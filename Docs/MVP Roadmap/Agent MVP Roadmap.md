@@ -814,3 +814,27 @@ Metro's own UI took over the terminal.
   - The reporter hook uses Expo internals, so pin Expo exactly.
 - Context: `packages/cli/tao-cli/cli-src/connect-command.ts`, `firebase-provision.ts`,
   `appwrite-provision.ts`, `hosted-crud-run.ts`, and `A21`.
+
+## Project tracking
+
+### A17 — In-repository issues with git-bug, synced to GitHub Issues
+
+Open work is tracked today in Markdown — `Roadmap.md`, these roadmap files, and the
+developer-environment ledger — and `R10` makes GitHub Issues the place outside developers report
+problems. Nothing connects the two, and agents working offline in a worktree cannot read or file an
+issue. [git-bug](https://github.com/git-bug/git-bug) stores issues as Git objects under `refs/bugs/`,
+so they travel with the repository, work offline, and are scriptable from a shell; its GitHub bridge
+imports and exports issues and comments.
+
+- Shape: two steps, in order. First adopt git-bug locally: add it to the devenv profile (a dependency
+  change the Developer approves), expose the commands agents need through `./agent`, make sure
+  landing and worktree creation carry `refs/bugs/` and `refs/identities/`, and state which tracked
+  work moves into issues and which stays in Markdown. Then configure the GitHub bridge so issues
+  filed on GitHub arrive in the repository and local issues reach GitHub, with the token kept out of
+  the repository and a documented pull/push cadence.
+- Context: `Roadmap.md`, `Docs/Roadmap/Developer environment upgrades.md`, `A7`'s `.github/` issue
+  forms, `R10`.
+- Waits on: the Developer's approval of the dependency, and of what migrates out of Markdown; the
+  bridge needs a GitHub token with issue access.
+- Done: an agent in a fresh worktree lists, files, and comments on issues through `./agent`, and an
+  issue opened on GitHub appears there after a sync, and the reverse.
