@@ -91,7 +91,9 @@ Second-wave return status: B's Studio repair and renderer runtime are frozen and
 D's lexical runtime plus its single-adoption joining repair are frozen and integrated. Their listed
 source paths have returned to the coordinator. A's concrete signatures and complete-correspondence
 repair are reviewed and integrated; the coordinator publishes their shared facade. C's alias/
-persisted-output completion repair is frozen for final integration review. Their next proposals
+persisted-output completion repair remains active in its separate worktree and is excluded from
+the current foundation landing. Its bounded recognition hooks in TR.ts and TR-persisted-state.ts
+remain reserved until the repaired chain is frozen, reviewed and integrated. Their next proposals
 remain read-only; no capability, numeric/unit or slot frontend release is implied by this manifest.
 TR.ts remains reserved until C's reviewed accessor chain is integrated. The coordinator owns the
 callable export hook, subsequent runtime facade hooks, combined verification and landing.

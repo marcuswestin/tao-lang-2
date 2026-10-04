@@ -15,7 +15,8 @@ and own-property default selection. Lexical cleanup runtime joins admitted work,
 LIFO cleanup and preserves primary failures; scoped foreign thenables are adopted once. These
 runtime leaves do not yet expose the selected slot/defer source grammar or compiler lowering.
 Concrete callable signatures now cover required inputs before preferring exact matches, preserving
-ambiguity and ordinary argument binding. Uniform native accessors are under final integration review.
+ambiguity and ordinary argument binding. Uniform native accessors are undergoing a bounded
+complete-output identity repair in their separate worktree and are excluded from this landing.
 Checked native factory publication, capabilities, full slots, units, cleanup lowering and app
 adapter/list graduation remain. No language stream is complete.
 Reconciled with the 2026-10-04 project/module migration before baseline landing.
