@@ -1,4 +1,5 @@
-import { CLI, FS, HCI, Json, Platform, Repo, Text } from '@shared'
+import { uninstalledLockedDependencies } from '@project-tooling'
+import { CLI, FS, HCI, Platform, Repo } from '@shared'
 
 /*
  * A tracked Tao project whose lock pins npm packages compiles only after `tao install` has linked
@@ -6,8 +7,6 @@ import { CLI, FS, HCI, Json, Platform, Repo, Text } from '@shared'
  * fresh checkout compiles the maintained apps the suites exercise. A project whose installed packages
  * already match every pin is left alone, so a repeated setup costs one manifest read per package.
  */
-
-type Pin = { alias: string; version: string; modulesRoot: string }
 
 /** projectsNeedingInstall lists tracked Tao projects, relative to the repository, whose pins are not installed. */
 export async function projectsNeedingInstall(repositoryRoot: string): Promise<string[]> {
@@ -18,42 +17,11 @@ export async function projectsNeedingInstall(repositoryRoot: string): Promise<st
   const projects: string[] = []
   for (const lockPath of listed.stdout.split('\0').filter(path => path !== '')) {
     const project = FS.dirname(FS.dirname(lockPath))
-    const pins = await lockedPins(FS.resolvePath(project, repositoryRoot))
-    for (const pin of pins) {
-      const manifest = FS.resolvePath(`${pin.alias}/package.json`, pin.modulesRoot)
-      if (!await FS.isFile(manifest) || (await FS.readJson<{ version?: string }>(manifest)).version !== pin.version) {
-        projects.push(project)
-        break
-      }
+    if ((await uninstalledLockedDependencies(FS.resolvePath(project, repositoryRoot))).length > 0) {
+      projects.push(project)
     }
   }
   return projects
-}
-
-/** Mirrors `ManagedInstallEnvironment.modulesRoot`: the project's own tree, or its origin's private one. */
-async function lockedPins(projectRoot: string): Promise<Pin[]> {
-  const parsed: unknown = JSON.parse(Text.stripJsonc(await FS.readText(FS.resolvePath('.tao/lock.jsonc', projectRoot))))
-  const installs = Json.isRecord(parsed) ? parsed['installs'] : undefined
-  const environments = Json.isRecord(installs) ? installs['environments'] : undefined
-  if (!Json.isRecord(environments)) {
-    return []
-  }
-  const pins: Pin[] = []
-  for (const environment of Object.values(environments)) {
-    if (!Json.isRecord(environment) || !Json.isRecord(environment['npm'])) {
-      continue
-    }
-    const origin = FS.resolvePath(String(environment['projectRoot'] ?? '.'), projectRoot)
-    const modulesRoot = origin === projectRoot
-      ? FS.resolvePath('node_modules', projectRoot)
-      : FS.resolvePath(`.tao/install/origins/${Platform.sha256Hex(origin)}/node_modules`, projectRoot)
-    for (const [alias, pin] of Object.entries(environment['npm'])) {
-      if (Json.isRecord(pin) && typeof pin['version'] === 'string') {
-        pins.push({ alias, version: pin['version'], modulesRoot })
-      }
-    }
-  }
-  return pins
 }
 
 if (import.meta.main) {

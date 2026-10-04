@@ -435,6 +435,11 @@ name and version range, and against its exact pin when recorded in the shared Ta
 package installed under the wrong alias identity cannot substitute for the declared dependency.
 The lock keys each install environment by its project root relative to the locking project, so a
 committed lock reads the same in every checkout and `tao install` reuses its pins anywhere.
+A missing or mismatched install fails with a diagnostic that names the `tao install` command to run.
+Before `tao run`, `watch`, `build`, `compile`, `ship`, or `test` compiles a project in an interactive
+terminal, Tao offers to run `tao install` when the project's lock pins packages that are not
+installed. Declining, or running without a terminal, leaves the compile to report them; aliases a
+source declares that no lock pins yet surface only through that diagnostic.
 
 ## Tooling files and TypeScript
 
