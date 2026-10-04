@@ -262,17 +262,20 @@ export function registerDeferredAction(body: () => unknown | PromiseLike<unknown
 }
 
 /** runActionScopeUser joins the entire contained outcome, including its asynchronous handlers. */
-export function runActionScopeUser<T>(body: () => T): T {
+export function runActionScopeUser<T>(body: () => T): T | Promise<Awaited<T>> {
   const scope = activeTransaction?.scope
   return joinScopeUser(scope, body())
 }
 
-function joinScopeUser<T>(scope: ActionScope | undefined, result: T): T {
+function joinScopeUser<T>(scope: ActionScope | undefined, result: T): T | Promise<Awaited<T>> {
   if (scope && isPromiseLike(result)) {
     RuntimeAssert(!scope.closed, 'a live action scope for joined work')
-    const settled = Promise.resolve(result).then(() => undefined, () => undefined)
+    // Return the adopted promise too: adopting a lazy thenable twice can repeat its work.
+    const joined = adoptScopePromise(result as PromiseLike<Awaited<T>>)
+    const settled = joined.then(() => undefined, () => undefined)
     scope.users.add(settled)
     void settled.then(() => scope.users.delete(settled))
+    return joined
   }
   return result
 }

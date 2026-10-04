@@ -53,6 +53,163 @@ async function root(body: () => unknown, allowFailure = false): Promise<readonly
 }
 
 Describe('Tao lexical action cleanup', () => {
+  Test('adopts a public WhenDo handler thenable once and drains cleanup after its work', async () => {
+    for (const scoped of [false, true]) {
+      const seen: string[] = []
+      let calls = 0
+      await root(() => {
+        const body = async () => {
+          if (scoped) {
+            registerDeferredAction(() => seen.push('cleanup'))
+          }
+          const result = await TR.WhenDo(() => undefined, { name: 'LazyWork', declared: [] }, [
+            ['saved', () => ({
+              then(resolve: (value: string) => void) {
+                calls++
+                seen.push(`work ${calls}`)
+                resolve('settled value')
+              },
+            })],
+          ])
+          Expect(result).toBe('settled value')
+          seen.push('after-work')
+        }
+        return scoped ? runActionScope(body) : body()
+      })
+      Expect(calls).toBe(1)
+      Expect(seen).toEqual(scoped ? ['work 1', 'after-work', 'cleanup'] : ['work 1', 'after-work'])
+    }
+  })
+
+  Test('keeps synchronous public WhenDo handler results synchronous and unchanged', async () => {
+    const value = { saved: true }
+    const seen: string[] = []
+    await root(() => {
+      const result = runActionScope(() => {
+        registerDeferredAction(() => seen.push('cleanup'))
+        const handled = TR.WhenDo(() => undefined, { name: 'SyncWork', declared: [] }, [
+          ['saved', () => value],
+        ])
+        Expect(handled).toBe(value)
+        seen.push('after-work')
+        return handled
+      })
+      Expect(result).toBe(value)
+    })
+    Expect(seen).toEqual(['after-work', 'cleanup'])
+  })
+
+  Test('joins unawaited public WhenDo work once even when its result is observed after scope exit', async () => {
+    const gate = Deferred()
+    const started = Deferred()
+    const seen: string[] = []
+    let calls = 0
+    let pending: unknown
+    const action = root(() =>
+      runActionScope(() => {
+        registerDeferredAction(() => seen.push('cleanup'))
+        pending = TR.WhenDo(() => undefined, { name: 'JoinedLazyWork', declared: [] }, [
+          ['saved', () => ({
+            then(resolve: (value: string) => void) {
+              calls++
+              started.resolve()
+              void gate.promise.then(() => {
+                seen.push(`work ${calls}`)
+                resolve('joined value')
+              })
+            },
+          })],
+        ])
+        seen.push('body-end')
+      })
+    )
+    await started.promise
+    try {
+      Expect(calls).toBe(1)
+      Expect(seen).toEqual(['body-end'])
+    } finally {
+      gate.resolve()
+    }
+    await action
+    Expect(seen).toEqual(['body-end', 'work 1', 'cleanup'])
+    Expect(await pending).toBe('joined value')
+    Expect(await pending).toBe('joined value')
+    Expect(calls).toBe(1)
+    Expect(seen).toEqual(['body-end', 'work 1', 'cleanup'])
+  })
+
+  Test('adopts a rejected public WhenDo handler once and preserves its primary through cleanup', async () => {
+    const primary = Object.freeze(new TaoActionFailure('WorkFailed', 'Work failed'))
+    const cleanup = new UnexpectedBehaviorError('cleanup failed')
+    const seen: string[] = []
+    let calls = 0
+    let caught: unknown
+    await root(async () => {
+      try {
+        await runActionScope(async () => {
+          registerDeferredAction(() => {
+            seen.push('cleanup')
+            throw cleanup
+          })
+          await TR.WhenDo(() => undefined, { name: 'LazyFailure', declared: [] }, [
+            ['saved', () => ({
+              then(_resolve: unknown, reject: (error: unknown) => void) {
+                calls++
+                seen.push(`work ${calls}`)
+                reject(primary)
+              },
+            })],
+          ])
+          seen.push('unexpected tail')
+        })
+      } catch (error) {
+        caught = error
+      }
+    })
+    Expect(calls).toBe(1)
+    Expect(seen).toEqual(['work 1', 'cleanup'])
+    Expect(actionExitOf(caught)?.primary).toBe(primary)
+    Expect(actionExitOf(caught)?.cleanupFailures).toEqual([cleanup])
+    Expect(actionExitOf(caught)?.stage).toBe('body')
+  })
+
+  Test('drains public WhenDo handler promise faults without replacing their original identity', async () => {
+    for (const property of ['constructor', 'then']) {
+      const fault = new UnexpectedBehaviorError(`handler promise ${property}`)
+      const promise = Promise.resolve('handler result')
+      if (property === 'constructor') {
+        Object.defineProperty(promise, property, {
+          get() {
+            throw fault
+          },
+        })
+      } else {
+        Object.defineProperty(promise, property, {
+          value() {
+            throw fault
+          },
+        })
+      }
+      const seen: string[] = []
+      let caught: unknown
+      await root(async () => {
+        try {
+          await runActionScope(async () => {
+            registerDeferredAction(() => seen.push('cleanup'))
+            await TR.WhenDo(() => undefined, { name: 'PoisonedHandler', declared: [] }, [
+              ['saved', () => promise],
+            ])
+            seen.push('unexpected tail')
+          })
+        } catch (error) {
+          caught = error
+        }
+      })
+      Expect(caught).toBe(fault)
+      Expect(seen).toEqual(['cleanup'])
+    }
+  })
+
   Test('runs synchronous cleanup LIFO in the live overlay before one root commit', async () => {
     const state = notes()
     const seen: string[] = []
