@@ -9,8 +9,8 @@ timings.
 
 ## Current state
 
-The successor worktree is `feat/studio-preview-speed`, created from exactly `8ecf581e7`, with no
-landing authorized. Its activation and decided folder layout are implemented: every scenario and the whole-app preview now
+The successor worktree is `feat/studio-preview-speed`, created from exactly `8ecf581e7`; the Developer
+authorized landing on 2026-10-04. Its activation and decided folder layout are implemented: every scenario and the whole-app preview now
 default to no iframe, with per-cell lightning toggles and server-persisted app activation in
 `.tao/local/studio/session.json`. Selection and its Tao ProductHost/feed boundary use focused names;
 the old browser focus/tabs and viewport import once into the project session. Fast draw and
@@ -20,6 +20,8 @@ layout implementation is recorded in the [layout decisions](<Tao CLI workflows/D
 The first activation/layout checkpoint passed the complete Studio and Studio-tooling source suites
 and `verify-changed` across source, compiler, runtime, CLI, and app checks. The final project gates
 and integration state are recorded in the task checkpoint.
+The landing integration with main `3bcd71647` retains bare render support and moves the incoming
+Syntax2 app's project identity and TypeScript base configuration to the decided store/cache layout.
 Mutation checks caught deliberately removed activation serialization and callback rewiring. A real
 browser run exposed an empty session-save response; the endpoint now returns JSON, with a real HTTP
 regression. The corrected real-app Metro smoke passes all four journeys (run
