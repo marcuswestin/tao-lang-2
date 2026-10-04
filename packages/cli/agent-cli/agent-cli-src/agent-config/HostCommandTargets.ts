@@ -1,5 +1,5 @@
 export type HostCommandTarget = {
-  argsPolicy?: 'none' | 'pid' | 'standalone-vm' | 'studio-list' | 'studio-stop' | 'dev-loop'
+  argsPolicy?: 'none' | 'pid' | 'standalone-vm' | 'studio-list' | 'studio-stop' | 'dev-loop' | 'studio-proof'
   command: string
   /** Environment the tool needs whatever shell dispatches it, merged over the inherited one. */
   env?: Readonly<Record<string, string>>
@@ -31,6 +31,13 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   'studio-native': { command: 'just', fixedArgs: ['studio-native'], server: true },
   'studio-ps': { command: './dev', fixedArgs: ['studio-ps'], argsPolicy: 'studio-list' },
   'studio-stop': { command: './dev', fixedArgs: ['studio-stop'], argsPolicy: 'studio-stop' },
+  'studio-canary': { command: './dev', fixedArgs: ['studio-canary'], argsPolicy: 'studio-proof' },
+  'studio-manual-checks': {
+    command: './dev',
+    fixedArgs: ['studio-manual-checks'],
+    argsPolicy: 'studio-proof',
+    server: true,
+  },
   'docker-desktop start': { command: 'open', fixedArgs: ['-g', '-a', 'Docker'], argsPolicy: 'none' },
   // One daemon serves this login's worktrees; no arbitrary Watchman commands or socket overrides.
   'watchman start': { command: './dev', fixedArgs: ['watchman', 'start'], argsPolicy: 'none' },

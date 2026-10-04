@@ -1,6 +1,6 @@
 import type { HostRevision, HostTarget } from '@host-control'
 import { Errors, FS, Platform, Repo } from '@shared'
-import { Expect, Test } from '@shared/test'
+import { Expect, runCleanups, Test } from '@shared/test'
 import { StudioNative } from '../studio-tooling-src/StudioNative'
 import { StudioNativeTestRun } from '../studio-tooling-src/StudioNativeTestRun'
 
@@ -23,18 +23,21 @@ Test('StartedStudioNative exposes its real Electrobun renderer through fenced se
   const { root: artifactRoot } = await StudioNativeTestRun.create(artifactBase)
   const studioPort = smokePort('TAO_STUDIO_SMOKE_SERVER_PORT', 42_000)
   const previewPort = smokePort('TAO_STUDIO_SMOKE_PREVIEW_PORT', 42_001)
-  const studioServer = Bun.serve({
-    fetch: () => new Response(studioFixture(), { headers: { 'content-type': 'text/html; charset=utf-8' } }),
-    hostname: '127.0.0.1',
-    port: studioPort,
-  })
-  const previewServer = Bun.serve({
-    fetch: () => new Response('<!doctype html><title>Studio host-control preview</title>'),
-    hostname: '127.0.0.1',
-    port: previewPort,
-  })
+  let studioServer: ReturnType<typeof Bun.serve> | undefined
+  let previewServer: ReturnType<typeof Bun.serve> | undefined
   let native: Awaited<ReturnType<typeof StudioNative.start>> | undefined
+  let primaryFailure: unknown
   try {
+    studioServer = Bun.serve({
+      fetch: () => new Response(studioFixture(), { headers: { 'content-type': 'text/html; charset=utf-8' } }),
+      hostname: '127.0.0.1',
+      port: studioPort,
+    })
+    previewServer = Bun.serve({
+      fetch: () => new Response('<!doctype html><title>Studio host-control preview</title>'),
+      hostname: '127.0.0.1',
+      port: previewPort,
+    })
     const studioUrl = `http://127.0.0.1:${studioServer.port}`
     native = await StudioNative.start({
       ...await StudioNativeTestRun.nativeOptions(artifactRoot),
@@ -99,10 +102,15 @@ Test('StartedStudioNative exposes its real Electrobun renderer through fenced se
     Expect(refreshed.text).toBe('ready')
     await peer.close(peer.descriptor().lease)
     await session.close(session.descriptor().lease)
+  } catch (error) {
+    primaryFailure = error
+    throw error
   } finally {
-    await native?.stop()
-    studioServer.stop(true)
-    previewServer.stop(true)
+    await runCleanups(primaryFailure, [
+      { label: 'stop native Studio', run: () => native?.stop() },
+      { label: 'stop Studio fixture', run: () => studioServer?.stop(true) },
+      { label: 'stop preview fixture', run: () => previewServer?.stop(true) },
+    ], { channel: 'studio-smoke-cleanup', subject: 'Studio host-control smoke' })
   }
 }, 180_000)
 

@@ -30,6 +30,26 @@ Describe('visible test workflows', () => {
     Expect(() => UiVisibility.preflightCommand('studio-host-control-smoke', ['--show-studio'])).not.toThrow()
     Expect(() => UiVisibility.preflightCommand('verify-full', [])).not.toThrow()
     Expect(UiVisibility.smokeNeedsStudio(['studio-simulated-user.test.ts'], true)).toBe(false)
+    Expect(UiVisibility.smokeNeedsStudio(['studio-wda-registration-probe.test.ts'], true)).toBe(true)
+    Expect(UiVisibility.smokeNeedsStudio(['studio-wda-registration-probe.test.ts'], false)).toBe(true)
+    Expect(UiVisibility.smokeNeedsStudio(['studio-mac2-source-probe.test.ts'], true)).toBe(true)
+    Expect(UiVisibility.smokeNeedsStudio(['studio-mac2-source-probe.test.ts'], false)).toBe(true)
+    Expect(() => UiVisibility.preflightCommand('studio-smoke', ['studio-mac2-source-probe.test.ts']))
+      .toThrow('--show-studio')
+    Expect(() => UiVisibility.preflightCommand('studio-smoke', ['studio-mac2-source-probe.test.ts', '--show-studio']))
+      .not.toThrow()
+    Expect(() => UiVisibility.preflightCommand('studio-smoke', ['studio-wda-registration-probe.test.ts']))
+      .toThrow('--show-studio')
+    Expect(() =>
+      UiVisibility.preflightCommand('studio-smoke', [
+        'studio-wda-registration-probe.test.ts',
+        '--show-studio',
+      ])
+    ).not.toThrow()
+    Expect(UiVisibility.smokeNeedsStudio(['other-studio-wda-registration-probe.test.ts'], true)).toBe(true)
+    Expect(
+      UiVisibility.smokeNeedsStudio(['studio-wda-registration-probe.test.ts', 'studio-mac2-acceptance.test.ts'], true),
+    ).toBe(true)
     Expect(() => UiVisibility.preflightCommand('land', ['--dry-run'])).not.toThrow()
     Expect(() => UiVisibility.preflightCommand('land', ['--skip-verify-full'])).not.toThrow()
     Expect(UiVisibility.preflightGates(['studio-smoke'])).toEqual([])

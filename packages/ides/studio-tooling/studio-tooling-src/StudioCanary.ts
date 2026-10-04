@@ -44,7 +44,8 @@ export function resolveCanaryTarget(
   const onDefaultProject = FS.slashPath(projectRoot) === FS.slashPath(defaultProjectRoot)
   const onHNReader = FS.slashPath(projectRoot) === FS.slashPath(FS.resolvePath('Apps/HNReader', repositoryRoot))
   return {
-    appName: options.appName ?? (onDefaultProject ? DEFAULT_CANARY_PROJECT.appName : onHNReader ? 'HNReader' : undefined),
+    appName: options.appName
+      ?? (onDefaultProject ? DEFAULT_CANARY_PROJECT.appName : onHNReader ? 'HNReader' : undefined),
     projectRoot,
   }
 }

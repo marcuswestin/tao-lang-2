@@ -103,7 +103,7 @@
     "test-host", "studio-smoke", "studio-proof-real-app", "admission-experiment",
     "native-module-check", "reclaim --execute",
     "prepare-release studio", "prepare-release ide-extension",
-    "app-dev", "dev-loop", "test-watch", "standalone-cli-acceptance", "studio", "studio-native", "studio-ps", "studio-stop",
+    "app-dev", "dev-loop", "test-watch", "standalone-cli-acceptance", "studio", "studio-native", "studio-ps", "studio-stop", "studio-canary", "studio-manual-checks",
     "docker-desktop start",
     "watchman start", "watchman status", "watchman stop",
     "local-instantdb start", "local-instantdb stop",

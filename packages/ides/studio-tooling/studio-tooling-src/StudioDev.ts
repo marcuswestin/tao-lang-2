@@ -96,7 +96,10 @@ export const StudioDev = {
 }
 
 /** runStudioDev owns the local Studio server, file watcher, preview compiler, and Expo process. */
-export async function runStudioDev(options: StudioDevOptions): Promise<number> {
+export async function runStudioDev(
+  options: StudioDevOptions,
+  onProcessSignal: typeof Platform.onProcessSignal = Platform.onProcessSignal,
+): Promise<number> {
   UiVisibility.warn(
     options.native === true
       ? options.nativeShowWindow === false ? [] : UiVisibility.warningsForCommand('studio-native', [])
@@ -115,7 +118,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       finish?.(exitCode)
     }
   }
-  const removeStopSignalHandlers = addStopSignalHandlers(stop)
+  const removeStopSignalHandlers = addStopSignalHandlers(stop, onProcessSignal)
   let native: StartedStudioNative | undefined
   let server: StartedStudioServer | undefined
   let foundationModels: AppleFoundationModelsService | undefined
@@ -383,54 +386,57 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
     HCI.logProcessError('studio', Errors.formatForLog(error))
     return 1
   } finally {
-    removeStopSignalHandlers()
-    lifecycle?.record({ component: 'studio-server', event: 'shutdown-requested' })
-    const cleanupStartedAt = Time.nowMs()
-    if (options.native === true) {
-      HCI.logProcessInfo('studio-native', 'final cleanup: started')
-    }
     try {
+      lifecycle?.record({ component: 'studio-server', event: 'shutdown-requested' })
+      const cleanupStartedAt = Time.nowMs()
+      if (options.native === true) {
+        HCI.logProcessInfo('studio-native', 'final cleanup: started')
+      }
       try {
-        await cleanupStudioDev([
-          () => deviceCli?.stop(),
-          () => native?.stop(),
-          () => studioClientReload?.close(),
-          () => server?.stop(),
-          () => deviceGateway?.stop(),
-          () => devDataServer?.stop(),
-          () => manager?.closeAll(),
-          () => foundationModels?.stop(),
-          () => trustStore?.flush(),
-          () => canvasViewportStore.flush(),
-          () =>
-            recentProjects.flush().catch(error => {
-              HCI.logProcessError('studio', `Could not save recent projects: ${Errors.formatForLog(error)}`)
-            }),
-          async () => {
-            // The process record is kept, not cleared: a caller checking for survivors after shutdown
-            // needs to know what this launch owned. Liveness is decided by validation, not by absence.
-            await launch?.finalize({ shutdownReason: 'studio exited' })
-            lifecycle?.record({ component: 'studio-server', event: 'manifest-finalized' })
-            await lifecycle?.close()
-          },
-        ])
-      } catch (cleanupError) {
-        cleanupFailed = true
-        if (primaryFailure === undefined) {
-          throw cleanupError
+        try {
+          await cleanupStudioDev([
+            () => deviceCli?.stop(),
+            () => native?.stop(),
+            () => studioClientReload?.close(),
+            () => server?.stop(),
+            () => deviceGateway?.stop(),
+            () => devDataServer?.stop(),
+            () => manager?.closeAll(),
+            () => foundationModels?.stop(),
+            () => trustStore?.flush(),
+            () => canvasViewportStore.flush(),
+            () =>
+              recentProjects.flush().catch(error => {
+                HCI.logProcessError('studio', `Could not save recent projects: ${Errors.formatForLog(error)}`)
+              }),
+            async () => {
+              // The process record is kept, not cleared: a caller checking for survivors after shutdown
+              // needs to know what this launch owned. Liveness is decided by validation, not by absence.
+              await launch?.finalize({ shutdownReason: 'studio exited' })
+              lifecycle?.record({ component: 'studio-server', event: 'manifest-finalized' })
+              await lifecycle?.close()
+            },
+          ])
+        } catch (cleanupError) {
+          cleanupFailed = true
+          if (primaryFailure === undefined) {
+            throw cleanupError
+          }
+          HCI.logProcessError('studio', `Startup cleanup also failed: ${Errors.formatForLog(cleanupError)}`)
         }
-        HCI.logProcessError('studio', `Startup cleanup also failed: ${Errors.formatForLog(cleanupError)}`)
+      } finally {
+        const resourcesStopped = !cleanupFailed
+          && (options.onCleanup === undefined || await resourcesAreStopped([...processRoots]))
+        notifyObserver('cleanup observer', () => options.onCleanup?.({ resourcesStopped }))
+        if (options.native === true) {
+          HCI.logProcessInfo(
+            'studio-native',
+            `final cleanup: completed in ${Math.max(0, Math.round(Time.nowMs() - cleanupStartedAt))}ms`,
+          )
+        }
       }
     } finally {
-      const resourcesStopped = !cleanupFailed
-        && (options.onCleanup === undefined || await resourcesAreStopped([...processRoots]))
-      notifyObserver('cleanup observer', () => options.onCleanup?.({ resourcesStopped }))
-      if (options.native === true) {
-        HCI.logProcessInfo(
-          'studio-native',
-          `final cleanup: completed in ${Math.max(0, Math.round(Time.nowMs() - cleanupStartedAt))}ms`,
-        )
-      }
+      removeStopSignalHandlers()
     }
   }
 }

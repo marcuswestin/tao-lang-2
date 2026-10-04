@@ -2,6 +2,8 @@ import { CLI, Errors, FS, HCI, Platform } from '@shared'
 import { parseDevLoopArgs } from '../agent-config/DevLoopArgs'
 import { agentHostCommands, hostCommandKind, hostCommandPrefix } from '../agent-config/HostCommandPolicy'
 import { hostCommandTarget } from '../agent-config/HostCommandTargets'
+import { validStudioProofArgs } from '../agent-config/StudioProofArgs'
+import { runNamedHostServer } from './NamedHostServer'
 
 const [sourcePath, ...argv] = Platform.runtimeProcess.argv.slice(2)
 
@@ -23,6 +25,12 @@ async function run(): Promise<number> {
     return 2
   }
   const args = argv.slice(prefix.length)
+  if (target.argsPolicy === 'studio-proof' && !validStudioProofArgs(args)) {
+    HCI.writeErrorLine(
+      `Usage: ./agent unsandboxed ${prefix.join(' ')} [--project <path>] [--app <name>] [--show-studio]`,
+    )
+    return 2
+  }
   if (target.argsPolicy === 'dev-loop') {
     try {
       parseDevLoopArgs(args)
@@ -91,13 +99,16 @@ async function run(): Promise<number> {
     }
     forwardedArgs = args.slice(1)
   }
-  const result = await CLI.run(target.command, {
+  const commandSpec: CLI.CommandSpec = {
     args: [...target.fixedArgs, ...forwardedArgs],
     cwd,
     ...(target.env === undefined ? {} : { env: target.env }),
     processPolicy: target.server ? 'server' : 'tool',
     stdio: 'inherit',
-  })
+  }
+  const result = target.server
+    ? await runNamedHostServer(target.command, commandSpec)
+    : await CLI.run(target.command, commandSpec)
   if (result.error !== undefined) {
     HCI.writeErrorLine(`FAIL  ${prefix.join(' ')}: ${result.error.message}`)
   }

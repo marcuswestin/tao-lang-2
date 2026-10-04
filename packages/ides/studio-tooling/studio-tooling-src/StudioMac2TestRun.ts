@@ -1,6 +1,7 @@
 import type { Mac2DesktopLeases } from '@appium-driver'
 import { type MachineResourceLease, MachineResources } from '@host-control'
 import { CLI, Errors, FS, HCI, Platform, ProcessTree, Repo, Time, type TrackedProcess } from '@shared'
+import { StudioWdaRegistration } from './StudioWdaRegistration'
 
 type FetchInit = Omit<RequestInit, 'signal'> & { signal?: AbortSignal | null }
 type FetchLike = (input: string, init?: FetchInit) => Promise<Response>
@@ -58,11 +59,19 @@ type PrepareOptions = {
   sleep?: (ms: number) => Promise<void>
   writeLog?: (path: string, text: string) => Promise<void>
   startForwarder?: typeof Bun.serve
+  registration?: typeof StudioWdaRegistration.prepare
+  /** Fixed internal engineering phases; never exposed as CLI or Appium capabilities. */
+  registrationOnly?: 'deny' | 'grant'
+  /** Fixed input-free source probe only; never a CLI or Appium capability. */
+  sourceLookupProbe?: true
+  persistRecord?: typeof persistRecord
 }
 
 /** Own WDA before Appium attaches, so the driver never uses its unowned-listener DELETE branch. */
 async function prepare(options: PrepareOptions) {
   const root = FS.resolvePath('appium-mac2', options.artifactRoot)
+  await FS.mkdir(root)
+  await FS.chmod(root, 0o700)
   const bootstrapRoot = FS.resolvePath('WebDriverAgentMac', root)
   const derivedData = FS.resolvePath('DerivedData', root)
   const resolvedBinary = options.xcodebuild ?? await CLI.commandPath('xcodebuild')
@@ -94,17 +103,30 @@ async function prepare(options: PrepareOptions) {
   const now = options.now ?? Time.nowMs
   const sleep = options.sleep ?? Time.sleep
   const owned = new Map<number, TrackedProcess>()
-  let process: ReturnType<typeof CLI.start> | undefined
+  let xcodeProcess: ReturnType<typeof CLI.start> | undefined
   let rootIdentity: TrackedProcess | undefined
+  let registration: Awaited<ReturnType<typeof StudioWdaRegistration.prepare>> | undefined
+  let registeredPeer: TrackedProcess | undefined
+  let registrationEvidence: {
+    bundlePath: string
+    bundleDigest: string
+    signedChannelRule: true
+    signedXcodeBaseline: boolean
+    signedBaselineDigest: string
+  } | undefined
   let desktop: MachineResourceLease | undefined
   let desktopReleased = false
   let released = false
   let retained = false
   let startupAttempted = false
   let forwarding = false
+  let replayComplete = false
+  let replayTail = ''
   let forwardingStarted = false
   let forwarderStopped = false
   const forwardingRequests = new Set<AbortController>()
+  let stopWdaCompletion: Promise<void> | undefined
+  let cleanupCompletion: Promise<void> | undefined
   function disableForwarding(): void {
     forwarding = false
     for (const request of forwardingRequests) {
@@ -120,19 +142,48 @@ async function prepare(options: PrepareOptions) {
     version: 1,
     xcodebuild,
   }
-  async function record(state: string) {
-    await FS.writeJson(note, { ...metadata, forwarderUrl, processes: [...owned.values()], state })
+  let recordPublication = Promise.resolve()
+  function record(state: string): Promise<void> {
+    // Snapshot only when this publication reaches the queue head. Earlier writes cannot erase a peer after ACK.
+    const publication = recordPublication.then(async () => await publishRecord(state))
+    recordPublication = publication.catch(() => {})
+    return publication
+  }
+  async function publishRecord(state: string): Promise<void> {
+    await (options.persistRecord ?? persistRecord)(note, {
+      ...metadata,
+      forwarderUrl,
+      processes: [...owned.values()],
+      registration: registrationEvidence,
+      sourceDigest: registration?.sourceDigest,
+      bootstrapDigest: registration?.bootstrapDigest,
+      sourceLookupProvenance: registration?.sourceLookupProvenance,
+      state,
+    })
   }
   async function quarantine(reason: string): Promise<never> {
     if (!retained) {
-      await MachineResources.retain({
+      const retention = {
         owners: [reservation.lease.owner, ...(desktop !== undefined && !desktopReleased ? [desktop.owner] : [])],
         // Missing inspection retains the complete last known tree, never an empty false proof.
         processes: retainedProcesses(),
         quarantined: true,
         reason,
         registryRoot: options.registryRoot,
-      })
+      }
+      try {
+        await MachineResources.retain(retention)
+      } catch (error) {
+        const currentDesktop = desktop === undefined ? undefined : await MachineResources.readOwner({
+          name: desktop.owner.name,
+          registryRoot: options.registryRoot,
+        })
+        if (desktop === undefined || currentDesktop === undefined || currentDesktop.id === desktop.owner.id) {
+          throw error
+        }
+        // A changed desktop generation belongs to its current owner. Still quarantine our own port.
+        await MachineResources.retain({ ...retention, owners: [reservation.lease.owner] })
+      }
       retained = true
     }
     await record('retained')
@@ -177,6 +228,7 @@ async function prepare(options: PrepareOptions) {
     return result.stdout.split(/\r?\n/).filter(line => /^p[0-9]+$/.test(line)).map(line => Number(line.slice(1)))
   }
   async function ownedListener(): Promise<boolean> {
+    await desktop!.assertCurrent(desktop!.generation)
     captureTree()
     const pids = await listener()
     if (pids.length === 0) {
@@ -191,7 +243,15 @@ async function prepare(options: PrepareOptions) {
     ) {
       return Errors.throwHostEnvironment('Refused to contact a WDA listener not owned by this invocation.')
     }
-    return true
+    registration?.assertHealthy()
+    if (
+      registeredPeer === undefined
+      || pids.some(pid => pid !== registeredPeer!.pid)
+      || !ProcessTree.sameProcess(identities([registeredPeer.pid]).get(registeredPeer.pid), registeredPeer)
+    ) {
+      return Errors.throwHostEnvironment('Refused to contact WDA before proven launch registration acknowledgement.')
+    }
+    return registration?.acknowledged() === true
   }
   async function waitGone(milliseconds: number): Promise<boolean> {
     const deadline = now() + milliseconds
@@ -205,8 +265,12 @@ async function prepare(options: PrepareOptions) {
     return false
   }
   async function stopWda(): Promise<void> {
+    return await (stopWdaCompletion ??= doStopWda())
+  }
+  async function doStopWda(): Promise<void> {
     reservation.guard.stop(true)
     try {
+      await registration?.disable()
       captureTree()
       signalTracked([...owned.values()], 'SIGTERM')
       if (!await waitGone(5_000)) {
@@ -230,8 +294,9 @@ async function prepare(options: PrepareOptions) {
     if (!await resourcesStopped(root, reservation.port, inspect)) {
       return await quarantine('WDA shutdown is unproved by scoped process and port inspection.')
     }
-    await process?.closeOutput()
-    process?.dispose()
+    await registration?.close()
+    await xcodeProcess?.closeOutput()
+    xcodeProcess?.dispose()
     await record('wda-stopped')
   }
   async function startWda(): Promise<void> {
@@ -239,8 +304,48 @@ async function prepare(options: PrepareOptions) {
     if ((await listener()).length > 0) {
       return Errors.throwHostEnvironment('Refused WDA startup because its reserved port has an unowned listener.')
     }
+    registration = await (options.registration ?? StudioWdaRegistration.prepare)({
+      bootstrapRoot,
+      derivedData: ownedDerivedData,
+      generation: desktop!.generation,
+      port: reservation.port,
+      root,
+      registrationOnly: options.registrationOnly,
+      sourceLookupProbe: options.sourceLookupProbe,
+      captureHelper: helper => owned.set(helper.pid, helper),
+      capture: async peer => {
+        if (peer.signedChannelRule !== true) {
+          return Errors.throwHostEnvironment('WDA signed host lacks the exact invocation socket exception.')
+        }
+        if (registeredPeer !== undefined) {
+          return Errors.throwHostEnvironment('Refused a replayed WDA launch registration.')
+        }
+        await desktop!.assertCurrent(desktop!.generation)
+        if ((await listener()).length > 0) {
+          return Errors.throwHostEnvironment(
+            'Refused an unowned listener bound before WDA registration acknowledgement.',
+          )
+        }
+        if (!ProcessTree.sameProcess(identities([peer.identity.pid]).get(peer.identity.pid), peer.identity)) {
+          return Errors.throwHostEnvironment('WDA launch registration has an unverifiable kernel identity.')
+        }
+        registeredPeer = peer.identity
+        registrationEvidence = {
+          bundlePath: peer.bundlePath,
+          bundleDigest: peer.bundleDigest,
+          signedChannelRule: true,
+          signedXcodeBaseline: peer.signedXcodeBaseline,
+          signedBaselineDigest: peer.signedBaselineDigest,
+        }
+        owned.set(peer.identity.pid, peer.identity)
+        await record('registered-before-bind')
+        if (!ProcessTree.sameProcess(identities([peer.identity.pid]).get(peer.identity.pid), peer.identity)) {
+          return Errors.throwHostEnvironment('WDA launch registration identity changed before acknowledgement.')
+        }
+      },
+    })
     startupAttempted = true
-    process = (options.start ?? CLI.start)(xcodebuild, {
+    xcodeProcess = (options.start ?? CLI.start)(xcodebuild, {
       args: [
         'build-for-testing',
         'test-without-building',
@@ -253,37 +358,74 @@ async function prepare(options: PrepareOptions) {
         ownedDerivedData,
       ],
       cwd: bootstrapRoot,
-      env: { ...Platform.runtimeProcess.env, USE_PORT: String(reservation.port), USE_HOST: '127.0.0.1' },
+      env: { ...Platform.runtimeProcess.env, ...registration.runnerEnvironment },
       onOutput: (_stream, chunk) => {
-        logs.push(chunk.toString())
+        const text = chunk.toString()
+        logs.push(text)
+        if (options.registrationOnly === 'grant') {
+          const marker = 'WDA registration-only replay refused'
+          replayTail = replayTail + text
+          replayComplete ||= replayTail.includes(marker)
+          replayTail = replayTail.slice(-marker.length)
+        }
       },
-      processPolicy: 'server',
+      processPolicy: options.registrationOnly === undefined ? 'server' : 'test',
+      timeoutMs: options.registrationOnly === undefined ? undefined : 120_000,
       stdio: 'pipe',
     })
-    if (process.pid === undefined) {
+    if (xcodeProcess.pid === undefined) {
       return Errors.throwHostEnvironment('WDA startup did not expose an owned process ID.')
     }
-    rootIdentity = identities([process.pid]).get(process.pid)
+    rootIdentity = identities([xcodeProcess.pid]).get(xcodeProcess.pid)
     if (rootIdentity === undefined) {
       return Errors.throwHostEnvironment('WDA startup process identity could not be captured.')
     }
     owned.set(rootIdentity.pid, rootIdentity)
     captureTree()
     await record('starting')
-    const deadline = now() + 240_000
+    const readinessBudget = options.registrationOnly === undefined ? 240_000 : 120_000
+    const deadline = now() + readinessBudget
     while (now() < deadline) {
+      registration.assertHealthy()
+      if (options.registrationOnly !== undefined && registration.acknowledged()) {
+        if (options.registrationOnly !== 'grant' || (await listener()).length !== 0) {
+          return Errors.throwHostEnvironment(
+            'The registration-only probe unexpectedly acknowledged or bound a backend.',
+          )
+        }
+        await record('registration-only-acknowledged')
+        return
+      }
+      if (xcodeProcess.error !== undefined && !registration.acknowledged()) {
+        return Errors.throwHostEnvironment(
+          'The recorded Xcode process failed before WDA registration acknowledgement (process error).',
+        )
+      }
+      if ((xcodeProcess.exitCode !== null || xcodeProcess.signalCode !== null) && !registration.acknowledged()) {
+        const terminal = xcodeProcess.signalCode !== null
+          ? `signal ${xcodeProcess.signalCode}`
+          : `exit ${xcodeProcess.exitCode}`
+        return Errors.throwHostEnvironment(
+          `The recorded Xcode process exited before WDA registration acknowledgement (${terminal}).`,
+        )
+      }
       if (await ownedListener()) {
-        // No HTTP reaches a listener until kernel identities tie it to our captured process tree.
+        // No HTTP precedes registration acknowledgement and current kernel/listener proof.
         let ready = false
+        let response: Response | undefined
         const abort = new AbortController()
         const timeout = setTimeout(() => abort.abort(), 5_000)
         try {
-          ready = (await fetcher(`${url}/status`, { signal: abort.signal })).ok
+          response = await fetcher(`${url}/status`, { method: 'GET', redirect: 'manual', signal: abort.signal })
         } catch {
           // The owned listener can bind before its status handler is ready; the startup budget bounds retries.
         } finally {
           clearTimeout(timeout)
         }
+        if (response !== undefined && response.status >= 300 && response.status < 400) {
+          return Errors.throwHostEnvironment('Owned WDA startup refused a backend redirect before readiness.')
+        }
+        ready = response?.ok === true
         if (await ownedListener() && ready) {
           await record('ready')
           return
@@ -294,12 +436,13 @@ async function prepare(options: PrepareOptions) {
       }
       await sleep(100)
     }
-    return Errors.throwHostEnvironment('The owned WDA listener did not become ready within 240000ms.')
+    return Errors.throwHostEnvironment(`The owned WDA listener did not become ready within ${readinessBudget}ms.`)
   }
   const logs: string[] = []
   async function saveLog(): Promise<void> {
     try {
-      await (options.writeLog ?? FS.writeText)(FS.resolvePath('wda.log', root), logs.join(''))
+      const text = logs.join('')
+      await (options.writeLog ?? FS.writeText)(FS.resolvePath('wda.log', root), registration?.redact(text) ?? text)
     } catch (error) {
       HCI.logProcessError('studio-mac2', `WDA log write failed: ${Errors.formatForLog(error)}`)
     }
@@ -317,8 +460,8 @@ async function prepare(options: PrepareOptions) {
       })
       try {
         await startWda()
-        forwarding = true
-        forwardingStarted = true
+        forwarding = options.registrationOnly === undefined
+        forwardingStarted = forwarding
       } catch (error) {
         try {
           await stopWda()
@@ -430,26 +573,64 @@ async function prepare(options: PrepareOptions) {
     environment: { ...Platform.runtimeProcess.env },
     systemPort: reservation.port,
     webDriverAgentMacUrl: forwarderUrl,
+    async registrationOnlyReplayComplete(): Promise<boolean> {
+      if (options.registrationOnly !== 'grant' || desktop === undefined || desktopReleased) {
+        return false
+      }
+      await desktop.assertCurrent(desktop.generation)
+      registration?.assertHealthy()
+      const current = identities([...owned.keys()])
+      if (
+        [...owned.values()].some(value =>
+          current.has(value.pid) && !ProcessTree.sameProcess(current.get(value.pid), value)
+        )
+      ) {
+        return Errors.throwHostEnvironment('Registration-only replay ownership changed before release.')
+      }
+      if ((await listener()).length !== 0) {
+        return Errors.throwHostEnvironment('Registration-only replay unexpectedly bound a backend.')
+      }
+      return registration?.acknowledged() === true && replayComplete
+    },
     async cleanup(serverStopped: boolean) {
       await closeForwarder(serverStopped)
-      if (released) {
-        return
-      }
-      if (retained) {
-        return Errors.throwHostEnvironment(`WDA resources remain fenced for recovery at ${root}.`)
-      }
-      reservation.guard.stop(true)
-      if (desktop !== undefined && !desktopReleased) {
-        // Ambiguous remote cleanup leaves physical input fenced; stopping Studio is independent.
-        return await quarantine('WDA remote-session shutdown is unproved.')
-      }
-      if (startupAttempted && (!serverStopped || !await resourcesStopped(root, reservation.port, inspect))) {
-        return await quarantine('WDA shutdown is unproved by server, process, and listener inspection.')
-      }
-      await reservation.lease.release()
-      released = true
-      await record('closed')
+      return await (cleanupCompletion ??= cleanupResources(serverStopped))
     },
+  }
+  async function cleanupResources(serverStopped: boolean): Promise<void> {
+    if (released) {
+      return
+    }
+    if (retained) {
+      return Errors.throwHostEnvironment(`WDA resources remain fenced for recovery at ${root}.`)
+    }
+    reservation.guard.stop(true)
+    if (desktop !== undefined && !desktopReleased) {
+      // Ambiguous remote cleanup leaves physical input fenced; stopping Studio is independent.
+      return await quarantine('WDA remote-session shutdown is unproved.')
+    }
+    if (startupAttempted && (!serverStopped || !await resourcesStopped(root, reservation.port, inspect))) {
+      return await quarantine('WDA shutdown is unproved by server, process, and listener inspection.')
+    }
+    await reservation.lease.release()
+    released = true
+    await record('closed')
+  }
+}
+
+async function persistRecord(note: string, snapshot: unknown): Promise<void> {
+  const temporary = `${note}.${Platform.randomUUID()}.tmp`
+  try {
+    await FS.writeJson(temporary, snapshot, { mode: 0o600 })
+    const handle = await FS.openAppend(temporary)
+    try {
+      await handle.sync()
+    } finally {
+      await handle.close()
+    }
+    await FS.move(temporary, note)
+  } finally {
+    await FS.remove(temporary).catch(() => {})
   }
 }
 

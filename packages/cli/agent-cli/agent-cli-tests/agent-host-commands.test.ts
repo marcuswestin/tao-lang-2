@@ -35,6 +35,8 @@ const expected = [
   'studio-native',
   'studio-ps',
   'studio-stop',
+  'studio-canary',
+  'studio-manual-checks',
   'docker-desktop start',
   'watchman start',
   'watchman status',

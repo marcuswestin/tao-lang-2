@@ -41,10 +41,15 @@ function selectsStudio(command: string, args: readonly string[]): boolean {
 
 function smokeNeedsStudio(files: readonly string[], native = false): boolean {
   const tests = files.filter(file => file.endsWith('.test.ts'))
-  if (tests.some(file => /studio-(?:host-control|mac2-acceptance)\.test\.ts$/.test(file))) {
+  if (
+    tests.some(file =>
+      /studio-(?:host-control|mac2-acceptance|mac2-source-probe|wda-registration-probe)\.test\.ts$/.test(file)
+    )
+  ) {
     return true
   }
-  return native && (tests.length === 0 || tests.some(file => !file.endsWith('studio-simulated-user.test.ts')))
+  return native && (tests.length === 0
+    || tests.some(file => !/(?:^|[\\/])studio-simulated-user\.test\.ts$/.test(file)))
 }
 
 function warningsForCommand(command: string, args: readonly string[]): readonly string[] {

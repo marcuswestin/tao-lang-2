@@ -13,6 +13,8 @@ export const STUDIO_MANUAL_CHECKS = [
 type StudioManualCheckReport = {
   checks: readonly string[]
   launchExitCode: number
+  openProjectRoot: string
+  projectRoot: string
   status: 'launched'
   version: 2
 }
@@ -27,6 +29,7 @@ type StudioManualCheckOptions = {
 
 type StudioManualCheckDependencies = {
   isInteractive: () => boolean
+  project?: typeof StudioNativeTestRun.project
   runStudio: (options: StudioDevOptions) => Promise<number>
   writeLine: (message: string) => void
 }
@@ -53,11 +56,20 @@ async function run(
     repositoryRoot,
   )
   const { root: artifactRoot } = await StudioNativeTestRun.create(artifactBase)
-  const target = await StudioNativeTestRun.project(options, artifactRoot, repositoryRoot)
-  const { appName, projectRoot } = target
-  let cleanupProof: StudioDevCleanupResult | undefined
+  const project = dependencies.project ?? StudioNativeTestRun.project
+  const targets: Awaited<ReturnType<typeof project>>[] = []
+  // Until launch is attempted, this invocation has started no native or project resources.
+  let cleanupProof: StudioDevCleanupResult | undefined = { resourcesStopped: true }
   try {
+    const target = await project(options, artifactRoot, repositoryRoot)
+    targets.push(target)
+    const openProject = await project({}, FS.resolvePath('open-project', artifactRoot), repositoryRoot)
+    targets.push(openProject)
+    const { appName, projectRoot } = target
+    const isolatedOptions = await StudioNativeTestRun.devOptions(artifactRoot)
     dependencies.writeLine('Tao Studio will open for these manual checks:')
+    dependencies.writeLine(`Initial project: ${projectRoot}`)
+    dependencies.writeLine(`For File > Open Project…, choose this disposable project: ${openProject.projectRoot}`)
     for (const [index, instruction] of STUDIO_MANUAL_CHECKS.entries()) {
       dependencies.writeLine(`${index + 1}. ${instruction}`)
     }
@@ -66,8 +78,9 @@ async function run(
         + ' when you are done; that is how this workflow ends, and it is not a failure.',
     )
 
+    cleanupProof = undefined
     const launchExitCode = await dependencies.runStudio({
-      ...await StudioNativeTestRun.devOptions(artifactRoot),
+      ...isolatedOptions,
       appName,
       browser: true,
       native: true,
@@ -83,6 +96,8 @@ async function run(
     const report: StudioManualCheckReport = {
       checks: STUDIO_MANUAL_CHECKS,
       launchExitCode,
+      openProjectRoot: openProject.projectRoot,
+      projectRoot,
       status: 'launched',
       version: 2,
     }
@@ -94,7 +109,12 @@ async function run(
     dependencies.writeLine(`Report: ${FS.displayPath(reportPath)}`)
     return 0
   } finally {
-    await target.cleanup(cleanupProof)
+    const cleanups = await Promise.allSettled(targets.map(target => target.cleanup(cleanupProof)))
+    for (const cleanup of cleanups) {
+      if (cleanup.status === 'rejected') {
+        throw cleanup.reason
+      }
+    }
   }
 }
 

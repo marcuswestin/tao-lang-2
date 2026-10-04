@@ -198,7 +198,11 @@ export async function openLaunchRecord(options: OpenLaunchOptions): Promise<Stud
  * to read. Removing them as a new launch opens keeps the listing about launches that matter,
  * without ever touching one that is still starting, ready, or stopping.
  */
-async function pruneFinalizedLaunches(repositoryRoot: string, exceptLaunchId: string, directory: string): Promise<void> {
+async function pruneFinalizedLaunches(
+  repositoryRoot: string,
+  exceptLaunchId: string,
+  directory: string,
+): Promise<void> {
   for (const stored of await readLaunches(repositoryRoot, directory)) {
     if (stored.manifest.launchId !== exceptLaunchId && stored.manifest.state === 'stopped') {
       await FS.remove(stored.path).catch(() => {})
