@@ -494,51 +494,139 @@ export const StartBranchCommand = {
     dependencies: FinalizeDependencies = defaultDependencies,
   ): Promise<void> {
     const root = FS.resolvePath(options.repositoryRoot ?? Repo.getRoot())
-    if (!name.startsWith('feat/') || name === 'feat/') {
-      Errors.throwUserInput(`start-branch requires a feat/* branch name; got '${name}'.`)
-    }
-    const validName = await dependencies.run('git', {
-      args: ['check-ref-format', '--branch', name],
-      cwd: root,
-      stdio: 'pipe',
-    })
-    if (validName.exitCode !== 0) {
-      Errors.throwUserInput(`Invalid feature branch name: ${name}.`)
-    }
-    await assertCleanWorktree(dependencies, root, 'start-branch')
-    const existing = await dependencies.run('git', {
-      args: ['show-ref', '--verify', '--quiet', `refs/heads/${name}`],
-      cwd: root,
-      stdio: 'pipe',
-    })
-    if (existing.exitCode === 0) {
-      Errors.throwUserInput(`Feature branch '${name}' already exists.`)
-    }
-    if (existing.exitCode !== 1) {
-      assertCommandSucceeded(existing)
-    }
-    await git(dependencies, root, ['fetch', '--quiet', REMOTE, MAIN_BRANCH])
+    await assertNewFeatureBranch(dependencies, root, name, 'start-branch')
+    await fetchForBranch(dependencies, root, name, 'start-branch', [REMOTE, MAIN_BRANCH])
     const mainSha = (await git(dependencies, root, ['rev-parse', `${REMOTE}/${MAIN_BRANCH}`])).stdout.trim()
-    const headSha = (await git(dependencies, root, ['rev-parse', 'HEAD'])).stdout.trim()
-    const diff = await git(dependencies, root, ['diff', '--name-only', '--no-renames', '-z', headSha, mainSha])
-    const blocked = await unwritablePaths(dependencies, root, diff.stdout.split('\0').filter(Boolean))
-    if (blocked.length > 0) {
-      Errors.throwHostEnvironment(
-        `Starting '${name}' from origin/main would write paths this shell may not:\n`
-          + blocked.map(path => `- ${path}`).join('\n')
-          + `\nThe checkout and HEAD are untouched; run \`./agent unsandboxed start-branch ${name}\`.`,
-      )
-    }
-    await git(dependencies, root, ['switch', '--no-track', '-c', name, mainSha])
-    const status = (await git(dependencies, root, ['status', '--porcelain=v1', '--untracked-files=all'])).stdout
-    if (status !== '') {
-      Errors.throwHostEnvironment(
-        `Git switched to '${name}' but left a dirty checkout. Inspect these paths before continuing:\n${status.trimEnd()}`,
-      )
-    }
+    await switchAndSetUp(dependencies, root, name, mainSha, 'start-branch', ['--no-track', '-c', name, mainSha])
     dependencies.writeLine(`Started '${name}' from origin/main (${shortSha(mainSha)}).`)
   },
 } as const
+
+/**
+ * Take over a feature branch someone else pushed: fetch it, switch to a local branch tracking it,
+ * and run setup for what it checked out. A sandboxed `git switch` that replaces protected harness
+ * files stops halfway, so this probes every write first, as start-branch does.
+ */
+export const TakeBranchCommand = {
+  async run(
+    name: string,
+    options: Pick<FinalizeOptions, 'repositoryRoot'> = {},
+    dependencies: FinalizeDependencies = defaultDependencies,
+  ): Promise<void> {
+    const root = FS.resolvePath(options.repositoryRoot ?? Repo.getRoot())
+    await assertNewFeatureBranch(dependencies, root, name, 'take-branch')
+    await fetchForBranch(dependencies, root, name, 'take-branch', [
+      REMOTE,
+      `+refs/heads/${name}:refs/remotes/${REMOTE}/${name}`,
+    ])
+    const branchSha = (await git(dependencies, root, ['rev-parse', `${REMOTE}/${name}`])).stdout.trim()
+    await switchAndSetUp(dependencies, root, name, branchSha, 'take-branch', [
+      '--track',
+      '-c',
+      name,
+      `${REMOTE}/${name}`,
+    ])
+    dependencies.writeLine(`Took over '${name}' at ${REMOTE}/${name} (${shortSha(branchSha)}), tracking it.`)
+  },
+} as const
+
+/**
+ * The remote's credential helper reads configuration the agent sandbox denies, so a sandboxed fetch
+ * fails before reaching the remote. Name the host operation rather than leaving a bare Git failure
+ * that invites a hand-run `git switch`, which half-applies in the sandbox.
+ */
+async function fetchForBranch(
+  dependencies: FinalizeDependencies,
+  root: string,
+  name: string,
+  command: string,
+  fetchArgs: readonly string[],
+): Promise<void> {
+  const fetched = await dependencies.run('git', { args: ['fetch', '--quiet', ...fetchArgs], cwd: root, stdio: 'pipe' })
+  if (fetched.exitCode === 0) {
+    return
+  }
+  const stderr = fetched.stderr.trim()
+  if (stderr.includes("couldn't find remote ref")) {
+    Errors.throwUserInput(`${REMOTE} has no branch '${name}'. Start a new one with ./agent start-branch ${name}.`)
+  }
+  Errors.throwHostEnvironment(
+    `Fetching from ${REMOTE} failed; the checkout and HEAD are untouched.\n${stderr}\n`
+      + `If the sandbox refused Git's credential helper, run \`./agent unsandboxed ${command} ${name}\`.`,
+  )
+}
+
+/** A new local feat/* branch needs a valid unused name and a clean worktree to switch from. */
+async function assertNewFeatureBranch(
+  dependencies: FinalizeDependencies,
+  root: string,
+  name: string,
+  command: string,
+): Promise<void> {
+  if (!name.startsWith('feat/') || name === 'feat/') {
+    Errors.throwUserInput(`${command} requires a feat/* branch name; got '${name}'.`)
+  }
+  const validName = await dependencies.run('git', {
+    args: ['check-ref-format', '--branch', name],
+    cwd: root,
+    stdio: 'pipe',
+  })
+  if (validName.exitCode !== 0) {
+    Errors.throwUserInput(`Invalid feature branch name: ${name}.`)
+  }
+  await assertCleanWorktree(dependencies, root, command)
+  const existing = await dependencies.run('git', {
+    args: ['show-ref', '--verify', '--quiet', `refs/heads/${name}`],
+    cwd: root,
+    stdio: 'pipe',
+  })
+  if (existing.exitCode === 0) {
+    Errors.throwUserInput(`Feature branch '${name}' already exists locally.`)
+  }
+  if (existing.exitCode !== 1) {
+    assertCommandSucceeded(existing)
+  }
+}
+
+/**
+ * Switch only when every write the checkout makes is allowed, then run setup: dependencies,
+ * generated harness files, and hooks belong to the commit checked out, and nothing else reruns
+ * setup when a worktree changes branch.
+ */
+async function switchAndSetUp(
+  dependencies: FinalizeDependencies,
+  root: string,
+  name: string,
+  targetSha: string,
+  command: string,
+  switchArgs: readonly string[],
+): Promise<void> {
+  const headSha = (await git(dependencies, root, ['rev-parse', 'HEAD'])).stdout.trim()
+  const diff = await git(dependencies, root, ['diff', '--name-only', '--no-renames', '-z', headSha, targetSha])
+  const blocked = await unwritablePaths(dependencies, root, diff.stdout.split('\0').filter(Boolean))
+  if (blocked.length > 0) {
+    Errors.throwHostEnvironment(
+      `Switching to '${name}' would write paths this shell may not:\n`
+        + blocked.map(path => `- ${path}`).join('\n')
+        + `\nThe checkout and HEAD are untouched; run \`./agent unsandboxed ${command} ${name}\`.`,
+    )
+  }
+  await git(dependencies, root, ['switch', ...switchArgs])
+  const status = (await git(dependencies, root, ['status', '--porcelain=v1', '--untracked-files=all'])).stdout
+  if (status !== '') {
+    Errors.throwHostEnvironment(
+      `Git switched to '${name}' but left a dirty checkout. Inspect these paths before continuing:\n${status.trimEnd()}`,
+    )
+  }
+  dependencies.writeLine(`Switched to '${name}'; running ./agent setup for it.`)
+  const setup = await dependencies.run('./agent', { args: ['setup'], cwd: root, stdio: 'inherit' })
+  if (setup.exitCode !== 0) {
+    Errors.throwHostEnvironment(
+      `Switched to '${name}', but ./agent setup failed. Follow its report; for a protected package path, `
+        + 'run ./agent unsandboxed setup.',
+    )
+  }
+}
 
 /**
  * recordMergeMessage writes the merge message for a branch whose whole change a command authored

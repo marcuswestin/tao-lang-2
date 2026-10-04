@@ -1,7 +1,13 @@
 import { runWithCommands } from '@cli-kit/RunWithCommands'
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 import { DeveloperBranchCommand, SyncMainCommand } from '@verification/DeveloperWorkflow'
-import { FinalizeCommand, LandCommand, MergeMainCommand, StartBranchCommand } from '@verification/Finalize'
+import {
+  FinalizeCommand,
+  LandCommand,
+  MergeMainCommand,
+  StartBranchCommand,
+  TakeBranchCommand,
+} from '@verification/Finalize'
 import { GateCatalog } from '@verification/GateCatalog'
 import { runGates } from '@verification/GateRunner'
 import { GreenTree } from '@verification/GreenTree'
@@ -626,6 +632,20 @@ await runWithCommands(commands => {
     .action(async (name: string) => {
       try {
         await StartBranchCommand.run(name)
+        Platform.runtimeProcess.exit(0)
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
+    .command('take-branch')
+    .description('Take over a pushed feat/* branch: fetch it, switch to it with tracking, and run setup.')
+    .argument('<name>', 'Full feat/* branch name on origin.')
+    .action(async (name: string) => {
+      try {
+        await TakeBranchCommand.run(name)
         Platform.runtimeProcess.exit(0)
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))
