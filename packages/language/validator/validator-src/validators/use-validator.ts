@@ -104,10 +104,18 @@ function validateUseStatement(useStatement: AST.UseStatement, options: ValidateU
     return
   }
 
-  const declarations = targetFiles
-    .flatMap(declarationsInFile)
+  const declarations = (useStatement.all
+    ? Packages.createResolver(ctx.packagesContext).collectTargetDeclarations(useStatement, {
+      fromFilePath,
+      workspaceFiles,
+    })
+      .flatMap(declarationRecords)
+    : targetFiles.flatMap(declarationsInFile))
     .filter(declaration => declaration.name.length > 0)
-  for (const importedName of useStatement.importedDeclarations.map(reference => reference.$refText)) {
+  const importedNames = useStatement.all
+    ? [...new Set(declarations.map(declaration => declaration.name))]
+    : useStatement.importedDeclarations.map(reference => reference.$refText)
+  for (const importedName of importedNames) {
     validateImportedName(importedName, {
       useStatement,
       declarations,
@@ -233,6 +241,9 @@ function reportUnusedImports(
   ctx: ValidationContext,
   referencedNames: ReadonlySet<string>,
 ): void {
+  if (useStatement.all) {
+    return
+  }
   for (const name of new Set(useStatement.importedDeclarations.map(reference => reference.$refText))) {
     if (!referencedNames.has(name)) {
       ctx.warning(useStatement, useValidationMessages.unusedImport(name), {

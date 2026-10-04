@@ -214,9 +214,14 @@ function nextFreeViewName(
 function viewNameTaken(file: AST.TaoFile, name: string, files: readonly AST.TaoFile[]): boolean {
   return [file, ...files].some(candidate =>
     candidate.statements.some(statement =>
-      (AST.isDeclaration(statement) && statement.name === name)
+      (AST.isDeclaration(statement) && AST.declarationNamespace(statement) === 'value' && statement.name === name)
       || (AST.isEntityDataDeclaration(statement) && statement.singularName === name)
-      || (AST.isUseStatement(statement) && statement.importedDeclarations.some(item => item.$refText === name))
+      || (AST.isUseStatement(statement)
+        && (AST.resolvedImportedDeclarations(statement).some(declaration =>
+          AST.declarationNamespace(declaration) === 'value'
+          && (declaration.name === name
+            || (AST.isEntityDataDeclaration(declaration) && declaration.singularName === name))
+        ) || statement.importedDeclarations.some(item => item.$refText === name && item.ref === undefined)))
     )
   )
 }

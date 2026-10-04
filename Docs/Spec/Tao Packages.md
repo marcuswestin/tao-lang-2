@@ -158,6 +158,19 @@ import of the root `Documents` collection. Local declarations and implicitly vis
 declarations retain both names. Import organization and unused-import diagnostics track each
 imported form independently.
 
+`use all from Path` imports every public declaration from that target, including both names of
+public entity data. It supports the same relative, module and dependency paths as named imports;
+named imports retain their existing visibility rules. Wildcard imports never expose file, folder
+or module-private declarations. Type and value names occupy separate namespaces. Every wildcard
+binding must be unambiguous, even when unused: collisions with local declarations or another import
+are errors. Import organization preserves the wildcard, and unused-import checks do not recommend
+removing individual exports from it. Generated runtime imports include only referenced values.
+
+```tao
+use all from @tao/ui
+use all from ./PublicData
+```
+
 The UI presents first-class
 view values; bare `@tao/nav` selects the native kit, so `StackNav` owns the corresponding native
 transition and reads a directly presented scene's reactive `Title` and optional `Toolbar`; a plain

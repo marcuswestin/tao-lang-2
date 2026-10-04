@@ -182,6 +182,9 @@ export function resolvedImportedDeclarations(useStatement: AST.UseStatement): AS
   const names = new Set(useStatement.importedDeclarations.map(reference => reference.$refText))
   const declarations = resolvedUseTargets.get(useStatement)
     ?? useStatement.importedDeclarations.map(reference => reference.ref).filter(AST.isDeclaration)
+  if (useStatement.all) {
+    return [...new Set(declarations)]
+  }
   return [...new Set(declarations)].filter(declaration =>
     names.has(declaration.name) || (AST.isEntityDataDeclaration(declaration) && names.has(declaration.singularName))
   )
@@ -755,7 +758,7 @@ export function visibleFileDeclarations<DeclarationT extends AST.Node>(
     for (const declaration of resolvedImportedDeclarations(statement)) {
       if (
         guard(declaration)
-        && (!importedName
+        && (statement.all || !importedName
           || statement.importedDeclarations.some(reference => reference.$refText === importedName(declaration)))
       ) {
         declarations.push(declaration)
@@ -813,7 +816,7 @@ export function visibleValueDeclarations<DeclarationT extends AST.Declaration>(
     if (AST.isUseStatement(statement)) {
       const names = new Set(statement.importedDeclarations.map(reference => reference.$refText))
       for (const declaration of resolvedImportedDeclarations(statement)) {
-        if (names.has(declaration.name)) {
+        if (statement.all || names.has(declaration.name)) {
           add(declaration)
         }
       }

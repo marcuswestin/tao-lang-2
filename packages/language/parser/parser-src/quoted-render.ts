@@ -14,6 +14,7 @@ export function quotedTextImport(): AST.UseStatement {
     $type: 'UseStatement',
     $container: { $type: 'TaoFile', statements: [] },
     importPath: '@tao/ui',
+    all: false,
     importedDeclarations: [],
   }
 }
