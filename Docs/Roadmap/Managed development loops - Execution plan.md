@@ -33,6 +33,15 @@ is unchanged. The isolated complete HNReader browser retry passes3/0, including 
 (`17-17-10-034Z-61246`). Full verification must cover the final committed tree before readiness
 is claimed. Landing and special acceptance remain held.
 
+The third readiness run passes typecheck, the developer CLI suite and all executed quiet
+browser/native proofs, but stops on another stale-owner fixture using an OS-invalid PID in the
+desktop host suite. Its replacement uses a real exited child and passes8
+(`17-24-48-429Z-72661-bed9b41f`). Two ship-transaction fixtures contain the same invalid-PID
+pattern; the same source-only correction passes6 (`17-25-12-593Z-81175-0e1fba85`). The
+no-execution readiness preview accepts the reviewed message and clean branch at `5b5bceee1`
+(`17-23-04-599Z-46425`); it changed no refs/worktrees and performed no push. A subsequent commit
+requires refreshing that message review. None of these partial broad runs is complete verification.
+
 The Developer requested a pause at a good stopping point to preserve effort and tokens for other
 work, and explicitly deferred all remaining managed-loop and isolated native acceptance until
 post-MVP. The subsequent instruction authorizes committing the completed implementation in chunks
