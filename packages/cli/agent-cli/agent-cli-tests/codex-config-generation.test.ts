@@ -272,7 +272,9 @@ Describe('Codex config generation', () => {
     const insideHome = await mkTestDir('tao-codex-home-location-')
     const outsideHome = await mkGitTestDir('tao-codex-other-location-')
     try {
-      Expect(insideHome.startsWith(`${FS.homeDir()}/`)).toBe(true)
+      // The checkout-local fixture shares the checkout's location, which is under home on a
+      // contributor machine but need not be in a hosted container whose HOME lies elsewhere.
+      Expect(insideHome.startsWith(`${FS.homeDir()}/`)).toBe(Repo.getRoot().startsWith(`${FS.homeDir()}/`))
       Expect(outsideHome.startsWith(`${FS.homeDir()}/`)).toBe(false)
       const expected = await FS.readText(Repo.resolvePath('.codex/config.toml'))
       // Different synthetic login/clone layouts exercise the whole renderer without changing
