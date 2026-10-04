@@ -1,4 +1,4 @@
-import { Errors, FS, HCI } from '@shared'
+import { Errors, FS, HCI, readFirebaseConnections } from '@shared'
 import { chooseTaoApp } from './dev-app-selection'
 import { type HostedProvider, readHostedProviderInputs } from './hosted-provider-inputs'
 
@@ -13,10 +13,23 @@ export async function runHostedProviderGenerate(
   const app = await chooseTaoApp(path, options.appName, `${provider} generate`)
   const { definition, policy } = await readHostedProviderInputs(app.appPath, app.appName, provider)
   const files: Readonly<Record<string, string>> = provider === 'jazz'
-    ? (await import('tao-jazz/deployment')).jazzDeploymentFiles(definition, policy)
+    ? (await import('tao-jazz/deployment')).jazzDeploymentFiles(definition, policy!)
     : provider === 'convex'
-    ? (await import('tao-convex/generate')).generateConvexBackend(definition, policy)
-    : (await import('tao-pylon/generate')).generatePylonBackend(definition, policy, { name: app.appName }).files
+    ? (await import('tao-convex/generate')).generateConvexBackend(definition, policy!)
+    : provider === 'pylon'
+    ? (await import('tao-pylon/generate')).generatePylonBackend(definition, policy!, { name: app.appName }).files
+    : {
+      ...(await import('tao-firebase/generate')).generateFirebaseBackend(definition, policy).files,
+      'firebase.json': `${
+        JSON.stringify(
+          {
+            firestore: { rules: 'firestore.rules', indexes: 'firestore.indexes.json' },
+          },
+          null,
+          2,
+        )
+      }\n`,
+    }
   const output = FS.resolvePath(options.output)
   if (await FS.isSymbolicLink(output)) {
     Errors.throwUserInput(`Output ${FS.displayPath(output)} is a symbolic link.`)
@@ -62,6 +75,7 @@ export async function runHostedProviderGenerate(
       `Generated files already exist with different content: ${conflicts.join(', ')}. Pass --force to replace them.`,
     )
   }
+  const connection = provider === 'firebase' ? await readFirebaseConnections(app.projectRoot) : undefined
   await FS.mkdir(output)
   for (const target of targets) {
     if (!await FS.exists(target.path) || await FS.readText(target.path) !== target.code) {
@@ -69,4 +83,19 @@ export async function runHostedProviderGenerate(
     }
   }
   HCI.writeSuccess(`Generated ${provider} backend files in ${FS.displayPath(output)}\n`)
+  if (provider === 'firebase') {
+    HCI.writeLine(
+      'Review these rules and combine them with any existing project-wide Firestore rules before deployment.',
+    )
+    if (connection === undefined) {
+      HCI.writeLine('Connect this Tao project to Firebase before deploying these files.')
+    } else {
+      HCI.writeLine(`From ${FS.displayPath(output)}, deploy with the Firebase CLI:`)
+      HCI.writeLine(
+        `firebase deploy --only firestore:rules,firestore:indexes --project '${
+          connection.projectId.replaceAll("'", "'\\''")
+        }'`,
+      )
+    }
+  }
 }

@@ -15,7 +15,8 @@
     "tao-instantdb": "workspace:*",
     "tao-jazz": "workspace:*",
     "tao-pylon": "workspace:*",
-    "tao-shared": "workspace:*"
+    "tao-shared": "workspace:*",
+    "tao-firebase": "workspace:*"
   },
   "peerDependencies": {
     "react": "^19.2.3",

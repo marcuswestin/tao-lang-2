@@ -5,7 +5,9 @@ type FirebaseResult = { exitCode: number | null; stdout: string; stderr: string 
 export type FirebaseRunner = (args: readonly string[], cwd: string, interactive: boolean) => Promise<FirebaseResult>
 
 type FirebasePrompts = { text: (message: string) => Promise<string> }
-type FirebaseConfig = Record<'projectId' | 'apiKey' | 'appId' | 'authDomain', string>
+type FirebaseConfig =
+  & Record<'projectId' | 'apiKey' | 'appId' | 'authDomain', string>
+  & Partial<Record<'storageBucket' | 'messagingSenderId', string>>
 
 type FirebaseProvisionOptions = {
   project: string
@@ -30,9 +32,25 @@ export async function provisionFirebase(options: FirebaseProvisionOptions): Prom
   if (await FS.isSymbolicLink(work) || await FS.isSymbolicLink(configPath) || await FS.isSymbolicLink(rulesPath)) {
     Errors.throwUserInput('Firebase setup files cannot be symbolic links; no cloud changes were made.')
   }
+  const sourceDirectory = FS.resolvePath('src', options.project)
+  const firebaseDirectory = FS.resolvePath('firebase', sourceDirectory)
   const sourceRules = FS.resolvePath('src/firebase/firestore.rules', options.project)
-  if (!await FS.isFile(sourceRules)) {
-    Errors.throwUserInput('Firebase automation needs src/firebase/firestore.rules in this pilot app.')
+  for (
+    const [entry, kind] of [
+      [sourceDirectory, 'directory'],
+      [firebaseDirectory, 'directory'],
+      [sourceRules, 'file'],
+    ] as const
+  ) {
+    if (await FS.isSymbolicLink(entry)) {
+      Errors.throwUserInput('Firebase pilot rules cannot use symbolic links; no cloud changes were made.')
+    }
+    if (!await FS.exists(entry) || (await FS.entryMetadata(entry)).kind !== kind) {
+      Errors.throwUserInput('Firebase automation needs a regular src/firebase/firestore.rules in this pilot app.')
+    }
+  }
+  if (!FS.pathIsWithin(await FS.realPath(sourceRules), await FS.realPath(options.project))) {
+    Errors.throwUserInput('Firebase pilot rules must stay inside the project; no cloud changes were made.')
   }
   await FS.mkdir(work)
 
@@ -219,6 +237,16 @@ function firebaseConfig(config: Record<string, unknown>): FirebaseConfig {
   const fields: Partial<FirebaseConfig> = {}
   for (const key of ['projectId', 'apiKey', 'appId', 'authDomain'] as const) {
     const value = config[key]
+    if (typeof value !== 'string' || !value.trim() || /[\u0000-\u001f\u007f]/u.test(value)) {
+      Errors.throwHostEnvironment(`Firebase CLI returned an invalid ${key} in the web app configuration.`)
+    }
+    fields[key] = value
+  }
+  for (const key of ['storageBucket', 'messagingSenderId'] as const) {
+    const value = config[key]
+    if (value === undefined) {
+      continue
+    }
     if (typeof value !== 'string' || !value.trim() || /[\u0000-\u001f\u007f]/u.test(value)) {
       Errors.throwHostEnvironment(`Firebase CLI returned an invalid ${key} in the web app configuration.`)
     }

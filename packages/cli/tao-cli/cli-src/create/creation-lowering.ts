@@ -21,6 +21,8 @@ export type LowerCreationPlanOptions = {
   releaseProfile?: ReleaseProfile
   /** The description the plan came from, recorded in the app file for provenance. */
   description?: string
+  provider?: 'firebase'
+  validationTools?: boolean
 }
 
 const TAB_ICONS = ['list.bullet', 'book', 'tray.full', 'star', 'tag', 'folder']
@@ -33,24 +35,59 @@ const COMMENT_WIDTH = 100
  * is Tao's.
  */
 export function lowerCreationPlan(plan: CreationPlan, options: LowerCreationPlanOptions = {}): CreationFiles {
+  Assert.input(
+    !options.validationTools || options.provider === 'firebase',
+    'Validation tools require Firebase creation.',
+  )
+  if (options.provider === 'firebase') {
+    ReleaseCapabilities.require('auth', options.releaseProfile)
+    ReleaseCapabilities.require('hosted-data', options.releaseProfile)
+    const issue = firebaseCreationIssue(plan)
+    Assert.input(issue === undefined, issue ?? 'Firebase creation name collision.')
+  }
   const names = new ProjectNames(plan)
+  const firebase = options.provider === 'firebase'
   const files: CreationFiles = {
-    'App.tao': appFile(plan, names, options.description),
-    'Data.tao': dataFile(plan, names),
+    'App.tao': appFile(plan, names, options.description, firebase),
+    'Data.tao': dataFile(plan, names, firebase),
     'Chrome.tao': chromeFile(plan, names),
     'Design.tao': designFile(plan, names, options.releaseProfile),
-    'Scenarios.tao': scenariosFile(plan, names),
-    [`${names.app}.test.tao`]: testFile(plan, names),
+    'Scenarios.tao': firebase ? firebaseScenariosFile(names) : scenariosFile(plan, names),
+    [`${names.app}.test.tao`]: testFile(plan, names, firebase, options.validationTools === true),
     'tsconfig.json': PROJECT_TSCONFIG,
     '.gitignore': '*.tao.ts\n.tao/\nnode_modules/\n',
     // The reserved root generated package exists from day one, committed empty, so Studio and the
     // compiler have their folder before the first generated file lands.
     '@/.gitkeep': '',
   }
+  if (firebase) {
+    files['Auth.tao'] = firebaseAuthFile(plan, names, options.validationTools === true)
+    files['README.md'] = firebaseReadme(plan, options.validationTools === true)
+  }
   for (const entity of plan.entities) {
-    files[`${entity.plural}/${entity.plural}.tao`] = featureFile(entity, names)
+    files[`${entity.plural}/${entity.plural}.tao`] = featureFile(entity, names, firebase)
   }
   return projectStarterRelease(files, options.releaseProfile)
+}
+
+export function firebaseCreationIssue(plan: CreationPlan): string | undefined {
+  const app = appIdentifier(plan.name)
+  const reserved = new Set([
+    'Accounts',
+    'Account',
+    'Firebase',
+    'FirebaseAuth',
+    `${app}AuthNavigator`,
+    `${app}AccountGate`,
+    `${app}SignIn`,
+  ])
+  const collision = reserved.has(app) ? app : plan.entities
+    .flatMap(entity => [entity.plural, entity.singular, ...derivedDeclarationNames(entity)])
+    .find(name => reserved.has(name))
+  if (collision !== undefined) {
+    return `Firebase creation reserves ${collision} for the signed-in account; rename the app or entity.`
+  }
+  return undefined
 }
 
 /** writeCreationFiles writes lowered sources under `directory`, creating feature folders as needed. */
@@ -77,11 +114,29 @@ class ProjectNames {
 
 // -- App.tao ---------------------------------------------------------------------------------------
 
-function appFile(plan: CreationPlan, names: ProjectNames, description: string | undefined): string {
+function appFile(plan: CreationPlan, names: ProjectNames, description: string | undefined, firebase: boolean): string {
   const provenance = description === undefined || description.trim().length === 0
     ? ''
     : `//\n${commentLines(`Created by tao create from: ${description}`)}\n`
-  return `use Local from @tao/data/providers/local
+  const imports = firebase
+    ? `use FirebaseAuth from @tao/auth/firebase
+use Firebase from @tao/data/providers/firebase
+use ${names.app}AuthNavigator from ./Auth`
+    : 'use Local from @tao/data/providers/local'
+  const connection = firebase
+    ? `   Auth FirebaseAuth {
+      ApiKey "REPLACE_WITH_FIREBASE_API_KEY"
+      ProjectId "REPLACE_WITH_FIREBASE_PROJECT_ID"
+   }
+   Datasource Firebase {
+      ApiKey "REPLACE_WITH_FIREBASE_API_KEY"
+      ProjectId "REPLACE_WITH_FIREBASE_PROJECT_ID"
+      StorageKey ${taoString(plan.id)}
+   }`
+    : `   Datasource Local {
+      StorageKey ${taoString(plan.id)}
+   }`
+  return `${imports}
 
 project {
    id ${taoString(plan.id)}
@@ -97,10 +152,8 @@ ${provenance}//
 // Data.tao, the design in Design.tao, and each feature has its own folder.
 app ${names.app} {
    Name ${taoString(plan.name)}
-   Navigator ${names.navigator}
-   Datasource Local {
-      StorageKey ${taoString(plan.id)}
-   }
+   Navigator ${firebase ? `${names.app}AuthNavigator` : names.navigator}
+${connection}
    Design ${names.design}
 }
 `
@@ -108,7 +161,7 @@ app ${names.app} {
 
 // -- Data.tao --------------------------------------------------------------------------------------
 
-function dataFile(plan: CreationPlan, _names: ProjectNames): string {
+function dataFile(plan: CreationPlan, _names: ProjectNames, firebase: boolean): string {
   const entities = plan.entities.map(entity => {
     const fields = entity.fields.map(field => `   ${fieldDeclaration(field)},`).join('\n')
     return `${commentLines(entity.purpose)}
@@ -122,7 +175,163 @@ ${fields}
   return `// The data catalog. Every entity the app stores is declared here, so what a row contains is
 // readable on one page.
 
-${entities.join('\n\n')}
+${firebase ? 'package\ndata Accounts / Account {\n   DisplayName text,\n}\n\n' : ''}${entities.join('\n\n')}
+`
+}
+
+function firebaseAuthFile(plan: CreationPlan, names: ProjectNames, validationTools: boolean): string {
+  const featureImports = plan.entities.map(entity => `use ${listScene(entity)} from ./${entity.plural}`).join('\n')
+  const selections = plan.entities.length === 1
+    ? `                  ${listScene(plan.entities[0]!)}()`
+    : `                  Row() {
+${
+      plan.entities.map(entity =>
+        `                     FormButton(${taoString(humanize(entity.plural))}) {
+                        on press -> { set Active = ${taoString(entity.plural)} }
+                     }`
+      ).join('\n')
+    }
+                  }
+${
+      plan.entities.map(entity =>
+        `                  if Active == ${taoString(entity.plural)} {
+                     ${listScene(entity)}()
+                  }`
+      ).join('\n')
+    }`
+  const validationAction = validationTools
+    ? `   // TODO: Remove this synthetic validation shortcut after hosted acceptance.
+   action FillValidationCredentials() {
+      set Flow.Email = "tao-hosted-validation@example.test"
+      set Flow.Password = "Tao-validation-only-2026!"
+   }
+`
+    : ''
+  const validationButton = validationTools
+    ? `      #fillValidationCredentials
+      FormButton("Fill validation credentials") {
+         on press FillValidationCredentials
+      }
+`
+    : ''
+  return `use Account, Session, SignInFlow, SignOut from @tao/auth
+use StackNav from @tao/nav
+use Col, Row, Text, TextInput, TextMultiline from @tao/ui
+use FormButton from @tao/ui/basic
+${featureImports}
+
+folder
+nav ${names.app}AuthNavigator = StackNav {
+   Initial ${names.app}AccountGate
+}
+
+scene ${names.app}AccountGate() {
+   Title ${taoString(plan.name)}
+${plan.entities.length === 1 ? '' : `   state Active = ${taoString(plan.entities[0]!.plural)}\n`}   action Leave() {
+      do SignOut()
+   }
+   render Col() [fill] {
+      when Session.State
+         | SignedIn -> {
+            #signOut
+            FormButton("Sign out") {
+               on press Leave
+            }
+            when Account {
+               loading -> Text("Opening account…")
+               missing -> Text("Account data is missing")
+               unauthorized -> Text("You do not have access")
+               error -> Text("Account data could not be loaded")
+               otherwise -> {
+${selections}
+               }
+            }
+         }
+         | Restoring -> Text("Restoring session…")
+         | otherwise -> ${names.app}SignIn()
+   }
+}
+
+view ${names.app}SignIn() {
+   state Flow = SignInFlow()
+   action ExistingAccount() {
+      set Flow.Registration = false
+      do Flow.Submit()
+   }
+   action CreateAccount() {
+      set Flow.Registration = true
+      do Flow.Submit()
+   }
+${validationAction}   render Col() [fill] {
+      Text(${taoString(`Sign in to ${plan.name}`)})
+      #email
+      TextInput(Value: Flow.Email, Label: "Email") {
+         on submit ExistingAccount
+      }
+      #password
+      TextInput(Value: Flow.Password, Label: "Password", Secure: true) {
+         on submit ExistingAccount
+      }
+      #signIn
+      FormButton("Sign in", Disabled: Flow.Running) {
+         on press ExistingAccount
+      }
+      #createAccount
+      FormButton("Create account", Disabled: Flow.Running) {
+         on press CreateAccount
+      }
+      if Flow.Problem is not empty {
+         TextMultiline(Flow.Problem)
+      }
+${validationButton}   }
+}
+`
+}
+
+function firebaseReadme(plan: CreationPlan, validationTools: boolean): string {
+  return `# ${plan.name}
+
+This app stores each signed-in account's data in a private Firebase store. Set up a Firebase
+project with Email/Password sign-in and Firestore before running the app.
+
+From this project directory:
+
+1. Run \`tao connect firebase .\` to save the public connection settings locally in
+   \`.tao/local/connections.json\`. The checked-in placeholders in \`App.tao\` are overridden locally.
+2. Run \`tao firebase generate . --app ${appIdentifier(plan.name)} --output .tao/firebase-backend\`.
+   Review and combine those rules with any existing rules in that Firebase project before deploying:
+   a Firestore rules deployment replaces the project's current rules. Generation does not deploy.
+3. Run \`tao dev . --app ${appIdentifier(plan.name)}\` and sign in or create an account.
+
+Run \`tao test .\` for the local Memory/TestAuth journeys. They do not contact Firebase.
+${
+    validationTools
+      ? '\nThe Fill validation credentials button only fills synthetic example values and never submits. Remove it after hosted validation.\n'
+      : ''
+  }
+`
+}
+
+function firebaseScenariosFile(names: ProjectNames): string {
+  return `use Memory from @tao/data/providers/memory
+use ${names.navigator} from ./Chrome
+use ${names.design} from ./Design
+
+app ${names.app}Preview {
+   Name ${taoString(names.plan.name)}
+   Datasource Memory { }
+   Navigator ${names.navigator}
+   Design ${names.design}
+}
+
+scenarios ${names.app}Preview "devices" {
+   scenario "phone" {
+      device phone
+      appearance light
+      network online
+      locale "en"
+   }
+}
 `
 }
 
@@ -238,7 +447,7 @@ ${palette}
 
 // -- <Plural>/<Plural>.tao -------------------------------------------------------------------------
 
-function featureFile(entity: CreationEntity, _names: ProjectNames): string {
+function featureFile(entity: CreationEntity, _names: ProjectNames, firebase: boolean): string {
   const title = titleField(entity)
   const singular = entity.singular
   const lower = lowerFirst(singular)
@@ -301,9 +510,8 @@ ${
     )
   }
 package
-scene ${listScene(entity)}() {
-   Title ${taoString(pluralWords)}
-   state ${draft} = ""
+${firebase ? 'view' : 'scene'} ${listScene(entity)}() {
+${firebase ? '' : `   Title ${taoString(pluralWords)}\n`}   state ${draft} = ""
    query ${entity.plural} { }
    action Add${singular}() {
       check ${draft} is not empty
@@ -318,8 +526,7 @@ scene ${listScene(entity)}() {
       Enabled ${draft} is not empty
       do Add${singular}()
    }
-   Toolbar { New${singular} }
-   render ScrollView() [screen] {
+${firebase ? '' : `   Toolbar { New${singular} }\n`}   render ScrollView() [screen] {
       Col() [column] {
          Col() [panel] {
             Text(${taoString(`NEW ${humanize(singular).toUpperCase()}`)}) [eyebrow]
@@ -519,7 +726,7 @@ function fixtureHandles(plan: CreationPlan, app: string): Map<string, string[]> 
 
 // -- <App>.test.tao --------------------------------------------------------------------------------
 
-function testFile(plan: CreationPlan, names: ProjectNames): string {
+function testFile(plan: CreationPlan, names: ProjectNames, firebase: boolean, validationTools: boolean): string {
   const journeys = plan.entities.map((entity, index) => {
     const title = titleField(entity)
     const lower = lowerFirst(entity.singular)
@@ -529,7 +736,7 @@ function testFile(plan: CreationPlan, names: ProjectNames): string {
     const renamed = `${first} (updated)`
     const openTab = index === 0 ? '' : `\n      press ${taoString(pluralWords)}`
     return `   test ${taoString(`adds a ${singularWords}, opens it, and renames it`)} {
-      run ${names.app}${openTab}
+      run ${firebase ? `${names.app}Test` : names.app}${openTab}
       expect text ${taoString(`No ${pluralWords.toLowerCase()} yet`)}
       enter ${taoString(first)} into #${lower}${title.name}
       press #add${entity.singular}
@@ -546,6 +753,75 @@ function testFile(plan: CreationPlan, names: ProjectNames): string {
       expect text ${taoString(renamed)}
    }`
   })
+  if (firebase) {
+    const validationJourney = validationTools
+      ? `   test "fills validation credentials without signing in" {
+      run ${names.app}SignInTest
+      expect text ${taoString(`Sign in to ${plan.name}`)}
+      press #fillValidationCredentials
+      expect input label "Email" value "tao-hosted-validation@example.test"
+      expect input label "Password" value "Tao-validation-only-2026!"
+      expect text ${taoString(`Sign in to ${plan.name}`)}
+   }
+`
+      : ''
+    return `use TestAuth from @tao/auth/testing
+use Memory from @tao/data/providers/memory
+use ${names.app}AuthNavigator from ./Auth
+use ${names.navigator} from ./Chrome
+use ${names.design} from ./Design
+
+app ${names.app}Test {
+   Name ${taoString(plan.name)}
+   Datasource Memory { }
+   Navigator ${names.navigator}
+   Design ${names.design}
+}
+
+app ${names.app}SignInTest {
+   Name ${taoString(plan.name)}
+   Auth TestAuth { }
+   Datasource Memory { }
+   Navigator ${names.app}AuthNavigator
+   Design ${names.design}
+}
+
+app ${names.app}SignOutTest {
+   Name ${taoString(plan.name)}
+   Auth TestAuth { State "SignedIn" }
+   Datasource Memory { }
+   Navigator ${names.app}AuthNavigator
+   Design ${names.design}
+}
+
+test ${taoString(plan.name)} {
+${validationJourney}   test "signs in with an existing account" {
+      run ${names.app}SignInTest
+      enter "reader@example.test" into #email
+      enter "local-test-password" into #password
+      press #signIn
+      expect missing text ${taoString(`Sign in to ${plan.name}`)}
+      press #signOut
+      expect text ${taoString(`Sign in to ${plan.name}`)}
+   }
+   test "creates an account" {
+      run ${names.app}SignInTest
+      enter "new-reader@example.test" into #email
+      enter "local-test-password" into #password
+      press #createAccount
+      expect missing text ${taoString(`Sign in to ${plan.name}`)}
+      press #signOut
+      expect text ${taoString(`Sign in to ${plan.name}`)}
+   }
+   test "signs out" {
+      run ${names.app}SignOutTest
+      press #signOut
+      expect text ${taoString(`Sign in to ${plan.name}`)}
+   }
+${journeys.join('\n')}
+}
+`
+  }
   return `use ${names.app} from ./
 
 test ${taoString(plan.name)} {

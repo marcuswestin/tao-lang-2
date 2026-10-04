@@ -1,6 +1,7 @@
+import { Packages } from '@ast-utils'
 import { Workspace } from '@compiler/workspace'
 import { AST } from '@parser'
-import { Assert, FS } from '@shared'
+import { Assert, type FirebaseConnection, FS, readFirebaseConnections } from '@shared'
 import { expoUpdateArtifacts, proveReleaseBundle } from './release-bundle-proof'
 import { RuntimeToolchainPaths } from './runtime-toolchain-paths'
 export { DesktopHost } from './desktop-host'
@@ -119,8 +120,13 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
       opts.ship === undefined || opts.preview === undefined,
       'a release ship manifest is not combined with a Studio preview publication',
     )
+    const projectRoot = await Packages.containingProjectRoot(FS.dirname(sourcePath)) ?? FS.dirname(sourcePath)
+    const firebase = await readFirebaseConnections(projectRoot)
+    const firebaseConfiguration = firebase === undefined ? undefined : firebaseConfigurationSlots(firebase)
     const compileOptions = {
       appDatasourceConfiguration: opts.datasourceConfiguration,
+      appFirebaseConfiguration: firebaseConfiguration,
+      appAuthConfiguration: firebaseConfiguration,
       appName: opts.appName,
       // A Studio preview carries debugger gates so a breakpoint can pause it. Nothing else does:
       // an app built for a device or a test run compiles exactly as it did before.
@@ -172,6 +178,17 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
         }),
     }
   })
+}
+
+function firebaseConfigurationSlots(connection: FirebaseConnection): Readonly<Record<string, string>> {
+  return {
+    ApiKey: connection.apiKey,
+    ProjectId: connection.projectId,
+    AppId: connection.appId,
+    ...(connection.authDomain === undefined ? {} : { AuthDomain: connection.authDomain }),
+    ...(connection.storageBucket === undefined ? {} : { StorageBucket: connection.storageBucket }),
+    ...(connection.messagingSenderId === undefined ? {} : { MessagingSenderId: connection.messagingSenderId }),
+  }
 }
 
 async function compileStudioPreview(

@@ -1,4 +1,5 @@
-import { Describe, Expect, Test } from '@shared/test'
+import { Workspace } from '@compiler/workspace'
+import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { BridgeMetadata } from '../compiler-src/bridge-metadata'
 import { TestCompiler as Compiler } from './test-compile'
 
@@ -120,6 +121,92 @@ Describe('compiler: app-scoped auth and account data', () => {
     )
     Expect(result.code).toContain('TR.Auth.Patch(')
     Expect(result.code).toContain('"Restoring"')
+  })
+
+  Test('patches Firebase auth and datasource settings only on the selected app variant', async () => {
+    const result = await Compiler.compileCode(
+      `
+      use FirebaseAuth from @tao/auth/firebase
+      use Firebase from @tao/data/providers/firebase
+      data Notes / Note { Title text }
+      app Local {
+        Auth FirebaseAuth { ApiKey "local-key" ProjectId "local-project" }
+        Datasource Firebase { ApiKey "local-key" ProjectId "local-project" }
+        view Main
+      }
+      app Hosted = Local with { }
+      view Main() { render Label("Ready") }
+      view Label(Value text) { render inject Value \`\`\`ts return null \`\`\` }
+    `,
+      {
+        appName: 'Hosted',
+        appAuthConfiguration: { ApiKey: 'hosted-key', ProjectId: 'hosted-project', AppId: 'hosted-app' },
+        appFirebaseConfiguration: { ApiKey: 'hosted-key', ProjectId: 'hosted-project', AppId: 'hosted-app' },
+      },
+    )
+    const local = result.code.slice(result.code.indexOf('const _TaoAppDefinition_Local ='))
+    const hosted = local.slice(local.indexOf('const _TaoAppDefinition_Hosted ='))
+    const base = local.slice(0, local.indexOf('const _TaoAppDefinition_Hosted ='))
+    Expect(base).toContain('"ApiKey": TR.Value("local-key")')
+    Expect(base).not.toContain('hosted-key')
+    Expect(hosted).toContain('TR.Auth.Patch(')
+    Expect(hosted).toContain('TR.Data.Patch(')
+    Expect(hosted.match(/"ApiKey": TR.Value\("hosted-key"\)/gu)).toHaveLength(2)
+    Expect(hosted.match(/"AppId": TR.Value\("hosted-app"\)/gu)).toHaveLength(2)
+  })
+
+  Test('does not apply Firebase settings to another provider with the same AppId slot', async () => {
+    const result = await Compiler.compileCode(
+      `
+      use InstantAuth from @tao/auth/instantdb
+      use InstantDB from @tao/data/providers/instantdb
+      data Notes / Note { Title text }
+      app NotesApp {
+        Auth InstantAuth { AppId "auth-local" }
+        Datasource InstantDB { AppId "data-local" }
+        view Main
+      }
+      view Main() { render Label("Ready") }
+      view Label(Value text) { render inject Value \`\`\`ts return null \`\`\` }
+    `,
+      {
+        appName: 'NotesApp',
+        appAuthConfiguration: { AppId: 'firebase-auth' },
+        appFirebaseConfiguration: { AppId: 'firebase-data' },
+      },
+    )
+    Expect(result.code).toContain('"AppId": TR.Value("auth-local")')
+    Expect(result.code).toContain('"AppId": TR.Value("data-local")')
+    Expect(result.code).not.toContain('firebase-auth')
+    Expect(result.code).not.toContain('firebase-data')
+  })
+
+  Test('patches inherited Firebase auth across modules after the variant author patch', async () => {
+    await withTaoFiles('tao-firebase-auth-variant-', {
+      'Base.tao': `
+        use FirebaseAuth from @tao/auth/firebase
+        public app Base {
+          Auth FirebaseAuth { ApiKey "source-key" ProjectId "source-project" }
+          view Main
+        }
+        view Main() { render Label("Ready") }
+        view Label(Value text) { render inject Value \`\`\`ts return null \`\`\` }
+      `,
+      'Main.tao': `
+        use Base from ./Base
+        app Hosted = Base with { Auth with { AuthDomain "source.firebaseapp.com" } }
+      `,
+    }, async paths => {
+      const result = await Workspace.compile(paths['Main.tao'], {
+        appName: 'Hosted',
+        appAuthConfiguration: { ApiKey: 'hosted-key', ProjectId: 'hosted-project' },
+      })
+      const hosted = result.code.slice(result.code.indexOf('const _TaoAppDefinition_Hosted ='))
+      Expect(hosted).toContain('"AuthDomain": TR.Value("source.firebaseapp.com")')
+      Expect(hosted).toContain('"ApiKey": TR.Value("hosted-key")')
+      Expect(hosted).toContain('"ProjectId": TR.Value("hosted-project")')
+      Expect(hosted.indexOf('source.firebaseapp.com')).toBeLessThan(hosted.indexOf('hosted-key'))
+    })
   })
 
   Test('publishes server policy and symbolic offline scopes without reading a live account', async () => {

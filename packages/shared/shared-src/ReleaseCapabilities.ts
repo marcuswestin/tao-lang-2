@@ -200,6 +200,8 @@ const commands = new Map<string, ReleaseCapability>([
     'convex generate',
     'pylon',
     'pylon generate',
+    'firebase',
+    'firebase generate',
   ]
     .map(name => [name, 'hosted-data'] as const),
 ])
@@ -213,6 +215,8 @@ const targets = new Map<string, ReleaseCapability>([
 ])
 // Keyed by long flag, or by `<command path> <flag>` where one command gives a flag another meaning.
 const options = new Map<string, ReleaseCapability>([
+  ['create --provider', 'hosted-data'],
+  ['create --validation-tools', 'hosted-data'],
   ...[
     '--app',
     '--json',

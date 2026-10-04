@@ -637,6 +637,13 @@ Deferred that day, to finish before MVP:
 
 ### A21 — Keep a developer's hosted project IDs out of shared source
 
+- Decision, 2026-10-04: the Developer approved ignored project-local `.tao/local/connections.json`
+  for the first ordinary Firebase Tao flow. Existing all-provider installation stays for this
+  slice; selective installation is deferred. The original Hosted CRUD/Appwrite pilot compatibility
+  path and removal of its tracked project IDs remain outstanding. The ordinary Firebase
+  configuration reader and CLI-created validation app now implement that local path; hosted
+  acceptance for the new app remains separate.
+
 - [ ] **Before MVP:** decide where `tao connect` records a developer's hosted project identifiers,
       and move them there. Today `Apps/Hosted CRUD/tao.connections.json` is tracked, and it commits
       the Developer's own Firebase project `tao-hosted-crud-79c429` and its public web config. The

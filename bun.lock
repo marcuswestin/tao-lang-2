@@ -94,6 +94,7 @@
         "react-test-renderer": "19.2.3",
         "tao-compiler": "workspace:*",
         "tao-convex": "workspace:*",
+        "tao-firebase": "workspace:*",
         "tao-icloud": "workspace:*",
         "tao-instantdb": "workspace:*",
         "tao-jazz": "workspace:*",
@@ -119,6 +120,19 @@
       "version": "1.0.0",
       "dependencies": {
         "convex": "1.46.0",
+        "tao-shared": "workspace:*",
+      },
+    },
+    "packages/apps/providers/firebase": {
+      "name": "tao-firebase",
+      "version": "1.0.0",
+      "dependencies": {
+        "@basepurpose/rxdb-sqlite": "0.1.0",
+        "@noble/hashes": "2.4.0",
+        "@react-native-async-storage/async-storage": "2.2.0",
+        "expo-sqlite": "~57.0.3",
+        "firebase": "12.19.0",
+        "rxdb": "17.5.0",
         "tao-shared": "workspace:*",
       },
     },
@@ -206,6 +220,7 @@
         "@clerk/expo": "4.7.1",
         "@react-native-async-storage/async-storage": "2.2.0",
         "tao-convex": "workspace:*",
+        "tao-firebase": "workspace:*",
         "tao-icloud": "workspace:*",
         "tao-instantdb": "workspace:*",
         "tao-jazz": "workspace:*",
@@ -282,6 +297,7 @@
         "tao-compiler": "workspace:*",
         "tao-convex": "workspace:*",
         "tao-expo-host": "workspace:*",
+        "tao-firebase": "workspace:*",
         "tao-formatter": "workspace:*",
         "tao-generation": "workspace:*",
         "tao-instantdb": "workspace:*",
@@ -3852,6 +3868,8 @@
     "tao-e2e-testing": ["tao-e2e-testing@workspace:packages/testing/e2e-testing"],
 
     "tao-expo-host": ["tao-expo-host@workspace:packages/apps/expo-host"],
+
+    "tao-firebase": ["tao-firebase@workspace:packages/apps/providers/firebase"],
 
     "tao-formatter": ["tao-formatter@workspace:packages/language/formatter"],
 

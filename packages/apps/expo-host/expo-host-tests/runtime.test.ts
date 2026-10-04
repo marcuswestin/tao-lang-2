@@ -207,6 +207,41 @@ Describe('Tao runtime app generation', () => {
     Expect(await FS.readText(generated.outputPath)).toBe(generated.code)
   })
 
+  Test('uses the declaring project root for local Firebase settings in a nested app', async () => {
+    const runtimePackageRoot = await createRuntimePackageRoot()
+    await withTaoFiles('tao-runtime-firebase-config-', {
+      'src/Main.tao': `
+        use FirebaseAuth from @tao/auth/firebase
+        use Firebase from @tao/data/providers/firebase
+        data Notes / Note { Title text }
+        app NotesApp {
+          Auth FirebaseAuth { ApiKey "source-key" ProjectId "source-project" }
+          Datasource Firebase { ApiKey "source-key" ProjectId "source-project" }
+          view Main
+        }
+        view Main() { render Label("Ready") }
+        view Label(Value text) { render inject Value \`\`\`ts return null \`\`\` }
+      `,
+    }, async (paths, root) => {
+      await FS.writeJson(FS.resolvePath('.tao/local/connections.json', root), {
+        firebase: {
+          apiKey: 'project-key',
+          projectId: 'project-id',
+          appId: 'project-app',
+          authDomain: 'project.firebaseapp.com',
+        },
+      })
+      await Runtime.generateApp(paths['src/Main.tao'], { runtimePackageRoot })
+      const generated = Object.values(await generatedGraph(runtimePackageRoot))
+        .find(code => code.includes('_TaoAppDefinition_NotesApp'))
+      Assert.defined(generated, 'Firebase app module is generated')
+      Expect(generated.match(/"ApiKey": TR.Value\("project-key"\)/gu)).toHaveLength(2)
+      Expect(generated.match(/"ProjectId": TR.Value\("project-id"\)/gu)).toHaveLength(2)
+      Expect(generated.match(/"AppId": TR.Value\("project-app"\)/gu)).toHaveLength(2)
+      Expect(generated).toContain('"AuthDomain": TR.Value("project.firebaseapp.com")')
+    })
+  })
+
   Test('publishes a typed ship manifest only with a release graph and removes it on development compile', async () => {
     const runtimePackageRoot = await createRuntimePackageRoot()
     const ship: ShipManifest = {

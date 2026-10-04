@@ -1,0 +1,67 @@
+// The design: a palette and the bundles the scenes apply at render sites.
+folder
+design FirebaseNotesDesign {
+   colors {
+      canvasLight #f6f4ee
+      surfaceLight #ffffff
+      inkLight #1f2421
+      inkMutedLight #6c6f6b
+      accentLight #3f6f9a
+      accentStrongLight #375c7c
+      accentSoftLight #dce5ed
+      lineLight #d6d5cf
+      dangerLight #a43d3d
+      dangerSoftLight #f8e6e3
+      onAccentLight #ffffff
+      canvasDark #161917
+      surfaceDark #292b2a
+      inkDark #f6f4ee
+      inkMutedDark #93948f
+      accentDark #799ab8
+      accentStrongDark #9bb3ca
+      accentSoftDark #373f43
+      lineDark #383a37
+      dangerDark #ef9189
+      dangerSoftDark #412422
+      onAccentDark #161917
+
+      // Every bundle spells these names, which follow the person's light or dark setting.
+      canvas when Scheme is Dark canvasDark / not canvasLight
+      surface when Scheme is Dark surfaceDark / not surfaceLight
+      ink when Scheme is Dark inkDark / not inkLight
+      inkMuted when Scheme is Dark inkMutedDark / not inkMutedLight
+      accent when Scheme is Dark accentDark / not accentLight
+      accentStrong when Scheme is Dark accentStrongDark / not accentStrongLight
+      accentSoft when Scheme is Dark accentSoftDark / not accentSoftLight
+      line when Scheme is Dark lineDark / not lineLight
+      danger when Scheme is Dark dangerDark / not dangerLight
+      dangerSoft when Scheme is Dark dangerSoftDark / not dangerSoftLight
+      onAccent when Scheme is Dark onAccentDark / not onAccentLight
+   }
+
+   styles {
+      Text [ink ink]
+      TextInput [background surface, border line, ink ink, radius 12, size 16]
+      FormButton [background accentStrong, background accent when pressed, ink onAccent, radius 12, weight 700]
+      Checkbox [ink ink]
+      AppSurface [background canvas]
+      NavigationHost [background canvas]
+      NavigationContent [background canvas]
+      NavigationHeader [background surface, border line]
+      NavigationTitle [size 18, weight 700, ink ink]
+      NavigationTabs [gap 6, pad 6, background surface, border line]
+      NavigationTab [pad 10, radius 10, ink inkMuted, weight 600, background accentSoft when selected, ink accentStrong when selected]
+      NavigationChromeButton [pad 8, radius 8, ink accentStrong, weight 600]
+
+      screen [fill, content top stretch, pad 24, background canvas]
+      column [width max 720, gap 16, centered]
+      eyebrow [size 13, line 18, weight 700, ink accentStrong]
+      sectionTitle [size 20, line 26, weight 700, ink ink]
+      body [size 16, line 24, ink inkMuted]
+      caption [size 14, line 20, ink inkMuted]
+      panel [hug, gap 14, pad 20, radius 18, background surface, border line]
+      card [hug, gap 10, pad 16, radius 14, background surface, border line]
+      buttonSecondary [background surface, border line, ink accentStrong]
+      buttonDanger [background dangerSoft, border danger, ink danger]
+   }
+}

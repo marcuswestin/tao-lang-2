@@ -1,0 +1,22 @@
+{
+  "name": "tao-firebase",
+  "private": true,
+  "version": "1.0.0",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "module": "firebase-src/Firebase.ts",
+  "exports": {
+    ".": "./firebase-src/Firebase.ts",
+    "./auth": "./firebase-src/FirebaseAuth.ts",
+    "./generate": "./firebase-src/generate.ts"
+  },
+  "dependencies": {
+    "@basepurpose/rxdb-sqlite": "0.1.0",
+    "@noble/hashes": "2.4.0",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "expo-sqlite": "~57.0.3",
+    "firebase": "12.19.0",
+    "rxdb": "17.5.0",
+    "tao-shared": "workspace:*"
+  }
+}

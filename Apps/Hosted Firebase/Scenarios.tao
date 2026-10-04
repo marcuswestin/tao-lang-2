@@ -1,0 +1,18 @@
+use Memory from @tao/data/providers/memory
+use FirebaseNotesNavigator from ./Chrome
+use FirebaseNotesDesign from ./Design
+
+app FirebaseNotesPreview {
+   Name "Firebase Notes"
+   Datasource Memory { }
+   Navigator FirebaseNotesNavigator
+   Design FirebaseNotesDesign
+}
+
+scenarios FirebaseNotesPreview "devices" {
+   scenario "phone" {
+      device phone
+      appearance light
+      network online
+      locale "en"
+}  }

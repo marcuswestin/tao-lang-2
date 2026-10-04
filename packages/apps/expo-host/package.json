@@ -51,7 +51,8 @@
     "tao-pylon": "workspace:*",
     "tao-runtime": "workspace:*",
     "tao-shared": "workspace:*",
-    "tao-compiler": "workspace:*"
+    "tao-compiler": "workspace:*",
+    "tao-firebase": "workspace:*"
   },
   "devDependencies": {
     "tao-native-bindings": "workspace:*",

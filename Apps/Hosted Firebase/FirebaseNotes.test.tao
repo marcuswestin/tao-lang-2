@@ -1,0 +1,83 @@
+use TestAuth from @tao/auth/testing
+use Memory from @tao/data/providers/memory
+use FirebaseNotesAuthNavigator from ./Auth
+use FirebaseNotesNavigator from ./Chrome
+use FirebaseNotesDesign from ./Design
+
+app FirebaseNotesTest {
+   Name "Firebase Notes"
+   Datasource Memory { }
+   Navigator FirebaseNotesNavigator
+   Design FirebaseNotesDesign
+}
+
+app FirebaseNotesSignInTest {
+   Name "Firebase Notes"
+   Auth TestAuth { }
+   Datasource Memory { }
+   Navigator FirebaseNotesAuthNavigator
+   Design FirebaseNotesDesign
+}
+
+app FirebaseNotesSignOutTest {
+   Name "Firebase Notes"
+   Auth TestAuth {
+      State "SignedIn"
+   }
+   Datasource Memory { }
+   Navigator FirebaseNotesAuthNavigator
+   Design FirebaseNotesDesign
+}
+
+test "Firebase Notes" {
+   test "fills validation credentials without signing in" {
+      run FirebaseNotesSignInTest
+
+      expect text "Sign in to Firebase Notes"
+      press #fillValidationCredentials
+      expect input label "Email" value "tao-hosted-validation@example.test"
+      expect input label "Password" value "Tao-validation-only-2026!"
+      expect text "Sign in to Firebase Notes"
+   }
+   test "signs in with an existing account" {
+      run FirebaseNotesSignInTest
+      enter "reader@example.test" into #email
+      enter "local-test-password" into #password
+      press #signIn
+      expect missing text "Sign in to Firebase Notes"
+      press #signOut
+      expect text "Sign in to Firebase Notes"
+   }
+   test "creates an account" {
+      run FirebaseNotesSignInTest
+      enter "new-reader@example.test" into #email
+      enter "local-test-password" into #password
+      press #createAccount
+      expect missing text "Sign in to Firebase Notes"
+      press #signOut
+      expect text "Sign in to Firebase Notes"
+   }
+   test "signs out" {
+      run FirebaseNotesSignOutTest
+      press #signOut
+      expect text "Sign in to Firebase Notes"
+   }
+   test "adds a item, opens it, and renames it" {
+      run FirebaseNotesTest
+
+      expect text "No items yet"
+      enter "First item" into #itemTitle
+      press #addItem
+      expect missing text "No items yet"
+      select #items[1] {
+         expect text "First item"
+         press #openItem
+      }
+      expect navigation title "First item"
+      enter "First item (updated)" into #itemTitleDraft
+      press #saveItem
+      expect navigation title "First item (updated)"
+      back
+      expect text "First item (updated)"
+   }
+}

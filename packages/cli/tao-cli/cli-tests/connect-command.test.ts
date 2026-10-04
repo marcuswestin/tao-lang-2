@@ -1,6 +1,7 @@
 import { Errors, FS } from '@shared'
 import { Describe, Expect, fakeTerminal, mkTestDir, Test } from '@shared/test'
 import { runTaoConnect } from '../cli-src/connect-command'
+import { provisionFirebase } from '../cli-src/firebase-provision'
 
 function scripted(text: string[], paste = '', secret = '') {
   const terminal = fakeTerminal()
@@ -17,6 +18,11 @@ function scripted(text: string[], paste = '', secret = '') {
       },
     },
   }
+}
+
+async function writePilotRules(root: string, rules = 'pilot rules\n'): Promise<void> {
+  await FS.writeJson(FS.resolvePath('package.json', root), { name: 'tao-hosted-crud-spike' })
+  await FS.writeText(FS.resolvePath('src/firebase/firestore.rules', root), rules)
 }
 
 /** An Appwrite Cloud project that starts empty and records every REST request made to it. */
@@ -264,9 +270,12 @@ Describe('tao connect', () => {
       await runTaoConnect('firebase', root, options)
 
       const publicText = await FS.readText(FS.resolvePath('tao.connections.json', root))
+      const localText = await FS.readText(FS.resolvePath('.tao/local/connections.json', root))
       const privateText = await FS.readText(FS.resolvePath('.tao/connect-secrets.json', root))
       Expect(JSON.parse(publicText)).toEqual({
         appwrite: { projectId: 'keep-appwrite' },
+      })
+      Expect(JSON.parse(localText)).toEqual({
         firebase: {
           projectId: 'firebase-project',
           apiKey: 'web-api-key',
@@ -277,22 +286,24 @@ Describe('tao connect', () => {
       Expect(JSON.parse(privateText)).toEqual(existingSecrets)
       Expect(await FS.fileMode(FS.resolvePath('.tao/connect-secrets.json', root))).toBe(0o600)
       Expect(publicText).not.toContain('private-key-canary')
+      Expect(localText).not.toContain('private-key-canary')
       Expect(terminal.outputText()).not.toContain('private-key-canary')
       Expect(terminal.outputText()).not.toContain('keep-secret')
       Expect(terminal.outputText()).toContain('press Create app')
-      Expect(terminal.outputText()).toContain('Tao Hosted CRUD Demo')
-      Expect(terminal.outputText()).toContain('Use npm selected')
+      Expect(terminal.outputText()).toContain('Name the web app for your project')
+      Expect(terminal.outputText()).toContain('public firebaseConfig')
       Expect(terminal.outputText()).toContain('Continue to console')
       Expect(terminal.outputText()).toContain('SDK setup and configuration > Config')
-      Expect(terminal.outputText()).toContain('Press Return at the next prompt to automate setup')
+      Expect(terminal.outputText()).toContain('Paste the public firebaseConfig')
       Expect(terminal.outputText()).toContain('No service-account JSON is needed')
-      Expect(terminal.outputText()).toContain('cloud resources were not provisioned or checked')
+      Expect(terminal.outputText()).toContain('cloud Auth, Firestore, and rules were not configured or checked')
+      Expect(terminal.outputText()).toContain('tao firebase generate')
     } finally {
       await FS.remove(root)
     }
   })
 
-  Test('extracts the four client fields from either Firebase SDK snippet without running code', async () => {
+  Test('extracts all public client fields from either Firebase SDK snippet without running code', async () => {
     const root = await mkTestDir('tao-connect-firebase-paste-')
     try {
       const config = `const firebaseConfig = {
@@ -311,12 +322,14 @@ Describe('tao connect', () => {
         ]
       ) {
         await runTaoConnect('firebase', root, scripted([], snippet).options)
-        Expect(await FS.readJson(FS.resolvePath('tao.connections.json', root))).toEqual({
+        Expect(await FS.readJson(FS.resolvePath('.tao/local/connections.json', root))).toEqual({
           firebase: {
             projectId: 'firebase-project',
             apiKey: 'web-api-key',
             appId: '1:123456789:web:abcdef',
             authDomain: 'firebase-project.firebaseapp.com',
+            storageBucket: 'firebase-project.firebasestorage.app',
+            messagingSenderId: '123456789',
           },
         })
       }
@@ -334,15 +347,106 @@ Describe('tao connect', () => {
       await Expect(runTaoConnect('firebase', root, scripted([], 'const firebaseConfig = { apiKey: "key" };').options))
         .rejects.toThrow('projectId')
       Expect(await FS.readJson(path)).toEqual({ existing: true })
+      Expect(await FS.exists(FS.resolvePath('.tao/local/connections.json', root))).toBe(false)
     } finally {
       await FS.remove(root)
+    }
+  })
+
+  Test('preserves other local connections when replacing Firebase public settings', async () => {
+    const root = await mkTestDir('tao-connect-firebase-local-')
+    try {
+      const localPath = FS.resolvePath('.tao/local/connections.json', root)
+      await FS.writeJson(localPath, {
+        appwrite: { projectId: 'keep-appwrite' },
+        firebase: { projectId: 'old-project', apiKey: 'old-key', appId: 'old-app' },
+      })
+      await runTaoConnect(
+        'firebase',
+        root,
+        scripted([
+          'new-project',
+          'new-key',
+          'new-app',
+          'new-project.firebaseapp.com',
+        ], 'manual').options,
+      )
+      Expect(await FS.readJson(localPath)).toEqual({
+        appwrite: { projectId: 'keep-appwrite' },
+        firebase: {
+          projectId: 'new-project',
+          apiKey: 'new-key',
+          appId: 'new-app',
+          authDomain: 'new-project.firebaseapp.com',
+        },
+      })
+      Expect(await FS.exists(FS.resolvePath('tao.connections.json', root))).toBe(false)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('does not run pilot cloud setup for an ordinary Tao project', async () => {
+    const root = await mkTestDir('tao-connect-firebase-ordinary-')
+    try {
+      await FS.writeJson(FS.resolvePath('package.json', root), { name: 'ordinary-tao-app' })
+      await FS.writeText(FS.resolvePath('src/firebase/firestore.rules', root), 'ordinary rules\n')
+      const calls: string[] = []
+      await Expect(runTaoConnect('firebase', root, {
+        ...scripted([]).options,
+        firebaseRunner: async args => {
+          calls.push(args[0] ?? '')
+          return { exitCode: 0, stdout: '', stderr: '' }
+        },
+      })).rejects.toThrow('Paste a Firebase web app config or type manual')
+      Expect(calls).toEqual([])
+      Expect(await FS.exists(FS.resolvePath('.tao/local/connections.json', root))).toBe(false)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('rejects linked pilot rules and ancestors before any Firebase CLI call or local output', async () => {
+    for (const linked of ['file', 'firebase directory', 'src directory']) {
+      const root = await mkTestDir('tao-connect-firebase-linked-rules-')
+      try {
+        const sourceRules = FS.resolvePath('src/firebase/firestore.rules', root)
+        if (linked === 'file') {
+          const realRules = FS.resolvePath('real.rules', root)
+          await FS.writeText(realRules, 'pilot rules\n')
+          await FS.mkdir(FS.resolvePath('src/firebase', root))
+          await FS.symlink(realRules, sourceRules)
+        } else if (linked === 'firebase directory') {
+          const realDirectory = FS.resolvePath('real-firebase', root)
+          await FS.writeText(FS.resolvePath('firestore.rules', realDirectory), 'pilot rules\n')
+          await FS.mkdir(FS.resolvePath('src', root))
+          await FS.symlink(realDirectory, FS.resolvePath('src/firebase', root))
+        } else {
+          const realDirectory = FS.resolvePath('real-src', root)
+          await FS.writeText(FS.resolvePath('firebase/firestore.rules', realDirectory), 'pilot rules\n')
+          await FS.symlink(realDirectory, FS.resolvePath('src', root))
+        }
+        const calls: string[] = []
+        await Expect(provisionFirebase({
+          project: root,
+          prompts: { text: async () => '' },
+          runner: async args => {
+            calls.push(args[0] ?? '')
+            return { exitCode: 0, stdout: '', stderr: '' }
+          },
+        })).rejects.toThrow('symbolic links')
+        Expect(calls).toEqual([])
+        Expect(await FS.exists(FS.resolvePath('.tao/firebase-connect', root))).toBe(false)
+      } finally {
+        await FS.remove(root)
+      }
     }
   })
 
   Test('creates a fresh Firebase project, web app, database, auth and rules by default', async () => {
     const root = await mkTestDir('tao-connect-firebase-auto-')
     try {
-      await FS.writeText(FS.resolvePath('src/firebase/firestore.rules', root), "rules_version = '2';\n")
+      await writePilotRules(root, "rules_version = '2';\n")
       await FS.writeJson(FS.resolvePath('tao.connections.json', root), {
         firebase: { projectId: 'REPLACE_WITH_FIREBASE_PROJECT_ID' },
       })
@@ -376,6 +480,8 @@ Describe('tao connect', () => {
               appId: '1:123:web:abc',
               apiKey: 'public-web-key',
               authDomain: `${project}.firebaseapp.com`,
+              storageBucket: `${project}.firebasestorage.app`,
+              messagingSenderId: '123456789',
             },
           }
         } else if (command === 'deploy') {
@@ -409,12 +515,24 @@ Describe('tao connect', () => {
       Expect(created).toMatch(/^tao-hosted-crud-[0-9a-f]{6}$/u)
       Expect(questions[0]).toContain(`Return to create new project ${created}`)
       Expect(questions.some(question => question.includes('Type yes'))).toBe(false)
+      Expect(await FS.readJson(FS.resolvePath('.tao/local/connections.json', root))).toEqual({
+        firebase: {
+          projectId: created,
+          appId: '1:123:web:abc',
+          apiKey: 'public-web-key',
+          authDomain: `${created}.firebaseapp.com`,
+          storageBucket: `${created}.firebasestorage.app`,
+          messagingSenderId: '123456789',
+        },
+      })
       Expect(await FS.readJson(FS.resolvePath('tao.connections.json', root))).toEqual({
         firebase: {
           projectId: created,
           appId: '1:123:web:abc',
           apiKey: 'public-web-key',
           authDomain: `${created}.firebaseapp.com`,
+          storageBucket: `${created}.firebasestorage.app`,
+          messagingSenderId: '123456789',
         },
       })
       Expect(calls.map(call => call[0])).toEqual([
@@ -460,7 +578,7 @@ Describe('tao connect', () => {
   Test('asks before creating a typed Firebase project ID that the account does not have', async () => {
     const root = await mkTestDir('tao-connect-firebase-typed-')
     try {
-      await FS.writeText(FS.resolvePath('src/firebase/firestore.rules', root), 'pilot rules\n')
+      await writePilotRules(root)
       const calls: string[] = []
       const runner = async (args: readonly string[]): Promise<{ exitCode: number; stdout: string; stderr: string }> => {
         calls.push(args[0] ?? '')
@@ -480,7 +598,7 @@ Describe('tao connect', () => {
   Test('reports the Firebase CLI error text instead of a generic hint', async () => {
     const root = await mkTestDir('tao-connect-firebase-error-')
     try {
-      await FS.writeText(FS.resolvePath('src/firebase/firestore.rules', root), 'pilot rules\n')
+      await writePilotRules(root)
       const runner = async (args: readonly string[]): Promise<{ exitCode: number; stdout: string; stderr: string }> =>
         args[0] === 'login:list'
           ? { exitCode: 0, stdout: JSON.stringify({ status: 'success', result: [{ user: {} }] }), stderr: '' }
@@ -499,7 +617,7 @@ Describe('tao connect', () => {
   Test('does not replace existing Firestore rules without an explicit yes', async () => {
     const root = await mkTestDir('tao-connect-firebase-rules-')
     try {
-      await FS.writeText(FS.resolvePath('src/firebase/firestore.rules', root), 'pilot rules\n')
+      await writePilotRules(root)
       const configPath = FS.resolvePath('tao.connections.json', root)
       await FS.writeJson(configPath, { preserved: true })
       const calls: string[] = []
@@ -621,10 +739,43 @@ Describe('tao connect', () => {
           'manual',
         ).options,
       )
-      Expect(await FS.readJson(FS.resolvePath('tao.connections.json', root))).toEqual({
+      Expect(await FS.readJson(FS.resolvePath('.tao/local/connections.json', root))).toEqual({
         firebase: { projectId: 'project', apiKey: 'web-key', appId: 'app-id', authDomain: 'project.firebaseapp.com' },
       })
       Expect(await FS.exists(FS.resolvePath('.tao/connect-secrets.json', root))).toBe(false)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('stores a nested app source connection at its declared project root', async () => {
+    const root = await mkTestDir('tao-connect-nested-source-')
+    try {
+      await FS.writeText(
+        FS.resolvePath('Project.tao', root),
+        'project { id "nested-connect", name "Nested connect" }\n',
+      )
+      const source = FS.resolvePath('features/App.tao', root)
+      await FS.writeText(source, 'app Example { view Main }\nview Main() { }\n')
+      await runTaoConnect(
+        'firebase',
+        source,
+        scripted([
+          'nested-project',
+          'web-key',
+          'app-id',
+          'nested-project.firebaseapp.com',
+        ], 'manual').options,
+      )
+      Expect(await FS.readJson(FS.resolvePath('.tao/local/connections.json', root))).toEqual({
+        firebase: {
+          projectId: 'nested-project',
+          apiKey: 'web-key',
+          appId: 'app-id',
+          authDomain: 'nested-project.firebaseapp.com',
+        },
+      })
+      Expect(await FS.exists(FS.resolvePath('features/.tao/local/connections.json', root))).toBe(false)
     } finally {
       await FS.remove(root)
     }

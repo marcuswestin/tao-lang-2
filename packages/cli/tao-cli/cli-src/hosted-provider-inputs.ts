@@ -6,15 +6,16 @@ import type TR from '@runtime/TR'
 import { Diagnostics, Errors, FS } from '@shared'
 import type { TaoDataPolicy } from 'tao-jazz/deployment'
 
-export type HostedProvider = 'jazz' | 'convex' | 'pylon'
+export type HostedProvider = 'jazz' | 'convex' | 'pylon' | 'firebase'
 
 export type HostedProviderInputs = Readonly<{
   definition: TR.DataSchemaDefinition
-  policy: TaoDataPolicy
+  policy: TaoDataPolicy | undefined
 }>
 
 const providerTypeNames: Readonly<Record<HostedProvider, string>> = {
   convex: 'Convex',
+  firebase: 'Firebase',
   jazz: 'Jazz',
   pylon: 'Pylon',
 }
@@ -80,10 +81,10 @@ export async function readHostedProviderInputs(
     Errors.throwUserInput(`App '${appName}' stores no data in its ${typeName} datasource.`)
   }
   const policyFile = compiled.files.find(file => file.relativePath === 'TaoDataPolicy.json')
-  if (policyFile === undefined) {
+  if (policyFile === undefined && provider !== 'firebase') {
     Errors.throwUserInput(
       `App '${appName}' has no compiled access policy; declare access rules before generating ${typeName} backend files.`,
     )
   }
-  return { definition, policy: JSON.parse(policyFile.code) as TaoDataPolicy }
+  return { definition, policy: policyFile === undefined ? undefined : JSON.parse(policyFile.code) as TaoDataPolicy }
 }

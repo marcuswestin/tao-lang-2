@@ -348,5 +348,20 @@ source repair remains unaccepted on devices. Keep Jazz/Convex/Pylon gates separa
 
 The first Tao flow targets private account-scoped Notes with full CRUD through existing
 auth/data contracts. General authored access grants and provider capability conformance remain
-separate proof obligations. Provider-dependency installation policy, A21 public connection-file
-placement, sharing the run screen with the dev loop, and landing remain Developer decisions. Landing still requires explicit authorization for the slice.
+separate proof obligations. The Developer approved the existing all-provider installation policy
+for this slice and ignored `.tao/local/connections.json` for public connection settings. Selective
+installation is deferred. Sharing the run screen with the dev loop and landing remain Developer
+decisions; landing requires explicit authorization for the slice.
+
+### First Tao Firebase flow — source checkpoint
+
+The Firebase provider, local public configuration path, backend-rule generator, and opt-in Firebase
+creation flow are implemented. `Apps/Hosted Firebase` is the CLI-created validation app. Local
+journeys and iOS bundling are evidence for source integration; live two-device sync, native durable
+restart/replay, account switching, and direct hostile requests against this app's deployed rules
+remain acceptance gates. The earlier hostile probe targets the standalone pilot layout and remains
+inconclusive. Follow the verification commands in the [continuation handoff](<Hosted provider continuation.md>).
+
+Firebase remains the easier first-flow recommendation based on the Developer's standalone manual
+acceptance and Appwrite's failed realtime check, not a measured setup-time comparison. Appwrite
+repair acceptance is deferred. This adds no acceptance evidence for Jazz, Convex, or Pylon.

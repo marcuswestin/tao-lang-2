@@ -63,6 +63,7 @@ Describe('Immutable public release surfaces', () => {
           HCI.writeLine(JSON.stringify({
             phase: ReleaseCapabilities.current().phase,
             commands: commands.commands.map(command => command.name()),
+            create: commands.commands.find(command => command.name() === 'create').options.map(option => option.long),
             dev: commands.commands.find(command => command.name() === 'dev').options.map(option => option.long),
             build: commands.commands.find(command => command.name() === 'build').options.map(option => option.long),
             ship: commands.commands.find(command => command.name() === 'ship')?.options.map(option => option.long),
@@ -85,6 +86,7 @@ Describe('Immutable public release surfaces', () => {
         const value = JSON.parse(result.stdout) as {
           build: string[]
           commands: string[]
+          create: string[]
           dev: string[]
           errors: string[]
           phase: number
@@ -93,9 +95,11 @@ Describe('Immutable public release surfaces', () => {
         Expect(value.phase).toBe(phase)
         Expect(value.commands).not.toContain('agents')
         Expect(value.commands).not.toContain('review')
-        for (const deferred of ['bridge', 'secrets', 'instantdb', 'connect', 'jazz', 'convex', 'pylon']) {
+        for (const deferred of ['bridge', 'secrets', 'instantdb', 'connect', 'jazz', 'convex', 'pylon', 'firebase']) {
           Expect(value.commands).not.toContain(deferred)
         }
+        Expect(value.create).not.toContain('--provider')
+        Expect(value.create).not.toContain('--validation-tools')
         Expect(value.build).toContain('--web')
         Expect(value.build).not.toContain('--visionos')
         Expect(value.build).not.toContain('--watchos')

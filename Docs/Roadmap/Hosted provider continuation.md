@@ -285,8 +285,10 @@ The first Tao flow will target private account-scoped Notes with full CRUD throu
 auth/data contracts. General authored access grants remain unsupported until separately proven;
 this does not change Tao language semantics or establish provider capability conformance.
 
-The selective provider-dependency installation policy and A21 public connection-file placement
-need Developer decisions before changing dependencies or the generated-app configuration flow.
+The Developer approved the existing all-provider installation policy for the Firebase-first slice
+and ignored project-local public connection settings at `.tao/local/connections.json`. Selective
+provider installation is deferred. The named Firebase/RxDB/SQLite/hash/persistence dependency pins
+and workspace wiring are approved; this does not authorize later version changes.
 Sharing the run screen with the dev loop and landing remain pending decisions. Landing still requires explicit authorization for the slice.
 
 Repository integration also reproduced the known ignored orphan-directory lint issue. The
@@ -299,3 +301,56 @@ Main also introduced immutable public release classifications. The inherited `co
 Convex, and Pylon pilot commands are classified under the existing development-only hosted-data
 capability. They remain available in the development CLI and excluded from public release phases;
 this integration does not approve a new public release phase.
+
+### First Tao Firebase application — implementation and remaining proof
+
+The development CLI can create a Firebase-backed app with `tao create ... --provider firebase`.
+`--validation-tools` adds the temporary synthetic credential-fill button only when explicitly
+requested. The committed validation app is `Apps/Hosted Firebase`, generated through that CLI.
+It has separate sign-in and registration actions, a signed-in account gate, private scalar item
+CRUD, and sign-out. It uses `@tao/auth/firebase` and `@tao/data/providers/firebase`; general access
+grants, references, unique fields, and migrations remain unsupported rather than advertised.
+
+Ordinary Tao projects save public Firebase settings at `.tao/local/connections.json` and receive
+those settings during app generation. Their connection flow does not provision cloud resources
+or deploy rules. The standalone Hosted CRUD pilot retains its compatibility setup. Missing or
+invalid local configuration produces a diagnostic; no developer project IDs are checked into
+this new validation app.
+
+Focused source checks cover configuration containment, generated rules, auth cancellation,
+account-scoped data mapping, shared database lifecycle, and generated app behavior. Five local
+Memory/TestAuth journeys pass in the CLI-created app. A headless Metro run produced an iOS bundle
+(1,869 modules); its owned dev loop was stopped. These are compilation and local behavior proofs,
+not device execution, SQLite restart durability, hosted realtime, or server authorization proofs.
+
+Developer verification, from this worktree:
+
+```sh
+cd /Users/ro/.codex/worktrees/hosted-acceptance-evidence/tao-lang-2
+./tao connect firebase 'Apps/Hosted Firebase'
+./tao firebase generate 'Apps/Hosted Firebase' --app FirebaseNotes --output 'Apps/Hosted Firebase/.tao/firebase-backend'
+```
+
+Use the existing Firebase project locally. Configure Email/Password authentication and Firestore
+if needed. Review and combine the generated rules with the project's current rules before any
+local deployment: deployment replaces project-wide rules, including rules used by the standalone
+pilot. Keep password entry and Google sign-in local. Generation alone does not enforce rules.
+
+After reviewing and deploying the combined rules locally:
+
+```sh
+cd /Users/ro/.codex/worktrees/hosted-acceptance-evidence/tao-lang-2
+./tao dev 'Apps/Hosted Firebase' --app FirebaseNotes --ios
+```
+
+In that dev loop, press `p` to choose a connected physical device. Sign in locally on iPhone and
+Simulator; validate create/edit/toggle/delete in both directions, restart offline with queued
+writes and reconnect replay, then switch accounts online and offline without foreign rows or
+writes crossing sessions. The temporary fill button supplies synthetic values only; it does not
+sign in. Existing pilot acceptance does not automatically accept this generated Tao application.
+
+The earlier hostile probe targets the standalone pilot's row layout. Direct server acceptance
+for the new `users/{uid}/stores/{store}/{entity}/{id}` layout remains open and needs matching probe
+requests against deployed rules; do not substitute UI filtering or local rule assertions. Appwrite
+realtime device debugging remains deferred. Jazz/Convex/Pylon gates remain separate. Sharing the
+compact run screen with the regular dev loop and landing remain pending Developer decisions.

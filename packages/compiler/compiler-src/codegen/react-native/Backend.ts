@@ -156,6 +156,8 @@ function compileReactNative(
       identityProjects,
       projectRoot: context.sourceRoot,
       selectedAppDatasourceConfiguration: options.appDatasourceConfiguration,
+      selectedAppFirebaseConfiguration: options.appFirebaseConfiguration,
+      selectedAppAuthConfiguration: options.appAuthConfiguration,
       selectedAppName: file.path === selectedAppPath ? selectedAppName : undefined,
       journeyObservations,
       studio,
@@ -328,6 +330,8 @@ type CompileSourceFileOptions = {
   identityProjects: readonly DeclarationIdentityProject[]
   projectRoot: string
   selectedAppDatasourceConfiguration?: Readonly<Record<string, string>>
+  selectedAppFirebaseConfiguration?: Readonly<Record<string, string>>
+  selectedAppAuthConfiguration?: Readonly<Record<string, string>>
   selectedAppName: string | undefined
   journeyObservations: boolean
   studio: boolean
@@ -344,6 +348,8 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
     identityProjects,
     projectRoot,
     selectedAppDatasourceConfiguration,
+    selectedAppFirebaseConfiguration,
+    selectedAppAuthConfiguration,
     selectedAppName,
     journeyObservations,
     studio,
@@ -434,6 +440,8 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
                   scopeBindings,
                   exportedBindings,
                   selectedAppDatasourceConfiguration,
+                  selectedAppFirebaseConfiguration,
+                  selectedAppAuthConfiguration,
                   selectedAppName,
                   projectRoot,
                   studioDataCatalog: studio && dataCatalog !== undefined && (ownsDataCatalog || needsStudioDataCatalog),
