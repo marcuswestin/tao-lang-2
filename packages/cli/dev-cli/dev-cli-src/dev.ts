@@ -864,7 +864,11 @@ await runWithCommands(commands => {
       '--device <name-or-udid>',
       'Launch on this connected iPhone or iPad and pair in Terminal without opening a browser.',
     )
-    .option('--host <ipv4>', 'The Mac LAN IPv4 address reachable from the phone; detected when omitted.')
+    .option(
+      '--host <ipv4>',
+      'Mac LAN IPv4: System Settings > Network > active connection > Details > TCP/IP.'
+        + ' Keep phone and Mac on the same LAN; use the Mac address, not localhost. Detected when omitted.',
+    )
     .option('--instant-url <origin>', 'Local InstantDB API origin.', 'http://127.0.0.1:9020')
     .option('--no-browser', 'Start Studio without opening the Mac browser.')
     .action(async (options: { host?: string; instantUrl?: string; browser?: boolean; device?: string }) => {
@@ -1242,7 +1246,11 @@ await runWithCommands(commands => {
     .command('prepare-release')
     .description('Prepare a Studio or IDE extension release locally; does not publish.')
     .argument('<target>', 'studio or ide-extension.')
-    .option('--repo <owner/name>', 'Public GitHub repository for Studio release assets.')
+    .option(
+      '--repo <owner/name>',
+      'Existing public GitHub repository: use owner/name from https://github.com/owner/name.'
+        + ' Requires GitHub CLI and gh auth login with repository write access.',
+    )
     .option('--version <version>', 'Three-part Studio version (defaults to 0.0.1).')
     .option('--phase <number>', 'Public release phase; defaults to 3 for Studio and 1 for the extension.')
     .action(async (target: string, options: { repo?: string; version?: string; phase?: string }) => {
@@ -1281,7 +1289,11 @@ await runWithCommands(commands => {
   commands
     .command('release-studio-prepare')
     .description('Build and locally validate a signed Studio release for a GitHub Releases host.')
-    .requiredOption('--repo <owner/name>', 'Public GitHub repository that will hold Studio releases.')
+    .requiredOption(
+      '--repo <owner/name>',
+      'Existing public GitHub repository: use owner/name from https://github.com/owner/name.'
+        + ' Requires GitHub CLI and gh auth login with repository write access.',
+    )
     .option('--version <version>', 'Three-part Studio version.', '0.0.1')
     .option('--phase <number>', 'Public release phase 3, 4, or 5.', '3')
     .action(async (options: { repo: string; version: string; phase: string }) => {
@@ -1298,7 +1310,11 @@ await runWithCommands(commands => {
   commands
     .command('release-studio-publish')
     .description('Upload prepared Studio artifacts to GitHub and verify public downloads.')
-    .requiredOption('--repo <owner/name>', 'Public GitHub repository that will hold Studio releases.')
+    .requiredOption(
+      '--repo <owner/name>',
+      'Existing public GitHub repository: use owner/name from https://github.com/owner/name.'
+        + ' Requires GitHub CLI and gh auth login with repository write access.',
+    )
     .action(async (options: { repo: string }) => {
       const { ReleaseWorkflow } = await import('./release/ReleaseWorkflow')
       await runReleaseAction(async () => await ReleaseWorkflow.publishStudio(options.repo))
@@ -1315,7 +1331,10 @@ await runWithCommands(commands => {
 
   commands
     .command('release-ide-publish')
-    .description('Publish the prepared VSIX to Marketplace, Open VSX, or both.')
+    .description(
+      'Publish the prepared VSIX to Marketplace, Open VSX, or both.'
+        + ' Requires publisher/namespace access and local VSCE_PAT/OVSX_PAT for the selected registries.',
+    )
     .option('--target <target>', 'all, marketplace, or open-vsx.', 'all')
     .action(async (options: { target: string }) => {
       const { ReleaseWorkflow } = await import('./release/ReleaseWorkflow')

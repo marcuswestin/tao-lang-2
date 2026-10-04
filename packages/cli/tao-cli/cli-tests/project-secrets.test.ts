@@ -1,5 +1,5 @@
-import { CLI, Errors, FS } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { CLI, Errors, FS, HCI } from '@shared'
+import { Describe, Expect, fakeTerminal, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import { createAgeCipher } from 'tao-cli-kit/age-cipher'
 import { formatStore, parseStore, withSecret } from 'tao-cli-kit/secrets'
 import {
@@ -45,6 +45,33 @@ async function machine(root: string, label: string, value = 'disposable-token'):
 }
 
 Describe('Tao project secrets', () => {
+  Test('explains how to obtain the value before hidden input without echoing it', async () => {
+    const root = await fixture()
+    const owner = await machine(root, 'owner')
+    await initProjectSecrets(root, owner.environment)
+    const terminal = fakeTerminal('disposable-hidden-token\n')
+    const captured = await withCapturedOutput(async () => {
+      await setProjectSecret('SERVICE_TOKEN', root, {
+        ...owner.environment,
+        promptSecret: async name => {
+          HCI.writeStderr('hidden input requested\n')
+          return (await HCI.askSecret({ ...terminal, message: `Value for ${name} (hidden):` })).value
+        },
+      })
+      return await readProjectSecret('SERVICE_TOKEN', root, owner.environment)
+    })
+
+    Expect(captured.result).toBe('disposable-hidden-token')
+    Expect(captured.stdout).toBe('')
+    Expect(captured.stderr).toContain(
+      'Obtain or create SERVICE_TOKEN from the service or app that uses it. Tao encrypts the value you supply; it does not issue credentials. Enter the exact value in the hidden local prompt.\nhidden input requested\n',
+    )
+    Expect(captured.stderr).not.toContain('disposable-hidden-token')
+    Expect(terminal.outputText()).toContain('Value for SERVICE_TOKEN (hidden):')
+    Expect(terminal.outputText()).not.toContain('disposable-hidden-token')
+    Expect(terminal.rawMode()).toBe(false)
+  })
+
   Test('initializes inside the nearest project and round-trips exact values without committing plaintext', async () => {
     const root = await fixture()
     const nested = FS.resolvePath('Feature', root)

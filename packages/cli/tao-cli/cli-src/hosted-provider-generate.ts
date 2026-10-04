@@ -87,8 +87,18 @@ export async function runHostedProviderGenerate(
     HCI.writeLine(
       'Review these rules and combine them with any existing project-wide Firestore rules before deployment.',
     )
+    HCI.writeLine('Install the Firebase CLI if needed: https://firebase.google.com/docs/cli#install_the_firebase_cli')
+    HCI.writeLine(
+      'Run firebase login and complete Google sign-in locally with an account allowed to deploy to this project.',
+    )
+    HCI.writeLine('In https://console.firebase.google.com, select this project and open Build > Firestore Database.')
+    HCI.writeLine(
+      'Select its (default) database; if absent, create (default) in production mode before deploying.',
+    )
     if (connection === undefined) {
-      HCI.writeLine('Connect this Tao project to Firebase before deploying these files.')
+      HCI.writeLine(
+        `Connect this Tao project first: tao connect firebase '${app.projectRoot.replaceAll("'", "'\\''")}'`,
+      )
     } else {
       HCI.writeLine(`From ${FS.displayPath(output)}, deploy with the Firebase CLI:`)
       HCI.writeLine(

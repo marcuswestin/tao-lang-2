@@ -95,7 +95,11 @@ export async function runClerkReview(
     !/^\d+\.\d+\.\d+\.\d+$/.test(host) || octets.some(value => value < 0 || value > 255)
     || octets[0] === 0 || octets[0] === 127 || octets[0]! >= 224
   ) {
-    Errors.throwUserInput('Clerk phone review needs a reachable LAN IPv4 address; pass --host <address>.')
+    Errors.throwUserInput(
+      'Clerk phone review needs a reachable LAN IPv4 address; pass --host <address>. '
+        + 'On your Mac, open System Settings > Network > your active connection > Details > TCP/IP and copy its IPv4 address. '
+        + 'Keep the phone on the same LAN; localhost and 127.0.0.1 cannot reach this Mac from the phone.',
+    )
   }
   let stage = 'load development Clerk configuration'
   let projectRoot: string | undefined

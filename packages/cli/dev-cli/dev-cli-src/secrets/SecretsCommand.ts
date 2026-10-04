@@ -375,6 +375,9 @@ async function addSecret(
 ): Promise<number> {
   const key = requireSecretName(name)
   const batch = await prepareSecretBatch(access)
+  HCI.writeStderr(
+    `Obtain or create ${key} from the service or app that uses it. This command encrypts the value you supply; it does not issue credentials. Enter the exact value in the hidden local prompt.\n`,
+  )
   const secret = await environment.promptSecret(`Paste the value for ${key} (hidden; a paste submits itself):`)
   await batch.save({ [key]: secret }, note === undefined ? {} : { [key]: note })
   const replaced = batch.existingNames.includes(key)

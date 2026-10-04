@@ -177,6 +177,13 @@ export async function provisionFirebase(options: FirebaseProvisionOptions): Prom
   }
   let location: string | undefined
   if (!defaultDatabase) {
+    HCI.writeLine(
+      'Choose where this new default Firestore database stores data; its location cannot be changed later.',
+      out,
+    )
+    HCI.writeLine('Use a supported location ID close to your users and other Firebase services.', out)
+    HCI.writeLine('Press Return for nam5 (United States multi-region), or enter an ID such as us-central1 (Iowa).', out)
+    HCI.writeLine('Available location IDs and geography: https://firebase.google.com/docs/firestore/locations', out)
     location = (await options.prompts.text(
       'Firestore region (Return for nam5, the United States multi-region; permanent)',
     )).trim() || 'nam5'

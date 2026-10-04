@@ -371,6 +371,11 @@ class SetupSession {
     let bundleId = this.options.bundleId
     let team = this.options.team
     if (this.options.apply && !this.options.json && this.terminal.isInteractive()) {
+      if (!bundleId) {
+        this.notice(
+          'Reuse the bundle ID of your own app, or choose a unique reverse-DNS identifier using a domain you own (yourcompany.com becomes com.yourcompany.visionhello). Use letters, digits, or hyphens in dot-separated parts starting with a letter; the preview identifier cannot be signed for your team.',
+        )
+      }
       while (!bundleId) {
         const answer = await this.terminal.askText({
           message: 'Enter your own app bundle ID (for example com.yourcompany.visionhello), or q to quit',
@@ -384,10 +389,17 @@ class SetupSession {
           this.notice('Use your own reverse-DNS bundle ID; the preview identifier cannot be signed for your team.')
         }
       }
+      if (bundleId && !team && !this.options.simulator) {
+        this.notice(
+          'Open https://developer.apple.com/account > Membership details and copy your development Team ID: exactly 10 uppercase letters or digits. Reuse the team that owns your app.',
+        )
+        this.notice(
+          "Before continuing, sign in to that team's Apple developer account in Xcode > Settings > Apple Accounts so Xcode can obtain signing credentials.",
+        )
+      }
       while (bundleId && !team && !this.options.simulator) {
         const answer = await this.terminal.askText({
-          message:
-            'In Xcode > Settings > Apple Accounts, sign in to your Apple developer account. Enter its 10-character development team ID, or q to quit',
+          message: 'Enter your 10-character development Team ID, or q to quit',
         })
         if (['q', 'quit'].includes(answer.trim().toLowerCase())) {
           break

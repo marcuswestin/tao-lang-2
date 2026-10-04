@@ -46,6 +46,11 @@ Describe('tao firebase generate', () => {
       const printed = await withCapturedOutput(() =>
         runHostedProviderGenerate('firebase', appPath, { appName: 'Hosted', output })
       )
+      Expect(printed.stdout).toContain('https://firebase.google.com/docs/cli#install_the_firebase_cli')
+      Expect(printed.stdout).toContain('firebase login')
+      Expect(printed.stdout).toContain('allowed to deploy')
+      Expect(printed.stdout).toContain('Build > Firestore Database')
+      Expect(printed.stdout).toContain('Select its (default) database')
       Expect(printed.stdout).toContain('combine them with any existing project-wide Firestore rules')
       Expect(printed.stdout).toContain(
         "firebase deploy --only firestore:rules,firestore:indexes --project 'firebase-project'",

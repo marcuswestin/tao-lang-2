@@ -423,3 +423,18 @@ Remove the temporary account buttons after acceptance. Appwrite's realtime repai
 host acceptance, followed by offline/restart/replay, account isolation, and direct requests that
 separately test forged ownerId and explicit row permissions. Its full Tao adapter and CLI-created
 app flow are later implementation work after the Firebase flow is accepted.
+
+### CLI input guidance follow-up — 2026-10-04
+
+Firebase connection now explains where to obtain the Web SDK configuration before its first
+paste prompt, including reuse of an existing Web app, registration only when missing, accepted
+paste format, and the manual-field source. Ordinary Tao projects receive concrete Console
+steps for Auth, Firestore, and publishing reviewed combined rules after saving local settings.
+Appwrite's manual guidance starts from an existing project. These instructions do not provision
+or deploy anything for ordinary Firebase projects and do not establish hosted acceptance.
+
+The CLI UX requirement is recorded in the owning skill: input guidance must precede the prompt
+and cover acquisition, prerequisites, and format. The CLI audit also covers named credentials,
+shipping/signing identifiers, database location choice, encrypted-secret entry/authorization,
+release authentication/token prerequisites, Firestore deployment prerequisites, and phone LAN addressing.
+Cloud accounts, passwords, native approvals, and deployment remain Developer actions.

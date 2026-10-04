@@ -246,6 +246,25 @@ async function resolveEntry(
       status: 'suggested',
     }
   }
+  HCI.writeLine(
+    'Reuse an existing App Store Connect API team key with Admin access if you have its private .p8 file.',
+    options,
+  )
+  HCI.writeLine(
+    'Open https://appstoreconnect.apple.com/access/integrations/api > Users and Access > Integrations > App Store Connect API > Team Keys.',
+    options,
+  )
+  HCI.writeLine(
+    'If API access is unavailable, ask the Account Holder to request access. To create a team key, an Account Holder or Admin selects Generate API Key (or +), names it, selects Admin under Access, and clicks Generate.',
+    options,
+  )
+  HCI.writeLine('Copy the Key ID beside that key and the Issuer ID above the team keys table.', options)
+  HCI.writeLine(
+    `Download API Key saves the private .p8 file only once. Keep it private and place it at ${
+      appStoreConnectKeyPath('<KEY_ID>')
+    }, replacing <KEY_ID> with that key's ID.`,
+    options,
+  )
   const keyId = await HCI.askText({
     input: options.input,
     interactive: options.interactive,
@@ -253,6 +272,7 @@ async function resolveEntry(
     output: options.output,
     validate: value => value.trim().length > 0 ? undefined : 'Enter the Key ID shown beside the Admin team key.',
   })
+  HCI.writeLine(`Expected private key file: ${appStoreConnectKeyPath(keyId)}.`, options)
   const issuerId = await HCI.askText({
     input: options.input,
     interactive: options.interactive,
@@ -260,6 +280,10 @@ async function resolveEntry(
     output: options.output,
     validate: value => value.trim().length > 0 ? undefined : 'Enter the Issuer ID shown above the team keys table.',
   })
+  HCI.writeLine(
+    `Reuse your app's owned bundle namespace, or reverse a domain you own (yourcompany.com becomes com.yourcompany). Tao appends '${app.id}' to form the bundle identifier. Use the default '${DEFAULT_SHIP_NAMESPACE}' only if you are authorized to use that namespace.`,
+    options,
+  )
   const namespace = await HCI.askText({
     defaultValue: DEFAULT_SHIP_NAMESPACE,
     input: options.input,

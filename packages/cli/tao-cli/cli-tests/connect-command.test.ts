@@ -257,6 +257,41 @@ Describe('tao connect', () => {
     }
   })
 
+  Test('explains where to get Firebase config before requesting a paste in either project flow', async () => {
+    for (const pilot of [false, true]) {
+      const root = await mkConnectProject('tao-connect-firebase-instructions-')
+      try {
+        if (pilot) {
+          await writePilotRules(root)
+        }
+        const { terminal, options } = scripted([])
+        let prompted = false
+        await runTaoConnect('firebase', root, {
+          ...options,
+          prompts: {
+            ...options.prompts,
+            paste: async () => {
+              prompted = true
+              const beforeInput = terminal.outputText()
+              Expect(beforeInput).toContain('https://console.firebase.google.com/')
+              Expect(beforeInput).toContain('Project settings > General')
+              Expect(beforeInput).toContain('select an existing Web app')
+              Expect(beforeInput).toContain('SDK setup and configuration > Config')
+              Expect(beforeInput).toContain('If no Web app appears')
+              Expect(beforeInput).toContain('including its braces')
+              Expect(beforeInput).toContain('Press Enter after pasting')
+              Expect(beforeInput).toContain('Type manual to enter fields separately')
+              return '{ projectId: "guide-project", apiKey: "public-api-key", appId: "web-app-id", authDomain: "guide-project.firebaseapp.com" }'
+            },
+          },
+        })
+        Expect(prompted).toBe(true)
+      } finally {
+        await FS.remove(root)
+      }
+    }
+  })
+
   Test('stores Firebase web config without disturbing existing private credentials', async () => {
     const root = await mkConnectProject('tao-connect-firebase-')
     try {
@@ -304,6 +339,10 @@ Describe('tao connect', () => {
       Expect(terminal.outputText()).toContain('No service-account JSON is needed')
       Expect(terminal.outputText()).toContain('cloud Auth, Firestore, and rules were not configured or checked')
       Expect(terminal.outputText()).toContain('tao firebase generate')
+      Expect(terminal.outputText()).toContain('Authentication > Sign-in method')
+      Expect(terminal.outputText()).toContain('Firestore Database > Rules')
+      Expect(terminal.outputText()).toContain('Select the (default) database')
+      Expect(terminal.outputText()).toContain('preserve rules for any other apps')
     } finally {
       await FS.remove(root)
     }
@@ -509,6 +548,11 @@ Describe('tao connect', () => {
         ...options.prompts,
         text: async (message: string) => {
           questions.push(message)
+          if (message.startsWith('Firestore region')) {
+            Expect(terminal.outputText()).toContain('location cannot be changed later')
+            Expect(terminal.outputText()).toContain('https://firebase.google.com/docs/firestore/locations')
+            Expect(terminal.outputText()).toContain('supported location ID close to your users')
+          }
           return ''
         },
       }

@@ -117,9 +117,8 @@ export async function runTaoConnect(
     }
   }
   if (provider === 'appwrite' && !appwriteAutomated) {
-    HCI.writeLine('1. At https://cloud.appwrite.io create a project, such as Tao Hosted CRUD Demo.', out)
-    HCI.writeLine('   Choose the free serverless option and a region.', out)
-    HCI.writeLine('   This is the one manual creation step: a project API key cannot create its project.', out)
+    HCI.writeLine('1. Open https://cloud.appwrite.io, sign in locally, and select your existing project.', out)
+    HCI.writeLine('   Reuse an existing project; a project API key configures it but cannot create it.', out)
     HCI.writeLine('2. In project Settings, copy Project ID and the regional API endpoint ending in /v1.', out)
     HCI.writeLine('3. Open API Keys in the project sidebar, click Create API key, and name it Tao CLI setup.', out)
     HCI.writeLine('   Grant project.read, project.write, platforms.read, platforms.write,', out)
@@ -131,6 +130,7 @@ export async function runTaoConnect(
   }
 
   if (provider === 'firebase') {
+    printFirebaseConfigInstructions(pilot, out)
     const pasted = (await prompts.paste(
       pilot
         ? 'Firebase config (Return to automate; type manual for individual fields):'
@@ -154,17 +154,7 @@ export async function runTaoConnect(
       })
       firebaseAutomated = true
     } else if (pasted === 'manual') {
-      HCI.writeLine('In Firebase Console, press Create app (or Add app) and select the Web app icon (</>).', out)
-      HCI.writeLine(
-        pilot
-          ? 'Name it Tao Hosted CRUD Demo; leave Firebase Hosting unchecked; click Register app.'
-          : 'Name the web app for your project; leave Firebase Hosting unchecked; click Register app.',
-        out,
-      )
-      HCI.writeLine('On Add Firebase SDK, select the Config tab and copy the public firebaseConfig.', out)
-      HCI.writeLine('Click Continue to console after copying config. Later find it in Project settings >', out)
-      HCI.writeLine('General > Your apps > Web app > SDK setup and configuration > Config.', out)
-      HCI.writeLine('No service-account JSON is needed for this app; do not generate one.', out)
+      HCI.writeLine('Read each requested field from that same firebaseConfig object; enter only its value.', out)
     } else {
       publicFields = parseFirebaseConfigSnippet(pasted)
     }
@@ -174,6 +164,14 @@ export async function runTaoConnect(
     : (['endpoint', 'projectId'] as const)
   if (Object.keys(publicFields).length === 0) {
     for (const field of fields) {
+      HCI.writeLine(
+        provider === 'firebase'
+          ? `Copy the ${field} string from the firebaseConfig object above; omit its quotes and comma.`
+          : field === 'endpoint'
+          ? 'Copy API Endpoint from the selected Appwrite project Settings; use its HTTPS URL ending in /v1.'
+          : 'Copy Project ID from that same Appwrite project Settings; enter the ID, not the project name.',
+        out,
+      )
       const value = (await prompts.text(`${provider} ${field}`)).trim()
       if (value === '' || /[\u0000-\u001f\u007f]/u.test(value)) {
         Errors.throwUserInput(
@@ -268,9 +266,19 @@ export async function runTaoConnect(
       'Firebase settings were saved locally; cloud Auth, Firestore, and rules were not configured or checked.',
       out,
     )
-    HCI.writeLine('Next, select your Firebase project and enable Email/Password sign-in and Firestore.', out)
+    HCI.writeLine('Next in your existing project at https://console.firebase.google.com/:', out)
+    HCI.writeLine('1. Open Authentication > Sign-in method, enable Email/Password, and Save.', out)
+    HCI.writeLine(
+      '2. Open Firestore Database. Select the (default) database, or create (default) in production mode if missing.',
+      out,
+    )
     HCI.writeLine('Run tao firebase generate <project-path> --output <backend-directory> for private rules.', out)
-    HCI.writeLine('Review and combine them with existing project rules before deploying with the Firebase CLI.', out)
+    HCI.writeLine("Review and combine the generated firestore.rules with the project's current rules.", out)
+    HCI.writeLine(
+      'With (default) selected, open Firestore Database > Rules, replace the editor with those combined rules, then Publish.',
+      out,
+    )
+    HCI.writeLine('Publishing replaces project-wide rules; preserve rules for any other apps using this project.', out)
   } else {
     HCI.writeLine(`${service} connect completed.`, out)
   }
@@ -366,4 +374,32 @@ async function readObject(path: string): Promise<Record<string, unknown>> {
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/** Explains the public Web SDK configuration before either connection input path. */
+function printFirebaseConfigInstructions(pilot: boolean, out: { output?: Writable }): void {
+  HCI.writeLine('Get your Firebase config before continuing:', out)
+  HCI.writeLine('1. Open https://console.firebase.google.com/ and sign in locally with Google.', out)
+  HCI.writeLine(
+    '2. Open your existing Firebase project, then the gear beside Project Overview > Project settings > General.',
+    out,
+  )
+  HCI.writeLine('3. In Your apps, select an existing Web app (</>), then SDK setup and configuration > Config.', out)
+  HCI.writeLine('   Tao uses the Web SDK config on iPhone and Android too.', out)
+  HCI.writeLine('   If no Web app appears, press Create app (or Add app), then choose Web (</>).', out)
+  HCI.writeLine(
+    pilot
+      ? '   Name it Tao Hosted CRUD Demo; leave Firebase Hosting unchecked; click Register app.'
+      : '   Name the web app for your project; leave Firebase Hosting unchecked; click Register app.',
+    out,
+  )
+  HCI.writeLine('   Copy the config from Add Firebase SDK, then click Continue to console.', out)
+  HCI.writeLine('4. Copy the public firebaseConfig object, including its braces, and paste it at the next prompt.', out)
+  HCI.writeLine(
+    '   The const firebaseConfig = { ... }; snippet is accepted too. Type manual to enter fields separately.',
+    out,
+  )
+  HCI.writeLine('5. Press Enter after pasting. These are public client settings; no password is requested here.', out)
+  HCI.writeLine('No service-account JSON is needed for this app; do not generate one.', out)
+  HCI.writeLine('Help: https://support.google.com/firebase/answer/7015592', out)
 }

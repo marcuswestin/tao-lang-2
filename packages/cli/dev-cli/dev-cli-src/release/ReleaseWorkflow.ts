@@ -256,6 +256,13 @@ async function requirePreparedStudio(
 }
 
 async function requirePublicRepo(repo: string): Promise<void> {
+  HCI.writeLine(
+    `GitHub prerequisite: open the existing public repository at https://github.com/${repo};`
+      + ` the two URL segments after github.com are owner/name (${repo}).`
+      + ' Use an account with repository write access to publish releases.'
+      + ' Install GitHub CLI from https://cli.github.com if needed, then run `gh auth login --hostname github.com`'
+      + ' and sign in with that account before continuing (https://cli.github.com/manual/gh_auth_login).',
+  )
   await run('gh', ['auth', 'status'])
   const raw = await run('gh', ['repo', 'view', repo, '--json', 'visibility'])
   const visibility = JSON.parse(raw) as { visibility?: string }
@@ -474,7 +481,16 @@ async function publishIde(target: 'all' | 'marketplace' | 'open-vsx'): Promise<v
   }
   if (target === 'all' || target === 'marketplace') {
     if (!Platform.runtimeProcess.env['VSCE_PAT']) {
-      Errors.throwUserInput('Set VSCE_PAT before Marketplace publication.')
+      Errors.throwUserInput(
+        'Set VSCE_PAT locally before Marketplace publication.'
+          + ' Sign in with your Microsoft account and select or create an Azure DevOps organization at https://dev.azure.com/.'
+          + ` Reuse publisher '${stamp.publisher}' at https://marketplace.visualstudio.com/manage`
+          + ' with the same Microsoft account allowed to publish; create it only if it does not exist.'
+          + ' In Azure DevOps: User settings > Personal access tokens > New Token;'
+          + ' choose All accessible organizations and Custom defined > Show all scopes > Marketplace > Manage.'
+          + ' Store the generated token in the local VSCE_PAT environment variable and retry.'
+          + ' Steps: https://code.visualstudio.com/api/working-with-extensions/publishing-extension#get-a-personal-access-token',
+      )
     }
     await run(
       'bunx',
@@ -486,7 +502,19 @@ async function publishIde(target: 'all' | 'marketplace' | 'open-vsx'): Promise<v
   }
   if (target === 'all' || target === 'open-vsx') {
     if (!Platform.runtimeProcess.env['OVSX_PAT']) {
-      Errors.throwUserInput('Set OVSX_PAT before Open VSX publication.')
+      Errors.throwUserInput(
+        'Set OVSX_PAT locally before Open VSX publication.'
+          + ' Sign in at https://open-vsx.org with GitHub; reuse or register an Eclipse account'
+          + ' at https://accounts.eclipse.org/ with the same GitHub username.'
+          + ' At https://open-vsx.org/user-settings/profile (avatar > Settings), select Log in with Eclipse,'
+          + ' then Show Publisher Agreement and agree to it before publishing.'
+          + ` Reuse namespace '${stamp.publisher}' with Owner or Contributor access;`
+          + ' create it only if absent, following https://github.com/eclipse-openvsx/openvsx/wiki/Publishing-Extensions#4-create-the-namespace.'
+          + ' Open https://open-vsx.org/user-settings/tokens (avatar > Settings > Access Tokens),'
+          + ' select Generate New Token, enter a description, then Generate Token.'
+          + ' This publishing token has no selectable scopes; namespace membership grants publication access.'
+          + ' Store the generated token in the local OVSX_PAT environment variable and retry.',
+      )
     }
     await run('bunx', ['ovsx', 'publish', vsix], Repo.resolvePath('packages/ides/ide-extension'), true)
     HCI.writeLine(`Published Open VSX: ${stamp.publisher}.${stamp.name}@${stamp.version}`)
