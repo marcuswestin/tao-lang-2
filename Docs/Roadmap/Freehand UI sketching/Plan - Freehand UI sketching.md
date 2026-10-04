@@ -160,7 +160,7 @@ beside the scenario matrix while keeping all free geometry in Studio's committed
 editable free rectangles beside the running app.
 
 **Introduces.** A Studio-server sketch provider validates and atomically writes versioned JSONC at
-`.tao-project/studio/sketches.jsonc`. It owns `Sketch` and ordered `Rect` rows with the exact FS-D1
+`.tao/studio/sketches.jsonc`. It owns `Sketch` and ordered `Rect` rows with the exact FS-D1
 fields, a project-wide monotonic view counter, render-identity associations for snapped rows, and
 conflict-safe source/catalog checkpoints. Creating a sketch immediately writes read-only
 `@/studio/ViewN.tao` with a public view, co-located scenarios group, fixture import where needed, and
@@ -845,7 +845,7 @@ Focusing a view wraps it in a frame whose size is the occurrence's measured size
   `reconfigureEnvironment`); the size shows in the canvas bar and in the inspector's Frame fields.
   Height may be "hug" (grow to content, reported back by the runtime) or fixed.
 - The frame size is editing state, kept in the sketch catalog next to the group
-  (`.tao-project/studio/sketches.jsonc`, a `frames` map keyed by view name), never in `.tao` source.
+  (`.tao/studio/sketches.jsonc`, a `frames` map keyed by view name), never in `.tao` source.
   A "Save as scenario size" command writes it into the scenario's `Size` when the person wants it.
 - Views without a focused `scenarios` group become focusable by creating a `draft` group on demand
   (decision A, second branch, from the strides plan), whose arguments come from the occurrence's

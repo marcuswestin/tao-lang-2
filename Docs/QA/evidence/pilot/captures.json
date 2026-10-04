@@ -1,0 +1,361 @@
+[
+  {
+    "subject": "reading-list",
+    "capturedAt": "2026-09-26T22:52:29.463Z",
+    "reviewId": "2026-09-26T22-52-29Z-4421044e",
+    "artifact": ".artifacts/qa/pilot/reading-list-review",
+    "cells": [
+      {
+        "group": "QA views",
+        "label": "phone",
+        "status": "captured",
+        "sha256": "94d3f329e159b7b46b31780370ef920334bd2bea552e429b3fbf6e04c5d0af7c",
+        "environment": {
+          "network": {
+            "latencyMs": 0,
+            "outcome": "normal"
+          },
+          "scheme": {
+            "capability": "reactive-browser",
+            "requested": "light",
+            "resolved": "light",
+            "source": "scenario"
+          },
+          "viewport": {
+            "height": 844,
+            "presetId": "phone",
+            "width": 390
+          }
+        },
+        "evidence": "Docs/QA/evidence/pilot/reading-list-phone.png"
+      },
+      {
+        "group": "QA views",
+        "label": "desktop",
+        "status": "captured",
+        "sha256": "dd55554dab86a5f15db7fa4a8cb0a5f42e12ba75bd4b96d420499e3d75bd9143",
+        "environment": {
+          "network": {
+            "latencyMs": 0,
+            "outcome": "normal"
+          },
+          "scheme": {
+            "capability": "reactive-browser",
+            "requested": "light",
+            "resolved": "light",
+            "source": "scenario"
+          },
+          "viewport": {
+            "height": 900,
+            "presetId": "tablet",
+            "width": 1280
+          }
+        },
+        "evidence": "Docs/QA/evidence/pilot/reading-list-desktop.png"
+      },
+      {
+        "group": "QA views",
+        "label": "dark",
+        "status": "captured",
+        "sha256": "94d3f329e159b7b46b31780370ef920334bd2bea552e429b3fbf6e04c5d0af7c",
+        "environment": {
+          "network": {
+            "latencyMs": 0,
+            "outcome": "normal"
+          },
+          "scheme": {
+            "capability": "reactive-browser",
+            "requested": "dark",
+            "resolved": "dark",
+            "source": "scenario"
+          },
+          "viewport": {
+            "height": 844,
+            "presetId": "phone",
+            "width": 390
+          }
+        },
+        "evidence": "Docs/QA/evidence/pilot/reading-list-dark.png"
+      }
+    ],
+    "renderer": {
+      "colorGamut": "srgb",
+      "deviceScaleFactor": 1,
+      "fontFingerprint": "fce7f8c6674bf18f9c1bd8b59972b0d878d8a3861f7bff9c43fac721fdb1c169",
+      "jsVersion": "15.3.76.13",
+      "locale": "en-US",
+      "platform": "MacIntel",
+      "product": "Chrome/153.0.8010.53",
+      "protocolVersion": "1.3",
+      "timezone": "America/New_York",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36"
+    },
+    "studio": {
+      "compileRevision": 1,
+      "manifestRevision": "compile:1",
+      "sourceVersions": {
+        "ReadingList.tao": "text-v1:6093:0ehwykx11h00w5"
+      }
+    },
+    "sourceBaseline": "d5bdeaefd037",
+    "sourceSnapshot": "Partial sourceVersions only; concurrent implementation means no complete immutable toolchain snapshot was captured."
+  },
+  {
+    "subject": "notebook",
+    "capturedAt": "2026-09-26T22:51:38.590Z",
+    "reviewId": "2026-09-26T22-51-38Z-70f2b5f1",
+    "artifact": ".artifacts/qa/pilot/notebook-review",
+    "cells": [
+      {
+        "group": "devices",
+        "label": "phone",
+        "status": "captured",
+        "sha256": "c3e465e99e06f6d2bfee9ed0172a2ad496b1201dc998f7401bff16c61ecef67d",
+        "environment": {
+          "network": {
+            "latencyMs": 0,
+            "outcome": "normal"
+          },
+          "scheme": {
+            "capability": "reactive-browser",
+            "requested": "light",
+            "resolved": "light",
+            "source": "scenario"
+          },
+          "viewport": {
+            "height": 844,
+            "presetId": "phone",
+            "width": 390
+          }
+        },
+        "evidence": "Docs/QA/evidence/pilot/notebook-phone.png"
+      },
+      {
+        "group": "devices",
+        "label": "tabletDark",
+        "status": "failed",
+        "environment": {
+          "network": {
+            "latencyMs": 0,
+            "outcome": "normal"
+          },
+          "scheme": {
+            "capability": "reactive-browser",
+            "requested": "dark",
+            "resolved": "dark",
+            "source": "scenario"
+          },
+          "viewport": {
+            "height": 1366,
+            "presetId": "tablet",
+            "width": 1024
+          }
+        },
+        "error": "Scenario did not reach ready/failed before the existing capture timeout."
+      },
+      {
+        "group": "notes states",
+        "label": "groceries",
+        "status": "captured",
+        "sha256": "77dc4b7af622e6348bdd53ca9f88b6757c46926beae08018e97e37bb7eb2d74d",
+        "environment": {
+          "network": {
+            "latencyMs": 0,
+            "outcome": "normal"
+          },
+          "scheme": {
+            "capability": "reactive-browser",
+            "requested": "light",
+            "resolved": "light",
+            "source": "scenario"
+          },
+          "viewport": {
+            "height": 844,
+            "presetId": "phone",
+            "width": 390
+          }
+        },
+        "evidence": "Docs/QA/evidence/pilot/notebook-groceries.png"
+      },
+      {
+        "group": "notes states",
+        "label": "ideas",
+        "status": "captured",
+        "sha256": "13401f0a4c7f2f581a03f7c353a79fe6928723e8f2b7bb075d1fe493ab71f5d2",
+        "environment": {
+          "network": {
+            "latencyMs": 0,
+            "outcome": "normal"
+          },
+          "scheme": {
+            "capability": "reactive-browser",
+            "requested": "light",
+            "resolved": "light",
+            "source": "scenario"
+          },
+          "viewport": {
+            "height": 844,
+            "presetId": "phone",
+            "width": 390
+          }
+        },
+        "evidence": "Docs/QA/evidence/pilot/notebook-ideas.png"
+      }
+    ],
+    "renderer": {
+      "colorGamut": "srgb",
+      "deviceScaleFactor": 1,
+      "fontFingerprint": "c102cbb242a01acc41f59d52f7ff766f09f2af125d049dcf2dcb63d98cba3577",
+      "jsVersion": "15.3.76.13",
+      "locale": "en-US",
+      "platform": "MacIntel",
+      "product": "Chrome/153.0.8010.53",
+      "protocolVersion": "1.3",
+      "timezone": "America/New_York",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36"
+    },
+    "studio": {
+      "compileRevision": 1,
+      "manifestRevision": "compile:1",
+      "sourceVersions": {
+        "App.tao": "text-v1:586:0cagf2d0h3t40x",
+        "Chrome.tao": "text-v1:243:0x603c308bobzr",
+        "Data.tao": "text-v1:331:1hq46j8006s754",
+        "Design.tao": "text-v1:1728:070bukt05lm4u1",
+        "Notebook.test.tao": "text-v1:737:1nekpyx0sfoon9",
+        "Notes/Notes.tao": "text-v1:3530:19ucsp51qqgkb9",
+        "Scenarios.tao": "text-v1:930:1cfgr5l1elyt0t"
+      }
+    },
+    "sourceBaseline": "d5bdeaefd037",
+    "sourceSnapshot": "Partial sourceVersions only; concurrent implementation means no complete immutable toolchain snapshot was captured."
+  },
+  {
+    "subject": "hnreader-stub",
+    "capturedAt": "2026-09-26T22:53:18.080Z",
+    "reviewId": "2026-09-26T22-53-18Z-7953073e",
+    "artifact": ".artifacts/qa/pilot/hnreader-review-diagnostics",
+    "cells": [
+      {
+        "group": "rows",
+        "label": "leading",
+        "status": "captured",
+        "sha256": "99c7a540cce071a35825c31f5a3b7cd8e12b90e338f0baa7dd13767e666ae5c6",
+        "environment": {
+          "network": {
+            "latencyMs": 0,
+            "outcome": "normal"
+          },
+          "scheme": {
+            "capability": "reactive-browser",
+            "requested": "light",
+            "resolved": "light",
+            "source": "scenario"
+          },
+          "viewport": {
+            "height": 844,
+            "presetId": "phone",
+            "width": 390
+          }
+        },
+        "evidence": "Docs/QA/evidence/pilot/hnreader-leading.png"
+      },
+      {
+        "group": "rows",
+        "label": "wrapping",
+        "status": "failed",
+        "environment": {
+          "network": {
+            "latencyMs": 0,
+            "outcome": "normal"
+          },
+          "scheme": {
+            "capability": "reactive-browser",
+            "requested": "light",
+            "resolved": "light",
+            "source": "scenario"
+          },
+          "viewport": {
+            "height": 844,
+            "presetId": "phone",
+            "width": 390
+          }
+        },
+        "error": "Scenario did not reach ready/failed before the existing capture timeout."
+      },
+      {
+        "group": "sketch",
+        "label": "draft",
+        "status": "captured",
+        "sha256": "1c9cfca8426da69ff4ceef6f475067935777b7624d5a43b05e9b59d1ef520133",
+        "environment": {
+          "network": {
+            "latencyMs": 0,
+            "outcome": "normal"
+          },
+          "scheme": {
+            "capability": "reactive-browser",
+            "requested": "system",
+            "resolved": "light",
+            "source": "system"
+          },
+          "viewport": {
+            "height": 844,
+            "presetId": "phone",
+            "width": 390
+          }
+        },
+        "reviewScope": "Captured draft surface; not reviewed as public app acceptance."
+      },
+      {
+        "group": "sketch",
+        "label": "draft",
+        "status": "captured",
+        "sha256": "56a5c71a2af915ae319161880a46427d37f81d4e545404cb7dd203790b85df36",
+        "environment": {
+          "network": {
+            "latencyMs": 0,
+            "outcome": "normal"
+          },
+          "scheme": {
+            "capability": "reactive-browser",
+            "requested": "system",
+            "resolved": "light",
+            "source": "system"
+          },
+          "viewport": {
+            "height": 844,
+            "presetId": "phone",
+            "width": 390
+          }
+        },
+        "reviewScope": "Captured draft surface; not reviewed as public app acceptance."
+      }
+    ],
+    "renderer": {
+      "colorGamut": "srgb",
+      "deviceScaleFactor": 1,
+      "fontFingerprint": "e76efa82d3939a9fad666bc9f358140c37cd73b074cc2c21b8f967d3f5d5a907",
+      "jsVersion": "15.3.76.13",
+      "locale": "en-US",
+      "platform": "MacIntel",
+      "product": "Chrome/153.0.8010.53",
+      "protocolVersion": "1.3",
+      "timezone": "America/New_York",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36"
+    },
+    "studio": {
+      "compileRevision": 1,
+      "manifestRevision": "compile:1",
+      "sourceVersions": {
+        "@/studio/View1.tao": "text-v1:268:1w8zg5y0ld1u0y",
+        "@/studio/View2.tao": "text-v1:474:0bq3xmn186pher",
+        "HNReader.scenarios.tao": "text-v1:2344:0ib9bnu0cfu0vi",
+        "HNReader.tao": "text-v1:13760:1yi34ic0u5l0ao",
+        "HNReader.test.tao": "text-v1:6826:0fx8zcy0xqvxsm"
+      }
+    },
+    "sourceBaseline": "d5bdeaefd037",
+    "sourceSnapshot": "Partial sourceVersions only; concurrent implementation means no complete immutable toolchain snapshot was captured."
+  }
+]

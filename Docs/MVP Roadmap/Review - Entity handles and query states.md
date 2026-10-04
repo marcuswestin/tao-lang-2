@@ -1,7 +1,7 @@
 # Pre-MVP review — entity handles and query states
 
-Requested 2026-10-04. Investigation task [A24](<Agent MVP Roadmap.md#a24--review-and-reorganize-entity-handle-and-query-states>)
-feeds decision [R19](<Developer MVP Roadmap.md#r19--entity-handle-and-query-state-model>).
+Requested 2026-10-04. Investigation task [A29](<Agent MVP Roadmap.md#a29--review-and-reorganize-entity-handle-and-query-states>)
+feeds decision [R20](<Developer MVP Roadmap.md#r20--entity-handle-and-query-state-model>).
 Design review only: do not implement the state model merely by taking this task. Audit current code,
 return a coherent proposed contract with small Tao forcing examples, and settle it with the Developer.
 
@@ -29,7 +29,7 @@ Current implementation is evidence, not a requirement to preserve its vocabulary
   fields, axes, and their types remain open. Every exposed expression/type should have a describable
   written type contract; investigate what generic/system types this actually requires.
 - Mandatory modeled failure coverage uses inferred effects and typed defaults; local handlers can
-  consume cases or propagate them. Complete foreign/availability/suspension proof belongs to A22.
+  consume cases or propagate them. Complete foreign/availability/suspension proof belongs to A27.
 - Failure cases/families have typed identity with origin metadata. Exact failure cases beat families,
   families beat generic error, and equally specific overlaps are rejected. This selection concerns
   failure dispatch, not a license to change all predicate when matching rules.
@@ -75,7 +75,7 @@ Current implementation is evidence, not a requirement to preserve its vocabulary
 5. Typed reads and observations:
    - Specify narrowing for optional/resource/member chains, aliases, synchronous render observations,
      and invalidation across suspension. Retained metadata is historical evidence, not authorization
-     for a later live dereference. Coordinate with A22; do not promise an arbitrary-code proof.
+     for a later live dereference. Coordinate with A27; do not promise an arbitrary-code proof.
 
 ## Current-source baseline to reverify
 
@@ -122,5 +122,5 @@ Reverify external behavior before relying on it. The foreign framework's default
 Context: [S47–S52 discussion](<../Roadmap/Data and render contracts/Syntax sketches.md#s47--app-guard-integration-explicit-cleanup-and-minimal-app>),
 [user/developer stories](<../Roadmap/Data and render contracts/User stories.md>),
 [language decisions](<../Roadmap/Tao Revolution/Decisions.md>),
-[A22](<Agent MVP Roadmap.md#a22--investigate-static-read-and-failure-handling-proofs>),
+[A27](<Agent MVP Roadmap.md#a27--investigate-static-read-and-failure-handling-proofs>),
 `Docs/Spec/Tao Data.md`, and `Docs/Spec/Tao Type System.md`.

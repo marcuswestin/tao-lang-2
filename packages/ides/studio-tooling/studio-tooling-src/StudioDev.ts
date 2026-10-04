@@ -4,7 +4,21 @@ import { ExpoRunner } from '@expo-host/dev-loop/expo-runner/ExpoRunner'
 import { detectLanIPv4 } from '@expo-host/dev-loop/expo-runner/lan-host'
 import { CompanionIdentity } from '@expo-host/dev-loop/prebuilt-host/CompanionIdentity'
 import { type AppleFoundationModelsService, startAppleFoundationModelsService } from '@generation/apple-server'
-import { CLI, Errors, FS, HCI, Json, Platform, ProjectDevSession, Repo, SecretsFile, Time } from '@shared'
+import {
+  Assert,
+  CLI,
+  Errors,
+  FS,
+  HCI,
+  Json,
+  Platform,
+  ProjectDevSession,
+  ReleaseCapabilities,
+  ReleaseToolchain,
+  Repo,
+  SecretsFile,
+  Time,
+} from '@shared'
 import {
   openStudioPreviewSession,
   resolveStudioProjectRoot,
@@ -23,6 +37,7 @@ import {
   StudioSessionPath,
   type StudioSessionResource,
 } from '@studio'
+import { UiVisibility } from '@verification/UiVisibility'
 import { enclosingWatchRoot } from '@verification/WatchmanHealth'
 import { StudioBrowser } from './StudioBrowser'
 import { type StartedStudioClientDevReload, startStudioClientDevReload } from './StudioClientDevReload'
@@ -32,6 +47,7 @@ import { describeOwnProcess, openLaunchRecord, type StudioLaunchRecord } from '.
 import { createStudioLifecycleLog, type StudioLifecycleLog } from './StudioLifecycleLog'
 import { StudioNative } from './StudioNative'
 import type { StartedStudioNative } from './StudioNative'
+import type { StudioNativeIdentity } from './StudioNativeIdentity'
 import { type CreatedStudioPreviewRuntime, StudioPreviewRuntime } from './StudioPreviewRuntime'
 import { openTarget, waitForReadyUrl, writeReadiness } from './StudioReadiness'
 import { StudioTestProcessRunner } from './StudioTestProcessRunner'
@@ -41,6 +57,9 @@ const PROFILE_BIN_PATH = '.devenv/profile/bin'
 // its own probe. Keep this list beside the Studio preflight so Metro cannot silently downgrade to
 // Node watching after Studio already said Watchman was usable.
 const METRO_WATCHMAN_CAPABILITIES = ['field-content.sha1hex', 'relative_root', 'suffix-set', 'wildmatch']
+
+/** Successful cleanup confirms the native shell and every owned project process stopped. */
+export type StudioDevCleanupResult = { resourcesStopped: boolean }
 
 export type StudioDevOptions = {
   appName?: string
@@ -54,18 +73,23 @@ export type StudioDevOptions = {
   native?: boolean
   nativeArtifactRoot?: string
   nativeHutchPath?: string
+  nativeHutchHome?: string
+  nativeIdentity?: StudioNativeIdentity
   nativeHostCommand?: string
   nativeProbe?: boolean
+  nativeShowStudio?: boolean
   nativeShowWindow?: boolean
   /** Receives the original classified startup failure for an in-process diagnostic caller. */
   onFailure?: (error: unknown) => void
   /** Receives this invocation's exact launch id once its durable record exists. */
   onLaunch?: (launchId: string) => void
+  onCleanup?: (result: StudioDevCleanupResult) => void
   port?: number
   projectRoot: string
   /** Where the dev data server persists app snapshots; defaults to the repository's user artifacts. */
   devDataRoot?: string
   userStateRoot?: string
+  launchRecordsRoot?: string
 }
 
 /** StudioDev exposes narrow lifecycle seams for focused developer-tool tests. */
@@ -80,12 +104,25 @@ export const StudioDev = {
     preferredExpoPort,
     publishPreviewBeforeBundling,
     studioWatchmanEnvironment,
+    resourcesAreStopped,
     withCleanup,
   },
 }
 
 /** runStudioDev owns the local Studio server, file watcher, preview compiler, and Expo process. */
-export async function runStudioDev(options: StudioDevOptions): Promise<number> {
+export async function runStudioDev(
+  options: StudioDevOptions,
+  onProcessSignal: typeof Platform.onProcessSignal = Platform.onProcessSignal,
+): Promise<number> {
+  ReleaseCapabilities.require('studio')
+  if (options.device !== undefined) {
+    ReleaseCapabilities.require('companion')
+  }
+  UiVisibility.warn(
+    options.native === true
+      ? options.nativeShowWindow === false ? [] : UiVisibility.warningsForCommand('studio-native', [])
+      : UiVisibility.warningsForCommand('studio', options.browser === false ? ['--no-browser'] : []),
+  )
   let finish: ((exitCode: number) => void) | undefined
   const finished = new Promise<number>(resolve => {
     finish = resolve
@@ -99,7 +136,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       finish?.(exitCode)
     }
   }
-  const removeStopSignalHandlers = addStopSignalHandlers(stop)
+  const removeStopSignalHandlers = addStopSignalHandlers(stop, onProcessSignal)
   let native: StartedStudioNative | undefined
   let server: StartedStudioServer | undefined
   let foundationModels: AppleFoundationModelsService | undefined
@@ -117,11 +154,14 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
   let launch: StudioLaunchRecord | undefined
   let lifecycle: StudioLifecycleLog | undefined
   let primaryFailure: unknown
+  let cleanupFailed = false
+  const processRoots = new Set<string>()
 
   try {
     launch = await openLaunchRecord({
       appName: options.appName,
       artifactRoot,
+      launchRecordsRoot: options.launchRecordsRoot,
       mode,
       projectRoot: options.projectRoot,
     })
@@ -133,30 +173,32 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       : undefined
     // The gateway starts before any project so its port can be written into every preview manifest,
     // and it finds sessions through the manager that is created right after it.
-    trustStore = await StudioDeviceTrustStore.open(FS.resolvePath('device-trust', userStateRoot))
-    deviceGateway = await StudioDeviceGateway.start({
-      hosts: async () => [await detectLanIPv4()].filter(host => host !== 'localhost'),
-      log: line => HCI.logProcessInfo('studio-device', line),
-      sessions: {
-        get: sessionId => {
-          const resource = manager?.get(sessionId)
-          return resource === undefined
-            ? undefined
-            : { previewUrl: resource.previewUrl, session: resource.session, sessionId }
-        },
-        list: () =>
-          (manager?.list().current ?? []).flatMap(item => {
-            const resource = manager?.get(item.sessionId)
+    if (ReleaseCapabilities.allows('companion')) {
+      trustStore = await StudioDeviceTrustStore.open(FS.resolvePath('device-trust', userStateRoot))
+      deviceGateway = await StudioDeviceGateway.start({
+        hosts: async () => [await detectLanIPv4()].filter(host => host !== 'localhost'),
+        log: line => HCI.logProcessInfo('studio-device', line),
+        sessions: {
+          get: sessionId => {
+            const resource = manager?.get(sessionId)
             return resource === undefined
-              ? []
-              : [{ previewUrl: resource.previewUrl, session: resource.session, sessionId: item.sessionId }]
-          }),
-      },
-      trustStore,
-    })
-    lifecycle.record({ component: 'device-gateway', event: 'port-allocated', port: deviceGateway.port })
-    HCI.logProcessInfo('studio', `Device gateway: tao-studio-device-v1 on port ${deviceGateway.port}`)
-    const gatewayPort = deviceGateway.port
+              ? undefined
+              : { previewUrl: resource.previewUrl, session: resource.session, sessionId }
+          },
+          list: () =>
+            (manager?.list().current ?? []).flatMap(item => {
+              const resource = manager?.get(item.sessionId)
+              return resource === undefined
+                ? []
+                : [{ previewUrl: resource.previewUrl, session: resource.session, sessionId: item.sessionId }]
+            }),
+        },
+        trustStore,
+      })
+      lifecycle.record({ component: 'device-gateway', event: 'port-allocated', port: deviceGateway?.port })
+      HCI.logProcessInfo('studio', `Device gateway: tao-studio-device-v1 on port ${deviceGateway?.port}`)
+    }
+    const gatewayPort = deviceGateway?.port
     // One dev data server serves every project this Studio opens; each project's preview manifest
     // names its own app key, so the projects' `Dev` datasources never share a stream.
     devDataServer = await DevDataServer.start({
@@ -175,6 +217,12 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
           isStopping: () => requestedStop,
           preferredExpoPort: preferredExpoPort(),
           stop,
+          onCleanupFailure: () => {
+            cleanupFailed = true
+          },
+          onProcessRoot: root => {
+            processRoots.add(root)
+          },
           // Studio scrapes the whole stream for failures and PASS/FAIL lines; a piped `tao test`
           // would otherwise select its quiet mode and truncate that stream to a failure tail.
           testCommandArgs: projectRoot => ['test', projectRoot, '--output', 'lines'],
@@ -250,14 +298,22 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       studioUrl: server.url,
     })
     if (options.native && !requestedStop) {
+      if (options.nativeArtifactRoot !== undefined) {
+        processRoots.add(
+          await FS.realPath(options.nativeArtifactRoot).catch(() => FS.resolvePath(options.nativeArtifactRoot!)),
+        )
+      }
       native = await StudioNative.start({
         artifactRoot: options.nativeArtifactRoot,
         hutchPath: nativeHutchPath,
+        hutchHome: options.nativeHutchHome,
+        identity: options.nativeIdentity,
         nativeHostCommand: options.nativeHostCommand,
         previewUrl: initialResource.previewUrl ?? 'http://127.0.0.1:1',
         // `--no-browser` also means "no extra project window" for the native shell.
         projectUrl: options.browser === false ? undefined : sessionUrl,
         probe: options.nativeProbe,
+        showStudio: options.nativeShowStudio,
         showWindow: options.nativeShowWindow,
         signal: nativeAbort.signal,
         studioUrl: server.url,
@@ -287,6 +343,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       if (await waitForReadyUrl(sessionUrl)) {
         await launch.update({ state: 'ready' })
         if (options.device !== undefined && !requestedStop) {
+          Assert.defined(deviceGateway, 'Studio device startup requires the Companion gateway.')
           if (initialResource.previewUrl === undefined) {
             Errors.throwHostEnvironment('Studio has no Metro preview to launch on the requested device.')
           }
@@ -306,7 +363,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
             appName: options.appName,
             artifactRoot,
             devDataPort: devDataServer.port,
-            deviceGatewayPort: deviceGateway.port,
+            deviceGatewayPort: deviceGateway?.port,
             launchId: launch.launchId,
             lifecycleLogPath: lifecycle.path,
             manifestPath: launch.path,
@@ -350,50 +407,57 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
     HCI.logProcessError('studio', Errors.formatForLog(error))
     return 1
   } finally {
-    removeStopSignalHandlers()
-    lifecycle?.record({ component: 'studio-server', event: 'shutdown-requested' })
-    const cleanupStartedAt = Time.nowMs()
-    if (options.native === true) {
-      HCI.logProcessInfo('studio-native', 'final cleanup: started')
-    }
     try {
+      lifecycle?.record({ component: 'studio-server', event: 'shutdown-requested' })
+      const cleanupStartedAt = Time.nowMs()
+      if (options.native === true) {
+        HCI.logProcessInfo('studio-native', 'final cleanup: started')
+      }
       try {
-        await cleanupStudioDev([
-          () => deviceCli?.stop(),
-          () => native?.stop(),
-          () => studioClientReload?.close(),
-          () => server?.stop(),
-          () => deviceGateway?.stop(),
-          () => devDataServer?.stop(),
-          () => manager?.closeAll(),
-          () => foundationModels?.stop(),
-          () => trustStore?.flush(),
-          () => canvasViewportStore.flush(),
-          () =>
-            recentProjects.flush().catch(error => {
-              HCI.logProcessError('studio', `Could not save recent projects: ${Errors.formatForLog(error)}`)
-            }),
-          async () => {
-            // The process record is kept, not cleared: a caller checking for survivors after shutdown
-            // needs to know what this launch owned. Liveness is decided by validation, not by absence.
-            await launch?.finalize({ shutdownReason: 'studio exited' })
-            lifecycle?.record({ component: 'studio-server', event: 'manifest-finalized' })
-            await lifecycle?.close()
-          },
-        ])
-      } catch (cleanupError) {
-        if (primaryFailure === undefined) {
-          throw cleanupError
+        try {
+          await cleanupStudioDev([
+            () => deviceCli?.stop(),
+            () => native?.stop(),
+            () => studioClientReload?.close(),
+            () => server?.stop(),
+            () => deviceGateway?.stop(),
+            () => devDataServer?.stop(),
+            () => manager?.closeAll(),
+            () => foundationModels?.stop(),
+            () => trustStore?.flush(),
+            () => canvasViewportStore.flush(),
+            () =>
+              recentProjects.flush().catch(error => {
+                HCI.logProcessError('studio', `Could not save recent projects: ${Errors.formatForLog(error)}`)
+              }),
+            async () => {
+              // The process record is kept, not cleared: a caller checking for survivors after shutdown
+              // needs to know what this launch owned. Liveness is decided by validation, not by absence.
+              await launch?.finalize({ shutdownReason: 'studio exited' })
+              lifecycle?.record({ component: 'studio-server', event: 'manifest-finalized' })
+              await lifecycle?.close()
+            },
+          ])
+        } catch (cleanupError) {
+          cleanupFailed = true
+          if (primaryFailure === undefined) {
+            throw cleanupError
+          }
+          HCI.logProcessError('studio', `Startup cleanup also failed: ${Errors.formatForLog(cleanupError)}`)
         }
-        HCI.logProcessError('studio', `Startup cleanup also failed: ${Errors.formatForLog(cleanupError)}`)
+      } finally {
+        const resourcesStopped = !cleanupFailed
+          && (options.onCleanup === undefined || await resourcesAreStopped([...processRoots]))
+        notifyObserver('cleanup observer', () => options.onCleanup?.({ resourcesStopped }))
+        if (options.native === true) {
+          HCI.logProcessInfo(
+            'studio-native',
+            `final cleanup: completed in ${Math.max(0, Math.round(Time.nowMs() - cleanupStartedAt))}ms`,
+          )
+        }
       }
     } finally {
-      if (options.native === true) {
-        HCI.logProcessInfo(
-          'studio-native',
-          `final cleanup: completed in ${Math.max(0, Math.round(Time.nowMs() - cleanupStartedAt))}ms`,
-        )
-      }
+      removeStopSignalHandlers()
     }
   }
 }
@@ -509,6 +573,8 @@ export async function openStudioProjectResource(
     preferredExpoPort?: number
     runtimeToolchainRoot?: string
     stop: (exitCode: number) => void
+    onCleanupFailure?: (error: unknown) => void
+    onProcessRoot?: (root: string) => void
     testCommandArgs?: (projectRoot: string) => readonly string[]
     expoCommand?: {
       argsPrefix?: readonly string[]
@@ -520,6 +586,7 @@ export async function openStudioProjectResource(
   },
 ): Promise<StudioSessionResource> {
   const project = await resolveStudioProjectRoot(request.projectPath)
+  await ReleaseToolchain.requireMatchingProjectRelease(project.projectRoot, 'Studio')
   const ownership = await ProjectDevSession.acquire(project.projectRoot, 'studio')
   const expo = await ExpoRunner.createSessionWithAvailablePort(options.preferredExpoPort, {
     scheme: CompanionIdentity.scheme,
@@ -545,6 +612,7 @@ export async function openStudioProjectResource(
       artifactRoot: options.previewArtifactRoot,
       deviceGatewayPort: options.deviceGatewayPort,
     })
+    options.onProcessRoot?.(await FS.realPath(previewRuntime.root))
     // Metro falls back to its Node watcher when Watchman cannot establish a real watch. Prove the
     // generated runtime is watchable, then put the pinned binary first in the child environment.
     const metroEnvironment = await studioWatchmanEnvironment({ watchRoot: previewRuntime.root })
@@ -565,12 +633,12 @@ export async function openStudioProjectResource(
     watcher = await startStudioFileWatcher(preview.session)
     const session = preview.session
     if (options.devDataAuthority !== undefined) {
-      // The app key needs the session's resolved app name, and Metro has not started yet, so the
+      // The app key needs the session's effective app ID, and Metro has not started yet, so the
       // manifest still takes the fact before any bundle is served.
       await previewRuntime.configure({
         devData: devDataManifest(
           options.devDataAuthority.port,
-          devDataAppKey(project.projectRoot, session.appName),
+          devDataAppKey(session.appId),
           options.devDataAuthority.capability,
         ),
       })
@@ -604,7 +672,10 @@ export async function openStudioProjectResource(
       () => expo.releasePortReservation(),
       () => previewRuntime?.close(),
       () => ownership.release(),
-    ])
+    ], cleanupError => {
+      options.onCleanupFailure?.(cleanupError)
+      HCI.logProcessError('studio', `Startup cleanup also failed: ${Errors.formatForLog(cleanupError)}`)
+    })
   }
 }
 
@@ -868,6 +939,24 @@ async function cleanupStudioDev(cleanups: ReadonlyArray<() => unknown | Promise<
   }
   if (firstError !== undefined) {
     throw firstError
+  }
+}
+
+/** Successful stop calls plus a scoped native/Metro process inspection establish shutdown. */
+async function resourcesAreStopped(roots: readonly string[], runner: typeof CLI.run = CLI.run): Promise<boolean> {
+  if (roots.length === 0) {
+    return true
+  }
+  try {
+    const processes = await runner('/usr/sbin/lsof', { args: ['-nP', '-d', 'cwd', '-Fpn'] })
+    if (processes.error !== undefined || processes.exitCode !== 0) {
+      return false
+    }
+    return !processes.stdout.split(/\r?\n/).some(line =>
+      line.startsWith('n') && roots.some(root => FS.pathIsWithin(line.slice(1).replace(/ \(deleted\)$/, ''), root))
+    )
+  } catch {
+    return false
   }
 }
 

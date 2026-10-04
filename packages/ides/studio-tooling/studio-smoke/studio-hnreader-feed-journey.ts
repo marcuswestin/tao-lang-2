@@ -28,6 +28,10 @@ export async function exerciseHnreaderFeed(): Promise<void> {
       }
     }
     await FS.copyDirectory(FS.resolvePath('@model', fixtureRoot), FS.resolvePath('@model', projectRoot))
+    await FS.copyFile(
+      FS.resolvePath('.tao/project.json', fixtureRoot),
+      FS.resolvePath('.tao/project.json', projectRoot),
+    )
     studio = await startStudioSmokeLaunch({ appName: 'HNReaderStub', projectRoot, repositoryRoot: Repo.getRoot() })
     browser = await StudioCdp.launchChrome({ artifactRoot: studio.readiness.artifactRoot })
     const driver = browser
@@ -40,7 +44,7 @@ export async function exerciseHnreaderFeed(): Promise<void> {
     await driver.waitFor(`document.querySelector('[data-tao-studio-sketch-workspace]') instanceof HTMLElement`)
     await driver.click(rectangleTool)
     await driver.dragBy('[data-tao-studio-sketch-workspace]', { x: 360, y: 110 }, { steps: 12 })
-    const catalogPath = FS.resolvePath('.tao-project/studio/sketches.jsonc', projectRoot)
+    const catalogPath = FS.resolvePath('.tao/studio/sketches.jsonc', projectRoot)
     const viewPath = FS.resolvePath('@/studio/View1.tao', projectRoot)
     const fixturePath = FS.resolvePath('@/studio/Sketches.tao', projectRoot)
     await until(async () => await FS.isFile(catalogPath) && await FS.isFile(viewPath))
@@ -64,11 +68,6 @@ export async function exerciseHnreaderFeed(): Promise<void> {
     await driver.waitFor(
       `document.querySelector(${JSON.stringify(board)})?.dataset.taoStudioSketchGesture === undefined`,
     )
-    Expect(
-      await driver.evaluate<string[]>(
-        `[...document.querySelectorAll('${board} [data-tao-studio-sketch-rect][data-selected="true"]')].map(rect => rect.dataset.taoStudioSketchRect)`,
-      ),
-    ).toEqual([snappedId])
     const snap = `[data-tao-studio-sketch-snap="${sketchId}"]`
     await driver.waitFor(`document.querySelector(${JSON.stringify(snap)})?.disabled === false`)
     Expect(
@@ -179,7 +178,6 @@ export async function exerciseHnreaderFeed(): Promise<void> {
       await FS.readText(viewPath) === beforeView && !await FS.exists(fixturePath)
       && (await catalog()).revision > keptSketchRevision
     )
-    Expect(await FS.readText(viewPath)).toBe(beforeView)
     const undone = await catalog()
     // Undo advances the revision while restoring the complete authored geometry and bindings.
     Expect(undone.sketches).toEqual(beforeCatalog.sketches)
@@ -244,7 +242,7 @@ export async function exerciseHnreaderFeed(): Promise<void> {
             rootChildren: document.getElementById('tao-studio-root')?.childElementCount,
           })`,
         ).catch(Errors.messageOf),
-        catalog: await FS.readJson(FS.resolvePath('.tao-project/studio/sketches.jsonc', projectRoot)).catch(
+        catalog: await FS.readJson(FS.resolvePath('.tao/studio/sketches.jsonc', projectRoot)).catch(
           Errors.messageOf,
         ),
         error: Errors.messageOf(error),

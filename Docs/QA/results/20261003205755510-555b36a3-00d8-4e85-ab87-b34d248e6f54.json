@@ -1,0 +1,40 @@
+{
+  "id": "20261003205755510-555b36a3-00d8-4e85-ab87-b34d248e6f54",
+  "runId": "20261003205701262-9a89a022-d4b0-4154-b8ae-a78eae848b6c",
+  "createdAt": "2026-10-03T20:57:55.508Z",
+  "recordedAt": "2026-10-03T20:57:55.508Z",
+  "commit": "f76f0f02e9d25419414821a573202714c38cc8fb",
+  "phase": 1,
+  "executionProfile": "development",
+  "provenance": {
+    "snapshotBasis": "observation-time",
+    "originalDependencies": "recorded",
+    "observedMetadataEvidence": [
+      "packages/ai/tao-skills/skills/tao-testing/SKILL.md"
+    ]
+  },
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "runtime": "bun:1.4.2"
+  },
+  "inputs": {
+    "source": "packages/ai/tao-skills/skills/tao-testing/SKILL.md",
+    "dependencySnapshot": "Docs/QA/inputs/1a6cdefd9541b41ec0a30a3e123003cd8d742e534d4559fc13aa0f416e47ca6b.json"
+  },
+  "surfaceId": "doc:packages/ai/tao-skills/skills/tao-testing/SKILL.md",
+  "dimension": "text",
+  "outcome": "pass",
+  "reviewer": "agent",
+  "channel": "source",
+  "evidence": [
+    {
+      "path": "packages/ai/tao-skills/skills/tao-testing/SKILL.md",
+      "sha256": "45bd4a0f5b46e67217ad6769648d6d97ed3d7a53bd0dff347d18335468bfbaa7"
+    }
+  ],
+  "notes": "Reviewed source: behavior tests remain available; interactive review is explicitly later or deferred. Installed release-1 loop recheck remains pending.",
+  "sourceHash": "45bd4a0f5b46e67217ad6769648d6d97ed3d7a53bd0dff347d18335468bfbaa7",
+  "rendererHash": "not-applicable",
+  "profileHash": "b5e443edb0ccd5952dd86869fb2a97f104715bfcbd7612b7bf7e2c50df3b94c8"
+}

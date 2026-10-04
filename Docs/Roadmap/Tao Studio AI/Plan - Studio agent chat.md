@@ -611,3 +611,14 @@ while the build instructions ordered the model to use it.
 - The snapshot is built once per turn rather than once per tool call, and invalidated when a change lands.
 - `applyAgentFiles` takes the versions a change was computed against, and the undo record is a stack. A
   conversation applies several changes; a single slot offered undo while being able to restore only the last.
+
+### Follow-up: scope checks on unformatted source
+
+The 2026-10-04 browser proof exposed an existing edge: `proposeEdit` formats the whole file before
+the scope guard compares unchanged declarations by their raw source text. A view-only edit in a
+file with inline app metadata is refused because formatting expands the unrelated app block.
+The migration's browser fixture now starts in canonical format and retains its scope and approval
+assertions. The product fix remains separate: compare unchanged declarations independently of
+formatting, while continuing to reject added declarations and unauthorized semantic changes.
+Acceptance must cover a view-only proposal in unformatted source and an actual out-of-scope app
+change, preserving approval, source-version checks, and undo behavior.

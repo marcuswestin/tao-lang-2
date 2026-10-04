@@ -1,0 +1,45 @@
+{
+  "id": "20260929164853407-0fe04d5b-e3b5-4bf4-ae99-10855a9054c7",
+  "runId": "20260929164657843-e6414d4f-c4d8-47a0-b8be-c662a133fa3d",
+  "createdAt": "2026-09-29T16:48:53.406Z",
+  "recordedAt": "2026-09-29T16:48:53.406Z",
+  "commit": "442e6416f4c705efb8f236021cf8220b4d02306e",
+  "phase": 1,
+  "executionProfile": "development",
+  "provenance": {
+    "snapshotBasis": "observation-time",
+    "originalDependencies": "recorded",
+    "observedMetadataEvidence": [
+      "Docs/QA/evidence/recheck-442e6416/notebook/notes-states-ideas-6bb99abba116.png",
+      "Docs/QA/evidence/recheck-442e6416/notebook/source-snapshot.json"
+    ]
+  },
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "runtime": "bun:1.4.2"
+  },
+  "inputs": {
+    "source": "packages/cli/tao-cli",
+    "dependencySnapshot": "Docs/QA/inputs/05cbff5f9dfc1dec547312675fc241fe7cc49dfa9a7d639908466aceb22f3c0a.json"
+  },
+  "surfaceId": "visual:notebook",
+  "dimension": "visual",
+  "outcome": "friction",
+  "reviewer": "agent",
+  "channel": "notes-ideas",
+  "evidence": [
+    {
+      "path": "Docs/QA/evidence/recheck-442e6416/notebook/notes-states-ideas-6bb99abba116.png",
+      "sha256": "ffc7032a4102a75c3f349c8690621df7bbd1b53fae3bbf762a52e08c77e15f55"
+    },
+    {
+      "path": "Docs/QA/evidence/recheck-442e6416/notebook/source-snapshot.json",
+      "sha256": "0c4dafefbe70b9fae1fef913888e29595abc30f77a7dba18e2a199061b86afed"
+    }
+  ],
+  "notes": "Recheck at 0aa8ebcf: the pinned Ideas row shows its PINNED eyebrow, title and Open, but its card grows to fill the whole cell like the Groceries state (QA-NOTEBOOK-PANEL-STRETCH). Recaptured at 442e6416 and reinspected: unchanged from the 0aa8ebcf capture.",
+  "sourceHash": "b8031a89d6193430d5ffed7cef6406f02ab594a6ecef1c3f847ab12a4c71cd88",
+  "rendererHash": "bd0a77e7580bf225b4b439da249856535dc4d4d7c3a64adda691ccb4a53d7ee2",
+  "profileHash": "b5e443edb0ccd5952dd86869fb2a97f104715bfcbd7612b7bf7e2c50df3b94c8"
+}

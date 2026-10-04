@@ -361,27 +361,37 @@ let FoundationStackLetWith = FoundationHomeStack with {}
 nav FoundationNavigator = SlotNav { Initial FoundationStack }
 
 app WordFlowerFoundationTest {
-   Name "WordFlower Navigation Foundation Test"
+   id "wordflower-word-flower-foundation-test"
+   version "1.0.0"
+   name "WordFlower Navigation Foundation Test"
    view FoundationNavigator
 }
 
 app WordFlowerDeclarationHead {
-   Name "WordFlower Declaration Head"
+   id "wordflower-word-flower-declaration-head"
+   version "1.0.0"
+   name "WordFlower Declaration Head"
    view FoundationStack
 }
 
 app WordFlowerDeclarationHeadWith = app with {
-   Name "WordFlower Declaration Head With"
+   id "wordflower-word-flower-declaration-head-with"
+   version "1.0.0"
+   name "WordFlower Declaration Head With"
    view FoundationStackWith
 }
 
 let WordFlowerDeclarationLet = app {
-   Name "WordFlower Declaration Let"
+   id "wordflower-word-flower-declaration-let"
+   version "1.0.0"
+   name "WordFlower Declaration Let"
    view FoundationStackLet
 }
 
 let WordFlowerDeclarationLetWith = app with {
-   Name "WordFlower Declaration Let With"
+   id "wordflower-word-flower-declaration-let-with"
+   version "1.0.0"
+   name "WordFlower Declaration Let With"
    view FoundationStackLetWith
 }
 

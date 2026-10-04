@@ -1,20 +1,28 @@
-import { ASTUtils, Type } from '@ast-utils'
+import { ASTUtils, Packages, Type } from '@ast-utils'
 import { AST } from '@parser'
 import type { ValidationContext } from '../validation'
 import { validateAgentCommands } from './agent-commands-validator'
 import { validateReferenceBlock } from './configured-values-validator'
 import { reportPresentationBindingDiagnostic } from './navigation-validator'
+import { isValidSemverVersion } from './package-validator'
+import { validateAppRequirementOwnership } from './requirement-ownership-validator'
 import { primitiveSlots } from './workspace-index'
 
 /** appValidationMessages declares structural diagnostics for Tao app placement and configuration. */
 const appValidationMessages = {
   topLevel:
-    'Only project, app, nav, datasource, ui, dialogue, view, layout, let, function, action, data, type, enum, test declarations, `guard default`, and use statements are allowed at file level.',
+    'Only package, app, nav, datasource, ui, dialogue, view, layout, let, function, action, data, type, enum, test declarations, and use statements are allowed at file level.',
   appBlock: (name: string) => `App ${name} contains a statement that is not app configuration.`,
   appRootCount: (name: string, count: number) =>
     `App ${name} must declare exactly one Navigator (or root view), found ${count}.`,
   rootViewPlacement: 'A root view is declared in an app block or in an app variant.',
-  nameCount: (name: string, count: number) => `App ${name} must declare exactly one Name, found ${count}.`,
+  identity: (name: string, field: string) => `App ${name} needs an effective ${field} text value.`,
+  invalidIdentityVersion: (name: string, value: string) =>
+    `App ${name} version '${value}' must be a valid SemVer version.`,
+  duplicateIdentity: (id: string, version: string) =>
+    `App id '${id}' and version '${version}' identify more than one app in this project.`,
+  guardPlacement: 'An app guard is declared in an app block or in an app variant.',
+  guardDuplicate: (name: string) => `App ${name} declares guard more than once.`,
   auxiliaryType: (name: string, key: string, actual: string) => `App ${name}@${key} expects nav, got ${actual}.`,
   duplicateAuxiliary: (name: string, key: string) => `App ${name} declares auxiliary navigator @${key} more than once.`,
   auxiliaryKey: (key: string) => `App auxiliary '${key}' must be a single @name key.`,
@@ -53,9 +61,78 @@ function validate(file: AST.TaoFile, ctx: ValidationContext): void {
     if (app.value && AST.isRefinementExpression(app.value)) {
       validateAppVariant(app, app.value, ctx)
     }
+    validateAppIdentity(app, ctx)
+    validateAppRequirementOwnership(app, ctx)
   }
   for (const root of [...AST.streamAllContents(file)].filter(AST.isAppView)) {
     validateRootViewPlacement(root, ctx)
+  }
+  for (const guard of [...AST.streamAllContents(file)].filter(AST.isAppGuardStatement)) {
+    validateAppGuardPlacement(guard, ctx)
+  }
+}
+
+function validateAppGuardPlacement(guard: AST.AppGuardStatement, ctx: ValidationContext): void {
+  if (AST.isAppBlock(guard.$container) && AST.isAppDeclaration(guard.$container.$container)) {
+    return
+  }
+  const entry = guard.$container
+  if (AST.isConfigurationEntry(entry)) {
+    const owner = entry.$container.$container
+    if (AST.isRefinementExpression(owner)) {
+      const type = Type.ofExpression(owner)
+      if (type.kind === 'primitive' && type.primitive === 'app') {
+        return
+      }
+    }
+  }
+  ctx.error(guard, appValidationMessages.guardPlacement)
+}
+
+function validateAppIdentity(app: AST.AppValueDeclaration, ctx: ValidationContext): void {
+  const configuration = ASTUtils.effectiveAppConfiguration(app)
+  const values = new Map<string, string>()
+  for (const field of ['id', 'version', 'name']) {
+    const source = configuration.get(field)?.value
+    if (!source || !AST.isStringLiteral(source) || source.value.trim() === '') {
+      ctx.error(app, appValidationMessages.identity(app.name, field))
+      continue
+    }
+    values.set(field, source.value)
+  }
+  const version = values.get('version')
+  if (version && !isValidSemverVersion(version)) {
+    ctx.error(app, appValidationMessages.invalidIdentityVersion(app.name, version))
+  }
+  const id = values.get('id')
+  if (!id || !version || !isValidSemverVersion(version)) {
+    return
+  }
+  const root = Packages.projectRootForPath(ctx.packagesContext.index, AST.getDocument(app).uri.path)
+  const firstByIdentity = ctx.memo('app-validator.firstByIdentity', () => {
+    const first = new Map<string, AST.AppValueDeclaration>()
+    const apps = ctx.workspaceFiles.flatMap(file => AST.appValueDeclarationsInFile(file))
+      .toSorted((left, right) => {
+        const pathOrder = AST.getDocument(left).uri.path.localeCompare(AST.getDocument(right).uri.path)
+        return pathOrder || (left.$cstNode?.offset ?? 0) - (right.$cstNode?.offset ?? 0)
+      })
+    for (const candidate of apps) {
+      const candidateRoot = Packages.projectRootForPath(ctx.packagesContext.index, AST.getDocument(candidate).uri.path)
+      const candidateConfiguration = ASTUtils.effectiveAppConfiguration(candidate)
+      const candidateId = candidateConfiguration.get('id')?.value
+      const candidateVersion = candidateConfiguration.get('version')?.value
+      if (!AST.isStringLiteral(candidateId) || !AST.isStringLiteral(candidateVersion)) {
+        continue
+      }
+      const key = `${candidateRoot ?? ''}#${candidateId.value}@${candidateVersion.value}`
+      if (!first.has(key)) {
+        first.set(key, candidate)
+      }
+    }
+    return first
+  })
+  if (firstByIdentity.get(`${root ?? ''}#${id}@${version}`) !== app) {
+    ctx.error(app, appValidationMessages.duplicateIdentity(id, version))
   }
 }
 
@@ -85,19 +162,24 @@ function validateAppDeclaration(app: AST.AppDeclaration, ctx: ValidationContext)
   const properties = statements.filter(AST.isAppProperty)
   const roots = statements.filter(AST.isAppView)
   const restoration = statements.filter(AST.isRestorationPolicy)
+  for (const guard of statements.filter(AST.isAppGuardStatement).slice(1)) {
+    ctx.error(guard, appValidationMessages.guardDuplicate(app.name))
+  }
   for (const statement of statements) {
     if (
       !AST.isAppProperty(statement)
       && !AST.isAppView(statement)
       && !AST.isAppAuxiliaryNavigator(statement)
+      && !AST.isPackageRequires(statement)
       && !AST.isRestorationPolicy(statement)
+      && !AST.isAppGuardStatement(statement)
       && !AST.isStateDeclaration(statement)
       && !AST.isActionDeclaration(statement)
     ) {
       ctx.error(statement, appValidationMessages.appBlock(app.name))
     }
   }
-  const supplied = [...properties.map(suppliedSlotOfProperty), ...rootViewSlots(app, roots, properties, ctx)]
+  const supplied = [...properties.map(suppliedSlotOfProperty), ...rootViewSlots(app, roots, ctx)]
   validateAppProperties(app.name, supplied, app, ctx, true)
   validateAppAuxiliaryNavigators(app, ctx)
   validateRestorationPolicies(app.name, restoration, ctx)
@@ -115,12 +197,10 @@ type SuppliedSlot = {
   readonly value?: AST.Expression | AST.ConfigurationValue
 }
 
-// `app X { view Y }` is sugar: the root view supplies the Navigator slot with a generated slot
-// navigator, and the app's own name supplies Name, so one app shape reaches every later check.
+// `app X { view Y }` supplies the Navigator slot with a generated slot navigator.
 function rootViewSlots(
   app: AST.AppDeclaration,
   roots: readonly AST.AppView[],
-  properties: readonly AST.AppProperty[],
   ctx: ValidationContext,
 ): SuppliedSlot[] {
   if (roots.length > 1) {
@@ -131,10 +211,7 @@ function rootViewSlots(
     return []
   }
   validateRootViewArguments(root, ctx)
-  // A spelled-out Name keeps its own value; the app's declaration name is only the sugar's default.
-  const named = properties.some(property => property.name === 'Name')
   return [
-    ...named ? [] : [{ name: 'Name', node: root, patched: false, sugar: true }],
     { name: 'Navigator', node: root, patched: false, sugar: true },
   ]
 }
@@ -207,13 +284,14 @@ function validateAppProperties(
     return
   }
   for (const required of contract.filter(Type.propertyRequiresValue)) {
+    if (required.name === 'id' || required.name === 'version' || required.name === 'name') {
+      continue
+    }
     if (seen.has(required.name)) {
       continue
     }
     const node = supplied[0]?.node ?? owner
-    if (required.name === 'Name') {
-      ctx.error(node, appValidationMessages.nameCount(appName, 0))
-    } else if (required.name === 'Navigator') {
+    if (required.name === 'Navigator') {
       ctx.error(node, appValidationMessages.appRootCount(appName, 0))
     } else {
       ctx.error(node, appValidationMessages.missingProperty(appName, required.name))
@@ -250,7 +328,7 @@ function validateAppVariant(
   ctx: ValidationContext,
 ): void {
   const supplied = refinement.patchBlock.entries.flatMap<SuppliedSlot>(entry => {
-    if (entry.restoration) {
+    if (entry.restoration || entry.requirement || entry.appGuard) {
       return []
     }
     if (entry.rootView) {
@@ -272,6 +350,9 @@ function validateAppVariant(
   })
   validateAppProperties(variant.name, supplied, variant, ctx, false)
   const restoration = refinement.patchBlock.entries.flatMap(entry => entry.restoration ? [entry.restoration] : [])
+  for (const guard of refinement.patchBlock.entries.flatMap(entry => entry.appGuard ? [entry.appGuard] : []).slice(1)) {
+    ctx.error(guard, appValidationMessages.guardDuplicate(variant.name))
+  }
   validateRestorationPolicies(variant.name, restoration, ctx)
 }
 

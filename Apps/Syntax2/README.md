@@ -45,7 +45,7 @@ to its prerequisite wave; implementation has not started.
 
 ## App-owned provisional contracts
 
-These are deliberately narrow integration requirements, not the final A24 query-state API.
+These are deliberately narrow integration requirements, not the final A29 query-state API.
 
 - BookStore starts with an available empty collection. Use a deterministic memory adapter and
   controllable acquisition/write/export failures for journeys; do not hide unimplemented I/O behind

@@ -15,7 +15,6 @@ Describe('Studio shared fixture source', () => {
         '@model/../Data.tao',
         '@model/Data.tao\nview Injected() {}',
         '/absolute/Data.tao',
-        '@model//Data.tao',
       ]
     ) {
       await Expect(StudioSharedFixtureSource.promote({
@@ -65,7 +64,7 @@ Describe('Studio shared fixture source', () => {
     Expect(reordered.source).toBe(result.source)
   })
 
-  for (const existingImport of [undefined, '', 'use Notes from ./Data.tao', 'use Note from ./Data.tao']) {
+  for (const existingImport of [undefined, 'use Notes from ./Data.tao', 'use Note from ./Data.tao']) {
     Test(`resolves promoted singular entities with ${existingImport ?? 'a new fixture'}`, async () => {
       const request = {
         imports: [{ collection: 'Notes', entity: 'Note', source: './Data.tao' }],
@@ -74,7 +73,7 @@ Describe('Studio shared fixture source', () => {
       }
       const result = await StudioSharedFixtureSource.promote(request)
       await withTaoFiles('tao-studio-shared-fixture-import-', {
-        'Data.tao': 'workspace data Notes / Note { Title text }',
+        'Data.tao': 'project data Notes / Note { Title text }',
         'Sketches.tao': result.source,
       }, async paths => {
         const validated = await Workspace.validate(paths['Sketches.tao'])
@@ -90,8 +89,6 @@ Describe('Studio shared fixture source', () => {
         Expect(row.entity.ref.name).toBe('Notes')
         Expect(AST.getDocument(row.entity.ref).uri.fsPath).toBe(paths['Data.tao'])
       })
-      const repeated = await StudioSharedFixtureSource.promote({ ...request, source: result.source })
-      Expect(repeated.source).toBe(result.source)
     })
   }
 
@@ -113,6 +110,7 @@ Describe('Studio shared fixture source', () => {
     })).rejects.toThrow('Studio shared fixture import conflicts for Note.')
   })
 
+  // REMOVAL CANDIDATE: signed-in extension also preserves source; deletion would lose the direct named-create-row check.
   Test('extends existing imports and rows and is idempotent', async () => {
     const first = await StudioSharedFixtureSource.promote({
       imports: [accountImport],

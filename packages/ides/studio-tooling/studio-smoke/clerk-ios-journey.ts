@@ -105,10 +105,7 @@ export async function runClerkIosJourney(fixture: Fixture) {
           .replace(/let ReviewEmail = ".*"/, `let ReviewEmail = ${JSON.stringify(email)}`)
           .replace(/let ReviewPassword = ".*"/, `let ReviewPassword = ${JSON.stringify(password)}`),
       )
-      await FS.writeText(
-        FS.resolvePath('Project.tao', projectRoot),
-        'project { id "tao-clerk-ios" name "Clerk iOS acceptance" }\n',
-      )
+      await FS.mkdir(FS.resolvePath('.tao', projectRoot))
     }
     await progress('create and install isolated iOS simulator')
     const devices = JSON.parse(

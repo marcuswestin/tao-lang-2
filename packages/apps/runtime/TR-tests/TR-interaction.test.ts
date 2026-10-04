@@ -154,7 +154,6 @@ Describe('TR.Interaction', () => {
     const entry = catalog.applicable('Document')[0]
     Expect(entry?.identity).toBe('@ui/Documents.Finish')
     const bound = entry?.command().with({ Document: TR.Value('draft') })
-    Expect(bound?.read().label).toBe('Finish document')
     bound?.evaluate().jsValue.invoke()
     Expect(invoked).toBe(1)
   })

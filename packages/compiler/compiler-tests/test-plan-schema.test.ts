@@ -7,7 +7,7 @@ Test('compiler: test-plan schema exposes a versioned public discriminated IR', a
     'tao-test-plan-schema-',
     {
       'Main.tao': `
-        app Demo { view Main }
+        app Demo { id "com.tao.test.demo" version "1.0.0" name "Demo"  view Main }
         view Main() { render inject \`\`\`ts return null \`\`\` }
       `,
       'Main.test.tao': `

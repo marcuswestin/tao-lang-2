@@ -34,8 +34,13 @@ export const ConfigurationCompiler = {
   },
 
   /** ConfigurationDeclarations emits sidecar-facing TypeScript configuration contracts for one Tao file. */
-  ConfigurationDeclarations(taoFile: AST.TaoFile, importLines: readonly string[] = [], bridgeTypes = ''): Compiled {
-    const declarations = taoFile.statements.filter(isRuntimeConfigurableDeclaration)
+  ConfigurationDeclarations(
+    taoFile: AST.TaoFile,
+    importLines: readonly string[] = [],
+    bridgeTypes = '',
+    statements: readonly AST.Statement[] = taoFile.statements,
+  ): Compiled {
+    const declarations = statements.filter(isRuntimeConfigurableDeclaration)
     const needsRuntimeTypes = bridgeTypes.includes('TR.') || declarations.some(declaration =>
       !declaration.aliasTarget
       && (AST.configurationPropertiesOf(declaration).length > 0
@@ -51,9 +56,9 @@ export const ConfigurationCompiler = {
   },
 
   /** ConfigurationTypes emits the same contracts inside the generated runtime module. */
-  ConfigurationTypes(taoFile: AST.TaoFile): Compiled {
+  ConfigurationTypes(taoFile: AST.TaoFile, statements: readonly AST.Statement[] = taoFile.statements): Compiled {
     return gen.list(
-      taoFile.statements.filter(isRuntimeConfigurableDeclaration),
+      statements.filter(isRuntimeConfigurableDeclaration),
       configurationDeclarationType,
       { newLines: 2 },
     )

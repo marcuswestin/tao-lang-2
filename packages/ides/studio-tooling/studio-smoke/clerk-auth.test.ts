@@ -77,10 +77,7 @@ async function runClerkBrowser(
     const configuredSource = source.replaceAll('pk_test_REPLACE_WITH_YOUR_KEY', configuration.publishableKey)
       .replaceAll('http://127.0.0.1:4738', gateway.url)
     await FS.writeText(FS.resolvePath('Auth Review.tao', projectRoot), configuredSource)
-    await FS.writeText(
-      FS.resolvePath('Project.tao', projectRoot),
-      'project { id "tao-clerk-live" name "Clerk live acceptance" }\n',
-    )
+    await FS.mkdir(FS.resolvePath('.tao', projectRoot))
     const toolchainRoot = Repo.resolvePath('packages/apps/expo-host')
     runtime = await StudioPreviewRuntime.create(toolchainRoot, FS.resolvePath('runtime', artifactRoot))
     preview = await openStudioPreviewSession({

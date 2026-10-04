@@ -1,7 +1,10 @@
 ---
 name: git-workflow
 description: >-
-  Work with Git in this repository: create or clean up worktrees, branch, commit, squash, merge a feature branch into main, rewrite history, or inspect branch state. Use when the Developer asks to commit, merge, squash, rebase, push, branch, resolve a dirty worktree, or move a branch ref, and whenever `main` is merged into a branch, to skim what arrived (`references/after-merging-main.md`); also covers committing every outstanding change in small chunks (`references/commit-all-chunks.md`), landing the finished part of a long task mid-flight (`references/merge-progress.md`, or `/merge-progress`), and a personal `dev/<name>` branch that lands, is deleted, and is created again from `main` (`references/personal-dev-branch.md`).
+  Manage Tao Git branches, commits, merges, and checkout ownership. Use for branch inspection,
+  worktree creation or cleanup, committing, pushing, squashing, rebasing, history rewriting,
+  dirty checkouts, commit-all, /merge-progress, or personal dev branch cycles. Read before any
+  merge; after integrating main, inspect what arrived.
 ---
 
 # Git Workflow
@@ -31,8 +34,11 @@ Root `AGENTS.md` owns the hard constraints on branches and the Git index; the wa
   `./agent unsandboxed merge-recover --reset-to <full pre-merge SHA>`. That uses `git reset --merge`
   to retain unrelated work where Git can; `--hard` discards tracked edits and needs separate explicit
   authorization. To start a new feature branch from current `origin/main`, run
-  `./agent start-branch feat/<name>`; if its write probe refuses, run
-  `./agent unsandboxed start-branch feat/<name>`. Both require a clean worktree. An authorized
+  `./agent start-branch feat/<name>`; to take over a `feat/*` branch someone already pushed, run
+  `./agent take-branch feat/<name>`, which tracks `origin/feat/<name>`. When either refuses its
+  fetch or its write probe, run the same command as `./agent unsandboxed …`. Both require a clean
+  worktree, and both run `./agent setup` after switching; nothing else reruns setup when a worktree
+  changes branch, so run it yourself after any other switch. An authorized
   `./agent unsandboxed land` performs its own integration under the landing lock. For any other
   Git operation that half-succeeded, diagnose the exact state read-only, report the write needed,
   and pause for the Developer's explicit approval.
@@ -59,6 +65,9 @@ the SHA. It preserves Git's squash appendix on `main` — summary, bullets, a bl
 `git log <base>..<head>` reproduces by hand.
 
 ## Merging a feature branch into `main`
+
+For landing a finished slice during a longer task, or `/merge-progress`, read
+`references/merge-progress.md` before preparing the partial landing.
 
 Require a clean feature branch with its merge message reviewed; `verification-lanes` owns the
 landing command's mechanics, evidence, and message format. After the Developer authorizes landing this slice,

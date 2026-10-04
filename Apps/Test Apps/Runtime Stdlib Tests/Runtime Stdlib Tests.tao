@@ -1,14 +1,10 @@
 use StackNav from @tao/nav
 use Box, Button, Col, Image, Layer, Number, Progress, Row, Spinner, Stack, Text, TextFrame, TextMultiline, WrappingRow from @tao/ui
 
-project {
-   id "runtime-stdlib-tests"
-   name "Runtime Stdlib Tests"
-   version "0.1.0"
-}
-
 app RuntimeStdlibTests {
-   Name "Runtime Stdlib Tests"
+   id "runtime-stdlib-tests"
+   version "0.1.0"
+   name "Runtime Stdlib Tests"
    Navigator StackNav {
       Initial MainView
 }  }

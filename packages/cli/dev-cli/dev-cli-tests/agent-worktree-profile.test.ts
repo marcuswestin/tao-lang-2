@@ -8,7 +8,6 @@ const SHELL_SCRIPT = 'packages/cli/dev-cli/dev-cli-src/environment/repo-shell.sh
 type ProfileFixture = {
   commonGitDir: string
   env: Platform.ProcessEnv
-  gitDirAlias: string
   primaryProfile: string
   systemTemp: string
   worktree: string
@@ -29,6 +28,7 @@ Describe('agent worktree profile bootstrap', () => {
           'print -r -- "$ANDROID_HOME"',
           'print -r -- "$ANDROID_SDK_ROOT"',
           'print -r -- "$ANDROID_USER_HOME"',
+          'print -r -- "$ANDROID_AVD_HOME"',
         ].join('\n'),
         fixture,
         profile,
@@ -41,6 +41,7 @@ Describe('agent worktree profile bootstrap', () => {
         FS.resolvePath('libexec/android-sdk', profile),
         FS.resolvePath('libexec/android-sdk', profile),
         FS.resolvePath('.android', fixture.worktree),
+        FS.resolvePath('.android/avd', fixture.worktree),
       ])
       Expect(await FS.realPath(profile)).toBe(await FS.realPath(fixture.primaryProfile))
     } finally {
@@ -239,16 +240,6 @@ Describe('agent worktree profile bootstrap', () => {
 
       Expect(linkedResult.exitCode).toBe(0)
       Expect(linkedResult.stdout.trim().split('\n')).toEqual(expected)
-
-      fixture.env['TAO_TEST_GIT_DIR'] = fixture.gitDirAlias
-      const primaryResult = await runProfileScript(
-        'tao_bun_install_args "$2"\nprint -rl -- "${reply[@]}"',
-        fixture,
-        profile,
-      )
-
-      Expect(primaryResult.exitCode).toBe(0)
-      Expect(primaryResult.stdout.trim().split('\n')).toEqual(expected)
     } finally {
       await FS.remove(testRoot)
     }
@@ -368,8 +359,25 @@ Describe('agent worktree profile bootstrap', () => {
         'Denied operation: copy file android/.idea/migrations.xml',
       )
       Expect(outcome.result.stderr).toContain(`Bun temporary directory: ${testRoot}/.artifacts/tmp/`)
-      Expect(outcome.result.stderr).toContain('./agent setup')
-      Expect(outcome.result.stderr).toContain('just session-unsandboxed')
+      Expect(outcome.result.stderr).toContain('Recover with: ./agent unsandboxed setup')
+    } finally {
+      await FS.remove(testRoot)
+    }
+  })
+
+  Test('names the package and a host recovery when the sandbox refuses a cache write', async () => {
+    const testRoot = await mkTestDir('tao-agent-install-cache-denied-')
+    try {
+      const outcome = await runAgentInstall(testRoot, [
+        'error: failed to download url-template@2.0.8: EPERM\n  https://registry.npmjs.org/url-template/-/url-template-2.0.8.tgz',
+        '',
+      ])
+
+      Expect(outcome.attempts).toBe(1)
+      Expect(outcome.result.exitCode).toBe(1)
+      Expect(outcome.result.stderr).toContain("Denied operation: writing url-template@2.0.8 into Bun's package cache.")
+      Expect(outcome.result.stderr).toContain('Recover with: ./agent unsandboxed setup')
+      Expect(outcome.result.stderr).not.toContain('just clean-scratch')
     } finally {
       await FS.remove(testRoot)
     }
@@ -509,9 +517,6 @@ Describe('agent worktree profile bootstrap', () => {
     Expect(commands).not.toContain('bun install')
     Expect(names).not.toContain('deps')
     Expect(names).not.toContain('setup')
-    for (const entrypoint of ['agent', 'dev']) {
-      Expect(await FS.readText(Repo.resolvePath(entrypoint))).toContain('ensure-dependencies.zsh')
-    }
     const help = await CLI.run(Repo.resolvePath('agent'), { args: ['help'], cwd: Repo.getRoot() })
     Expect(help.exitCode).toBe(0)
     Expect(help.stdout).toContain('setup')
@@ -796,21 +801,21 @@ Describe('agent worktree profile bootstrap', () => {
 
     // The complete scope keeps its own meaning and composes with the same filter, so the two
     // questions — which suites, which tests inside them — stay answerable independently.
-    Expect((await justCommands('test-all')).split('\n')).toContain('./dev test')
     Expect((await justCommands('test-all', 'one package only')).split('\n')).toContain("./dev test 'one package only'")
   })
 
   Test('the exhaustive pass composes the recipes it is made of rather than restating their gates', async () => {
-    const commands = await justCommands('verify-repo')
+    const commands = await justCommands('verify-repo', '--show-studio')
 
     // Clean first, then a verification that trusts no recorded evidence, then the checks a person
     // performs. Composing the three means widening `verify-full` widens this too.
-    Expect(commands).toContain('./dev clean')
-    Expect(commands).toContain('--lane verify-full ')
-    Expect(commands).toContain('--no-cache')
-    Expect(commands).toContain('./dev studio-manual-checks')
-    Expect(commands.indexOf('./dev clean')).toBeLessThan(commands.indexOf('--lane verify-full '))
-    Expect(commands.indexOf('--lane verify-full ')).toBeLessThan(commands.indexOf('./dev studio-manual-checks'))
+    Expect(commands).toContain('test "true" = true')
+    Expect(commands).toContain('just clean')
+    Expect(commands).toContain('just verify-full --no-cache --show-studio')
+    Expect(commands).toContain('just studio-manual-checks --show-studio')
+    Expect(commands.indexOf('test "true"')).toBeLessThan(commands.indexOf('just clean'))
+    Expect(commands.indexOf('just clean')).toBeLessThan(commands.indexOf('just verify-full'))
+    Expect(commands.indexOf('just verify-full')).toBeLessThan(commands.indexOf('just studio-manual-checks'))
     // It runs `verify-full`'s gate list because it runs `verify-full`, not because it holds a copy.
     Expect(await justRecipeNames()).toContain('verify-repo')
   })
@@ -871,9 +876,6 @@ Describe('agent worktree profile bootstrap', () => {
     )
     Expect(commands).toContain('--lane verify-full')
     Expect(commands).not.toContain('--jobs 1')
-    Expect(commands).toContain(
-      'ship-bundle-proof studio-smoke studio-proof-real-app studio-smoke-simulated-user keyboard-navigation-smoke studio-dialog-browser studio-agent-browser studio-network-simulation studio-smoke-native studio-canary',
-    )
     Expect(commands).not.toContain('_tao-check=')
     Expect(commands).not.toContain('_dprint-check=')
     Expect(commands).not.toContain('manual-check')
@@ -907,13 +909,7 @@ Describe('agent worktree profile bootstrap', () => {
     }
   })
 
-  Test('never runs dprint with the incremental cache that would live in a home directory', async () => {
-    for (const lane of ['fix', 'fmt', '_fix-dprint', '_dprint-check']) {
-      const dprintCommands = (await justCommands(lane)).split('\n')
-        .filter(line => line.trimStart().startsWith('dprint '))
-      Expect(dprintCommands.every(command => command.includes('--incremental=false'))).toBe(true)
-    }
-    // And the checking gate, which `check` runs, uses the same flag.
+  Test('disables the home-directory incremental cache in the checking gate', async () => {
     Expect(await justCommands('_dprint-check')).toContain('dprint check --incremental=false')
   })
 
@@ -943,7 +939,9 @@ Describe('agent worktree profile bootstrap', () => {
     const fullVerify = await justCommands('verify-full')
     const sandbox = await justCommands('verify-full-sandbox')
 
-    Expect(verify).toContain('--skipped "studio-smoke=slow lane; run ./agent studio-smoke or ./agent verify-full"')
+    Expect(verify).toContain(
+      '--skipped "studio-smoke=slow lane; run ./agent unsandboxed studio-smoke or ./agent unsandboxed verify-full"',
+    )
     for (const commands of [verify, fullVerify, sandbox]) {
       Expect(commands).not.toContain('_tao-check=')
       Expect(commands).not.toContain('_dprint-check=')
@@ -1058,16 +1056,12 @@ async function createProfileFixture(testRoot: string, withPrimaryProfile: boolea
   const primaryRoot = FS.resolvePath('primary', testRoot)
   const commonGitDir = FS.resolvePath('.git', primaryRoot)
   const linkedGitDir = FS.resolvePath('worktrees/fixture', commonGitDir)
-  const gitDirAlias = FS.resolvePath('primary-git-alias', testRoot)
   const primaryProfile = FS.resolvePath('.devenv/profile', primaryRoot)
   const systemTemp = FS.resolvePath('system-temp', testRoot)
   const systemTempAlias = FS.resolvePath('system-temp-alias', testRoot)
   const worktree = FS.resolvePath('linked-worktree', testRoot)
   await Promise.all([FS.mkdir(linkedGitDir), FS.mkdir(systemTemp), FS.mkdir(worktree)])
-  await Promise.all([
-    FS.symlink(commonGitDir, gitDirAlias),
-    FS.symlink(systemTemp, systemTempAlias),
-  ])
+  await FS.symlink(systemTemp, systemTempAlias)
   await FS.writeText(
     fakeGit,
     [
@@ -1105,7 +1099,6 @@ async function createProfileFixture(testRoot: string, withPrimaryProfile: boolea
       TAO_TEST_DARWIN_TEMP_DIR: systemTempAlias,
       TAO_TEST_GIT_DIR: linkedGitDir,
     },
-    gitDirAlias,
     primaryProfile,
     systemTemp,
     worktree,

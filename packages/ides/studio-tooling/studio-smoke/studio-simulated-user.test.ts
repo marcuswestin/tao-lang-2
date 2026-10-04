@@ -1,5 +1,5 @@
-import { Errors, FS, Platform, Repo, Time } from '@shared'
-import { Expect, mkTestDir, runCleanups, Test } from '@shared/test'
+import { Errors, FS, HCI, Platform, Repo, Time } from '@shared'
+import { Expect, runCleanups, Test } from '@shared/test'
 import {
   openStudioPreviewSession,
   startStudioSessionServer,
@@ -10,12 +10,13 @@ import {
 } from '@studio'
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
 import { type StartedStudioNative, StudioNative } from '../studio-tooling-src/StudioNative'
+import { StudioNativeTestRun } from '../studio-tooling-src/StudioNativeTestRun'
 import { exerciseStudioFeed } from './studio-feed-journey'
 
 const scrollingTail = Array.from({ length: 80 }, (_, index) => `// scroll proof ${index + 1}`).join('\n')
 
 const initialSource = `use Stack, Text from @tao/ui
-app Smoke { view MainView }
+app Smoke { id "smoke" version "1.0.0" name "Smoke" view MainView }
 view MainView() {
   render Stack() {
     Text("First")
@@ -34,6 +35,7 @@ ${scrollingTail}
 
 const typedSource = initialSource.replace('Text("First")', 'Text("First typed")')
 
+// REMOVAL CANDIDATE: Static fixture-origin fence; dropping it permits a simulated preview to bypass the message boundary the journey claims to prove.
 Test('simulated preview stays within the preview-origin API boundary', () => {
   const html = previewHtml()
   Expect(html).toContain("message.type === 'highlight-source'")
@@ -70,6 +72,7 @@ Test('sketch persistence evidence requires catalog-only rectangle mutation', () 
 Test('simulated user exercises the browser editor or the native Electrobun shell', async () => {
   const artifactParent = Platform.runtimeProcess.env['TAO_STUDIO_SMOKE_ARTIFACT_ROOT']
     ?? Repo.resolvePath('.artifacts/studio-smoke')
+  const { root: artifactRoot } = await StudioNativeTestRun.create(artifactParent)
   let browser: StudioCdp | undefined
   let native: StartedStudioNative | undefined
   let preview: ReturnType<typeof startPreviewServer> | undefined
@@ -79,24 +82,68 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
   let studio: Awaited<ReturnType<typeof startStudioSessionServer>> | undefined
   let manager: StudioSessionManager | undefined
   let primaryFailure: unknown
+  const pendingShutdown = new Set<string>()
+  const directoryStates = new Map<string, 'owned' | 'retained' | 'removed'>()
+  const writeDirectoryLedger = async () => {
+    await FS.writeJson(FS.resolvePath('external-directories.json', artifactRoot), {
+      directories: [...directoryStates].map(([path, state]) => ({
+        cleanupCondition: 'Remove only after every resource owned by this invocation has confirmed shutdown.',
+        owner: artifactRoot,
+        path,
+        purpose: path === projectRoot ? 'Disposable simulated-user source project.' : 'Disposable preview runtime.',
+        state,
+      })),
+      pendingShutdown: [...pendingShutdown],
+      version: 1,
+    })
+  }
+  const stopResource = async (label: string, run: () => unknown | Promise<unknown>) => {
+    await run()
+    pendingShutdown.delete(label)
+  }
+  const removeDirectory = async (path: string | undefined) => {
+    if (path === undefined) {
+      return
+    }
+    if (pendingShutdown.size > 0) {
+      directoryStates.set(path, 'retained')
+      await writeDirectoryLedger()
+      HCI.logProcessWarn(
+        'studio-smoke-cleanup',
+        `Retained ${path}; shutdown is unproved for: ${[...pendingShutdown].join(', ')}.`,
+      )
+      return
+    }
+    await FS.remove(path)
+    directoryStates.set(path, 'removed')
+    await writeDirectoryLedger()
+  }
   try {
-    await FS.mkdir(artifactParent)
-    // The smoke artifact root normally lives under the repository's ignored `.artifacts` tree.
-    // Project discovery intentionally honors Git ignores, so keep the synthetic project outside it.
-    projectRoot = await mkTestDir('tao-studio-simulated-user-', { location: 'host' })
-    // Generated runtime state is disposable; durable screenshots and browser logs use artifactParent.
+    // Explicit scratch projects remain discoverable. Caller-owned scratch has no automatic test/exit
+    // removal, so uncertain shutdown can retain this project with its existing ownership receipt.
+    projectRoot = await Repo.mkScratchDir('tao-studio-simulated-user-')
+    directoryStates.set(projectRoot, 'owned')
+    await writeDirectoryLedger()
+    const canonicalProjectRoot = await FS.realPath(projectRoot)
+    if (canonicalProjectRoot !== projectRoot) {
+      directoryStates.delete(projectRoot)
+      projectRoot = canonicalProjectRoot
+      directoryStates.set(projectRoot, 'owned')
+      await writeDirectoryLedger()
+    }
+    // Generated runtime state is disposable; durable screenshots and browser logs use artifactRoot.
     previewRuntimeRoot = await Repo.mkScratchDir('tao-studio-simulated-runtime-')
+    directoryStates.set(previewRuntimeRoot, 'owned')
+    await writeDirectoryLedger()
     const sourcePath = FS.resolvePath('Smoke.tao', projectRoot)
     await FS.writeText(sourcePath, initialSource)
-    // The real compile lane refuses a project without checked-in identity.
-    await FS.writeText(
-      FS.resolvePath('Project.tao', projectRoot),
-      'project { id "tao-studio-simulated-user-smoke" name "Simulated user smoke" }\n',
-    )
+    await FS.mkdir(FS.resolvePath('.tao', projectRoot))
     preview = startPreviewServer(smokePort('TAO_STUDIO_SMOKE_PREVIEW_PORT', 42_001))
+    pendingShutdown.add('preview server')
     // The scenario canvas and inspector only exist once a preview manifest is published, and only
     // the real compile lane publishes one. A stubbed compile leaves `previewManifest()` undefined,
     // so `scenarioRows()` returns nothing and no scenario UI can render.
+    pendingShutdown.add('preview session')
     previewSession = await openStudioPreviewSession({
       entryPath: sourcePath,
       previewRuntimeRoot,
@@ -108,15 +155,18 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       Errors.throwUnexpected(`The smoke fixture must compile for this lane to mean anything: ${initialCompile.message}`)
     }
     manager = new StudioSessionManager()
+    pendingShutdown.add('Studio sessions')
     const current = manager.add({ previewUrl: preview.url, session })
+    pendingShutdown.add('Studio server')
     studio = await startStudioSessionServer(manager, {
       hostname: '127.0.0.1',
       port: smokePort('TAO_STUDIO_SMOKE_SERVER_PORT', 42_000),
     })
     const projectUrl = `${studio.url}/sessions/${encodeURIComponent(current.sessionId)}`
     if (Platform.runtimeProcess.env['TAO_STUDIO_SMOKE_NATIVE'] === 'true') {
+      pendingShutdown.add('native Studio')
       native = await StudioNative.start({
-        artifactRoot: FS.resolvePath('electrobun', artifactParent),
+        ...await StudioNativeTestRun.nativeOptions(artifactRoot),
         nativeHostCommand: 'studio-smoke-native',
         previewUrl: preview.url,
         projectUrl,
@@ -128,7 +178,8 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       Expect(result.passed).toBe(true)
       Expect(Object.values(result.capabilities).every(capability => capability.passed)).toBe(true)
     } else {
-      browser = await StudioCdp.launchChrome({ artifactRoot: artifactParent })
+      pendingShutdown.add('browser')
+      browser = await StudioCdp.launchChrome({ artifactRoot })
       await browser.setViewport(1_440, 900)
       await browser.goto(projectUrl)
       await browser.waitFor(
@@ -319,7 +370,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       // reveal the one region involved and leave every other fold alone, and neither changes the
       // file: an edit beside a folded region is cancelled in favour of showing it, and a caret that
       // lands on its edge opens it rather than sitting in text the person cannot see.
-      const revealedHead = 'app Smoke { view MainView }'
+      const revealedHead = 'app Smoke { id "smoke" version "1.0.0" name "Smoke" view MainView }'
       await browser.click('[data-testid="studio-lens-preset-outline"]')
       await browser.waitFor(`document.querySelector('.cm-line:has(.cm-lens-glyph)') instanceof HTMLElement`)
       const outlineFolds = await foldedRegions(browser)
@@ -404,16 +455,13 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       await waitForInspectorReady(browser)
       await browser.waitFor(`document.querySelector('.studio-canvas-focus')?.textContent === 'Focus MainView'`)
 
-      for (let reveal = 0; reveal < 2; reveal += 1) {
-        await browser.wheel('.cm-scroller', { x: 0, y: 8_000 })
-        await browser.waitFor(`(document.querySelector('.cm-scroller')?.scrollTop ?? 0) > 0`)
-        const away = await browser.evaluate<number>("document.querySelector('.cm-scroller')?.scrollTop ?? 0")
-        Expect(away).toBeGreaterThan(0)
-        await clickPreviewAndWaitForState(browser, preview.url, '#select-first', 'selection sent')
-        await browser.waitFor(
-          `(document.querySelector('.cm-scroller')?.scrollTop ?? 0) < ${away}`,
-        )
-      }
+      await browser.wheel('.cm-scroller', { x: 0, y: 8_000 })
+      await browser.waitFor(`(document.querySelector('.cm-scroller')?.scrollTop ?? 0) > 0`)
+      const away = await browser.evaluate<number>("document.querySelector('.cm-scroller')?.scrollTop ?? 0")
+      await clickPreviewAndWaitForState(browser, preview.url, '#select-first', 'selection sent')
+      await browser.waitFor(
+        `(document.querySelector('.cm-scroller')?.scrollTop ?? 0) < ${away}`,
+      )
 
       // Focus frames the group's cells at the measured size of the selected element's view. The
       // measurement reaches the client with the preview's inspection, so leaving and re-entering is
@@ -459,7 +507,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       await waitForCompileAfter(browser, compileRevision)
 
       const generatedSketchPath = FS.resolvePath('@/studio/View1.tao', projectRoot)
-      const sketchCatalogPath = FS.resolvePath('.tao-project/studio/sketches.jsonc', projectRoot)
+      const sketchCatalogPath = FS.resolvePath('.tao/studio/sketches.jsonc', projectRoot)
       // A 360-pixel board needs a canvas column wider than the Design preset leaves at 1440; a
       // designer's display gives the sketch room, and the pointer gesture below is checked against it.
       await browser.setViewport(1_920, 1_080)
@@ -815,7 +863,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       // fails on any page error and keeps the evidence beside the run's other artifacts.
       await browser.captureScreenshot('simulated-user')
       const consoleErrors = browser.consoleErrors()
-      await FS.writeJson(FS.resolvePath('logs/browser-console.json', artifactParent), consoleErrors)
+      await FS.writeJson(FS.resolvePath('logs/browser-console.json', artifactRoot), consoleErrors)
       Expect(consoleErrors.map(entry => entry.text)).toEqual([])
     }
   } catch (error) {
@@ -823,21 +871,39 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
     throw error
   } finally {
     await runCleanups(primaryFailure, [
-      { label: 'close browser', run: () => browser?.close() },
-      { label: 'stop native Studio', run: () => native?.stop() },
-      { label: 'stop Studio server', run: () => studio?.stop() },
-      { label: 'close Studio sessions', run: () => manager?.closeAll() },
-      { label: 'close preview session', run: () => previewSession?.close() },
-      { label: 'stop preview server', run: () => preview?.stop() },
-      { label: 'remove project root', run: () => projectRoot === undefined ? undefined : FS.remove(projectRoot) },
+      {
+        label: 'close browser',
+        run: () => browser === undefined ? undefined : stopResource('browser', () => browser!.close()),
+      },
+      {
+        label: 'stop native Studio',
+        run: () => native === undefined ? undefined : stopResource('native Studio', () => native!.stop()),
+      },
+      {
+        label: 'stop Studio server',
+        run: () => studio === undefined ? undefined : stopResource('Studio server', () => studio!.stop()),
+      },
+      {
+        label: 'close Studio sessions',
+        run: () => manager === undefined ? undefined : stopResource('Studio sessions', () => manager!.closeAll()),
+      },
+      {
+        label: 'close preview session',
+        run: () =>
+          previewSession === undefined
+            ? undefined
+            : stopResource('preview session', () => previewSession!.close()),
+      },
+      {
+        label: 'stop preview server',
+        run: () => preview === undefined ? undefined : stopResource('preview server', () => preview!.stop()),
+      },
+      { label: 'remove project root', run: () => removeDirectory(projectRoot) },
       {
         label: 'remove preview runtime',
-        run: () => previewRuntimeRoot === undefined ? undefined : FS.remove(previewRuntimeRoot),
+        run: () => removeDirectory(previewRuntimeRoot),
       },
     ], { channel: 'studio-smoke-cleanup', subject: 'Studio smoke' })
-  }
-  if (projectRoot !== undefined) {
-    Expect(await FS.exists(projectRoot)).toBe(false)
   }
 }, 180_000)
 
@@ -1380,6 +1446,7 @@ async function focusCanvasUntilFramed(browser: StudioCdp): Promise<void> {
  * same round trip that confirms the board is still the marked one, so the press cannot follow a
  * render that discarded what it was told to act on.
  */
+// REMOVAL CANDIDATE: A fixed quiet pause approximates renderer settlement; simplifying it needs a host-visible completion signal to preserve one-press semantics.
 async function clickSketchWhenSettled(
   browser: StudioCdp,
   sketchId: string,

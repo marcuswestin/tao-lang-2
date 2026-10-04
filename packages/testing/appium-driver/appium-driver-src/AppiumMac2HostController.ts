@@ -42,6 +42,7 @@ export type Mac2HostSession =
   & HostSession
   & Readonly<{
     executeExternalUi: (operation: Mac2ExternalUiOperation) => Promise<unknown>
+    captureTargetScreenshot: (name: string, request: HostObservationRequest) => Promise<HostScreenshot>
   }>
 
 export type Mac2HostController =
@@ -222,6 +223,47 @@ class AppiumMac2HostSession implements Mac2HostSession {
 
   async captureScreenshot(name: string): Promise<HostScreenshot> {
     return await this.#serialize(async () => await this.#captureScreenshot(name))
+  }
+
+  async captureTargetScreenshot(name: string, request: HostObservationRequest): Promise<HostScreenshot> {
+    return await this.#serialize(async () => {
+      await this.#assertOpen()
+      assertRevision(this.#descriptor.revision, request.expectedRevision)
+      if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(name)) {
+        Errors.throwUserInput(
+          'Appium Mac2 screenshot names must use only letters, numbers, dots, underscores, or dashes.',
+        )
+      }
+      const element = await this.#find(copyTarget(request.target))
+      await this.#assertOpen()
+      assertRevision(this.#descriptor.revision, request.expectedRevision)
+      if (element.screenshot === undefined) {
+        throw new HostControlError(
+          'unsupported',
+          'Appium Mac2 cannot capture a screenshot of the requested native target.',
+        )
+      }
+      const png = await element.screenshot()
+      // Refuse publication if physical ownership changed while the native element was being captured.
+      await this.#assertOpen()
+      assertRevision(this.#descriptor.revision, request.expectedRevision)
+      const fileName = name.endsWith('.png') ? name : `${name}.png`
+      const artifactPath = FS.resolvePath(
+        `appium-mac2/screenshots/${++this.#screenshotSequence}-${fileName}`,
+        this.#artifactRoot,
+      )
+      // Create with private permissions before writing binary content; FS.writeFile preserves this mode.
+      await FS.writeText(artifactPath, '', { mode: 0o600 })
+      await FS.chmod(artifactPath, 0o600)
+      await FS.writeFile(artifactPath, png)
+      return {
+        artifactPath,
+        observationRevision: this.#invalidateObservation(),
+        revision: this.#descriptor.revision,
+        sessionId: this.#descriptor.id,
+        version: 1,
+      }
+    })
   }
 
   async #captureScreenshot(name: string): Promise<HostScreenshot> {

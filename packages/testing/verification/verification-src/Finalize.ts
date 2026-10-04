@@ -117,6 +117,8 @@ export type FinalizeDependencies = {
   key: (repositoryRoot: string) => Promise<GreenTreeKey>
   isSymbolicLink: (path: string) => Promise<boolean>
   makeProbeDirectory: (prefix: string) => Promise<string>
+  /** A file's last modification, in epoch milliseconds. */
+  modifiedTimeMs: (path: string) => Promise<number>
   now: () => Date
   readJson: <ValueT>(path: string) => Promise<ValueT>
   realPath: (path: string) => Promise<string>
@@ -143,6 +145,7 @@ const defaultDependencies: FinalizeDependencies = {
   isSymbolicLink: FS.isSymbolicLink,
   key: GreenTree.key,
   makeProbeDirectory: FS.mkTmpDir,
+  modifiedTimeMs: FS.modifiedTimeMs,
   now: () => new Date(),
   readJson: FS.readJson,
   realPath: FS.realPath,
@@ -296,6 +299,7 @@ export const FinalizeCommand = {
 
 /** LandOptions is what `./dev land` accepts; every flag only removes work. */
 export type LandOptions = {
+  showStudio?: boolean
   /** Report the readiness of this branch and the plan, and change nothing. */
   dryRun?: boolean
   /** Must resolve exactly to this branch's canonical `.artifacts/merge/<branch>.msg`. */
@@ -369,6 +373,7 @@ export const LandCommand = {
     }
 
     const merge = await MergeWithMainCommand.run({
+      showStudio: options.showStudio,
       dryRun: options.dryRun === true,
       messageFile,
       repositoryRoot: root,
@@ -489,51 +494,139 @@ export const StartBranchCommand = {
     dependencies: FinalizeDependencies = defaultDependencies,
   ): Promise<void> {
     const root = FS.resolvePath(options.repositoryRoot ?? Repo.getRoot())
-    if (!name.startsWith('feat/') || name === 'feat/') {
-      Errors.throwUserInput(`start-branch requires a feat/* branch name; got '${name}'.`)
-    }
-    const validName = await dependencies.run('git', {
-      args: ['check-ref-format', '--branch', name],
-      cwd: root,
-      stdio: 'pipe',
-    })
-    if (validName.exitCode !== 0) {
-      Errors.throwUserInput(`Invalid feature branch name: ${name}.`)
-    }
-    await assertCleanWorktree(dependencies, root, 'start-branch')
-    const existing = await dependencies.run('git', {
-      args: ['show-ref', '--verify', '--quiet', `refs/heads/${name}`],
-      cwd: root,
-      stdio: 'pipe',
-    })
-    if (existing.exitCode === 0) {
-      Errors.throwUserInput(`Feature branch '${name}' already exists.`)
-    }
-    if (existing.exitCode !== 1) {
-      assertCommandSucceeded(existing)
-    }
-    await git(dependencies, root, ['fetch', '--quiet', REMOTE, MAIN_BRANCH])
+    await assertNewFeatureBranch(dependencies, root, name, 'start-branch')
+    await fetchForBranch(dependencies, root, name, 'start-branch', [REMOTE, MAIN_BRANCH])
     const mainSha = (await git(dependencies, root, ['rev-parse', `${REMOTE}/${MAIN_BRANCH}`])).stdout.trim()
-    const headSha = (await git(dependencies, root, ['rev-parse', 'HEAD'])).stdout.trim()
-    const diff = await git(dependencies, root, ['diff', '--name-only', '--no-renames', '-z', headSha, mainSha])
-    const blocked = await unwritablePaths(dependencies, root, diff.stdout.split('\0').filter(Boolean))
-    if (blocked.length > 0) {
-      Errors.throwHostEnvironment(
-        `Starting '${name}' from origin/main would write paths this shell may not:\n`
-          + blocked.map(path => `- ${path}`).join('\n')
-          + `\nThe checkout and HEAD are untouched; run \`./agent unsandboxed start-branch ${name}\`.`,
-      )
-    }
-    await git(dependencies, root, ['switch', '--no-track', '-c', name, mainSha])
-    const status = (await git(dependencies, root, ['status', '--porcelain=v1', '--untracked-files=all'])).stdout
-    if (status !== '') {
-      Errors.throwHostEnvironment(
-        `Git switched to '${name}' but left a dirty checkout. Inspect these paths before continuing:\n${status.trimEnd()}`,
-      )
-    }
+    await switchAndSetUp(dependencies, root, name, mainSha, 'start-branch', ['--no-track', '-c', name, mainSha])
     dependencies.writeLine(`Started '${name}' from origin/main (${shortSha(mainSha)}).`)
   },
 } as const
+
+/**
+ * Take over a feature branch someone else pushed: fetch it, switch to a local branch tracking it,
+ * and run setup for what it checked out. A sandboxed `git switch` that replaces protected harness
+ * files stops halfway, so this probes every write first, as start-branch does.
+ */
+export const TakeBranchCommand = {
+  async run(
+    name: string,
+    options: Pick<FinalizeOptions, 'repositoryRoot'> = {},
+    dependencies: FinalizeDependencies = defaultDependencies,
+  ): Promise<void> {
+    const root = FS.resolvePath(options.repositoryRoot ?? Repo.getRoot())
+    await assertNewFeatureBranch(dependencies, root, name, 'take-branch')
+    await fetchForBranch(dependencies, root, name, 'take-branch', [
+      REMOTE,
+      `+refs/heads/${name}:refs/remotes/${REMOTE}/${name}`,
+    ])
+    const branchSha = (await git(dependencies, root, ['rev-parse', `${REMOTE}/${name}`])).stdout.trim()
+    await switchAndSetUp(dependencies, root, name, branchSha, 'take-branch', [
+      '--track',
+      '-c',
+      name,
+      `${REMOTE}/${name}`,
+    ])
+    dependencies.writeLine(`Took over '${name}' at ${REMOTE}/${name} (${shortSha(branchSha)}), tracking it.`)
+  },
+} as const
+
+/**
+ * The remote's credential helper reads configuration the agent sandbox denies, so a sandboxed fetch
+ * fails before reaching the remote. Name the host operation rather than leaving a bare Git failure
+ * that invites a hand-run `git switch`, which half-applies in the sandbox.
+ */
+async function fetchForBranch(
+  dependencies: FinalizeDependencies,
+  root: string,
+  name: string,
+  command: string,
+  fetchArgs: readonly string[],
+): Promise<void> {
+  const fetched = await dependencies.run('git', { args: ['fetch', '--quiet', ...fetchArgs], cwd: root, stdio: 'pipe' })
+  if (fetched.exitCode === 0) {
+    return
+  }
+  const stderr = fetched.stderr.trim()
+  if (stderr.includes("couldn't find remote ref")) {
+    Errors.throwUserInput(`${REMOTE} has no branch '${name}'. Start a new one with ./agent start-branch ${name}.`)
+  }
+  Errors.throwHostEnvironment(
+    `Fetching from ${REMOTE} failed; the checkout and HEAD are untouched.\n${stderr}\n`
+      + `If the sandbox refused Git's credential helper, run \`./agent unsandboxed ${command} ${name}\`.`,
+  )
+}
+
+/** A new local feat/* branch needs a valid unused name and a clean worktree to switch from. */
+async function assertNewFeatureBranch(
+  dependencies: FinalizeDependencies,
+  root: string,
+  name: string,
+  command: string,
+): Promise<void> {
+  if (!name.startsWith('feat/') || name === 'feat/') {
+    Errors.throwUserInput(`${command} requires a feat/* branch name; got '${name}'.`)
+  }
+  const validName = await dependencies.run('git', {
+    args: ['check-ref-format', '--branch', name],
+    cwd: root,
+    stdio: 'pipe',
+  })
+  if (validName.exitCode !== 0) {
+    Errors.throwUserInput(`Invalid feature branch name: ${name}.`)
+  }
+  await assertCleanWorktree(dependencies, root, command)
+  const existing = await dependencies.run('git', {
+    args: ['show-ref', '--verify', '--quiet', `refs/heads/${name}`],
+    cwd: root,
+    stdio: 'pipe',
+  })
+  if (existing.exitCode === 0) {
+    Errors.throwUserInput(`Feature branch '${name}' already exists locally.`)
+  }
+  if (existing.exitCode !== 1) {
+    assertCommandSucceeded(existing)
+  }
+}
+
+/**
+ * Switch only when every write the checkout makes is allowed, then run setup: dependencies,
+ * generated harness files, and hooks belong to the commit checked out, and nothing else reruns
+ * setup when a worktree changes branch.
+ */
+async function switchAndSetUp(
+  dependencies: FinalizeDependencies,
+  root: string,
+  name: string,
+  targetSha: string,
+  command: string,
+  switchArgs: readonly string[],
+): Promise<void> {
+  const headSha = (await git(dependencies, root, ['rev-parse', 'HEAD'])).stdout.trim()
+  const diff = await git(dependencies, root, ['diff', '--name-only', '--no-renames', '-z', headSha, targetSha])
+  const blocked = await unwritablePaths(dependencies, root, diff.stdout.split('\0').filter(Boolean))
+  if (blocked.length > 0) {
+    Errors.throwHostEnvironment(
+      `Switching to '${name}' would write paths this shell may not:\n`
+        + blocked.map(path => `- ${path}`).join('\n')
+        + `\nThe checkout and HEAD are untouched; run \`./agent unsandboxed ${command} ${name}\`.`,
+    )
+  }
+  await git(dependencies, root, ['switch', ...switchArgs])
+  const status = (await git(dependencies, root, ['status', '--porcelain=v1', '--untracked-files=all'])).stdout
+  if (status !== '') {
+    Errors.throwHostEnvironment(
+      `Git switched to '${name}' but left a dirty checkout. Inspect these paths before continuing:\n${status.trimEnd()}`,
+    )
+  }
+  dependencies.writeLine(`Switched to '${name}'; running ./agent setup for it.`)
+  const setup = await dependencies.run('./agent', { args: ['setup'], cwd: root, stdio: 'inherit' })
+  if (setup.exitCode !== 0) {
+    Errors.throwHostEnvironment(
+      `Switched to '${name}', but ./agent setup failed. Follow its report; for a protected package path, `
+        + 'run ./agent unsandboxed setup.',
+    )
+  }
+}
 
 /**
  * recordMergeMessage writes the merge message for a branch whose whole change a command authored
@@ -652,9 +745,12 @@ export async function prepareForLanding(
   const messageFile = FS.resolvePath(options.messageFile ?? `.artifacts/merge/${branch}.msg`, root)
   const reviewPath = `${messageFile}.review.json`
   const draftReview = await loadDraftReview(dependencies, reviewPath)
-  const reviewedDraftHeadSha = draftReview?.headSha === headSha
+  // An edit made after the baseline was recorded confirms the message, and stays a confirmation
+  // when only main has arrived since — as when this landing's own integration conflicted.
+  const reviewedDraftHeadSha = draftReview !== undefined
       && await dependencies.exists(messageFile)
       && await dependencies.readText(messageFile) !== draftReview.draftText
+      && await onlyMainArrivedSince(dependencies, root, draftReview.headSha, mainSha, headSha)
     ? headSha
     : undefined
   const message = await draftOrKeepMessage(
@@ -669,7 +765,7 @@ export async function prepareForLanding(
     options.redraft === true,
     lines,
   )
-  // A kept message for an older HEAD needs a fresh author edit too. Record its current bytes as
+  // A kept message for an older HEAD with commits of its own needs a fresh author edit too. Record its current bytes as
   // the baseline, so that edit can be confirmed on the next land attempt without `finalize`.
   if (
     message.decision !== 'kept'
@@ -1118,7 +1214,16 @@ async function draftOrKeepMessage(
       lines.push(`FAIL  The kept merge message is not one the landing will accept: ${malformed}`)
       return { decision: 'kept', malformed, messageHeadSha: headSha, unconfirmedReason: '' }
     }
-    const unconfirmedReason = keptMessageReason(source, priorState, headSha, reviewedDraftHeadSha)
+    const unconfirmedReason = await keptMessageReason(
+      dependencies,
+      root,
+      messageFile,
+      source,
+      priorState,
+      mainSha,
+      headSha,
+      reviewedDraftHeadSha,
+    )
     lines.push(
       `PASS  Kept the existing merge message; ${
         unconfirmedReason === ''
@@ -1156,24 +1261,88 @@ async function draftOrKeepMessage(
  * it was recorded against an earlier HEAD and the branch has gained commits since. Empty means the
  * applicable evidence proves it covers this HEAD.
  */
-function keptMessageReason(
+async function keptMessageReason(
+  dependencies: FinalizeDependencies,
+  root: string,
+  messageFile: string,
   source: string,
   priorState: FinalizeState | undefined,
+  mainSha: string,
   headSha: string,
   reviewedDraftHeadSha: string | undefined,
-): string {
+): Promise<string> {
   if (reviewedDraftHeadSha === headSha) {
     return ''
   }
   if (source.startsWith(DRAFT_PREFIX)) {
     return 'the generated draft has not been edited by its author'
   }
-  if (priorState === undefined) {
-    return 'nothing records which HEAD it was written for'
+  if (
+    priorState !== undefined
+    && await onlyMainArrivedSince(dependencies, root, priorState.messageHeadSha, mainSha, headSha)
+  ) {
+    return ''
   }
-  return priorState.messageHeadSha === headSha
-    ? ''
+  if (await writtenAfterNewestOwnCommit(dependencies, root, messageFile, mainSha, headSha)) {
+    return ''
+  }
+  return priorState === undefined
+    ? "nothing records which HEAD it was written for, and it predates the branch's newest commit"
     : `the branch has gained commits since it was recorded for ${shortSha(priorState.messageHeadSha)}`
+}
+
+/**
+ * A hand-written message saved after the branch's newest commit of its own was written with all of
+ * the branch's work in front of its author, so it is reviewed for this HEAD without a recorded
+ * baseline. Merges are skipped, so resolving a landing's conflicted integration of main does not
+ * date the message. A message older than that commit predates work it cannot describe.
+ */
+async function writtenAfterNewestOwnCommit(
+  dependencies: FinalizeDependencies,
+  root: string,
+  messageFile: string,
+  mainSha: string,
+  headSha: string,
+): Promise<boolean> {
+  const newest = await dependencies.run('git', {
+    args: ['log', '-1', '--no-merges', '--format=%ct', headSha, `^${mainSha}`],
+    cwd: root,
+    stdio: 'pipe',
+  })
+  const committedSeconds = Number.parseInt(newest.stdout.trim(), 10)
+  if (newest.exitCode !== 0 || newest.error !== undefined || !Number.isFinite(committedSeconds)) {
+    return false
+  }
+  // Commit times are whole seconds; a save in the same second as the commit follows it in practice.
+  return Math.floor(await dependencies.modifiedTimeMs(messageFile) / 1000) >= committedSeconds
+}
+
+/**
+ * Whether a message confirmed at `recordedSha` still describes `headSha`: true when the branch has
+ * gained no commit of its own since, only merges of main — which is all that resolving a landing's
+ * own conflicted integration of main adds. A merge changes nothing an author wrote about, so asking
+ * them to confirm again would be ceremony. Any non-merge commit main does not contain is the
+ * branch's own work and does need the author; so does a recorded commit Git cannot resolve.
+ */
+async function onlyMainArrivedSince(
+  dependencies: FinalizeDependencies,
+  root: string,
+  recordedSha: string,
+  mainSha: string,
+  headSha: string,
+): Promise<boolean> {
+  if (recordedSha === headSha) {
+    return true
+  }
+  if (recordedSha === '') {
+    return false
+  }
+  const ownCommits = await dependencies.run('git', {
+    args: ['rev-list', '--no-merges', `${recordedSha}..${headSha}`, `^${mainSha}`],
+    cwd: root,
+    stdio: 'pipe',
+  })
+  return ownCommits.exitCode === 0 && ownCommits.error === undefined && ownCommits.stdout.trim() === ''
 }
 
 async function loadDraftReview(

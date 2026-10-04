@@ -20,9 +20,9 @@ import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
  * Builds the Tao Companion as a prebuilt Android host, and publishes one. Expo prebuild writes the
  * native project, Gradle assembles a debug APK — a development client, which runs whatever bundle
  * Metro serves it — and the APK lands in this checkout's host cache beside a manifest naming the
- * native kit it was built with. `tao dev` installs it on an emulator whenever that kit covers the one
+ * native kit it was built with. `tao run` installs it on an emulator whenever that kit covers the one
  * it computes for itself, and falls back to Expo Go when none does. Publishing puts the same two
- * files on a GitHub release, where any `tao dev` can download them.
+ * files on a GitHub release, where any `tao run` can download them.
  */
 
 const APK_OUTPUT_PATH = 'app/build/outputs/apk/debug/app-debug.apk'
@@ -292,7 +292,7 @@ export async function runCompanionHostPublish(options: CompanionHostPublishOptio
         '--title',
         `${CompanionIdentity.name} ${first.manifest.hostVersion} host (${hostKey(first.manifest)})`,
         '--notes',
-        `Prebuilt ${CompanionIdentity.name} hosts that \`tao dev\` downloads when their native kit covers its own. `
+        `Prebuilt ${CompanionIdentity.name} hosts that \`tao run\` downloads when their native kit covers its own. `
         + `Each platform carries a \`tao-host-<platform>.json\` manifest beside its binary.`,
       ])
     }
@@ -431,7 +431,7 @@ async function companionVersion(packageRoot: string): Promise<string> {
 }
 
 /**
- * The host is staged beside its final directory and moved into place, so a `tao dev` searching the
+ * The host is staged beside its final directory and moved into place, so a `tao run` searching the
  * cache meanwhile finds the old host, then none, then the new one — never an APK without its
  * manifest or a manifest describing a different APK.
  */

@@ -1,10 +1,10 @@
 use VisionHello from ./
 
 test "VisionHello" {
+   // REMOVAL CANDIDATE: State Action covers the generic counter; removal drops this app's in-process source smoke.
    test "increments twice and resets the count" {
       run VisionHello
       expect navigation title "Hello Tao"
-      expect text "Hello from Tao"
       expect text "Count: 0"
       press "Increment"
       expect text "Count: 1"

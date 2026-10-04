@@ -1,0 +1,6 @@
+{
+  "command": "./agent test-file packages/cli/tao-cli/cli-tests/tutorials.test.ts",
+  "outcome": "pass",
+  "evidence": ".artifacts/qa/runs/20260926233551708-ca460a27-0bbf-446d-9388-e83161a7ac84/tutorial.log",
+  "scope": "source tests only; no text, visual, installed artifact, or human acceptance"
+}

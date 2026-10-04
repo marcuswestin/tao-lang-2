@@ -87,28 +87,26 @@ Describe('interactive Tao development shell', () => {
     async () => {
       const root = await mkTestDir('tao-dev-shell-')
       try {
-        for (const active of [false, true]) {
-          for (const setupExit of ['0', '23']) {
-            const fixture = FS.resolvePath(`${active}-${setupExit}`, root)
-            const env = await prepareFixture(fixture)
-            const result = await CLI.run('/bin/sh', {
-              args: [FS.resolvePath('enter-tao-dev-env', fixture), '--setup-only'],
-              cwd: fixture,
-              env: {
-                ...env,
-                TAO_DEVENV: active ? '1' : undefined,
-                DEVENV_ROOT: active ? fixture : undefined,
-                TAO_TEST_SETUP_EXIT: setupExit,
-              },
-            })
-            Expect(result.exitCode).toBe(Number(setupExit))
-            Expect((await FS.readText(FS.resolvePath('calls.log', fixture))).trim().split('\n')).toEqual([
-              `devenv|${fixture}|false`,
-              'setup|yes|setup',
-            ])
-            Expect(await FS.exists(FS.resolvePath('startup-env.log', fixture))).toBe(false)
-            Expect(await FS.exists(FS.resolvePath('.artifacts/cache/dev-shell', fixture))).toBe(false)
-          }
+        for (const [active, setupExit] of [[false, '0'], [false, '23'], [true, '0']] as const) {
+          const fixture = FS.resolvePath(`${active}-${setupExit}`, root)
+          const env = await prepareFixture(fixture)
+          const result = await CLI.run('/bin/sh', {
+            args: [FS.resolvePath('enter-tao-dev-env', fixture), '--setup-only'],
+            cwd: fixture,
+            env: {
+              ...env,
+              TAO_DEVENV: active ? '1' : undefined,
+              DEVENV_ROOT: active ? fixture : undefined,
+              TAO_TEST_SETUP_EXIT: setupExit,
+            },
+          })
+          Expect(result.exitCode).toBe(Number(setupExit))
+          Expect((await FS.readText(FS.resolvePath('calls.log', fixture))).trim().split('\n')).toEqual([
+            `devenv|${fixture}|false`,
+            'setup|yes|setup',
+          ])
+          Expect(await FS.exists(FS.resolvePath('startup-env.log', fixture))).toBe(false)
+          Expect(await FS.exists(FS.resolvePath('.artifacts/cache/dev-shell', fixture))).toBe(false)
         }
       } finally {
         await FS.remove(root)

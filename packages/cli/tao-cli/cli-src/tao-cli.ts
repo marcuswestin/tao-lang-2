@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import tab from '@bomb.sh/tab/commander'
 import { Command } from '@commander-js/extra-typings'
-import { Diagnostic, Errors, FS, HCI, Platform } from '@shared'
+import { Diagnostic, Errors, FS, HCI, Platform, ReleaseCapabilities } from '@shared'
 import type { Command as BaseCommand } from 'commander'
 import * as DiagnosticReport from './diagnostic-report'
 import type { InPlace } from './in-place-files'
@@ -39,7 +39,7 @@ export async function runTaoCli(argv = Platform.runtimeProcess.argv): Promise<vo
   await createCommands().parseAsync(argv, { from: 'node' })
 }
 
-function createCommands(): Command {
+export function createCommands(): Command {
   const commands = new Command()
     .name('tao')
     .description('Tao language CLI.')
@@ -92,45 +92,48 @@ function createCommands(): Command {
     .option('--id <id>', 'Checked-in project id and directory name. Suggested from the name when omitted.')
     .option('--yes', 'Accept the suggested id, the plan, and the first available AI lane without asking.')
     .option('--ai <lane>', 'How to shape the plan: auto, claude, codex, ollama, apple, or none.', 'auto')
+    .option('--provider <provider>', 'Use a hosted datasource and sign-in (development: firebase).')
+    .option('--validation-tools', 'Include temporary sample credential tools with --provider firebase.')
     .option('--skip-tests', "Skip running the new project's tests after creating it.")
     .description('Create a new Tao project from a description.')
-    .action(async (description: string, options: { ai: string; id?: string; skipTests?: boolean; yes?: boolean }) => {
-      try {
-        const { createAiOptions, runCreate } = await import('./create/create-command')
-        const ai = createAiOptions.find(candidate => candidate === options.ai)
-        if (ai === undefined) {
-          Errors.throwUserInput(`--ai must be one of ${createAiOptions.join(', ')}, not '${options.ai}'.`)
+    .action(
+      async (
+        description: string,
+        options: {
+          ai: string
+          id?: string
+          provider?: string
+          validationTools?: boolean
+          skipTests?: boolean
+          yes?: boolean
+        },
+      ) => {
+        try {
+          const { createAiOptions, runCreate } = await import('./create/create-command')
+          const ai = createAiOptions.find(candidate => candidate === options.ai)
+          if (ai === undefined) {
+            Errors.throwUserInput(`--ai must be one of ${createAiOptions.join(', ')}, not '${options.ai}'.`)
+          }
+          if (options.provider !== undefined && options.provider !== 'firebase') {
+            Errors.throwUserInput('The hosted creation provider must be firebase.')
+          }
+          if (options.validationTools === true && options.provider !== 'firebase') {
+            Errors.throwUserInput('--validation-tools requires --provider firebase.')
+          }
+          await runCreate(description, {
+            ...(options.provider === undefined ? {} : { provider: options.provider as 'firebase' }),
+            ...(options.validationTools === true ? { validationTools: true } : {}),
+            ai,
+            ...(options.id === undefined ? {} : { id: options.id }),
+            ...(options.skipTests === true ? { runTests: false } : {}),
+            ...(options.yes === true ? { yes: true } : {}),
+          })
+        } catch (error) {
+          HCI.writeErrorLine(Errors.formatForUser(error))
+          Platform.runtimeProcess.exit(1)
         }
-        await runCreate(description, {
-          ai,
-          ...(options.id === undefined ? {} : { id: options.id }),
-          ...(options.skipTests === true ? { runTests: false } : {}),
-          ...(options.yes === true ? { yes: true } : {}),
-        })
-      } catch (error) {
-        HCI.writeErrorLine(Errors.formatForUser(error))
-        Platform.runtimeProcess.exit(1)
-      }
-    })
-
-  commands
-    .command('project')
-    .description('Manage checked-in Tao project metadata.')
-    .command('id')
-    .argument('<id>', 'Opaque project id to persist.')
-    .argument('[path]', 'Project .tao file or directory to search.', '.')
-    .option('--replace', 'Replace an existing id when making an independent project.')
-    .description('Add or deliberately replace a project id.')
-    .action(async (id: string, path: string, options: { replace?: boolean }) => {
-      try {
-        const { setProjectId } = await import('./project-command')
-        const projectPath = await setProjectId(id, path, options)
-        HCI.writeSuccess(`Project id '${id}' in ${FS.displayPath(projectPath)}\n`)
-      } catch (error) {
-        HCI.writeErrorLine(Errors.formatForUser(error))
-        Platform.runtimeProcess.exit(1)
-      }
-    })
+      },
+    )
 
   const secrets = commands
     .command('secrets')
@@ -224,7 +227,30 @@ function createCommands(): Command {
     )
 
   commands
-    .command('dev')
+    .command('connect')
+    .argument('<provider>', 'Hosted service to connect (firebase or appwrite), or run to start the pilot in Expo Go.')
+    .argument('[path]', 'Project directory to configure or run.', '.')
+    .description('Save local Firebase settings, configure the Hosted CRUD Appwrite pilot, or run the pilot in Expo Go.')
+    .action(async (provider: string, path: string) => {
+      try {
+        if (provider === 'run') {
+          const { runHostedCrud } = await import('./hosted-crud-run')
+          await runHostedCrud(path)
+          return
+        }
+        if (provider !== 'firebase' && provider !== 'appwrite') {
+          Errors.throwUserInput(`Unknown provider '${provider}'. Choose firebase, appwrite, or run.`)
+        }
+        const { runTaoConnect } = await import('./connect-command')
+        await runTaoConnect(provider, path)
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.setExitCode(1)
+      }
+    })
+
+  commands
+    .command('run')
     .argument('[path]', 'Tao file or directory whose runnable apps should be discovered.', '.')
     .option('--app <name>', 'Select a uniquely named app without prompting.')
     .option(
@@ -235,7 +261,7 @@ function createCommands(): Command {
     .option('--android', 'Open Android after Metro starts.')
     .option('--web', 'Open the web app after Metro starts.')
     .option('--desktop', 'Open the Tao desktop app after Metro starts.')
-    .description('Start Metro for a Tao app without opening a target unless requested.')
+    .description('Refresh and watch a Tao project, then start Metro for a selected app.')
     .action(
       async (
         path: string,
@@ -243,6 +269,7 @@ function createCommands(): Command {
       ) => {
         try {
           // Command implementations load lazily so completion and help paths stay fast.
+          await (await import('./install-offer')).offerMissingInstalls([path])
           const { runTaoDev } = await import('./dev-command')
           const startupTargets = (['ios', 'android', 'web', 'desktop'] as const).filter(target =>
             options[target] === true
@@ -256,6 +283,43 @@ function createCommands(): Command {
         }
       },
     )
+
+  commands
+    .command('watch')
+    .argument('[path]', 'Tao file or directory in the project to watch.', '.')
+    .description('Refresh and watch a Tao project without starting a runtime.')
+    .action(async (path: string) => {
+      try {
+        await (await import('./install-offer')).offerMissingInstalls([path])
+        const { runTaoWatch } = await import('./watch-command')
+        Platform.runtimeProcess.setExitCode(await runTaoWatch(path))
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.setExitCode(1)
+      }
+    })
+
+  commands
+    .command('install')
+    .argument('[path]', 'Tao file or directory in the project to install.', '.')
+    .option('--app <name>', 'Install dependencies of one app.')
+    .option('--publication <name>', 'Install dependencies of one named publication.')
+    .option('--default-publication', 'Install dependencies of the unnamed publication.')
+    .description('Resolve local Tao requirements and install npm aliases for all apps and publications.')
+    .action(async (path: string, options: { app?: string; publication?: string; defaultPublication?: boolean }) => {
+      try {
+        HCI.writeLine('Loading dependency installer...')
+        const { runTaoInstall } = await import('./install-command')
+        await runTaoInstall(path, {
+          appName: options.app,
+          publicationName: options.publication,
+          defaultPublication: options.defaultPublication,
+        })
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.setExitCode(1)
+      }
+    })
 
   commands
     .command('build')
@@ -288,6 +352,7 @@ function createCommands(): Command {
         },
       ) => {
         try {
+          await (await import('./install-offer')).offerMissingInstalls([path])
           const { runTaoBuild } = await import('./build-command')
           const targets = (['web', 'desktop', 'ios', 'android', 'visionos', 'watchos'] as const).filter(target =>
             options[target] === true
@@ -384,6 +449,31 @@ function createCommands(): Command {
         Platform.runtimeProcess.setExitCode(1)
       }
     })
+
+  for (const provider of ['jazz', 'convex', 'pylon', 'firebase'] as const) {
+    commands
+      .command(provider)
+      .description(`Generate deployable ${provider} backend source for a Tao app.`)
+      .command('generate')
+      .argument('[path]', 'Tao file or directory whose app should be generated.', '.')
+      .option('--app <name>', 'Select a named app.')
+      .requiredOption('--output <directory>', 'Directory for generated backend source files.')
+      .option('--force', 'Replace generated files whose content differs.')
+      .description(`Generate ${provider} backend source from the app's compiled schema and supported policy.`)
+      .action(async (path: string, options: { app?: string; force?: boolean; output: string }) => {
+        try {
+          const { runHostedProviderGenerate } = await import('./hosted-provider-generate')
+          await runHostedProviderGenerate(provider, path, {
+            appName: options.app,
+            force: options.force,
+            output: options.output,
+          })
+        } catch (error) {
+          HCI.writeErrorLine(Errors.formatForUser(error))
+          Platform.runtimeProcess.setExitCode(1)
+        }
+      })
+  }
 
   commands
     .command('clean')
@@ -529,6 +619,7 @@ function createCommands(): Command {
     .description('Compile a Tao app into the local runtime package.')
     .action(async (appPath: string, options: { app?: string }) => {
       try {
+        await (await import('./install-offer')).offerMissingInstalls([appPath])
         const { runCompile } = await import('./compile-command')
         const compiled = await runCompile(appPath, { appName: options.app })
         HCI.writeSuccess(`Compiled ${compiled.sourcePath} -> ${compiled.outputPath}\n`)
@@ -602,6 +693,7 @@ function createCommands(): Command {
       yes?: boolean
     }) => {
       try {
+        await (await import('./install-offer')).offerMissingInstalls([path])
         const { runShipCommand } = await import('./ship-command')
         await runShipCommand(path, {
           appName: options.app,
@@ -730,6 +822,9 @@ function createCommands(): Command {
             await finalizeSharedTaoTestRun(options.sharedFinalize)
             return
           }
+          if (options.sharedRun === undefined) {
+            await (await import('./install-offer')).offerMissingInstalls(testPaths)
+          }
           const { TestOutput } = await import('./test-output')
           const testOptions = {
             journeyObservationsPath: options.journeyObservations,
@@ -778,11 +873,48 @@ function createCommands(): Command {
       }
     })
 
+  commands.command('release-profile')
+    .description('Print the immutable release profile used by this toolchain.')
+    .action(() =>
+      HCI.writeLine(
+        JSON.stringify({
+          version: TaoVersion.current(),
+          ...ReleaseCapabilities.current(),
+          fingerprint: ReleaseCapabilities.fingerprint(),
+        }),
+      )
+    )
+
+  // Remove unavailable surfaces before completion registration so discovery and parsing agree.
+  // Unclassified commands and options are deferred, so a new surface stays out of public builds.
+  pruneReleaseSurface(commands as unknown as BaseCommand, '')
+
   // Registers `tao complete <shell>` to print a completion script, and the hidden request protocol it calls.
   // The adapter types against plain Commander, which extra-typings' generic Command does not widen to.
   tab(commands as unknown as BaseCommand)
 
   return commands
+}
+
+/** pruneReleaseSurface removes the subcommands and options this release profile does not ship, at every depth. */
+function pruneReleaseSurface(command: BaseCommand, path: string): void {
+  if (path) {
+    const registeredOptions = command.options as BaseCommand['options'][number][]
+    for (const option of [...registeredOptions]) {
+      if (!ReleaseCapabilities.allows(ReleaseCapabilities.optionCapability(path, option.long ?? option.flags))) {
+        registeredOptions.splice(registeredOptions.indexOf(option), 1)
+      }
+    }
+  }
+  const registeredCommands = command.commands as BaseCommand[]
+  for (const child of [...registeredCommands]) {
+    const childPath = path ? `${path} ${child.name()}` : child.name()
+    if (!ReleaseCapabilities.allows(ReleaseCapabilities.commandCapability(childPath))) {
+      registeredCommands.splice(registeredCommands.indexOf(child), 1)
+      continue
+    }
+    pruneReleaseSurface(child, childPath)
+  }
 }
 
 function parseBetaRecipients(value: boolean | string | undefined): string[] | undefined {

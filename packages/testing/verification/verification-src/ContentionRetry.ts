@@ -19,10 +19,14 @@ import { WorkGraph, type WorkRunOptions, type WorkState } from './WorkGraph'
 
 /** RetryOptions describes the finished run whose contended timeouts are being confirmed. */
 export type RetryOptions = {
+  /** Preserve the original lane's scoped test consent, no-cache and admission environment. */
+  env?: WorkRunOptions['env']
   contention: ContentionReport
   location: RunLocation
   /** The original top-level lane, used to stop new admissions and drain peer reservations. */
   machineLane?: MachineLane
+  /** Reports each phase before waiting for isolation or running a confirmation. */
+  onProgress?: (message: string) => void
   /** Live states from the finished run; those that recover are updated in place. */
   states: readonly WorkState[]
   /** Injected so tests observe the retry without starting real processes. */
@@ -82,17 +86,21 @@ async function confirmContendedFailures(options: RetryOptions): Promise<RetryOut
   for (const original of retrying) {
     // Isolation belongs to one confirmation, not the whole serial retry batch. Releasing between
     // nodes lets peer worktrees use the machine while this lane prepares its next confirmation.
+    options.onProgress?.(`${original.name}: waiting for an exclusive retry ...`)
     const isolation = await options.machineLane?.acquireExclusive()
     if (isolation === undefined) {
       original.reason =
         'timed out under machine contention; exclusive confirmation was not obtained, so the failure is unconfirmed'
       unconfirmed.push(original.name)
+      options.onProgress?.(`${original.name}: exclusive retry unavailable; timeout remains unconfirmed.`)
       continue
     }
     const attempt = WorkGraph.createState(original.node)
     attempt.logPath = FS.resolvePath(`${WorkGraph.nodeLabel(attempt.node)}.retry.log`, options.location.logRoot)
     try {
+      options.onProgress?.(`${original.name}: running an isolated retry ...`)
       await WorkGraph.run([attempt], {
+        env: options.env,
         jobs: 1,
         runNode: options.runNode,
         slotBroker: options.machineLane,
@@ -103,16 +111,21 @@ async function confirmContendedFailures(options: RetryOptions): Promise<RetryOut
     }
     await writeRetryLog(attempt)
     adoptRetry(original, attempt)
+    options.onProgress?.(`${original.name}: retry ${attempt.status}; log: ${attempt.logPath}`)
     ;(attempt.status === 'passed' ? recovered : confirmed).push(original.name)
   }
 
   if (recovered.length > 0) {
     const resumable = resumableDependents(options.states)
     const attempts = resumable.map(state => WorkGraph.createState(state.node))
+    if (attempts.length > 0) {
+      options.onProgress?.(`Resuming ${attempts.length} checks after successful retries ...`)
+    }
     for (const attempt of attempts) {
       attempt.logPath = FS.resolvePath(`${WorkGraph.nodeLabel(attempt.node)}.resume.log`, options.location.logRoot)
     }
     await WorkGraph.run(attempts, {
+      env: options.env,
       jobs: options.machineLane?.ceiling ?? 1,
       runNode: options.runNode,
       slotBroker: options.machineLane,

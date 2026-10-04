@@ -1,4 +1,6 @@
+import { ProjectTooling, type ProjectToolingResult } from '@project-tooling'
 import { CLI, Errors, Repo, Text } from '@shared'
+import type { DevLoopMobilePublication } from '@shared/DevLoopControl'
 import Runtime from '../runtime'
 import { RuntimeToolchainPaths } from '../runtime-toolchain-paths'
 import CommandRunner from './CommandRunner'
@@ -40,6 +42,9 @@ type CompileAppOptions = {
   reason: string
   shouldRunParserGen: boolean
   runtimeRoot: string
+  managedPublication?: Omit<DevLoopMobilePublication, 'sourceRevision' | 'compiledRevision' | 'nonce'>
+  onPublication?: (publication: DevLoopMobilePublication) => void | Promise<void>
+  toolingResult?: ProjectToolingResult
 }
 
 /** runTests runs repository tests in line-output mode for the Expo dev-loop dashboard. */
@@ -78,7 +83,25 @@ async function compileAppWithoutCommandLock(options: CompileAppOptions): Promise
     if (shouldRunParserGen) {
       await runJust(['_parser-gen'])
     }
-    await Runtime.generateApp(appPath, { appName, runtimePackageRoot: runtimeRoot })
+    const tooling = options.toolingResult ?? await ProjectTooling.refresh(appPath, {
+      hostModulesRoot: RuntimeToolchainPaths.dependencyRoot(),
+    })
+    if (tooling.status !== 'fresh') {
+      DevLoopOutput.recordFailure(
+        'compile',
+        tooling.diagnostics.map(diagnostic => diagnostic.message).join('\n')
+          || 'Project tooling is stale; keeping the last working app.',
+      )
+      return false
+    }
+    const generated = await Runtime.generateApp(appPath, {
+      appName,
+      runtimePackageRoot: runtimeRoot,
+      managedPublication: options.managedPublication,
+    })
+    if (generated.managedPublication !== undefined) {
+      await options.onPublication?.(generated.managedPublication)
+    }
     DevLoopOutput.logDevLoop('compile', 'compiled')
     DevLoopOutput.clearFailure('compile')
     return true

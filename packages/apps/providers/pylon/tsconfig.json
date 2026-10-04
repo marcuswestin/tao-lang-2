@@ -1,0 +1,15 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "include": [
+    "pylon-src/**/*",
+    "pylon-tests/**/*"
+  ],
+  "compilerOptions": {
+    "types": ["node", "bun"],
+    "composite": false,
+    "jsx": "react-jsx",
+    "declaration": false,
+    "incremental": false,
+    "noEmit": true
+  }
+}

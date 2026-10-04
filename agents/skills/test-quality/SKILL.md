@@ -1,11 +1,18 @@
 ---
 name: test-quality
 description: >-
-  Write, review, consolidate, or delete Tao tests: vacuous or self-fulfilling assertions, coverage before a parity claim, shared test helpers, global test state, captured output, test file naming, and README claims a journey does not prove.
+  Assess and improve Tao test quality. Use when writing, reviewing, consolidating, or deleting
+  tests, or assessing parity coverage, vacuous assertions, shared helpers, global state, captured
+  output, test naming, or claims that behavior journeys do not prove.
 ---
 
 # Test Quality
 
+- Test Tao-owned behavior at the smallest boundary that can credibly prove it: syntax in the parser, source diagnostics in the validator, canonical output in the formatter, and distinct generated or executing behavior in the compiler and runtime. A broader test earns its cost by proving an additional integration or user-visible contract.
+- Trust a dependency's documented contract. Test its own functionality only for an identified bug affecting Tao, documenting the affected versions and the condition for retiring that regression. Our invocation, configuration, encoding, mapping, state changes, and failure handling remain our responsibility.
+- Mock external dependencies with small explicit fixtures from documented or sanitized output; keep the Tao implementation under test real. Retain real integration coverage when our actual invocation or effects are the contract. Search the shared helpers before building another mock framework.
+- Validate uncertain data at its owning boundary. Remove downstream rechecks only while that guarantee remains valid; preserve external, user, and mutable-state validation, local invariants, necessary type narrowing, and fixture checks that make the behavior assertion meaningful.
+- Name a test after the Tao behavior it protects. Before removing a check, identify the contract's owner and source, name the surviving proof of every distinct Tao behavior, and have an independent reviewer recheck the proposed removal against the current tree. Retain ambiguous checks and report the uncertainty; ownership is a judgment, not a semantic lint rule.
 - Assert against a selector, symbol, or path that exists. An assertion naming something absent passes forever and proves nothing; check the target exists before trusting a green test.
 - Never build an expectation from the same source the assertion verifies. Pin a literal instead, or the test only proves the code agrees with itself.
 - A test that calls a subject without asserting on it is a smoke test at best. Give it a real assertion or delete it.

@@ -11,6 +11,9 @@ import { hostCommandKind } from '../agent-cli-src/agent-config/HostCommandPolicy
 import { HOST_COMMAND_TARGETS, hostCommandTarget } from '../agent-cli-src/agent-config/HostCommandTargets'
 
 const expected = [
+  'notify-developer',
+  'stop',
+  'setup',
   'land',
   'finalize',
   'merge-main',
@@ -19,7 +22,9 @@ const expected = [
   'capabilities',
   'open-pr',
   'fix-agent-config',
+  'verify-full',
   'test-host',
+  'qa-capture',
   'studio-smoke',
   'studio-proof-real-app',
   'admission-experiment',
@@ -27,13 +32,17 @@ const expected = [
   'reclaim --execute',
   'prepare-release studio',
   'prepare-release ide-extension',
+  'ide-extension-acceptance',
   'app-dev',
+  'dev-loop',
   'test-watch',
   'standalone-cli-acceptance',
   'studio',
   'studio-native',
   'studio-ps',
   'studio-stop',
+  'studio-canary',
+  'studio-manual-checks',
   'docker-desktop start',
   'watchman start',
   'watchman status',
@@ -74,6 +83,7 @@ const expected = [
   'android emulators',
   'android boot',
   'android ensure',
+  'android recover',
   'remote fetch',
   'remote refs',
   'remote heads',
@@ -81,6 +91,7 @@ const expected = [
   'processes list',
   'processes started',
   'start-branch',
+  'take-branch',
   'storage sync',
   'storage qa',
   'storage push',
@@ -93,13 +104,23 @@ Describe('agent host command permissions', () => {
     )
     const prefixes = agentHostCommands(source)
     Expect(prefixes).toEqual(expected.map(command => command.split(' ')))
+    Expect(hostCommandKind(['verify-full', '--no-cache'], prefixes)).toBe('agent')
+    Expect(hostCommandKind(['verify-full-sandbox'], prefixes)).toBeUndefined()
+    Expect(hostCommandKind(['verify-repo'], prefixes)).toBeUndefined()
     Expect(hostCommandKind(['prepare-release', 'studio', '--version', '0.0.1'], prefixes)).toBe('named')
     Expect(hostCommandKind(['prepare-release', 'ide-extension'], prefixes)).toBe('named')
     Expect(hostCommandKind(['prepare-release', 'other'], prefixes)).toBeUndefined()
     Expect(hostCommandKind(['prepare-release'], prefixes)).toBeUndefined()
     Expect(hostCommandKind(['reclaim', '--execute'], prefixes)).toBe('named')
     Expect(hostCommandKind(['reclaim', '--report-json'], prefixes)).toBeUndefined()
-    Expect(Object.keys(HOST_COMMAND_TARGETS)).toEqual(['merge-recover', ...expected.slice(13)])
+    Expect(hostCommandKind(['notify-developer', '--message', 'question'], prefixes)).toBe('named')
+    Expect(hostCommandKind(['stop'], prefixes)).toBe('named')
+    Expect(Object.keys(HOST_COMMAND_TARGETS)).toEqual([
+      'notify-developer',
+      'stop',
+      'merge-recover',
+      ...expected.slice(expected.indexOf('reclaim --execute')),
+    ])
     const rules = CodexConfigGenerator.renderRules(source)
     const settings = JSON.parse(await FS.readText(Repo.resolvePath('.claude/settings.json'))) as {
       permissions: { allow: string[] }
@@ -143,13 +164,14 @@ Describe('agent host command permissions', () => {
       fixedArgs: ['simctl', 'launch'],
     })
     Expect(hostCommandTarget(['start-branch'])).toEqual({ command: './dev', fixedArgs: ['start-branch'] })
+    Expect(hostCommandTarget(['take-branch'])).toEqual({ command: './dev', fixedArgs: ['take-branch'] })
     Expect(hostCommandTarget(['setup-ios'])).toEqual({ command: './dev', fixedArgs: ['setup-ios'] })
     Expect(hostCommandTarget(['setup-visionos'])).toEqual({ command: './dev', fixedArgs: ['setup-visionos'] })
     Expect(hostCommandTarget(['setup-watchos'])).toEqual({ command: './dev', fixedArgs: ['setup-watchos'] })
     Expect(() => agentHostCommands({ agentHostCommands: ['land', 'land'] })).toThrow()
     Expect(() => agentHostCommands({ agentHostCommands: ['land', 42] })).toThrow()
     Expect(() => agentHostCommands({ agentHostCommands: ['xcrun simctl list devices'] })).toThrow()
-    Expect(() => agentHostCommands({ agentHostCommands: ['./tao dev'] })).toThrow()
+    Expect(() => agentHostCommands({ agentHostCommands: ['./tao run'] })).toThrow()
     Expect(() => agentHostCommands({ agentHostCommands: ['xcrun  simctl'] })).toThrow()
     Expect(() => agentHostCommands({ agentHostCommands: ['xcrun *'] })).toThrow()
   })

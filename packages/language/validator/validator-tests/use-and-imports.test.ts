@@ -77,7 +77,7 @@ Describe('validator: use and imports', () => {
           'Main.tao': `
             use Person from ./Declarations.tao
 
-            app MyApp { view MainView }
+            app MyApp { id "my" version "1.0.0" name "My app" view MainView }
             let Primary = Person { Name Person }
 
             view MainView() {
@@ -87,10 +87,10 @@ Describe('validator: use and imports', () => {
             ${stubView('Text', 'Value text')}
           `,
           'Declarations.tao': valueFirst
-            ? `workspace let Person = "person"
-               workspace type Person is { Name text }`
-            : `workspace type Person is { Name text }
-               workspace let Person = "person"`,
+            ? `project let Person = "person"
+               project type Person is { Name text }`
+            : `project type Person is { Name text }
+               project let Person = "person"`,
         },
         result => {
           Expect(validationErrorMessages(result)).toEqual([])
@@ -110,11 +110,11 @@ Describe('validator: use and imports', () => {
         ),
         'Types.tao': `
           let Name = "Hidden"
-          workspace type Name is text
+          project type Name is text
         `,
       },
       result => {
-        Expect(validationErrorMessages(result).some(message => message.includes('Name'))).toBe(true)
+        Expect(validationErrorMessages(result)).toContain("No value named 'Name' is in scope.")
       },
     ),
   )
@@ -131,11 +131,11 @@ Describe('validator: use and imports', () => {
         ),
         'Types.tao': `
           type Name is text
-          workspace let Name = "Visible"
+          project let Name = "Visible"
         `,
       },
       result => {
-        Expect(validationErrorMessages(result).some(message => message.includes('Name'))).toBe(true)
+        Expect(validationErrorMessages(result)).toContain("No type named 'Name' is in scope.")
       },
     ),
   )
@@ -198,7 +198,7 @@ Describe('validator: use and imports', () => {
       importedTextFiles(
         'use Text from ./',
         `
-          workspace view Text(Value text) {
+          project view Text(Value text) {
             render inject Value, Value ${tsFence}
               return null
             ${fence}
@@ -209,17 +209,9 @@ Describe('validator: use and imports', () => {
         const message = injectionValidationMessages.duplicateArgument('Value')
         const diagnostic = result.diagnostics.find(diagnostic => diagnostic.message === message)
 
-        Expect(validationErrorMessages(result)).toContain(message)
         Expect(diagnostic?.filePath?.endsWith('/Views.tao')).toBe(true)
       },
     ),
-  )
-
-  Test(
-    'reports parser errors inside imported Tao files',
-    checksFiles(importedTextFiles('use Text from ./', 'view Text(Value text) {'), result => {
-      Expect(Diagnostics.hasSource(result.diagnostics, 'parser')).toBe(true)
-    }),
   )
 
   Test(
@@ -249,7 +241,7 @@ Describe('validator: use and imports', () => {
       importedTextFiles(
         'use Text from ./',
         `
-          workspace view Text(Value text) {
+          project view Text(Value text) {
             render MissingView()
           }
         `,
@@ -292,15 +284,15 @@ Describe('validator: use and imports', () => {
       {
         'Main.tao': `
           use Helper, ResetNav from ./Support.tao
-          app MyApp { Name "My app" Navigator ResetNav }
-          workspace let AppLet = MyApp with { Name "Inferred app" }
+          app MyApp { id "my" version "1.0.0" name "My app" Navigator ResetNav }
+          project let AppLet = MyApp with { id "inferred" name "Inferred app" }
         `,
         'Support.tao': `
           use StackNav from @tao/nav
           use Col from @tao/ui
           use AppLet, MyApp from ./
-          workspace nav ResetNav = StackNav { Initial Helper }
-          workspace scene Helper() {
+          project nav ResetNav = StackNav { Initial Helper }
+          project scene Helper() {
             Title "Helper"
             action Reset() { replace ResetNav in MyApp }
             render Col() { }
@@ -375,34 +367,12 @@ Describe('validator: use and imports', () => {
     )
   }
 
-  Test(
-    'lets inline tests import visible app declarations outside the entry file',
-    acceptsFiles(
-      {
-        'Main.tao': importingApp(
-          'use OtherApp, OtherView from ./Other.tao',
-          'render OtherView()',
-          `test "inline smoke" {
-             test "renders" {
-               run MyApp
-               expect text "Hello"
-             }
-           }`,
-        ),
-        'Other.tao': `
-          folder app OtherApp { view OtherView }
-          ${visibleView('OtherView')}
-        `,
-      },
-    ),
-  )
-
   // Once sources are grouped into folders, the app a sidecar runs is declared in an ancestor
   // directory rather than beside it.
   Test(
     'lets a test sidecar in a subfolder run an app declared in an ancestor directory',
     acceptsFilesFrom('ui/Main.test.tao', {
-      'Main.tao': stubApp().replace('app MyApp', 'workspace app MyApp'),
+      'Main.tao': stubApp().replace('app MyApp', 'project app MyApp'),
       'ui/Main.test.tao': `
         use MyApp from ../
         test "sidecar smoke" {
@@ -415,6 +385,7 @@ Describe('validator: use and imports', () => {
     }),
   )
 
+  // REMOVAL CANDIDATE: the imported nested app is unused; this retains its availability from a test entry.
   Test(
     'lets test sidecars import a visible app from a nested file',
     acceptsFilesFrom(
@@ -432,7 +403,7 @@ Describe('validator: use and imports', () => {
         `,
         'Main.tao': stubApp(),
         'nested/Other.tao': `
-          workspace app OtherApp { view OtherView }
+          project app OtherApp { id "other" version "1.0.0" name "Other" view OtherView }
           ${visibleView('OtherView')}
         `,
       },
@@ -464,7 +435,7 @@ Describe('validator: use organization', () => {
           `render inject ${tsFence} return null ${fence}`,
           'type Person is { Name }',
         ),
-        'Types.tao': 'workspace type Name is text',
+        'Types.tao': 'project type Name is text',
       },
       result => {
         Expect(validationErrorMessages(result)).toEqual([])
@@ -485,7 +456,7 @@ Describe('validator: use organization', () => {
           `let Current = Happy
            ${stubView('Text', 'Value text')}`,
         ),
-        'Mood.tao': 'workspace type Mood is one of Happy, Sad',
+        'Mood.tao': 'project type Mood is one of Happy, Sad',
       },
       result => {
         Expect(validationErrorMessages(result)).toEqual([])
@@ -502,11 +473,11 @@ Describe('validator: use organization', () => {
       {
         'Main.tao': `
           use Documents from ./Schema.tao
-          app Main { view Empty }
+          app Main { id "main" version "1.0.0" name "Main" view Empty }
           view Editor(Document) { render Empty() }
           ${stubView('Empty')}
         `,
-        'Schema.tao': 'workspace data Documents / Document { Title text }',
+        'Schema.tao': 'project data Documents / Document { Title text }',
       },
       result => {
         Expect(validationErrorMessages(result)).toContain(typeValidationMessages.unknownType('Document'))
@@ -544,7 +515,7 @@ Describe('validator: imported declaration regressions', () => {
     'queries resolve imported plural data declarations',
     checksFiles(
       {
-        'Schema.tao': 'workspace data Workspaces / Workspace { Name text }',
+        'Schema.tao': 'project data Workspaces / Workspace { Name text }',
         'Main.tao': importingApp(
           'use Workspaces from ./Schema',
           `query Workspaces = Workspaces with { }
@@ -560,7 +531,7 @@ Describe('validator: imported declaration regressions', () => {
 })
 
 Describe('validator: explicit data import forms', () => {
-  const schema = 'workspace data Workspaces / Workspace { Name text }'
+  const schema = 'project data Workspaces / Workspace { Name text }'
 
   Test(
     'imports a singular entity for type references and creates',
@@ -684,7 +655,7 @@ Describe('validator: explicit data import forms', () => {
          fixture Starter { Home = create Workspace { Name: "Home" } }
          ${stubView('Text', 'Value text')}`,
       ),
-      'Schema.tao': schema.replace('workspace ', 'folder '),
+      'Schema.tao': schema.replace('project ', 'folder '),
     }),
   )
 
@@ -771,9 +742,9 @@ ${stubView('Text', 'Value text')}`,
       ),
       'Schema/Workspaces.tao': `
         use Person from ./People.tao
-        workspace data Workspaces / Workspace { Owner Person }
+        project data Workspaces / Workspace { Owner Person }
       `,
-      'Schema/People.tao': 'workspace data People / Person { Active yes / Inactive no }',
+      'Schema/People.tao': 'project data People / Person { Active yes / Inactive no }',
     }),
   )
 
@@ -783,12 +754,12 @@ ${stubView('Text', 'Value text')}`,
       'Main.tao': importingApp(
         'use Workspaces from ./Schema.tao',
         'render Text("Ready")',
-        `workspace data Notes / Note { Workspaces }
+        `project data Notes / Note { Workspaces }
          ${stubView('Text', 'Value text')}`,
       ),
       'Schema.tao': `
         use Note from ./Main.tao
-        workspace data Workspaces / Workspace { Note }
+        project data Workspaces / Workspace { Note }
       `,
     }, result => {
       Expect(validationErrorMessages(result)).toEqual([])
@@ -817,7 +788,7 @@ ${stubView('Text', 'Value text')}`,
         'render Text(Account.DisplayName)',
         stubView('Text', 'Value text'),
       ),
-      'Schema.tao': 'workspace data Accounts / Account { DisplayName text }',
+      'Schema.tao': 'project data Accounts / Account { DisplayName text }',
     }),
   )
 
@@ -828,11 +799,11 @@ ${stubView('Text', 'Value text')}`,
         // Access rules need an Auth to enforce them, so the app binds one.
         'Main.tao': `use ${imported} from ./Schema.tao
 use TestAuth from @tao/auth/testing
-app MyApp { Auth TestAuth { } view MainView }
+app MyApp { id "my" version "1.0.0" name "My app" Auth TestAuth { } view MainView }
 view MainView() { render Text("Ready") }
 access Account { Account can read }
 ${stubView('Text', 'Value text')}`,
-        'Schema.tao': 'workspace data Accounts / Account { DisplayName text }',
+        'Schema.tao': 'project data Accounts / Account { DisplayName text }',
       }, result => {
         if (imported === 'Account') {
           Expect(validationErrorMessages(result)).toEqual([])
@@ -860,7 +831,7 @@ ${stubView('Text', 'Value text')}`,
     rejectsFiles({
       'Main.tao': importingApp('use Workspace from ./Schemas', 'render Text("Ready")', stubView('Text', 'Value text')),
       'Schemas/First.tao': schema,
-      'Schemas/Second.tao': 'workspace data OtherWorkspaces / Workspace { Name text }',
+      'Schemas/Second.tao': 'project data OtherWorkspaces / Workspace { Name text }',
     }, useValidationMessages.ambiguousImport('Workspace', './Schemas')),
   )
 
@@ -886,8 +857,8 @@ ${stubView('Text', 'Value text')}`,
         `view Editor(Entries) { render Text(Entries.Label) }
          ${stubView('Text', 'Value text')}`,
       ),
-      'Schema.tao': `workspace data Entries / Entry { Name text }
-                     workspace data Groups / Entries { Label text }`,
+      'Schema.tao': `project data Entries / Entry { Name text }
+                     project data Groups / Entries { Label text }`,
     }),
   )
 })

@@ -4,7 +4,7 @@ import { Expect, Test, withTaoFiles } from '@shared/test'
 Test('compiler: a foreign failure stub belongs to its check, outside ordered UI steps', async () => {
   await withTaoFiles('tao-test-action-stubs-', {
     'Main.tao': `
-      app Demo { view Main }
+      app Demo { id "com.tao.test.demo" version "1.0.0" name "Demo"  view Main }
       view Main() { render inject \`\`\`ts return null \`\`\` }
       type Failure is one of Offline
       folder action Export() fails Offline "Offline." from ./Export.ts

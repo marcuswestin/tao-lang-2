@@ -14,25 +14,35 @@
   "dependencies": {
     "@bomb.sh/tab": "^0.0.22",
     "@commander-js/extra-typings": "^15.0.0",
+    "appwrite-cli": "28.1.0",
     "commander": "^15.0.0",
+    "firebase-tools": "^15.32.0",
     "ink": "^7.1.1",
+    "marked": "^15.0.12",
     "react": "^19.2.8",
     "tao-ast-utils": "workspace:*",
     "tao-cli-kit": "workspace:*",
     "tao-formatter": "workspace:*",
     "tao-generation": "workspace:*",
+    "tao-convex": "workspace:*",
     "tao-instantdb": "workspace:*",
+    "tao-jazz": "workspace:*",
     "tao-native-bindings": "workspace:*",
     "tao-parser": "workspace:*",
+    "tao-pylon": "workspace:*",
     "tao-expo-host": "workspace:*",
     "tao-shared": "workspace:*",
     "tao-skills": "workspace:*",
     "tao-source-actions": "workspace:*",
     "tao-studio-tooling": "workspace:*",
     "tao-update-server": "workspace:*",
-    "tao-compiler": "workspace:*"
+    "tao-compiler": "workspace:*",
+    "qrcode": "1.5.4",
+    "tao-firebase": "workspace:*",
+    "tao-project-tooling": "workspace:*"
   },
   "devDependencies": {
-    "@types/react": "^19.2.18"
+    "@types/react": "^19.2.18",
+    "@types/qrcode": "^1.5.6"
   }
 }

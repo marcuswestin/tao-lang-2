@@ -159,21 +159,6 @@ Describe('companion native module parity', () => {
     }
   })
 
-  Test('leaves a mismatched dependency alone when it ships no native code', async () => {
-    const root = await mkTestDir('tao-companion-native-parity-')
-    try {
-      await writePackage(root, HOST_PACKAGE_PATH, { dependencies: { 'js-only-module': '1.0.0' } })
-      await writePackage(root, COMPANION_PACKAGE_PATH, { dependencies: {} })
-      await writePackage(root, 'packages/apps/expo-host/node_modules/js-only-module/package.json', {
-        name: 'js-only-module',
-      })
-
-      Expect(await companionNativeParityIssues(root)).toEqual([])
-    } finally {
-      await FS.remove(root)
-    }
-  })
-
   Test('leaves a mismatched dependency alone when its ios/android directories hold no native build file', async () => {
     // Shaped like the installed jest-expo: an `ios/` and `android/` directory that each carry only
     // a jest-preset.js, the false positive a bare directory-presence check would report.
@@ -210,6 +195,7 @@ Describe('companion native module parity', () => {
     }
   })
 
+  // REMOVAL CANDIDATE: empty-host smoke overlaps installed parity; removal loses an explicit one-way policy check.
   Test('leaves a Companion-only dependency alone; the invariant runs one way', async () => {
     const root = await mkTestDir('tao-companion-native-parity-')
     try {

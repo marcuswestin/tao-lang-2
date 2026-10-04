@@ -34,8 +34,7 @@ Describe('Expo runtime: SelectionNav display modes', () => {
             @settings { Label "Settings" Content Settings }
           }
 
-          app TabsApp {
-            Name "Tabs"
+          app TabsApp { id "tabsapp" version "1.0.0" name "Tabs"
             Navigator MainSelection
           }
 
@@ -80,8 +79,7 @@ Describe('Expo runtime: SelectionNav display modes', () => {
             @settings { Label "Settings" Content Settings }
           }
 
-          app ToggleApp {
-            Name "Toggle"
+          app ToggleApp { id "toggleapp" version "1.0.0" name "Toggle"
             Navigator MainSelection
           }
 

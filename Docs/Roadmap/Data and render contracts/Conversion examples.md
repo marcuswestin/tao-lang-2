@@ -70,7 +70,7 @@ All source-visible implementations are not automatically a closed world. Foreign
 separately compiled consumers, provider-supplied values, dynamic registration and open extension
 points need trusted contracts or conservative unknown. Exact semantic enumeration of every failure
 that will actually happen is generally not decidable. Finite, sound upper bounds over proven closed
-targets and hidden effect-polymorphic summaries are useful without promising the complete A22 proof.
+targets and hidden effect-polymorphic summaries are useful without promising the complete A27 proof.
 The current EffectOutcomesValidator only warns on root declared effects; it does not implement this
 interprocedural capability analysis or the proposed mandatory coverage guarantee.
 

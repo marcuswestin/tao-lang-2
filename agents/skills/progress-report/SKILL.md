@@ -1,9 +1,9 @@
 ---
 name: progress-report
 description: >-
-  Plan and report progress on multi-step work. Use when the Developer asks for a progress report, status
-  update, percentage done or remaining, ETA, or how much longer — and when a lengthy task is ready
-  for execution, to record its step weights and report progress during the work.
+  Plan and report progress on multi-step work. Use when asked for status, a progress report,
+  percentage done or remaining, ETA, or how much longer; also when lengthy work becomes ready for
+  execution, to record weighted steps and report progress during the work.
 ---
 
 # Progress Report

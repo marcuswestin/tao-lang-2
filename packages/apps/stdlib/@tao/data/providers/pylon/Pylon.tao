@@ -1,0 +1,10 @@
+use PylonAuth from @tao/auth/pylon
+
+public
+type Pylon is datasource with {
+   BaseURL text
+   accepts { Session from PylonAuth }
+   supports { Relations, AccessRules, FieldUpdates }
+
+   provider PylonProvider from ./Pylon.ts
+}

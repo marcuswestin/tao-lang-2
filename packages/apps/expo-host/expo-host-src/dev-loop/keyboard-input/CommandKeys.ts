@@ -1,4 +1,4 @@
-import { Errors } from '@shared'
+import { Errors, ReleaseCapabilities } from '@shared'
 import CommandRunner from '../CommandRunner'
 import { DEV_LOOP_CONTROLS, DevLoopOutput } from '../DevLoopOutput'
 import type { ExpoRunnerSession } from '../expo-runner/ExpoRunner'
@@ -34,6 +34,12 @@ export async function handleCommandKey(key: string, context: CommandKeyContext):
     return
   }
 
+  const capability = DEV_LOOP_CONTROLS.find(control => control.key === key)?.capability
+  if (capability !== undefined && !ReleaseCapabilities.allows(capability)) {
+    DevLoopOutput.logDevLoop('dev', ReleaseCapabilities.diagnostic(capability), 'warn')
+    return
+  }
+
   if (context.repositoryControlsAvailable === false && REPOSITORY_COMMAND_KEYS.includes(key)) {
     DevLoopOutput.logDevLoop('dev', `Key ${key} requires a Tao source checkout.`, 'warn')
     return
@@ -49,7 +55,8 @@ export async function handleCommandKey(key: string, context: CommandKeyContext):
 
 const COMMAND_HANDLERS = {
   q: context => context.finish(0),
-  r: context => CommandRunner.runNonInteractiveCommand('reload app', context.expo.reloadExpoApps),
+  r: context =>
+    CommandRunner.runNonInteractiveCommand('reload app', () => context.expo.reloadExpoApps(context.shouldStop)),
   d: context => CommandRunner.runNonInteractiveCommand('open Tao desktop', context.openDesktop ?? (async () => false)),
   p: context =>
     CommandRunner.runNonInteractiveCommand(

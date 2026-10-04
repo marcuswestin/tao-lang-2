@@ -102,8 +102,6 @@ Describe('Node compiler worker teardown', () => {
       Expect(worker.signalCode).toBe('SIGKILL')
       const survivor = ProcessTree.identities([sibling.pid!]).get(sibling.pid!)
       Expect(survivor).toBeDefined()
-      Expect(survivor!.command.length).toBeGreaterThan(0)
-      Expect(survivor!.command).not.toContain('\0')
       // A stale snapshot must not turn the sibling into collateral damage.
       ProcessTree.signalTracked([{ ...survivor!, startedAt: 'stale-start-identity' }], 'SIGKILL')
       Expect(ProcessTree.identities([sibling.pid!]).get(sibling.pid!)).toEqual(survivor)

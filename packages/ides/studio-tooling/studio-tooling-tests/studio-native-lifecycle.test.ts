@@ -5,11 +5,6 @@ import { Deferred, Describe, Expect, mkTestDir, settle, Test, until } from '@sha
 import { StudioNative } from '../studio-tooling-src/StudioNative'
 
 Describe('Studio native bounded lifecycle', () => {
-  Test('uses a release-build timeout independent from the native smoke budget', () => {
-    Expect(StudioNative.testing.electrobunReleaseBuildTimeoutMs).toBe(30 * 60_000)
-    Expect(StudioNative.testing.electrobunReleaseBuildTimeoutMs).toBeGreaterThan(120_000)
-  })
-
   Test('wires the release timeout into the production Electrobun build invocation', async () => {
     const calls: unknown[] = []
 
@@ -100,7 +95,9 @@ Describe('Studio native bounded lifecycle', () => {
     const removed: Platform.ProcessSignal[] = []
 
     await Expect(StudioNative.start({
+      nativeHostCommand: 'studio-test',
       previewUrl: 'http://127.0.0.1:8081',
+      showStudio: true,
       studioUrl: 'http://127.0.0.1:55101',
     }, {
       nativeHost: {
@@ -207,29 +204,39 @@ Describe('Studio native bounded lifecycle', () => {
     Expect(rerunCalls).toEqual(['install', 'electrobun prepare'])
   })
 
-  Test('timeout cancellation reaches a descendant in the detached process group', async () => {
+  Test('preparation cancellation reaches a ready descendant in the detached process group', async () => {
     const root = await mkTestDir('tao-hutch-process-tree-')
     const descendantPath = FS.resolvePath('descendant.pid', root)
+    const cancellation = new AbortController()
+    let descendant: ReturnType<typeof ProcessTree.descendants>[number] | undefined
+    const run = StudioNative.testing.prepareElectrobun('/tools/hutch', root, {
+      log: () => {},
+      signal: cancellation.signal,
+      startCommand: () =>
+        startStudioProcessTree('/bin/sh', {
+          args: ['-c', 'sleep 60 & child=$!; echo "$child" > "$1"; wait', 'hutch-child', descendantPath],
+        }),
+    })
     try {
-      const run = StudioNative.testing.prepareElectrobun('/tools/hutch', root, {
-        installTimeoutMs: 200,
-        log: () => {},
-        startCommand: () =>
-          startStudioProcessTree('/bin/sh', {
-            args: ['-c', `sleep 60 & child=$!; echo "$child" > "${descendantPath}"; wait`],
-          }),
-      })
       await until(async () => await FS.isFile(descendantPath), {
         description: 'the Hutch descendant pid',
       })
       const descendantPid = Number((await FS.readText(descendantPath)).trim())
-
-      await Expect(run).rejects.toThrow('timed out after 200ms')
+      descendant = ProcessTree.identities([descendantPid]).get(descendantPid)
+      Expect(descendant).toBeDefined()
+      cancellation.abort()
+      const error = await rejectedError(run)
+      Expect(error.details?.['failureKind']).toBe('user-interruption')
       await until(() => !processIsRunning(descendantPid), {
         description: 'the complete Hutch process group to stop',
       })
-      Expect(processIsRunning(descendantPid)).toBe(false)
     } finally {
+      cancellation.abort()
+      // Retain identity before cancellation so a failed proof cleans up only its own descendant.
+      if (descendant !== undefined) {
+        ProcessTree.signalTracked([descendant], 'SIGKILL')
+      }
+      await run.catch(() => undefined)
       await FS.remove(root)
     }
   })

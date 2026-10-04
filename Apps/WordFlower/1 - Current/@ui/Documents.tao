@@ -16,7 +16,7 @@ phrase ParagraphCount(Count number) = one "{ Count } paragraph" / other "{ Count
 
 // The document area: an availability-guarded entry, the editor itself, and the close conversation.
 // The presented entry guards entity availability; the editor below assumes an available document.
-workspace
+project
 scene DocumentScreen(Document) {
    command Export() {
       Title "Export document"
@@ -44,7 +44,7 @@ type DocumentInput is Document { Title, Body }
 
 // The TypeScript sidecar hands a Markdown copy to the platform share sheet. The app records the
 // failure cases here so an export site can distinguish a missing connection from other rejections.
-workspace
+project
 action ExportDocument(Document) fails Offline "Exporting needs a connection." fails TooLarge "This document is too long to export." fails Cancelled "" from ./Export.ts
 
 view ExportPanel(Document) {
@@ -194,7 +194,7 @@ view DocumentEditor(Document) {
                TextMultiline(Paragraph.Text) [body]
 }  }  }  }  }
 
-workspace
+project
 view SavedToast(Revert action()) {
    render Row() [gapMedium] {
       Text("✓") [width 20, height 20]

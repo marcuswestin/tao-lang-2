@@ -46,7 +46,7 @@ ItemTypeExpression:
 
 // A postfix `?` carries optionality. Item fields take no trait list.
 TypeProperty:
-    ((name=ID type=TypeReference? optional?='?'?) | name='implement')
+    ((name=MetadataName type=TypeReference? optional?='?'?) | name='implement')
     ('is' value=Expression)?;
 
 // The closed trailing trait list, carried by `data` declaration fields only. A trait spelled as a

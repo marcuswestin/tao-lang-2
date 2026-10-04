@@ -1,13 +1,18 @@
 ---
 name: tao-syntax
-description: Write implemented Tao declarations, render trees, slots, expressions, conditions, and canonical source.
+description: >-
+  Write implemented Tao syntax. Use before authoring or correcting declarations, render trees,
+  slots, expressions, conditions, or canonical source; future language design needs a separate decision.
 ---
 
 # Tao Syntax
 
 ## Declarations
 
-- `project { ... }` supplies checked-in id, name, version, `app Name`, remote, and license metadata.
+- `.tao/` marks the project root. Runnable apps own lowercase `id`, `version`, and `name`, plus
+  dependencies; variants inherit them and may override identity fields. Effective ID/version pairs
+  must be unique. Root-only `package { ... }` blocks define publications with optional name, version,
+  license, dependencies, and `includes` of named modules.
 - `app Name { ... }` configures a launchable app.
 - `data Plural / Singular { ... }` declares stored entity shape.
 - `nav Name = NavType { ... }` configures a navigation value.

@@ -6,7 +6,7 @@ export type IosSimulatorPresentation = {
 }
 
 /**
- * Bring an iOS simulator forward on both Xcode generations.
+ * Present an iOS simulator without activating its app on both Xcode generations.
  *
  * Xcode 27 replaces Simulator.app with DeviceHub.app. Device Hub uses a URL to select the simulated
  * device; older Xcodes still accept Simulator's `-CurrentDeviceUDID` launch argument.
@@ -15,7 +15,7 @@ export async function presentIosSimulator(
   udid?: string,
   run: typeof CLI.run = CLI.run,
 ): Promise<IosSimulatorPresentation> {
-  const simulatorArgs = ['-a', 'Simulator']
+  const simulatorArgs = ['-g', '-a', 'Simulator']
   if (udid !== undefined) {
     simulatorArgs.push('--args', '-CurrentDeviceUDID', udid)
   }
@@ -26,7 +26,7 @@ export async function presentIosSimulator(
 
   if (udid !== undefined) {
     const selection = await run('open', {
-      args: [`devices://device/open?id=${encodeURIComponent(udid)}`],
+      args: ['-g', `devices://device/open?id=${encodeURIComponent(udid)}`],
       stdio: 'pipe',
     })
     if (selection.exitCode === 0 && selection.error === undefined) {
@@ -38,6 +38,6 @@ export async function presentIosSimulator(
   // handler. Opening the application still gives the person a usable simulator host.
   return {
     host: 'Device Hub',
-    result: await run('open', { args: ['-a', 'DeviceHub'], stdio: 'pipe' }),
+    result: await run('open', { args: ['-g', '-a', 'DeviceHub'], stdio: 'pipe' }),
   }
 }

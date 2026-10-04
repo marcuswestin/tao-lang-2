@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "id": "d32ddd6c-cb9f-4ef3-90d2-101d3d5e5243",
+  "originalProject": "/Users/ro/code/tao-lang-2.worktrees/staged-release-qa-work-1831d4/.artifacts/scratch/qa-reading-list-2",
+  "app": "ReadingList",
+  "stagedProject": "/Users/ro/code/tao-lang-2.worktrees/staged-release-qa-work-1831d4/.artifacts/scratch/qa-capture/d32ddd6c-cb9f-4ef3-90d2-101d3d5e5243/project",
+  "output": "/Users/ro/code/tao-lang-2.worktrees/staged-release-qa-work-1831d4/.artifacts/qa/captures/reading-list-442e6416",
+  "createdAt": "2026-09-29T16:48:02.622Z",
+  "owner": "qa-capture",
+  "cleanup": "Retained for diagnosis. Remove this owned scratch directory only after its capture processes have stopped.",
+  "status": "complete",
+  "files": [
+    {
+      "path": "ReadingList.tao",
+      "sha256": "ff1252023d9cdfb96a07e88551d129f970d69b620feee39f41ff09f582dc568c"
+    }
+  ],
+  "excluded": [],
+  "cells": [
+    {
+      "key": "[\"ReadingList.tao\",\"QA views\",\"phone\",\"{\\\"arguments\\\":{},\\\"fixtureId\\\":\\\"/Users/ro/code/tao-lang-2.worktrees/staged-release-qa-work-1831d4/.artifacts/scratch/qa-capture/d32ddd6c-cb9f-4ef3-90d2-101d3d5e5243/project/ReadingList.tao#fixture:Sample\\\",\\\"prepare\\\":[],\\\"stateLayers\\\":[],\\\"steps\\\":[]}\",\"{\\\"network\\\":{\\\"latencyMs\\\":0,\\\"outcome\\\":\\\"normal\\\"},\\\"scheme\\\":{\\\"capability\\\":\\\"reactive-browser\\\",\\\"requested\\\":\\\"light\\\",\\\"resolved\\\":\\\"light\\\",\\\"source\\\":\\\"scenario\\\"},\\\"viewport\\\":{\\\"height\\\":844,\\\"presetId\\\":\\\"phone\\\",\\\"width\\\":390}}\"]",
+      "group": "QA views",
+      "label": "phone",
+      "status": "captured",
+      "screenshot": "screenshots/qa-views-phone-dc46fd157182.png",
+      "sha256": "e4f8a7745e6116be0ad7fa5275efb9d92c11a83d439183de6d39eebd2ae3ad8e"
+    },
+    {
+      "key": "[\"ReadingList.tao\",\"QA views\",\"desktop\",\"{\\\"arguments\\\":{},\\\"fixtureId\\\":\\\"/Users/ro/code/tao-lang-2.worktrees/staged-release-qa-work-1831d4/.artifacts/scratch/qa-capture/d32ddd6c-cb9f-4ef3-90d2-101d3d5e5243/project/ReadingList.tao#fixture:Sample\\\",\\\"prepare\\\":[],\\\"stateLayers\\\":[],\\\"steps\\\":[]}\",\"{\\\"network\\\":{\\\"latencyMs\\\":0,\\\"outcome\\\":\\\"normal\\\"},\\\"scheme\\\":{\\\"capability\\\":\\\"reactive-browser\\\",\\\"requested\\\":\\\"light\\\",\\\"resolved\\\":\\\"light\\\",\\\"source\\\":\\\"scenario\\\"},\\\"viewport\\\":{\\\"height\\\":900,\\\"presetId\\\":\\\"tablet\\\",\\\"width\\\":1280}}\"]",
+      "group": "QA views",
+      "label": "desktop",
+      "status": "captured",
+      "screenshot": "screenshots/qa-views-desktop-4ee74f4d9ed0.png",
+      "sha256": "7221a55eaa226bad01b67fbf30841d38cfd2b081c19b92dd509089e84930ad8f"
+    },
+    {
+      "key": "[\"ReadingList.tao\",\"QA views\",\"dark\",\"{\\\"arguments\\\":{},\\\"fixtureId\\\":\\\"/Users/ro/code/tao-lang-2.worktrees/staged-release-qa-work-1831d4/.artifacts/scratch/qa-capture/d32ddd6c-cb9f-4ef3-90d2-101d3d5e5243/project/ReadingList.tao#fixture:Sample\\\",\\\"prepare\\\":[],\\\"stateLayers\\\":[],\\\"steps\\\":[]}\",\"{\\\"network\\\":{\\\"latencyMs\\\":0,\\\"outcome\\\":\\\"normal\\\"},\\\"scheme\\\":{\\\"capability\\\":\\\"reactive-browser\\\",\\\"requested\\\":\\\"dark\\\",\\\"resolved\\\":\\\"dark\\\",\\\"source\\\":\\\"scenario\\\"},\\\"viewport\\\":{\\\"height\\\":844,\\\"presetId\\\":\\\"phone\\\",\\\"width\\\":390}}\"]",
+      "group": "QA views",
+      "label": "dark",
+      "status": "captured",
+      "screenshot": "screenshots/qa-views-dark-11f71e8a7910.png",
+      "sha256": "e4f8a7745e6116be0ad7fa5275efb9d92c11a83d439183de6d39eebd2ae3ad8e"
+    }
+  ]
+}

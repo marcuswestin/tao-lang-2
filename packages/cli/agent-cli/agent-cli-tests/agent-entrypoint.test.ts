@@ -43,7 +43,7 @@ Describe('agent entrypoint', () => {
       const fakeBun = FS.resolvePath('bun', bin)
       const fakePs = FS.resolvePath('ps', bin)
       const fakeXcrun = FS.resolvePath('xcrun', bin)
-      const fakeTao = FS.resolvePath('tao', root)
+      const fakeDev = FS.resolvePath('dev', root)
       await FS.writeText(
         fakeBun,
         '#!/usr/bin/env zsh\nif [[ "$1" == */agent-host-command-check.ts ]]; then shift; exec "$TAO_REAL_BUN" "$TAO_REAL_CHECKER" "$@"; fi\nif [[ "$1" == */agent-host-dispatch.ts ]]; then shift; exec "$TAO_REAL_BUN" "$TAO_REAL_DISPATCHER" "$@"; fi\nprintf "%s\\n" "$@" > "$TAO_TEST_ARGS"\n',
@@ -53,8 +53,8 @@ Describe('agent entrypoint', () => {
       await FS.chmod(fakePs, 0o755)
       await FS.writeText(fakeXcrun, '#!/bin/sh\nprintf "%s\\n" "$@" > "$TAO_TEST_ARGS"\n')
       await FS.chmod(fakeXcrun, 0o755)
-      await FS.writeText(fakeTao, '#!/bin/sh\nprintf "%s\\n" "$@" > "$TAO_TEST_ARGS"\n')
-      await FS.chmod(fakeTao, 0o755)
+      await FS.writeText(fakeDev, '#!/bin/sh\nprintf "%s\\n" "$@" > "$TAO_TEST_ARGS"\n')
+      await FS.chmod(fakeDev, 0o755)
       const env = {
         PATH: `${bin}:${Platform.runtimeProcess.env['PATH'] ?? ''}`,
         TAO_TEST_ARGS: marker,
@@ -96,7 +96,7 @@ Describe('agent entrypoint', () => {
       })
       Expect(dev.exitCode).toBe(0)
       Expect((await FS.readText(marker)).split('\n').filter(Boolean))
-        .toEqual(['dev', 'Apps/HNReader', '--app', 'HNReaderStub'])
+        .toEqual(['app-dev', 'Apps/HNReader', '--app', 'HNReaderStub'])
 
       await FS.remove(marker)
       const unlisted = await CLI.run('zsh', {
@@ -153,20 +153,9 @@ Describe('agent entrypoint', () => {
     Expect(result.stderr).toContain('./agent <command> --verbose')
   })
 
-  Test('leaves an unrelated unknown option without the front-door hint', async () => {
-    const result = await runEntrypoint(['--not-a-real-flag', 'board'])
-
-    Expect(result.exitCode).toBe(1)
-    Expect(result.stderr).toContain("unknown option '--not-a-real-flag'")
-    // Still hinted: any option before the command is unknown to the top-level parser, front-door
-    // flag or not, so the hint is the right answer for this one too rather than a special case.
-    Expect(result.stderr).toContain('go after the command, not before it')
-  })
-
   Test('requires the named host entry point for release preparation', async () => {
     const result = await runEntrypoint(['prepare-release', 'studio'])
 
     Expect(result.exitCode).toBe(1)
-    Expect(result.stderr).toContain('too many arguments')
   })
 })

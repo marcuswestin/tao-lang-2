@@ -4,7 +4,9 @@ use Button, Col, Text from @tao/ui
 // never names one. The synthesized navigator is a slot, which owns no chrome of its own — a journey
 // over this app asserts the content on screen, never a navigation title.
 app RootViewApp {
-   Name "Root View App"
+   id "navigation-root-view-app"
+   version "0.1.0"
+   name "Root View App"
    view RootHome
 }
 

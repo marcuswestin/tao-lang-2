@@ -182,6 +182,16 @@ Describe('model audit — codex column', () => {
     ])
   })
 
+  Test('reports concrete Sol defaults that lag the newest GPT-6 Sol release', async () => {
+    const report = await auditModelRouting(
+      options(await fixture({ slugs: [...CATALOG, 'gpt-6.1-sol'] })),
+    )
+
+    Expect(report.findings).toEqual([
+      "codex tiers standard, deep name 'gpt-6-sol', superseded by 'gpt-6.1-sol' in the installed catalog",
+    ])
+  })
+
   Test('never takes a hidden slug for a newer model', async () => {
     const report = await auditModelRouting(options(await fixture({ hidden: ['gpt-7-astra'], slugs: CATALOG })))
 
@@ -416,6 +426,76 @@ Describe('model audit — checkout measurements', () => {
     Expect(report.sinceIso).toEqual('2026-09-19T00:00:00.000Z')
     Expect(report.untilIso).toEqual('2026-09-21T00:00:00.000Z')
     Expect(report.info?.context.main).toEqual({ count: 1, max: 100, p50: 100, p90: 100 })
+  })
+})
+
+Describe('model audit — personal subagent default', () => {
+  Test('reports a different personal default in brief and full reports without exposing other settings', async () => {
+    const paths = await fixture()
+    const configPath = FS.resolvePath('config.toml', paths.codexHome)
+    const config = '[agents]\ndefault_subagent_model = "gpt-5.6-luna"\nprivate_setting = "fixture-private-value"\n'
+    await FS.writeText(configPath, config)
+
+    for (const brief of [false, true]) {
+      const report = await ModelAuditCommand.audit(options(paths, { brief }))
+      Expect(report.findings).toEqual([
+        "personal Codex subagent default names 'gpt-5.6-luna', differing from repository standard 'gpt-6-sol'",
+      ])
+      const output = await withCapturedOutput(() => ModelAuditCommand.write(report, { brief, json: !brief }))
+      Expect(output.stdout).toContain('gpt-5.6-luna')
+      Expect(output.stdout).not.toContain('fixture-private-value')
+      Expect(output.stdout).not.toContain('private_setting')
+    }
+    Expect(await FS.readText(configPath)).toEqual(config)
+  })
+
+  Test('stays quiet when a personal default matches or inherits the repository default', async () => {
+    const paths = await fixture()
+    Expect((await ModelAuditCommand.audit(options(paths))).findings).toEqual([])
+    for (
+      const config of [
+        '[agents]\ndefault_subagent_model = "gpt-6-sol"\n',
+        '[agents]\nmax_threads = 4\n',
+        'default_subagent_model = "gpt-5.6-luna"\n[other]\ndefault_subagent_model = "gpt-5.6-luna"\n',
+      ]
+    ) {
+      await FS.writeText(FS.resolvePath('config.toml', paths.codexHome), config)
+      const report = await ModelAuditCommand.audit(options(paths, { brief: true }))
+      Expect(report.findings).toEqual([])
+      Expect(report.notes).toEqual([])
+      const output = await withCapturedOutput(() => ModelAuditCommand.write(report, { brief: true }))
+      Expect(output.stdout).toEqual('')
+    }
+  })
+
+  Test('contains malformed personal configuration without printing its contents', async () => {
+    const paths = await fixture()
+    await FS.writeText(
+      FS.resolvePath('config.toml', paths.codexHome),
+      '[agents]\nprivate_setting = "fixture-private-value',
+    )
+    const report = await ModelAuditCommand.audit(options(paths))
+
+    Expect(report.findings).toEqual([])
+    Expect(report.notes).toEqual([
+      'personal Codex configuration could not be read; its subagent default was not compared',
+    ])
+    const output = await withCapturedOutput(() => ModelAuditCommand.write(report, { json: true }))
+    Expect(output.stdout).not.toContain('fixture-private-value')
+  })
+
+  Test('does not reflect invalid default values into findings or notes', async () => {
+    const paths = await fixture()
+    for (const value of ['42', '"fixture-private-value\\nother"']) {
+      await FS.writeText(
+        FS.resolvePath('config.toml', paths.codexHome),
+        `[agents]\ndefault_subagent_model = ${value}\n`,
+      )
+      const report = await ModelAuditCommand.audit(options(paths))
+
+      Expect(report.findings).toEqual([])
+      Expect(report.notes).toEqual(['personal Codex subagent default is not a model ID; it was not compared'])
+    }
   })
 })
 

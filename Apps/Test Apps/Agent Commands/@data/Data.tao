@@ -1,4 +1,4 @@
-workspace
+project
 data AgentCommandEntries / AgentCommandEntry {
    Message text,
    Quantity number,

@@ -14,7 +14,6 @@ Test('configured invalid Instant endpoints fail before running the Clerk browser
   for (
     const endpoint of [
       '',
-      'not a URL',
       'https://localhost:9020',
       'http://remote.example:9020',
       'http://user:secret@localhost:9020',

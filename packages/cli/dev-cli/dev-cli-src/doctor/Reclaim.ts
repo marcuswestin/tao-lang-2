@@ -1,3 +1,4 @@
+import { MachineResources } from '@host-control'
 import { CLI, Errors, FS, Repo } from '@shared'
 import { LandingLock } from '@verification/LandingLock'
 import { MachineLanes, type MachineResourceOwner } from '@verification/MachineLanes'
@@ -32,7 +33,6 @@ const MAIN_BRANCH = 'main'
  * the window in which it looks idle.
  */
 const PROTECTED_PATH_FRAGMENT = '/.artifacts/merge/'
-const RESOURCE_LEASE_SUFFIX = '.lease'
 
 export type ReclaimDependencies = {
   registryRoot?: string
@@ -288,20 +288,10 @@ async function readLiveRoots(registryRoot?: string): Promise<LiveRoots> {
   return { busy, registryAvailable: true }
 }
 
-/** readLiveResourceOwners reads the host-resource leases, keeping only those whose holder is alive. */
+/** readLiveResourceOwners includes retained and quarantined target fences after parent exit. */
 async function readLiveResourceOwners(root: string): Promise<readonly MachineResourceOwner[]> {
-  let entries: string[]
-  try {
-    entries = await FS.listDir(root)
-  } catch {
-    return []
-  }
   const owners: MachineResourceOwner[] = []
-  for (const entry of entries.filter(name => name.endsWith(RESOURCE_LEASE_SUFFIX))) {
-    const owner = await FS.readJson<MachineResourceOwner>(FS.resolvePath(entry, root)).catch(() => undefined)
-    if (owner?.repositoryRoot === undefined) {
-      continue
-    }
+  for (const owner of await MachineResources.listOwners({ registryRoot: root })) {
     if (await MachineLanes.ownerIsLive({ ...owner, repositoryRoot: await canonicalPath(owner.repositoryRoot) })) {
       owners.push(owner)
     }

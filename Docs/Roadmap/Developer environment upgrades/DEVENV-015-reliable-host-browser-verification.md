@@ -44,6 +44,12 @@
   managed abort. The same-coalition full-access success and this sandboxed ancestry narrow the
   likely boundary to the managed launch context, but do not prove the exact macOS denial;
   `log show` is unavailable in the sandbox.
+  On 2026-10-03, the serial test reduction pass invoked the listed host command
+  `./agent unsandboxed studio-smoke packages/ides/studio-tooling/studio-smoke/studio-agent-browser.test.ts`.
+  It was refused before dispatch: `FAIL  ./agent unsandboxed is still running inside a sandbox; the host command was not started.`
+  No browser or native process started, and this attempt provides no host acceptance. This is a
+  command-reach limitation, separate from the earlier GUI registration abort. The current task
+  cannot escalate its managed shell and does not change permission reach or bypass the wrapper.
 - **Workaround:** From an independent desktop terminal, run `./agent parser-gen` if generated
   parser artifacts are missing, then `./agent studio-smoke
   packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts <unique-run-id>`.

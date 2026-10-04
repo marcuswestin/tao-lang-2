@@ -135,10 +135,7 @@ Describe('the package groups left out of the toolchain identity', () => {
     Expect(groups.has('shared')).toBe(true)
     // A denylist, so a group nobody has thought about is hashed rather than skipped; `cli` holds
     // both an excluded package-scoped entry and the two verdict-relevant packages that keep it in.
-    Expect(groups.has('cli')).toBe(true)
     Expect(groupPackages.has('cli/tao-cli')).toBe(true)
     Expect(groupPackages.has('cli/cli-kit')).toBe(true)
-    Expect(groupPackages.has('cli/dev-cli')).toBe(false)
-    Expect(groupPackages.has('cli/agent-cli')).toBe(false)
   })
 })

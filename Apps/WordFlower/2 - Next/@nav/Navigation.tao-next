@@ -16,7 +16,7 @@ nav SettingsStack = StackNav {
 
 // Direct keys bind to SelectionNav's declared `@key` collection and share this configured nav's
 // target-key namespace. The `Icon` property contains a system-icon name; it is not an Icon view.
-workspace
+project
 nav WordFlowerNavigator = SelectionNav {
    Initial @home
    Display "automatic"
@@ -38,12 +38,12 @@ nav WordFlowerNavigator = SelectionNav {
 
 // The preview variants hand the shell a differently configured navigator, so a preview still gets
 // the focus bar.
-workspace
+project
 nav WordFlowerDrawerNavigator = WordFlowerNavigator with {
    Display "drawer"
 }
 
-workspace
+project
 nav WordFlowerTabsNavigator = WordFlowerNavigator with {
    Display "tabs"
 }

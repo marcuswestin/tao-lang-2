@@ -11,7 +11,6 @@ import { InjectionsCompiler } from './app/InjectionsCompiler'
 import { InteractionOutlineCompiler } from './app/InteractionOutlineCompiler'
 import { InvocationsCompiler } from './app/InvocationsCompiler'
 import { NavigationCompiler } from './app/NavigationCompiler'
-import { ProjectDeclarationCompiler } from './app/ProjectDeclarationCompiler'
 import { RenderStatementCompiler } from './app/RenderStatementCompiler'
 import { StateCompiler } from './app/StateCompiler'
 import { StatementsCompiler } from './app/StatementsCompiler'
@@ -34,7 +33,6 @@ export const Compile = {
   ...TaoPropsCompiler,
   ...RenderStatementCompiler,
   ...UseStatementCompiler,
-  ...ProjectDeclarationCompiler,
   ...InjectionsCompiler,
   ...InteractionOutlineCompiler,
   ...NavigationCompiler,

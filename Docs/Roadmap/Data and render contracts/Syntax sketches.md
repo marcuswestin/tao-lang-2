@@ -2762,15 +2762,15 @@ malformed primitive values. Generic foreign-action results are trusted, not auto
 against their declared Tao return type. Domain tags, units, and custom constraints still require
 appropriate boundary validation; no complete type-safe decoder is claimed.
 
-Locale-aware core text moves to pre-MVP A21/R16, and the complete static data/read/failure proof system
-to A22/R17 in the MVP roadmaps. Both investigations are deferred from the remainder of this syntax
+Locale-aware core text moves to pre-MVP A26/R17, and the complete static data/read/failure proof system
+to A27/R18 in the MVP roadmaps. Both investigations are deferred from the remainder of this syntax
 task; adding them does not authorize implementing their unsettled designs.
 
 ## S37 — operation domains and protected representations
 
 Requested 2026-10-02. Bare immediate-callee binding fallback is now accepted direction (S36), with
 visible types taking precedence and `.Right` retained as an escape hatch. `never` and conversion
-ban declarations are removed from the active fixture and deferred to pre-MVP A23/R18. Historical
+ban declarations are removed from the active fixture and deferred to pre-MVP A28/R19. Historical
 S33 examples retain the reasoning record; they do not prescribe the current fixture.
 
 ### Useful comparison side discussion
@@ -2813,7 +2813,7 @@ and representation exposure separate: storage sharing grants no semantic convers
   Explicit extraction ends encapsulation unless a separate information-flow system is introduced.
   Secret wrapping is not encryption. Access policy can use encapsulation and positive operations
   without restoring `never`; private implementation access still needs a contract.
-- Raw string versus locale-aware text remains A21/R16. This frame does not select a replacement
+- Raw string versus locale-aware text remains A26/R17. This frame does not select a replacement
   core text representation while that investigation is deferred.
 
 ### Evidence and next forcing examples
@@ -2872,7 +2872,7 @@ Useful additions or sharper forcing questions:
   equality need a numerical contract even if public machine-storage controls are deferred.
 - Preferred display unit is optional presentation metadata, not reliable historical provenance.
   Arithmetic, persistence, and adapters must decide whether to retain it. Core locale-text design
-  remains A21/R16; displaying a unit is not itself a decision to make text locale-aware storage.
+  remains A26/R17; displaying a unit is not itself a decision to make text locale-aware storage.
 - Ratios such as percentage have scaled representations without a physical dimension. Probability
   also has bounds. Shared dimension or representation must not imply interchangeable semantic types
   or preserve a constrained result type under every operation.
@@ -3334,7 +3334,7 @@ delegate their remainder. Local partial handlers remain legal. Explicit acknowle
 is a handling policy rather than an unhandled case; an empty branch can satisfy structural coverage
 but warrants a lint warning because coverage does not establish useful recovery. Prefer meaningful
 default reporting to accidental empty handlers. The full availability/suspension/receipt proof is
-still the deferred A22 investigation; this is a practical proposed effect-coverage subset, not its
+still the deferred A27 investigation; this is a practical proposed effect-coverage subset, not its
 implementation or a theorem of universal safety.
 
 Action failure ends at an invocation's matching handler or the event/command/task root. It does not
@@ -3690,7 +3690,7 @@ No language/runtime implementation or tests.
 ## S52 — remove public missing, defer state reorganization, and next round
 
 The Developer selects removal of public missing and requests a pre-MVP review of entity-handle/query
-states with the discussion context. A24/R19 and their Review brief own that investigation. Expected
+states with the discussion context. A29/R20 and their Review brief own that investigation. Expected
 absence uses none; a failed promised existence/required-data contract remains a typed failure.
 Retain factual metadata and privacy boundaries. This supersedes historical missing sketches without
 rewriting current implementation/specs or silently renaming every internal runtime status.
@@ -3749,7 +3749,7 @@ Whether actions admit this, when conditions are captured, fallback behavior and 
 failure remain decisions. Recommendation: action use is allowed, matching conditions are observed
 before effects start, bodies join sequentially in declaration order, and an unhandled failure stops
 remaining branches with ordinary typed propagation. A local handler can consume a failure. A stored
-observation does not authorize a later live read across suspension; A22's proof limits remain.
+observation does not authorize a later live read across suspension; A27's proof limits remain.
 
 Time for monotonic affine points and DateTime for wall-clock instants is coherent; Timer should name
 a measuring/countdown object, not a clock reading. Neither naming alternative is selected yet.
@@ -3805,7 +3805,7 @@ Matching uses one frozen observation. A preceding body cannot change later match
 add a public Val.snapshot field, copy a whole linked entity graph, or freeze live authority. Pattern
 metadata/payload values are captured for matching; body expressions explicitly reading live handles
 remain live and validated. An effect that suspends does not preserve authority to dereference a
-previously available entity. Coherent resource observation details remain in A24/A22.
+previously available entity. Coherent resource observation details remain in A29/A27.
 
 Recommendations for the next five, all pending: when otherwise is optional and runs only when no
 case matched; pick must prove total coverage, allowing omission of otherwise only when proven;
@@ -3923,7 +3923,7 @@ creates another; fixed sampling creates no live subscription. Timer.Duration rem
 fixed per-call sampling API and does not stop measurement.
 
 Q5 is deferred, not answered: the remaining time API, including DateTime arithmetic and Time.Live,
-is assigned to pre-MVP A25/R20 with the [modern-library review brief](<../../MVP Roadmap/Review - Dates and time APIs.md>).
+is assigned to pre-MVP A30/R21 with the [modern-library review brief](<../../MVP Roadmap/Review - Dates and time APIs.md>).
 Preserve selected contracts, review current official library designs, and return typed forcing
 examples and MVP recommendations before implementation. No time arithmetic policy is silently selected.
 
@@ -4053,7 +4053,7 @@ Never here denotes an empty propagated failure set, not a bottom type. Declared 
 bounds; inferred sets carry the known contract when the compiler can prove one. No declaration and
 no provable inference means unknown, not empty. Bodyless can signatures have no body to infer from.
 Local handling may remove propagated effects; a downstream default does not make a callee's
-fails-never annotation valid. General bottom types and conversion bans stay deferred A23/R18.
+fails-never annotation valid. General bottom types and conversion bans stay deferred A28/R19.
 Unknown-failure coverage/substitution and bare fails input syntax are explicit next questions.
 
 ### Outstanding queue — seven replacements, recommendations pending
@@ -4061,7 +4061,7 @@ Unknown-failure coverage/substitution and bare fails input syntax are explicit n
 - Q15 — Handling unknown failure sets: recommend allow invocation only with an owned generic error
   handler locally or in installed defaults; enumerated known cases alone cannot prove coverage of
   the unknown remainder. Alternative prohibit invocation until the callable publishes a closed set.
-  Cancellation and termination remain distinct; this is not arbitrary foreign-code proof (A22).
+  Cancellation and termination remain distinct; this is not arbitrary foreign-code proof (A27).
 - Q16 — Capability compatibility: recommend an implementation's propagated failure set must be a
   subset of the required contract. Never satisfies any bound; known sets satisfy compatible unknown
   requirements; unknown cannot satisfy a closed contract without an adapter establishing that bound.
@@ -4130,7 +4130,7 @@ bounds where the actual target/body is proven in the compiled build. Public cont
 globally narrower just because one app uses one implementation. Packages/code reloads and mutable
 captures require invalidation and sound lifetime target sets; unknown foreign/open targets remain
 unknown. Exact runtime outcome enumeration is not a decidable general guarantee. Q23 concerns the
-practical precision strategy; the complete proof investigation remains A22.
+practical precision strategy; the complete proof investigation remains A27.
 
 The four new questions replace the four selected items while retaining three unanswered ones.
 
@@ -4185,7 +4185,7 @@ can CheckedDisplay {
 Optional native result constraints use -> Type, superseding returns Type. Omission infers the result.
 Ordinary body/callee inference remains selected. Advanced precision through concrete capability
 instances, target sets and whole-program analysis moves to the post-MVP task
-[Capability failure refinement](<../Capability failure refinement.md>); A22/R17 remain a separate
+[Capability failure refinement](<../Capability failure refinement.md>); A27/R18 remain a separate
 pre-MVP investigation of complete proofs. Unknown/open contracts never silently become empty.
 
 One installed app-level generic error guard covers propagated known and unknown modeled failures.
@@ -4270,7 +4270,7 @@ pick; app error coverage, local recovery, joined action results, cleanup and det
 
 Hypothetical typed I/O/collection packages stand for adapter/schema validation, bounded query
 acquisition, loaded-subset projection, continuation, revision acknowledgment, and flattened grouped
-rows. Their names are review aids, not selections of the deferred A24 API. Group rows are reactive
+rows. Their names are review aids, not selections of the deferred A29 API. Group rows are reactive
 renderable values, not cached rendered nodes; row occurrences own position and identity. Writable
 input controls must retain the named target type and validate input, rather than treating upward
 value assignability as permission to write arbitrary parent values into a child-typed field.
@@ -4279,7 +4279,7 @@ The read-only coverage audit was checked against Code preferences and Decisions.
 fields do not establish a separate named opposite-type pair's polarity-preserving not semantics;
 that historical request needs explicit contract review if included in the implementation scope.
 Generic comparator calls retain capability failure bounds; the fixture makes no advanced concrete
-implementation refinement claim. Clock classification is context for the already-deferred A25
+implementation refinement claim. Clock classification is context for the already-deferred A30
 review. Exact scalar-template binding and unit declaration grammar still need a standard-library
 forcing sketch rather than invented app syntax. Generic same-T inference must also be reviewed
 against the rule that sibling comparisons require deliberate widening; a common ancestor must not
@@ -4362,7 +4362,7 @@ Next round, five remaining recommendations (not selected):
 5. Inverse writes: both member names target one field; reject filling both names in one update even
    if the values appear consistent. Alternative: permit them with a consistency check.
 
-These close current app integration seams rather than reopening detailed deferred A24 state,
+These close current app integration seams rather than reopening detailed deferred A29 state,
 localization, time API or complete-proof investigations. The round does not authorize implementation.
 
 ## S67 — Five integration choices selected

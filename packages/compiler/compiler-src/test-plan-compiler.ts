@@ -1,6 +1,7 @@
 import { ASTUtils, Units } from '@ast-utils'
 import { AST, type ParseResult } from '@parser'
 import { Assert, type DiagnosticRange, Diagnostics, Switch } from '@shared'
+import Validator from '@validator'
 import type { ValidationResult } from '@validator'
 import type { CompilerContext } from './compiler'
 import { foreignActionTestStubKey } from './foreign-action-test-stubs'
@@ -294,8 +295,15 @@ export type TaoTestPlan = {
 }
 
 /** compileTestPlan compiles parsed v0 Tao test declarations into structured test-plan IR. */
-export function compileTestPlan(input: TaoTestPlanInput, _context: CompilerContext): TaoTestPlan {
-  const errors = Diagnostics.errorMessages(input.diagnostics)
+export function compileTestPlan(input: TaoTestPlanInput, context: CompilerContext): TaoTestPlan {
+  const releaseDiagnostics = Validator.releaseDiagnostics(Validator.createContext(
+    context.packagesContext,
+    input.files.map(file => file.ast),
+    input.entry.path,
+    undefined,
+    context.releaseProfile,
+  ))
+  const errors = Diagnostics.errorMessages([...input.diagnostics, ...releaseDiagnostics])
   Assert(errors.length === 0, `Cannot compile Tao tests with validation errors: ${errors.join('; ')}`, { errors })
   return {
     version: 1,

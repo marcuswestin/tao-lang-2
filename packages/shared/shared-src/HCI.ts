@@ -253,15 +253,26 @@ export async function askChoice<ValueT extends string>(options: ChoicePromptOpti
   }
 
   return withReadline(options, async readline => {
-    while (true) {
-      const value = (await readline.question(formatChoiceQuestion(options))).trim()
-      const defaultChoice = options.defaultValue ? findChoice(options.choices, options.defaultValue) : undefined
-      const answer = value === '' ? defaultChoice : parseChoice(options.choices, value)
+    const choices = orderedChoices(options)
+    const cancelled = new AbortController()
+    const cancel = () => cancelled.abort()
+    readline.on('SIGINT', cancel)
+    readline.on('close', cancel)
+    try {
+      while (true) {
+        const value = (await readline.question(formatChoiceQuestion(options, choices), { signal: cancelled.signal }))
+          .trim()
+        const defaultChoice = options.defaultValue ? findChoice(choices, options.defaultValue) : undefined
+        const answer = value === '' ? defaultChoice : parseChoice(choices, value)
 
-      if (answer) {
-        return answer.value
+        if (answer) {
+          return answer.value
+        }
+        writeOutput(options, 'ctrl+c to quit\n')
       }
-      writeOutput(options, 'Choose one of the listed options.\n')
+    } finally {
+      readline.off('SIGINT', cancel)
+      readline.off('close', cancel)
     }
   })
 }
@@ -497,23 +508,33 @@ function formatConfirmQuestion(options: ConfirmPromptOptions): string {
   return `${bold(white(`${options.message}${confirmChoiceSuffix(options.defaultValue)}`))}: `
 }
 
-function formatChoiceQuestion<ValueT extends string>(options: ChoicePromptOptions<ValueT>): string {
-  const choices = options.choices
-    .map((choice, index) => `${index + 1}) ${choice.label ?? choice.value}`)
-    .join('\n')
+function formatChoiceQuestion<ValueT extends string>(
+  options: ChoicePromptOptions<ValueT>,
+  choices: readonly Choice<ValueT>[],
+): string {
+  const lines = choices.map((choice, index) => {
+    const label = index < 9 ? String(index + 1) : String.fromCharCode('a'.charCodeAt(0) + index - 9)
+    const suffix = choice.value === options.defaultValue ? ' (default)' : ''
+    return `${label}. ${choice.label ?? choice.value}${suffix}`
+  })
+  return `${bold(white(options.message))}:\n${lines.join('\n')}\n${bold(white('Choose'))}: `
+}
+
+function orderedChoices<ValueT extends string>(options: ChoicePromptOptions<ValueT>): Choice<ValueT>[] {
   const defaultChoice = options.defaultValue === undefined
     ? undefined
     : findChoice(options.choices, options.defaultValue)
-  const suffix = defaultChoice === undefined ? '' : ` [${defaultChoice.label ?? defaultChoice.value}]`
-
-  return `${bold(white(`${options.message}${suffix}`))}\n${choices}\n${bold(white('Choose'))}: `
+  return defaultChoice === undefined
+    ? [...options.choices]
+    : [defaultChoice, ...options.choices.filter(choice => choice !== defaultChoice)]
 }
 
 function parseChoice<ValueT extends string>(
   choices: readonly Choice<ValueT>[],
   value: string,
 ): Choice<ValueT> | undefined {
-  const indexedChoice = choices[Number(value) - 1]
+  const index = /^[1-9]$/u.test(value) ? Number(value) - 1 : /^[a-z]$/u.test(value) ? value.charCodeAt(0) - 97 + 9 : -1
+  const indexedChoice = choices[index]
   if (indexedChoice) {
     return indexedChoice
   }
@@ -533,6 +554,9 @@ function assertChoices<ValueT extends string>(options: ChoicePromptOptions<Value
   }
   if (options.defaultValue && !findChoice(options.choices, options.defaultValue)) {
     throwUserInput(`Prompt "${options.message}" default value must match one of its choices.`)
+  }
+  if (options.choices.length > 35) {
+    throwUserInput(`Prompt "${options.message}" has more than 35 choices.`)
   }
 }
 

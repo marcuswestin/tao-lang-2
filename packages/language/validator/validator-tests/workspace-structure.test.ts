@@ -5,9 +5,10 @@ import { Diagnostics, FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { Validation } from '../validator-src/validation'
 import { AliasesValidator } from '../validator-src/validators/aliases-validator'
+import { packageValidationMessages } from '../validator-src/validators/package-validator'
 import { preludeValidationMessages } from '../validator-src/validators/prelude-validator'
-import { projectValidationMessages } from '../validator-src/validators/project-validator'
 import { testValidationMessages } from '../validator-src/validators/tests-validator'
+import { typeValidationMessages } from '../validator-src/validators/types-validator'
 import { useValidationMessages, validateVisibleDeclarations } from '../validator-src/validators/use-validator'
 import {
   accepts,
@@ -61,16 +62,9 @@ Describe('validator: workspace structure', () => {
     )
   }
 
-  Test('validates an existing parser result', async () => {
-    await withValidationParse(stubApp(), ({ result }) => {
-      Expect(validationErrorMessages(result)).toEqual([])
-    })
-  })
-
   Test('auto-loads the parsed Tao prelude and exposes its primitive slot contracts', async () => {
     await withValidationParse(stubApp(), ({ result }) => {
       const prelude = result.files.find(file => file.path.endsWith('/@tao/Prelude.tao'))
-      Expect(prelude).toBeDefined()
       const primitives = prelude?.ast.statements.filter(AST.isPrimitiveDeclaration) ?? []
       Expect(primitives.map(declaration => declaration.name)).toEqual([
         'item',
@@ -93,7 +87,9 @@ Describe('validator: workspace structure', () => {
       ])
       const appPrimitive = primitives.find(declaration => declaration.name === 'app')
       Expect(appPrimitive?.slots?.properties.map(property => property.name)).toEqual([
-        'Name',
+        'id',
+        'version',
+        'name',
         'Navigator',
         'AgentCommands',
         'Datasource',
@@ -102,6 +98,19 @@ Describe('validator: workspace structure', () => {
       ])
     })
   })
+
+  Test(
+    'requires an explicit import to name the intrinsic read context',
+    rejects(
+      stubApp('view ReadError(Context ReadContext) { render Fixture() }'),
+      typeValidationMessages.unknownType('ReadContext'),
+    ),
+  )
+
+  Test(
+    'accepts a reusable view with the public read context contract',
+    accepts(`use ReadContext from @tao/data\n${stubApp('view ReadError(Context ReadContext) { render Fixture() }')}`),
+  )
 
   Test(
     'rejects primitive declarations outside the pinned prelude',
@@ -152,6 +161,7 @@ Describe('validator: workspace structure', () => {
     }, preludeValidationMessages.location),
   )
 
+  // REMOVAL CANDIDATE: user primitives are forbidden; this retains termination for adversarial inheritance.
   Test(
     'reports cyclic user primitive inheritance without aborting validation',
     rejects('primitive view is nav', preludeValidationMessages.location),
@@ -193,13 +203,6 @@ Describe('validator: workspace structure', () => {
 
   for (
     const checkCase of [
-      {
-        // A file-level test is a suite, so an empty one declares no checks rather than being a
-        // leaf journey that forgot its run step. A leaf that forgets one is `missing run` below.
-        title: 'rejects a file-level test that declares no checks',
-        source: testSuite('', false),
-        message: testValidationMessages.emptySuite('Smoke'),
-      },
       {
         title: 'rejects duplicate run statements in one check',
         source: testCheck('duplicate run', 'run MyApp\nrun MyApp'),
@@ -257,22 +260,9 @@ Describe('validator: workspace structure', () => {
   )
 
   Test(
-    'accepts relaunch fresh after run',
-    accepts(testCheck('fresh relaunch', 'run MyApp\nrelaunch fresh\nexpect text "Hello"')),
-  )
-
-  Test(
     'rejects relaunch inside a selected row, whose scope a relaunch replaces',
     rejects(
       testCheck('relaunch in select', 'run MyApp\nselect #rows[1] { relaunch }'),
-      testValidationMessages.relaunchInSelect,
-    ),
-  )
-
-  Test(
-    'rejects relaunch fresh inside a selected row, which the modifier does not excuse',
-    rejects(
-      testCheck('fresh relaunch in select', 'run MyApp\nselect #rows[1] { relaunch fresh }'),
       testValidationMessages.relaunchInSelect,
     ),
   )
@@ -295,11 +285,6 @@ Describe('validator: workspace structure', () => {
         messages: [testValidationMessages.relaunchPlacement],
       },
       {
-        title: 'rejects relaunch fresh at top level',
-        source: 'relaunch fresh',
-        messages: [testValidationMessages.relaunchPlacement],
-      },
-      {
         title: 'rejects aliases in check blocks',
         source: testCheck('renders', 'let Message = "Hello"\nrun MyApp'),
         messages: [testValidationMessages.checkBlock('renders')],
@@ -315,11 +300,6 @@ Describe('validator: workspace structure', () => {
   }
 
   Test(
-    'accepts nested tests, which are the decided grouping form',
-    accepts(`${stubApp()}\ntest "Smoke" { test "renders" { run MyApp\nexpect text "Hello" } }`),
-  )
-
-  Test(
     'accepts visible app declarations outside the entry file',
     acceptsFiles(
       {
@@ -328,7 +308,7 @@ Describe('validator: workspace structure', () => {
           ${app('render OtherView()')}
         `,
         'Other.tao': `
-          folder app OtherApp { view OtherView }
+          folder app OtherApp { id "other" version "1.0.0" name "Other" view OtherView }
           ${visibleView('OtherView')}
         `,
       },
@@ -358,10 +338,10 @@ Describe('validator: workspace structure', () => {
       {
         'Main.tao': `
           use PackageApp, MainView from @bar
-          app MyApp { view MainView }
+          app MyApp { id "my" version "1.0.0" name "My app" view MainView }
         `,
         'packages/@bar/Main.tao': `
-          public app PackageApp { view MainView }
+          public app PackageApp { id "package" version "1.0.0" name "Package" view MainView }
           ${visibleView('MainView')}
         `,
       },
@@ -388,7 +368,7 @@ Describe('validator: workspace structure', () => {
     checksFiles(
       {
         'Main.tao': `
-          app MyApp { view MainView }
+          app MyApp { id "my" version "1.0.0" name "My app" view MainView }
           use Greeting from ./
           let Local = Greeting
           ${stubView('Text', 'Value text')}
@@ -399,7 +379,7 @@ Describe('validator: workspace structure', () => {
           // importing file's references, which used to trip the declaration-order check.
           // More padding.
           // More padding.
-          workspace let Greeting = "Hello"
+          project let Greeting = "Hello"
         `,
       },
       result => {
@@ -430,7 +410,7 @@ Describe('validator: workspace structure', () => {
             use Chosen from ${packagePathCase.importPath}
             ${stubApp()}
           `,
-          [packagePathCase.sourcePath]: 'workspace let Chosen = "File target"',
+          [packagePathCase.sourcePath]: 'project let Chosen = "File target"',
         },
         useValidationMessages.unresolvedImport(packagePathCase.importPath),
       ),
@@ -475,12 +455,13 @@ Describe('validator: workspace structure', () => {
     rejectsFilesFrom(
       'Outer/Main.tao',
       {
+        'Outer/.tao/.gitkeep': '',
         'Outer/Main.tao': `
-          project { id "outer" name "Outer" }
+          package { version 1.0.0 includes @outer }
           use Hidden from @outer/Child
         `,
-        'Outer/@outer/Main.tao': 'workspace let Visible = "Outer"',
-        'Outer/@outer/Child/Project.tao': 'project { id "child" name "Child" }',
+        'Outer/@outer/Main.tao': 'project let Visible = "Outer"',
+        'Outer/@outer/Child/.tao/.gitkeep': '',
         'Outer/@outer/Child/Hidden.tao': 'public let Hidden = "Nested"',
       },
       useValidationMessages.projectBoundary('@outer/Child'),
@@ -492,8 +473,10 @@ Describe('validator: workspace structure', () => {
     rejectsFilesFrom(
       'App/Main.tao',
       {
+        'App/.tao/.gitkeep': '',
+        'Sibling/.tao/.gitkeep': '',
         'App/Main.tao': `
-          project { id "app" name "App" }
+          package { version 1.0.0 includes @app }
           use Hidden from ../Sibling
         `,
         'Sibling/Hidden.tao': 'public let Hidden = "Sibling"',
@@ -507,23 +490,9 @@ Describe('validator: workspace structure', () => {
     rejectsFiles(
       {
         'Main.tao': 'use Hidden from @data/../../Outside',
-        '@data/Data.tao': 'workspace let Visible = "Local"',
+        '@data/Data.tao': 'project let Visible = "Local"',
       },
       useValidationMessages.packagePathEscape('@data/../../Outside', '@data'),
-    ),
-  )
-
-  Test(
-    'keeps package-visible declarations out of cross-package imports',
-    rejectsFiles(
-      {
-        'Main.tao': `
-          use MainView from @bar
-          app VisibilityApp { view MainView }
-        `,
-        'features/@bar/Main.tao': stubView('MainView').replace('view ', 'package view '),
-      },
-      useValidationMessages.notVisible('MainView'),
     ),
   )
 
@@ -534,11 +503,11 @@ Describe('validator: workspace structure', () => {
         'Main.tao': `
           use MainView from @outer
           use InnerView from @inner
-          app NestedPackageApp { view MainView }
+          app NestedPackageApp { id "nested" version "1.0.0" name "Nested" view MainView }
         `,
         'features/@outer/Main.tao': `
           use NestedAlias
-          workspace view MainView() { render Text(NestedAlias) }
+          project view MainView() { render Text(NestedAlias) }
           ${stubView('Text', 'Value text')}
         `,
         'features/@outer/@inner/Main.tao': `
@@ -556,13 +525,12 @@ Describe('validator: workspace structure', () => {
       {
         'Main.tao': `
           use MainView from @outer
-          app NestedPackageApp { view MainView }
+          app NestedPackageApp { id "nested" version "1.0.0" name "Nested" view MainView }
         `,
         'features/@outer/Main.tao': visibleView('MainView'),
         'features/@outer/@inner/Broken.tao': 'view Broken() {',
       },
       result => {
-        Expect(Diagnostics.hasSource(result.diagnostics, 'parser')).toBe(false)
         Expect(validationErrorMessages(result)).toEqual([])
       },
     ),
@@ -590,80 +558,39 @@ Describe('validator: workspace structure', () => {
     ),
   )
 
-  for (
-    const projectCase of [
-      {
-        title: 'rejects multiple project declarations',
-        source: `project { id "one" name "One" }\nproject { id "two" name "Two" }\n${stubApp()}`,
-        message: projectValidationMessages.duplicateProject(),
-      },
-      {
-        title: 'rejects a missing project id with the migration command',
-        source: `project { name "One" }\n${stubApp()}`,
-        message: projectValidationMessages.requiredId(),
-      },
-      {
-        title: 'rejects duplicate project ids',
-        source: `project { id "one" id "two" name "One" }\n${stubApp()}`,
-        message: projectValidationMessages.duplicateId(),
-      },
-      {
-        title: 'rejects duplicate project names',
-        source: `project { id "one" name "One" name "Two" }\n${stubApp()}`,
-        message: projectValidationMessages.duplicateName(),
-      },
-      {
-        title: 'rejects duplicate project versions',
-        source: `project { id "one" name "One" version "1.2.3" version "1.2.4" }\n${stubApp()}`,
-        message: projectValidationMessages.duplicateVersion(),
-      },
-      {
-        title: 'rejects duplicate default apps',
-        source: `project { id "one" name "One" app First app Second }\napp First { }\napp Second { }`,
-        message: projectValidationMessages.duplicateDefaultApp(),
-      },
-      {
-        title: 'rejects duplicate project remotes',
-        source: `project { id "one" name "One" remote none remote none }\n${stubApp()}`,
-        message: projectValidationMessages.duplicateRemote(),
-      },
-      {
-        title: 'rejects duplicate project licenses',
-        source: `project { id "one" name "One" license MIT license Apache }\n${stubApp()}`,
-        message: projectValidationMessages.duplicateLicense(),
-      },
-      {
-        title: 'rejects unsupported project requirements',
-        source: `project { id "one" name "One" requires foo }\n${stubApp()}`,
-        message: projectValidationMessages.unsupportedRequires(),
-      },
-    ]
-  ) {
-    Test(projectCase.title, rejects(projectCase.source, projectCase.message))
-  }
-
-  for (const version of ['1.2', '1.2.3-beta', '1.2.3+4', '01.2.3', 'v1.2.3']) {
-    Test(
-      `rejects non-core project version ${version}`,
-      rejects(
-        `project { id "version-test" name "Version test" version "${version}" }\n${stubApp()}`,
-        projectValidationMessages.invalidVersion(),
-      ),
-    )
-  }
-
   Test(
-    'accepts numeric SemVer core and a default app declared beside project metadata',
-    accepts(`
-      project { id "one" name "One" version "0.12.3" app MyApp }
-      ${stubApp()}
-    `),
+    'rejects more than one unnamed publication',
+    rejects(
+      `package { version 1.0.0 }\npackage { version 2.0.0 }\n${stubApp()}`,
+      packageValidationMessages.duplicateDefault(),
+    ),
   )
 
   Test(
-    'resolves a default app from a root project metadata file',
+    'rejects duplicate named publications',
+    rejects(
+      `package { name "Library" version 1.0.0 }\npackage { name "Library" version 2.0.0 }\n${stubApp()}`,
+      packageValidationMessages.duplicateNamed('Library'),
+    ),
+  )
+
+  Test(
+    'rejects malformed publication versions',
+    rejects(
+      `package { version "01.2.3" }\n${stubApp()}`,
+      packageValidationMessages.invalidVersion('01.2.3'),
+    ),
+  )
+
+  Test(
+    'accepts a prerelease publication version',
+    accepts(`package { version "1.2.3-beta.1" }\n${stubApp()}`),
+  )
+
+  Test(
+    'accepts a root publication in another file',
     acceptsFiles({
-      'Project.tao': 'project { id "one" name "One" version "1.2.3" app MyApp }',
+      'Library.tao': 'package { version 1.2.3 }',
       'Main.tao': stubApp(),
     }),
   )

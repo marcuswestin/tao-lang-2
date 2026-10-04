@@ -8,7 +8,7 @@ use FormButton from @tao/ui/basic
 // not a navigation kind. The navigator arrives as a parameter, which is how one shell serves every
 // preview variant. The bar is conditional on the data; the navigator never is, because its history
 // lives on its mount and a branch that unmounted it would drop where the person was.
-workspace
+project
 scene WordFlowerShell(Navigator nav) {
    query CurrentSession = FocusSessions with {
       limit 1
@@ -21,7 +21,7 @@ scene WordFlowerShell(Navigator nav) {
 }  }  }
 
 // The screens the app shell mounts directly.
-workspace
+project
 scene Settings() {
    Title "Settings"
    render Scroller() [screen] {
@@ -41,7 +41,7 @@ scene Settings() {
                on press -> { replace SignedOutNav in app }
 }  }  }  }  }
 
-workspace
+project
 scene SignedOut() {
    Title "Signed out"
    render Col() [screen, centeredLayout] {

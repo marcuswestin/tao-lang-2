@@ -1,6 +1,11 @@
-import { CLI, FS, HCI, Platform } from '@shared'
+import { CLI, Errors, FS, HCI, Platform } from '@shared'
+import { parseDevLoopArgs } from '../agent-config/DevLoopArgs'
 import { agentHostCommands, hostCommandKind, hostCommandPrefix } from '../agent-config/HostCommandPolicy'
 import { hostCommandTarget } from '../agent-config/HostCommandTargets'
+import { validStudioProofArgs } from '../agent-config/StudioProofArgs'
+import { isNotificationText, NOTIFICATION_SOUNDS } from '../attention/NotifyDeveloper'
+import { runAgentCommand } from '../runner/AgentRunner'
+import { runNamedHostServer } from './NamedHostServer'
 
 const [sourcePath, ...argv] = Platform.runtimeProcess.argv.slice(2)
 
@@ -22,6 +27,31 @@ async function run(): Promise<number> {
     return 2
   }
   const args = argv.slice(prefix.length)
+  if (target.argsPolicy === 'studio-proof' && !validStudioProofArgs(args)) {
+    HCI.writeErrorLine(
+      `Usage: ./agent unsandboxed ${prefix.join(' ')} [--project <path>] [--app <name>] [--show-studio]`,
+    )
+    return 2
+  }
+  if (target.argsPolicy === 'dev-loop') {
+    try {
+      parseDevLoopArgs(args)
+    } catch (error) {
+      const failure = Errors.formatForUser(error)
+      if (args.includes('--json')) {
+        HCI.writeLine(JSON.stringify({ version: 1, status: 'refused', failure, warnings: [] }))
+      } else {
+        HCI.writeErrorLine(failure)
+      }
+      return 2
+    }
+  }
+  if (target.argsPolicy === 'notify' && !validNotifyArgs(args)) {
+    HCI.writeErrorLine(
+      'Usage: ./agent unsandboxed notify-developer [--sound <name>] [--message <text>] [--context <text>] [--flash-screen] [--stop] | --help',
+    )
+    return 2
+  }
   if (
     (target.argsPolicy === 'studio-list' || target.argsPolicy === 'studio-stop')
     && !validStudioArgs(args, target.argsPolicy === 'studio-stop')
@@ -63,6 +93,16 @@ async function run(): Promise<number> {
     }
     return await openSimulator(args[0])
   }
+  // The attention loop must end when its tool session is cancelled. The workflow runner forwards
+  // parent signals to the owned process tree; a raw server-policy CLI.run would leave it sounding.
+  if (target.argsPolicy === 'notify') {
+    return await runAgentCommand({
+      args: [],
+      command: 'notify-developer',
+      spawnArgs: [...target.fixedArgs, ...args],
+      spawnCommand: target.command,
+    })
+  }
   let cwd: string | undefined
   let forwardedArgs = args
   if (prefix.join(' ') === 'pods install') {
@@ -77,17 +117,53 @@ async function run(): Promise<number> {
     }
     forwardedArgs = args.slice(1)
   }
-  const result = await CLI.run(target.command, {
+  const commandSpec: CLI.CommandSpec = {
     args: [...target.fixedArgs, ...forwardedArgs],
     cwd,
     ...(target.env === undefined ? {} : { env: target.env }),
     processPolicy: target.server ? 'server' : 'tool',
     stdio: 'inherit',
-  })
+  }
+  const result = target.server
+    ? await runNamedHostServer(target.command, commandSpec)
+    : await CLI.run(target.command, commandSpec)
   if (result.error !== undefined) {
     HCI.writeErrorLine(`FAIL  ${prefix.join(' ')}: ${result.error.message}`)
   }
   return result.exitCode ?? 1
+}
+
+/** Attention alerts accept only bounded display text and supported effects. */
+function validNotifyArgs(args: readonly string[]): boolean {
+  if (args.length === 1 && ['--help', '-h'].includes(args[0]!)) {
+    return true
+  }
+  let stop = false
+  let sound = false
+  let flash = false
+  const textOptions = new Set<string>()
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index]
+    if (arg === '--stop' && !stop) {
+      stop = true
+    } else if (arg === '--sound' && !sound) {
+      const name = args[++index]
+      if (!NOTIFICATION_SOUNDS.some(candidate => candidate.toLowerCase() === name?.toLowerCase())) {
+        return false
+      }
+      sound = true
+    } else if (arg === '--flash-screen' && !flash) {
+      flash = true
+    } else if ((arg === '--message' || arg === '--context') && !textOptions.has(arg)) {
+      if (!isNotificationText(args[++index], arg === '--message' ? 2_000 : 256)) {
+        return false
+      }
+      textOptions.add(arg)
+    } else {
+      return false
+    }
+  }
+  return true
 }
 
 /** Lifecycle commands select recorded launches, never arbitrary processes or roots. */
@@ -116,7 +192,7 @@ function validStudioArgs(args: readonly string[], stop: boolean): boolean {
   return true
 }
 
-/** Boot one selected device and bring its Simulator or Device Hub window forward. */
+/** Boot one selected device and present its viewer without activating it. */
 async function runSimulator(args: readonly string[]): Promise<number> {
   if (args.length !== 1) {
     HCI.writeErrorLine('Usage: ./agent unsandboxed simulators run <device-udid>')
@@ -133,21 +209,21 @@ async function runSimulator(args: readonly string[]): Promise<number> {
 
 /** Present the selected simulator on either Xcode's Simulator or Device Hub. */
 async function openSimulator(udid?: string): Promise<number> {
-  const simulatorArgs = ['-a', 'Simulator']
+  const simulatorArgs = ['-g', '-a', 'Simulator']
   if (udid !== undefined) {
     simulatorArgs.push('--args', '-CurrentDeviceUDID', udid)
   }
   const attempts = [simulatorArgs]
   if (udid !== undefined) {
-    attempts.push([`devices://device/open?id=${encodeURIComponent(udid)}`])
+    attempts.push(['-g', `devices://device/open?id=${encodeURIComponent(udid)}`])
   }
-  attempts.push(['-a', 'DeviceHub'])
+  attempts.push(['-g', '-a', 'DeviceHub'])
   for (const openArgs of attempts) {
     const opened = await CLI.run('open', { args: openArgs, stdio: 'pipe' })
     if (opened.exitCode === 0 && opened.error === undefined) {
       return 0
     }
-    if (openArgs[0] === '-a' && openArgs[1] === 'DeviceHub') {
+    if (openArgs[1] === '-a' && openArgs[2] === 'DeviceHub') {
       HCI.writeErrorLine(opened.stderr.trim() || opened.error?.message || 'Could not open simulator host.')
       return opened.exitCode ?? 1
     }

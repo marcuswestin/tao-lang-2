@@ -1,0 +1,15 @@
+{
+  "firebase": {
+    "projectId": "tao-hosted-crud-79c429",
+    "apiKey": "AIzaSyBFn5HUxGiJ3Vjo5E6fazdXIkU3up19mB4",
+    "appId": "1:207029393467:web:f7e865e14f6db5d70fa41e",
+    "authDomain": "tao-hosted-crud-79c429.firebaseapp.com"
+  },
+  "appwrite": {
+    "endpoint": "https://fra.cloud.appwrite.io/v1",
+    "projectId": "tao-hosted-crud-160214",
+    "platform": "dev.tao.hostedcrudspike",
+    "databaseId": "tao_notes",
+    "tableId": "notes"
+  }
+}

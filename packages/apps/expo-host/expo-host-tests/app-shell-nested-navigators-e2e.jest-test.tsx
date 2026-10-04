@@ -45,49 +45,8 @@ Describe('Expo runtime: nested window-owning navigators', () => {
 
           let InnerStack = StackNav { Initial InnerHome }
 
-          app NestedSlotApp {
-            Name "Nested Slot"
+          app NestedSlotApp { id "nestedslotapp" version "1.0.0" name "Nested Slot"
             Navigator SlotNav { Initial InnerStack }
-          }
-
-          scene InnerHome() {
-            Title "Inner Home"
-            render Text("Inner Home body")
-          }
-        `,
-        screen => {
-          ExpectScreen(screen).toHaveText('Inner Home body')
-          const scrollViews = screen.UNSAFE_getAllByType(RN.ScrollView)
-          Expect(scrollViews).toHaveLength(1)
-          Expect(RN.StyleSheet.flatten(scrollViews[0]!.props.contentContainerStyle)).toMatchObject({
-            paddingBottom: 12 + insets.bottom,
-            paddingLeft: 12 + insets.left,
-            paddingRight: 12 + insets.right,
-            paddingTop: 12 + insets.top,
-          })
-        },
-      )
-    } finally {
-      resetInsets()
-    }
-  })
-
-  Test('insets a StackNav held as another StackNav Initial value exactly once', async () => {
-    setInsets()
-    try {
-      await testCompileApp(
-        `
-          use StackNav from @tao/nav
-          use Text from @tao/ui
-
-          nav InnerStack = StackNav {
-            Initial InnerHome
-            Title "Inner Stack"
-          }
-
-          app NestedStackApp {
-            Name "Nested Stack"
-            Navigator StackNav { Initial InnerStack }
           }
 
           scene InnerHome() {
@@ -120,8 +79,7 @@ Describe('Expo runtime: nested window-owning navigators', () => {
           use SlotNav, StackNav from @tao/nav
           use Text from @tao/ui
 
-          app AuxiliaryApp {
-            Name "Auxiliary"
+          app AuxiliaryApp { id "auxiliaryapp" version "1.0.0" name "Auxiliary"
             Navigator StackNav { Initial Home }
             @window SlotNav { Initial AuxiliaryScreen }
           }
@@ -167,8 +125,7 @@ Describe('Expo runtime: nested window-owning navigators', () => {
           use SplitNav from @tao/nav
           use Text from @tao/ui
 
-          app PlainSplitApp {
-            Name "Plain Split"
+          app PlainSplitApp { id "plainsplitapp" version "1.0.0" name "Plain Split"
             Navigator SplitNav {
               @sidebar {
                 Content Sidebar
@@ -244,8 +201,7 @@ Describe('Expo runtime: nested window-owning navigators', () => {
             }
           }
 
-          app NestedSplitApp {
-            Name "Nested Split"
+          app NestedSplitApp { id "nestedsplitapp" version "1.0.0" name "Nested Split"
             Navigator SplitNav {
               @sidebar {
                 Content Sidebar
@@ -301,8 +257,7 @@ Describe('Expo runtime: nested window-owning navigators', () => {
 
           nav MainStack = StackNav { Initial MainHome }
 
-          app SplitPaneApp {
-            Name "Split Pane"
+          app SplitPaneApp { id "splitpaneapp" version "1.0.0" name "Split Pane"
             Navigator SplitNav {
               @sidebar {
                 Content Sidebar
@@ -370,8 +325,7 @@ Describe('Expo runtime: nested window-owning navigators', () => {
 
           nav Inner = StackNav { Initial InnerHome }
 
-          app InlineNavApp {
-            Name "Inline Nav"
+          app InlineNavApp { id "inlinenavapp" version "1.0.0" name "Inline Nav"
             view Shell
           }
 
@@ -432,8 +386,7 @@ Describe('Expo runtime: nested window-owning navigators', () => {
             @home { Label "Home" Content ItemStack }
           }
 
-          app ToggleNestedApp {
-            Name "Toggle Nested"
+          app ToggleNestedApp { id "togglenestedapp" version "1.0.0" name "Toggle Nested"
             Navigator MainSelection
           }
 

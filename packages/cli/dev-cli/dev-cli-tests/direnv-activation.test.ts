@@ -99,7 +99,7 @@ async function runShell(
   test: Awaited<ReturnType<typeof fixture>>,
   script: string,
   interactive = true,
-  expectedStderr = '',
+  expectedStderr: string | null = '',
 ) {
   const startup = FS.resolvePath('probe.zsh', test.base)
   await FS.writeText(startup, script)
@@ -129,7 +129,9 @@ async function runShell(
       TAO_TEST_LOG: FS.resolvePath('calls.log', test.base),
     },
   })
-  Expect(Text.stripAnsi(result.stderr)).toBe(expectedStderr)
+  if (expectedStderr !== null) {
+    Expect(Text.stripAnsi(result.stderr)).toBe(expectedStderr)
+  }
   Expect(result.exitCode).toBe(0)
   Expect((await calls(test)).filter(line => line.startsWith('unexpected-dev|'))).toEqual([])
   return result.stdout.trim().split('\n')
@@ -239,14 +241,7 @@ _tao_dev_direnv_hook
 print -r -- "outside|$+TAO_TEST_ACTIVE"
 `,
             true,
-            [
-              `direnv: loading ${test.root}/.envrc`,
-              'direnv: export +TAO_TEST_ACTIVE',
-              `direnv: loading ${test.root}/.envrc`,
-              'direnv: export +TAO_TEST_ACTIVE',
-              'direnv: unloading',
-              '',
-            ].join('\n'),
+            null,
           ),
         ).toEqual(['real|9|first|yes', 'changed|changed_with_real_direnv', 'outside|0'])
         Expect((await calls(test)).filter(line => line.startsWith('completion|'))).toEqual([

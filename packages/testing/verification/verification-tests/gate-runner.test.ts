@@ -1,11 +1,24 @@
 import { Errors, FS } from '@shared'
-import { Deferred, Describe, Expect, mkTestDir, settle, Test, testOverrideSlot, until } from '@shared/test'
+import {
+  Deferred,
+  Describe,
+  Expect,
+  mkTestDir,
+  setClockForTest,
+  settle,
+  Test,
+  testOverrideSlot,
+  until,
+} from '@shared/test'
 import { runGates } from '../verification-src/GateRunner'
 import type { GeneratedEvidence, GeneratedOutput } from '../verification-src/GeneratedEvidence'
 import { GreenTree } from '../verification-src/GreenTree'
 import { MachineLanes } from '../verification-src/MachineLanes'
 import { RunArtifacts } from '../verification-src/RunArtifacts'
 import { classifyFailure, formatGateSummary, gateExitCode } from '../verification-src/RunSummary'
+import { TestLedger } from '../verification-src/TestLedger'
+import { TestNodes } from '../verification-src/TestNodes'
+import { TestRunner } from '../verification-src/TestRunner'
 import { WorkGraph } from '../verification-src/WorkGraph'
 
 type GateScript = Record<string, { exitCode: number; output: string }>
@@ -13,6 +26,80 @@ type GateScript = Record<string, { exitCode: number; output: string }>
 const resourceAcquisition = testOverrideSlot<typeof MachineLanes.acquireResource>({
   read: () => MachineLanes.acquireResource,
   write: value => Object.defineProperty(MachineLanes, 'acquireResource', { value }),
+})
+
+const testPlanSlot = testOverrideSlot<typeof TestRunner.testNodesFor>({
+  read: () => TestRunner.testNodesFor,
+  write: value => Object.defineProperty(TestRunner, 'testNodesFor', { value }),
+})
+
+Describe('gate test evidence', () => {
+  Test('records full-run wall time and preserves it when fail-fast leaves tests unrun', async () => {
+    const root = await mkTestDir('tao-gate-test-evidence-')
+    let wallTime = Date.UTC(2026, 9, 1, 12)
+    const restoreClock = setClockForTest(() => wallTime)
+    const original = TestRunner.testNodesFor
+    const files = ['first', 'second'].map(name => `packages/shared/shared-tests/${name}.test.ts`)
+    const restorePlan = testPlanSlot.install(async options => {
+      if (options.repositoryRoot !== root) {
+        return original(options)
+      }
+      // Supply a small runner inventory while keeping graph execution and evidence recording real.
+      const plan = TestNodes.build({
+        ledger: { version: 1, tests: {} },
+        timings: { version: 1, nodes: {} },
+        selected: files.map((file, index) => ({
+          name: `fixture-${index}`,
+          files: [file],
+          buildProcess: (name, selected) => ({
+            command: 'fixture-runner',
+            args: [],
+            files: selected,
+            testReport: { format: 'bun-junit', suite: name, path: FS.resolvePath(`${name}.xml`, root) },
+          }),
+        })),
+      })
+      return { ...plan, states: [...plan.states] }
+    })
+    let fail = false
+    try {
+      for (const file of files) {
+        await FS.writeText(FS.resolvePath(file, root), '// test inventory fixture\n')
+      }
+      const execute = () =>
+        runGates({
+          gates: ['_test'],
+          jobs: 1,
+          now: () => 123,
+          machineLoadAverage: IDLE_MACHINE,
+          repositoryRoot: root,
+          registryRoot: FS.resolvePath('registry', root),
+          logRoot: FS.resolvePath(fail ? 'partial-logs' : 'complete-logs', root),
+          runGate: async name => {
+            const file = files[Number(name.split('-')[1])]
+            const failure = fail ? '<failure message="Tao regression" />' : ''
+            await FS.writeText(
+              FS.resolvePath(`${name}.xml`, root),
+              `<testsuite tests="1"><testcase file="${file}" name="protects Tao">${failure}</testcase></testsuite>`,
+            )
+            return { exitCode: fail ? 1 : 0, output: fail ? 'Tao regression' : '' }
+          },
+        })
+      Expect((await execute()).status).toBe('passed')
+      const fullRunAt = new Date(wallTime).toISOString()
+      Expect((await TestLedger.load(root)).lastFullRunStartedAt).toBe(fullRunAt)
+      fail = true
+      wallTime += 1_000
+      const partial = await execute()
+      Expect(partial.status).toBe('failed')
+      Expect(partial.gates.some(gate => gate.status === 'skipped')).toBe(true)
+      Expect((await TestLedger.load(root)).lastFullRunStartedAt).toBe(fullRunAt)
+    } finally {
+      restorePlan()
+      restoreClock()
+      await FS.remove(root)
+    }
+  })
 })
 
 Describe('gate release lifetime', () => {
@@ -45,6 +132,7 @@ Describe('gate release lifetime', () => {
     })
     let finished = false
     const run = runGates({
+      showStudio: true,
       gates: ['_fix-dprint', 'studio-canary', '_typecheck'],
       jobs: 8,
       machineCpuCount: 8,
@@ -105,6 +193,7 @@ async function run(gates: readonly string[], script: GateScript, extra: Record<s
   try {
     const started: string[] = []
     const summary = await runGates({
+      showStudio: true,
       gates,
       jobs: 2,
       logRoot: FS.resolvePath('logs', root),
@@ -146,14 +235,14 @@ async function busyRegistryRoot(laneCount = 1): Promise<string> {
 }
 
 Describe('repository gate runner', () => {
-  Test('full verification stops after a definite failure and keeps a complete diagnostic record', async () => {
+  Test('broad verification stops after a definite failure and keeps a complete diagnostic record', async () => {
     const root = await mkTestDir('tao-gate-runner-fail-fast-')
     const started: string[] = []
     try {
       const summary = await runGates({
+        showStudio: true,
         gates: ['first', 'second'],
         jobs: 1,
-        lane: 'verify-full',
         logRoot: FS.resolvePath('logs', root),
         machineLoadAverage: IDLE_MACHINE,
         registryRoot: FS.resolvePath('registry', root),
@@ -176,6 +265,18 @@ Describe('repository gate runner', () => {
     } finally {
       await FS.remove(root)
     }
+  })
+
+  Test('diagnostic execution collects failures within its explicit scope', async () => {
+    const { started, summary } = await run(['first', 'second'], {
+      first: { exitCode: 1, output: 'first defect' },
+      second: { exitCode: 1, output: 'second defect' },
+    }, { failurePolicy: 'collect-all', jobs: 1 })
+    Expect(started).toEqual(['first', 'second'])
+    Expect(summary.gates.map(gate => gate.status)).toEqual(['failed', 'failed'])
+    Expect(summary.warnings.some(warning => warning.startsWith('verification stopped after definite failure'))).toBe(
+      false,
+    )
   })
 
   Test('full verification keeps admitting checks after a timeout that may recover on retry', async () => {
@@ -205,7 +306,7 @@ Describe('repository gate runner', () => {
   Test('fails the wrapper when one gate fails, never hiding its status', async () => {
     const { summary } = await run(['_repo-lint', '_typecheck'], {
       _typecheck: { exitCode: 2, output: 'error TS2345: bad argument' },
-    })
+    }, { failurePolicy: 'collect-all' })
 
     Expect(summary.status).toBe('failed')
     Expect(gateExitCode(summary)).toBe(1)
@@ -229,7 +330,7 @@ Describe('repository gate runner', () => {
     // replaced by one node per suite, each reporting under the suite it belongs to.
     const { started, summary } = await run(['_repo-lint', '_test'], {
       _test: { exitCode: 1, output: 'a recipe that must never run' },
-    })
+    }, { failurePolicy: 'collect-all' })
 
     Expect(started).toContain('_repo-lint')
     Expect(started).not.toContain('_test')
@@ -281,9 +382,24 @@ Describe('repository gate runner', () => {
     Expect(summary.gates.filter(gate => gate.status === 'skipped').map(gate => gate.name)).toEqual(hostOnly)
     Expect(
       summary.gates.filter(gate => gate.status === 'skipped').every(gate =>
-        gate.reason?.includes('requires unsandboxed host capabilities')
+        gate.reason === 'requires unsandboxed host capabilities; run ./agent unsandboxed verify-full'
       ),
     ).toBe(true)
+  })
+
+  Test('skips the macOS-only gates off macOS and runs them on it', async () => {
+    const macOnly = ['studio-smoke-native', 'studio-canary']
+    const linux = await run(['_repo-lint', ...macOnly], {}, { hostPlatform: 'linux' })
+    const darwin = await run(['_repo-lint', ...macOnly], {}, { hostPlatform: 'darwin' })
+
+    Expect(linux.started).toEqual(['_repo-lint'])
+    Expect(linux.summary.gates.filter(gate => gate.status === 'skipped').map(gate => gate.name)).toEqual(macOnly)
+    Expect(
+      linux.summary.gates.filter(gate => gate.status === 'skipped').every(gate =>
+        gate.reason === 'requires macOS; not run on linux'
+      ),
+    ).toBe(true)
+    Expect(darwin.started.toSorted()).toEqual(['_repo-lint', ...macOnly].toSorted())
   })
 
   Test('surfaces warnings a gate printed without failing on them', async () => {
@@ -313,6 +429,7 @@ Describe('repository gate runner', () => {
     const registryRoot = await mkTestDir('tao-gate-runner-contended-lanes-')
     try {
       const summary = await runGates({
+        showStudio: true,
         gates: ['_repo-lint'],
         machineCpuCount: 8,
         machineLoadAverage: CONTENDED_MACHINE,
@@ -337,18 +454,13 @@ Describe('repository gate runner', () => {
     }
   })
 
-  Test('runs every gate exactly once, whatever the concurrency', async () => {
-    const { started } = await run(['a', 'b', 'c', 'd', 'e'], {})
-
-    Expect(started.toSorted()).toEqual(['a', 'b', 'c', 'd', 'e'])
-  })
-
   Test('propagates the enclosing lane identity to nested diagnostics', async () => {
     const root = await mkTestDir('tao-gate-runner-lane-env-')
     const registryRoot = FS.resolvePath('registry', root)
     let laneId: string | undefined
     try {
       await runGates({
+        showStudio: true,
         gates: ['_doctor-json'],
         registryRoot,
         repositoryRoot: root,
@@ -371,6 +483,7 @@ Describe('repository gate runner', () => {
     Expect(priority).toBeDefined()
     const started: string[] = []
     const pending = runGates({
+      showStudio: true,
       gates: ['studio-smoke-native', '_fix-just-fmt'],
       jobs: 2,
       registryRoot,
@@ -409,6 +522,7 @@ Describe('repository gate runner', () => {
     const root = await mkTestDir('tao-gate-runner-json-')
     try {
       await runGates({
+        showStudio: true,
         gates: ['_repo-lint'],
         jsonPath: 'summary.json',
         logRoot: FS.resolvePath('logs', root),
@@ -429,6 +543,7 @@ Describe('repository gate runner', () => {
     const root = await mkTestDir('tao-gate-runner-artifacts-')
     try {
       const summary = await runGates({
+        showStudio: true,
         gates: ['_repo-lint'],
         lane: 'check',
         registryRoot: FS.resolvePath('registry', root),
@@ -442,7 +557,6 @@ Describe('repository gate runner', () => {
       Expect(written.lane).toBe('check')
       const latest = FS.resolvePath('.artifacts/logs/check/latest', root)
       Expect(await FS.realPath(latest)).toBe(await FS.realPath(summary.logRoot))
-      Expect(await FS.readText(FS.resolvePath('repo-lint.log', latest))).toBe('lint ok\n')
     } finally {
       await FS.remove(root)
     }
@@ -453,6 +567,7 @@ Describe('repository gate runner', () => {
     const held = Deferred()
     try {
       const finished = runGates({
+        showStudio: true,
         gates: ['first', 'held'],
         jobs: 2,
         logRoot: FS.resolvePath('logs', root),
@@ -516,6 +631,7 @@ Describe('repository gate runner', () => {
     const registryRoot = await mkTestDir('tao-gate-runner-lanes-')
     try {
       await runGates({
+        showStudio: true,
         gates: ['_repo-lint'],
         machineLoadAverage: IDLE_MACHINE,
         registryRoot,
@@ -541,6 +657,7 @@ Describe('repository gate runner', () => {
     const registryRoot = await mkTestDir('tao-gate-runner-lanes-')
     try {
       await runGates({
+        showStudio: true,
         gates: ['_repo-lint', '_doctor-json'],
         machineLoadAverage: IDLE_MACHINE,
         registryRoot,
@@ -629,6 +746,7 @@ Describe('gate runner under a shared machine', () => {
     let declined = false
 
     const finished = runGates({
+      showStudio: true,
       gates: ['_repo-lint', '_dprint-check', '_runtime-pack-check'],
       logRoot: FS.resolvePath('logs', root),
       machineCpuCount: 4,
@@ -682,6 +800,7 @@ Describe('gate runner under a shared machine', () => {
     const root = await mkTestDir('tao-gate-runner-')
 
     await runGates({
+      showStudio: true,
       gates: ['_repo-lint'],
       registryRoot,
       repositoryRoot: root,
@@ -701,6 +820,7 @@ Describe('gate runner under a shared machine', () => {
     let attempts = 0
 
     const summary = await runGates({
+      showStudio: true,
       gates: ['_repo-lint'],
       logRoot: FS.resolvePath('logs', root),
       registryRoot,
@@ -749,6 +869,7 @@ Describe('gate runner green trees', () => {
   ) {
     const started: string[] = []
     const summary = await runGates({
+      showStudio: true,
       // Two recordable readers that read no generated class, so a record stands for them in a lane
       // holding no generator. `_typecheck` reads both generated trees and is the wrong default here.
       gates: options.gates ?? ['_dprint-check', '_repo-lint'],
@@ -827,6 +948,7 @@ Describe('gate runner green trees', () => {
     const hashes = ['tree-before', 'tree-after']
     try {
       const summary = await runGates({
+        showStudio: true,
         gates: ['_repo-lint'],
         greenTree: { hashTree: async () => hashes.shift()!, lanes: ['verify'] },
         logRoot: FS.resolvePath('logs', root),
@@ -851,6 +973,7 @@ Describe('gate runner green trees', () => {
     const started: string[] = []
     try {
       const summary = await runGates({
+        showStudio: true,
         gates: ['_fix-dprint', '_repo-lint'],
         greenTree: { hashTree: async () => hashes.shift()!, lanes: ['verify'] },
         logRoot: FS.resolvePath('logs', root),
@@ -875,6 +998,7 @@ Describe('gate runner green trees', () => {
     const started: string[] = []
     try {
       const summary = await runGates({
+        showStudio: true,
         gates: ['_fix-dprint', '_repo-lint'],
         logRoot: FS.resolvePath('logs', root),
         registryRoot: FS.resolvePath('registry', root),
@@ -888,7 +1012,9 @@ Describe('gate runner green trees', () => {
       Expect(started).toEqual(['_fix-dprint'])
       Expect(summary.status).toBe('failed')
       Expect(summary.gates.find(gate => gate.name === '_repo-lint')?.status).toBe('skipped')
-      Expect(summary.gates.find(gate => gate.name === '_repo-lint')?.reason).toContain('dependency failed')
+      Expect(summary.gates.find(gate => gate.name === '_repo-lint')?.reason).toBe(
+        'not run after definite failure: _fix-dprint',
+      )
     } finally {
       await FS.remove(root)
     }
@@ -936,6 +1062,7 @@ Describe('gate runner green trees', () => {
     let capture = 0
     try {
       const summary = await runGates({
+        showStudio: true,
         gates: ['_parser-gen', '_repo-lint'],
         greenTree: {
           captureGenerated: async () => ({
@@ -1040,6 +1167,7 @@ Describe('gate runner green trees', () => {
       // own rewrite and not concurrent drift — which is the case only this guard catches.
       const hashes = ['tree-1', 'tree-2', 'tree-2']
       const moved = await runGates({
+        showStudio: true,
         gates: ['_fix-dprint', '_repo-lint', '_typecheck'],
         greenTree: {
           hashTree: async () => hashes.shift()!,

@@ -18,7 +18,7 @@ Describe('compiler: checkbox test-plan IR', () => {
           }
         `,
         'Main.tao': `
-          app CheckboxApp { view MainView }
+          app CheckboxApp { id "com.tao.test.checkboxapp" version "1.0.0" name "CheckboxApp"  view MainView }
           view MainView() { render inject \`\`\`ts return null \`\`\` }
         `,
       },

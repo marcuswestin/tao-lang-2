@@ -1,8 +1,9 @@
-import { Assert, type Diagnostic, type DiagnosticRange, Diagnostics, FS, TaoFiles } from '@shared'
+import { Assert, type Diagnostic, type DiagnosticRange, Diagnostics, FS, type ReleaseProfile, TaoFiles } from '@shared'
 import { Langium } from './langium-exports'
 import { bridgesToATypeScriptExport, unresolvedReferenceMessage } from './linker-diagnostics'
 import { emptyPackageResolver, type PackageResolver } from './package-resolver'
 import * as AST from './parserASTExport'
+import { ReleaseCompletionProvider } from './release-completion-provider'
 import { TaoLexerErrorMessageProvider, TaoParserErrorMessageProvider } from './syntax-diagnostics'
 import { TaoDocumentValidator } from './tao-document-validator'
 import { TaoReferences } from './tao-references'
@@ -20,9 +21,18 @@ export const codeProjectRoot = '/__tao__'
 const codeSourceUri = Langium.URI.file(`${codeProjectRoot}/source.tao`)
 
 export { AST, Langium, URI }
+export { releaseCapabilityOf } from './release-capability'
 export { TaoReferences } from './tao-references'
 export type URI = Langium.URI
-export type { PackageResolver } from './package-resolver'
+export type {
+  ModuleOrigin,
+  PackageResolver,
+  ProjectAppRequirements,
+  ProjectGraph,
+  ProjectModuleBinding,
+  ProjectPublication,
+  ProjectRequirement,
+} from './package-resolver'
 
 /** ParserServices declares the Langium services used by the parser stage. */
 export type ParserServices = {
@@ -57,6 +67,8 @@ export type CreateParserLspContextOptions = ParserLspContributions & {
 
 /** ParserLspContributions declares optional LSP services supplied by parser hosts. */
 export type ParserLspContributions = {
+  releaseProfile?: ReleaseProfile
+  releaseStdlibRoot?: string
   lspFormatter?: () => Langium.Formatter
   lspCodeActionProvider?: () => Langium.CodeActionProvider
 }
@@ -429,6 +441,8 @@ type ParserLspModule = {
 
 function lspModule(options: ParserLspContributions): ParserLspModule {
   const lsp = {
+    CompletionProvider: (services: Langium.LangiumServices) =>
+      new ReleaseCompletionProvider(services, options.releaseProfile, options.releaseStdlibRoot),
     ...(options.lspFormatter ? { Formatter: options.lspFormatter } : {}),
     ...(options.lspCodeActionProvider ? { CodeActionProvider: options.lspCodeActionProvider } : {}),
   }
@@ -633,7 +647,11 @@ async function loadReachableDocuments(
   const intrinsicDocuments = await Promise.all(
     (await context.packages.intrinsicFilePaths()).map(path => documentFromFilePath(context, path, loaded)),
   )
-  const queue: AST.Document[] = [entryDocument, ...intrinsicDocuments]
+  const rootDocuments = await Promise.all(
+    (await context.packages.projectRootFilePaths(entryDocument.uri.path))
+      .map(path => documentFromFilePath(context, path, loaded)),
+  )
+  const queue: AST.Document[] = [entryDocument, ...intrinsicDocuments, ...rootDocuments]
 
   while (queue.length > 0) {
     const document = queue.shift()!
@@ -680,15 +698,19 @@ async function loadReferencedDocuments(
       }
     }
   }
+  for (const requirement of AST.streamAllContents(ast).filter(AST.isPackageRequires)) {
+    for (const candidatePath of await context.packages.requirementFilePaths(requirement, document.uri.path)) {
+      if (!loadedDocuments.has(candidatePath)) {
+        referencedDocuments.push(await documentFromFilePath(context, candidatePath, loaded))
+      }
+    }
+  }
   return referencedDocuments
 }
 
 // Only a sibling that actually declares something `folder`-visible is pulled in, so a project that
 // does not use the marker keeps exactly the document set its `use` statements describe.
 const folderDeclarationPattern = /^[ \t]*folder[ \t\r\n]/m
-// The project's `guard default` covers every app without being named by any of them, so a sibling
-// declaring it is pulled in the same way.
-const readNetDeclarationPattern = /^[ \t]*guard[ \t]+default\b/m
 
 /** SiblingScanCache memoizes one load's per-directory folder-sibling scans. */
 type SiblingScanCache = Map<string, Promise<string[]>>
@@ -719,7 +741,7 @@ async function folderSiblingPathsIn(context: ParserContext, directory: string): 
   const paths: string[] = []
   for (const path of candidates) {
     const source = overrides[path] ?? await FS.readText(path)
-    if (folderDeclarationPattern.test(source) || readNetDeclarationPattern.test(source)) {
+    if (folderDeclarationPattern.test(source)) {
       paths.push(path)
     }
   }

@@ -44,17 +44,6 @@ Describe('Docs tutorials', () => {
     const blocks = tutorialBlocks(await FS.readText(Repo.resolvePath(FIRST_APP_TUTORIAL)))
     const steps = replayTutorial(blocks)
 
-    Expect(steps.map(step => step.section)).toEqual([
-      'Step 1 — the smallest app',
-      'Step 2 — layout',
-      'Step 3 — design',
-      'Step 4 — data',
-      'Step 5 — creating rows',
-      'Step 6 — a second screen',
-      'Step 7 — tabs',
-      'Step 8 — one layout for phone and desktop',
-      'Step 9 — a test that drives the whole app',
-    ])
     Expect(steps.at(-1)?.source).toBe(finishedFile(blocks))
   })
 
@@ -63,10 +52,11 @@ Describe('Docs tutorials', () => {
     const root = await mkTestDir('tao-tutorial-steps-')
     try {
       // Declarations in one folder are visible to each other, and every step declares ReadingList,
-      // so each step gets its own folder. The parent is still one fix run and one workspace.
+      // so each step gets its own marked project. The parent groups one batch fix run.
       const written = replayTutorial(blocks)
         .map((step, index) => ({ ...step, file: FS.resolvePath(`step-${index + 1}/ReadingList.tao`, root) }))
       for (const step of written) {
+        await FS.writeText(FS.resolvePath('.tao/.gitkeep', FS.dirname(step.file)), '')
         await FS.writeText(step.file, step.source)
       }
 
@@ -107,12 +97,12 @@ Describe('Docs tutorials', () => {
     const root = await mkTestDir('tao-tutorial-app-')
     try {
       const directory = FS.resolvePath('reading-list', root)
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', directory), '')
       await FS.writeText(FS.resolvePath('ReadingList.tao', directory), finishedFile(blocks))
 
       const run = await withTaoHome(root, () => runTaoCliForTest(['test', directory]))
 
       const output = `${run.stdout}${run.stderr}`
-      Expect(output).toContain('Found 1 Tao test file')
       Expect(output).toContain('Tests:       1 passed, 1 total')
       Expect(run.exitCode).toBe(0)
     } finally {

@@ -93,6 +93,11 @@ export type TaoAppDeclaration = Readonly<{
 }>
 
 export type TaoAppDefinition = {
+  /** Effective identity and release version from the runnable Tao app declaration. */
+  id: string
+  version: string
+  /** Rebinds inherited app state and actions for a derived app's effective ID. */
+  bindApp?(appId: string): TaoAppBinding
   agentCommands?(): readonly RuntimeCommand[]
   auth?(): TaoConfiguredAuth
   auxiliaries(scope?: RuntimeAuthScope): Record<string, TaoNavigationInput>
@@ -106,10 +111,22 @@ export type TaoAppDefinition = {
   design?(): TaoDesign | undefined
   name: string
   navigator(scope?: RuntimeAuthScope): TaoNavigationInput
-  /** The project's `guard default`, which every app in the project carries when one is declared. */
+  /** The app's read net, with its variant's per-case overrides already merged. */
   readNet?(): TaoReadNet | undefined
   restoration?: TaoAppRestorationDefinition
   useSetup?(): void
+}
+
+type TaoAppBinding = {
+  scope: Record<string, any>
+  name(): string
+  navigator(scope?: RuntimeAuthScope): TaoNavigationInput
+  design(): TaoDesign | undefined
+  auth(): TaoConfiguredAuth | undefined
+  agentCommands(): readonly RuntimeCommand[]
+  datasources(): readonly TaoAppDatasourceBinding[]
+  auxiliaries(scope?: RuntimeAuthScope): Record<string, TaoNavigationInput>
+  useSetup(): void
 }
 
 type TaoAppRestorationDefinition = Readonly<{

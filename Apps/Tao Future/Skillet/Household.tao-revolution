@@ -75,7 +75,7 @@ view JoinKitchen(Code secret) {
          Text("Sign in first — this invitation will be waiting.") [body]
          SignInPanel()
       }  }
-      guard Invited // loading and missing fall to `guard default`; an expired invitation still shows its kitchen, and joining is refused with a sentence
+      guard Invited // loading and missing fall to the app read net; an expired invitation still shows its kitchen, and joining is refused with a sentence
       Text("You're invited to { Invited.Name }") [title]
       Text("You'll share its recipes, its plan, and its shopping list.") [body, muted]
       if Invited.Anyone { Text("Anyone with this link may join once, until it is used.") [caption] }

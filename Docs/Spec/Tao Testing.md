@@ -58,7 +58,7 @@ and alternate device adapters remain future work.
 
 `tao test --watch` composes with paths, `--name`, `--output`, and `--pass-with-no-tests`: it runs the
 selected set once, then reruns the whole selected set on any change under the selected paths or the
-project roots of the selected tests, until Ctrl-C. Changes are debounced the way `tao dev`
+project roots of the selected tests, until Ctrl-C. Changes are debounced the way `tao run`
 debounces a recompile, and a change that arrives while a run is still in progress queues exactly one
 rerun rather than starting one per change. A rerun uses the same compiled-output cache a plain
 `tao test` does: its fingerprint covers every watched file, so a real change always recompiles. A failing

@@ -1,5 +1,5 @@
 // The data catalog used by the app's Local datasource.
-workspace
+project
 data Workspaces / Workspace { // the plural collection, then the singular entity it stores
    // `title` names a workspace to a person; `required` marks it unfinished until it has a name,
    // without ever blocking a write.
@@ -16,7 +16,7 @@ data Workspaces / Workspace { // the plural collection, then the singular entity
    commands { Pin, Unpin },
 }
 
-workspace
+project
 data Documents / Document {
    Title text (required "Name this document", search, title), // `search`: a query's `search` reads it
    Body text (default "", search),
@@ -33,7 +33,7 @@ data Documents / Document {
    commands hide { Delete },
 }
 
-workspace
+project
 data Paragraphs / Paragraph {
    Text text,
    Ordering number,
@@ -47,7 +47,7 @@ data Paragraphs / Paragraph {
 // `order by`: this entity lives in the device store whatever datasource the app configures, so the
 // synced variant never syncs it. Holding the session as data rather than as view state is what lets
 // it survive navigation and relaunch, and lets each consumer query it locally.
-workspace
+project
 data FocusSessions / FocusSession {
    EndsAt time, // absolute, so a running session survives relaunch correctly
    PausedAt time (default now), // read only while paused; resuming re-anchors EndsAt from it
@@ -60,7 +60,7 @@ data FocusSessions / FocusSession {
 // imports the UI package that renders them. `Pin` and `Unpin` invert the workspace's stored flag;
 // `Finish` and `Duplicate` are the ordered document defaults;
 // destructive deletion is available only where a view explicitly lists it.
-workspace
+project
 command Pin(Workspace) {
    Title "Pin workspace"
    Description "Moves this workspace to the top of the library."
@@ -69,7 +69,7 @@ command Pin(Workspace) {
    do -> { toggle Workspace.Pinned }
 }
 
-workspace
+project
 command Unpin(Workspace) {
    Title "Unpin workspace"
    Description "Returns this workspace to the unpinned library."
@@ -78,7 +78,7 @@ command Unpin(Workspace) {
    do -> { toggle Workspace.Pinned }
 }
 
-workspace
+project
 command Finish(Document) {
    Title "Finish document"
    Description "Moves a document out of drafts and into the archive."
@@ -91,7 +91,7 @@ command Finish(Document) {
    } }
 }
 
-workspace
+project
 command Duplicate(Document) {
    Title "Duplicate document"
    Description "Makes a new draft beside this document."
@@ -105,7 +105,7 @@ command Duplicate(Document) {
    } }
 }
 
-workspace
+project
 command Delete(Document) {
    Title "Delete document"
    Description "Permanently removes this document."

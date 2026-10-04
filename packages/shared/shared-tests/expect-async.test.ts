@@ -22,6 +22,7 @@ Describe('Expect asynchronous matchers', () => {
   })
 })
 
+// REMOVAL CANDIDATE: Reduce the 20 stress batches once a smaller fixture reliably reproduces Bun #33261.
 Test('settles every Git child when an assertion starts in a child completion', async () => {
   for (let batch = 0; batch < 20; batch++) {
     let completed = 0

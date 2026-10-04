@@ -11,7 +11,7 @@ import {
 import { downloadCompatibleHost, taoHostsRoot } from './HostReleases'
 
 /*
- * Where `tao dev` finds a prebuilt host, and which one it takes. Hosts are cached as
+ * Where `tao run` finds a prebuilt host, and which one it takes. Hosts are cached as
  * `<root>/<hostKey>/<platform>/`, a binary beside its manifest, but the path is only where one was
  * put: a host is taken because its manifest's native kit covers the kit this Tao computes for
  * itself, never because of the directory it sits in. The roots are the Tao home's `hosts/`
@@ -21,7 +21,7 @@ import { downloadCompatibleHost, taoHostsRoot } from './HostReleases'
 /** CHECKOUT_HOSTS_PATH is where a Tao checkout's own host builds land, relative to its root. */
 export const CHECKOUT_HOSTS_PATH = '.artifacts/hosts'
 
-/** PrebuiltHost is one host `tao dev` can install: its directory, manifest, and binary. */
+/** PrebuiltHost is one host `tao run` can install: its directory, manifest, and binary. */
 export type PrebuiltHost = {
   binaryPath: string
   directory: string
@@ -45,7 +45,7 @@ function hostRoots(): string[] {
 }
 
 /**
- * obtainCompatibleHost is how `tao dev` gets a host: a cached one whose kit covers `required`, or
+ * obtainCompatibleHost is how `tao run` gets a host: a cached one whose kit covers `required`, or
  * else the newest published one that does, downloaded into Tao's home. A download that cannot
  * happen — offline, rate-limited, or releases not yet public — is one calm line, and the caller
  * falls back to Expo Go as it would with no host at all.

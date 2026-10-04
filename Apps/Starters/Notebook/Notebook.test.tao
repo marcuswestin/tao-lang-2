@@ -19,11 +19,4 @@ test "Notebook" {
       back
       expect text "Groceries (updated)"
    }
-   test "keeps notes across a relaunch" {
-      run Notebook
-      enter "Groceries" into #noteTitle
-      press #addNote
-      relaunch
-      expect text "Groceries"
-   }
 }

@@ -3,6 +3,16 @@ import { Describe, Expect, Test } from '@shared/test'
 import { testParseCode } from './test-parse'
 
 Describe('parser: types', () => {
+  Test('parses app type contracts with lowercase metadata slots', async () => {
+    const parseResult = await testParseCode('type ReusableApp is app with { name text is "Reusable" }')
+
+    Expect(parseResult.diagnostics).toEqual([])
+    const declaration = parseResult.entry.ast.statements.find(AST.isTypeDeclaration)
+    Expect.Is(declaration, AST.isTypeDeclaration)
+    Expect.Is(declaration.type, AST.isDerivedTypeExpression)
+    Expect(declaration.type.slots.properties[0]?.name).toBe('name')
+  })
+
   Test('parses projected input types and typed copies', async () => {
     const parseResult = await testParseCode(`
       data Documents / Document { Title text, Body text, Owner text, CreatedAt time }
@@ -13,7 +23,6 @@ Describe('parser: types', () => {
       }
     `)
 
-    Expect(parseResult.diagnostics).toEqual([])
     const [input, editable] = parseResult.entry.ast.statements.filter(AST.isTypeDeclaration)
     Expect.Is(input, AST.isTypeDeclaration)
     Expect.Is(editable, AST.isTypeDeclaration)
@@ -54,7 +63,6 @@ Describe('parser: types', () => {
       view Text(Value text) { }
     `)
 
-    Expect(parseResult.diagnostics).toEqual([])
     const [nameType, tagsType, jobType, personType] = parseResult.entry.ast.statements.filter(AST.isTypeDeclaration)
     Expect.Is(nameType, AST.isTypeDeclaration)
     Expect.Is(tagsType, AST.isTypeDeclaration)
@@ -106,7 +114,6 @@ Describe('parser: types', () => {
       view MainView() { }
     `)
 
-    Expect(parseResult.diagnostics).toEqual([])
     const profile = parseResult.entry.ast.statements.find(
       statement => AST.isTypeDeclaration(statement) && statement.name === 'Profile',
     )
@@ -142,7 +149,6 @@ Describe('parser: types', () => {
       view MainView() { }
     `)
 
-    Expect(parseResult.diagnostics).toEqual([])
     const profile = parseResult.entry.ast.statements.find(
       statement => AST.isTypeDeclaration(statement) && statement.name === 'Profile',
     )
@@ -168,7 +174,6 @@ Describe('parser: types', () => {
       view MainView() { }
     `)
 
-    Expect(parseResult.diagnostics).toEqual([])
     const adminType = parseResult.entry.ast.statements.find(
       statement => AST.isTypeDeclaration(statement) && statement.name === 'Admin',
     )

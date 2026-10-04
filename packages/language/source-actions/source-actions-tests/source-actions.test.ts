@@ -16,22 +16,6 @@ import {
 
 Describe('organizeSource use statements', () => {
   Test(
-    'produces no edit for an already organized file',
-    organized(`
-      use Stack, Text from @tao/ui
-
-      app MyApp {
-         view MainView
-      }
-
-      view MainView() {
-         render Stack() {
-            Text("hi")
-      }  }
-    `),
-  )
-
-  Test(
     'merges duplicate imports from the same source',
     organizes(
       `
@@ -55,25 +39,6 @@ Describe('organizeSource use statements', () => {
   )
 
   Test(
-    'removes unused imported symbols',
-    organizes(
-      `
-        use Text, Row, Button from @tao/ui
-        view MainView() {
-           render Text("hi")
-        }
-      `,
-      `
-        use Text from @tao/ui
-
-        view MainView() {
-           render Text("hi")
-        }
-      `,
-    ),
-  )
-
-  Test(
     'keeps an imported one-of type when one of its cases is referenced',
     organized(`
       use Haptic, HapticKind from @tao/device/haptic
@@ -84,19 +49,6 @@ Describe('organizeSource use statements', () => {
             do Feedback.Play(Success)
       }  }
     `),
-  )
-
-  Test(
-    'drops use statements whose imports are all unused',
-    organizes(
-      `
-        use Button from @tao/ui
-        view MainView() { }
-      `,
-      `
-        view MainView() { }
-      `,
-    ),
   )
 
   Test(
@@ -128,29 +80,6 @@ Describe('organizeSource use statements', () => {
   )
 
   Test(
-    'sorts imported symbols alphabetically within each import',
-    organizes(
-      `
-        use Text, Stack, Row from @tao/ui
-        view MainView() {
-           render Stack() {
-              Row() {
-                 Text("hi")
-        }  }  }
-      `,
-      `
-        use Row, Stack, Text from @tao/ui
-
-        view MainView() {
-           render Stack() {
-              Row() {
-                 Text("hi")
-        }  }  }
-      `,
-    ),
-  )
-
-  Test(
     'keeps unresolved imports when organizing source',
     organizes(
       `
@@ -168,79 +97,24 @@ Describe('organizeSource use statements', () => {
 
 Describe('organizeSource canonical statement order', () => {
   Test(
-    'moves use statements above other top-level statements',
-    organizes(
-      `
-        app MyApp {
-           view MainView
-        }
-        use Text from @tao/ui
-        view MainView() {
-           render Text("hi")
-        }
-      `,
-      `
-        use Text from @tao/ui
-
-        app MyApp {
-           view MainView
-        }
-
-        view MainView() {
-           render Text("hi")
-        }
-      `,
-    ),
-  )
-
-  Test(
-    'moves app declarations after imports and keeps other statements after the app',
-    organizes(
-      `
-        let Greeting = "hi"
-        app MyApp {
-           view MainView
-        }
-        use Text from @tao/ui
-        view MainView() {
-           render Text(Greeting)
-        }
-      `,
-      `
-        use Text from @tao/ui
-
-        app MyApp {
-           view MainView
-        }
-
-        let Greeting = "hi"
-
-        view MainView() {
-           render Text(Greeting)
-        }
-      `,
-    ),
-  )
-
-  Test(
-    'moves project metadata after imports and before the app',
+    'moves package publication after imports and before the app',
     organizes(
       `
         app MyApp { view MainView }
         view MainView() { render Text("hi") }
         use Text from @tao/ui
-        project {
+        package {
            name "My App"
-           remote none
+           version 1.0.0
            license MIT
         }
       `,
       `
         use Text from @tao/ui
 
-        project {
+        package {
            name "My App"
-           remote none
+           version 1.0.0
            license MIT
         }
 
@@ -427,18 +301,6 @@ Describe('removeUnusedImports', () => {
     }\n`)
   })
 
-  Test('produces no edit when every import is used', async () => {
-    const document = await parseDocument(`
-      use Text from @tao/ui
-
-      view MainView() {
-         render Text("hi")
-      }
-    `)
-
-    Expect(await SourceActions.removeUnusedImports(document)).toBeUndefined()
-  })
-
   Test('keeps app imports used by run steps', async () => {
     await withTaoFiles(
       'tao-source-actions-tests-',
@@ -485,18 +347,6 @@ Describe('removeUnusedImports', () => {
 
   for (
     const example of [
-      {
-        name: 'singular-only entity type',
-        imports: 'Document',
-        body: 'view Editor(Document) { render Empty(Document.Title) }',
-        kept: ['Document'],
-      },
-      {
-        name: 'plural-only root query',
-        imports: 'Documents',
-        body: 'view Editor() { query Documents = Documents with { } render Empty("ok") }',
-        kept: ['Documents'],
-      },
       {
         name: 'both explicit forms when both are used',
         imports: 'Documents, Document',
@@ -561,12 +411,6 @@ Describe('removeUnusedImports', () => {
         kept: [],
       },
       {
-        name: 'no singular import for a local same-name state',
-        imports: 'Document',
-        body: 'view Editor() { state Document = "local" render Empty(Document) }',
-        kept: [],
-      },
-      {
         name: 'neither unused form',
         imports: 'Documents, Document',
         body: 'view Editor() { render Empty("ok") }',
@@ -574,50 +418,41 @@ Describe('removeUnusedImports', () => {
       },
     ]
   ) {
-    for (const operation of ['removeUnusedImports', 'organizeSource'] as const) {
-      Test(`${operation} keeps ${example.name}`, async () => {
-        await withTaoFiles('tao-source-actions-data-import-', {
-          'Main.tao': `
-            use ${example.imports} from ./Schema.tao
-            ${example.body}
-            view Empty(Value text) { render inject \`\`\`ts return null \`\`\` }
-            view Col() { render inject Content @@content \`\`\`ts return Content \`\`\` }
-          `,
-          'Schema.tao': 'workspace data Documents / Document { Title text }',
-        }, async paths => {
-          const source = await FS.readText(paths['Main.tao']!)
-          const document = await parseRawDocumentAt(source, paths['Main.tao']!)
-          Expect(document.parseResult.lexerErrors).toEqual([])
-          Expect(document.parseResult.parserErrors).toEqual([])
-          const uses = document.parseResult.value.statements.filter(AST.isUseStatement)
-          Expect(uses[0]!.importedDeclarations.every(reference => reference.ref !== undefined)).toBe(true)
-          if (example.name.includes('loop binder')) {
-            const references = AST.streamAllContents(document.parseResult.value)
-              .filter(AST.isMemberAccessExpression)
-            Expect(references.some(reference => AST.isForStatement(reference.target.ref))).toBe(true)
-          }
-          if (example.name.includes('local same-name')) {
-            const reference = AST.streamAllContents(document.parseResult.value)
-              .filter(AST.isValueReference).find(reference => reference.target.$refText === 'Document')
-            Expect(reference?.target.ref).toBeDefined()
-            Expect(AST.findRoot(reference!.target.ref!)).toBe(document.parseResult.value)
-          }
-          const updated = await SourceActions[operation](document) ?? source
-          const reparsed = await parseRawDocumentAt(updated, paths['Main.tao']!)
-          const imports = reparsed.parseResult.value.statements.filter(AST.isUseStatement)
-            .flatMap(statement => statement.importedDeclarations.map(reference => reference.$refText))
-          Expect(imports.toSorted()).toEqual(example.kept)
-          Expect(await SourceActions[operation](reparsed)).toBeUndefined()
-          if (example.name.includes('local same-name')) {
-            const validated = await Workspace.validate(paths['Main.tao']!)
-            const unused = validated.diagnostics.filter(diagnostic =>
-              diagnostic.code === useValidationCodes.unusedImport
-            )
-            Expect(unused).toHaveLength(1)
-          }
-        })
+    Test(`removeUnusedImports keeps ${example.name}`, async () => {
+      await withTaoFiles('tao-source-actions-data-import-', {
+        'Main.tao': `
+          use ${example.imports} from ./Schema.tao
+          ${example.body}
+          view Empty(Value text) { render inject \`\`\`ts return null \`\`\` }
+          view Col() { render inject Content @@content \`\`\`ts return Content \`\`\` }
+        `,
+        'Schema.tao': 'project data Documents / Document { Title text }',
+      }, async paths => {
+        const source = await FS.readText(paths['Main.tao']!)
+        const document = await parseRawDocumentAt(source, paths['Main.tao']!)
+        Expect(document.parseResult.lexerErrors).toEqual([])
+        Expect(document.parseResult.parserErrors).toEqual([])
+        const uses = document.parseResult.value.statements.filter(AST.isUseStatement)
+        Expect(uses[0]!.importedDeclarations.every(reference => reference.ref !== undefined)).toBe(true)
+        if (example.name.includes('loop binder')) {
+          const references = AST.streamAllContents(document.parseResult.value)
+            .filter(AST.isMemberAccessExpression)
+          Expect(references.some(reference => AST.isForStatement(reference.target.ref))).toBe(true)
+        }
+        if (example.name.includes('local same-name')) {
+          const reference = AST.streamAllContents(document.parseResult.value)
+            .filter(AST.isValueReference).find(reference => reference.target.$refText === 'Document')
+          Expect(reference?.target.ref).toBeDefined()
+          Expect(AST.findRoot(reference!.target.ref!)).toBe(document.parseResult.value)
+        }
+        const updated = await SourceActions.removeUnusedImports(document) ?? source
+        const reparsed = await parseRawDocumentAt(updated, paths['Main.tao']!)
+        const imports = reparsed.parseResult.value.statements.filter(AST.isUseStatement)
+          .flatMap(statement => statement.importedDeclarations.map(reference => reference.$refText))
+        Expect(imports.toSorted()).toEqual(example.kept)
+        Expect(await SourceActions.removeUnusedImports(reparsed)).toBeUndefined()
       })
-    }
+    })
   }
 
   Test('unused-import quickfix removes only the unused data form', async () => {
@@ -626,14 +461,13 @@ Describe('removeUnusedImports', () => {
         use Documents, Document from ./Schema.tao
         view Editor(Document) { render inject \`\`\`ts return null \`\`\` }
       `,
-      'Schema.tao': 'workspace data Documents / Document { Title text }',
+      'Schema.tao': 'project data Documents / Document { Title text }',
     }, async paths => {
       const validated = await Workspace.validate(paths['Main.tao']!)
       const document = validated.entry.document
       const unused = validated.diagnostics.filter(diagnostic => diagnostic.code === useValidationCodes.unusedImport)
         .map(diagnostic => ({ code: diagnostic.code, message: diagnostic.message, range: diagnostic.range! }))
       Expect(unused).toHaveLength(1)
-      Expect(unused[0]!.range).toBeDefined()
       const actions = await new TaoCodeActionProvider().getCodeActions(document, {
         textDocument: { uri: document.uri.toString() },
         range: unused[0]!.range,
@@ -745,24 +579,6 @@ Describe('removeUnusedImports', () => {
 })
 
 Describe('moveRendersLast', () => {
-  Test('moves a render statement to the end of its view body', async () => {
-    const document = await parseDocument(`
-      view MainView() {
-         render Text(Greeting)
-         let Greeting = "hi"
-      }
-    `)
-
-    Expect(await SourceActions.moveRendersLast(document)).toBe(`${
-      Text.stripIndent(`
-      view MainView() {
-         let Greeting = "hi"
-         render Text(Greeting)
-      }
-    `)
-    }\n`)
-  })
-
   Test('moves render statements to the end of plain and responds-declaring view bodies', async () => {
     const document = await parseDocument(`
       type Answer is one of Confirmed

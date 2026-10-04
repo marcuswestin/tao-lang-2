@@ -1,0 +1,55 @@
+{
+  "id": "20260926234036716-9356b414-ab5b-41ef-9b3f-50a093807ccd",
+  "runId": "20260926233551708-ca460a27-0bbf-446d-9388-e83161a7ac84",
+  "createdAt": "2026-09-26T23:40:36.716Z",
+  "recordedAt": "2026-09-26T23:40:36.716Z",
+  "commit": "d5bdeaefd03740d976cc14da01b80688aa6fbe89",
+  "phase": 1,
+  "executionProfile": "development",
+  "provenance": {
+    "snapshotBasis": "observation-time",
+    "originalDependencies": "recorded",
+    "observedMetadataEvidence": [
+      "Docs/QA/evidence/final-pilot/reading-list-phone.png",
+      "Docs/QA/evidence/final-pilot/capture.json",
+      "Docs/QA/evidence/final-pilot/source-snapshot.json",
+      "Docs/QA/evidence/final-pilot/review.md"
+    ]
+  },
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "runtime": "bun:1.4.2"
+  },
+  "inputs": {
+    "source": "Docs/Tutorials/Your First Tao App.md",
+    "dependencySnapshot": "Docs/QA/inputs/f387790d8201945c60701db9e04992ddf96d93cbdef461eba9648e93c6b164aa.json"
+  },
+  "surfaceId": "visual:reading-list",
+  "dimension": "visual",
+  "outcome": "friction",
+  "reviewer": "agent",
+  "channel": "phone-light",
+  "evidence": [
+    {
+      "path": "Docs/QA/evidence/final-pilot/reading-list-phone.png",
+      "sha256": "94d3f329e159b7b46b31780370ef920334bd2bea552e429b3fbf6e04c5d0af7c"
+    },
+    {
+      "path": "Docs/QA/evidence/final-pilot/capture.json",
+      "sha256": "a2723eab0c1cb6e36cca4fe4e5dc18b86110d377c936c3f736630b2f11d06d8c"
+    },
+    {
+      "path": "Docs/QA/evidence/final-pilot/source-snapshot.json",
+      "sha256": "e24604bca8e4d70b3f17bd6aa8ccada8b17a83c0bcc1da53646c07bf8aaec0b3"
+    },
+    {
+      "path": "Docs/QA/evidence/final-pilot/review.md",
+      "sha256": "94b36a0387c162f34aca687e970e88bb92209e3df2f7fca31dc4481db99d9ef9"
+    }
+  ],
+  "notes": "Inspected actual final phone image: LibraryAbout is visually joined and a large vertical gap separates Reading and Finished. Initial fixture only; no keyboard or failure-state acceptance.",
+  "sourceHash": "0cd3438d3d501c81f82956dc2e64a7f9e05ef53c7496abc1a2d63124444d84f0",
+  "rendererHash": "99bbbedc6f85b385352f81eca62987298eb506aa9ebd0a8917e33dd1c1f892f8",
+  "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
+}

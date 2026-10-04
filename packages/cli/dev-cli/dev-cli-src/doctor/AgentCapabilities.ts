@@ -17,7 +17,10 @@ export type CapabilityReport = {
   version: 1
 }
 
-const LANDING_REQUIRED_CAPABILITIES = new Set(['Watchman socket', 'CoreSimulator service', 'Hutch native launcher'])
+export const WATCHMAN_SOCKET = 'Watchman socket'
+const LANDING_REQUIRED_CAPABILITIES = new Set([WATCHMAN_SOCKET])
+/** Only the native gates need these, and `verify-full` skips those gates off macOS. */
+const MACOS_LANDING_REQUIRED_CAPABILITIES = new Set(['CoreSimulator service', 'Hutch native launcher'])
 
 export type ProbeResult = {
   error?: unknown
@@ -72,7 +75,7 @@ const PROBES: readonly CapabilityProbe[] = [
     args: ['--no-spawn', '--no-local', 'watch-list'],
     command: 'watchman',
     display: 'watchman --no-spawn --no-local watch-list',
-    name: 'Watchman socket',
+    name: WATCHMAN_SOCKET,
     // Agent sandboxes leave Watchman's per-login socket out by design; a denial there is expected.
     remediation: 'Run ./agent unsandboxed watchman status; if stopped, run ./agent unsandboxed watchman start. '
       + 'Run file-watching dev loops with ./agent unsandboxed app-dev or ./agent unsandboxed studio.',
@@ -137,9 +140,18 @@ export function classifyCapability(probe: CapabilityProbe, result: ProbeResult):
   }
 }
 
+/** Whether landing on this host platform blocks on the named capability. */
+export function requiredToLand(name: string, hostPlatform: string = Platform.hostPlatform): boolean {
+  return LANDING_REQUIRED_CAPABILITIES.has(name)
+    || (hostPlatform === 'darwin' && MACOS_LANDING_REQUIRED_CAPABILITIES.has(name))
+}
+
 /** Required probes, rather than an inherited harness marker, decide whether landing can run host gates. */
-export function unavailableLandingCapabilities(report: CapabilityReport): readonly CapabilityCheck[] {
-  return report.checks.filter(check => LANDING_REQUIRED_CAPABILITIES.has(check.name) && check.status !== 'available')
+export function unavailableLandingCapabilities(
+  report: CapabilityReport,
+  hostPlatform: string = Platform.hostPlatform,
+): readonly CapabilityCheck[] {
+  return report.checks.filter(check => requiredToLand(check.name, hostPlatform) && check.status !== 'available')
 }
 
 /** readAgentCapabilities probes host seams without installing tools, opening apps, or signalling processes. */

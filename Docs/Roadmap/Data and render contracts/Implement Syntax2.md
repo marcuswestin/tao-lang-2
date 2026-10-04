@@ -4,6 +4,7 @@ Requested 2026-10-04. Deliver [Apps/Syntax2](../../../Apps/Syntax2/README.md) as
 implementing its accepted, non-deferred requirements and graduating dependency-complete source
 from `.tao.future` to `.tao`. Source files are the forcing target, not evidence of parser acceptance.
 This task records the implementation program; no implementation threads have been launched.
+Reconciled with the 2026-10-04 project/module migration before baseline landing.
 
 Planning readiness: **100% for the high-level implementation plan**, reviewed 2026-10-04.
 The bounded final audit found no unresolved author decision blocking the plan. This is not
@@ -20,8 +21,8 @@ before implementation depends on their exact grammar. Do not promote provisional
 spellings into universal language decisions. The program supplements the existing Revolution process;
 it does not silently change MVP priority or replace WordFlower tranche obligations.
 
-Remain deferred: general never/bans (A23), localized core text/string (A21), comprehensive static
-proof investigation (A22), general entity/query-state redesign (A24), remaining time/date APIs (A25)
+Remain deferred: general never/bans (A28), localized core text/string (A26), comprehensive static
+proof investigation (A27), general entity/query-state redesign (A29), remaining time/date APIs (A30)
 and automatic whole-app capability/effect refinement (post-MVP). Implement already selected basic
 effects and clock/quantity behavior; app-owned bounded adapter metadata can be narrow. If an app
 requirement genuinely depends on an unresolved deferred design, settle that specific seam with
@@ -49,6 +50,11 @@ use ordinary associated/library adapters. stdlib/Keyed.tao.future graduates into
 owner, not an app-local competing declaration. Scalar is an abstract operation family; unit ambiguity
 requires qualification; inverse alias double fills are rejected even if consistent.
 
+Preserve existing effect-outcome machinery: transitive failure inference, contained-call savepoints,
+bound action results and detached-root scheduling already exist. Workstream D implements the delta
+to the selected `then`/`done`, coverage and cleanup contracts, with parity tests for existing behavior.
+Do not replace proven rollback or effect inference with a parallel implementation.
+
 Every slice is vertical: parser/AST where needed, semantic validation, formatter and source actions,
 compiler lowering, runtime, native bridge and tests. Prove owner-specific behavior, not merely that a
 fixture parses. For approved interface changes, add counterexamples at grammar/type seams and Tao
@@ -72,7 +78,7 @@ behavior checks during the owning slices for the following accepted cases:
 Preserve the selected Time.StartTimer/Timer.Duration/Time.Now API and function restrictions. Classify
 their permitted clock observations explicitly at implementation; do not create a blanket native I/O
 exception. If these selected contracts cannot coexist, return only that narrow conflict for judgment.
-The broader time API remains deferred to A25.
+The broader time API remains deferred to A30.
 
 ## High-level implementation plan
 
@@ -104,7 +110,11 @@ snapshots or mounted JSX.
 1. **Foundation and launchable shell — coordinator first.**
    a. Re-check current code and instructions; produce exact path ownership, dependency and acceptance
    manifests. Retain current implemented behavior until the selected replacement has parity proof.
-   b. Establish shared callable/type/effect contracts and a checked native binding contract. Prototype
+   b. Extend shared callable/type/effect contracts and the existing checked native binding pipeline.
+   BridgeMetadata plans contracts; ProjectToolingService publishes `.tao-ts` contracts, removes
+   legacy adjacent outputs and runs mapped TypeScript checks. Preserve handwritten sidecars and
+   that publication ownership when adding checked quantities, live handles and callback contracts.
+   Prototype
    owner-elided members, named-state construction, unit suffixes and bare render parsing with
    ambiguity/precedence counterexamples. Implement a coherent minimum before publishing it.
    c. Extract the smallest dependency-complete entry and real Tao journey into `.tao`, omitting
@@ -148,6 +158,8 @@ before dispatch; these are architecture anchors, not exhaustive launch-time assi
 - `packages/language/validator/validator-src/validators/FunctionalCoreValidator.ts`.
 - `packages/compiler/compiler-src/codegen/react-native/app/FunctionalCoreCompiler.ts`, common
   compiler aggregation and `packages/compiler/compiler-src/bridge-metadata.ts`.
+- `packages/language/project-tooling/project-tooling-src/ProjectToolingService.ts`, contract publication
+  and project TypeScript configuration when extending the native boundary.
 - `packages/apps/runtime/TaoRuntime-src/TR.ts` and shared native value/effect representation.
 - Apps/Syntax2 integration source, graduation/coverage ledger, shared exports/config and roadmap edits.
 

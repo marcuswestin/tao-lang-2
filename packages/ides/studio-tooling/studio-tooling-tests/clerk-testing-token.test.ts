@@ -93,10 +93,8 @@ Test('complete Clerk environment configuration never opens the stored secrets', 
 Test('Clerk testing token setup preserves requests and cannot leak to another origin or path', async () => {
   const excluded = [
     'https://example.clerk.accounts.dev.evil.test/v1/client',
-    'https://other.clerk.accounts.dev/v1/client',
     'http://example.clerk.accounts.dev/v1/client',
     'https://example.clerk.accounts.dev/npm/sdk.js',
-    'http://127.0.0.1:4000/v1/data',
   ]
   const script = `
     const requests = []

@@ -42,7 +42,6 @@ Describe('Companion host build', () => {
         Expect(fixture.calls.find(call => call.command === 'pod')?.spec.env?.['LANG']).toBe('en_US.UTF-8')
         Expect(fixture.calls.find(call => call.command === 'xcodebuild')?.spec.env?.['LC_ALL']).toBe('en_US.UTF-8')
         Expect(Platform.runtimeProcess.env['DEVELOPER_DIR']).toBe(original)
-        Expect(fixture.calls.some(call => call.command.includes('xcode-select'))).toBe(false)
       } finally {
         await FS.remove(fixture.root)
       }

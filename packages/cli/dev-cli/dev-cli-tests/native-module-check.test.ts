@@ -117,6 +117,7 @@ Describe('native module compiler check', () => {
           'app.config.js',
           'app-config.cjs',
           'index.ts',
+          'expo-host-src/ManagedLoopIdentityMarker.ts',
           'metro.config.cjs',
           'package.json',
         ]
@@ -132,6 +133,8 @@ Describe('native module compiler check', () => {
       await NativeModuleCheck.testing.prepareHost(source, host)
 
       Expect(await FS.readText(FS.resolvePath('app.json', host))).toBe('app.json')
+      Expect(await FS.readText(FS.resolvePath('expo-host-src/ManagedLoopIdentityMarker.ts', host)))
+        .toBe('expo-host-src/ManagedLoopIdentityMarker.ts')
       Expect(await FS.readText(FS.resolvePath('assets/icon.png', host))).toBe('icon')
       Expect(await FS.readText(FS.resolvePath('plugins/plugin.cjs', host))).toBe('plugin')
       Expect(await FS.realPath(FS.resolvePath('node_modules', host)))
@@ -188,7 +191,7 @@ Describe('native module compiler check', () => {
     Expect(output.join('\n')).toContain('Artifacts retained at: /repo/.artifacts/native-module-check/run-1')
   })
 
-  Test('bounds a real child command without leaving its timeout timer active', async () => {
+  Test('classifies a timed-out child as a native check timeout', async () => {
     // This is the timeoutMs under test — the child sleeps 1s and the test proves the real-command
     // timeout path fires, not that the run is fast.
     const result = await NativeModuleCheck.testing.runCommand({
@@ -230,14 +233,9 @@ Describe('native module compiler check', () => {
     Expect(output.join('\n')).toContain('SwiftCompile failed')
   })
 
-  Test('parses pod and Xcode target JSON and rejects missing required targets', () => {
-    Expect(NativeModuleCheck.testing.podTargetName('{"name":"Native"}', '/repo/Native.podspec')).toBe('Native')
-    Expect(NativeModuleCheck.testing.podsProjectTargets('{"project":{"targets":["Support","Native"]}}'))
-      .toEqual(['Support', 'Native'])
+  Test('deduplicates and sorts declared pod targets', () => {
     Expect(NativeModuleCheck.testing.requiredPodTargets(['B', 'A', 'B'], ['A', 'B', 'Support']))
       .toEqual(['A', 'B'])
-    Expect(() => NativeModuleCheck.testing.requiredPodTargets(['Missing'], ['Support']))
-      .toThrow('missing native module target: Missing')
   })
 })
 

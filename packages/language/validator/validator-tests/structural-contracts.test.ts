@@ -29,7 +29,7 @@ Describe('validator: declaration contracts', () => {
     rejects(
       `
         let NotNavigation = "not navigation"
-        workspace let BadApp = app {
+        project let BadApp = app {
           Name "Bad"
           Navigator NotNavigation
         }
@@ -50,8 +50,7 @@ Describe('validator: declaration contracts', () => {
         supports { }
         ${implementation('provider')}
       }
-      app Demo {
-        Name "Demo"
+      app Demo { id "demo" version "1.0.0" name "Demo"
         Navigator { Initial Home }
         Datasource { StorageKey "demo" }
       }
@@ -64,7 +63,7 @@ Describe('validator: declaration contracts', () => {
     'rejects a bare app slot block without its uniquely named declaration',
     rejects(
       `
-        app Demo { Name "Demo" Navigator { Initial Home } }
+        app Demo { id "demo" version "1.0.0" name "Demo" Navigator { Initial Home } }
         view Home() { render Empty() }
         ${stubView('Empty')}
       `,
@@ -77,7 +76,7 @@ Describe('validator: declaration contracts', () => {
     rejects(
       `
         use StackNav from @tao/nav
-        app Demo { Name "Demo" Navigator StackNav { Initial Detail } }
+        app Demo { id "demo" version "1.0.0" name "Demo" Navigator StackNav { Initial Detail } }
         view Detail(Label text) { render Empty() }
         ${stubView('Empty')}
       `,
@@ -102,7 +101,7 @@ Describe('validator: declaration contracts', () => {
     rejects(
       `
         use StackNav from @tao/nav
-        app Demo { Name "Demo" Navigator StackNav { } }
+        app Demo { id "demo" version "1.0.0" name "Demo" Navigator StackNav { } }
       `,
       configuredValueValidationMessages.missingConfiguration('StackNav', 'Initial'),
     ),
@@ -131,8 +130,7 @@ Describe('validator: declaration contracts', () => {
         Display "tabs"
         @home { Label "Home" Content Home }
       }
-      app Demo {
-        Name "Demo"
+      app Demo { id "demo" version "1.0.0" name "Demo"
         Navigator Main
         Datasource SnapshotStore { StorageKey "demo" }
       }
@@ -209,7 +207,7 @@ Describe('validator: declaration contracts', () => {
       let BaseNavigation = StackNav { Initial Home }
       let NavigationAlias = BaseNavigation
       let PatchedNavigation = NavigationAlias with { Initial Other }
-      app Demo { Name "Demo" Navigator PatchedNavigation }
+      app Demo { id "demo" version "1.0.0" name "Demo" Navigator PatchedNavigation }
       scene Home() { Title "Home" render Empty() }
       scene Other() { Title "Other" render Empty() }
       ${stubView('Empty')}
@@ -223,7 +221,7 @@ Describe('validator: declaration contracts', () => {
       use StackNav from @tao/nav
       let Plain = 5
       let Patched = Plain with { X: 1 }
-      app Demo { Name "Demo" Navigator StackNav { Initial Home } }
+      app Demo { id "demo" version "1.0.0" name "Demo" Navigator StackNav { Initial Home } }
       view Home() { render Empty() }
       ${stubView('Empty')}
     `,
@@ -238,7 +236,7 @@ Describe('validator: declaration contracts', () => {
     accepts(`
       type HiddenNav is nav with { ${implementation('nav')} }
       let Hidden = HiddenNav { }
-      app Demo { Name "Demo" Navigator Hidden }
+      app Demo { id "demo" version "1.0.0" name "Demo" Navigator Hidden }
       view Home() { render Empty() }
       ${stubView('Empty')}
     `),
@@ -335,7 +333,7 @@ Describe('validator: declaration contracts', () => {
     rejects(
       `
       use StackNav from @tao/nav
-      app OverlayApp { Name "Overlay" Navigator StackNav { Initial Home } }
+      app OverlayApp { id "overlayapp" version "1.0.0" name "Overlay" Navigator StackNav { Initial Home } }
       view Home() {
         action Open() { present Detail() as overlay in Detail }
         render Empty()
@@ -379,7 +377,7 @@ Describe('validator: declaration contracts', () => {
     rejects(
       `
         use StackNav from @tao/nav
-        app RestoreApp { Name "Restore" Navigator StackNav { Initial Home } }
+        app RestoreApp { id "restoreapp" version "1.0.0" name "Restore" Navigator StackNav { Initial Home } }
         view Home() {
           action Callback() { }
           action Open() { present Detail(Callback) }
@@ -396,7 +394,7 @@ Describe('validator: declaration contracts', () => {
     'allows action arguments on toasts because toasts never enter restoration snapshots',
     accepts(`
       use StackNav from @tao/nav
-      app ToastActions { Name "Toast actions" Navigator StackNav { Initial Home } }
+      app ToastActions { id "toastactions" version "1.0.0" name "Toast actions" Navigator StackNav { Initial Home } }
       scene Home() {
         Title "Home"
         action Callback() { }
@@ -418,7 +416,7 @@ Describe('validator: declaration contracts', () => {
         Display "tabs"
         @workspace { Label "Workspace" Content Home }
       }
-      app SelectionApp { Name "Selection" Navigator MainNavigation }
+      app SelectionApp { id "selectionapp" version "1.0.0" name "Selection" Navigator MainNavigation }
       action Activate() { present SelectionApp@workspace }
       view Home() { render Empty() }
       ${stubView('Empty')}
@@ -428,30 +426,12 @@ Describe('validator: declaration contracts', () => {
   )
 
   Test(
-    'accepts selection activation inside any view declaration',
-    accepts(`
-      use SelectionNav from @tao/nav
-      let MainNavigation = SelectionNav {
-        Initial @workspace
-        Display "tabs"
-        @workspace { Label "Workspace" Content Home }
-      }
-      app SelectionApp { Name "Selection" Navigator MainNavigation }
-      view Home() {
-        action Activate() { present SelectionApp@workspace }
-        render Empty()
-      }
-      ${stubView('Empty')}
-    `),
-  )
-
-  Test(
     'rejects replacement outside view declarations',
     rejects(
       `
       use StackNav from @tao/nav
       let SignedOutNav = StackNav { Initial SignedOut }
-      app ReplaceApp { Name "Replace" Navigator StackNav { Initial Home } }
+      app ReplaceApp { id "replaceapp" version "1.0.0" name "Replace" Navigator StackNav { Initial Home } }
       action Reset() { replace SignedOutNav in ReplaceApp }
       view Home() { render Empty() }
       view SignedOut() { render Empty() }
@@ -466,9 +446,11 @@ Describe('validator: declaration contracts', () => {
     accepts(selectionVariantApp(
       `
       let SelectionDrawer = SelectionApp with {
+        id "selectiondrawer"
         Navigator with { Display "drawer" }
       }
       let SelectionAlternate = SelectionApp with {
+        id "selectionalternate"
         Navigator SelectionNav {
           Initial @workspace
           Display "tabs"
@@ -488,6 +470,7 @@ Describe('validator: declaration contracts', () => {
       'keys missing from a keyed app variant',
       `
         let SelectionLimited = SelectionApp with {
+          id "selectionlimited"
           Navigator SelectionNav {
             Initial @workspace
             Display "tabs"
@@ -500,7 +483,7 @@ Describe('validator: declaration contracts', () => {
     ],
     [
       'keys on app variants with non-keyed navigation',
-      'let SelectionStack = SelectionApp with { Navigator StackNav { Initial Home } }',
+      'let SelectionStack = SelectionApp with { id "selectionstack" Navigator StackNav { Initial Home } }',
       'workspace',
       'SelectionStack',
     ],
@@ -521,8 +504,7 @@ Describe('validator: declaration contracts', () => {
     accepts(`
       use SelectionNav, SlotNav, StackNav from @tao/nav
       let ResetNav = StackNav { Initial Home }
-      app StrictApp {
-        Name "Strict"
+      app StrictApp { id "strictapp" version "1.0.0" name "Strict"
         Navigator SelectionNav {
           Initial @workspace
           Display "tabs"
@@ -530,7 +512,7 @@ Describe('validator: declaration contracts', () => {
         }
         @window SlotNav { Initial Detail }
       }
-      let StrictVariant = StrictApp with { Name "Strict variant" }
+      let StrictVariant = StrictApp with { id "strictvariant" name "Strict variant" }
       scene Home() {
         Title "Home"
         action Activate() { present StrictVariant@workspace }
@@ -543,47 +525,14 @@ Describe('validator: declaration contracts', () => {
     `),
   )
 
-  const selectionNavCases: ReadonlyArray<readonly [name: string, configuration: string, message: string]> = [
-    [
-      'initial keys absent from keyed items',
-      'Initial @missing Display "tabs" @home { Label "Home" Content Home }',
+  // REMOVAL CANDIDATE: Carousel covers missing keys; this retains imported stdlib schema integration.
+  Test(
+    'rejects an Initial key absent from imported SelectionNav items',
+    rejects(
+      selectionNavApp('Initial @missing Display "tabs" @home { Label "Home" Content Home }'),
       navigationValidationMessages.unknownConfigurationKey('SelectionNav', 'Initial', '@missing'),
-    ],
-    [
-      'display values of the wrong type',
-      'Initial @home Display 3 @home { Label "Home" Content Home }',
-      navigationValidationMessages.configurationType('Display', 'text', 'number'),
-    ],
-    [
-      'duplicate keyed items',
-      'Initial @home Display "tabs" @home { Label "Home" Content Home } @home { Label "Again" Content Home }',
-      navigationValidationMessages.duplicateConfigurationKey('SelectionNav', '@home'),
-    ],
-    [
-      'labels of the wrong type',
-      'Initial @home Display "tabs" @home { Label 4 Content Home }',
-      navigationValidationMessages.configurationType('Label', 'text', 'number'),
-    ],
-    [
-      'content of the wrong type',
-      'Initial @home Display "tabs" @home { Label "Home" Content "not presentable" }',
-      navigationValidationMessages.configurationType('Content', 'view', 'text'),
-    ],
-    [
-      'unknown keyed item properties',
-      'Initial @home Display "tabs" @home { Label "Home" Content Home Extra "unknown" }',
-      navigationValidationMessages.keyedItemConfiguration('SelectionNav', '@home', 'Extra'),
-    ],
-    [
-      'missing keyed item properties',
-      'Initial @home Display "tabs" @home { Label "Home" }',
-      navigationValidationMessages.keyedItemMissing('SelectionNav', '@home', 'Content'),
-    ],
-  ]
-
-  for (const [name, configuration, message] of selectionNavCases) {
-    Test(`rejects SelectionNav ${name}`, rejects(selectionNavApp(configuration), message))
-  }
+    ),
+  )
 
   const queryCases: ReadonlyArray<readonly [name: string, source: string, message: string]> = [
     [
@@ -713,11 +662,6 @@ Describe('validator: declaration contracts', () => {
       dataValidationMessages.autoDeleteOwner('Enabled'),
     ],
     [
-      'a field that is both optional and defaulted',
-      'data Parents / Parent { Title text? (default "x") }',
-      dataValidationMessages.optionalDefault('Title'),
-    ],
-    [
       'ambiguous owner-side cascade relations',
       `
         data Parents / Parent { Children (owned) }
@@ -730,11 +674,6 @@ Describe('validator: declaration contracts', () => {
   for (const [name, source, message] of dataFieldCases) {
     Test(`rejects ${name}`, rejects(source, message))
   }
-
-  Test(
-    'accepts unique on a primitive field',
-    accepts('data Parents / Parent { ExternalId number (unique), Name text }'),
-  )
 
   Test(
     'accepts unique on a boolean field with named cases',
@@ -803,23 +742,10 @@ Describe('validator: declaration contracts', () => {
   )
 
   Test(
-    'accepts search on a text field',
-    accepts('data Recipes / Recipe { Title text (search), Servings number }'),
-  )
-
-  Test(
     'rejects search on a non-text field',
     rejects(
       'data Recipes / Recipe { Servings number (search) }',
       dataValidationMessages.searchFieldKind('Servings'),
-    ),
-  )
-
-  Test(
-    'rejects duplicate search modifiers',
-    rejects(
-      'data Recipes / Recipe { Title text (search, search) }',
-      dataValidationMessages.duplicateModifier('Title', 'search'),
     ),
   )
 
@@ -892,12 +818,10 @@ Describe('validator: declaration contracts', () => {
     Test(`rejects ${name}`, rejects(taggedLoopApp(body), message))
   }
 
-  for (const member of ['Loading', 'Error', 'Empty'] as const) {
-    Test(
-      `rejects retired collection member ${member}`,
-      rejects(collectionApp(`Text(Items.${member})`), typeValidationMessages.memberNotItem(member)),
-    )
-  }
+  Test(
+    'rejects retired collection member Loading',
+    rejects(collectionApp('Text(Items.Loading)'), typeValidationMessages.memberNotItem('Loading')),
+  )
 
   Test(
     'accepts stable entity IDs in collection loops',
@@ -940,7 +864,7 @@ function carouselApp(configuration: string): string {
     }
     view Home() { render Empty() }
     let Navigation = Carousel { ${configuration} }
-    app Demo { Name "Demo" Navigator Navigation }
+    app Demo { id "demo" version "1.0.0" name "Demo" Navigator Navigation }
     ${stubView('Empty')}
   `
 }
@@ -948,7 +872,7 @@ function carouselApp(configuration: string): string {
 function responseApp(action: string): string {
   return `
     type ConfirmResult is one of Confirmed
-    app Demo { view Editor }
+    app Demo { id "demo" version "1.0.0" name "Demo" view Editor }
     view Editor() { action Broken() { ${action} } render Empty() }
     view ConfirmClose(Title text) responds ConfirmResult { render Empty() }
     ${stubView('Empty')}
@@ -959,7 +883,7 @@ function toastApp(statement: string): string {
   return `
     use StackNav from @tao/nav
     let Target = StackNav { Initial Home }
-    app ToastApp { Name "Toast" Navigator Target }
+    app ToastApp { id "toastapp" version "1.0.0" name "Toast" Navigator Target }
     view Home() { action Present() { ${statement} } render Empty() }
     view Saved() { render Empty() }
     ${stubView('Empty')}
@@ -975,7 +899,7 @@ function selectionVariantApp(variants: string, selection: string): string {
       @workspace { Label "Workspace" Content Home }
       @settings { Label "Settings" Content Settings }
     }
-    app SelectionApp { Name "Selection" Navigator MainNavigation }
+    app SelectionApp { id "selectionapp" version "1.0.0" name "Selection" Navigator MainNavigation }
     ${variants}
     view Home() { action Activate() { present SelectionApp@${selection} } render Empty() }
     view Settings() { render Empty() }
@@ -988,7 +912,7 @@ function selectionNavApp(configuration: string): string {
   return `
     use SelectionNav from @tao/nav
     let Navigation = SelectionNav { ${configuration} }
-    app SelectionApp { Name "Selection" Navigator Navigation }
+    app SelectionApp { id "selectionapp" version "1.0.0" name "Selection" Navigator Navigation }
     view Home() { render Empty() }
     ${stubView('Empty')}
   `

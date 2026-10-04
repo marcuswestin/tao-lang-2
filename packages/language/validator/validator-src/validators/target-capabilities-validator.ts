@@ -34,12 +34,17 @@ function validate(
     return collected.diagnostics
   }
   for (const statement of app.block.statements) {
-    if (!AST.isAppProperty(statement) || !['Name', 'Navigator'].includes(statement.name) || statement.patch) {
+    if (
+      !AST.isAppProperty(statement) || !['id', 'version', 'name', 'Navigator'].includes(statement.name)
+      || statement.patch
+    ) {
       unsupported(statement, `app member '${'name' in statement ? statement.name : statement.$type}'`)
       continue
     }
-    if (statement.name === 'Name' && statement.value && !AST.isStringLiteral(statement.value)) {
-      unsupported(statement, 'computed app names')
+    if (
+      ['id', 'version', 'name'].includes(statement.name) && statement.value && !AST.isStringLiteral(statement.value)
+    ) {
+      unsupported(statement, `computed app ${statement.name}`)
     }
   }
   const navigator = app.block.statements.find(statement =>

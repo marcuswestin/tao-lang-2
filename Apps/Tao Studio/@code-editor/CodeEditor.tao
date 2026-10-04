@@ -2,5 +2,5 @@
 // revisioned host state. The implementation stays in `packages/ides/studio`, named through the same
 // product-host module the client's other views reach, so the editor and the host share one instance
 // of that module's state; this app-local package is the workbench's name for it.
-workspace
+project
 view StudioCodeEditor() from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx

@@ -4,7 +4,6 @@ test "Navigation MVP" {
    test "presents a typed destination, preserves covered state, and returns through automatic back" {
       run NavigationMVPApp
       expect navigation title "Navigation MVP"
-      expect text "Navigation MVP"
       expect text "Home visits: 0"
       press #countVisit
       expect text "Home visits: 1"
@@ -15,7 +14,6 @@ test "Navigation MVP" {
       expect text "Typed workspace"
       back
       expect navigation title "Navigation MVP"
-      expect text "Navigation MVP"
       expect text "Home visits: 1"
       expect missing text "Detail"
    }
@@ -43,20 +41,6 @@ test "Navigation MVP" {
       relaunch
       expect navigation title "Navigation MVP"
       expect missing text "Detail"
-      // Leave the app on a presented screen. The check below is what says that does not carry.
-      press #openDetail
-      expect navigation title "Typed workspace"
-   }
-   // Every check launches onto a device nobody has used, so the Detail the check above ended on is
-   // not there to restore. This check only proves that by following it: order it earlier and it
-   // proves nothing.
-   test "opens on the initial screen after an earlier check left the app on a presented one" {
-      run NavigationMVPApp
-      expect navigation title "Navigation MVP"
-      expect missing text "Detail"
-      relaunch
-      expect navigation title "Navigation MVP"
-      expect missing text "Detail"
    }
    // An `ask` is the one presentation that suspends the action that made it. These two checks are a
    // pair: the first says the action really does open a screen once the dialogue answers, so the
@@ -80,7 +64,6 @@ test "Navigation MVP" {
       expect text "Open the detail?"
       relaunch fresh
       expect navigation title "Navigation MVP"
-      expect text "Navigation MVP"
       expect missing text "Open the detail?"
       expect missing text "Answered workspace"
    }

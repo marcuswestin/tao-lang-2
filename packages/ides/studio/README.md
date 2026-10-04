@@ -135,15 +135,15 @@ answers is recorded `failed` and stops, rather than idling in a state that reads
 ## Dev data
 
 An app that configures `Datasource Dev` (`Docs/Spec/Tao Data.md`, _The Dev datasource_) keeps its
-rows on this machine, not on the device. Every Studio launch and every `tao dev` run starts one
+rows on this machine, not on the device. Every Studio launch and every `tao run` run starts one
 **dev data server** (`tao-dev-data-v1`) beside Metro on an ephemeral port — Studio logs it as
-`Dev data: tao-dev-data-v1 on port <port>` and `--json` carries it as `devDataPort`; `tao dev`
+`Dev data: tao-dev-data-v1 on port <port>` and `--json` carries it as `devDataPort`; `tao run`
 prints it with the Metro port. Each project Studio opens gets its own app key in its preview
 manifest, so several projects share one server without sharing rows.
 
 - **Where the rows are:** `.artifacts/user/dev-data/<app key>/<storage key>.json`, one complete
   snapshot per file. The app key is the app name plus a digest of its project root, the same from
-  Studio and from `tao dev`. Delete a directory to start that app clean; the next connection
+  Studio and from `tao run`. Delete a directory to start that app clean; the next connection
   serves an empty snapshot.
 - **Which devices sync:** everything running that app's development build against this dev
   server — the Studio canvas, a browser tab opened on Metro's URL, simulators, and a paired phone.
@@ -304,7 +304,7 @@ compile or reload, shutdown, a signal escalation, an orphan — and never source
 
 ## Freehand Draw, Snap, and Feed project state
 
-Unsnapped Draw geometry is committed in `.tao-project/studio/sketches.jsonc`. It is not a launch
+Unsnapped Draw geometry is committed in `.tao/studio/sketches.jsonc`. It is not a launch
 artifact, browser-local preference, or Tao render tree. Catalog format version 1 stores a monotonic
 `nextViewNumber`, a conflict `revision`, and ordered sketches. Each sketch records stable `id`,
 display `name`, project, generated `view`, width, height, total
@@ -690,8 +690,11 @@ ships in the pinned devenv profile.
 **Missing Hutch.** Only native Studio needs it; browser Studio is unaffected. `./dev studio-doctor`
 reports it as optional with the installer command.
 
-**Missing Chrome or Chromium.** Only the browser smoke lane needs it. Set `TAO_STUDIO_CHROME_PATH`
-to an executable.
+**Missing Chrome or Chromium.** Only the browser smoke lane needs it. Discovery tries
+`TAO_STUDIO_CHROME_PATH` or `CHROME_PATH`, the macOS applications, `google-chrome`, `chromium` and
+`chromium-browser` on PATH, then a Playwright Chromium under `PLAYWRIGHT_BROWSERS_PATH`; set
+`TAO_STUDIO_CHROME_PATH` to an executable when none of those exists. On Linux as root, as hosted
+containers run, Chrome is started with `--no-sandbox` because its sandbox refuses root.
 
 **Native Studio will not register.** AppKit application registration aborts under an agent host
 coalition, and the runtime dies by signal before it can report. `just studio-canary` names this;
@@ -702,7 +705,7 @@ from an ordinary Terminal in the logged-in desktop session, or use `./dev studio
 Two failures look alike and need opposite responses: a denied _temporary directory_ is resumable —
 `just clean-scratch && direnv exec . ./agent setup` — while a denied _destination path_ repeats
 forever, because some npm packages ship files under paths an agent sandbox protects (`.gitmodules`,
-`.idea/`). Start `just session-unsandboxed` and run `./agent setup` there.
+`.idea/`). Run `./agent unsandboxed setup`.
 
 **A failed install left gigabytes behind.** `just clean-scratch` reclaims it and reports how much. It
 only ever empties a repository `.artifacts` scratch root.

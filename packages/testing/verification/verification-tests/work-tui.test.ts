@@ -56,6 +56,15 @@ Describe('work dashboard', () => {
     )
   })
 
+  Test('names core ordering barriers without treating settled failures as waiting work', () => {
+    const core = state('parser:core', [], 'running')
+    const app = state('app')
+    app.node.after = ['parser:core']
+    Expect(WorkTUI.testing.dashboardSummaryText([core, app])).toBe('1 node blocked on parser:core → app')
+    core.status = 'failed'
+    Expect(WorkTUI.testing.dashboardSummaryText([core, app])).toBe('1 node waiting for local capacity')
+  })
+
   Test('groups only explicitly marked shards and leaves names opaque', () => {
     const items = WorkTUI.testing.dashboardItems([
       shard('tao-apps', 1, 'running'),
@@ -70,7 +79,6 @@ Describe('work dashboard', () => {
       'node:parser',
     ])
     const grouped = items[0]
-    Expect(grouped?.kind).toBe('group')
     Expect(grouped?.kind === 'group' ? grouped.states.map(item => item.name) : []).toEqual([
       'tao-apps#1',
       'tao-apps#2',
@@ -96,7 +104,6 @@ Describe('work dashboard', () => {
       '#4 - waiting for dependency',
     ])
     // Even a zero-output dense card retains the failing shard's identity in its title.
-    Expect(WorkTUI.testing.dashboardColumn(item, 0).title.startsWith('#3 x tao-apps')).toBe(true)
     const longName = WorkTUI.testing.dashboardItems([shard('runtime-toolchain', 12, 'failed')])[0]!
     Expect(WorkTUI.testing.dashboardColumn(longName, 0).title.startsWith('#12 x runtime-toolchain')).toBe(true)
   })

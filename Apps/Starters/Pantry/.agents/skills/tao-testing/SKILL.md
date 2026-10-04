@@ -1,6 +1,8 @@
 ---
 name: tao-testing
-description: Write Tao behavior journeys, selectors, fixtures, Studio scenarios, and visual reviews.
+description: >-
+  Prove Tao app behavior and prepare review scenarios. Use when writing or fixing .test.tao journeys,
+  choosing selectors or fixtures, adding Studio scenarios, or reviewing app visuals.
 ---
 
 # Tao Testing
@@ -70,7 +72,9 @@ scenarios Pantry "skill preview" {
 }  }
 ```
 
-Use `tao review` after scenario-visible changes. It captures each authored scenario into a portable
-visual-review bundle; pixel change is evidence to inspect, not an automatic pass/fail decision.
+Scenario syntax is available in release 1. Interactive scenario review arrives with native Studio
+in release 3. `tao review` in the standalone CLI remains deferred; a development checkout's review
+command does not establish public availability. A pixel change is evidence to inspect, not an
+automatic pass/fail decision.
 Focused test renders, direct state/action assertions, arbitrary sleeps, fixture seeding into ordinary
 tests, entity-ID selectors, watch mode, and JSON test output are unavailable.

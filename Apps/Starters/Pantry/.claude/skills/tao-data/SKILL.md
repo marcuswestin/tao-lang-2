@@ -1,6 +1,8 @@
 ---
 name: tao-data
-description: Model Tao entities, relations, queries, writes, fixtures, datasources, and typed TypeScript adapters.
+description: >-
+  Model Tao app data and storage boundaries. Use when defining entities or relations, building
+  queries and writes, preparing data fixtures, configuring datasources, or adding typed TypeScript adapters.
 ---
 
 # Tao Data
@@ -36,15 +38,16 @@ cascade deletion. Without ownership, deletion is restricted while another row re
 ## Datasources
 
 `Datasource Local { StorageKey "..." }` persists rows on the device. `Memory { }` is ephemeral.
-`Dev`, `Http`, `InstantDB`, `ICloud`, and `CloudKit` are also implemented provider declarations with
-provider-specific configuration. The `remote none` line in `project` metadata says the project has
+The release-1 public surface permits Local, Memory, and Dev. `Http` and multiple datasources arrive
+in release 2; CloudKit private sync arrives in release 4. Other hosted providers remain outside the
+five public releases. The `remote none` line in `project` metadata says the project has
 no publication remote; it does not configure app data.
 
 ## Queries and writes
 
-- `query Things { }` reads a root entity; `query Name = Parent.Children with { }` reads a relation.
-- Add repeated `where` clauses, one `order by Field [asc|desc]`, and `limit N`. Root queries may use
-  `query Things as Name`. Queries and lists expose `.Count` and `is empty`.
+- `query Things = Things` reads a root entity; `query Name = Parent.Children with { }` reads a relation.
+- Add repeated `where` clauses, one `order by Field [asc|desc]`, and `limit N` inside `with { }`.
+  Queries and lists expose `.Count` and `is empty`.
 - Guard first-fill `loading`/`error`; `empty` means a ready zero-row result. `refreshing` and `stale`
   retain already-filled rows.
 - Use `loop Things / Thing` to render rows.
@@ -54,12 +57,14 @@ no publication remote; it does not configure app data.
 ## Fixtures and scenarios
 
 Declare deterministic rows in `fixture Name { Handle = create Thing { ... } }`, then attach one with
-`fixture Name` in a `scenarios` group. Fixtures feed Studio scenarios; ordinary behavior journeys
+`fixture Name` in a `scenarios` group. Scenario syntax is available in release 1; interactive Studio
+review arrives in release 3. Fixtures feed those scenarios; ordinary behavior journeys
 start with a fresh isolated store and do not receive fixture rows.
 
 ## TypeScript adapters
 
-Use a sidecar when an external API cannot be expressed in Tao. Derive a datasource from `Http`, type
+Release 2 adds HTTP through typed adapters. Then use a sidecar when an external API cannot be
+expressed in Tao. Derive a datasource from `Http`, type
 its `Adapter` with `item is Export from ./Adapter.ts`, and export that exact named value. In the
 sidecar, import `TR` from `@runtime/TR`, build `TR.Http.adapter`, declare supported query shapes with
 `TR.Http.on`, and call `upsert` or `upsertInto`. Rows reconcile by the entity's one `(unique)` field.

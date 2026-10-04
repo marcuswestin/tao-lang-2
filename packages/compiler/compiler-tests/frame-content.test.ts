@@ -30,7 +30,7 @@ Describe('compiler: frame content and render injection channels', () => {
           }
         }
       }
-      app Demo { view Main }
+      app Demo { id "com.tao.test.demo" version "1.0.0" name "Demo"  view Main }
     `)
 
     Expect(compiled.code).toContain('__taoSlots?: Readonly<Record<string, React.ReactNode>>')
@@ -51,11 +51,10 @@ Describe('compiler: frame content and render injection channels', () => {
         ${fence}
       }
       view Main() { render Native() }
-      app Demo { view Main }
+      app Demo { id "com.tao.test.demo" version "1.0.0" name "Demo"  view Main }
     `)
 
     const boundary = compiled.files.find(file => file.relativePath === 'App.injection-1.tsx')
-    Expect(boundary).toBeDefined()
     Expect(boundary?.code).toContain(
       "export default function(Content: import('react').ReactNode, Layout: ReturnType<typeof TR.VisualLayout>, Tag: string | undefined)",
     )

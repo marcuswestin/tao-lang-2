@@ -19,19 +19,13 @@ export const LocalDataBindings = {
 } as const
 
 /** CodegenOptions carries explicit per-compilation generation modes through recursive emitters. */
-/**
- * ReadNetBinding is the module binding holding the project's compiled `guard default`. The module
- * declaring it exports it, and every module declaring an app imports it, so each app carries it.
- */
-export const ReadNetBinding = '_TaoReadNet'
-
 export type CodegenOptions = {
   projectRoot?: string
-  /** readNet is whether the project declares a `guard default`, which every app definition then carries. */
-  readNet?: boolean
   /** localDataCatalog is whether this project emits the companion catalog for `local only` entities. */
   localDataCatalog?: boolean
   selectedAppDatasourceConfiguration?: Readonly<Record<string, string>>
+  selectedAppFirebaseConfiguration?: Readonly<Record<string, string>>
+  selectedAppAuthConfiguration?: Readonly<Record<string, string>>
   selectedAppName?: string
   /** journeyObservations emits test-harness-only render source locators without Studio preview behavior. */
   journeyObservations?: boolean
@@ -55,7 +49,7 @@ type GenJoinOptions = {
   separator?: string
 }
 
-type AnyBlockStatement = AST.ActionStatement | AST.ProjectStatement | AST.Statement
+type AnyBlockStatement = AST.ActionStatement | AST.Statement
 type JsLiteralValue =
   | boolean
   | number
@@ -71,11 +65,6 @@ type GenBlock = {
   (
     owner: AST.Render | AST.ViewDeclaration,
     compileStatement: (statement: AST.Statement) => GenValue,
-    options?: GenListOptions,
-  ): Compiled
-  (
-    owner: AST.ProjectDeclaration,
-    compileStatement: (statement: AST.ProjectStatement) => GenValue,
     options?: GenListOptions,
   ): Compiled
 }

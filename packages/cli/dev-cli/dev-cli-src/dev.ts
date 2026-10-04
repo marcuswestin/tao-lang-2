@@ -1,20 +1,28 @@
 import { runWithCommands } from '@cli-kit/RunWithCommands'
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 import { DeveloperBranchCommand, SyncMainCommand } from '@verification/DeveloperWorkflow'
-import { FinalizeCommand, LandCommand, MergeMainCommand, StartBranchCommand } from '@verification/Finalize'
+import {
+  FinalizeCommand,
+  LandCommand,
+  MergeMainCommand,
+  StartBranchCommand,
+  TakeBranchCommand,
+} from '@verification/Finalize'
+import { GateCatalog } from '@verification/GateCatalog'
 import { runGates } from '@verification/GateRunner'
 import { GreenTree } from '@verification/GreenTree'
 import { LandingLock } from '@verification/LandingLock'
 import { landedReport, MergeWithMainCommand } from '@verification/MergeWithMain'
 import { formatGateSummary, formatVerdict, gateExitCode } from '@verification/RunSummary'
 import { TestRunner } from '@verification/TestRunner'
+import { UiVisibility } from '@verification/UiVisibility'
 import { VerificationLanes } from '@verification/VerificationLanes'
 import { WorkReporter } from '@verification/WorkReporter'
 import { CleanCommand } from './clean/CleanCommand'
 import { devZshCompletion } from './completion/DevCompletion'
-import { readAgentCapabilities, unavailableLandingCapabilities } from './doctor/AgentCapabilities'
 import { AgentCapabilitiesCommand } from './doctor/AgentCapabilitiesCommand'
 import { BoardCommand } from './doctor/BoardCommand'
+import { landingHostGateMessage, prepareLandingHost } from './doctor/LandingHost'
 import { MyStatusCommand } from './doctor/MyStatusCommand'
 import { ReclaimCommand } from './doctor/ReclaimCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
@@ -41,6 +49,7 @@ type TestChangedCommandOptions = TestCommandOptions & {
 }
 
 type GatesCommandOptions = {
+  showStudio?: boolean
   /**
    * Commander reads `--no-cache` as the negation of a `cache` option that defaults to true, so the
    * flag arrives here as `cache === false` rather than as a positive field of its own.
@@ -56,6 +65,7 @@ type GatesCommandOptions = {
 }
 
 type LandCommandOptions = {
+  showStudio?: boolean
   dryRun?: boolean
   messageFile?: string
   redraft?: boolean
@@ -64,6 +74,7 @@ type LandCommandOptions = {
 }
 
 type MergeCommandOptions = {
+  showStudio?: boolean
   abort?: string
   dryRun?: boolean
   messageFile?: string
@@ -84,9 +95,43 @@ async function runReleaseAction(action: () => Promise<void>): Promise<void> {
   }
 }
 
+function parseQaReleasePhase(value: string, minimum: number): 1 | 2 | 3 | 4 | 5 {
+  const phase = Number(value)
+  if (!Number.isInteger(phase) || phase < minimum || phase > 5) {
+    Errors.throwUserInput(`Release phase must be ${minimum} through 5.`)
+  }
+  return phase as 1 | 2 | 3 | 4 | 5
+}
+
 /** Repository development CLI behind `./dev`: package tests and low-level Expo device preparation. */
 await runWithCommands(commands => {
   commands.name('dev')
+
+  commands
+    .command('qa-capture')
+    .description('Capture headless review evidence; requires a separate visual judgment.')
+    .argument('<project>')
+    .requiredOption('--app <name>')
+    .requiredOption('--output <path>')
+    .action(async (project: string, options: { app: string; output: string }) => {
+      const { runStudioReview } = await import('@studio-tooling/StudioReview')
+      const { QaCapture } = await import('./qa/QaCapture')
+      const result = await new QaCapture(Repo.getRoot(), runStudioReview).run(project, options)
+      HCI.writeLine(JSON.stringify(result, null, 2))
+    })
+
+  commands
+    .command('qa')
+    .description('Inventory, run, record, and report on-demand QA evidence.')
+    .argument('<action>', 'inventory, run, report, record, or finding')
+    .option('--phase <number>', 'Cumulative release phase 1 through 5', '1')
+    .option('--scope <scope>', 'changed or all', 'changed')
+    .option('--resume <id>', 'Resume an interrupted run without replacing its results')
+    .option('--file <path>', 'Validated observation or finding JSON')
+    .action(async (action: string, options) => {
+      const { QaRegister } = await import('./qa/QaRegister')
+      await new QaRegister(Repo.getRoot()).command(action, options)
+    })
 
   commands
     .command('shell-setup')
@@ -111,11 +156,38 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('app-dev')
+    .description('Run the agent dev loop with reserved iOS/Android devices and owned Chrome.')
+    .argument(
+      '[args...]',
+      'Arguments for tao dev; --show-simulator, --show-emulator, or --show-browser requests a window.',
+    )
+    .allowUnknownOption()
+    .action(async (args: string[]) => {
+      await runExitCommand(async () => {
+        const { runAgentAppDev } = await import('./simulators/AgentAppDev')
+        return await runAgentAppDev(args)
+      })
+    })
+
+  commands
+    .command('dev-loop')
+    .description('Manage recorded background app development loops without a runtime timer.')
+    .argument('[args...]', 'start, status, logs, stop, restart, or reload; use --help for options.')
+    .allowUnknownOption()
+    .action(async (args: string[]) => {
+      await runExitCommand(async () => {
+        const { runDevLoopCommand } = await import('./dev-loop/DevLoopCommand')
+        return await runDevLoopCommand(args)
+      })
+    })
+
+  commands
     .command('test-host')
     .description('Run the opt-in real-host testing prototype, independently of existing suites.')
     .argument(
       '[mode]',
-      'check, lint, typecheck, format, driver, prepare, export, browser, android, ios, device, watchos, catalyst, agents, or setup.',
+      'check, lint, typecheck, format, driver, prepare, export, browser, android, ios, device, watchos, catalyst, agents, managed-loop, managed-loop-recover, or setup.',
       'check',
     )
     .option(
@@ -134,7 +206,31 @@ await runWithCommands(commands => {
     .option('--browser-channel <name>', 'Installed browser channel (chrome), or chromium after setup.', 'chrome')
     .option('--fault', 'Inject a subject application fault for a compiled host journey; expected to exit nonzero.')
     .option('--demo', 'For agents: build the example, print discovery, invoke one command, then stop.')
+    .option('--case <name>', 'For managed-loop: one bounded acceptance case.')
+    .option('--session <uuid>', 'For managed-loop: recorded session for bounded interaction only.')
+    .option('--target <platform>', 'For managed-loop mobile interaction: ios or android.')
+    .option('--invocation <uuid>', 'For managed-loop-recover: one recorded Android borrowing invocation.')
     .action(async (mode, options) => {
+      if (mode === 'managed-loop-recover') {
+        const { parseManagedLoopAcceptanceRecoveryArgs } = await import(
+          '@agent-cli/agent-config/ManagedLoopAcceptanceRecoveryArgs'
+        )
+        const args = Platform.runtimeProcess.argv.slice(2)
+        const commandIndex = args.indexOf('test-host')
+        const request = parseManagedLoopAcceptanceRecoveryArgs(args.slice(commandIndex + 2))
+        const { runManagedLoopAcceptanceRecovery } = await import('./dev-loop/ManagedLoopAcceptanceRecovery')
+        Platform.runtimeProcess.setExitCode(await runManagedLoopAcceptanceRecovery(request))
+        return
+      }
+      if (mode === 'managed-loop') {
+        const { parseManagedLoopAcceptanceArgs } = await import('@agent-cli/agent-config/ManagedLoopAcceptanceArgs')
+        const args = Platform.runtimeProcess.argv.slice(2)
+        const commandIndex = args.indexOf('test-host')
+        const request = parseManagedLoopAcceptanceArgs(args.slice(commandIndex + 2))
+        const { runManagedLoopAcceptance } = await import('./dev-loop/ManagedLoopAcceptance')
+        Platform.runtimeProcess.setExitCode(await runManagedLoopAcceptance(request))
+        return
+      }
       if (mode === 'watchos') {
         const { runWatchProof } = await import('./watchos/WatchProof')
         await runWatchProof(options)
@@ -226,6 +322,7 @@ await runWithCommands(commands => {
 
   commands
     .command('land')
+    .option('--show-studio', 'Permit native Studio windows during landing verification.')
     .description('Land this feature branch: prepare unlocked, then integrate, verify, squash and push under one lock.')
     .option('--dry-run', 'Report readiness and the plan, and change nothing.')
     .option('--message-file <path>', 'Must name the canonical .artifacts/merge/<branch>.msg file.')
@@ -234,19 +331,17 @@ await runWithCommands(commands => {
     .option('--skip-verify-full', 'Skip just verify-full; the staged squash then gets just verify --complete.')
     .action(async (options: LandCommandOptions = {}) => {
       try {
+        if (options.showStudio === true && options.dryRun !== true && options.skipVerifyFull !== true) {
+          UiVisibility.warn(UiVisibility.studioWarnings)
+        }
         if (options.dryRun !== true && options.skipVerifyFull !== true) {
-          const host = await readAgentCapabilities()
-          const missing = unavailableLandingCapabilities(host)
-          if (missing.length > 0) {
-            Errors.throwHostEnvironment(
-              'Landing needs a host-capable unsandboxed shell before entering the ready queue. '
-                + missing.map(check => `${check.name}: ${check.detail}. `).join('')
-                + 'Run `./agent capabilities` for details, then run `./agent land` in an approved '
-                + 'unsandboxed session. Do not retry the host gate inside this sandbox.',
-            )
+          const host = await prepareLandingHost()
+          if (host.missing.length > 0) {
+            Errors.throwHostEnvironment(landingHostGateMessage(host.missing, host.report.sandboxDetected))
           }
         }
         await LandCommand.run({
+          showStudio: options.showStudio,
           dryRun: options.dryRun === true,
           messageFile: options.messageFile,
           redraft: options.redraft === true,
@@ -343,6 +438,7 @@ await runWithCommands(commands => {
 
   commands
     .command('gates')
+    .option('--show-studio', 'Permit selected native Studio tests to open windows.')
     .description('Run repository gates in parallel and report one verification summary.')
     .argument('<gates...>', 'Just recipe names to run as gates.')
     .option('--jobs <count>', 'Maximum number of gates to run at once.')
@@ -361,6 +457,12 @@ await runWithCommands(commands => {
     // uncaught stack with a code frame from inside the error helper.
     .action(async (gates: string[], options: GatesCommandOptions = {}) => {
       await runExitCommand(async () => {
+        UiVisibility.preflightGates(
+          options.skipUnsandboxed === true
+            ? gates.filter(name => GateCatalog.metadata(name).requiresUnsandboxed !== true)
+            : gates,
+          options.showStudio,
+        )
         // Keep this process-wide change at the CLI boundary, not in the reusable gate runner.
         // Gate children inherit it; the invoking shell and landing process keep their priority.
         if (VerificationLanes.VERIFY_OR_WIDER.includes(options.lane ?? VerificationLanes.VERIFY)) {
@@ -374,10 +476,12 @@ await runWithCommands(commands => {
         const verdict = { color: WorkReporter.colorizes(outputMode) }
         return await holdingLandingLock(options.lane ?? 'verify', async () => {
           const summary = await runGates({
+            showStudio: options.showStudio,
             gates,
             greenTree: options.greenTree === undefined || options.greenTree.length === 0
               ? undefined
               : { lanes: options.greenTree, noCache: options.cache === false },
+            hostPlatform: Platform.hostPlatform,
             jobs: parseOptionalPositiveInteger(options.jobs, '--jobs'),
             jsonPath: options.json,
             lane: options.lane,
@@ -400,6 +504,7 @@ await runWithCommands(commands => {
 
   commands
     .command('merge-with-main')
+    .option('--show-studio', 'Permit native Studio windows during full verification.')
     .description('Squash-merge the current feature branch into main and push it; flags only remove work.')
     .option('--skip-verify', 'Skip the staged-squash just verify --complete pass.')
     .option(
@@ -413,6 +518,7 @@ await runWithCommands(commands => {
     .action(async (options: MergeCommandOptions = {}) => {
       try {
         await MergeWithMainCommand.run({
+          showStudio: options.showStudio,
           abortSnapshot: options.abort,
           dryRun: options.dryRun === true,
           messageFile: options.messageFile,
@@ -526,6 +632,20 @@ await runWithCommands(commands => {
     .action(async (name: string) => {
       try {
         await StartBranchCommand.run(name)
+        Platform.runtimeProcess.exit(0)
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
+    .command('take-branch')
+    .description('Take over a pushed feat/* branch: fetch it, switch to it with tracking, and run setup.')
+    .argument('<name>', 'Full feat/* branch name on origin.')
+    .action(async (name: string) => {
+      try {
+        await TakeBranchCommand.run(name)
         Platform.runtimeProcess.exit(0)
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))
@@ -780,7 +900,7 @@ await runWithCommands(commands => {
   commands
     .command('instant-review')
     .description(
-      'Push Auth Review to the stored Instant Cloud app, then run it in tao dev from a disposable copy.',
+      'Push Auth Review to the stored Instant Cloud app, then run it in tao run from a disposable copy.',
     )
     .option('--device <name-or-id>', 'Open this physical device after Metro starts.')
     .option('--ios', 'Open an iOS simulator after Metro starts.')
@@ -833,6 +953,9 @@ await runWithCommands(commands => {
       try {
         const { AgentConfigGenerator } = await import('@agent-cli/agent-config/AgentConfigGenerator')
         await AgentConfigGenerator.generate({ root: Repo.resolvePath() })
+        // Local Git metadata paths must never enter the tracked adapters or freshness render.
+        const { CodexGitPermissions } = await import('@agent-cli/agent-config/CodexGitPermissions')
+        await CodexGitPermissions.install({ root: Repo.resolvePath() })
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.exit(1)
@@ -874,16 +997,21 @@ await runWithCommands(commands => {
 
   commands
     .command('studio-canary')
+    .option('--show-studio', 'Permit native Studio windows for this canary.')
     .description('Run native Tao Studio against a deterministic project and report what it proved.')
     .option('--project <path>', 'Tao project folder to open.')
     .option('--app <name>', 'App declaration within the selected project.')
     .option('--artifact-root <path>', 'Where the canary writes its artifacts.')
     .option('--hutch <path>', 'Explicit Hutch executable path.')
     .action(
-      async (options: { app?: string; artifactRoot?: string; hutch?: string; project?: string } = {}) => {
+      async (
+        options: { app?: string; artifactRoot?: string; hutch?: string; project?: string; showStudio?: boolean } = {},
+      ) => {
         const { StudioCanaryCommand } = await import('@studio-tooling/StudioCanaryCommand')
         Platform.runtimeProcess.exit(
           await StudioCanaryCommand.canary({
+            showStudio: options.showStudio === true
+              || Platform.runtimeProcess.env[UiVisibility.STUDIO_ENV_KEY] === 'true',
             appName: options.app,
             artifactRoot: options.artifactRoot,
             hutchPath: options.hutch,
@@ -895,17 +1023,23 @@ await runWithCommands(commands => {
 
   commands
     .command('studio-manual-checks')
+    .option('--show-studio', 'Permit native Studio windows and manual interaction.')
     .description('Run native Studio checks that require a person and record their results.')
     .option('--project <path>', 'Tao project folder to open.')
     .option('--app <name>', 'App declaration within the selected project.')
     .option('--artifact-root <path>', 'Where the manual workflow writes its artifacts.')
     .option('--hutch <path>', 'Explicit Hutch executable path.')
     .action(
-      async (options: { app?: string; artifactRoot?: string; hutch?: string; project?: string } = {}) => {
+      async (
+        options: { app?: string; artifactRoot?: string; hutch?: string; project?: string; showStudio?: boolean } = {},
+      ) => {
         try {
+          UiVisibility.requireStudio(options.showStudio)
+          UiVisibility.warn(UiVisibility.studioWarnings)
           const { StudioManualChecks } = await import('@studio-tooling/StudioManualChecks')
           Platform.runtimeProcess.exit(
             await StudioManualChecks.run({
+              showStudio: options.showStudio,
               appName: options.app,
               artifactRoot: options.artifactRoot,
               hutchPath: options.hutch,
@@ -1014,7 +1148,7 @@ await runWithCommands(commands => {
   commands
     .command('companion-host-build')
     .description(
-      'Build the Tao Companion as a prebuilt host into .artifacts/hosts, which tao dev installs on an emulator or simulator in place of Expo Go.',
+      'Build the Tao Companion as a prebuilt host into .artifacts/hosts, which tao run installs on an emulator or simulator in place of Expo Go.',
     )
     .option('--platform <platform>', 'android, or ios-simulator for an iOS Simulator host.', 'android')
     .option('--abi <abis>', 'Comma-separated Android ABIs to build; arm64-v8a,x86_64 by default.')
@@ -1042,7 +1176,7 @@ await runWithCommands(commands => {
   commands
     .command('companion-host-publish')
     .description(
-      'Publish every host built for the Tao Companion as it stands to its GitHub release, where tao dev downloads it.',
+      'Publish every host built for the Tao Companion as it stands to its GitHub release, where tao run downloads it.',
     )
     .action(async () => {
       try {
@@ -1097,6 +1231,7 @@ await runWithCommands(commands => {
     .option('--node <path>', 'Standalone Node executable to bundle; Nix Node is relocated when needed.')
     .requiredOption('--release-base-url <url>', 'HTTPS base URL for Studio release and update artifacts.')
     .option('--version <version>', 'Studio semantic version.', '0.0.1')
+    .option('--phase <number>', 'Public release phase 3, 4, or 5.', '3')
     .action(async options => {
       try {
         const { StudioNative } = await import('@studio-tooling/StudioNative')
@@ -1109,6 +1244,7 @@ await runWithCommands(commands => {
           outputRoot: options.outputRoot,
           releaseBaseUrl: options.releaseBaseUrl,
           version: options.version,
+          releasePhase: parseQaReleasePhase(options.phase, 3) as 3 | 4 | 5,
         })
         HCI.logProcessInfo(
           'studio-native',
@@ -1128,22 +1264,37 @@ await runWithCommands(commands => {
     .argument('<target>', 'studio or ide-extension.')
     .option('--repo <owner/name>', 'Public GitHub repository for Studio release assets.')
     .option('--version <version>', 'Three-part Studio version (defaults to 0.0.1).')
-    .action(async (target: string, options: { repo?: string; version?: string }) => {
+    .option('--phase <number>', 'Public release phase; defaults to 3 for Studio and 1 for the extension.')
+    .action(async (target: string, options: { repo?: string; version?: string; phase?: string }) => {
       await runReleaseAction(async () => {
         const { ReleaseWorkflow } = await import('./release/ReleaseWorkflow')
         if (target === 'studio') {
           if (options.repo === undefined) {
             Errors.throwUserInput('Studio preparation needs --repo owner/name.')
           }
-          await ReleaseWorkflow.prepareStudio(options.repo, options.version ?? '0.0.1')
+          await ReleaseWorkflow.prepareStudio(
+            options.repo,
+            options.version ?? '0.0.1',
+            parseQaReleasePhase(options.phase ?? '3', 3) as 3 | 4 | 5,
+          )
         } else if (target === 'ide-extension') {
           if (options.repo !== undefined || options.version !== undefined) {
             Errors.throwUserInput('IDE extension preparation takes no --repo or --version.')
           }
-          await ReleaseWorkflow.prepareIde()
+          await ReleaseWorkflow.prepareIde(parseQaReleasePhase(options.phase ?? '1', 1))
         } else {
           Errors.throwUserInput('Expected release target studio or ide-extension.')
         }
+      })
+    })
+
+  commands
+    .command('ide-extension-acceptance')
+    .description('Verify the installed extension in an isolated VS Code window; does not publish.')
+    .action(async () => {
+      await runReleaseAction(async () => {
+        const { InstalledEditorAcceptance } = await import('./release/InstalledEditorAcceptance')
+        await InstalledEditorAcceptance.run()
       })
     })
 
@@ -1152,9 +1303,16 @@ await runWithCommands(commands => {
     .description('Build and locally validate a signed Studio release for a GitHub Releases host.')
     .requiredOption('--repo <owner/name>', 'Public GitHub repository that will hold Studio releases.')
     .option('--version <version>', 'Three-part Studio version.', '0.0.1')
-    .action(async (options: { repo: string; version: string }) => {
+    .option('--phase <number>', 'Public release phase 3, 4, or 5.', '3')
+    .action(async (options: { repo: string; version: string; phase: string }) => {
       const { ReleaseWorkflow } = await import('./release/ReleaseWorkflow')
-      await runReleaseAction(async () => await ReleaseWorkflow.prepareStudio(options.repo, options.version))
+      await runReleaseAction(async () =>
+        await ReleaseWorkflow.prepareStudio(
+          options.repo,
+          options.version,
+          parseQaReleasePhase(options.phase, 3) as 3 | 4 | 5,
+        )
+      )
     })
 
   commands
@@ -1169,9 +1327,10 @@ await runWithCommands(commands => {
   commands
     .command('release-ide-prepare')
     .description('Package the VSIX and prove it installs into an isolated VS Code profile.')
-    .action(async () => {
+    .option('--phase <number>', 'Public release phase 1 through 5.', '1')
+    .action(async (options: { phase: string }) => {
       const { ReleaseWorkflow } = await import('./release/ReleaseWorkflow')
-      await runReleaseAction(async () => await ReleaseWorkflow.prepareIde())
+      await runReleaseAction(async () => await ReleaseWorkflow.prepareIde(parseQaReleasePhase(options.phase, 1)))
     })
 
   commands
@@ -1199,17 +1358,34 @@ await runWithCommands(commands => {
     )
     .option('--worker <index>', 'Zero-based worker index.', '0')
     .option('--native', 'Run the shell smoke through Electrobun instead of Chrome.')
+    .option('--show-studio', 'Permit native Studio windows for this smoke.')
     .action(async (files, options) => {
       const { StudioSmoke } = await import('@studio-tooling/StudioSmoke')
       Platform.runtimeProcess.exit(
         await StudioSmoke.run({
           files,
           native: options.native,
+          showStudio: options.showStudio === true
+            || Platform.runtimeProcess.env[UiVisibility.STUDIO_ENV_KEY] === 'true',
           runId: options.runId,
           shardIndex: options.shard === undefined ? undefined : parseNonNegativeInteger(options.shard, '--shard'),
           workerIndex: parseNonNegativeInteger(options.worker, '--worker'),
         }),
       )
+    })
+
+  commands
+    .command('android-recover')
+    .description('Release retained emulator fences only after their owned processes have stopped.')
+    .requiredOption('--avd <name>', 'Retained Android virtual device name.')
+    .requiredOption('--generation <id>', 'Recovery generation printed by failed cleanup.')
+    .action(async (options: { avd: string; generation: string }) => {
+      await runExitCommand(async () => {
+        const { AndroidRecovery } = await import('./simulators/AndroidRecovery')
+        await AndroidRecovery.recover(options.avd, options.generation)
+        HCI.writeLine(`Released stopped Android emulator fences for ${options.avd}.`)
+        return 0
+      })
     })
 
   commands

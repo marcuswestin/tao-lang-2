@@ -1,10 +1,11 @@
-import { Errors, FS } from '@shared'
+import { Errors, FS, ProjectIdentity } from '@shared'
 import { Deferred, Expect, mkTestDir, Test } from '@shared/test'
 import { runInstantReview } from '../dev-cli-src/instantdb/InstantReviewCommand'
 
 type Environment = NonNullable<Parameters<typeof runInstantReview>[1]>
 
 const APP_ID = '3f2a9c1e-5b7d-4e8f-9a0b-1c2d3e4f5a6b'
+const PROJECT_ID = '5930dd57-d1d6-4ee8-8f2b-ecc0226af9dd'
 const TOKEN = 'private-admin-token'
 // A development key for tao-review.clerk.accounts.dev, the shape just setup-clerk stores.
 const PUBLISHABLE_KEY = `pk_test_${Buffer.from('tao-review.clerk.accounts.dev$').toString('base64')}`
@@ -19,7 +20,13 @@ const SOURCE = [
   '}',
 ].join('\n')
 
-type Run = { args: readonly string[]; env?: Readonly<Record<string, string>>; captureOutput: boolean; source: string }
+type Run = {
+  args: readonly string[]
+  env?: Readonly<Record<string, string>>
+  captureOutput: boolean
+  source: string
+  projectIdentity: string | undefined
+}
 
 async function fixture() {
   const root = await mkTestDir('instant-review-')
@@ -27,7 +34,7 @@ async function fixture() {
   const output: string[] = []
   const stops: string[] = []
   const handlers = new Map<string, () => void>()
-  const exitCodes: Record<string, number> = { instantdb: 0, dev: 0 }
+  const exitCodes: Record<string, number> = { instantdb: 0, run: 0 }
   const environment: Environment = {
     secrets: async () => ({
       AUTH_REVIEW_INSTANT_APP_ID: APP_ID,
@@ -35,13 +42,19 @@ async function fixture() {
       CLERK_PUBLISHABLE_KEY: PUBLISHABLE_KEY,
     }),
     source: async () => SOURCE,
+    projectIdentity: () => PROJECT_ID,
     project: async () => root,
     writeOwnership: FS.writeJson,
     runTao: (args, options) => {
-      const entry = args[args[0] === 'dev' ? 1 : 2]!
+      const entry = args[args[0] === 'run' ? 1 : 2]!
       return {
         result: (async () => {
-          runs.push({ ...options, args, source: await FS.readText(entry) })
+          runs.push({
+            ...options,
+            args,
+            source: await FS.readText(entry),
+            projectIdentity: ProjectIdentity.read(FS.dirname(entry)),
+          })
           // A push that echoes both values proves the command redacts what its child prints.
           return { exitCode: exitCodes[args[0]!]!, output: `InstantDB app ${APP_ID} with ${TOKEN}\n` }
         })(),
@@ -63,17 +76,18 @@ async function fixture() {
   return { root, runs, output, stops, handlers, exitCodes, environment }
 }
 
-Test('review pushes with the token only in the push child, then runs tao dev on the substituted copy', async () => {
+Test('review pushes with the token only in the push child, then runs tao run on the substituted copy', async () => {
   const f = await fixture()
   Expect(await runInstantReview({ device: 'roPhone' }, f.environment)).toBe(0)
   Expect(f.runs.map(run => run.args.filter(arg => !arg.endsWith('.tao')))).toEqual([
     ['instantdb', 'push', '--app', 'AuthReviewInstant'],
-    ['dev', '--app', 'AuthReviewInstant', '--device', 'roPhone'],
+    ['run', '--app', 'AuthReviewInstant', '--device', 'roPhone'],
   ])
   Expect(f.runs[0]!.env).toEqual({ INSTANT_APP_ADMIN_TOKEN: TOKEN })
   Expect(f.runs[0]!.captureOutput).toBe(true)
   Expect(f.runs[1]!.env).toBeUndefined()
   Expect(f.runs[1]!.captureOutput).toBe(false)
+  Expect(f.runs.map(run => run.projectIdentity)).toEqual([PROJECT_ID, PROJECT_ID])
   Expect(f.runs[1]!.source.split(APP_ID).length - 1).toBe(2)
   Expect(f.runs[1]!.source).not.toContain('REPLACE_WITH_INSTANT_APP_ID')
   Expect(f.runs[1]!.source).not.toContain(TOKEN)
@@ -90,12 +104,10 @@ Test('the Clerk variant pushes and runs AuthReviewInstantClerk with the stored p
   Expect(await runInstantReview({ clerk: true, device: 'roPhone' }, f.environment)).toBe(0)
   Expect(f.runs.map(run => run.args.filter(arg => !arg.endsWith('.tao')))).toEqual([
     ['instantdb', 'push', '--app', 'AuthReviewInstantClerk'],
-    ['dev', '--app', 'AuthReviewInstantClerk', '--device', 'roPhone'],
+    ['run', '--app', 'AuthReviewInstantClerk', '--device', 'roPhone'],
   ])
   Expect(f.runs[1]!.source).toContain(`PublishableKey "${PUBLISHABLE_KEY}"`)
-  Expect(f.runs[1]!.source).not.toContain('REPLACE_WITH')
   Expect(f.output.join('\n')).toContain('AuthReviewInstantClerk against Instant app 3f2a9c1e…')
-  Expect(await FS.exists(f.root)).toBe(false)
 })
 
 Test('the InstantAuth variant leaves the Clerk placeholder alone and needs no Clerk key', async () => {
@@ -142,18 +154,18 @@ Test('dry run plans the push and starts no dev loop', async () => {
 Test('force reaches the push and not the dev loop', async () => {
   const f = await fixture()
   Expect(await runInstantReview({ force: true, device: 'roPhone' }, f.environment)).toBe(0)
-  Expect(f.runs.map(run => [run.args[0], run.args.includes('--force')])).toEqual([['instantdb', true], ['dev', false]])
+  Expect(f.runs.map(run => [run.args[0], run.args.includes('--force')])).toEqual([['instantdb', true], ['run', false]])
 })
 
-Test('skip push starts tao dev directly and forwards the simulator and web targets', async () => {
+Test('skip push starts tao run directly and forwards the simulator and web targets', async () => {
   const f = await fixture()
   Expect(await runInstantReview({ skipPush: true, ios: true, web: true }, f.environment)).toBe(0)
   Expect(f.runs.map(run => run.args.filter(arg => !arg.endsWith('.tao')))).toEqual([
-    ['dev', '--app', 'AuthReviewInstant', '--ios', '--web'],
+    ['run', '--app', 'AuthReviewInstant', '--ios', '--web'],
   ])
 })
 
-Test('a failed push returns its exit code, skips tao dev, and removes the copy', async () => {
+Test('a failed push returns its exit code, skips tao run, and removes the copy', async () => {
   const f = await fixture()
   f.exitCodes['instantdb'] = 2
   Expect(await runInstantReview({}, f.environment)).toBe(2)
@@ -173,13 +185,13 @@ Test('a child failure is reported by stage without its private message', async (
   Expect(await FS.exists(f.root)).toBe(false)
 })
 
-Test('interrupting tao dev forwards the signal, waits for it, and cleans up', async () => {
+Test('interrupting tao run forwards the signal, waits for it, and cleans up', async () => {
   const f = await fixture()
   const started = Deferred()
   const exited = Deferred<{ exitCode: number; output: string }>()
   const runTao = f.environment.runTao
   f.environment.runTao = (args, options) => {
-    if (args[0] !== 'dev') {
+    if (args[0] !== 'run') {
       return runTao(args, options)
     }
     started.resolve()
@@ -200,7 +212,7 @@ Test('interrupting tao dev forwards the signal, waits for it, and cleans up', as
   Expect(f.handlers.size).toBe(0)
 })
 
-Test('interruption during the push never starts tao dev', async () => {
+Test('interruption during the push never starts tao run', async () => {
   const f = await fixture()
   const runTao = f.environment.runTao
   f.environment.runTao = (args, options) => {

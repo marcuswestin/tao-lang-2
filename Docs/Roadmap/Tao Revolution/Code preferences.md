@@ -105,7 +105,7 @@ than selecting by import order. This does not authorize implicit downward or sib
 
 2.4. Avoid wrappers whose only operation is an already permitted ancestor conversion. Prefer
 `Value as text` or direct compatible argument passing when permitted. The active fixture omits
-an uninhabited `never` type and conversion-ban declarations pending pre-MVP A23/R18; the selected
+an uninhabited `never` type and conversion-ban declarations pending pre-MVP A28/R19; the selected
 `fails never` annotation is separate from those deferred features. `data of` is unnecessary where
 public representation conversion exists. Opaque/secret access policy remains to decide.
 
@@ -135,7 +135,7 @@ An explicit `empty` case can enforce a nonempty-content precondition. The compac
 today the equivalent branch uses `{ Text("Fallback") }`. Any matched branch stops the render remainder.
 The public missing state is removed from the intended design. Prefer none for expected absence;
 preserve typed failures for failed existence/schema promises. Detailed state migration belongs to
-pre-MVP A24/R19. Today's runtime vocabulary remains documented in the implemented Spec.
+pre-MVP A29/R20. Today's runtime vocabulary remains documented in the implemented Spec.
 
 3.4. Bare empty text values use core text's ui implementation to produce `empty`, with no node and
 no sibling gap contribution. Prefer `Feedback` over a conditional whose only work is suppressing
@@ -250,7 +250,7 @@ selected contract. Timer handles are runtime-only and cannot be persisted. In a 
 `state Timer = Time.StartTimer()` to create one per mounted instance and retain it across rerenders.
 Persist DateTime timestamps/deadlines or fixed Duration amounts rather than a timer origin.
 Remaining time API design, including [Time.Live](../Time.Live%20API.md), belongs to pre-MVP
-[A25/R20](<../../MVP Roadmap/Review - Dates and time APIs.md>).
+[A30/R21](<../../MVP Roadmap/Review - Dates and time APIs.md>).
 
 ## 5. Data, metadata, and localized presentation
 
@@ -269,5 +269,5 @@ Adapter ownership is selected; automatic runtime decoding of every foreign resul
 formatting of percentages/units to concatenation such as `"{Value * 100}%"`. User content must remain
 verbatim, and machine serialization must not depend on the display locale. Changing `text` storage
 or admitting this distinction is not decided by these preferences.
-Further discussion is deferred to the pre-MVP [A21 investigation](<../../MVP Roadmap/Agent MVP Roadmap.md#a21--investigate-locale-aware-core-text>).
-The complete static read/failure proof design likewise moves to [A22](<../../MVP Roadmap/Agent MVP Roadmap.md#a22--investigate-static-read-and-failure-handling-proofs>).
+Further discussion is deferred to the pre-MVP [A26 investigation](<../../MVP Roadmap/Agent MVP Roadmap.md#a26--investigate-locale-aware-core-text>).
+The complete static read/failure proof design likewise moves to [A27](<../../MVP Roadmap/Agent MVP Roadmap.md#a27--investigate-static-read-and-failure-handling-proofs>).

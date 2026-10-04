@@ -38,9 +38,9 @@ scene NoteList() {
          }  }
          guard Notes {
             loading -> { Spinner() }
-            error -> Message {
+            error -> Context {
                Text("Notes could not be loaded") [sectionTitle]
-               TextMultiline(Message) [body]
+               TextMultiline(Context.Message) [body]
          }  }
          guard Notes empty -> { Col() [panel] {
             Text("No notes yet") [sectionTitle]
@@ -101,7 +101,7 @@ scene NoteDetail(Note) {
          guard Note {
             loading -> { Spinner() }
             missing -> { TextMultiline("This note no longer exists.") [body] }
-            error -> Message { TextMultiline("The note could not be loaded: { Message }") [body] }
+            error -> Context { TextMultiline("The note could not be loaded: { Context.Message }") [body] }
          }
 
          #noteTitleDraft

@@ -1,0 +1,33 @@
+{
+  "id": "QA-HNREADER-CAPTURE",
+  "status": "triaged",
+  "phase": 2,
+  "surfaceId": "visual:hnreader",
+  "dimension": "visual",
+  "channel": "rows-wrapping",
+  "severity": "major",
+  "title": "The wrapping state remains unreviewed",
+  "observed": "Rechecked at 0aa8ebcf after QA capture learned to stage project packages (e3ed6940): rows/wrapping reached a complete capture and its long headline reads cleanly (result 20260929162234510-ac269662-3353-4b89-a182-503e479553a0). The pilot timeout did not reproduce.",
+  "impact": "Long-title wrapping remains visually unreviewed despite other successful captures.",
+  "location": "Docs/QA/evidence/recheck-0aa8ebcf/hnreader/source-snapshot.json:rows/wrapping",
+  "affectedPhases": [
+    2,
+    3,
+    4,
+    5
+  ],
+  "expected": "A usable wrapping-state image supports an actual readability judgment.",
+  "recheck": "Reproduce rows/wrapping, capture it, and inspect long-title readability.",
+  "evidence": [
+    "Docs/QA/evidence/recheck-0aa8ebcf/hnreader/rows-wrapping-7ace074bcdf7.png",
+    "Docs/QA/evidence/recheck-0aa8ebcf/hnreader/source-snapshot.json"
+  ],
+  "evidenceHashes": [],
+  "createdAt": "2026-09-26T22:53:18.080Z",
+  "updatedAt": "2026-09-29T16:22:51.368Z",
+  "confidence": "suspected",
+  "requiredReviewer": "agent",
+  "relatedStories": [],
+  "notes": "Readability is acceptable, but the review recorded friction for the row card filling its cell, so no rows-wrapping pass exists to close this finding yet.",
+  "existingIssue": "Docs/Roadmap/Developer environment upgrades/DEVENV-VISUAL-REVIEW-SCENARIO-READINESS-TIMEOUTS.md"
+}

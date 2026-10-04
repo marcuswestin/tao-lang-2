@@ -68,7 +68,6 @@ Describe('TR.Data references across stores', () => {
     await TR.Data.Settle(stories)
 
     const dangling = TR.Data.Read(bookmark, 'Story')
-    Expect(dangling).toBeDefined()
     Expect(TR.Data.EntityAvailability(dangling)).toEqual({ status: 'missing' })
     // The placeholder is stable, so a re-render reads the same handle rather than a new one.
     Expect(TR.Data.Read(bookmark, 'Story')).toBe(dangling)

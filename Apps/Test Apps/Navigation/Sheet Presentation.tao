@@ -2,7 +2,9 @@ use StackNav from @tao/nav
 use Button, Col, Text from @tao/ui
 
 app SheetPresentation {
-   Name "Sheet Presentation"
+   id "navigation-sheet-presentation"
+   version "0.1.0"
+   name "Sheet Presentation"
    Navigator StackNav {
       Initial MainView
 }  }

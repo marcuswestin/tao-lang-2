@@ -11,6 +11,18 @@ export type RenderablePrimitive = 'view' | 'scene' | 'nav'
 const resolvedUseTargets = new WeakMap<AST.UseStatement | AST.UsePackageStatement, readonly AST.Declaration[]>()
 const visibleWorkspaceFiles = new WeakMap<AST.TaoFile, readonly AST.TaoFile[]>()
 
+/** readContextDeclaration finds the intrinsic public contract without making its name implicit. */
+export function readContextDeclaration(node: AST.Node): AST.TypeDeclaration | undefined {
+  const root = findRoot(node)
+  if (!AST.isTaoFile(root)) {
+    return undefined
+  }
+  const contract = (visibleWorkspaceFiles.get(root) ?? []).find(file =>
+    AST.getDocument(file).uri.path.endsWith('/@tao/data/ReadContext.tao')
+  )
+  return contract?.statements.filter(AST.isTypeDeclaration).find(declaration => declaration.name === 'ReadContext')
+}
+
 /**
  * isTestSidecarPath says whether a path names a `.test.tao` sidecar. An app file's graph never holds
  * one: the loader leaves them out of a folder's siblings, and folder scope leaves them out too, so
@@ -28,6 +40,11 @@ export function rememberVisibleWorkspaceFiles(files: readonly AST.TaoFile[]): vo
   for (const file of files) {
     visibleWorkspaceFiles.set(file, files)
   }
+}
+
+/** workspaceFilesFor returns the parsed documents built alongside one Tao file. */
+export function workspaceFilesFor(file: AST.TaoFile): readonly AST.TaoFile[] {
+  return visibleWorkspaceFiles.get(file) ?? [file]
 }
 
 /** declarationNamespace classifies declarations by the reference contexts that can resolve them. */
@@ -182,7 +199,7 @@ type ArgumentListOwner =
 type BlockStatementFor<OwnerT extends AST.BlockStatementOwner> = OwnerT extends
   AST.ActionDeclaration | AST.ActionExpression ? AST.ActionStatement
   : OwnerT extends AST.AppDeclaration ? AST.AppStatement | AST.Statement
-  : OwnerT extends AST.ProjectDeclaration ? AST.ProjectStatement
+  : OwnerT extends AST.PackageDeclaration ? AST.PackageStatement
   : AST.Statement
 type BlockStatementPredicate<InputT extends AST.OwnedBlockStatement, OutputT extends InputT> = (
   statement: InputT,

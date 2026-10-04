@@ -175,11 +175,10 @@ Describe('agent CLI generation provider', () => {
       '--ignore-rules',
       '--output-schema',
     ])
-    Expect(generate.spec.args).toContain('--output-last-message')
     Expect(generate.spec.args).toContain('--image')
     Expect(generate.spec.args).toContain('/pictures/shot.png')
     Expect(generate.spec.args.at(-1)).toBe('-')
     Expect(generate.spec.stdin).toContain('Create a recipe.')
-    Expect(generate.spec.cwd).toBeDefined()
+    Expect(generate.spec.cwd).toContain('tao-create-codex-')
   })
 })

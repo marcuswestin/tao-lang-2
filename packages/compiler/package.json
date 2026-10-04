@@ -7,6 +7,7 @@
   "exports": {
     ".": "./compiler-src/compiler.ts",
     "./bridge-metadata": "./compiler-src/bridge-metadata.ts",
+    "./sidecar-source-graph": "./compiler-src/sidecar-source-graph.ts",
     "./workspace": "./compiler-src/workspace/index.ts"
   },
   "dependencies": {
@@ -14,6 +15,7 @@
     "tao-generation": "workspace:*",
     "tao-parser": "workspace:*",
     "tao-shared": "workspace:*",
-    "tao-validator": "workspace:*"
+    "tao-validator": "workspace:*",
+    "typescript": "5.9.3"
   }
 }

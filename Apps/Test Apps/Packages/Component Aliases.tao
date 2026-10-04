@@ -4,7 +4,12 @@ use Col, Text from @tao/ui
 use package @widgets
 
 app ComponentAliases {
-   Name "Component Aliases"
+   id "packages-component-aliases"
+   version "0.1.0"
+   name "Component Aliases"
+   requires ./Packages version 0.1.0 {
+      @widgets
+   }
    Navigator StackNav {
       Initial AliasesView
 }  }

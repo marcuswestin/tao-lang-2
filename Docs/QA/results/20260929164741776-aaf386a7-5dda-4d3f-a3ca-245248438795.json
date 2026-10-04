@@ -1,0 +1,40 @@
+{
+  "id": "20260929164741776-aaf386a7-5dda-4d3f-a3ca-245248438795",
+  "runId": "20260929164657843-e6414d4f-c4d8-47a0-b8be-c662a133fa3d",
+  "createdAt": "2026-09-29T16:47:41.776Z",
+  "recordedAt": "2026-09-29T16:47:41.776Z",
+  "commit": "442e6416f4c705efb8f236021cf8220b4d02306e",
+  "phase": 1,
+  "executionProfile": "development",
+  "provenance": {
+    "snapshotBasis": "observation-time",
+    "originalDependencies": "recorded",
+    "observedMetadataEvidence": [
+      "Docs/Tutorials/Your First Tao App.md"
+    ]
+  },
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "runtime": "bun:1.4.2"
+  },
+  "inputs": {
+    "source": "Docs/Tutorials/Your First Tao App.md",
+    "dependencySnapshot": "Docs/QA/inputs/05cbff5f9dfc1dec547312675fc241fe7cc49dfa9a7d639908466aceb22f3c0a.json"
+  },
+  "surfaceId": "doc:Docs/Tutorials/Your First Tao App.md",
+  "dimension": "text",
+  "outcome": "fail",
+  "reviewer": "agent",
+  "channel": "source",
+  "evidence": [
+    {
+      "path": "Docs/Tutorials/Your First Tao App.md",
+      "sha256": "7a4b7e1952404036618d0f2c89693d58e1afd2f311c6a24c050120649fd4d1c6"
+    }
+  ],
+  "notes": "Release-1 editorial recheck: QA-TUTORIAL-ENTRY, QA-TUTORIAL-RENAME-PROSE. Source replay passes separately (run tutorial.json); that does not cover the missing run instructions. Re-recorded at 442e6416: the document bytes are unchanged since the 2026-09-29 recheck; the release catalog now classifies subcommands, which none of these findings depends on.",
+  "sourceHash": "7a4b7e1952404036618d0f2c89693d58e1afd2f311c6a24c050120649fd4d1c6",
+  "rendererHash": "not-applicable",
+  "profileHash": "b5e443edb0ccd5952dd86869fb2a97f104715bfcbd7612b7bf7e2c50df3b94c8"
+}

@@ -8,10 +8,6 @@ import { createWorkspaceLspServices } from '../../compiler-src/workspace/langium
 const tsFence = '```ts'
 const fence = '```'
 
-// These tests live apart from `workspace.test.ts` on purpose. The compiler suite runs under Bun's
-// `--concurrent`, which starts every test in a file at once on one thread, and that file holds a test
-// with a two-second wall-clock budget. Four more tests sharing its window were enough to push it past
-// the budget on a loaded machine.
 Describe('what a workspace reference may resolve to', () => {
   // These three references once fell through to Langium's default scope, which offers every
   // top-level declaration of every loaded document. Each test loads the declaration it must not find,
@@ -24,12 +20,12 @@ Describe('what a workspace reference may resolve to', () => {
           use AsksImported, AsksUnimported from @ui
           view MainView() { }
         `,
-        '@data/Results.tao': 'workspace type ConfirmResult is one of Confirmed',
+        '@data/Results.tao': 'project type ConfirmResult is one of Confirmed',
         '@ui/Imported.tao': `
           use ConfirmResult from @data
-          workspace view AsksImported() responds ConfirmResult { }
+          project view AsksImported() responds ConfirmResult { }
         `,
-        '@ui/Unimported.tao': 'workspace view AsksUnimported() responds ConfirmResult { }',
+        '@ui/Unimported.tao': 'project view AsksUnimported() responds ConfirmResult { }',
       },
       async (paths, rootDir) => {
         const parsed = await (await Workspace.open(rootDir)).parse(paths['Main.tao']!)
@@ -46,56 +42,16 @@ Describe('what a workspace reference may resolve to', () => {
     )
   })
 
-  Test('lets app name an app anywhere in its own project and nowhere else', async () => {
-    await withTaoFiles(
-      'tao-workspace-default-app-scope-',
-      {
-        // Two app lines are a validation error of their own; linking still resolves each,
-        // which is what lets one project declaration ask both questions.
-        'Main.tao': 'project { id "outer" name "Outer" app Elsewhere app NestedApp }',
-        'Apps.tao': `
-          app Elsewhere { view Shown }
-          view Shown() { render inject ${tsFence} return null ${fence} }
-        `,
-        'Nested/Apps.tao': `
-          project { id "nested" name "Nested" }
-          app NestedApp { view NestedShown }
-          view NestedShown() { render inject ${tsFence} return null ${fence} }
-        `,
-      },
-      async (paths, rootDir) => {
-        // The documents are loaded by hand, as the editor loads a folder, so that the nested
-        // project's app is in the workspace without anything having imported it.
-        const services = createWorkspaceLspServices(await Packages.createContext(rootDir))
-        const factory = services.shared.workspace.LangiumDocumentFactory
-        const loaded = await Promise.all(
-          Object.values(paths).map(path => factory.fromUri(Langium.URI.file(path))),
-        )
-        loaded.forEach(document => services.shared.workspace.LangiumDocuments.addDocument(document))
-        await services.shared.workspace.DocumentBuilder.build(loaded, { eagerLinking: true })
-
-        const main = loaded.find(document => document.uri.path === paths['Main.tao'])?.parseResult.value
-        Expect.Is(main, AST.isTaoFile)
-        const project = main.statements.find(AST.isProjectDeclaration)
-        Expect.Is(project, AST.isProjectDeclaration)
-        const named = AST.blockStatementOf(project, { filter: AST.isProjectDefaultApp })
-          .map(defaultApp => defaultApp.app.ref?.name)
-
-        Expect(named).toEqual(['Elsewhere', undefined])
-      },
-    )
-  })
-
   Test('resolves what a test exercises by ordinary visibility', async () => {
     await withTaoFiles(
       'tao-workspace-test-dependency-scope-',
       {
         'Main.tao': `
-          app Exercised { view MainView }
+          app Exercised { id "com.tao.test.exercised" version "1.0.0" name "Exercised"  view MainView }
           view MainView() { render inject ${tsFence} return null ${fence} }
         `,
         'Unrelated.tao': `
-          app Unrelated { view UnrelatedView }
+          app Unrelated { id "com.tao.test.unrelated" version "1.0.0" name "Unrelated"  view UnrelatedView }
           view UnrelatedView() { render inject ${tsFence} return null ${fence} }
         `,
         'Main.test.tao': `
@@ -124,12 +80,13 @@ Describe('what a workspace reference may resolve to', () => {
     await withTaoFiles(
       'tao-workspace-lsp-import-after-update-',
       {
+        'App/.tao/.gitkeep': '',
         'App/Main.tao': `
-          project { id "app" name "App" }
+          package { version "1.0.0" license AGPL-3.0-only }
           use Label from @data
-          workspace let Selected = Label
+          project let Selected = Label
         `,
-        'App/@data/Data.tao': 'workspace let Label = "Before"',
+        'App/@data/Data.tao': 'project let Label = "Before"',
       },
       async (paths, rootDir) => {
         const packagesContext = await Packages.createContext(FS.resolvePath('App', rootDir))
@@ -150,7 +107,7 @@ Describe('what a workspace reference may resolve to', () => {
         const before = importedLabel()
         Expect(before && AST.findRoot(before)).toBe(data.parseResult.value)
 
-        await FS.writeText(paths['App/@data/Data.tao']!, 'workspace let Label = "After"')
+        await FS.writeText(paths['App/@data/Data.tao']!, 'project let Label = "After"')
         await builder.update([data.uri], [])
         await builder.build([main, data], { eagerLinking: true, validation: true })
 

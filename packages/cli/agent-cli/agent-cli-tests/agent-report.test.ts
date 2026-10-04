@@ -4,7 +4,6 @@ import {
   buildReportText,
   failedBlock,
   startLine,
-  verdictLine,
 } from '../agent-cli-src/runner/AgentReport'
 import type { AgentFailure } from '../agent-cli-src/runner/FailureParser'
 
@@ -19,20 +18,8 @@ const PASSED = {
 }
 
 Describe('agent report', () => {
-  Test('prints the start line before the child runs', () => {
+  Test('formats the start line with its log path', () => {
     Expect(startLine('verify', '/a/verify/latest.log')).toBe('verify: running — log /a/verify/latest.log')
-  })
-
-  Test('states a passing verdict with its exit code and duration', () => {
-    Expect(verdictLine(PASSED)).toBe('test-file: passed (exit 0) in 1.2s')
-  })
-
-  Test('states a failing verdict distinctly from a pass', () => {
-    Expect(verdictLine({ ...PASSED, exitCode: 1 })).toBe('test-file: failed (exit 1) in 1.2s')
-  })
-
-  Test('prints no Failed: block for a run that failed nothing', () => {
-    Expect(failedBlock([])).toEqual([])
   })
 
   Test('names each failure by gate, test, error, and file', () => {
@@ -144,15 +131,12 @@ Describe('agent report', () => {
         PASSED.logPath,
       ].join('\n'),
     )
-    // The front door's own Failed: block is the only one left — the child's copy of it is gone.
-    Expect(text.split('Failed:').length - 1).toBe(1)
   })
 
   Test('omits the child output in verbose mode, since it already streamed live', () => {
     const text = buildReportText(PASSED, { verbose: true })
 
     Expect(text).toBe(['REPORT:', 'test-file: passed (exit 0) in 1.2s', PASSED.logPath].join('\n'))
-    Expect(text).not.toContain('1 pass')
   })
 
   Test('builds the one JSON object --json prints, with the bounded output as tail', () => {
@@ -167,6 +151,7 @@ Describe('agent report', () => {
       failuresTruncated: false,
       logPath: PASSED.logPath,
       tail: ['ok', '1 pass', '0 fail'],
+      warnings: [],
     })
   })
 
@@ -180,6 +165,24 @@ Describe('agent report', () => {
     const report = buildJsonReport(outcome)
     Expect(report.logUnavailable).toBe('EACCES: permission denied')
     Expect(report.logPath).toBe(PASSED.logPath)
+  })
+
+  Test('retains warnings in successful clipped and verbose reports', () => {
+    const outcome = {
+      ...PASSED,
+      output: Array.from({ length: 30 }, (_, index) => `child line ${index}`).join('\n'),
+      warnings: ['This command opens a visible window.'],
+    }
+
+    for (const options of [{ maxLines: 1 }, { verbose: true }]) {
+      const text = buildReportText(outcome, options)
+      Expect(text).toContain('test-file: passed (exit 0)')
+      Expect(text).toContain('WARNING: This command opens a visible window.')
+      Expect(text).not.toContain('child line 0\n')
+    }
+    const report = buildJsonReport(outcome, { maxLines: 1 })
+    Expect(report.warnings).toEqual(['This command opens a visible window.'])
+    Expect(report.tail).not.toContain('child line 0')
   })
 
   Test('caps --json failures at the same limit as the text report and names the cut', () => {

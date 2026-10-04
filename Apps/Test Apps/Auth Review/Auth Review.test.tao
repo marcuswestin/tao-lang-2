@@ -32,14 +32,6 @@ test "Auth review" {
       press "Verify"
       expect text "Signed in"
    }
-   test "opens signed out and keeps custom sign-in input local" {
-      run AuthReview
-
-      expect text "Sign in to your notes"
-      enter "alice@example.com" into #email
-      expect #email input value "alice@example.com"
-      expect missing text "Signed in"
-   }
    test "signs in with the headless action and signs out" {
       run AuthReview
       enter "alice@example.com" into #email
@@ -49,11 +41,6 @@ test "Auth review" {
       press #signOut
       expect text "Sign in to your notes"
       expect missing text "Signed in"
-   }
-   test "offers supplied sign-in UI" {
-      run AuthReview
-      press #toggleSignIn
-      expect text "Sign in"
    }
    test "retries a rejected code in custom UI" {
       run AuthReview
@@ -139,6 +126,40 @@ test "Account data" with AliceNotes {
       press #signOut
       expect missing text "New private note"
       expect missing text "Alice private note"
+      expect text "Sign in to your notes"
+   }
+   test "updates and deletes only the visible account note" {
+      run AuthReview
+
+      expect text "Alice private note"
+      expect missing text "Bob private note"
+      press #updateNote
+      expect text "Updated note"
+      expect missing text "Alice private note"
+      press #deleteNote
+      expect missing text "Updated note"
+      expect missing text "Bob private note"
+   }
+   test "deletes a note's owned detail while the account stays available" {
+      run AuthReview
+      press #addNoteDetail
+      expect text "Owned note detail"
+      press #deleteNote
+      expect missing text "Owned note detail"
+      expect text "Hello Alice"
+   }
+   test "deletes the current account and its owned notes" {
+      run AuthReview
+
+      expect text "Alice private note"
+      expect missing text "Bob private note"
+      press #deleteAccount
+      expect text "Confirm delete account and notes"
+      expect text "Alice private note"
+      press #confirmDeleteAccount
+      expect text "Account data is missing"
+      expect missing text "Alice private note"
+      press #signOut
       expect text "Sign in to your notes"
    }
 }

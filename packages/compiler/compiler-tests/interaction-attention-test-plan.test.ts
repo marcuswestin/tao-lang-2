@@ -20,7 +20,7 @@ Describe('compiler: interaction attention test-plan IR', () => {
           }
         `,
         'Main.tao': `
-          app Demo { view Home }
+          app Demo { id "com.tao.test.demo" version "1.0.0" name "Demo"  view Home }
           view Home() { render inject \`\`\`ts return null \`\`\` }
         `,
       },

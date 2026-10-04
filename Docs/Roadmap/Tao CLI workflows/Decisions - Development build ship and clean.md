@@ -1,6 +1,6 @@
 # Decisions — Tao development, build, ship, and clean
 
-Status: **decided product behavior; bare `tao dev`, web/desktop build, and clean landed on `main`; later ship and native slices remain planned**. These decisions were made in the
+Status: **decided product behavior; bare `tao run`, web/desktop build, and clean landed on `main`; later ship and native slices remain planned**. These decisions were made in the
 September 2026 CLI workflow dialogue. They supersede conflicting _forward-looking_ command designs
 in `Docs/MVP Roadmap/Plan - Standalone Tao CLI.md` and
 `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md`; much of the remaining contract
@@ -11,7 +11,7 @@ landed on `main`; implementation should start from that post-restructure state, 
 unrelated `feat/real-host-acceptance` history. The design discussion changed the personal dialogue
 skill separately; no skill change is part of this CLI work.
 
-The first implementation slice starts bare `tao dev` without opening a target, places its generated
+The first implementation slice starts bare `tao run` without opening a target, places its generated
 Expo host under the project, records session history at `.tao/sessions/`, and shares exclusive
 project ownership with Studio. Slice two adds local web and desktop builds, live desktop opening,
 and build cleanup. Ship, invite, native packaging, and installer behavior remain later slices;
@@ -19,7 +19,7 @@ command help describes what is implemented now.
 
 ## Product boundary and architecture
 
-- `tao dev`, `tao build`, `tao ship`, `tao invite`, and `tao clean` are the public workflow verbs.
+- `tao run`, `tao build`, `tao ship`, `tao invite`, and `tao clean` are the public workflow verbs.
   Do not add a public `tao package` or an app-OTA `tao update` command. `tao build --compile-only`
   replaces the old public `tao compile` once its callers have migrated.
 - The CLI should expose the development and build capabilities that overlap with Studio. A shared
@@ -39,9 +39,9 @@ command help describes what is implemented now.
   `tao check-for-updates` and asks whether to install when it finds an update; that command is not
   part of this implementation.
 
-## `tao dev`
+## `tao run`
 
-- Bare `tao dev` starts the live development session and Metro, but opens no simulator, browser,
+- Bare `tao run` starts the live development session and Metro, but opens no simulator, browser,
   desktop window, or device. Startup flags `--ios`, `--android`, `--web`, and `--desktop` open only
   requested targets and may be combined. `--device <name-or-id>` opens a physical device directly;
   it accepts an iPhone/iPad name or ID, or an Android serial, and may accompany the other flags.
@@ -58,7 +58,7 @@ command help describes what is implemented now.
 - Desktop is a first-class Tao target through Electrobun, not another name for a browser tab or for
   Tao Studio. The browser and desktop display the same Tao app; their bundles need not be byte-for-
   byte identical. Desktop-native capabilities are available only in the Electrobun host, and their
-  absence in a browser must be handled explicitly. `tao dev --desktop` and `d` use the live Metro
+  absence in a browser must be handled explicitly. `tao run --desktop` and `d` use the live Metro
   session and Fast Refresh; they do not run a saved static build.
 
 ## `tao build`
@@ -69,7 +69,7 @@ command help describes what is implemented now.
   another target's failure; the final view gives detailed errors for every failed target and the
   command exits unsuccessfully if any failed.
 - Every invocation creates a fresh build record and artifacts. It does not silently reuse a prior
-  local build. A build may run alongside `tao dev`: all selected targets compile the same copied
+  local build. A build may run alongside `tao run`: all selected targets compile the same copied
   source snapshot made before target work starts, and later source edits cannot change that build.
   Keep the human-facing progress view; machine-readable `--json` output is not in this slice.
 - A build is local and produces an inspectable artifact; it does not ship or upload. `--compile-only`
@@ -138,7 +138,7 @@ command help describes what is implemented now.
   deferred. Show unavailable ship targets in the picker with a clear alert rather than pretending
   the commands succeed.
 - Shipping history and accepted deployment configuration belong in the existing project lock
-  (`.tao-project/lock.jsonc`) or a clearly separate durable shipping store, not in disposable local
+  (`.tao/lock.jsonc`) or a clearly separate durable shipping store, not in disposable local
   build records. Do not make `tao clean` remove that history.
 
 ## `tao invite`
@@ -156,7 +156,7 @@ command help describes what is implemented now.
   dirty-source builds in that selection without a special warning. Before deleting, show the exact
   selected paths and sizes and ask for permanent deletion; **Yes** is the default answer.
 - Delete each selected build folder and its local record. Keep no “cleaned build” tombstone. Do not
-  delete shipping history, `.tao-project/lock.jsonc`, source, credentials, deployed records, or
+  delete shipping history, `.tao/lock.jsonc`, source, credentials, deployed records, or
   session records. Current source can usually be built again, but historical or dirty-source
   artifacts may not be byte-for-byte reproducible; the choice to show no special warning was
   deliberate. `tao clean` is interactive-only in this slice; it does not accept a noninteractive
@@ -169,8 +169,8 @@ web/desktop build, compile-only, and clean examples are implemented so far.
 
 | Use case                                            | Invocation or operation                             |
 | --------------------------------------------------- | --------------------------------------------------- |
-| Start a live session without opening a target       | `tao dev`                                           |
-| Open selected live targets at startup               | `tao dev --web --desktop`                           |
+| Start a live session without opening a target       | `tao run`                                           |
+| Open selected live targets at startup               | `tao run --web --desktop`                           |
 | Build local static web files and serve them         | `tao build --web`, then the artifact's `run` script |
 | Build a local desktop app                           | `tao build --desktop`                               |
 | Build local iOS simulator and available device apps | `tao build --ios`                                   |
@@ -199,7 +199,7 @@ These are implementation priorities, not claims that every command already works
 the landed slice 1 and delivers all of web/desktop/clean on one branch. The later bullets
 give priority order, not a rule against all parallel preparation.
 
-1. Standalone `tao dev`: a live Metro session that opens no target by default, with project-local
+1. Standalone `tao run`: a live Metro session that opens no target by default, with project-local
    session ownership shared with Studio and the standalone runtime resources it needs.
 2. Local web and desktop builds plus `tao clean`: deliver the static web folder, runnable macOS
    `.app`, retained artifact records, and selective cleanup together in one landing.

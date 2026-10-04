@@ -46,7 +46,7 @@ action ProductPanelAction(Name text, Payload text) from ../../../packages/ides/s
 folder
 action ApplyActiveCellEnvironment(CellId text, CellRevision number, Preset text, Width number, Height number, Network text, Latency number, ErrorMessage text, ErrorStatus number) fails Conflict "This preview changed while its environment was being edited." from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-workspace
+project
 view StudioRoot(CollapsedFolders list of text, ToggleFolder action(text)) {
    render ProductHostBoundary() {
       @files FilesPanel(CollapsedFolders: CollapsedFolders, ToggleFolder: ToggleFolder)

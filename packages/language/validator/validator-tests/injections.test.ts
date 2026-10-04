@@ -7,7 +7,7 @@ Describe('validator: injections', () => {
     'rejects duplicate inject argument names',
     rejects(
       `
-      app MyApp { view MainView }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
       view MainView() {
         render Text("Hello")
       }

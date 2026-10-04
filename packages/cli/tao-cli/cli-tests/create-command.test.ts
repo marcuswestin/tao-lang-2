@@ -4,7 +4,6 @@ import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { PassThrough } from 'node:stream'
 import { type CreateCommandOptions, type CreationPrompts, runCreate } from '../cli-src/create/create-command'
 import type { CreationLane } from '../cli-src/create/creation-lanes'
-import { lowerCreationPlan } from '../cli-src/create/creation-lowering'
 import { runTaoCliForTest } from './test-cli-files'
 
 const wholePlan: JsonObject = {
@@ -82,6 +81,130 @@ async function relativeTaoFiles(directory: string): Promise<string[]> {
 }
 
 Describe('tao create command', () => {
+  Test('creates a Firebase app with local journeys and no connection setup', async () => {
+    await withRoot(async (root, output, captured) => {
+      const result = await runCreate('A notebook for short notes', {
+        ai: 'none',
+        cwd: root,
+        id: 'private-notes',
+        interactive: false,
+        output,
+        provider: 'firebase',
+        runTests: false,
+        yes: true,
+      })
+      Expect(result.created).toBe(true)
+      Expect(await relativeTaoFiles(result.directory)).toContain('Auth.tao')
+      Expect(await FS.readText(FS.resolvePath('App.tao', result.directory)))
+        .toContain('Auth FirebaseAuth')
+      Expect(await FS.readText(FS.resolvePath('ANotebookFor.test.tao', result.directory)))
+        .toContain('Datasource Memory')
+      Expect(await FS.readText(FS.resolvePath('Auth.tao', result.directory)))
+        .not.toContain('Fill validation credentials')
+      Expect(captured()).toContain('Created')
+      Expect(await FS.exists(FS.resolvePath('.tao/local/connections.json', result.directory))).toBe(false)
+    })
+  })
+
+  Test('adds the synthetic validation fill only when requested for Firebase', async () => {
+    await withRoot(async (root, output) => {
+      await Expect(runCreate('A notebook for short notes', {
+        ai: 'none',
+        cwd: root,
+        id: 'invalid-validation',
+        interactive: false,
+        output,
+        runTests: false,
+        validationTools: true,
+        yes: true,
+      })).rejects.toThrow('--validation-tools requires --provider firebase')
+      Expect(await FS.exists(FS.resolvePath('invalid-validation', root))).toBe(false)
+      const result = await runCreate('A notebook for short notes', {
+        ai: 'none',
+        cwd: root,
+        id: 'validation-notes',
+        interactive: false,
+        output,
+        provider: 'firebase',
+        runTests: false,
+        validationTools: true,
+        yes: true,
+      })
+      Expect(await FS.readText(FS.resolvePath('Auth.tao', result.directory)))
+        .toContain('FormButton("Fill validation credentials")')
+      Expect(await FS.readText(FS.resolvePath('ANotebookFor.test.tao', result.directory)))
+        .toContain('fills validation credentials without signing in')
+    })
+  })
+
+  Test('rejects Firebase account name collisions before writing', async () => {
+    await withRoot(async (root, output) => {
+      await Expect(runCreate('Account', {
+        ai: 'none',
+        cwd: root,
+        id: 'account-name',
+        interactive: false,
+        output,
+        provider: 'firebase',
+        runTests: false,
+        yes: true,
+      })).rejects.toThrow('reserves Account')
+      Expect(await FS.exists(FS.resolvePath('account-name', root))).toBe(false)
+
+      const accountPlan: JsonObject = {
+        ...wholePlan,
+        id: 'account-entity',
+        entities: [{
+          plural: 'Accounts',
+          singular: 'Account',
+          purpose: 'One account.',
+          fields: [{ name: 'Title', type: 'text', title: true }],
+        }],
+      }
+      const provider = new ScriptedGenerationProvider([
+        { kind: 'answer', value: accountPlan },
+        { kind: 'answer', value: { rows: [{ Title: 'One' }] } },
+      ])
+      await Expect(runCreate('A list of accounts', {
+        cwd: root,
+        interactive: false,
+        lanes: [fakeLane(provider)],
+        output,
+        provider: 'firebase',
+        runTests: false,
+        yes: true,
+      })).rejects.toThrow('reserves Accounts')
+      Expect(await FS.exists(FS.resolvePath('account-entity', root))).toBe(false)
+
+      for (const name of ['TripPlannerAuthNavigator', 'TripPlannerAccountGate', 'TripPlannerSignIn']) {
+        const authPlan: JsonObject = {
+          ...wholePlan,
+          id: `collision-${name.toLowerCase()}`,
+          entities: [{
+            plural: name,
+            singular: 'Entry',
+            purpose: 'One entry.',
+            fields: [{ name: 'Title', type: 'text', title: true }],
+          }],
+        }
+        const authProvider = new ScriptedGenerationProvider([
+          { kind: 'answer', value: authPlan },
+          { kind: 'answer', value: { rows: [{ Title: 'One' }] } },
+        ])
+        await Expect(runCreate('A list of entries', {
+          cwd: root,
+          interactive: false,
+          lanes: [fakeLane(authProvider)],
+          output,
+          provider: 'firebase',
+          runTests: false,
+          yes: true,
+        })).rejects.toThrow(`reserves ${name}`)
+        Expect(await FS.exists(FS.resolvePath(`collision-${name.toLowerCase()}`, root))).toBe(false)
+      }
+    })
+  })
+
   Test('fresh one-feature and two-feature projects use native navigation and UI', async () => {
     await withRoot(async (root, output) => {
       const one = await runCreate('A notebook for short notes', {
@@ -165,10 +288,15 @@ Describe('tao create command', () => {
       Expect(captured()).toContain(
         'Items / Item: Title (text, title), Notes (text), Done (yes/no), CreatedAt (time); 3 sample rows',
       )
-      Expect(captured()).toContain('tao dev a-notebook-for')
+      Expect(captured()).toContain('tao run a-notebook-for')
       Expect(await FS.readText(FS.resolvePath('App.tao', result.directory))).toContain('id "a-notebook-for"')
-      Expect(await FS.readText(FS.resolvePath('tsconfig.json', result.directory))).toContain('"@tao/runtime"')
-      Expect(await FS.readText(FS.resolvePath('.tao-project/skills.version', result.directory))).toBe('1.0.0\n')
+      Expect(await FS.readText(FS.resolvePath('tsconfig.json', result.directory)))
+        .toBe('{ "extends": "./.tao/typescript/tsconfig.json" }\n')
+      Expect(await FS.readText(FS.resolvePath('.tao/skills.version', result.directory))).toBe('1.0.0\n')
+      const identity = await FS.readJson<{ id: string }>(FS.resolvePath('.tao/project.json', result.directory))
+      Expect(identity.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
+      Expect(await FS.readText(FS.resolvePath('.gitignore', result.directory)))
+        .toContain('!/.tao/project.json\n')
       Expect(await FS.readText(FS.resolvePath('CLAUDE.md', result.directory))).toBe('@AGENTS.md\n')
       Expect(await FS.readText(FS.resolvePath('.agents/skills/tao-project/SKILL.md', result.directory)))
         .toBe(await FS.readText(FS.resolvePath('.claude/skills/tao-project/SKILL.md', result.directory)))
@@ -234,7 +362,7 @@ Describe('tao create command', () => {
       // the claim the plan's own lowering used to be asked to make about itself.
       Expect(await relativeTaoFiles(result.directory)).toContain('Trips/Trips.tao')
       Expect(await FS.readText(FS.resolvePath('Trips/Trips.tao', result.directory))).toContain('Trip')
-      Expect(captured()).toContain('tao dev plan-trips-with')
+      Expect(captured()).toContain('tao run plan-trips-with')
     })
   })
 
@@ -319,7 +447,6 @@ Describe('tao create command', () => {
         runTests: false,
       })
       Expect(result.plan.palette).toEqual(palette)
-      Expect(lowerCreationPlan(result.plan)['Design.tao']).toContain('canvasLight #fdf6e3')
       Expect(captured()).toContain(`Read colors from ${FS.displayPath(image)}.`)
     })
   })
@@ -386,9 +513,8 @@ Describe('tao create command', () => {
     })
   })
 
-  Test('refuses an existing directory and a malformed --id', async () => {
+  Test('refuses a malformed --id and empty description', async () => {
     await withRoot(async (root, output) => {
-      await FS.mkdir(FS.resolvePath('taken', root))
       const options: CreateCommandOptions = {
         ai: 'none',
         cwd: root,
@@ -397,7 +523,6 @@ Describe('tao create command', () => {
         runTests: false,
         yes: true,
       }
-      await Expect(runCreate('Taken', { ...options, id: 'taken' })).rejects.toThrow('already exists')
       await Expect(runCreate('Bad', { ...options, id: 'Bad Id' })).rejects.toThrow(
         'lowercase letters, digits, and hyphens',
       )

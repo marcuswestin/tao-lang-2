@@ -204,6 +204,7 @@ Describe('test world provider stand-in', () => {
     }
   })
 
+  // REMOVAL CANDIDATE: TR-data preserves queried rows after save failure; this additionally checks handle availability.
   Test('a production snapshot save failure keeps an existing handle readable', async () => {
     const schema = TR.Data.Schema({
       name: 'ProductionSnapshot',

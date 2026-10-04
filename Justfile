@@ -10,7 +10,7 @@ IDE_EXTENSION_VSIX := justfile_directory() + "/.artifacts/build/tao-ide-extensio
 LOCAL_INSTANTDB_APP_ID := "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f"
 LOCAL_INSTANTDB_DIR := justfile_directory() + "/packages/services/tao-cloud/tao-cloud-src/local"
 LOCAL_INSTANTDB_COMPOSE := "docker compose --project-name tao-local-instantdb --file \"" + LOCAL_INSTANTDB_DIR + "/docker-compose.yml\""
-VERIFY_FULL_GATES := "_fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check _doctor-json dead-exports ship-bundle-proof studio-smoke studio-proof-real-app studio-smoke-simulated-user keyboard-navigation-smoke studio-dialog-browser studio-agent-browser studio-network-simulation studio-smoke-native studio-canary"
+VERIFY_FULL_GATES := "_fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _hosted-crud-test _test _runtime-pack-check _doctor-json dead-exports ship-bundle-proof studio-smoke studio-proof-real-app studio-smoke-simulated-user keyboard-navigation-smoke studio-dialog-browser studio-agent-browser studio-network-simulation studio-smoke-native studio-canary"
 VERIFY_FULL_SKIPPED := ""
 
 # Print available recipes
@@ -20,7 +20,7 @@ help:
 # The private setup recipe is what every harness reaches through `./agent setup`: Worktrunk's pre-start hook
 # (.config/wt.toml), the harness SessionStart hooks (.rulesync/hooks.jsonc), and
 # Cursor's worktree setup (.cursor/worktrees.json). Changing what setup does changes them all.
-_setup: _deps _agent-config _git-hooks _initial-dev-branch _shell-completion
+_setup: _deps _tao-project-deps _agent-config _git-hooks _initial-dev-branch _shell-completion
     ./dev shell-setup --prepare
 
 # Configure optional automatic development environments for this repository and its worktrees
@@ -55,6 +55,12 @@ secrets *ARGS:
 [group('Setup')]
 setup-clerk *ARGS:
     ./dev setup-clerk {{ ARGS }}
+
+# Manage recorded background app loops: start, status, logs, stop, restart, reload
+[group('Sessions')]
+[positional-arguments]
+dev-loop *ARGS:
+    ./dev dev-loop "$@"
 
 # Launch the agent harness with the Bash sandbox off; switch a running session with /sandbox
 [group('Sessions')]
@@ -103,7 +109,22 @@ auth-review-server *ARGS:
 clerk-review *ARGS: _parser-gen
     ./dev clerk-review {{ ARGS }}
 
-# Push Auth Review to your Instant Cloud app and run it in tao dev; requires its stored App ID and admin token
+# Run the Firebase/RxDB and Appwrite/Legend generic CRUD comparison in Expo Go
+[group('Run')]
+hosted-crud:
+    ./tao connect run 'Apps/Hosted CRUD'
+
+# Typecheck the Expo Go hosted CRUD comparison app
+[group('Dev')]
+hosted-crud-check:
+    "{{ BUN }}" run --cwd "{{ justfile_directory() }}/Apps/Hosted CRUD" typecheck
+
+# Run focused storage and account-scope tests for the hosted CRUD comparison
+[group('Dev')]
+hosted-crud-test:
+    "{{ BUN }}" run --cwd "{{ justfile_directory() }}/Apps/Hosted CRUD" test
+
+# Push Auth Review to your Instant Cloud app and run it in tao run; requires its stored App ID and admin token
 [group('Run')]
 instant-review *ARGS: _parser-gen
     ./dev instant-review {{ ARGS }}
@@ -128,7 +149,7 @@ studio-companion-install device="":
 studio-companion-simulator simulator="":
     ./dev studio-companion-install --simulator "{{ simulator }}"
 
-# Build the Tao Companion as a prebuilt host (--platform ios-simulator for the simulator); tao dev opens apps in it
+# Build the Tao Companion as a prebuilt host (--platform ios-simulator for the simulator); tao run opens apps in it
 [group('Run')]
 companion-host-build *ARGS:
     ./dev companion-host-build {{ ARGS }}
@@ -148,15 +169,16 @@ setup-visionos *ARGS:
 setup-watchos *ARGS:
     ./dev setup-watchos {{ ARGS }}
 
-# Publish the built Companion hosts to their GitHub release, where tao dev downloads them; needs gh
+# Publish the built Companion hosts to their GitHub release, where tao run downloads them; needs gh
 [group('Run')]
 companion-host-publish:
     ./dev companion-host-publish
 
 # Run the opt-in real-host testing prototype; does not run or replace the existing suites
 [group('Host proofs')]
+[positional-arguments]
 test-host *ARGS:
-    ./dev test-host {{ ARGS }}
+    ./dev test-host "$@"
 
 # Build the agent-command example, list commands, invoke one in a separate CLI process, and stop (macOS)
 [group('Run')]
@@ -166,24 +188,40 @@ agents-demo: _parser-gen
     ./.artifacts/agents-demo/agents run AppendEntry --args '{"Message":"Hello from just agents-demo","Quantity":3,"Marked":true}' --stop-after
 
 # Run an explicit slow Studio smoke file in an isolated lane
+[arg('native', long='native', value='true')]
+[arg('run_id', long='run-id')]
+[arg('show_studio', long='show-studio', value='true')]
 [group('Host proofs')]
-studio-smoke test_file="packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts" run_id="local":
-    ./dev studio-smoke --run-id "{{ run_id }}" "{{ test_file }}"
+studio-smoke test_file="packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts" run_id="local" native='false' show_studio='false':
+    ./dev studio-smoke {{ if native == "true" { "--native" } else { "" } }} {{ if show_studio == "true" { "--show-studio" } else { "" } }} --run-id "{{ run_id }}" "{{ test_file }}"
 
 # Run an explicit slow Studio shell smoke through Electrobun
+[arg('show_studio', long='show-studio', value='true')]
 [group('Host proofs')]
-studio-smoke-native test_file="packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts" run_id="local":
-    ./dev studio-smoke --native --run-id "{{ run_id }}" "{{ test_file }}"
+studio-smoke-native test_file="packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts" run_id="local" show_studio='false':
+    ./dev studio-smoke --native {{ if show_studio == "true" { "--show-studio" } else { "" } }} --run-id "{{ run_id }}" "{{ test_file }}"
 
 # Prove semantic host control against the owned native Studio shell
+[arg('show_studio', long='show-studio', value='true')]
 [group('Host proofs')]
-studio-host-control-smoke run_id="local":
-    ./dev studio-smoke --native --run-id "{{ run_id }}" packages/ides/studio-tooling/studio-smoke/studio-host-control.test.ts
+studio-host-control-smoke run_id="local" show_studio='false':
+    ./dev studio-smoke --native {{ if show_studio == "true" { "--show-studio" } else { "" } }} --run-id "{{ run_id }}" packages/ides/studio-tooling/studio-smoke/studio-host-control.test.ts
 
 # Probe external Studio accessibility and physical input through Appium Mac2
+[arg('show_studio', long='show-studio', value='true')]
 [group('Host proofs')]
-studio-mac2-acceptance run_id="local":
-    ./dev studio-smoke --native --run-id "{{ run_id }}" packages/ides/studio-tooling/studio-smoke/studio-mac2-acceptance.test.ts
+studio-mac2-acceptance run_id="local" show_studio='false':
+    ./dev studio-smoke --native {{ if show_studio == "true" { "--show-studio" } else { "" } }} --run-id "{{ run_id }}" packages/ides/studio-tooling/studio-smoke/studio-mac2-acceptance.test.ts
+
+# Capture a bounded headless QA review; capture alone is not a visual judgment
+[group('Host proofs')]
+qa-capture *ARGS: _parser-gen
+    ./dev qa-capture {{ ARGS }}
+
+# Inventory, run bounded checks, record observations, and report on-demand QA
+[group('Report')]
+qa *ARGS:
+    ./dev qa {{ ARGS }}
 
 # Prove Studio compile/edit/undo against the real HNReader app
 [group('Host proofs')]
@@ -196,9 +234,10 @@ keyboard-navigation-smoke run_id="local":
     ./dev studio-smoke --run-id "{{ run_id }}" --worker 4 packages/ides/studio-tooling/studio-smoke/runtime-keyboard-navigation.test.ts
 
 # Run native Tao Studio against a deterministic project and report what it proved
+[arg('show_studio', long='show-studio', value='true')]
 [group('Host proofs')]
-studio-canary project="Apps/HNReader" app="HNReader":
-    ./dev studio-canary --project "{{ project }}" --app "{{ app }}"
+studio-canary project="Apps/HNReader" app="HNReader" show_studio='false':
+    ./dev studio-canary {{ if show_studio == "true" { "--show-studio" } else { "" } }} --project "{{ project }}" --app "{{ app }}"
 
 # Export real release and Studio-preview iOS bundles and prove only the preview carries Studio code
 [group('Host proofs')]
@@ -211,9 +250,10 @@ native-module-check:
     ./dev native-module-check
 
 # Run the native Studio checks that require a person; never part of test or verify
+[arg('show_studio', long='show-studio', value='true')]
 [group('Host proofs')]
-studio-manual-checks project="Apps/HNReader" app="HNReader":
-    ./dev studio-manual-checks --project "{{ project }}" --app "{{ app }}"
+studio-manual-checks project="Apps/HNReader" app="HNReader" show_studio='false':
+    ./dev studio-manual-checks {{ if show_studio == "true" { "--show-studio" } else { "" } }} --project "{{ project }}" --app "{{ app }}"
 
 # Validate a built native Studio release without publishing anything
 [group('Ship')]
@@ -252,14 +292,19 @@ standalone-cli-build: _parser-gen
 
 # Build the files one standalone Tao release publishes, and print the command that publishes them
 [group('Ship')]
-standalone-cli-release version: _parser-gen
-    "{{ BUN }}" run packages/cli/tao-cli/cli-src/standalone-build.ts --release "{{ version }}"
+standalone-cli-release version="0.4.0" phase="1": _parser-gen
+    "{{ BUN }}" run packages/cli/tao-cli/cli-src/standalone-build.ts --release "{{ version }}" --phase "{{ phase }}"
 
 # Build a release, install it through curl | sh into a throwaway HOME, and prove create, check, compile, and build --compile-only work with no Bun or Node on PATH
 [group('Ship')]
 standalone-cli-acceptance: _parser-gen
-    "{{ BUN }}" run packages/cli/tao-cli/cli-src/standalone-build.ts --release 0.0.0
+    "{{ BUN }}" run packages/cli/tao-cli/cli-src/standalone-build.ts --release 0.0.0 --phase 1
     "{{ BUN }}" run packages/cli/tao-cli/cli-src/standalone-acceptance.ts .artifacts/release/v0.0.0
+
+# Install the VSIX in an isolated VS Code window and verify activation, diagnostics, hover, and navigation
+[group('Host proofs')]
+ide-extension-acceptance:
+    ./dev ide-extension-acceptance
 
 # Test a release in a disposable macOS VM; --base or --prepare-base vanilla|xcode selects a pinned image
 [group('Ship')]
@@ -288,7 +333,7 @@ standalone-cli-vm-setup:
 [group('Dev')]
 [positional-arguments]
 dev app_path="Apps" APP="":
-    ./tao dev "$1" {{ if APP == "" { "" } else { "--app \"$2\"" } }}
+    ./tao run "$1" {{ if APP == "" { "" } else { "--app \"$2\"" } }}
 
 # `just test` is the fast default, so it runs the suites this branch's diff reaches rather than all
 # of them. Selection is a heuristic over the diff: a run can be green while a suite the change broke
@@ -303,22 +348,22 @@ dev app_path="Apps" APP="":
 # A name pattern narrows the same default scope rather than replacing it: `just test "<name>"` is the
 # changed suites filtered to that name, not every suite filtered to it. Scope and filter compose, so
 # the fast default stays fast and only `test-all` widens it.
-# Run the suites this branch's diff reaches; a wider change can still break a suite it never ran, so `test-all` before a merge. One optional target is a test path or a test name
+# Run changed suites, fail fast; explicit file/name targets collect failures. Selection can miss a regression, so `test-all` before a merge
 [group('Dev')]
 test target="": _compile-word-flower-app
     if [ {{ quote(target) }} = '' ]; then ./dev test-changed; elif [ -e {{ quote(target) }} ]; then printf 'Running tests in %s\n' {{ quote(target) }}; ./dev test-file {{ quote(target) }}; else printf 'Filtering the changed suites to tests matching "%s"\n' {{ quote(target) }}; ./dev test-changed --name {{ quote(target) }}; fi
 
-# Run every test suite, whatever this branch changed; the scope `verify` runs. One optional test-name pattern filters them
+# Run every test suite, fail fast; an explicit test-name pattern collects failures in that filtered scope
 [group('Dev')]
 test-all pattern="": _compile-word-flower-app
     ./dev test{{ if pattern == "" { "" } else { " " + quote(pattern) } }}
 
-# Run tests selected by changes since a ref; defaults to this branch's main merge base
+# Run implicitly selected changed suites, fail fast; defaults to this branch's main merge base
 [group('Dev')]
 test-changed ref="": _compile-word-flower-app
     ./dev test-changed {{ if ref == "" { "" } else { "\"" + ref + "\"" } }}
 
-# Run one package Bun or runtime Jest test file, or every test file under a directory
+# Collect failures in one test file/directory; a repository-root target remains fail fast
 [group('Dev')]
 test-file path: _compile-word-flower-app
     ./dev test-file "{{ path }}"
@@ -328,7 +373,7 @@ test-file path: _compile-word-flower-app
 test-mutation path: _compile-word-flower-app
     ./dev test-mutation {{ quote(path) }}
 
-# Re-run files that are not green since this checkout's latest complete test run
+# Collect failures in files not green since this checkout's latest complete test run
 [group('Dev')]
 test-retry: _compile-word-flower-app
     ./dev test-retry
@@ -409,11 +454,12 @@ my-land *ARGS:
 [arg('dry_run', long='dry-run', value='true')]
 [arg('message_file', long='message-file')]
 [arg('redraft', long='redraft', value='true')]
+[arg('show_studio', long='show-studio', value='true')]
 [arg('skip_verify', long='skip-verify', value='true')]
 [arg('skip_verify_full', long='skip-verify-full', value='true')]
 [group('Ship')]
-land dry_run='false' message_file='' redraft='false' skip_verify='false' skip_verify_full='false':
-    ./dev land {{ if dry_run == "true" { "--dry-run" } else { "" } }} {{ if redraft == "true" { "--redraft" } else { "" } }} {{ if skip_verify == "true" { "--skip-verify" } else { "" } }} {{ if skip_verify_full == "true" { "--skip-verify-full" } else { "" } }} {{ if message_file == "" { "" } else { "--message-file " + quote(message_file) } }}
+land dry_run='false' message_file='' redraft='false' skip_verify='false' skip_verify_full='false' show_studio='false':
+    ./dev land {{ if show_studio == "true" { "--show-studio" } else { "" } }} {{ if dry_run == "true" { "--dry-run" } else { "" } }} {{ if redraft == "true" { "--redraft" } else { "" } }} {{ if skip_verify == "true" { "--skip-verify" } else { "" } }} {{ if skip_verify_full == "true" { "--skip-verify-full" } else { "" } }} {{ if message_file == "" { "" } else { "--message-file " + quote(message_file) } }}
 
 # The cheap-gate barrier a landing runs first, inside the lock, before anything expensive. It is
 # `check` — generation and formatting consistency, repository lint, types — plus `dead-exports`, and
@@ -429,20 +475,41 @@ land-barrier: check dead-exports
 [arg('abort', long='abort')]
 [arg('dry_run', long='dry-run', value='true')]
 [arg('message_file', long='message-file')]
+[arg('show_studio', long='show-studio', value='true')]
 [arg('skip_all', long='skip-all', value='true')]
 [arg('skip_verify', long='skip-verify', value='true')]
 [arg('skip_verify_full', long='skip-verify-full', value='true')]
 [group('Ship')]
-merge-with-main skip_verify='false' skip_verify_full='false' skip_all='false' dry_run='false' message_file='' abort='':
-    ./dev merge-with-main {{ if skip_verify == "true" { "--skip-verify" } else { "" } }} {{ if skip_verify_full == "true" { "--skip-verify-full" } else { "" } }} {{ if skip_all == "true" { "--skip-all" } else { "" } }} {{ if dry_run == "true" { "--dry-run" } else { "" } }} {{ if message_file == "" { "" } else { "--message-file " + quote(message_file) } }} {{ if abort == "" { "" } else { "--abort " + quote(abort) } }}
+merge-with-main skip_verify='false' skip_verify_full='false' skip_all='false' dry_run='false' message_file='' abort='' show_studio='false':
+    ./dev merge-with-main {{ if show_studio == "true" { "--show-studio" } else { "" } }} {{ if skip_verify == "true" { "--skip-verify" } else { "" } }} {{ if skip_verify_full == "true" { "--skip-verify-full" } else { "" } }} {{ if skip_all == "true" { "--skip-all" } else { "" } }} {{ if dry_run == "true" { "--dry-run" } else { "" } }} {{ if message_file == "" { "" } else { "--message-file " + quote(message_file) } }} {{ if abort == "" { "" } else { "--abort " + quote(abort) } }}
 
-# Format code, without applying the other Tao source fixes
+# Format code, optionally only named files, without applying the other Tao source fixes
 [group('Dev')]
-fmt: _parser-gen
-    dprint fmt --incremental=false --excludes "@/" "**/@/**"
-    dprint check --incremental=false --allow-no-files "@/**/*" "**/@/**/*"
-    ./tao fmt
-    just --fmt
+[positional-arguments]
+fmt *PATHS: _parser-gen
+    #!/usr/bin/env zsh
+    set -e
+    if (( $# > 0 )); then
+        for task_format_file in "$@"; do
+            [[ -f "$task_format_file" ]] || { print -u2 -r -- "Formatting requires a file: $task_format_file"; exit 2; }
+            [[ "$task_format_file" == /* ]] || task_format_file="./$task_format_file"
+            case "$task_format_file" in
+                *.tao) ./tao fmt "$task_format_file" ;;
+                */Justfile) just --fmt --justfile "$task_format_file" ;;
+                *) dprint fmt --incremental=false "$task_format_file" ;;
+            esac
+        done
+    else
+        dprint fmt --incremental=false --excludes "@/" "**/@/**"
+        dprint check --incremental=false --allow-no-files "@/**/*" "**/@/**/*"
+        ./tao fmt
+        just --fmt
+    fi
+
+# Format one file or dprint glob without changing unrelated concurrent work
+[group('Dev')]
+fmt-file path:
+    dprint fmt --incremental=false {{ quote(path) }}
 
 # Each harness write-protects its own agent configuration — skills, hooks, settings — against shell
 # commands, while allowing the harness's own edit tools, so that a change to an agent's instructions
@@ -469,7 +536,7 @@ fix: _parser-gen
     ./tao fix
     just --fmt
 
-# Check all code without changing it or running tests: Tao and dprint canonical source, lint, types. --no-cache ignores a recorded green tree
+# Check all code, fail fast between checks: canonical source, lint, types. --no-cache ignores a recorded green tree
 [arg('no_cache', long='no-cache', value='true')]
 [group('Dev')]
 check no_cache='false':
@@ -477,7 +544,7 @@ check no_cache='false':
 
 # Build a VSIX without installing it, for VS Code packager compatibility checks
 [group('Dev')]
-ide-extension-package: _ide-extension-package
+ide-extension-package release_version="development" phase="development": (_ide-extension-package release_version phase)
 
 # Run the repository lint on its own
 [group('Dev')]
@@ -551,6 +618,17 @@ delegation-report *ARGS:
 model-audit *ARGS:
     ./dev model-audit {{ ARGS }}
 
+# Post a contextual macOS notification and run at most one machine-wide sound/flash loop; just stop ends it
+[group('Sessions')]
+[positional-arguments]
+notify-developer *ARGS:
+    "{{ BUN }}" run packages/cli/agent-cli/agent-cli-src/cli/agent-notify-developer.ts "$@"
+
+# Stop the developer attention sound and screen flashes from any worktree
+[group('Sessions')]
+stop:
+    "{{ BUN }}" run packages/cli/agent-cli/agent-cli-src/cli/agent-notify-developer.ts --stop
+
 # Measure what a simplification pass targets: size, dispatch chains, allowlists, instructions, docs
 [group('Report')]
 simplify-audit *ARGS:
@@ -616,18 +694,18 @@ clean-all: clean-scratch
 # Full verification lanes lower their CLI process to below-normal scheduling priority before
 # launching gates; children inherit it. This leaves job counts and admission unchanged.
 # A host or sandbox refusal prints a warning and verification continues at inherited priority.
-# Verify everything: fix, check, and every test suite. --no-cache ignores a recorded green tree
+# Verify everything, fail fast between checks: fix, check, all tests. --no-cache ignores a recorded green tree
 [arg('complete', long='complete', value='true')]
 [arg('no_cache', long='no-cache', value='true')]
 [group('Dev')]
 verify complete='false' no_cache='false': _deps
-    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check dead-exports --lane verify --json .artifacts/logs/verify/summary.json --skipped "studio-smoke=slow lane; run ./agent studio-smoke or ./agent verify-full" --green-tree verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
+    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _hosted-crud-test _test _runtime-pack-check dead-exports --lane verify --json .artifacts/logs/verify/summary.json --skipped "studio-smoke=slow lane; run ./agent unsandboxed studio-smoke or ./agent unsandboxed verify-full" --green-tree verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
 
-# Verify narrowed to the suites the branch diff reaches: the iteration gate, never merge evidence. --no-cache ignores a recorded green tree
+# Verify changed suites, fail fast: the iteration gate, never merge evidence. --no-cache ignores a recorded green tree
 [arg('no_cache', long='no-cache', value='true')]
 [group('Dev')]
 verify-changed no_cache='false': _deps
-    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test-changed _runtime-pack-check dead-exports --lane verify-changed --json .artifacts/logs/verify-changed/summary.json --skipped "studio-smoke=slow lane; run ./agent studio-smoke or ./agent verify-full" --green-tree verify-changed verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
+    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _hosted-crud-test _test-changed _runtime-pack-check dead-exports --lane verify-changed --json .artifacts/logs/verify-changed/summary.json --skipped "studio-smoke=slow lane; run ./agent unsandboxed studio-smoke or ./agent unsandboxed verify-full" --green-tree verify-changed verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
 
 # This lane no longer refuses to start beside another one. The gates that genuinely cannot share a
 # host — the native shell and the canary, which contend on the window server — declare `gui` in the
@@ -635,9 +713,10 @@ verify-changed no_cache='false': _deps
 # headless and parallel-safe, so refusing the whole lane priced six gates at the cost of two.
 # Verify everything plus browser, native and bundle lanes; stop starting checks after a definite failure. --no-cache ignores a recorded green tree
 [arg('no_cache', long='no-cache', value='true')]
+[arg('show_studio', long='show-studio', value='true')]
 [group('Dev')]
-verify-full no_cache='false': _deps
-    ./dev gates {{ VERIFY_FULL_GATES }} --lane verify-full {{ if VERIFY_FULL_SKIPPED == "" { "" } else { "--skipped \"" + VERIFY_FULL_SKIPPED + "\"" } }} --green-tree verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
+verify-full no_cache='false' show_studio='false': _deps
+    ./dev gates {{ VERIFY_FULL_GATES }} --lane verify-full {{ if show_studio == "true" { "--show-studio" } else { "" } }} {{ if VERIFY_FULL_SKIPPED == "" { "" } else { "--skipped \"" + VERIFY_FULL_SKIPPED + "\"" } }} --green-tree verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
 
 # Run verify-full's gate membership in a managed shell, skipping the host-only lanes and claiming nothing about them. --no-cache ignores a recorded green tree
 [arg('no_cache', long='no-cache', value='true')]
@@ -657,8 +736,13 @@ verify-full-sandbox no_cache='false':
 # and it is not `--no-cache` on a name: a flag would have to be remembered, and this one has to be
 # chosen deliberately anyway.
 # Everything, slowest first to last: delete artifacts, verify-full against nothing cached, then the checks that need a person at the keyboard. Reach for it when a green may be stale, or before a release
+[arg('show_studio', long='show-studio', value='true')]
 [group('Dev')]
-verify-repo: clean (verify-full "true") studio-manual-checks
+verify-repo show_studio='false':
+    test "{{ show_studio }}" = true || { echo 'Native checks require --show-studio; no cleanup or tests were run.' >&2; exit 1; }
+    just clean
+    just verify-full --no-cache --show-studio
+    just studio-manual-checks --show-studio
 
 # Private
 #########
@@ -683,6 +767,11 @@ _shell-completion: _deps
     trap 'rm -f "$completion_file"' EXIT
     "{{ BUN }}" run packages/cli/dev-cli/dev-cli-src/dev.ts completion zsh > "$completion_file"
     mv -f "$completion_file" "$cache/completion.zsh"
+
+# Tracked Tao projects keep their npm pins in .tao/lock.jsonc; their node_modules is installed here.
+# `tao install` loads the parser, which a fresh checkout has not generated yet.
+_tao-project-deps: _deps _parser-gen
+    "{{ BUN }}" run packages/cli/dev-cli/dev-cli-src/setup/TaoProjectDependencies.ts
 
 _git-hooks:
     ./packages/cli/agent-cli/agent-cli-src/cli/agent-git-hooks.zsh install
@@ -735,9 +824,9 @@ _compile-word-flower-app: _parser-gen
 _ide-extension-build: _parser-gen
     cd packages/ides/ide-extension && "{{ BUN }}" esbuild.config.ts
 
-_ide-extension-package: _parser-gen
+_ide-extension-package release_version="development" phase="development": _parser-gen
     mkdir -p .artifacts/build
-    cd packages/ides/ide-extension && "{{ BUN }}" esbuild.config.ts --minify
+    cd packages/ides/ide-extension && "{{ BUN }}" esbuild.config.ts --minify {{ if release_version == "development" { "" } else { "--release " + quote(release_version) + " --phase " + quote(phase) } }}
     cd packages/ides/ide-extension && "{{ BUNX }}" @vscode/vsce package --no-dependencies --out "{{ IDE_EXTENSION_VSIX }}" 1> /dev/null
 
 _tao-check: _parser-gen
@@ -754,7 +843,10 @@ _repo-lint:
 # build takes ~2s where `typescript` 5.9 takes ~17s. `typescript` itself stays at 5.9 because the
 # editor's tsserver and `bunx tsc` still need its JavaScript API, which 7.0 does not ship.
 _typecheck:
-    "{{ BUN }}" node_modules/typescript-native/bin/tsc --build packages/*/tsconfig.json packages/*/*/tsconfig.json
+    "{{ BUN }}" node_modules/typescript-native/bin/tsc --build packages/*/tsconfig.json packages/*/*/tsconfig.json "Apps/Hosted CRUD/tsconfig.json"
+
+_hosted-crud-test:
+    "{{ BUN }}" run --cwd "{{ justfile_directory() }}/Apps/Hosted CRUD" test
 
 # `just test`'s own runner. In a lane's gate list, `_test` and `_test-changed` are not recipes at
 # all: `./dev gates` replaces each with one node per test suite and per shard of a long suite, so the

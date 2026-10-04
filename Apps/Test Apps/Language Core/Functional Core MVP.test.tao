@@ -1,10 +1,10 @@
 use FunctionalCoreMVP from ./
 
 test "Functional Core MVP" {
+   // REMOVAL CANDIDATE: Lower suites own these language rules; removal drops their combined compiled-app execution smoke.
    test "evaluates functions, control flow, and collection rendering" {
       run FunctionalCoreMVP
 
-      expect text "Functional core"
       expect text "Ready"
       expect text "Visible"
       expect text "Count: 2"

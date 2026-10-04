@@ -8,7 +8,7 @@ import {
   type StudioProcessTree,
 } from '@expo-host/dev-loop/StudioProcessTree'
 import type { HostController } from '@host-control'
-import { CLI, Errors, FS, HCI, Json, Platform, Repo, Text, Time } from '@shared'
+import { CLI, Errors, FS, HCI, Json, Platform, ReleaseCapabilities, ReleaseToolchain, Repo, Text, Time } from '@shared'
 import { StudioClientAssets } from '@studio'
 import {
   MachineLanes,
@@ -17,6 +17,7 @@ import {
   type MachineResourceOwner,
 } from '@verification/MachineLanes'
 import { PackageGraph } from '@verification/PackageGraph'
+import { UiVisibility } from '@verification/UiVisibility'
 import { delimiter as pathDelimiter } from 'node:path'
 import {
   defaultStudioAppName,
@@ -51,6 +52,8 @@ const nativeHostTakeoverWaitMs = 10_000
 type StudioNativeOptions = {
   artifactRoot?: string
   hutchPath?: string
+  /** Mutable Hutch home for this launch; development retains its existing home. */
+  hutchHome?: string
   /** Development app identity; defaults to the one derived from this worktree. */
   identity?: StudioNativeIdentity
   /** Operation recorded in this worktree's native-host lease. */
@@ -59,6 +62,8 @@ type StudioNativeOptions = {
   /** Undefined opens the Welcome window only: `--no-browser` must not add a project window. */
   projectUrl?: string
   probe?: boolean
+  /** Permission for visible test windows; development keeps its normal guided launch. */
+  showStudio?: boolean
   showWindow?: boolean
   signal?: AbortSignal
   studioUrl: string
@@ -99,6 +104,7 @@ type StudioNativePackageOptions = {
   nodePath?: string
   outputRoot?: string
   releaseBaseUrl: string
+  releasePhase?: 3 | 4 | 5
   version?: string
 }
 
@@ -166,7 +172,6 @@ export const StudioNative = {
   testing: {
     acquireNativeHostLease,
     acquireNativeHostLeases,
-    installedHutchExecutablePath,
     installStudioServicePayload,
     createNativeInterruption,
     discoverStudioServicePackageRoots,
@@ -195,6 +200,14 @@ async function start(
   options: StudioNativeOptions,
   lifecycleOptions: NativeStartLifecycleOptions = {},
 ): Promise<StartedStudioNative> {
+  if (
+    options.showWindow !== false
+    && (options.probe === true || /(?:^|-)(?:smoke|canary|test|manual)(?:-|$)/.test(options.nativeHostCommand ?? ''))
+  ) {
+    UiVisibility.requireStudio(
+      options.showStudio ?? Platform.runtimeProcess.env[UiVisibility.STUDIO_ENV_KEY] === 'true',
+    )
+  }
   const interruption = createNativeInterruption(options.signal, lifecycleOptions.onProcessSignal)
   let nativeHostLease: NativeHostLease | undefined
   try {
@@ -205,7 +218,13 @@ async function start(
       'native host lease',
       async () =>
         await acquireNativeHostLeases(
-          { command, name: identity.hostResourceName, probe: options.probe === true },
+          {
+            command,
+            name: identity.hostResourceName,
+            probe: options.probe === true,
+            signal: interruption.signal,
+            testing: identity.testing,
+          },
           lifecycleOptions.nativeHost,
         ),
       { signal: interruption.signal },
@@ -248,7 +267,7 @@ async function startWithInterruption(
     'isolate Hutch mutable state',
     async () =>
       await StudioHutchHome.prepare({
-        targetHome: Repo.resolvePath('.artifacts/user/studio-hutch-home'),
+        targetHome: options.hutchHome ?? Repo.resolvePath('.artifacts/user/studio-hutch-home'),
       }),
     phaseOptions,
   )
@@ -424,7 +443,7 @@ async function startWithInterruption(
  * verification run, which fails at once as busy rather than stop another worktree's run.
  */
 async function acquireNativeHostLeases(
-  request: { command: string; name: string; probe: boolean },
+  request: { command: string; name: string; probe: boolean; signal?: AbortSignal; testing?: boolean },
   dependencies: NativeHostLeaseDependencies = {},
 ): Promise<NativeHostLease> {
   const hostLease = await acquireNativeHostLease(request, dependencies)
@@ -438,6 +457,7 @@ async function acquireNativeHostLeases(
       maxAgeMs: Number.POSITIVE_INFINITY,
       name: nativeProbeResourceName,
       repositoryRoot: Repo.getRoot(),
+      signal: request.signal,
       waitTimeoutMs: 0,
     })
   } catch (error) {
@@ -463,7 +483,7 @@ async function acquireNativeHostLeases(
  * on a default answer.
  */
 async function acquireNativeHostLease(
-  host: { command: string; name: string },
+  host: { command: string; name: string; signal?: AbortSignal; testing?: boolean },
   dependencies: NativeHostLeaseDependencies = {},
 ): Promise<MachineResourceLease> {
   const acquire = dependencies.acquire ?? MachineLanes.acquireResource
@@ -476,12 +496,16 @@ async function acquireNativeHostLease(
       maxAgeMs: Number.POSITIVE_INFINITY,
       name: host.name,
       repositoryRoot: Repo.getRoot(),
+      signal: host.signal,
       waitTimeoutMs,
     })
   try {
-    return await request(0)
+    return await request(host.testing === true ? 10 * 60_000 : 0)
   } catch (error) {
-    if (!(error instanceof MachineResourceBusyError) || !(dependencies.isInteractive ?? HCI.isInteractive)()) {
+    if (
+      host.testing === true || !(error instanceof MachineResourceBusyError)
+      || !(dependencies.isInteractive ?? HCI.isInteractive)()
+    ) {
       throw error
     }
     const owner = error.owner
@@ -684,6 +708,11 @@ function nativeRuntimeCloseResult(line: string): NativeRuntimeCloseResult | unde
 }
 
 async function packageApp(options: StudioNativePackageOptions): Promise<PackagedStudioNative> {
+  if (options.version === undefined) {
+    Errors.throwUserInput('A public Studio package requires --version matching its Tao toolchain release.')
+  }
+  const profile = ReleaseCapabilities.profile(options.releasePhase ?? 3)
+  ReleaseCapabilities.require('studio', profile)
   const outputRoot = FS.resolvePath(options.outputRoot ?? '.artifacts/build/studio-native', Repo.getRoot())
   const projectRoot = FS.resolvePath('project', outputRoot)
   const serviceStageRoot = FS.resolvePath('service-stage', outputRoot)
@@ -694,11 +723,12 @@ async function packageApp(options: StudioNativePackageOptions): Promise<Packaged
   await FS.remove(serviceStageRoot)
   await FS.mkdir(serviceStageRoot)
   const serviceBundlePath = FS.resolvePath('service.js', serviceStageRoot)
-  await stageStudioPackagedServiceBundle(serviceBundlePath)
+  await stageStudioPackagedServiceBundle(serviceBundlePath, profile, options.version)
   const studioClientBundlePath = FS.resolvePath('studio.js', serviceStageRoot)
-  await stageStudioClientBundle(studioClientBundlePath)
+  await stageStudioClientBundle(studioClientBundlePath, profile)
   const testCommandBundlePath = FS.resolvePath('test-command.js', serviceStageRoot)
   const testCommandBundle = await Bun.build({
+    define: { TAO_RELEASE_PHASE: JSON.stringify(profile.phase), TAO_RELEASE_VERSION: JSON.stringify(options.version) },
     entrypoints: [Repo.resolvePath('packages/ides/studio-tooling/studio-tooling-src/StudioPackagedTestCommand.ts')],
     minify: true,
     target: 'node',
@@ -710,9 +740,18 @@ async function packageApp(options: StudioNativePackageOptions): Promise<Packaged
     )
   }
   await FS.writeText(testCommandBundlePath, await testCommandOutput.text())
+  await FS.writeJson(FS.resolvePath('release-profile.json', serviceStageRoot), {
+    version: options.version,
+    ...profile,
+    fingerprint: ReleaseCapabilities.fingerprint(profile),
+  })
   const servicePayloadRoot = FS.resolvePath('payload', serviceStageRoot)
   await materializeStudioServicePayload(servicePayloadRoot, { 'studio.js': studioClientBundlePath })
   await FS.copyFile(testCommandBundlePath, FS.resolvePath('test-command.js', servicePayloadRoot))
+  await FS.copyFile(
+    FS.resolvePath('release-profile.json', serviceStageRoot),
+    FS.resolvePath('release-profile.json', servicePayloadRoot),
+  )
   await materializeStudioNodeRuntime(
     options.nodePath ?? Repo.resolvePath('.devenv/profile/bin/node'),
     servicePayloadRoot,
@@ -739,9 +778,15 @@ async function packageApp(options: StudioNativePackageOptions): Promise<Packaged
   return { artifactPaths, artifactsRoot, channel, projectRoot }
 }
 
-async function stageStudioPackagedServiceBundle(serviceBundlePath: string): Promise<void> {
+async function stageStudioPackagedServiceBundle(
+  serviceBundlePath: string,
+  profile = ReleaseCapabilities.current(),
+  version = ReleaseToolchain.current().version,
+): Promise<void> {
   const bundle = await Bun.build({
     define: {
+      TAO_RELEASE_PHASE: JSON.stringify(profile.phase),
+      TAO_RELEASE_VERSION: JSON.stringify(version),
       __DEV__: 'false',
       'process.env.NODE_ENV': JSON.stringify('production'),
     },
@@ -913,8 +958,10 @@ async function materializeStudioServicePayload(
   }
 }
 
-async function stageStudioClientBundle(path: string): Promise<void> {
-  const source = portableStudioClientBundle(await StudioClientAssets.bundle({ validationMode: 'release' }))
+async function stageStudioClientBundle(path: string, profile = ReleaseCapabilities.current()): Promise<void> {
+  const source = portableStudioClientBundle(
+    await StudioClientAssets.bundle({ validationMode: 'release', releaseProfile: profile }),
+  )
   if (source.trim() === '') {
     Errors.throwUnexpected('Studio browser bundling produced an empty artifact.')
   }

@@ -1,5 +1,5 @@
 export type HostCommandTarget = {
-  argsPolicy?: 'none' | 'pid' | 'standalone-vm' | 'studio-list' | 'studio-stop'
+  argsPolicy?: 'none' | 'notify' | 'pid' | 'standalone-vm' | 'studio-list' | 'studio-stop' | 'dev-loop' | 'studio-proof'
   command: string
   /** Environment the tool needs whatever shell dispatches it, merged over the inherited one. */
   env?: Readonly<Record<string, string>>
@@ -15,12 +15,16 @@ const UTF8_LOCALE = { LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' } as const
 
 /** Implementations for named host operations. Permissions still come solely from agentHostCommands. */
 export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> = {
+  'notify-developer': { command: 'just', fixedArgs: ['notify-developer'], argsPolicy: 'notify' },
+  'stop': { command: 'just', fixedArgs: ['stop'], argsPolicy: 'none' },
   'merge-recover': { command: './dev', fixedArgs: ['merge-recover'] },
   // Keep read-only reclaim sandboxed; only its guarded removal action needs host filesystem access.
   'reclaim --execute': { command: './dev', fixedArgs: ['reclaim', '--execute'], argsPolicy: 'none' },
   'prepare-release studio': { command: './dev', fixedArgs: ['prepare-release', 'studio'] },
   'prepare-release ide-extension': { command: './dev', fixedArgs: ['prepare-release', 'ide-extension'] },
-  'app-dev': { command: './tao', fixedArgs: ['dev'], server: true },
+  'ide-extension-acceptance': { command: './dev', fixedArgs: ['ide-extension-acceptance'], argsPolicy: 'none' },
+  'app-dev': { command: './dev', fixedArgs: ['app-dev'], server: true },
+  'dev-loop': { command: './dev', fixedArgs: ['dev-loop'], argsPolicy: 'dev-loop' },
   'test-watch': { command: './tao', fixedArgs: ['test', '--watch'], server: true },
   'standalone-cli-acceptance': { command: 'just', fixedArgs: ['standalone-cli-acceptance'], argsPolicy: 'none' },
   // Dev loops that watch files run on the host, where Watchman and the OS file-event service are
@@ -30,7 +34,14 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   'studio-native': { command: 'just', fixedArgs: ['studio-native'], server: true },
   'studio-ps': { command: './dev', fixedArgs: ['studio-ps'], argsPolicy: 'studio-list' },
   'studio-stop': { command: './dev', fixedArgs: ['studio-stop'], argsPolicy: 'studio-stop' },
-  'docker-desktop start': { command: 'open', fixedArgs: ['-a', 'Docker'], argsPolicy: 'none' },
+  'studio-canary': { command: './dev', fixedArgs: ['studio-canary'], argsPolicy: 'studio-proof' },
+  'studio-manual-checks': {
+    command: './dev',
+    fixedArgs: ['studio-manual-checks'],
+    argsPolicy: 'studio-proof',
+    server: true,
+  },
+  'docker-desktop start': { command: 'open', fixedArgs: ['-g', '-a', 'Docker'], argsPolicy: 'none' },
   // One daemon serves this login's worktrees; no arbitrary Watchman commands or socket overrides.
   'watchman start': { command: './dev', fixedArgs: ['watchman', 'start'], argsPolicy: 'none' },
   'watchman status': { command: './dev', fixedArgs: ['watchman', 'status'], argsPolicy: 'none' },
@@ -83,6 +94,7 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   'android emulators': { command: 'emulator', fixedArgs: ['-list-avds'], argsPolicy: 'none' },
   'android boot': { command: 'emulator', fixedArgs: ['-avd'], server: true },
   'android ensure': { command: './dev', fixedArgs: ['android-emulator'], argsPolicy: 'none' },
+  'android recover': { command: './dev', fixedArgs: ['android-recover'] },
   'remote fetch': { command: 'git', fixedArgs: ['fetch', 'origin'] },
   'remote refs': { command: 'git', fixedArgs: ['ls-remote', 'origin'] },
   'remote heads': { command: 'git', fixedArgs: ['ls-remote', '--heads', 'origin'] },
@@ -90,6 +102,7 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   'processes list': { command: 'ps', fixedArgs: ['-axo', 'pid=,ppid=,lstart=,command='], argsPolicy: 'none' },
   'processes started': { command: 'ps', fixedArgs: ['-o', 'lstart=', '-p'], argsPolicy: 'pid' },
   'start-branch': { command: './dev', fixedArgs: ['start-branch'] },
+  'take-branch': { command: './dev', fixedArgs: ['take-branch'] },
   // The `storage` submodule archives development evidence: syncing and pushing reach its GitHub
   // remote, and a QA run drives Studio, which needs the host's Watchman.
   'storage sync': { command: './dev', fixedArgs: ['storage', 'sync'], argsPolicy: 'none' },

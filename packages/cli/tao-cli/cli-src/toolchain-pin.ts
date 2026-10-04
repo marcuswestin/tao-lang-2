@@ -4,7 +4,7 @@ import { PROJECT_LOCK_RELATIVE_PATH } from './project-lock-path'
 import { TaoVersion } from './tao-version'
 
 /**
- * ToolchainPin makes a project run under the Tao release it pins. `.tao-project/lock.jsonc` carries
+ * ToolchainPin makes a project run under the Tao release it pins. `.tao/lock.jsonc` carries
  * `toolchain.version`, which `tao create` writes; `tao +0.4.1 <command>` and `TAO_VERSION` choose a
  * release explicitly and win over the pin, in that order. A project with no pin runs under
  * whichever release `bin/tao` points at.

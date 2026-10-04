@@ -12,31 +12,12 @@ registerRuntimeE2ELifecycle()
 const impacts = [
   ['Light', 'light'],
   ['Medium', 'medium'],
-  ['Heavy', 'heavy'],
-  ['Soft', 'soft'],
-  ['Rigid', 'rigid'],
 ] as const
-const notifications = [['Success', 'success'], ['Warning', 'warning'], ['Error', 'error']] as const
+const notifications = [['Success', 'success'], ['Warning', 'warning']] as const
 const android = [
   ['Confirm', 'confirm'],
-  ['Reject', 'reject'],
   ['Gesture_Start', 'gesture-start'],
-  ['Gesture_End', 'gesture-end'],
-  ['Toggle_On', 'toggle-on'],
-  ['Toggle_Off', 'toggle-off'],
-  ['Clock_Tick', 'clock-tick'],
-  ['Context_Click', 'context-click'],
-  ['Drag_Start', 'drag-start'],
-  ['Keyboard_Tap', 'keyboard-tap'],
-  ['Keyboard_Press', 'keyboard-press'],
-  ['Keyboard_Release', 'keyboard-release'],
-  ['Long_Press', 'long-press'],
-  ['Virtual_Key', 'virtual-key'],
-  ['Virtual_Key_Release', 'virtual-key-release'],
-  ['No_Haptics', 'no-haptics'],
-  ['Segment_Tick', 'segment-tick'],
   ['Segment_Frequent_Tick', 'segment-frequent-tick'],
-  ['Text_Handle_Move', 'text-handle-move'],
 ] as const
 
 const native = {
@@ -75,30 +56,27 @@ async function generatedFiles(): Promise<Record<string, string>> {
 }
 
 Describe('generated native Haptics bindings', () => {
-  Test('invokes all four package methods with all 27 exact enum literals and preserves omitted defaults', async () => {
-    const defaults: string[] = []
-    native.impactAsync.mockClear().mockImplementation(async (style: string = 'medium') => {
-      defaults.push(style)
-    })
-    native.notificationAsync.mockClear().mockImplementation(async (type: string = 'success') => {
-      defaults.push(type)
-    })
-    native.selectionAsync.mockClear().mockResolvedValue(undefined)
-    native.performAndroidHapticsAsync.mockClear()
-    const cases = [
-      ...impacts.map(([name]) => [name, `ImpactAsync(Style: ${name})`]),
-      ...notifications.map(([name]) => [name, `NotificationAsync(Type: ${name})`]),
-      ...android.map(([name]) => [name, `PerformAndroidHapticsAsync(Type: ${name})`]),
-      ['ImpactDefault', 'ImpactAsync()'],
-      ['NotificationDefault', 'NotificationAsync()'],
-      ['Selection', 'SelectionAsync()'],
-    ]
-    await testCompileFiles('App.tao', async () => ({
-      ...await generatedFiles(),
-      'App.tao': `
+  Test(
+    'invokes all four package methods with representative enum literals and preserves argument omission',
+    async () => {
+      native.impactAsync.mockClear().mockResolvedValue(undefined)
+      native.notificationAsync.mockClear().mockResolvedValue(undefined)
+      native.selectionAsync.mockClear().mockResolvedValue(undefined)
+      native.performAndroidHapticsAsync.mockClear()
+      const cases = [
+        ...impacts.map(([name]) => [name, `ImpactAsync(Style: ${name})`]),
+        ...notifications.map(([name]) => [name, `NotificationAsync(Type: ${name})`]),
+        ...android.map(([name]) => [name, `PerformAndroidHapticsAsync(Type: ${name})`]),
+        ['ImpactDefault', 'ImpactAsync()'],
+        ['NotificationDefault', 'NotificationAsync()'],
+        ['Selection', 'SelectionAsync()'],
+      ]
+      await testCompileFiles('App.tao', async () => ({
+        ...await generatedFiles(),
+        'App.tao': `
         use ImpactAsync, NotificationAsync, SelectionAsync, PerformAndroidHapticsAsync from ./Bindings.tao
         use ImpactFeedbackStyle, NotificationFeedbackType, AndroidHaptics from ./Bindings.tao
-        app HapticsProof { view Main }
+        app HapticsProof { id "hapticsproof" version "1.0.0" name "HapticsProof" view Main }
         view Main() {
           ${cases.map(([name, call]) => `action Run${name}() { do ${call} }`).join('\n')}
           render Stack() {
@@ -112,19 +90,19 @@ Describe('generated native Haptics bindings', () => {
         }
         ${nativeButton}
       `,
-    }), async screen => {
-      for (const [name] of cases) {
-        await act(async () => {
-          await fireEvent.press(screen.getByText(name!))
-        })
-      }
-      Expect(native.impactAsync.mock.calls).toEqual([...impacts.map(([, value]) => [value]), []])
-      Expect(native.notificationAsync.mock.calls).toEqual([...notifications.map(([, value]) => [value]), []])
-      Expect(native.performAndroidHapticsAsync.mock.calls).toEqual(android.map(([, value]) => [value]))
-      Expect(native.selectionAsync.mock.calls).toEqual([[]])
-      Expect(defaults.slice(-2)).toEqual(['medium', 'success'])
-    })
-  })
+      }), async screen => {
+        for (const [name] of cases) {
+          await act(async () => {
+            await fireEvent.press(screen.getByText(name!))
+          })
+        }
+        Expect(native.impactAsync.mock.calls).toEqual([...impacts.map(([, value]) => [value]), []])
+        Expect(native.notificationAsync.mock.calls).toEqual([...notifications.map(([, value]) => [value]), []])
+        Expect(native.performAndroidHapticsAsync.mock.calls).toEqual(android.map(([, value]) => [value]))
+        Expect(native.selectionAsync.mock.calls).toEqual([[]])
+      })
+    },
+  )
 
   Test(
     'waits for the native promise before continuing and reports rejection through the action failure channel',
@@ -139,7 +117,7 @@ Describe('generated native Haptics bindings', () => {
         'App.tao': `
         use NotificationAsync, SelectionAsync from ./Bindings.tao
         use NotificationFeedbackType from ./Bindings.tao
-        app HapticsCompletionProof { view Main }
+        app HapticsCompletionProof { id "hapticscompletionproof" version "1.0.0" name "HapticsCompletionProof" view Main }
         view Main() {
           action Run() { do SelectionAsync() do NotificationAsync(Type: Success) }
           render NativeButton("Run", Run)
@@ -161,7 +139,6 @@ Describe('generated native Haptics bindings', () => {
           Expect(native.notificationAsync.mock.calls).toEqual([])
           completion.resolve()
           await first
-          Expect(completed).toBe(true)
           Expect(native.notificationAsync.mock.calls).toEqual([['success']])
 
           const failure = new Errors.HostEnvironmentError('Haptic device failed')

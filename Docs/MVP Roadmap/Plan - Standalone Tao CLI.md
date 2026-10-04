@@ -1,5 +1,10 @@
 # Plan - Standalone Tao CLI
 
+The [staged public release plan](<Plan - Staged public releases.md>) owns public scope as of
+2026-09-26. Release 1 requires signing/notarization and the local/browser app/test journey;
+release 2 adds iOS Simulator, release 5 TestFlight shipping. Android and other distribution
+channels remain beyond release 5. Implementation records below are not release acceptance.
+
 ## Intermediate landing boundary (2026-09-25)
 
 The standalone macOS CLI, installer, pinned toolchain, interactive developer shell, and clean-machine
@@ -113,9 +118,9 @@ The temporary capabilities alias remains removed. If a temporary host route is p
 it must respect the session's actual host permissions; a repository alias cannot grant them.
 The Developer requests an explicit check-in before removing any temporary route added in this pass.
 
-Implementation update (2026-09-22): the first `tao dev` slice now generates its Expo host in the
+Implementation update (2026-09-22): the first `tao run` slice now generates its Expo host in the
 selected project's `.tao/dev/runtime`, keeps Expo and dev-data state in that project, and uses a
-shared CLI/Studio owner with retained `.tao/sessions/` records. Bare `tao dev` opens no target.
+shared CLI/Studio owner with retained `.tao/sessions/` records. Bare `tao run` opens no target.
 The next branch implements local static web exports, local Electrobun `.app` builds, desktop dev
 opening, retained `.tao/builds/` records, and interactive build cleanup; it does not yet package
 or publish the standalone CLI, or implement native builds and shipping.
@@ -140,7 +145,7 @@ numbers are reproduced verbatim so a later reader can tell measurement from opin
   itself with the zsh-only `${0:A:h}` expansion, so it needs this checkout, its devenv profile, and
   zsh.
 - All twenty packages under `packages/` carry `"private": true`.
-- `tao dev` compiles into `packages/apps/expo-host/_gen_tao-app` and runs Metro in that package,
+- `tao run` compiles into `packages/apps/expo-host/_gen_tao-app` and runs Metro in that package,
   against that package's `node_modules`.
 - The dev loop it drives is the _repository's_ dev loop: it calls `just`,
   `bun run packages/cli/dev-cli/dev-cli-src/dev.ts`, and `Repo.resolvePath('tao')`, and anchors Expo's home,
@@ -469,12 +474,12 @@ Not macOS-only, but broken on Windows or outside a checkout:
 - `EXPO_START_ENV` sets `BROWSER: 'Google Chrome'` with `OPEN_MATCH_HOST_ONLY`, which is macOS
   `open -a` semantics.
 - `Repo.getRoot()` shells out to `git rev-parse --show-toplevel` and throws
-  `HostEnvironmentError` outside a worktree. On the `tao dev` path it decides the Expo home
+  `HostEnvironmentError` outside a worktree. On the `tao run` path it decides the Expo home
   (`.artifacts/cache/expo`), the Expo log path, the runtime-toolchain root, the dev-data root, and
   the Expo Go APK cache.
 - The dev loop calls `just --justfile <repo>/Justfile`, `bun run <repo>/packages/cli/dev-cli/dev-cli-src/dev.ts`,
   and `Repo.resolvePath('tao')`; `DevFileWatcher` watches thirteen repository-root paths beside the
-  project root it already watches. This is the repository's own loop, reused by `tao dev`.
+  project root it already watches. This is the repository's own loop, reused by `tao run`.
   Separating the shipped loop from the repository loop is the largest single piece of work in this
   item, and it is not an OS problem.
 - `tao review` launches Chrome over CDP, so it needs a browser on the host. It is not optional
@@ -511,13 +516,13 @@ for signing and notarization and a Windows runner for Authenticode, but not for 
   versions/<tao-version>/
     tao                            the compiled binary for this version
     resources -> .resources-<hash>/  unpacked on first run, ~4 MB; .tao-resources stamp written last
-      stdlib/@tao/**, Project.tao  .tao sources, .ts sidecars, and the stdlib's project identity
+      stdlib/@tao/**, Package.tao, .tao/.gitkeep  .tao sources, .ts sidecars, publication and root marker
       modules/@tao/runtime/        TaoRuntime-src + package.json
       host/                        runtime-toolchain files, no node_modules
       apple/tao-foundation-models-server   (macOS payload only, later)
     host/node_modules/             resolved once per version, shared by every project
     node/                          the managed Node this version downloads for `tao test`
-  hosts/<version>-<kit>/<platform>/  prebuilt Companion hosts `tao dev` downloads (`A9`)
+  hosts/<version>-<kit>/<platform>/  prebuilt Companion hosts `tao run` downloads (`A9`)
   cache/                           bun install cache, Expo home, downloads
 ```
 
@@ -556,7 +561,7 @@ Embed the host `package.json` and `bun.lock`. On the first command that needs a 
 generated app and the Metro cache are per project.
 
 This replaces `packages/apps/expo-host/_gen_tao-app` as the single global output directory. A
-per-project generated root is required anyway — two `tao dev` sessions in different projects
+per-project generated root is required anyway — two `tao run` sessions in different projects
 currently write to the same place.
 
 ### Metro and Expo driven by the binary
@@ -595,19 +600,19 @@ first public release; Homebrew, npm, and other platforms are later possibilities
 
 ### The per-project version pin
 
-`.tao-project/lock.jsonc` is already the one Tao-written envelope, with `schemaVersion: 1` and
+`.tao/lock.jsonc` is already the one Tao-written envelope, with `schemaVersion: 2` and
 independent `installs` and `ship` concerns that each side preserves without interpreting. Add a
 third:
 
 ```jsonc
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "toolchain": { "version": "0.4.2" }
 }
 ```
 
 `~/.tao/bin/tao` is a shim, not the toolchain. On each invocation it walks up from the working
-directory for `.tao-project/lock.jsonc`, reads `toolchain.version`, and execs
+directory for `.tao/lock.jsonc`, reads `toolchain.version`, and execs
 `~/.tao/versions/<version>/tao`. The pin is exact, and the shim asks before downloading a missing
 version. `TAO_VERSION` overrides the pin; `tao +0.4.1 <command>` is the explicit form. A project
 with no pin uses the installed default, and `tao create` writes the pin it used.
@@ -651,8 +656,7 @@ from the text above:
 - The runtime goes to `resources/modules/@tao/runtime`, and the resource root stands in for the CLI
   package root. The checkout's `packages/cli/tao-cli/modules/@tao/` stays empty.
 - The payload copies each package's files that Git does not ignore, not the curated list in F4:
-  the whole stdlib `@tao/` tree plus `Project.tao`, which gives stdlib declarations their project
-  identity (`compile` fails without it), and every visible Expo host file. That is 261 files and
+  the whole stdlib `@tao/` tree plus `Package.tao` and the tracked `.tao/.gitkeep` root marker (`compile` fails without it), and every visible Expo host file. That is 261 files and
   2.4 MB compressed.
 - The grammar path is not converted. Its only reader is `tao review`, which slice 9 removes from
   the binary; if `tao review` comes back, the grammar joins the payload then.
@@ -676,7 +680,7 @@ it. The whole run takes about 25 s.
   `~/.local/share/tao`, reading `$HOME` as the install script does. The Companion's downloaded
   hosts move from `~/.tao/hosts` to its `hosts/`.
 - The per-project generated root already exists on `main`: `tao build --compile-only` writes under
-  the project's `.tao/builds/`, and `tao dev` under `.tao/dev/runtime`. Only the retiring
+  the project's `.tao/builds/`, and `tao run` under `.tao/dev/runtime`. Only the retiring
   `tao compile` still writes into the host, into the installed version's `resources/host/`.
 - The release build rewrites the staged host so it installs outside the repository (below), adds
   `@shared/core` to the payload, and resolves the host's `bun.lock` once per release.
@@ -688,7 +692,7 @@ it. The whole run takes about 25 s.
 - `metro.config.cjs` takes `TAO_HOST_DEPENDENCY_ROOT`, `TAO_RUNTIME_SOURCE_ROOT`, and
   `TAO_SHARED_CORE_SOURCE_ROOT` in place of its three repository climbs, which stay the defaults, so
   the repository's own loop is unchanged; `RuntimeToolchainPaths.expoEnvironment` supplies them.
-  `tao build --web` and `--desktop` use them, and run Expo under the binary. `tao dev` (slice 4) and
+  `tao build --web` and `--desktop` use them, and run Expo under the binary. `tao run` (slice 4) and
   `tao test`'s Jest configuration (slice 5) do not yet.
 
 The prototype that settled the shape, on 2026-09-24, in a scratch directory outside the repository
@@ -727,11 +731,11 @@ iCloud-backed app from the binary will not find it; that belongs with shipping f
 `process.execPath`; re-anchor the four repository-relative values `expo-config.ts` and
 `expo-server.ts` hand Expo — `__UNSAFE_EXPO_HOME_DIRECTORY`, `EXPO_LOG_PATH`,
 `RUNTIME_TOOLCHAIN_PATH`, and the dev-data root — on `~/.tao` and the project. Done when
-`tao dev` runs a created project on web and on the iOS Simulator from a binary on a machine with no
+`tao run` runs a created project on web and on the iOS Simulator from a binary on a machine with no
 checkout. This is the biggest slice; it may need splitting once the seam is drawn.
 
 _Web landed 2026-09-25; iOS still open._ Most of this slice had already happened on
-`main`: `tao dev` generates its host under the project's `.tao/dev/runtime`, keeps Expo's log and
+`main`: `tao run` generates its host under the project's `.tao/dev/runtime`, keeps Expo's log and
 dev data in the project, watches only the project outside a checkout, and gates the checkout-only
 keys (`c`, `f`, `t`, `v`, `e`). What remained for web, now done:
 
@@ -741,7 +745,7 @@ keys (`c`, `f`, `t`, `v`, `e`). What remained for web, now done:
   Bun on Expo's script, with the three Metro locations in its environment. A checkout keeps `bunx`.
   `ExpoServer`'s launcher gained `namesExpoScript`, because the start arguments open with the
   package name `bunx` wants and Expo otherwise read `expo` as its project root.
-- `just standalone-cli-acceptance` starts `tao dev` from the installed binary, waits for Metro,
+- `just standalone-cli-acceptance` starts `tao run` from the installed binary, waits for Metro,
   fetches the web bundle, and checks it contains the app. Agents run this file-watching acceptance
   through `./agent unsandboxed standalone-cli-acceptance` on the host, where Metro receives native
   file events without a Watchman socket injected into the throwaway home.
@@ -809,7 +813,8 @@ public repository. What it settled:
   copy of the releases.
 - `curl` sets no `com.apple.quarantine`, only `com.apple.provenance`, which Gatekeeper does not act
   on, so an unsigned binary fetched by the install script runs without a Gatekeeper prompt. Signing
-  still matters for a binary someone downloads with a browser.
+  is nevertheless mandatory before the first public release under the revised 2026-09-26 decision;
+  the browser-download/quarantine experience requires its own acceptance evidence.
 - `standalone-install.test.ts` covers the install script in the ordinary suite with a stand-in
   binary. `just standalone-cli-acceptance` installs a real release through `curl | sh` into a
   throwaway `$HOME` and runs `create`, `check`, and `compile` from `PATH`. It stays a recipe rather
@@ -819,7 +824,7 @@ public repository. What it settled:
 - The release notes list what the binary cannot do yet from `KNOWN_GAPS` in `standalone-build.ts`,
   which later slices shorten as they land.
 
-**8. The version pin and the shim.** `toolchain` in `.tao-project/lock.jsonc`, the shim's
+**8. The version pin and the shim.** `toolchain` in `.tao/lock.jsonc`, the shim's
 resolve-and-exec, `tao check-for-updates`, and `tao create` writing the pin. Implementation decision 3
 replaced the `tao install <version>` and `tao update` this slice first named.
 
@@ -830,7 +835,7 @@ command, and that `check-for-updates` reads the listing.
 - **Every release binary is its own shim**, so there is no separate shim binary and `bin/tao` stays
   the installer's link to the default release. Before the CLI loads, `tao-standalone.ts` asks
   `ToolchainPin.delegate` which release the run wants: `tao +0.4.1 …`, then `TAO_VERSION`, then the
-  nearest `.tao-project/lock.jsonc`'s `toolchain.version`. The nearest lock decides even when it pins
+  nearest `.tao/lock.jsonc`'s `toolchain.version`. The nearest lock decides even when it pins
   nothing, so a nested project does not inherit an outer pin. Another release runs the command on the
   same terminal and this one exits with its status, so a handed-off run pays a second binary start;
   `TAO_HANDED_OFF_BY` stops a mislabelled binary from handing the run on forever. A development build
@@ -845,7 +850,7 @@ command, and that `check-for-updates` reads the listing.
 - **Asking a download its version** happens from `/` with no version named, in the install script and
   the shim alike, because asked from inside a pinned project the new binary would hand the question
   to the pinned release.
-- **A `tao dev` hang the acceptance found**, in a checkout too: the dev loop reserves Metro's port
+- **A `tao run` hang the acceptance found**, in a checkout too: the dev loop reserves Metro's port
   during the first compile, and a simulator or emulator dev client retrying 8081 connects to that
   reservation. `server.close` then waited on the connection forever, so Expo never started. The
   reservation now drops connections.
@@ -862,7 +867,7 @@ binary does not do. The measured saving is small, 5 of 1,313 modules and about 8
 import was the CLI's only reach into Studio and `studio-review` pulls in little of Studio itself:
 F7's "pulls in the Studio graph" overstated it. The honest statement of what is absent is the
 release notes' `KNOWN_GAPS` list in `standalone-build.ts`: the iOS Simulator and Android from
-`tao dev`, `tao review`, and signing.
+`tao run`, `tao review`, and signing.
 
 Slices 1–5, first-release parts of 7–9, and the macOS payload are the standalone release path.
 Slice 6 and the other-platform and other-channel parts of 7 wait for later releases. Work can
@@ -874,7 +879,7 @@ As of 2026-09-25, with slices 1–5, 7, 8, and the `tao review` part of 9 on `ma
 clean-machine acceptance passed for the current web commands. This is what stands between `A2` and
 done, in the order to take it:
 
-1. **The iOS Simulator and Android from an installed `tao dev`.** `run-targets.ts:114` and
+1. **The iOS Simulator and Android from an installed `tao run`.** `run-targets.ts:114` and
    `android.ts:236,484` resolve the runtime toolchain through the repository and throw outside a
    checkout; `RuntimeToolchainPaths.packageRoot` is the replacement. The files belong to the
    device-loop work (`A4`, `A9`), so this is coordinated with it. Web alone does not meet `A2`'s
@@ -900,7 +905,7 @@ done, in the order to take it:
    documentation asking for Node; `pod install` and a Release `xcodebuild` for the Simulator,
    JavaScript bundle included, succeed when a two-line `node` script that runs
    `BUN_BE_BUN=1 <tao> "$@"` answers the Podfile's and Xcode's `node` calls. `tao ship` needs three
-   changes: run prebuild through the binary as `tao dev` runs Expo (today it calls
+   changes: run prebuild through the binary as `tao run` runs Expo (today it calls
    `node_modules/.bin/expo`, whose shebang wants Node); put that script first on `PATH` for
    `pod install` and `xcodebuild` and name it as `NODE_BINARY` in `ios/.xcode.env.local`; and pass
    `RuntimeToolchainPaths.expoEnvironment()` to all three, because Metro otherwise climbs to
@@ -915,7 +920,7 @@ done, in the order to take it:
    command plan and files. CocoaPods, the Simulator build, signing, and upload remain unproved on
    this branch. The standalone host still lacks the iCloud config plugin, now listed in release gaps.
 4. **Signing and notarization, and the Foundation Models helper**, both waiting on the Developer ID
-   certificate; `tao dev` is then re-checked under the hardened runtime (uncertainty 5).
+   certificate; `tao run` is then re-checked under the hardened runtime (uncertainty 5).
 5. **A test for downloading a missing pinned release interactively**, the one slice-8 path no test
    covers, because neither the acceptance nor an agent sandbox has a terminal to answer the question
    (`DEVENV-082`). A pseudo-terminal harness or an injectable prompt would cover it.
@@ -960,14 +965,14 @@ developer-environment backlog.
    warning, which is a materially worse first impression.
 4. **Does `expo start` need `typescript` resolvable from the project root?** `DEVENV-064` records
    that it does for the Studio preview. The probe host here had no `typescript` and bundled fine.
-   Settle by adding it to the host lockfile and running `tao dev` on a project outside the
+   Settle by adding it to the host lockfile and running `tao run` on a project outside the
    repository. **Settled 2026-09-24:** `expo start` refuses to run without `typescript` and
    `@types/react` once a project has TypeScript files, although `expo export` did not ask for them.
    The installed host now carries both, pinned to the repository's versions (`typescript` 5.9.3,
    while Expo would suggest `~6.0.3`), and Expo writes its own `tsconfig.json` into the project's
    dev runtime.
 5. **Do hardened-runtime entitlements need `com.apple.security.cs.allow-jit`?** `tao check` ran
-   clean under `--options runtime` with no entitlements (F3). Re-verify with `tao dev` and a
+   clean under `--options runtime` with no entitlements (F3). Re-verify with `tao run` and a
    genuinely notarized build, since Metro exercises far more of the JIT.
 6. **Linux and Windows behaviour is entirely unmeasured.** Everything above was verified on macOS
    arm64. Slice 6's CI lane is the first real evidence.
@@ -988,14 +993,14 @@ this list makes their effect on the implementation sequence explicit.
 6. Do not publish an npm CLI wrapper in the first release. The final app-safe licence structure for
    the repository and any future public packages must be settled before public publication (`R1`).
 7. Host release binaries, checksums, and the version index on GitHub Releases in the public repo.
-   App OTA updates are separate and deferred from the first release (`R11`).
+   Public app OTA claims remain beyond release 5 (`R11` and the staged release plan).
 8. Leave `tao review` out of the first binary. Its dynamic import pulls in the Studio graph today,
    so this choice requires a packaging change rather than only hiding the command (`R12`).
 
 ## Implementation decisions, 2026-09-22
 
 Settled in the dialogue that opened the implementation. These refine the first-release decisions
-above; where the two disagree, these are later and win.
+above, except where the 2026-09-26 staged-release decision explicitly supersedes them.
 
 1. **Slice order** is 2 → 7 → 3 → 4 → 5 → 8 → 9, each its own landing. Release engineering runs
    second so an installable artifact exists early. Slice 6 leaves the first release under `R4`.
@@ -1006,9 +1011,11 @@ above; where the two disagree, these are later and win.
 3. **Toolchain commands**: `tao check-for-updates` is the only public verb. A missing pinned
    version is fetched by the shim, which asks first. There is no public `tao install` — that name
    is already the package installer.
-4. **The first release is `0.4.0`**, semver, tagged `v0.4.0`, published unsigned and labelled as
-   needing later slices for `dev` and `test`. Signing and notarization follow on the Developer's machine once
-   the Developer ID certificate exists.
+4. **Revised 2026-09-26:** the earlier decision to publish `0.4.0` unsigned and without complete
+   `dev`/`test` support is superseded. Release 1 must be signed and notarized and must support its
+   local/browser app and behavior-test journey. `0.4.0` / `v0.4.0` remains the recorded version
+   choice, not evidence that such a candidate is ready or published. See
+   [the staged public releases](<Plan - Staged public releases.md>).
 5. **The install script** is served from the public repository's Releases. It detects whichever
    user-writable bin directory is already on `PATH`, symlinks the shim there, and prints the `PATH`
    line only when there is none. It lists published GitHub releases, ignores drafts, prereleases,

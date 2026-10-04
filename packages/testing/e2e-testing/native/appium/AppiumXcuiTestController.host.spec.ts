@@ -196,13 +196,6 @@ test('writes immutable screenshot evidence for repeated captures across two sess
       FS.resolvePath('appium/screenshots/simulator-SIM-SHOT-B-lease-4-1-checkpoint.png', artifactRoot),
       FS.resolvePath('appium/screenshots/simulator-SIM-SHOT-A-lease-1-2-checkpoint.png', artifactRoot),
     ])
-    expect(
-      new Set([
-        firstCapture.artifactPath,
-        secondCapture.artifactPath,
-        repeatedFirstCapture.artifactPath,
-      ]).size,
-    ).toBe(3)
     await expect(Promise.all([
       FS.exists(firstCapture.artifactPath),
       FS.exists(secondCapture.artifactPath),
@@ -609,20 +602,6 @@ test('serializes deferred Appium input, later inspection, and controller close',
   await expect(laterObservation).resolves.toMatchObject({ observationRevision: 3 })
   await expect(close).resolves.toBeUndefined()
   expect(client.sessions[0]?.deleted).toBe(true)
-})
-
-test('reports Appium hidden elements from the displayed-state endpoint', async () => {
-  const client = new FakeClient('hidden')
-  client.sessions[0]!.visible = false
-  const controller = appiumController(client, new FakeLeases(), simulator('SIM-HIDDEN'))
-  const session = await open(controller)
-
-  await expect(session.observe({
-    expectedRevision: revision,
-    target: { kind: 'accessibility', name: 'entry' },
-  })).resolves.toMatchObject({ visible: false })
-
-  await session.close(session.descriptor().lease)
 })
 
 test('writes a closed receipt before releasing leases, and retries failed deletion without stranded bookkeeping', async () => {

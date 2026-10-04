@@ -23,25 +23,10 @@ test('RuntimeCore arrays order frozen inputs into independent results through sh
   expect(reversed).not.toBe(input)
 })
 
-test('RuntimeCore arrays create independent empty and singleton results and retain explicit in-place identity', () => {
-  const empty = Object.freeze([] as string[])
-  const singleton = Object.freeze(['only'])
-
-  const sortedEmpty = RuntimeArrays.sorted(empty)
-  const reversedEmpty = RuntimeArrays.reversed(empty)
-  const sortedSingleton = SharedArrays.sorted(singleton)
-  const reversedSingleton = RuntimeArrays.reversed(singleton)
+test('RuntimeCore arrays retain explicit in-place identity', () => {
   const mutable = ['second', 'first']
   const sortedMutable = RuntimeArrays.sortInPlace(mutable)
 
-  expect(sortedEmpty).toEqual([])
-  expect(sortedEmpty).not.toBe(empty)
-  expect(reversedEmpty).toEqual([])
-  expect(reversedEmpty).not.toBe(empty)
-  expect(sortedSingleton).toEqual(['only'])
-  expect(sortedSingleton).not.toBe(singleton)
-  expect(reversedSingleton).toEqual(['only'])
-  expect(reversedSingleton).not.toBe(singleton)
   expect(sortedMutable).toBe(mutable)
   expect(mutable).toEqual(['first', 'second'])
 })

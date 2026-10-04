@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "installs": {
+    "lockfileVersion": 2,
+    "local": {},
+    "environments": {
+      ".": {
+        "projectRoot": ".",
+        "publications": [],
+        "npm": {
+          "expo-clipboard": {
+            "name": "expo-clipboard",
+            "requested": "~57.0.2",
+            "version": "57.0.2"
+          },
+          "expo-haptics": {
+            "name": "expo-haptics",
+            "requested": "~57.0.3",
+            "version": "57.0.3"
+          }
+        }
+      }
+    }
+  }
+}

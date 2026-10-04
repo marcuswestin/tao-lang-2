@@ -14,14 +14,16 @@ type TaoFileCompileOptions = {
   scopeBindings?: string[]
   exportedBindings?: ReadonlyArray<{ exported: string; binding: string }>
   projectRoot?: string
-  readNet?: boolean
   selectedAppDatasourceConfiguration?: Readonly<Record<string, string>>
+  selectedAppFirebaseConfiguration?: Readonly<Record<string, string>>
+  selectedAppAuthConfiguration?: Readonly<Record<string, string>>
   selectedAppName?: string
   studioDataCatalog?: boolean
   studio?: boolean
   debug?: boolean
   studioViews?: ReadonlyArray<{ id: string; view: AST.ViewDeclaration }>
   viewRegistrations?: string
+  selectedStatements?: readonly AST.Statement[]
 }
 
 export const RuntimeGen = {
@@ -36,17 +38,26 @@ export const RuntimeGen = {
   },
 
   /** ConfigurationDeclarations emits the sidecar-facing declaration companion for one Tao file. */
-  ConfigurationDeclarations(taoFile: AST.TaoFile, importLines: readonly string[] = [], bridgeTypes = ''): string {
-    return Langium.toString(Compile.ConfigurationDeclarations(taoFile, importLines, bridgeTypes))
+  ConfigurationDeclarations(
+    taoFile: AST.TaoFile,
+    importLines: readonly string[] = [],
+    bridgeTypes = '',
+    statements: readonly AST.Statement[] = taoFile.statements,
+  ): string {
+    return Langium.toString(Compile.ConfigurationDeclarations(taoFile, importLines, bridgeTypes, statements))
   },
 
   /** ConfigurationTypes emits sidecar-facing contracts inside one generated runtime module. */
-  ConfigurationTypes(taoFile: AST.TaoFile): string {
-    return Langium.toString(Compile.ConfigurationTypes(taoFile))
+  ConfigurationTypes(taoFile: AST.TaoFile, statements: readonly AST.Statement[] = taoFile.statements): string {
+    return Langium.toString(Compile.ConfigurationTypes(taoFile, statements))
   },
 
   /** ViewRegistrations emits eager canonical view registrations for restoration and link arrival. */
-  ViewRegistrations(taoFile: AST.TaoFile, options: { studio?: boolean } = {}): string {
-    return Langium.toString(Compile.ViewRegistrations(taoFile, options))
+  ViewRegistrations(
+    taoFile: AST.TaoFile,
+    options: { studio?: boolean } = {},
+    statements: readonly AST.Statement[] = taoFile.statements,
+  ): string {
+    return Langium.toString(Compile.ViewRegistrations(taoFile, options, statements))
   },
 } as const

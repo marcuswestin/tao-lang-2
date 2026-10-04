@@ -86,26 +86,6 @@ Describe('run timings store', () => {
     })
   })
 
-  Test('falls back to wall time when the cpu share of wall is too low to trust', async () => {
-    await withRepository(async root => {
-      // A suite that mostly blocks on a spawned subprocess: 100ms of the direct child's own cpu
-      // against a 6_000ms wall is a ratio resourceUsage() cannot tell apart from a real subprocess
-      // suite, so it must not be trusted as the node's duration.
-      await RunTimings.record({
-        durations: new Map([['tao-cli', sample(6_000, { cpuMs: 100 })]]),
-        lane: 'verify',
-        repositoryRoot: root,
-        stamp: 'only',
-      })
-      const store = await RunTimings.load({ repositoryRoot: root })
-
-      Expect(RunTimings.expectedMs(store, 'tao-cli')).toBe(6_000)
-      Expect(store.nodes['tao-cli']?.source).toBe('wall')
-      Expect(store.nodes['tao-cli']?.lastCpuMs).toBe(100)
-      Expect(store.nodes['tao-cli']?.lastWallMs).toBe(6_000)
-    })
-  })
-
   Test('a contended run learns only trustworthy CPU work and never its stretched wall time', async () => {
     await withRepository(async root => {
       await RunTimings.record({

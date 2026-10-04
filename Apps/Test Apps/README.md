@@ -146,37 +146,25 @@ shape, so it is what says a synthesized navigator restores at all — the same r
 
 ## Forms and Interaction MVP
 
-Exercise controlled text input, event configuration, and form feedback.
+Exercise controlled text input, event configuration, form feedback, and writable or copied
+parameters through controls and action bodies. `FormsInteractionMVP`, `ReactiveEditing`, and
+`BoundReactiveEditing` keep separate source and behavior-test pairs; each check runs its named app.
 
-**Belongs here:** `TextInput`, `Checkbox`, and `FormButton` from `@tao/ui`; labeled arguments such as `Value:`, `Placeholder:`, and `Disabled:`, including control defaults; automatic two-way text updates when `Value:` directly references writable text state; `on press|change|submit` with named actions or inline handlers, including boolean checkbox change and the scoped `on change -> Payload` form that replaces automatic text binding; `#tag`, label, and placeholder selectors for entry, submission, presses, and checkbox state; input-value and checkbox-state assertions; reactive validation, disabled submit, and duplicate-press suppression while submitting.
+**Belongs here:** `TextInput`, `Checkbox`, and `FormButton` from `@tao/ui`; labeled arguments such as `Value:`, `Placeholder:`, and `Disabled:`, including control defaults; automatic two-way text updates when `Value:` directly references writable text state; `on press|change|submit` with named actions or inline handlers, including boolean checkbox change and the scoped `on change -> Payload` form that replaces automatic text binding; `#tag`, label, and placeholder selectors for entry, submission, presses, and checkbox state; input-value and checkbox-state assertions; reactive validation, disabled submit, and duplicate-press suppression while submitting. Direct writable parameter forwarding through a child `TextInput`; parent and child writes over the same value; independent writable literal occurrences surviving a parent rerender; `copy` view parameters that initialize once and detach from later caller changes; copied action and command parameters whose mutations do not change their input; configured command fills retaining caller storage; and configured root views writing persisted app state.
 
-**Does not belong here:** durable collections, relationships, filtering, or ordering; navigation; invocation, selector, or event diagnostics.
-
-## Reactive Editing
-
-Exercise settled writable and copied parameters through ordinary controls and action bodies.
-
-**Belongs here:** direct writable parameter forwarding through a child `TextInput`; parent and child writes over the same value; independent writable literal occurrences surviving a parent rerender; `copy` view parameters that initialize once and detach from later caller changes; copied action and command parameters whose mutations do not change their input; configured command fills retaining caller storage; and configured root views writing persisted app state.
-
-**Does not belong here:** parameter grammar and diagnostic cases, runtime transaction internals, entity-field projection, or native callback lifecycle. Those belong to language, runtime, and WordFlower coverage respectively.
-
-## Write Rules
-
-Exercise `required` completeness and the writes that consume it through an ordinary form.
-
-**Belongs here:** `required "<sentence>"` deriving `Incomplete` and `Problems` on a stored row and on a projection that selects the field; a projection that leaves a required field out never reporting it; a projection-backed form disabling its submit while incomplete; `check` stopping an action on an incomplete input; `create Entity with Input` creating a row from a projected item; and a row written incomplete that reads complete after an update.
-
-**Does not belong here:** `validate` and store-side rejection, which are Post-MVP; diagnostic cases for the completeness members and `create … with`, which belong to package tests; and the stdlib `Problems(…)` view, which WordFlower's forms prove.
+**Does not belong here:** durable collections, relationships, filtering, or ordering; navigation; invocation, selector, event, or parameter diagnostics; runtime transaction internals, entity-field projection, or native callback lifecycle. Language, runtime, and WordFlower coverage own those latter cases.
 
 ## Data MVP
 
-Exercise the provider-neutral data catalog and an app-configured isolated Memory datasource.
+Exercise the provider-neutral data catalog, query search, write completeness, and an
+app-configured isolated Memory datasource. `DataMVPApp`, `EnumFields`, `WriteRulesApp`, and
+`SearchApp` remain separate app declarations with their own behavior-test pairs.
 
 The Enum Fields app also proves declared enum defaults, explicit overrides, and omitted or absent optional values through creates, copies, updates, and clearing.
 
-**Belongs here:** top-level `data Plural / Singular` declarations with field modifiers, `index`, and declaration-level `order by`; boolean case fields; relations with cascade lifetime, spelled `Tasks (owned)`; `Datasource Memory { }` on the app; reactive `query` values with filtering and ordering; `guard` over query `loading` and `error -> Message` cases; strict action-owned `create`, live-handle `update` and `delete`; relationship cleanup, empty and populated transitions, stored rows surviving a `relaunch`, and Memory saving while the test network is offline. Query status is proved through `guard` cases in the app, not through a test step: the test language has no `data` step.
+**Belongs here:** top-level `data Plural / Singular` declarations with field modifiers, `index`, and declaration-level `order by`; boolean case fields; relations with cascade lifetime, spelled `Tasks (owned)`; `Datasource Memory { }` on the app; reactive `query` values with filtering and ordering; `guard` over query `loading` and `error -> Message` cases; strict action-owned `create`, live-handle `update` and `delete`; relationship cleanup, empty and populated transitions, stored rows surviving a `relaunch`, and Memory saving while the test network is offline. Query status is proved through `guard` cases in the app, not through a test step: the test language has no `data` step. `required "<sentence>"` derives `Incomplete` and `Problems` on stored rows and selected projections; the write-rule form disables incomplete submission, `check` stops an incomplete action, `create Entity with Input` writes a projected item, and an updated incomplete row reads complete. The `search` query clause narrows over `(search)` text fields, matches the second field, restores all rows for a blank term, and ignores unmarked fields.
 
-**Does not belong here:** remote providers, credentials, auth, permissions, sync, pagination, or aggregation; navigation or WordFlower product behavior; schema, query, and write diagnostics.
+**Does not belong here:** remote providers, credentials, auth, permissions, sync, pagination, aggregation, or relevance ranking; navigation or WordFlower product behavior; schema, query, and write diagnostics; Post-MVP `validate` and store-side rejection. WordFlower's forms prove the stdlib `Problems(…)` view.
 
 ## Local Data
 
@@ -216,9 +204,9 @@ and protocol failure boundaries.
 ## Language Core
 
 Exercise the executable language core: expressions, pure functions, control flow, view-local state,
-and actions. Two `app` declarations share the folder — `FunctionalCoreMVP` in
-`Functional Core MVP.tao` and `StateActionMVP` in `State Action MVP.tao` — and each behavior test
-picks its app with `run`.
+actions, phrases, and effect outcomes. `FunctionalCoreMVP`, `StateActionMVP`, `Phrases`, and
+`EffectOutcomesApp` keep separate source and behavior-test pairs; each test names its app with
+`run`. `Effect Outcomes.tao` uses the sibling `Export.ts` for its foreign action.
 
 **Belongs here:** boolean, absence, arithmetic, comparison, and boolean-logic expressions;
 parenthesized block-bodied `function` declarations with explicit `return`; interpolated strings;
@@ -227,39 +215,40 @@ in actions and renders; `loop Plural / Singular` in render blocks; `toggle`; non
 `async { ... }`; `state` declarations; named actions with parameters; `action()`-typed view
 parameters; inline `on press -> { }` handlers and named action references; `set`, compound `set`,
 and `do`; state-derived immutable bindings; reactive branch changes driven by Tao state and actions.
+`phrase` declarations with typed holes and plural `one`/`other` forms at counts 0, 1, and 2;
+parameterless phrase references; `when do` saved, named failure, `rejected`, and `error` outcomes;
+declared-case failure stubbing; the verb's rolled-back write and the caller's surviving write; and a
+failure contract reached through plain `do`.
 
-**Does not belong here:** control-flow, expression, placement, or type diagnostics; input, submit,
-and non-press events, which belong to Forms and Interaction MVP; data, navigation, or custom types;
-collection transforms beyond the shipped list members and iteration.
+**Does not belong here:** control-flow, expression, placement, type, phrase, or outcome diagnostics;
+input, submit, and non-press events, which belong to Forms and Interaction MVP; data, navigation, or
+custom types; collection transforms beyond the shipped list members and iteration; copy extraction,
+`words` blocks, measurement forms, and queued outcomes, which are post-MVP; runtime locale coverage
+across CLDR categories and unhandled-failure reports, which package tests own.
 
 ## Layout and App Shell
 
 Exercise bracketed layout clauses and the default app-shell baseline.
 
-**Belongs here:** layout clauses on render sites, including `content`, `claim`, `gap`, `pad`, `margin`, numeric, `fill`, and maximum `width`, numeric and `fill` `height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and `centered`; a declaration's header clause as its public layout default, a caller replacing it (`pad 0`) or clearing it (`pad none`), and a root's private clause staying put; adaptive `Panes` and viewport-owning `ScrollView`; app-root content rendered inside the safe default shell; text asserted by the layout smoke path.
+**Belongs here:** layout clauses on render sites, including `content`, `claim`, `gap`, `pad`, `margin`, numeric, `fill`, and maximum `width`, numeric and `fill` `height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and `centered`; a declaration's header clause as its public layout default, a caller replacing it (`pad 0`) or clearing it (`pad none`), and a root's private clause staying put; adaptive `Panes` and viewport-owning `ScrollView`; app-root content rendered inside the safe default shell. Mounted app-shell tests compile this entry and assert its rendered layout and shell properties.
 
 **Does not belong here:** visual style clauses; `@@content`, named render slots, or render elision; state, actions, forms, data, navigation, or richer scrolling behavior.
 
 ## Packages
 
-Exercise local workspace package resolution, project metadata, and the namespace-import and alias
-mechanism component kits publish through. Two `app` declarations share the folder — `PackageAccess`
-in `Package Access.tao` and `ComponentAliases` in `Component Aliases.tao` — over one fixture set of
-local packages in `Packages/`: `@cards` and `@copy` for resolution, `@widgets` as the stand-in
-implementation package an alias republishes.
+Exercise project discovery, app-owned metadata and local publication dependencies, plus the
+namespace-import and alias mechanisms used by module component kits. Two app declarations share
+this project — `PackageAccess` in `Package Access.tao` and `ComponentAliases` in
+`Component Aliases.tao`. The separate marked `Packages/` project publishes named module folders.
 
-**Belongs here:** `project { name … remote none license … }` metadata; `use … from @package/subfolder`
-for package folders nested in the project; bare `use Foo` for `package` declarations across sibling
-files, sibling folders, and child folders in the same `@package`; `workspace`-visible declarations
-imported across indexed local packages; runtime rendering for package-imported views and bindings;
-`use package @pkg [as name]` with a derived namespace name and an `as` rename; `public view Name =
-ns.Member` publishing a package member under the file's own name; a same-named alias proving the
-namespace avoids shadowing; call sites binding through the alias to the target's parameters.
+**Belongs here:** lowercase app metadata; `use … from @module/subfolder`; same-module `package`
+visibility and same-root `project` visibility; app-owned `requires` selecting included public module
+API; runtime rendering through module imports; `use package @module [as name]` namespaces; public
+aliases and call sites binding to their target’s parameters.
 
-**Does not belong here:** resolution, duplicate-package, and visibility diagnostics;
-namespace-import diagnostics — duplicate namespaces, unresolvable packages, non-view targets — which
-are package tests; external projects, `requires`, install/update/publish, remotes, or lockfiles; the
-stdlib's own native components, which `@tao/ui` and its conformance suite own.
+**Does not belong here:** duplicate-publication and visibility diagnostics, invalid dependency
+selection, version ranges, installer/update/publish behavior or locks, which belong to package tests;
+stdlib native components, which `@tao/ui` and its conformance suite own.
 
 ## Runtime Stdlib Tests
 
@@ -314,9 +303,9 @@ Each surface keeps generated bindings in its own `Generated/` directory; authore
 it. The entry's README owns launch and regeneration commands and the extension pattern.
 
 **Belongs here:** device controls for all generated Haptics enum values, React Native vibration and
-cancellation, and Clipboard text/HTML, image, URL, and subscription operations. Navigation journeys
-check that each screen is reachable and can be left without starting native effects. A maintained-app
-runtime suite exercises Clipboard input, controls, previews and listener cleanup, all Haptics controls,
+cancellation, and Clipboard text/HTML, image, URL, and subscription operations. The maintained-app
+runtime suite checks that each surface opens without starting native effects, then exercises Clipboard
+input, controls, previews and listener cleanup, representative Haptics controls,
 and vibration/cancellation with native substitutes. An explicit `.host-tests/Clipboard.test.tao` journey uses
 the real module in an isolated iOS Simulator build for formats, availability, and listener controls.
 Package tests also cover generated contracts. Cross-app paste permissions remain pending; physical
@@ -343,61 +332,21 @@ Exercise the type system through a small UI that passes typed values into views.
 
 ## Read Net
 
-Exercise the read net: the runtime's handling of the exceptional read cases a render guard leaves
-unnamed, and a project's file-level `guard default` replacing it case by case. Two projects share
-the folder so their nets can differ: `ReadNetApp` replaces `missing`, and `Runtime Default/`'s
+Exercise the read net: the runtime's handling of exceptional read cases a render guard leaves
+unnamed, and app-level `guard` handlers replacing it case by case. `ReadNetApp` replaces `missing`;
+its two variants demonstrate replacing `missing` and inheriting it when only `error` is replaced.
 `RuntimeDefaultApp` replaces `loading` and `error` and leaves `missing` to the runtime.
 
 **Belongs here:** a bare `guard Subject` over an entity and a query; a deleted row reaching the net
-as `missing`; the project's override rendering at the guarding site; a guard that names `missing`
-winning over the net; the runtime's `missing` sentence where the project's net does not replace it;
-a deleted handle keeping `.Id` inside a site's own `missing` handler.
+as `missing`; an app's override rendering at the guarding site; a guard that names `missing`
+winning over the net; a variant's `missing` override and inheritance of its base app's `missing`
+handler; the runtime's `missing` sentence where the app's net does not replace it; a deleted handle
+keeping `.Id` inside a site's own `missing` handler.
 
 **Does not belong here:** `loading`, `unauthorized`, and `error` rendered through a journey, which
 Memory cannot produce on demand and the runtime package tests prove; read-net diagnostics
-(placement, cases, one per project, a bare guard over text), which are package tests; action guards;
+(placement, cases, one per app, a bare guard over text), which are package tests; action guards;
 write outcomes.
-
-## Phrases
-
-Exercise `phrase` declarations: named copy with typed holes and CLDR plural forms (Decisions §14).
-
-**Belongs here:** a single-form phrase with a typed hole; a parameterless phrase referenced by bare
-name; a plural phrase selecting `one` or `other` by its number parameter as the count changes
-through `0`, `1`, and `2`, rendered through the running `Text` view.
-
-**Does not belong here:** copy extraction, `words` blocks, and measurement forms, which are
-post-MVP; parser, validator, formatter, and compiler diagnostics, which are package tests; runtime
-locale-selection coverage across CLDR categories, which the runtime package tests own.
-
-## Search
-
-Exercise the query `search` clause: multi-field text search over an entity's `(search)` fields,
-matched with the same attention matcher keyboard narrowing and the command palette use.
-
-**Belongs here:** rows narrowing as a term is entered; a term matching a row only through its
-second `(search)` field; every row returned on a blank term; a field without `(search)` never
-matching. Schema and query diagnostics — a query search term that is not text, a query search
-clause over an entity with no `(search)` field, and `(search)` on a non-text field — are package
-tests, not journeys.
-
-**Does not belong here:** relevance ranking, which is explicitly not decided; `group by`, which is
-Post-MVP; remote providers; navigation or WordFlower product behavior.
-
-## Effect Outcomes
-
-Exercise `when do` (Decisions §5): a call site that runs a verb, contains its failure, and names what
-happens next. The verb is a native action that writes a draft and then calls a foreign `Export` whose
-sibling `Export.ts` ends each call the way its `Mode` argument says.
-
-**Belongs here:** a check-scoped declared-case failure stub that bypasses `Export.ts`; `saved` after the verb finishes, keeping its writes; a declared case the site names;
-`rejected -> Problem` catching a declared case the site does not name, with the declared sentence; `error
--> Message` for a case the verb never declared, with the provider's own sentence; the verb's own write
-rolled back while the caller's earlier write survives; a verb's contract reached through a plain `do`.
-
-**Does not belong here:** the unhandled-failure warning, unknown or duplicate outcomes, and `check`
-placement, which are validator tests; `queued`, which is post-MVP; Studio's failure reports for an
-unhandled failure, which the runtime tests own.
 
 ## Test Device and Fixture
 
@@ -433,7 +382,10 @@ atomic backend rejection. Those need provider and device evidence.
 ## Auth Review
 
 Provider-neutral sessions, custom and supplied sign-in UI, current account reads, profile editing,
-and owner-scoped notes. AuthReview uses the deterministic adapter; AuthReviewLocal binds the same
+owner-scoped notes, and confirmed account deletion. The Tao journey verifies a Note's owned detail
+is removed while its Account remains visible, and that deleting the current Account makes its notes
+inaccessible. Direct provider tests must inspect stored rows to prove the Account cascade and other
+accounts' isolation. AuthReview uses the deterministic adapter; AuthReviewLocal binds the same
 UI to the localhost reference service at port4738. Backend policy, durable offline data and identity
 isolation are verified separately by the reference server/provider tests; only completed Tao
 journeys establish the user-facing behavior. AuthReviewClerk selects the managed adapter with a
@@ -446,6 +398,12 @@ credentials, starts its local InstantDB gateway, and opens Studio for manual iPh
 Tao Companion with `just studio-companion-install roPhone`, keep the phone and Mac on the same
 network, then choose the phone in Studio and open the app. Select the "Clerk and InstantDB / iPhone"
 scenario to send the app to Companion. Clerk sign-in requires Internet access.
+
+The Convex/Clerk and Pylon/PylonAuth variants select hosted-provider pilots with placeholder project
+configuration. The Jazz/Clerk Auth Review variant is pending provider capability conformance; its
+current datasource declaration cannot bind the app's relations and field update rules. The existing
+Tao journeys check the provider-neutral UI; hosted policy, native transport, and Jazz/Pylon offline
+behavior require separate live acceptance.
 The custom password input is masked and authentication problems wrap on a phone. Known Clerk
 configuration failures, including disabled native API access, are distinguished from rejected
 credentials without exposing provider response text.

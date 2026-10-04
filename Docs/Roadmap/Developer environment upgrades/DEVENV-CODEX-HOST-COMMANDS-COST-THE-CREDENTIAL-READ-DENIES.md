@@ -27,7 +27,7 @@
   paths while allowing CoreSimulator, Xcode, and devices. Keep credential use in fixed broker
   operations that run no repository code, such as push, release upload, and `gh` calls. Recreate the
   devenv `PATH` and caches for each command, stream output, and support cancellation of long-running
-  commands such as `./tao dev` and Metro. Add Docker only as an opt-in entry.
+  commands such as `./tao run` and Metro. Add Docker only as an opt-in entry.
   `feat/landing-agent-permissions` has prior art for a broker `land` operation with streaming and
   cancellation, but that broker runs the landing inside the credential-holding process; separate
   repository code execution from credential operations in this design.

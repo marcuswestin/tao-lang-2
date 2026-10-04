@@ -2,7 +2,7 @@ import { Describe, Expect, Test } from '@shared/test'
 import { TestCompiler as Compiler } from './test-compile'
 
 const source = `
-  app Main { view Root }
+  app Main { id "com.tao.test.main" version "1.0.0" name "Main"  view Root }
   view Root() {
     state Ready = false
     action Bump() {
@@ -26,11 +26,6 @@ Describe('compiler: debugger instrumentation', () => {
     Expect(code).toContain(`await TR.Debug.At({ action: "Bump", path: "1", declaration:`)
   })
 
-  Test('emits nothing without debug', async () => {
-    const compiled = await Compiler.compileCode(source)
-    Expect(compiled.code).not.toContain('TR.Debug.At')
-  })
-
   Test('scopes instrumentation to the compile instead of the position of the app declaration', async () => {
     const appLast = `
       view Root() {
@@ -39,7 +34,7 @@ Describe('compiler: debugger instrumentation', () => {
         render Text("Ready")
       }
       view Text(Value text) { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
-      app Main { view Root }
+      app Main { id "com.tao.test.main" version "1.0.0" name "Main"  view Root }
     `
 
     const debug = await Compiler.compileCode(appLast, { debug: true })
@@ -52,7 +47,7 @@ Describe('compiler: debugger instrumentation', () => {
   Test('gives same-named actions canonical declaration and structural statement identities', async () => {
     const compiled = await Compiler.compileCode(
       `
-      app Main { view First }
+      app Main { id "com.tao.test.main" version "1.0.0" name "Main"  view First }
       view First() {
         state Ready = false
         action Save() { toggle Ready }

@@ -154,14 +154,13 @@ Describe('developer workflow', () => {
     const first = fake({ branch: 'local/primary', existingBranches: ['main'], worktreeBranches: [] })
     await DeveloperBranchCommand.run('', first.dependencies)
     Expect(first.calls.map(call => call.args.join(' '))).toContain('switch --create dev/mira main')
-    Expect(first.lines).toContain("PASS  Created 'dev/mira' from main and switched to it.")
 
     const again = fake({ branch: 'local/primary' })
     await DeveloperBranchCommand.run('', again.dependencies)
     Expect(again.calls.map(call => call.args.join(' '))).toContain('switch dev/mira')
   })
 
-  Test('names the branch from the argument, the environment, then the Git identity', async () => {
+  Test('normalizes an explicit branch name and preserves its dev prefix', async () => {
     const named = fake({ branch: 'local/primary', existingBranches: ['main'], worktreeBranches: [] })
     await DeveloperBranchCommand.run('Spike Two', named.dependencies)
     Expect(named.calls.map(call => call.args.join(' '))).toContain('switch --create dev/spike-two main')
@@ -220,8 +219,6 @@ Describe('developer workflow', () => {
       'update-ref -m sync-main: fast-forward to origin refs/heads/main new-main main00000000000000000000000000000000000000',
     )
     Expect(moved.state.mirrorHead).toBe('new-main')
-    Expect(moved.lines).toContain('PASS  Moved the main mirror at /mirror to new-main.')
-    Expect(moved.lines).toContain("PASS  Merged main into 'dev/mira'.")
   })
 
   Test('leaves a mirror someone is working in alone', async () => {

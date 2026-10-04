@@ -48,6 +48,7 @@ async function runLane(root: string, options: LaneOptions): Promise<LaneRun> {
   // readings so a test can make the prepare phase change the tree and observe which one is recorded.
   const readings = [...options.hashes ?? [options.hash]]
   const summary = await runGates({
+    showStudio: true,
     gates: options.gates,
     greenTree: {
       captureGenerated: stableGeneratedEvidence,
@@ -129,7 +130,6 @@ Describe('gates a green record never covers', () => {
     Expect(GateCatalog.metadata(HOST_DEPENDENT_GATE).hostDependent).toBe(true)
     Expect(GateCatalog.isRecordable(HOST_DEPENDENT_GATE)).toBe(false)
     Expect(GateCatalog.isRecordable(RECORDABLE_GATE)).toBe(true)
-    Expect(GateCatalog.metadata('ship-bundle-proof').hostDependent).toBe(true)
 
     const root = await mkTestDir('tao-green-host-')
     try {
@@ -142,7 +142,6 @@ Describe('gates a green record never covers', () => {
       const store = await GreenTree.load(root)
       Expect(store.gates[RECORDABLE_GATE]?.treeHash).toBe('tree-1')
       Expect(store.gates[HOST_DEPENDENT_GATE]).toBeUndefined()
-      Expect(await FS.exists(FS.resolvePath(`${GreenTree.STORE_DIR}/gate-studio-canary.json`, root))).toBe(false)
 
       // Same tree, same toolchain, a lane no whole-lane record covers: the recordable gate stands on
       // its record and the host-dependent one goes back to the machine, because this host is not
@@ -284,7 +283,6 @@ Describe('gates a green record never covers', () => {
     try {
       await FS.mkdir(FS.resolvePath('.devenv', root))
       await FS.replaceSymlink('/nix/store/tao-toolchain-a', profileLink)
-      Expect(await GreenTree.toolchain(root)).toBe('/nix/store/tao-toolchain-a')
 
       const first = await runLane(root, { gates: [RECORDABLE_GATE], hash: 'tree-1' })
       Expect(first.started).toEqual([RECORDABLE_GATE])

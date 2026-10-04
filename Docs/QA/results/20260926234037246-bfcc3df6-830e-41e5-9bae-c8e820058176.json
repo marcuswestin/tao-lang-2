@@ -1,0 +1,55 @@
+{
+  "id": "20260926234037246-bfcc3df6-830e-41e5-9bae-c8e820058176",
+  "runId": "20260926233551708-ca460a27-0bbf-446d-9388-e83161a7ac84",
+  "createdAt": "2026-09-26T23:40:37.246Z",
+  "recordedAt": "2026-09-26T23:40:37.246Z",
+  "commit": "d5bdeaefd03740d976cc14da01b80688aa6fbe89",
+  "phase": 1,
+  "executionProfile": "development",
+  "provenance": {
+    "snapshotBasis": "observation-time",
+    "originalDependencies": "recorded",
+    "observedMetadataEvidence": [
+      "Docs/QA/evidence/final-pilot/reading-list-desktop.png",
+      "Docs/QA/evidence/final-pilot/capture.json",
+      "Docs/QA/evidence/final-pilot/source-snapshot.json",
+      "Docs/QA/evidence/final-pilot/review.md"
+    ]
+  },
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "runtime": "bun:1.4.2"
+  },
+  "inputs": {
+    "source": "Docs/Tutorials/Your First Tao App.md",
+    "dependencySnapshot": "Docs/QA/inputs/f387790d8201945c60701db9e04992ddf96d93cbdef461eba9648e93c6b164aa.json"
+  },
+  "surfaceId": "visual:reading-list",
+  "dimension": "visual",
+  "outcome": "blocked",
+  "reviewer": "agent",
+  "channel": "desktop",
+  "evidence": [
+    {
+      "path": "Docs/QA/evidence/final-pilot/reading-list-desktop.png",
+      "sha256": "d6bcf17837ba4cdca84bebeae0d4f57c9a1a4fc691ac645ca782f4938ed8567f"
+    },
+    {
+      "path": "Docs/QA/evidence/final-pilot/capture.json",
+      "sha256": "a2723eab0c1cb6e36cca4fe4e5dc18b86110d377c936c3f736630b2f11d06d8c"
+    },
+    {
+      "path": "Docs/QA/evidence/final-pilot/source-snapshot.json",
+      "sha256": "e24604bca8e4d70b3f17bd6aa8ccada8b17a83c0bcc1da53646c07bf8aaec0b3"
+    },
+    {
+      "path": "Docs/QA/evidence/final-pilot/review.md",
+      "sha256": "94b36a0387c162f34aca687e970e88bb92209e3df2f7fca31dc4481db99d9ef9"
+    }
+  ],
+  "notes": "Inspected retained desktop image, including the 100% overlay. Capture failed stability: preview changed between consecutive settled captures. No current desktop visual acceptance; older overlay finding remains open.",
+  "sourceHash": "0cd3438d3d501c81f82956dc2e64a7f9e05ef53c7496abc1a2d63124444d84f0",
+  "rendererHash": "99bbbedc6f85b385352f81eca62987298eb506aa9ebd0a8917e33dd1c1f892f8",
+  "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
+}

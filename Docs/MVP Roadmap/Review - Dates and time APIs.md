@@ -1,7 +1,7 @@
 # Pre-MVP review — dates and time APIs
 
-Requested 2026-10-04. Investigation [A25](<Agent MVP Roadmap.md#a25--review-modern-date-and-time-library-designs>)
-feeds decision [R20](<Developer MVP Roadmap.md#r20--dates-and-remaining-time-apis>).
+Requested 2026-10-04. Investigation [A30](<Agent MVP Roadmap.md#a30--review-modern-date-and-time-library-designs>)
+feeds decision [R21](<Developer MVP Roadmap.md#r21--dates-and-remaining-time-apis>).
 Defer remaining time API decisions from the current dialogue. Investigation only: do not implement
 an API or reopen selected contracts without discussing evidence with the Developer.
 
@@ -34,7 +34,7 @@ fractional waits round scheduling upward. These are selected design contracts, n
    arithmetic was deferred, not selected. Cover end-of-month, leap years, DST gaps/overlaps,
    timezone database changes and explicit ambiguity/overflow policies.
 3. Parsing, validation, machine serialization through datasource/I/O adapters, localized display
-   coordinated with A21, precision/range and cross-runtime representations. Keep type/unit meaning
+   coordinated with A26, precision/range and cross-runtime representations. Keep type/unit meaning
    through boundaries; distinguish known offset from a named timezone.
 4. Monotonic clock origins, sleep inclusion and supported-host guarantees; timers across navigation,
    state ownership and test-controlled clocks. Do not pretend a wall-clock fallback preserves a
@@ -54,4 +54,4 @@ recommended defaults and escape hatches, adapter/host obligations and diagnostic
 deadline, same-local-time-tomorrow transformation, ambiguous local-time input and ticking UI.
 Show both authoring and library/provider implementation contracts, and a scoped MVP recommendation.
 Separate questions genuinely needed before implementation from later optional features; settle
-remaining choices through R20 and amend Decisions.md before implementation.
+remaining choices through R21 and amend Decisions.md before implementation.

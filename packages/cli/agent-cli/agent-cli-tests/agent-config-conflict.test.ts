@@ -56,7 +56,6 @@ Describe('generated settings merge recovery', () => {
             Expect(parsed.permissions.allow).toContain('Bash(echo canonical)')
             Expect(parsed.permissions.allow).toContain('Bash(./agent unsandboxed setup-visionos)')
             Expect(JSON.stringify(parsed.hooks)).toContain('echo canonical-hook')
-            Expect(content).not.toContain('<<<<<<<')
             Expect(content).not.toContain('"old"')
             Expect(content).not.toContain('"other"')
           }

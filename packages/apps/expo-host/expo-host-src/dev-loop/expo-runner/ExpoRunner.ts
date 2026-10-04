@@ -39,6 +39,7 @@ export type ExpoServerOptions = {
 }
 
 export type ExpoRunnerSession = ReturnType<typeof createSessionFromConfig>
+export type ExpoRunnerTargetOperations = NonNullable<Parameters<typeof createExpoTargets>[3]>
 
 /** createSession binds every Expo runner operation to one explicitly selected port. */
 function createSession(port: number = PREFERRED_EXPO_PORT): ExpoRunnerSession {
@@ -49,18 +50,20 @@ function createSession(port: number = PREFERRED_EXPO_PORT): ExpoRunnerSession {
 async function createSessionWithAvailablePort(
   preferredPort: number = PREFERRED_EXPO_PORT,
   options: ExpoConfigOptions = {},
+  targetOperations: ExpoRunnerTargetOperations = {},
 ): Promise<ExpoRunnerSession> {
   const reservation = await Ports.reserveAvailable(preferredPort)
-  return createSessionFromConfig(createExpoConfig(reservation.port, options), reservation.release)
+  return createSessionFromConfig(createExpoConfig(reservation.port, options), reservation.release, targetOperations)
 }
 
 function createSessionFromConfig(
   config: ExpoSessionConfig,
   releasePortReservation: () => Promise<void> = async () => {},
+  targetOperations: ExpoRunnerTargetOperations = {},
 ) {
   const metro = createExpoMetro(config)
   const android = createAndroid(config, metro)
-  const targets = createExpoTargets(config, metro, android)
+  const targets = createExpoTargets(config, metro, android, targetOperations)
   return {
     config,
     createServer: (runtimeRoot: string, options?: ExpoServerOptions) =>
@@ -74,6 +77,7 @@ function createSessionFromConfig(
     openStartupTargets: (requested?: readonly DevStartupTarget[], shouldStop?: () => boolean) =>
       targets.openStartupTargets(requested, shouldStop),
     openWeb: targets.openWeb,
+    stopWeb: targets.stopWeb,
     reloadExpoApps: metro.reloadExpoApps,
     releasePortReservation,
     startExpo: () => startExpo(config, targets.openPreparedAndroid),
