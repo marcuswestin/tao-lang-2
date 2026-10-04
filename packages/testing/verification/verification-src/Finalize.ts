@@ -117,6 +117,8 @@ export type FinalizeDependencies = {
   key: (repositoryRoot: string) => Promise<GreenTreeKey>
   isSymbolicLink: (path: string) => Promise<boolean>
   makeProbeDirectory: (prefix: string) => Promise<string>
+  /** A file's last modification, in epoch milliseconds. */
+  modifiedTimeMs: (path: string) => Promise<number>
   now: () => Date
   readJson: <ValueT>(path: string) => Promise<ValueT>
   realPath: (path: string) => Promise<string>
@@ -143,6 +145,7 @@ const defaultDependencies: FinalizeDependencies = {
   isSymbolicLink: FS.isSymbolicLink,
   key: GreenTree.key,
   makeProbeDirectory: FS.mkTmpDir,
+  modifiedTimeMs: FS.modifiedTimeMs,
   now: () => new Date(),
   readJson: FS.readJson,
   realPath: FS.realPath,
@@ -654,9 +657,12 @@ export async function prepareForLanding(
   const messageFile = FS.resolvePath(options.messageFile ?? `.artifacts/merge/${branch}.msg`, root)
   const reviewPath = `${messageFile}.review.json`
   const draftReview = await loadDraftReview(dependencies, reviewPath)
-  const reviewedDraftHeadSha = draftReview?.headSha === headSha
+  // An edit made after the baseline was recorded confirms the message, and stays a confirmation
+  // when only main has arrived since — as when this landing's own integration conflicted.
+  const reviewedDraftHeadSha = draftReview !== undefined
       && await dependencies.exists(messageFile)
       && await dependencies.readText(messageFile) !== draftReview.draftText
+      && await onlyMainArrivedSince(dependencies, root, draftReview.headSha, mainSha, headSha)
     ? headSha
     : undefined
   const message = await draftOrKeepMessage(
@@ -671,7 +677,7 @@ export async function prepareForLanding(
     options.redraft === true,
     lines,
   )
-  // A kept message for an older HEAD needs a fresh author edit too. Record its current bytes as
+  // A kept message for an older HEAD with commits of its own needs a fresh author edit too. Record its current bytes as
   // the baseline, so that edit can be confirmed on the next land attempt without `finalize`.
   if (
     message.decision !== 'kept'
@@ -1120,7 +1126,16 @@ async function draftOrKeepMessage(
       lines.push(`FAIL  The kept merge message is not one the landing will accept: ${malformed}`)
       return { decision: 'kept', malformed, messageHeadSha: headSha, unconfirmedReason: '' }
     }
-    const unconfirmedReason = keptMessageReason(source, priorState, headSha, reviewedDraftHeadSha)
+    const unconfirmedReason = await keptMessageReason(
+      dependencies,
+      root,
+      messageFile,
+      source,
+      priorState,
+      mainSha,
+      headSha,
+      reviewedDraftHeadSha,
+    )
     lines.push(
       `PASS  Kept the existing merge message; ${
         unconfirmedReason === ''
@@ -1158,24 +1173,88 @@ async function draftOrKeepMessage(
  * it was recorded against an earlier HEAD and the branch has gained commits since. Empty means the
  * applicable evidence proves it covers this HEAD.
  */
-function keptMessageReason(
+async function keptMessageReason(
+  dependencies: FinalizeDependencies,
+  root: string,
+  messageFile: string,
   source: string,
   priorState: FinalizeState | undefined,
+  mainSha: string,
   headSha: string,
   reviewedDraftHeadSha: string | undefined,
-): string {
+): Promise<string> {
   if (reviewedDraftHeadSha === headSha) {
     return ''
   }
   if (source.startsWith(DRAFT_PREFIX)) {
     return 'the generated draft has not been edited by its author'
   }
-  if (priorState === undefined) {
-    return 'nothing records which HEAD it was written for'
+  if (
+    priorState !== undefined
+    && await onlyMainArrivedSince(dependencies, root, priorState.messageHeadSha, mainSha, headSha)
+  ) {
+    return ''
   }
-  return priorState.messageHeadSha === headSha
-    ? ''
+  if (await writtenAfterNewestOwnCommit(dependencies, root, messageFile, mainSha, headSha)) {
+    return ''
+  }
+  return priorState === undefined
+    ? "nothing records which HEAD it was written for, and it predates the branch's newest commit"
     : `the branch has gained commits since it was recorded for ${shortSha(priorState.messageHeadSha)}`
+}
+
+/**
+ * A hand-written message saved after the branch's newest commit of its own was written with all of
+ * the branch's work in front of its author, so it is reviewed for this HEAD without a recorded
+ * baseline. Merges are skipped, so resolving a landing's conflicted integration of main does not
+ * date the message. A message older than that commit predates work it cannot describe.
+ */
+async function writtenAfterNewestOwnCommit(
+  dependencies: FinalizeDependencies,
+  root: string,
+  messageFile: string,
+  mainSha: string,
+  headSha: string,
+): Promise<boolean> {
+  const newest = await dependencies.run('git', {
+    args: ['log', '-1', '--no-merges', '--format=%ct', headSha, `^${mainSha}`],
+    cwd: root,
+    stdio: 'pipe',
+  })
+  const committedSeconds = Number.parseInt(newest.stdout.trim(), 10)
+  if (newest.exitCode !== 0 || newest.error !== undefined || !Number.isFinite(committedSeconds)) {
+    return false
+  }
+  // Commit times are whole seconds; a save in the same second as the commit follows it in practice.
+  return Math.floor(await dependencies.modifiedTimeMs(messageFile) / 1000) >= committedSeconds
+}
+
+/**
+ * Whether a message confirmed at `recordedSha` still describes `headSha`: true when the branch has
+ * gained no commit of its own since, only merges of main — which is all that resolving a landing's
+ * own conflicted integration of main adds. A merge changes nothing an author wrote about, so asking
+ * them to confirm again would be ceremony. Any non-merge commit main does not contain is the
+ * branch's own work and does need the author; so does a recorded commit Git cannot resolve.
+ */
+async function onlyMainArrivedSince(
+  dependencies: FinalizeDependencies,
+  root: string,
+  recordedSha: string,
+  mainSha: string,
+  headSha: string,
+): Promise<boolean> {
+  if (recordedSha === headSha) {
+    return true
+  }
+  if (recordedSha === '') {
+    return false
+  }
+  const ownCommits = await dependencies.run('git', {
+    args: ['rev-list', '--no-merges', `${recordedSha}..${headSha}`, `^${mainSha}`],
+    cwd: root,
+    stdio: 'pipe',
+  })
+  return ownCommits.exitCode === 0 && ownCommits.error === undefined && ownCommits.stdout.trim() === ''
 }
 
 async function loadDraftReview(

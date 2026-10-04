@@ -55,6 +55,11 @@ type FakeRepository = {
   /** Paths `git merge-tree` reports, which it can answer even when the merge itself cannot run. */
   mergeTreeConflicts?: string[]
   featureCommits?: Array<{ body: string; subject: string }>
+  /** Non-merge commits outside main since a message was confirmed; none means only main arrived. */
+  ownCommitsSinceConfirmed?: string[]
+  /** When the merge message file was last saved and the branch's newest own commit made, in seconds. */
+  messageSavedAt?: number
+  newestOwnCommitAt?: number
   headSha: string
   localMainSha?: string
   mainSha: string
@@ -151,6 +156,12 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
           : (repository.diffPaths ?? []).join('\n'),
       )
     }
+    if (args[0] === 'log' && args[1] === '-1' && args[2] === '--no-merges') {
+      return result(args, spec.cwd, `${repository.newestOwnCommitAt ?? 100}\n`)
+    }
+    if (args[0] === 'rev-list' && args[1] === '--no-merges') {
+      return result(args, spec.cwd, (repository.ownCommitsSinceConfirmed ?? ['owncommit']).join('\n'))
+    }
     if (args[0] === 'log' && args[1] === '--no-merges') {
       const RECORD_SEPARATOR = ''
       const FIELD_SEPARATOR = ''
@@ -213,6 +224,7 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       files.set(path, '')
       return path
     },
+    modifiedTimeMs: async () => (repository.messageSavedAt ?? 0) * 1000,
     now: () => new Date('2026-09-17T12:00:00.000Z'),
     readJson: async <ValueT>(path: string) => {
       if (!states.has(path)) {
@@ -1090,6 +1102,65 @@ Describe('landing preparation', () => {
     })
     const moved = await prepareForLanding({ repositoryRoot: '/repo' }, fake.dependencies)
     Expect(moved.ok).toBe(false)
+  })
+
+  Test('keeps a recorded message confirmed when only merges of main arrived since', async () => {
+    const fake = fakeDependencies({ ownCommitsSinceConfirmed: [] })
+    await recordMergeMessage(
+      'Pin storage\n\n- Point storage at abc12345',
+      { repositoryRoot: '/repo' },
+      fake.dependencies,
+    )
+    fake.states.set('/repo/.artifacts/merge/feat/example.state.json', {
+      ...fake.states.get('/repo/.artifacts/merge/feat/example.state.json') as FinalizeState,
+      messageHeadSha: 'oldhead0000000000000000000000000000000000',
+    })
+
+    const merged = await prepareForLanding({ repositoryRoot: '/repo' }, fake.dependencies)
+
+    Expect(merged.ok).toBe(true)
+    Expect(fake.calls.some(call =>
+      call.args.join(' ')
+        === 'rev-list --no-merges oldhead0000000000000000000000000000000000..headsha0000000000000000000000000000000000 '
+          + '^mainsha00000000000000000000000000000000000'
+    )).toBe(true)
+  })
+
+  Test('accepts a hand-written message saved after the newest own commit, and refuses an older one', async () => {
+    const path = '/repo/.artifacts/merge/feat/example.msg'
+    const written = 'Land the example workflow\n\n- Add the example workflow.\n'
+
+    const fresh = fakeDependencies({ messageSavedAt: 200, newestOwnCommitAt: 200 })
+    fresh.files.set(path, written)
+    Expect((await prepareForLanding({ repositoryRoot: '/repo' }, fresh.dependencies)).ok).toBe(true)
+    Expect(fresh.calls.some(call =>
+      call.args.join(' ')
+        === 'log -1 --no-merges --format=%ct headsha0000000000000000000000000000000000 '
+          + '^mainsha00000000000000000000000000000000000'
+    )).toBe(true)
+
+    const stale = fakeDependencies({ messageSavedAt: 199, newestOwnCommitAt: 200 })
+    stale.files.set(path, written)
+    const refused = await prepareForLanding({ repositoryRoot: '/repo' }, stale.dependencies)
+    Expect(refused.ok).toBe(false)
+    Expect(refused.remaining[0]).toContain("predates the branch's newest commit")
+  })
+
+  Test('keeps an edited message confirmed after resolving a conflicted integration of main', async () => {
+    // The landing that conflicted had already accepted the edit; committing the resolved merge moves
+    // HEAD, and only main arrived with it.
+    const fake = fakeDependencies({ ownCommitsSinceConfirmed: [] })
+    const path = '/repo/.artifacts/merge/feat/example.msg'
+    fake.files.set(path, 'Land the example workflow\n\n- Add and validate the example workflow.\n')
+    fake.states.set(`${path}.review.json`, {
+      draftText: 'Land the example workflow\n\n- Add the example workflow.\n',
+      headSha: 'oldhead0000000000000000000000000000000000',
+      version: 1,
+    })
+
+    const resolved = await prepareForLanding({ repositoryRoot: '/repo' }, fake.dependencies)
+
+    Expect(resolved.ok).toBe(true)
   })
 
   Test('does not turn an untouched generated draft into author review on a later landing', async () => {
