@@ -35,7 +35,8 @@ export function hostCommandKind(
   if (match === undefined) {
     return undefined
   }
-  return match.length === 1 && JUST_COMMANDS.includes(match[0] as (typeof JUST_COMMANDS)[number])
+  return hostCommandTarget(match) === undefined && match.length === 1
+      && JUST_COMMANDS.includes(match[0] as (typeof JUST_COMMANDS)[number])
     ? 'agent'
     : 'named'
 }
