@@ -18,7 +18,7 @@ import { startStudioSmokeLaunch } from '../studio-tooling-src/StudioSmokeLaunch'
  * `Docs/Spec/Tao Studio.md` says has "no Tao scenario spelling" but does have a Studio UI control.
  */
 Test(
-  'Studio shows loading, offline, declared failure, and cross-cell isolation in a real browser',
+  'Studio shows guarded loading and safe failures with cross-cell isolation in a real browser',
   async () => {
     const repositoryRoot = Repo.getRoot()
     const projectRoot = await mkTestDir('tao-studio-network-simulation-')
@@ -85,22 +85,25 @@ Test(
         text => text.includes('Alpha item') && text.includes('Beta item'),
       )
 
-      // (b) Offline: the cell shows its offline state, and the write action nested inside the loaded
+      // (b) Offline: the cell shows its safe error state, and the write action nested inside the loaded
       // list is not even reachable — the network condition only gates the query's remote fill, never
       // a local write, so isolation of the write has to come from the guard never reaching the list.
       step = 'offline'
       await applyCellNetwork(browser, 'cellA', { latencyMs: 0, outcome: 'offline' })
       const offlineSrcA = await cellIframeSrc(browser, 'cellA')
+      const safeErrorMessage = 'Unable to load these items.'
       const offlineMessage = "Tao Studio network is offline while filling 'Item'."
-      await waitForPreviewText(browser, offlineSrcA, text => text.includes(offlineMessage))
+      await waitForPreviewText(browser, offlineSrcA, text => text.includes(safeErrorMessage))
+      const offlineText = await browser.evaluateInFrame<string>(offlineSrcA, `document.body?.textContent ?? ''`)
+      Expect(offlineText).not.toContain(offlineMessage)
       const removeButtonWhileOffline = await browser.evaluateInFrame<boolean>(
         offlineSrcA,
         `[...document.querySelectorAll('[data-tao-studio]')].some(element => element.textContent?.trim() === 'Remove')`,
       )
       Expect(removeButtonWhileOffline).toBe(false)
 
-      // (c) Declared failure: a custom message set through the same Network control's "error" outcome
-      // renders verbatim in the guard's error branch.
+      // (c) Declared failure: the Network control's custom provider diagnostic stays out of the
+      // guard's safe display context.
       step = 'declared-failure'
       const declaredMessage = 'Simulated Studio outage for Item.'
       await applyCellNetwork(browser, 'cellA', {
@@ -110,7 +113,9 @@ Test(
         outcome: 'error',
       })
       const failureSrcA = await cellIframeSrc(browser, 'cellA')
-      await waitForPreviewText(browser, failureSrcA, text => text.includes(declaredMessage))
+      await waitForPreviewText(browser, failureSrcA, text => text.includes(safeErrorMessage))
+      const failureText = await browser.evaluateInFrame<string>(failureSrcA, `document.body?.textContent ?? ''`)
+      Expect(failureText).not.toContain(declaredMessage)
 
       // (d) Cross-cell isolation: cellA offline and cellB online show different states at the same
       // time, and a write performed in cellB does not appear in cellA once cellA comes back online.
@@ -122,7 +127,7 @@ Test(
       await applyCellNetwork(browser, 'cellA', { latencyMs: 0, outcome: 'offline' })
       const isolationSrcA = await cellIframeSrc(browser, 'cellA')
       const [textA] = await Promise.all([
-        waitForPreviewText(browser, isolationSrcA, text => text.includes(offlineMessage)).then(() =>
+        waitForPreviewText(browser, isolationSrcA, text => text.includes(safeErrorMessage)).then(() =>
           browser!.evaluateInFrame<string>(isolationSrcA, `document.body?.textContent ?? ''`)
         ),
         waitForPreviewText(browser, baselineSrcB, text => text.includes('Alpha item') && text.includes('Beta item')),
