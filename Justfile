@@ -10,7 +10,7 @@ IDE_EXTENSION_VSIX := justfile_directory() + "/.artifacts/build/tao-ide-extensio
 LOCAL_INSTANTDB_APP_ID := "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f"
 LOCAL_INSTANTDB_DIR := justfile_directory() + "/packages/services/tao-cloud/tao-cloud-src/local"
 LOCAL_INSTANTDB_COMPOSE := "docker compose --project-name tao-local-instantdb --file \"" + LOCAL_INSTANTDB_DIR + "/docker-compose.yml\""
-VERIFY_FULL_GATES := "_fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check _doctor-json dead-exports ship-bundle-proof studio-smoke studio-proof-real-app studio-smoke-simulated-user keyboard-navigation-smoke studio-dialog-browser studio-agent-browser studio-network-simulation studio-smoke-native studio-canary"
+VERIFY_FULL_GATES := "_fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _hosted-crud-test _test _runtime-pack-check _doctor-json dead-exports ship-bundle-proof studio-smoke studio-proof-real-app studio-smoke-simulated-user keyboard-navigation-smoke studio-dialog-browser studio-agent-browser studio-network-simulation studio-smoke-native studio-canary"
 VERIFY_FULL_SKIPPED := ""
 
 # Print available recipes
@@ -108,6 +108,21 @@ auth-review-server *ARGS:
 [group('Run')]
 clerk-review *ARGS: _parser-gen
     ./dev clerk-review {{ ARGS }}
+
+# Run the Firebase/RxDB and Appwrite/Legend generic CRUD comparison in Expo Go
+[group('Run')]
+hosted-crud:
+    ./tao connect run 'Apps/Hosted CRUD'
+
+# Typecheck the Expo Go hosted CRUD comparison app
+[group('Dev')]
+hosted-crud-check:
+    "{{ BUN }}" run --cwd "{{ justfile_directory() }}/Apps/Hosted CRUD" typecheck
+
+# Run focused storage and account-scope tests for the hosted CRUD comparison
+[group('Dev')]
+hosted-crud-test:
+    "{{ BUN }}" run --cwd "{{ justfile_directory() }}/Apps/Hosted CRUD" test
 
 # Push Auth Review to your Instant Cloud app and run it in tao run; requires its stored App ID and admin token
 [group('Run')]
@@ -684,13 +699,13 @@ clean-all: clean-scratch
 [arg('no_cache', long='no-cache', value='true')]
 [group('Dev')]
 verify complete='false' no_cache='false': _deps
-    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check dead-exports --lane verify --json .artifacts/logs/verify/summary.json --skipped "studio-smoke=slow lane; run ./agent unsandboxed studio-smoke or ./agent unsandboxed verify-full" --green-tree verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
+    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _hosted-crud-test _test _runtime-pack-check dead-exports --lane verify --json .artifacts/logs/verify/summary.json --skipped "studio-smoke=slow lane; run ./agent unsandboxed studio-smoke or ./agent unsandboxed verify-full" --green-tree verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
 
 # Verify changed suites, fail fast: the iteration gate, never merge evidence. --no-cache ignores a recorded green tree
 [arg('no_cache', long='no-cache', value='true')]
 [group('Dev')]
 verify-changed no_cache='false': _deps
-    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test-changed _runtime-pack-check dead-exports --lane verify-changed --json .artifacts/logs/verify-changed/summary.json --skipped "studio-smoke=slow lane; run ./agent unsandboxed studio-smoke or ./agent unsandboxed verify-full" --green-tree verify-changed verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
+    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _hosted-crud-test _test-changed _runtime-pack-check dead-exports --lane verify-changed --json .artifacts/logs/verify-changed/summary.json --skipped "studio-smoke=slow lane; run ./agent unsandboxed studio-smoke or ./agent unsandboxed verify-full" --green-tree verify-changed verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
 
 # This lane no longer refuses to start beside another one. The gates that genuinely cannot share a
 # host — the native shell and the canary, which contend on the window server — declare `gui` in the
@@ -823,7 +838,10 @@ _repo-lint:
 # build takes ~2s where `typescript` 5.9 takes ~17s. `typescript` itself stays at 5.9 because the
 # editor's tsserver and `bunx tsc` still need its JavaScript API, which 7.0 does not ship.
 _typecheck:
-    "{{ BUN }}" node_modules/typescript-native/bin/tsc --build packages/*/tsconfig.json packages/*/*/tsconfig.json
+    "{{ BUN }}" node_modules/typescript-native/bin/tsc --build packages/*/tsconfig.json packages/*/*/tsconfig.json "Apps/Hosted CRUD/tsconfig.json"
+
+_hosted-crud-test:
+    "{{ BUN }}" run --cwd "{{ justfile_directory() }}/Apps/Hosted CRUD" test
 
 # `just test`'s own runner. In a lane's gate list, `_test` and `_test-changed` are not recipes at
 # all: `./dev gates` replaces each with one node per test suite and per shard of a long suite, so the

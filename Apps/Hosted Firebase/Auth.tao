@@ -1,0 +1,79 @@
+use Account, Session, SignInFlow, SignOut from @tao/auth
+use StackNav from @tao/nav
+use Col, Text, TextInput, TextMultiline from @tao/ui
+use FormButton from @tao/ui/basic
+use ItemList from ./Items
+
+folder
+nav FirebaseNotesAuthNavigator = StackNav {
+   Initial FirebaseNotesAccountGate
+}
+
+scene FirebaseNotesAccountGate() {
+   Title "Firebase Notes"
+   action Leave() {
+      do SignOut()
+   }
+   render Col() [fill] {
+      when Session.State
+         | SignedIn -> {
+            #signOut
+            FormButton("Sign out") {
+               on press Leave
+            }
+            when Account {
+               loading -> Text("Opening account…")
+               missing -> Text("Account data is missing")
+               unauthorized -> Text("You do not have access")
+               error -> Text("Account data could not be loaded")
+               otherwise -> { ItemList() }
+         }  }
+         | Restoring -> Text("Restoring session…")
+         | otherwise -> FirebaseNotesSignIn()
+}  }
+
+view FirebaseNotesSignIn() {
+   state Flow = SignInFlow()
+   action ExistingAccount() {
+      set Flow.Registration = false
+      do Flow.Submit()
+   }
+   action CreateAccount() {
+      set Flow.Registration = true
+      do Flow.Submit()
+   }
+   // TODO: Remove this synthetic validation shortcut after hosted acceptance.
+   action FillValidationCredentials() {
+      set Flow.Email = "tao-hosted-validation@example.test"
+      set Flow.Password = "Tao-validation-only-2026!"
+   }
+   render Col() [fill] {
+      Text("Sign in to Firebase Notes")
+
+      #email
+      TextInput(Value: Flow.Email, Label: "Email") {
+         on submit ExistingAccount
+      }
+
+      #password
+      TextInput(Value: Flow.Password, Label: "Password", Secure: true) {
+         on submit ExistingAccount
+      }
+
+      #signIn
+      FormButton("Sign in", Disabled: Flow.Running) {
+         on press ExistingAccount
+      }
+
+      #createAccount
+      FormButton("Create account", Disabled: Flow.Running) {
+         on press CreateAccount
+      }
+      if Flow.Problem is not empty {
+         TextMultiline(Flow.Problem)
+      }
+
+      #fillValidationCredentials
+      FormButton("Fill validation credentials") {
+         on press FillValidationCredentials
+}  }  }

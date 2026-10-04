@@ -9,7 +9,7 @@ import {
 import * as nodeFs from 'node:fs/promises'
 import * as nodeOs from 'node:os'
 import * as nodePath from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath as nodeFileURLToPath, pathToFileURL } from 'node:url'
 import { messageOf, throwUnexpected, UnexpectedBehaviorError } from './core/Errors'
 import * as Json from './core/Json'
 import { sleep } from './core/Time'
@@ -41,6 +41,11 @@ export function resolvePath(inputPath: string, cwd?: string): string {
   return cwd === undefined
     ? nodePath.resolve(normalizePathPart(inputPath))
     : nodePath.resolve(normalizePathPart(cwd), normalizePathPart(inputPath))
+}
+
+/** fileUrlToPath converts an import-resolved local module URL to a filesystem path. */
+export function fileUrlToPath(url: string): string {
+  return nodeFileURLToPath(url)
 }
 
 /** fileUrl converts a filesystem path into an escaped file URL for local module imports. */

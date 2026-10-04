@@ -1610,8 +1610,11 @@ nativeBarrierTest(
         Expect(result.exitCode).toBe(3)
         Expect(result.stderr).toBe(`WDA launch registration failure category=${category}\n`)
       }
+      // A missing Unix socket must fit the kernel path limit even in a long worktree path.
+      const absentSocket = FS.resolvePath(`tao-wda-absent-${Platform.randomUUID()}`, '/private/tmp')
+      Expect(await FS.exists(absentSocket)).toBe(false)
       const refused = await CLI.run(binary, {
-        env: { ...Platform.runtimeProcess.env, ...environment, TAO_WDA_CHANNEL: FS.resolvePath('absent-socket', root) },
+        env: { ...Platform.runtimeProcess.env, ...environment, TAO_WDA_CHANNEL: absentSocket },
       })
       Expect(refused.exitCode).toBe(3)
       Expect(refused.stderr).toBe(

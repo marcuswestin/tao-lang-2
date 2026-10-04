@@ -1,7 +1,7 @@
 import { Workspace } from '@compiler/workspace'
 import { AST } from '@parser'
 import { findProjectRoot } from '@project-tooling'
-import { Assert, FS, Platform } from '@shared'
+import { Assert, type FirebaseConnection, FS, Platform, readFirebaseConnections } from '@shared'
 import type { DevLoopMobilePublication } from '@shared/DevLoopControl'
 import { withGeneratedModuleLinks } from './generated-module-links'
 import { expoUpdateArtifacts, proveReleaseBundle } from './release-bundle-proof'
@@ -130,8 +130,14 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
       opts.managedPublication === undefined || opts.validationMode !== 'release',
       'managed development identity is not included in a release publication',
     )
+    const requesterRoot = await findProjectRoot(sourcePath)
+    Assert.input(requesterRoot !== undefined, `No Tao project marker (.tao directory) was found for ${sourcePath}.`)
+    const firebase = await readFirebaseConnections(requesterRoot)
+    const firebaseConfiguration = firebase === undefined ? undefined : firebaseConfigurationSlots(firebase)
     const compileOptions = {
       appDatasourceConfiguration: opts.datasourceConfiguration,
+      appFirebaseConfiguration: firebaseConfiguration,
+      appAuthConfiguration: firebaseConfiguration,
       appName: opts.appName,
       // A Studio preview carries debugger gates so a breakpoint can pause it. Nothing else does:
       // an app built for a device or a test run compiles exactly as it did before.
@@ -174,8 +180,6 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
       relativePath: 'ManagedLoopIdentity.ts',
       code: `export default ${JSON.stringify(publication ?? null)}\n`,
     }]
-    const requesterRoot = await findProjectRoot(sourcePath)
-    Assert.input(requesterRoot !== undefined, `No Tao project marker (.tao directory) was found for ${sourcePath}.`)
     await withGeneratedModuleLinks(generatedAppRoot, requesterRoot, compiled.dependencyEnvironments, async () => {
       await writeGeneratedFiles(
         generatedAppRoot,
@@ -207,6 +211,17 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
         }),
     }
   })
+}
+
+function firebaseConfigurationSlots(connection: FirebaseConnection): Readonly<Record<string, string>> {
+  return {
+    ApiKey: connection.apiKey,
+    ProjectId: connection.projectId,
+    AppId: connection.appId,
+    ...(connection.authDomain === undefined ? {} : { AuthDomain: connection.authDomain }),
+    ...(connection.storageBucket === undefined ? {} : { StorageBucket: connection.storageBucket }),
+    ...(connection.messagingSenderId === undefined ? {} : { MessagingSenderId: connection.messagingSenderId }),
+  }
 }
 
 async function managedSourceRevision(projectRoot: string): Promise<string> {

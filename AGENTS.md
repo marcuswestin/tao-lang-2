@@ -27,7 +27,7 @@ The Developer is Tao's author, project lead, and language designer, and decides 
 ## Response format
 
 - Lead with the outcome. Keep expected results to a sentence; surface decisions to confirm, surprises, and anything needing the Developer's judgment. Let other detail wait until asked.
-- Before printing Developer-run commands, check live help for each wrapper, flag and argument. Put exact copyable commands with required arguments and working directory in a shell block in the request, update or handoff.
+- Check live help for Developer-run commands and flags. Give copyable commands and working directory in a shell block. Use `just`, `./dev` or `./tao`, never `./agent`; add missing human commands to `./dev`.
 - Use numbered lists and lettered sub-items, up to three levels ("elaborate 2.b"). Requested summaries use executive-summary bullets, 1–2 sentences each. One point per item; quote errors and output verbatim in code blocks.
 - Depart from this when a root-cause walkthrough or a design argument serves the Developer better. This section governs what they read and nothing else: subagent and agent-to-agent text is exempt from the shape, and the `delegation` skill owns what a subagent's report must contain instead.
 - After a meaningful chunk, recommend the next slice. Harness settings compact context automatically; at a natural break before an unrelated slice, refresh `.artifacts/checkpoint/<branch>.md` and offer `/compact` or a fresh session.

@@ -643,6 +643,77 @@ Deferred that day, to finish before MVP:
   journey file's leftover timers.
 - Done: every box above is checked on `main`.
 
+### A21 — Keep a developer's hosted project IDs out of shared source
+
+- Decision, 2026-10-04: the Developer approved ignored project-local `.tao/local/connections.json`
+  for the first ordinary Firebase Tao flow. Existing all-provider installation stays for this
+  slice; selective installation is deferred. The original Hosted CRUD/Appwrite pilot compatibility
+  path and removal of its tracked project IDs remain outstanding. The ordinary Firebase
+  configuration reader and CLI-created validation app now implement that local path; hosted
+  acceptance for the new app remains separate.
+
+- [ ] **Before MVP:** decide where `tao connect` records a developer's hosted project identifiers,
+      and move them there. Today `Apps/Hosted CRUD/tao.connections.json` is tracked, and it commits
+      the Developer's own Firebase project `tao-hosted-crud-79c429` and its public web config. The
+      Developer chose this on 2026-09-29 so the pilot runs from a clean checkout. A shared or
+      published app instead needs a placeholder template in Git, a per-developer untracked file or
+      one per environment, and a clear first-run message when the IDs are missing.
+- The Firebase web API key and app ID are public client identifiers, not secrets. Appwrite's setup
+  key already lives in the ignored `.tao/connect-secrets.json`. The concern is that every clone
+  points at one person's project and its quotas, and the IDs churn in unrelated diffs.
+- Context: `Docs/Roadmap/Hosted provider continuation.md`, `Apps/Hosted CRUD/README.md`, and `A19`
+  for the CLI secret store.
+
+### A22 — Make the automated CLI setup flows consistent and pleasant
+
+`tao connect firebase`, `tao connect appwrite`, and `tao connect run` each grew their own prompts
+during the 2026-09-29 pilot, and running them showed rough edges. Examples: a prompt printed twice;
+Return meant "create another project" after a failed run had already created one; the Free plan's
+project limit surfaced only as a raw CLI error; the Expo Go account step read as a wall of text; and
+Metro's own UI took over the terminal.
+
+- [ ] **Before MVP:** one shared shape for every automated flow, so a developer can always tell
+      which steps are required, which are optional, and what happens next. That covers a numbered
+      step list up front, the same prompt wording and Return-default conventions, visible progress
+      per step, and one closing summary with the next command.
+- [ ] **Before MVP:** safe defaults that never spend a limited resource without an explicit
+      choice. Examples are reusing what an earlier run created and naming plan limits before
+      hitting them.
+- [ ] **Before MVP:** failures say what was already done, what was not, and the one command that
+      resumes. Provider CLI errors are translated rather than passed through.
+- [x] Replace Expo's terminal screen in `tao connect run` with Tao's own interactive screen: a QR
+      code, per-platform bundling progress, readable build errors, device logs, and Tao's own keys
+      (`r` reload, `i` iOS Simulator, `a` Android emulator, `c` Show connection,
+      `d` Device (Android/iPhone), `q` quit; `?` aliases `c`). Implemented as
+      `hosted-crud-metro.ts` on 2026-09-29; checked against real Metro. On 2026-10-04 the Developer
+      confirmed the larger repaired QR scans on iPhone; the compact replacement needs a new scan.
+- [ ] **Before MVP:** accept Android emulator launch (`a`) in `tao connect run`. The action now
+      calls Expo's Android POST endpoint; prove real launch, reload, logs, and clean stop.
+      The physical-device action (`d`) shows a QR for Expo Go on Android/iPhone; verify both
+      platforms on real devices, including the repaired QR and account requirements. The run
+      screen uses a compact Actions line rather than an initial target menu or action list.
+- [ ] **Before MVP:** a test that starts real Metro and checks the event and address shapes, so an
+      Expo upgrade that moves the internals below fails loudly; and the same screen for the dev
+      loop, which still relays Expo's raw lines.
+- Spike (2026-09-29, Expo CLI 57.0.27, Hosted CRUD): Tao's own screen is feasible.
+  - Expo's `/events` WebSocket never delivers events; it registers clients on one server and
+    serves another. Expo also replaces any `reporter` set in `metro.config`.
+  - Starting Expo as `node --require <preload> node_modules/expo/bin/cli start --go`, with stdout
+    piped and stdin closed, avoids Expo's screen and keeps file watching. The preload wraps
+    `MetroTerminalReporter.prototype.update` and writes each Metro event as a JSON line.
+  - That captured `bundle_build_started` (platform, entry), `bundle_transform_progressed_throttled`
+    (transformed and total files), `bundle_build_done`, and `bundling_error`. The error carries
+    message, filename, line, column, and type. `client_log` needs a connected device and was not
+    exercised.
+  - For the address, Expo's own `GET /_expo/open?platform=ios` (with an `Origin` header) answers
+    the `exp://<LAN IP>:<port>` URL Expo's QR code encodes, over plain HTTP; the dev loop already
+    reads it the same way. Tao does not work out the address itself. `POST` to the same route
+    opens the app in the iOS Simulator.
+  - `CI=1` is unusable: it turns off watching and reloads, and prints only a localhost URL.
+  - The reporter hook uses Expo internals, so pin Expo exactly.
+- Context: `packages/cli/tao-cli/cli-src/connect-command.ts`, `firebase-provision.ts`,
+  `appwrite-provision.ts`, `hosted-crud-run.ts`, and `A21`.
+
 ## Project tracking
 
 ### A17 — In-repository issues with git-bug, synced to GitHub Issues

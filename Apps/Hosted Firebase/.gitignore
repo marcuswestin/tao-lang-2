@@ -1,0 +1,7 @@
+/.tao-ts/
+/.tao/*
+!/.tao/.gitkeep
+!/.tao/project.json
+!/.tao/lock.jsonc
+!/.tao/skills.version
+node_modules/

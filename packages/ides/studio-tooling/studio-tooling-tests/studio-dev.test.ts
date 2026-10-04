@@ -1299,6 +1299,11 @@ Describe('Studio smoke resource isolation', () => {
       second = await StudioPreviewRuntime.create(sourceRoot, { artifactRoot })
       Expect(first.root === second.root).toBe(false)
       Expect(first.root.startsWith(`${artifactRoot}/`)).toBe(true)
+      // Expo resolves these local plugins from the generated project, not the source toolchain.
+      const config = await FS.readJson<{ expo: { plugins: unknown[] } }>(FS.resolvePath('app.json', first.root))
+      Expect(config.expo.plugins).toContain('./plugins/with-jazz-podfile-properties.cjs')
+      Expect(await FS.isFile(FS.resolvePath('plugins/with-jazz-podfile-properties.cjs', first.root))).toBe(true)
+      Expect(await FS.isFile(FS.resolvePath('plugins/with-ios-fmt-compat.cjs', first.root))).toBe(true)
       // Expo refuses to start a TypeScript project unless `typescript` resolves from its root, and the
       // repository hoists it above the linked package node_modules.
       Expect(await FS.realPath(Bun.resolveSync('typescript/package.json', second.root))).toBe(

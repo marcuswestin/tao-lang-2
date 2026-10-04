@@ -1,5 +1,5 @@
 import Workspace from '@compiler/workspace'
-import { FS } from '@shared'
+import { FS, ProjectIdentity } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { lowerCreationPlan, writeCreationFiles } from '../cli-src/create/creation-lowering'
 import { type CreationPlan, validateCreationPlan } from '../cli-src/create/creation-plan'
@@ -66,6 +66,7 @@ Describe('tao create lowering', () => {
     try {
       const generated = FS.resolvePath('field-notes', root)
       await writeCreationFiles(generated, lowerCreationPlan(plan))
+      await ProjectIdentity.ensure(generated)
       const gitignore = await FS.readText(FS.resolvePath('.gitignore', generated))
       Expect(gitignore).toContain('!/.tao/skills.version\n')
       await runFix(generated, { cwd: root })

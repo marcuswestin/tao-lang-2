@@ -13,6 +13,7 @@ import {
   HCI,
   Platform,
   ProjectIdentity,
+  readFirebaseConnections,
   ReleaseCapabilities,
   Repo,
 } from '@shared'
@@ -88,18 +89,12 @@ export async function runTaoBuild(path: string, options: BuildOptions): Promise<
   }
   const id = `${new Date().toISOString().replaceAll(/[:.]/g, '-')}-${Platform.randomUUID().slice(0, 8)}`
   const artifactRoot = FS.resolvePath(id, buildsRoot)
-  // Git-aware package discovery intentionally includes explicitly requested scratch projects.
-  const workRoot = await Repo.mkScratchDirOrHost('tao-build-')
   const dependencyEnvironments = await selectedDependencyEnvironments(app.projectRoot, app.appName)
   const roots = [...new Set(dependencyEnvironments.map(environment => FS.resolvePath(environment.projectRoot)))]
   await Promise.all(roots.map(root => ProjectIdentity.ensure(root)))
   const externalSidecars = [...new Set(refreshed.externalSidecarInputPaths.map(path => FS.resolvePath(path)))]
     .toSorted()
   const commonRoot = commonProjectAncestor([...roots, ...externalSidecars.map(path => FS.dirname(path))])
-  const snapshotBase = FS.resolvePath('source', workRoot)
-  const snapshotRootFor = (root: string) => FS.resolvePath(FS.relativePath(commonRoot, root), snapshotBase)
-  const snapshotRoot = snapshotRootFor(app.projectRoot)
-  const snapshotApp = FS.resolvePath(FS.relativePath(app.projectRoot, app.appPath), snapshotRoot)
   const record: BuildRecord = {
     appName: app.appName,
     createdAt: new Date().toISOString(),
@@ -118,7 +113,16 @@ export async function runTaoBuild(path: string, options: BuildOptions): Promise<
     await ensureBuildsIgnored(app.projectRoot)
   }
   const progress = new BuildProgress(selectedTargets, id)
+  // External host sidecars must remain outside any containing Tao project after snapshotting.
+  // Ordinary snapshots still use Git-aware, explicitly requested worktree scratch projects.
+  const workRoot = externalSidecars.length > 0
+    ? await FS.mkTmpDir('tao-build-')
+    : await Repo.mkScratchDirOrHost('tao-build-')
   try {
+    const snapshotBase = FS.resolvePath('source', workRoot)
+    const snapshotRootFor = (root: string) => FS.resolvePath(FS.relativePath(commonRoot, root), snapshotBase)
+    const snapshotRoot = snapshotRootFor(app.projectRoot)
+    const snapshotApp = FS.resolvePath(FS.relativePath(app.projectRoot, app.appPath), snapshotRoot)
     progress.start()
     const sourceDigests = await Promise.all(
       roots.toSorted().map(async root =>
@@ -555,6 +559,7 @@ async function installTreeIdentity(root: string): Promise<string> {
 
 async function snapshotProject(projectRoot: string, snapshotRoot: string): Promise<string> {
   const realRoot = await FS.realPath(projectRoot)
+  const firebase = await firebaseConnectionSnapshot(projectRoot)
   const sources: string[] = []
   for await (
     const source of FS.walk(projectRoot, {
@@ -589,6 +594,10 @@ async function snapshotProject(projectRoot: string, snapshotRoot: string): Promi
     digests.push(`.tao/lock.jsonc:${Platform.sha256Hex(lock)}`)
     await FS.writeFile(FS.resolvePath('.tao/lock.jsonc', snapshotRoot), lock)
   }
+  if (firebase !== undefined) {
+    digests.push(`.tao/local/connections.json:${Platform.sha256Hex(firebase)}`)
+    await FS.writeText(FS.resolvePath('.tao/local/connections.json', snapshotRoot), firebase)
+  }
   const after: string[] = []
   for await (
     const source of FS.walk(projectRoot, {
@@ -613,7 +622,17 @@ async function snapshotProject(projectRoot: string, snapshotRoot: string): Promi
   if (Platform.sha256Hex(await FS.readFile(identityPath)) !== Platform.sha256Hex(identity)) {
     Errors.throwUserInput('Project identity changed while creating the build snapshot; retry the build.')
   }
+  if (await firebaseConnectionSnapshot(projectRoot) !== firebase) {
+    Errors.throwUserInput('Firebase settings changed while creating the build snapshot; retry the build.')
+  }
   return Platform.sha256Hex(digests.join('\n'))
+}
+
+async function firebaseConnectionSnapshot(projectRoot: string): Promise<string | undefined> {
+  const firebase = await readFirebaseConnections(projectRoot)
+  return firebase === undefined ? undefined : JSON.stringify({
+    firebase: Object.fromEntries(Object.entries(firebase).toSorted(([left], [right]) => left.localeCompare(right))),
+  })
 }
 
 async function exportWeb(
@@ -632,6 +651,7 @@ async function exportWeb(
     }
     await FS.copyFile(source, FS.resolvePath(file, runtimeRoot))
   }
+  await FS.copyDirectory(FS.resolvePath('plugins', toolchainRoot), FS.resolvePath('plugins', runtimeRoot))
   // An installed Tao resolves its host's packages on first use; inside a checkout this does nothing.
   await HostDependencies.ensure()
   const modules = RuntimeToolchainPaths.dependencyRoot()

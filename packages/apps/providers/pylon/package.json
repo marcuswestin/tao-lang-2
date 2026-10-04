@@ -1,0 +1,21 @@
+{
+  "name": "tao-pylon",
+  "private": true,
+  "version": "1.0.0",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "module": "pylon-src/Pylon.ts",
+  "exports": {
+    ".": "./pylon-src/Pylon.ts",
+    "./auth": "./pylon-src/PylonAuth.ts",
+    "./generate": "./pylon-src/generate.ts"
+  },
+  "dependencies": {
+    "@pylonsync/react": "0.20.0",
+    "@pylonsync/react-native": "0.20.0",
+    "@pylonsync/functions": "0.20.0",
+    "@pylonsync/sdk": "0.20.0",
+    "@pylonsync/sync": "0.20.0",
+    "tao-shared": "workspace:*"
+  }
+}

@@ -5,7 +5,7 @@ import { runTaoInstall } from '../cli-src/install-command'
 
 Describe('tao build project dependency snapshot', () => {
   Test('builds an own-app view through an unmarked sibling helper without copying its neighbours', async () => {
-    const root = await mkTestDir('tao-build-external-sidecar-')
+    const root = await mkTestDir('tao-build-external-sidecar-', { location: 'host' })
     const app = FS.resolvePath('App', root)
     const output = FS.resolvePath('builds', root)
     try {

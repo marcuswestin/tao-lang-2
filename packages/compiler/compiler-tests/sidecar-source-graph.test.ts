@@ -94,7 +94,7 @@ Describe('sidecar source graph', () => {
   })
 
   Test('records external ownership markers even when a binding is rejected', async () => {
-    const root = await mkTestDir('tao-external-sidecar-watch-')
+    const root = await mkTestDir('tao-external-sidecar-watch-', { location: 'host' })
     try {
       const projectRoot = FS.resolvePath('App', root)
       const externalPath = FS.resolvePath('Host/Widget.tsx', root)
@@ -139,7 +139,7 @@ Describe('sidecar source graph', () => {
   })
 
   Test('accepts a same-project symlink and a local unmarked host link', async () => {
-    const root = await mkTestDir('tao-symlink-sidecar-parity-')
+    const root = await mkTestDir('tao-symlink-sidecar-parity-', { location: 'host' })
     try {
       const projectRoot = FS.resolvePath('App', root)
       await FS.writeText(FS.resolvePath('App/.tao/.gitkeep', root), '')

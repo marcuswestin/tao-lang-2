@@ -192,7 +192,20 @@ const commands = new Map<string, ReleaseCapability>([
     'secrets remove',
   ]
     .map(name => [name, 'project-secrets'] as const),
-  ...['instantdb', 'instantdb push'].map(name => [name, 'hosted-data'] as const),
+  ...[
+    'instantdb',
+    'instantdb push',
+    'connect',
+    'jazz',
+    'jazz generate',
+    'convex',
+    'convex generate',
+    'pylon',
+    'pylon generate',
+    'firebase',
+    'firebase generate',
+  ]
+    .map(name => [name, 'hosted-data'] as const),
 ])
 const targets = new Map<string, ReleaseCapability>([
   ['web', 'core'],
@@ -204,6 +217,8 @@ const targets = new Map<string, ReleaseCapability>([
 ])
 // Keyed by long flag, or by `<command path> <flag>` where one command gives a flag another meaning.
 const options = new Map<string, ReleaseCapability>([
+  ['create --provider', 'hosted-data'],
+  ['create --validation-tools', 'hosted-data'],
   ...[
     '--app',
     '--json',

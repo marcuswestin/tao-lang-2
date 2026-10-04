@@ -1,0 +1,42 @@
+// Node preload for `tao connect run`; hosted-crud-metro.ts copies it beside the app and starts Expo CLI with it.
+//
+// Expo CLI force-installs its own Metro reporter and its `/events` socket delivers nothing, so the only
+// dependable view of bundling is the reporter itself: this wraps `MetroTerminalReporter.update` and
+// appends each event to TAO_METRO_EVENTS as a JSON line. Metro's transform workers inherit `--require`
+// but not the deleted variable, so only the server process reports. The per-file progress event is
+// dropped; its throttled twin carries the same counts.
+const file = process.env.TAO_METRO_EVENTS
+delete process.env.TAO_METRO_EVENTS
+if (file) {
+  const fs = require('node:fs')
+  const Module = require('node:module')
+  const fd = fs.openSync(file, 'a')
+  const plain = value =>
+    value instanceof Error
+      ? {
+        name: value.name,
+        message: value.message,
+        filename: value.filename,
+        lineNumber: value.lineNumber,
+        column: value.column,
+      }
+      : value
+  const load = Module._load
+  Module._load = function(request) {
+    const exported = load.apply(this, arguments)
+    const Reporter = exported && exported.MetroTerminalReporter
+    if (Reporter && !Reporter.taoPatched && String(request).endsWith('/MetroTerminalReporter')) {
+      Reporter.taoPatched = true
+      const update = Reporter.prototype.update
+      Reporter.prototype.update = function(event) {
+        if (event && event.type !== 'bundle_transform_progressed') {
+          try {
+            fs.writeSync(fd, JSON.stringify(event, (_key, value) => plain(value)) + '\n')
+          } catch {}
+        }
+        return update.call(this, event)
+      }
+    }
+    return exported
+  }
+}
