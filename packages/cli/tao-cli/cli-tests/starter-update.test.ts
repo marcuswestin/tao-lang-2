@@ -3,21 +3,26 @@ import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { updateStarterFiles } from './test-starter-lowering'
 
 Describe('starter updates', () => {
-  Test('keeps the checked-in project identity when regenerating starter source', async () => {
+  Test('keeps the checked-in project identity and local state when regenerating starter source', async () => {
     const root = await mkTestDir('tao-starter-identity-')
     try {
       const source = FS.resolvePath('source', root)
       const target = FS.resolvePath('target', root)
       const original = { id: '550e8400-e29b-41d4-a716-446655440000' }
+      const localStatePath = FS.resolvePath('.tao/local/studio/session.json', target)
+      const localState = { sessionId: 'private-studio-session' }
       await FS.writeJson(FS.resolvePath('.tao/project.json', source), {
         id: '550e8400-e29b-41d4-a716-446655440001',
       })
       await FS.writeText(FS.resolvePath('App.tao', source), 'new app')
       await FS.writeJson(FS.resolvePath('.tao/project.json', target), original)
+      await FS.writeJson(localStatePath, localState)
 
       await updateStarterFiles(source, target)
 
       Expect(await FS.readJson(FS.resolvePath('.tao/project.json', target))).toEqual(original)
+      Expect(await FS.exists(localStatePath)).toBe(true)
+      Expect(await FS.readJson(localStatePath)).toEqual(localState)
       Expect(await FS.readText(FS.resolvePath('App.tao', target))).toBe('new app')
     } finally {
       await FS.remove(root)

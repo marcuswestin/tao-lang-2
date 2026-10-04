@@ -49,6 +49,17 @@ authoritative close and dispose the wrapper. Desktop8 and ship6 pass again at
 pass in the integrated check `17-31-34-815Z-64289-9d1bb9d7`. No output exception or production
 liveness policy was added. Full readiness remains unproved until a complete final-tree gate passes.
 
+The fifth readiness run passes the executed quiet browser/native proofs and developer CLI,
+desktop-host, lint and typecheck checks, but stops on starter reproduction: both checked-in
+starters contain stale copies of canonical skill descriptions. The 40 description copies are
+regenerated through the existing `TAO_UPDATE_STARTERS=1 ./agent test-file` route, without manual
+generated edits. A regression first demonstrates that the updater deletes unrelated local
+`.tao/` files; its stale-target deletion now preserves them. Updater2 and both update-off starter
+tests pass (`17-42-56-317Z-57022`, `17-44-13-927Z-65540`, `17-44-13-927Z-65539`). Existing
+project identities and all four local TypeScript files retain their hashes. Authored stale-file
+removal, dependency preservation and symlink refusal are unchanged. Complete final-tree verification
+and refreshed no-execution message review are still required; do not infer readiness from the partial run.
+
 The Developer requested a pause at a good stopping point to preserve effort and tokens for other
 work, and explicitly deferred all remaining managed-loop and isolated native acceptance until
 post-MVP. The subsequent instruction authorizes committing the completed implementation in chunks
