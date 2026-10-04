@@ -90,13 +90,28 @@ their branches. The coordinator reviews and validates the combined tree before l
 Second-wave return status: B's Studio repair and renderer runtime are frozen and integrated;
 D's lexical runtime plus its single-adoption joining repair are frozen and integrated. Their listed
 source paths have returned to the coordinator. A's concrete signatures and complete-correspondence
-repair are reviewed and integrated; the coordinator publishes their shared facade. C's alias/
-persisted-output completion repair remains active in its separate worktree and is excluded from
-the current foundation landing. Its bounded recognition hooks in TR.ts and TR-persisted-state.ts
-remain reserved until the repaired chain is frozen, reviewed and integrated. Their next proposals
-remain read-only; no capability, numeric/unit or slot frontend release is implied by this manifest.
-TR.ts remains reserved until C's reviewed accessor chain is integrated. The coordinator owns the
-callable export hook, subsequent runtime facade hooks, combined verification and landing.
+repair are reviewed and integrated; the coordinator published their shared facade. The foundation
+landed at `580f88cc5d8bec4682ebe430d08068f16aac3cb3`. C's accessor chain, including complete alias
+and persisted-output recognition, is reviewed and integrated on the follow-up numeric branch.
+The coordinator retains TR.ts and native publication; existing cleanup facade methods are published.
+
+Current exclusive assignments:
+
+- A owns the parameter-array overload in callable-signatures.ts and its existing test, preserving
+  the ordinary binder. Associated capability/method/converter source remains withheld.
+- C owns the complete numeric/unit construction vertical: its focused feature modules/tests,
+  numeric grammar integration and parser AST/scoping, Type.ts, the AST facade, registrations,
+  NumericUnitsCompiler and ExpressionsCompiler. No other manager writes these shared seams.
+- D owns existing-block cleanup lowering in ActionsCompiler.ts, action-control-flow.ts and a new
+  defer-actions compiler test. Defer grammar, then/result-token and purity extensions remain held.
+- B's renderer paths have returned; slot frontend and foreign adapters remain held. Its current
+  generated quantity export-name investigation is read-only.
+- The coordinator owns Backend/bridge-metadata/project tooling/native factory publication,
+  InvocationsCompiler/FunctionalCoreCompiler caller adaptations, runtime facade, preparatory
+  comma-helper retirement, app/stdlib graduation, combined verification and landing.
+
+Managers implement against supplied frozen inputs in isolated worktrees and reconcile the landed
+base before frozen return. This manifest transfers no unlisted shared file implicitly.
 
 1. A preserves resolveArgumentBindings's parameter-ordered pairs and diagnostics, and the existing
    named/dynamic/unresolved action resolver. D consumes these APIs unchanged in its first slice.

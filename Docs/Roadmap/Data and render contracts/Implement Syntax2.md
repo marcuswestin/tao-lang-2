@@ -7,18 +7,25 @@ This task records the implementation program. The design baseline landed on main
 `825637cd72395958bfbab396e5e8de13e604b90e`. The first render foundation and executable shell landed
 at `3bcd71647bfcbc5e6a371c3cd8fcccba8b1fb6f2` after full host verification. Four separate manager
 worktrees delivered A1 nominal/binding, B1 accessibility prefixes, D1 open failure contracts and
-C1 checked-quantity runtime storage. The integration branch adds public wildcard imports, erased
-native sidecar type checks and preparatory comma migration. Its first-wave combined host proof
-passed before later runtime changes; fresh combined verification is required for landing.
+C1 checked-quantity runtime storage. The shared foundation landed at
+`580f88cc5d8bec4682ebe430d08068f16aac3cb3` with public wildcard imports, erased native sidecar
+type checks, preparatory comma migration and the runtime cleanup facade. Combined host verification
+passed at that tree; lint, typecheck and runtime packaging reused exact-tree green evidence.
 Reviewed second-wave renderer descriptors provide independently mounted placements, fresh captures
 and own-property default selection. Lexical cleanup runtime joins admitted work, drains serial
 LIFO cleanup and preserves primary failures; scoped foreign thenables are adopted once. These
 runtime leaves do not yet expose the selected slot/defer source grammar or compiler lowering.
 Concrete callable signatures now cover required inputs before preferring exact matches, preserving
-ambiguity and ordinary argument binding. Uniform native accessors are undergoing a bounded
-complete-output identity repair in their separate worktree and are excluded from this landing.
+ambiguity and ordinary argument binding. The separately reviewed uniform native accessor chain is
+now integrated on `feat/syntax2-numeric-construction`; complete returned wrapper identities survive
+selection, callable results and persisted snapshots. Focused accessor, quantity and cleanup tests
+pass together; combined proof for this follow-up remains pending.
 Checked native factory publication, capabilities, full slots, units, cleanup lowering and app
 adapter/list graduation remain. No language stream is complete.
+Numeric/unit construction, the parameter-array signature adapter and existing-block cleanup
+compiler lowering are active in separate worktrees. The coordinator retains native factory
+publication, shared compiler callers, app graduation and combined proof; slot and associated
+capability frontend work waits for numeric grammar/type ownership to return.
 Reconciled with the 2026-10-04 project/module migration before baseline landing.
 
 Planning readiness: **100% for the high-level implementation plan**, reviewed 2026-10-04.

@@ -515,6 +515,12 @@ path rather than to a Tao declaration — there are no default exports, in eithe
 what lets one sidecar back several bindings. Arguments are ordinary Tao expressions, evaluated on the
 Tao side and passed as plain JavaScript values; the result is wrapped as a Tao value.
 
+Runtime values expose `getJSValue()` at the trusted TypeScript boundary. It evaluates a live value
+once per read, retains ordinary payload identity, and extracts a checked quantity's canonical
+number regardless of its selected unit view. Aliases, cells and persisted owners stay live;
+complete value wrappers returned through runtime helpers retain their identity. Quantity-backed
+source declarations and generated native factories remain a separate implementation slice.
+
 Tao owns the type. A bridged value therefore needs a declared one — a `returns` clause, or a
 `let Name is Type =` ascription — and that declaration is the contract the sidecar must satisfy. The
 compiler copies the named sidecar beside its generated module and imports the export from there.
