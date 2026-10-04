@@ -244,7 +244,7 @@ for (
               .replace('[title]', '[headline]'),
           )
         }
-        for (const url of urls) {
+        for (const [index, url] of urls.entries()) {
           Expect(
             await Time.pollUntil(() =>
               browser!.evaluateInFrame<boolean>(
@@ -253,7 +253,10 @@ for (
                 { world: 'page' },
               ), { intervalMs: 50, timeoutMs: 30_000 }),
           ).toBe(true)
-          if (!configuration.focused) {
+          if (configuration.focused) {
+            Expect(await browser.evaluateInFrame(url, `document.body.textContent.includes('Count: ${index + 1}')`))
+              .toBe(true)
+          } else {
             Expect(await browser.evaluateInFrame(url, 'document.body.textContent.includes("Detail")')).toBe(true)
           }
         }

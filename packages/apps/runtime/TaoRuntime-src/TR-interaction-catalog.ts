@@ -623,21 +623,32 @@ function usesInteractionDesign(props: TaoProps | undefined): boolean {
   const design = TaoPropsControls.ambientContext(props).app?.design
   let current = props
   while (current) {
-    const renderDesign = DesignControls.forSource(design, current.designSpec?.source ?? current.designSource)
-    const headerDesign = DesignControls.forSource(design, current.declarationSpec?.source ?? current.designSource)
-    const defaultDesign = DesignControls.forSource(design, current.designSource)
+    const occurrenceProps = current
+    const renderDesigns = DesignControls.forSourceCandidates(
+      design,
+      occurrenceProps.designSpec?.source ?? occurrenceProps.designSource,
+    )
+    const headerDesigns = DesignControls.forSourceCandidates(
+      design,
+      occurrenceProps.declarationSpec?.source ?? occurrenceProps.designSource,
+    )
+    const defaultDesigns = DesignControls.forSourceCandidates(design, occurrenceProps.designSource)
     if (
-      designSpecUsesInteraction(current.designSpec, renderDesign, new Set())
-      || designSpecUsesInteraction(current.declarationSpec, headerDesign, new Set())
-      || designSpecUsesInteraction(
-        current.designDefault === undefined ? undefined : defaultDesign?.bundles[current.designDefault],
-        defaultDesign,
-        new Set(),
+      renderDesigns.some(candidate => designSpecUsesInteraction(occurrenceProps.designSpec, candidate, new Set()))
+      || headerDesigns.some(candidate =>
+        designSpecUsesInteraction(occurrenceProps.declarationSpec, candidate, new Set())
+      )
+      || defaultDesigns.some(candidate =>
+        designSpecUsesInteraction(
+          occurrenceProps.designDefault === undefined ? undefined : candidate?.bundles[occurrenceProps.designDefault],
+          candidate,
+          new Set(),
+        )
       )
     ) {
       return true
     }
-    current = current.callerProps
+    current = occurrenceProps.callerProps
   }
   return false
 }

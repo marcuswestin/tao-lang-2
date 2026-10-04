@@ -7,6 +7,41 @@ import { Describe, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
 import { ProjectTooling } from '../project-tooling-src/ProjectToolingService'
 
 Describe('project tooling disk refresh', () => {
+  Test('keeps current diagnostics across overlapping watches and a reopened watch', async () => {
+    const root = await mkTestDir('tao-tooling-watched-program-', { location: 'host' })
+    const watches: Awaited<ReturnType<typeof ProjectTooling.watch>>[] = []
+    try {
+      await FS.mkdir(FS.resolvePath('.tao', root))
+      const source = FS.resolvePath('Main.ts', root)
+      await FS.writeText(source, 'export const value: number = 1\n')
+      const first = await ProjectTooling.watch(root, {})
+      watches.push(first)
+      const second = await ProjectTooling.watch(root, {})
+      watches.push(second)
+      Expect(first.lastResult.status).toBe('fresh')
+      Expect(second.lastResult.status).toBe('fresh')
+      await first.dispose()
+      await first.dispose()
+
+      await FS.writeText(source, 'export const value: number = "wrong"\n')
+      const invalid = await second.requestRefresh()
+      Expect(invalid.status).toBe('stale')
+      Expect(invalid.diagnostics.some(diagnostic => diagnostic.code === 'TS2322')).toBe(true)
+      await FS.writeText(source, 'export const value: number = 2\n')
+      Expect((await second.requestRefresh()).status).toBe('fresh')
+      await second.dispose()
+
+      await FS.writeText(source, 'export const value: number = "wrong again"\n')
+      const reopened = await ProjectTooling.watch(root, {})
+      watches.push(reopened)
+      Expect(reopened.lastResult.status).toBe('stale')
+      Expect(reopened.lastResult.diagnostics.some(diagnostic => diagnostic.code === 'TS2322')).toBe(true)
+    } finally {
+      await Promise.all(watches.map(watch => watch.dispose()))
+      await FS.remove(root)
+    }
+  })
+
   Test('initializes a missing project identity and reports an invalid existing one', async () => {
     const root = await mkTestDir('tao-tooling-project-identity-', { location: 'host' })
     try {

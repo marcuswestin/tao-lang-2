@@ -1,4 +1,4 @@
-import { Errors, FS, HCI, Platform, ProjectLocal, Repo, Time } from '@shared'
+import { Errors, FS, HCI, Platform, ProjectIdentity, ProjectLocal, Repo, Time } from '@shared'
 import { Expect, mkTestDir, Test } from '@shared/test'
 import {
   openStudioPreviewSession,
@@ -873,10 +873,8 @@ Test('Studio publication-off preview renders edits without reloading its frame',
   let studio: Awaited<ReturnType<typeof startStudioSmokeLaunch>> | undefined
   try {
     await FS.writeText(sourcePath, fastRefreshSource)
-    await FS.writeText(
-      FS.resolvePath('Project.tao', projectRoot),
-      'project { id "tao-studio-publication-off-smoke" name "Publication off smoke" }\n',
-    )
+    await FS.mkdir(FS.resolvePath('.tao', projectRoot))
+    await ProjectIdentity.ensure(projectRoot)
     studio = await startStudioSmokeLaunch({
       appName: 'RefreshSmoke',
       previewPublication: 'off',

@@ -19,13 +19,14 @@ import {
   removeLegacyAdjacentContracts,
 } from './ProjectOutputPublisher'
 import type { ProjectToolingOptions, ProjectToolingResult, ProjectToolingService } from './ProjectTooling'
-import { checkProjectTypeScriptWithConfigInputs } from './ProjectTypeScriptCheck'
+import { checkProjectTypeScriptWithConfigInputs, ProjectTypeScriptProgramSession } from './ProjectTypeScriptCheck'
 import { findProjectRoot, writeProjectTypeScriptConfigUnderLock } from './ProjectTypeScriptConfig'
 
 const revisions = new Map<string, number>()
 const lastDependencyRoots = new Map<string, readonly string[]>()
 const lastPrivatePackages = new Map<string, ReadonlySet<string>>()
 const lastGoodResults = new Map<string, ProjectToolingResult>()
+const typeScriptSessions = new Map<string, { references: number; session: ProjectTypeScriptProgramSession }>()
 
 /** ProjectTooling refreshes saved project files and owns their generated TypeScript publication. */
 export const ProjectTooling: ProjectToolingService = {
@@ -50,7 +51,11 @@ export const ProjectTooling: ProjectToolingService = {
     }
     await ProjectLocal.prepare(root)
     const lockPath = ProjectLocal.cacheResolve('locks/ts-gen-lock', root)
-    const refreshed = await FS.withFileMutationLock(lockPath, root, async () => await refreshUnderLock(root, options))
+    const refreshed = await FS.withFileMutationLock(
+      lockPath,
+      root,
+      async () => await refreshUnderLock(root, options, typeScriptSessions.get(root)?.session),
+    )
     if (refreshed.status === 'fresh') {
       lastGoodResults.set(root, refreshed)
     }
@@ -59,15 +64,46 @@ export const ProjectTooling: ProjectToolingService = {
   async watch(root, options) {
     const projectRoot = await findProjectRoot(root) ?? FS.resolvePath(root)
     const { startProjectFileWatch } = await import('./ProjectFileWatch')
-    return await startProjectFileWatch(
-      projectRoot,
-      options,
-      async () => await ProjectTooling.refresh(projectRoot, options),
-    )
+    const retained = typeScriptSessions.get(projectRoot)
+      ?? { references: 0, session: new ProjectTypeScriptProgramSession() }
+    retained.references += 1
+    typeScriptSessions.set(projectRoot, retained)
+    const release = () => {
+      retained.references -= 1
+      if (retained.references === 0) {
+        retained.session.clear()
+        typeScriptSessions.delete(projectRoot)
+      }
+    }
+    try {
+      const watch = await startProjectFileWatch(
+        projectRoot,
+        options,
+        async () => await ProjectTooling.refresh(projectRoot, options),
+      )
+      let disposal: Promise<void> | undefined
+      return {
+        get lastResult() {
+          return watch.lastResult
+        },
+        requestRefresh: () => watch.requestRefresh(),
+        dispose() {
+          disposal ??= watch.dispose().finally(release)
+          return disposal
+        },
+      }
+    } catch (error) {
+      release()
+      throw error
+    }
   },
 }
 
-async function refreshUnderLock(root: string, options: ProjectToolingOptions): Promise<ProjectToolingResult> {
+async function refreshUnderLock(
+  root: string,
+  options: ProjectToolingOptions,
+  typeScriptSession?: ProjectTypeScriptProgramSession,
+): Promise<ProjectToolingResult> {
   try {
     await ProjectIdentity.ensure(root)
   } catch (error) {
@@ -301,12 +337,18 @@ async function refreshUnderLock(root: string, options: ProjectToolingOptions): P
   const published = await publishProjectOutputs(root, planned)
   changedOutputPaths.push(...published.changedOutputPaths)
   changedOutputPaths.push(...await removeLegacyAdjacentContracts(root))
+  const hasExternalSidecars = externalSidecarInputs.size > 0
+    || (planned === undefined && (lastGoodResults.get(root)?.externalSidecarInputPaths.length ?? 0) > 0)
+  if (hasExternalSidecars) {
+    typeScriptSession?.clear()
+  }
   const typeCheck = await checkProjectTypeScriptWithConfigInputs(
     root,
     published.contractPaths,
     published.snapshotPaths,
     published.sourceMappings,
     options,
+    hasExternalSidecars ? undefined : typeScriptSession,
   )
   diagnostics.push(...typeCheck.diagnostics)
   const status = Diagnostics.hasError(diagnostics) ? 'stale' : 'fresh'

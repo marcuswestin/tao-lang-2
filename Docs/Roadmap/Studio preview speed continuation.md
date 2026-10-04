@@ -130,6 +130,16 @@ snapshot, and consumers awaiting a newer design suspend. The preview acknowledge
 after the content commits beneath that Suspense boundary. Ordinary unknown style names still fail.
 Focused regressions cover both arrival orders, same-source reverts, deleted and previously unvisited
 consumers, multiple mounted generations, and acknowledgment after suspension.
+An intermediate disk publication can rename a bundle before its consumer file changes. Resolution
+tries eligible snapshots newest first and falls back only for a missing bundle, color, or size;
+ordinary invalid clauses and unknown names without a compatible snapshot still fail. Interaction
+subscriptions inspect the same eligible candidates, retaining an old conditional bundle's press
+response. Only successfully resolved snapshots become the last valid render. Structural supersets
+replace snapshots whose complete lookup structure they preserve; regressions prove that 80 literal
+edits and 80 additive-name edits avoid retaining 80 copies. Renames, changed references, and other
+incomparable shapes remain until their cohort is released. Arbitrary historical dynamic-color
+fallback can still require growing incompatible history; a finite cap or active-read lifetime policy
+is a later product decision, alongside the deferred delivery work, rather than an implicit eviction.
 
 The independent design smoke `design-delivery-final-20261004` passes all three cases: eight color
 and font-size saves, followed by a coordinated style-bundle and consumer rename. Computed DOM
@@ -197,9 +207,74 @@ environment, preserving declared dependency precedence after the move into proje
 Release checks stop at the nearest project marker and leave unpinned boundaries untouched rather
 than inheriting a containing project's pin or migrating home state.
 The Developer approved this integration, including dependencies and the lockfile, and authorized
-future incoming branch merges. Direct dependency changes still require approval. Fresh integrated
-Metro measurements, repository verification, and finalization remain required before proposing
-landing.
+future incoming branch merges. Direct dependency changes still require approval. Integrated Metro
+measurements are recorded below. Readiness requires exact-tree repository verification and
+finalization before proposing landing; the task checkpoint records their outcomes.
+
+### Integrated acceptance, 2026-10-04
+
+On integrated main `854427134`, `integrated-real-app-final-20261004` passes all four journeys and
+80 assertions in 117.6 seconds, including persisted reopen, edit/undo, drag refresh, and
+publication-off edits. Both activation screenshots were inspected: the outlined inactive bolt is
+beside the preview name, the blank viewport uses the dark Studio surface and pressable activate
+control, and the active bolt is filled yellow. The initial integrated real-app attempt passed
+three journeys but its publication-off fixture used the retired `Project.tao` declaration and
+failed before startup. The corrected fixture creates the project marker and identity; that failed
+attempt is excluded from complete acceptance.
+
+`integrated-source-navigation-20261004` passes the delayed-language-connection one-press reveal
+regression. `integrated-loading-20261004` restores all six active previews and measures first/last
+paint at 758/874ms; this remains concurrent-startup regression evidence, not an A/B comparison.
+The first integrated design repeat passed the whole-app and same-file cases but logged a transient
+missing-bundle error in the imported focused case during its coordinated bundle/consumer rename.
+Its timings are excluded from final acceptance. The intermediate-publication regression failed
+before correction and passed afterward. Review then corrected redundant snapshot retention and
+conditional interaction subscriptions; their regressions also failed before the fixes. Final
+runtime design and interaction suites pass 34 and 43 tests, respectively.
+
+`integrated-design-final-20261004` passes all three cases and 128 assertions after those corrections,
+including retained focused counters after the coordinated rename. Imported focused, imported
+whole-app, and same-file focused warm paint medians are 583/567/606ms, with load 5.4–6.6 on 18 CPUs.
+No iframe reloads or browser console errors were recorded. These integrated timings differ from
+the earlier pre-main delivery baseline; they do not establish a speed gain or attribute the change
+to one slice. The previous corrected repeat passed under load 37–48, with medians 2630/2589/781ms;
+it is acceptance evidence only and excluded from timing comparisons.
+
+The final packaged agent-only desktop proof builds and executes its command successfully in 9.6s.
+Its first integrated attempt stopped before startup because main's release checks reject the proof
+app's old inline spacing and the runtime correction had type errors. The same spacing now lives in
+a named design bundle, and the type errors are corrected; the complete proof was repeated.
+
+The first integrated 32-save harness, `integrated-latency-20261004`, passes all four cases with
+zero iframe reloads or recorded revision errors, but exposes a performance regression requiring
+diagnosis before readiness. Warm source-to-publication medians are 236/237ms for one-file
+publication on/off and 2177/2585ms for HNReader; total p50/p95 values are 513/556, 511/532,
+2486/3482, and 2855/3078ms. Load is 5.3–6.6 on 18 CPUs. These are moderate-load measurements,
+not the earlier heavily contended design repeat; they cannot be presented as an improvement over
+the pre-main source-to-publication medians of about 20ms and 123ms. Exact stage attribution and
+a corrected repeat are required before final verification and finalization.
+
+The bounded three-save attribution probe, `integrated-tooling-phases-20261004`, records fresh
+workspaces opening in about 1.5ms, Tao validation taking 370–764ms, native TypeScript program
+construction taking 180–228ms, and diagnostics taking 827–1310ms over 365 files. Watch and preview
+refreshes repeat the same pipeline, with later requests waiting 1.4–2 seconds under the project
+mutation lock. Load was 17.4–18.2 on 18 CPUs; these figures attribute the work and do not establish
+a quiet-host speed comparison. The preceding full probe passed all 32 saves under load 20–60;
+its timings are excluded from improvement claims.
+
+The selected correction retains one native TypeScript program for a watched project only while
+its effective configuration, root files, and every recorded filesystem input still match current
+bytes and resolution probes. Tao validation, generated publication, configuration parsing, and
+diagnostic mapping remain fresh. External sidecar checks stay uncached. Workspace object reuse
+was rejected for this correction: it would save only the measured 1.5ms and would retain a package
+index whose requirement additions have no invalidation API. Final parity tests and measurements
+of the TypeScript correction remain pending. The first corrected three-save probe records a cold
+native program and eight unchanged-program reuses: audits take 12–20ms and diagnostic retrieval
+0.3–0.5ms, while Tao validation and duplicate watcher refreshes remain. This was under load 7.6–13.2
+on 18 CPUs; its short end-to-end sample is not the final 32-save comparison. Watch-session lifecycle
+and existing refresh behavior pass 21 focused tests; the checker suite passes eight, including
+ordered cold-diagnostic parity after source, generated contract, package-resolution, config, and
+mapping changes. Final independent cache review, source/type gates, and integrated repeats remain.
 
 ### Refresh indicator diagnostic, 2026-10-04 — closed
 

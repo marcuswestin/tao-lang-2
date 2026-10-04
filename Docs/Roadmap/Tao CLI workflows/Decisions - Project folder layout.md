@@ -249,8 +249,8 @@ executes its command successfully. Final review fixes preserve linked-parent tar
 legacy private ignore coverage, merge concurrent home recents, and reproduce committed starter store
 files. Studio compile-error recovery, ordered focus/tab saves, manifest pruning, and exact browser
 registration release have source regressions; the full Studio directory passes. The decided
-first-pair implementation passed `verify-changed` at `e91c60008`; whole-project final verification
-remains pending. Decisions 12–14 are now implemented; decision 11 is deferred into
+first-pair implementation passed `verify-changed` at `e91c60008`; exact-tree whole-project verification
+and finalization outcomes belong to the task checkpoint. Decisions 12–14 are now implemented; decision 11 is deferred into
 [Plan - Adapter project storage](<Plan - Adapter project storage.md>).
 
 Generated development hosts live under `cache/dev/desktop-host/`, with recognized older host
@@ -263,10 +263,15 @@ The clean command checks linked ancestors before removing generated output. An o
 Metro fixture exposed a missing TypeScript dependency link: checkout runtimes now link their parent
 to the hoisted checkout dependencies, with the installed-host fallback retained. Focused regressions
 cover these paths, and the corrected real-app smoke `preview-pointer-shield-20261004` passes all four
-journeys. Incoming project identity, shared lock, managed installs, TypeScript base, and
-generation-lock writers must adopt the decided store/cache locations during integration with `main`.
-Source reconciliation is underway; integrated validation and finalization remain pending. This state
-does not establish readiness to land.
+journeys. Integration with main `854427134`, committed as `2896af8`, routes incoming project
+identity, shared lock, managed installs, TypeScript base, and generation-lock writers into the
+decided store/cache locations. Complete integrated `verify-changed` passed on 2026-10-04; the
+fresh `integrated-real-app-final-20261004` Metro smoke passes all four journeys, including persisted
+reopen and publication-off rendering. Its publication-off fixture now creates the project marker
+and identity rather than the retired `Project.tao` declaration. The integrated packaged agent-only
+desktop proof also builds and executes its command successfully after promoting the proof app's
+inline spacing to a release-safe design bundle. Focused results alone do not establish readiness
+to land; the task checkpoint owns exact-tree verification and finalization outcomes.
 
 Historical starting point:
 
