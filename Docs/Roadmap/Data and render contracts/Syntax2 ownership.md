@@ -49,6 +49,26 @@ project-tooling publication, stdlib shared declarations, and all Apps/Syntax2 ex
 source moves. Managers request a minimal seam change or an explicit whole-file transfer before editing.
 Each owns its feature-specific tests and validator message factories alongside approved source.
 
+## Second bounded releases
+
+The integrated first-wave source is the prerequisite for these releases. Managers integrate that
+coordinator commit in their own clean worktrees; they do not modify the coordinator checkout or land
+their branches. The coordinator reviews and validates the combined tree before landing.
+
+1. B's accessibility-prefix repair owns source-actions' studio-source-text.ts, studio-render-tree.ts,
+   studio-extract-view.ts and its new render-prefixes.test.ts. Removal, movement, wrapping and
+   extraction use AST.renderPrefixCluster so metadata remains attached to the original occurrence.
+   Preserve the integrated wildcard-import work. No parameterized-slot source is released yet.
+2. D's runtime lexical-cleanup slice owns TR-action-transactions.ts, TR-errors.ts, TR-effect-outcomes.ts
+   and TR-defer-actions.test.ts, plus focused parity assertions in the corresponding existing runtime
+   tests. Publish runActionScope, registerDeferredAction and actionExitOf. Cleanup is joined, serial
+   LIFO and preserves a primary failure while retaining cleanup failures. Existing callers remain
+   valid. General cancellation and abandonment unwinding are not part of this bounded runtime slice;
+   neither grammar/compiler wiring nor TR.ts facade ownership is transferred.
+3. A's capability/signature and C's numeric/unit proposals remain read-only until their exact
+   interfaces and ownership releases are recorded. Their proposals do not authorize edits to the
+   shared Type, grammar, binding, dispatch or native-publication seams.
+
 ## Binding and effects
 
 1. A preserves resolveArgumentBindings's parameter-ordered pairs and diagnostics, and the existing
