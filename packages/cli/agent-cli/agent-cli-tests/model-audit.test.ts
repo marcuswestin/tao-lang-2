@@ -183,9 +183,12 @@ Describe('model audit — codex column', () => {
   })
 
   Test('reports concrete Sol defaults that lag the newest GPT-6 Sol release', async () => {
-    const report = await auditModelRouting(
-      options(await fixture({ slugs: [...CATALOG, 'gpt-6.1-sol'] })),
+    const paths = await fixture()
+    await FS.writeText(
+      FS.resolvePath('agents/skills/delegation/SKILL.md', paths.repoRoot),
+      SKILL_SOURCE.replaceAll('`gpt-6.1-sol`', '`gpt-6-sol`'),
     )
+    const report = await auditModelRouting(options(paths))
 
     Expect(report.findings).toEqual([
       "codex tiers standard, deep name 'gpt-6-sol', superseded by 'gpt-6.1-sol' in the installed catalog",
@@ -439,7 +442,7 @@ Describe('model audit — personal subagent default', () => {
     for (const brief of [false, true]) {
       const report = await ModelAuditCommand.audit(options(paths, { brief }))
       Expect(report.findings).toEqual([
-        "personal Codex subagent default names 'gpt-5.6-luna', differing from repository standard 'gpt-6-sol'",
+        "personal Codex subagent default names 'gpt-5.6-luna', differing from repository standard 'gpt-6.1-sol'",
       ])
       const output = await withCapturedOutput(() => ModelAuditCommand.write(report, { brief, json: !brief }))
       Expect(output.stdout).toContain('gpt-5.6-luna')
@@ -454,7 +457,7 @@ Describe('model audit — personal subagent default', () => {
     Expect((await ModelAuditCommand.audit(options(paths))).findings).toEqual([])
     for (
       const config of [
-        '[agents]\ndefault_subagent_model = "gpt-6-sol"\n',
+        '[agents]\ndefault_subagent_model = "gpt-6.1-sol"\n',
         '[agents]\nmax_threads = 4\n',
         'default_subagent_model = "gpt-5.6-luna"\n[other]\ndefault_subagent_model = "gpt-5.6-luna"\n',
       ]
