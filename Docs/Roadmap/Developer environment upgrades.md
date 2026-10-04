@@ -21,6 +21,7 @@ change that addressed it.
 - [DEVENV-NATIVE-MODULE-CHECK-CANNOT-LIST-SWIFT-PACKAGE-PODS — native module check cannot list Swift package Pods](<Developer environment upgrades/DEVENV-NATIVE-MODULE-CHECK-CANNOT-LIST-SWIFT-PACKAGE-PODS.md>) — Candidate
 - [DEVENV-NESTED-TAO-JOURNEYS-RUN-IN-OVERLAPPING-SHARDS — Nested Tao journeys run in overlapping shards](<Developer environment upgrades/DEVENV-NESTED-TAO-JOURNEYS-RUN-IN-OVERLAPPING-SHARDS.md>) — Open
 - [DEVENV-PERSISTENT-UI-CONTROLLER-POST-MVP — Persistent UI controller after MVP](<Developer environment upgrades/DEVENV-PERSISTENT-UI-CONTROLLER-POST-MVP.md>) — Planned
+- [DEVENV-STANDALONE-SERVER-STARTUP-HIDES-CHILD-FAILURE — Standalone server startup hides child failure](<Developer environment upgrades/DEVENV-STANDALONE-SERVER-STARTUP-HIDES-CHILD-FAILURE.md>) — Candidate
 - [DEVENV-STUDIO-STARTUP-STAGES-NEED-MEASUREMENT — Studio startup stages need measurement](<Developer environment upgrades/DEVENV-STUDIO-STARTUP-STAGES-NEED-MEASUREMENT.md>) — Planned
 
 ## External and observational findings
