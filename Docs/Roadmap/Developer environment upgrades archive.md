@@ -74,6 +74,7 @@ hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 - [DEVENV-112 — The human landing recipe rejected the landing dry-run flag](<Developer environment upgrades/Archive/DEVENV-112-human-landing-recipe-rejected-dry-run.md>) — Resolved
 - [DEVENV-ACCOUNT-SERVICE-READINESS-JSON-RACE — Account service readiness JSON race](<Developer environment upgrades/Archive/DEVENV-ACCOUNT-SERVICE-READINESS-JSON-RACE.md>) — Resolved
 - [DEVENV-ACCOUNT-TEST-READS-PARTIAL-READINESS-JSON — Account test reads partial readiness JSON](<Developer environment upgrades/Archive/DEVENV-ACCOUNT-TEST-READS-PARTIAL-READINESS-JSON.md>) — Resolved
+- [DEVENV-AGENT-BUNDLE-MISSES-VERIFICATION-SOURCE-CHANGES — Agent bundle misses verification source changes](<Developer environment upgrades/Archive/DEVENV-AGENT-BUNDLE-MISSES-VERIFICATION-SOURCE-CHANGES.md>) — Resolved
 - [DEVENV-AGENT-CONFIG-RECOVERY-COLD-DPRINT-PLUGIN-DOWNLOAD — Agent-config recovery can download dprint plugins](<Developer environment upgrades/Archive/DEVENV-AGENT-CONFIG-RECOVERY-COLD-DPRINT-PLUGIN-DOWNLOAD.md>) — Resolved
 - [DEVENV-APP-LINT-COUNTS-IGNORED-ORPHAN-DIRECTORIES — App lint counts ignored orphan directories](<Developer environment upgrades/Archive/DEVENV-APP-LINT-COUNTS-IGNORED-ORPHAN-DIRECTORIES.md>) — Resolved
 - [DEVENV-APP-SIDECAR-TYPECHECK-ASSUMES-GENERATED-METADATA — App sidecar typecheck assumes generated metadata](<Developer environment upgrades/Archive/DEVENV-APP-SIDECAR-TYPECHECK-ASSUMES-GENERATED-METADATA.md>) — Resolved
@@ -86,6 +87,7 @@ hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 - [DEVENV-DOCTOR-TEST-OBSERVES-CONCURRENT-ARTIFACT-CREATION — Doctor test observes concurrent artifact creation](<Developer environment upgrades/Archive/DEVENV-DOCTOR-TEST-OBSERVES-CONCURRENT-ARTIFACT-CREATION.md>) — Resolved
 - [DEVENV-EMULATOR-EXIT-LOG-CAN-REPORT-PRIOR-LAUNCH — Emulator exit can report a prior launch's failure](<Developer environment upgrades/Archive/DEVENV-EMULATOR-EXIT-LOG-CAN-REPORT-PRIOR-LAUNCH.md>) — Resolved
 - [DEVENV-FIXED-SHORT-TIMEOUTS-LOSE-TO-CONTENTION — A fixed short `timeoutMs` around real work loses to contention](<Developer environment upgrades/Archive/DEVENV-FIXED-SHORT-TIMEOUTS-LOSE-TO-CONTENTION.md>) — Resolved
+- [DEVENV-FORMATTER-FAILURE-MISCLASSIFIED-AS-SANDBOX-RESTRICTION — Formatter failure misclassified as sandbox restriction](<Developer environment upgrades/Archive/DEVENV-FORMATTER-FAILURE-MISCLASSIFIED-AS-SANDBOX-RESTRICTION.md>) — Resolved
 - [DEVENV-FULL-HOST-VERIFICATION-LACKS-A-NAMED-OPERATION — Full host verification lacks a named operation](<Developer environment upgrades/Archive/DEVENV-FULL-HOST-VERIFICATION-LACKS-A-NAMED-OPERATION.md>) — Resolved
 - [DEVENV-FULL-TEST-LEDGER-USES-MONOTONIC-TIME — Full-test ledger uses monotonic time](<Developer environment upgrades/Archive/DEVENV-FULL-TEST-LEDGER-USES-MONOTONIC-TIME.md>) — Resolved
 - [DEVENV-GATE-SCRATCH-CLEANUP-DENIED-IN-MANAGED-WORKTREE — Gate scratch cleanup denied in managed worktree](<Developer environment upgrades/Archive/DEVENV-GATE-SCRATCH-CLEANUP-DENIED-IN-MANAGED-WORKTREE.md>) — Resolved

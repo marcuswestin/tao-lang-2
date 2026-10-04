@@ -151,6 +151,7 @@ Describe('agent report', () => {
       failuresTruncated: false,
       logPath: PASSED.logPath,
       tail: ['ok', '1 pass', '0 fail'],
+      warnings: [],
     })
   })
 
@@ -164,6 +165,24 @@ Describe('agent report', () => {
     const report = buildJsonReport(outcome)
     Expect(report.logUnavailable).toBe('EACCES: permission denied')
     Expect(report.logPath).toBe(PASSED.logPath)
+  })
+
+  Test('retains warnings in successful clipped and verbose reports', () => {
+    const outcome = {
+      ...PASSED,
+      output: Array.from({ length: 30 }, (_, index) => `child line ${index}`).join('\n'),
+      warnings: ['This command opens a visible window.'],
+    }
+
+    for (const options of [{ maxLines: 1 }, { verbose: true }]) {
+      const text = buildReportText(outcome, options)
+      Expect(text).toContain('test-file: passed (exit 0)')
+      Expect(text).toContain('WARNING: This command opens a visible window.')
+      Expect(text).not.toContain('child line 0\n')
+    }
+    const report = buildJsonReport(outcome, { maxLines: 1 })
+    Expect(report.warnings).toEqual(['This command opens a visible window.'])
+    Expect(report.tail).not.toContain('child line 0')
   })
 
   Test('caps --json failures at the same limit as the text report and names the cut', () => {

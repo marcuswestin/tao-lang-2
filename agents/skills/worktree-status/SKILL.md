@@ -1,6 +1,9 @@
 ---
 name: worktree-status
-description: Report every Tao Git worktree, its reclaim verdict, and matching Codex, Claude, or Cursor tasks with title, description, creation, and last activity. Use for worktree inventory or before considering reclaim.
+description: >-
+  Report Tao worktrees, reclaim verdicts, and matching harness task metadata. Use when asked for
+  a worktree inventory or before considering reclaim; distinguish missing ownership evidence from
+  an unused checkout.
 ---
 
 # Worktree status

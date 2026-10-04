@@ -25,7 +25,7 @@ const PROVIDERS = {
     create: (apiKey: string, model: string): LanguageModel => createOpenAI({ apiKey })(model),
     keyVariable: 'OPENAI_API_KEY',
     label: 'OpenAI',
-    model: 'gpt-6-sol',
+    model: 'gpt-6.1-sol',
     modelVariable: 'TAO_STUDIO_AGENT_OPENAI_MODEL',
   },
 } as const

@@ -1,7 +1,9 @@
+import { lineDevLoopReporter } from '@expo-host/dev-loop/DevLoopOutput'
 import { type DevAppSelection, type DevLoopOutcome, runDevLoop } from '@expo-host/dev-loop/expo-dev-loop'
 import type { DevStartupTarget } from '@expo-host/dev-loop/expo-runner/run-targets'
 import { ProjectTooling, type ProjectToolingWatch } from '@project-tooling'
-import { Errors, FS, HCI, ProjectDevSession, ReleaseCapabilities, Switch } from '@shared'
+import { Errors, FS, HCI, Platform, ProjectDevSession, ReleaseCapabilities, Switch } from '@shared'
+import { connectDevLoopWorker, type DevLoopControlHooks } from '@shared/DevLoopControl'
 import type { Readable, Writable } from 'node:stream'
 import { TaoAppModules } from './app-modules'
 import { discoverTaoDevProjects, type TaoDevApp } from './dev-app-discovery'
@@ -18,6 +20,7 @@ type TaoDevCommandOptions = {
   output?: Writable
   runLoop?: (selection: DevAppSelection, device?: string) => Promise<DevLoopOutcome>
   startupTargets?: readonly DevStartupTarget[]
+  control?: DevLoopControlHooks
 }
 
 /** runTaoDev discovers, selects, and runs apps until the dev loop exits. */
@@ -32,19 +35,46 @@ export async function runTaoDev(
     ReleaseCapabilities.require(ReleaseCapabilities.targetCapability(target))
   }
   const target = FS.resolvePath(targetPath)
+  const selectionOnly = Platform.runtimeProcess.env['TAO_DEV_LOOP_SELECTION_ONLY'] === '1'
+  // Private worker state is consumed once, so downstream subprocesses cannot join its control plane.
+  const credentials = Platform.runtimeProcess.env['TAO_DEV_LOOP_WORKER_CREDENTIALS']
+  delete Platform.runtimeProcess.env['TAO_DEV_LOOP_WORKER_CREDENTIALS']
+  delete Platform.runtimeProcess.env['TAO_DEV_LOOP_SELECTION_ONLY']
+  let managed: Awaited<ReturnType<typeof connectDevLoopWorker>> | undefined
+  let control = options.control
+  const managedRequest = credentials !== undefined && credentials !== ''
   // `runDevLoop` renders through whichever reporter it is given; the dashboard is `tao run`'s to
   // own, so this is the one place that wires the Ink implementation in.
   const runLoop = options.runLoop
-    ?? ((selection, device) => runDevLoop(selection, createInkDevLoopReporter(), options.startupTargets, device))
-  let current = await initialSelection(target, options)
+    ?? ((selection, device) =>
+      runDevLoop(
+        selection,
+        control === undefined ? createInkDevLoopReporter() : lineDevLoopReporter(),
+        options.startupTargets,
+        device,
+        control,
+      ))
+  let current = await initialSelection(target, {
+    ...options,
+    ...(selectionOnly || control !== undefined || managedRequest ? { interactive: false } : {}),
+  })
   if (current.kind !== 'selected') {
     return exitTaoDev(current.kind === 'exit' ? current.exitCode : 0, options)
   }
   let currentApp = current.app
+  if (selectionOnly) {
+    HCI.writeLine(JSON.stringify(currentApp))
+    return 0
+  }
+  managed = managedRequest ? await connectDevLoopWorker(credentials) : undefined
+  control ??= managed
   let lease: Awaited<ReturnType<typeof ProjectDevSession.acquire>> | undefined
   let toolingWatch: ProjectToolingWatch | undefined
   try {
     while (true) {
+      if (control?.stopRequested?.()) {
+        return exitTaoDev(0, options)
+      }
       if (lease === undefined) {
         lease = await ProjectDevSession.acquire(currentApp.projectRoot, 'cli')
         await TaoAppModules.ensureProject(currentApp.projectRoot)
@@ -65,6 +95,9 @@ export async function runTaoDev(
       }
       const previousProject = currentApp.projectRoot
       const outcome = await runLoop(currentApp, options.device)
+      if (control?.stopRequested?.()) {
+        return exitTaoDev(0, options)
+      }
       const exitCode = await Switch.kind<typeof outcome, Promise<number | undefined>>(outcome, {
         exit: async exit => exit.exitCode,
         restart: async () => undefined,
@@ -91,8 +124,15 @@ export async function runTaoDev(
       }
     }
   } finally {
-    await toolingWatch?.dispose()
-    await lease?.release()
+    try {
+      await toolingWatch?.dispose()
+    } finally {
+      try {
+        await lease?.release()
+      } finally {
+        await managed?.close()
+      }
+    }
   }
 }
 

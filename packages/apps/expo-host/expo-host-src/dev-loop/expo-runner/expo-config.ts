@@ -70,6 +70,10 @@ export function createExpoConfig(port: number = PREFERRED_EXPO_PORT, options: Ex
     IOS_BOOT_TIMEOUT_MS: 120_000,
     RUNTIME_TOOLCHAIN_PATH: 'packages/apps/expo-host',
     WEB_BROWSER_APP_NAME,
+    WEB_PROFILE_PARENT: FS.resolvePath(
+      'chrome',
+      options.stateRoot ?? Repo.tryResolvePath('.artifacts/dev') ?? FS.resolvePath('tao-dev', FS.tmpdir()),
+    ),
   } as const
 }
 

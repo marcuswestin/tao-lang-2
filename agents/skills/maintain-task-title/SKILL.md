@@ -1,6 +1,9 @@
 ---
 name: maintain-task-title
-description: Keep the current task's sidebar title aligned with its evolving work. Use when starting or resuming a task, reaching a major milestone, or moving into a new scope. Update automatic titles directly; preserve manually edited titles and propose changes for approval.
+description: >-
+  Keep the current task's sidebar title aligned with its work. Use when starting or resuming a
+  task, reaching a major milestone, or changing scope. Update misleading automatic titles;
+  preserve manually chosen titles and propose changes for approval.
 ---
 
 # Maintain the task title

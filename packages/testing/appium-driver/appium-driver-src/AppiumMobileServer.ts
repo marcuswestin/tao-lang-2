@@ -1,5 +1,6 @@
 import { type MachineResourceLease, MachineResources } from '@host-control'
 import { CLI, Errors, FS, Json, Platform, Repo } from '@shared'
+import { mobileAppiumPreflight } from './AppiumMobilePreflight'
 import {
   type AppiumPortReservation,
   type AppiumPortReservations,
@@ -14,6 +15,11 @@ export async function startMobileAppiumServer(options: {
   environment?: Readonly<Record<string, string | undefined>>
   quiet?: boolean
   runId: string
+  onStarted?: (process: CLI.StartedCommand) => Promise<void>
+  detached?: boolean
+  reservations?: AppiumPortReservations
+  signal?: AbortSignal
+  onStartupCleanup?: (proved: boolean) => void
 }, dependencies: {
   ensureDriver?: typeof ensureAppiumDriver
   startServer?: typeof startAppiumServer
@@ -22,18 +28,51 @@ export async function startMobileAppiumServer(options: {
     ...Platform.runtimeProcess.env,
     ...options.environment,
   })
-  await (dependencies.ensureDriver ?? ensureAppiumDriver)(options.driver, environment)
-  return await (dependencies.startServer ?? startAppiumServer)({
-    command: appiumCommand(),
-    environment,
-    reservations: appiumPortReservations(options.runId),
-    quiet: options.quiet,
-  })
+  let discoveryAttempted = false
+  let discoveryClosed = false
+  let serverAttempted = false
+  let serverClosed = false
+  try {
+    await (dependencies.ensureDriver ?? ensureAppiumDriver)(options.driver, environment, {
+      signal: options.signal,
+      onStarted: options.onStarted,
+      onStartAttempt: () => {
+        discoveryAttempted = true
+      },
+      onOwnedCleanup: () => {
+        discoveryClosed = true
+      },
+    })
+    return await (dependencies.startServer ?? startAppiumServer)({
+      command: appiumCommand(),
+      environment,
+      reservations: options.reservations ?? appiumPortReservations(options.runId),
+      quiet: options.quiet,
+      onStarted: options.onStarted,
+      detached: options.detached,
+      signal: options.signal,
+      onStartAttempt: () => {
+        serverAttempted = true
+      },
+      onStartupCleanup: proved => {
+        serverClosed = proved
+      },
+    })
+  } catch (error) {
+    options.onStartupCleanup?.((!discoveryAttempted || discoveryClosed) && (!serverAttempted || serverClosed))
+    throw error
+  }
 }
 
 async function ensureAppiumDriver(
   driver: 'uiautomator2' | 'xcuitest',
   environment: Record<string, string | undefined>,
+  lifecycle: {
+    signal?: AbortSignal
+    onStarted?: (process: CLI.StartedCommand) => Promise<void>
+    onStartAttempt?: () => void
+    onOwnedCleanup?: () => void
+  } = {},
 ): Promise<void> {
   const command = appiumCommand()
   const home = environment['APPIUM_HOME']!
@@ -47,8 +86,7 @@ async function ensureAppiumDriver(
   await FS.writeJson(FS.resolvePath('package.json', home), {
     devDependencies: { [packageName]: `file:${source}` },
   })
-  const listed = await CLI.mustRun(command, { args: ['driver', 'list', '--installed', '--json'], env: environment })
-  const installed = Json.tryParse(listed.stdout)
+  const installed = Json.tryParse(await mobileAppiumPreflight({ command, environment, ...lifecycle }))
   if (typeof installed === 'object' && installed !== null && driver in installed) {
     return
   }

@@ -538,7 +538,15 @@ Describe('FS', () => {
     await FS.writeText(FS.resolvePath('value.txt', sourceDir), 'current')
     await FS.writeText(FS.resolvePath('value.txt', targetDir), 'stale')
     const lockPath = `${await FS.realPath(targetDir)}.tao-file-mutation.lock`
-    await FS.writeJson(lockPath, { pid: Number.MAX_SAFE_INTEGER, token: 'dead-owner' })
+    const exited = await CLI.run(Platform.runtimeProcess.execPath, {
+      args: ['--eval', 'console.log(process.pid)'],
+      stdio: 'pipe',
+    })
+    Expect(exited.exitCode).toBe(0)
+    const ownerPid = Number(exited.stdout.trim())
+    Expect(ownerPid).toBeGreaterThan(0)
+    Expect(Platform.processIsAlive(ownerPid)).toBe(false)
+    await FS.writeJson(lockPath, { pid: ownerPid, token: 'dead-owner' })
 
     await FS.synchronizeDirectoryFiles(sourceDir, targetDir, { boundaryPath: root })
 

@@ -1,5 +1,5 @@
 export type HostCommandTarget = {
-  argsPolicy?: 'none' | 'notify' | 'pid' | 'standalone-vm' | 'studio-list' | 'studio-stop'
+  argsPolicy?: 'none' | 'notify' | 'pid' | 'standalone-vm' | 'studio-list' | 'studio-stop' | 'dev-loop' | 'studio-proof'
   command: string
   /** Environment the tool needs whatever shell dispatches it, merged over the inherited one. */
   env?: Readonly<Record<string, string>>
@@ -23,7 +23,8 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   'prepare-release studio': { command: './dev', fixedArgs: ['prepare-release', 'studio'] },
   'prepare-release ide-extension': { command: './dev', fixedArgs: ['prepare-release', 'ide-extension'] },
   'ide-extension-acceptance': { command: './dev', fixedArgs: ['ide-extension-acceptance'], argsPolicy: 'none' },
-  'app-dev': { command: './tao', fixedArgs: ['run'], server: true },
+  'app-dev': { command: './dev', fixedArgs: ['app-dev'], server: true },
+  'dev-loop': { command: './dev', fixedArgs: ['dev-loop'], argsPolicy: 'dev-loop' },
   'test-watch': { command: './tao', fixedArgs: ['test', '--watch'], server: true },
   'standalone-cli-acceptance': { command: 'just', fixedArgs: ['standalone-cli-acceptance'], argsPolicy: 'none' },
   // Dev loops that watch files run on the host, where Watchman and the OS file-event service are
@@ -33,7 +34,14 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   'studio-native': { command: 'just', fixedArgs: ['studio-native'], server: true },
   'studio-ps': { command: './dev', fixedArgs: ['studio-ps'], argsPolicy: 'studio-list' },
   'studio-stop': { command: './dev', fixedArgs: ['studio-stop'], argsPolicy: 'studio-stop' },
-  'docker-desktop start': { command: 'open', fixedArgs: ['-a', 'Docker'], argsPolicy: 'none' },
+  'studio-canary': { command: './dev', fixedArgs: ['studio-canary'], argsPolicy: 'studio-proof' },
+  'studio-manual-checks': {
+    command: './dev',
+    fixedArgs: ['studio-manual-checks'],
+    argsPolicy: 'studio-proof',
+    server: true,
+  },
+  'docker-desktop start': { command: 'open', fixedArgs: ['-g', '-a', 'Docker'], argsPolicy: 'none' },
   // One daemon serves this login's worktrees; no arbitrary Watchman commands or socket overrides.
   'watchman start': { command: './dev', fixedArgs: ['watchman', 'start'], argsPolicy: 'none' },
   'watchman status': { command: './dev', fixedArgs: ['watchman', 'status'], argsPolicy: 'none' },
@@ -86,6 +94,7 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   'android emulators': { command: 'emulator', fixedArgs: ['-list-avds'], argsPolicy: 'none' },
   'android boot': { command: 'emulator', fixedArgs: ['-avd'], server: true },
   'android ensure': { command: './dev', fixedArgs: ['android-emulator'], argsPolicy: 'none' },
+  'android recover': { command: './dev', fixedArgs: ['android-recover'] },
   'remote fetch': { command: 'git', fixedArgs: ['fetch', 'origin'] },
   'remote refs': { command: 'git', fixedArgs: ['ls-remote', 'origin'] },
   'remote heads': { command: 'git', fixedArgs: ['ls-remote', '--heads', 'origin'] },

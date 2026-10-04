@@ -11,6 +11,7 @@ import { ExpoServer, formatExpoExitFailure } from '@expo-host/dev-loop/expo-runn
 import { ExpoRunner } from '@expo-host/dev-loop/expo-runner/ExpoRunner'
 import { parseIfconfigIPv4, preferredLanIPv4 } from '@expo-host/dev-loop/expo-runner/lan-host'
 import {
+  createExpoMetro,
   type ExpoFetch,
   type ExpoMetroSession,
   expoRuntimeLink,
@@ -83,7 +84,7 @@ Describe('Expo dev-loop command helpers', () => {
 
     Expect(presented.host).toBe('Simulator')
     Expect(commands).toEqual([
-      ['open', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', 'SIM-OLD'],
+      ['open', '-g', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', 'SIM-OLD'],
     ])
   })
 
@@ -106,8 +107,8 @@ Describe('Expo dev-loop command helpers', () => {
 
     Expect(presented.host).toBe('Device Hub')
     Expect(commands).toEqual([
-      ['open', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', 'SIM PRO/27'],
-      ['open', 'devices://device/open?id=SIM%20PRO%2F27'],
+      ['open', '-g', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', 'SIM PRO/27'],
+      ['open', '-g', 'devices://device/open?id=SIM%20PRO%2F27'],
     ])
   })
 
@@ -131,9 +132,9 @@ Describe('Expo dev-loop command helpers', () => {
     Expect(presented.host).toBe('Device Hub')
     Expect(presented.result.exitCode).toBe(0)
     Expect(commands).toEqual([
-      ['open', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', 'SIM-27'],
-      ['open', 'devices://device/open?id=SIM-27'],
-      ['open', '-a', 'DeviceHub'],
+      ['open', '-g', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', 'SIM-27'],
+      ['open', '-g', 'devices://device/open?id=SIM-27'],
+      ['open', '-g', '-a', 'DeviceHub'],
     ])
   })
 
@@ -150,7 +151,97 @@ Describe('Expo dev-loop command helpers', () => {
       {} as ExpoMetroSession,
       {} as ReturnType<typeof createAndroid>,
     )
-    await targets.openStartupTargets()
+    Expect(await targets.openStartupTargets()).toEqual([])
+  })
+
+  Test('startup reports failed dispatch and cancellation without claiming target readiness', async () => {
+    let preparations = 0
+    const targets = createExpoTargets(
+      createExpoConfig(49_152),
+      {} as ExpoMetroSession,
+      {
+        prepareAvailableRuntime: async () => {
+          preparations++
+          return false
+        },
+      } as unknown as ReturnType<typeof createAndroid>,
+    )
+    Expect(await targets.openStartupTargets(['android'])).toEqual([{ target: 'android', dispatched: false }])
+    Expect(preparations).toBe(1)
+    Expect(await targets.openStartupTargets(['android'], () => true)).toEqual([{
+      target: 'android',
+      dispatched: false,
+    }])
+    Expect(preparations).toBe(1)
+  })
+
+  Test('startup cancellation during target preparation prevents a later browser launch', async () => {
+    const endpoint = Deferred<undefined>()
+    let stopped = false
+    const targets = createExpoTargets(
+      createExpoConfig(49_152),
+      { expoOpenEndpoint: () => endpoint.promise, endpointUrl: () => undefined } as unknown as ExpoMetroSession,
+      {} as ReturnType<typeof createAndroid>,
+    )
+    const opening = targets.openStartupTargets(['web'], () => stopped)
+    stopped = true
+    endpoint.resolve(undefined)
+    Expect(await opening).toEqual([{ target: 'web', dispatched: false }])
+  })
+
+  Test('startup cancellation during the Android endpoint lookup prevents a borrowed device launch', async () => {
+    const endpoint = Deferred<undefined>()
+    const lookingUp = Deferred<void>()
+    let stopped = false
+    let launches = 0
+    const targets = createExpoTargets(
+      createExpoConfig(49_152),
+      {
+        expoOpenEndpoint: () => {
+          lookingUp.resolve()
+          return endpoint.promise
+        },
+        endpointUrl: () => undefined,
+        formatOpenedRuntime: () => '',
+      } as unknown as ExpoMetroSession,
+      {
+        prepareAvailableRuntime: async () => true,
+        openRuntime: async () => {
+          launches++
+          return 'expo-go'
+        },
+      } as unknown as ReturnType<typeof createAndroid>,
+    )
+    const opening = targets.openStartupTargets(['android'], () => stopped)
+    await lookingUp.promise
+    stopped = true
+    endpoint.resolve(undefined)
+    Expect(await opening).toEqual([{ target: 'android', dispatched: false }])
+    Expect(launches).toBe(0)
+  })
+
+  Test('reload reports a Metro dispatch refusal and respects cancellation', async () => {
+    let dispatched = 0
+    const server = Bun.serve({
+      hostname: '127.0.0.1',
+      port: 0,
+      fetch: request => {
+        if (new URL(request.url).pathname === '/status') {
+          return new Response('packager-status:running')
+        }
+        dispatched++
+        return new Response('reload refused', { status: 503 })
+      },
+    })
+    try {
+      const metro = createExpoMetro(createExpoConfig(server.port!))
+      await Expect(metro.reloadExpoApps()).rejects.toThrow('Expo reload failed: 503 reload refused')
+      Expect(dispatched).toBe(1)
+      await Expect(metro.reloadExpoApps(() => true)).rejects.toThrow('cancelled')
+      Expect(dispatched).toBe(1)
+    } finally {
+      server.stop(true)
+    }
   })
 
   Test('a stopped session does not begin a requested physical-device launch', async () => {
@@ -427,6 +518,42 @@ Describe('Expo dev-loop command helpers', () => {
       await FS.remove(root)
     }
   })
+
+  Test('stop joins an in-flight Expo start before releasing its resources', async () => {
+    const root = await mkTestDir('tao-expo-start-stop-')
+    const released = Deferred<void>()
+    let releases = 0
+    const server = new ExpoServer(root, createExpoConfig(49_155), async () => {
+      releases++
+      await released.promise
+    }, {
+      command: { executable: '/a-command-that-must-never-start' },
+      logRoot: root,
+      runtimeToolchainSourceRoot: root,
+    })
+    let stopped = false
+    const starting = server.start()
+    const stopping = server.stop().then(() => {
+      stopped = true
+    })
+    try {
+      await Promise.resolve()
+      Expect(stopped).toBe(false)
+      Expect(releases).toBe(1)
+      released.resolve()
+      await starting
+      await stopping
+      Expect(stopped).toBe(true)
+      Expect(releases).toBe(2)
+      Expect(await FS.listDir(root)).toEqual([])
+      await server.start()
+      Expect(releases).toBe(2)
+    } finally {
+      released.resolve()
+      await server.stop()
+      await FS.remove(root)
+    }
+  })
 })
 
 Describe('Expo dev-loop port helpers', () => {
@@ -677,6 +804,33 @@ Describe('Expo dev-loop port helpers', () => {
 })
 
 Describe('Expo session scheme', () => {
+  Test('managed session target adapter records a refused Chrome dispatch without starting a browser', async () => {
+    const previous = Platform.runtimeProcess.env['TAO_AGENT_BROWSER_QUIET']
+    Platform.runtimeProcess.env['TAO_AGENT_BROWSER_QUIET'] = '1'
+    let invoked = 0
+    const session = await createDevLoopExpoSession(0, undefined, {
+      startChrome: async origin => {
+        invoked++
+        Expect(origin).toBe(session.config.EXPO_ORIGIN)
+        Errors.throwHostEnvironment('source-only fixed Chrome refusal')
+      },
+    })
+    try {
+      // No Metro is started. Its unavailable URL falls back to the selected loopback origin.
+      const captured = await withCapturedOutput(() => session.openStartupTargets(['web']))
+      Expect(invoked).toBe(1)
+      Expect(captured.result).toEqual([{ target: 'web', dispatched: false }])
+    } finally {
+      await session.stopWeb()
+      await session.releasePortReservation()
+      if (previous === undefined) {
+        delete Platform.runtimeProcess.env['TAO_AGENT_BROWSER_QUIET']
+      } else {
+        Platform.runtimeProcess.env['TAO_AGENT_BROWSER_QUIET'] = previous
+      }
+    }
+  })
+
   Test('local dev sessions identify the Companion for physical-device links', async () => {
     const session = await createDevLoopExpoSession(49_152)
     try {

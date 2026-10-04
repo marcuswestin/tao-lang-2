@@ -1,5 +1,7 @@
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
+import { UiVisibility } from '@verification/UiVisibility'
 import { parseAgentFlags } from './AgentFlags'
+import type { AgentRunOutcome, BuildReportOptions } from './AgentReport'
 import { buildJsonReport, buildReportText, startLine } from './AgentReport'
 import { parseFailuresFromOutput } from './FailureParser'
 import { readSummaryFailures } from './SummaryFailures'
@@ -75,6 +77,7 @@ export type RunAgentCommandOptions = {
 export async function runAgentCommand(options: RunAgentCommandOptions): Promise<number> {
   const repositoryRoot = options.cwd ?? Repo.getRoot()
   const flags = parseAgentFlags(options.args)
+  const initialWarnings = UiVisibility.warningsForCommand(options.command, flags.rest)
   const start = options.start ?? CLI.start
   const now = options.now ?? Date.now
   const isInteractive = options.isInteractive ?? HCI.isInteractive
@@ -89,11 +92,40 @@ export async function runAgentCommand(options: RunAgentCommandOptions): Promise<
   if (!flags.json) {
     HCI.writeLine(startLine(options.command, logPath))
   }
+  for (const warning of initialWarnings) {
+    const line = `WARNING: ${warning}\n`
+    if (flags.json) {
+      HCI.writeStderr(line)
+    } else {
+      HCI.writeLine(line.trimEnd())
+    }
+    log.append(Buffer.from(line, 'utf8'))
+  }
 
   const chunks: string[] = []
   const appendOutput = (chunk: Buffer): void => {
     chunks.push(chunk.toString('utf8'))
     log.append(chunk)
+  }
+
+  try {
+    UiVisibility.preflightCommand(options.command, flags.rest)
+  } catch (error) {
+    appendOutput(Buffer.from(`error: ${Errors.messageOf(error)}\n`, 'utf8'))
+    const output = chunks.join('')
+    const logUnavailable = await log.close()
+    printOutcome({
+      args: flags.rest,
+      command: options.command,
+      durationMs: now() - startedAt,
+      exitCode: 1,
+      failures: parseFailuresFromOutput(output, options.command),
+      logPath,
+      ...(logUnavailable === undefined ? {} : { logUnavailable }),
+      output,
+      warnings: initialWarnings,
+    }, { json: flags.json, maxLines: flags.maxLines })
+    return 1
   }
 
   const runStdio = resolveRunStdio(options.command, flags, isInteractive)
@@ -156,18 +188,22 @@ export async function runAgentCommand(options: RunAgentCommandOptions): Promise<
     logPath,
     ...(logUnavailable === undefined ? {} : { logUnavailable }),
     output,
+    warnings: [...new Set([...initialWarnings, ...(summary?.warnings ?? [])])],
   }
 
-  if (flags.json) {
-    HCI.writeLine(JSON.stringify(buildJsonReport(outcome, { maxLines: flags.maxLines })))
-  } else {
-    HCI.writeLine('')
-    // `stream` and `inherit` stdio both already showed the child's output as it ran — live over the
-    // pipe, or straight to the terminal — so the report never reprints it, whichever reason applies.
-    HCI.writeLine(buildReportText(outcome, { maxLines: flags.maxLines, verbose: runStdio.stdio !== 'pipe' }))
-  }
+  // `stream` and `inherit` already showed the child's output, so neither reprints it in the report.
+  printOutcome(outcome, { json: flags.json, maxLines: flags.maxLines, verbose: runStdio.stdio !== 'pipe' })
 
   return exitCode
+}
+
+function printOutcome(outcome: AgentRunOutcome, options: BuildReportOptions & { json: boolean }): void {
+  if (options.json) {
+    HCI.writeLine(JSON.stringify(buildJsonReport(outcome, options)))
+  } else {
+    HCI.writeLine('')
+    HCI.writeLine(buildReportText(outcome, options))
+  }
 }
 
 /** RunStdioDecision is how one run's child stdio is wired, and the note (if any) explaining to the
@@ -197,7 +233,7 @@ export function resolveRunStdio(
       stdio: 'inherit',
     }
   }
-  return { stdio: flags.verbose ? 'stream' : 'pipe' }
+  return { stdio: !flags.json && flags.verbose ? 'stream' : 'pipe' }
 }
 
 /** formatSpawnError turns a child-process spawn failure into a line the report and log both show —

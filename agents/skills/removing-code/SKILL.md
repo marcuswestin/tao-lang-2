@@ -1,7 +1,9 @@
 ---
 name: removing-code
 description: >-
-  Delete or retire anything in Tao: dead exports, unused recipes or modules, legacy branches, generated artifacts, or a surface an audit called unreferenced. Covers proving reachability, stale references, and lifecycle for generated trees.
+  Prove reachability and manage deletion in Tao. Use before deleting, retiring, or de-exporting
+  code, recipes, modules, legacy branches, generated artifacts, or surfaces reported as
+  unreferenced; cover stale references and generated-output lifecycle.
 ---
 
 # Removing Code

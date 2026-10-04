@@ -1,6 +1,8 @@
 ---
 name: tao-navigation-actions
-description: Configure Tao navigation, present scenes, pass values, and implement actions, commands, state, and responses.
+description: >-
+  Implement Tao navigation and interactions. Use when configuring navigation, presenting scenes,
+  passing values, handling actions or commands, or updating app state and responses.
 ---
 
 # Tao Navigation and Actions

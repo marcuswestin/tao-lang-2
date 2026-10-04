@@ -1,9 +1,9 @@
 ---
 name: second-opinion
 description: >-
-  Ask a model from another vendor to judge a Tao question independently, when agreement inside one
-  family is not evidence. Use when the Developer asks for a second opinion, a cross-check, or what another
-  model thinks, and before a decision that is expensive to reverse. Off unless the Developer asks for it.
+  Obtain an independent assessment from another model vendor. Use only when the Developer
+  explicitly asks for a second opinion, cross-vendor check, or another model's judgment in the
+  current request, including decisions expensive to reverse; stay within that authorized scope.
 ---
 
 # Second Opinion

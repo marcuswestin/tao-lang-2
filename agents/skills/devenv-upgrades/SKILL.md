@@ -1,7 +1,9 @@
 ---
 name: devenv-upgrades
 description: >-
-  Choose which reported developer-environment issues to fix next, work them, and archive what was addressed. Use when the Developer asks to work on devenv issues, fix the developer environment, clear the DEVENV backlog, pick the next DEVENV entries, or archive the addressed ones.
+  Select, fix, and archive Tao developer-environment issues. Use when asked to work on devenv
+  problems, improve the developer environment, choose DEVENV backlog entries, clear the backlog,
+  or archive addressed entries.
 ---
 
 # Developer Environment Upgrades

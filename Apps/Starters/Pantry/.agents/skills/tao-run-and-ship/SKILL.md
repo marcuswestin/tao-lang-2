@@ -1,6 +1,6 @@
 ---
 name: tao-run-and-ship
-description: Run Tao apps in the browser; understand later Simulator, Studio, Companion, and TestFlight release phases.
+description: Run Tao apps in the browser; understand later Simulator, Studio, Companion, and TestFlight release phases. Use when choosing an app run or release workflow; publishing requires the user's authorization.
 ---
 
 # Tao Run and Ship
