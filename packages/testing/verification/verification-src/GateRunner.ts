@@ -105,6 +105,8 @@ export type RunGatesOptions = {
   onEvent?: (event: WorkEvent) => void
   /** How the run reports itself while it runs. Omitted, it reports nothing but the artifacts. */
   outputMode?: OutputMode
+  /** The OS the lane runs on; off macOS, `requiresMacOS` gates are skipped. Omitted, none is skipped for its OS. */
+  hostPlatform?: string
   /** Injected by tests; defaults to the machine-wide lane registry. */
   registryRoot?: string
   repositoryRoot?: string
@@ -190,14 +192,19 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
 
   // A gate that is both run and declared skipped is run: the declaration is stale, and counting
   // it twice would make the totals disagree with the list above them.
-  const runnableGates = options.skipUnsandboxed === true
-    ? options.gates.filter(name => GateCatalog.metadata(name).requiresUnsandboxed !== true)
-    : [...options.gates]
-  const unsandboxedSkips = options.skipUnsandboxed === true
-    ? options.gates
-      .filter(name => GateCatalog.metadata(name).requiresUnsandboxed === true)
-      .map(name => `${name}=requires unsandboxed host capabilities; run ./agent verify-full outside the sandbox`)
-    : []
+  const { hostPlatform } = options
+  const skipsUnsandboxed = (name: string) =>
+    options.skipUnsandboxed === true && GateCatalog.metadata(name).requiresUnsandboxed === true
+  const skipsMacOS = (name: string) =>
+    hostPlatform !== undefined && hostPlatform !== 'darwin' && GateCatalog.metadata(name).requiresMacOS === true
+  const runnableGates = options.gates.filter(name => !skipsUnsandboxed(name) && !skipsMacOS(name))
+  const hostSkips = options.gates.flatMap(name =>
+    skipsUnsandboxed(name)
+      ? [`${name}=requires unsandboxed host capabilities; run ./agent verify-full outside the sandbox`]
+      : skipsMacOS(name)
+      ? [`${name}=requires macOS; not run on ${hostPlatform}`]
+      : []
+  )
 
   const recipeGates = runnableGates.filter(name => !isTestGate(name))
   const testGate = runnableGates.find(isTestGate)
@@ -240,7 +247,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
     ...(suites.includes(name) ? { suite: name } : {}),
   }))
   const declaredSkips = [
-    ...[...options.skipped ?? [], ...unsandboxedSkips].map(skippedResult),
+    ...[...options.skipped ?? [], ...hostSkips].map(skippedResult),
     ...greenSkips,
   ]
     .filter(result => !gatesToRun.includes(result.name))
