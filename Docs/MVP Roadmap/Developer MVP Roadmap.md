@@ -28,8 +28,9 @@ releases; it waives none of these publication or licensing prerequisites.
       identifiers, not credentials, and cannot be rotated.
 - [ ] **Re-run the full-history credential scan** (`P22`, clean as of 2026-09-20) over the history
       being pushed, and revoke anything it finds.
-- [ ] **Apply the app-safe licence structure** (`R1`, decided 2026-09-22 to land before the first
-      public release; `P24`).
+- [x] **Apply the app-safe licence structure** (`R1`, applied 2026-10-04: AGPL-3.0 with the Tao
+      Application Exception, and the contributor licence agreement; `P24`). Remaining: ship
+      `LICENSE-APP-EXCEPTION.md` inside each published runtime package.
 - [ ] **No login name or home directory in the generated harness config** (`P17`, `P18`): the
       Watchman socket rule in `.claude/settings.json` and `.codex/config.toml`.
 - [ ] **Register the public identifiers.** Most cannot be changed once published or once users
@@ -90,6 +91,15 @@ their own product.
   `license`. Until those are fixed this decision is invisible downstream — see
   `Report - Publication audit.md` `P24`, and `P23` for why the runtime's licence reaches inside every
   app built with Tao.
+- **Decided 2026-10-04 — the licence.** Tao stays AGPL-3.0, with an additional permission under
+  AGPL §7, the [Tao Application Exception](../../LICENSE-APP-EXCEPTION.md): an app built with Tao,
+  including the runtime and stdlib built into it, is its author's under any terms, with no duty to
+  share source. A runtime file the author edits by hand stays AGPL, and so does any product that
+  provides Tao's own functionality (a compiler, editor, or build service), so a changed or hosted Tao
+  must be shared. Contributions come in under the [CLA](../../CLA.md), which keeps every licensing
+  choice, a commercial licence included, with the maintainer. A non-commercial restriction cannot be
+  added to the AGPL (§7 lets recipients remove further restrictions); the name and logo are the
+  remaining lever, through a trademark policy.
 - Relicensing is cheap only while there is one copyright holder. Every commit is authored by one
   person today; a second contributor turns this into a consent-gathering exercise.
 

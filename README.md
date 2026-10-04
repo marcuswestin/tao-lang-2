@@ -126,6 +126,17 @@ decisions.
 
 ## Licence
 
-Tao is released under the GNU Affero General Public License v3.0; see [LICENSE](LICENSE). The
-licence structure for apps built with Tao remains an unresolved pre-release decision. Do not infer
-an app licence from Tao's repository licence.
+**Apps you build with Tao are yours.** Write them, ship them, sell them, and license them however
+you like. You never have to publish their source or license them in any particular way, and nothing
+in Tao's licence claims your code or what Tao's tools generate from it. The
+[Tao Application Exception](LICENSE-APP-EXCEPTION.md) says so in licence terms, including for the
+runtime and standard library that Tao builds into your app.
+
+**Tao itself is under the GNU Affero General Public License v3.0** ([LICENSE](LICENSE)). Anyone may
+use, study, and change Tao, but whoever distributes a changed Tao, or offers one to users over a
+network, must share those changes under the same licence. That includes changes made to the runtime
+inside an app; it does not include the rest of the app. Tao's name and logo are not licensed.
+
+**Contributing:** a pull request is merged once its author has accepted the
+[Contributor License Agreement](CLA.md), which leaves you the copyright in your contribution and
+lets the maintainer license Tao, your contribution included, under any terms.
