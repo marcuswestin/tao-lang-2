@@ -11,6 +11,8 @@ import { hostCommandKind } from '../agent-cli-src/agent-config/HostCommandPolicy
 import { HOST_COMMAND_TARGETS, hostCommandTarget } from '../agent-cli-src/agent-config/HostCommandTargets'
 
 const expected = [
+  'notify-developer',
+  'stop',
   'land',
   'finalize',
   'merge-main',
@@ -104,7 +106,11 @@ Describe('agent host command permissions', () => {
     Expect(hostCommandKind(['prepare-release'], prefixes)).toBeUndefined()
     Expect(hostCommandKind(['reclaim', '--execute'], prefixes)).toBe('named')
     Expect(hostCommandKind(['reclaim', '--report-json'], prefixes)).toBeUndefined()
+    Expect(hostCommandKind(['notify-developer', '--message', 'question'], prefixes)).toBe('named')
+    Expect(hostCommandKind(['stop'], prefixes)).toBe('named')
     Expect(Object.keys(HOST_COMMAND_TARGETS)).toEqual([
+      'notify-developer',
+      'stop',
       'merge-recover',
       ...expected.slice(expected.indexOf('reclaim --execute')),
     ])

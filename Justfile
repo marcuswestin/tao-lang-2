@@ -576,6 +576,17 @@ delegation-report *ARGS:
 model-audit *ARGS:
     ./dev model-audit {{ ARGS }}
 
+# Post a contextual macOS notification and run at most one machine-wide sound/flash loop; just stop ends it
+[group('Sessions')]
+[positional-arguments]
+notify-developer *ARGS:
+    "{{ BUN }}" run packages/cli/agent-cli/agent-cli-src/cli/agent-notify-developer.ts "$@"
+
+# Stop the developer attention sound and screen flashes from any worktree
+[group('Sessions')]
+stop:
+    "{{ BUN }}" run packages/cli/agent-cli/agent-cli-src/cli/agent-notify-developer.ts --stop
+
 # Measure what a simplification pass targets: size, dispatch chains, allowlists, instructions, docs
 [group('Report')]
 simplify-audit *ARGS:
