@@ -705,7 +705,7 @@ from an ordinary Terminal in the logged-in desktop session, or use `./dev studio
 Two failures look alike and need opposite responses: a denied _temporary directory_ is resumable —
 `just clean-scratch && direnv exec . ./agent setup` — while a denied _destination path_ repeats
 forever, because some npm packages ship files under paths an agent sandbox protects (`.gitmodules`,
-`.idea/`). Start `just session-unsandboxed` and run `./agent setup` there.
+`.idea/`). Run `./agent unsandboxed setup`.
 
 **A failed install left gigabytes behind.** `just clean-scratch` reclaims it and reports how much. It
 only ever empties a repository `.artifacts` scratch root.
