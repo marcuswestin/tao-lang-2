@@ -9,21 +9,21 @@ described in [`../README.md`](../README.md).
 
 ## Reading order
 
-| File                          | What it holds                                                                    |
-| ----------------------------- | -------------------------------------------------------------------------------- |
-| `Wayfare.tao-revolution`      | project, capabilities, the three-pane workspace, links, the app, settings        |
-| `Data.tao-revolution`         | trips, days, stops, seats, documents, and their invariants                       |
-| `Access.tao-revolution`       | audiences, per-verb access, the private-document rule, two projections           |
-| `Rules.tao-revolution`        | transactions, and the stop reminder the provider owns                            |
-| `Shared.tao-revolution`       | the open trip, `guard default`, frames, the stop card, sign-in, the one question |
-| `Trips.tao-revolution`        | the library, a new trip, the overview, travelers, invitations, joining, sharing  |
-| `Itinerary.tao-revolution`    | one day, the stop editor as a draft, the conflict conversation, Today            |
-| `Documents.tao-revolution`    | travel documents, some private to one traveler                                   |
-| `Design.tao-revolution`       | colors, sizes, shadows, text, screens, styles, and the rules that check them     |
-| `Words.tao-revolution`        | Spanish                                                                          |
-| `Scenarios.tao-revolution`    | the states this app is reviewed, screenshotted, and audited in                   |
-| `Wayfare.test.tao-revolution` | the journeys                                                                     |
-| `Justfile`                    | the developer loop                                                               |
+| File                          | What it holds                                                                           |
+| ----------------------------- | --------------------------------------------------------------------------------------- |
+| `Wayfare.tao-revolution`      | project, capabilities, the three-pane workspace, links, the app, settings, app read net |
+| `Data.tao-revolution`         | trips, days, stops, seats, documents, and their invariants                              |
+| `Access.tao-revolution`       | audiences, per-verb access, the private-document rule, two projections                  |
+| `Rules.tao-revolution`        | transactions, and the stop reminder the provider owns                                   |
+| `Shared.tao-revolution`       | the open trip, frames, the stop card, sign-in, the one question                         |
+| `Trips.tao-revolution`        | the library, a new trip, the overview, travelers, invitations, joining, sharing         |
+| `Itinerary.tao-revolution`    | one day, the stop editor as a draft, the conflict conversation, Today                   |
+| `Documents.tao-revolution`    | travel documents, some private to one traveler                                          |
+| `Design.tao-revolution`       | colors, sizes, shadows, text, screens, styles, and the rules that check them            |
+| `Words.tao-revolution`        | Spanish                                                                                 |
+| `Scenarios.tao-revolution`    | the states this app is reviewed, screenshotted, and audited in                          |
+| `Wayfare.test.tao-revolution` | the journeys                                                                            |
+| `Justfile`                    | the developer loop                                                                      |
 
 ## What this app leans on hardest
 

@@ -66,7 +66,7 @@ Describe('release bundle proof', () => {
     })
   })
 
-  Test('rejects missing and escaping paths from Expo export metadata', async () => {
+  Test('rejects an escaping launch path from Expo export metadata', async () => {
     const exportRoot = await mkTestDir('tao-invalid-update-export-')
     await FS.writeJson(FS.resolvePath('metadata.json', exportRoot), {
       bundler: 'metro',

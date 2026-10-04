@@ -2,7 +2,6 @@ import { Errors, Http } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import {
   assertUpdateCompatibility,
-  expoUpdateRequestHeaders,
   expoUpdateResponseHeaders,
   type TaoPublishedUpdate,
   TaoUpdateClient,
@@ -10,7 +9,6 @@ import {
 } from '../cli-src/tao-update-client'
 
 type RecordedRequest = {
-  authorization?: string
   body?: unknown
   headers: Record<string, string>
   method: string
@@ -18,18 +16,7 @@ type RecordedRequest = {
 }
 
 Describe('Tao expo-updates service client', () => {
-  Test('pins the open Expo Updates v1 request and response contract', () => {
-    Expect(expoUpdateRequestHeaders({
-      channel: 'wordflower-instantdb',
-      platform: 'ios',
-      runtimeVersion: 'native-fingerprint-1',
-    })).toEqual({
-      accept: 'application/expo+json, application/json;q=0.9, multipart/mixed;q=0.8',
-      'expo-channel-name': 'wordflower-instantdb',
-      'expo-platform': 'ios',
-      'expo-protocol-version': '1',
-      'expo-runtime-version': 'native-fingerprint-1',
-    })
+  Test('pins Tao response headers to the open Expo Updates v1 contract', () => {
     Expect(expoUpdateResponseHeaders()).toEqual({
       'cache-control': 'private, max-age=0',
       'content-type': 'application/expo+json',
@@ -58,7 +45,6 @@ Describe('Tao expo-updates service client', () => {
     ).toEqual(published)
 
     Expect(recorded.requests).toEqual([{
-      authorization: 'Bearer update-admin.jwt',
       body: {
         data: {
           assets: [{
@@ -111,7 +97,6 @@ Describe('Tao expo-updates service client', () => {
       }),
     ).toEqual(uploaded)
     Expect(recorded.requests).toEqual([{
-      authorization: 'Bearer update-admin.jwt',
       body: [116, 97, 111],
       headers: {
         accept: 'application/json',
@@ -341,7 +326,6 @@ function recordedFetch(responses: readonly Response[]): {
         ? [...init.body]
         : undefined
       requests.push({
-        ...(headers['authorization'] === undefined ? {} : { authorization: headers['authorization'] }),
         ...(body === undefined ? {} : { body }),
         headers,
         method: init?.method ?? 'GET',

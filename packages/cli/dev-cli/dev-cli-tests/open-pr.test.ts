@@ -28,9 +28,9 @@ function fakeRun(routes: Record<string, RouteResult>, calls?: string[]): OpenPrR
       args: [...(spec.args ?? [])],
       command,
       cwd: spec.cwd,
-      exitCode: 0,
+      exitCode: key in routes ? 0 : 1,
       signal: null,
-      stderr: '',
+      stderr: key in routes ? '' : `unexpected command: ${key}`,
       stdout: '',
       ...routes[key],
     }
@@ -104,6 +104,7 @@ Describe('open-pr', () => {
     // What the first real runs met: `gh pr checks` asked straight after the push, before GitHub had
     // created the workflow run, answered "no checks reported". The run appeared seconds later.
     const routes = openedPullRequestRoutes(2)
+    routes[headViewKey(2)] = {}
     routes[routeKey('gh', ['pr', 'checks', '--help'], ROOT)] = { stdout: '  --watch  Watch checks\n' }
     routes[routeKey('gh', ['pr', 'checks', '2', '--watch'], ROOT)] = {}
     routes[routeKey('gh', ['pr', 'checks', '2', '--json', 'name,state,link,bucket'], ROOT)] = {

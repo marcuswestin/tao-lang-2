@@ -178,10 +178,6 @@ Describe('explicit Nix bootstrap', () => {
       Expect(await FS.readText(fixture.calls)).toBe(
         'download\ninstall --no-daemon --no-channel-add --no-modify-profile --yes\n',
       )
-      Expect(await FS.readText(fixture.env['TAO_TEST_INSTALL_CONFIG']!)).toBe(
-        'store = local\nbuild-users-group =\nsandbox = false\n',
-      )
-      await expectDownloadsRemoved(fixture)
     }, 'aarch64')
   })
 

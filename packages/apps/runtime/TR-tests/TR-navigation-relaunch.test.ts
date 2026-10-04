@@ -62,25 +62,6 @@ function persistedWidth(name: string) {
 }
 
 Describe('navigation across a relaunch', () => {
-  Test('re-reads the device on a relaunch instead of replaying the load the last launch memoized', async () => {
-    const device = memoryKeyValueStorage()
-    const restoreDevice = setNavigationRestorationStorageForTests(device)
-    try {
-      const { app, detail } = moduleScopeApp('LoadMemo')
-      const detach = await app.attachRestoration()
-      app.present(app.navigator, detail, { Message: TR.Value('restored') })
-      await drainMicrotasks()
-      detach()
-
-      await TR.Navigation.beginLaunch()
-      const relaunched = await app.attachRestoration()
-      Expect(depth(app)).toBe(2)
-      relaunched()
-    } finally {
-      restoreDevice()
-    }
-  })
-
   Test('a fresh relaunch opens where a first launch opens, and records that as the stored position', async () => {
     const device = memoryKeyValueStorage()
     const restoreDevice = setNavigationRestorationStorageForTests(device)

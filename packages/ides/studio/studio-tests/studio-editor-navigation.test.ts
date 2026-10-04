@@ -3,7 +3,7 @@ import { Expect, Test } from '@shared/test'
 import type { EditorView } from 'codemirror'
 import { StudioSourceNavigation } from '../studio-src/client/StudioEditor'
 
-Test('Studio source navigation opens and centers an absolute preview source range', async () => {
+Test('Studio source navigation opens, selects, and focuses an absolute preview source range', async () => {
   const state = EditorState.create({ doc: 'view Main() {\n   Text("Hello")\n}\n' })
   const transactions: TransactionSpec[] = []
   let focused = false
@@ -35,7 +35,6 @@ Test('Studio source navigation opens and centers an absolute preview source rang
   Expect(opened).toBeDefined()
   Expect(transactions).toHaveLength(1)
   Expect(transactions[0]?.selection).toEqual({ anchor: 17, head: 30 })
-  Expect(transactions[0]?.effects).toBeDefined()
   Expect(focused).toBe(true)
 })
 

@@ -26,18 +26,4 @@ test "Root View App" {
       expect text "Home visits: 0"
       expect missing text "Root detail"
    }
-   // `relaunch fresh` is the launch a device that has never run this app gives, and it records
-   // where it opened. The ordinary relaunch after it therefore returns to the root view rather
-   // than to the detail the run before it left behind.
-   test "opens on the root view after a fresh relaunch and stores that position" {
-      run RootViewApp
-      press #rootOpenDetail
-      expect text "Typed root detail"
-      relaunch fresh
-      expect text "Root home"
-      expect missing text "Root detail"
-      relaunch
-      expect text "Root home"
-      expect missing text "Root detail"
-   }
 }

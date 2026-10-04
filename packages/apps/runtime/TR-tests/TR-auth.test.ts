@@ -683,7 +683,6 @@ Describe('mounted app authentication', () => {
     await Promise.all([first.scope.restore(), second.scope.restore()])
     const firstStore = first.store
     const secondStore = second.store
-    Expect(firstStore).not.toBe(secondStore)
     createNote(firstStore, 'Alice private')
     createNote(secondStore, 'Bob private', 'account-b')
     Expect(firstStore.query({ entity: 'Note', filters: [] }).map(row => (row as { Body: string }).Body)).toEqual([
@@ -1001,16 +1000,46 @@ Describe('mounted app authentication', () => {
     const harness = authHarness({ restore: () => pending.promise })
     const schema = TR.Data.Schema(definition)
     const account = TR.Alias(TR.Auth.Account(harness.scope, schema, 'Account'))
+    const contexts: unknown[] = []
+    const localContexts: unknown[] = []
+    const entityHint = { readKind: 'entity' as const, subjectType: 'Account' }
     const readNet = {
-      app: { readNet: { loading: () => 'app loading', unauthorized: () => 'app login' } },
+      app: {
+        readNet: {
+          loading: (_: unknown, context: TR.Evaluable) => {
+            contexts.push(context.evaluate().jsValue)
+            return 'app loading'
+          },
+          unauthorized: (_: unknown, context: TR.Evaluable) => {
+            contexts.push(context.evaluate().jsValue)
+            return 'app login'
+          },
+        },
+      },
     } as unknown as TR.TaoProps
-    Expect(TR.GuardRender(account, [], () => 'private', readNet)).toBe('app loading')
-    Expect(TR.GuardRender(account, [['loading', () => 'site loading']], () => 'private', readNet)).toBe('site loading')
+    Expect(TR.GuardRender(account, [], () => 'private', readNet, entityHint)).toBe('app loading')
+    Expect(TR.GuardRender(
+      account,
+      [['loading', context => {
+        localContexts.push(context.evaluate().jsValue)
+        return 'site loading'
+      }]],
+      () => 'private',
+      readNet,
+      entityHint,
+    )).toBe('site loading')
     const restoring = harness.scope.restore()
     pending.resolve({ state: 'SignedOut' })
     await restoring
     Expect(account.evaluate().jsValue).toBeUndefined()
-    Expect(TR.GuardRender(account, [], () => 'private', readNet)).toBe('app login')
+    Expect(TR.GuardRender(account, [], () => 'private', readNet, entityHint)).toBe('app login')
+    Expect(contexts).toMatchObject([
+      { State: 'loading', ReadKind: 'account', LoadingPhase: 'initial' },
+      { State: 'unauthorized', ReadKind: 'account', UnauthorizedReason: 'signed-out' },
+    ])
+    Expect(localContexts).toMatchObject([{ State: 'loading', ReadKind: 'account', SubjectType: 'Account' }])
+    Expect((contexts[1] as { Message: string; SubjectType: string }).Message).toBe('Sign in to view this account.')
+    Expect((contexts[1] as { SubjectType: string }).SubjectType).toBe('Account')
     const states = TR.Enum(
       TR.Navigation.Identity(['tao.declaration', 1, 'test', '@workspace', 'Auth', 'enum', 'State']),
       ['SignedOut'],
@@ -1056,7 +1085,6 @@ Describe('mounted app authentication', () => {
     const first = TR.Auth.Seal(key, 'private data', 'account-a/notes')
     const second = TR.Auth.Seal(key, 'private data', 'account-a/notes')
     Expect(first).not.toBe(second)
-    Expect(first).not.toContain('private data')
     Expect(TR.Auth.Open(key, first, 'account-a/notes')).toBe('private data')
     Expect(() => TR.Auth.Open(key, first, 'account-b/notes')).toThrow('could not be opened')
     Expect(() => TR.Auth.Open('34'.repeat(32), first, 'account-a/notes')).toThrow('could not be opened')

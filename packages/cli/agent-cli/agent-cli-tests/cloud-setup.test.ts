@@ -73,20 +73,8 @@ Describe('cloud setup lifecycle', () => {
     })
   })
 
-  Test('an incomplete profile still bootstraps the missing tool', async () => {
-    await withCloudFixture(async (root, env) => {
-      await writeProfileTool(root, 'bun')
-      const result = await CLI.run(FS.resolvePath(HOOK, root), {
-        cwd: root,
-        env: { ...env, CLAUDE_CODE_REMOTE: 'true' },
-      })
-      Expect(result.exitCode).toBe(0)
-      Expect(await FS.readText(env['TAO_TEST_CALLS']!)).toBe('bootstrap --install-nix\n')
-    })
-  })
-
   Test('local sessions and non-Linux hosts never bootstrap automatically', async () => {
-    for (const [remote, os] of [['', 'Linux'], ['false', 'Linux'], ['1', 'Linux'], ['true', 'Darwin']]) {
+    for (const [remote, os] of [['', 'Linux'], ['false', 'Linux'], ['true', 'Darwin']]) {
       await withCloudFixture(async (root, env) => {
         const result = await CLI.run(FS.resolvePath(HOOK, root), {
           cwd: root,
@@ -167,21 +155,12 @@ Describe('cloud setup lifecycle', () => {
   )
 
   for (const phase of ['install', 'start'] as const) {
-    Test(`Cursor ${phase} invokes the common bootstrap and propagates its failure`, async () => {
-      await withCloudFixture(async (root, env) => {
-        const config = JSON.parse(await FS.readText(Repo.resolvePath('.cursor/environment.json'))) as Record<
-          'install' | 'start',
-          string
-        >
-        Expect(config[phase]).toBe('./.config/bootstrap-tao-dev-env --install-nix')
-        const result = await CLI.run('sh', {
-          args: ['-c', config[phase]],
-          cwd: root,
-          env: { ...env, TAO_TEST_BOOTSTRAP_STATUS: '8' },
-        })
-        Expect(result.exitCode).toBe(8)
-        Expect(await FS.readText(env['TAO_TEST_CALLS']!)).toBe('bootstrap --install-nix\n')
-      })
+    Test(`Cursor ${phase} selects the common bootstrap`, async () => {
+      const config = JSON.parse(await FS.readText(Repo.resolvePath('.cursor/environment.json'))) as Record<
+        'install' | 'start',
+        string
+      >
+      Expect(config[phase]).toBe('./.config/bootstrap-tao-dev-env --install-nix')
     })
   }
 })

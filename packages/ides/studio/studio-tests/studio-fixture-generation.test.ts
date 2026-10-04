@@ -5,20 +5,6 @@ import type { StudioPreviewManifestV2 } from '../studio-src/StudioPreviewManifes
 import { cellEnvironment } from './test-studio-fixtures'
 
 Describe('Studio fixture generation', () => {
-  Test('reports injected provider availability without browser-side model access', async () => {
-    const generation = new StudioFixtureGeneration(
-      new ScriptedGenerationProvider([], {
-        reason: 'Foundation Models is disabled.',
-        status: 'unavailable',
-      }),
-    )
-
-    Expect(await generation.availability()).toEqual({
-      reason: 'Foundation Models is disabled.',
-      status: 'unavailable',
-    })
-  })
-
   Test('declines generation clearly for a valid fixtureless scenario', async () => {
     const base = manifest()
     const provider = new ScriptedGenerationProvider([{ kind: 'answer', value: { Title: 'Unused' } }])

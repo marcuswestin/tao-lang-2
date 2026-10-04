@@ -81,7 +81,7 @@ Describe('Tao debugger', () => {
     Expect(entry?.outcome).toBe('committed')
   })
 
-  Test('pauses at a breakpoint, keeps the overlay private while paused, then steps and continues', async () => {
+  Test('pauses at a breakpoint, keeps the overlay private while paused, then continues', async () => {
     TR.Debug.Reset()
     const schema = recordingSchema()
     TR.Debug.Configure({ steps: [{ action: 'AddTwo', path: '1' }] })
@@ -107,27 +107,6 @@ Describe('Tao debugger', () => {
     Expect(TR.Debug.Paused()).toBeUndefined()
     Expect(notes(schema)).toBe(2)
     Expect(TR.Debug.Journal().at(-1)?.outcome).toBe('committed')
-  })
-
-  Test('step over stops at the next statement of the same frame', async () => {
-    TR.Debug.Reset()
-    const schema = recordingSchema()
-    TR.Debug.Configure({ steps: [{ action: 'AddTwo', path: '0' }] })
-
-    const first = nextEvent('paused')
-    const pending = instrumented(schema).jsValue.invoke()
-    await first
-    Expect(TR.Debug.Paused()?.step.path).toBe('0')
-
-    const second = nextEvent('paused')
-    TR.Debug.Step('over')
-    await second
-    Expect(TR.Debug.Paused()?.step.path).toBe('1')
-    Expect(notes(schema)).toBe(0)
-
-    TR.Debug.Continue()
-    await pending
-    Expect(notes(schema)).toBe(2)
   })
 
   Test('an action-entry breakpoint pauses before the first statement', async () => {

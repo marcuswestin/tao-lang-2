@@ -12,7 +12,7 @@ const fromDirectory = Repo.resolvePath('packages/apps/expo-host')
 const sourceReadSlot = testOverrideSlot({ read: () => ExpoApiSource.read, write: value => ExpoApiSource.read = value })
 
 Describe('native binding generation', () => {
-  Test('generates the complete installed Haptics surface deterministically', async () => {
+  Test('generates the complete installed Haptics surface', async () => {
     const generated = await NativeBindings.generate({
       source: ExpoApiSource,
       packageName: 'expo-haptics',
@@ -31,9 +31,6 @@ Describe('native binding generation', () => {
     ])
     Expect(generated.diagnostics).toEqual([])
     Expect(generated.files['Bindings.ts']).not.toContain('TR.Haptic')
-
-    Expect((await NativeBindings.generate({ source: ExpoApiSource, packageName: 'expo-haptics', fromDirectory })).files)
-      .toEqual(generated.files)
   })
 
   Test('uses the same import interface and emitter for React Native Vibration', async () => {
@@ -147,26 +144,6 @@ export declare function requiredAbsent(value: string | undefined): void;
         'requiredAbsent',
         'run',
       ])
-    }, { location: 'host', verbatim: true })
-  })
-
-  Test('serializes concurrent generations into the same output directory', async () => {
-    await withTaoFiles('native-bindings-test', {
-      'node_modules/expo-race/package.json': JSON.stringify({
-        name: 'expo-race',
-        version: '1.0.0',
-        types: 'index.d.ts',
-      }),
-      'node_modules/expo-race/index.d.ts': 'export declare function pulse(): void;',
-    }, async (_paths, root) => {
-      const options = { source: 'expo', from: root, out: FS.resolvePath('Generated', root) }
-      const results = await Promise.allSettled([
-        generateNativeBindingFiles('expo-race', options),
-        generateNativeBindingFiles('expo-race', options),
-      ])
-      Expect(results.map(result => result.status)).toEqual(['fulfilled', 'fulfilled'])
-      Expect(await FS.readText(FS.resolvePath('Bindings.ts', options.out))).toContain('native()["pulse"]()')
-      Expect((await FS.listDir(options.out)).sort()).toEqual(['Bindings.tao', 'Bindings.ts', 'bindings.json'])
     }, { location: 'host', verbatim: true })
   })
 

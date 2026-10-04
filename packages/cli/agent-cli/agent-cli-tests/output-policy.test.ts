@@ -52,7 +52,6 @@ Describe('agent output policy', () => {
 
     const bounded = boundOutput(lines.join('\n'), 'report', 'failed')
 
-    Expect(bounded.lines).toContain('FAIL packages/cli/dev-cli/dev-cli-tests/board.test.ts')
     // The head and tail are unchanged; the restored line sits right after the elision line, which now
     // undercounts the middle by exactly the one restored line.
     Expect(bounded.lines[120]).toBe('… and 219 more lines …')

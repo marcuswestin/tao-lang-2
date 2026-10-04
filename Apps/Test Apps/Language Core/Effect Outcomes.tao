@@ -1,0 +1,61 @@
+use StackNav from @tao/nav
+use Col, FormButton, Text from @tao/ui
+
+app EffectOutcomesApp {
+   Name "Effect Outcomes"
+   Navigator StackNav {
+      Initial OutcomesView
+}  }
+
+type ExportFailure is one of Offline, TooLarge
+
+// A foreign verb publishes the failures its TypeScript may raise, each with a fallback sentence.
+folder
+action Export(Mode text) fails Offline "Exporting needs a connection." fails TooLarge "This document is too long to export." from ./Export.ts
+
+scene OutcomesView() {
+   Title "Effect Outcomes"
+   state Status = "Idle"
+   state Draft = "Empty"
+   state Attempts = 0
+
+   // Writes before it exports, so a contained failure has a write of the verb's own to roll back.
+   // Its contract is Export's, reached through a plain `do`.
+   action StageAndExport(Mode text) {
+      set Draft = "Staged"
+      do Export(Mode)
+   }
+
+   // The caller writes first; that write stays whichever outcome runs.
+   action Run(Mode text) {
+      set Attempts += 1
+      when do StageAndExport(Mode) {
+         saved -> { set Status = "Exported" }
+         Offline -> { set Status = "Waiting for a connection" }
+         rejected -> Problem { set Status = "Rejected: { Problem }" }
+         error -> Message { set Status = "Failed: { Message }" }
+   }  }
+   render Col() {
+      Text("Status: { Status }")
+      Text("Draft: { Draft }")
+      Text("Attempts: { Attempts }")
+
+      #exportSaved
+      FormButton(Title: "Export") {
+         on press -> { do Run("Saved") }
+      }
+
+      #exportOffline
+      FormButton(Title: "Export offline") {
+         on press -> { do Run("Offline") }
+      }
+
+      #exportTooLarge
+      FormButton(Title: "Export too large") {
+         on press -> { do Run("TooLarge") }
+      }
+
+      #exportBroken
+      FormButton(Title: "Export broken") {
+         on press -> { do Run("Broken") }
+}  }  }

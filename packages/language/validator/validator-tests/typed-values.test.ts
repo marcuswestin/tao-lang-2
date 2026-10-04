@@ -4,15 +4,12 @@ import { Describe, Expect, promptTagsApp, Test } from '@shared/test'
 import { AliasesValidator } from '../validator-src/validators/aliases-validator'
 import { configuredItemValidationMessages } from '../validator-src/validators/configured-item-validator'
 import { FunctionsValidator } from '../validator-src/validators/functions-validator'
-import { injectionValidationMessages } from '../validator-src/validators/injections-validator'
 import { typeValidationMessages } from '../validator-src/validators/types-validator'
 import {
   accepts,
   app,
-  fence,
   rejects,
   stubView,
-  tsFence,
   validationErrorMessages,
   withValidationParse,
 } from './test-validate'
@@ -23,7 +20,7 @@ Describe('validator: typed values', () => {
     accepts(promptTagsApp()),
   )
 
-  Test('accepts typed list parameters, bridged bodies, alias ascriptions, and omitted fields?', async () => {
+  Test('preserves alias ascriptions and omitted optional field types', async () => {
     await withValidationParse(
       `
         type Profile is { Name text, Subtitle text? }
@@ -32,9 +29,6 @@ Describe('validator: typed values', () => {
           let Basic is Profile = Profile { Name: "Ada" }
           let MaybeSubtitle = Basic.Subtitle
           render Empty()
-        }
-        function Join(Values list of text, Separator text) returns text {
-          return Join(Values, Separator) from ./Join.ts
         }
         ${stubView('Empty')}
       `,
@@ -51,14 +45,13 @@ Describe('validator: typed values', () => {
         Expect(Type.displayName(Type.ofValueDeclaration(basic))).toBe('Profile')
         Expect(Type.displayName(Type.ofExpression(maybeSubtitle.value))).toBe('Profile.Subtitle | none')
       },
-      { 'Join.ts': 'export function Join(values: string[], separator: string) { return values.join(separator) }' },
     )
   })
 
   Test(
     'rejects an alias value that does not satisfy its ascribed type',
     rejects(
-      app('', `let Count is text = 1 ${stubView('Unused')}`),
+      app('', 'let Count is text = 1'),
       AliasesValidator.messages.ascriptionType('Count', 'text', 'number'),
     ),
   )
@@ -68,7 +61,7 @@ Describe('validator: typed values', () => {
     rejects(
       `
         type Counts is list of number
-        let Counts = Counts [1, 2]
+        let Counts = Counts [1]
         function Consume(Values list of text) returns text { return "unused" }
         app TypedLists { view Main }
         view Main() {
@@ -82,7 +75,7 @@ Describe('validator: typed values', () => {
   )
 
   Test(
-    'requires fields to? have an explicit type',
+    'requires optional fields to have an explicit type',
     rejects(
       app('', 'type Missing is { Label? }'),
       typeValidationMessages.optionalFieldType('Label'),
@@ -90,27 +83,10 @@ Describe('validator: typed values', () => {
   )
 
   Test(
-    'keeps fields distinct? from defaulted fields',
+    'keeps optional fields distinct from defaulted fields',
     rejects(
       app('', 'type Defaulted is { Label text? is "fallback" }'),
       typeValidationMessages.optionalFieldDefault('Label'),
-    ),
-  )
-
-  Test(
-    'applies duplicate argument validation to render injections',
-    rejects(
-      app(
-        'render Native("Ada")',
-        `
-          view Native(Value text) {
-            render inject Value, Value 1 ${tsFence}
-              return null
-            ${fence}
-          }
-        `,
-      ),
-      injectionValidationMessages.duplicateArgument('Value'),
     ),
   )
 

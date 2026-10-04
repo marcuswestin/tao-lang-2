@@ -99,6 +99,7 @@ Describe('validator: auth data syntax', () => {
   `),
   )
 
+  // REMOVAL CANDIDATE: Subjectless boolean checks may duplicate functional-core tests; retain the bar-match entrypoint pending comparison.
   Test(
     'requires explicit boolean predicates in subjectless matches',
     rejects(

@@ -101,8 +101,8 @@
   // per first operation name; the wrapper checks deeper argv and HostCommandTargets implements
   // tool operations. This editable-wrapper trust boundary is tracked for later replacement.
   "agentHostCommands": [
-    "land", "finalize", "merge-main", "merge-recover", "landed", "capabilities", "open-pr", "fix-agent-config",
-    "test-host", "studio-smoke", "studio-proof-real-app", "admission-experiment",
+    "land", "finalize", "merge-main", "merge-recover", "landed", "capabilities", "open-pr", "fix-agent-config", "verify-full",
+    "test-host", "qa-capture", "studio-smoke", "studio-proof-real-app", "admission-experiment",
     "native-module-check", "reclaim --execute",
     "prepare-release studio", "prepare-release ide-extension",
     "app-dev", "test-watch", "standalone-cli-acceptance", "studio", "studio-native", "studio-ps", "studio-stop",

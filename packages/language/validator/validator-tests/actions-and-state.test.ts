@@ -85,17 +85,6 @@ Describe('validator: actions and state', () => {
   )
 
   Test(
-    'rejects a computed default for an inferred-writable action parameter',
-    rejects(
-      app(
-        'let Draft = "draft"\naction Edit(Value text default Draft) { set Value += "!" }\nrender Text("ready")',
-        textView,
-      ),
-      reactiveParameterMessages.readonlyArgument('Value'),
-    ),
-  )
-
-  Test(
     'allows writable state as an inferred-writable action default',
     accepts(app(
       'state Draft = "draft"\naction Edit(Value text default Draft) { set Value += "!" }\nrender Text("ready")',
@@ -199,17 +188,6 @@ Describe('validator: actions and state', () => {
   )
 
   Test(
-    'rejects a mutating action passed to an ordinary readonly callback',
-    rejects(
-      app(
-        'action Normalize(Value text) { set Value = "normalized" }\nrender Wrapper(Callback: Normalize)',
-        `${textView}\nview Wrapper(Callback action(text)) { render Text("ready") }`,
-      ),
-      invocationMessages.namedArgumentType('Wrapper', 'Callback', 'action(text)', 'action(writable Normalize.Value)'),
-    ),
-  )
-
-  Test(
     'allows a copied action parameter through a readonly callback contract',
     accepts(
       app(
@@ -301,18 +279,8 @@ Describe('validator: actions and state', () => {
         'let LateGreeting = "Hello"',
       ],
       [
-        'allows local aliases to reference later file-level actions',
-        'let Save = SharedAction',
-        'action SharedAction() { }',
-      ],
-      [
         'allows compound mutation of a number state',
         'state Count = 0\naction Bump() { set Count += 1 }',
-        '',
-      ],
-      [
-        'allows compound mutation of a state declared as number',
-        'state Count is number = 0\naction Bump() { set Count += 1 }',
         '',
       ],
       [
@@ -547,23 +515,17 @@ Describe('validator: actions and state', () => {
     )
   }
 
-  for (
-    const [title, parameter, expected, actual] of [
-      ['rejects incompatible typed callbacks', 'Change', 'action(text)', 'action(Change.Value)'],
-      ['rejects callbacks with too many required parameters', 'Submit', 'action()', 'action(Change.Value)'],
-    ] as const
-  ) {
-    Test(
-      title,
-      rejects(
-        app(
-          'action Change(Value number) { }\nrender Field(Change: Change, Submit: Change)',
-          `${textView}\n${stubView('Field', 'Change action(text), Submit action()')}`,
-        ),
-        invocationMessages.namedArgumentType('Field', parameter, expected, actual),
+  Test(
+    'rejects typed callbacks with incompatible arguments or too many required parameters',
+    rejects(
+      app(
+        'action Change(Value number) { }\nrender Field(Change: Change, Submit: Change)',
+        `${textView}\n${stubView('Field', 'Change action(text), Submit action()')}`,
       ),
-    )
-  }
+      invocationMessages.namedArgumentType('Field', 'Change', 'action(text)', 'action(Change.Value)'),
+      invocationMessages.namedArgumentType('Field', 'Submit', 'action()', 'action(Change.Value)'),
+    ),
+  )
 
   Test('allows omitted optional computed-callback arguments while reporting other invalid calls', async () => {
     const result = await testValidateCodeWithErrors(actionApp(

@@ -369,7 +369,7 @@ guard Draft empty
 
 guard Documents {
    loading -> { Text("Loading…") }
-   error -> Message { Text(Message) }
+   error -> Context { Text(Context.Message) }
 }
 
 guard Document
@@ -384,20 +384,26 @@ called action's current block; execution after `do Callee()` in the caller conti
 a nested event handler stops only that handler block. A render guard renders its matched handler and
 skips only later siblings in the same render block.
 
-An entity subject additionally supports `loading`, `missing`, `unauthorized`, and `error -> Message`.
+An entity subject additionally supports `loading`, `missing`, `unauthorized`, and `error`.
+Exceptional render-guard payloads are `ReadContext` records, whose `Message` is safe display copy;
+optional metadata, timing, cause and recovery fields are `none` when unknown or unimplemented.
+Ordinary `when` and action-guard error payloads remain text.
 If the runtime reports none of those exceptional cases, execution falls through with the live
 entity handle. A render guard hands an exceptional case it does not name — every one, for a bare
-guard — to the read net instead of falling through; the net is always present and a project's
-`guard default` restyles it case by case (`Tao Data.md`, "The read net"). A bare guard therefore
+guard — to the read net instead of falling through; the net is always present and an app's
+`guard { … }` restyles it case by case (`Tao Data.md`, "The read net"). A bare guard therefore
 needs a subject that has exceptional cases: an entity or a query. An action guard still falls
 through on an unnamed case:
 
 ```tao
 guard Document {
-   loading -> { Spinner() }
-   missing -> { Text("Missing { Document.Id }") }
-   unauthorized -> { Text("No access") }
-   error -> Message { Text(Message) }
+   loading -> Context {
+         Spinner()
+         Text(Context.Message)
+      }
+   missing -> Context { Text(Context.Message) }
+   unauthorized -> Context { Text(Context.Message) }
+   error -> Context { Text(Context.Message) }
 }
 DocumentEditor(Document)
 ```

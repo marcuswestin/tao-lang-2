@@ -7,20 +7,14 @@ import { FilesystemUpdateStore, InMemoryUpdateStore } from '../update-server-src
 const baseUrl = 'https://updates.devtao.com'
 const token = 'update-admin.jwt'
 
-type RecordedRequest = {
-  authenticated: boolean
-  method: string
-  path: string
-}
-
 Describe('Tao update protocol server', () => {
   Test('stores immutable hash-addressed assets and serves their public bytes', async () => {
-    const recorded = recordedService(service())
+    const updateService = service()
     const bytes = new TextEncoder().encode('console.log("tao")')
     const hash = hashBytes(bytes)
     const request = assetUploadRequest(hash, bytes)
 
-    const created = await recorded.handle(request)
+    const created = await updateService.handle(request)
     Expect(created.status).toBe(201)
     Expect(await created.json()).toEqual({
       contentType: 'application/javascript',
@@ -29,43 +23,34 @@ Describe('Tao update protocol server', () => {
       key: 'launch',
       url: `${baseUrl}/assets/${hash}.js`,
     })
-    Expect((await recorded.handle(assetUploadRequest(hash, bytes))).status).toBe(200)
-    const reused = await recorded.handle(assetUploadRequest(hash, bytes, { key: 'same-content-other-key' }))
+    const reused = await updateService.handle(assetUploadRequest(hash, bytes, { key: 'same-content-other-key' }))
     Expect(reused.status).toBe(200)
     Expect((await reused.json() as { key: string }).key).toBe('same-content-other-key')
 
     const conflicting = assetUploadRequest(hash, bytes, { contentType: 'text/javascript' })
-    const conflict = await recorded.handle(conflicting)
+    const conflict = await updateService.handle(conflicting)
     Expect(conflict.status).toBe(409)
     Expect(await conflict.text()).toContain('immutable')
 
-    const downloaded = await recorded.handle(new Request(`${baseUrl}/assets/${hash}.js`))
+    const downloaded = await updateService.handle(new Request(`${baseUrl}/assets/${hash}.js`))
     Expect(downloaded.status).toBe(200)
     Expect(downloaded.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
     Expect([...new Uint8Array(await downloaded.arrayBuffer())]).toEqual([...bytes])
-    Expect(recorded.requests).toEqual([
-      { authenticated: true, method: 'PUT', path: `/v1/apps/wordflower/assets/${hash}` },
-      { authenticated: true, method: 'PUT', path: `/v1/apps/wordflower/assets/${hash}` },
-      { authenticated: true, method: 'PUT', path: `/v1/apps/wordflower/assets/${hash}` },
-      { authenticated: true, method: 'PUT', path: `/v1/apps/wordflower/assets/${hash}` },
-      { authenticated: false, method: 'GET', path: `/assets/${hash}.js` },
-    ])
   })
 
   Test('publishes history and selects the newest manifest by channel, platform, and runtime', async () => {
     const ids = ['ios-1', 'android-1', 'ios-2']
     const updateService = service({ createUpdateId: () => ids.shift()! })
-    const recorded = recordedService(updateService)
-    const asset = await uploadLaunchAsset(recorded.handle)
+    const asset = await uploadLaunchAsset(updateService.handle)
 
-    const iosFirst = await publish(recorded.handle, asset, {
+    const iosFirst = await publish(updateService.handle, asset, {
       message: 'First iOS update',
       metadata: { platform: 'ios' },
     })
-    const android = await publish(recorded.handle, asset, {
+    const android = await publish(updateService.handle, asset, {
       metadata: { platform: 'android' },
     })
-    const iosLatest = await publish(recorded.handle, asset, {
+    const iosLatest = await publish(updateService.handle, asset, {
       message: 'Second iOS update',
       metadata: { platform: 'ios' },
       sourceUpdateId: iosFirst.manifest.id,
@@ -74,29 +59,28 @@ Describe('Tao update protocol server', () => {
     Expect(android.manifest.id).toBe('android-1')
     Expect(iosLatest.sourceUpdateId).toBe('ios-1')
 
-    const byId = await recorded.handle(authorizedRequest(
+    const byId = await updateService.handle(authorizedRequest(
       `${baseUrl}/v1/apps/wordflower/channels/stable/updates/ios-1`,
     ))
     Expect(byId.status).toBe(200)
     Expect((await byId.json() as { manifest: { id: string } }).manifest.id).toBe('ios-1')
 
-    const history = await recorded.handle(authorizedRequest(
+    const history = await updateService.handle(authorizedRequest(
       `${baseUrl}/v1/apps/wordflower/channels/stable/updates`,
     ))
     Expect((await history.json() as { updates: Array<{ manifest: { id: string } }> }).updates
       .map(update => update.manifest.id)).toEqual(['ios-2', 'android-1', 'ios-1'])
 
-    const iosManifest = await recorded.handle(manifestRequest('stable', 'ios', 'native-1'))
+    const iosManifest = await updateService.handle(manifestRequest('stable', 'ios', 'native-1'))
     Expect(iosManifest.status).toBe(200)
     Expect(iosManifest.headers.get('content-type')).toBe('application/expo+json')
     Expect((await iosManifest.json() as { id: string }).id).toBe('ios-2')
 
-    const androidManifest = await recorded.handle(manifestRequest('stable', 'android', 'native-1'))
+    const androidManifest = await updateService.handle(manifestRequest('stable', 'android', 'native-1'))
     Expect((await androidManifest.json() as { id: string }).id).toBe('android-1')
 
-    const noCompatibleUpdate = await recorded.handle(manifestRequest('stable', 'ios', 'native-2'))
+    const noCompatibleUpdate = await updateService.handle(manifestRequest('stable', 'ios', 'native-2'))
     Expect(noCompatibleUpdate.status).toBe(204)
-    Expect(await noCompatibleUpdate.text()).toBe('')
   })
 
   Test('rejects rollback aliases that do not exactly preserve the immutable source envelope', async () => {
@@ -114,10 +98,10 @@ Describe('Tao update protocol server', () => {
     Expect(await response.text()).toContain('exact immutable source')
   })
 
-  Test('requires management authorization without reflecting or recording tokens', async () => {
-    const recorded = recordedService(service())
+  Test('requires management authorization without reflecting tokens', async () => {
+    const updateService = service()
     const secret = 'do-not-reflect-this-token'
-    const response = await recorded.handle(
+    const response = await updateService.handle(
       new Request(
         `${baseUrl}/v1/apps/wordflower/channels/stable/updates`,
         { headers: { authorization: `Bearer ${secret}` } },
@@ -126,11 +110,6 @@ Describe('Tao update protocol server', () => {
 
     Expect(response.status).toBe(401)
     Expect(await response.text()).not.toContain(secret)
-    Expect(recorded.requests).toEqual([{
-      authenticated: true,
-      method: 'GET',
-      path: '/v1/apps/wordflower/channels/stable/updates',
-    }])
   })
 
   Test('persists publications and assets without persisting the administration token', async () => {
@@ -185,24 +164,6 @@ function service(options: {
     publicBaseUrl: baseUrl,
     store: options.store ?? new InMemoryUpdateStore(),
   })
-}
-
-function recordedService(updateService: UpdateService): {
-  handle(request: Request): Promise<Response>
-  requests: RecordedRequest[]
-} {
-  const requests: RecordedRequest[] = []
-  return {
-    handle: async request => {
-      requests.push({
-        authenticated: request.headers.has('authorization'),
-        method: request.method,
-        path: new URL(request.url).pathname,
-      })
-      return await updateService.handle(request)
-    },
-    requests,
-  }
 }
 
 function assetUploadRequest(

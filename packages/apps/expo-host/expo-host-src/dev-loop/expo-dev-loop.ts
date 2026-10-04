@@ -1,4 +1,4 @@
-import { Errors, FS, HCI, Platform, Repo } from '@shared'
+import { Errors, FS, HCI, Platform, ReleaseCapabilities, Repo } from '@shared'
 import { DesktopHost } from '../desktop-host'
 import { RuntimeToolchainPaths } from '../runtime-toolchain-paths'
 import { devDataAppKey, devDataEnvironment } from './dev-data/DevDataBootstrap'
@@ -167,6 +167,7 @@ async function runDevLoopWithActiveReporter(
     // once Metro is ready.
     Commands.printControls()
     const openDesktop = async (): Promise<boolean> => {
+      ReleaseCapabilities.require('desktop')
       if (desktop !== undefined) {
         DevLoopOutput.logDevLoop('desktop', 'Desktop app is already open.')
         return true

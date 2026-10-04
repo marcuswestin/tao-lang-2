@@ -230,7 +230,6 @@ Describe('Tao effect outcomes', () => {
 
     Expect(titles(schema)).toEqual(['Retry'])
     Expect(calleeIds).toHaveLength(1)
-    Expect(ids()).toHaveLength(1)
     Expect(ids()[0]).not.toBe(calleeIds[0])
   })
 

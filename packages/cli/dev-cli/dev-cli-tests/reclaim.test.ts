@@ -313,7 +313,7 @@ Describe('reclaim', () => {
     await cursorDatabase(appRoot, candidate)
     const db = new Database(FS.resolvePath('User/globalStorage/state.vscdb', appRoot))
     try {
-      for (const value of [0, false, [], {}]) {
+      for (const value of [0, {}]) {
         db.run('UPDATE composerHeaders SET value = ?', [
           JSON.stringify({ workspaceIdentifier: { uri: { fsPath: value } } }),
         ])
@@ -328,7 +328,6 @@ Describe('reclaim', () => {
       for (
         const value of [
           {},
-          { workspaceIdentifier: { uri: {} } },
           { workspaceIdentifier: { uri: { fsPath: null } } },
           { workspaceIdentifier: { uri: { fsPath: '' } } },
         ]

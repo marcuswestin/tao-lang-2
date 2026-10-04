@@ -184,6 +184,7 @@ ConfigurationBlock:
 ConfigurationEntry:
     restoration=RestorationPolicy
     | rootView=AppView
+    | appGuard=AppGuardStatement
     | key=USE_IMPORT_PATH block=ConfigurationBlock
     | label=ID ':' expression=Expression
     | name=ID ('.' nameMembers+=ID)* (value=ConfigurationValue | block=ConfigurationBlock)

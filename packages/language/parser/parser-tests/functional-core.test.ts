@@ -83,14 +83,12 @@ Describe('parser: functional core', () => {
     Expect(loopValue.target.ref).toBe(loop)
   })
 
-  Test('requires otherwise in value and render subject cases while allowing single-case guards', async () => {
+  Test('requires otherwise in value and render subject cases', async () => {
     const value = await parseCodeWithErrors('let Result = when true { true -> "yes" }')
     const render = await parseCodeWithErrors('view Main() { render Stack() { when true { true -> { Text("yes") } } } }')
-    const action = await testParseCode('action Run() { guard true true -> { } }')
 
     Expect(value.entry.document.parseResult.parserErrors.length).toBeGreaterThan(0)
     Expect(render.entry.document.parseResult.parserErrors.length).toBeGreaterThan(0)
-    Expect(action.entry.document.parseResult.parserErrors).toEqual([])
   })
 
   Test('parses declaration-linked case tests, enums, and one-sided action and render if', async () => {
@@ -108,7 +106,7 @@ Describe('parser: functional core', () => {
             loading -> { Text("Loading") }
             missing -> { Text("Missing") }
             unauthorized -> { Text("Unauthorized") }
-            error -> Message { Text(Message) }
+            error -> Context { Text(Context.Message) }
           }
           if Result is Confirmed { Text("Confirmed") }
           if Document.Final is Draft { Text("Draft") }
@@ -150,7 +148,7 @@ Describe('parser: functional core', () => {
     const errorText = errorBranch.block?.statements[0]
     Expect.Is(errorText, AST.isViewRender)
     const errorMessage = AST.argumentsOf(errorText)[0]?.value
-    Expect.Is(errorMessage, AST.isValueReference)
+    Expect.Is(errorMessage, AST.isMemberAccessExpression)
     Expect(errorMessage.target.ref).toBe(errorBranch.payload)
     const renderIfs = AST.statementsOf(render.block).filter(AST.isIfRenderStatement)
     Expect(renderIfs).toHaveLength(2)
@@ -188,20 +186,25 @@ Describe('parser: functional core', () => {
     Expect.Is(text, AST.isViewRender)
   })
 
-  Test('parses the file-level read net with block, payload, and bare render handlers', async () => {
+  Test('parses an app read net with block, payload, and bare render handlers', async () => {
     const result = await testParseCode(`
-      guard default {
+      app NetApp {
+        view Home
+        guard {
         loading -> Spinner()
         missing -> { Text("This is gone") }
-        error -> Message { Text(Message) }
+        error -> Context { Text(Context.Message) }
+        }
       }
+      view Home() { render Spinner() }
       view Spinner() { render inject \`\`\`ts\nreturn null\n\`\`\` }
       view Text(Value text) { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
     `)
 
-    const net = result.entry.ast.statements.find(AST.isGuardDefaultStatement)
-    Expect.Is(net, AST.isGuardDefaultStatement)
-    Expect(AST.isTopLevelStatement(net)).toBe(true)
+    const app = result.entry.ast.statements.find(AST.isAppDeclaration)
+    Expect.Is(app, AST.isAppDeclaration)
+    const net = app.block?.statements.find(AST.isAppGuardStatement)
+    Expect.Is(net, AST.isAppGuardStatement)
     Expect(net.branches.map(branch => branch.case)).toEqual(['loading', 'missing', 'error'])
     const [loading, missing, error] = net.branches
     Expect.Is(loading?.render, AST.isViewRender)
@@ -210,7 +213,7 @@ Describe('parser: functional core', () => {
     const errorText = error?.block?.statements[0]
     Expect.Is(errorText, AST.isViewRender)
     const errorMessage = AST.argumentsOf(errorText)[0]?.value
-    Expect.Is(errorMessage, AST.isValueReference)
+    Expect.Is(errorMessage, AST.isMemberAccessExpression)
     Expect(errorMessage.target.ref).toBe(error?.payload)
   })
 
@@ -268,6 +271,7 @@ Describe('parser: functional core', () => {
     Expect(AST.parametersOf(card)[0]?.defaultValue?.$type).toBe('NumberLiteral')
   })
 
+  // REMOVAL CANDIDATE: Most empty heads are exercised elsewhere; confirm parameterless function coverage before dropping this matrix.
   Test('parses empty parenthesized lists on every parameterized declaration kind', async () => {
     const result = await testParseCode(`
       type Response is one of Done

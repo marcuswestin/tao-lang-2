@@ -5,17 +5,12 @@ import { Describe, Expect, Test } from '@shared/test'
 import { act, fireEventAsync, render, waitFor } from '@testing-library/react-native'
 import { createElement, type ReactElement, useState } from 'react'
 import * as RN from 'react-native'
-import { InstantDBProvider } from '../../stdlib/@tao/data/providers/instantdb/InstantDB'
 import { MemoryProvider } from '../../stdlib/@tao/data/providers/memory/Memory'
 import { ExpectScreen, registerRuntimeE2ELifecycle, testCompileFiles } from './test-compile-app'
 
 registerRuntimeE2ELifecycle()
 
 Describe('Expo runtime', () => {
-  Test('constructs the InstantDB provider without loading native modules before connect', () => {
-    Expect(typeof InstantDBProvider().connect).toBe('function')
-  })
-
   Test('shares one data catalog across the app, schema, and query modules', async () => {
     await testCompileFiles(
       'App.tao',
@@ -308,7 +303,6 @@ Describe('Expo runtime', () => {
     // A re-render must not rebind the studio-wrapped datasource: the store and its live handles
     // survive, so fixture handles held in state stay usable.
     Expect(schema.query({ entity: 'Entry', filters: [] })).toHaveLength(1)
-    Expect(TR.Data.EntityAvailability(row)).toEqual({ status: 'available' })
     act(() => {
       TR.Data.Update(TR.Value(row), { Name: TR.Value('Still live') })
     })

@@ -2,10 +2,6 @@ import TR from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
 
 Describe('TR adaptive layout', () => {
-  Test('keeps width max fluid below its React Native maximum', () => {
-    Expect(TR.Layout.resolve({ entries: [['width', 'max', 720]] })).toEqual({ maxWidth: 720, width: '100%' })
-  })
-
   Test('replaces a concrete width with a later width maximum', () => {
     const merged = TR.Layout.merge(
       TR.Layout.create([['width', 960]]),

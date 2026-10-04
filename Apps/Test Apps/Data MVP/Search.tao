@@ -1,0 +1,54 @@
+use Memory from @tao/data/providers/memory
+use StackNav from @tao/nav
+use Col, FormButton, Text, TextInput from @tao/ui
+
+app SearchApp {
+   Name "Search"
+   Navigator StackNav {
+      Initial SearchView
+   }
+   Datasource Memory { }
+}
+
+data Documents / Document {
+   Title text (search, title),
+   Body text (default "", search),
+   Owner text (default ""),
+}
+
+scene SearchView() {
+   Title "Search"
+   state Find = ""
+   query Found = Documents with {
+      search Find
+      order by Title
+   }
+   action Seed() {
+      create Document {
+         Title: "Bread Recipe",
+         Body: "Mix flour and water",
+         Owner: "Casey"
+      }
+      create Document {
+         Title: "Grocery List",
+         Body: "Buy bread and milk",
+         Owner: "Alex"
+      }
+      create Document {
+         Title: "Travel Notes",
+         Body: "Pack sunscreen",
+         Owner: "Bread"
+   }  }
+   render Col() [gap 8, pad 16] {
+      #seed
+      FormButton("Seed") {
+         on press Seed
+      }
+
+      #findInput
+      TextInput(Value: Find, Label: "Find") {
+         on submit -> { }
+      }
+      loop Found / Document {
+         Text(Document.Title)
+}  }  }

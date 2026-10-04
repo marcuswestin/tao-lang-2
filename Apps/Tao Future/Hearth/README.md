@@ -12,11 +12,11 @@ described in [`../README.md`](../README.md).
 
 | File                         | What it holds                                                                           |
 | ---------------------------- | --------------------------------------------------------------------------------------- |
-| `Hearth.tao-revolution`      | project, capabilities, navigation, the live root, links, variants                       |
+| `Hearth.tao-revolution`      | project, capabilities, navigation, the live root, links, variants, app read net         |
 | `Data.tao-revolution`        | the entities, their fields, and their invariants                                        |
 | `Access.tao-revolution`      | audiences, per-verb access, the shared-list and invitation projections                  |
 | `Rules.tao-revolution`       | transactions, and the reminder automation the provider owns                             |
-| `Shared.tao-revolution`      | the home handles, `guard default`, frames, the item row, capture, find                  |
+| `Shared.tao-revolution`      | the home handles, frames, the item row, capture, find                                   |
 | `Home.tao-revolution`        | getting in, choosing a home, Today, who lives here, settings                            |
 | `Lists.tao-revolution`       | lists, the shopping fold, one item (write-through, comments, photos, a window), sharing |
 | `Week.tao-revolution`        | the week grid, dragging plans between days                                              |

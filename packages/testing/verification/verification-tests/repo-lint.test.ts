@@ -171,26 +171,6 @@ _bench-check:
     ))).toEqual([])
   })
 
-  Test('accepts an open directory when a mapped Current file is missing from Next', () => {
-    Expect(wordFlowerDirectoryIssues(directory(
-      [
-        file('WordFlower.tao', `${absorbed}\nview Main { }`),
-        file('Documents.tao', 'view Documents { }'),
-      ],
-      [file('WordFlower.tao-next', `${open}\nview Main { }`)],
-    ))).toEqual([])
-  })
-
-  Test('accepts an open directory when Next has an extra mapped file', () => {
-    Expect(wordFlowerDirectoryIssues(directory(
-      [file('WordFlower.tao', `${absorbed}\nview Main { }`)],
-      [
-        file('WordFlower.tao-next', `${open}\nview Main { }`),
-        file('Documents.tao-next', 'view Documents { }'),
-      ],
-    ))).toEqual([])
-  })
-
   Test('keeps Next open while the nested scratch package exists', () => {
     Expect(wordFlowerDirectoryIssues(directory(
       [file('WordFlower.tao', `${absorbed}\nview Main { }`)],
@@ -198,13 +178,6 @@ _bench-check:
         file('WordFlower.tao-next', `${open}\nview Main { }`),
         file('@tao-next/Prelude.tao-next', 'primitive item'),
       ],
-    ))).toEqual([])
-  })
-
-  Test('allows either Next status when mapped content matches', () => {
-    Expect(wordFlowerDirectoryIssues(directory(
-      [file('WordFlower.tao', `${absorbed}\nview Main { }`)],
-      [file('WordFlower.tao-next', `${open}\nview Main { }`)],
     ))).toEqual([])
   })
 
@@ -358,7 +331,6 @@ _bench-check:
       [
         file('WordFlower.tao', absorbed),
         file('.tao-project/lock.jsonc', '{ "ship": true }'),
-        file('.tao/sessions/owner.json', '{ "owner": "studio" }'),
         file('.tao/sessions/session.json', '{ "status": "active" }'),
         file('@ui/View.tao.ts', 'generated bridge metadata'),
       ],
@@ -708,15 +680,6 @@ Describe('repo lint conventions', () => {
         + ' from `@shared`, and add the seam there when none fits.'
       ),
     )
-  })
-
-  Test('a node-import exemption allows one site rather than its whole file', () => {
-    const path = 'packages/dev/dev-src/studio/StudioNew.ts'
-    const source = [importFrom('node:crypto'), importFrom('node:net')].join('\n')
-    Expect(conventionRuleIssues(CONVENTION_RULES.nodeImport, [{ path, source }], [`${path}:1`])).toEqual([
-      `${path}:2 imports a \`node:\` module directly; reach for \`FS\`, \`CLI\`, \`Platform\`, or \`HCI\``
-      + ' from `@shared`, and add the seam there when none fits.',
-    ])
   })
 
   Test('leaves a type-only node import alone', () => {

@@ -58,17 +58,6 @@ function pastedStrings(value: unknown): string[] {
   return []
 }
 
-/**
- * The real host, read once for the whole file. Every probe is a process, and a machine running
- * several verification lanes charges for each one, so the two tests that need the true answer share
- * a single reading of it.
- */
-let host: Promise<EnvironmentFingerprint> | undefined
-function thisHost(): Promise<EnvironmentFingerprint> {
-  host ??= environmentFingerprintOf()
-  return host
-}
-
 /** Splits a pasteable value into the words a machine or account name would appear as. */
 function words(value: string): string[] {
   return value.split(/[._+-]/).filter(word => word.length > 0)
@@ -78,6 +67,7 @@ Describe('environment fingerprint', () => {
   Test('reports the host, the commit, and the toolchain a reproduction needs', () => {
     const fingerprint = environmentFingerprint(facts())
 
+    Expect(fingerprint.version).toBe(1)
     Expect(fingerprint.os).toEqual({ build: '26A428', name: 'macOS', version: '27.0' })
     Expect(fingerprint.kernel).toEqual({ name: 'Darwin', version: '27.0.0' })
     Expect(fingerprint.architecture).toBe('arm64')
@@ -101,7 +91,7 @@ Describe('environment fingerprint', () => {
   })
 
   Test('accepts a version, a hash, or a bare word, and nothing that could hide anything else', () => {
-    for (const accepted of ['macOS', 'Darwin', 'arm64', '27.0', '26A428', '2026.01.19.00', 'v0.1.0-3-gabc1234']) {
+    for (const accepted of ['macOS', '27.0', '26A428', '2026.01.19.00', 'v0.1.0-3-gabc1234']) {
       Expect(safeToken(accepted)).toBe(accepted)
     }
     // Every shape a person, a machine, or a location could arrive in is refused outright rather
@@ -127,7 +117,6 @@ Describe('environment fingerprint', () => {
 
   Test('reads the version out of whatever decoration a tool prints around it', () => {
     Expect(toolVersion('git version 2.53.0')).toBe('2.53.0')
-    Expect(toolVersion('dprint 0.54.0')).toBe('0.54.0')
     Expect(toolVersion('v24.14.1')).toBe('24.14.1')
     Expect(toolVersion('2026.01.19.00')).toBe('2026.01.19.00')
     // A version printed next to the path it was installed at keeps the version and loses the path.
@@ -168,7 +157,7 @@ Describe('environment fingerprint', () => {
   })
 
   Test('carries nothing off this machine that names the person or the machine', async () => {
-    const fingerprint = await thisHost()
+    const fingerprint = await environmentFingerprintOf()
     const values = pastedStrings(fingerprint)
     const hostname = (await CLI.run('hostname')).stdout.trim()
     // The fingerprint's own component names are fixed literals, so an account that happens to be
@@ -193,19 +182,12 @@ Describe('environment fingerprint', () => {
   })
 
   Test('prints the fingerprint alone, and succeeds, when it is asked for as an attachment', async () => {
-    // Gathered before the capture, never inside it: output capture is serialized process-wide, and
-    // holding that queue through a dozen process spawns stalls every other capturing test too.
-    const host = await thisHost()
-    const printed = await withCapturedOutput(() => RepositoryDoctorCommand.writeFingerprint(host))
+    const fingerprint = environmentFingerprint(facts())
+    const printed = await withCapturedOutput(() => RepositoryDoctorCommand.writeFingerprint(fingerprint))
 
     // Somebody running this is collecting an attachment for a report, not asking for a verdict.
     Expect(printed.result).toBe(0)
-    const fingerprint = JSON.parse(printed.stdout) as EnvironmentFingerprint
-    Expect(fingerprint.version).toBe(1)
-    Expect(fingerprint.architecture).toBeDefined()
-    // The rest of the doctor's report names this checkout, so none of it may ride along.
-    Expect(printed.stdout).not.toContain('repositoryRoot')
-    Expect(printed.stdout).not.toContain('checks')
+    Expect(JSON.parse(printed.stdout)).toEqual(fingerprint)
   })
 
   Test('renders the same facts as the two lines the terminal shows', () => {

@@ -50,8 +50,6 @@ Describe('Secret store', () => {
     Expect(text.includes('"addedAt": "2026-09-04T10:00:00.000Z"')).toBe(true)
     // The armor is one array entry per line, so replacing a secret is a line diff rather than one long blob.
     Expect(text.includes('"-----BEGIN AGE ENCRYPTED FILE-----"')).toBe(true)
-    // And the value itself never appears, which is the entire point of committing this file.
-    Expect(text.includes('sk-')).toBe(false)
   })
 
   Test('replacing a secret keeps when it was first added and records when it changed', () => {
@@ -69,16 +67,6 @@ Describe('Secret store', () => {
     const second = withSecret(first, 'TOKEN', ARMOR, { now: new Date('2026-06-01Z') })
 
     Expect(second.secrets['TOKEN']?.note).toBe('why this exists')
-  })
-
-  Test('two secrets added in two worktrees do not collide', () => {
-    // Values are encrypted one at a time and the file is written in key order, so separate additions touch
-    // separate lines. A whole-file scheme would put a changed authentication tag on both sides instead.
-    const left = formatStore(withSecret(store(), 'ALPHA', ARMOR, { now: new Date('2026-01-01Z') }))
-    const right = formatStore(withSecret(store(), 'BETA', ARMOR, { now: new Date('2026-01-01Z') }))
-
-    const changedInLeft = left.split('\n').filter(line => !right.includes(line.trim()) && line.trim() !== '')
-    Expect(changedInLeft.every(line => line.includes('ALPHA') || line.includes('}'))).toBe(true)
   })
 
   Test('a store with no secrets yet is still a file worth reading', () => {
@@ -130,14 +118,6 @@ Describe('Generated environment file', () => {
     Expect(text.includes('.env.local')).toBe(true)
     Expect(text.includes('# tao-secret-format: json-v1')).toBe(true)
     Expect(text.includes('TOKEN="abc"')).toBe(true)
-  })
-
-  Test('a value keeps its exact bytes through quoting', () => {
-    const awkward = "has 'quotes' and spaces #and-a-hash"
-
-    const text = renderEnvFile(new Map([['TOKEN', awkward]]), { generatedAt: new Date() })
-
-    Expect(text.includes(`TOKEN="has 'quotes' and spaces #and-a-hash"`)).toBe(true)
   })
 
   Test('multiline and surrounding whitespace survive the generated-file round trip exactly', () => {

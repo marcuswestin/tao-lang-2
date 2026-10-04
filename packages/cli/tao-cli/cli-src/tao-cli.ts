@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import tab from '@bomb.sh/tab/commander'
 import { Command } from '@commander-js/extra-typings'
-import { Diagnostic, Errors, FS, HCI, Platform } from '@shared'
+import { Diagnostic, Errors, FS, HCI, Platform, ReleaseCapabilities } from '@shared'
 import type { Command as BaseCommand } from 'commander'
 import * as DiagnosticReport from './diagnostic-report'
 import type { InPlace } from './in-place-files'
@@ -39,7 +39,7 @@ export async function runTaoCli(argv = Platform.runtimeProcess.argv): Promise<vo
   await createCommands().parseAsync(argv, { from: 'node' })
 }
 
-function createCommands(): Command {
+export function createCommands(): Command {
   const commands = new Command()
     .name('tao')
     .description('Tao language CLI.')
@@ -778,11 +778,48 @@ function createCommands(): Command {
       }
     })
 
+  commands.command('release-profile')
+    .description('Print the immutable release profile used by this toolchain.')
+    .action(() =>
+      HCI.writeLine(
+        JSON.stringify({
+          version: TaoVersion.current(),
+          ...ReleaseCapabilities.current(),
+          fingerprint: ReleaseCapabilities.fingerprint(),
+        }),
+      )
+    )
+
+  // Remove unavailable surfaces before completion registration so discovery and parsing agree.
+  // Unclassified commands and options are deferred, so a new surface stays out of public builds.
+  pruneReleaseSurface(commands as unknown as BaseCommand, '')
+
   // Registers `tao complete <shell>` to print a completion script, and the hidden request protocol it calls.
   // The adapter types against plain Commander, which extra-typings' generic Command does not widen to.
   tab(commands as unknown as BaseCommand)
 
   return commands
+}
+
+/** pruneReleaseSurface removes the subcommands and options this release profile does not ship, at every depth. */
+function pruneReleaseSurface(command: BaseCommand, path: string): void {
+  if (path) {
+    const registeredOptions = command.options as BaseCommand['options'][number][]
+    for (const option of [...registeredOptions]) {
+      if (!ReleaseCapabilities.allows(ReleaseCapabilities.optionCapability(path, option.long ?? option.flags))) {
+        registeredOptions.splice(registeredOptions.indexOf(option), 1)
+      }
+    }
+  }
+  const registeredCommands = command.commands as BaseCommand[]
+  for (const child of [...registeredCommands]) {
+    const childPath = path ? `${path} ${child.name()}` : child.name()
+    if (!ReleaseCapabilities.allows(ReleaseCapabilities.commandCapability(childPath))) {
+      registeredCommands.splice(registeredCommands.indexOf(child), 1)
+      continue
+    }
+    pruneReleaseSurface(child, childPath)
+  }
 }
 
 function parseBetaRecipients(value: boolean | string | undefined): string[] | undefined {

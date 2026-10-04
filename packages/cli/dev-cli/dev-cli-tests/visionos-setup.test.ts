@@ -25,7 +25,7 @@ function harness(
   const files = new Map<string, unknown>()
   const reports: string[] = []
   let mode = settings.mode ?? 'enabled'
-  let reality = settings.reality ?? 'physical'
+  const reality = settings.reality ?? 'physical'
   let prompts = 0
   let output = ''
   const runCommand: typeof CLI.run = async (command, spec = {}) => {
@@ -168,9 +168,6 @@ function harness(
     },
     setMode: (value: string) => {
       mode = value
-    },
-    setReality: (value: string) => {
-      reality = value
     },
     promptCount: () => prompts,
     receipt: () =>
@@ -364,9 +361,8 @@ Describe('guided visionOS setup', () => {
       const changed = harness({ selection: '/Applications/Other.app/Contents/Developer' })
       Expect(await VisionOSSetup.run({ ...changed.options, json: true }, changed.dependencies)).toBe(1)
       Expect(changed.receipt().remaining.join('\n')).toContain('global Xcode selection changed')
-      Expect(
-        changed.calls.filter(call => call.command === '/usr/bin/xcode-select').every(call => call.args.join() === '-p'),
-      ).toBe(true)
+      Expect(changed.calls.filter(call => call.command === '/usr/bin/xcode-select').map(call => call.args))
+        .toEqual([['-p']])
     },
   )
 

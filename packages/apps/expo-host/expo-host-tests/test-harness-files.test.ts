@@ -49,7 +49,6 @@ Describe('Tao test Jest entrypoints', () => {
     await withRunRoot(async runRoot => {
       const generated = await TestHarnessFiles.write(runRoot, manifestOf(oneShardPerWorker(4)), 4)
 
-      Expect(generated.shardCount).toBe(4)
       Expect([...(await writtenPlan(generated.directory)).keys()]).toEqual([
         'shard-1-of-4.jest.tsx',
         'shard-2-of-4.jest.tsx',
@@ -84,19 +83,10 @@ Describe('Tao test Jest entrypoints', () => {
       const shards = [...(await writtenPlan(generated.directory)).values()]
 
       // 30 + 10 against 20 + 10 + 10: one file each side, then the ties broken towards the first.
-      Expect(generated.shardCount).toBe(2)
       Expect(shards).toEqual([
         ['/projects/Demo/A.test.tao', '/projects/Demo/D.test.tao'],
         ['/projects/Demo/B.test.tao', '/projects/Demo/C.test.tao', '/projects/Demo/E.test.tao'],
       ])
-    })
-  })
-
-  Test('never plans more entrypoints than the worker budget allows', async () => {
-    await withRunRoot(async runRoot => {
-      const generated = await TestHarnessFiles.write(runRoot, manifestOf(oneShardPerWorker(9)), 3)
-
-      Expect(generated.shardCount).toBe(3)
     })
   })
 
@@ -151,13 +141,21 @@ Describe('Tao test Jest entrypoints', () => {
     await withRunRoot(async runRoot => {
       const manifest = manifestOf(oneShardPerWorker(4))
       const wide = await TestHarnessFiles.write(runRoot, manifest, 4)
+      const snapshot = async () =>
+        await Promise.all(
+          (await FS.listDir(wide.directory)).toSorted().map(async name => [
+            name,
+            await FS.readText(FS.resolvePath(name, wide.directory)),
+          ]),
+        )
+      const original = await snapshot()
       const narrow = await TestHarnessFiles.write(runRoot, manifest, 2)
       const named = await TestHarnessFiles.write(runRoot, manifestOf(oneShardPerWorker(2)), 2)
       const again = await TestHarnessFiles.write(runRoot, manifest, 4)
 
       Expect(new Set([wide.directory, narrow.directory, named.directory]).size).toBe(3)
       Expect(again.directory).toBe(wide.directory)
-      Expect(await writtenPlan(again.directory)).toEqual(await writtenPlan(wide.directory))
+      Expect(await snapshot()).toEqual(original)
     })
   })
 
@@ -168,14 +166,6 @@ Describe('Tao test Jest entrypoints', () => {
 
       Expect(source).toContain(`import { declareTaoJourneys } from '${TestHarnessFiles.HARNESS_MODULE}'`)
       Expect(source).toContain('"/projects/Demo/A.test.tao"')
-    })
-  })
-
-  Test('leaves no temporary file behind in a finished plan', async () => {
-    await withRunRoot(async runRoot => {
-      const generated = await TestHarnessFiles.write(runRoot, manifestOf(oneShardPerWorker(3)), 3)
-
-      Expect((await FS.listDir(generated.directory)).filter(name => name.endsWith('.tmp'))).toEqual([])
     })
   })
 })

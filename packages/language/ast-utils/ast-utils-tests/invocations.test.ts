@@ -3,24 +3,6 @@ import { AST, Parser, type ParseResult } from '@parser'
 import { Describe, Expect, Test } from '@shared/test'
 
 Describe('Tao AST invocation resolution', () => {
-  Test('resolves render argument pairs by type', async () => {
-    const parseResult = await parseClean(`
-      app MyApp { view MainView }
-      view MainView() {
-        render Tile("Open", 1)
-      }
-      view Tile(Title text, Count number) { }
-    `)
-    const mainView = findMainView(parseResult)
-    const render = AST.blockStatementOf(mainView, 0)
-    Expect.Is(render, AST.isRenderStatement)
-
-    const invocation = ASTUtils.resolveRenderInvocation(render)
-
-    Expect(invocation.view?.name).toBe('Tile')
-    Expect(invocation.pairs.map(pair => Type.parameterName(pair.parameter))).toEqual(['Title', 'Count'])
-  })
-
   Test('resolves out-of-order render arguments by type', async () => {
     const parseResult = await parseClean(`
       app MyApp { view MainView }

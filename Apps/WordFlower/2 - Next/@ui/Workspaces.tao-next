@@ -58,9 +58,9 @@ scene WorkspaceList() {
          }
          // The home screen titles its own load failure; loading goes to the app's read net.
          guard Workspaces {
-            error -> Message {
+            error -> Context {
                Text("Could not load WordFlower") [title]
-               TextMultiline(Message) [body]
+               TextMultiline(Context.Message) [body]
          }  }
          Panes() [gapWide] {
             Col() [panel] {

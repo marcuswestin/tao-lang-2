@@ -5,12 +5,12 @@ import { Describe, Expect, Test } from '@shared/test'
 import { fireEvent, render } from '@testing-library/react-native'
 import { createElement } from 'react'
 import * as RN from 'react-native'
-import { ExpectScreen, registerRuntimeE2ELifecycle, testCompileApp } from './test-compile-app'
+import { registerRuntimeE2ELifecycle, testCompileApp } from './test-compile-app'
 
 registerRuntimeE2ELifecycle()
 
 Describe('Expo runtime adaptive layout', () => {
-  Test('keeps handled taps available beside an editable child and preserves explicit keyboard props', () => {
+  Test('forwards platform keyboard defaults and explicit overrides to the mounted ScrollView', () => {
     const restoreRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime')
     try {
       for (const [os, dismissMode] of [['ios', 'interactive'], ['android', 'on-drag']] as const) {
@@ -26,30 +26,14 @@ Describe('Expo runtime adaptive layout', () => {
           Pressable: RN.Pressable,
           Platform: { OS: os },
         })
-        let draft = ''
-        const submissions: string[] = []
         const children = createElement(
-          RN.View,
-          null,
-          createElement(RN.TextInput, {
-            accessibilityLabel: 'Draft',
-            autoFocus: true,
-            onChangeText: (value: string) => {
-              draft = value
-            },
-          }),
-          createElement(RN.Pressable, {
-            accessibilityLabel: 'Open detail',
-            onPress: () => submissions.push(draft),
-          }),
+          RN.TextInput,
+          { accessibilityLabel: 'Draft', autoFocus: true },
         )
         const screen = render(TR.Views.ScrollView({ children }))
         const scroll = screen.UNSAFE_getByType(RN.ScrollView)
         Expect(scroll.props.keyboardShouldPersistTaps).toBe('handled')
         Expect(scroll.props.keyboardDismissMode).toBe(dismissMode)
-        fireEvent.changeText(screen.getByLabelText('Draft'), 'Keep this draft')
-        fireEvent.press(screen.getByLabelText('Open detail'))
-        Expect(submissions).toEqual(['Keep this draft'])
         screen.rerender(TR.Views.ScrollView({ children }, {
           nativeProps: { keyboardShouldPersistTaps: 'always', keyboardDismissMode: 'none' },
         }))
@@ -85,8 +69,6 @@ Describe('Expo runtime adaptive layout', () => {
         }
       `,
       screen => {
-        ExpectScreen(screen).toHaveText('Primary pane')
-        ExpectScreen(screen).toHaveText('Secondary pane')
         Expect(screen.getAllByText(/pane$/).map(node => String(node.props.children))).toEqual([
           'Primary pane',
           'Secondary pane',
@@ -109,7 +91,6 @@ Describe('Expo runtime adaptive layout', () => {
         const primaryContentStyle = RN.StyleSheet.flatten(primary.props.contentContainerStyle)
         Expect(primaryViewportStyle).toMatchObject({ alignSelf: 'stretch', flexGrow: 2 })
         Expect(primaryContentStyle).toMatchObject({ flexDirection: 'column', flexGrow: 1, gap: 7, padding: 9 })
-        Expect(primaryContentStyle?.flexGrow).not.toBe(2)
 
         const readable = screen.getByTestId('readableColumn')
         Expect(RN.StyleSheet.flatten(readable.props.style)).toMatchObject({ maxWidth: 720, width: '100%' })

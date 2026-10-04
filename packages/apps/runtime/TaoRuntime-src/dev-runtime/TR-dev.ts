@@ -9,9 +9,6 @@ export type TaoDevModeOptions = {
 
 type TaoDebugStyle = Record<string, number | string>
 type TaoDebugStyleInput = TaoDebugStyle | readonly TaoDebugStyleInput[] | null | undefined
-type TaoCreateElementDevOptions = {
-  readonly platformOS?: string
-}
 
 type TaoDevModeState = Required<TaoDevModeOptions>
 
@@ -28,21 +25,12 @@ const layoutBoundColors = [
   '#0d9488',
 ] as const
 
-const boundingBoxStyleProperties = new Set([
-  'backgroundColor',
-  'borderBottomWidth',
-  'borderColor',
-  'borderEndWidth',
-  'borderLeftWidth',
-  'borderRightWidth',
-  'borderStartWidth',
-  'borderTopWidth',
-  'borderWidth',
+// Layout bounds draw with an inward outline, or an inset shadow when the author already set an outline, so they
+// never change layout; an element whose author set both keeps its own appearance.
+const outlineStyleProperties = new Set(['outlineColor', 'outlineStyle', 'outlineWidth'])
+const shadowStyleProperties = new Set([
   'boxShadow',
   'elevation',
-  'filter',
-  'outlineColor',
-  'outlineWidth',
   'shadowColor',
   'shadowOffset',
   'shadowOpacity',
@@ -173,23 +161,17 @@ function isLayoutBoundsEnabled(): boolean {
   return devMode.enabled && devMode.layoutBounds
 }
 
-function styleLayoutBounds(color: string, platformOS?: string): TaoDebugStyle {
-  if (platformOS === 'android' || platformOS === 'ios') {
-    return {
-      borderColor: color,
-      borderWidth: 0.5,
-    }
+function styleLayoutBounds(color: string, style: TaoDebugStyleInput): TaoDebugStyle | undefined {
+  if (!setsAny(style, outlineStyleProperties)) {
+    return { outlineColor: color, outlineOffset: -0.5, outlineStyle: 'solid', outlineWidth: 0.5 }
   }
-  return {
-    boxShadow: `inset 0 0 0 0.5px ${color}`,
-    outlineColor: color,
-    outlineOffset: -0.5,
-    outlineStyle: 'solid',
-    outlineWidth: 0.5,
+  if (!setsAny(style, shadowStyleProperties)) {
+    return { boxShadow: `inset 0 0 0 0.5px ${color}` }
   }
+  return undefined
 }
 
-function processCreateReactElementArgs(args: any[], options: TaoCreateElementDevOptions = {}): void {
+function processCreateReactElementArgs(args: any[]): void {
   if (args[0] === React.Fragment) {
     return
   }
@@ -198,23 +180,21 @@ function processCreateReactElementArgs(args: any[], options: TaoCreateElementDev
   }
 
   const props = elementProps(args[1])
-  const style = styleInput(props['style'])
-  if (hasBoundingBoxAppearance(style)) {
+  const debugStyle = styleLayoutBounds(layoutBoundsColorForArgs(args), styleInput(props['style']))
+  if (!debugStyle) {
     return
   }
-
-  const debugStyle = styleLayoutBounds(layoutBoundsColorForArgs(args), options.platformOS)
   injectedDebugStyles.add(debugStyle)
   props['style'] = appendStyle(props['style'], debugStyle)
   args[1] = props
 }
 
-function hasBoundingBoxAppearance(style: TaoDebugStyleInput): boolean {
+function setsAny(style: TaoDebugStyleInput, properties: ReadonlySet<string>): boolean {
   if (!style) {
     return false
   }
   if (Array.isArray(style)) {
-    return style.some(hasBoundingBoxAppearance)
+    return style.some(item => setsAny(item, properties))
   }
   if (injectedDebugStyles.has(style)) {
     return false
@@ -223,7 +203,7 @@ function hasBoundingBoxAppearance(style: TaoDebugStyleInput): boolean {
     return value !== undefined
       && value !== null
       && value !== 0
-      && boundingBoxStyleProperties.has(property)
+      && properties.has(property)
   })
 }
 

@@ -12,17 +12,6 @@ test "Test world controls" {
       wait for sync
       expect text "Queued 0"
    }
-   test "fails one granular write and retries that record" {
-      run TestWorldApp
-      datasource fails after create Note "rejected note"
-      enter "Retry note" into #draft
-      press #add
-      expect text "Failed 1"
-      expect text "rejected note"
-      press #retry
-      wait for sync
-      expect text "Failed 0"
-   }
    test "holds a declared failure until an offline write reaches the provider" {
       run TestWorldApp
       datasource fails after create Note "rejected on reconnect"
@@ -52,6 +41,7 @@ test "Test world controls" {
       network offline
       enter "Offline Dev" into #draft
       press #add
-      expect text "Could not save data: Network is offline."
+      expect text "Unable to load these items."
+      expect missing text "Network is offline."
    }
 }

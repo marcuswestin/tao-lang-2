@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, HCI, Platform, Repo, Time } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, ReleaseCapabilities, type ReleasePhase, Repo, Time } from '@shared'
 
 /** Human release commands behind the four `just` prepare/publish recipes. */
 
@@ -9,6 +9,8 @@ const STUDIO_STAMP = '.artifacts/build/studio-native/prepared-release.json'
 
 type Asset = { name: string; sha256: string }
 type StudioStamp = {
+  releasePhase: ReleasePhase
+  releaseFingerprint: string
   appPath: string
   assets: Asset[]
   baseUrl: string
@@ -18,7 +20,15 @@ type StudioStamp = {
   repo: string
   version: string
 }
-type IdeStamp = { commit: string; name: string; publisher: string; sha256: string; version: string }
+type IdeStamp = {
+  releasePhase: ReleasePhase
+  releaseFingerprint: string
+  commit: string
+  name: string
+  publisher: string
+  sha256: string
+  version: string
+}
 type ExtensionManifest = { name?: unknown; publisher?: unknown; version?: unknown }
 
 function requireGitHubRepo(repo: string): void {
@@ -170,7 +180,9 @@ async function readStudioStamp(): Promise<StudioStamp> {
   return await FS.readJson<StudioStamp>(Repo.resolvePath(STUDIO_STAMP))
 }
 
-async function prepareStudio(repo: string, version: string): Promise<void> {
+async function prepareStudio(repo: string, version: string, phase: ReleasePhase = 3): Promise<void> {
+  const profile = publicProfile(phase)
+  ReleaseCapabilities.require('studio', profile)
   const baseUrl = studioBaseUrl(repo)
   requireVersion(version)
   await requirePublicRepo(repo)
@@ -179,6 +191,8 @@ async function prepareStudio(repo: string, version: string): Promise<void> {
     './dev',
     [
       'package-studio-native',
+      '--phase',
+      String(phase),
       '--release-base-url',
       baseUrl,
       '--channel',
@@ -200,6 +214,8 @@ async function prepareStudio(repo: string, version: string): Promise<void> {
   await FS.writeJson(
     Repo.resolvePath(STUDIO_STAMP),
     {
+      releasePhase: phase,
+      releaseFingerprint: ReleaseCapabilities.fingerprint(profile),
       appPath: paths.appPath,
       assets: await currentAssets(paths.artifactsRoot),
       baseUrl,
@@ -217,6 +233,8 @@ async function requirePreparedStudio(
   repo: string,
 ): Promise<{ paths: Awaited<ReturnType<typeof studioPaths>>; stamp: StudioStamp }> {
   const stamp = await readStudioStamp()
+  requireReleaseStamp(stamp)
+  ReleaseCapabilities.require('studio', publicProfile(stamp.releasePhase))
   if (stamp.repo !== repo || stamp.baseUrl !== studioBaseUrl(repo)) {
     Errors.throwUserInput('The prepared Studio release targets a different GitHub repository.')
   }
@@ -397,9 +415,10 @@ async function vscodeCli(): Promise<string> {
   return 'code'
 }
 
-async function prepareIde(): Promise<void> {
-  await run('./agent', ['ide-extension-package'], Repo.getRoot(), true)
+async function prepareIde(phase: ReleasePhase = 1): Promise<void> {
+  const profile = publicProfile(phase)
   const manifest = await extensionManifest()
+  await run('./agent', ['ide-extension-package', manifest.version, String(phase)], Repo.getRoot(), true)
   const vsix = Repo.resolvePath(IDE_VSIX)
   if (!await FS.isFile(vsix)) {
     Errors.throwUserInput(`The IDE package did not write ${vsix}.`)
@@ -422,6 +441,8 @@ async function prepareIde(): Promise<void> {
     Repo.resolvePath(IDE_STAMP),
     {
       commit: await commit(),
+      releasePhase: phase,
+      releaseFingerprint: ReleaseCapabilities.fingerprint(profile),
       name: manifest.name,
       publisher: manifest.publisher,
       sha256: await fileHash(vsix),
@@ -440,6 +461,7 @@ async function publishIde(target: 'all' | 'marketplace' | 'open-vsx'): Promise<v
     Errors.throwUserInput('Run `just ide-extension-release-prepare` first.')
   }
   const stamp = await FS.readJson<IdeStamp>(path)
+  requireReleaseStamp(stamp)
   await requireCleanSource(stamp.commit)
   await requirePublishedMain(stamp.commit)
   const manifest = await extensionManifest()
@@ -468,6 +490,20 @@ async function publishIde(target: 'all' | 'marketplace' | 'open-vsx'): Promise<v
     }
     await run('bunx', ['ovsx', 'publish', vsix], Repo.resolvePath('packages/ides/ide-extension'), true)
     HCI.writeLine(`Published Open VSX: ${stamp.publisher}.${stamp.name}@${stamp.version}`)
+  }
+}
+
+function publicProfile(phase: ReleasePhase) {
+  const profile = ReleaseCapabilities.profile(phase)
+  if (profile.phase === 'development') {
+    Errors.throwUserInput('Public releases require a numbered release phase.')
+  }
+  return profile
+}
+
+function requireReleaseStamp(stamp: { releasePhase: ReleasePhase; releaseFingerprint: string }): void {
+  if (stamp.releaseFingerprint !== ReleaseCapabilities.fingerprint(publicProfile(stamp.releasePhase))) {
+    Errors.throwUserInput('The release capability policy changed after preparation; prepare a fresh release.')
   }
 }
 

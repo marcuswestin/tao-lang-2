@@ -1,4 +1,4 @@
-import { Errors, FS, Json, Platform, Text } from '@shared'
+import { Errors, FS, Json, Platform, ReleaseCapabilities, type ReleaseProfile, Text } from '@shared'
 import { PROJECT_LOCK_RELATIVE_PATH } from './project-lock-path'
 import { withShipLockWrite } from './ship-transaction'
 
@@ -88,6 +88,7 @@ export type TaoProjectLock = {
   }
   /** The Tao release this project runs under; `toolchain-pin.ts` reads and writes it. */
   toolchain?: {
+    releaseProfile?: ReleaseProfile & { fingerprint: string }
     version: string
   }
 }
@@ -176,7 +177,15 @@ export function mergeProjectLocks(fresh: TaoProjectLock, incoming: TaoProjectLoc
  */
 export async function writeToolchainPin(projectRoot: string, version: string): Promise<string> {
   const lock = await readProjectLock(projectRoot)
-  return await writeProjectLock(projectRoot, { ...lock, toolchain: { version } })
+  return await writeProjectLock(projectRoot, {
+    ...lock,
+    toolchain: {
+      version,
+      ...(ReleaseCapabilities.current().phase === 'development'
+        ? {}
+        : { releaseProfile: { ...ReleaseCapabilities.current(), fingerprint: ReleaseCapabilities.fingerprint() } }),
+    },
+  })
 }
 
 function shipLockEntry(lock: TaoProjectLock, identity: string): ShipLockEntry | undefined {

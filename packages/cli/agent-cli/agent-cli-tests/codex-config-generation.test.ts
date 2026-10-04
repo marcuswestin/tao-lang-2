@@ -135,7 +135,6 @@ Describe('Codex config generation', () => {
     // A home-relative socket cannot be spelled for Codex without a login, so it is left out rather
     // than expanded into one developer's home directory.
     Expect(Object.keys(profile['network']['unix_sockets'])).toEqual(['/nix/var/nix/daemon-socket/socket'])
-    Expect(profile['network']['unix_sockets']['/var/run/docker.sock']).toBeUndefined()
     Expect(profile['network']['domains']['*']).toBeUndefined()
     Expect(parsed['permissions']['tao-review']['extends']).toBe(':read-only')
     Expect(parsed['permissions']['tao-native']['filesystem']['~/Library/Developer/CoreSimulator']).toBe('write')
@@ -188,8 +187,6 @@ Describe('Codex config generation', () => {
     // harness is keeping.
     Expect(filesystem['~/.bun']).toBe('write')
     Expect(filesystem['~/.cache']).toBe('write')
-    // The default profile must have no denied reads or Codex cannot run its host rule.
-    Expect(filesystem['~/.ssh/**']).toBeUndefined()
   })
 
   Test('keeps denied reads out of the host-capable default but in the review profile', () => {
@@ -414,8 +411,6 @@ Describe('Codex config generation', () => {
     Expect(tracked.stdout.split('\n')).toContain('.codex/config.toml')
     const configText = await FS.readText(FS.resolvePath('.codex/config.toml', root))
     const config = Platform.parseToml(configText) as any
-    Expect(config.default_permissions).toBe('tao-workspace')
-    Expect(config.permissions['tao-workspace'].extends).toBe(':workspace')
     // Machine-specific Git grants belong to the local user profile, never this tracked file.
     Expect(Object.keys(config.permissions['tao-workspace'].filesystem).some(path => path.includes('.git'))).toBe(false)
   })

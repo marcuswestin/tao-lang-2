@@ -1,0 +1,44 @@
+{
+  "id": "QA-SKILL-DATA-PROVIDERS",
+  "status": "fixed-awaiting-qa",
+  "phase": 1,
+  "surfaceId": "doc:packages/ai/tao-skills/skills/tao-data/SKILL.md",
+  "dimension": "text",
+  "channel": "source",
+  "severity": "major",
+  "title": "Data skill offers providers release 1 rejects",
+  "observed": "The skill calls Dev, Http, InstantDB, ICloud and CloudKit \"implemented provider declarations\" and teaches TypeScript/Http adapters without phase marking; release 1 rejects all but Dev (Http is release 2, CloudKit release 4, InstantDB and ICloud deferred). tao-visibility repeats the list.",
+  "impact": "An agent steers a release-1 user into providers the compiler refuses.",
+  "location": "packages/ai/tao-skills/skills/tao-data/SKILL.md:39, 60-68; packages/ai/tao-skills/skills/tao-visibility/SKILL.md:49",
+  "affectedPhases": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "expected": "Later-release and deferred providers are marked unavailable in release 1.",
+  "recheck": "Compile each advertised provider under a release-1 profile.",
+  "evidence": [
+    "packages/ai/tao-skills/skills/tao-data/SKILL.md",
+    "packages/ai/tao-skills/skills/tao-visibility/SKILL.md"
+  ],
+  "evidenceHashes": [
+    {
+      "path": "packages/ai/tao-skills/skills/tao-data/SKILL.md",
+      "sha256": "eb1c0a93a78445a5e4f3b17d6ef0cc77d20677b6d3d083f0edbe9b2b764cf5c6"
+    },
+    {
+      "path": "packages/ai/tao-skills/skills/tao-visibility/SKILL.md",
+      "sha256": "c23e1915595aaad1538521983ca6d7b60321231e15ff6cdab3f470b83dfca12c"
+    }
+  ],
+  "createdAt": "2026-09-29T16:13:47.064Z",
+  "updatedAt": "2026-10-03T20:24:12.817Z",
+  "confidence": "confirmed",
+  "requiredReviewer": "agent",
+  "relatedStories": [
+    "CLI10"
+  ],
+  "notes": "Source documentation repair implemented and reviewed in the staged-release QA slice. This is source evidence only; the finding stays unresolved until its original acceptance recheck is completed: Compile each advertised provider under a release-1 profile."
+}

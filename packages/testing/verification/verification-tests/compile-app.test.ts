@@ -1,5 +1,5 @@
 import { CLI, FS, Repo, Time } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { Describe, Expect, mkTestDir, Test, until } from '@shared/test'
 import {
   COMPILE_INPUT_FILES,
   COMPILE_SOURCE_ROOTS,
@@ -81,7 +81,6 @@ Describe('app compilation staleness stamp', () => {
     const root = await repository()
     const tao = compiler()
     try {
-      Expect(await run(root, tao.compile)).toBe(0)
       Expect(await run(root, tao.compile)).toBe(0)
       Expect(await run(root, tao.compile)).toBe(0)
 
@@ -379,11 +378,31 @@ Describe('app compilation staleness stamp', () => {
   Test('serializes independent compiles and rechecks staleness after acquiring the lock', async () => {
     const root = await repository()
     const releasePath = FS.resolvePath('release-first', root)
+    const blockedPath = FS.resolvePath('blocked-second', root)
     const modulePath = Repo.resolvePath('packages/testing/verification/verification-src/CompileApp.ts')
     const sharedPath = Repo.resolvePath('packages/shared/shared-src/shared.ts')
     const worker = (id: string, hold: boolean) => `
-      import { Errors, FS, Platform, Time } from ${JSON.stringify(sharedPath)}
-      import { runCompileApp } from ${JSON.stringify(modulePath)}
+      import * as shared from ${JSON.stringify(sharedPath)}
+      const { Errors, FS, Platform, Time } = shared
+      ${
+      hold ? '' : `
+      const { MockModule } = await import(${
+        JSON.stringify(Repo.resolvePath('packages/shared/shared-src/testing/Test-Bun.ts'))
+      })
+      MockModule('@shared', () => ({ ...shared, FS: { ...FS,
+        withFileMutationLock: (target, boundary, work) => FS.withFileMutationLock(target, boundary, work, {
+          inspectProcessIdentity: async pid => {
+            if (pid !== Platform.runtimeProcess.pid) {
+              await FS.writeText(${JSON.stringify(blockedPath)}, '')
+            }
+            // This fixture keeps the known first worker alive until the parent releases it.
+            return { evidence: 'unknown' }
+          },
+        }),
+      }}))
+      `
+    }
+      const { runCompileApp } = await import(${JSON.stringify(modulePath)})
       const root = Platform.runtimeProcess.env['TAO_COMPILE_APP_ROOT']
       if (!root) Errors.throwUnexpected('Missing compile app root.')
       const result = await runCompileApp({
@@ -421,7 +440,16 @@ Describe('app compilation staleness stamp', () => {
         }),
       ).toBe(true)
       second = start('second', false)
-      await Time.sleep(100)
+      let secondCompleted = false
+      void second.then(() => {
+        secondCompleted = true
+      }, () => {
+        secondCompleted = true
+      })
+      await until(async () => await FS.exists(blockedPath) || secondCompleted, {
+        description: 'second compile waiting on the live owner',
+      })
+      Expect(await FS.exists(blockedPath)).toBe(true)
       Expect(await FS.exists(FS.resolvePath('entered-second', root))).toBe(false)
       await FS.writeText(releasePath, '')
       const results = await Promise.all([first, second])

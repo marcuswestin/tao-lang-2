@@ -1,0 +1,45 @@
+{
+  "id": "20260929164852084-fd48299f-7e82-459c-a9e5-f9b906bfaa1d",
+  "runId": "20260929164657843-e6414d4f-c4d8-47a0-b8be-c662a133fa3d",
+  "createdAt": "2026-09-29T16:48:52.084Z",
+  "recordedAt": "2026-09-29T16:48:52.084Z",
+  "commit": "442e6416f4c705efb8f236021cf8220b4d02306e",
+  "phase": 1,
+  "executionProfile": "development",
+  "provenance": {
+    "snapshotBasis": "observation-time",
+    "originalDependencies": "recorded",
+    "observedMetadataEvidence": [
+      "Docs/QA/evidence/recheck-442e6416/qa-views-dark-11f71e8a7910.png",
+      "Docs/QA/evidence/recheck-442e6416/source-snapshot.json"
+    ]
+  },
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "runtime": "bun:1.4.2"
+  },
+  "inputs": {
+    "source": "Docs/Tutorials/Your First Tao App.md",
+    "dependencySnapshot": "Docs/QA/inputs/05cbff5f9dfc1dec547312675fc241fe7cc49dfa9a7d639908466aceb22f3c0a.json"
+  },
+  "surfaceId": "visual:reading-list",
+  "dimension": "visual",
+  "outcome": "friction",
+  "reviewer": "agent",
+  "channel": "phone-dark",
+  "evidence": [
+    {
+      "path": "Docs/QA/evidence/recheck-442e6416/qa-views-dark-11f71e8a7910.png",
+      "sha256": "e4f8a7745e6116be0ad7fa5275efb9d92c11a83d439183de6d39eebd2ae3ad8e"
+    },
+    {
+      "path": "Docs/QA/evidence/recheck-442e6416/source-snapshot.json",
+      "sha256": "552ac7580d73e34baa53f2f1f79e6f43eb69c5c069acec008835528693537423"
+    }
+  ],
+  "notes": "Recheck at 0aa8ebcf: the dark scenario image is byte-identical to the light phone image (same SHA-256); QA-TUTORIAL-DARK-PALETTE remains. Release 1 has no conditional colors, so whether a phase-1 tutorial should show a dark presentation needs a design judgment. Recaptured at 442e6416 and reinspected: unchanged from the 0aa8ebcf capture.",
+  "sourceHash": "b8031a89d6193430d5ffed7cef6406f02ab594a6ecef1c3f847ab12a4c71cd88",
+  "rendererHash": "bd0a77e7580bf225b4b439da249856535dc4d4d7c3a64adda691ccb4a53d7ee2",
+  "profileHash": "b5e443edb0ccd5952dd86869fb2a97f104715bfcbd7612b7bf7e2c50df3b94c8"
+}

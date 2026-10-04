@@ -1,0 +1,85 @@
+use Memory from @tao/data/providers/memory
+use StackNav from @tao/nav
+use Col, FormButton, Text, TextInput from @tao/ui
+
+app WriteRulesApp {
+   Name "Write Rules"
+   Navigator StackNav {
+      Initial NotesView
+   }
+   Datasource Memory { }
+}
+
+// `required` states completeness. It never blocks a write; it derives `Incomplete` and `Problems`
+// on a stored row, and on every projection that selects the field.
+data Notes / Note {
+   Title text (required "Give the note a title"),
+   Topic text (required "Pick a topic"),
+   Summary text (default "", required "Summarize the note"),
+}
+
+// A projection carries the `required` sentences of the fields it selects, so a form knows it is
+// unfinished before any row exists.
+type NoteInput is Note { Title, Topic }
+
+scene NotesView() {
+   Title "Write Rules"
+   state Input = NoteInput {
+      Title: "",
+      Topic: ""
+   }
+   query Notes = Notes with { }
+   // The button is gated by its `Disabled` argument alone, so pressing it while incomplete proves
+   // the view received `Input.Incomplete`. A keyboard submit has no such gate and checks instead.
+   action Add() {
+      create Note with Input
+      set Input = NoteInput {
+         Title: "",
+         Topic: ""
+   }  }
+   action Submit() {
+      check not Input.Incomplete
+      do Add()
+   }
+   render Col() {
+      #noteTitle
+      TextInput(Value: Input.Title, Label: "Title") {
+         on submit Submit
+      }
+
+      #noteTopic
+      TextInput(Value: Input.Topic, Label: "Topic") {
+         on submit Submit
+      }
+      loop Input.Problems / Problem {
+         Text("Needed: { Problem }")
+      }
+
+      #addNote
+      FormButton(Title: "Add note", Disabled: Input.Incomplete) {
+         on press Add
+      }
+      Text("Notes: { Notes.Count }")
+
+      #notes
+      loop Notes / Note {
+         NoteRow(Note)
+}  }  }
+
+// A stored row is incomplete while any of its own `required` fields is empty, whatever the form
+// that created it selected.
+view NoteRow(Note) {
+   action Summarize() {
+      update Note {
+         Summary: "In short"
+   }  }
+   render Col() {
+      Text("Note: { Note.Title } about { Note.Topic }")
+      loop Note.Problems / Problem {
+         Text("Unfinished: { Problem }")
+      }
+
+      #summarize
+      FormButton(Title: "Summarize") {
+         on press Summarize
+}  }  }
