@@ -23,7 +23,7 @@ type NotifyDependencies = {
   root?: string
   now?: () => number
   sleep?: (ms: number) => Promise<void>
-  play?: (sound: string) => Promise<void>
+  play?: (sound: string, volume: number) => Promise<void>
   flash?: () => Promise<void>
   onSignal?: typeof Platform.onProcessSignal
 }
@@ -85,12 +85,14 @@ export async function notifyDeveloper(
         options.flashScreen ? ', flashing immediately' : ', flashing after 30 seconds'
       }. Acknowledge with ./agent notify-developer --shutdown-id ${id} --stop.`,
     )
-    let nextSoundAt = now()
+    const startedAt = now()
+    let nextSoundAt = startedAt
     let nextFlashAt = nextSoundAt + (options.flashScreen ? 0 : 30_000)
     while (!cancelled && effectFailure === undefined && await read() === token) {
       if (now() >= nextSoundAt && playback === undefined) {
+        const volume = 0.2 + 0.8 * Math.min(1, Math.max(0, (now() - startedAt) / 120_000))
         nextSoundAt = now() + 4_000
-        playback = Promise.resolve().then(() => play(sound)).catch(cause => {
+        playback = Promise.resolve().then(() => play(sound, volume)).catch(cause => {
           effectFailure ??= cause
         }).finally(() => {
           playback = undefined
@@ -124,12 +126,12 @@ export async function notifyDeveloper(
   }
 }
 
-async function playNotificationSound(sound: string): Promise<void> {
+async function playNotificationSound(sound: string, volume: number): Promise<void> {
   if (Platform.hostPlatform !== 'darwin') {
     Errors.throwHostEnvironment('Attention sounds currently require macOS.')
   }
   const result = await CLI.run('/usr/bin/afplay', {
-    args: [`/System/Library/Sounds/${sound}.aiff`],
+    args: ['--volume', String(volume), `/System/Library/Sounds/${sound}.aiff`],
     processPolicy: 'test',
     timeoutMs: 4_000, // budget-ok: a sound must finish before the next four-second tick
   })

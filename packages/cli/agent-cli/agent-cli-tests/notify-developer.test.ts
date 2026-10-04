@@ -3,6 +3,35 @@ import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { notifyDeveloper } from '../agent-cli-src/attention/NotifyDeveloper'
 
 Describe('developer attention', () => {
+  Test('ramps playback volume from twenty percent to full over two minutes and caps it there', async () => {
+    const root = await mkTestDir('notify-volume-')
+    let now = 0
+    const samples = new Map<number, number>()
+    try {
+      await notifyDeveloper({}, {
+        root,
+        now: () => now,
+        sleep: async ms => {
+          now += ms
+        },
+        flash: async () => {},
+        play: async (_sound, volume) => {
+          samples.set(now, volume)
+          if (now >= 124_000) {
+            await notifyDeveloper({ stop: true }, { root })
+          }
+        },
+      })
+      Expect(samples.get(0)).toBeCloseTo(0.2)
+      Expect(samples.get(60_000)).toBeCloseTo(0.6)
+      Expect(samples.get(120_000)).toBe(1)
+      Expect(samples.get(124_000)).toBe(1)
+      Expect([...samples.values()].every(volume => volume >= 0.2 && volume <= 1)).toBe(true)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('sounds immediately and every four seconds, then acknowledgement stops only its own alert', async () => {
     const root = await mkTestDir('notify-developer-')
     let now = 0
