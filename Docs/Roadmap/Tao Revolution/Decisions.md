@@ -132,7 +132,438 @@ list and a field block the same thing written the same way.
   _different_ type's name is already pathological (real renames read `StartedBy Account`,
   `Mine draft of Stop`), and the type checker catches the typo at the first use site.
 
+#### Callable type exposure and argument resolution amendment (2026-10-01)
+
+The Developer selected type/name-based invocation for every function and view, never argument
+position. Exporting a callable also exposes its parameter types through qualified signature paths,
+including parameters referencing otherwise private named types. This exposes the contract without
+importing those names into the caller's ordinary scope or exporting unrelated private declarations.
+
+For signatures referencing an existing named type, a projection such as `PersonName.GivenName`
+preserves the identity of that type. `func B(A A)` must not create a fresh nominal B.A identity;
+it is the longhand of `func B(A)`, binding the parameter value A to the existing type A. The short
+form makes that value available normally in the body, as in `func F(A) { Print(A) }`. Applying
+identity preservation to differently named bindings such as `Value A` is the recommended extension;
+inline primitive role declarations remain a distinct case to settle. The requested `.GivenName`
+construction inside the immediate call explicitly
+selects that signature type. Bare constructor names resolve ordinary visible types first, then
+the immediate signature only when absent; an incompatible visible type errors without fallback.
+These are prospective language decisions, not implementation claims.
+
+Removing callable argument labels, requiring distinct input identities, named-type declaration
+identity, contextual literal construction, and the precise complete binding algorithm remain under
+discussion. After exploring bidirectional matching in S29, the Developer selected `is` spelling and
+upward-only implicit nominal matching: invoking a callable must not automatically convert a value
+into a more specific type or a sibling branch. Bare literals may still receive an expected named
+type; this is separate from conversion of already typed values. Downward and sibling conversion
+require explicit treatment, with `as` under discussion. Widening Celsius through Temperature must
+not authorize silently reinterpreting its magnitude as Fahrenheit. [S30](<../Data and render contracts/Syntax sketches.md#s30--upward-only-matching-and-quantities-that-cannot-be-reinterpreted>)
+records the active direction, realistic matching examples, source differences, and unit-conversion
+questions. Constraint validation, permissible `as` operations, and unit representation remain to
+settle before implementation.
+The subsequent [S32](<../Data and render contracts/Syntax sketches.md#s32--semantic-ancestry-data-representation-and-a-duration-library-fixture>)
+round compares core-as-ancestor with core-as-data and revisits the default direction using a
+duration-library consumer/implementation fixture. The Developer rejected input-local accepts/using
+adapters, prefers convert/to operations grouped with their owning type, and wants type-associated
+functionality explored briefly rather than silently assumed implemented. Core representation,
+capability/protocol definitions, scoped parameter-role syntax, and exact-only versus upward default
+remain discussion points. Future examples should pair rejected calls with working alternatives
+where feasible. No new counterfactual conversion policy is accepted merely by this exploration.
+The subsequent [S33](<../Data and render contracts/Syntax sketches.md#s33--tagged-families-capabilities-construction-and-forbidden-conversions>)
+explores preserving descendant identity during parent admission, abstract/closed semantic families,
+type-pattern coverage, type-owned `as` bodies, `can`/concrete-Self codec contracts, literal construction
+and negative conversion permissions. These remain proposals. In particular, the uninhabited `never`
+type and a declaration forbidding a conversion must not be conflated with a callable converter
+that aborts; neither runtime type discrimination nor a new scalar codec contract is implemented
+by this discussion.
+In [S34](<../Data and render contracts/Syntax sketches.md#s34--capability-vocabulary-and-explicitly-qualified-receivers>),
+the Developer accepted the recommendations on 2026-10-02, correcting associated type body syntax
+to `type Fahrenheit is Temperature with { ... }`. Actions live directly inside data bodies;
+canonical declarations qualify the receiver, as in Book.Return/Books.Return. Receiver values bind
+the actual item or collection, including selected/query subsets; collection membership is captured
+at entry and per-item actions execute sequentially. This does not imply atomicity or a new failure
+policy. Receiver-name shadowing is rejected, and invocation requires an actual bound value rather
+than an arbitrary item selected from a type name. Use can for capability requirements, omit like
+sugar initially, and reserve as for permitted value operations and source-as-target converter
+declarations. A converter may be owned by its source or target; it cannot bypass foreign private
+representations, and duplicate source-target implementations need diagnostics. Existing input-local
+adapters remain rejected. Static factory spelling, precise capability/operator contracts and
+conversion visibility/conflict rules remain to specify. No receiver or nested method facility is
+implemented merely by recording this direction.
+The older colon rule above continues to describe structural value binding; its callable portion is
+being reconsidered. Explicit inline role declarations must be distinguished from repeated references
+or transparent aliases of one type when applying any uniqueness rule.
+
+The minimal-app review (2026-10-02) selects structural capability satisfaction: compatible associated
+method signatures, including inherited methods, satisfy a `can` contract without an implementing-type
+conformance clause. Capability parameters use ordinary type syntax (`Value Display`), not a second
+`can` modifier. Function return types are inferred when omitted; explicit `-> Type` remains available
+to constrain them. Bodyless contracts still need their result contract. The Developer requested
+`can ui { Render() -> rendered }` as the rendering direction. S59 selects associated view methods
+to implement Render, preserving reactive rendering and occurrence/lifecycle behavior rather than
+eagerly caching nodes; implementation/prototyping remains outstanding.
+[Code preferences](<Code preferences.md>) records requested
+canonical forms and distinguishes preferences from unresolved grammar/semantics. Repeated input
+identities, role selection with `.Name`, locale-aware text, unit suffixes, and private representation
+access are still discussion points; no implementation is claimed.
+
+In the follow-up (2026-10-02), the Developer selected datasource and I/O adapters as the default
+owners of serialization/deserialization. Existing datasource snapshot/schema validation supports
+part of this boundary; arbitrary foreign results do not yet receive automatic runtime decoding
+against their Tao result type. Primitive schema compatibility is not nominal/unit validation.
+Locale-aware core text and the complete static read/failure proof system are deferred from this
+syntax work to pre-MVP investigations [A21 and A22](<../../MVP Roadmap/Agent MVP Roadmap.md#pre-mvp-language-investigations>),
+feeding [R16 and R17](<../../MVP Roadmap/Developer MVP Roadmap.md#pre-mvp-language-investigations>).
+The Developer subsequently accepted the bare `Right 2` argument direction: visible type lookup
+wins; only an absent name falls back to an immediate-callee binding. Keep that binding at the
+argument site and retain `.Right` for explicit selection. Calls do not use positional ties.
+Concrete grammar and matching implementation remain to prototype.
+
+`never`, both as a bottom-type proposal and as conversion-ban syntax, is removed from the active
+fixture and deferred to pre-MVP [A23/R18](<../../MVP Roadmap/Agent MVP Roadmap.md#a23--investigate-uninhabited-types-and-representation-protection>).
+Historical S33 exploration is not an active requirement. The new numeric/scalar/affine/opaque/secret
+frame in [S37](<../Data and render contracts/Syntax sketches.md#s37--operation-domains-and-protected-representations>)
+is a proposal to evaluate, not a selected core taxonomy or numeric conversion policy.
+
+The next clarification selects `numeric` as operation-free storage representation. `number` uses
+that storage and explicitly supplies ordinary numeric operators; other numeric-backed types
+declare their own applicable operand/result contracts instead of gaining number arithmetic from
+storage. TypeScript injection is the intended primitive implementation boundary; operator declaration
+syntax and equality spelling remain open. Temperature ordering and paired delta arithmetic must
+not admit unrelated quantities or points. Whether Temperature itself supports point-plus-delta,
+or addition is exposed only on the delta receiver, remains to clarify. Duration examples must name
+input units: the prior `Duration 5 + Duration 3` illustration omitted essential unit information.
+Same-unit values can add their readings; mixed units require either explicit conversion or a
+declared normalization policy. Unit identity versus quantity identity is the next decision (S38).
+
+The Developer subsequently endorsed the scalar-backed quantity sketch with one explicit base unit
+and other units defined by ratios, subject to refinement during design/implementation. The sketch
+uses unit-bearing constructors normalized to a common quantity type; exact declaration grammar,
+canonical precision, and numeric validation remain open. After considering the separate TimeDelta
+proposal in S40, the Developer selected signed Duration: time values are affine points, and their
+difference is Duration. Time-Time -> Duration, Time +/- Duration -> Time, and Duration +/- Duration
+-> Duration. Do not introduce a separate TimeDelta merely to name the same signed displacement;
+do not clamp Duration at zero. Time+Time is invalid. Exact point type naming and clock/calendar
+contracts remain to specify; this does not classify time-of-day as an unrestricted linear timestamp.
+Consumers such as waits/animations need their own negative-input contracts. The Developer then
+accepted Ratio as a signed dimensionless scalar backed by numeric, with unity as its base and
+percent/permille as scaled units. Duration/Duration -> Ratio, Duration*Ratio -> Duration, and
+Duration/Ratio -> Duration are selected contracts. General Ratio has no zero-to-one bound;
+Probability/Progress can be separate constrained types. The Developer accepted the next round's
+recommendations: inherited operators retain their explicitly declared operand/result domains rather
+than automatically strengthening results to descendant types; value equality uses ==/!=, with is
+retained for type/case/status matching; ordinary number, quantity, and Ratio values are finite, and
+invalid arithmetic produces a modeled failure rather than NaN/Infinity. Statically evident invalid
+expressions receive diagnostics. Exact failure representation/handling and numerical precision
+remain to specify; this does not authorize the deferred complete static proof system. Narrower
+constrained scalar descendants still require valid operand/result contracts; signed Duration itself
+is closed under subtraction. Continue the remaining dialogue three items per round.
+
+The Developer accepted ordinary associated func declarations for operator symbols and explicitly
+authored ordered operand signatures; the compiler does not swap operands to discover a match.
+Reverse signatures are supplied separately where supported. The proposed unit-reading methods
+returning bare number were rejected: unit selection must preserve semantic/unit information.
+The exact result type/representation of a unit-aware reading remains open. Identify concrete
+primitive-magnitude consumers before choosing any extraction API; no public extraction spelling
+is selected. Value-preserving conversion of Minutes 2 to seconds is 120 Seconds.
+The Developer agreed to proceed from concrete injected-implementation and adapter boundaries.
+Choose their unit-aware value/access contracts before any general extraction API. No TypeScript
+bridge spelling, unit-view representation, or negative-delay policy is selected by that agreement.
+
+The next round selects unit-aware results as Duration with a selected-unit view; canonical backing
+is unchanged and quantity equality ignores the view. TypeScript should have a uniform accessor
+on values for their underlying JavaScript data (`getJSValue()` is the recommended provisional
+name), not a required per-unit extraction helper. Each type specifies its canonical representation;
+different unit views expose the same backing value. Adapters still perform conversions required
+by their external contract. Exact composite/resource/secret accessor contracts remain to define;
+this is explicit trusted TypeScript interop, not a new Tao-level raw-data operator.
+Rename the proposed Delay action to Wait. Wait treats negative and zero Duration as no intentional
+wait; positive values wait subject to the backend timing contract. Duration stays signed and is not
+globally clamped. Prefer signed unit construction such as Seconds -2 where the name resolves as
+a unit constructor; current literal-only constructor grammar does not implement it. Name-minus-value
+must still represent subtraction when the name resolves as a value, so parsing/name-resolution needs
+a deliberate prototype rather than assuming this surface is already unambiguous.
+
+The Developer accepted explicit TypeScript type factories, canonical backing input for fromJSValue
+without repeated unit/input normalization, and checked construction reporting modeled failure rather
+than an explicit construction-result union. Factories check backing shape, finiteness, and declared
+invariants; caller/adapter contracts supply semantic interpretation. Exact SDK export and failure
+handling syntax remain to define. Switch the continuing dialogue to five questions per round.
+
+The Developer selected ordinary number and Ratio scaling, exact canonical equality with explicit
+approximate comparison, and authored derived-quantity operator contracts initially. Arithmetic
+results use the leftmost operand's unit view rather than a common/default-unit policy when that
+operand supplies a unit applicable to the result. Scaling by a unitless number or Ratio retains the
+sole quantity operand's unit, regardless of operand order. Different-result-domain operations still
+require a defined result-unit policy; do not apply a Duration unit to Ratio or Speed results.
+The Developer selected mandatory postfix unit construction on signed numeric literals and explicitly
+parenthesized number expressions, e.g. -2 Seconds and (Count + 1) Seconds. The suffix binds before
+multiplication/addition; the sign belongs to the construction input, so -2 Celsius does not require
+negation of a temperature point. -(2 Celsius) separately requires that type's negation operator.
+Require comma separators between value entries in item/configuration literals to remove the
+omitted-comma entry conflict; calls/lists also use commas. This decision does not introduce commas
+between render children or declaration statements. Nominal type-first construction remains separate.
+Grammar implementation/prototyping is still outstanding; no parser acceptance is claimed.
+
+S44 selections: initially finite binary64 JavaScript number backing; unit views persist through
+ordinary Tao assignment/argument passing while serialization defaults to canonical data and decoding
+restores the declared default view unless the schema carries metadata; operator declarations belong
+to a package owning at least one operand or result type, with duplicate/conflicting contracts rejected.
+Exact operator import/coherence mechanics remain to specify. Failure expression ergonomics and
+different-result-domain units are still under discussion; do not adopt their recommendations yet.
+
+The Developer accepts the different-result-domain unit recommendation: use the result type's
+declared default view unless the authored operator explicitly selects another supported unit view;
+callers may also select a view explicitly. Same-domain leftmost-unit and sole-quantity scaling rules
+remain unchanged. Automatic synthesis of compound unit views is not selected. Failure coverage,
+cleanup, propagation contracts, and default-boundary details remain under discussion.
+
+The Developer accepts mandatory coverage of modeled failures with inferred typed failure effects
+and installed typed default root handlers. Local partial handlers may consume selected cases;
+the remainder propagates through the callable contract to a caller or owned default boundary.
+Missing modeled root coverage is a compile error in the proposed contract subset, not silent loss.
+This is a design selection, not an implemented complete static proof over external code or resource
+availability. Existing root warnings and project-wide read defaults are superseded in direction;
+the separate app-scoped read-guard/context slice is in progress. How that rendering policy should
+extend to action/receipt failures, precise outcome words, and cleanup contracts remain to decide.
+
+S47 follow-up selections: unavailable reads use an inline fallback; action/receipt failures use
+owned dismissible notices while healthy content remains visible. General defer is scoped to the
+innermost lexical block, runs LIFO on normal/failed/cancelled exit after joined resource users finish,
+and preserves the primary failure with cleanup failures attached. If only cleanup fails, the overall
+operation fails with cleanup-stage information while retaining facts about successful external work;
+do not automatically repeat that work. Cleanup may suspend; scope exit waits for it, and ordinary
+cancellation does not interrupt already-started cleanup. This cannot guarantee cleanup after process
+termination.
+`defer Invocation(...)` is exact shorthand for `defer { do Invocation(...) }`, registering work rather
+than invoking immediately. Both forms use ordinary lexical closure capture: immutable bindings stay
+stable and mutable values are read when cleanup executes. Bind an immutable local for a snapshot.
+
+The selected success arm is `done`, superseding the proposed `completed` spelling. It denotes success
+of the invocation's own contract, not universal remote acknowledgement. `error` covers modeled
+failures, `cancelled` is distinct, and `otherwise` remains a catch-all. Shared app-guard failure
+matching vocabulary and origin metadata remain under discussion. Explicit `guard Available` empty
+cases are supported semantically today; bare guards do not intercept ordinary empty content.
+
+`use all from Path` is selected as the all-exports import surface. Public visibility and collision
+resolution now follow the selected S48 3B rule: import public exports and reject every conflicting
+wildcard binding immediately, even if unused. This is not an implemented wildcard import.
+
+S48 selections: app failure guards match typed cases/families with origin carried as factual metadata,
+not a separate action-exception hierarchy. Exact case beats family and family beats generic error;
+equally specific overlaps are rejected. Compact string render branches are accepted, including
+`guard Available { empty -> "No reports yet." }`; multiple render statements still need a block.
+Any matched render guard branch stops the remainder of the enclosing render block. Whether a guard
+without case selectors should also intercept empty/none is reopened: recommend a usable-content
+default, catching absent/unavailable/empty content while letting healthy and usable stale/refreshing
+content continue. This broader default is not yet selected. Missing-target status remains distinct
+from known optional absence and successfully acquired empty content.
+
+S50 source inventory clarifies that none is not a current guard case, and empty can overlap query
+refreshing/stale. The default guard contract is still open. On separating absence/content/acquisition,
+the recommendation is refined to require an available/present usable value while allowing valid
+empty text/lists; ordinary empty/advisory UI belongs in when/if, with explicit empty guard allowed
+when nonempty content is required. S49's broader nonempty default remains an alternative, not a
+selected decision. Preserve none/empty/missing meanings through typed metadata axes rather than
+forcing them into one exclusive status hierarchy; failure-family specificity remains selected.
+
+S50 follow-up: the Developer accepts the available/present continuation recommendation with empty
+text/lists allowed, but questions retaining public missing versus none. Adopt the continuation rule;
+public absence vocabulary remains open. Distinguish expected optional/not-found absence from a
+violated required-data contract: the latter must become a typed adapter/schema failure. Deleted
+retained identities and provider-filtered rows do not automatically prove a schema violation.
+Independent multi-match presentation and freshness policy remain proposals, not selected syntax.
+
+The Developer selects removal of the public built-in missing state/guard keyword. Expected optional
+or lookup absence uses none; operations promising existence and genuine required-data violations
+remain typed failures rather than silently absent values. Preserve factual identity/reason metadata
+and permission privacy. This is a design amendment, not removal of today's internal runtime status.
+The complete entity-handle/query state reorganization is deferred to pre-MVP A24/R19 with its
+[context brief](<../../MVP Roadmap/Review - Entity handles and query states.md>).
+All-match ordinary when remains an open question; single-choice value/action semantics and selected
+failure-family specificity must be accounted for before adopting it.
+
+S53 supersedes that open spelling choice: pick is the single-value-producing selection construct;
+when runs/renders every matching case. Multiple branch results therefore do not become a scalar
+value expression. Native when-do outcome syntax remains scheduled to become do ... then, with its
+single selected invocation outcome; app failure guards retain selected most-specific dispatch.
+Whether multi-match when also operates in actions, condition observation timing, otherwise fallback,
+and failure interruption are the next details to settle, not implicit choices here.
+
+S52 3A/4A/5A are selected: cancelling an action context while Wait suspends unwinds that context and
+runs deferred cleanup rather than returning normally into subsequent work; long finite waits use
+bounded host timers internally; positive fractional waits round scheduling upward to supported host
+granularity. Resumption can be late, and these rules do not imply durable execution after termination.
+Monotonic versus wall-clock naming remains open: Time/DateTime is a coherent proposed pair; Timer
+would more naturally describe a measuring/countdown object than an affine point. Supported clock
+sources must resist wall-clock corrections; sleep and origin/lifetime semantics remain to decide.
+
+S54–S56 select the public timing API: synchronous Time.StartTimer() returns a timer;
+Timer.Duration() returns a fixed monotonic elapsed Duration sampled at that call; it neither stops
+measurement nor installs a live reading. A later call can produce a later sample while previously
+returned values stay fixed. S56 supersedes the temporary S55 Stop proposal. Time.Now() returns a
+DateTime absolute wall-clock instant, with timezone as presentation. Time is the API owner/namespace
+rather than a necessary monotonic value type.
+Timers include device sleep, requiring a verified host clock contract; callbacks still wait until
+the app can execute. S57 selects runtime-only, nonpersistent timer handles. Persist DateTime for
+timestamps/deadlines or Duration for captured elapsed amounts; do not serialize monotonic origins.
+In a view, `state Timer = Time.StartTimer()` creates one timer per mounted instance, preserved on
+rerender; remount creates another. Sampling schedules no update. Remaining time API design, including
+host capability policy and [Time.Live](../Time.Live%20API.md), is deferred to pre-MVP
+[A25/R20](<../../MVP Roadmap/Review - Dates and time APIs.md>).
+
+The Developer selects multi-match when in actions, joined bodies in declaration order, branch
+matching captured before effects begin, and normal propagation stopping remaining branches on
+unhandled failure. Conceptually evaluate the subject once, capture its matching observation, and
+execute an independent if for each matching case. This does not introduce a public .snapshot member,
+deep-copy an entity graph, freeze a live handle, or authorize reads after suspension. Explicit live
+reads retain current availability/permission checks; captured match metadata is historical evidence.
+Pick must produce a result for every input: a fallback may be omitted only when static exhaustiveness
+is proven. S57 restores optional `otherwise -> ...` as fallback for both when and pick, superseding
+S56's temporary no-match none spelling. When executes otherwise once only when no ordinary case
+matched the captured observation; it is not recovery for a matching body. None retains its ordinary
+absent-value meaning, so no special `is none` case syntax is required to distinguish fallback.
+
+S58 selects both parenthesized and bare comma-separated renderer binder lists. Canonical formatting
+omits binder-list parentheses when unambiguous; retain them where removal would create ambiguity.
+For simple named binders, the slot name, commas and required arrow provide the intended boundary;
+parser/formatter prototypes must prove acceptance rather than treating this reasoning as a test.
+
+A separate AnimationDuration is optional, useful when it represents a distinct role or enforced
+constraint; plain Duration suffices otherwise. S58 accepts explicit role construction such as
+`let AnimationDuration 150 Milliseconds` through an authorized constructor/conversion. Preserve
+canonical data/unit views and validation; do not authorize automatic narrowing or turn a fallible
+checked constructor into a promised total as conversion. Exact checked-constructor declaration
+syntax remains part of the prototype work.
+
+Optional native `fails X, Y, Z` annotations bound the inferred propagated modeled failure set.
+S59 supersedes the S58 bare-fails empty-bound spelling with `fails never`: no modeled failures may
+escape, although locally handled failures can occur. The compiler infers precise failure contracts
+when it can. Without a declared or provable inferred contract the failure set is unknown/open, not
+empty; a bodyless can signature may declare never, list its closed failure set, or omit the clause
+and allow anything. This does not assume arbitrary foreign faults are impossible or erase callee
+effects merely because a caller/root handler exists. Bare fails is rejected as incomplete.
+This contextual never annotation does not select the deferred uninhabited type or conversion bans.
+S61 clarifies that S60's brackets indicated optional notation, not literal delimiters. Write
+`ToText() fails never -> text`, `ToText() fails Foo, Bar -> text`, or `ToText() -> text`.
+Failure-effect substitution is selected: implementations cannot
+propagate more than a capability permits; unknown effects do not satisfy a closed bound unless a
+provable narrower contract establishes compatibility.
+
+S58 selects that importing an operand/result type makes its attached exported public operators
+available, subject to unique resolution, visibility, owning-package rules and conflict diagnostics.
+Import order does not select an implementation; separate operator imports are not required.
+S59 also selects associated exported converters accompanying source/target type imports with
+unique resolution, rather than separate converter imports. Associated methods have no independent
+visibility modifiers: if the type is visible its methods are visible. File-local top-level helpers
+remain available; the current implementation has no associated-method facility or private keyword.
+S59 selects exact slot forwarding: in `@item: @item` the left selects the receiving slot and the
+right resolves lexically to the enclosing renderer, checked for compatible signatures. It does not
+invoke the renderer or recursively bind the right-hand side to the receiving slot.
+
+S60 selects inherited comparison Self specialization to each derived nominal type. Deliberately
+widen both operands to a shared domain to compare siblings when that domain has a meaningful
+comparator; shared numeric storage alone is insufficient. As binds tighter than comparisons:
+`Width as Length < Height as Length` means `(Width as Length) < (Height as Length)`. Arithmetic
+result conversions can be written `(Width + Height) as Length`; broader precedence still needs
+parser prototypes rather than changing unrelated operator rules here.
+
+S60 selects compile-time generic constraints before the value parameter list:
+`func Earlier where type T is Ordered, type T2 is Other (Left T, Right T, Foo T2) { ... }`.
+These introduce constrained type variables, not fresh nominal declarations or runtime arguments.
+Inference and explicit binding of repeated value-parameter types still apply.
+
+S61 selects one app-level generic error guard as coverage for propagated known and unknown modeled
+failures, with local handlers for special recovery. Presentation does not resume a failed action;
+cleanup runs and later statements in that failed action are skipped. Unknown contracts remain open.
+Authored explicit as conversions may fail through ordinary modeled failure effects. Use a shared
+ConversionFailure family for format, encoding, range, precision and constraint failures, retaining
+specific leaf types and safe diagnostic metadata. These selections do not settle conversion-route
+search, conversion purity, or exact converter declaration syntax.
+
+S61 selects `static func` for associated functions without an instance receiver and optional
+`-> Type` result constraints for functions/actions, replacing the earlier `returns Type` sketch
+spelling. Results are inferred when omitted. Ordinary body/callee failure inference remains the
+selected direction; automatic refinement through proven capability implementations, per-instance
+targets and whole-program analysis is explicitly post-MVP. The pre-MVP complete-proof investigation
+remains separate. See [conversion examples](<../Data and render contracts/Conversion examples.md>)
+and the [post-MVP refinement task](<../Capability failure refinement.md>).
+
+S62 selects Q26–Q32 A, with a stronger Q27 rule: converters are functions, and functions cannot
+invoke actions, perform I/O, or suspend, directly or transitively. This applies to ordinary,
+associated, static and injected implementations; structural capability dispatch cannot bypass it.
+Functions can still propagate modeled validation/computation failures. A converter is declared as
+`Source as Target fails X, Y { ... }`, with an implicit Target result and inferred failures if the
+clause is omitted. Calling a converter does not create an action or suspension boundary.
+
+Conversion resolution uses one applicable declared converter, preferring the nearest source
+ancestor and rejecting equally applicable candidates. No automatic multi-converter graph search
+is selected; write explicit intermediate conversions when needed. Authorized ordinary upward
+matching remains available. Inherited static factories retain their declared/inferred result type,
+without automatically rebinding construction to a descendant. Ordinary lexical value lookup wins
+when a value hides a type name; an import rename retains access to its static functions.
+Multiple capability requirements use `where type T is Ordered and Display`. Intentional rounding,
+truncation and clamping use named library operations, followed by checked conversion when needed;
+they do not add policy clauses to as or silently bypass range/constraint validation.
+
+S64 (2026-10-04) records the requested Syntax2 authoring refinements. Inside an associated type's
+with body, an unqualified method/view name uses its uniquely determined owner; this is canonical
+over a redundant owner prefix. Keep qualifiers when selecting a collection versus item receiver,
+and keep source/target names for explicit converters. Core text's structural ui rendering suppresses
+a bare empty text value to empty, leaving no node/gap contribution. Explicit Text("") retains a node;
+quoted render sugar retains its Text equivalence. A custom ui implementation controls its own output.
+Direct placement of a value satisfying ui is preferred over interpolation just to render it.
+
+The Developer authorized Apps/Syntax2 as .tao.future source and an implementation task to graduate
+working pieces to .tao. The app is not executable acceptance. Named-state shorthand with type/value
+context selection is a requested prototype target; ambiguous dotted lookup must preserve the selected
+lexical-value rule. Scalar/unit declaration grammar, same-T inference and a separate opposite Boolean
+type-pair contract remain review recommendations, not implicit selections merely because source exists.
+The app's keyed grouped-row/adapter APIs remain bounded integration targets, not a replacement for
+the deferred general resource-state design. See [implementation task](<../Data and render contracts/Implement Syntax2.md>).
+
+S66 (2026-10-04) selects `units { Seconds 1 (default), Milliseconds 0.001, Minutes 60, Hours 3600 }`:
+the explicit reference scale 1 is retained. No separate canonical marker is introduced now; the
+minimal unit block normalizes to that reference and supplies the initial default view. Per-value
+unit selection does not change canonical backing. Directed conversions are canonical without
+parentheses when their removal changes no meaning; retain parentheses for actual expression grouping.
+
+S66 selects supplied-ancestor inference: generic T may use the most specific typed input that is an
+ancestor of all other inputs and satisfies the bounds. Celsius/RoomReading may infer Celsius in
+either argument order. Siblings do not manufacture an absent ancestor or invoke a converter
+implicitly. Contextual literals can construct an established T but do not count as deliberate
+parent anchors. Resolve comparison under T's contract, not a narrower receiver's comparator.
+Boolean IsReturned construction preserves the inverse member's yes/no value; uniquely matched raw
+yes/no literals may contextually construct it. This does not admit arbitrary typed Boolean siblings.
+Other keyed-list, scalar-family and alias-write integration recommendations remain open.
+
+S67 (2026-10-04) selects all five S66 integration recommendations, with the Keyed restriction
+explicitly scoped to the standard-library LazyList implementation. Scalar is an abstract operation
+family, not a directly constructed unitless value; bounded generic T preserves concrete operator
+domains. Unit names are owner-scoped; qualified suffixes are available, visible shorthand is allowed,
+and ambiguous names error without expected-type guessing.
+
+Keyed and RenderKey are ordinary standard-library declarations. The selected LazyList consumes
+Key() fails never -> RenderKey through ordinary structural checking and enforces stable unique keys
+in its own implementation. Missing providers violate its admission contract; duplicate keys are a
+modeled list failure, never repaired with an index. The compiler does not recognize RowKey/Keyed/
+LazyList names, inject their methods into entities, or require that protocol on arbitrary lists or
+loops. Stable entity identity can be adapted by normal library methods; the Syntax2 Book and
+GroupedRow now supply Key explicitly. Other list implementations choose their own contracts.
+
+Inverse Boolean writes target one stored field with inverted polarity. Reject filling both aliases
+in one update even when their values agree. A separate opposite nominal type-pair remains distinct
+from this selected field contract. These choices close the current five-question round; final
+forcing-source/integration audit remains, with no compiler/runtime implementation claimed.
+
 ### Unit values and literals
+
+Historical examples below predate the signed quantity dialogue. For the current Syntax2 program,
+the later amendments govern Duration/Ratio construction, arithmetic and readings: postfix units,
+canonical seconds, typed unit readings and declared domain operators supersede the older `.unit`
+construction, numeric readings and nanosecond backing shown here. See S37–S67 and the
+[implementation plan](<../Data and render contracts/Implement Syntax2.md>); these examples must not
+be copied as its acceptance contract.
 
 - **A literal carries its type**: `#FBF7EF` is a color, `"…"` is text, `12` is a number, `yes` is a
   yes/no. Colors also construct as `rgb(217, 98, 43)` and `hsl(20, 66%, 51%)` — the forms the
@@ -177,7 +608,7 @@ time Soon = now + 3.s
 - **A bare number is a number** — a ratio, count, or scale. The one ergonomic exception: in a
   clause-list _size position_ (`size 64`, `tap min 48`, `cell min 220`) a bare number means `px`,
   which is the runtime's own convention for those properties.
-- **Conversion is a call on the type name**: `number("42")`, `color(Input)`, `Course("Dinner")` — a
+- **Earlier conversion proposal, reopened 2026-10-01**: `number("42")`, `color(Input)`, `Course("Dinner")` — a
   capitalized name in call position converts when it names a type and renders when it names a view;
   the namespaces are distinct. A bad **literal** is a compile error, because the compiler evaluates
   it. A runtime conversion is optional in plain use, and a site that cares distinguishes _why_ it
@@ -192,6 +623,11 @@ when color(Input) {
    Color   -> Swatch(Color)                     // the bare name binds the parsed value
 }
 ```
+
+The Developer reopened this spelling and its conversion rules in favor of considering explicit
+library parsers such as `ParseNumberString`, with type methods as another candidate. The examples
+above record the earlier proposal and must not constrain the new design. Parsing representations
+and assigning already typed values are separate concerns; their final contracts remain to settle.
 
 ### Entities
 
@@ -1263,6 +1699,15 @@ command New(Title text) {
   Subject-less matches use the same arm boundaries. The older braced examples in this record
   remain migration inputs. The compact boolean form below needs an explicit compatibility
   decision before a universal replacement; this amendment does not silently remove it.
+- **Coherent nested matching** (decided 2026-09-30; typed metadata narrowing remains planned).
+  A nested match is one atomic branch, as the existing render grammar already permits. When an
+  outer match discriminates resource metadata, its nested payload accesses use the same captured
+  observation. Narrowing must not combine a phase from one observation with a reason from another.
+  Later live observations and guarded live resource use after suspension require revalidation;
+  an explicitly retained immutable observation remains valid evidence of its captured time. The
+  implementation must define observation capture and lifetime rather than silently treating a
+  live resource as permanently narrowed. This accepts the nested/refinement contract; it does not
+  settle the pending global match-format migration or add arbitrary metadata dictionaries.
 - **`when` covers two or more outcomes, and is the value-producing form.** One word for "maybe do
   this", one word for "cover every case":
 

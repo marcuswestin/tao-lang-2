@@ -564,6 +564,107 @@ Deferred that day, to finish before MVP:
   journey file's leftover timers.
 - Done: every box above is checked on `main`.
 
+## Pre-MVP language investigations
+
+These investigations were requested on 2026-10-02 and 2026-10-04. They are deferred from the current syntax
+conversation but must inform a pre-MVP decision; they do not authorize implementing these designs.
+
+### A21 — Investigate locale-aware core text
+
+- What: investigate whether Tao should have a locale-aware core display value, whether that value
+  should be `text`, and whether raw, unlocalized character data should be a separate `string` type.
+- Why: settle the boundary before outside developers depend on text storage, interpolation, APIs,
+  or localization behavior. Preserve verbatim user content and locale-independent machine formats.
+- Context: [R16](<Developer MVP Roadmap.md#r16--locale-aware-core-text>),
+  [copy, words, and formatting](<../Roadmap/Tao Revolution/Decisions.md#14-copy-words-and-formatting>),
+  and [code preferences](<../Roadmap/Tao Revolution/Code preferences.md#5-data-metadata-and-localized-presentation>).
+- Done: present concrete alternatives with small Tao examples and verified external precedents;
+  cover literal inference, deferred interpolation, pluralization, percentages/units, user content,
+  persistence, serialization/logging, equality/search, locale changes, and compatibility/migration.
+  Recommend the core representation, boundary operations, and an achievable MVP subset for R16.
+  Investigation completion does not imply implementation completion.
+
+### A22 — Investigate static read and failure-handling proofs
+
+- What: investigate a static system proving availability-safe reads, optional narrowing, and explicit
+  handling or propagation of every modeled fetching/mutation failure at an owned invocation boundary.
+- Why: determine the useful guarantees and their limits before promising complete safety. Static
+  proofs must account for suspension, reactive aliases, and failures arriving after submission.
+- Discussion input: distinguish a practical inferred failure-effect coverage check, with installed
+  typed default root handlers, from a complete availability/handling proof. Include callback and
+  foreign open contracts, later receipts, cleanup, and deliberate quiet policies; never interpret
+  an unknown failure set as empty. The Developer selected mandatory modeled-failure coverage with
+  inferred effects and typed defaults as the design direction; the complete availability/foreign/
+  suspension proof remains investigation, and no implementation is selected by this entry.
+  S59 selects fails never for an empty contract, explicit closed failure lists, inference when
+  provable and unknown/open effects otherwise, including unannotated bodyless can signatures.
+  Investigate coverage and narrowing of unknown contracts without silently treating them as empty.
+  S61 accepts the precision direction but explicitly defers automatic capability-instance/call-site
+  refinement and app-wide points-to/call-target analysis to
+  [post-MVP](<../Roadmap/Capability failure refinement.md>). Ordinary body/callee inference remains
+  the selected direction. This pre-MVP investigation may assess feasibility and limits without
+  pulling advanced refinement implementation into MVP; distinguish sound upper bounds from exact
+  runtime failure enumeration.
+- Context: [R17](<Developer MVP Roadmap.md#r17--static-data-safety-guarantees>),
+  [data and render contracts](<../Roadmap/Data and render contracts/Syntax sketches.md>),
+  `Docs/Spec/Tao Data.md`, and `Docs/Spec/Tao Actions.md`.
+- Done: enumerate positive/negative forcing examples for guards, optional/member chains, captured
+  observations, mutation preconditions, aliases, async/callbacks, foreign adapters, transitive failure
+  inference, exhaustive handlers, and lasting receipt observation. Distinguish compile-time guarantees
+  over closed modeled contracts from runtime validation/containment for foreign or unexpected errors.
+  Present feasible rules, diagnostics, implementation cost, and an MVP subset for R17; do not claim a
+  proof over arbitrary foreign code or implement the system as part of this investigation.
+
+### A23 — Investigate uninhabited types and representation protection
+
+- What: investigate two independent needs previously discussed using `never`: an uninhabited
+  result type, and declarations prohibiting particular conversions or representation extraction.
+  Requested 2026-10-02; remove both from the active syntax fixture pending this investigation.
+  The later selected `fails never` empty failure contract is a contextual annotation, not either
+  deferred feature; keep it in the active design.
+- Why: an uninhabited type can describe nonreturning functions, impossible match remainders, and
+  exhaustive control flow. Conversion restrictions can protect opaque domains or secrets from
+  accidental semantic erasure. A converter that aborts is not a compile-time prohibition.
+- Alternatives: infer exhaustive matches and model nonreturning behavior as a function effect
+  without exposing a bottom type; protect representations by default and export only positive,
+  explicit conversions instead of adding negative conversion declarations.
+- Context: [R18](<Developer MVP Roadmap.md#r18--uninhabited-types-and-representation-protection>)
+  and [S37](<../Roadmap/Data and render contracts/Syntax sketches.md#s37--operation-domains-and-protected-representations>).
+- Done: give small forcing examples, diagnostics, and limits for both needs; examine narrowing,
+  unreachable branches, foreign nonreturning calls, transitive ancestor extraction, internal access,
+  opaque identifiers, and secrets. Recommend separate contracts and an MVP boundary; do not assume
+  one `never` spelling should serve both or promise information-flow security after extraction.
+
+### A24 — Review and reorganize entity handle and query states
+
+- Requested 2026-10-04: investigate before MVP and defer detailed state redesign from this dialogue.
+- What: audit the current state model and propose typed, coherent availability/presence/content,
+  acquisition, freshness and failure contracts with ergonomic predicates and written types.
+- Context and required coverage: [review brief](<Review - Entity handles and query states.md>),
+  [R19](<Developer MVP Roadmap.md#r19--entity-handle-and-query-state-model>), and A22 for proof limits.
+- Selected direction: remove public missing; guards require present usable values but allow empty
+  content. Do not mechanically map schema violations or inaccessible targets to none. Single-value
+  pick and all-match when are selected; detailed matching and freshness rules remain open. No state
+  implementation is authorized by this investigation.
+- Done: return the source audit, type/state truth table, positive/negative minimal app examples,
+  provider obligations, typed failure/default coverage, privacy/narrowing rules, and recommended MVP
+  subset/migration plan specified in the brief. Settle remaining decisions through R19.
+
+### A25 — Review modern date and time library designs
+
+- Requested 2026-10-04: investigate before MVP; defer remaining time API decisions from the current
+  type-system dialogue, including DateTime arithmetic and Time.Live.
+- What: compare current official library designs and propose coherent date/time types,
+  transformations, calendar/elapsed arithmetic, timezone policies and live-clock ownership for Tao.
+- Context and required coverage: [review brief](<Review - Dates and time APIs.md>),
+  [R20](<Developer MVP Roadmap.md#r20--dates-and-remaining-time-apis>), and A21 for localized display.
+- Preserve selected fixed Timer.Duration samples, signed Duration, DateTime absolute instants,
+  runtime-only timers and state-owned mounted-view initialization. Flag evidence-based problems
+  explicitly; do not silently replace those choices or claim supported-host proof.
+- Done: return sourced comparisons, minimal forcing examples, written types, policy/diagnostic and
+  provider/host contracts, and recommended MVP scope specified in the brief. Investigation only;
+  implementation waits for remaining R20 decisions.
+
 ## Project tracking
 
 ### A17 — In-repository issues with git-bug, synced to GitHub Issues
