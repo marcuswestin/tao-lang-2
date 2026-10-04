@@ -1,0 +1,17 @@
+use LibraryApp from ./Main
+
+test "Syntax2 Library" {
+   test "renders a quoted header and switches the grouping display" {
+      run LibraryApp
+
+      expect text "Library"
+      expect text "All books."
+      expect missing text "Grouped books."
+      press "Group"
+      expect text "Grouped books."
+      expect missing text "All books."
+      press "Group"
+      expect text "All books."
+      expect missing text "Grouped books."
+   }
+}

@@ -103,7 +103,7 @@ Describe('tao check', () => {
     await withTaoFixture({
       ...checkedProjectFile,
       'stray-brace.tao': 'view Main() {\n}\n}\n',
-      'view-member.tao': 'view Broken() {\n   Text is "hi"\n}\n',
+      'view-member.tao': 'view Broken() {\n   public "hi"\n}\n',
     }, async rootDir => {
       const results = await runCheck(rootDir)
       const messageByFile = Object.fromEntries(
@@ -112,25 +112,24 @@ Describe('tao check', () => {
 
       Expect(messageByFile).toEqual({
         'stray-brace.tao': 'Expected an open block for this `}` to close, but none is open here.',
-        'view-member.tao': 'Expected a view member here, but found `Text`.',
+        'view-member.tao': 'Expected a declaration here, but found `public`.',
       })
     })
   })
 
-  // One stray word makes the parser mis-read the token after it, so `Text is "hi"` alone produces
-  // three messages about the same word. Reporting the first on each line leaves the two places a
-  // reader actually has to go.
+  // A malformed declaration can produce recovery messages behind its first error. Reporting the
+  // first on each line leaves the two independent places a reader actually has to go.
   Test('reports each separate syntax mistake once, not the cascade behind it', async () => {
     await withTaoFixture({
       ...checkedProjectFile,
-      'broken.tao': 'view One() {\n   Text is "hi"\n}\n\nview Two {\n}\n',
+      'broken.tao': '\ntype One { }\n\n\ntype Two { }\n',
     }, async rootDir => {
       const results = await runCheck(rootDir)
       const broken = results.find(result => FS.basename(result.path) === 'broken.tao')
 
       Expect(broken?.diagnostics?.map(diagnostic => [diagnostic.range?.start.line, diagnostic.message])).toEqual([
-        [1, 'Expected a view member here, but found `Text`.'],
-        [4, 'Expected `(` or `=` here, but found `{`.'],
+        [1, 'Expected `is` or `=` here, but found `{`.'],
+        [4, 'Expected `is` or `=` here, but found `{`.'],
       ])
       Expect(broken?.unreportedDiagnostics).toBe(0)
     })
@@ -181,7 +180,7 @@ Describe('tao check', () => {
   Test('holds back a badly broken file past the first three lines, and says how many', async () => {
     await withTaoFixture({
       ...checkedProjectFile,
-      'broken.tao': 'view Main( {\n   render Text "a"\n   render Text("b"\n   Text is 1\nview Two {\n}\n',
+      'broken.tao': 'type One { }\ntype Two { }\ntype Three { }\ntype Four { }\n',
     }, async rootDir => {
       const results = await runCheck(rootDir)
       const broken = results.find(result => FS.basename(result.path) === 'broken.tao')
