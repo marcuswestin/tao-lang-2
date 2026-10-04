@@ -315,8 +315,10 @@ CRUD, and sign-out. It uses `@tao/auth/firebase` and `@tao/data/providers/fireba
 grants, references, unique fields, and migrations remain unsupported rather than advertised.
 
 Ordinary Tao projects save public Firebase settings at `.tao/local/connections.json` and receive
-those settings during app generation. Their connection flow does not provision cloud resources
-or deploy rules. The standalone Hosted CRUD pilot retains its compatibility setup. Missing or
+those settings during app generation. Their connection flow now uses API setup by default: it compiles the selected app before cloud
+setup, reuses local Google sign-in and saved project/web-app identity, and configures Email/Password
+Auth, the default Firestore database, and private rules. `--manual` retains Console setup with
+direct project links. The standalone Hosted CRUD pilot retains its handwritten rules input. Missing or
 invalid local configuration produces a diagnostic; no developer project IDs are checked into
 this new validation app.
 
@@ -330,14 +332,15 @@ Developer verification, from this worktree:
 
 ```sh
 cd /Users/ro/.codex/worktrees/hosted-acceptance-evidence/tao-lang-2
-./tao connect firebase 'Apps/Hosted Firebase'
-./tao firebase generate 'Apps/Hosted Firebase' --app FirebaseNotes --output 'Apps/Hosted Firebase/.tao/firebase-backend'
+./tao connect firebase 'Apps/Hosted Firebase' --app FirebaseNotes
 ```
 
-Use the existing Firebase project locally. Configure Email/Password authentication and Firestore
-if needed. Review and combine the generated rules with the project's current rules before any
-local deployment: deployment replaces project-wide rules, including rules used by the standalone
-pilot. Keep password entry and Google sign-in local. Generation alone does not enforce rules.
+Select the existing Firebase project locally and review the CLI setup plan before deployment.
+The exact known Hosted CRUD notes rules can be preserved alongside the generated store rules.
+Unfamiliar rules stop automation with downloaded current rules and a generated candidate for
+local review; resume with `--rules` pointing at the reviewed combined file. Keep password entry
+and Google sign-in local. `--manual` is available for Console setup; generation alone does not
+enforce rules.
 
 After reviewing and deploying the combined rules locally:
 
@@ -430,11 +433,48 @@ Firebase connection now explains where to obtain the Web SDK configuration befor
 paste prompt, including reuse of an existing Web app, registration only when missing, accepted
 paste format, and the manual-field source. Ordinary Tao projects receive concrete Console
 steps for Auth, Firestore, and publishing reviewed combined rules after saving local settings.
-Appwrite's manual guidance starts from an existing project. These instructions do not provision
-or deploy anything for ordinary Firebase projects and do not establish hosted acceptance.
+Appwrite's manual guidance starts from an existing project. Those instructions remain available behind `--manual`; API setup is now the default. Neither
+source checks nor a saved configuration establish hosted acceptance.
 
 The CLI UX requirement is recorded in the owning skill: input guidance must precede the prompt
 and cover acquisition, prerequisites, and format. The CLI audit also covers named credentials,
 shipping/signing identifiers, database location choice, encrypted-secret entry/authorization,
 release authentication/token prerequisites, Firestore deployment prerequisites, and phone LAN addressing.
-Cloud accounts, passwords, native approvals, and deployment remain Developer actions.
+Cloud accounts, passwords, and native approvals remain Developer actions. API deployment runs
+only after the Developer reviews and confirms the concrete plan locally.
+
+### API-first Firebase connect follow-up — 2026-10-04
+
+`tao connect firebase` defaults to automated setup for ordinary Tao projects as well as the
+standalone pilot. The current-directory project path is optional. `--app` selects the app whose
+compiled schema supplies the backend rules; compilation must succeed before cloud setup. The
+manual config-paste and Console flow is selected explicitly with `--manual`. Its instructions
+link directly to the selected project's Authentication and Firestore pages, and use the visible
+labels `Get started`, `Sign-in method`, `Email/Password`, `Save`, `Create database`, and `Rules`.
+
+Google sign-in stays in the official Firebase CLI's local browser flow. CLI/API account identity
+must remain consistent, credentials must never be copied into app settings, and project/web-app
+choices offer saved and existing resources before explicit creation. The workflow prints progress
+through inspection, generation, deployment, and verification. Existing indexes are preserved:
+the currently generated empty index file is retained as a local artifact rather than deployed
+as a request to delete project indexes.
+
+Deployed rules are project-owned. The CLI downloads them, preserves a local before-copy, and
+checks for a concurrent change before deployment. A narrowly recognized exact Hosted CRUD
+policy permits adding the generated store rule as a disjoint sibling while preserving the old
+notes route. An unknown policy stops for a locally reviewed combined file via `--rules`; this
+is not a general rules merger. Ordinary generated policies still cover wildcard store keys, so
+multiple different ordinary app policies in one Firebase project require a separate composition
+design and remain unsupported by this automatic compatibility case.
+
+`.tao/firebase-backend` means a local generated deployment directory, containing
+`firestore.rules`, `firestore.indexes.json`, and `firebase.json`. No custom backend server is
+required. From the app folder, manual generation is `tao firebase generate --app FirebaseNotes
+--output .tao/firebase-backend`; the default API flow performs generation itself.
+
+Focused tests cover resource reuse, deployment cancellation, rule preservation on reconnect,
+concurrent-change detection, and partial failure. Isolated vendor fixtures also execute the real
+Node inspection bridge, covering account selection, paginated provider configuration, first-time
+Auth initialization, email-link preservation, and exclusion of secret values from process output.
+These tests do not establish live cloud provisioning, Google browser sign-in, or device acceptance. Run the API-default command locally in the existing
+project, then continue the hosted Tao app checks above. This follow-up is not authorized to land.

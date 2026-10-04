@@ -219,6 +219,8 @@ const targets = new Map<string, ReleaseCapability>([
 const options = new Map<string, ReleaseCapability>([
   ['create --provider', 'hosted-data'],
   ['create --validation-tools', 'hosted-data'],
+  ['connect --manual', 'hosted-data'],
+  ['connect --rules', 'hosted-data'],
   ...[
     '--app',
     '--json',

@@ -1,0 +1,86 @@
+const [root, projectId, email] = process.argv.slice(1);
+const auth = require(root + '/auth.js');
+const { requireAuth } = require(root + '/requireAuth.js');
+const { Client } = require(root + '/apiv2.js');
+const api = require(root + '/api.js');
+const rulesApi = require(root + '/gcp/rules.js');
+const { createHash } = require('node:crypto');
+async function main() {
+  const fallback = auth.getGlobalDefaultAccount();
+  const account = email ? auth.selectAccount(email, process.cwd()) : fallback;
+  if (!account || account.user.email !== email) process.exit(1);
+  const options = { project: projectId, projectRoot: process.cwd(), nonInteractive: true };
+  auth.setActiveAccount(options, account);
+  if (await requireAuth(options, true) !== email) process.exit(1);
+  const firestore = new Client({ urlPrefix: api.firestoreOrigin(), apiVersion: 'v1' });
+  const identity = new Client({ urlPrefix: api.identityOrigin(), auth: true });
+  function disabled(error) {
+    const details = error.context?.body?.error?.details;
+    return Array.isArray(details) && details.some(d => d.reason === 'SERVICE_DISABLED');
+  }
+  let databases;
+  try { databases = (await firestore.get('/projects/' + projectId + '/databases')).body.databases || []; }
+  catch (error) { if (!disabled(error)) throw error; databases = []; }
+  const database = databases.find(d => d.name === 'projects/' + projectId + '/databases/(default)');
+  let config;
+  let authExists = true;
+  try { config = (await identity.get('/admin/v2/projects/' + projectId + '/config', {
+    headers: { 'x-goog-user-project': projectId }, skipLog: { resBody: true }
+  })).body; }
+  catch (error) { if (error.status !== 404 && !disabled(error)) throw error; config = {}; authExists = false; }
+  const signIn = structuredClone(config.signIn || {});
+  const emailPasswordEnabled = signIn.email?.enabled === true;
+  const emailPasswordRequired = signIn.email?.passwordRequired;
+  if (signIn.email) {
+    delete signIn.email.enabled; delete signIn.email.passwordRequired;
+    if (!Object.keys(signIn.email).length) delete signIn.email;
+  }
+  delete signIn.hashConfig;
+  config.signIn = signIn;
+  // These documented output-only fields describe provisioning, rather than retained settings.
+  delete config.name; delete config.subtype; delete config.defaultHostingSite;
+  const providerConfigs = [];
+  if (authExists) {
+    for (const resource of ['defaultSupportedIdpConfigs', 'oauthIdpConfigs', 'inboundSamlConfigs']) {
+      let pageToken;
+      do {
+        const response = await identity.get('/admin/v2/projects/' + projectId + '/' + resource, {
+          queryParams: { pageSize: 100, ...(pageToken ? { pageToken } : {}) },
+          headers: { 'x-goog-user-project': projectId }, skipLog: { resBody: true }
+        });
+        providerConfigs.push(...(response.body[resource] || []));
+        pageToken = response.body.nextPageToken;
+      } while (pageToken);
+    }
+  }
+  function stable(value) {
+    if (Array.isArray(value)) return '[' + value.map(stable).join(',') + ']';
+    if (value && typeof value === 'object') return '{' + Object.keys(value).sort().map(k => JSON.stringify(k) + ':' + stable(value[k])).join(',') + '}';
+    return JSON.stringify(value);
+  }
+  function normalize(value) {
+    if (Array.isArray(value)) return value.length ? value.map(normalize) : undefined;
+    if (value && typeof value === 'object') {
+      const entries = Object.entries(value).map(([key, child]) => [key, normalize(child)]).filter(([, child]) => child !== undefined);
+      return entries.length ? Object.fromEntries(entries) : undefined;
+    }
+    return value === false || value === '' || value === null ? undefined : value;
+  }
+  // Hash full settings and provider configurations; SMTP/OAuth secrets stay inside this process.
+  const retained = normalize({ config, providers: providerConfigs.sort((a, b) => String(a.name).localeCompare(String(b.name))) });
+  const preserved = authExists && retained ? createHash('sha256').update(stable(retained)).digest('hex') : null;
+  let releases;
+  try { releases = await rulesApi.listAllReleases(projectId); }
+  catch (error) { if (database || !disabled(error)) throw error; releases = []; }
+  const release = releases.find(r => r.name === 'projects/' + projectId + '/releases/cloud.firestore');
+  let rules;
+  if (release) {
+    const files = await rulesApi.getRulesetContent(release.rulesetName);
+    if (files.length !== 1 || typeof files[0].content !== 'string') process.exit(1);
+    rules = { releaseName: release.name, rulesetName: release.rulesetName, source: files[0].content };
+  }
+  process.stdout.write(JSON.stringify({ database: database && {
+    name: database.name, type: database.type, databaseEdition: database.databaseEdition,
+    locationId: database.locationId }, auth: { emailPasswordEnabled, emailPasswordRequired, preserved }, rules }));
+}
+main().catch(() => process.exit(1));

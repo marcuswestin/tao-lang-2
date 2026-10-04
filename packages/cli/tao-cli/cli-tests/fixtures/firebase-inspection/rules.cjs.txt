@@ -1,0 +1,2 @@
+exports.listAllReleases = async projectId => [{ name: 'projects/' + projectId + '/releases/cloud.firestore', rulesetName: 'projects/' + projectId + '/rulesets/original' }];
+exports.getRulesetContent = async () => [{ content: 'deployed rules source' }];

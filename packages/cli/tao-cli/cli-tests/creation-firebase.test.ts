@@ -10,6 +10,9 @@ Describe('tao create Firebase', () => {
   Test('lowers private account data and a local auth journey into a valid project', async () => {
     const plan = deterministicPlan('A notebook for short notes')
     const files = lowerCreationPlan(plan, { provider: 'firebase' })
+    Expect(files['README.md']).toContain('tao connect firebase --app ANotebookFor')
+    Expect(files['README.md']).toContain('tao connect firebase --manual')
+    Expect(files['README.md']).toContain('no separate backend server')
     Expect(files['App.tao']).toContain('Auth FirebaseAuth {')
     Expect(files['App.tao']).toContain('Datasource Firebase {')
     Expect(files['Data.tao']).toContain('data Accounts / Account')

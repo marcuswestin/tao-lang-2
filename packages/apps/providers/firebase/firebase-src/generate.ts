@@ -11,6 +11,7 @@ export type TaoDataPolicy = Readonly<{
 
 export type FirebaseBackend = Readonly<{
   files: Readonly<{ 'firestore.rules': string; 'firestore.indexes.json': string }>
+  documentMatch: string
 }>
 
 const identifier = /^[A-Za-z][A-Za-z0-9_]*$/
@@ -115,12 +116,15 @@ export function generateFirebaseBackend(schema: TR.DataSchemaDefinition, access?
       }`)
   }
 
+  const documentMatch =
+    `    match /users/{userId}/stores/{storageKey} {\n      function signedInAsOwner() {\n        return request.auth != null && request.auth.uid == userId;\n      }\n\n${
+      matches.join('\n\n')
+    }\n    }`
   return {
+    documentMatch,
     files: {
       'firestore.rules':
-        `rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    match /users/{userId}/stores/{storageKey} {\n      function signedInAsOwner() {\n        return request.auth != null && request.auth.uid == userId;\n      }\n\n${
-          matches.join('\n\n')
-        }\n    }\n  }\n}\n`,
+        `rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n${documentMatch}\n  }\n}\n`,
       'firestore.indexes.json': '{\n  "indexes": [],\n  "fieldOverrides": []\n}\n',
     },
   }

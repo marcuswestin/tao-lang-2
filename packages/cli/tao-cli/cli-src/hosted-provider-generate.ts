@@ -1,5 +1,6 @@
 import { Errors, FS, HCI, readFirebaseConnections } from '@shared'
 import { chooseTaoApp } from './dev-app-selection'
+import { printFirebaseConsoleSetup } from './firebase-console-guidance'
 import { type HostedProvider, readHostedProviderInputs } from './hosted-provider-inputs'
 
 type GenerateOptions = Readonly<{ appName?: string; force?: boolean; output: string }>
@@ -91,20 +92,19 @@ export async function runHostedProviderGenerate(
     HCI.writeLine(
       'Run firebase login and complete Google sign-in locally with an account allowed to deploy to this project.',
     )
-    HCI.writeLine('In https://console.firebase.google.com, select this project and open Build > Firestore Database.')
-    HCI.writeLine(
-      'Select its (default) database; if absent, create (default) in production mode before deploying.',
-    )
+    HCI.writeLine('These are local deployment files; no separate backend server is needed.')
+    if (connection !== undefined) {
+      printFirebaseConsoleSetup(connection.projectId)
+    }
     if (connection === undefined) {
       HCI.writeLine(
         `Connect this Tao project first: tao connect firebase '${app.projectRoot.replaceAll("'", "'\\''")}'`,
       )
     } else {
+      HCI.writeLine('The generated index list is empty; deploy rules only to preserve existing indexes.')
       HCI.writeLine(`From ${FS.displayPath(output)}, deploy with the Firebase CLI:`)
       HCI.writeLine(
-        `firebase deploy --only firestore:rules,firestore:indexes --project '${
-          connection.projectId.replaceAll("'", "'\\''")
-        }'`,
+        `firebase deploy --only firestore:rules --project '${connection.projectId.replaceAll("'", "'\\''")}'`,
       )
     }
   }

@@ -1,0 +1,20 @@
+const fs = require('node:fs');
+exports.Client = class {
+  async get(path, options = {}) {
+    const state = JSON.parse(fs.readFileSync(__dirname + '/state.json', 'utf8'));
+    const callsPath = __dirname + '/calls.json';
+    const calls = fs.existsSync(callsPath) ? JSON.parse(fs.readFileSync(callsPath, 'utf8')) : [];
+    calls.push({ path, options, account: require('./auth.js').active });
+    fs.writeFileSync(callsPath, JSON.stringify(calls));
+    if (state.denied) return Promise.reject({ status: 403 });
+    if (path.endsWith('/databases')) return { body: { databases: [{ name: 'projects/test-project/databases/(default)', type: 'FIRESTORE_NATIVE', databaseEdition: 'STANDARD', locationId: 'nam5' }] } };
+    if (path.endsWith('/config')) {
+      if (state.absent) return Promise.reject({ status: 404 });
+      return { body: { name: 'projects/test-project/config', signIn: { email: { enabled: state.enabled, passwordRequired: state.passwordRequired }, hashConfig: { signerKey: 'HASH_SECRET_CANARY', saltSeparator: 'SALT_SECRET_CANARY' } }, authorizedDomains: ['localhost'], notification: { sendEmail: { smtp: { password: 'SMTP_SECRET_CANARY' } } } } };
+    }
+    const resource = path.split('/').pop();
+    if (resource === 'defaultSupportedIdpConfigs' && !options.queryParams.pageToken) return { body: { defaultSupportedIdpConfigs: [{ name: 'google.com', enabled: true, clientSecret: state.oauthSecret }], nextPageToken: 'next' } };
+    if (resource === 'defaultSupportedIdpConfigs') return { body: { defaultSupportedIdpConfigs: [{ name: 'github.com', enabled: true, clientSecret: 'OTHER_SECRET_CANARY' }] } };
+    return { body: { [resource]: [] } };
+  }
+};

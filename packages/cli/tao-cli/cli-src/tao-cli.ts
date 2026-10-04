@@ -230,9 +230,20 @@ export function createCommands(): Command {
     .command('connect')
     .argument('<provider>', 'Hosted service to connect (firebase or appwrite), or run to start the pilot in Expo Go.')
     .argument('[path]', 'Project directory to configure or run.', '.')
-    .description('Save local Firebase settings, configure the Hosted CRUD Appwrite pilot, or run the pilot in Expo Go.')
-    .action(async (provider: string, path: string) => {
+    .option('--manual', 'Use Firebase Console instructions and paste public configuration instead of API setup.')
+    .option('--app <name>', 'Select the Tao app whose Firebase backend should be configured.')
+    .option('--rules <file>', 'Use a reviewed rules file that preserves existing project rules.')
+    .description(
+      'Connect Firebase through the API, configure the Hosted CRUD Appwrite pilot, or run the pilot in Expo Go.',
+    )
+    .action(async (provider, path, options) => {
       try {
+        if (provider !== 'firebase' && (options.manual || options.app || options.rules)) {
+          Errors.throwUserInput('--manual, --app, and --rules apply to tao connect firebase only.')
+        }
+        if (options.manual && options.rules) {
+          Errors.throwUserInput('--rules is for API setup; omit --manual when deploying reviewed rules.')
+        }
         if (provider === 'run') {
           const { runHostedCrud } = await import('./hosted-crud-run')
           await runHostedCrud(path)
@@ -242,7 +253,7 @@ export function createCommands(): Command {
           Errors.throwUserInput(`Unknown provider '${provider}'. Choose firebase, appwrite, or run.`)
         }
         const { runTaoConnect } = await import('./connect-command')
-        await runTaoConnect(provider, path)
+        await runTaoConnect(provider, path, { manual: options.manual, appName: options.app, rulesFile: options.rules })
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.setExitCode(1)
