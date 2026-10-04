@@ -2,7 +2,7 @@
 
 Status: explicitly post-MVP, selected in the S61 design dialogue on 2026-10-04. This task does not
 authorize implementation now. Ordinary native body/callee inference and explicit failure bounds
-remain the selected baseline; the complete-proof pre-MVP investigation remains A22/R17.
+remain the selected baseline; the complete-proof pre-MVP investigation remains A27/R18.
 
 ## Need and scope
 
@@ -39,7 +39,7 @@ selected values, mutable captures, recursive callbacks and unknown foreign targe
 failure upper bounds, stable diagnostics and cache invalidation. Do not promise exact runtime
 failure enumeration or a proof covering arbitrary foreign code.
 
-Context: [A22](<../MVP Roadmap/Agent MVP Roadmap.md#a22--investigate-static-read-and-failure-handling-proofs>),
-[R17](<../MVP Roadmap/Developer MVP Roadmap.md#r17--static-data-safety-guarantees>),
+Context: [A27](<../MVP Roadmap/Agent MVP Roadmap.md#a27--investigate-static-read-and-failure-handling-proofs>),
+[R18](<../MVP Roadmap/Developer MVP Roadmap.md#r18--static-data-safety-guarantees>),
 [conversion examples](<Data and render contracts/Conversion examples.md>), and
 [language decisions](<Tao Revolution/Decisions.md>).

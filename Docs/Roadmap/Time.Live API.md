@@ -4,7 +4,7 @@
 
 Requested during the timer/type-system dialogue (Syntax sketches S55, amended in S56). This is design work;
 implementation is not selected. S57 assigns review of the remaining time API, including this design,
-to pre-MVP [A25/R20](<../MVP Roadmap/Review - Dates and time APIs.md>).
+to pre-MVP [A30/R21](<../MVP Roadmap/Review - Dates and time APIs.md>).
 
 ## Selected context
 
