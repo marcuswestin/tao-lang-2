@@ -17,8 +17,7 @@ type RuntimeAppCapture = {
 const rootViewApp = `
   use Col, FormButton, Text from @tao/ui
 
-  app RootViewCaptureApp {
-    Name "Root view capture"
+  app RootViewCaptureApp { id "rootviewcaptureapp" version "1.0.0" name "Root view capture"
     view Main
   }
 
@@ -38,7 +37,7 @@ const rootViewApp = `
 `
 
 /**
- * `app X { view Y }` mounts Y in a navigator Tao synthesizes rather than one the source names. The
+ * `app X { id "x" version "1.0.0" name "X" view Y }` mounts Y in a navigator Tao synthesizes rather than one the source names. The
  * runtime holds that navigator to the same contract as a written one, so this suite drives the
  * compiled app rather than a hand-built definition: only the generated code says whether the sugar
  * hands the navigator the canonical identity restoration needs.

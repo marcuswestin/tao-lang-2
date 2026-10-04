@@ -3,7 +3,9 @@ use Interval from @tao/time
 use Col, FormButton, Text from @tao/ui
 
 app Clockwork {
-   Name "Clockwork"
+   id "clockwork"
+   version "0.1.0"
+   name "Clockwork"
    Navigator StackNav {
       Initial ClockworkScene
 }  }

@@ -38,7 +38,8 @@
     "tao-update-server": "workspace:*",
     "tao-compiler": "workspace:*",
     "qrcode": "1.5.4",
-    "tao-firebase": "workspace:*"
+    "tao-firebase": "workspace:*",
+    "tao-project-tooling": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "^19.2.18",

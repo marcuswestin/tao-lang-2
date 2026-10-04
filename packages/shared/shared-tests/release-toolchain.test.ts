@@ -6,7 +6,7 @@ Describe('Project release toolchain compatibility', () => {
     const root = await mkTestDir('release-toolchain-')
     const project = FS.resolvePath('nested/project', root)
     const source = FS.resolvePath('Main.tao', project)
-    const lock = FS.resolvePath('.tao-project/lock.jsonc', project)
+    const lock = FS.resolvePath('.tao/lock.jsonc', project)
     const own = { version: '0.4.3', profile: ReleaseCapabilities.profile(3) }
     try {
       await FS.writeText(source, 'Project Nested')
@@ -38,7 +38,7 @@ Describe('Project release toolchain compatibility', () => {
         `The Tao project lock at ${lock} is not valid JSONC`,
       )
       await Expect(ReleaseToolchain.requireMatchingProjectRelease(source, 'editor', own)).rejects.toThrow(
-        'git restore .tao-project/lock.jsonc',
+        'git restore .tao/lock.jsonc',
       )
     } finally {
       await FS.remove(root)

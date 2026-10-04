@@ -184,10 +184,11 @@ ConfigurationBlock:
 ConfigurationEntry:
     restoration=RestorationPolicy
     | rootView=AppView
+    | requirement=PackageRequires
     | appGuard=AppGuardStatement
     | key=USE_IMPORT_PATH block=ConfigurationBlock
     | label=ID ':' expression=Expression
-    | name=ID ('.' nameMembers+=ID)* (value=ConfigurationValue | block=ConfigurationBlock)
+    | name=MetadataName ('.' nameMembers+=ID)* (value=ConfigurationValue | block=ConfigurationBlock)
     | memberReference=MemberAccessExpression
     | reference=[ListedDeclaration:ID]
     | expression=NonIdentifierConstructorEntryValue;

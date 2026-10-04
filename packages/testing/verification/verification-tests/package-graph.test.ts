@@ -109,6 +109,7 @@ Describe('workspace package graph', () => {
       'compiler',
       'language/formatter',
       'language/parser',
+      'language/project-tooling',
       'language/source-actions',
       'shared',
     ])

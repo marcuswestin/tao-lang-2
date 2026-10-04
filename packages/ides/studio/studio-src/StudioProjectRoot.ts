@@ -1,5 +1,5 @@
-import { AST, Langium, Parser } from '@parser'
-import { Errors, FS, Repo, TaoFiles } from '@shared'
+import { findProjectRoot } from '@project-tooling'
+import { Errors, FS, TaoFiles } from '@shared'
 
 /** StudioProjectRootResolution identifies the requested folder and the project selected for its Studio session. */
 export type StudioProjectRootResolution = {
@@ -8,38 +8,35 @@ export type StudioProjectRootResolution = {
   selectedDescendant: boolean
 }
 
-/** discoverStudioProjectRoots finds directories that directly own exactly one Tao project declaration. */
+/** discoverStudioProjectRoots finds marker-owned projects beneath the requested folder. */
 export async function discoverStudioProjectRoots(input: string): Promise<string[]> {
   const inputRoot = await requireDirectory(input)
-  const declarationCounts = new Map<string, number>()
-  const parserContext = Parser.createContext()
-  const paths = await Repo.filesUnder(inputRoot, {
-    excludeDirectoryNames: TaoFiles.discoveryExcludeDirectoryNames,
-    extensions: ['.tao'],
-  })
-
-  for (const path of paths) {
-    if (path.endsWith('.test.tao')) {
-      continue
-    }
-    const source = await FS.readText(path)
-    const parsed = await Parser.parseSource(parserContext, source, { uri: Langium.URI.file(path), validation: false })
-    const count = parsed.entry.ast.statements.filter(AST.isProjectDeclaration).length
-    if (count > 0) {
-      const owner = await FS.realPath(FS.dirname(path))
-      declarationCounts.set(owner, (declarationCounts.get(owner) ?? 0) + count)
+  const roots: string[] = []
+  if (await FS.isDirectory(FS.resolvePath('.tao', inputRoot))) {
+    roots.push(inputRoot)
+  }
+  for await (
+    const path of FS.walk(inputRoot, {
+      includeDirectories: true,
+      includeHidden: true,
+      excludeDirectory: name =>
+        name.startsWith('.') || TaoFiles.discoveryExcludeDirectoryNames.some(excluded => excluded === name),
+    })
+  ) {
+    if (FS.basename(path) === '.tao' && await FS.isDirectory(path)) {
+      roots.push(await FS.realPath(FS.dirname(path)))
     }
   }
-
-  return [...declarationCounts]
-    .filter(([, count]) => count === 1)
-    .map(([root]) => root)
-    .toSorted()
+  return [...new Set(roots)].toSorted()
 }
 
 /** resolveStudioProjectRoot keeps a project root or selects its sole descendant project root. */
 export async function resolveStudioProjectRoot(input: string): Promise<StudioProjectRootResolution> {
   const inputRoot = await requireDirectory(input)
+  const containingRoot = await findProjectRoot(inputRoot)
+  if (containingRoot !== undefined && FS.pathIsWithin(inputRoot, containingRoot)) {
+    return { inputRoot, projectRoot: containingRoot, selectedDescendant: false }
+  }
   const candidates = await discoverStudioProjectRoots(inputRoot)
   if (candidates.includes(inputRoot)) {
     return { inputRoot, projectRoot: inputRoot, selectedDescendant: false }

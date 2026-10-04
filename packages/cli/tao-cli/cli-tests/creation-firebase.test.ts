@@ -1,5 +1,5 @@
 import Workspace from '@compiler/workspace'
-import { FS, ReleaseCapabilities } from '@shared'
+import { FS, ProjectIdentity, ReleaseCapabilities } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { lowerCreationPlan, writeCreationFiles } from '../cli-src/create/creation-lowering'
 import { deterministicPlan } from '../cli-src/create/creation-plan'
@@ -28,6 +28,7 @@ Describe('tao create Firebase', () => {
     const root = await mkTestDir('tao-create-firebase-')
     try {
       await writeCreationFiles(root, files)
+      await ProjectIdentity.ensure(root)
       await runFix(root, { cwd: root })
       const workspace = await Workspace.open(root)
       const problems: string[] = []
@@ -57,6 +58,7 @@ Describe('tao create Firebase', () => {
     const root = await mkTestDir('tao-create-firebase-validation-')
     try {
       await writeCreationFiles(root, files)
+      await ProjectIdentity.ensure(root)
       await runFix(root, { cwd: root })
       const journey = await runTestCommandOnce(root, { output: 'quiet' })
       Expect(journey.failed).toBe(false)
@@ -70,24 +72,19 @@ Describe('tao create Firebase', () => {
     const files = lowerCreationPlan(plan, { provider: 'firebase' })
     const testFile = 'ANotebookFor.test.tao'
     const source = files[testFile]!
-    const signInApp = `app ANotebookForSignInTest {
-   Name "A Notebook For"
-   Auth TestAuth { }
-   Datasource Memory { }
-   Navigator ANotebookForAuthNavigator
-   Design ANotebookForDesign
-}`
+    const signInApp = source.match(/app ANotebookForSignInTest \{[\s\S]*?\n\}/u)?.[0]
+    Expect(signInApp).toBeDefined()
     Expect(source).toContain(signInApp)
     files[testFile] = source.replace(
       'use TestAuth from @tao/auth/testing',
       'use TestAuth from @tao/auth/testing\nuse ProbeAuth from ./ProbeAuth',
     )
       .replace(
-        signInApp,
-        `${signInApp.replace('Auth TestAuth { }', 'Auth ProbeAuth { ExpectedRegister false }')}
+        signInApp!,
+        `${signInApp!.replace('Auth TestAuth { }', 'Auth ProbeAuth { ExpectedRegister false }')}
 
 ${
-          signInApp.replaceAll('SignInTest', 'SignUpTest').replace(
+          signInApp!.replaceAll('SignInTest', 'SignUpTest').replace('sign-in-test', 'sign-up-test').replace(
             'Auth TestAuth { }',
             'Auth ProbeAuth { ExpectedRegister true }',
           )
@@ -138,6 +135,7 @@ export function ProbeAuthProvider(): TR.AuthProvider {
     const root = await mkTestDir('tao-create-firebase-auth-probe-')
     try {
       await writeCreationFiles(root, files)
+      await ProjectIdentity.ensure(root)
       await runFix(root, { cwd: root })
       const journey = await runTestCommandOnce(root, { output: 'quiet' })
       Expect(journey.failed).toBe(false)

@@ -5,7 +5,7 @@ Describe('compiler: interaction attention', () => {
   Test('emits richer command metadata plus entity and view surface policy', async () => {
     const compiled = await Compiler.compileCode(`
       use Text from @tao/ui
-      app Demo { view Home }
+      app Demo { id "com.tao.test.demo" version "1.0.0" name "Demo"  view Home }
       view Home() { render Text("Home") }
       action Run() { }
       data Documents / Document {
@@ -37,7 +37,7 @@ Describe('compiler: interaction attention', () => {
     Expect(code).toContain('"CommandDeclaration","Archive"]).canonical]')
     Expect(code).toContain("scope: { kind: 'module' }")
     Expect(code).toContain(
-      'scope: { kind: \'view\', declaration: TR.Navigation.Identity(["tao.declaration",1,"tao-compiler-test","@workspace","source","view","Row"]).canonical }',
+      'scope: { kind: \'view\', declaration: TR.Navigation.Identity(["tao.declaration",1,"ephemeral:source","@workspace","source","view","Row"]).canonical }',
     )
     Expect(code).toContain(
       'static: { title: "Finish", description: "Finish this document", summary: "Finish selection", label: "Finish", icon: "checkmark", key: "f", }',
@@ -54,7 +54,7 @@ Describe('compiler: interaction attention', () => {
     const compiled = await Compiler.compileCode(`
       use StackNav from @tao/nav
       use Col, Text from @tao/ui
-      app Demo { Name "Demo" Navigator StackNav { Initial Home } }
+      app Demo { id "com.tao.test.demo" version "1.0.0"  name "Demo" Navigator StackNav { Initial Home } }
       scene Home() { Title "Home" render Text("Home") }
       view Shell(Navigator nav) {
         render Col() {

@@ -15,7 +15,7 @@ export const useValidationMessages = {
   packagePathEscape: (importPath: string, packageName: string) =>
     `Package import '${importPath}' must stay inside package '${packageName}'.`,
   projectBoundary: (importPath: string) =>
-    `Import '${importPath}' crosses a project boundary; cross-project imports will require a dependency declaration in project { ... }.`,
+    `Import '${importPath}' crosses a project boundary; declare a requires clause on an app or package publication.`,
   duplicateImport: (name: string) => `Imported name '${name}' is declared more than once in this use statement.`,
   repeatedImport: (name: string) => `Imported name '${name}' is already imported by an earlier use statement.`,
   unusedImport: (name: string) => `Imported name '${name}' is not used in this file.`,
@@ -27,7 +27,7 @@ export const useValidationMessages = {
     `Visible declaration '${name}' is declared more than once in folder '${folderPath}'.`,
   missingImport: (name: string, importPath: string) => `'${name}' is not visible from '${importPath}'.`,
   notVisible: (name: string) =>
-    `'${name}' is not visible from here; mark it as 'folder', 'package', 'workspace', or 'public'.`,
+    `'${name}' is not visible from here; mark it as 'folder', 'package', 'project', or 'public'.`,
 } as const
 
 type DeclarationRecord = {

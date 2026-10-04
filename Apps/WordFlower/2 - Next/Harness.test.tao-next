@@ -1,13 +1,10 @@
 use SlotNav, StackNav from @tao/nav/basic
 use Col, FormButton, Text from @tao/ui
 
-project {
-   id "wordflower-foundation-harness"
-   name "WordFlower Foundation Harness"
-}
-
 app WordFlowerNavHarness {
-   Name "WordFlower Navigation Harness"
+   id "wordflower-nav-harness"
+   version "1.0.0"
+   name "WordFlower Navigation Harness"
    Navigator HarnessNavigator
    // An app without data omits `Datasource` entirely
 }
@@ -15,7 +12,9 @@ app WordFlowerNavHarness {
 // Two representative apps cover primitive/canonical and inferred/explicit spellings through
 // mounted behavior. Package language tests own the remaining syntax combinations.
 app WordFlowerStackByNav {
-   Name "WordFlower Declaration Head"
+   id "wordflower-stack-by-nav"
+   version "1.0.0"
+   name "WordFlower Declaration Head"
    Navigator StackByNav
 }
 
@@ -31,20 +30,22 @@ type HarnessStack is StackNav with {
    Initial is HarnessHome
 }
 
-workspace
+project
 nav StackByNav = HarnessStack { }
 
-workspace
+project
 let StackByLetWith = HarnessStack with { }
 
-workspace
+project
 nav HarnessNavigator = SlotNav {
    Initial StackByNav
 }
 
 folder
 let WordFlowerStackByLetWith = app with {
-   Name "WordFlower Declaration Let With"
+   id "wordflower-stack-by-let-with"
+   version "1.0.0"
+   name "WordFlower Declaration Let With"
    Navigator StackByLetWith
 }
 

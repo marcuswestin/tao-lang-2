@@ -49,7 +49,7 @@ type GenJoinOptions = {
   separator?: string
 }
 
-type AnyBlockStatement = AST.ActionStatement | AST.ProjectStatement | AST.Statement
+type AnyBlockStatement = AST.ActionStatement | AST.Statement
 type JsLiteralValue =
   | boolean
   | number
@@ -65,11 +65,6 @@ type GenBlock = {
   (
     owner: AST.Render | AST.ViewDeclaration,
     compileStatement: (statement: AST.Statement) => GenValue,
-    options?: GenListOptions,
-  ): Compiled
-  (
-    owner: AST.ProjectDeclaration,
-    compileStatement: (statement: AST.ProjectStatement) => GenValue,
     options?: GenListOptions,
   ): Compiled
 }

@@ -55,7 +55,9 @@ export function lowerCreationPlan(plan: CreationPlan, options: LowerCreationPlan
     'Scenarios.tao': firebase ? firebaseScenariosFile(names) : scenariosFile(plan, names),
     [`${names.app}.test.tao`]: testFile(plan, names, firebase, options.validationTools === true),
     'tsconfig.json': PROJECT_TSCONFIG,
-    '.gitignore': '*.tao.ts\n.tao/\nnode_modules/\n',
+    '.gitignore':
+      '/.tao-ts/\n/.tao/*\n!/.tao/.gitkeep\n!/.tao/project.json\n!/.tao/lock.jsonc\n!/.tao/skills.version\nnode_modules/\n',
+    '.tao/.gitkeep': '',
     // The reserved root generated package exists from day one, committed empty, so Studio and the
     // compiler have their folder before the first generated file lands.
     '@/.gitkeep': '',
@@ -112,6 +114,10 @@ class ProjectNames {
   }
 }
 
+function variantAppId(id: string, variant: string): string {
+  return `${id.slice(0, 63 - variant.length).replace(/-+$/u, '')}-${variant}`
+}
+
 // -- App.tao ---------------------------------------------------------------------------------------
 
 function appFile(plan: CreationPlan, names: ProjectNames, description: string | undefined, firebase: boolean): string {
@@ -138,20 +144,14 @@ use ${names.app}AuthNavigator from ./Auth`
    }`
   return `${imports}
 
-project {
-   id ${taoString(plan.id)}
-   name ${taoString(plan.name)}
-   version "0.1.0"
-   app ${names.app}
-   remote none
-}
-
 ${commentLines(`${plan.name}: ${plan.summary}`)}
 ${provenance}//
-// This file holds the project and the app. The navigation is in Chrome.tao, the entities in
+// This file holds the app. The navigation is in Chrome.tao, the entities in
 // Data.tao, the design in Design.tao, and each feature has its own folder.
 app ${names.app} {
-   Name ${taoString(plan.name)}
+   id ${taoString(plan.id)}
+   version "0.1.0"
+   name ${taoString(plan.name)}
    Navigator ${firebase ? `${names.app}AuthNavigator` : names.navigator}
 ${connection}
    Design ${names.design}
@@ -301,7 +301,7 @@ From this project directory:
 2. Run \`tao firebase generate . --app ${appIdentifier(plan.name)} --output .tao/firebase-backend\`.
    Review and combine those rules with any existing rules in that Firebase project before deploying:
    a Firestore rules deployment replaces the project's current rules. Generation does not deploy.
-3. Run \`tao dev . --app ${appIdentifier(plan.name)}\` and sign in or create an account.
+3. Run \`tao run . --app ${appIdentifier(plan.name)}\` and sign in or create an account.
 
 Run \`tao test .\` for the local Memory/TestAuth journeys. They do not contact Firebase.
 ${
@@ -318,7 +318,9 @@ use ${names.navigator} from ./Chrome
 use ${names.design} from ./Design
 
 app ${names.app}Preview {
-   Name ${taoString(names.plan.name)}
+   id ${taoString(variantAppId(names.plan.id, 'preview'))}
+   version "0.1.0"
+   name ${taoString(`${names.plan.name} Preview`)}
    Datasource Memory { }
    Navigator ${names.navigator}
    Design ${names.design}
@@ -772,14 +774,18 @@ use ${names.navigator} from ./Chrome
 use ${names.design} from ./Design
 
 app ${names.app}Test {
-   Name ${taoString(plan.name)}
+   id ${taoString(variantAppId(plan.id, 'memory-test'))}
+   version "0.1.0"
+   name ${taoString(`${plan.name} Memory Test`)}
    Datasource Memory { }
    Navigator ${names.navigator}
    Design ${names.design}
 }
 
 app ${names.app}SignInTest {
-   Name ${taoString(plan.name)}
+   id ${taoString(variantAppId(plan.id, 'sign-in-test'))}
+   version "0.1.0"
+   name ${taoString(`${plan.name} Sign In Test`)}
    Auth TestAuth { }
    Datasource Memory { }
    Navigator ${names.app}AuthNavigator
@@ -787,7 +793,9 @@ app ${names.app}SignInTest {
 }
 
 app ${names.app}SignOutTest {
-   Name ${taoString(plan.name)}
+   id ${taoString(variantAppId(plan.id, 'sign-out-test'))}
+   version "0.1.0"
+   name ${taoString(`${plan.name} Sign Out Test`)}
    Auth TestAuth { State "SignedIn" }
    Datasource Memory { }
    Navigator ${names.app}AuthNavigator

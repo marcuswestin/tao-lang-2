@@ -5,7 +5,7 @@ import { TestCompiler as Compiler } from './test-compile'
 Describe('compiler: functional core', () => {
   Test('compiles pure functions and total control flow through validated Tao', async () => {
     const compiled = await Compiler.compileCode(`
-      app FunctionalApp { view Main }
+      app FunctionalApp { id "com.tao.test.functionalapp" version "1.0.0" name "FunctionalApp"  view Main }
       function HasCount(Count number) returns boolean {
         return Count > 0
       }
@@ -59,7 +59,7 @@ Describe('compiler: functional core', () => {
 
   Test('lowers typed defaults in view, action, and function callee scopes', async () => {
     const compiled = await Compiler.compileCode(`
-      app DefaultsApp { view Main }
+      app DefaultsApp { id "com.tao.test.defaultsapp" version "1.0.0" name "DefaultsApp"  view Main }
       function Label(Value text default "Save") returns text { return Value }
       view Main() {
         action Submit(Message text default "Saved") { }
@@ -78,7 +78,7 @@ Describe('compiler: functional core', () => {
 
   Test('lowers enum identity case tests and one-sided action and render if', async () => {
     const compiled = await Compiler.compileCode(`
-      app CaseApp { view Main }
+      app CaseApp { id "com.tao.test.caseapp" version "1.0.0" name "CaseApp"  view Main }
       type ConfirmResult is one of Confirmed, Cancelled
       data Documents / Document { Final yes / Draft no }
       view Main() {
@@ -121,7 +121,7 @@ Describe('compiler: functional core', () => {
 
   Test('hands unnamed exceptional cases to the read net the app carries', async () => {
     const compiled = await Compiler.compileCode(`
-      app NetApp { view Main guard {
+      app NetApp { id "com.tao.test.netapp" version "1.0.0" name "NetApp" view Main guard {
         loading -> Text("Opening…")
         error -> Context { Text(Context.Message) }
       } }
@@ -139,6 +139,7 @@ Describe('compiler: functional core', () => {
 
     const code = compiled.files[0]?.code ?? ''
     Expect(code).toContain('readNet: () => TR.MergeReadNet(undefined, TR.ReadNet({')
+    Expect(code).toContain('readNet: _TaoBoundApp_NetApp.readNet,')
     Expect(code).toContain('"loading": (_ViewProps, _TaoCasePayload) =>')
     Expect(code).toContain('_Scope.Context = _TaoCasePayload')
     Expect(code).toMatch(/<_Scope\.Text\s+Value=\{[^}]*_Scope\.Context[^}]*\["Message"\]/)
@@ -149,7 +150,7 @@ Describe('compiler: functional core', () => {
 
   Test('compiles entity when error binders through the text-compatible read path', async () => {
     const compiled = await Compiler.compileCode(`
-      app NetApp { view Shell }
+      app NetApp { id "com.tao.test.netapp" version "1.0.0" name "NetApp" view Shell }
       data Documents / Document { Title text }
       view Shell() { render Text("Ready") }
       view Main(Document) {
@@ -172,16 +173,17 @@ Describe('compiler: functional core', () => {
     await withTaoFiles(
       'tao-compiler-read-net-',
       {
-        'Project.tao': `project { id "compiler-read-net" name "Compiler read net" }`,
+        '.tao/.gitkeep': '',
         'Main.tao': `
           use Base from ./Net
-          app NetApp = Base with { guard { error -> Context { Text(Context.Message) } } }
+          app NetApp = Base with { id "com.tao.test.netapp" guard { error -> Context { Text(Context.Message) } } }
           view Text(Value text) { render inject ${tsFence} return null ${fence} }
         `,
         'Net.tao': `
-          workspace app Base { view Home guard { missing -> { Gone() } } }
-          workspace view Gone() { render inject ${tsFence} return null ${fence} }
-          workspace view Home() { render inject ${tsFence} return null ${fence} }
+          project app Base { id "com.tao.test.base" version "1.0.0" name "Base" view Home
+            guard { missing -> { Gone() } } }
+          project view Gone() { render inject ${tsFence} return null ${fence} }
+          project view Home() { render inject ${tsFence} return null ${fence} }
         `,
       },
       async paths => {
@@ -190,7 +192,8 @@ Describe('compiler: functional core', () => {
         const net = compiled.files.find(file => file.relativePath === 'modules/Net.tao.tsx')?.code ?? ''
 
         Expect(app).toContain('TR.MergeReadNet(')
-        Expect(app).toContain('.definition.readNet?.(), TR.ReadNet({')
+        Expect(app).toContain('_TaoBaseBinding.readNet?.(), TR.ReadNet({')
+        Expect(app).toContain('readNet: _TaoBoundApp_NetApp.readNet,')
         Expect(app).toContain('"error": (_ViewProps, _TaoCasePayload) =>')
         Expect(net).toContain('"missing": (_ViewProps, _TaoCasePayload) =>')
       },
@@ -199,7 +202,7 @@ Describe('compiler: functional core', () => {
 
   Test('keeps a matched guard inside its action block while caller execution continues', async () => {
     const compiled = await Compiler.compileCode(`
-      app GuardApp { view Main }
+      app GuardApp { id "com.tao.test.guardapp" version "1.0.0" name "GuardApp"  view Main }
       view Main() {
         state Stop = true
         state Count = 0

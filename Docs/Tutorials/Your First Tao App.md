@@ -46,15 +46,10 @@ One file with:
 use StackNav from @tao/nav
 use Col, Text from @tao/ui
 
-project {
-   id "reading-list"
-   name "ReadingList"
-   remote none
-   license MIT
-}
-
 app ReadingList {
-   Name "Reading List"
+   id "reading-list"
+   version "0.1.0"
+   name "Reading List"
    Navigator LibraryStack
 }
 
@@ -69,12 +64,10 @@ scene BookList() {
 }  }
 ```
 
-Four declarations, and each one has a job:
+Three declarations, and each one has a job:
 
-- **`project`** identifies the project. `id` is the stable identity the toolchain stores data and
-  releases under, and it never changes; `name` is the display name, which may. One `project` per
-  project.
-- **`app`** is what launches. `Navigator` names a navigator root directly; `view` instead names an
+- **`app`** is what launches. Its lowercase `id`, `version`, and `name` describe the runnable app;
+  Tao-managed app state is scoped by `id` across release versions. `Navigator` names a navigator root directly; `view` instead names an
   ordinary shell view that may render a navigator.
 - **`nav`** is a navigator _value_. `StackNav` pushes and pops screens, and `Initial` is what it
   shows first. Bare `@tao/nav` selects the native kit, so the platform owns its transition and bar.
@@ -149,7 +142,9 @@ Point the app at it by adding one line to `app ReadingList`:
 
 ```tao edit
 app ReadingList {
-   Name "Reading List"
+   id "reading-list"
+   version "0.1.0"
+   name "Reading List"
    Design ReadingListDesign
    Navigator LibraryStack
 }
@@ -211,7 +206,9 @@ use Local from @tao/data/providers/local
 
 ```tao edit
 app ReadingList {
-   Name "Reading List"
+   id "reading-list"
+   version "0.1.0"
+   name "Reading List"
    Design ReadingListDesign
    Navigator LibraryStack
    Datasource Local {
@@ -466,7 +463,9 @@ And point the app at the new one:
 
 ```tao edit
 app ReadingList {
-   Name "Reading List"
+   id "reading-list"
+   version "0.1.0"
+   name "Reading List"
    Design ReadingListDesign
    Navigator ReadingListNavigator
    Datasource Local {
@@ -642,15 +641,10 @@ use Local from @tao/data/providers/local
 use SelectionNav, StackNav from @tao/nav
 use Checkbox, Col, FormButton, Panes, Row, ScrollView, Spinner, Text, TextInput from @tao/ui
 
-project {
-   id "reading-list"
-   name "ReadingList"
-   remote none
-   license MIT
-}
-
 app ReadingList {
-   Name "Reading List"
+   id "reading-list"
+   version "0.1.0"
+   name "Reading List"
    Design ReadingListDesign
    Navigator ReadingListNavigator
    Datasource Local {

@@ -1,4 +1,4 @@
-workspace
+project
 data Files / File {
    StableId text (unique),
    Path text,
@@ -13,28 +13,28 @@ data Files / File {
    order by Path,
 }
 
-workspace
+project
 data Diagnostics / Diagnostic {
    Message text,
    Source text,
    File,
 }
 
-workspace
+project
 data Screens / Screen {
    StableId text (unique),
    Name text,
    SourcePath text,
 }
 
-workspace
+project
 data Views / View {
    StableId text (unique),
    Name text,
    SourcePath text,
 }
 
-workspace
+project
 data Scenarios / Scenario {
    StableId text (unique),
    Group text,
@@ -43,7 +43,7 @@ data Scenarios / Scenario {
    SubjectId text,
 }
 
-workspace
+project
 data Checkpoints / Checkpoint {
    StableId text (unique),
    Path text,
@@ -52,7 +52,7 @@ data Checkpoints / Checkpoint {
    Status text,
 }
 
-workspace
+project
 data DesignTokens / DesignToken {
    StableId text (unique),
    DesignName text,

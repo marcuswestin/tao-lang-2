@@ -1,8 +1,9 @@
 import { HostDependencies, ManagedNode, RuntimeToolchainPaths } from '@expo-host'
 import { RuntimeTesting } from '@expo-host/testing/runtime-testing'
 import { AST, Langium, Parser } from '@parser'
-import { CLI, Errors, FS, HCI, Json, Platform, Repo, TaoTestProtocol } from '@shared'
+import { CLI, Errors, FS, HCI, Json, Platform, ProjectIdentity, Repo, TaoTestProtocol } from '@shared'
 import { TaoAppModules } from './app-modules'
+import { inPlace } from './in-place-files'
 import { findTaoFiles } from './tao-files'
 import { type FingerprintRequest, TestCache } from './test-cache'
 import { TestOutput, type TestOutputMode } from './test-output'
@@ -72,6 +73,7 @@ export async function prepareSharedTaoTestRun(
   }
   for (const testPath of testPaths) {
     await TaoAppModules.ensureForPath(testPath)
+    await ProjectIdentity.ensure(await inPlace.workspaceRootForPath(testPath))
   }
   const runtimeRoot = testRuntimeRoot()
   const fingerprint = await reusableRunFingerprint({ roots, runtimeRoot, testPaths })
@@ -225,6 +227,7 @@ export async function runTestCommandOnce(
   }
   for (const testPath of testPaths) {
     await TaoAppModules.ensureForPath(testPath)
+    await ProjectIdentity.ensure(await inPlace.workspaceRootForPath(testPath))
   }
   HCI.logProcessInfo('test', `Found ${testPaths.length} Tao test ${testPaths.length === 1 ? 'file' : 'files'}`)
   const runtimeRoot = testRuntimeRoot()

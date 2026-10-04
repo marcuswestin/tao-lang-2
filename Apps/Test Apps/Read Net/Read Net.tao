@@ -2,14 +2,10 @@ use Memory from @tao/data/providers/memory
 use StackNav from @tao/nav
 use Col, FormButton, Spinner, Text, TextInput from @tao/ui
 
-project {
-   id "read-net"
-   name "Read Net"
-   version "0.1.0"
-}
-
 app ReadNetApp {
-   Name "Read Net"
+   id "read-net"
+   version "0.1.0"
+   name "Read Net"
    Navigator StackNav {
       Initial NotesView
    }
@@ -20,20 +16,24 @@ app ReadNetApp {
 
 // This app replaces only `missing`; every other exceptional case keeps the runtime's.
 app ReadNetMissingVariant = ReadNetApp with {
-   Name "Read Net Missing Variant"
+   id "read-net-missing"
+   name "Read Net Missing Variant"
    guard {
       missing -> { Text("Variant: this note is gone") }
 }  }
 
 app ReadNetErrorVariant = ReadNetApp with {
-   Name "Read Net Error Variant"
+   id "read-net-error"
+   name "Read Net Error Variant"
    guard {
       error -> Context { Text("Read Net error: { Context.Message }") }
 }  }
 
 // An independent app in this project replaces loading and error while leaving missing to the runtime.
 app RuntimeDefaultApp {
-   Name "Read Net Runtime Default"
+   id "read-net-runtime-default"
+   version "0.1.0"
+   name "Read Net Runtime Default"
    Navigator StackNav {
       Initial RuntimeNotesView
    }
@@ -43,7 +43,7 @@ app RuntimeDefaultApp {
       error -> Context { Text("Runtime Default: { Context.Message }") }
 }  }
 
-workspace
+project
 data Notes / Note {
    Title text,
 }
@@ -112,7 +112,7 @@ scene SiteNoteView(Note) {
          on press -> { delete Note }
 }  }  }
 
-workspace
+project
 data RuntimeNotes / RuntimeNote {
    Title text,
 }

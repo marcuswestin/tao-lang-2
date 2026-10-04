@@ -21,7 +21,7 @@ Describe('validator: selectable loops', () => {
   Test('hints that a multi-root row carries no accessibility label, and only such a row', async () => {
     const result = await testValidateCode(`
       use Col, Text from @tao/ui
-      app MyApp { view MainView }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
       view MainView() {
         state Selected = ""
         render Col() {

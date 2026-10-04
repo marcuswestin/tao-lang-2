@@ -6,7 +6,7 @@ Describe('compiler: data defaults', () => {
     const compiled = await Compiler.compileCode(`
       data Owners / Owner { Children? }
       data Children / Child { Owner }
-      app Collections { view Main }
+      app Collections { id "com.tao.test.collections" version "1.0.0" name "Collections"  view Main }
       view Main() { render Empty() }
       view Inspect(Owner) {
         let Count = Owner.Children.Count
@@ -31,7 +31,7 @@ Describe('compiler: data defaults', () => {
         Public yes / Private no (default Public),
         Pinned yes / Unpinned no (default Unpinned)
       }
-      app Defaults { view Main }
+      app Defaults { id "com.tao.test.defaults" version "1.0.0" name "Defaults"  view Main }
       view Main() { render Empty() }
       ${stubView('Empty')}
     `)

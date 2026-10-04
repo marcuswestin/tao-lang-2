@@ -2,13 +2,10 @@ use Memory from @tao/data/providers/memory
 use StackNav from @tao/nav
 use Col, FormButton, Text, TextInput from @tao/ui
 
-project {
-   id "runtime-keyboard-navigation-smoke"
-   name "Runtime Keyboard Navigation Smoke"
-}
-
 app KeyboardNavigationAcceptance {
-   Name "Keyboard Navigation Acceptance"
+   id "runtime-keyboard-navigation-smoke"
+   version "1.0.0"
+   name "Keyboard Navigation Acceptance"
    Navigator StackNav {
       Initial KeyboardWorkbench
    }

@@ -17,7 +17,7 @@ function outlineApp(body: string, extra = ''): string {
       Name text (title),
       Documents (owned)
     }
-    app OutlineApp { view Main }
+    app OutlineApp { id "com.tao.test.outlineapp" version "1.0.0" name "OutlineApp"  view Main }
     view Main() {
       query Documents = Documents with { }
       query Workspaces = Workspaces with { }
@@ -226,7 +226,7 @@ Describe('compiler: interaction outline', () => {
 
   Test('emits no table for a module without outline nodes', async () => {
     const compiled = await Compiler.compileCode(`
-      app QuietApp { view Main }
+      app QuietApp { id "com.tao.test.quietapp" version "1.0.0" name "QuietApp"  view Main }
       view Main() { render Empty() }
       view Empty() { render inject ${tsFence} return null ${fence} }
     `)

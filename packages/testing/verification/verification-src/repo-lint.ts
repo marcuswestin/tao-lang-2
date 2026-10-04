@@ -63,9 +63,9 @@ function wordFlowerAbsorbedParityIssues(directory: WordFlowerDirectory): string[
 }
 
 function isWordFlowerParityFile(file: SourceFile): boolean {
-  return file.path !== '.tao-project/lock.jsonc'
-    && !file.path.split('/').some(segment => segment === '.tao' || segment === 'node_modules')
-    && !file.path.endsWith('.tao.ts')
+  return !file.path.split('/').some(segment =>
+    segment === '.tao' || segment === '.tao-ts' || segment === 'node_modules'
+  )
 }
 
 function currentWordFlowerPath(path: string): string {
@@ -448,12 +448,13 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:313',
   'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:323',
   'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:360',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:371',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:412',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:603',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:635',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:803',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:964',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:381',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:387',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:431',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:622',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:654',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:822',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:983',
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobun.ts:102',
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:208',
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:211',
@@ -482,26 +483,26 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:884',
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:905',
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:908',
-  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:238',
-  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:350',
-  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:358',
-  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:375',
+  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:240',
+  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:352',
+  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:360',
+  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:377',
   'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:20',
-  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:198',
-  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:516',
-  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:545',
-  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:552',
-  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:628',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:208',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:956',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:961',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:966',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:991',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1230',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1251',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1439',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1483',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1509',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:196',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:514',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:543',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:550',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:639',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:204',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:952',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:957',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:962',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:987',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1226',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1247',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1435',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1479',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1505',
   'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:306',
   'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:328',
   'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:1075',
@@ -1119,19 +1120,14 @@ export async function repoLintIssues(
   issues.push(...instructionBudgetIssues(await readInstructionFiles(repoRoot)))
   issues.push(...await readDeveloperEnvironmentLedgerIssues(repoRoot))
 
-  // Test apps and starters each document every folder in their README, one `## <Name>` entry per app.
+  // Inventory authored Tao sources, since removed apps can leave ignored generated directories.
   for (const collection of ['Apps/Test Apps', 'Apps/Starters']) {
     const collectionPath = FS.resolvePath(collection, repoRoot)
     if (!(await FS.isDirectory(collectionPath))) {
       continue
     }
     const readmePath = FS.resolvePath('README.md', collectionPath)
-    const appNames: string[] = []
-    for (const name of await FS.listDir(collectionPath)) {
-      if (!name.startsWith('.') && await FS.isDirectory(FS.resolvePath(name, collectionPath))) {
-        appNames.push(name)
-      }
-    }
+    const appNames = await readTaoAppNames(repoRoot, collection)
     const missingEntries = missingTestAppReadmeEntries(appNames, await FS.readText(readmePath))
     issues.push(...missingEntries.map(name => `${readmePath} needs a \`## ${name}\` entry.`))
   }
@@ -1176,6 +1172,38 @@ async function readInstructionFiles(repoRoot: string): Promise<SourceFile[]> {
 }
 
 const EXECUTABLE_EXTENSIONS = ['.cjs', '.js', '.jsx', '.mjs', '.ts', '.tsx']
+
+async function readTaoAppNames(repoRoot: string, collection: string): Promise<string[]> {
+  const inventory = await CLI.run('git', {
+    args: ['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', collection],
+    cwd: repoRoot,
+  })
+  const paths: string[] = []
+  if (inventory.exitCode === 0) {
+    paths.push(...inventory.stdout.split('\0'))
+  } else {
+    for await (
+      const path of FS.walk(FS.resolvePath(collection, repoRoot), {
+        extensions: ['.tao'],
+        excludeDirectory: name => name === 'node_modules' || name.startsWith('_gen_'),
+      })
+    ) {
+      paths.push(FS.relativePath(repoRoot, path))
+    }
+  }
+  const names = new Set<string>()
+  for (const path of paths) {
+    const segments = FS.slashPath(path).slice(collection.length + 1).split('/')
+    if (
+      path.endsWith('.tao') && segments.length > 1
+      && !segments.some(segment => segment.startsWith('.') || segment === 'node_modules' || segment.startsWith('_gen_'))
+      && await FS.isFile(FS.resolvePath(path, repoRoot))
+    ) {
+      names.add(segments[0]!)
+    }
+  }
+  return [...names].sort()
+}
 
 async function readExecutableFiles(repoRoot: string): Promise<SourceFile[]> {
   const tracked = await CLI.run('git', {

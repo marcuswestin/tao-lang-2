@@ -4,14 +4,10 @@ use Box, Col, Panes, Row, ScrollView, Stack, Text, TextFrame, TextMultiline, Wra
 // the platform-native default, which renders the OS's own chrome.
 use Button from @tao/ui/basic
 
-project {
-   id "layout-app-shell"
-   name "Layout and App Shell"
-   version "0.1.0"
-}
-
 app LayoutAndAppShell {
-   Name "Layout and App Shell"
+   id "layout-app-shell"
+   version "0.1.0"
+   name "Layout and App Shell"
    Navigator StackNav {
       Initial MainView
 }  }

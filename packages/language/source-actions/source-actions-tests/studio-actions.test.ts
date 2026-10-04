@@ -420,7 +420,7 @@ Describe('Studio source-action patch bus', () => {
 
   Test('inspects parsed layout and style values and edits current-dialect inline style', async () => {
     const document = await parseDocument(`
-      workspace design Theme { ink #111 body [fg ink, size 14] }
+      project design Theme { ink #111 body [fg ink, size 14] }
       view MainView() {
          render Text("First") [gap 8, body, size 16]
       }
@@ -448,7 +448,7 @@ Describe('Studio source-action patch bus', () => {
   Test('inspects and edits a clause that reads a color value without treating it as a token', async () => {
     const document = await parseDocument(`
       use Text from @tao/ui
-      workspace design Theme { colors { accent #2f6b4f } }
+      project design Theme { colors { accent #2f6b4f } }
       app Demo { view MainView Design Theme }
       view MainView() { render Badge(Tint: accent) }
       view Badge(Tint color default accent) {
@@ -498,7 +498,7 @@ Describe('Studio source-action patch bus', () => {
   Test('inspects and promotes decided visual aliases and representable numeric families', async () => {
     const document = await parseDocument(`
       use Text from @tao/ui
-      workspace design Theme { ink #111 body [ink ink, size 16] }
+      project design Theme { ink #111 body [ink ink, size 16] }
       view MainView() {
          render Text("First") [body, background #c00, radius 8, pad 12]
       }
@@ -530,8 +530,8 @@ Describe('Studio source-action patch bus', () => {
 
   Test('sets one entry on a named design member without a render occurrence (semantic agent PoC)', async () => {
     const document = await parseDocument(`
-      workspace design Theme { ink #111 card [gap 10, pad 16, radius 14] }
-      workspace design Other { card [pad 4] }
+      project design Theme { ink #111 card [gap 10, pad 16, radius 14] }
+      project design Other { card [pad 4] }
     `)
     const patch = await SourceActions.applyStudioPatch(document, {
       designName: 'Theme',
@@ -552,7 +552,7 @@ Describe('Studio source-action patch bus', () => {
   Test('inspects and lands edits, forks, defaults, colors, and sizes in structured design blocks', async () => {
     const document = await parseDocument(`
       use Text from @tao/ui
-      workspace design Theme {
+      project design Theme {
          colors { ink #111 }
          sizes { sm 8.px }
          text { body [size sm, ink ink] }
@@ -631,7 +631,7 @@ Describe('Studio source-action patch bus', () => {
 
   Test('promotes a numeric dimensional exploration into a sizes block with release-safe source shape', async () => {
     const document = await parseDocument(`
-      workspace design Theme { colors { ink #111 } styles { card [ink ink] } }
+      project design Theme { colors { ink #111 } styles { card [ink ink] } }
       view MainView() { render Text("First") [card, pad 12] }
     `)
     const id = renderId(requireRenderByText(document, 'Text("First")'))
@@ -649,7 +649,7 @@ Describe('Studio source-action patch bus', () => {
   Test('replaces visual aliases by their canonical slot instead of creating invalid duplicates', async () => {
     const document = await parseDocument(`
       use Text from @tao/ui
-      workspace design Theme {
+      project design Theme {
          canvas #fff
          ink #111
          card [bg canvas, fg ink]
@@ -688,7 +688,7 @@ Describe('Studio source-action patch bus', () => {
 
   Test('promotes a raw inline color to a token and replaces only the selected render entry', async () => {
     const document = await parseDocument(`
-      workspace design Theme { ink #111 }
+      project design Theme { ink #111 }
       view MainView() { render Text("First") [fg #c00] Text("Second") [fg #c00] }
     `)
     const id = renderId(requireRenderByText(document, 'Text("First")'))
@@ -740,7 +740,7 @@ Describe('Studio source-action patch bus', () => {
 
   Test('lands new colors and forks of a flat design in typed blocks, leaving flat members as written', async () => {
     const document = await parseDocument(`
-      workspace design Theme { ink #111 body [ink ink, size 14] }
+      project design Theme { ink #111 body [ink ink, size 14] }
       view MainView() { render Text("First") [body, size 18, background #c00] }
     `)
     const id = renderId(requireRenderByText(document, 'Text("First")'))
@@ -776,7 +776,7 @@ Describe('Studio source-action patch bus', () => {
 
   Test('refuses a Capitalized or keyword name for a new color, size, or fork', async () => {
     const document = await parseDocument(`
-      workspace design Theme { colors { ink #111 } styles { card [pad 4] } }
+      project design Theme { colors { ink #111 } styles { card [pad 4] } }
       view MainView() { render Text("First") [card, pad 12, background #c00] }
     `)
     const id = renderId(requireRenderByText(document, 'Text("First")'))
@@ -817,7 +817,7 @@ Describe('Studio source-action patch bus', () => {
 
   Test('names a default fork of a Capitalized style as a lowercase style', async () => {
     const document = await parseDocument(`
-      workspace design Theme { styles { Card [pad 4] } }
+      project design Theme { styles { Card [pad 4] } }
       view MainView() { render Text("First") [Card, pad 12] }
     `)
     const patch = await SourceActions.applyStudioPatch(document, {
@@ -1525,7 +1525,7 @@ Describe('Studio source-action patch bus', () => {
         ? 'use Note, Notes from ./Data.tao'
         : ''
       await withTaoFiles('tao-captured-fixture-import-', {
-        'Data.tao': `${scope === 'folder' ? 'folder' : 'workspace'} data Notes / Note { Title text }`,
+        'Data.tao': `${scope === 'folder' ? 'folder' : 'project'} data Notes / Note { Title text }`,
         'View.tao': `
           ${imported}
           ${scope === 'local' ? 'data Notes / Note { Title text }' : ''}
@@ -1994,7 +1994,7 @@ Describe('Studio source-action patch bus', () => {
       `adds an imported entity parameter to every sketch scenario with ${existingImport || 'no data import'}`,
       async () => {
         await withTaoFiles('tao-source-actions-sketch-feed-', {
-          'Data.tao': `workspace data Playlists / Playlist { Cover text, Title text, Score number }\n`,
+          'Data.tao': `project data Playlists / Playlist { Cover text, Title text, Score number }\n`,
           'View1.tao': `
           use Placeholder from @tao/ui
           ${existingImport}
@@ -2722,7 +2722,7 @@ Describe('Studio make view and group', () => {
         'Main.tao': `
         use Col, Text from @tao/ui
 
-        workspace
+        project
         data Notes / Note {
            Title text,
         }

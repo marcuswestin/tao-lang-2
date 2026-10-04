@@ -17,7 +17,7 @@ Describe('compiler: typed values', () => {
       function Join(Values list of text, Separator text) returns text {
         return Join(Values, Separator) from ./Join.ts
       }
-      app TypedValues { view Main }
+      app TypedValues { id "com.tao.test.typedvalues" version "1.0.0" name "TypedValues"  view Main }
       view Main() {
         let Basic is Profile = Profile { Name: "Ada" }
         let Joined = Join(["Ada", "Grace"], " + ")
@@ -41,7 +41,7 @@ Describe('compiler: typed values', () => {
 
   Test('adapts explicitly action-typed bare exports without URL-specific compiler knowledge', async () => {
     const compiled = await Compiler.compileCode(`
-      app BridgeApp { view Main }
+      app BridgeApp { id "com.tao.test.bridgeapp" version "1.0.0" name "BridgeApp"  view Main }
       view Main() {
         let OpenUrl is action(text) = OpenUrl from ./OpenStoryLink.ts
         action Open() { do OpenUrl("https://example.com/story") }

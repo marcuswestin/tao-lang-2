@@ -14,8 +14,8 @@ Describe('validator: explicit app agent commands', () => {
     'accepts scalar commands and replacement variants',
     accepts(`
     ${base}
-    app Main { AgentCommands [Safe, Plain] view Home() }
-    app Restricted = Main with { AgentCommands [] }
+    app Main { id "main" version "1.0.0" name "Main" AgentCommands [Safe, Plain] view Home() }
+    app Restricted = Main with { id "restricted" AgentCommands [] }
   `),
   )
   Test(
@@ -24,14 +24,16 @@ Describe('validator: explicit app agent commands', () => {
     ${base}
     use StackNav from @tao/nav
     nav Navigation = StackNav { Initial Home }
-    let Main = app { Name "Main" Navigator Navigation AgentCommands [Safe, Plain] }
+    let Main = app { id "main" version "1.0.0" name "Main" Navigator Navigation AgentCommands [Safe, Plain] }
   `),
   )
   Test(
     'accepts imported commands',
     acceptsFiles({
-      'Main.tao': `${stubView('Home')} use Safe from ./Commands app Main { AgentCommands [Safe] view Home() }`,
-      'Commands.tao': 'action Run() {} workspace command Safe(Value text) { Title "Safe" do Run() }',
+      'Main.tao': `${
+        stubView('Home')
+      } use Safe from ./Commands app Main { id "main" version "1.0.0" name "Main" AgentCommands [Safe] view Home() }`,
+      'Commands.tao': 'action Run() {} project command Safe(Value text) { Title "Safe" do Run() }',
     }),
   )
   Test(
@@ -43,7 +45,7 @@ Describe('validator: explicit app agent commands', () => {
       command Hidden() { Title "Hidden" do Run() }
       render inject \`\`\`tsx return null \`\`\`
     }
-    app Main { AgentCommands [Hidden] view Home() }
+    app Main { id "main" version "1.0.0" name "Main" AgentCommands [Hidden] view Home() }
   `,
       messages.command,
     ),
@@ -54,7 +56,7 @@ Describe('validator: explicit app agent commands', () => {
       `
     ${base}
     let Allowed = [Safe]
-    app Main { AgentCommands Allowed view Home() }
+    app Main { id "main" version "1.0.0" name "Main" AgentCommands Allowed view Home() }
   `,
       messages.literal,
     ),
@@ -64,7 +66,7 @@ Describe('validator: explicit app agent commands', () => {
     rejects(
       `
     ${base}
-    app Main { AgentCommands [Run] view Home() }
+    app Main { id "main" version "1.0.0" name "Main" AgentCommands [Run] view Home() }
   `,
       messages.command,
     ),
@@ -75,7 +77,7 @@ Describe('validator: explicit app agent commands', () => {
       `
     ${base}
     let Bound = Safe with { Value "x", Count 1, Enabled true }
-    app Main { AgentCommands [Bound] view Home() }
+    app Main { id "main" version "1.0.0" name "Main" AgentCommands [Bound] view Home() }
   `,
       messages.command,
     ),
@@ -86,7 +88,7 @@ Describe('validator: explicit app agent commands', () => {
       `
     ${base}
     command Many(Values list of text) { Title "Many" do Run() }
-    app Main { AgentCommands [Many] view Home() }
+    app Main { id "main" version "1.0.0" name "Main" AgentCommands [Many] view Home() }
   `,
       messages.slot('Many', 'Values'),
     ),
@@ -100,7 +102,7 @@ Describe('validator: explicit app agent commands', () => {
     data Records / Record { Value text }
     command RecordInput(Item Record) { Title "Record input" do Run() }
     command PayloadInput(Item Payload) { Title "Payload input" do Run() }
-    app Main { AgentCommands [RecordInput, PayloadInput] view Home() }
+    app Main { id "main" version "1.0.0" name "Main" AgentCommands [RecordInput, PayloadInput] view Home() }
   `,
       messages.slot('RecordInput', 'Item'),
       messages.slot('PayloadInput', 'Item'),
@@ -111,8 +113,8 @@ Describe('validator: explicit app agent commands', () => {
     rejects(
       `
     ${base}
-    app Main { AgentCommands [Safe] view Home() }
-    app Patched = Main with { AgentCommands with { Value "x" } }
+    app Main { id "main" version "1.0.0" name "Main" AgentCommands [Safe] view Home() }
+    app Patched = Main with { id "patched" AgentCommands with { Value "x" } }
   `,
       messages.literal,
     ),

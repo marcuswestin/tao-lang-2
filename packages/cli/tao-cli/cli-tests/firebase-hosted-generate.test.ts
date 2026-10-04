@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { FS, ProjectIdentity } from '@shared'
 import { Describe, Expect, Test, withCapturedOutput } from '@shared/test'
 import { runHostedProviderGenerate } from '../cli-src/hosted-provider-generate'
 import { readHostedProviderInputs } from '../cli-src/hosted-provider-inputs'
@@ -8,12 +8,10 @@ const source = `use Text from @tao/ui
 use FirebaseAuth from @tao/auth/firebase
 use Firebase from @tao/data/providers/firebase
 
-project {
-   id "firebase-generate"
-   name "Firebase generate"
-}
-
 app Hosted {
+   id "firebase-generate"
+   version "1.0.0"
+   name "Firebase generate"
    Auth FirebaseAuth { ApiKey "web-key", ProjectId "firebase-project" }
    Datasource Firebase { ApiKey "web-key", ProjectId "firebase-project" }
    view Main
@@ -34,7 +32,8 @@ data Notes / Note {
 
 Describe('tao firebase generate', () => {
   Test('compiles a Firebase store without authored access rules and writes private backend files', async () => {
-    await withTaoFixture({ 'Hosted.tao': source }, async root => {
+    await withTaoFixture({ '.tao/.gitkeep': '', 'Hosted.tao': source }, async root => {
+      await ProjectIdentity.ensure(root)
       const appPath = FS.resolvePath('Hosted.tao', root)
       const output = FS.resolvePath('backend', root)
       const inputs = await readHostedProviderInputs(appPath, 'Hosted', 'firebase')

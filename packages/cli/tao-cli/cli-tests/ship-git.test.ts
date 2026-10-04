@@ -17,8 +17,11 @@ Describe('tao ship git behavior', () => {
     await git(root, 'config', 'user.email', 'test@example.com')
     await git(root, 'config', 'user.name', 'Tao Test')
     const projectPath = FS.resolvePath('App.tao', root)
-    const lockPath = FS.resolvePath('.tao-project/lock.jsonc', root)
-    await FS.writeText(projectPath, 'project { version "1.0.0" }\n')
+    const lockPath = FS.resolvePath('.tao/lock.jsonc', root)
+    await FS.writeText(
+      projectPath,
+      'app Notes { id "notes" version "1.0.0" name "Notes" view Main }\nview Main() { }\n',
+    )
     await FS.writeText(lockPath, '{"schemaVersion":1}\n')
     await git(root, 'add', '.')
     await git(root, 'commit', '-qm', 'Initial')
@@ -32,7 +35,10 @@ Describe('tao ship git behavior', () => {
     const headBefore = await git(root, 'rev-parse', 'HEAD')
     const refsBefore = await git(root, 'show-ref')
 
-    await FS.writeText(projectPath, 'project { version "1.0.1" }\n')
+    await FS.writeText(
+      projectPath,
+      'app Notes { id "notes" version "1.0.1" name "Notes" view Main }\nview Main() { }\n',
+    )
     await FS.writeText(lockPath, '{"schemaVersion":1,"ship":{}}\n')
     const dirty = await inspectShipGit(root)
     Expect(dirty.dirty).toBe(true)
@@ -134,8 +140,8 @@ Describe('tao ship git behavior', () => {
     await git(root, 'config', 'user.email', 'test@example.com')
     await git(root, 'config', 'user.name', 'Tao Test')
     const sourcePath = FS.resolvePath('App.tao', root)
-    const lockPath = FS.resolvePath('.tao-project/lock.jsonc', root)
-    await FS.writeText(sourcePath, 'project { version "1.0.0" }\n')
+    const lockPath = FS.resolvePath('.tao/lock.jsonc', root)
+    await FS.writeText(sourcePath, 'app Notes { id "notes" version "1.0.0" name "Notes" view Main }\nview Main() { }\n')
     await FS.writeText(lockPath, '{"schemaVersion":1}\n')
     await git(root, 'add', '.')
     await git(root, 'commit', '-qm', 'Source build')
@@ -144,7 +150,10 @@ Describe('tao ship git behavior', () => {
     await FS.writeText(lockPath, '{"schemaVersion":1,"ship":{}}\n')
     Expect(shipSourceMatchesBuild(await inspectShipGit(root, { excludePaths: [lockPath] }), built)).toBe(true)
 
-    await FS.writeText(sourcePath, 'project { version "1.0.0" }\n// changed\n')
+    await FS.writeText(
+      sourcePath,
+      'app Notes { id "notes" version "1.0.0" name "Notes" view Main }\nview Main() { }\n// changed\n',
+    )
     await git(root, 'add', '.')
     await git(root, 'commit', '-qm', 'Change source')
     Expect(shipSourceMatchesBuild(await inspectShipGit(root, { excludePaths: [lockPath] }), built)).toBe(false)

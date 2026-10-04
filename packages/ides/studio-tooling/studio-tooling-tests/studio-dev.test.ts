@@ -20,7 +20,7 @@ import { StudioTestProcessOutput, StudioTestProcessRunner } from '../studio-tool
 Describe('Studio project ownership', () => {
   Test('refuses a project owned by a CLI session before starting Expo', async () => {
     const root = await mkTestDir('tao-studio-owned-project-')
-    await FS.writeText(FS.resolvePath('Project.tao', root), 'project { id "owned" name "Owned" }')
+    await FS.mkdir(FS.resolvePath('.tao', root))
     const owner = await ProjectDevSession.acquire(root, 'cli')
     try {
       await Expect(

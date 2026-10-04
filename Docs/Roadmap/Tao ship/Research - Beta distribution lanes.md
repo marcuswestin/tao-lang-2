@@ -118,14 +118,14 @@ Re-verified against the open web this date.
   Android version in the future. It does not apply to simulator versions," and that "Login is not
   required for development builds." https://expo.dev/changelog/expo-go-57-login
 - This login requirement, not the SDK, is what closes the physical-iPhone Expo Go lane for Tao:
-  `tao dev`'s Metro server sets `__UNSAFE_EXPO_HOME_DIRECTORY` to a repository-local
+  `tao run`'s Metro server sets `__UNSAFE_EXPO_HOME_DIRECTORY` to a repository-local
   `.artifacts/cache/expo`
   (`packages/apps/expo-host/expo-host-src/dev-loop/expo-runner/expo-config.ts:48-50`), so a
   developer's own `expo login` session in `~/.expo` never reaches the Metro server Expo Go on an
   iPhone would need to see it from.
 - The 2026-05-12 ownership rule two sections above remains scoped to "updates published to EAS
   Update"; it does not govern local Metro dev servers, and this correction does not extend it to
-  `tao dev`'s LAN lane. https://expo.dev/changelog/expo-go-loading-changes-may-2026
+  `tao run`'s LAN lane. https://expo.dev/changelog/expo-go-loading-changes-may-2026
 - Android device/emulator and the iOS Simulator still get SDK 57 Expo Go clients with no account
   requirement (`api.expo.dev/v2/versions/latest`, `androidClientUrl`/`iosClientUrl` at 57.0.9;
   SDK 58 also exists), so those lanes are unaffected by either correction above.

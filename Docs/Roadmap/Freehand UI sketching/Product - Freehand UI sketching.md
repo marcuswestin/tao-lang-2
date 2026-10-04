@@ -30,7 +30,7 @@ cell and delegates initial Pencil input to a native sidecar.
 ### Authority and data boundary
 
 - Unsnapped geometry, content hints, and bindings are Studio data in
-  `.tao-project/studio/sketches.jsonc`; they are not Tao render nodes.
+  `.tao/studio/sketches.jsonc`; they are not Tao render nodes.
 - Snapping is the only operation that writes those rectangles into a view's flowed Tao render tree.
   A partially snapped sketch is therefore a flowed source subtree plus remaining Studio rows, merged
   by Studio for editing. Later Snap and Unsnap operations patch only their selected Studio-owned
@@ -139,7 +139,7 @@ The following rulings are recorded verbatim from the project requirement authori
 > empty `@/`. A "Move to package" action moves the file with history, rewrites every
 > `use … from @/studio` site, and asks only when the target package already declares the name.
 
-> **FS-D4 — Sketch data persists in `.tao-project/studio/sketches.jsonc`**, written by the Studio
+> **FS-D4 — Sketch data persists in `.tao/studio/sketches.jsonc`**, written by the Studio
 > server's provider and committed by default. The companion app reads it through the paired session,
 > never the file.
 
@@ -266,7 +266,7 @@ a good part of this on an iPad with a pencil, or on the phone at true size, with
 ## Why it can be better here than anywhere else
 
 - **Flow is source; free geometry is Studio data.** Unsnapped rectangles live in the committed
-  `.tao-project/studio/sketches.jsonc` catalog. Snapping writes flowed elements into the generated
+  `.tao/studio/sketches.jsonc` catalog. Snapping writes flowed elements into the generated
   view, and every source mutation remains versioned and undoable. The companion sees both through
   the paired Studio session (FS-D1, FS-D4).
 - **The vocabulary is already Figma's.** Fill container, hug contents, and fixed are `fill`, `hug`,
@@ -559,7 +559,7 @@ a public view and its view-specific `scenarios` group. Before the first snap its
 `Placeholder` matching the sketch size. Shared example rows live in `@/studio/Sketches.tao`.
 
 Free geometry is separate. Studio's server persists it in
-`.tao-project/studio/sketches.jsonc`, committed by default:
+`.tao/studio/sketches.jsonc`, committed by default:
 
 ```jsonc
 {

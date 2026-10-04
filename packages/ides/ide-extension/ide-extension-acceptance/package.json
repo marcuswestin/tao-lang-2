@@ -1,0 +1,9 @@
+{
+  "name": "tao-installed-editor-probe",
+  "displayName": "Tao Installed Editor Probe",
+  "version": "0.0.1",
+  "private": true,
+  "engines": { "vscode": "^1.104.0" },
+  "main": "./extension.cjs",
+  "activationEvents": ["*"]
+}

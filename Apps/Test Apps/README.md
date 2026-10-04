@@ -236,24 +236,19 @@ Exercise bracketed layout clauses and the default app-shell baseline.
 
 ## Packages
 
-Exercise local workspace package resolution, project metadata, and the namespace-import and alias
-mechanism component kits publish through. Two `app` declarations share the folder — `PackageAccess`
-in `Package Access.tao` and `ComponentAliases` in `Component Aliases.tao` — over one fixture set of
-local packages in `Packages/`: `@cards` and `@copy` for resolution, `@widgets` as the stand-in
-implementation package an alias republishes.
+Exercise project discovery, app-owned metadata and local publication dependencies, plus the
+namespace-import and alias mechanisms used by module component kits. Two app declarations share
+this project — `PackageAccess` in `Package Access.tao` and `ComponentAliases` in
+`Component Aliases.tao`. The separate marked `Packages/` project publishes named module folders.
 
-**Belongs here:** `project { name … remote none license … }` metadata; `use … from @package/subfolder`
-for package folders nested in the project; bare `use Foo` for `package` declarations across sibling
-files, sibling folders, and child folders in the same `@package`; `workspace`-visible declarations
-imported across indexed local packages; runtime rendering for package-imported views and bindings;
-`use package @pkg [as name]` with a derived namespace name and an `as` rename; `public view Name =
-ns.Member` publishing a package member under the file's own name; a same-named alias proving the
-namespace avoids shadowing; call sites binding through the alias to the target's parameters.
+**Belongs here:** lowercase app metadata; `use … from @module/subfolder`; same-module `package`
+visibility and same-root `project` visibility; app-owned `requires` selecting included public module
+API; runtime rendering through module imports; `use package @module [as name]` namespaces; public
+aliases and call sites binding to their target’s parameters.
 
-**Does not belong here:** resolution, duplicate-package, and visibility diagnostics;
-namespace-import diagnostics — duplicate namespaces, unresolvable packages, non-view targets — which
-are package tests; external projects, `requires`, install/update/publish, remotes, or lockfiles; the
-stdlib's own native components, which `@tao/ui` and its conformance suite own.
+**Does not belong here:** duplicate-publication and visibility diagnostics, invalid dependency
+selection, version ranges, installer/update/publish behavior or locks, which belong to package tests;
+stdlib native components, which `@tao/ui` and its conformance suite own.
 
 ## Runtime Stdlib Tests
 

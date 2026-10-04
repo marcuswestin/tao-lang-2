@@ -23,7 +23,7 @@ Describe('release capability language policy', () => {
     const result = await Validator.validateCode(
       `
       use Text from @tao/ui
-      app Demo { view Home }
+      app Demo { id "demo" version "1.0.0" name "Demo" view Home }
       view Home() { render Text("Hello") }
     `,
       ReleaseCapabilities.profile(1),
@@ -68,7 +68,7 @@ Describe('release capability language policy', () => {
       data Pins / Pin { Story (reference) }
       datasource Feed = Memory { Data { Stories } }
       datasource Personal = Memory { Data { Pins } }
-      app Demo { view Home Datasource { Feed, Personal } }
+      app Demo { id "demo" version "1.0.0" name "Demo" view Home Datasource { Feed, Personal } }
       view Home() { render inject \`\`\`ts return null \`\`\` }
     `
     const errors = await releaseErrors(source, 1)
@@ -79,8 +79,8 @@ Describe('release capability language policy', () => {
 
   Test('app automation and auth remain deferred through constructed app variants', async () => {
     const source = `
-      app Demo { view Home }
-      app Derived = Demo with { AgentCommands {} Auth none }
+      app Demo { id "demo" version "1.0.0" name "Demo" view Home }
+      app Derived = Demo with { version "1.0.1" AgentCommands {} Auth none }
       view Home() { render inject \`\`\`ts return null \`\`\` }
     `
     const errors = await releaseErrors(source, 5)
@@ -93,7 +93,7 @@ Describe('release capability language policy', () => {
     await withTaoFiles('release-transitive-', {
       'Main.tao': 'use Remote from ./Library\ntype Feed is Remote',
       'Library.tao': 'use Http from @tao/data/providers/http\npublic type Remote is Http',
-      'Project.tao': 'project { id "release-transitive" name "Release" }',
+      '.tao/.gitkeep': '',
     }, async paths => {
       const workspace = await Workspace.openProfile(FS.dirname(paths['Main.tao']), ReleaseCapabilities.profile(1))
       const result = await workspace.validate(paths['Main.tao'])

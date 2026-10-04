@@ -1,5 +1,6 @@
 import { Errors, FS, Platform, ReleaseCapabilities, type ReleasePhase } from '@shared'
 import { context } from 'esbuild'
+import { stageProjectToolingResources } from './ide-extension-src/resources/project-tooling-resources'
 import { writeMergedTaoTextMateGrammar } from './ide-extension-src/syntax/textmate-grammar'
 
 type IdeExtensionPublicationOptions =
@@ -79,6 +80,8 @@ export async function buildIdeExtension(options: BuildIdeExtensionOptions = {}):
   const dprintTypescriptWasm = Bun.resolveSync('@dprint/typescript/plugin.wasm', formatterPackageRoot)
   const stdlibSourceRoot = FS.resolvePath('../../apps/stdlib/@tao', packageRoot)
   const stagingBundledStdlibRoot = FS.resolvePath('_gen_ide-extension/@tao', stagingPackageRoot)
+  const runtimeRoot = FS.resolvePath('../../apps/runtime', packageRoot)
+  const typescriptPackageRoot = FS.dirname(Bun.resolveSync('typescript/package.json', packageRoot))
 
   const ctx = await context({
     absWorkingDir: packageRoot,
@@ -91,6 +94,7 @@ export async function buildIdeExtension(options: BuildIdeExtensionOptions = {}):
     target: 'ES2022',
     format: 'cjs',
     define: {
+      'import.meta.dir': '__dirname',
       'import.meta.dirname': '__dirname',
       TAO_RELEASE_PHASE: JSON.stringify(profile.phase),
       TAO_RELEASE_VERSION: JSON.stringify(releaseVersion ?? 'development'),
@@ -133,6 +137,16 @@ export async function buildIdeExtension(options: BuildIdeExtensionOptions = {}):
             boundaryPath: stagingPackageRoot,
             lockPath: stagingBundledStdlibRoot,
             sourceBoundaryPath: repositoryRoot,
+          })
+          await stageProjectToolingResources({
+            runtimeRoot,
+            moduleRoots: [
+              FS.resolvePath('node_modules', runtimeRoot),
+              FS.resolvePath('../../apps/expo-host/node_modules', packageRoot),
+              FS.resolvePath('node_modules', repositoryRoot),
+            ],
+            typescriptLibRoot: FS.resolvePath('lib', typescriptPackageRoot),
+            outputRoot: stagingGeneratedRoot,
           })
           await publishIdeExtensionOutputs(stagingPackageRoot, packageRoot, { boundaryPath: repositoryRoot })
         })

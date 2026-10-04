@@ -18,14 +18,14 @@ const askConfirmView = `
   }
 `
 
-// A synthesized SlotNav (\`app X { view Y }\`) does not own its window: the app host renders it
+// A synthesized SlotNav (\`app X { id "x" version "1.0.0" name "X" view Y }\`) does not own its window: the app host renders it
 // inside one AppSurfaceFrame, whose content is already padded by the live insets.
 const askSlotSource = `
   use Button from @tao/ui/basic
 
   ${askConfirmView}
 
-  app AskDialogApp {
+  app AskDialogApp { id "askdialogapp" version "1.0.0" name "AskDialogApp"
     view Editor
   }
 
@@ -46,8 +46,7 @@ const askStackSource = `
 
   ${askConfirmView}
 
-  app AskDialogStackApp {
-    Name "Ask Dialog Stack"
+  app AskDialogStackApp { id "askdialogstackapp" version "1.0.0" name "Ask Dialog Stack"
     Navigator StackNav { Initial Editor }
   }
 
@@ -74,7 +73,7 @@ const sheetSlotSource = `
   use Button from @tao/ui/basic
   use TextInput from @tao/ui
 
-  app SheetApp {
+  app SheetApp { id "sheetapp" version "1.0.0" name "SheetApp"
     view Editor
   }
 
@@ -91,8 +90,7 @@ const sheetStackSource = `
   use TextInput from @tao/ui
   use StackNav from @tao/nav
 
-  app SheetStackApp {
-    Name "Sheet Stack"
+  app SheetStackApp { id "sheetstackapp" version "1.0.0" name "Sheet Stack"
     Navigator StackNav { Initial Editor }
   }
 
@@ -243,7 +241,13 @@ Describe('Expo runtime: presentation surfaces', () => {
       TR.Navigation.Declaration('Covered ask stack', TR.NavKind.Stack()),
       { Initial: home },
     ))
-    const app = TR.Navigation.App({ name: 'Covered ask app', navigator: () => stack, auxiliaries: () => ({}) })
+    const app = TR.Navigation.App({
+      id: 'covered-ask-app',
+      version: '1.0.0',
+      name: 'Covered ask app',
+      navigator: () => stack,
+      auxiliaries: () => ({}),
+    })
     const screen = render(React.createElement(TR.Navigation.AppHost, { app }))
     ExpectScreen(screen).toHaveText('Inner home')
 
@@ -417,7 +421,7 @@ Describe('Expo runtime: presentation surfaces', () => {
 
             ${askConfirmView}
 
-            app SheetAskApp {
+            app SheetAskApp { id "sheetaskapp" version "1.0.0" name "SheetAskApp"
               view Editor
             }
 
@@ -481,7 +485,7 @@ Describe('Expo runtime: presentation surfaces', () => {
         use Button from @tao/ui/basic
         use Text from @tao/ui
 
-        app SheetOverlayApp {
+        app SheetOverlayApp { id "sheetoverlayapp" version "1.0.0" name "SheetOverlayApp"
           view Editor
         }
 
@@ -543,7 +547,7 @@ Describe('Expo runtime: presentation surfaces', () => {
 
         ${askConfirmView}
 
-        app SheetAskOwnApp {
+        app SheetAskOwnApp { id "sheetaskownapp" version "1.0.0" name "SheetAskOwnApp"
           view Editor
         }
 
@@ -587,7 +591,7 @@ Describe('Expo runtime: presentation surfaces', () => {
           use Button from @tao/ui/basic
           use Text from @tao/ui
 
-          app ToastApp {
+          app ToastApp { id "toastapp" version "1.0.0" name "ToastApp"
             view Editor
           }
 

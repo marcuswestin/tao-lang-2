@@ -5,7 +5,7 @@ import { registerRuntimeE2ELifecycle } from './test-compile-app'
 registerRuntimeE2ELifecycle()
 
 const checkboxApp = `
-  app CheckboxApp { view MainView }
+  app CheckboxApp { id "checkboxapp" version "1.0.0" name "CheckboxApp" view MainView }
 
   view MainView() {
     state Final = false

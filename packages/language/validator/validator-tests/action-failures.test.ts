@@ -37,7 +37,7 @@ Describe('validator: action failures', () => {
   Test('reports a missing foreign action sidecar at its Tao declaration', async () => {
     await withValidatedFiles('Main.tao', {
       'Main.tao':
-        'app Missing { view Main } view Main() { action Publish() from ./Missing.ts render Empty() } view Empty() { render inject ```ts return null ``` }',
+        'app Missing { id "missing" version "1.0.0" name "Missing" view Main } view Main() { action Publish() from ./Missing.ts render Empty() } view Empty() { render inject ```ts return null ``` }',
     }, result => {
       const diagnostic = result.diagnostics.find(candidate =>
         candidate.message === ActionsValidator.messages.foreignActionMissing('./Missing.ts')

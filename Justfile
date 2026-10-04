@@ -118,7 +118,7 @@ hosted-crud-check:
 hosted-crud-test:
     "{{ BUN }}" run --cwd "{{ justfile_directory() }}/Apps/Hosted CRUD" test
 
-# Push Auth Review to your Instant Cloud app and run it in tao dev; requires its stored App ID and admin token
+# Push Auth Review to your Instant Cloud app and run it in tao run; requires its stored App ID and admin token
 [group('Run')]
 instant-review *ARGS: _parser-gen
     ./dev instant-review {{ ARGS }}
@@ -143,7 +143,7 @@ studio-companion-install device="":
 studio-companion-simulator simulator="":
     ./dev studio-companion-install --simulator "{{ simulator }}"
 
-# Build the Tao Companion as a prebuilt host (--platform ios-simulator for the simulator); tao dev opens apps in it
+# Build the Tao Companion as a prebuilt host (--platform ios-simulator for the simulator); tao run opens apps in it
 [group('Run')]
 companion-host-build *ARGS:
     ./dev companion-host-build {{ ARGS }}
@@ -163,7 +163,7 @@ setup-visionos *ARGS:
 setup-watchos *ARGS:
     ./dev setup-watchos {{ ARGS }}
 
-# Publish the built Companion hosts to their GitHub release, where tao dev downloads them; needs gh
+# Publish the built Companion hosts to their GitHub release, where tao run downloads them; needs gh
 [group('Run')]
 companion-host-publish:
     ./dev companion-host-publish
@@ -286,6 +286,11 @@ standalone-cli-acceptance: _parser-gen
     "{{ BUN }}" run packages/cli/tao-cli/cli-src/standalone-build.ts --release 0.0.0 --phase 1
     "{{ BUN }}" run packages/cli/tao-cli/cli-src/standalone-acceptance.ts .artifacts/release/v0.0.0
 
+# Install the VSIX in an isolated VS Code window and verify activation, diagnostics, hover, and navigation
+[group('Host proofs')]
+ide-extension-acceptance:
+    ./dev ide-extension-acceptance
+
 # Test a release in a disposable macOS VM; --base or --prepare-base vanilla|xcode selects a pinned image
 [group('Ship')]
 standalone-cli-clean-machine action='' vm='': _parser-gen
@@ -313,7 +318,7 @@ standalone-cli-vm-setup:
 [group('Dev')]
 [positional-arguments]
 dev app_path="Apps" APP="":
-    ./tao dev "$1" {{ if APP == "" { "" } else { "--app \"$2\"" } }}
+    ./tao run "$1" {{ if APP == "" { "" } else { "--app \"$2\"" } }}
 
 # `just test` is the fast default, so it runs the suites this branch's diff reaches rather than all
 # of them. Selection is a heuristic over the diff: a run can be green while a suite the change broke
@@ -468,6 +473,11 @@ fmt: _parser-gen
     dprint check --incremental=false --allow-no-files "@/**/*" "**/@/**/*"
     ./tao fmt
     just --fmt
+
+# Format one file or dprint glob without changing unrelated concurrent work
+[group('Dev')]
+fmt-file path:
+    dprint fmt --incremental=false {{ quote(path) }}
 
 # Each harness write-protects its own agent configuration — skills, hooks, settings — against shell
 # commands, while allowing the harness's own edit tools, so that a change to an agent's instructions

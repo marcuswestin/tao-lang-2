@@ -31,7 +31,7 @@ const DECLARED_ROOT_ENV = 'TAO_STDLIB_ROOT'
 const ABSENT = '<absent>'
 
 /** Directories no stdlib walk descends: installed dependencies and Git's own store. */
-const EXCLUDED_DIRECTORY_NAMES = new Set(['node_modules', '.git'])
+const EXCLUDED_DIRECTORY_NAMES = new Set(['node_modules', '.git', '.tao', '.tao-ts'])
 
 /**
  * TypeScript's incremental build state is rewritten by every typecheck without any source changing,
@@ -115,7 +115,7 @@ async function treeIdentity(root: string): Promise<string> {
       includeHidden: true,
     })
   ) {
-    if (!path.endsWith(EXCLUDED_SUFFIX) && !path.endsWith('.tao.ts')) {
+    if (!EXCLUDED_DIRECTORY_NAMES.has(FS.basename(path)) && !path.endsWith(EXCLUDED_SUFFIX)) {
       entries.push([FS.relativePath(root, path), path])
     }
   }

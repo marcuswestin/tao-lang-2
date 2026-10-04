@@ -234,7 +234,7 @@ Describe('validator: functional core', () => {
     'rejects a member outside the read context contract',
     rejects(
       `
-    app NetApp { view Main guard { error -> Context { Text(Context.Unknown) } } }
+    app NetApp { id "netapp" version "1.0.0" name "NetApp" view Main guard { error -> Context { Text(Context.Unknown) } } }
     view Main() { render Text("Ready") }
     ${runtimeViews}
   `,
@@ -263,7 +263,7 @@ Describe('validator: functional core', () => {
 
   Test('infers optional recovery actions from the public read context', async () => {
     const result = await testValidateCode(`
-      app NetApp { view Main guard {
+      app NetApp { id "netapp" version "1.0.0" name "NetApp" view Main guard {
         error -> Context { Text(Context.Message) }
       } }
       view Main() { render Text("Ready") }
@@ -309,7 +309,7 @@ Describe('validator: functional core', () => {
   Test(
     'accepts bare guards over entity and query subjects and an app read net',
     accepts(`
-      app NetApp { view Shell guard {
+      app NetApp { id "netapp" version "1.0.0" name "NetApp" view Shell guard {
         loading -> Text("Opening…")
         missing -> { Text("Gone") }
         error -> Context { Text(Context.Message) }
@@ -362,7 +362,7 @@ Describe('validator: functional core', () => {
     'rejects app read net cases that are content or repeated',
     rejects(
       `
-        app NetApp { view Main guard {
+        app NetApp { id "netapp" version "1.0.0" name "NetApp" view Main guard {
           empty -> { Text("Nothing yet") }
           rejected -> { Text("Refused") }
           loading -> { Text("One") }
@@ -392,11 +392,24 @@ Describe('validator: functional core', () => {
   Test(
     'rejects a second guard in one app',
     rejects(
-      `app NetApp { view Main guard { loading -> { Text("Loading") } } guard { missing -> { Text("Gone") } } }
+      `app NetApp { id "netapp" version "1.0.0" name "NetApp" view Main guard { loading -> { Text("Loading") } } guard { missing -> { Text("Gone") } } }
       view Main() { render Text("Ready") }
       ${runtimeViews}`,
       AppValidator.messages.guardDuplicate('NetApp'),
     ),
+  )
+
+  Test(
+    'accepts a guard in an app variant with its own identity',
+    accepts(`
+      app NetApp { id "netapp" version "1.0.0" name "NetApp" view Main }
+      app Offline = NetApp with {
+        id "offline"
+        guard { missing -> { Text("Unavailable") } }
+      }
+      view Main() { render Text("Ready") }
+      ${runtimeViews}
+    `),
   )
 
   Test('unifies nested list values with an empty list on either side', async () => {

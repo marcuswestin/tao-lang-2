@@ -6,7 +6,7 @@ import {
 } from '../studio-src/StudioGeneratedSources'
 
 Test('Studio writes generated public views read-only and repairs their mode on reopen', async () => {
-  await withTaoFiles('tao-studio-generated-', { 'Project.tao': 'project Garden\n' }, async (_paths, root) => {
+  await withTaoFiles('tao-studio-generated-', {}, async (_paths, root) => {
     const generated = new StudioGeneratedSources(root)
     const path = await generated.writeView('View1', 'public\nview View1() { render Placeholder("View 1") }')
 
@@ -26,7 +26,6 @@ Test('Studio writes generated public views read-only and repairs their mode on r
 Test('Studio repairs every contained source before reporting an invalid generated path', async () => {
   await withTaoFiles('tao-studio-generated-repair-all-', {
     'Outside.tao': 'view Outside() { }\n',
-    'Project.tao': 'project Garden\n',
   }, async (paths, root) => {
     const escaped = FS.resolvePath('@/studio/View1.tao', root)
     const contained = FS.resolvePath('@/studio/View2.tao', root)
@@ -40,7 +39,7 @@ Test('Studio repairs every contained source before reporting an invalid generate
 })
 
 Test('Studio authenticates generated ownership before returning source for a transaction', async () => {
-  await withTaoFiles('tao-studio-generated-read-', { 'Project.tao': 'project Garden\n' }, async (_paths, root) => {
+  await withTaoFiles('tao-studio-generated-read-', {}, async (_paths, root) => {
     const generated = new StudioGeneratedSources(root)
     const path = await generated.writeView('View1', 'public\nview View1() {}')
 
@@ -52,7 +51,7 @@ Test('Studio authenticates generated ownership before returning source for a tra
 })
 
 Test('Studio restores generated source to read-only after a failed rewrite', async () => {
-  await withTaoFiles('tao-studio-generated-failure-', { 'Project.tao': 'project Garden\n' }, async (_paths, root) => {
+  await withTaoFiles('tao-studio-generated-failure-', {}, async (_paths, root) => {
     const generated = new StudioGeneratedSources(root)
     const path = await generated.writeView('View1', 'public\nview View1() {}')
 
@@ -65,7 +64,7 @@ Test('Studio restores generated source to read-only after a failed rewrite', asy
 })
 
 Test('Studio creates generated views without replacement and removes only generated rollback files', async () => {
-  await withTaoFiles('tao-studio-generated-create-', { 'Project.tao': 'project Garden\n' }, async (_paths, root) => {
+  await withTaoFiles('tao-studio-generated-create-', {}, async (_paths, root) => {
     const generated = new StudioGeneratedSources(root)
     const path = await generated.createView('View1', 'public\nview View1() {}')
 
@@ -83,9 +82,7 @@ Test('Studio creates generated views without replacement and removes only genera
 })
 
 Test('Studio removes a partial file when creating generated source fails', async () => {
-  await withTaoFiles('tao-studio-generated-create-failure-', {
-    'Project.tao': 'project Garden\n',
-  }, async (_paths, root) => {
+  await withTaoFiles('tao-studio-generated-create-failure-', {}, async (_paths, root) => {
     const generated = new StudioGeneratedSources(root)
     const path = FS.resolvePath('@/studio/View1.tao', root)
 
@@ -102,7 +99,6 @@ Test('Studio moves a generated view into an authored package with writable sourc
     '@/studio/View1.tao':
       `${studioGeneratedSourceHeader}\n\npublic view View1() {\n   #studio_rect_006100720074\n   render Text("Art")\n}\n`,
     '@views/Existing.tao': 'public view Existing() { }\n',
-    'Project.tao': 'project Garden\n',
   }, async (paths, root) => {
     await FS.chmod(paths['@/studio/View1.tao'], 0o444)
     const generated = new StudioGeneratedSources(root)
@@ -125,7 +121,6 @@ Test('Studio restores generated ownership and content when preparing a move fail
   await withTaoFiles('tao-studio-generated-move-failure-', {
     '@/studio/View1.tao': `${studioGeneratedSourceHeader}\n\npublic view View1() { }\n`,
     '@views/Existing.tao': 'public view Existing() { }\n',
-    'Project.tao': 'project Garden\n',
   }, async (paths, root) => {
     const source = paths['@/studio/View1.tao']
     await FS.chmod(source, 0o444)
@@ -146,7 +141,6 @@ Test('Studio refuses to move source whose ownership header is absent or displace
   await withTaoFiles('tao-studio-generated-move-header-', {
     '@/studio/View1.tao': `${studioGeneratedSourceHeader}\n\npublic view View1() { }\n`,
     '@views/Existing.tao': 'public view Existing() { }\n',
-    'Project.tao': 'project Garden\n',
   }, async (paths, root) => {
     const generated = new StudioGeneratedSources(root)
     const displaced = `public view View1() { }\n\n${studioGeneratedSourceHeader}\n\n`
@@ -160,9 +154,7 @@ Test('Studio refuses to move source whose ownership header is absent or displace
 Test(
   'Studio refuses a generated root symlink that resolves outside the real project before writing or repairing',
   async () => {
-    await withTaoFiles('tao-studio-generated-root-symlink-', {
-      'Project.tao': 'project Garden\n',
-    }, async (_paths, root) => {
+    await withTaoFiles('tao-studio-generated-root-symlink-', {}, async (_paths, root) => {
       const outside = await mkTestDir('tao-studio-generated-outside-')
       try {
         await FS.writeText(FS.resolvePath('Existing.tao', outside), 'view Existing() { }\n')
@@ -185,7 +177,6 @@ Test(
 Test('Studio refuses an authored-package symlink that resolves outside the real project before moving', async () => {
   await withTaoFiles('tao-studio-generated-target-symlink-', {
     '@/studio/View1.tao': `${studioGeneratedSourceHeader}\n\npublic view View1() { }\n`,
-    'Project.tao': 'project Garden\n',
   }, async (paths, root) => {
     const outside = await mkTestDir('tao-studio-authored-outside-')
     try {

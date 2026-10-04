@@ -317,6 +317,8 @@ Describe('TR.Navigation', () => {
     const nestedStack = TR.Navigation.Configure(stackDeclaration, { Initial: home })
     const rootSlot = TR.Navigation.Configure(slotDeclaration, { Initial: nestedStack })
     const app = TR.Navigation.App({
+      id: 'descriptor-app',
+      version: '1.0.0',
       name: 'Descriptor app',
       navigator: () => rootSlot,
       auxiliaries: () => ({}),
@@ -346,6 +348,8 @@ Describe('TR.Navigation', () => {
     const window = configuredSlot('Window', home)
     const replacement = configuredStack('Replacement', detail)
     const app = TR.Navigation.App({
+      id: 'configured-navigation-test',
+      version: '1.0.0',
       name: 'Configured navigation test',
       navigator: () => slot,
       auxiliaries: () => ({ window }),
@@ -373,6 +377,8 @@ Describe('TR.Navigation', () => {
     const root = configuredStack('History root', home)
     const auxiliary = configuredSlot('History auxiliary', home)
     const app = TR.Navigation.App({
+      id: 'ordered-history-app',
+      version: '1.0.0',
       name: 'Ordered history app',
       navigator: () => root,
       auxiliaries: () => ({ auxiliary }),
@@ -411,7 +417,13 @@ Describe('TR.Navigation', () => {
     const home = TR.Navigation.View({ name: 'Home', render: () => null })
     const saved = TR.Navigation.View({ name: 'Saved', render: () => null })
     const stack = configuredStack('Toast host', home)
-    const app = TR.Navigation.App({ name: 'Toast App', navigator: () => stack, auxiliaries: () => ({}) })
+    const app = TR.Navigation.App({
+      id: 'toast-app',
+      version: '1.0.0',
+      name: 'Toast App',
+      navigator: () => stack,
+      auxiliaries: () => ({}),
+    })
     const taoProps: TR.TaoProps = { app }
 
     TR.Navigation.PresentToast(taoProps, saved, {}, {
@@ -481,6 +493,8 @@ Describe('TR.Navigation', () => {
       name: 'Main selection',
     })
     const app = TR.Navigation.App({
+      id: 'selection-app',
+      version: '1.0.0',
       name: 'Selection App',
       navigator: () => selection,
       auxiliaries: () => ({}),
@@ -523,8 +537,10 @@ Describe('TR.Navigation', () => {
     })
     const app = TR.Navigation.App({
       auxiliaries: () => ({}),
+      id: 'back-affordance-app',
       name: 'Back affordance app',
       navigator: () => selection,
+      version: '1.0.0',
     })
     const taoProps: TR.TaoProps = { app }
     void app.navigator
@@ -556,8 +572,10 @@ Describe('TR.Navigation', () => {
     const stack = configuredStack('Disposable stack', home)
     const app = TR.Navigation.App({
       auxiliaries: () => ({}),
+      id: 'disposable-app',
       name: 'Disposable app',
       navigator: () => stack,
+      version: '1.0.0',
     })
     void app.navigator
     TR.Navigation.PresentIn(undefined, stack, detail, {})
@@ -590,6 +608,8 @@ Describe('TR.Navigation', () => {
     })
     const replacement = configuredStack('History-free replacement', home)
     const app = TR.Navigation.App({
+      id: 'history-classification-app',
+      version: '1.0.0',
       name: 'History classification app',
       navigator: () => selection,
       auxiliaries: () => ({}),
@@ -625,6 +645,8 @@ Describe('TR.Navigation', () => {
       },
     )
     const app = TR.Navigation.App({
+      id: 'structural-selection-app',
+      version: '1.0.0',
       name: 'Structural selection app',
       navigator: () => selection,
       auxiliaries: () => ({}),
@@ -676,6 +698,8 @@ Describe('TR.Navigation', () => {
       },
     )
     const app = TR.Navigation.App({
+      id: 'sealed-structural-app',
+      version: '1.0.0',
       name: 'Sealed structural app',
       navigator: () => selection,
       auxiliaries: () => ({}),
@@ -713,6 +737,8 @@ Describe('TR.Navigation', () => {
       },
     )
     const app = TR.Navigation.App({
+      id: 'resettable-structural-app',
+      version: '1.0.0',
       name: 'Resettable structural app',
       navigator: () => selection,
       auxiliaries: () => ({}),
@@ -747,6 +773,8 @@ Describe('TR.Navigation', () => {
         Initial: TR.Value('@home'),
       })
     const app = TR.Navigation.App({
+      id: 'replacement-observer-app',
+      version: '1.0.0',
       name: 'Replacement observer app',
       navigator: () => configure('Old structural selection', oldKind.kind),
       auxiliaries: () => ({}),
@@ -774,11 +802,15 @@ Describe('TR.Navigation', () => {
     const detail = TR.Navigation.View({ name: 'Detail', render: () => null })
     const shared = configuredStack('Shared raw stack', home)
     const first = TR.Navigation.App({
+      id: 'first-shared-app',
+      version: '1.0.0',
       name: 'First shared app',
       navigator: () => shared,
       auxiliaries: () => ({}),
     })
     const second = TR.Navigation.App({
+      id: 'second-shared-app',
+      version: '1.0.0',
       name: 'Second shared app',
       navigator: () => shared,
       auxiliaries: () => ({}),
@@ -847,6 +879,8 @@ Describe('TR.Navigation', () => {
     Expect((configured.config['@home'] as Record<string, unknown>)['Icon']).toBeDefined()
     Expect((configuredWithReplacement.config['@home'] as Record<string, unknown>)['Icon']).toBeUndefined()
     const app = TR.Navigation.App({
+      id: 'configured-selection-app',
+      version: '1.0.0',
       name: 'Configured selection app',
       navigator: () => configuredWithOther,
       auxiliaries: () => ({}),
@@ -909,11 +943,15 @@ Describe('TR.Navigation', () => {
     const firstWindow = configuredSlot('First window', home)
     const secondWindow = configuredSlot('Second window', home)
     const first = TR.Navigation.App({
+      id: 'first-same-name',
+      version: '1.0.0',
       name: 'Same declaration name',
       navigator: () => firstRoot,
       auxiliaries: () => ({ window: firstWindow }),
     })
     const second = TR.Navigation.App({
+      id: 'second-same-name',
+      version: '1.0.0',
       name: 'Same declaration name',
       navigator: () => secondRoot,
       auxiliaries: () => ({ window: secondWindow }),
@@ -950,6 +988,8 @@ Describe('TR.Navigation', () => {
     let namedNavigatorLoads = 0
     let namedAuxiliaryLoads = 0
     const named = TR.Navigation.App({
+      id: 'origin-declaration',
+      version: '1.0.0',
       name: 'Origin declaration',
       navigator: () => {
         namedNavigatorLoads += 1
@@ -962,11 +1002,15 @@ Describe('TR.Navigation', () => {
     })
     const variant = TR.Navigation.App({
       declaration: named.declaration,
+      id: named.definition.id,
+      version: named.definition.version,
       name: 'Configured variant',
       navigator: () => variantSelection,
       auxiliaries: () => ({ window: variantWindow }),
     })
     const unrelated = TR.Navigation.App({
+      id: 'nested-unrelated-app',
+      version: '1.0.0',
       name: 'Nested unrelated app',
       navigator: () => configuredStack('Unrelated root', home),
       auxiliaries: () => ({}),
@@ -1111,9 +1155,11 @@ function hostedRestorationApp(variant: string) {
   const app = TR.Navigation.App({
     auxiliaries: () => ({}),
     declaration: TR.Navigation.AppDeclaration('ShellApp', identity('app', 'ShellApp')),
+    id: 'shell-app',
     name: 'ShellApp',
     navigator: () => TR.Navigation.Configure(root, { Initial: shell }),
     restoration: { exclusions: [], mode: 'automatic', variant },
+    version: '1.0.0',
   })
   return { app, detail, rendered: TR.Navigation.Configure(rendered, { Initial: home }) }
 }

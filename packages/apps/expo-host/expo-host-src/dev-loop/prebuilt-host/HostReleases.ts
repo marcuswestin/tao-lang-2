@@ -17,10 +17,10 @@ import type { HostSearch, PrebuiltHost } from './PrebuiltHosts'
 /*
  * Prebuilt hosts are published on Tao's public repository as GitHub releases, one per host build,
  * tagged `companion-host-<hostKey>` and carrying a manifest and a binary for each platform built. A
- * release is a prerelease and never "latest", so it cannot displace a Tao CLI release. `tao dev`
+ * release is a prerelease and never "latest", so it cannot displace a Tao CLI release. `tao run`
  * needs no account to read them: it lists the releases, reads each small manifest, and downloads the
  * first binary whose native kit covers its own into Tao's home, staged and moved into place so a
- * concurrent `tao dev` never finds half a host.
+ * concurrent `tao run` never finds half a host.
  */
 
 const HOST_RELEASE_TAG_PREFIX = 'companion-host-'
@@ -29,7 +29,7 @@ const DEFAULT_HOST_RELEASES_REPOSITORY = 'marcuswestin/tao-lang-2'
 /**
  * Host releases share the repository's release list with the CLI's and Studio's, so the newest
  * host can sit pages deep. Pages are read one at a time and only until a host fits, within a bound
- * that keeps an unauthenticated `tao dev` well inside GitHub's hourly request allowance.
+ * that keeps an unauthenticated `tao run` well inside GitHub's hourly request allowance.
  */
 const RELEASES_PER_PAGE = 30
 const RELEASE_PAGES_TO_CONSIDER = 5
@@ -172,7 +172,7 @@ async function fetchResponse(
 
 /**
  * The binary downloads beside its final directory and moves into place with its manifest. When
- * another `tao dev` finished the same host first, that one is kept and this download discarded.
+ * another `tao run` finished the same host first, that one is kept and this download discarded.
  */
 async function installHost(
   fetchImpl: NonNullable<HostDownloadOptions['fetch']>,

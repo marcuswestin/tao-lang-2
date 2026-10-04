@@ -262,7 +262,7 @@ _bench-check:
       await FS.writeText(FS.resolvePath('Justfile', root), healthyJustfile)
       await FS.writeText(FS.resolvePath(DEV_ENTRY_PATH, root), importFrom('@shared'))
       await FS.writeText(FS.resolvePath('Apps/WordFlower/1 - Current/.tao/dev/runtime/App.tsx', root), 'generated\n')
-      await FS.writeText(FS.resolvePath('Apps/WordFlower/1 - Current/@ui/Shell.tao.ts', root), 'generated\n')
+      await FS.writeText(FS.resolvePath('Apps/WordFlower/1 - Current/.tao-ts/@ui/Shell.tao.ts', root), 'generated\n')
       await FS.symlink(
         FS.resolvePath('Apps/WordFlower/1 - Current/.tao/dev/runtime', root),
         FS.resolvePath('Apps/WordFlower/1 - Current/.tao/dev/node_modules', root),
@@ -330,9 +330,9 @@ _bench-check:
     Expect(wordFlowerDirectoryIssues(directory(
       [
         file('WordFlower.tao', absorbed),
-        file('.tao-project/lock.jsonc', '{ "ship": true }'),
+        file('.tao/lock.jsonc', '{ "ship": true }'),
         file('.tao/sessions/session.json', '{ "status": "active" }'),
-        file('@ui/View.tao.ts', 'generated bridge metadata'),
+        file('.tao-ts/@ui/View.tao.ts', 'generated bridge metadata'),
       ],
       [file('WordFlower.tao-next', absorbed)],
     ))).toEqual([])
@@ -521,6 +521,39 @@ _bench-check:
       ['Data MVP', 'Navigation MVP'],
       '# Test Apps\n\n## Navigation MVP\n\nNavigation behavior.\n',
     )).toEqual(['Data MVP'])
+  })
+
+  Test('requires contracts for authored apps while ignoring removed apps and generated leftovers', async () => {
+    const root = await mkGitTestDir('tao-repo-lint-apps-')
+    await initGitTestRepository(root)
+    await FS.writeText(FS.resolvePath('Justfile', root), healthyJustfile)
+    await FS.writeText(FS.resolvePath('Apps/Test Apps/README.md', root), '# Test Apps\n')
+    await FS.writeText(FS.resolvePath('Apps/Starters/README.md', root), '# Starters\n')
+    await FS.writeText(FS.resolvePath('Apps/WordFlower/1 - Current/WordFlower.tao', root), absorbed)
+    await FS.writeText(FS.resolvePath('Apps/WordFlower/2 - Next/WordFlower.tao-next', root), absorbed)
+    await FS.writeText(FS.resolvePath(DEV_ENTRY_PATH, root), importFrom('@shared'))
+    await FS.writeText(
+      FS.resolvePath('.gitignore', root),
+      '**/node_modules/\n**/.tao/\n**/.tao-ts/\nApps/Test Apps/Ignored/\n',
+    )
+    await FS.writeText(FS.resolvePath('Apps/Test Apps/Removed/tsconfig.json', root), '{}')
+    await FS.writeText(FS.resolvePath('Apps/Test Apps/Removed/.tao/project.json', root), '{}')
+    await FS.writeText(FS.resolvePath('Apps/Test Apps/Removed/.tao-ts/App.tao.ts', root), '')
+    await FS.writeText(FS.resolvePath('Apps/Test Apps/Removed/node_modules/example/App.tao', root), '')
+    await FS.writeText(FS.resolvePath('Apps/Test Apps/Ignored/App.tao', root), '')
+    Expect(await repoLintIssues(root)).toEqual([])
+
+    const authored = FS.resolvePath('Apps/Test Apps/Authored/@ui/App.tao', root)
+    await FS.writeText(authored, '')
+    await FS.writeText(FS.resolvePath('Apps/Starters/New Starter/App.tao', root), '')
+    Expect(await repoLintIssues(root)).toEqual([
+      `${FS.resolvePath('Apps/Test Apps/README.md', root)} needs a \`## Authored\` entry.`,
+      `${FS.resolvePath('Apps/Starters/README.md', root)} needs a \`## New Starter\` entry.`,
+    ])
+
+    await FS.remove(authored)
+    await FS.writeText(FS.resolvePath('Apps/Starters/README.md', root), '# Starters\n\n## New Starter\n')
+    Expect(await repoLintIssues(root)).toEqual([])
   })
 
   Test('reports Describe titles duplicated across test files', () => {

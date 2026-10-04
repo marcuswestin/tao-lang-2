@@ -53,13 +53,13 @@ simulator prerequisites, build steps, and prototype limitations.
 From a Tao checkout, open an ordinary app in the installed Tao Companion without Studio:
 
 ```sh
-./tao dev "Apps/Test Apps/Native Bridge" --app NativeBridge --device roPhone
+./tao run "Apps/Test Apps/Native Bridge" --app NativeBridge --device roPhone
 ```
 
 `--device <name-or-id>` selects an attached/paired physical iPhone or iPad by name or ID, or an
 Android phone by serial. Duplicate names require an ID. iOS uses Tao Companion's development-client
 link to this session's Metro server; it applies no Studio scenarios. Keep the phone unlocked and
-on the same network as the Mac. `--ios` still selects the simulator, and bare `tao dev` opens no
+on the same network as the Mac. `--ios` still selects the simulator, and bare `tao run` opens no
 target. The interactive `p` shortcut opens the sole connected device or presents a device picker.
 
 Install the iOS shell once with `./dev studio-companion-install --device roPhone`. A missing shell

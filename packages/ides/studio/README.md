@@ -135,15 +135,15 @@ answers is recorded `failed` and stops, rather than idling in a state that reads
 ## Dev data
 
 An app that configures `Datasource Dev` (`Docs/Spec/Tao Data.md`, _The Dev datasource_) keeps its
-rows on this machine, not on the device. Every Studio launch and every `tao dev` run starts one
+rows on this machine, not on the device. Every Studio launch and every `tao run` run starts one
 **dev data server** (`tao-dev-data-v1`) beside Metro on an ephemeral port — Studio logs it as
-`Dev data: tao-dev-data-v1 on port <port>` and `--json` carries it as `devDataPort`; `tao dev`
+`Dev data: tao-dev-data-v1 on port <port>` and `--json` carries it as `devDataPort`; `tao run`
 prints it with the Metro port. Each project Studio opens gets its own app key in its preview
 manifest, so several projects share one server without sharing rows.
 
 - **Where the rows are:** `.artifacts/user/dev-data/<app key>/<storage key>.json`, one complete
   snapshot per file. The app key is the app name plus a digest of its project root, the same from
-  Studio and from `tao dev`. Delete a directory to start that app clean; the next connection
+  Studio and from `tao run`. Delete a directory to start that app clean; the next connection
   serves an empty snapshot.
 - **Which devices sync:** everything running that app's development build against this dev
   server — the Studio canvas, a browser tab opened on Metro's URL, simulators, and a paired phone.
@@ -304,7 +304,7 @@ compile or reload, shutdown, a signal escalation, an orphan — and never source
 
 ## Freehand Draw, Snap, and Feed project state
 
-Unsnapped Draw geometry is committed in `.tao-project/studio/sketches.jsonc`. It is not a launch
+Unsnapped Draw geometry is committed in `.tao/studio/sketches.jsonc`. It is not a launch
 artifact, browser-local preference, or Tao render tree. Catalog format version 1 stores a monotonic
 `nextViewNumber`, a conflict `revision`, and ordered sketches. Each sketch records stable `id`,
 display `name`, project, generated `view`, width, height, total

@@ -1,100 +1,80 @@
 import { FS } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
-import { discoverShipProject, selectShipApp } from '../cli-src/ship-project'
+import { discoverShipProject, selectShipApp, writeProjectVersion } from '../cli-src/ship-project'
 
 const projectSource = `
-project {
-  id "notes"
-  name "Notes"
-  version "1.2.3"
-  app NotesBeta
-}
-app Notes { view Main }
-app NotesBeta = Notes with { Name "Notes Beta" }
-view Main() { }
+app Notes { id "notes" version "1.2.3" name "Notes" view Main }
+app NotesBeta = Notes with { id "notes-beta" name "Notes Beta" }
+view Main() { render inject \`\`\`ts return null \`\`\` }
 `
 
 Describe('tao ship project discovery', () => {
-  Test('climbs to metadata and resolves app', async () => {
+  Test('climbs to the marker and resolves effective app metadata', async () => {
     await withTaoFiles('tao-ship-project-', {
       'App.tao': projectSource,
-      'nested/deeper/Other.tao': 'view Other() { }',
+      'nested/deeper/Other.tao': 'view Other() { render inject ```ts return null ``` }',
     }, async paths => {
       const project = await discoverShipProject(FS.dirname(paths['nested/deeper/Other.tao']!))
-      Expect(project.id).toBe('notes')
-      Expect(project.version).toBe('1.2.3')
+      Expect(project.apps.find(app => app.name === 'Notes')?.id).toBe('notes')
+      Expect(project.apps.find(app => app.name === 'NotesBeta')?.version).toBe('1.2.3')
       Expect(project.primaryAppName).toBe('Notes')
-      Expect(selectShipApp(project)?.name).toBe('NotesBeta')
-      Expect(selectShipApp(project)?.displayName).toBe('Notes Beta')
-      Expect(selectShipApp(project)?.isVariant).toBe(true)
+      Expect(selectShipApp(project)).toBeUndefined()
+      Expect(selectShipApp(project, 'NotesBeta')?.displayName).toBe('Notes Beta')
+      Expect(selectShipApp(project, 'NotesBeta')?.isVariant).toBe(true)
       Expect(selectShipApp(project, 'Notes')?.name).toBe('Notes')
     })
   })
 
-  Test('ignores a test sidecar project beside the release project', async () => {
+  Test('ignores test sidecar app declarations beside the release app', async () => {
     await withTaoFiles('tao-ship-project-', {
       'App.tao': projectSource,
       'Harness.test.tao': `
-        project { id "notes-harness" name "Notes Harness" }
-        app Harness { view HarnessView }
-        view HarnessView() { }
+        app Harness { id "notes-harness" version "1.0.0" name "Harness" view HarnessView }
+        view HarnessView() { render inject \`\`\`ts return null \`\`\` }
       `,
     }, async paths => {
       const project = await discoverShipProject(paths['App.tao']!)
-      Expect(project.projectSourcePath).toBe(paths['App.tao'])
+      Expect(project.root).toBe(FS.dirname(paths['App.tao']!))
       Expect(project.apps.map(app => app.name)).toEqual(['Notes', 'NotesBeta'])
     })
   })
 
-  Test('discovers a package app and a cross-file variant under root project metadata', async () => {
+  Test('discovers a module app and a cross-file variant under one marked root', async () => {
     await withTaoFiles('tao-ship-split-project-', {
-      'Project.tao': `
-        project {
-          id "split-notes"
-          name "Split notes"
-          version "1.2.3"
-          app NotesBeta
-        }
-      `,
       'Apps/Notes.tao': `
         use NotesBase from @notes
-        workspace app NotesBeta = NotesBase with { Name "Notes Beta" }
+        project app NotesBeta = NotesBase with { id "split-notes-beta" name "Notes Beta" }
       `,
-      'packages/@notes/App.tao': `
-        public app NotesBase { Name "Notes" view Main }
-        view Main() { }
+      '@notes/App.tao': `
+        public app NotesBase { id "split-notes" version "1.2.3" name "Notes" view Main }
+        view Main() { render inject \`\`\`ts return null \`\`\` }
       `,
-    }, async paths => {
+    }, async (paths, root) => {
       const project = await discoverShipProject(paths['Apps/Notes.tao']!)
 
-      Expect(project.root).toBe(FS.dirname(paths['Project.tao']!))
+      Expect(project.root).toBe(root)
       Expect(project.apps.map(app => app.name)).toEqual(['NotesBase', 'NotesBeta'])
-      Expect(selectShipApp(project)?.sourcePath).toBe(paths['Apps/Notes.tao'])
+      Expect(selectShipApp(project, 'NotesBeta')?.sourcePath).toBe(paths['Apps/Notes.tao'])
       Expect(project.primaryAppName).toBe('NotesBase')
     })
   })
 
   Test('derives inherited ship metadata without inspecting unrelated sibling declarations', async () => {
     await withTaoFiles('tao-ship-metadata-graph-', {
-      'Project.tao': `
-        project {
-          id "metadata-graph"
-          name "Metadata graph"
-          version "1.2.3"
-          app TargetInstantDBBeta
-        }
-      `,
       'Apps/Target.tao': `
         use TargetInstantDBBase, CloudBase from @metadata
-        workspace app TargetInstantDBBeta = TargetInstantDBBase with { Name "Target Beta" }
-        workspace app CloudBeta = CloudBase with { Name "Cloud Beta" }
+        project app TargetInstantDBBeta = TargetInstantDBBase with { id "target-beta" name "Target Beta" }
+        project app CloudBeta = CloudBase with { id "cloud-beta" name "Cloud Beta" }
       `,
-      'packages/@metadata/App.tao': `
+      '@metadata/App.tao': `
         use Dev from @tao/data/providers/dev
         use ICloud from @tao/data/providers/icloud
         use InstantDB from @tao/data/providers/instantdb
 
         public app TargetInstantDBBase {
+          id "target-base"
+          version "1.2.3"
+          name "Target"
           Datasource TargetStore
           view Main
         }
@@ -105,17 +85,20 @@ Describe('tao ship project discovery', () => {
         }
 
         public app CloudBase {
+          id "cloud-base"
+          version "1.2.3"
+          name "Cloud"
           Datasource ICloud { Container "iCloud.target.notes" }
           view Main
         }
 
-        app UnrelatedDev { Datasource Dev view Main }
+        app UnrelatedDev { id "unrelated-dev" version "1.2.3" name "Unrelated" Datasource Dev { } view Main }
         datasource UnrelatedStore = InstantDB {
           AppId "unrelated-app-id"
           ApiURI "http://localhost:9030"
           WebsocketURI "ws://localhost:9030/runtime/session"
         }
-        view Main() { }
+        view Main() { render inject \`\`\`ts return null \`\`\` }
       `,
     }, async paths => {
       const project = await discoverShipProject(paths['Apps/Target.tao']!)
@@ -141,30 +124,34 @@ Describe('tao ship project discovery', () => {
     })
   })
 
+  Test('writes the version in canonical source', async () => {
+    await withTaoFiles('tao-ship-project-', { 'App.tao': projectSource }, async paths => {
+      const project = await discoverShipProject(paths['App.tao']!)
+      await writeProjectVersion(selectShipApp(project, 'NotesBeta')!, '2.0.0-beta.1')
+      const source = await FS.readText(paths['App.tao']!)
+      Expect(source).toContain('version "2.0.0-beta.1"')
+      Expect(source).toContain('app Notes {\n   id "notes"\n   version "1.2.3"')
+    })
+  })
+
   Test('reads every provider an app mounts through its variants, declarations, and types', async () => {
     const source = `
-project { id "notes" name "Notes" version "1.0.0" }
 use CloudKit from @tao/data/providers/cloudkit
 use ICloud from @tao/data/providers/icloud
 use Local from @tao/data/providers/local
 use StackNav from @tao/nav
 
-app Notes { Name "Notes" Navigator StackNav { Initial Main } Datasource NotesCloud }
-app NotesDevice = Notes with { Datasource Local { StorageKey "Notes" } }
-app NotesInherited = Notes with { Name "Notes Beta" }
-app NotesInline = Notes with { Datasource ICloud { Container "iCloud.custom.notes" } }
-app NotesPatched = Notes with { Datasource with { Container "iCloud.patched.notes" } }
-app NotesTyped = Notes with { Datasource TypedCloud { } }
-app NotesKit = Notes with { Datasource CloudKit { Container "iCloud.lang.tao.kitchen" } }
-app NotesBoth = Notes with {
-  Datasource { Documents, Records }
-}
+app Notes { id "notes" version "1.0.0" name "Notes" Navigator StackNav { Initial Main } Datasource NotesCloud }
+app NotesDevice = Notes with { id "notes-device" Datasource Local { StorageKey "Notes" } }
+app NotesInherited = Notes with { id "notes-inherited" name "Notes Beta" }
+app NotesInline = Notes with { id "notes-inline" Datasource ICloud { Container "iCloud.custom.notes" } }
+app NotesPatched = Notes with { id "notes-patched" Datasource with { Container "iCloud.patched.notes" } }
+app NotesTyped = Notes with { id "notes-typed" Datasource TypedCloud { } }
+app NotesKit = Notes with { id "notes-kit" Datasource CloudKit { Container "iCloud.lang.tao.kitchen" } }
 
 datasource NotesCloud = ICloud { StorageKey "Notes" }
-datasource Documents = ICloud { Container "iCloud.lang.tao.documents" }
-datasource Records = CloudKit { Container "iCloud.lang.tao.records" }
 type TypedCloud is ICloud with { Container is "iCloud.typed.notes" }
-view Main() { }
+view Main() { render inject \`\`\`ts return null \`\`\` }
 `
     await withTaoFiles('tao-ship-icloud-', { 'App.tao': source }, async paths => {
       const project = await discoverShipProject(paths['App.tao']!)
@@ -206,7 +193,34 @@ view Main() { }
           usesDefaultContainer: false,
         }],
       })
-      Expect(icloudOf('NotesBoth')).toEqual({
+      // A variant that binds a device store mounts no Apple provider at all.
+      Expect(icloudOf('NotesDevice')).toBeUndefined()
+    })
+  })
+
+  Test('combines both Apple services when one app mounts two data stores', async () => {
+    await withTaoFiles('tao-ship-apple-providers-', {
+      'App.tao': `
+        use CloudKit from @tao/data/providers/cloudkit
+        use ICloud from @tao/data/providers/icloud
+        use StackNav from @tao/nav
+
+        data Documents / Document { Title text }
+        data Records / Record { Title text }
+        datasource DocumentStore = ICloud { Container "iCloud.lang.tao.documents" Data { Documents } }
+        datasource RecordStore = CloudKit { Container "iCloud.lang.tao.records" Data { Records } }
+        app Notes {
+          id "notes"
+          version "1.0.0"
+          name "Notes"
+          Navigator StackNav { Initial Main }
+          Datasource { DocumentStore, RecordStore }
+        }
+        view Main() { render inject \`\`\`ts return null \`\`\` }
+      `,
+    }, async paths => {
+      const project = await discoverShipProject(paths['App.tao']!)
+      Expect(selectShipApp(project)?.icloud).toEqual({
         serviceBindings: [
           {
             containers: ['iCloud.lang.tao.documents'],
@@ -220,30 +234,29 @@ view Main() { }
           },
         ],
       })
-      // A variant that binds a device store mounts no Apple provider at all.
-      Expect(icloudOf('NotesDevice')).toBeUndefined()
     })
   })
 
   Test('reads the providers of every datasource an app binds, not only the first', async () => {
     const source = `
-project { id "reader" name "Reader" version "1.0.0" }
 use CloudKit from @tao/data/providers/cloudkit
 use Dev from @tao/data/providers/dev
 use StackNav from @tao/nav
 
-data Stories / Story { HnId number (unique) Title text }
+data Stories / Story { HnId number (unique), Title text }
 data Bookmarks / Bookmark { Story (reference) }
 
 datasource Feed = Dev { Data { Stories } }
 datasource Personal = CloudKit { Container "iCloud.lang.tao.reader" Data { Bookmarks } }
 
 app Reader {
-   Name "Reader"
+   id "reader"
+   version "1.0.0"
+   name "Reader"
    Navigator StackNav { Initial Main }
    Datasource { Feed, Personal }
 }
-view Main() { }
+view Main() { render inject \`\`\`ts return null \`\`\` }
 `
     await withTaoFiles('tao-ship-multi-', { 'App.tao': source }, async paths => {
       const project = await discoverShipProject(paths['App.tao']!)
@@ -264,7 +277,6 @@ view Main() { }
 
   Test('derives hosted InstantDB endpoints from the datasource an app actually binds', async () => {
     const source = `
-project { id "notes" name "Notes" version "1.0.0" }
 use InstantDB from @tao/data/providers/instantdb
 use Local from @tao/data/providers/local
 use StackNav from @tao/nav
@@ -275,11 +287,11 @@ datasource Store = InstantDB {
    WebsocketURI "ws://localhost:9020/runtime/session"
 }
 
-app Notes { Name "Notes" Navigator StackNav { Initial Main } Datasource Store }
-app NotesDevice = Notes with { Datasource Local { StorageKey "Notes" } }
-view Main() { }
+app Notes { id "notes" version "1.0.0" name "Notes" Navigator StackNav { Initial Main } Datasource Store }
+app NotesDevice = Notes with { id "notes-device" name "Notes Device" Datasource Local { StorageKey "Notes" } }
+view Main() { render inject \`\`\`ts return null \`\`\` }
 `
-    await withTaoFiles('tao-ship-instant-', { 'App.tao': source }, async paths => {
+    await withTaoFiles('tao-ship-instant-', { '.tao/.gitkeep': '', 'App.tao': source }, async paths => {
       const project = await discoverShipProject(paths['App.tao']!)
       const notes = project.apps.find(app => app.name === 'Notes')!
       const device = project.apps.find(app => app.name === 'NotesDevice')!

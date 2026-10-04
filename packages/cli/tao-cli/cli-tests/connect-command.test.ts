@@ -1,7 +1,13 @@
-import { Errors, FS } from '@shared'
+import { Errors, FS, ProjectIdentity } from '@shared'
 import { Describe, Expect, fakeTerminal, mkTestDir, Test } from '@shared/test'
 import { runTaoConnect } from '../cli-src/connect-command'
 import { provisionFirebase } from '../cli-src/firebase-provision'
+
+async function mkConnectProject(prefix: string): Promise<string> {
+  const root = await mkTestDir(prefix)
+  await FS.writeText(FS.resolvePath('.tao/.gitkeep', root), '')
+  return root
+}
 
 function scripted(text: string[], paste = '', secret = '') {
   const terminal = fakeTerminal()
@@ -144,7 +150,7 @@ function fakeAppwriteCli(projects: { $id: string; region: string }[]) {
 
 Describe('tao connect', () => {
   Test('automates Appwrite: browser sign-in, new project, short-lived key, nothing stored', async () => {
-    const root = await mkTestDir('tao-connect-appwrite-cli-')
+    const root = await mkConnectProject('tao-connect-appwrite-cli-')
     try {
       const cli = fakeAppwriteCli([])
       const cloud = fakeAppwriteCloud('tao-hosted-demo')
@@ -191,7 +197,7 @@ Describe('tao connect', () => {
   })
 
   Test('reuses the Appwrite project already in tao.connections.json without creating one', async () => {
-    const root = await mkTestDir('tao-connect-appwrite-reuse-')
+    const root = await mkConnectProject('tao-connect-appwrite-reuse-')
     try {
       await FS.writeJson(FS.resolvePath('tao.connections.json', root), {
         firebase: { projectId: 'keep' },
@@ -218,7 +224,7 @@ Describe('tao connect', () => {
   })
 
   Test('reuses a Tao-created Appwrite project whose ID a failed run never saved', async () => {
-    const root = await mkTestDir('tao-connect-appwrite-orphan-')
+    const root = await mkConnectProject('tao-connect-appwrite-orphan-')
     try {
       const cli = fakeAppwriteCli([{ $id: 'other', region: 'fra' }, { $id: 'tao-hosted-crud-abc123', region: 'syd' }])
       await runTaoConnect('appwrite', root, {
@@ -236,7 +242,7 @@ Describe('tao connect', () => {
   })
 
   Test('declining a typed Appwrite project ID creates nothing', async () => {
-    const root = await mkTestDir('tao-connect-appwrite-decline-')
+    const root = await mkConnectProject('tao-connect-appwrite-decline-')
     try {
       const cli = fakeAppwriteCli([])
       await Expect(runTaoConnect('appwrite', root, {
@@ -252,7 +258,7 @@ Describe('tao connect', () => {
   })
 
   Test('stores Firebase web config without disturbing existing private credentials', async () => {
-    const root = await mkTestDir('tao-connect-firebase-')
+    const root = await mkConnectProject('tao-connect-firebase-')
     try {
       await FS.writeJson(FS.resolvePath('tao.connections.json', root), { appwrite: { projectId: 'keep-appwrite' } })
       const serviceAccount = {
@@ -304,7 +310,7 @@ Describe('tao connect', () => {
   })
 
   Test('extracts all public client fields from either Firebase SDK snippet without running code', async () => {
-    const root = await mkTestDir('tao-connect-firebase-paste-')
+    const root = await mkConnectProject('tao-connect-firebase-paste-')
     try {
       const config = `const firebaseConfig = {
   apiKey: "web-api-key",
@@ -340,7 +346,7 @@ Describe('tao connect', () => {
   })
 
   Test('rejects incomplete pasted Firebase config without changing the connection', async () => {
-    const root = await mkTestDir('tao-connect-firebase-bad-paste-')
+    const root = await mkConnectProject('tao-connect-firebase-bad-paste-')
     try {
       const path = FS.resolvePath('tao.connections.json', root)
       await FS.writeJson(path, { existing: true })
@@ -354,7 +360,7 @@ Describe('tao connect', () => {
   })
 
   Test('preserves other local connections when replacing Firebase public settings', async () => {
-    const root = await mkTestDir('tao-connect-firebase-local-')
+    const root = await mkConnectProject('tao-connect-firebase-local-')
     try {
       const localPath = FS.resolvePath('.tao/local/connections.json', root)
       await FS.writeJson(localPath, {
@@ -387,7 +393,7 @@ Describe('tao connect', () => {
   })
 
   Test('does not run pilot cloud setup for an ordinary Tao project', async () => {
-    const root = await mkTestDir('tao-connect-firebase-ordinary-')
+    const root = await mkConnectProject('tao-connect-firebase-ordinary-')
     try {
       await FS.writeJson(FS.resolvePath('package.json', root), { name: 'ordinary-tao-app' })
       await FS.writeText(FS.resolvePath('src/firebase/firestore.rules', root), 'ordinary rules\n')
@@ -408,7 +414,7 @@ Describe('tao connect', () => {
 
   Test('rejects linked pilot rules and ancestors before any Firebase CLI call or local output', async () => {
     for (const linked of ['file', 'firebase directory', 'src directory']) {
-      const root = await mkTestDir('tao-connect-firebase-linked-rules-')
+      const root = await mkConnectProject('tao-connect-firebase-linked-rules-')
       try {
         const sourceRules = FS.resolvePath('src/firebase/firestore.rules', root)
         if (linked === 'file') {
@@ -444,7 +450,7 @@ Describe('tao connect', () => {
   })
 
   Test('creates a fresh Firebase project, web app, database, auth and rules by default', async () => {
-    const root = await mkTestDir('tao-connect-firebase-auto-')
+    const root = await mkConnectProject('tao-connect-firebase-auto-')
     try {
       await writePilotRules(root, "rules_version = '2';\n")
       await FS.writeJson(FS.resolvePath('tao.connections.json', root), {
@@ -576,7 +582,7 @@ Describe('tao connect', () => {
   })
 
   Test('asks before creating a typed Firebase project ID that the account does not have', async () => {
-    const root = await mkTestDir('tao-connect-firebase-typed-')
+    const root = await mkConnectProject('tao-connect-firebase-typed-')
     try {
       await writePilotRules(root)
       const calls: string[] = []
@@ -596,7 +602,7 @@ Describe('tao connect', () => {
   })
 
   Test('reports the Firebase CLI error text instead of a generic hint', async () => {
-    const root = await mkTestDir('tao-connect-firebase-error-')
+    const root = await mkConnectProject('tao-connect-firebase-error-')
     try {
       await writePilotRules(root)
       const runner = async (args: readonly string[]): Promise<{ exitCode: number; stdout: string; stderr: string }> =>
@@ -615,7 +621,7 @@ Describe('tao connect', () => {
   })
 
   Test('does not replace existing Firestore rules without an explicit yes', async () => {
-    const root = await mkTestDir('tao-connect-firebase-rules-')
+    const root = await mkConnectProject('tao-connect-firebase-rules-')
     try {
       await writePilotRules(root)
       const configPath = FS.resolvePath('tao.connections.json', root)
@@ -662,7 +668,7 @@ Describe('tao connect', () => {
   })
 
   Test('provisions Appwrite from a scoped API key and stores that key outside client config', async () => {
-    const root = await mkTestDir('tao-connect-appwrite-')
+    const root = await mkConnectProject('tao-connect-appwrite-')
     try {
       const cloud = fakeAppwriteCloud('appwrite-project')
       const { requests, fetchImpl } = cloud
@@ -714,7 +720,7 @@ Describe('tao connect', () => {
   })
 
   Test('rejects a noninteractive run before creating files', async () => {
-    const root = await mkTestDir('tao-connect-noninteractive-')
+    const root = await mkConnectProject('tao-connect-noninteractive-')
     try {
       await Expect(runTaoConnect('firebase', root, { interactive: false })).rejects.toBeInstanceOf(
         Errors.UserInputError,
@@ -727,7 +733,7 @@ Describe('tao connect', () => {
   })
 
   Test('accepts a Tao source path and skips optional server credentials', async () => {
-    const root = await mkTestDir('tao-connect-source-')
+    const root = await mkConnectProject('tao-connect-source-')
     try {
       const source = FS.resolvePath('App.tao', root)
       await FS.writeText(source, 'app Example { view Main }\nview Main() { }\n')
@@ -749,12 +755,9 @@ Describe('tao connect', () => {
   })
 
   Test('stores a nested app source connection at its declared project root', async () => {
-    const root = await mkTestDir('tao-connect-nested-source-')
+    const root = await mkConnectProject('tao-connect-nested-source-')
     try {
-      await FS.writeText(
-        FS.resolvePath('Project.tao', root),
-        'project { id "nested-connect", name "Nested connect" }\n',
-      )
+      await ProjectIdentity.ensure(root)
       const source = FS.resolvePath('features/App.tao', root)
       await FS.writeText(source, 'app Example { view Main }\nview Main() { }\n')
       await runTaoConnect(
@@ -782,7 +785,7 @@ Describe('tao connect', () => {
   })
 
   Test('invalid Appwrite endpoint leaves existing connection untouched', async () => {
-    const root = await mkTestDir('tao-connect-invalid-')
+    const root = await mkConnectProject('tao-connect-invalid-')
     try {
       const publicPath = FS.resolvePath('tao.connections.json', root)
       await FS.writeJson(publicPath, { preserved: true })
@@ -802,7 +805,7 @@ Describe('tao connect', () => {
   })
 
   Test('rejects an Appwrite API key without access and leaves local config unchanged', async () => {
-    const root = await mkTestDir('tao-connect-appwrite-denied-')
+    const root = await mkConnectProject('tao-connect-appwrite-denied-')
     try {
       const publicPath = FS.resolvePath('tao.connections.json', root)
       await FS.writeJson(publicPath, { existing: true })

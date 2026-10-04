@@ -32,7 +32,7 @@ use Editor as ProseEditor from @prose // imports may be renamed locally
 //   §9  one renderable kind with `scene is view`, clause lists, conditional styling, `Interval`
 //   §10 the nav kinds, `Compact { Progression … }`, `Width` / `CollapseOrder`, `reveal` vs
 //       `present`, presentation modes, `link`, `Restore`
-//   §11 `project`, `app`, keywordized variants and provider bindings
+//   §11 `package`, `app`, keywordized variants and provider bindings
 //   §13 the design system: `colors` / `sizes` / `text` / `screens` / `styles` / `rules`
 //   §14 `phrase`, inline source copy, the `words` file
 //   §15 `<expr> from <path>`, foreign views, foreign actions with declared failures
@@ -123,18 +123,10 @@ use Editor as ProseEditor from @prose // imports may be renamed locally
 
 // §11. The product envelope. `targets` and `languages` are what make `Platform` and `Locale`
 // meaningful values, so a tier that reads either declares both.
-project {
-   id "wordflower" // an opaque, immutable, developer-chosen identity that survives moves and forks
-   name "WordFlower"
-   version "1.0.0"
-   DefaultApp WordFlower
-   targets phone, tablet, laptop
-   languages "en-US", "es"
-   remote none
+package {
+   version 1.0.0
    license MIT
-
-   // External dependencies are declared in source and resolved into a lockfile by `tao install`.
-   requires github:acme/prose @editor --version 1.0.1
+   // Future package source: requires github:acme/prose @editor --version 1.0.1
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -236,7 +228,7 @@ design WordFlowerDesign {
 //
 // `Platform` is the §13 environment value — read-only, reactive, and Capitalized like every handle —
 // and `when` is §8's value-producing form, so the platform split needs no declaration-level
-// conditional. The cases are the project's own `targets`, never a device or OS name.
+// conditional. The cases are the app's own `targets`, never a device or OS name.
 nav WorkspaceNav = when Platform {
    laptop -> SlotNav { Initial WorkspaceChooser }
    otherwise -> StackNav { Initial WorkspaceChooser }
@@ -332,7 +324,11 @@ datasource WordFlowerStageStore = WordFlowerStore with {
 // expose plain dismissal. Window presentation is universal and keeps its semantic key on the call
 // site.
 app WordFlower {
-   Name "WordFlower"
+   id "wordflower" // an opaque, immutable, developer-chosen identity that survives moves and forks
+   version "1.0.0"
+   name "WordFlower"
+   targets phone, tablet, laptop
+   languages "en-US", "es"
    Design WordFlowerDesign
    Datasource WordFlowerStore
    view WordFlowerShell(WordFlowerNavigator)
@@ -353,19 +349,22 @@ app WordFlower {
 // unchanged. The variant rebinds the root with the same shell and a different navigator in it, so it
 // keeps the focus bar.
 app WordFlowerDrawer = WordFlower with {
-   Name "WordFlower - Drawer Preview"
+   id "wordflower-drawer"
+   name "WordFlower - Drawer Preview"
    view WordFlowerShell(WordFlowerDrawerNavigator) // the same shell, a different navigator in it
 }
 
 app WordFlowerStage = WordFlower with {
-   Name "WordFlower - Stage"
+   id "wordflower-stage"
+   name "WordFlower - Stage"
    Datasource WordFlowerStageStore
 }
 
 // Preview and journey variants swap providers rather than forking a product declaration, which is
 // what lets a test name the world it runs in instead of reconfiguring one inline.
 app WordFlowerPreview = WordFlower with {
-   Name "WordFlower Preview"
+   id "wordflower-preview"
+   name "WordFlower Preview"
    Datasource Memory
    Restore fresh
 }
@@ -1477,7 +1476,7 @@ scenarios ReadingView "content" {
    }
 
    // Pseudolocale is a review mode, exactly as the platform does it — never an entry in
-   // `project { languages }` — and it is paired with right-to-left so mirrored layout is reviewed in
+   // `app { languages }` — and it is paired with right-to-left so mirrored layout is reviewed in
    // the same pass.
    scenario "pseudolocale" {
       locale pseudolocale

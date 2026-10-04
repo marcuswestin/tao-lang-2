@@ -10,7 +10,7 @@ From this project directory:
 2. Run `tao firebase generate . --app FirebaseNotes --output .tao/firebase-backend`.
    Review and combine those rules with any existing rules in that Firebase project before deploying:
    a Firestore rules deployment replaces the project's current rules. Generation does not deploy.
-3. Run `tao dev . --app FirebaseNotes` and sign in or create an account.
+3. Run `tao run . --app FirebaseNotes` and sign in or create an account.
 
 Run `tao test .` for the local Memory/TestAuth journeys. They do not contact Firebase.
 

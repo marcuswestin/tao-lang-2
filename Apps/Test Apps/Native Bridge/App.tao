@@ -5,15 +5,12 @@ use NativeBridgeDesign from ./Design.tao
 use HapticsDemo from ./Haptics/Haptics.tao
 use VibrationDemo from ./Vibration/Vibration.tao
 
-project {
-   id "native-bridge-device-demo"
-   name "Native Bridge"
-   version "0.1.0"
-   app NativeBridge
-}
-
 app NativeBridge {
-   Name "Native Bridge"
+   id "native-bridge-device-demo"
+   version "0.1.0"
+   name "Native Bridge"
+   requires ts npm:expo-clipboard version ~57.0.2 as expo-clipboard
+   requires ts npm:expo-haptics version ~57.0.3 as expo-haptics
    Design NativeBridgeDesign
    Navigator StackNav {
       Initial NativeBridgeHome

@@ -87,10 +87,10 @@ is `private`. Nobody outside the repository can install Tao.
   index, and install script. That unsigned artifact is not publication-ready: signing/notarization
   and all applicable publication prerequisites remain required. Installed through
   `curl | sh`, the binary creates a project with its tests, then checks, compiles, tests, builds for
-  web, and serves web from `tao dev` outside any checkout, and each project it creates runs under
+  web, and serves web from `tao run` outside any checkout, and each project it creates runs under
   the release that made it; `just standalone-cli-acceptance` proves all of that. The plan's
   `tart` gate also passed a vanilla macOS guest on 2026-09-25. The plan's
-  "Remaining work" orders what is still absent: the iOS Simulator and Android from `tao dev`, the
+  "Remaining work" orders what is still absent: the iOS Simulator and Android from `tao run`, the
   move of `tao test` onto `bun test` and `tao ship` off Node so the
   release needs no Node at all, signing and notarization with the
   Foundation Models helper (both need the Developer ID certificate), a test for the interactive
@@ -108,7 +108,7 @@ is `private`. Nobody outside the repository can install Tao.
   macOS signing and notarization must be ready before publication. The credential-dependent build
   and hosted acceptance are parked until the near-release pass (`R12`).
 - Done: a person with no Bun, Node, nix, or repository checkout installs `tao` with one command and
-  runs `tao create` through `tao dev` on a clean machine.
+  runs `tao create` through `tao run` on a clean machine.
 
 ### A3 — A front door: README and public documentation
 
@@ -365,7 +365,7 @@ from the development loop, which no virtualization approach can do.
 
 - Shape: use the companion app as the shared host, release its native shell infrequently, and check
   bundle compatibility explicitly. Build the applicable simulator/emulator artifacts in Tao's CI;
-  `tao dev` obtains and launches a compatible host. The physical-iPhone companion is an invitation
+  `tao run` obtains and launches a compatible host. The physical-iPhone companion is an invitation
   beta in release 4. iOS Simulator is release 2; Android is deferred beyond release 5.
 - Context: `packages/ides/studio-companion-app` (Slice 1 and 2 records under
   `Docs/Roadmap/Tao Studio companion app/`), `packages/apps/expo-host`.
@@ -382,22 +382,22 @@ from the development loop, which no virtualization approach can do.
   2026-09-25 both workflows run only when a pull request opens, never on a later push to its branch.
 - Landed 2026-09-22, the Android emulator lane: `just companion-host-build` builds the Companion as
   a debug APK into `.artifacts/hosts/<version>-<kit digest>/android/` beside a `tao-host.json` naming its native
-  kit, and `tao dev --android` installs a host whose kit covers its own and opens the app in it in
+  kit, and `tao run --android` installs a host whose kit covers its own and opens the app in it in
   place of Expo Go, passing over any other host by name. Compatibility is the manifest's kit, never
   the cache path. Proven with HNReader on the `Tao_Pixel_API_36` emulator.
 - Landed 2026-09-23, distribution (`R7`): `just companion-host-publish` puts a built host on a
-  prerelease tagged `companion-host-<version>-<kit digest>`, and when no cached host fits, `tao dev`
+  prerelease tagged `companion-host-<version>-<kit digest>`, and when no cached host fits, `tao run`
   lists those releases without signing in and downloads the newest whose kit covers its own into
   the Tao home's `hosts/` (`~/.local/share/tao/hosts` by default). The download is proven against a
   fake GitHub only: until the repository is public
-  the listing answers 404, and `tao dev` says so and uses Expo Go.
+  the listing answers 404, and `tao run` says so and uses Expo Go.
 - Landed 2026-09-23, the iOS Simulator lane: `just companion-host-build --platform ios-simulator`
   builds the Companion for both simulator architectures, signed ad hoc so its entitlements are
-  embedded, and `tao dev --ios` installs a compatible host unless the simulator already has that
+  embedded, and `tao run --ios` installs a compatible host unless the simulator already has that
   build and opens the app in it. Publishing zips it beside the Android host on the same release.
   Proven with HNReader on an iPhone 17 simulator; the first, unsigned build carried no entitlements
   and CloudKit aborted it, which the build now refuses.
-- Landed 2026-09-25, physical Android: `tao dev`'s phone path prepares a phone the way it prepares an
+- Landed 2026-09-25, physical Android: `tao run`'s phone path prepares a phone the way it prepares an
   emulator, installing a compatible Companion only when the phone's copy differs, and reaches Metro
   over `adb reverse` on the phone's own loopback, or at the Mac's LAN address when that fails.
   Unit-tested only; the Developer asked for it to land before a device run.

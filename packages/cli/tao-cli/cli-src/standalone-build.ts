@@ -35,7 +35,7 @@ const RELEASE_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/
  * standalone plan removes its line when it lands, so a release cannot overstate the binary.
  */
 const KNOWN_GAPS = [
-  '`tao dev` serves the web target from the standalone binary; the iOS Simulator and Android do not open from it yet.',
+  '`tao run` serves the web target from the standalone binary; the iOS Simulator and Android do not open from it yet.',
   '`tao ship` cannot prebuild an iCloud-backed app from the standalone binary because its host lacks the tao-icloud config plugin.',
   '`tao review` is not in the standalone binary.',
   'The binary is not signed or notarized yet.',
@@ -43,9 +43,12 @@ const KNOWN_GAPS = [
 
 /** Package paths the payload copies, each package to its place in the resource layout. */
 const COPIED_TREES = [
-  // The stdlib root is the package: its packages under `@tao/`, and the `Project.tao` that gives
-  // their declarations the project identity every compiled app's navigation is keyed on.
-  { source: 'packages/apps/stdlib', within: ['@tao', 'Project.tao'], target: TaoResources.STDLIB_DIRECTORY },
+  // The identity is authored; generated `.tao` state and TypeScript contracts are refreshed after install.
+  {
+    source: 'packages/apps/stdlib',
+    within: ['@tao', 'Package.tao', '.tao/project.json'],
+    target: TaoResources.STDLIB_DIRECTORY,
+  },
   { source: 'packages/apps/expo-host', within: ['.'], target: TaoResources.HOST_DIRECTORY },
   // The stdlib's data-provider sidecars import `@shared/core`, which Metro resolves by path, and the
   // journey harness `tao test` runs under Jest imports the rest of `@shared`.

@@ -99,6 +99,7 @@
         "tao-instantdb": "workspace:*",
         "tao-jazz": "workspace:*",
         "tao-pylon": "workspace:*",
+        "tao-project-tooling": "workspace:*",
         "tao-runtime": "workspace:*",
         "tao-shared": "workspace:*",
       },
@@ -305,6 +306,7 @@
         "tao-native-bindings": "workspace:*",
         "tao-parser": "workspace:*",
         "tao-pylon": "workspace:*",
+        "tao-project-tooling": "workspace:*",
         "tao-shared": "workspace:*",
         "tao-skills": "workspace:*",
         "tao-source-actions": "workspace:*",
@@ -324,6 +326,7 @@
         "tao-parser": "workspace:*",
         "tao-shared": "workspace:*",
         "tao-validator": "workspace:*",
+        "typescript": "5.9.3",
       },
     },
     "packages/ides/ide-extension": {
@@ -333,6 +336,7 @@
         "tao-compiler": "workspace:*",
         "tao-formatter": "workspace:*",
         "tao-parser": "workspace:*",
+        "tao-project-tooling": "workspace:*",
         "tao-shared": "workspace:*",
         "tao-source-actions": "workspace:*",
         "vscode-languageclient": "~10.1.1",
@@ -371,6 +375,7 @@
         "tao-formatter": "workspace:*",
         "tao-generation": "workspace:*",
         "tao-parser": "workspace:*",
+        "tao-project-tooling": "workspace:*",
         "tao-shared": "workspace:*",
         "tao-source-actions": "workspace:*",
       },
@@ -457,6 +462,17 @@
       },
       "devDependencies": {
         "langium-cli": "^4.3.0",
+      },
+    },
+    "packages/language/project-tooling": {
+      "name": "tao-project-tooling",
+      "dependencies": {
+        "chokidar": "^5.0.0",
+        "tao-ast-utils": "workspace:*",
+        "tao-compiler": "workspace:*",
+        "tao-parser": "workspace:*",
+        "tao-shared": "workspace:*",
+        "typescript": "5.9.3",
       },
     },
     "packages/language/source-actions": {
@@ -3892,6 +3908,7 @@
     "tao-playwright-driver": ["tao-playwright-driver@workspace:packages/testing/playwright-driver"],
 
     "tao-pylon": ["tao-pylon@workspace:packages/apps/providers/pylon"],
+    "tao-project-tooling": ["tao-project-tooling@workspace:packages/language/project-tooling"],
 
     "tao-runtime": ["tao-runtime@workspace:packages/apps/runtime"],
 

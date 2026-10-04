@@ -9,7 +9,7 @@ const baseFiles = {
   '@/studio/View1.tao':
     '// Studio-written generated source. Read-only until moved to a package.\npublic view View1() { }\nscenarios View1 "sketch" { scenario "draft" { render () } }',
   '@views/Existing.tao': 'public view Existing() { }',
-  'Garden.tao': 'app Garden { view Main }\nview Main() { }',
+  'Garden.tao': 'app Garden { id "garden" version "1.0.0" name "Garden" view Main }\nview Main() { }',
 }
 
 const moveSlot = testOverrideSlot({

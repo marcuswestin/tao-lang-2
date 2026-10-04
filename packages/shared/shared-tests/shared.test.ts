@@ -1165,7 +1165,7 @@ Describe('Repo', () => {
   Test('answers every file and directory question from one listing as the per-question calls do', async () => {
     const root = await untrackedTmpDir()
     try {
-      await FS.writeText(FS.resolvePath('Project.tao', root), '')
+      await FS.writeText(FS.resolvePath('Root.tao', root), '')
       await FS.writeText(FS.resolvePath('@data/Data.tao', root), '')
       await FS.writeText(FS.resolvePath('@data/nested/Notes.ts', root), '')
       await FS.writeText(FS.resolvePath('@empty/README.md', root), '')
@@ -1195,7 +1195,7 @@ Describe('Repo', () => {
           FS.relativePath(root, path)
         ),
       )
-        .toEqual(['@data/Data.tao', 'Project.tao'])
+        .toEqual(['@data/Data.tao', 'Root.tao'])
     } finally {
       await FS.remove(root)
     }
@@ -1459,6 +1459,21 @@ Describe('TaoStdlib', () => {
       const before = await TaoStdlib.declaredRootIdentity()
       await FS.writeText(FS.resolvePath('@tao/ui/Views.tao', payload), 'public view Text(Value text) { }\n// edit\n')
 
+      Expect(await TaoStdlib.declaredRootIdentity()).not.toBe(before)
+    })
+  })
+
+  Test('ignores hidden TypeScript generation but fingerprints handwritten Tao TypeScript companions', async () => {
+    const payload = await tmpDir()
+    const authored = FS.resolvePath('@tao/ui/Views.tao.ts', payload)
+    await FS.writeText(authored, 'export const authored = 1\n')
+    await withDeclaredStdlibRoot(payload, async () => {
+      const before = await TaoStdlib.declaredRootIdentity()
+      await FS.writeText(FS.resolvePath('.tao-ts/@tao/ui/Views.tao.ts', payload), 'generated contract\n')
+      await FS.writeJson(FS.resolvePath('.tao/typescript/tsconfig.json', payload), { compilerOptions: {} })
+      Expect(await TaoStdlib.declaredRootIdentity()).toBe(before)
+
+      await FS.writeText(authored, 'export const authored = 2\n')
       Expect(await TaoStdlib.declaredRootIdentity()).not.toBe(before)
     })
   })

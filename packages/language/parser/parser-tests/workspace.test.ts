@@ -123,7 +123,7 @@ Describe('minimal Tao parser', () => {
         }
       `,
         'Shared.tao': `
-        workspace view SharedView() {
+        project view SharedView() {
           render inject \`\`\`ts
             return null
           \`\`\`
@@ -298,22 +298,22 @@ Describe('minimal Tao parser', () => {
     Expect(labelTextValue.target.ref).toBe(labelAlias)
   })
 
-  Test('parses use statements and workspace-visible declarations', async () => {
+  Test('parses use statements and project-visible declarations', async () => {
     const parseResult = await testParseSyntax(`
       app MyApp { view MainView }
       use Text, Stack from ./
-      workspace let Greeting = "Hello"
-      workspace view MainView() {
+      project let Greeting = "Hello"
+      project view MainView() {
         render Stack(){
           Text(Greeting)
         }
       }
-      workspace view Stack() {
+      project view Stack() {
         render inject Content @@content \`\`\`ts
           return <>{Content}</>
         \`\`\`
       }
-      workspace view Text(Value text) {
+      project view Text(Value text) {
         render inject Value \`\`\`ts
           return <RN.Text>{Value}</RN.Text>
         \`\`\`
@@ -325,9 +325,9 @@ Describe('minimal Tao parser', () => {
     Expect(useStatement.importedDeclarations.map(reference => reference.$refText)).toEqual(['Text', 'Stack'])
     Expect(useStatement.importPath).toBe('./')
     Expect.Is(sharedAlias, AST.isAliasDeclaration)
-    Expect(sharedAlias.visibility).toBe('workspace')
+    Expect(sharedAlias.visibility).toBe('project')
     Expect.Is(mainView, AST.isViewDeclaration)
-    Expect(mainView.visibility).toBe('workspace')
+    Expect(mainView.visibility).toBe('project')
   })
 
   Test('parses parent-directory imports with trailing slashes', async () => {
@@ -343,7 +343,7 @@ Describe('minimal Tao parser', () => {
   Test('parses bare use statements', async () => {
     const parseResult = await testParseSyntax(`
       use Text
-      workspace view Text(Value text) {
+      project view Text(Value text) {
         render inject Value \`\`\`ts
           return null
         \`\`\`
@@ -375,11 +375,11 @@ Describe('minimal Tao parser', () => {
     Expect(subfolderUse.importPath).toBe('@bar/forms')
   })
 
-  Test('parses file, package, workspace, and public visibility declarations', async () => {
+  Test('parses file, package, project, and public visibility declarations', async () => {
     const parseResult = await testParseCode(`
       file let FileTitle = "File"
       package let PackageTitle = "Package"
-      workspace view ProjectView() { }
+      project view ProjectView() { }
       public view PublishedStack() { }
     `)
 
@@ -390,12 +390,12 @@ Describe('minimal Tao parser', () => {
     Expect.Is(publishedView, AST.isViewDeclaration)
     Expect(fileAlias.visibility).toBe('file')
     Expect(packageAlias.visibility).toBe('package')
-    Expect(projectView.visibility).toBe('workspace')
+    Expect(projectView.visibility).toBe('project')
     Expect(publishedView.visibility).toBe('public')
   })
 
   // REMOVAL CANDIDATE: This is AST package visibility policy rather than parser behavior; remove if owning-layer coverage survives.
-  Test('keeps workspace visibility scoped out of stdlib imports', () => {
+  Test('keeps project visibility scoped out of stdlib imports', () => {
     const stdlibResolution: Packages.Resolution = {
       relation: 'stdlib',
       targetPath: '/tao-stdlib/tao/ui',
@@ -404,41 +404,38 @@ Describe('minimal Tao parser', () => {
     }
 
     Expect(Packages.isVisible('file', stdlibResolution)).toBe(false)
-    Expect(Packages.isVisible('workspace', stdlibResolution)).toBe(false)
+    Expect(Packages.isVisible('project', stdlibResolution)).toBe(false)
     Expect(Packages.isVisible('public', stdlibResolution)).toBe(true)
   })
 
-  Test('parses local project metadata', async () => {
+  Test('parses root package publication metadata', async () => {
     const parseResult = await testParseCode(`
-      project {
-        id "package-access"
+      package {
         name "Package Access"
-        version "1.2.3"
-        app PackageAccess
-        remote none
-        license MIT
+        version 1.2.3
+        license AGPL-3.0-only
+        includes @ui @icons
       }
-      app PackageAccess { }
     `)
 
-    const [project] = parseResult.entry.ast.statements
-    Expect.Is(project, AST.isProjectDeclaration)
-    Expect(AST.blockStatementOf(project, { map: statement => statement.$type })).toEqual([
-      AST.ProjectId.$type,
-      AST.ProjectName.$type,
-      AST.ProjectVersion.$type,
-      AST.ProjectDefaultApp.$type,
-      AST.ProjectRemote.$type,
-      AST.ProjectLicense.$type,
+    const [publication] = parseResult.entry.ast.statements
+    Expect.Is(publication, AST.isPackageDeclaration)
+    Expect(AST.blockStatementOf(publication, { map: statement => statement.$type })).toEqual([
+      AST.PackageName.$type,
+      AST.PackageVersion.$type,
+      AST.PackageLicense.$type,
+      AST.PackageIncludes.$type,
     ])
-    const defaultApp = AST.blockStatementOf(project, { filter: AST.isProjectDefaultApp })[0]
-    Expect(defaultApp?.app.ref?.name).toBe('PackageAccess')
+    Expect(AST.blockStatementOf(publication, { filter: AST.isPackageIncludes })[0]?.modules).toEqual([
+      '@ui',
+      '@icons',
+    ])
   })
 
   Test('keeps DefaultApp available as an ordinary declaration name', async () => {
     const parseResult = await testParseCode(`
-      project { id "default-app-name" name "Default app name" app DefaultApp }
-      app DefaultApp { view DefaultApp }
+      package { version 1.0.0 includes @ui }
+      app DefaultApp { id "default-app" version "1.0.0" name "Default app" view DefaultApp }
       view DefaultApp() { }
     `)
 

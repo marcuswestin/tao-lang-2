@@ -1,4 +1,4 @@
-import { Errors, FS } from '@shared'
+import { Errors, FS, ProjectIdentity } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { runHostedProviderGenerate } from '../cli-src/hosted-provider-generate'
 import { type HostedProvider, readHostedProviderInputs } from '../cli-src/hosted-provider-inputs'
@@ -21,12 +21,10 @@ ${auth}use ${
     provider === 'jazz' ? 'Jazz' : provider === 'convex' ? 'Convex' : 'Pylon'
   } from @tao/data/providers/${provider}
 
-project {
-   id "hosted-generate"
-   name "Hosted generate"
-}
-
 app Hosted {
+   id "hosted-generate"
+   version "1.0.0"
+   name "Hosted generate"
    Auth ${authValue}
    Datasource ${datasource}
    view Main
@@ -66,7 +64,8 @@ async function withApp(
   access: boolean,
   run: (appPath: string, output: string) => Promise<void>,
 ) {
-  await withTaoFixture({ 'Hosted.tao': source(provider, access) }, async root => {
+  await withTaoFixture({ '.tao/.gitkeep': '', 'Hosted.tao': source(provider, access) }, async root => {
+    await ProjectIdentity.ensure(root)
     await run(FS.resolvePath('Hosted.tao', root), FS.resolvePath('backend', root))
   })
 }

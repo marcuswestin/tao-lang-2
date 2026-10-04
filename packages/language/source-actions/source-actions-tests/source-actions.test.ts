@@ -97,24 +97,24 @@ Describe('organizeSource use statements', () => {
 
 Describe('organizeSource canonical statement order', () => {
   Test(
-    'moves project metadata after imports and before the app',
+    'moves package publication after imports and before the app',
     organizes(
       `
         app MyApp { view MainView }
         view MainView() { render Text("hi") }
         use Text from @tao/ui
-        project {
+        package {
            name "My App"
-           remote none
+           version 1.0.0
            license MIT
         }
       `,
       `
         use Text from @tao/ui
 
-        project {
+        package {
            name "My App"
-           remote none
+           version 1.0.0
            license MIT
         }
 
@@ -426,7 +426,7 @@ Describe('removeUnusedImports', () => {
           view Empty(Value text) { render inject \`\`\`ts return null \`\`\` }
           view Col() { render inject Content @@content \`\`\`ts return Content \`\`\` }
         `,
-        'Schema.tao': 'workspace data Documents / Document { Title text }',
+        'Schema.tao': 'project data Documents / Document { Title text }',
       }, async paths => {
         const source = await FS.readText(paths['Main.tao']!)
         const document = await parseRawDocumentAt(source, paths['Main.tao']!)
@@ -461,7 +461,7 @@ Describe('removeUnusedImports', () => {
         use Documents, Document from ./Schema.tao
         view Editor(Document) { render inject \`\`\`ts return null \`\`\` }
       `,
-      'Schema.tao': 'workspace data Documents / Document { Title text }',
+      'Schema.tao': 'project data Documents / Document { Title text }',
     }, async paths => {
       const validated = await Workspace.validate(paths['Main.tao']!)
       const document = validated.entry.document

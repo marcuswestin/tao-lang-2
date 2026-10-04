@@ -22,7 +22,8 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   'reclaim --execute': { command: './dev', fixedArgs: ['reclaim', '--execute'], argsPolicy: 'none' },
   'prepare-release studio': { command: './dev', fixedArgs: ['prepare-release', 'studio'] },
   'prepare-release ide-extension': { command: './dev', fixedArgs: ['prepare-release', 'ide-extension'] },
-  'app-dev': { command: './tao', fixedArgs: ['dev'], server: true },
+  'ide-extension-acceptance': { command: './dev', fixedArgs: ['ide-extension-acceptance'], argsPolicy: 'none' },
+  'app-dev': { command: './tao', fixedArgs: ['run'], server: true },
   'test-watch': { command: './tao', fixedArgs: ['test', '--watch'], server: true },
   'standalone-cli-acceptance': { command: 'just', fixedArgs: ['standalone-cli-acceptance'], argsPolicy: 'none' },
   // Dev loops that watch files run on the host, where Watchman and the OS file-event service are

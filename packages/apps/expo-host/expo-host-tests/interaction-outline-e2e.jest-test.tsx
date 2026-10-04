@@ -130,7 +130,7 @@ Describe('interaction outline runtime', () => {
             `
             use Col, FormButton from @tao/ui
             use StackNav from @tao/nav
-            app KeyApp { Name "Keys" Navigator StackNav { Initial Home } }
+            app KeyApp { id "keyapp" version "1.0.0" name "Keys" Navigator StackNav { Initial Home } }
             scene Home() {
               Title "Home"
               render Col() { FormButton("Next") { on press -> { } } }
@@ -195,7 +195,7 @@ Describe('interaction outline runtime', () => {
         `
           use Col, FormButton, TextInput from @tao/ui
           use StackNav from @tao/nav
-          app KeyApp { Name "Keys" Navigator StackNav { Initial Home } }
+          app KeyApp { id "keyapp" version "1.0.0" name "Keys" Navigator StackNav { Initial Home } }
           scene Home() {
             Title "Home"
             state Draft = ""
@@ -309,7 +309,7 @@ Describe('interaction outline runtime', () => {
       `
         use Button, Col, Text from @tao/ui
         use StackNav from @tao/nav
-        app DisabledApp { Name "Disabled" Navigator StackNav { Initial Home } }
+        app DisabledApp { id "disabledapp" version "1.0.0" name "Disabled" Navigator StackNav { Initial Home } }
         scene Home() {
           Title "Home"
           state Count = 0
@@ -335,7 +335,7 @@ Describe('interaction outline runtime', () => {
       `
         use Text from @tao/ui
         use StackNav from @tao/nav
-        app CommandApp { Name "Commands" Navigator StackNav { Initial Home } }
+        app CommandApp { id "commandapp" version "1.0.0" name "Commands" Navigator StackNav { Initial Home } }
         scene Home() {
           Title "Home"
           state Count = 0
@@ -363,8 +363,7 @@ Describe('interaction outline runtime', () => {
           do -> { delete Document }
         }
         use StackNav from @tao/nav
-        app OutlineApp {
-          Name "Outline"
+        app OutlineApp { id "outlineapp" version "1.0.0" name "Outline"
           Navigator StackNav { Initial Main }
           Datasource Memory { }
         }
@@ -455,7 +454,7 @@ Describe('interaction outline runtime', () => {
   Test('keeps controls reachable in a non-selectable row and withdraws the row when it unmounts', async () => {
     await testCompileApp(
       `${catalog}
-        app OutlineApp {
+        app OutlineApp { id "outlineapp" version "1.0.0" name "OutlineApp"
           view Main
           Datasource Memory { }
         }
@@ -513,7 +512,7 @@ Describe('interaction outline runtime', () => {
   Test('registers a multi-root row without a row-level label', async () => {
     await testCompileApp(
       `${catalog}
-        app OutlineApp {
+        app OutlineApp { id "outlineapp" version "1.0.0" name "OutlineApp"
           view Main
           Datasource Memory { }
         }
@@ -549,8 +548,7 @@ Describe('interaction outline runtime', () => {
         use Col, FormButton, Text, TextInput from @tao/ui
         use StackNav from @tao/nav
 
-        app OutlineApp {
-          Name "Outline"
+        app OutlineApp { id "outlineapp" version "1.0.0" name "Outline"
           Navigator StackNav { Initial Home }
         }
         scene Home() {
@@ -638,8 +636,8 @@ Describe('interaction outline runtime', () => {
         use Col, FormButton, Panes, ScrollView, Text from @tao/ui
         use StackNav from @tao/nav
 
-        workspace nav MainNav = StackNav { Initial Home }
-        app OutlineApp { Name "Outline" view Shell(MainNav) }
+        project nav MainNav = StackNav { Initial Home }
+        app OutlineApp { id "outlineapp" version "1.0.0" name "Outline" view Shell(MainNav) }
         scene Home() { Title "Home" render Text("Home") }
         view Shell(Navigator nav) {
           render Col() {
@@ -671,7 +669,7 @@ Describe('interaction outline runtime', () => {
   Test('tells a subscriber when a row label changes and only then', async () => {
     await testCompileApp(
       `${catalog}
-        app OutlineApp {
+        app OutlineApp { id "outlineapp" version "1.0.0" name "OutlineApp"
           view Main
           Datasource Memory { }
         }
@@ -734,7 +732,7 @@ Describe('interaction outline runtime', () => {
     await testCompileApp(
       `
         use Col, FormButton from @tao/ui
-        app OutlineApp { view Main }
+        app OutlineApp { id "outlineapp" version "1.0.0" name "OutlineApp" view Main }
         view Main() {
           state Count = 0
           render Col() {

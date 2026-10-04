@@ -3,7 +3,9 @@ use FirebaseNotesNavigator from ./Chrome
 use FirebaseNotesDesign from ./Design
 
 app FirebaseNotesPreview {
-   Name "Firebase Notes"
+   id "hosted-firebase-notes-preview"
+   version "0.1.0"
+   name "Firebase Notes Preview"
    Datasource Memory { }
    Navigator FirebaseNotesNavigator
    Design FirebaseNotesDesign

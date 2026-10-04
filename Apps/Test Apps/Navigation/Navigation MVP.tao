@@ -2,7 +2,9 @@ use StackNav from @tao/nav
 use Col, FormButton, Text from @tao/ui
 
 app NavigationMVPApp {
-   Name "Navigation MVP"
+   id "navigation-navigation-mvpapp"
+   version "0.1.0"
+   name "Navigation MVP"
    Navigator StackNav {
       Initial Home
 }  }
@@ -11,7 +13,7 @@ app NavigationMVPApp {
 // is its one value, and a dismissed responder answers none rather than a second case.
 type ConfirmResult is one of Confirmed
 
-workspace
+project
 scene Home() {
    Title "Navigation MVP"
    state Visits = 0
@@ -76,7 +78,7 @@ view ConfirmOpen() responds ConfirmResult {
          on press -> { respond Confirmed }
 }  }  }
 
-workspace
+project
 scene Detail(Name text) {
    Title Name
    render Col() [gap 10, pad 16] {

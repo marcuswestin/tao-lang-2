@@ -4,7 +4,7 @@ import { TestCompiler as Compiler } from './test-compile'
 Describe('compiler: selectable loops', () => {
   Test('lowers row rendering and selection as sibling callbacks with the same singular binding', async () => {
     const compiled = await Compiler.compileCode(`
-      app SelectableApp { view Main }
+      app SelectableApp { id "com.tao.test.selectableapp" version "1.0.0" name "SelectableApp"  view Main }
       view Main() {
         state Selected = ""
         render Stack() {
@@ -32,7 +32,7 @@ Describe('compiler: selectable loops', () => {
 
   Test('leaves non-selectable loop lowering on the two-argument runtime path', async () => {
     const compiled = await Compiler.compileCode(`
-      app StaticApp { view Main }
+      app StaticApp { id "com.tao.test.staticapp" version "1.0.0" name "StaticApp"  view Main }
       view Main() {
         render Stack() {
           loop ["One"] / Row { Text(Row) }

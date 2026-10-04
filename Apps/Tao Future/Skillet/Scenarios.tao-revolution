@@ -38,7 +38,7 @@ scenarios "Recipe" {
       locale "es"
    }
    // Pseudolanguages are review modes, never shipped languages: Double-Length and mirrored layout are
-   // reviewed in one pass, and neither is an entry in `project { languages }`.
+   // reviewed in one pass, and neither is an entry in `app { languages }`.
    scenario "pseudolocale" {
       locale pseudolocale
       direction rightToLeft

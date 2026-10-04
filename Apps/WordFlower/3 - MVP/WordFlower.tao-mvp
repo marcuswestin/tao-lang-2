@@ -67,12 +67,8 @@ use Checkbox, Col, FormButton, Image, Panes, Placeholder, Problems, Progress, Ro
 // A strict `App@key` target may name a complete root or in-file variant. Variants retain their root
 // declaration identity, and the key must exist on every launch configuration of that root.
 
-project {
-   id "wordflower"
-   name "WordFlower"
-   version "1.0.0"
-   DefaultApp WordFlower
-   remote none
+package {
+   version 1.0.0
    license MIT
 }
 
@@ -178,7 +174,9 @@ datasource WordFlowerStageStore = WordFlowerStore with {
 
 
 app WordFlower {
-   Name "WordFlower"
+   id "wordflower"
+   version "1.0.0"
+   name "WordFlower"
    Design WordFlowerDesign
    view WordFlowerShell(WordFlowerNavigator)
 
@@ -194,12 +192,14 @@ app WordFlower {
 // unchanged. The variant rebinds the root with the same shell and a different navigator in it, so it
 // keeps the focus bar.
 app WordFlowerDrawer = WordFlower with {
-   Name "WordFlower - Drawer Preview"
+   id "wordflower-drawer"
+   name "WordFlower - Drawer Preview"
    view WordFlowerShell(WordFlowerDrawerNavigator) // the same shell, a different navigator in it
 }
 
 app WordFlowerStage = WordFlower with {
-   Name "WordFlower - Stage"
+   id "wordflower-stage"
+   name "WordFlower - Stage"
    Datasource WordFlowerStageStore
 }
 
@@ -299,7 +299,7 @@ data FocusSessions / FocusSession {
 // Entity command policy is independent of the view that happens to render a document. Finish and
 // Duplicate are the ordered defaults; destructive deletion is available only where a view
 // explicitly promotes it.
-workspace
+project
 command Finish(Document) {
    Title "Finish document"
    Description "Moves a document out of drafts and into the archive."
@@ -312,7 +312,7 @@ command Finish(Document) {
    } }
 }
 
-workspace
+project
 command Duplicate(Document) {
    Title "Duplicate document"
    Description "Makes a new draft beside this document."
@@ -326,7 +326,7 @@ command Duplicate(Document) {
    } }
 }
 
-workspace
+project
 command Delete(Document) {
    Title "Delete document"
    Description "Permanently removes this document."
@@ -474,7 +474,7 @@ view WorkspaceNameNotice() {
    }
 }
 
-workspace
+project
 scene WorkspaceDetails(Workspace) { // a bare parameter name binds the same-named entity type
    Title Workspace.Name
    state WorkspaceNameDraft = Workspace.Name
@@ -689,7 +689,7 @@ view StatusBadge(Label text, Tint color default inkMuted) {
       Text(Label)
 }  }
 
-workspace
+project
 view FileTree(Workspace) {
    query Documents from Workspace.Documents { }
    render Col() [gap 6, pad 10] {
@@ -737,7 +737,7 @@ view FileTree(Workspace) {
 }
 
 // The pane-level entry guards entity availability; the editor below assumes an available document.
-workspace
+project
 scene DocumentScreen(Document) {
    command Export() {
       Title "Export document"
@@ -759,7 +759,7 @@ scene DocumentScreen(Document) {
 type DocumentInput is Document { Title, Body }
 
 type ExportFailure is one of Offline, TooLarge, Cancelled
-workspace
+project
 action ExportDocument(Document)
    fails Offline "Exporting needs a connection."
    fails TooLarge "This document is too long to export."
@@ -791,7 +791,7 @@ view ExportNotice(Message text) {
 }
 
 // `view` stays embeddable content; DocumentEditor only appears inside another render tree.
-workspace
+project
 view DocumentEditor(Document) {
    state Input = copy Document as DocumentInput
    state ParagraphText = ""
@@ -1082,46 +1082,56 @@ scene SignedOut() {
 
 // Deterministic navigation-foundation harness: only StackNav and SlotNav, with no Design or
 // Datasource capability, so navigation foundations stay executable independently of them.
-workspace
+project
 type FoundationHomeStack is StackNav with {
    Initial is FoundationHome
 }
 
-workspace
+project
 nav FoundationStack = FoundationHomeStack {}
-workspace
+project
 nav FoundationStackWith = FoundationHomeStack with {}
-workspace
+project
 let FoundationStackLet = FoundationHomeStack {}
-workspace
+project
 let FoundationStackLetWith = FoundationHomeStack with {}
-workspace
+project
 nav FoundationNavigator = SlotNav { Initial FoundationStack }
 
 app WordFlowerFoundationTest {
-   Name "WordFlower Navigation Foundation Test"
+   id "wordflower-word-flower-foundation-test"
+   version "1.0.0"
+   name "WordFlower Navigation Foundation Test"
    Navigator FoundationNavigator
 }
 
 app WordFlowerDeclarationHead {
-   Name "WordFlower Declaration Head"
+   id "wordflower-word-flower-declaration-head"
+   version "1.0.0"
+   name "WordFlower Declaration Head"
    Navigator FoundationStack
 }
 
 app WordFlowerDeclarationHeadWith = app with {
-   Name "WordFlower Declaration Head With"
+   id "wordflower-word-flower-declaration-head-with"
+   version "1.0.0"
+   name "WordFlower Declaration Head With"
    Navigator FoundationStackWith
 }
 
-workspace
+project
 let WordFlowerDeclarationLet = app {
-   Name "WordFlower Declaration Let"
+   id "wordflower-word-flower-declaration-let"
+   version "1.0.0"
+   name "WordFlower Declaration Let"
    Navigator FoundationStackLet
 }
 
-workspace
+project
 let WordFlowerDeclarationLetWith = app with {
-   Name "WordFlower Declaration Let With"
+   id "wordflower-word-flower-declaration-let-with"
+   version "1.0.0"
+   name "WordFlower Declaration Let With"
    Navigator FoundationStackLetWith
 }
 

@@ -20,14 +20,13 @@ Describe('Expo runtime', () => {
           use StackNav from @tao/nav
           use Main from ./Screen.tao
 
-          app MultiFileData {
-            Name "Multi-file data"
+          app MultiFileData { id "multifiledata" version "1.0.0" name "Multi-file data"
             Navigator StackNav { Initial Main }
             Datasource Memory { }
           }
         `,
         'Data.tao': `
-          workspace data Notes / Note {
+          project data Notes / Note {
             Title text
           }
         `,
@@ -35,7 +34,7 @@ Describe('Expo runtime', () => {
           use Notes from ./Data.tao
           use Text from @tao/ui
 
-          workspace scene Main() {
+          project scene Main() {
             Title "Notes"
             query Notes = Notes with { }
             render Text("Notes: { Notes.Count }")

@@ -4,7 +4,8 @@ use CloudKit from @tao/data/providers/cloudkit
 // Exercise per-row recovery through the same WordFlower UI; its hosted InstantDB variant saves
 // snapshots, while this test-only provider has queued and retryable writes.
 app WordFlowerSyncTest = WordFlower with {
-   Name "WordFlower Sync Test"
+   id "wordflower-sync-test"
+   name "WordFlower Sync Test"
    Datasource CloudKit { }
 }
 

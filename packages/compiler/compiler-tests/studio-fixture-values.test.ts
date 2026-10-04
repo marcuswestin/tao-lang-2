@@ -11,7 +11,7 @@ Describe('compiler: Studio preview fixture values', () => {
           Archived yes / no
         }
 
-        app First { view Home }
+        app First { id "com.tao.test.first" version "1.0.0" name "First"  view Home }
 
         view Home() { render Surface() }
 

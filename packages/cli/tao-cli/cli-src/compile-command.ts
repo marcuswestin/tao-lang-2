@@ -1,4 +1,5 @@
 import Runtime from '@expo-host'
+import { findProjectRoot, ProjectTooling } from '@project-tooling'
 import { Errors, FS, HCI } from '@shared'
 import type { Readable, Writable } from 'node:stream'
 import { TaoAppModules } from './app-modules'
@@ -27,6 +28,14 @@ export async function runCompile(
     Errors.throwUserInput(`No Tao app file found at ${sourcePath}`)
   }
   await TaoAppModules.ensureForPath(sourcePath)
+  const projectRoot = await findProjectRoot(sourcePath)
+  if (projectRoot === undefined) {
+    Errors.throwUserInput(`No Tao project root was found from ${sourcePath}. Add a .tao directory to the project root.`)
+  }
+  const refreshed = await ProjectTooling.refresh(projectRoot, { runtimeRoot: TaoAppModules.runtimeRoot() })
+  if (refreshed.status !== 'fresh') {
+    Errors.throwUserInput(refreshed.diagnostics.map(diagnostic => diagnostic.message).join('\n'))
+  }
   const appNames = await Runtime.appNames(sourcePath)
   const appName = await selectAppName(sourcePath, appNames, options)
   const generated = await Runtime.generateApp(sourcePath, {

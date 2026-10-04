@@ -65,7 +65,7 @@ Test('StudioServer datasource fills source-bound design and problem metadata wit
     Expect((refreshedDesign.rows as StudioServerDesignTokenRow[])[0]?.SourceVersion)
       .toBe(changed.file.sourceVersion)
     const invalid = await session.syncDraft({
-      content: 'app Garden {',
+      content: 'app Garden { id "garden" version "1.0.0" name "Garden"',
       path: file.Path,
       sourceVersion: changed.file.sourceVersion,
       writeId: 'invalid-draft',
@@ -100,7 +100,7 @@ Test('StudioServer datasource publishes structured design kinds with revision-bo
          screens { wide }
          styles { card [radius md] Text [ink ink] }
       }
-      app Garden { view Main Design GardenDesign }
+      app Garden { id "garden" version "1.0.0" name "Garden" view Main Design GardenDesign }
       view Main() { render Text("Garden") [card, body] }
     `,
   }, async (paths, root) => {
@@ -144,7 +144,7 @@ Test('StudioServer datasource tolerates unparseable project files when indexing 
       design ValidDesign {
         ink #121826
       }
-      app Valid { view Main }
+      app Valid { id "valid" version "1.0.0" name "Valid" view Main }
       view Main() { render Text("Valid") }
     `,
   }, async (paths, root) => {
@@ -497,7 +497,7 @@ async function withSession(
       design GardenDesign {
         ink #121826
       }
-      app Garden { view Main }
+      app Garden { id "garden" version "1.0.0" name "Garden" view Main }
       view Main() { render Stack() { Text("Garden") } }
       scene Card(Title text) { render Text(Title) }
     `,

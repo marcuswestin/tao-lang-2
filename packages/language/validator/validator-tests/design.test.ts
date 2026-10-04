@@ -27,7 +27,7 @@ Describe('validator: minimal design', () => {
 
   Test('does not warn for named style values or layout keywords', async () => {
     const result = await Validator.validateCode(designApp(
-      'workspace design Theme { sizes { sm 8.px } ink #111 }',
+      'project design Theme { sizes { sm 8.px } ink #111 }',
       'render Surface() [gap sm, pad sm, fill, hug, claim 1, compress, centered, fg ink, weight bold]',
     ))
 
@@ -42,8 +42,8 @@ Describe('validator: minimal design', () => {
     rejects(
       `
         use StackNav from @tao/nav
-        workspace design Theme { paper #fff }
-        app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
+        project design Theme { paper #fff }
+        app Demo { id "demo" version "1.0.0" name "Demo" Navigator StackNav { Initial Main } Design Theme }
         scene Main() { Title "Main" render Card() }
         view Card() [bg missingToken] {
           render Surface()
@@ -57,7 +57,7 @@ Describe('validator: minimal design', () => {
   Test(
     'accepts `none` as a clearing term on visual and layout value heads in a header clause',
     accepts(`
-      app Demo { view Card }
+      app Demo { id "demo" version "1.0.0" name "Demo" view Card }
       view Card() [bg none, border none, pad none, margin horizontal none, gap none, width none, height none, size none] {
         render inject ${tsFence}
           return null
@@ -70,7 +70,7 @@ Describe('validator: minimal design', () => {
     'rejects `none` after a keyword head in a header clause',
     rejects(
       `
-        app Demo { view Card }
+        app Demo { id "demo" version "1.0.0" name "Demo" view Card }
         view Card() [fill none] {
           render inject ${tsFence}
             return null
@@ -85,7 +85,7 @@ Describe('validator: minimal design', () => {
     'rejects `none` followed by more terms in a header clause',
     rejects(
       `
-        app Demo { view Card }
+        app Demo { id "demo" version "1.0.0" name "Demo" view Card }
         view Card() [bg none paper] {
           render inject ${tsFence}
             return null
@@ -100,7 +100,7 @@ Describe('validator: minimal design', () => {
     'does not lint a raw zero or `none` as inline design exploration, but still lints a raw header hex',
     async () => {
       const result = await Validator.validateCode(`
-      app Demo { view Card }
+      app Demo { id "demo" version "1.0.0" name "Demo" view Card }
       view Card() [pad 0, bg none, bg #fff] {
         render inject ${tsFence}
           return null
@@ -168,7 +168,7 @@ Describe('validator: minimal design', () => {
     'accepts exact hex forms, WordFlower bundles, and decomposed later layout effects',
     accepts(designApp(
       `
-      workspace design Theme {
+      project design Theme {
         short #abc
         alpha #abcd
         paper #f6f7f3
@@ -187,7 +187,7 @@ Describe('validator: minimal design', () => {
     'accepts decided background and ink names alongside current visual and spacing families',
     accepts(designApp(
       `
-      workspace design Theme {
+      project design Theme {
         canvas #fff
         ink #111
         lineColor #ddd
@@ -204,7 +204,7 @@ Describe('validator: minimal design', () => {
     'accepts exact Light and Dark Scheme conditions on visual entries',
     accepts(designApp(
       `
-      workspace design Theme {
+      project design Theme {
         canvas #fff
         canvasDark #111
         Surface [background canvas, background canvasDark when Scheme is Dark]
@@ -218,7 +218,7 @@ Describe('validator: minimal design', () => {
     'accepts structured typed blocks, color families, folded sizes, screens, styles, and defaults',
     accepts(designApp(
       `
-      workspace design Theme {
+      project design Theme {
         colors {
           cream #fff
           ember #d9622b { 20 #f4d7c8, 60 #b34e1f }
@@ -240,7 +240,7 @@ Describe('validator: minimal design', () => {
   Test(
     'resolves named design sizes in direct layout clauses',
     accepts(designApp(
-      'workspace design Theme { sizes { sm 8.px, readable 1.rem } }',
+      'project design Theme { sizes { sm 8.px, readable 1.rem } }',
       'render Surface() [gap sm, pad sm, margin sm, width readable, height readable]',
     )),
   )
@@ -249,7 +249,7 @@ Describe('validator: minimal design', () => {
     'rejects missing or unknown named layout sizes',
     rejects(
       `
-        app Legacy { view Main }
+        app Legacy { id "legacy" version "1.0.0" name "Legacy" view Main }
         view Main() { render Surface() [gap sm] }
         ${surfaceView}
       `,
@@ -260,7 +260,7 @@ Describe('validator: minimal design', () => {
   Test(
     'rejects a named layout size absent from the selected design',
     rejects(
-      designApp('workspace design Theme { sizes { sm 8.px } }', 'render Surface() [width absent]'),
+      designApp('project design Theme { sizes { sm 8.px } }', 'render Surface() [width absent]'),
       messages.unknownSize('Theme', 'absent'),
     ),
   )
@@ -269,7 +269,7 @@ Describe('validator: minimal design', () => {
     'rejects invalid structured conditions, units, and screen ordering',
     rejects(
       designApp(
-        `workspace design Theme {
+        `project design Theme {
           colors { ink when Motion is Dark #fff / not #111 }
           sizes { bad 2.seconds }
           screens { wide, narrow below 400.px }
@@ -287,7 +287,7 @@ Describe('validator: minimal design', () => {
     'accepts `when selected` as an interaction condition on an element default',
     accepts(designApp(
       `
-      workspace design Theme {
+      project design Theme {
         colors { inkMuted #666, accentSoft #eef, accentStrong #113 }
         styles {
           NavigationTab [pad 10, ink inkMuted, background accentSoft when selected, ink accentStrong when selected]
@@ -301,7 +301,7 @@ Describe('validator: minimal design', () => {
   Test('rejects an element default named in a render, header, or style clause list', async () => {
     const result = await Validator.validateCode(`
       use StackNav from @tao/nav
-      workspace design Theme {
+      project design Theme {
         colors { accentSoft #eef }
         styles {
           NavigationTab [pad 10]
@@ -310,7 +310,7 @@ Describe('validator: minimal design', () => {
         }
         NavigationTabActive [NavigationTab, background accentSoft]
       }
-      app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
+      app Demo { id "demo" version "1.0.0" name "Demo" Navigator StackNav { Initial Main } Design Theme }
       scene Main() { Title "Main" render Card() [Hint] }
       view Card() [Hint, pad 2] {
         render Surface()
@@ -333,7 +333,7 @@ Describe('validator: minimal design', () => {
     'rejects an element default named in a clause list even with no app design selected',
     async () => {
       const result = await Validator.validateCode(`
-        app Legacy { view Main }
+        app Legacy { id "legacy" version "1.0.0" name "Legacy" view Main }
         view Main() { render Surface() [Hint] }
         ${surfaceView}
       `)
@@ -347,7 +347,7 @@ Describe('validator: minimal design', () => {
 
   Test('rejects Capitalized colors, sizes, text styles, screens, and flat color tokens', async () => {
     const result = await Validator.validateCode(`
-      workspace design Theme {
+      project design Theme {
         Brand #fff
         colors { Accent #f60, ink #111 }
         sizes { Gutter 8.px, sm 4.px }
@@ -376,7 +376,7 @@ Describe('validator: minimal design', () => {
     'rejects malformed or unrelated visual conditions',
     rejects(
       designApp(
-        'workspace design Theme { canvas #fff Surface [background canvas when Viewport is Dark] }',
+        'project design Theme { canvas #fff Surface [background canvas when Viewport is Dark] }',
         'render Surface()',
       ),
       messages.malformedVisual('background canvas when Viewport is Dark'),
@@ -387,7 +387,7 @@ Describe('validator: minimal design', () => {
     'rejects mixed source aliases that normalize to the same visual property',
     rejects(
       designApp(
-        'workspace design Theme { canvas #fff paper #eee card [bg canvas, background paper] }',
+        'project design Theme { canvas #fff paper #eee card [bg canvas, background paper] }',
         'render Surface() [card]',
       ),
       messages.duplicateVisualAlias('bg', 'background'),
@@ -396,7 +396,7 @@ Describe('validator: minimal design', () => {
 
   Test('warns for the legacy bg/fg spelling at a render site, anchored on the head', async () => {
     const result = await Validator.validateCode(designApp(
-      'workspace design Theme { canvas #fff }',
+      'project design Theme { canvas #fff }',
       'render Surface() [bg canvas]',
     ))
     const warnings = result.diagnostics.filter(diagnostic => diagnostic.code === designValidationCodes.legacyVisualHead)
@@ -409,7 +409,7 @@ Describe('validator: minimal design', () => {
 
   Test('warns for the legacy bg/fg spelling in a declaration header clause, including a clearing entry', async () => {
     const result = await Validator.validateCode(`
-      app Demo { view Card }
+      app Demo { id "demo" version "1.0.0" name "Demo" view Card }
       view Card() [bg none] {
         render inject ${tsFence}
           return null
@@ -424,7 +424,7 @@ Describe('validator: minimal design', () => {
 
   Test('warns for the legacy bg/fg spelling in a flat design bundle and a styles block entry', async () => {
     const result = await Validator.validateCode(`
-      workspace design Theme {
+      project design Theme {
         canvas #fff
         card [bg canvas]
         styles {
@@ -442,7 +442,7 @@ Describe('validator: minimal design', () => {
 
   Test('does not warn about a legacy visual head for the decided background and ink spellings', async () => {
     const result = await Validator.validateCode(designApp(
-      'workspace design Theme { canvas #fff card [background canvas] }',
+      'project design Theme { canvas #fff card [background canvas] }',
       'render Surface() [card, background canvas]',
     ))
 
@@ -452,7 +452,7 @@ Describe('validator: minimal design', () => {
 
   Test('warns once, on the declaration, for a design with several flat catalog entries', async () => {
     const result = await Validator.validateCode(`
-      workspace design Theme {
+      project design Theme {
         canvas #fff
         ink #111
         card [background canvas]
@@ -468,7 +468,7 @@ Describe('validator: minimal design', () => {
 
   Test('does not warn about a flat catalog when every member lives in a typed block', async () => {
     const result = await Validator.validateCode(`
-      workspace design Theme {
+      project design Theme {
         colors { canvas #fff }
         styles { card [background canvas] }
       }
@@ -482,7 +482,7 @@ Describe('validator: minimal design', () => {
     Test(
       `rejects malformed contextual color ${color}`,
       rejects(
-        `workspace design Theme { ink ${color} }`,
+        `project design Theme { ink ${color} }`,
         messages.malformedColor(color),
       ),
     )
@@ -504,7 +504,7 @@ Describe('validator: minimal design', () => {
 
   Test('uses one private member namespace while allowing the represented line token', async () => {
     const result = await Validator.validateCode(`
-      workspace design Theme {
+      project design Theme {
         line #ddd
         panel #fff
         panel [bg line]
@@ -537,7 +537,7 @@ Describe('validator: minimal design', () => {
     'rejects malformed visual entries, unknown tokens and bundles, and cycles',
     rejects(
       `
-        workspace design Theme {
+        project design Theme {
           ink #111
           badWeight [weight 750]
           badColor [bg absent]
@@ -554,10 +554,10 @@ Describe('validator: minimal design', () => {
   )
 
   Test(
-    'resolves render bundle and token names exactly with one selected workspace design',
+    'resolves render bundle and token names exactly with one selected project design',
     rejects(
       designApp(
-        'workspace design Theme { ink #111 body [fg ink] }',
+        'project design Theme { ink #111 body [fg ink] }',
         'render Surface() [unknownBundle, fg absent]',
       ),
       messages.unknownBundle('Theme', 'unknownBundle'),
@@ -569,7 +569,7 @@ Describe('validator: minimal design', () => {
     'requires an app design for a design-dependent render spec',
     rejects(
       `
-        app Legacy { view Main }
+        app Legacy { id "legacy" version "1.0.0" name "Legacy" view Main }
         view Main() { render Surface() [panel] }
         ${surfaceView}
       `,
@@ -580,7 +580,7 @@ Describe('validator: minimal design', () => {
   Test(
     'accepts self-contained numeric visuals with no app design selected',
     accepts(`
-      app Legacy { view Main }
+      app Legacy { id "legacy" version "1.0.0" name "Legacy" view Main }
       view Main() { render Surface() [size 14, radius 8, weight 600, line 20] }
       ${surfaceView}
     `),
@@ -590,7 +590,7 @@ Describe('validator: minimal design', () => {
     'still requires an app design for a color token with no design selected',
     rejects(
       `
-        app Legacy { view Main }
+        app Legacy { id "legacy" version "1.0.0" name "Legacy" view Main }
         view Main() { render Surface() [size 14, fg ink] }
         ${surfaceView}
       `,
@@ -602,10 +602,10 @@ Describe('validator: minimal design', () => {
     'defers private bundle lookup when different mounted apps select different designs',
     accepts(`
       use StackNav from @tao/nav
-      workspace design Light { surface #fff panel [bg surface] }
-      workspace design Dark { surface #000 panel [bg surface] }
-      app LightApp { Name "Light" Navigator StackNav { Initial Main } Design Light }
-      app DarkApp { Name "Dark" Navigator StackNav { Initial Main } Design Dark }
+      project design Light { surface #fff panel [bg surface] }
+      project design Dark { surface #000 panel [bg surface] }
+      app LightApp { id "lightapp" version "1.0.0" name "Light" Navigator StackNav { Initial Main } Design Light }
+      app DarkApp { id "darkapp" version "1.0.0" name "Dark" Navigator StackNav { Initial Main } Design Dark }
       scene Main() { Title "Main" render Surface() [panel] }
       ${surfaceView}
     `),
@@ -615,10 +615,10 @@ Describe('validator: minimal design', () => {
     'requires a shared style and layout size in every directly mounted design',
     rejects(
       `
-      workspace design Light { sizes { sm 8.px } styles { panel [pad sm] } }
-      workspace design Dark { styles { other [pad 8] } }
-      app LightApp { view Main Design Light }
-      app DarkApp { view Main Design Dark }
+      project design Light { sizes { sm 8.px } styles { panel [pad sm] } }
+      project design Dark { styles { other [pad 8] } }
+      app LightApp { id "lightapp" version "1.0.0" name "LightApp" view Main Design Light }
+      app DarkApp { id "darkapp" version "1.0.0" name "DarkApp" view Main Design Dark }
       view Main() { render Surface() [panel, gap sm] }
       ${surfaceView}
     `,
@@ -631,10 +631,10 @@ Describe('validator: minimal design', () => {
     'requires a shared visual color in every mounted design',
     rejects(
       `
-      workspace design Light { colors { accent #fff } }
-      workspace design Dark { colors { other #000 } }
-      app LightApp { view Main Design Light }
-      app DarkApp { view Main Design Dark }
+      project design Light { colors { accent #fff } }
+      project design Dark { colors { other #000 } }
+      app LightApp { id "lightapp" version "1.0.0" name "LightApp" view Main Design Light }
+      app DarkApp { id "darkapp" version "1.0.0" name "DarkApp" view Main Design Dark }
       view Main() { render Surface() [background accent] }
       ${surfaceView}
     `,
@@ -646,10 +646,10 @@ Describe('validator: minimal design', () => {
     'requires a shared style in a design mounted by an app refinement',
     rejects(
       `
-      workspace design Light { styles { panel [pad 8] } }
-      workspace design Dark { styles { other [pad 8] } }
-      app Demo { view Main Design Light }
-      app DemoDark = Demo with { Design Dark }
+      project design Light { styles { panel [pad 8] } }
+      project design Dark { styles { other [pad 8] } }
+      app Demo { id "demo" version "1.0.0" name "Demo" view Main Design Light }
+      app DemoDark = Demo with { id "demodark" Design Dark }
       view Main() { render Surface() [panel] }
       ${surfaceView}
     `,
@@ -661,7 +661,7 @@ Describe('validator: minimal design', () => {
     'rejects incompatible claim and rigid effects that both remain effective',
     rejects(
       designApp(
-        'workspace design Theme { weighted [claim 2, rigid] }',
+        'project design Theme { weighted [claim 2, rigid] }',
         'render Surface() [weighted]',
       ),
       messages.weightedRigidClaim,
@@ -672,7 +672,7 @@ Describe('validator: minimal design', () => {
     'applies replacement across expanded bundles before checking surviving incompatibilities',
     accepts(designApp(
       `
-      workspace design Theme {
+      project design Theme {
         weighted [claim 2]
         stiff [rigid]
         flexible [compress]
@@ -685,7 +685,7 @@ Describe('validator: minimal design', () => {
   Test(
     'lets an intervening bundle replace a direct winner before incompatibility validation',
     accepts(designApp(
-      'workspace design Theme { resetGrowth [fill] }',
+      'project design Theme { resetGrowth [fill] }',
       'render Surface() [claim 2, resetGrowth, rigid]',
     )),
   )
@@ -695,7 +695,7 @@ Describe('validator: minimal design', () => {
     rejects(
       designApp(
         `
-        workspace design Theme {
+        project design Theme {
           weighted [claim 2]
           stiff [rigid]
         }
@@ -709,7 +709,7 @@ Describe('validator: minimal design', () => {
   Test('warns when a view style definition has a property already present in an applied style', async () => {
     const result = await Validator.validateCode(
       designApp(
-        `workspace design Theme {
+        `project design Theme {
           accent #f60
           header [hug, pad 14, bg accent]
         }`,
@@ -729,7 +729,7 @@ Describe('validator: minimal design', () => {
   Test('warns when an applied style property is overridden inline by a spacing or visual entry', async () => {
     const result = await Validator.validateCode(
       designApp(
-        `workspace design Theme {
+        `project design Theme {
           accent #f60
           snow #fff
           header [hug, pad 14, bg accent]
@@ -750,7 +750,7 @@ Describe('validator: minimal design', () => {
   Test('names a repeated visual property as written, and by its decided spelling when the two differ', async () => {
     const result = await Validator.validateCode(
       designApp(
-        `workspace design Theme {
+        `project design Theme {
           colors { ink #111, paper #fff, accent #f60 }
           styles {
             card [ink ink]
@@ -774,7 +774,7 @@ Describe('validator: minimal design', () => {
   Test('warns when multiple applied styles share a property', async () => {
     const result = await Validator.validateCode(
       designApp(
-        `workspace design Theme {
+        `project design Theme {
           styleA [hug, pad 14]
           styleB [pad 10, radius 8]
         }`,
@@ -793,7 +793,7 @@ Describe('validator: minimal design', () => {
   Test('warns through transitively inherited bundle properties', async () => {
     const result = await Validator.validateCode(
       designApp(
-        `workspace design Theme {
+        `project design Theme {
           base [pad 14]
           header [base, hug]
         }`,
@@ -812,7 +812,7 @@ Describe('validator: minimal design', () => {
   Test('does not warn when applied style and inline entry have disjoint properties', async () => {
     const result = await Validator.validateCode(
       designApp(
-        `workspace design Theme {
+        `project design Theme {
           card #fff
           line #ddd
           storyCard [pad 12, radius 10, bg card, border line]
@@ -831,7 +831,7 @@ Describe('validator: minimal design', () => {
   Test('does not warn when an inline visual entry is an interaction state condition', async () => {
     const result = await Validator.validateCode(
       designApp(
-        `workspace design Theme {
+        `project design Theme {
           accent #f60
           snow #fff
           header [bg accent]
@@ -849,7 +849,7 @@ Describe('validator: minimal design', () => {
 
   Test('rejects a design member that collides with a built-in clause the runtime answers first', async () => {
     const result = await Validator.validateCode(`
-      workspace design Theme {
+      project design Theme {
         hug [pad 14]
         styles {
           fill [pad 8]
@@ -869,7 +869,7 @@ Describe('validator: minimal design', () => {
 
   Test('warns when a design property has redundant style properties', async () => {
     const result = await Validator.validateCode(`
-      workspace design Theme {
+      project design Theme {
         accent #f60
         header [hug, pad 14, bg accent, hug]
       }
@@ -886,7 +886,7 @@ Describe('validator: minimal design', () => {
 
   Test('accepts entries that share a head but claim independent slots', async () => {
     const result = await Validator.validateCode(`
-      workspace design Theme {
+      project design Theme {
         sides [pad top 4, pad left 8, margin top 2, margin bottom 2]
         axes [content top, content left]
         span [width fill, width max 680]
@@ -904,7 +904,7 @@ Describe('validator: minimal design', () => {
 
   Test('reports the slot a repeated side or axis actually re-claims', async () => {
     const result = await Validator.validateCode(`
-      workspace design Theme {
+      project design Theme {
         sides [pad top 4, pad vertical 8]
         axes [content top, content bottom]
         span [width 200, width fill]
@@ -964,7 +964,7 @@ function designApp(design: string, body: string): string {
   return `
     use StackNav from @tao/nav
     ${design}
-    app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
+    app Demo { id "demo" version "1.0.0" name "Demo" Navigator StackNav { Initial Main } Design Theme }
     scene Main() { Title "Main" ${body} }
     ${surfaceView}
   `

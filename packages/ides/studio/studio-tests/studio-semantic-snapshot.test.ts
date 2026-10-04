@@ -6,7 +6,7 @@ Test('semantic snapshot names a rendered view parameter without inventing a decl
     'App.tao': `
       use Text from @tao/ui
 
-      app Demo { view Shell(Leaf) }
+      app Demo { id "demo" version "1.0.0" name "Demo" view Shell(Leaf) }
 
       view Shell(Content view) {
         render Content()
@@ -37,7 +37,7 @@ Test('semantic snapshot records projected input fields as bulk update writes', a
       use Text from @tao/ui
       data Documents / Document { Title text, Body text, Owner text }
       type DocumentInput is Document { Title, Body }
-      app Demo { view Main }
+      app Demo { id "demo" version "1.0.0" name "Demo" view Main }
       view Main() { render Text("Main") }
       view Editor(Document) {
         state Input = copy Document as DocumentInput
@@ -65,7 +65,7 @@ Test('semantic snapshot records projected input fields as create writes', async 
       use Text from @tao/ui
       data Notes / Note { Title text, Topic text, Summary text (default "") }
       type NoteInput is Note { Title, Topic }
-      app Demo { view Main }
+      app Demo { id "demo" version "1.0.0" name "Demo" view Main }
       view Main() {
         state Input = NoteInput { Title: "", Topic: "" }
         action Add() { create Note with Input }

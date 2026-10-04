@@ -10,7 +10,7 @@ Describe('tao semantic commands', () => {
         'App.tao': `
         use Button, Col, Text from @tao/ui
 
-        app Demo { view Home }
+        app Demo { id "semantic-demo" version "1.0.0" name "Demo" view Home }
 
         view Home() {
           action Active() { }
@@ -93,7 +93,8 @@ Describe('tao semantic commands', () => {
   Test('rejects a requested app that is absent from the semantic graph as a typed user error', async () => {
     await withTaoFixture({
       ...checkedProjectFile,
-      'App.tao': 'app Demo { view Home }\nview Home() { render Text("Welcome") }\n',
+      'App.tao':
+        'app Demo { id "semantic-demo" version "1.0.0" name "Demo" view Home }\nview Home() { render Text("Welcome") }\n',
     }, async root => {
       const result = await runTaoCliForTest(['facts', root, 'App.tao', 'DoesNotExist'])
 
@@ -109,7 +110,7 @@ Describe('tao semantic commands', () => {
       'App.tao': `
         use Button, Col, Text from @tao/ui
 
-        app Demo { view Home }
+        app Demo { id "semantic-demo" version "1.0.0" name "Demo" view Home }
 
         view Home() {
           action Active() { }

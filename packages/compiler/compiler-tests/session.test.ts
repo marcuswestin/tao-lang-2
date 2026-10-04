@@ -29,7 +29,7 @@ Describe('compiler: reusable sessions', () => {
 
 function appSource(appName: string): string {
   return `
-    app ${appName} { view MainView }
+    app ${appName} { id "com.tao.test.${appName.toLowerCase()}" version "1.0.0" name "${appName}" view MainView }
     view MainView() {
       render inject \`\`\`ts
         return null

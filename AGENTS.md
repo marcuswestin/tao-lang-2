@@ -6,11 +6,12 @@ The Developer is Tao's author, project lead, and language designer, and decides 
 
 ## Commands
 
-- Use `./agent` for setup, fixes, tests, verification, diagnosis, and landing; run `./agent help` first each session. `./agent setup` installs dependencies. If a needed operation is missing, tell the Developer.
+- Use `./agent` for setup, fixes, tests, verification, diagnosis, and landing; `./agent setup` installs dependencies. Run `./agent help` first each session. If a needed operation is missing, tell the Developer instead of bypassing the front door.
+- Commands taking over two seconds must print concise steps as they run. Announce major phases beforehand, especially long operations; keep activity visible without exhaustive or buffered logging.
 - Ask the Developer before adding a dependency, changing a package version, or updating a lockfile. After approval for that named change, edit the manifest and run `./agent setup --refresh-lockfile` to resolve and install it; use `./agent setup` for ordinary frozen installs. Approval for one change does not cover later dependency changes.
 - Run Tao CLI commands as `./agent tao [args…]`. Run development loops through `./agent unsandboxed app-dev [path] [options]`, `studio [project]`, or `local-instantdb start|stop`. Shell inspection and Git stay direct when permitted. `Justfile` is the human menu. Search with tools that honour `.gitignore`; the output-discipline hook rejects scans of generated trees.
 - Run commands from the worktree root with paths relative to it. The shell shapes that mislead or bloat are refused as you type them rather than listed here: the output-discipline hook names the flag, pipe, redirect, or tool that makes each command acceptable, and `# hook-ok: <reason>` runs one a rule wrongly caught, recording the reason in `.artifacts/logs/hook-overrides.jsonl` so the rule can be tuned. A refusal is the rule; prose that repeated it would be a second owner, free to drift.
-- When a repository command fails, read what it printed: every `./agent` command ends in a report naming the failure and its log, and `./agent doctor` diagnoses the checkout. `environment-recovery` owns what needs more than that.
+- On repository-command failure, read its report and named log; `./agent doctor` diagnoses the checkout. `environment-recovery` owns further recovery.
 - Ask the Developer when language design, roadmap priority, destructive work, or ambiguous product behavior cannot be derived safely; the `decision-rounds` skill owns how those questions are found and put to them. Resolve routine implementation choices from repository evidence.
 - Goal questions or "stop notification": use `developer-attention`.
 - Name an agent harness or AI provider only in agent configuration: `.rulesync/`, `.claude/`, `.codex/`, `.cursor/`, `agents/subagents/`, `packages/cli/agent-cli/`, or in a commit message describing changes to that harness or provider. Elsewhere say "agent" or "harness"; where behavior genuinely differs by provider, cover every provider in use (today Claude and Codex), never just one.
@@ -26,7 +27,7 @@ The Developer is Tao's author, project lead, and language designer, and decides 
 ## Response format
 
 - Lead with the outcome. Keep expected results to a sentence; surface decisions to confirm, surprises, and anything needing the Developer's judgment. Let other detail wait until asked.
-- Before printing Developer-run commands, check live help for each wrapper, flag and argument. Put exact copyable commands with arguments and working directory in a shell block in the request, update or handoff. Use human entry points (`just`, `./dev`, `./tao`), never `./agent`; add a missing human command to `./dev`.
+- Check live help for Developer-run commands and flags. Give copyable commands and working directory in a shell block. Use `just`, `./dev` or `./tao`, never `./agent`; add missing human commands to `./dev`.
 - Use numbered lists and lettered sub-items, up to three levels ("elaborate 2.b"). Requested summaries use executive-summary bullets, 1–2 sentences each. One point per item; quote errors and output verbatim in code blocks.
 - Depart from this when a root-cause walkthrough or a design argument serves the Developer better. This section governs what they read and nothing else: subagent and agent-to-agent text is exempt from the shape, and the `delegation` skill owns what a subagent's report must contain instead.
 - After a meaningful chunk, recommend the next slice. Harness settings compact context automatically; at a natural break before an unrelated slice, refresh `.artifacts/checkpoint/<branch>.md` and offer `/compact` or a fresh session.

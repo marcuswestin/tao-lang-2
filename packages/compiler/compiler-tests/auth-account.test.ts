@@ -8,7 +8,7 @@ Describe('compiler: app-scoped auth and account data', () => {
     const result = await Compiler.compileCode(`
       use TestAuth from @tao/auth/testing
       data Drafts / Draft { Body text, local only }
-      app Notes { Auth TestAuth { State "SignedOut" } view Main }
+      app Notes { id "com.tao.test.notes" version "1.0.0" name "Notes"  Auth TestAuth { State "SignedOut" } view Main }
       view Main() {
         query Drafts = Drafts with { }
         action Add() { create Draft { Body: "Local" } }
@@ -24,13 +24,14 @@ Describe('compiler: app-scoped auth and account data', () => {
     Expect(code).toContain('TR.Data.Query( TR.Auth.Store(_TaoAuthScope, _Scope._TaoLocalDataCatalog)')
     Expect(code).toContain('TR.Data.Create( TR.Auth.Store(_TaoAuthScope, _Scope._TaoLocalDataCatalog)')
     Expect(code).not.toContain('TR.Data.UseConfigured(')
-    Expect(code).not.toContain('datasources: () =>')
+    Expect(code).toContain('datasources: () => []')
+    Expect(code).not.toContain('datasources: _TaoBoundApp_Notes.datasources')
   })
 
   Test('binds independent auth configuration and mounts the scoped host', async () => {
     const result = await Compiler.compileCode(`
       use TestAuth from @tao/auth/testing
-      app Notes { Name "Notes" Auth TestAuth { State "SignedOut" } view Main }
+      app Notes { id "com.tao.test.notes" version "1.0.0"  name "Notes" Auth TestAuth { State "SignedOut" } view Main }
       view Main() { render Label("Welcome") }
       view Label(Value text) { render inject Value \`\`\`ts return null \`\`\` }
     `)
@@ -49,7 +50,7 @@ Describe('compiler: app-scoped auth and account data', () => {
       let Me = Account
       action Leave() { do SignOut() }
       action Enter() { when do SignIn() { completed -> { } cancelled -> { } rejected -> Message { } error -> Message { } } }
-      app NotesApp { Auth TestAuth { } view Main }
+      app NotesApp { id "com.tao.test.notesapp" version "1.0.0" name "NotesApp"  Auth TestAuth { } view Main }
       view Main() {
         query Mine = Me.Notes
         render Label("Welcome")
@@ -70,7 +71,7 @@ Describe('compiler: app-scoped auth and account data', () => {
       use SignOut from @tao/auth
       use TestAuth from @tao/auth/testing
       use FormButton from @tao/ui
-      app Notes {
+      app Notes { id "com.tao.test.notes" version "1.0.0" name "Notes"
         Auth TestAuth { }
         action Leave() { do SignOut() }
         view Main(Leave: Leave)
@@ -91,10 +92,10 @@ Describe('compiler: app-scoped auth and account data', () => {
     const result = await Compiler.compileCode(`
       use Session, SignInFlow, SignInView from @tao/auth
       use TestAuth from @tao/auth/testing
-      app Notes { Auth TestAuth { } view Main }
+      app Notes { id "com.tao.test.notes" version "1.0.0" name "Notes"  Auth TestAuth { } view Main }
       view Main() { state Flow = SignInFlow() render SignInView(Flow) }
     `)
-    const contract = BridgeMetadata.collect(result.validation.files).find(file =>
+    const contract = BridgeMetadata.collect(result.validation.files, '/').find(file =>
       file.path.endsWith('/@tao/auth/Auth.tao.ts')
     )
     Expect(contract).toBeDefined()
@@ -112,8 +113,8 @@ Describe('compiler: app-scoped auth and account data', () => {
     const result = await Compiler.compileCode(
       `
       use TestAuth from @tao/auth/testing
-      app Notes { Auth TestAuth { State "SignedOut" } view Main }
-      app Preview = Notes with { Auth with { State "Restoring" } }
+      app Notes { id "com.tao.test.notes" version "1.0.0" name "Notes"  Auth TestAuth { State "SignedOut" } view Main }
+      app Preview = Notes with { id "com.tao.test.preview"  Auth with { State "Restoring" } }
       view Main() { render Label("Welcome") }
       view Label(Value text) { render inject Value \`\`\`ts return null \`\`\` }
     `,
@@ -130,11 +131,12 @@ Describe('compiler: app-scoped auth and account data', () => {
       use Firebase from @tao/data/providers/firebase
       data Notes / Note { Title text }
       app Local {
+        id "com.tao.test.local" version "1.0.0" name "Local"
         Auth FirebaseAuth { ApiKey "local-key" ProjectId "local-project" }
         Datasource Firebase { ApiKey "local-key" ProjectId "local-project" }
         view Main
       }
-      app Hosted = Local with { }
+      app Hosted = Local with { id "com.tao.test.hosted" name "Hosted" }
       view Main() { render Label("Ready") }
       view Label(Value text) { render inject Value \`\`\`ts return null \`\`\` }
     `,
@@ -144,13 +146,13 @@ Describe('compiler: app-scoped auth and account data', () => {
         appFirebaseConfiguration: { ApiKey: 'hosted-key', ProjectId: 'hosted-project', AppId: 'hosted-app' },
       },
     )
-    const local = result.code.slice(result.code.indexOf('const _TaoAppDefinition_Local ='))
-    const hosted = local.slice(local.indexOf('const _TaoAppDefinition_Hosted ='))
-    const base = local.slice(0, local.indexOf('const _TaoAppDefinition_Hosted ='))
+    const local = result.code.slice(result.code.indexOf('function _TaoBindApp_Local('))
+    const hosted = local.slice(local.indexOf('function _TaoBindApp_Hosted('))
+    const base = local.slice(0, local.indexOf('function _TaoBindApp_Hosted('))
     Expect(base).toContain('"ApiKey": TR.Value("local-key")')
     Expect(base).not.toContain('hosted-key')
     Expect(hosted).toContain('TR.Auth.Patch(')
-    Expect(hosted).toContain('TR.Data.Patch(')
+    Expect(hosted).toContain('TR.Data.PatchBindings(')
     Expect(hosted.match(/"ApiKey": TR.Value\("hosted-key"\)/gu)).toHaveLength(2)
     Expect(hosted.match(/"AppId": TR.Value\("hosted-app"\)/gu)).toHaveLength(2)
   })
@@ -162,6 +164,7 @@ Describe('compiler: app-scoped auth and account data', () => {
       use InstantDB from @tao/data/providers/instantdb
       data Notes / Note { Title text }
       app NotesApp {
+        id "com.tao.test.notesapp" version "1.0.0" name "NotesApp"
         Auth InstantAuth { AppId "auth-local" }
         Datasource InstantDB { AppId "data-local" }
         view Main
@@ -186,6 +189,7 @@ Describe('compiler: app-scoped auth and account data', () => {
       'Base.tao': `
         use FirebaseAuth from @tao/auth/firebase
         public app Base {
+          id "com.tao.test.base" version "1.0.0" name "Base"
           Auth FirebaseAuth { ApiKey "source-key" ProjectId "source-project" }
           view Main
         }
@@ -194,14 +198,17 @@ Describe('compiler: app-scoped auth and account data', () => {
       `,
       'Main.tao': `
         use Base from ./Base
-        app Hosted = Base with { Auth with { AuthDomain "source.firebaseapp.com" } }
+        app Hosted = Base with {
+          id "com.tao.test.hosted" name "Hosted"
+          Auth with { AuthDomain "source.firebaseapp.com" }
+        }
       `,
     }, async paths => {
       const result = await Workspace.compile(paths['Main.tao'], {
         appName: 'Hosted',
         appAuthConfiguration: { ApiKey: 'hosted-key', ProjectId: 'hosted-project' },
       })
-      const hosted = result.code.slice(result.code.indexOf('const _TaoAppDefinition_Hosted ='))
+      const hosted = result.code.slice(result.code.indexOf('function _TaoBindApp_Hosted('))
       Expect(hosted).toContain('"AuthDomain": TR.Value("source.firebaseapp.com")')
       Expect(hosted).toContain('"ApiKey": TR.Value("hosted-key")')
       Expect(hosted).toContain('"ProjectId": TR.Value("hosted-project")')
@@ -221,7 +228,7 @@ Describe('compiler: app-scoped auth and account data', () => {
       data Memberships / Membership { Person Account, Role, unique Person + Role }
       access Account { Account can read; Account can update DisplayName }
       access Note { Owner can read, create, delete; Owner can update Body }
-      app NotesApp {
+      app NotesApp { id "com.tao.test.notesapp" version "1.0.0" name "NotesApp"
         // Reference pairs with an Auth whose sign-in proof its server accepts.
         Auth LocalAuth { Endpoint "http://localhost:4738" Resource "test" }
         Datasource Reference { ServerURL "http://localhost:4738" Resource "test" Offline { Me, Me.Notes } }
@@ -253,7 +260,7 @@ Describe('compiler: app-scoped auth and account data', () => {
       use Col from @tao/ui
       data Accounts / Account { DisplayName text }
       let Me = Account
-      app NotesApp { Auth TestAuth { } view Main }
+      app NotesApp { id "com.tao.test.notesapp" version "1.0.0" name "NotesApp"  Auth TestAuth { } view Main }
       view Main() {
         render Col() { when Me | otherwise -> Label("Ready") }
       }

@@ -39,3 +39,7 @@ The earlier standalone hostile probe was inconclusive because the second Firebas
 not authenticate. It made no hostile requests. Server authorization still needs direct evidence
 against the deployed rules. Appwrite debugging is deferred; Jazz, Convex, and Pylon acceptance
 remain separate.
+
+This checkpoint uses repository development tooling and built-in stdlib provider resolution.
+Installed standalone CLI packaging and selective per-provider installation remain separate work;
+no standalone Firebase runtime acceptance is claimed.

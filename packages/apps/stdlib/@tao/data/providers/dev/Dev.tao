@@ -1,4 +1,4 @@
-// Dev is the development-only datasource. The Tao dev server — `tao dev` or Studio — stores each
+// Dev is the development-only datasource. The Tao dev server — `tao run` or Studio — stores each
 // app's snapshots on the development machine and syncs them live to every device, browser tab,
 // and simulator running that app's development build. Storage is scoped per app and survives a
 // dev server restart; a schema edit that leaves the stored data unreadable clears that app's data.

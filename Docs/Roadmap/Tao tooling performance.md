@@ -20,7 +20,7 @@ preview within 1-2s.
 2. **Three structural habits cost the next order of magnitude.** Scope resolution recomputes every
    import against every document for every reference; every entry file rebuilds the whole graph
    from disk, standard library included, so 13 entries means 13 builds; and every command is a fresh
-   process that throws its workspace away, including the recompile `tao dev` runs on each save.
+   process that throws its workspace away, including the recompile `tao run` runs on each save.
    Langium's own incremental update handles a one-file edit in the same workspace in **7-35ms**, and
    nothing in the CLI, the dev loop, or the test runner uses it.
 3. **The current stack meets the bar for check, fix, fmt, and compile.** Measured floor: 250k
@@ -236,7 +236,7 @@ file changes this by less than the noise, because Bun already caches transpiled 
 evaluating Langium and building the parser, not finding files. It is paid:
 
 - once per `tao check`, `fix`, `compile` — tolerable alone;
-- on **every save** under `tao dev` — which, this report wrongly said, spawned a `tao compile`
+- on **every save** under `tao run` — which, this report wrongly said, spawned a `tao compile`
   process per change. It does not: `Run.compileApp` calls `Runtime.generateApp` in-process
   (`packages/apps/expo-host/expo-host-src/dev-loop/Run.ts`), and only parser generation spawns.
   What a save still pays is a fresh workspace per compile — new Langium services and a new package
@@ -301,7 +301,7 @@ directory.
 | Cold single-file check         | —       | **about 0.35s**, the process floor. Lazy imports might reach 0.2s. Not reducible below about 0.15s on this stack.                                                                                                                                                                                                     |
 | Whole-app check, cold process  | <1s     | **about 0.5s** for WordFlower (0.35s process + one 0.1-0.2s build). About 1s at ten times the size; parse alone scales to 25k lines in 0.1s. Measured with the one build in place: 1.22s — the build is 0.17s as projected; per-entry validation (0.34s) and opening the workspace (0.15s) are what is left, see 5.3. |
 | Format                         | instant | 8ms per file warm; 0.35s cold, all of it the process.                                                                                                                                                                                                                                                                 |
-| Recompile on save in `tao dev` | 1-2s    | **about 0.2s** in-process (update + validate + about 0.1s codegen), then Metro Fast Refresh. Meets the bar with room.                                                                                                                                                                                                 |
+| Recompile on save in `tao run` | 1-2s    | **about 0.2s** in-process (update + validate + about 0.1s codegen), then Metro Fast Refresh. Meets the bar with room.                                                                                                                                                                                                 |
 | Re-run one behavior test       | <1s     | **Not on Jest** (2.8s best case). **0.22s** in a prototype headless Bun runner. See 6.1.                                                                                                                                                                                                                              |
 | Whole app's tests              | <10s    | 3.6s today when nothing changed, 14-26s after an edit; about 5s fixed and still on Jest; **1.2s** headless for WordFlower's 29 journeys.                                                                                                                                                                              |
 
@@ -472,7 +472,7 @@ test after an edit 26s → about 5s; `_tao-check`, `_fix-tao`, and the `tao-cli`
 
 Phase 1 — keep the workspace alive (weeks):
 
-6. `tao dev` compiles in-process on a live workspace through `DocumentBuilder.update` instead of
+6. `tao run` compiles in-process on a live workspace through `DocumentBuilder.update` instead of
    spawning `tao compile` per save.
 7. `tao check --watch` and `tao test --watch` on the same live workspace. `tao test --watch` exists
    as an outer loop (`packages/cli/tao-cli/cli-src/test-watch.ts`): debounced, serialized, and
@@ -496,7 +496,7 @@ core (7.2), each opened only by its named trigger.
    and the Jest run stays the gate in `verify` that proves a journey against real React Native
    JavaScript. Phase 2 opens after Phase 1's first slice.
 2. **May the CLI rely on a resident process?** Decided by the Developer on 2026-09-21: yes, it may. Also decided
-   the same day: Phase 1 starts with `tao dev` compiling in-process, before watch modes, because the
+   the same day: Phase 1 starts with `tao run` compiling in-process, before watch modes, because the
    1-2s edit-to-preview bar is the one people feel; a shared background service comes only if cold
    one-shot commands still feel slow after that, because daemons cost lifecycle bugs. That decision
    rested on 5.4's claim that a save spawned a process, which was stale (see 5.4); the in-process

@@ -5,11 +5,10 @@ import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import Validator from '@validator'
 import { Workspace } from '../../compiler-src/workspace/index'
 
-// `parseFiles` builds a workspace's entries once instead of once per entry. It is only allowed to be
-// faster: every entry keeps the graph it alone reaches, and no file comes to see a declaration it
-// would not see as an entry of its own.
+// `parseFiles` builds a workspace's entries once instead of once per entry. Every entry reads its
+// whole root project; shared imported documents are still parsed once in the batch.
 Describe('parsing a workspace batch with one build', () => {
-  Test('gives each entry its own graph while reading a shared file once', async () => {
+  Test('gives each entry its project graph while reading a shared file once', async () => {
     await withTaoFiles(
       'tao-workspace-batch-graphs-',
       {
@@ -22,7 +21,7 @@ Describe('parsing a workspace batch with one build', () => {
           let FromSecond = Shared
         `,
         'Alone.tao': 'let Unrelated = "alone"',
-        '@lib/Shared.tao': 'workspace let Shared = "shared"',
+        '@lib/Shared.tao': 'project let Shared = "shared"',
       },
       async (paths, rootDir) => {
         const workspace = await Workspace.open(rootDir)
@@ -34,8 +33,8 @@ Describe('parsing a workspace batch with one build', () => {
         const onePerEntry = await (await Workspace.open(rootDir)).parse(paths['First.tao']!)
 
         Expect(first!.files.map(file => file.path)).toEqual(onePerEntry.files.map(file => file.path))
-        Expect(alone!.files.map(file => file.path)).not.toContain(paths['@lib/Shared.tao'])
-        Expect(alone!.files.map(file => file.path)).not.toContain(paths['First.tao'])
+        Expect(alone!.files.map(file => file.path)).toContain(paths['@lib/Shared.tao'])
+        Expect(alone!.files.map(file => file.path)).toContain(paths['First.tao'])
 
         const sharedIn = (parsed: ParseResult) => parsed.files.find(file => file.path === paths['@lib/Shared.tao'])
         Expect(sharedIn(first!)?.document).toBeDefined()

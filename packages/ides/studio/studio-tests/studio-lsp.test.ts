@@ -8,7 +8,7 @@ Test('Studio LSP accepts binary and string frames for initialize and formatting'
     {
       'Garden.tao': `
         use Text from @tao/ui
-        app Garden { view MainView }
+        app Garden { id "garden" version "1.0.0" name "Garden" view MainView }
         view MainView() { render Text("Hello") }
       `,
     },
@@ -50,7 +50,7 @@ Test('Studio LSP accepts binary and string frames for initialize and formatting'
           params: {
             textDocument: {
               languageId: 'tao',
-              text: 'app Garden { view MainView }\nview MainView() { }\n',
+              text: 'app Garden { id "garden" version "1.0.0" name "Garden" view MainView }\nview MainView() { }\n',
               uri,
               version: 0,
             },

@@ -10,7 +10,7 @@ Installable agent skills that let an agent create, edit, run, test, and ship a T
    - `.agents/skills/<name>/` (canonical copy, not symlink).
    - `AGENTS.md` (the `tao-project` skill body, with a skills index) and `CLAUDE.md` containing `@AGENTS.md`.
    - `.claude/skills/<name>` → copy of the same folders. Cursor and Codex read `.agents/skills` directly.
-   - `.tao-project/skills.version` stamped with the skill package version.
+   - `.tao/skills.version` stamped with the skill package version.
 4. Proof: `packages/ai/tao-skills/skills-tests/skills-snippets.test.ts` extracts every ` ```tao ` fence from every skill, drops each into a scratch copy of the `Pantry` starter (or a fenced file path if the fence names one), and runs `tao check`. A snippet that does not check fails the build. The byte-for-byte starter comparison in `test-starter-lowering.ts` gains the installed skill files.
 
 ## Skills
@@ -19,7 +19,7 @@ Each entry: purpose, then what the body must contain. Derive content from `Docs/
 
 1. `tao-project` (always loaded; doubles as the generated `AGENTS.md`)
    - What Tao is (UI-app language → TSX for Expo/React Native), canonical file layout (`App.tao`, `Data.tao`, `Chrome.tao`, `Design.tao`, `Scenarios.tao`, `<App>.test.tao`, one folder per feature, `@/` generated package, `tsconfig.json`).
-   - The edit loop: edit → `tao fix` → `tao check` → `tao test` → `tao dev`. Never edit `@/`. Read diagnostics from `tao check` and how to act on the common ones.
+   - The edit loop: edit → `tao fix` → `tao check` → `tao test` → `tao run`. Never edit `@/`. Read diagnostics from `tao check` and how to act on the common ones.
    - Index of the other skills with one-line triggers.
 2. `tao-create`
    - Running `tao create "<description>"`, what the two starter shapes look like (one entity + StackNav; multi-entity + SelectionNav), and how to add a feature folder by hand: list scene, row view, detail scene, wiring into `Chrome.tao`, fixtures and scenarios, a test.
@@ -38,7 +38,7 @@ Each entry: purpose, then what the body must contain. Derive content from `Docs/
 9. `tao-testing`
    - `.test.tao` behavior tests, scenarios and fixtures, tab labels and accessible names as targets, `tao test <paths>`, `tao review` for visual review, and how to read a failing test.
 10. `tao-run-and-ship`
-    - `tao dev` (Metro port discovery, Expo Go for the iOS Simulator and Android, a development build for a physical iPhone), Studio in one paragraph as a user, `tao project` metadata (`id`, `version`), `tao ship` through TestFlight and App Store Connect, and publishing a project for other projects to use.
+    - `tao run` (Metro port discovery, Expo Go for the iOS Simulator and Android, a development build for a physical iPhone), Studio in one paragraph as a user, `tao project` metadata (`id`, `version`), `tao ship` through TestFlight and App Store Connect, and publishing a project for other projects to use.
 
 ## Context the implementer cannot derive from the repository alone
 

@@ -2,7 +2,9 @@ use StackNav from @tao/nav
 use Button, Col, Text from @tao/ui
 
 app Phrases {
-   Name "Phrases"
+   id "phrases"
+   version "0.1.0"
+   name "Phrases"
    Navigator StackNav {
       Initial PhrasesView
 }  }

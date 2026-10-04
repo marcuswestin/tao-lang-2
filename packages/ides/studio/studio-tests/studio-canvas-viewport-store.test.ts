@@ -19,7 +19,7 @@ Test('Studio server teardown drains accepted viewport writes', async () => {
   })
   await withTaoFiles(
     'studio-viewport-teardown-project-',
-    { 'Garden.tao': 'app Garden { Text("Hello") }\n' },
+    { 'Garden.tao': 'app Garden { id "garden" version "1.0.0" name "Garden" Text("Hello") }\n' },
     async (_paths, root) => {
       const session = await StudioProjectSession.open({ compile: async () => {}, projectRoot: root })
       const manager = new StudioSessionManager({ createSessionId: () => 'teardown_session' })
@@ -164,7 +164,7 @@ Test(
     const state = await mkTestDir('studio-viewport-session-state-')
     await withTaoFiles(
       'studio-viewport-session-',
-      { 'Garden.tao': 'app Garden { Text("Hello") }\n' },
+      { 'Garden.tao': 'app Garden { id "garden" version "1.0.0" name "Garden" Text("Hello") }\n' },
       async (_paths, root) => {
         let compiles = 0
         const open = () =>

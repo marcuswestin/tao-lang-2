@@ -175,7 +175,7 @@ function requireEntityImport(
     Packages.isVisible(Packages.visibilityOf(entity), resolution),
     `Feed cannot use ${entity.singularName} from ${FS.basename(path)}: its ${
       entity.visibility ?? 'file'
-    } visibility does not allow imports from @/studio. Move the entity to a shared model package with workspace or public visibility.`,
+    } visibility does not allow imports from @/studio. Move the entity to a shared model package with project or public visibility.`,
   )
   return source
 }

@@ -52,7 +52,9 @@ Describe('release capability catalog', () => {
     ) {
       Expect(ReleaseCapabilities.allows(capability, phase5)).toBe(false)
     }
-    Expect(ReleaseCapabilities.optionCapability('dev', '--device')).toBe('companion')
+    Expect(ReleaseCapabilities.commandCapability('run')).toBe('core')
+    Expect(ReleaseCapabilities.commandCapability('dev')).toBe('unclassified')
+    Expect(ReleaseCapabilities.optionCapability('run', '--device')).toBe('companion')
     Expect(ReleaseCapabilities.optionCapability('_preview qa', '--device')).toBe('studio')
   })
 })

@@ -5,14 +5,18 @@ use FirebaseNotesNavigator from ./Chrome
 use FirebaseNotesDesign from ./Design
 
 app FirebaseNotesTest {
-   Name "Firebase Notes"
+   id "hosted-firebase-notes-memory-test"
+   version "0.1.0"
+   name "Firebase Notes Memory Test"
    Datasource Memory { }
    Navigator FirebaseNotesNavigator
    Design FirebaseNotesDesign
 }
 
 app FirebaseNotesSignInTest {
-   Name "Firebase Notes"
+   id "hosted-firebase-notes-sign-in-test"
+   version "0.1.0"
+   name "Firebase Notes Sign In Test"
    Auth TestAuth { }
    Datasource Memory { }
    Navigator FirebaseNotesAuthNavigator
@@ -20,7 +24,9 @@ app FirebaseNotesSignInTest {
 }
 
 app FirebaseNotesSignOutTest {
-   Name "Firebase Notes"
+   id "hosted-firebase-notes-sign-out-test"
+   version "0.1.0"
+   name "Firebase Notes Sign Out Test"
    Auth TestAuth {
       State "SignedIn"
    }

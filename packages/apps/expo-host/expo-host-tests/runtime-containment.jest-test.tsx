@@ -230,8 +230,8 @@ describe('runtime failure containment and Studio capture', () => {
       `
         use StackNav from @tao/nav
 
-        app WithinLimit { Name "Within" Navigator StackNav { Initial WithinRoot } }
-        app BeyondLimit { Name "Beyond" Navigator StackNav { Initial BeyondRoot } }
+        app WithinLimit { id "withinlimit" version "1.0.0" name "Within" Navigator StackNav { Initial WithinRoot } }
+        app BeyondLimit { id "beyondlimit" version "1.0.0" name "Beyond" Navigator StackNav { Initial BeyondRoot } }
 
         scene WithinRoot() { Title "Within" render Recursive(253) }
         scene BeyondRoot() { Title "Beyond" render Recursive(254) }

@@ -68,7 +68,8 @@ Describe('Studio Feed loop proposals', () => {
     const packageView = files['@/studio/View1.tao'].replace('from ../../Data', 'from @model')
       .replace('scenarios View1 "sketch" { scenario "draft" { render () } }', '').trim()
     await withTaoFiles('tao-feed-loop-package-', {
-      'Main.tao': 'app Feed { view Main } view Main() { render inject ```ts return null ``` }',
+      'Main.tao':
+        'app Feed { id "feed" version "1.0.0" name "Feed" view Main } view Main() { render inject ```ts return null ``` }',
       '@model/Data.tao': files['Data.tao'],
       '@cards/Rows.tao': files['Rows.tao'].replace('from ./Data', 'from @model'),
       '@/studio/View1.tao': packageView,

@@ -340,7 +340,7 @@ After reviewing and deploying the combined rules locally:
 
 ```sh
 cd /Users/ro/.codex/worktrees/hosted-acceptance-evidence/tao-lang-2
-./tao dev 'Apps/Hosted Firebase' --app FirebaseNotes --ios
+./tao run 'Apps/Hosted Firebase' --app FirebaseNotes --ios
 ```
 
 In that dev loop, press `p` to choose a connected physical device. Sign in locally on iPhone and
@@ -354,3 +354,29 @@ for the new `users/{uid}/stores/{store}/{entity}/{id}` layout remains open and n
 requests against deployed rules; do not substitute UI filtering or local rule assertions. Appwrite
 realtime device debugging remains deferred. Jazz/Convex/Pylon gates remain separate. Sharing the
 compact run screen with the regular dev loop and landing remain pending Developer decisions.
+
+Main's project/module migration is integrated: the generated app uses literal identity and
+`.tao/project.json`, and the regular launch command is now `tao run`. Firebase stays a built-in
+`@tao` provider backed by its private workspace package, following the existing provider seam.
+This preserves the approved repository SDK installation policy; it does not add authored npm
+requirements or selective provider installation. Installed standalone CLI packaging is a separate
+unproved boundary. The regenerated app's five local journeys pass after that integration.
+The merged app also generated backend files and an iOS Metro bundle without launching a device.
+Package-discovery fixtures required explicit project markers after the migration; their 19
+focused tests pass with all assertions preserved. Two sidecar host fixtures also now live outside
+the repository; their seven tests pass. The resolved finding is archived in the ledger.
+
+The integration also gives the Convex/Pylon review variants distinct app identities. An external
+sidecar build snapshot inherited the worktree project boundary; those snapshots now use temporary
+host storage with finally cleanup, while ordinary builds keep worktree scratch. The publication
+and build regression suites pass with their original assertions. These repairs establish no new
+hosted-provider acceptance.
+
+Post-merge verification exposed more fixtures that assumed no containing project. Their isolated checks pass after explicit project markers or host temporary
+roots. A reproduction refreshed the untracked worktree root and wrote synthetic connection state
+there before the fixtures were corrected. That root `.tao/` state caused Studio external sidecar imports to cross a project boundary. Its original ownership is unconfirmed. The Developer approved preserving
+that directory, generated root `tsconfig.json`, and task-created root `tao.connections.json` under
+ignored `.artifacts/hosted-provider/root-state-backup/`; the move is complete with contents intact.
+No secrets were read. Keep the production ownership rule. The repaired tree passes changed verification, including Studio and the Tao app suites. Full
+verification, the integration commit, and finalize record repository readiness separately from
+hosted device or server acceptance; landing still requires explicit authorization.

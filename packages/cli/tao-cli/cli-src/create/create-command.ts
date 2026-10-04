@@ -1,5 +1,5 @@
-import Workspace from '@compiler/workspace'
-import { Errors, FS, HCI, ReleaseCapabilities } from '@shared'
+import { ProjectTooling } from '@project-tooling'
+import { Errors, FS, HCI, ProjectIdentity, ReleaseCapabilities } from '@shared'
 import type { Readable, Writable } from 'node:stream'
 import { installTaoSkills } from 'tao-skills'
 import { TaoAppModules } from '../app-modules'
@@ -137,6 +137,7 @@ export async function runCreate(description: string, options: CreateCommandOptio
     validationTools: options.validationTools,
   })
   await writeCreationFiles(directory, files)
+  await ProjectIdentity.ensure(directory)
   const installedSkills = await installTaoSkills(directory)
   await TaoAppModules.ensureProject(directory)
   // A release pins the project to itself, so it keeps running under the Tao that made it until
@@ -159,7 +160,7 @@ export async function runCreate(description: string, options: CreateCommandOptio
   }
   say('')
   say(`Wrote ${FS.displayPath(directory)}:`)
-  for (const path of [...Object.keys(files), ...installedSkills.paths].sort()) {
+  for (const path of [...Object.keys(files), '.tao/project.json', ...installedSkills.paths].sort()) {
     say(`  ${path}`)
   }
 
@@ -179,7 +180,7 @@ export async function runCreate(description: string, options: CreateCommandOptio
   say('')
   HCI.writeSuccess(`Created ${FS.displayPath(directory)}\n`, streams)
   say('Next:')
-  say(`  tao dev ${quoteForCommand(FS.relativePath(cwd, directory))}`)
+  say(`  tao run ${quoteForCommand(FS.relativePath(cwd, directory))}`)
   say(`  tao test ${quoteForCommand(FS.relativePath(cwd, directory))}`)
   return { created: true, directory, plan }
 }
@@ -321,30 +322,13 @@ function proposalSummary(plan: CreationPlan, shapedBy: string | undefined): stri
   return lines.join('\n')
 }
 
-/**
- * validateProject validates from the two entry files a project has — the app file and its test file —
- * which is how `tao dev` and `tao test` see it; every other file is reached from those. Validating a
- * feature file as its own entry would misreport the app as declared outside the entry.
- */
+/** Validate the complete saved project through the same refresh used by check and run. */
 async function validateProject(directory: string): Promise<string[]> {
-  const workspace = await Workspace.open(directory)
-  const problems = new Set<string>()
-  const entries: string[] = [FS.resolvePath('App.tao', directory)]
-  for await (const path of FS.walk(directory, { extensions: ['.tao'] })) {
-    if (path.endsWith('.test.tao')) {
-      entries.push(path)
-    }
-  }
-  for (const entry of entries) {
-    const result = await workspace.validate(entry)
-    for (const diagnostic of result.diagnostics) {
-      if (diagnostic.severity === 'error') {
-        const file = diagnostic.filePath === undefined ? entry : FS.resolvePath(diagnostic.filePath, directory)
-        problems.add(`${FS.relativePath(directory, file)}: ${diagnostic.message}`)
-      }
-    }
-  }
-  return [...problems]
+  const result = await ProjectTooling.refresh(directory, { runtimeRoot: TaoAppModules.runtimeRoot() })
+  return result.diagnostics.filter(diagnostic => diagnostic.severity === 'error').map(diagnostic => {
+    const file = diagnostic.filePath === undefined ? directory : diagnostic.filePath
+    return `${FS.relativePath(directory, file)}: ${diagnostic.message}`
+  })
 }
 
 async function runProjectTests(directory: string): Promise<void> {

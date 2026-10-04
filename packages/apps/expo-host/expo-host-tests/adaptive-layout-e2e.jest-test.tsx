@@ -51,7 +51,7 @@ Describe('Expo runtime adaptive layout', () => {
       `
         use Col, Panes, ScrollView, Text from @tao/ui
 
-        app AdaptiveLayoutApp { view MainView }
+        app AdaptiveLayoutApp { id "adaptivelayoutapp" version "1.0.0" name "AdaptiveLayoutApp" view MainView }
         view MainView() {
           render Panes() [gap 16] {
             #primaryPane

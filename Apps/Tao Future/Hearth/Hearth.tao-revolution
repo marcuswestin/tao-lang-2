@@ -1,18 +1,12 @@
 // Hearth — a calm, private place for the people who share a home to remember what matters: chores,
 // shopping, small plans, errands, and who is taking care of what.
 //
-// This file holds the project, the capabilities, the navigation, and the app. Everything else in the
+// This file holds the package, the capabilities, the navigation, and the app. Everything else in the
 // folder is visible here without imports.
 
-project {
-   id "hearth"
-   name "Hearth"
-   version "1.0.0"
-   DefaultApp Hearth
+package {
+   version 1.0.0
    license MIT
-
-   targets phone, tablet, laptop
-   languages "en-US", "es"
 }
 
 // -- Capabilities ---------------------------------------------------------------------------------------
@@ -68,7 +62,11 @@ nav HomeNavigator = SelectionNav {
 // -- App ------------------------------------------------------------------------------------------------
 
 app Hearth {
-   Name "Hearth"
+   id "hearth"
+   version "1.0.0"
+   name "Hearth"
+   targets phone, tablet, laptop
+   languages "en-US", "es"
    Design HearthDesign
    Datasource HomeCloud
    Files HomePhotos
@@ -120,14 +118,16 @@ app Hearth {
 }
 
 app HearthOnDevice = Hearth with {
-   Name "Hearth (on device)"
+   id "hearth-on-device"
+   name "Hearth (on device)"
    Datasource OnDevice
    Notifications simulated
    Places simulated
 }
 
 app HearthPreview = Hearth with {
-   Name "Hearth Preview"
+   id "hearth-preview"
+   name "Hearth Preview"
    Datasource Memory
    Seed PineStreet
    Accounts simulated (signed in as "Mira")

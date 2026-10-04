@@ -73,7 +73,7 @@ Describe('Studio shared fixture source', () => {
       }
       const result = await StudioSharedFixtureSource.promote(request)
       await withTaoFiles('tao-studio-shared-fixture-import-', {
-        'Data.tao': 'workspace data Notes / Note { Title text }',
+        'Data.tao': 'project data Notes / Note { Title text }',
         'Sketches.tao': result.source,
       }, async paths => {
         const validated = await Workspace.validate(paths['Sketches.tao'])

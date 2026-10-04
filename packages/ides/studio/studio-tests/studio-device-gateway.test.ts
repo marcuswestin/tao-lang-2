@@ -917,7 +917,7 @@ type Env = {
  * refuse. Slice 2's acceptance calls this "select both ways".
  */
 Describe('Studio device gateway canvas', () => {
-  const twoRenders = `app Garden { view Main }
+  const twoRenders = `app Garden { id "tao-studio-device-garden" version "1.0.0" name "Garden" view Main }
 view Main() {
   render Stack() {
     Text("First")
@@ -1178,13 +1178,11 @@ async function openProject(
   session: StudioProjectSession
 }> {
   const root = await mkTestDir(prefix, { location: 'host' })
-  await FS.writeText(
-    FS.resolvePath('Project.tao', root),
-    `project { id "tao-studio-device-${appName.toLowerCase()}" name "${appName}" }`,
-  )
+  await FS.mkdir(FS.resolvePath('.tao', root))
   await FS.writeText(
     FS.resolvePath(`${appName}.tao`, root),
-    source ?? `app ${appName} { view Main }\nview Main() { render Text("${appName}") }\n`,
+    source
+      ?? `app ${appName} { id "tao-studio-device-${appName.toLowerCase()}" version "1.0.0" name "${appName}" view Main }\nview Main() { render Text("${appName}") }\n`,
   )
   const cells = ['cell:phone', 'cell:tablet']
   // A failing compile still advances the coordinator's compileRevision but never publishes a

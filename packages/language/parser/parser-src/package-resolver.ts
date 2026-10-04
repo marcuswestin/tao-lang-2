@@ -5,6 +5,67 @@ type PackageDeclarationResolveRequest = {
   workspaceFiles: readonly AST.TaoFile[]
 }
 
+/** A published module keeps its source and publication identity through any local alias. */
+export type ModuleOrigin = {
+  projectRoot: string
+  packageName?: string
+  packageVersion?: string
+  modulePath: string
+}
+
+/** One project-local name bound to a module from a selected publication. */
+export type ProjectModuleBinding = {
+  localName: string
+  origin: ModuleOrigin
+  sourceRoot: string
+  requirement: AST.PackageRequires
+}
+
+/** A publication exposes public declarations only from explicitly included modules. */
+export type ProjectPublication = {
+  declaration: AST.PackageDeclaration
+  name?: string
+  version?: string
+  includedModuleRoots: readonly string[]
+  publicDeclarations: readonly AST.Declaration[]
+  /** Requirements written in this publication, resolved independently of overlapping module roots. */
+  requirements: readonly ProjectRequirement[]
+  /** Public declarations and the private declarations they reach within this project. */
+  sourceDeclarations: readonly AST.Declaration[]
+  /** Unique files containing sourceDeclarations; consumers must select declarations within them. */
+  sourceFiles: readonly AST.TaoFile[]
+}
+
+/** A requirement records its own origin and the publication selected by name and version. */
+export type ProjectRequirement = {
+  declaration: AST.PackageRequires
+  sourceRoot: string
+  targetProjectRoot?: string
+  requestedName?: string
+  versionRange: string
+  selectedPublication?: ProjectPublication
+  bindings: readonly ProjectModuleBinding[]
+}
+
+/** An app's effective requirements include those inherited through with. */
+export type ProjectAppRequirements = {
+  app: AST.AppValueDeclaration
+  requirements: readonly ProjectRequirement[]
+  /** The app and own-project declarations reached through its linked Tao references. */
+  sourceDeclarations: readonly AST.Declaration[]
+  /** Unique files containing sourceDeclarations; scan declarations, not whole files, for sidecars. */
+  sourceFiles: readonly AST.TaoFile[]
+}
+
+/** Shared project graph for validation, compiler selection, and language tooling. */
+export type ProjectGraph = {
+  projectRoot: string
+  projectFiles: readonly AST.TaoFile[]
+  publications: readonly ProjectPublication[]
+  requirements: readonly ProjectRequirement[]
+  appRequirements: readonly ProjectAppRequirements[]
+}
+
 /** PackageFileResolveRequest declares import lookup state for reachable files. */
 type PackageFileResolveRequest = {
   fromFilePath: string
@@ -16,6 +77,8 @@ type ImportingStatement = AST.UseStatement | AST.UsePackageStatement
 /** PackageResolver resolves declarations and files reachable through Tao use statements. */
 export type PackageResolver = {
   intrinsicFilePaths(): Promise<readonly string[]>
+  projectRootFilePaths(fromFilePath: string): Promise<readonly string[]>
+  requirementFilePaths(requirement: AST.PackageRequires, fromFilePath: string): Promise<readonly string[]>
   collectTargetDeclarations(
     useStatement: ImportingStatement,
     request: PackageDeclarationResolveRequest,
@@ -26,11 +89,12 @@ export type PackageResolver = {
   ): Promise<readonly string[]>
   /**
    * projectSourceFiles keeps the workspace files that belong to the project `fromFilePath` belongs
-   * to, test sidecars excluded. A project declaration names things by project membership rather than
+   * to, test sidecars excluded. Project visibility names things by project membership rather than
    * by import, and a test sidecar is loaded only when it is the file being checked, so counting one
    * would make the answer depend on which file a command was pointed at.
    */
   projectSourceFiles(request: PackageDeclarationResolveRequest): readonly AST.TaoFile[]
+  projectGraph(request: PackageDeclarationResolveRequest): ProjectGraph
 }
 
 /**
@@ -39,7 +103,16 @@ export type PackageResolver = {
  */
 export const emptyPackageResolver: PackageResolver = {
   intrinsicFilePaths: async () => [],
+  projectRootFilePaths: async () => [],
+  requirementFilePaths: async () => [],
   collectTargetDeclarations: () => [],
   candidateFilePaths: async () => [],
   projectSourceFiles: request => request.workspaceFiles,
+  projectGraph: request => ({
+    projectRoot: request.fromFilePath.slice(0, request.fromFilePath.lastIndexOf('/')),
+    projectFiles: request.workspaceFiles,
+    publications: [],
+    requirements: [],
+    appRequirements: [],
+  }),
 }

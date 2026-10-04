@@ -1,28 +1,34 @@
 import { Errors, Platform } from '@shared'
 
-/** ShipVersion is the numeric SemVer core Apple accepts as a marketing version. */
-export type ShipVersion = `${number}.${number}.${number}`
+/** Tao keeps the authored full SemVer; native packaging uses its numeric core. */
+export type ShipVersion = string
 
 export type ShipBump = 'major' | 'minor' | 'patch'
 
 export type ShipIdentityInput = {
-  appName: string
-  primaryAppName: string
-  projectId: string
+  appId: string
   namespace: string
 }
 
-/** parseShipVersion accepts SemVer's three numeric core components and nothing Apple cannot consume. */
+/** Parse a full Tao SemVer, including prerelease and build metadata. */
 export function parseShipVersion(value: string): ShipVersion | undefined {
-  if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u.test(value)) {
+  if (
+    !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u
+      .test(value)
+  ) {
     return undefined
   }
-  return value as ShipVersion
+  return value
+}
+
+/** Apple accepts the numeric core as its marketing version. */
+export function nativeMarketingVersion(version: ShipVersion): string {
+  return version.split(/[+-]/u, 1)[0]!
 }
 
 /** bumpShipVersion applies the selected SemVer core bump. */
 export function bumpShipVersion(version: ShipVersion, bump: ShipBump): ShipVersion {
-  const [major, minor, patch] = version.split('.').map(Number) as [number, number, number]
+  const [major, minor, patch] = nativeMarketingVersion(version).split('.').map(Number) as [number, number, number]
   if (bump === 'major') {
     return `${major + 1}.0.0`
   }
@@ -68,20 +74,17 @@ export function nextBuildNumber(minimum: string, usedNumbers: readonly string[])
   return (maximumUsed !== undefined && maximumUsed >= minimumValue ? maximumUsed + 1n : minimumValue).toString()
 }
 
-/** deriveShipIdentity deterministically separates every non-primary app variant. */
+/** Derive a native identifier and update channel from the selected effective app id. */
 export function deriveShipIdentity(input: ShipIdentityInput): {
   bundleIdentifier: string
   channel: string
-  variant?: string
 } {
-  const project = bundleSegment(input.projectId)
-  const variant = input.appName === input.primaryAppName ? undefined : bundleSegment(input.appName)
+  const app = bundleSegment(input.appId)
   const namespace = input.namespace.split('.').map(bundleSegment).filter(Boolean).join('.')
-  const bundleIdentifier = [namespace, project, variant].filter(Boolean).join('.')
+  const bundleIdentifier = [namespace, app].filter(Boolean).join('.')
   return {
     bundleIdentifier,
-    channel: variant === undefined ? project : `${project}-${variant}`,
-    ...(variant === undefined ? {} : { variant }),
+    channel: app,
   }
 }
 

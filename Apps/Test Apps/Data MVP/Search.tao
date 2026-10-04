@@ -3,7 +3,9 @@ use StackNav from @tao/nav
 use Col, FormButton, Text, TextInput from @tao/ui
 
 app SearchApp {
-   Name "Search"
+   id "search"
+   version "0.1.0"
+   name "Search"
    Navigator StackNav {
       Initial SearchView
    }
