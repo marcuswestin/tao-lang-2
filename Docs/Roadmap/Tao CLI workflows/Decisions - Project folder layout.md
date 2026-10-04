@@ -221,8 +221,9 @@ modes. `test-host agents --demo` builds the packaged desktop app with the `agent
 executes its command successfully. Final review fixes preserve linked-parent targets, retain unknown
 legacy private ignore coverage, merge concurrent home recents, and reproduce committed starter store
 files. Studio compile-error recovery, ordered focus/tab saves, manifest pruning, and exact browser
-registration release have source regressions; the full Studio directory passes. Committed gates and
-the whole-project final verification remain pending. The four
+registration release have source regressions; the full Studio directory passes. The decided
+first-pair implementation passed `verify-changed` at `e91c60008`; whole-project final verification
+remains pending. The four
 [open decisions](#open) remain with the Developer; their undecided behavior is retained pending an answer.
 
 Historical starting point:

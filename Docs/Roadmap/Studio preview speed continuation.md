@@ -31,6 +31,18 @@ speed claim. The activation gate/watchdog, sequential experiment,
 and steps 6–8 are not yet done.
 The four Developer-owned layout questions remain pending before the first pair can be called complete.
 
+Follow-up on 2026-10-04: one preview press now retains the source selection and scroll when
+language-server readiness replaces the visible editor. The editor tracks which view consumed the
+reveal and does not echo host-driven selection updates back during tab teardown. A focused browser
+regression closes the source tab, presses once, releases a delayed language connection, and checks
+the selected line and exact selected text after the editor DOM is replaced. Disabling view-aware
+replay makes the regression fail; restoring it passes. Focused editor/navigation tests and read-only
+source/type checks pass. The regression is an explicit headless lane:
+
+```sh
+./agent unsandboxed studio-smoke packages/ides/studio-tooling/studio-smoke/studio-preview-source-navigation.test.ts source-navigation
+```
+
 ### Activation baseline, 2026-10-03
 
 Run `activation-baseline-final-20261003`, alone with no other tests or agents from this task.
@@ -52,6 +64,27 @@ the paint wait after successfully applying the DOM edit, and is excluded. These 
 a new baseline; differences from the historical loaded-machine runs below are not attributable gains.
 The prior corrected repeat (`activation-baseline-visible-20261003`, load 3.78–4.92) measured
 183/184ms one-file medians and 306/321ms HNReader medians, illustrating run-to-run spread.
+
+### Refresh indicator diagnostic, 2026-10-04
+
+The installed Expo web indicator shows on HMR `update-start`, requests hiding on `update-done`,
+and deliberately pads its presentation with a 400ms minimum and a 150ms fade. Its DOM remains
+another 250ms after its shown class is removed; DOM presence is not visible refresh work.
+The indicator does not own the next-save gate. Tao draft writes and compilation are serialized,
+and a connected phone can separately delay an editor save while it applies the preceding revision.
+
+A temporary isolated one-file editor diagnostic (`refresh-indicator-paired-20261004`) recorded
+HMR, badge class/transition, draft request/response, DOM and two-frame paint events in both publication
+modes, with eight edits per mode and no 500ms pause before the following edit. No other checks or
+task agents ran during measurement; observed one-minute load was 5.37–5.66 on 18 CPUs.
+All 16 edits painted with the badge's shown class present, and all 14 following edits began while
+the badge was shown. Draft HTTP responses took 31–53ms; warm save-to-paint was 163–206ms.
+After the last paint, opacity finished fading 265ms later with publication on and 258ms later off;
+DOM removal followed at 341ms/336ms. Neither mode reloaded an iframe or recorded
+`RevisionNotFoundError`. This disproves an indicator-based save gate in this fixture, but does not
+reproduce or explain the reported roughly two-second HNReader delay. That requires an HNReader
+save/compile/HMR trace, distinguishing visual padding from the actual queued work.
+Raw timelines are retained under `.artifacts/tests/studio-smoke/preview-latency/refresh-indicator-*.json`.
 
 Historical handoff state:
 
