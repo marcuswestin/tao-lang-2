@@ -30,7 +30,7 @@ Describe('validator: declaration contracts', () => {
       `
         let NotNavigation = "not navigation"
         project let BadApp = app {
-          Name "Bad"
+          Name "Bad",
           Navigator NotNavigation
         }
       `,
@@ -446,16 +446,16 @@ Describe('validator: declaration contracts', () => {
     accepts(selectionVariantApp(
       `
       let SelectionDrawer = SelectionApp with {
-        id "selectiondrawer"
+        id "selectiondrawer",
         Navigator with { Display "drawer" }
       }
       let SelectionAlternate = SelectionApp with {
-        id "selectionalternate"
+        id "selectionalternate",
         Navigator SelectionNav {
-          Initial @workspace
-          Display "tabs"
-          @workspace { Label "Workspace" Content Home }
-          @other { Label "Other" Content Other }
+          Initial @workspace,
+          Display "tabs",
+          @workspace { Label "Workspace", Content Home },
+          @other { Label "Other", Content Other }
         }
       }
     `,
@@ -470,11 +470,11 @@ Describe('validator: declaration contracts', () => {
       'keys missing from a keyed app variant',
       `
         let SelectionLimited = SelectionApp with {
-          id "selectionlimited"
+          id "selectionlimited",
           Navigator SelectionNav {
-            Initial @workspace
-            Display "tabs"
-            @workspace { Label "Workspace" Content Home }
+            Initial @workspace,
+            Display "tabs",
+            @workspace { Label "Workspace", Content Home }
           }
         }
       `,
@@ -483,7 +483,7 @@ Describe('validator: declaration contracts', () => {
     ],
     [
       'keys on app variants with non-keyed navigation',
-      'let SelectionStack = SelectionApp with { id "selectionstack" Navigator StackNav { Initial Home } }',
+      'let SelectionStack = SelectionApp with { id "selectionstack", Navigator StackNav { Initial Home } }',
       'workspace',
       'SelectionStack',
     ],

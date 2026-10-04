@@ -322,7 +322,7 @@ Describe('compiler: minimal design', () => {
       scene Main() { Title "Main" render Surface() [screen] }
       view Surface() { render inject \`\`\`ts return null \`\`\` }
       app Demo { id "com.tao.test.demo" version "1.0.0"  name "Demo" Navigator StackNav { Initial Main } Design Light }
-      app DemoDark = Demo with { id "com.tao.test.demodark"  name "Demo Dark" Design Dark }
+      app DemoDark = Demo with { id "com.tao.test.demodark",  name "Demo Dark", Design Dark }
     `,
       { appName: 'DemoDark' },
     )

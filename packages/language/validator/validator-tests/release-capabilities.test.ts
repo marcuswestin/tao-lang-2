@@ -80,7 +80,7 @@ Describe('release capability language policy', () => {
   Test('app automation and auth remain deferred through constructed app variants', async () => {
     const source = `
       app Demo { id "demo" version "1.0.0" name "Demo" view Home }
-      app Derived = Demo with { version "1.0.1" AgentCommands {} Auth none }
+      app Derived = Demo with { version "1.0.1", AgentCommands {}, Auth none }
       view Home() { render inject \`\`\`ts return null \`\`\` }
     `
     const errors = await releaseErrors(source, 5)

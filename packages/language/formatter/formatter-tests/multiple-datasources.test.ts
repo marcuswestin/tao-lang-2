@@ -6,7 +6,7 @@ Describe('multiple datasources formatter', () => {
     'formats membership, a bound set with a patched member, and bare and named references',
     formats(
       `datasource Feed=Memory{Data{Stories,Comments}}
-datasource Personal=Local{StorageKey "p" Data{Bookmarks}}
+datasource Personal=Local{StorageKey "p", Data{Bookmarks}}
 app Reader{Name "Reader" Datasource{Feed,Personal with{StorageKey "prod"}}}
 data Bookmarks/Bookmark{Story(reference), Kept Story (reference), Note text(default "")}`,
       `
@@ -17,7 +17,7 @@ data Bookmarks/Bookmark{Story(reference), Kept Story (reference), Note text(defa
         }  }
 
         datasource Personal = Local {
-           StorageKey "p"
+           StorageKey "p",
            Data {
               Bookmarks
         }  }

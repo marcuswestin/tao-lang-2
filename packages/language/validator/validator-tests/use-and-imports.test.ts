@@ -285,7 +285,7 @@ Describe('validator: use and imports', () => {
         'Main.tao': `
           use Helper, ResetNav from ./Support.tao
           app MyApp { id "my" version "1.0.0" name "My app" Navigator ResetNav }
-          project let AppLet = MyApp with { id "inferred" name "Inferred app" }
+          project let AppLet = MyApp with { id "inferred", name "Inferred app" }
         `,
         'Support.tao': `
           use StackNav from @tao/nav

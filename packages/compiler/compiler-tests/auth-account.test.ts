@@ -114,7 +114,7 @@ Describe('compiler: app-scoped auth and account data', () => {
       `
       use TestAuth from @tao/auth/testing
       app Notes { id "com.tao.test.notes" version "1.0.0" name "Notes"  Auth TestAuth { State "SignedOut" } view Main }
-      app Preview = Notes with { id "com.tao.test.preview"  Auth with { State "Restoring" } }
+      app Preview = Notes with { id "com.tao.test.preview",  Auth with { State "Restoring" } }
       view Main() { render Label("Welcome") }
       view Label(Value text) { render inject Value \`\`\`ts return null \`\`\` }
     `,
@@ -132,11 +132,11 @@ Describe('compiler: app-scoped auth and account data', () => {
       data Notes / Note { Title text }
       app Local {
         id "com.tao.test.local" version "1.0.0" name "Local"
-        Auth FirebaseAuth { ApiKey "local-key" ProjectId "local-project" }
-        Datasource Firebase { ApiKey "local-key" ProjectId "local-project" }
+        Auth FirebaseAuth { ApiKey "local-key", ProjectId "local-project" }
+        Datasource Firebase { ApiKey "local-key", ProjectId "local-project" }
         view Main
       }
-      app Hosted = Local with { id "com.tao.test.hosted" name "Hosted" }
+      app Hosted = Local with { id "com.tao.test.hosted", name "Hosted" }
       view Main() { render Label("Ready") }
       view Label(Value text) { render inject Value \`\`\`ts return null \`\`\` }
     `,
@@ -190,7 +190,7 @@ Describe('compiler: app-scoped auth and account data', () => {
         use FirebaseAuth from @tao/auth/firebase
         public app Base {
           id "com.tao.test.base" version "1.0.0" name "Base"
-          Auth FirebaseAuth { ApiKey "source-key" ProjectId "source-project" }
+          Auth FirebaseAuth { ApiKey "source-key", ProjectId "source-project" }
           view Main
         }
         view Main() { render Label("Ready") }
@@ -199,7 +199,7 @@ Describe('compiler: app-scoped auth and account data', () => {
       'Main.tao': `
         use Base from ./Base
         app Hosted = Base with {
-          id "com.tao.test.hosted" name "Hosted"
+          id "com.tao.test.hosted", name "Hosted",
           Auth with { AuthDomain "source.firebaseapp.com" }
         }
       `,
@@ -230,8 +230,8 @@ Describe('compiler: app-scoped auth and account data', () => {
       access Note { Owner can read, create, delete; Owner can update Body }
       app NotesApp { id "com.tao.test.notesapp" version "1.0.0" name "NotesApp"
         // Reference pairs with an Auth whose sign-in proof its server accepts.
-        Auth LocalAuth { Endpoint "http://localhost:4738" Resource "test" }
-        Datasource Reference { ServerURL "http://localhost:4738" Resource "test" Offline { Me, Me.Notes } }
+        Auth LocalAuth { Endpoint "http://localhost:4738", Resource "test" }
+        Datasource Reference { ServerURL "http://localhost:4738", Resource "test", Offline { Me, Me.Notes } }
         view Main
       }
       view Main() { render Label("Ready") }

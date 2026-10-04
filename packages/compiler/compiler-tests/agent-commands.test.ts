@@ -7,7 +7,7 @@ Describe('compiler: explicit app agent commands', () => {
     await withTaoFiles('tao-agent-auth-commands-', {
       'Main.tao': `
         use Base from ./Base
-        app Inherited = Base with { id "com.tao.test.inherited"  name "Inherited" }
+        app Inherited = Base with { id "com.tao.test.inherited",  name "Inherited" }
       `,
       'Base.tao': `
         use Account from @tao/auth
@@ -39,9 +39,9 @@ Describe('compiler: explicit app agent commands', () => {
       'Main.tao': `
         use Base from ./Base
         use Public from ./Commands
-        app Inherited = Base with { id "com.tao.test.inherited"  name "Inherited" }
-        app Replaced = Base with { id "com.tao.test.replaced"  AgentCommands [Public] }
-        app Closed = Base with { id "com.tao.test.closed"  AgentCommands [] }
+        app Inherited = Base with { id "com.tao.test.inherited",  name "Inherited" }
+        app Replaced = Base with { id "com.tao.test.replaced",  AgentCommands [Public] }
+        app Closed = Base with { id "com.tao.test.closed",  AgentCommands [] }
       `,
       'Base.tao': `
         ${stubView('Home')}

@@ -4,7 +4,7 @@ import { discoverShipProject, selectShipApp, writeProjectVersion } from '../cli-
 
 const projectSource = `
 app Notes { id "notes" version "1.2.3" name "Notes" view Main }
-app NotesBeta = Notes with { id "notes-beta" name "Notes Beta" }
+app NotesBeta = Notes with { id "notes-beta", name "Notes Beta" }
 view Main() { render inject \`\`\`ts return null \`\`\` }
 `
 
@@ -43,7 +43,7 @@ Describe('tao ship project discovery', () => {
     await withTaoFiles('tao-ship-split-project-', {
       'Apps/Notes.tao': `
         use NotesBase from @notes
-        project app NotesBeta = NotesBase with { id "split-notes-beta" name "Notes Beta" }
+        project app NotesBeta = NotesBase with { id "split-notes-beta", name "Notes Beta" }
       `,
       '@notes/App.tao': `
         public app NotesBase { id "split-notes" version "1.2.3" name "Notes" view Main }
@@ -63,8 +63,8 @@ Describe('tao ship project discovery', () => {
     await withTaoFiles('tao-ship-metadata-graph-', {
       'Apps/Target.tao': `
         use TargetInstantDBBase, CloudBase from @metadata
-        project app TargetInstantDBBeta = TargetInstantDBBase with { id "target-beta" name "Target Beta" }
-        project app CloudBeta = CloudBase with { id "cloud-beta" name "Cloud Beta" }
+        project app TargetInstantDBBeta = TargetInstantDBBase with { id "target-beta", name "Target Beta" }
+        project app CloudBeta = CloudBase with { id "cloud-beta", name "Cloud Beta" }
       `,
       '@metadata/App.tao': `
         use Dev from @tao/data/providers/dev
@@ -79,8 +79,8 @@ Describe('tao ship project discovery', () => {
           view Main
         }
         public datasource TargetStore = InstantDB {
-          AppId "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f"
-          ApiURI "http://localhost:9020"
+          AppId "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f",
+          ApiURI "http://localhost:9020",
           WebsocketURI "ws://localhost:9020/runtime/session"
         }
 
@@ -94,8 +94,8 @@ Describe('tao ship project discovery', () => {
 
         app UnrelatedDev { id "unrelated-dev" version "1.2.3" name "Unrelated" Datasource Dev { } view Main }
         datasource UnrelatedStore = InstantDB {
-          AppId "unrelated-app-id"
-          ApiURI "http://localhost:9030"
+          AppId "unrelated-app-id",
+          ApiURI "http://localhost:9030",
           WebsocketURI "ws://localhost:9030/runtime/session"
         }
         view Main() { render inject \`\`\`ts return null \`\`\` }
@@ -142,12 +142,12 @@ use Local from @tao/data/providers/local
 use StackNav from @tao/nav
 
 app Notes { id "notes" version "1.0.0" name "Notes" Navigator StackNav { Initial Main } Datasource NotesCloud }
-app NotesDevice = Notes with { id "notes-device" Datasource Local { StorageKey "Notes" } }
-app NotesInherited = Notes with { id "notes-inherited" name "Notes Beta" }
-app NotesInline = Notes with { id "notes-inline" Datasource ICloud { Container "iCloud.custom.notes" } }
-app NotesPatched = Notes with { id "notes-patched" Datasource with { Container "iCloud.patched.notes" } }
-app NotesTyped = Notes with { id "notes-typed" Datasource TypedCloud { } }
-app NotesKit = Notes with { id "notes-kit" Datasource CloudKit { Container "iCloud.lang.tao.kitchen" } }
+app NotesDevice = Notes with { id "notes-device", Datasource Local { StorageKey "Notes" } }
+app NotesInherited = Notes with { id "notes-inherited", name "Notes Beta" }
+app NotesInline = Notes with { id "notes-inline", Datasource ICloud { Container "iCloud.custom.notes" } }
+app NotesPatched = Notes with { id "notes-patched", Datasource with { Container "iCloud.patched.notes" } }
+app NotesTyped = Notes with { id "notes-typed", Datasource TypedCloud { } }
+app NotesKit = Notes with { id "notes-kit", Datasource CloudKit { Container "iCloud.lang.tao.kitchen" } }
 
 datasource NotesCloud = ICloud { StorageKey "Notes" }
 type TypedCloud is ICloud with { Container is "iCloud.typed.notes" }
@@ -207,8 +207,8 @@ view Main() { render inject \`\`\`ts return null \`\`\` }
 
         data Documents / Document { Title text }
         data Records / Record { Title text }
-        datasource DocumentStore = ICloud { Container "iCloud.lang.tao.documents" Data { Documents } }
-        datasource RecordStore = CloudKit { Container "iCloud.lang.tao.records" Data { Records } }
+        datasource DocumentStore = ICloud { Container "iCloud.lang.tao.documents", Data { Documents } }
+        datasource RecordStore = CloudKit { Container "iCloud.lang.tao.records", Data { Records } }
         app Notes {
           id "notes"
           version "1.0.0"
@@ -247,7 +247,7 @@ data Stories / Story { HnId number (unique), Title text }
 data Bookmarks / Bookmark { Story (reference) }
 
 datasource Feed = Dev { Data { Stories } }
-datasource Personal = CloudKit { Container "iCloud.lang.tao.reader" Data { Bookmarks } }
+datasource Personal = CloudKit { Container "iCloud.lang.tao.reader", Data { Bookmarks } }
 
 app Reader {
    id "reader"
@@ -282,13 +282,13 @@ use Local from @tao/data/providers/local
 use StackNav from @tao/nav
 
 datasource Store = InstantDB {
-   AppId "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f"
-   ApiURI "http://localhost:9020"
+   AppId "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f",
+   ApiURI "http://localhost:9020",
    WebsocketURI "ws://localhost:9020/runtime/session"
 }
 
 app Notes { id "notes" version "1.0.0" name "Notes" Navigator StackNav { Initial Main } Datasource Store }
-app NotesDevice = Notes with { id "notes-device" name "Notes Device" Datasource Local { StorageKey "Notes" } }
+app NotesDevice = Notes with { id "notes-device", name "Notes Device", Datasource Local { StorageKey "Notes" } }
 view Main() { render inject \`\`\`ts return null \`\`\` }
 `
     await withTaoFiles('tao-ship-instant-', { '.tao/.gitkeep': '', 'App.tao': source }, async paths => {
