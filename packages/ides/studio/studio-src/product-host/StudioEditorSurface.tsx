@@ -2,7 +2,8 @@ import TR from '@runtime/TR'
 import React from 'react'
 import { StudioApiClient } from '../client/StudioApiClient'
 import { fileUri, sanitizeLspHtml, StudioEditorInsertion } from '../client/StudioEditor'
-import { StudioLens, type StudioLensFacet } from '../client/StudioLens'
+import { StudioLens, type StudioLensFacet, type StudioLensStorage } from '../client/StudioLens'
+import { StudioPreferences } from '../client/StudioPreferences'
 import { studioPaletteMime, StudioPaletteTransfer } from '../client/StudioVisualEditing'
 import {
   CodeEditor,
@@ -59,12 +60,8 @@ const studioLensEditorFacets: readonly CodeEditorLensFacet[] = StudioLens.facets
   name: facet.name,
 }))
 
-function studioLensStorage(): Storage | undefined {
-  try {
-    return typeof localStorage === 'undefined' ? undefined : localStorage
-  } catch {
-    return undefined
-  }
+function studioLensStorage(): StudioLensStorage {
+  return StudioPreferences.storage
 }
 
 /**
@@ -154,6 +151,7 @@ export function StudioCodeEditor(): React.ReactElement {
   const [lensActive, setLensActive] = React.useState<readonly StudioLensFacet[]>(() =>
     StudioLens.load(studioLensStorage())
   )
+  React.useEffect(() => StudioPreferences.subscribe(() => setLensActive(StudioLens.load(studioLensStorage()))), [])
   const [lensRefold, setLensRefold] = React.useState(0)
   const changeLens = React.useCallback((next: readonly StudioLensFacet[]) => {
     setLensActive(next)

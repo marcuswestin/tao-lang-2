@@ -293,7 +293,27 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
     let cleanup: (() => void) | undefined
     let unmounted = false
     const cancellation = new AbortController()
-    const mounting = mountStudio({ root, signal: cancellation.signal })
+    const mounting = mountStudio({
+      root,
+      signal: cancellation.signal,
+      onShellReady: () => {
+        if (cancellation.signal.aborted) {
+          return
+        }
+        setFilesTarget(root.querySelector<HTMLElement>('.studio-files') ?? undefined)
+        setEditorTarget(root.querySelector<HTMLElement>('.studio-editor') ?? undefined)
+        setComponentsTarget(root.querySelector<HTMLElement>('.studio-components') ?? undefined)
+        setProjectViewsTarget(root.querySelector<HTMLElement>('.studio-project-views') ?? undefined)
+        setScreensTarget(root.querySelector<HTMLElement>('.studio-screens') ?? undefined)
+        setTokensTarget(root.querySelector<HTMLElement>('.studio-design-values') ?? undefined)
+        setDataTarget(root.querySelector<HTMLElement>('.studio-data') ?? undefined)
+        setDrawerTarget(root.querySelector<HTMLElement>('.studio-drawer-content') ?? undefined)
+        setSearchTarget(root.querySelector<HTMLElement>('.studio-search-results') ?? undefined)
+        setScenarioTarget(root.querySelector<HTMLElement>('.studio-scenario-inspector-content') ?? undefined)
+        setEnvironmentTarget(root.querySelector<HTMLElement>('.studio-inspector-tao-environment') ?? undefined)
+        setInspectorTarget(root.querySelector<HTMLElement>('.studio-inspector-tao-context') ?? undefined)
+      },
+    })
     const reportMountError = (error: unknown): void => {
       if (unmounted && error instanceof Error && error.name === 'AbortError') {
         return
@@ -314,29 +334,6 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
         Errors.abortError('Tao Studio product host unmounted before the requested action could run.'),
       )
       cleanup?.()
-    }
-    const target = root.querySelector<HTMLElement>('.studio-files')
-    if (target === null) {
-      void mounting.catch(reportMountError)
-      return unmount
-    }
-    setFilesTarget(target)
-    const editor = root.querySelector<HTMLElement>('.studio-editor')
-    if (editor !== null) {
-      setEditorTarget(editor)
-    }
-    setComponentsTarget(root.querySelector<HTMLElement>('.studio-components') ?? undefined)
-    setProjectViewsTarget(root.querySelector<HTMLElement>('.studio-project-views') ?? undefined)
-    setScreensTarget(root.querySelector<HTMLElement>('.studio-screens') ?? undefined)
-    setTokensTarget(root.querySelector<HTMLElement>('.studio-design-values') ?? undefined)
-    setDataTarget(root.querySelector<HTMLElement>('.studio-data') ?? undefined)
-    setDrawerTarget(root.querySelector<HTMLElement>('.studio-drawer-content') ?? undefined)
-    setSearchTarget(root.querySelector<HTMLElement>('.studio-search-results') ?? undefined)
-    setScenarioTarget(root.querySelector<HTMLElement>('.studio-scenario-inspector-content') ?? undefined)
-    setEnvironmentTarget(root.querySelector<HTMLElement>('.studio-inspector-tao-environment') ?? undefined)
-    const inspector = root.querySelector<HTMLElement>('.studio-inspector-tao-context')
-    if (inspector !== null) {
-      setInspectorTarget(inspector)
     }
     void mounting.then(dispose => {
       if (unmounted) {

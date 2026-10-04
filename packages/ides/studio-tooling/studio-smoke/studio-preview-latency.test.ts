@@ -1,4 +1,4 @@
-import { Assert, Errors, FS, HCI, Platform, Repo, Time } from '@shared'
+import { Assert, Errors, FS, HCI, Platform, ProjectLocal, Repo, Time } from '@shared'
 import { Expect, mkTestDir, Test } from '@shared/test'
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
 import { startStudioSmokeLaunch } from '../studio-tooling-src/StudioSmokeLaunch'
@@ -339,6 +339,10 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
       activatedCells: await browser.evaluate<number>(
         'document.querySelectorAll(".studio-preview-activation-toggle[aria-pressed=true]").length',
       ),
+      emissionCache: studio.output().split('\n').flatMap(line => {
+        const entry = /\{"type":"studio-emitted-module-cache"[^\n]*\}/u.exec(line)?.[0]
+        return entry === undefined ? [] : [JSON.parse(entry) as unknown]
+      }),
     }
     await reportSamples(`${project.name} publication-${mode}`, samples, evidence)
     Expect(samples.at(-1)!.frameLoads).toBe(0)
@@ -353,7 +357,7 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
 }
 
 async function generatedRootFor(projectRoot: string): Promise<string> {
-  const artifactRoot = Repo.resolvePath('.artifacts/dev/studio-preview')
+  const artifactRoot = ProjectLocal.cacheResolve('studio/runtimes', projectRoot)
   for (const name of await FS.listDir(artifactRoot)) {
     const generatedRoot = FS.resolvePath(`${name}/_gen_tao-app`, artifactRoot)
     const publication = FS.resolvePath('TaoStudioPublication.ts', generatedRoot)
@@ -382,6 +386,7 @@ async function reportSamples(
     cellLoads: unknown[]
     metroMessages: unknown[]
     activatedCells: number
+    emissionCache: unknown[]
   },
 ): Promise<void> {
   const span = (from: number | undefined, to: number | undefined) =>

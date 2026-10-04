@@ -141,6 +141,10 @@ export function mountPreviewFocus(host: HTMLElement, previews: readonly StudioPr
     }
   }
   document.addEventListener('pointerdown', outsidePointerDown, true)
+  // The matrix can mount a frame while its asynchronous refresh is still pending.
+  // Shield it before the browser can dispatch pointer input into that frame.
+  const observer = typeof MutationObserver === 'undefined' ? undefined : new MutationObserver(() => reconcile())
+  observer?.observe(host, { childList: true, subtree: true })
   reconcile()
   return {
     reconcile,
@@ -170,6 +174,7 @@ export function mountPreviewFocus(host: HTMLElement, previews: readonly StudioPr
     },
     dispose: () => {
       disposed = true
+      observer?.disconnect()
       document.removeEventListener('pointerdown', outsidePointerDown, true)
       for (const entry of entries.values()) {
         entry.dispose()

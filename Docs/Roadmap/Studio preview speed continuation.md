@@ -10,15 +10,16 @@ timings.
 ## Current state
 
 The successor worktree is `feat/studio-preview-speed`, created from exactly `8ecf581e7`, with no
-landing authorized. Its first pair is in progress: every scenario and the whole-app preview now
+landing authorized. Its activation and decided folder layout are implemented: every scenario and the whole-app preview now
 default to no iframe, with per-cell lightning toggles and server-persisted app activation in
 `.tao/local/studio/session.json`. Selection and its Tao ProductHost/feed boundary use focused names;
 the old browser focus/tabs and viewport import once into the project session. Fast draw and
 off-screen suspension are removed, and real smokes explicitly activate their cells. The decided
 layout implementation is recorded in the [layout decisions](<Tao CLI workflows/Decisions - Project folder layout.md#implementation-state>).
 
-Source tests pass for the complete Studio and Studio-tooling directories, and `verify-changed`
-passes the integrated source, compiler, runtime, CLI, and app checks.
+The first activation/layout checkpoint passed the complete Studio and Studio-tooling source suites
+and `verify-changed` across source, compiler, runtime, CLI, and app checks. The final project gates
+and integration state are recorded in the task checkpoint.
 Mutation checks caught deliberately removed activation serialization and callback rewiring. A real
 browser run exposed an empty session-save response; the endpoint now returns JSON, with a real HTTP
 regression. The corrected real-app Metro smoke passes all four journeys (run
@@ -27,9 +28,16 @@ active preview, were inspected in its `home/studio/launches/browser/screenshots/
 Final review corrected revision changes during activation, shared home-state concurrency,
 linked-parent migration hazards, compile-error recovery, ordered focus/tab writes, manifest pruning,
 and browser-registration cleanup. The activation baseline below is measured; it is not an A/B
-speed claim. The activation gate/watchdog, sequential experiment,
-and steps 6–8 are not yet done.
-The four Developer-owned layout questions remain pending before the first pair can be called complete.
+speed claim. The activation gate and watchdog are now implemented: registration waits for a
+settled publication and exact acknowledgements from connected active cells, bounded by one
+30-second deadline. A lagging cell reloads at most once after its peers acknowledge, with the
+existing navigation timeout retained as a backstop. Restored activation begins after the message
+listener is wired; pending cells do not deadlock the gate. Focused lifecycle and revision tests pass.
+On 2026-10-04 the Developer accepted all four layout recommendations: defer the adapter storage API,
+use `desktop-host/`, move home preferences to `~/.tao/studio/prefs.json`, and place generated apps in
+each project's cache. These accepted choices are implemented alongside the remaining speed work.
+Selective design subscriptions (step 8) are explicitly deferred; steps 5–7 remain in this project's
+current execution scope. The refresh-indicator investigation below is closed at the Developer's request.
 
 Follow-up on 2026-10-04: one preview press now retains the source selection and scroll when
 language-server readiness replaces the visible editor. The editor tracks which view consumed the
@@ -65,7 +73,131 @@ a new baseline; differences from the historical loaded-machine runs below are no
 The prior corrected repeat (`activation-baseline-visible-20261003`, load 3.78–4.92) measured
 183/184ms one-file medians and 306/321ms HNReader medians, illustrating run-to-run spread.
 
-### Refresh indicator diagnostic, 2026-10-04
+### Concurrent startup retained, 2026-10-04
+
+The sequential-loading experiment used six previews of the same view, persisted activation,
+fresh browsers, warmed Metro, balanced mode order, and two-frame paint timestamps. Run
+`preview-loading-ab-corrected-20261004` passed eight opens; the first pair was discarded.
+Concurrent first/last paint medians were 1231/1446ms; sequential medians were 1089/1885ms.
+All three retained pairs made the last preview slower with sequential loading, so it failed the
+keep bar and was removed. Concurrent restored startup remains. These measurements were contended
+(one-minute load 21.9–34.0 on 18 CPUs), and do not establish an absolute startup budget.
+The measured result and exact counterfactual patch are preserved under
+`.artifacts/checkpoint/preview-loading-counterfactual/`; the maintained loading smoke checks that
+all six persisted activations load and paint concurrently.
+Its final run `preview-loading-final-20261004` passes, with first/last paint at 720/852ms. This is
+a concurrent-startup regression result, not a new sequential comparison.
+
+The real-app smoke `preview-pointer-shield-20261004` passes all four journeys, including the dark
+inactive viewport and computed preview/canvas cursors. A child-list observer now shields frames
+mounted during an asynchronous refresh before pointer input can reach them; the smoke retains its
+zero app-input assertion during unfocused canvas panning.
+
+### Emitted-module reuse measured separately, 2026-10-04
+
+Step 6 was measured with step 7 held off. The session-owned cache reuses validated modules,
+retains dependency and output-plan invalidation, recopies sidecars, and rebuilds the manifest and
+policy. Unresolved ordinary references prevent reuse; intentional TypeScript bridge heads follow
+the parser's existing exemption. A real HNReader overlay regression failed before that narrow
+exemption and passes with uncached output and diagnostic parity afterward. Shared fingerprint work
+is computed once per compile rather than repeated for each module.
+
+Both the quiet cache-off control (`emitted-cache-control-off-quiet-20261004`) and optimized cache-on
+run (`emitted-cache-optimized-20261004`) passed all 32 edits, without iframe reloads or recorded
+`RevisionNotFoundError`. Each case uses eight saves and discards the first for warm statistics.
+
+| Case                      | Cache-off source→published / total p50 ms | Cache-on source→published / total p50 ms |
+| ------------------------- | ----------------------------------------- | ---------------------------------------- |
+| One-file, publication on  | 28 / 181                                  | 21 / 175                                 |
+| One-file, publication off | 27 / 192                                  | 21 / 180                                 |
+| HNReader, publication on  | 142 / 282                                 | 119 / 453                                |
+| HNReader, publication off | 153 / 314                                 | 129 / 285                                |
+
+HNReader reused 21 of 23 modules; total fingerprint, copy and emit work was approximately 5ms,
+with approximately 1.5ms spent emitting the two misses. The source-to-publication phase improved
+in both HNReader modes. The publication-on run had a 227ms HMR-to-DOM median, making its total worse;
+it does not establish an end-to-end gain in that mode. Observed one-minute load was 4.1–6.5 for
+the control and 5.2–7.3 for the optimized run on 18 CPUs. Earlier high-load comparisons are excluded
+from gain claims. Final delivery measurements must retain the same phase boundary distinctions.
+
+### Live design delivery, 2026-10-04
+
+Step 7 publishes designs by declaration identity and gives mounted app hosts a coarse revision
+subscription. A cached app reads the latest design rather than keeping its first snapshot.
+Generated source modules register a weakly retained cohort with monotonic per-file epochs, so a
+coedited consumer and design can arrive in either order: old consumers retain their compatible
+snapshot, and consumers awaiting a newer design suspend. The preview acknowledges a revision only
+after the content commits beneath that Suspense boundary. Ordinary unknown style names still fail.
+Focused regressions cover both arrival orders, same-source reverts, deleted and previously unvisited
+consumers, multiple mounted generations, and acknowledgment after suspension.
+
+The independent design smoke `design-delivery-final-20261004` passes all three cases: eight color
+and font-size saves, followed by a coordinated style-bundle and consumer rename. Computed DOM
+styles and two animation frames establish paint. Warm medians were 181ms for imported designs in
+two focused previews, 200ms for an imported design in a navigated whole-app preview, and 252ms for
+same-file designs in two focused previews; load was 4.0–5.9 on 18 CPUs. All cases had zero iframe
+reloads and no browser console errors. These are delivery measurements, not an A/B speed claim.
+
+Focused previews retain their counters. The whole-app test proves retained navigation, not local
+view state: its counter resets after an imported design edit in the pre-step-7 baseline too.
+Installed Metro follows the non-component design module's inverse imports and reevaluates the app
+module, which builds a new app/navigation generation. A stable exported design object alone does
+not stop that traversal. Isolating design delivery from the app module belongs with the deferred
+step-8 delivery/subscription work; no Metro patch or hot-update containment is included here.
+The final source-navigation smoke `source-navigation-final-tip-20261004` also passes the delayed
+language-connection, one-press selection and scroll regression.
+
+The separate maintained harness `design-delivery-latency-final-20261004` passes all 32 saves,
+with zero iframe reloads and no recorded `RevisionNotFoundError`. Its warm results (first save
+discarded) are below. Load was 5.6–6.3 on 18 CPUs; no other task tests ran concurrently.
+
+| Case                      | Source→published p50 ms | Total p50 / p95 ms |
+| ------------------------- | ----------------------- | ------------------ |
+| One-file, publication on  | 21                      | 187 / 206          |
+| One-file, publication off | 20                      | 179 / 193          |
+| HNReader, publication on  | 120                     | 266 / 283          |
+| HNReader, publication off | 122                     | 289 / 314          |
+
+Compared with the separate quiet cache-off control, HNReader source-to-publication improved from
+142/153ms to 120/122ms. Total medians changed from 282/314ms to 266/289ms, with run-to-run HMR and
+host-load variation still material. These final delivery results cover the combined retained
+slices; they do not attribute the total difference to step 7. Parse/link/validation work remains
+the dominant compiler-side slice; the next planned work is measured Langium document reuse.
+
+Final acceptance also exposed fixture application being owned by an app hook while the cell's
+provider outlived an app remount. The cell Host now owns fixture work and stable datasource
+wrappers; a genuine provider rebind still retires the old application. Renderer regressions cover
+retained live handles, updated rows, pending auth, rebinds, and a fresh Host. Same-declaration storage
+changes invalidate the application too; app-owned binding changes retain the intentional initial
+binding. The final real-app smoke `fixture-generation-final-20261004` passes all four journeys:
+Keep/Undo/Keep, persisted reopen, source/visual edits, and both publication modes without retained
+browser failures. The renderer fixture suite passes all ten regressions.
+
+The final fixture-generation latency run `fixture-generation-latency-final-20261004` also passes
+all 32 saves without iframe reloads or recorded revision errors. Warm source-to-publication medians
+are 22/20ms for one-file publication on/off and 123/128ms for HNReader; total p50/p95 values are
+184/194, 183/187, 270/329, and 271/321ms, respectively. Load spans 4.2–7.2 on 18 CPUs. This is
+final-source regression evidence; the separately measured cache control remains the gain comparison.
+The final design repeat `fixture-generation-design-repeat-20261004` passes all three cases and
+124 assertions, with warm paint medians 171/170/236ms. Its immediately preceding run passed both
+focused cases but timed out activating the whole-app cell before any design saves; that failed
+attempt is excluded from delivery timing claims.
+The smoke helper's 15-second activation wait was shorter than the readiness gate's 30-second
+deadline. It now allows 45 seconds including registration and saving, and reports the button's
+pending/error state and Studio status on failure. This aligns the harness with the product deadline.
+The corrected helper passes `activation-deadline-design-final-20261004`, all three cases and
+124 assertions, with warm paint medians 174/180/241ms and no iframe reloads or browser errors.
+
+Finalization must reconcile the newer main project-tooling migration with the decided folder
+layout and retained cache/design changes. Shared identity and lock state belong in `store/`, and
+generated configuration and locks belong in `cache/`. The new tooling refresh and output planner
+must be retained alongside preview reuse. Dependency and lockfile integration still waits for the
+Developer's approval; this branch is not reported ready to land before integration and verification.
+
+### Refresh indicator diagnostic, 2026-10-04 — closed
+
+The Developer closed this investigation on 2026-10-04. The following is its historical evidence;
+further indicator investigation is outside this project's current scope.
 
 The installed Expo web indicator shows on HMR `update-start`, requests hiding on `update-done`,
 and deliberately pads its presentation with a 400ms minimum and a 150ms fade. Its DOM remains
@@ -121,7 +253,7 @@ Historical handoff state:
    persistence.
 2. The rest of step 5: the activation gate, the lagging-cell watchdog, then the sequential-loading
    measurement.
-3. Next slice steps 6–8, each measured on its own.
+3. Next slice steps 6–7, each measured on its own. Step 8 is deferred by the Developer.
 4. Commit reviewed paths, update this document, run `./agent verify-changed`, `./agent verify`,
    the real Metro smokes, and `./agent unsandboxed finalize`; review the merge message and the full
    diff; propose landing. Do not land.
@@ -141,7 +273,8 @@ each preview has its own toggle, off by default; the active set is per developer
    name: a tiny lightning bolt. Active, the bolt is filled a subtle yellow; inactive, it is a grey
    outline with no fill. It carries
    `aria-pressed`, and its label and tooltip read "Activate preview" or "Deactivate preview".
-   Deactivating removes the cell's iframe.
+   Deactivating removes the cell's iframe. Preview controls use the pointer cursor; empty canvas uses
+   the open hand for panning. The inactive viewport uses Studio's dark surface color.
 3. **Naming in code.** "Active" now means activated. Rename `StudioActivePreview`
    (`studio-src/client/StudioApp.ts:139`), which means the selected cell, to `StudioFocusedPreview`,
    along with its file, its `onActivate` callback, its tests, and the
@@ -367,7 +500,8 @@ Each slice is measured on its own with the latency harness, so each gain is attr
 The successor can report completion when it has a committed, clean branch with: previews inactive
 by default behind their toggles, persisted per developer and project; no `RevisionNotFoundError`
 in the HNReader race case under real Metro; the folder layout of the decisions document, with its
-migration and tests; each of steps 5–8 measured, kept or dropped on its numbers; source-action
+migration and tests; each of steps 5–7 measured, kept or dropped on its numbers (step 8 deferred by
+the Developer on 2026-10-04); source-action
 safety retained; focused, repository, and real Metro evidence for the exact tip; a reviewed merge
 message and successful `finalize`; and a concise statement of the measured gain and the remaining
 dominant slice. Do not report test success as a measured latency improvement. Landing remains a

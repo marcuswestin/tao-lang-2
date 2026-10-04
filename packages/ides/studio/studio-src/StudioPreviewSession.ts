@@ -1,6 +1,7 @@
+import { EmittedModuleCache } from '@compiler/compiler'
 import { Workspace } from '@compiler/workspace'
 import Runtime from '@expo-host'
-import { Assert, Errors, FS, Switch } from '@shared'
+import { Assert, Errors, FS, HCI, Switch } from '@shared'
 import SourceActions from '@source-actions'
 import type {
   StudioParameterSchema,
@@ -29,6 +30,8 @@ export async function openStudioPreviewSession(
   let session: StudioProjectSession | undefined
   let previewWorkspace: Workspace | undefined
   let previewWorkspaceFiles: string | undefined
+  const emittedModuleCache = new EmittedModuleCache()
+  const sourceChanges = new Map<string, { version: string; epoch: number }>()
   session = await StudioProjectSession.open({
     ...options,
     async compile(request) {
@@ -39,6 +42,18 @@ export async function openStudioPreviewSession(
       const sourceVersions = Object.fromEntries(files.map(file => [file.path, file.sourceVersion]))
       for (const [path, source] of Object.entries(sourceOverrides ?? {})) {
         sourceVersions[FS.relativePath(request.project, path)] = SourceActions.studioSourceVersion(source)
+      }
+      const sourceEpochs: Record<string, number> = {}
+      for (const [path, version] of Object.entries(sourceVersions)) {
+        const previous = sourceChanges.get(path)
+        const epoch = previous?.version === version ? previous.epoch : request.compileRevision
+        sourceChanges.set(path, { version, epoch })
+        sourceEpochs[path] = epoch
+      }
+      for (const path of sourceChanges.keys()) {
+        if (!(path in sourceVersions)) {
+          sourceChanges.delete(path)
+        }
       }
       if (sourceOverrides === undefined) {
         // A workspace indexes the project's `@` packages when it opens, so a Tao file added, removed,
@@ -57,11 +72,27 @@ export async function openStudioPreviewSession(
           revision: request.compileRevision,
           sourceOverrides,
           sourceVersions,
+          sourceEpochs,
         },
         runtimePackageRoot: options.previewRuntimeRoot,
         validationMode: options.validationMode,
         previewWorkspace,
+        emittedModuleCache,
       })
+      if (generated.emittedModuleCache !== undefined) {
+        const { hits, misses, files: emitted } = generated.emittedModuleCache
+        HCI.logProcessInfo(
+          'studio',
+          JSON.stringify({
+            type: 'studio-emitted-module-cache',
+            revision: request.compileRevision,
+            hits,
+            misses,
+            emitMs: emitted.reduce((sum, file) => sum + file.emitMs, 0),
+            totalMs: emitted.reduce((sum, file) => sum + file.totalMs, 0),
+          }),
+        )
+      }
       if (generated.studioManifest !== undefined && generated.preview !== undefined) {
         session.setMatrixManifest(matrixManifest(session, generated, request.compileRevision))
       }

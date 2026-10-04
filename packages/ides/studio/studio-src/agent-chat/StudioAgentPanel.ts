@@ -2,6 +2,7 @@
 // It floats over the workbench by default, can be dragged to reposition anywhere on screen,
 // can be minimized to a compact pill or expanded, and is styled by the shared Studio sheet.
 
+import { StudioPreferences } from '../client/StudioPreferences'
 import { studioIcon } from '../client/StudioShell'
 import { mountStudioAgentChatPanel, type StudioAgentChatPanelHooks } from './StudioAgentChatPanel'
 
@@ -131,11 +132,7 @@ export function mountStudioAgentPanel(root: HTMLElement, hooks: StudioAgentChatP
   }
 
   function store(key: string, value: string): void {
-    try {
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem(key, value)
-      }
-    } catch {}
+    StudioPreferences.storage.setItem(key, value)
   }
 
   function setMinimized(minimized: boolean): void {
@@ -237,7 +234,7 @@ export function mountStudioAgentPanel(root: HTMLElement, hooks: StudioAgentChatP
       // The stored position was clamped against the display it was dragged on. A smaller one now, or
       // a smaller window, would leave the panel off-screen with no way back, so it is re-clamped here
       // and again on every resize rather than trusted as written.
-      const saved = StudioAgentPosition.parse(window.localStorage.getItem(agentPositionStorageKey))
+      const saved = StudioAgentPosition.parse(StudioPreferences.storage.getItem(agentPositionStorageKey))
       if (saved !== undefined) {
         place(saved)
       }

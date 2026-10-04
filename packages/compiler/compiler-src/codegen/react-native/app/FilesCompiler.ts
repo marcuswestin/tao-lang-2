@@ -38,6 +38,7 @@ export const FilesCompiler = {
     if (!hasRuntimeStatements && !importLines && !scopeBindings && !exportLines && !bridgeTypes) {
       return gen`export {}`
     }
+    const sourcePath = AST.getDocument(taoFile).uri.fsPath
     const registry = apps.length === 0 ? gen.noop() : gen`
       export const TaoApps = {
         ${gen.list(apps, app => gen`${gen.jsLiteral(app.name)}: ${gen.Name({ name: `TaoApp_${app.name}` })},`)}
@@ -51,6 +52,16 @@ export const FilesCompiler = {
       import TR from '@runtime/TR'
 
       ${gen.textLines(importLines)}
+
+      ${
+      opts.studio === true && opts.studioSourceEpochs !== undefined
+        ? gen`const __tao_design_cohort__ = TR.Design.Cohort({
+          path: ${gen.jsLiteral(sourcePath)},
+          epoch: ${opts.studioSourceEpochs[sourcePath] ?? 0},
+          designEpochs: ${gen.jsLiteral(opts.studioDesignEpochs ?? {})},
+        })`
+        : gen.noop()
+    }
 
       ${apps.length > 0 ? gen`const useTaoGeneratedAgentCommands = TR.Agent.useCommands` : gen.noop()}
       ${

@@ -1,6 +1,6 @@
 import { DevDataServer } from '@expo-host/dev-loop/dev-data/DevDataServer'
 import { stopStudioProcessTree, type StudioProcessTree } from '@expo-host/dev-loop/StudioProcessTree'
-import { CLI, Errors, FS, Platform, ProjectDevSession, Repo, Time } from '@shared'
+import { CLI, Errors, FS, Platform, ProjectDevSession, ProjectLocal, Repo, Time } from '@shared'
 import { Deferred, Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import { startStudioSessionServer, StudioClientAssets, StudioDeviceGateway, StudioDeviceTrustStore } from '@studio'
 import { StudioBrowser } from '../studio-tooling-src/StudioBrowser'
@@ -1314,7 +1314,12 @@ Describe('Studio smoke resource isolation', () => {
       Expect(first.root.startsWith(`${artifactRoot}/`)).toBe(true)
       // Expo refuses to start a TypeScript project unless `typescript` resolves from its root, and the
       // repository hoists it above the linked package node_modules.
-      Expect(await FS.realPath(Bun.resolveSync('typescript/package.json', second.root))).toBe(
+      const nodeResolution = await CLI.run('node', {
+        args: ['-p', `require.resolve("typescript/package.json", { paths: [${JSON.stringify(second.root)}] })`],
+        cwd: second.root,
+      })
+      Expect(nodeResolution.exitCode).toBe(0)
+      Expect(await FS.realPath(nodeResolution.stdout.trim())).toBe(
         await FS.realPath(Repo.resolvePath('node_modules/typescript/package.json')),
       )
       Expect(await FS.readText(FS.resolvePath('index.ts', first.root))).toBe(
@@ -1330,6 +1335,37 @@ Describe('Studio smoke resource isolation', () => {
       await first?.close()
       await second?.close()
       await FS.remove(artifactRoot)
+    }
+  })
+
+  Test('keeps concurrent preview runtimes inside the owning project cache', async () => {
+    const sourceRoot = Repo.resolvePath('packages/apps/expo-host')
+    const projectRoot = await mkTestDir('studio-preview-project-')
+    let first: Awaited<ReturnType<typeof StudioPreviewRuntime.create>> | undefined
+    let second: Awaited<ReturnType<typeof StudioPreviewRuntime.create>> | undefined
+    try {
+      first = await StudioPreviewRuntime.create(sourceRoot, { projectRoot })
+      second = await StudioPreviewRuntime.create(sourceRoot, { projectRoot })
+      const artifactRoot = ProjectLocal.cacheResolve('studio/runtimes', projectRoot)
+      Expect(first.root.startsWith(`${artifactRoot}/`)).toBe(true)
+      Expect(second.root.startsWith(`${artifactRoot}/`)).toBe(true)
+      Expect(first.root === second.root).toBe(false)
+      // Expo's dependency check resolves from the lexical project root, not Bun's module graph.
+      Expect(await FS.isFile(FS.resolvePath('node_modules/typescript/package.json', artifactRoot))).toBe(true)
+      const nodeResolution = await CLI.run('node', {
+        args: ['-p', `require.resolve("typescript/package.json", { paths: [${JSON.stringify(second.root)}] })`],
+        cwd: second.root,
+      })
+      Expect(nodeResolution.exitCode).toBe(0)
+      Expect(await FS.realPath(nodeResolution.stdout.trim())).toBe(
+        await FS.realPath(Repo.resolvePath('node_modules/typescript/package.json')),
+      )
+      await first.close()
+      Expect(await FS.isFile(FS.resolvePath('index.ts', second.root))).toBe(true)
+    } finally {
+      await first?.close()
+      await second?.close()
+      await FS.remove(projectRoot)
     }
   })
 

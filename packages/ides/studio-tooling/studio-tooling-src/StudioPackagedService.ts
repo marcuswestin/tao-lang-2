@@ -149,6 +149,7 @@ export async function startStudioPackagedService(
       compileOnStart: false,
       deviceGateway,
       openBrowser: StudioBrowser.open,
+      preferencesRoot: userStateRoot,
     })
   } catch (error) {
     return await rollbackPackagedStart(error, [

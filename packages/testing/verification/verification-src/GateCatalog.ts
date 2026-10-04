@@ -36,7 +36,7 @@ import { type WorkAdmission, type WorkCommand, WorkGraph, type WorkNode } from '
  * is written by at most one node, which is what makes the derived edges unambiguous.
  */
 export type SourceClass =
-  /** `packages/apps/expo-host/_gen_tao-app*`, filled by the WordFlower compile. */
+  /** WordFlower's `.tao/cache/_gen_tao-app`, filled by the repository compile. */
   | 'gen-app'
   /** The extension bundles and syntax tree filled by the IDE extension build. */
   | 'gen-ide'
@@ -386,9 +386,8 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
       { priority: PREPARE_PRIORITY, reads: ['gen-parser', 'tao', 'ts'], writes: ['gen-ide'] },
     ],
     ['_tao-check', { cost: TAO_CHECK_COST, reads: ['gen-parser', 'tao', 'ts'] }],
-    // `packages/language/parser/tsconfig.json` compiles `parser-src/**`, where Langium writes, and
-    // `packages/apps/expo-host/tsconfig.json` compiles `_gen_tao-app/**`, where the WordFlower
-    // compile writes, so the typechecker reads both generated trees.
+    // The parser tsconfig includes Langium's generated tree. Typecheck retains its conservative
+    // ordering after the app compile moved into the WordFlower project's cache.
     ['_typecheck', { cost: TYPECHECK_COST, reads: ['gen-app', 'gen-parser', 'ts'] }],
     [
       'ship-bundle-proof',

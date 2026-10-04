@@ -1,3 +1,4 @@
+import type { CompileResult, EmittedModuleCache } from '@compiler/compiler'
 import { Workspace } from '@compiler/workspace'
 import { AST } from '@parser'
 import { Assert, FS } from '@shared'
@@ -23,6 +24,8 @@ export type GeneratePreviewOptions = {
   project: string
   revision: number
   sourceVersions: Readonly<Record<string, string>>
+  /** Per-file last-change epochs coordinate independently refreshed design and consumer modules. */
+  sourceEpochs?: Readonly<Record<string, number>>
 }
 
 export type StudioPreviewIdentity = {
@@ -42,6 +45,8 @@ export type GenerateAppOptions = {
   preview?: GeneratePreviewOptions
   /** A Studio session may reuse its isolated parser services across preview revisions. */
   previewWorkspace?: Workspace
+  /** One caller's validated Tao module reuse across its generated revisions. */
+  emittedModuleCache?: EmittedModuleCache
   /** publicationHooks exposes file-operation failure seams for transactional publication tests. */
   publicationHooks?: Pick<FS.SynchronizeDirectoryFileSetsOptions, 'beforeMove' | 'beforeRemove'>
   /** journeyObservations emits test-harness-only render source locators without enabling Studio preview behavior. */
@@ -94,6 +99,7 @@ export type GeneratedApp = {
   shipManifest?: ShipManifest
   shipManifestPath?: string
   studioManifest?: NonNullable<Awaited<ReturnType<typeof Workspace.compile>>['studioManifest']>
+  emittedModuleCache?: CompileResult['emittedModuleCache']
 }
 
 const generationQueues = new Map<string, Promise<void>>()
@@ -126,6 +132,8 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
     const compileOptions = {
       appDatasourceConfiguration: opts.datasourceConfiguration,
       appName: opts.appName,
+      emittedModuleCache: opts.emittedModuleCache,
+      studioSourceEpochs: opts.preview?.sourceEpochs,
       // A Studio preview carries debugger gates so a breakpoint can pause it. Nothing else does:
       // an app built for a device or a test run compiles exactly as it did before.
       debug: opts.preview !== undefined,
@@ -171,6 +179,7 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
       sourcePath,
       outputPath: generatedAppPath,
       code: generatedAppCode ?? compiled.code,
+      ...(compiled.emittedModuleCache === undefined ? {} : { emittedModuleCache: compiled.emittedModuleCache }),
       ...(opts.ship === undefined ? {} : { shipManifest: opts.ship, shipManifestPath }),
       ...(preview === undefined
         ? {}

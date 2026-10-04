@@ -1,11 +1,17 @@
 import { Errors } from '@shared/core'
-import { Deferred, Expect, settle, Test, testOverrideSlot } from '@shared/test'
+import { Deferred, Expect, settle, Test, testOverrideSlot, until } from '@shared/test'
 import { StudioMatrixGrid } from '../studio-src/client/matrix/StudioMatrixGrid'
 import { StudioMatrixSketches } from '../studio-src/client/matrix/StudioMatrixSketches'
 import { StudioDrawCanvas } from '../studio-src/client/matrix/StudioMatrixSketches'
+import { StudioPreviewActivationGate } from '../studio-src/client/matrix/StudioPreviewActivationGate'
 import { reconcilePreviewActivation } from '../studio-src/client/matrix/StudioPreviewActivationWiring'
+import { disconnectPreviews, StudioPreviewPublication } from '../studio-src/client/matrix/StudioPreviewConnection'
 import type { StudioPreviewConnection } from '../studio-src/client/matrix/StudioPreviewConnection'
-import { refreshCellPreviews, wireActivation } from '../studio-src/client/matrix/StudioPreviewMatrix'
+import {
+  refreshCellPreviews,
+  startRestoredPreviews,
+  wireActivation,
+} from '../studio-src/client/matrix/StudioPreviewMatrix'
 import { StudioApiClient, type StudioHandshake } from '../studio-src/client/StudioApiClient'
 import type { StudioPreviewCell, StudioPreviewManifestV2 } from '../studio-src/StudioPreviewManifest'
 
@@ -197,7 +203,15 @@ Test(
       }
       wireActivation(parent, previews, updatedManifest, previewUrl, handshake)
       firstRegistration.resolve()
-      await Promise.all([first, second])
+      await first
+      const firstPreview = previews[0]!
+      StudioPreviewPublication.acknowledged(
+        firstPreview,
+        firstPreview.cellIdentity!,
+        firstPreview.previewInstanceId,
+      )
+      StudioPreviewActivationGate.changed(firstPreview)
+      await second
       Expect(saved).toEqual([['a'], ['a', 'b']])
       Expect(previews.map(preview => preview.activated)).toEqual([true, true])
       Expect(
@@ -228,6 +242,90 @@ Test(
     }
   },
 )
+
+Test('Studio activation gate wakes on disconnect and bounds abort and timeout', async () => {
+  const parent = {} as HTMLElement
+  const published = manifest(cell('peer'))
+  const peer = connection(published.cells[0]!)
+  peer.activated = true
+  peer.cellIdentity = {
+    appName: 'Demo',
+    cellId: 'peer',
+    cellRevision: 1,
+    compileRevision: 1,
+    manifestRevision: 'manifest-1',
+    project: '/project',
+  }
+  const compile = { appliedRevision: 1, compileRevision: 1, diagnostics: [], message: '', status: 'compiled' } as const
+  StudioPreviewActivationGate.attach(parent, compile, published, [peer])
+  const controller = new AbortController()
+  const aborted = StudioPreviewActivationGate.wait(parent, Date.now() + 30_000, () => published, controller.signal)
+  controller.abort()
+  let abortName = ''
+  try {
+    await aborted
+  } catch (error) {
+    abortName = Errors.asError(error).name
+  }
+  Expect(abortName).toBe('AbortError')
+
+  let timedOut = false
+  try {
+    await StudioPreviewActivationGate.wait(parent, Date.now() - 1, () => published)
+  } catch (error) {
+    timedOut = error instanceof Errors.HostEnvironmentError
+  }
+  Expect(timedOut).toBe(true)
+
+  const removed = StudioPreviewActivationGate.wait(parent, Date.now() + 30_000, () => published)
+  StudioPreviewActivationGate.attach(parent, compile, published, [])
+  await removed
+  StudioPreviewActivationGate.attach(parent, compile, published, [peer])
+  const dropped = StudioPreviewActivationGate.wait(parent, Date.now() + 30_000, () => published)
+  disconnectPreviews([peer])
+  await dropped
+  Expect(peer.activated).toBe(false)
+  StudioPreviewPublication.cancel(peer)
+})
+
+Test('Studio reloads one lagging peer once after another peer acknowledges the publication', async () => {
+  const parent = {} as HTMLElement
+  const published = manifest(cell('first'), cell('lagging'))
+  const first = connection(published.cells[0]!)
+  const lagging = connection(published.cells[1]!)
+  let reloads = 0
+  Object.defineProperty(lagging.iframe, 'src', {
+    get: () => previewUrl,
+    set: () => {
+      reloads++
+      StudioPreviewPublication.loaded(lagging)
+    },
+  })
+  for (const preview of [first, lagging]) {
+    preview.activated = true
+    preview.cellIdentity = {
+      appName: 'Demo',
+      cellId: preview.cell!.cellId,
+      cellRevision: 1,
+      compileRevision: 1,
+      manifestRevision: 'manifest-1',
+      project: '/project',
+    }
+  }
+  const compile = { appliedRevision: 1, compileRevision: 1, diagnostics: [], message: '', status: 'compiled' } as const
+  try {
+    StudioPreviewActivationGate.attach(parent, compile, published, [first, lagging])
+    Expect(lagging.pendingPublication?.normalWaitMs).toBe(6_000)
+    StudioPreviewPublication.acknowledged(first, first.cellIdentity!, first.previewInstanceId)
+    StudioPreviewActivationGate.changed(first)
+    Expect(lagging.pendingPublication?.normalWaitMs).toBe(3_000)
+    await until(() => reloads === 1, { description: 'one lagging preview recovery reload' })
+    Expect(reloads).toBe(1)
+  } finally {
+    StudioPreviewPublication.cancel(first)
+    StudioPreviewPublication.cancel(lagging)
+  }
+})
 
 Test('Studio activates the latest same-cell revision after registration and session saves race replans', async () => {
   const restoreWindow = windowSlot.install({
@@ -428,6 +526,141 @@ Test('Studio invalidates the old matrix when the parent changes apps during regi
   }
 })
 
+Test(
+  'Studio waits for compile, publication, and the exact connected peer before registering another cell',
+  async () => {
+    const restoreWindow = windowSlot.install({
+      configurable: true,
+      value: { location: { origin: 'http://localhost:1234', pathname: '/studio' } },
+    })
+    const registrations: string[] = []
+    const restoreRegistration = cellInstanceSlot.install(async body => {
+      registrations.push((body as { cellId: string }).cellId)
+      return {}
+    })
+    const restoreSession = saveSessionSlot.install(async () => {})
+    let pending: Promise<void> | undefined
+    let peer: StudioPreviewConnection | undefined
+    try {
+      const parent = {} as HTMLElement
+      const previous = manifest(cell('peer'), cell('new'))
+      const latest = {
+        ...manifest(cell('peer', 2), cell('new', 2)),
+        compileRevision: 2,
+        manifestRevision: 'manifest-2',
+      }
+      peer = connection(previous.cells[0]!)
+      peer.activated = true
+      peer.cellIdentity = {
+        appName: 'Demo',
+        cellId: 'peer',
+        cellRevision: 1,
+        compileRevision: 1,
+        manifestRevision: 'manifest-1',
+        project: '/project',
+      }
+      const newcomer = connection(previous.cells[1]!)
+      const previews = [peer, newcomer]
+      const compiling = {
+        appliedRevision: 1,
+        compileRevision: 2,
+        diagnostics: [],
+        message: '',
+        status: 'compiling',
+      } as const
+      wireActivation(parent, previews, previous, previewUrl, { ...handshake, compile: compiling })
+      StudioPreviewActivationGate.compile(parent, compiling)
+      pending = newcomer.toggleActivation!()
+      await settle()
+      Expect(registrations).toEqual([])
+
+      StudioPreviewActivationGate.compile(parent, { ...compiling, status: 'compiled' })
+      await settle()
+      Expect(registrations).toEqual([])
+      StudioPreviewActivationGate.manifest(parent, latest)
+      newcomer.cell = latest.cells[1]!
+      peer.cell = latest.cells[0]!
+      peer.cellIdentity = {
+        ...peer.cellIdentity!,
+        cellRevision: 2,
+        compileRevision: 2,
+        manifestRevision: 'manifest-2',
+      }
+      wireActivation(parent, previews, latest, previewUrl, { ...handshake, compile: compiling })
+      await settle()
+      Expect(registrations).toEqual([])
+      StudioPreviewPublication.acknowledged(peer, {
+        ...peer.cellIdentity!,
+        cellRevision: 1,
+      }, peer.previewInstanceId)
+      StudioPreviewActivationGate.changed(peer)
+      await settle()
+      Expect(registrations).toEqual([])
+      StudioPreviewPublication.acknowledged(peer, peer.cellIdentity!, peer.previewInstanceId)
+      StudioPreviewActivationGate.changed(peer)
+      await pending
+      Expect(registrations).toEqual(['new'])
+      Expect(newcomer.cellIdentity?.compileRevision).toBe(2)
+    } finally {
+      if (peer !== undefined) {
+        StudioPreviewPublication.cancel(peer)
+      }
+      await Promise.allSettled([pending].filter((task): task is Promise<void> => task !== undefined))
+      restoreSession()
+      restoreRegistration()
+      restoreWindow()
+    }
+  },
+)
+
+Test(
+  'Studio starts restored cells together after wiring without waiting for another frame',
+  async () => {
+    const restoreWindow = windowSlot.install({
+      configurable: true,
+      value: { location: { origin: 'http://localhost:1234', pathname: '/studio' } },
+    })
+    const registrations: string[] = []
+    const restoreRegistration = cellInstanceSlot.install(async body => {
+      registrations.push((body as { cellId: string }).cellId)
+      return {}
+    })
+    let pending: Promise<void> | undefined
+    const first = connection(cell('a'))
+    const second = connection(cell('b'))
+    try {
+      const parent = {} as HTMLElement
+      const published = manifest(first.cell!, second.cell!)
+      for (const preview of [first, second]) {
+        preview.activated = true
+        preview.startupPending = true
+        preview.cellIdentity = {
+          appName: 'Demo',
+          cellId: preview.cell!.cellId,
+          cellRevision: 1,
+          compileRevision: 1,
+          manifestRevision: 'manifest-1',
+          project: '/project',
+        }
+      }
+      const previews = [first, second]
+      wireActivation(parent, previews, published, previewUrl, handshake)
+      Expect(registrations).toEqual([])
+      pending = startRestoredPreviews(parent, previews)
+      await pending
+      Expect(registrations).toEqual(['a', 'b'])
+      Expect(first.startupPending).toBe(false)
+      Expect(second.startupPending).toBe(false)
+    } finally {
+      StudioPreviewPublication.cancel(first)
+      StudioPreviewPublication.cancel(second)
+      await Promise.allSettled([pending].filter((task): task is Promise<void> => task !== undefined))
+      restoreRegistration()
+      restoreWindow()
+    }
+  },
+)
+
 Test('Studio passes edited inactive cell configuration to the grid before its card is rendered', async () => {
   const gridSlot = testOverrideSlot({
     read: () => StudioMatrixGrid.reconcile,
@@ -474,7 +707,7 @@ Test('Studio passes edited inactive cell configuration to the grid before its ca
 })
 
 Test(
-  'Studio retains pending scenario activation through whole-app toggles and restores it on the first manifest',
+  'Studio restores a pending scenario activation on the first manifest',
   async () => {
     const element = (): HTMLElement =>
       ({
@@ -560,10 +793,8 @@ Test(
       const previews = [wholeApp]
       const savedHandshake = { ...handshake, studioSession: { activatedCellIds: ['a'] } }
       wireActivation(parent, previews, undefined, previewUrl, savedHandshake)
-      await wholeApp.toggleActivation!()
-      await wholeApp.toggleActivation!()
-      Expect(saved).toEqual([['a', 'whole-app'], ['a']])
       await refreshCellPreviews(parent, previews, previewUrl, manifest(cell('a')), savedHandshake)
+      await startRestoredPreviews(parent, previews)
       Expect(registrations).toEqual(['a'])
       Expect(previews[0]?.activated).toBe(true)
       await refreshCellPreviews(parent, previews, previewUrl, manifest(), savedHandshake)

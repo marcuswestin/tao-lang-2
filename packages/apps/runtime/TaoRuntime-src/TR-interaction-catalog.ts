@@ -2,7 +2,7 @@ import React from 'react'
 import { Arrays } from './core/RuntimeCore'
 import { accessibilityVerbProps, focusAccessibilityHost, type TaoAccessibilityHost } from './TR-accessibility'
 import { AuthControls } from './TR-auth'
-import type { TaoDesign, TaoDesignSpec } from './TR-design'
+import { DesignControls, type TaoDesign, type TaoDesignSpec } from './TR-design'
 import { CommandControls, type RuntimeCommand } from './TR-interaction'
 import { InteractionAttention, runtimeInteractionValue, type TaoAttentionKey } from './TR-interaction-attention'
 import { interactionKeyboardPresence, normalizeInteractionKey } from './TR-interaction-keys'
@@ -621,15 +621,18 @@ function occurrenceAttentionSnapshot(occurrence: TaoInteractionOccurrence): stri
 
 function usesInteractionDesign(props: TaoProps | undefined): boolean {
   const design = TaoPropsControls.ambientContext(props).app?.design
-  const visitedBundles = new Set<string>()
   let current = props
   while (current) {
+    const renderDesign = DesignControls.forSource(design, current.designSpec?.source ?? current.designSource)
+    const headerDesign = DesignControls.forSource(design, current.declarationSpec?.source ?? current.designSource)
+    const defaultDesign = DesignControls.forSource(design, current.designSource)
     if (
-      designSpecUsesInteraction(current.designSpec, design, visitedBundles)
+      designSpecUsesInteraction(current.designSpec, renderDesign, new Set())
+      || designSpecUsesInteraction(current.declarationSpec, headerDesign, new Set())
       || designSpecUsesInteraction(
-        current.designDefault === undefined ? undefined : design?.bundles[current.designDefault],
-        design,
-        visitedBundles,
+        current.designDefault === undefined ? undefined : defaultDesign?.bundles[current.designDefault],
+        defaultDesign,
+        new Set(),
       )
     ) {
       return true

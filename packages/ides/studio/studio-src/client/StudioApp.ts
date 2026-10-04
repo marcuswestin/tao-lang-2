@@ -58,6 +58,7 @@ import {
 import { mountStudioSelectionHud } from './app/StudioSelectionHud'
 import { configureStudioSessionPickers } from './app/StudioSessionPickers'
 import { StudioSourceMutations } from './app/StudioSourceMutations'
+import { StudioPreviewActivationGate } from './matrix/StudioPreviewActivationGate'
 import {
   StudioApiClient,
   StudioApiError,
@@ -78,11 +79,13 @@ import {
   postDebugCommand,
   postEditorSelection,
   refreshCellPreviews,
+  startRestoredPreviews,
   StudioDebugEvents,
   StudioFocusedPreview,
   StudioMatrixView,
   type StudioPreviewConnection,
 } from './StudioMatrixView'
+import { StudioPreferences } from './StudioPreferences'
 import type { StudioDrawerTab } from './StudioProductPanels'
 import { StudioRailPanels } from './StudioRailPanels'
 import { StudioSessionWriter } from './StudioSessionWriter'
@@ -106,7 +109,7 @@ declare global {
   }
 }
 
-export type StudioMountOptions = Readonly<{ root?: HTMLElement; signal?: AbortSignal }>
+export type StudioMountOptions = Readonly<{ onShellReady?: () => void; root?: HTMLElement; signal?: AbortSignal }>
 
 export async function mountStudio(options: StudioMountOptions = {}): Promise<() => void> {
   const root = options.root ?? document.querySelector<HTMLElement>('#tao-studio-root')
@@ -115,7 +118,11 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
   }
 
   const config = window.TaoStudioConfig ?? {}
-  const view = createStudioShell(root, config)
+  StudioMountSignal.throwIfAborted(options.signal)
+  await StudioPreferences.load()
+  StudioMountSignal.throwIfAborted(options.signal)
+  const view = createStudioShell(root, config, StudioPreferences.storage)
+  options.onShellReady?.()
   const lifetime = new StudioMountLifetime(options.signal)
   const { signal } = lifetime
   lifetime.add(() => view.dispose())
@@ -540,6 +547,11 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         return
       }
       void refreshCellPreviews(view.preview, previews, config.previewUrl, manifest, handshake).then(() => {
+        void startRestoredPreviews(view.preview, previews, signal).catch(error => {
+          if (!StudioMountSignal.isAbortError(error)) {
+            showSourceActionError(view.status, error)
+          }
+        })
         wireActivationReconcile()
         const restoredCellId = pendingFocusedCellId
         pendingFocusedCellId = undefined
@@ -559,7 +571,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       button.addEventListener('click', () => {
         const tab = button.dataset['drawerTab'] as StudioDrawerTab
         drawer.select(tab)
-        StudioWorkbenchState.saveDrawerTab(window.localStorage, tab)
+        StudioWorkbenchState.saveDrawerTab(StudioPreferences.storage, tab)
       })
     }
     view.rail.addEventListener('click', event => {
@@ -572,7 +584,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     if (activeRailButton?.dataset['panel'] !== undefined) {
       drawer.selectRail(activeRailButton.dataset['panel'])
     }
-    const initialDrawerTab = StudioWorkbenchState.loadDrawerTab(window.localStorage)
+    const initialDrawerTab = StudioWorkbenchState.loadDrawerTab(StudioPreferences.storage)
     drawer.select(initialDrawerTab)
 
     const commands = mountStudioCommandPalette({
@@ -590,7 +602,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       projectFiles: () => projectFiles,
       selectDrawer: tab => {
         drawer.select(tab)
-        StudioWorkbenchState.saveDrawerTab(window.localStorage, tab)
+        StudioWorkbenchState.saveDrawerTab(StudioPreferences.storage, tab)
       },
       view,
     })
@@ -640,6 +652,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     StudioMountSignal.throwIfAborted(signal)
     const disconnectEvents = connectStudioEvents(view.status, openCompileDiagnostic, {
       onCompile(state) {
+        StudioPreviewActivationGate.compile(view.preview, state)
         compileState = state
         previewNotice.render()
         devicePanel.setCompileState(state)
@@ -671,6 +684,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         fileTree?.setFiles(files)
       },
       onManifest(manifest) {
+        StudioPreviewActivationGate.manifest(view.preview, manifest)
         const previousCompileRevision = previewManifest?.compileRevision
         previewManifest = manifest
         if (previousCompileRevision !== manifest.compileRevision) {
@@ -774,6 +788,13 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       },
     })
     lifetime.add(disconnectPreviewMessages)
+    if (config.previewUrl !== undefined) {
+      void startRestoredPreviews(view.preview, previews, signal).catch(error => {
+        if (!StudioMountSignal.isAbortError(error)) {
+          showSourceActionError(view.status, error)
+        }
+      })
+    }
     const keydownListener = (event: KeyboardEvent): void => {
       if (isStudioSaveShortcut(event)) {
         event.preventDefault()

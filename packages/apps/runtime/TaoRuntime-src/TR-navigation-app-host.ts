@@ -56,6 +56,7 @@ function NavigationAppHostContent(props: { app: RuntimeAppDefinition; __tao?: Ta
 
 function MountedNavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: TaoProps }): React.JSX.Element {
   useSubscription(props.app)
+  React.useSyncExternalStore(props.app.subscribeDesign, props.app.designSnapshot, props.app.designSnapshot)
   const navigator = props.app.navigator
   const auxiliaries = Object.values(props.app.auxiliaries)
   useSubscription(navigator)

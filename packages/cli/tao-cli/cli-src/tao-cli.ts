@@ -524,9 +524,9 @@ function createCommands(): Command {
 
   commands
     .command('compile')
-    .argument('<appPath>', 'Tao app path to compile into the local runtime package.')
+    .argument('<appPath>', 'Tao app path to compile into its project cache.')
     .option('--app <name>', 'Select a named app when the file declares multiple apps.')
-    .description('Compile a Tao app into the local runtime package.')
+    .description('Compile a Tao app into its project .tao/cache/_gen_tao-app directory.')
     .action(async (appPath: string, options: { app?: string }) => {
       try {
         const { runCompile } = await import('./compile-command')

@@ -11,6 +11,7 @@ import { StudioFixtureGeneration } from './StudioFixtureGeneration'
 import { StudioHighlight } from './StudioHighlight'
 import { StudioLsp, type StudioLspSession } from './StudioLsp'
 import { StudioMatrixConflictError } from './StudioMatrixSession'
+import { StudioPreferencesStore } from './StudioPreferencesStore'
 import {
   StudioProjectSession,
   StudioSourceActionConflictError,
@@ -79,6 +80,7 @@ export type StudioServerOptions = {
   openBrowser?: (url: string) => Promise<void>
   port?: number
   previewUrl?: string
+  preferencesRoot?: string
   shipBeta?: StudioBetaShip
 }
 
@@ -150,7 +152,7 @@ function routeEntries<KeyT extends string, HandlerT>(
 
 /**
  * dispatch answers the request from one table, and returns undefined when no route in it is the request,
- * so the caller can try the next table. Paths never repeat within a table, so table order does not matter.
+ * so the caller can try the next table. Method and path pairs never repeat within a table.
  */
 async function dispatch<ContextT>(
   entries: readonly StudioRouteEntry<StudioHandler<ContextT>>[],
@@ -253,6 +255,7 @@ export async function startStudioSessionServer(
   })
   const closeSession = async (sessionId: string): Promise<boolean> => await manager.close(sessionId)
   const authorization = originAuthorization(manager, options.allowedOrigins)
+  const preferences = new StudioPreferencesStore(options.preferencesRoot)
   const server = Bun.serve<StudioSocketData>({
     fetch: async (request, bunServer) => {
       const url = new URL(request.url)
@@ -283,6 +286,7 @@ export async function startStudioSessionServer(
           requestOptions,
           subscribeSession,
           closeSession,
+          preferences,
         )
         if (managed !== undefined) {
           return managed
@@ -603,6 +607,7 @@ type StudioManagerContext = Readonly<{
   closeSession: (sessionId: string) => Promise<boolean>
   manager: StudioSessionManager
   parameters: Readonly<Record<string, string>>
+  preferences: StudioPreferencesStore
   request: Request
   subscribeSession: (sessionId: string) => void
 }>
@@ -620,6 +625,25 @@ const managerHandlers: Readonly<Record<StudioManagerRouteKey, StudioHandler<Stud
   },
   openSession: async context =>
     openedSessionReply(context, await context.manager.open(projectOpenRequest(await context.request.json()))),
+  studioPreferences: async ({ preferences }) => jsonReply({ values: await preferences.read() }),
+  studioPreferencesSave: async ({ preferences, request }) => {
+    const body: unknown = await request.json()
+    Assert.input(Json.isRecord(body) && Json.isRecord(body['values']), 'Expected Studio preference values.')
+    Assert.input(
+      body['importMissing'] === undefined || typeof body['importMissing'] === 'boolean',
+      'Expected a boolean Studio preference import choice.',
+    )
+    const writerId = body['writerId']
+    const sequence = body['sequence']
+    Assert.input(
+      (writerId === undefined && sequence === undefined)
+        || (typeof writerId === 'string' && /^[A-Za-z0-9_-]{1,128}$/u.test(writerId)
+          && typeof sequence === 'number' && Number.isSafeInteger(sequence) && sequence > 0),
+      'Expected a Studio preference writer id and sequence.',
+    )
+    const writer = typeof writerId === 'string' && typeof sequence === 'number' ? { id: writerId, sequence } : undefined
+    return jsonReply({ values: await preferences.save(body['values'], body['importMissing'] === true, writer) })
+  },
   root: ({ manager }) => htmlReply(StudioWelcome.html(manager.list())),
   sessions: ({ manager }) => jsonReply(manager.list()),
   switchSession: async context =>
@@ -650,11 +674,13 @@ async function handleManagerRequest(
   options: StudioServerOptions,
   subscribeSession: (sessionId: string) => void,
   closeSession: (sessionId: string) => Promise<boolean>,
+  preferences: StudioPreferencesStore,
 ): Promise<Response | undefined> {
   return await dispatch(managerEntries, request, url, options, url.pathname, parameters => ({
     closeSession,
     manager,
     parameters,
+    preferences,
     request,
     subscribeSession,
   }))

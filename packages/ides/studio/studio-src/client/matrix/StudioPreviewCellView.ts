@@ -187,7 +187,9 @@ export function renderCellPreview(
   viewport.style.width = `${cell.environment.viewport.width}px`
   connection.iframe.style.height = '100%'
   connection.iframe.style.width = '100%'
-  if (connection.activated) {
+  if (connection.startupPending) {
+    viewport.replaceChildren()
+  } else if (connection.activated) {
     if (!viewport.contains(connection.iframe)) {
       viewport.replaceChildren(connection.iframe)
     }

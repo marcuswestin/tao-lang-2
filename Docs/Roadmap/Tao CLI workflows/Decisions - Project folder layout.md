@@ -29,7 +29,7 @@ Where Tao keeps a project's state on disk, and what a project commits. Decided 2
 5. **Everything Studio writes goes under a `studio/` folder** of whichever of `store/`, `local/`, or
    `cache/` it belongs in. The same holds in the home folder (`~/.tao/studio/`).
 6. **Files only an app with agents needs go in an `agents/` folder** of the generated desktop host
-   (`cache/dev/desktop/agents/`), so the host's own files read the same with or without agents.
+   (`cache/dev/desktop-host/agents/`), so the host's own files read the same with or without agents.
 7. **`tao create` writes a root `.gitignore` of common defaults**, one commented section per
    concern with a blank line between sections: operating system and editor files, Tao's generated
    sidecars (`*.tao.ts`), tooling output (`node_modules/`, `.expo/`, `*.tsbuildinfo`, `*.log`), and
@@ -50,9 +50,14 @@ Where Tao keeps a project's state on disk, and what a project commits. Decided 2
     files are, and `lock.jsonc` already records which Tao release the project pins. The migration
     folds an existing `.tao-project/skills.version` into the field.
 11. **Datasource adapters get a Tao API to read and write `store/`, `local/`, and `cache/`.** Today
-    only the `Dev` datasource's server writes into the project, through its own protocol. Whether
-    the API is built in this project or deferred is to be decided; when deferred, it gets its own
-    roadmap entry.
+    only the `Dev` datasource's server writes into the project, through its own protocol. The API
+    is deferred to [Adapter project storage](<Plan - Adapter project storage.md>).
+12. **The development desktop host lives in `cache/dev/desktop-host/`.** Its agent-only files remain
+    under `agents/`; a retained build's `desktop/` still contains the built app.
+13. **Global Studio preferences live in `~/.tao/studio/prefs.json`.** The Studio server reads and writes
+    them. Existing browser preferences import once, without overwriting a saved home preference.
+14. **Generated app output belongs to the project's `cache/`.** Development and Studio runtimes remain
+    isolated by launch; explicit retained build, ship, and test output roots keep their own lifetimes.
 
 ## The tree
 
@@ -102,7 +107,7 @@ Every kind of entry, shown three times where a project can hold several.
         │   ├── node_modules/
         │   ├── runtime/
         │   ├── expo-home/
-        │   └── desktop/
+        │   └── desktop-host/
         │       ├── electrobun.config.ts
         │       ├── hutch.config.ts
         │       ├── package.json
@@ -114,6 +119,7 @@ Every kind of entry, shown three times where a project can hold several.
         │           ├── agent-host.js
         │           └── index.ts
         ├── studio/
+        │   ├── runtimes/            isolated generated preview runtimes
         │   ├── locks/               sketch catalog lock, owner, and claim files
         │   └── tmp/                 sketch catalog staging
         ├── ship/
@@ -190,16 +196,11 @@ Home folder, for state not tied to one project:
    because `tsc` takes a project file; the in-process TypeScript API (already imported at line 37)
    could replace both.
 
-## Open
+## Decisions completed on 2026-10-04
 
-1. **When the adapter storage API is built** (decision 11): in this project or deferred.
-2. **The desktop host's folder name.** `cache/dev/desktop/` holds the generated Electrobun shell, not
-   a desktop app's output, while a build's `desktop/` is the built app. Recommended:
-   `cache/dev/desktop-host/`, matching `DesktopHost`, with `agents/` inside it.
-3. **Home Studio preferences.** Whether the global browser keys in item 6 move to
-   `~/.tao/studio/prefs.json` or stay in the browser.
-4. **The generated app.** `_gen_tao-app` sits in the toolchain root, shared by every project;
-   whether it moves to each project's `cache/` is open.
+The Developer accepted all four recommendations: defer the adapter storage API, name the generated
+development host `desktop-host/`, move home preferences through the Studio server, and place generated
+app output under each project's cache. Decisions 11–14 above own these choices.
 
 ## Implementation state
 
@@ -212,6 +213,13 @@ launches, recents, trust, and logs and literal app-id agent state have recognize
 Unknown entries, symlinks, and destination file conflicts remain untouched; recognized directories
 merge without dropping either side. Browser project focus/tabs and the prior viewport file import
 into `.tao/local/studio/session.json` alongside per-app activated previews.
+Before moving legacy files or rewriting ignore rules, preparation refuses an unrecognized custom
+rule in `.tao/.gitignore` and asks its owner to move that rule to the root ignore file. This preserves
+private-file coverage; comments, blank lines, the old `*`, and the decided two rules are recognized.
+Real Git regressions cover both refusal without migration and the recognized legacy migration.
+The root migration also removes the recognized blanket `.tao/` rule from CRLF files, preserving
+the other rules and their line endings; its Git regression proves that the committed lock becomes
+visible while unknown private files and `local/` and `cache/` remain ignored.
 
 Focused migration, CLI, skills, Dev data, and launch tests pass; the full Studio and Studio-tooling
 source test directories pass. Mutation checks prove that the shared skills/pin lock and one-time
@@ -223,8 +231,21 @@ legacy private ignore coverage, merge concurrent home recents, and reproduce com
 files. Studio compile-error recovery, ordered focus/tab saves, manifest pruning, and exact browser
 registration release have source regressions; the full Studio directory passes. The decided
 first-pair implementation passed `verify-changed` at `e91c60008`; whole-project final verification
-remains pending. The four
-[open decisions](#open) remain with the Developer; their undecided behavior is retained pending an answer.
+remains pending. Decisions 12–14 are now implemented; decision 11 is deferred into
+[Plan - Adapter project storage](<Plan - Adapter project storage.md>).
+
+Generated development hosts live under `cache/dev/desktop-host/`, with recognized older host
+directories migrated without replacing conflicts. Studio preferences use the server's shared home
+store, fresh-read locked merges, and missing-only browser import. Saved keys include the Debug
+drawer. Saves flush on page close; per-window sequence numbers reject an older request arriving
+after a newer one. Default compiled output, verification output, and isolated Studio runtimes now
+live in each owning project's cache; explicit build, ship, and test output roots retain their scope.
+The clean command checks linked ancestors before removing generated output. An outside-repository
+Metro fixture exposed a missing TypeScript dependency link: checkout runtimes now link their parent
+to the hoisted checkout dependencies, with the installed-host fallback retained. Focused regressions
+cover these paths, and the corrected real-app smoke `preview-pointer-shield-20261004` passes all four
+journeys. Finalization and verification against the integrated main tree remain pending; the newer
+project-tooling helpers must adopt these decided store/cache paths during that integration.
 
 Historical starting point:
 

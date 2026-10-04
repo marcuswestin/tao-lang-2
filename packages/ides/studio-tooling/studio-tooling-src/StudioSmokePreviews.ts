@@ -1,3 +1,4 @@
+import { Errors } from '@shared'
 import type { StudioCdp } from './StudioCdp'
 
 /** Activates the listed cells a real-Metro smoke uses, through each cell's own toggle. */
@@ -11,10 +12,26 @@ export async function activateSmokePreviews(browser: StudioCdp): Promise<void> {
       `[...document.querySelectorAll('.studio-preview-cell')].find(cell => (cell.dataset.taoStudioCell ?? cell.dataset.cellId) === ${
         JSON.stringify(cellId)
       })?.querySelector('.studio-preview-activation-toggle')`
+    await browser.waitFor(`(${toggle}) instanceof HTMLButtonElement && !(${toggle}).disabled`)
     await browser.evaluate(`(() => {
       const toggle = ${toggle}
       if (toggle instanceof HTMLButtonElement && toggle.getAttribute('aria-pressed') === 'false') toggle.click()
     })()`)
-    await browser.waitFor(`(${toggle})?.getAttribute('aria-pressed') === 'true'`)
+    try {
+      // Activation may spend 30 seconds on readiness before registration and the session write.
+      await browser.waitFor(`(${toggle})?.getAttribute('aria-pressed') === 'true'`, { timeoutMs: 45_000 })
+    } catch (error) {
+      const state = await browser.evaluate(`(() => {
+        const toggle = ${toggle}
+        return {
+          exists: toggle instanceof HTMLButtonElement,
+          disabled: toggle?.disabled,
+          pressed: toggle?.getAttribute('aria-pressed'),
+          title: toggle?.title,
+          status: document.querySelector('.studio-status')?.textContent,
+        }
+      })()`)
+      Errors.throwHostEnvironment(`Preview activation failed for ${cellId}: ${JSON.stringify(state)}`, { cause: error })
+    }
   }
 }

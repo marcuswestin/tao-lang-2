@@ -1,7 +1,8 @@
 import Runtime from '@expo-host'
-import { Errors, FS, HCI } from '@shared'
+import { Errors, FS, HCI, ProjectLocal } from '@shared'
 import type { Readable, Writable } from 'node:stream'
 import { TaoAppModules } from './app-modules'
+import { inPlace } from './in-place-files'
 
 /** CompileCommandResult declares the compiled app's source and generated output paths. */
 type CompileCommandResult = {
@@ -17,7 +18,7 @@ type CompileCommandOptions = {
   runtimePackageRoot?: string
 }
 
-/** runCompile compiles the Tao app at `appPath` into the local runtime package. */
+/** runCompile compiles the Tao app at `appPath` into its project's cache by default. */
 export async function runCompile(
   appPath: string,
   options: CompileCommandOptions = {},
@@ -27,11 +28,17 @@ export async function runCompile(
     Errors.throwUserInput(`No Tao app file found at ${sourcePath}`)
   }
   await TaoAppModules.ensureForPath(sourcePath)
+  let runtimePackageRoot = options.runtimePackageRoot
+  if (runtimePackageRoot === undefined) {
+    const projectRoot = await inPlace.workspaceRootForPath(sourcePath)
+    await ProjectLocal.prepare(projectRoot)
+    runtimePackageRoot = ProjectLocal.cacheResolve('', projectRoot)
+  }
   const appNames = await Runtime.appNames(sourcePath)
   const appName = await selectAppName(sourcePath, appNames, options)
   const generated = await Runtime.generateApp(sourcePath, {
     appName,
-    runtimePackageRoot: options.runtimePackageRoot,
+    runtimePackageRoot,
   })
   return { sourcePath: generated.sourcePath, outputPath: generated.outputPath }
 }

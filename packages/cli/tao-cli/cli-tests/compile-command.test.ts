@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { FS, ProjectLocal } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { PassThrough } from 'node:stream'
 import { runCompile } from '../cli-src/compile-command'
@@ -10,6 +10,15 @@ const source = `
 `
 
 Describe('tao compile app selection', () => {
+  Test('generates into the owning project cache by default', async () => {
+    await withTaoFiles('tao-compile-cache-', { 'Main.tao': source }, async paths => {
+      const sourcePath = paths['Main.tao']!
+      const compiled = await runCompile(sourcePath, { appName: 'First' })
+      const projectRoot = FS.dirname(sourcePath)
+      Expect(compiled.outputPath).toBe(ProjectLocal.cacheResolve('_gen_tao-app/App.tsx', projectRoot))
+      Expect(await FS.isFile(compiled.outputPath)).toBe(true)
+    })
+  })
   Test('refreshes source-adjacent bridge metadata during compilation', async () => {
     await withTaoFiles('tao-compile-bridge-', {
       'Main.tao': `app Demo { view Main }

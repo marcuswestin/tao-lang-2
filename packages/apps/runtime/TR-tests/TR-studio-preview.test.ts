@@ -1510,7 +1510,7 @@ Describe('Studio preview runtime bridge', () => {
         appliedRevision: 7,
         channel: 'tao-studio',
         compileRevision: 7,
-        identity: { appName: 'Demo', previewInstanceId: 'preview-1', project: '/project' },
+        identity: { appName: 'Demo', compileRevision: 7, previewInstanceId: 'preview-1', project: '/project' },
         protocolVersion: 1,
         type: 'preview-applied',
       },
@@ -2049,5 +2049,27 @@ Test('keeps the editing bridge active without an applied-publication claim in th
   Expect(fake.listenerCount()).not.toBe(0)
   Expect(fake.messages.some(post => (post.message as { type?: string }).type === 'preview-applied')).toBe(false)
   Expect(fake.messages.some(post => (post.message as { type?: string }).type === 'preview-mounted')).toBe(true)
+  Expect(fake.messages.find(post => (post.message as { type?: string }).type === 'preview-mounted'))
+    .toMatchObject({
+      message: {
+        appliedRevision: config.compileRevision,
+        compileRevision: config.compileRevision,
+        identity: { compileRevision: config.compileRevision, previewInstanceId: config.previewInstanceId },
+      },
+    })
+  cleanup()
+})
+
+Test('acknowledges the whole-app revision with its preview instance', () => {
+  const fake = previewHost([])
+  const cleanup = mountStudioPreviewBridge(config, fake.host)
+  Expect(fake.messages.find(post => (post.message as { type?: string }).type === 'preview-applied'))
+    .toMatchObject({
+      message: {
+        appliedRevision: config.compileRevision,
+        compileRevision: config.compileRevision,
+        identity: { compileRevision: config.compileRevision, previewInstanceId: config.previewInstanceId },
+      },
+    })
   cleanup()
 })

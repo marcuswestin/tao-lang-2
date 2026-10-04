@@ -665,6 +665,7 @@ kbd {
 .tao-studio-product-host[data-layout-preset="draw"] [data-tao-studio-draw-live] .studio-preview-cell[data-tao-studio-drop-into-target] .studio-preview-cell-viewport {
   box-shadow: 0 0 0 5px var(--studio-bezel), 0 0 0 8px var(--studio-accent);
 }
+.studio-preview { cursor: grab; }
 .studio-preview[data-canvas-pan-ready="true"] { cursor: grab; }
 .studio-preview[data-canvas-panning="true"] { cursor: grabbing; }
 /* Keep one transparent surface above every preview for the entire held-Space gesture, including
@@ -745,7 +746,7 @@ kbd {
   overscroll-behavior-x: contain; padding: 4px 8px 14px 4px; scroll-snap-type: x proximity;
 }
 .studio-preview-group-cells > .studio-preview-cell { scroll-snap-align: start; }
-.studio-preview-cell { display: grid; flex: none; gap: 8px; justify-items: start; min-width: 0; }
+.studio-preview-cell { cursor: pointer; display: grid; flex: none; gap: 8px; justify-items: start; min-width: 0; }
 .studio-whole-app-preview { grid-template-rows: auto minmax(0, 1fr); height: 100%; width: 100%; padding: 8px; }
 .studio-whole-app-preview > .studio-preview-cell-viewport { height: 100%; width: 100%; }
 .studio-preview-cell:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 8px; }
@@ -761,11 +762,11 @@ kbd {
 .studio-preview-cell-details { margin-left: auto; color: var(--studio-text-dim); font: 11px var(--studio-mono); font-weight: 400; }
 .studio-preview-cell[data-preview-interactive="true"] > .studio-preview-cell-label { color: var(--studio-accent-strong); }
 .studio-preview-cell-viewport {
-  background: #fff; border-radius: 26px; box-shadow: 0 0 0 5px var(--studio-bezel), 0 0 0 6px var(--studio-stroke-strong), 0 24px 48px -12px rgba(0, 0, 0, .8);
+  background: var(--studio-panel); border-radius: 26px; box-shadow: 0 0 0 5px var(--studio-bezel), 0 0 0 6px var(--studio-stroke-strong), 0 24px 48px -12px rgba(0, 0, 0, .8);
   flex: none; overflow: hidden; position: relative;
 }
 .studio-preview-focus-shield {
-  appearance: none; background: transparent; border: 0; border-radius: inherit; cursor: grab; inset: 0; padding: 0; position: absolute; z-index: 2;
+  appearance: none; background: transparent; border: 0; border-radius: inherit; cursor: pointer; inset: 0; padding: 0; position: absolute; z-index: 2;
 }
 .studio-preview-focus-shield[hidden] { display: none; }
 .studio-preview-focus-shield:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: -3px; }

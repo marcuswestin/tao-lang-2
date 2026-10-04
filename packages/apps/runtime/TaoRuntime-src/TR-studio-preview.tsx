@@ -496,10 +496,6 @@ function PreviewBridge(props: StudioPreviewBridgeProps): React.ReactElement {
       })
     }
   }, [props.config])
-  React.useEffect(() => mountStudioPreviewBridge(props.config, undefined, captureFixture), [
-    captureFixture,
-    props.config,
-  ])
   React.useEffect(() => publishStudioScheme(props.config, scheme), [props.config, scheme])
   React.useEffect(() => {
     const steps = scenario?.steps
@@ -534,7 +530,30 @@ function PreviewBridge(props: StudioPreviewBridgeProps): React.ReactElement {
   if (journeyError !== undefined) {
     return createElement(StudioPreviewFailure, { error: journeyError })
   }
-  return createElement(StudioLensHost, { publish: publishLens }, props.children)
+  return createElement(
+    React.Suspense,
+    { fallback: createElement(StudioPreviewPending) },
+    createElement(StudioPreviewCommittedContent, {
+      captureFixture,
+      children: props.children,
+      config: props.config,
+      publishLens,
+    }),
+  )
+}
+
+/** Bridge registration acknowledges only a committed tree, never a suspended fallback. */
+function StudioPreviewCommittedContent(props: {
+  captureFixture?: () => Promise<TaoStudioFixturePlan>
+  children?: React.ReactNode
+  config: StudioPreviewConfig
+  publishLens: (sample: TaoStudioLensRenderSample) => void
+}): React.ReactElement {
+  React.useEffect(() => mountStudioPreviewBridge(props.config, undefined, props.captureFixture), [
+    props.captureFixture,
+    props.config,
+  ])
+  return createElement(StudioLensHost, { publish: props.publishLens }, props.children)
 }
 
 /** Reads the browser's final public CSS values after React commits the selected occurrence. */
@@ -1486,7 +1505,10 @@ export function mountStudioPreviewBridge(
     })
   } else {
     // A fresh bridge still needs the current editing and canvas mode after Fast Refresh.
-    postToStudio(host, config, 'preview-mounted')
+    postToStudio(host, config, 'preview-mounted', {
+      appliedRevision: config.compileRevision,
+      compileRevision: config.compileRevision,
+    })
   }
   scheduleLayoutMeasurements()
   const stopFailures = onRuntimeFailure(capture => postToStudio(host, config, 'preview-runtime-failure', { capture }))
@@ -1964,7 +1986,10 @@ function postToStudio(
 ): void {
   host.parent.postMessage({
     channel: studioProtocolChannel,
-    identity: previewIdentity(config),
+    identity: {
+      ...previewIdentity(config),
+      ...(type === 'preview-applied' || type === 'preview-mounted' ? { compileRevision: config.compileRevision } : {}),
+    },
     protocolVersion: studioProtocolVersion,
     ...payload,
     type,

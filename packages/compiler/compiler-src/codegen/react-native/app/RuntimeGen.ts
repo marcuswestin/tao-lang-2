@@ -19,6 +19,8 @@ type TaoFileCompileOptions = {
   selectedAppName?: string
   studioDataCatalog?: boolean
   studio?: boolean
+  studioSourceEpochs?: Readonly<Record<string, number>>
+  studioDesignEpochs?: Readonly<Record<string, number>>
   debug?: boolean
   studioViews?: ReadonlyArray<{ id: string; view: AST.ViewDeclaration }>
   viewRegistrations?: string

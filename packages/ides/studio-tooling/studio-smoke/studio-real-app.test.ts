@@ -18,7 +18,7 @@ Test(
 async function canvasTranslation(browser: StudioCdp): Promise<{ x: number; y: number }> {
   return await browser.evaluate(`(() => {
     const grid = document.querySelector('.studio-preview > .studio-preview-grid')
-    if (!(grid instanceof HTMLElement)) throw new Error('Missing Studio canvas grid')
+    if (!(grid instanceof HTMLElement)) throw new TypeError('Missing Studio canvas grid')
     const matrix = new DOMMatrix(getComputedStyle(grid).transform)
     return { x: matrix.e, y: matrix.f }
   })()`)
@@ -143,6 +143,31 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
       .toBe('activate')
     Expect(
       await browser.evaluate(`(() => {
+      const viewport = document.querySelector('.studio-preview-cell-viewport')
+      const canvas = document.querySelector('.studio-preview')
+      const cell = document.querySelector('.studio-preview-cell')
+      if (!viewport || !canvas || !cell) throw new TypeError('Missing inactive preview surfaces')
+      return {
+        background: getComputedStyle(viewport).backgroundColor,
+        canvasCursor: getComputedStyle(canvas).cursor,
+        previewCursor: getComputedStyle(cell).cursor,
+        panel: getComputedStyle(document.documentElement).getPropertyValue('--studio-panel').trim(),
+      }
+    })()`),
+    ).toMatchObject({ canvasCursor: 'grab', previewCursor: 'pointer' })
+    Expect(
+      await browser.evaluate(`(() => {
+      const viewport = document.querySelector('.studio-preview-cell-viewport')
+      const swatch = document.createElement('div')
+      swatch.style.backgroundColor = 'var(--studio-panel)'
+      document.body.append(swatch)
+      const matches = viewport && getComputedStyle(viewport).backgroundColor === getComputedStyle(swatch).backgroundColor
+      swatch.remove()
+      return matches
+    })()`),
+    ).toBe(true)
+    Expect(
+      await browser.evaluate(`(() => {
       const header = document.querySelector('.studio-preview-cell-label')
       const toggle = header?.querySelector('.studio-preview-activation-toggle')
       const name = toggle?.nextElementSibling
@@ -159,6 +184,8 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
     )
     // The native button renders its title uppercase on web, and innerText reports the transformed text.
     await waitForPreview(browser, studio, previewUrl, `document.body?.textContent?.includes('Increment') === true`)
+    Expect(await browser.evaluate(`getComputedStyle(document.querySelector('.studio-preview-focus-shield')).cursor`))
+      .toBe('pointer')
     Expect(await browser.evaluate("document.querySelector('.studio-preview-inactive-activate')")).toBe(null)
     Expect(
       await browser.evaluate(
@@ -224,7 +251,7 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
 
     await browser.evaluate(`(() => {
       const frame = document.querySelector('.studio-preview-cell iframe')
-      if (!(frame instanceof HTMLIFrameElement)) throw new Error('Missing Studio preview iframe')
+      if (!(frame instanceof HTMLIFrameElement)) throw new TypeError('Missing Studio preview iframe')
       window.__taoFastRefreshFrameProbe = { loads: 0 }
       frame.addEventListener('load', () => { window.__taoFastRefreshFrameProbe.loads += 1 })
       return true
@@ -542,7 +569,7 @@ async function waitForCompileAfter(browser: StudioCdp, previousRevision: number)
 async function setInteractionMode(browser: StudioCdp, mode: 'edit' | 'run'): Promise<void> {
   await browser.evaluate(`(() => {
     const button = document.querySelector('.studio-interaction-mode')
-    if (!(button instanceof HTMLButtonElement)) throw new Error('Missing Studio interaction mode control')
+    if (!(button instanceof HTMLButtonElement)) throw new TypeError('Missing Studio interaction mode control')
     if (button.dataset.mode !== ${JSON.stringify(mode)}) button.click()
     return button.dataset.mode
   })()`)
@@ -570,14 +597,14 @@ async function pressIncrementOnce(browser: StudioCdp, previewUrl: string): Promi
         .filter(element => element.textContent?.trim() === 'Increment')
         .toSorted((left, right) => left.querySelectorAll('[data-tao-studio]').length
           - right.querySelectorAll('[data-tao-studio]').length)[0]
-      if (!(increment instanceof HTMLElement)) throw new Error('Missing Increment control')
+      if (!(increment instanceof HTMLElement)) throw new TypeError('Missing Increment control')
       const rect = increment.getBoundingClientRect()
       return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
     })()`,
     )
     const point = await browser.evaluate<Readonly<{ x: number; y: number }>>(`(() => {
       const frame = document.querySelector('.studio-preview-cell iframe')
-      if (!(frame instanceof HTMLIFrameElement)) throw new Error('Missing Studio preview iframe')
+      if (!(frame instanceof HTMLIFrameElement)) throw new TypeError('Missing Studio preview iframe')
       const rect = frame.getBoundingClientRect()
       const scale = frame.clientWidth === 0 ? 1 : rect.width / frame.clientWidth
       return { x: rect.left + ${inFrame.x} * scale, y: rect.top + ${inFrame.y} * scale }
@@ -664,7 +691,7 @@ async function dragRenderBetween(
     const second = exactRender(${JSON.stringify(after)})
     const third = exactRender(${JSON.stringify(moved)})
     if (!(first instanceof HTMLElement) || !(second instanceof HTMLElement) || !(third instanceof HTMLElement)) {
-      throw new Error('Missing draggable Studio render targets')
+      throw new TypeError('Missing draggable Studio render targets')
     }
     const firstRect = first.getBoundingClientRect()
     const secondRect = second.getBoundingClientRect()
@@ -712,7 +739,13 @@ async function focusFirstPreview(browser: StudioCdp): Promise<void> {
 }
 
 async function exerciseUnfocusedPreview(browser: StudioCdp, previewUrl: string): Promise<void> {
-  await browser.waitFor(`document.querySelectorAll('[data-preview-interactive="true"]').length === 0`)
+  await browser.waitFor(`(() => {
+    const frame = document.querySelector('.studio-preview-cell iframe')
+    const shield = document.querySelector('.studio-preview-cell .studio-preview-focus-shield')
+    return frame !== null && shield !== null && !shield.hidden
+      && getComputedStyle(frame).pointerEvents === 'none'
+      && document.querySelectorAll('[data-preview-interactive="true"]').length === 0
+  })()`)
   await browser.evaluateInFrame(
     previewUrl,
     `(() => {

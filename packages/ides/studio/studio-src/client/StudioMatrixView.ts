@@ -50,7 +50,7 @@ export {
   StudioPreviewSourceSync,
   StudioRetainedPreview,
 } from './matrix/StudioPreviewConnection'
-export { connectPreviews, refreshCellPreviews } from './matrix/StudioPreviewMatrix'
+export { connectPreviews, refreshCellPreviews, startRestoredPreviews } from './matrix/StudioPreviewMatrix'
 export { previewBundleNoticeFor, previewNoticeFor, studioPreviewNotice } from './matrix/StudioPreviewNotice'
 export { StudioReviewDom } from './matrix/StudioReviewDom'
 export {

@@ -53,6 +53,8 @@ const managerRoutes = {
   closeAllSessions: { method: 'POST', path: '/api/sessions/close-all' },
   closeSession: { method: 'POST', path: '/api/sessions/:sessionId/close' },
   openSession: { method: 'POST', path: '/api/sessions/open' },
+  studioPreferences: { method: 'GET', path: '/api/studio/preferences' },
+  studioPreferencesSave: { method: 'POST', path: '/api/studio/preferences' },
   root: { method: 'GET', path: '/' },
   sessions: { method: 'GET', path: '/api/sessions' },
   switchSession: { method: 'POST', path: '/api/sessions/:sessionId/switch' },

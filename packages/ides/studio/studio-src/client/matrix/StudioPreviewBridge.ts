@@ -30,6 +30,7 @@ import { absoluteSourcePath, StudioSourceNavigation } from '../StudioEditor'
 import { revealCanvasNode } from './StudioCanvasViewport'
 import { StudioDebugEvents } from './StudioDebugEvents'
 import { invalidatePreviewJourneyRecording, StudioJourneyRecorder } from './StudioJourneyRecording'
+import { StudioPreviewActivationGate } from './StudioPreviewActivationGate'
 import {
   type StudioInteractionMode,
   type StudioPreviewConnection,
@@ -473,12 +474,14 @@ async function receivePreviewApplied(
 ): Promise<void> {
   postInteractionMode(preview, handshake)
   const identity = preview.cellIdentity
-  const currentCell = identity === undefined || (
-    message.identity.cellId === identity.cellId
-    && message.identity.cellRevision === identity.cellRevision
-    && message.identity.compileRevision === identity.compileRevision
-    && message.identity.manifestRevision === identity.manifestRevision
-  )
+  const currentCell = identity === undefined
+    ? message.compileRevision === preview.expectedRevision
+    : (
+      message.identity.cellId === identity.cellId
+      && message.identity.cellRevision === identity.cellRevision
+      && message.identity.compileRevision === identity.compileRevision
+      && message.identity.manifestRevision === identity.manifestRevision
+    )
   if (!currentCell) {
     return
   }
@@ -487,10 +490,16 @@ async function receivePreviewApplied(
   if (canvasGesturesOwned !== undefined) {
     postCanvasGestureOwnership(preview, handshake, canvasGesturesOwned)
   }
+  preview.appliedRevision = Math.max(preview.appliedRevision ?? 0, message.appliedRevision)
   if (identity !== undefined) {
-    preview.appliedRevision = Math.max(preview.appliedRevision ?? 0, message.appliedRevision)
     preview.appliedIdentity = { identity, previewInstanceId: preview.previewInstanceId }
   }
+  StudioPreviewPublication.acknowledged(
+    preview,
+    identity ?? { compileRevision: message.compileRevision },
+    message.identity.previewInstanceId,
+  )
+  StudioPreviewActivationGate.changed(preview)
   if (preview.frame !== undefined && StudioReviewDom.appliedReady(preview.journeyReplayStatus)) {
     StudioReviewDom.status(preview.frame, 'ready')
   }
@@ -498,9 +507,6 @@ async function receivePreviewApplied(
   // The server correctly rejects that stale report; it does not indicate a broken preview.
   try {
     await StudioApiClient.previewApplied(message)
-    if (identity !== undefined) {
-      StudioPreviewPublication.acknowledged(preview, identity, message.identity.previewInstanceId)
-    }
   } catch (error) {
     ignoreSupersededPreviewReport(error)
   }
@@ -514,16 +520,24 @@ function receivePreviewMounted(
 ): void {
   const current = preview.cellIdentity
   if (
-    current !== undefined && (
-      message.identity.cellId !== current.cellId
-      || message.identity.cellRevision !== current.cellRevision
-      || message.identity.compileRevision !== current.compileRevision
-      || message.identity.manifestRevision !== current.manifestRevision
-    )
+    current === undefined
+      ? message.identity.compileRevision !== preview.expectedRevision
+      : (
+        message.identity.cellId !== current.cellId
+        || message.identity.cellRevision !== current.cellRevision
+        || message.identity.compileRevision !== current.compileRevision
+        || message.identity.manifestRevision !== current.manifestRevision
+      )
   ) {
     return
   }
   postInteractionMode(preview, handshake)
+  StudioPreviewPublication.acknowledged(
+    preview,
+    current ?? { compileRevision: message.identity.compileRevision! },
+    message.identity.previewInstanceId,
+  )
+  StudioPreviewActivationGate.changed(preview)
   if (canvasGesturesOwned !== undefined) {
     postCanvasGestureOwnership(preview, handshake, canvasGesturesOwned)
   }

@@ -2,7 +2,7 @@ import React from 'react'
 import { Arrays } from './core/RuntimeCore'
 import type { RuntimeAuthScope } from './TR-auth'
 import { createElement } from './TR-create-element'
-import type { TaoDesign } from './TR-design'
+import { DesignControls, type TaoDesign } from './TR-design'
 import { runtimeRevisionStore } from './TR-listeners'
 import { mountedDesignStyle } from './TR-mounted-design'
 import type {
@@ -188,10 +188,14 @@ export class RuntimeAppDefinition implements Subscription {
     )
   }
 
-  /** design lazily resolves this mounted app's declaration-local design without a global registry. */
+  /** Keep the original declaration as the identity anchor while reading its latest published snapshot. */
   get design(): TaoDesign | undefined {
-    return this.designValue ??= this.definition.design?.()
+    return DesignControls.current(this.designValue ??= this.definition.design?.())
   }
+
+  readonly subscribeDesign = (listener: () => void): () => void => DesignControls.subscribe(this.design, listener)
+
+  readonly designSnapshot = (): number => DesignControls.revision(this.design)
 
   /** readNet is the project's `guard default`, resolved after generated module initialization. */
   get readNet(): TaoReadNet | undefined {

@@ -332,8 +332,24 @@ function resolveDesignProps(
   // The stdlib element default resolves on its own because it is the weakest authored layer: a
   // caller's clause overrules the default of the element it reaches. The declaration header and
   // this link's own clauses resolve together, header first, at this link's own strength.
-  const elementDefault = DesignControls.resolve(design, undefined, props.designDefault, scheme, condition)
-  const resolved = DesignControls.resolve(design, designSpec, undefined, scheme, condition, props.declarationSpec)
+  const elementDefault = DesignControls.resolve(
+    design,
+    undefined,
+    props.designDefault,
+    scheme,
+    condition,
+    undefined,
+    props.designSource,
+  )
+  const resolved = DesignControls.resolve(
+    design,
+    designSpec,
+    undefined,
+    scheme,
+    condition,
+    props.declarationSpec,
+    props.designSource,
+  )
   const callerProps = resolveDesignProps(props.callerProps, design, scheme)
   const style = mergeResolvedStyles(props.style, resolved.style)
   return {

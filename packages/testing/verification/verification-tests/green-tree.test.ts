@@ -116,7 +116,7 @@ Describe('green tree records', () => {
 
   Test('generated output evidence invalidates a lane on edit, addition, deletion, or absence', async () => {
     const root = await mkTestDir('tao-green-tree-generated-')
-    const outputRoot = FS.resolvePath('packages/apps/expo-host/_gen_tao-app', root)
+    const outputRoot = FS.resolvePath('Apps/WordFlower/1 - Current/.tao/cache/_gen_tao-app', root)
     const app = FS.resolvePath('App.tsx', outputRoot)
     const added = FS.resolvePath('Added.tsx', outputRoot)
     try {

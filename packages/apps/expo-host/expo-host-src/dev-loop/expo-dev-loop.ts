@@ -173,7 +173,7 @@ async function runDevLoopWithActiveReporter(
         return true
       }
       try {
-        const project = await DesktopHost.prepare({ appName, root: FS.resolvePath('desktop', stateRoot) })
+        const project = await DesktopHost.prepare({ appName, root: FS.resolvePath('desktop-host', stateRoot) })
         if (shouldStop()) {
           return false
         }

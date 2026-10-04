@@ -226,6 +226,7 @@ export class RuntimeDataSchema {
   private failedSaveSequence: number | undefined
   private fills = new Map<string, FillState>()
   private generation = 0
+  private appBindingGeneration = 0
   private sealed = false
   private fixtureActor: string | undefined
   private pendingFills = new Set<Promise<void>>()
@@ -300,6 +301,20 @@ export class RuntimeDataSchema {
    */
   boundDeclaration(): TaoDatasourceDeclaration | undefined {
     return typeof this.providerBinding === 'object' ? this.providerBinding.declaration : undefined
+  }
+
+  /** Changes only when configure installs a new provider connection, including config-only rebinds. */
+  bindingGeneration(): number {
+    return this.generation
+  }
+
+  /** The last connection generation installed by an app binding, excluding auth fixture setup. */
+  configuredAppBindingGeneration(): number {
+    return this.appBindingGeneration
+  }
+
+  recordConfiguredAppBinding(): void {
+    this.appBindingGeneration = this.generation
   }
 
   async resetFromRecovery(): Promise<void> {

@@ -3,7 +3,7 @@ import { createTaoJourneyReplayGate, replayTaoJourney, type TaoJourneyStep } fro
 import { StudioLensHost, StudioLensRender } from '@runtime/TR-studio-lens'
 import { Describe, Expect, Test } from '@shared/test'
 import { act, render } from '@testing-library/react-native'
-import { createElement, type ReactElement, useCallback, useEffect, useRef, useState } from 'react'
+import { createElement, memo, type ReactElement, useCallback, useEffect, useRef, useState } from 'react'
 import { Text } from 'react-native'
 import { MemoryProvider } from '../../stdlib/@tao/data/providers/memory/Memory'
 
@@ -250,6 +250,265 @@ Describe('Studio preview runtime identity dedupe', () => {
       Expect(seed?.revision).not.toBe(revision)
       Expect(screen.getByText('Seeded')).toBeTruthy()
     } finally {
+      screen.unmount()
+    }
+  })
+
+  Test('keeps one unique fixture row and its edited handle across an app child remount', async () => {
+    const schema = TR.Data.Schema({
+      name: 'StudioFixtureLifetime',
+      entities: {
+        Story: {
+          collection: 'Stories',
+          fields: {
+            HnId: { kind: 'number', unique: true },
+            Name: { kind: 'text' },
+          },
+        },
+      },
+    })
+    const cell = {
+      ...cellPayload({ cellRevision: 0, compileRevision: 1, manifestRevision: 'compile:1' }),
+      fixture: { accounts: [], creates: [{ entity: 'Story', fields: { HnId: 42, Name: 'Seeded' }, name: 'Story' }] },
+    }
+    const first = TR.Data.Declaration('StudioFixtureLifetimeMemory', MemoryProvider())
+    let seed: ReturnType<typeof TR.Studio.Environment.useFixture> | undefined
+    function App({ declaration, storageKey }: {
+      declaration: ReturnType<typeof TR.Data.Declaration>
+      storageKey: string
+    }): null {
+      TR.Data.UseConfigured(schema, TR.Data.Configure(declaration, { StorageKey: storageKey }))
+      seed = TR.Studio.Environment.useFixture(schema)
+      return null
+    }
+    const host = (
+      hostKey: string,
+      childKey: string,
+      declaration: ReturnType<typeof TR.Data.Declaration>,
+      storageKey = 'fixture-a',
+    ) =>
+      createElement(TR.Studio.Environment.Host, {
+        key: hostKey,
+        cell: cell as never,
+        children: createElement(App, { declaration, key: childKey, storageKey }),
+      })
+    const rows = () => schema.query({ entity: 'Story', filters: [] })
+    const screen = render(host('cell', 'app-1', first))
+    try {
+      await act(async () => await TR.Data.Settle(schema))
+      Expect(rows()).toHaveLength(1)
+      const handle = seed?.handles['Story']
+      const revision = seed?.revision
+      TR.Data.Update(TR.Value(handle), { Name: TR.Value('Edited') })
+      screen.rerender(host('cell', 'app-2', first))
+      await act(async () => await TR.Data.Settle(schema))
+      Expect(rows()).toHaveLength(1)
+      Expect(seed?.handles['Story']).toBe(handle)
+      Expect(seed?.revision).toBe(revision)
+      Expect(TR.Data.Read(seed?.handles['Story'], 'Name')).toBe('Edited')
+
+      screen.rerender(host('cell', 'app-storage-b', first, 'fixture-b'))
+      await act(async () => await TR.Data.Settle(schema))
+      Expect(rows()).toHaveLength(1)
+      Expect(seed?.handles['Story']).not.toBe(handle)
+      Expect(seed?.revision).not.toBe(revision)
+      Expect(TR.Data.Read(seed?.handles['Story'], 'Name')).toBe('Seeded')
+
+      const rebound = TR.Data.Declaration('StudioFixtureLifetimeMemory', MemoryProvider())
+      const storageHandle = seed?.handles['Story']
+      screen.rerender(host('cell', 'app-3', rebound, 'fixture-b'))
+      await act(async () => await TR.Data.Settle(schema))
+      Expect(rows()).toHaveLength(1)
+      Expect(seed?.handles['Story']).not.toBe(storageHandle)
+      Expect(seed?.revision).not.toBe(revision)
+      Expect(TR.Data.Read(seed?.handles['Story'], 'Name')).toBe('Seeded')
+
+      const reboundHandle = seed?.handles['Story']
+      screen.rerender(host('fresh-cell', 'app-4', rebound, 'fixture-b'))
+      await act(async () => await TR.Data.Settle(schema))
+      Expect(rows()).toHaveLength(1)
+      Expect(seed?.handles['Story']).not.toBe(reboundHandle)
+      Expect(TR.Data.Read(seed?.handles['Story'], 'Name')).toBe('Seeded')
+    } finally {
+      screen.unmount()
+    }
+  })
+
+  Test('starts a new fixture application for a new declaration with the same canonical identity', async () => {
+    const schema = TR.Data.Schema({ name: 'StudioCanonicalRebind', entities: {} })
+    const identity = TR.Navigation.Identity([
+      'tao.declaration',
+      1,
+      'studio-fixture-test',
+      'app',
+      'Data.tao',
+      'datasource',
+      'SharedMemory',
+    ])
+    const cell = cellPayload({ cellRevision: 0, compileRevision: 1, manifestRevision: 'compile:1' })
+    let seed: ReturnType<typeof TR.Studio.Environment.useFixture> | undefined
+    function App({ declaration }: { declaration: ReturnType<typeof TR.Data.Declaration> }): null {
+      TR.Data.UseConfigured(schema, TR.Data.Configure(declaration, {}))
+      seed = TR.Studio.Environment.useFixture(schema)
+      return null
+    }
+    const host = (declaration: ReturnType<typeof TR.Data.Declaration>) =>
+      createElement(TR.Studio.Environment.Host, {
+        cell: cell as never,
+        children: createElement(App, { declaration }),
+      })
+    const first = TR.Data.Declaration('SharedMemory', MemoryProvider(), identity)
+    const screen = render(host(first))
+    try {
+      await act(async () => await TR.Data.Settle(schema))
+      const revision = seed?.revision
+      const generation = schema.bindingGeneration()
+      screen.rerender(host(TR.Data.Declaration('SharedMemory', MemoryProvider(), identity)))
+      await act(async () => await TR.Data.Settle(schema))
+      Expect(schema.bindingGeneration()).toBeGreaterThan(generation)
+      Expect(seed?.ready).toBe(true)
+      Expect(seed?.revision).not.toBe(revision)
+    } finally {
+      screen.unmount()
+    }
+  })
+
+  Test('keeps one fixture application when auth preparation binds its own connection', async () => {
+    const schema = TR.Data.Schema({
+      name: 'StudioAuthPreparationData',
+      entities: { Story: { collection: 'Stories', fields: { HnId: { kind: 'number' } } } },
+    })
+    const declaration = TR.Data.Declaration('StudioAuthPreparationMemory', MemoryProvider())
+    const cell = {
+      ...cellPayload({ cellRevision: 0, compileRevision: 1, manifestRevision: 'compile:1' }),
+      fixture: {
+        accounts: [{ name: 'Tester', fields: {} }],
+        creates: [{ account: 'Tester', entity: 'Story', fields: { HnId: 42 }, name: 'Story' }],
+      },
+    }
+    let preparations = 0
+    let creates = 0
+    const auth = {
+      prepareFixture: async () => {
+        preparations += 1
+        schema.bindConfigured(TR.Data.Configure(declaration, { StorageKey: 'auth-fixture' }))
+        return {}
+      },
+      fixtureCreate: (store: typeof schema, entity: string, fields: Record<string, unknown>) => {
+        creates += 1
+        return store.create(entity, fields)
+      },
+      finishFixture: () => {},
+    }
+    let seed: ReturnType<typeof TR.Studio.Environment.useFixture> | undefined
+    const Binding = memo(function Binding(): null {
+      TR.Data.UseConfigured(schema, TR.Data.Configure(declaration, { StorageKey: 'app' }))
+      return null
+    })
+    function Fixture(): null {
+      seed = TR.Studio.Environment.useFixture(schema, auth as never)
+      return null
+    }
+    const host = (childKey: string) =>
+      createElement(TR.Studio.Environment.Host, {
+        cell: cell as never,
+        children: [createElement(Binding, { key: 'binding' }), createElement(Fixture, { key: childKey })],
+      })
+    const screen = render(host('first'))
+    try {
+      await act(async () => await TR.Data.Settle(schema))
+      const handle = seed?.handles['Story']
+      const revision = seed?.revision
+      screen.rerender(host('second'))
+      await act(async () => await TR.Data.Settle(schema))
+      Expect(preparations).toBe(1)
+      Expect(creates).toBe(1)
+      Expect(seed?.handles['Story']).toBe(handle)
+      Expect(seed?.revision).toBe(revision)
+    } finally {
+      screen.unmount()
+    }
+  })
+
+  Test('shares pending auth fixture work across a child remount and retires it on datasource rebind', async () => {
+    const schema = TR.Data.Schema({
+      name: 'StudioPendingFixtureLifetime',
+      entities: { Story: { collection: 'Stories', fields: { HnId: { kind: 'number', unique: true } } } },
+    })
+    const cell = {
+      ...cellPayload({ cellRevision: 0, compileRevision: 1, manifestRevision: 'compile:1' }),
+      fixture: {
+        accounts: [{ name: 'Tester', fields: {} }],
+        creates: [{ account: 'Tester', entity: 'Story', fields: { HnId: 42 }, name: 'Story' }],
+      },
+    }
+    const pending: Array<() => void> = []
+    let preparations = 0
+    let creates = 0
+    const auth = {
+      prepareFixture: async () => {
+        preparations += 1
+        await new Promise<void>(resolve => {
+          pending.push(resolve)
+        })
+        return {}
+      },
+      fixtureCreate: (store: typeof schema, entity: string, fields: Record<string, unknown>) => {
+        creates += 1
+        return store.create(entity, fields)
+      },
+      finishFixture: () => {},
+    }
+    let seed: ReturnType<typeof TR.Studio.Environment.useFixture> | undefined
+    function App({ declaration, storageKey }: {
+      declaration: ReturnType<typeof TR.Data.Declaration>
+      storageKey: string
+    }): null {
+      TR.Data.UseConfigured(schema, TR.Data.Configure(declaration, { StorageKey: storageKey }))
+      seed = TR.Studio.Environment.useFixture(schema, auth as never)
+      return null
+    }
+    const host = (key: string, declaration: ReturnType<typeof TR.Data.Declaration>, storageKey = 'pending-a') =>
+      createElement(TR.Studio.Environment.Host, {
+        cell: cell as never,
+        children: createElement(App, { declaration, key, storageKey }),
+      })
+    const first = TR.Data.Declaration('StudioPendingFixtureMemory', MemoryProvider())
+    const screen = render(host('app-1', first))
+    try {
+      await act(async () => {
+        await Promise.resolve()
+      })
+      Expect(preparations).toBe(1)
+      Expect(seed?.ready).toBe(false)
+      screen.rerender(host('app-2', first))
+      await act(async () => {
+        await Promise.resolve()
+      })
+      Expect(preparations).toBe(1)
+      Expect(creates).toBe(0)
+
+      screen.rerender(host('app-3', first, 'pending-b'))
+      await act(async () => {
+        await Promise.resolve()
+      })
+      Expect(preparations).toBe(1)
+      pending[0]?.()
+      await act(async () => {
+        await Promise.resolve()
+      })
+      Expect(preparations).toBe(2)
+      Expect(creates).toBe(0)
+      pending[1]?.()
+      await act(async () => await TR.Data.Settle(schema))
+      Expect(creates).toBe(1)
+      Expect(schema.query({ entity: 'Story', filters: [] })).toHaveLength(1)
+      Expect(seed?.ready).toBe(true)
+      Expect(TR.Data.Read(seed?.handles['Story'], 'HnId')).toBe(42)
+    } finally {
+      for (const resolve of pending) {
+        resolve()
+      }
       screen.unmount()
     }
   })

@@ -7,11 +7,12 @@ import {
   compileAppOutputHash,
   NO_CACHE_ENV_KEYS,
   runCompileApp,
+  WORD_FLOWER_OUTPUT_ROOT,
 } from '../verification-src/CompileApp'
 import { TAO_TEST_NO_CACHE_ENV_KEY } from '../verification-src/GateRunner'
 
 const APP_PATH = 'Apps/Example/Example.tao'
-const OUTPUT_ROOT = 'packages/apps/expo-host/_gen_tao-app'
+const OUTPUT_ROOT = 'Apps/Example/.tao/cache/_gen_tao-app'
 const SOURCE_ROOTS = ['packages/compiler/compiler-src', 'packages/stdlib'] as const
 const INPUT_FILES = ['bun.lock', 'packages/compiler/package.json'] as const
 const STAMP = '.artifacts/compile-app-stamp.json'
@@ -77,6 +78,40 @@ async function run(
 }
 
 Describe('app compilation staleness stamp', () => {
+  Test('default gate accepts only the WordFlower project cache output', async () => {
+    const root = await repository()
+    const appPath = 'Apps/WordFlower/1 - Current/WordFlower.tao'
+    try {
+      await FS.writeText(FS.resolvePath(appPath, root), 'app WordFlower\n')
+      const options = {
+        appPath,
+        inputFiles: INPUT_FILES,
+        noCache: false,
+        repositoryRoot: root,
+        sourceRoots: SOURCE_ROOTS,
+      }
+      await Expect(runCompileApp({
+        ...options,
+        compile: async () => {
+          await FS.writeText(FS.resolvePath('packages/apps/expo-host/_gen_tao-app/App.tsx', root), 'old output\n')
+          return 0
+        },
+      })).rejects.toThrow('App compilation produced no output')
+      Expect(
+        await runCompileApp({
+          ...options,
+          compile: async () => {
+            await FS.writeText(FS.resolvePath(`${WORD_FLOWER_OUTPUT_ROOT}/App.tsx`, root), 'new output\n')
+            return 0
+          },
+        }),
+      ).toBe(0)
+      Expect(await FS.isFile(FS.resolvePath(`${WORD_FLOWER_OUTPUT_ROOT}/App.tsx`, root))).toBe(true)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('compiles once and skips while the inputs and the generated tree are unchanged', async () => {
     const root = await repository()
     const tao = compiler()

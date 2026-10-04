@@ -265,6 +265,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       hostname: options.hostname,
       openBrowser: StudioBrowser.open,
       port: options.port,
+      preferencesRoot: userStateRoot,
     })
     const sessionUrl = `${server.url}${StudioSessionPath.window(initial.sessionId)}`
     lifecycle.record({ component: 'studio-server', event: 'port-allocated', port: server.port })
@@ -580,6 +581,7 @@ export async function openStudioProjectResource(
   try {
     const runtimeToolchainRoot = options.runtimeToolchainRoot ?? Repo.resolvePath(expo.config.RUNTIME_TOOLCHAIN_PATH)
     previewRuntime = await StudioPreviewRuntime.create(runtimeToolchainRoot, {
+      projectRoot: project.projectRoot,
       artifactRoot: options.previewArtifactRoot,
       deviceGatewayPort: options.deviceGatewayPort,
     })

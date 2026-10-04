@@ -23,15 +23,27 @@ import type { StudioRuntimeLog } from './StudioRuntimeCapture'
 
 export type StudioInteractionMode = 'edit' | 'run'
 
+type StudioPublicationIdentity = Pick<StudioCellIdentity, 'compileRevision'> & Partial<StudioCellIdentity>
+
+function samePublication(left: StudioPublicationIdentity, right: StudioPublicationIdentity): boolean {
+  return left.cellId === right.cellId
+    && left.cellRevision === right.cellRevision
+    && left.compileRevision === right.compileRevision
+    && left.manifestRevision === right.manifestRevision
+}
+
 /** One preview iframe and the Studio-side state that follows it through reloads and remounts. */
 export type StudioPreviewConnection = {
   focus?: () => void
   activated?: boolean
+  startupPending?: boolean
+  startupStarting?: boolean
+  previewStateChanged?: () => void
   toggleActivation?: () => Promise<void>
   applySourceAction?: (envelope: StudioSourceActionEnvelope) => Promise<void>
   /** The cell identity the frame last acknowledged applying, and the frame instance that applied it. */
   appliedIdentity?: Readonly<{ identity: StudioCellIdentity; previewInstanceId: string }>
-  acknowledgedPublication?: Readonly<{ identity: StudioCellIdentity; previewInstanceId: string }>
+  acknowledgedPublication?: Readonly<{ identity: StudioPublicationIdentity; previewInstanceId: string }>
   appliedRevision?: number
   capture?: {
     fixtureName: string
@@ -55,7 +67,7 @@ export type StudioPreviewConnection = {
   navigationPending?: boolean
   navigationWaitMs?: number
   pendingPublication?: {
-    identity: StudioCellIdentity
+    identity: StudioPublicationIdentity
     previewInstanceId: string
     retries: number
     normalWaitMs: number
@@ -155,6 +167,8 @@ export function disconnectPreviews(
   for (const preview of previews) {
     preview.releaseCellInstance?.()
     preview.releaseCellInstance = undefined
+    preview.activated = false
+    preview.previewStateChanged?.()
     StudioPreviewPublication.cancel(preview)
     preview.navigationPending = false
     invalidatePreviewJourneyRecording(preview)
@@ -200,7 +214,7 @@ export function expectPreviewRevision(connection: StudioPreviewConnection, compi
 
 /** A retained frame can miss Metro's file update while its old publication ignores the new runtime. */
 export const StudioPreviewPublication = {
-  maxReloads: 2,
+  maxReloads: 1,
   navigating(connection: StudioPreviewConnection, waitMs = 30_000): void {
     connection.navigationPending = true
     connection.navigationWaitMs = waitMs
@@ -228,14 +242,11 @@ export const StudioPreviewPublication = {
     }
     connection.pendingPublication = undefined
   },
-  expect(connection: StudioPreviewConnection, identity: StudioCellIdentity, waitMs = 6_000): void {
+  expect(connection: StudioPreviewConnection, identity: StudioPublicationIdentity, waitMs = 6_000): void {
     const applied = connection.acknowledgedPublication
     if (
       connection.navigationPending !== true && applied?.previewInstanceId === connection.previewInstanceId
-      && applied.identity.cellId === identity.cellId
-      && applied.identity.cellRevision === identity.cellRevision
-      && applied.identity.compileRevision === identity.compileRevision
-      && applied.identity.manifestRevision === identity.manifestRevision
+      && samePublication(applied.identity, identity)
     ) {
       this.cancel(connection)
       return
@@ -243,11 +254,16 @@ export const StudioPreviewPublication = {
     const pending = connection.pendingPublication
     if (
       pending?.previewInstanceId === connection.previewInstanceId
-      && pending.identity.cellId === identity.cellId
-      && pending.identity.cellRevision === identity.cellRevision
-      && pending.identity.compileRevision === identity.compileRevision
-      && pending.identity.manifestRevision === identity.manifestRevision
+      && samePublication(pending.identity, identity)
     ) {
+      if (waitMs < pending.normalWaitMs) {
+        this.pause(connection)
+        pending.normalWaitMs = waitMs
+        if (connection.navigationPending !== true) {
+          pending.waitMs = waitMs
+        }
+        this.resume(connection)
+      }
       return
     }
     this.cancel(connection)
@@ -260,15 +276,16 @@ export const StudioPreviewPublication = {
     }
     this.resume(connection)
   },
-  acknowledged(connection: StudioPreviewConnection, identity: StudioCellIdentity, previewInstanceId: string): void {
+  acknowledged(
+    connection: StudioPreviewConnection,
+    identity: StudioPublicationIdentity,
+    previewInstanceId: string,
+  ): void {
     connection.acknowledgedPublication = { identity, previewInstanceId }
     const pending = connection.pendingPublication
     if (
       pending !== undefined && pending.previewInstanceId === previewInstanceId
-      && pending.identity.cellId === identity.cellId
-      && pending.identity.cellRevision === identity.cellRevision
-      && pending.identity.compileRevision === identity.compileRevision
-      && pending.identity.manifestRevision === identity.manifestRevision
+      && samePublication(pending.identity, identity)
     ) {
       this.cancel(connection)
     }

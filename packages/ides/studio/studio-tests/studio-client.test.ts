@@ -1194,7 +1194,7 @@ Test('Studio ignores stale acknowledgements and bounds preview publication recov
     intervalMs: 0,
   })
 
-  Expect(reloads).toBe(2)
+  Expect(reloads).toBe(1)
   Expect(frame.dataset['taoReviewStatus']).toBe('failed')
   Expect(preview.pendingPublication).toBeUndefined()
 })

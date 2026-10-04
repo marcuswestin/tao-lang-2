@@ -221,7 +221,8 @@ export const StudioWorkbenchState = {
     try {
       const store = storage ?? (typeof window !== 'undefined' ? window.localStorage : undefined)
       const val = store?.getItem(drawerTabStorageKey)
-      return val === 'Compile' || val === 'Data' || val === 'Logs' || val === 'Problems' || val === 'Tests'
+      return val === 'Compile' || val === 'Data' || val === 'Debug' || val === 'Logs' || val === 'Problems'
+          || val === 'Tests'
         ? val
         : 'Problems'
     } catch {
