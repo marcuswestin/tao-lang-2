@@ -1,10 +1,10 @@
 import { Assert, CLI, Errors, FS, HCI, Platform, Repo, Time } from '@shared'
 
-/** macOS notification sounds accepted by the CLI and the host argument policy. */
+/** macOS sounds accepted by the CLI and host policy; the first is the default. */
 export const NOTIFICATION_SOUNDS = [
+  'Bottle',
   'Basso',
   'Blow',
-  'Bottle',
   'Frog',
   'Funk',
   'Glass',
@@ -38,7 +38,9 @@ export async function notifyDeveloper(
     /^[A-Za-z0-9_][A-Za-z0-9_-]{0,127}$/.test(id),
     'Shutdown ID must be 1–128 letters, digits, underscores or dashes and must not start with a dash.',
   )
-  const sound = NOTIFICATION_SOUNDS.find(name => name.toLowerCase() === (options.sound ?? 'Glass').toLowerCase())
+  const sound = NOTIFICATION_SOUNDS.find(name =>
+    name.toLowerCase() === (options.sound ?? NOTIFICATION_SOUNDS[0]).toLowerCase()
+  )
   Assert.input(sound !== undefined, `Choose a notification sound: ${NOTIFICATION_SOUNDS.join(', ')}.`)
   const root = dependencies.root ?? Repo.getRoot()
   const state = FS.resolvePath(`.artifacts/notify-developer/${id}.txt`, root)

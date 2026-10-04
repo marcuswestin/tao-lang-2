@@ -41,7 +41,8 @@ Describe('developer attention', () => {
     try {
       await notifyDeveloper({}, {
         root,
-        play: async () => {
+        play: async sound => {
+          Expect(sound).toBe('Bottle')
           plays++
         },
         sleep: async () => {
