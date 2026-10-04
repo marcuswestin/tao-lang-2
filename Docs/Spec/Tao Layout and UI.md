@@ -202,6 +202,13 @@ with `@name = empty`. A caller may fill it at most once with `@name <view>`. The
 opaque visual content and renders exactly where the declaring body places `@name`; `empty`
 contributes no node. Parameterized, repeatable, and required slots remain future work.
 
+A separate runtime renderer descriptor is ready for the selected parameterized-slot lowering.
+Each placement mounts its own stable body component with current arguments, captures and occurrence
+metadata. Updating captures preserves mounted state; replacing the body component remounts it.
+Default selection distinguishes absence from an explicitly empty own property, and forwarding
+preserves descriptor identity. This runtime support does not change the source slot contract above;
+parameterized/defaulted declarations, binder fills and repeated placement still await compiler work.
+
 ```tao
 use Col, FormButton, Row, Text from @tao/ui
 

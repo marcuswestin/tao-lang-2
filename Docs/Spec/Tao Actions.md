@@ -270,6 +270,16 @@ reports that fact but does not automatically retry an action.
 An `async { ... }` action block is detached from its caller. When encountered inside a transaction, it starts
 as a new serialized root after the caller finishes rather than joining the caller's overlay.
 
+The runtime also provides explicit lexical cleanup frames. Admitted joined work and its outcome
+handlers settle before a frame drains cleanup, serially in reverse registration order. Every
+cleanup runs even when an earlier one fails. A body failure retains its original identity; attached
+cleanup failures are diagnostic metadata. A cleanup-only failure prevents successful completion.
+Generated continuations must capture the active frame and restore it after suspension. Scoped
+foreign thenables are adopted once for both joining and the caller's observation.
+
+This runtime API is opt-in. The selected Tao `defer` syntax and automatic compiler frame lowering
+remain future work; existing action blocks do not acquire cleanup merely by using the runtime.
+
 ## Effect outcomes
 
 A call site that must react to a verb's failure runs it with `when do` and names what happens next:

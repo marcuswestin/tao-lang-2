@@ -87,6 +87,14 @@ their branches. The coordinator reviews and validates the combined tree before l
 
 ## Binding and effects
 
+Second-wave return status: B's Studio repair and renderer runtime are frozen and integrated;
+D's lexical runtime plus its single-adoption joining repair are frozen and integrated. Their listed
+source paths have returned to the coordinator. A's callable correspondence repair and C's alias/
+persisted-output completion repair are frozen for final integration review. Their next proposals
+remain read-only; no capability, numeric/unit or slot frontend release is implied by this manifest.
+TR.ts remains reserved until C's reviewed accessor chain is integrated. The coordinator owns the
+callable export hook, subsequent runtime facade hooks, combined verification and landing.
+
 1. A preserves resolveArgumentBindings's parameter-ordered pairs and diagnostics, and the existing
    named/dynamic/unresolved action resolver. D consumes these APIs unchanged in its first slice.
 2. D publishes a failure contract containing known cases and an open flag. Union preserves openness;
