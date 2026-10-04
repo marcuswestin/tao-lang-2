@@ -1005,6 +1005,7 @@ Describe('finalize', () => {
       isSymbolicLink: FS.isSymbolicLink,
       key: async () => ({ toolchain: 'irrelevant-in-this-fixture', treeHash: 'irrelevant-in-this-fixture' }),
       makeProbeDirectory: FS.mkTmpDir,
+      modifiedTimeMs: FS.modifiedTimeMs,
       now: () => new Date('2026-09-17T12:00:00.000Z'),
       readJson: FS.readJson,
       realPath: FS.realPath,
