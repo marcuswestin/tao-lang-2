@@ -1,9 +1,12 @@
 import { CLI, Errors, FS, Platform, Time } from '@shared'
+import { ProcessTree, type TrackedProcess } from '@shared/ProcessTree'
 
 const MAC_CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 
 export type AgentChromeSession = {
   debugPort: number
+  profile: string
+  process?: TrackedProcess
   stop: () => Promise<void>
 }
 
@@ -12,13 +15,24 @@ export async function startAgentChrome(
   url: string,
   profileParent: string,
   visible: boolean,
-  launch: { chromePath?: string; start?: typeof CLI.start } = {},
+  launch: { chromePath?: string; start?: typeof CLI.start; identities?: typeof ProcessTree.identities } = {},
 ): Promise<AgentChromeSession> {
   const chrome = launch.chromePath ?? await chromeExecutable()
   const profile = FS.resolvePath(Platform.randomUUID(), profileParent)
   await FS.mkdir(profile)
   let child: CLI.StartedCommand | undefined
+  let process: TrackedProcess | undefined
+  const identities = launch.identities ?? ProcessTree.identities
   let processClosed = false
+  const signalOwned = (started: CLI.StartedCommand, signal: 'SIGTERM' | 'SIGKILL'): void => {
+    if (
+      started.pid !== undefined && (process === undefined
+        || !ProcessTree.sameProcess(identities([started.pid]).get(started.pid), process))
+    ) {
+      Errors.throwHostEnvironment(`Chrome ownership changed; profile kept at ${profile}.`)
+    }
+    started.kill(signal)
+  }
   const stop = async (): Promise<void> => {
     const started = child
     if (started === undefined) {
@@ -26,14 +40,14 @@ export async function startAgentChrome(
       return
     }
     if (!processClosed) {
-      started.kill('SIGTERM')
+      signalOwned(started, 'SIGTERM')
     }
     const closed = await Time.pollUntil(
       () => processClosed ? true : undefined,
       { intervalMs: 100, timeoutMs: 10_000 },
     )
     if (closed !== true) {
-      started.kill('SIGKILL')
+      signalOwned(started, 'SIGKILL')
     }
     const killed = await Time.pollUntil(
       () => processClosed ? true : undefined,
@@ -58,6 +72,7 @@ export async function startAgentChrome(
       stdio: 'ignore',
     })
     const started = child
+    process = started.pid === undefined ? undefined : identities([started.pid]).get(started.pid)
     void started.waitForClose().then(() => {
       processClosed = true
     })
@@ -79,7 +94,13 @@ export async function startAgentChrome(
     if (debugPort === undefined) {
       Errors.throwHostEnvironment('Chrome did not expose a DevTools port within 20 seconds.')
     }
-    return { debugPort, stop }
+    if (
+      started.pid !== undefined && (process === undefined
+        || !ProcessTree.sameProcess(identities([started.pid]).get(started.pid), process))
+    ) {
+      Errors.throwHostEnvironment('Chrome launch identity changed before DevTools readiness.')
+    }
+    return { debugPort, profile, process, stop }
   } catch (error) {
     try {
       await stop()

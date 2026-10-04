@@ -835,6 +835,33 @@ Describe('Expo dev-loop port helpers', () => {
 })
 
 Describe('Expo session scheme', () => {
+  Test('managed session target adapter records a refused Chrome dispatch without starting a browser', async () => {
+    const previous = Platform.runtimeProcess.env['TAO_AGENT_BROWSER_QUIET']
+    Platform.runtimeProcess.env['TAO_AGENT_BROWSER_QUIET'] = '1'
+    let invoked = 0
+    const session = await createDevLoopExpoSession(0, undefined, {
+      startChrome: async origin => {
+        invoked++
+        Expect(origin).toBe(session.config.EXPO_ORIGIN)
+        Errors.throwHostEnvironment('source-only fixed Chrome refusal')
+      },
+    })
+    try {
+      // No Metro is started. Its unavailable URL falls back to the selected loopback origin.
+      const captured = await withCapturedOutput(() => session.openStartupTargets(['web']))
+      Expect(invoked).toBe(1)
+      Expect(captured.result).toEqual([{ target: 'web', dispatched: false }])
+    } finally {
+      await session.stopWeb()
+      await session.releasePortReservation()
+      if (previous === undefined) {
+        delete Platform.runtimeProcess.env['TAO_AGENT_BROWSER_QUIET']
+      } else {
+        Platform.runtimeProcess.env['TAO_AGENT_BROWSER_QUIET'] = previous
+      }
+    }
+  })
+
   Test('local dev sessions identify the Companion for physical-device links', async () => {
     const session = await createDevLoopExpoSession(49_152)
     try {

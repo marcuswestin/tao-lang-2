@@ -32,6 +32,7 @@ type BuildOptions = {
 const targets = ['web', 'desktop', 'ios', 'android', 'visionos', 'watchos'] as const
 const runtimeFiles = [
   'index.ts',
+  'expo-host-src/ManagedLoopIdentityMarker.ts',
   'app.json',
   'app.config.js',
   'app-config.cjs',

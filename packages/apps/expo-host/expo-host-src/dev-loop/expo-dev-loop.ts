@@ -1,5 +1,10 @@
 import { Errors, FS, HCI, Platform, Repo } from '@shared'
-import type { DevLoopActions, DevLoopControlHooks } from '@shared/DevLoopControl'
+import type {
+  DevLoopActions,
+  DevLoopControlHooks,
+  DevLoopMobilePublication,
+  DevLoopTargetReceipt,
+} from '@shared/DevLoopControl'
 import { DesktopHost } from '../desktop-host'
 import { RuntimeToolchainPaths } from '../runtime-toolchain-paths'
 import { devDataAppKey, devDataEnvironment } from './dev-data/DevDataBootstrap'
@@ -8,7 +13,7 @@ import { DevFileWatcher } from './DevFileWatcher'
 import { DevLoopOutput, type DevLoopReporter, lineDevLoopReporter, setDevLoopReporter } from './DevLoopOutput'
 import { DevRuntime } from './DevRuntime'
 import { PREFERRED_EXPO_PORT } from './expo-runner/expo-config'
-import { ExpoRunner, type ExpoRunnerSession } from './expo-runner/ExpoRunner'
+import { ExpoRunner, type ExpoRunnerSession, type ExpoRunnerTargetOperations } from './expo-runner/ExpoRunner'
 import type { DevStartupTarget } from './expo-runner/run-targets'
 import { handleCommandKey } from './keyboard-input/CommandKeys'
 import Commands from './keyboard-input/Commands'
@@ -29,12 +34,47 @@ export type DevLoopOutcome =
   | { kind: 'restart' }
   | { kind: 'select-app' }
 
+export type DevLoopOperations = {
+  beforePhase?: (phase: 'compile' | 'metro' | 'dispatch', shouldStop: () => boolean) => Promise<void>
+  afterCleanup?: () => Promise<void>
+  targetOperations?: ExpoRunnerTargetOperations
+  afterDispatch?: (targets: readonly DevLoopTargetReceipt[], shouldStop: () => boolean) => Promise<void>
+}
+
+/** Dispatch failure must not skip independent service shutdown or hide its failures. */
+export async function settleDevLoopCleanup(
+  startupDispatch: Promise<unknown> | undefined,
+  stopServices: () => Promise<void>,
+): Promise<void> {
+  const results = await Promise.allSettled([
+    startupDispatch,
+    Promise.resolve().then(stopServices),
+  ])
+  const failures = results.flatMap(result => result.status === 'rejected' ? [result.reason] : [])
+  if (failures.length > 0) {
+    Errors.throwHostEnvironment(`Dev-loop cleanup failed: ${failures.map(Errors.formatForUser).join('; ')}`, {
+      cause: failures[0],
+      details: {
+        failures,
+        retainsTargetLease: failures.some(error =>
+          error instanceof Errors.HostEnvironmentError && error.details?.['retainsTargetLease'] === true
+        ),
+      },
+    })
+  }
+}
+
 /** createDevLoopExpoSession reserves the preferred port or an OS-selected free alternative. */
 export async function createDevLoopExpoSession(
   preferredPort: number = PREFERRED_EXPO_PORT,
   stateRoot?: string,
+  targetOperations: ExpoRunnerTargetOperations = {},
 ): Promise<ExpoRunnerSession> {
-  return await ExpoRunner.createSessionWithAvailablePort(preferredPort, { scheme: CompanionIdentity.scheme, stateRoot })
+  return await ExpoRunner.createSessionWithAvailablePort(
+    preferredPort,
+    { scheme: CompanionIdentity.scheme, stateRoot },
+    targetOperations,
+  )
 }
 
 /**
@@ -50,6 +90,7 @@ export async function runDevLoop(
   startupTargets: readonly DevStartupTarget[] = [],
   device?: string,
   control?: DevLoopControlHooks,
+  operations: DevLoopOperations = {},
 ): Promise<DevLoopOutcome> {
   const restoreDevLoopReporter = setDevLoopReporter(reporter)
   let activeActions: DevLoopActions | undefined
@@ -79,6 +120,7 @@ export async function runDevLoop(
   })
   const activeControl: DevLoopControlHooks | undefined = control === undefined ? undefined : {
     emit: control.emit,
+    identity: control.identity,
     bind: actions => {
       activeActions = actions
       if (stopped) {
@@ -90,7 +132,7 @@ export async function runDevLoop(
     },
   }
   try {
-    return await runDevLoopWithActiveReporter(selection, startupTargets, device, activeControl)
+    return await runDevLoopWithActiveReporter(selection, startupTargets, device, activeControl, operations)
   } finally {
     unbind?.()
     complete()
@@ -103,6 +145,7 @@ async function runDevLoopWithActiveReporter(
   startupTargets: readonly DevStartupTarget[],
   device?: string,
   control?: DevLoopControlHooks,
+  operations: DevLoopOperations = {},
 ): Promise<DevLoopOutcome> {
   await control?.emit({ type: 'starting' })
   const toolchainRepo = Repo.tryGetRoot(RuntimeToolchainPaths.packageRoot)
@@ -122,7 +165,7 @@ async function runDevLoopWithActiveReporter(
   })
   let expo: ExpoRunnerSession
   try {
-    expo = await createDevLoopExpoSession(PREFERRED_EXPO_PORT, stateRoot)
+    expo = await createDevLoopExpoSession(PREFERRED_EXPO_PORT, stateRoot, operations.targetOperations)
   } catch (error) {
     await devData.stop().catch(() => {})
     throw error
@@ -141,9 +184,37 @@ async function runDevLoopWithActiveReporter(
   let desktop: ReturnType<typeof DesktopHost.runDev> | undefined
   let finished = false
   let cleanupPromise: Promise<void> | undefined
+  let cleanupFailureReported = false
   let finishPromise: Promise<void> | undefined
   let requestedOutcome: DevLoopOutcome | undefined
-  let startupDispatch: Promise<readonly { target: DevStartupTarget; dispatched: boolean }[]> | undefined
+  let startupDispatch: Promise<readonly DevLoopTargetReceipt[]> | undefined
+  let publication: DevLoopMobilePublication | undefined
+  const scope = control?.identity?.()
+  const managedCompile = scope === undefined ? {} : {
+    managedPublication: {
+      session: scope.session,
+      checkout: await FS.realPath(repoRoot),
+      loopGeneration: scope.generation,
+      projectRoot: await FS.realPath(selection.projectRoot),
+      appName,
+    },
+    onPublication: async (next: DevLoopMobilePublication) => {
+      publication = next
+      if (startupDispatch !== undefined && !finished && control !== undefined) {
+        const dispatch = await startupDispatch
+        if (!finished && dispatch.every(target => target.dispatched)) {
+          await control.emit({
+            type: 'ready',
+            url: expo.config.EXPO_ORIGIN,
+            targets: dispatch.map(target => ({
+              ...target,
+              ...(target.mobileDispatch === undefined ? {} : { mobile: { ...next, ...target.mobileDispatch } }),
+            })),
+          })
+        }
+      }
+    },
+  }
   let exitLoop!: (outcome: DevLoopOutcome) => void
 
   const done = new Promise<DevLoopOutcome>(resolve => {
@@ -163,6 +234,7 @@ async function runDevLoopWithActiveReporter(
         await cleanup()
         exitLoop(requestedOutcome!)
       } catch (error) {
+        cleanupFailureReported = true
         await control?.emit({ type: 'cleanup-failed', message: Errors.formatForUser(error) })
         exitLoop({ kind: 'exit', exitCode: 1 })
         throw error
@@ -175,8 +247,8 @@ async function runDevLoopWithActiveReporter(
     cleanupPromise ??= (async () => {
       keyInput?.stop()
       keyInput = undefined
-      await startupDispatch
-      await stopServices()
+      finished = true
+      await settleDevLoopCleanup(startupDispatch, stopServices)
     })()
     return await cleanupPromise
   }
@@ -205,6 +277,7 @@ async function runDevLoopWithActiveReporter(
     if (failures.length > 0) {
       Errors.throwHostEnvironment(`Dev-loop cleanup failed: ${failures.join('; ')}`)
     }
+    await operations.afterCleanup?.()
   }
 
   const requestFinish = (exitCode: number) => {
@@ -296,7 +369,12 @@ async function runDevLoopWithActiveReporter(
       keyInput = undefined
       DevLoopOutput.logDevLoop('dev', 'No interactive TTY found; dev loop is running until the process is stopped.')
     }
+    await operations.beforePhase?.('compile', shouldStop)
+    if (shouldStop()) {
+      return await done
+    }
     const initialCompileSucceeded = await Run.compileApp({
+      ...managedCompile,
       repoRoot,
       appPath,
       appName,
@@ -312,6 +390,7 @@ async function runDevLoopWithActiveReporter(
     }
     watcher = new DevFileWatcher(selection.projectRoot, shouldRunParserGen => {
       void Run.compileApp({
+        ...managedCompile,
         repoRoot,
         appPath,
         appName,
@@ -320,6 +399,10 @@ async function runDevLoopWithActiveReporter(
         runtimeRoot: runtime.root,
       })
     })
+    await operations.beforePhase?.('metro', shouldStop)
+    if (shouldStop()) {
+      return await done
+    }
     await expoServer.start()
     if (shouldStop()) {
       return await done
@@ -330,8 +413,19 @@ async function runDevLoopWithActiveReporter(
     if (shouldStop()) {
       return await done
     }
+    await operations.beforePhase?.('dispatch', shouldStop)
+    if (shouldStop()) {
+      return await done
+    }
     startupDispatch = expo.openStartupTargets(startupTargets.filter(target => target !== 'desktop'), shouldStop)
     const dispatch = await startupDispatch
+    if (shouldStop()) {
+      return await done
+    }
+    await operations.afterDispatch?.(structuredClone(dispatch), shouldStop)
+    if (shouldStop()) {
+      return await done
+    }
     if (device !== undefined) {
       void expo.openPhysicalDevice(device, shouldStop).catch(error => {
         if (!shouldStop()) {
@@ -350,7 +444,16 @@ async function runDevLoopWithActiveReporter(
           message: `Could not dispatch targets: ${failed.map(result => result.target).join(', ')}.`,
         })
       } else {
-        await control.emit({ type: 'ready', url: expo.config.EXPO_ORIGIN, targets: dispatch })
+        await control.emit({
+          type: 'ready',
+          url: expo.config.EXPO_ORIGIN,
+          targets: dispatch.map(target => ({
+            ...target,
+            ...(publication !== undefined && target.mobileDispatch !== undefined
+              ? { mobile: { ...publication, ...target.mobileDispatch } }
+              : {}),
+          })),
+        })
       }
     }
     return await done
@@ -362,7 +465,16 @@ async function runDevLoopWithActiveReporter(
     removeSigint()
     removeSigterm()
     unbindControl?.()
-    await cleanup()
-    await output?.stop()
+    try {
+      await cleanup()
+    } catch (error) {
+      if (!cleanupFailureReported) {
+        cleanupFailureReported = true
+        await control?.emit({ type: 'cleanup-failed', message: Errors.formatForUser(error) })
+      }
+      throw error
+    } finally {
+      await output?.stop()
+    }
   }
 }

@@ -192,6 +192,48 @@ Describe('Tao runtime app generation', () => {
     Expect(await FS.modifiedTimeMs(generated.outputPath)).toBe(firstWrite)
   })
 
+  Test('publishes managed source and compiled identity with a fresh mounted nonce', async () => {
+    const runtimePackageRoot = await createRuntimePackageRoot()
+    await withTaoFiles('tao-managed-publication-', {
+      'Main.tao': 'app Preview { view Home }\nview Home() { render inject ```ts return "Before" ``` }',
+    }, async paths => {
+      const managedPublication = {
+        session: 'session-1',
+        checkout: Repo.getRoot(),
+        loopGeneration: 'loop-1',
+        projectRoot: FS.dirname(paths['Main.tao']!),
+        appName: 'Preview',
+      }
+      const first = await Runtime.generateApp(paths['Main.tao']!, {
+        appName: 'Preview',
+        runtimePackageRoot,
+        managedPublication,
+      })
+      Expect(first.managedPublication?.appName).toBe('Preview')
+      Expect(first.managedPublication?.sourceRevision).toMatch(/^[a-f0-9]{64}$/u)
+      Expect(first.managedPublication?.compiledRevision).toMatch(/^[a-f0-9]{64}$/u)
+      Expect(await FS.readText(generatedPreviewPath(runtimePackageRoot, 'ManagedLoopIdentity.ts'))).toContain(
+        '"session":"session-1"',
+      )
+      await FS.writeText(
+        paths['Main.tao']!,
+        'app Preview { view Home }\nview Home() { render inject ```ts return "After" ``` }',
+      )
+      const second = await Runtime.generateApp(paths['Main.tao']!, {
+        appName: 'Preview',
+        runtimePackageRoot,
+        managedPublication,
+      })
+      Expect(second.managedPublication?.sourceRevision).not.toBe(first.managedPublication?.sourceRevision)
+      Expect(second.managedPublication?.compiledRevision).not.toBe(first.managedPublication?.compiledRevision)
+      Expect(second.managedPublication?.nonce).not.toBe(first.managedPublication?.nonce)
+      await Runtime.generateApp(paths['Main.tao']!, { appName: 'Preview', runtimePackageRoot })
+      Expect(await FS.readText(generatedPreviewPath(runtimePackageRoot, 'ManagedLoopIdentity.ts'))).toBe(
+        'export default null\n',
+      )
+    })
+  })
+
   Test('resolves relative app paths from an explicit working directory', async () => {
     const outsideRoot = await createRuntimePackageRoot()
     const runtimePackageRoot = FS.resolvePath('runtime', outsideRoot)
@@ -744,6 +786,7 @@ Describe('Tao runtime app generation', () => {
         Expect(generatedFiles.toSorted()).toEqual([
           'App.injection-1.tsx',
           'App.tsx',
+          'ManagedLoopIdentity.ts',
           'modules/external/Auth.files/Auth.ts',
           'modules/external/Auth.files/AuthFlow.ts',
           'modules/external/Auth.files/AuthViews.tsx',
@@ -789,6 +832,7 @@ Describe('Tao runtime app generation', () => {
         Expect(generatedFiles.toSorted()).toEqual([
           'App.injection-1.tsx',
           'App.tsx',
+          'ManagedLoopIdentity.ts',
           'TaoApp.tsx',
           'TaoAppRefresh.tsx',
           'TaoStudioManifest.ts',

@@ -1,6 +1,7 @@
 /// <reference path="./better-opn.d.ts" />
 
 import { CLI, Errors, Platform, Repo, Time } from '@shared'
+import type { DevLoopTargetReceipt } from '@shared/DevLoopControl'
 import betterOpen from 'better-opn'
 import { DevLoopOutput } from '../DevLoopOutput'
 import { presentIosSimulator } from '../IosSimulatorPresentation'
@@ -11,6 +12,7 @@ import { prepareSimulatorCompanion } from '../prebuilt-host/SimulatorCompanion'
 import { type AgentChromeSession, startAgentChrome } from './AgentChrome'
 import type { AndroidSession } from './android'
 import { expoSdkMajor, type ExpoSessionConfig } from './expo-config'
+import { type FixedIosLaunchOperations, runFixedIosLaunchCommand } from './fixedIosLaunchCommand'
 import type { ExpoMetroSession } from './metro'
 import { openPhysicalDevice } from './physical-device'
 
@@ -29,6 +31,8 @@ type ExpoTargetContext = {
   android: AndroidSession
   config: ExpoSessionConfig
   metro: ExpoMetroSession
+  mobileDispatch: Map<string, NonNullable<DevLoopTargetReceipt['mobileDispatch']>>
+  iosLaunch?: FixedIosLaunchOperations
 }
 export type DevStartupTarget = 'android' | 'ios' | 'web' | 'desktop'
 
@@ -37,8 +41,15 @@ export function createExpoTargets(
   config: ExpoSessionConfig,
   metro: ExpoMetroSession,
   android: AndroidSession,
+  operations: { startChrome?: typeof startAgentChrome; iosLaunch?: FixedIosLaunchOperations } = {},
 ) {
-  const context = { android, config, metro }
+  const context: ExpoTargetContext = {
+    android,
+    config,
+    metro,
+    mobileDispatch: new Map(),
+    iosLaunch: operations.iosLaunch,
+  }
   let chromeLaunch: Promise<AgentChromeSession> | undefined
   const openSessionWeb = async (shouldStop: () => boolean = () => false): Promise<boolean> => {
     const url = context.metro.endpointUrl(await context.metro.expoOpenEndpoint('web')) ?? context.config.EXPO_ORIGIN
@@ -49,14 +60,16 @@ export function createExpoTargets(
       return await openChromeWebUrl(context, url)
     }
     try {
+      // This browser runs on the Metro host; use the same loopback origin the managed receipt records.
+      const localUrl = context.config.EXPO_ORIGIN
       const visible = Platform.runtimeProcess.env['TAO_AGENT_BROWSER_VISIBLE'] === '1'
-      chromeLaunch ??= startAgentChrome(url, config.WEB_PROFILE_PARENT, visible)
+      chromeLaunch ??= (operations.startChrome ?? startAgentChrome)(localUrl, config.WEB_PROFILE_PARENT, visible)
       const chrome = await chromeLaunch
       DevLoopOutput.logDevLoop(
         'dev',
         `opened web in ${
           visible ? 'visible' : 'headless'
-        } Chrome; DevTools http://127.0.0.1:${chrome.debugPort}; ${url}`,
+        } Chrome; DevTools http://127.0.0.1:${chrome.debugPort}; ${localUrl}`,
       )
       return true
     } catch (error) {
@@ -72,8 +85,25 @@ export function createExpoTargets(
     openPhysicalDevice: (device?: string, shouldStop?: () => boolean) =>
       openPhysicalDevice(config, metro, android, { device, shouldStop }),
     openPreparedAndroid: (url?: string) => openPreparedAndroid(context, url),
-    openStartupTargets: (requested?: readonly DevStartupTarget[], shouldStop?: () => boolean) =>
-      openStartupTargets(context, openSessionWeb, requested, shouldStop),
+    openStartupTargets: async (requested?: readonly DevStartupTarget[], shouldStop?: () => boolean) => {
+      const dispatch = await openStartupTargets(context, openSessionWeb, requested, shouldStop)
+      const chrome = await chromeLaunch?.catch(() => undefined)
+      return dispatch.map((result): DevLoopTargetReceipt => ({
+        ...result,
+        ...(result.dispatched && context.mobileDispatch.has(result.target)
+          ? { mobileDispatch: context.mobileDispatch.get(result.target) }
+          : {}),
+        ...(result.target === 'web' && result.dispatched && chrome !== undefined
+          ? {
+            browser: {
+              devToolsUrl: `http://127.0.0.1:${chrome.debugPort}`,
+              profile: chrome.profile,
+              process: chrome.process,
+            },
+          }
+          : {}),
+      }))
+    },
     openWeb: openSessionWeb,
     stopWeb: async () => {
       const launched = await chromeLaunch?.catch(() => undefined)
@@ -104,27 +134,56 @@ async function openIosSimulator(
   context: ExpoTargetContext,
   shouldStop: () => boolean = () => false,
 ): Promise<boolean> {
-  const simulator = await ensureIosSimulator(context.config, shouldStop)
+  const simulator = await ensureIosSimulator(context.config, shouldStop, context.iosLaunch)
   if (!simulator) {
     return false
   }
   if (shouldStop()) {
     return false
   }
-  const inCompanion = await prepareCompanionOnSimulator(context, simulator)
+  const inCompanion = await prepareCompanionOnSimulator(context, simulator, shouldStop)
   if (shouldStop()) {
     return false
   }
-  const link = inCompanion
-    ? companionDevClientUrl({ host: '127.0.0.1', port: context.config.EXPO_PORT })
-    : context.metro.endpointUrl(await context.metro.expoOpenEndpoint('ios'))
-      ?? await context.metro.expoLink('ios')
-      ?? context.config.EXPO_GO_URL
+  let link = companionDevClientUrl({ host: '127.0.0.1', port: context.config.EXPO_PORT })
+  if (!inCompanion) {
+    const endpoint = await context.metro.expoOpenEndpoint('ios')
+    if (shouldStop()) {
+      return false
+    }
+    const endpointUrl = context.metro.endpointUrl(endpoint)
+    if (endpointUrl !== undefined) {
+      link = endpointUrl
+    } else {
+      const expoLink = await context.metro.expoLink('ios')
+      if (shouldStop()) {
+        return false
+      }
+      link = expoLink ?? context.config.EXPO_GO_URL
+    }
+  }
   if (shouldStop()) {
     return false
   }
-  const result = await CLI.run('xcrun', { args: ['simctl', 'openurl', simulator.udid, link] })
-  if (result.exitCode === 0 && result.error === undefined) {
+  const result = await runFixedIosLaunchCommand(
+    {
+      stage: 'openurl',
+      udid: simulator.udid,
+      url: link,
+      metroPort: context.config.EXPO_PORT,
+    },
+    shouldStop,
+    context.iosLaunch,
+  )
+  if (shouldStop()) {
+    return false
+  }
+  if (result.exitCode === 0 && result.error === undefined && result.signal === null) {
+    context.mobileDispatch.set('ios', {
+      kind: inCompanion ? 'companion' : 'expo-go',
+      appId: inCompanion ? CompanionIdentity.bundleIdentifier : 'host.exp.Exponent',
+      devUrl: link,
+    })
     DevLoopOutput.logDevLoop(
       'dev',
       `opened iOS Simulator (${simulator.name}${inCompanion ? `, ${CompanionIdentity.name}` : ''})`,
@@ -136,16 +195,27 @@ async function openIosSimulator(
 }
 
 /** A Companion that cannot be installed leaves the simulator on Expo Go, saying why, not the dev loop stopped. */
-async function prepareCompanionOnSimulator(context: ExpoTargetContext, simulator: IosSimulator): Promise<boolean> {
+async function prepareCompanionOnSimulator(
+  context: ExpoTargetContext,
+  simulator: IosSimulator,
+  shouldStop: () => boolean,
+): Promise<boolean> {
   try {
     return await prepareSimulatorCompanion(simulator.udid, simulator.name, {
-      findPrebuiltHost: async () =>
-        await obtainCompatibleHost(
-          'ios-simulator',
-          await nativeKitOf(Repo.resolvePath(context.config.RUNTIME_TOOLCHAIN_PATH)),
-        ),
+      shouldStop,
+      launchOperations: context.iosLaunch,
+      findPrebuiltHost: async () => {
+        const nativeKit = await nativeKitOf(Repo.resolvePath(context.config.RUNTIME_TOOLCHAIN_PATH))
+        if (shouldStop()) {
+          throw Errors.abortError('iOS Companion host lookup cancelled.')
+        }
+        return await obtainCompatibleHost('ios-simulator', nativeKit)
+      },
     })
   } catch (error) {
+    if (retainsIosTargetLease(error) || shouldStop() || Errors.asError(error).name === 'AbortError') {
+      throw error
+    }
     DevLoopOutput.logDevLoop(
       'dev',
       `Could not install ${CompanionIdentity.name} on ${simulator.name}; opening in Expo Go: ${
@@ -202,10 +272,20 @@ async function openStartupTargets(
     try {
       return { target, dispatched: await openers[target]() }
     } catch (error) {
+      if (retainsIosTargetLease(error)) {
+        throw error
+      }
+      if (shouldStop() || Errors.asError(error).name === 'AbortError') {
+        return { target, dispatched: false }
+      }
       DevLoopOutput.logDevLoop('dev', `skipped ${target} launch: ${Errors.formatForUser(error)}`, 'warn')
       return { target, dispatched: false }
     }
   }))
+}
+
+function retainsIosTargetLease(error: unknown): boolean {
+  return error instanceof Errors.HostEnvironmentError && error.details?.['retainsTargetLease'] === true
 }
 
 /** openPreparedAndroid opens the current app in the runtime prepared on the Android emulator. */
@@ -235,6 +315,13 @@ async function openPreparedAndroidAndSay(
   if (runtime === undefined || shouldStop()) {
     return false
   }
+  context.mobileDispatch.set('android', {
+    kind: runtime,
+    appId: runtime === 'companion' ? CompanionIdentity.androidPackage : 'host.exp.exponent',
+    devUrl: runtime === 'companion'
+      ? companionDevClientUrl({ host: '127.0.0.1', port: context.config.EXPO_PORT })
+      : context.metro.endpointUrl(endpoint) ?? context.config.EXPO_GO_URL,
+  })
   DevLoopOutput.logDevLoop(
     'dev',
     `opened Android${
@@ -247,6 +334,7 @@ async function openPreparedAndroidAndSay(
 async function ensureIosSimulator(
   config: ExpoSessionConfig,
   shouldStop: () => boolean,
+  operations?: FixedIosLaunchOperations,
 ): Promise<IosSimulator | undefined> {
   if (!await CLI.commandExists('xcrun')) {
     DevLoopOutput.logDevLoop('dev', 'xcrun not found; skipping iOS Simulator launch.')
@@ -256,6 +344,9 @@ async function ensureIosSimulator(
     return undefined
   }
   const simulator = await selectIosSimulator()
+  if (shouldStop()) {
+    return undefined
+  }
   if (!simulator) {
     DevLoopOutput.logDevLoop('dev', 'No available iOS Simulator found.', 'warn')
     return undefined
@@ -269,13 +360,19 @@ async function ensureIosSimulator(
   if (shouldStop()) {
     return undefined
   }
-  if (simulator.state !== 'Booted' && !await bootIosSimulator(simulator.udid)) {
+  if (simulator.state !== 'Booted' && !await bootIosSimulator(simulator.udid, shouldStop, operations)) {
+    return undefined
+  }
+  if (shouldStop()) {
     return undefined
   }
   if (!await waitForIosSimulatorBoot(config, simulator.udid, shouldStop)) {
     if (!shouldStop()) {
       DevLoopOutput.logDevLoop('dev', `iOS Simulator did not finish booting: ${simulator.name}`, 'warn')
     }
+    return undefined
+  }
+  if (shouldStop()) {
     return undefined
   }
   return simulator
@@ -336,9 +433,16 @@ async function openSimulatorApp(udid: string): Promise<void> {
   }
 }
 
-async function bootIosSimulator(udid: string): Promise<boolean> {
+async function bootIosSimulator(
+  udid: string,
+  shouldStop: () => boolean,
+  operations?: FixedIosLaunchOperations,
+): Promise<boolean> {
   DevLoopOutput.logDevLoop('dev', 'booting iOS Simulator')
-  const result = await CLI.run('xcrun', { args: ['simctl', 'boot', udid] })
+  const result = await runFixedIosLaunchCommand({ stage: 'boot', udid }, shouldStop, operations)
+  if (shouldStop()) {
+    return false
+  }
   if (
     result.exitCode === 0
     || result.stderr.includes('Unable to boot device in current state: Booted')

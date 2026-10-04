@@ -4,6 +4,7 @@ import { RuntimeToolchainPaths } from '../runtime-toolchain-paths'
 
 const runtimeFiles = [
   'index.ts',
+  'expo-host-src/ManagedLoopIdentityMarker.ts',
   'app.json',
   'app.config.js',
   'app-config.cjs',

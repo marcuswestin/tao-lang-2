@@ -4,6 +4,7 @@ import { Errors, FS, HCI, Json, Repo } from '@shared'
 
 const runtimeFiles = [
   'index.ts',
+  'expo-host-src/ManagedLoopIdentityMarker.ts',
   'metro.config.cjs',
   'package.json',
 ] as const
