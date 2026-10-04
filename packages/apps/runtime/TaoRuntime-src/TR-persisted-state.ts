@@ -515,6 +515,11 @@ class PersistedValue<T> implements TaoRuntimeValue<T> {
   }
 }
 
+/** Recognize complete persisted snapshots without evaluating or inspecting their payloads. */
+export function isCompletePersistedValue(candidate: object): boolean {
+  return candidate instanceof PersistedValue
+}
+
 function value<T>(jsValue: T): TaoRuntimeValue<T> {
   return new PersistedValue(jsValue)
 }

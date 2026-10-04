@@ -4,7 +4,7 @@ import type { TaoActionValue, TaoEvaluable } from './TR-action-values'
 import { RuntimeAssert } from './TR-assert'
 import { DataControls } from './TR-data'
 import { getJSValue, type TaoJSValue } from './TR-js-value'
-import { isPersistedEnumCase } from './TR-persisted-state'
+import { isCompletePersistedValue, isPersistedEnumCase } from './TR-persisted-state'
 import { isReactiveValue } from './TR-reactive'
 import { readAvailability, withReadAvailability } from './TR-read-availability'
 
@@ -20,6 +20,13 @@ export type TaoRuntimeValue<ValueT> = Readonly<{
   getJSValue(): TaoJSValue<ValueT>
   jsValue: ValueT
 }>
+
+const registeredCompleteValues = new WeakSet<object>()
+
+/** Runtime-owned facade constructors register complete outputs without inspecting their reads. */
+export function registerCompleteRuntimeValue<ValueT>(value: TaoRuntimeValue<ValueT>): void {
+  registeredCompleteValues.add(value)
+}
 
 /** TaoWritableInput preserves narrow read/write capabilities without requiring output methods. */
 export type TaoWritableInput<ValueT> =
@@ -259,7 +266,9 @@ export function completeRuntimeValue<ValueT>(value: TaoEvaluable<ValueT>): TaoRu
 
 /** Only runtime-owned classes guarantee complete outputs from every evaluation. */
 function isKnownCompleteRuntimeValue(value: object): boolean {
-  return value instanceof Value
+  return registeredCompleteValues.has(value)
+    || isCompletePersistedValue(value)
+    || value instanceof Value
     || value instanceof ReactiveCell
     || value instanceof PathLens
     || value instanceof MappedWritable

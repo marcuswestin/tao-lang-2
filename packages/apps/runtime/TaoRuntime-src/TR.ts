@@ -169,6 +169,7 @@ import {
   mappedWritable,
   nativeMutationLease,
   reactiveValue,
+  registerCompleteRuntimeValue,
   type TaoRuntimeValue,
   type TaoRuntimeValueInput,
   type TaoWritable,
@@ -1072,7 +1073,9 @@ function authActionOutcome(outcome: TaoAuthOutcome): void {
 }
 
 class RuntimeValue<T> {
-  constructor(readonly jsValue: T) {}
+  constructor(readonly jsValue: T) {
+    registerCompleteRuntimeValue(this)
+  }
 
   evaluate(): RuntimeValue<T> {
     return this
@@ -1089,6 +1092,7 @@ class RuntimeReadonlyValue<T> implements TR.Value<T> {
 
   constructor(source: TR.Evaluable) {
     this.#source = source
+    registerCompleteRuntimeValue(this)
   }
 
   evaluate(): TR.Value<T> {
@@ -1122,7 +1126,9 @@ class RuntimeState<T> {
     private readonly setJsValue: React.Dispatch<React.SetStateAction<T>>,
     private readonly initialValue: T,
     private readonly lensScope: TaoStudioLensScope | undefined,
-  ) {}
+  ) {
+    registerCompleteRuntimeValue(this)
+  }
 
   defaultValue(): RuntimeValue<T> {
     return new RuntimeValue(this.initialValue)
@@ -1325,13 +1331,7 @@ class RuntimeFunction {
 
   invoke(...args: TR.Evaluable[]): TR.Value<any> | TR.Function {
     const result = this.body(...args)
-    if (
-      result instanceof RuntimeFunction || result instanceof RuntimeValue || result instanceof RuntimeReadonlyValue
-      || result instanceof RuntimeState
-    ) {
-      return result
-    }
-    return completeRuntimeValue(result)
+    return result instanceof RuntimeFunction ? result : completeRuntimeValue(result)
   }
 }
 

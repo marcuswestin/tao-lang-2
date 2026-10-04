@@ -232,6 +232,19 @@ Describe('native JavaScript value accessors', () => {
     }
   })
 
+  Test('preserves complete value identity consistently through selection, plural and mapped outputs', () => {
+    const value = TR.Value('Complete')
+    const selected = TR.WhenCase<string>(TR.Value(true), [['true', () => value]], () => TR.Value('Unused'))
+    const fallback = TR.WhenCase<string>(TR.Value(false), [['true', () => TR.Value('Unused')]], () => value)
+    const plural = TR.Plural(TR.Value(2), { other: value }, 'en')
+    const mapped = TR.Mapped(() => value, TR.Action((_next: TR.Value<string>) => {}))
+    for (const output of [selected, fallback, plural, mapped.evaluate(), TR.Call<string>(TR.Function(() => value))]) {
+      Expect(output).toBe(value)
+      Expect(output.evaluate()).toBe(value)
+      Expect(output.getJSValue()).toBe('Complete')
+    }
+  })
+
   Test('completes function-returned legacy aliases without changing direct alias evaluation', () => {
     let evaluations = 0
     let payloadReads = 0
@@ -565,6 +578,9 @@ Describe('native JavaScript value accessors', () => {
       )
       storage.values.set(state.key, JSON.stringify({ formatVersion: 1, type: numberType, value: 360 }))
       const called = TR.Call<number>(TR.Function(() => state))
+      const snapshot = state.evaluate()
+      Expect(TR.Call<number>(TR.Function(() => snapshot))).toBe(snapshot)
+      Expect(TR.WhenCase<number>(TR.Value(true), [['true', () => snapshot]], () => TR.Value(0))).toBe(snapshot)
 
       Expect(state.getJSValue()).toBe(280)
       Expect(called.jsValue).toBe(280)
@@ -593,6 +609,26 @@ Describe('native JavaScript value accessors', () => {
       Expect(storage.values.get(state.key)).toBe(JSON.stringify({ formatVersion: 1, type: numberType, value: 280 }))
     } finally {
       restore()
+    }
+  })
+
+  Test('preserves persisted text snapshot identity across every value-returning helper', () => {
+    const state = TR.PersistedState(
+      () => legacyValue('Complete'),
+      identity('AccessorSnapshotIdentity'),
+      'Title',
+      { kind: 'primitive', name: 'text' },
+      'com.tao.test.accessor-snapshot',
+    )
+    const snapshot = state.evaluate()
+    const selected = TR.WhenCase<string>(TR.Value(true), [['true', () => snapshot]], () => TR.Value('Unused'))
+    const plural = TR.Plural(TR.Value(2), { other: snapshot }, 'en')
+    const called = TR.Call<string>(TR.Function(() => snapshot))
+    for (const output of [selected, plural, called]) {
+      Expect(output).toBe(snapshot)
+      Expect(output.evaluate()).toBe(snapshot)
+      Expect(output.jsValue).toBe('Complete')
+      Expect(output.getJSValue()).toBe('Complete')
     }
   })
 
