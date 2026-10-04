@@ -690,8 +690,11 @@ ships in the pinned devenv profile.
 **Missing Hutch.** Only native Studio needs it; browser Studio is unaffected. `./dev studio-doctor`
 reports it as optional with the installer command.
 
-**Missing Chrome or Chromium.** Only the browser smoke lane needs it. Set `TAO_STUDIO_CHROME_PATH`
-to an executable.
+**Missing Chrome or Chromium.** Only the browser smoke lane needs it. Discovery tries
+`TAO_STUDIO_CHROME_PATH` or `CHROME_PATH`, the macOS applications, `google-chrome`, `chromium` and
+`chromium-browser` on PATH, then a Playwright Chromium under `PLAYWRIGHT_BROWSERS_PATH`; set
+`TAO_STUDIO_CHROME_PATH` to an executable when none of those exists. On Linux as root, as hosted
+containers run, Chrome is started with `--no-sandbox` because its sandbox refuses root.
 
 **Native Studio will not register.** AppKit application registration aborts under an agent host
 coalition, and the runtime dies by signal before it can report. `just studio-canary` names this;

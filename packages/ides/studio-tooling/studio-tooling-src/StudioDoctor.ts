@@ -1,6 +1,7 @@
 import { CLI, FS, Platform, Repo } from '@shared'
 import type { CheckStatus, DoctorCheck } from '@verification/RepositoryDoctor'
 import { doctorReport, readDoctorFacts, worstStatus } from '@verification/RepositoryDoctor'
+import { findChromeExecutable } from './ChromeDiscovery'
 import { listLaunches } from './StudioLifecycle'
 import { StudioNative } from './StudioNative'
 import { readWatchFacts, studioWatchChecks, type WatchFacts } from './StudioWatchHealth'
@@ -319,7 +320,7 @@ export async function readStudioDoctorFacts(repositoryRoot = Repo.getRoot()): Pr
     appKitReason: await hasWindowServerSession()
       ? undefined
       : 'no window server session is attached to this process',
-    chrome: await findChrome(),
+    chrome: await findChromeExecutable(),
     cottontailVersion: await readToolVersion(hutchPath, ['cottontail', '--version']),
     electrobunVersion: await readToolVersion(hutchPath, ['electrobun', '--version']),
     hutchPath,
@@ -353,27 +354,6 @@ async function missingPaths(repositoryRoot: string, paths: readonly string[]): P
     }
   }
   return missing
-}
-
-/** Mirrors StudioCdp's discovery order so `doctor` reports the browser smoke would actually use. */
-async function findChrome(): Promise<{ configured: boolean; path: string } | undefined> {
-  const configured = Platform.runtimeProcess.env['TAO_STUDIO_CHROME_PATH']
-    ?? Platform.runtimeProcess.env['CHROME_PATH']
-  if (configured !== undefined && configured.trim() !== '' && await FS.isFile(configured)) {
-    return { configured: true, path: configured }
-  }
-  for (
-    const candidate of [
-      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-      '/Applications/Chromium.app/Contents/MacOS/Chromium',
-    ]
-  ) {
-    if (await FS.isFile(candidate)) {
-      return { configured: false, path: candidate }
-    }
-  }
-  const discovered = await CLI.commandPath('google-chrome') ?? await CLI.commandPath('chromium')
-  return discovered === undefined ? undefined : { configured: false, path: discovered }
 }
 
 async function readToolVersion(
