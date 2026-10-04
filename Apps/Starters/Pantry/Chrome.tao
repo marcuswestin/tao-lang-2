@@ -13,15 +13,15 @@ nav RecipesStack = StackNav {
 
 folder
 nav PantryNavigator = SelectionNav {
-   Initial @ingredients
-   Display "automatic"
+   Initial @ingredients,
+   Display "automatic",
    @ingredients {
-      Label "Ingredients"
-      Icon "list.bullet"
+      Label "Ingredients",
+      Icon "list.bullet",
       Content IngredientsStack
-   }
+   },
    @recipes {
-      Label "Recipes"
-      Icon "book"
+      Label "Recipes",
+      Icon "book",
       Content RecipesStack
 }  }

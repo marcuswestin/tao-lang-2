@@ -18,8 +18,8 @@ app LocalData {
 // The same program over a different datasource. `local only` is unmoved by the choice: the focus
 // session still binds to the device-local companion store, never to this app's Memory store.
 app LocalDataMemory = LocalData with {
-   id "local-data-local-data-memory"
-   name "Local Data Memory"
+   id "local-data-local-data-memory",
+   name "Local Data Memory",
    Datasource Memory { }
 }
 

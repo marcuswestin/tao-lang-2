@@ -14,12 +14,12 @@ app FirebaseNotes {
    name "Firebase Notes"
    Navigator FirebaseNotesAuthNavigator
    Auth FirebaseAuth {
-      ApiKey "REPLACE_WITH_FIREBASE_API_KEY"
+      ApiKey "REPLACE_WITH_FIREBASE_API_KEY",
       ProjectId "REPLACE_WITH_FIREBASE_PROJECT_ID"
    }
    Datasource Firebase {
-      ApiKey "REPLACE_WITH_FIREBASE_API_KEY"
-      ProjectId "REPLACE_WITH_FIREBASE_PROJECT_ID"
+      ApiKey "REPLACE_WITH_FIREBASE_API_KEY",
+      ProjectId "REPLACE_WITH_FIREBASE_PROJECT_ID",
       StorageKey "hosted-firebase-notes"
    }
    Design FirebaseNotesDesign

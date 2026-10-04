@@ -11,13 +11,13 @@ app ResizableSplitApp {
    }
    Navigator SplitNav {
       @sidebar {
-         Content Sidebar(Width: SidebarWidth, Widen: WidenSidebar)
-         Width SidebarWidth
+         Content Sidebar(Width: SidebarWidth, Widen: WidenSidebar),
+         Width SidebarWidth,
          Resizable true
-      }
+      },
       @main {
-         Content Main
-         Width 640
+         Content Main,
+         Width 640,
          Resizable true
 }  }  }
 

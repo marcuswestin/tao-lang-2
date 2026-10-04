@@ -612,6 +612,12 @@ keyed item contract. A keyed patch is whole-item replacement, not a deep merge, 
 complete keyed-item contract. The descriptor retains its declaration identity across imports,
 aliases, and generated modules.
 
+Canonical item literals and configuration value blocks separate adjacent value entries with commas.
+`tao fix` migrates omitted separators with the legacy parser before formatting, including nested
+values and comment gaps. Configuration directives such as `view`, `requires`, restoration and app
+guards reset the value run; declarations and render children retain their existing separators. The
+parser still accepts legacy omitted value commas during this migration phase.
+
 ```tao
 public
 type CopiedStack is nav with {
