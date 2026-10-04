@@ -65,9 +65,15 @@ their branches. The coordinator reviews and validates the combined tree before l
    LIFO and preserves a primary failure while retaining cleanup failures. Existing callers remain
    valid. General cancellation and abandonment unwinding are not part of this bounded runtime slice;
    neither grammar/compiler wiring nor TR.ts facade ownership is transferred.
-3. A's capability/signature and C's numeric/unit proposals remain read-only until their exact
-   interfaces and ownership releases are recorded. Their proposals do not authorize edits to the
-   shared Type, grammar, binding, dispatch or native-publication seams.
+3. A's concrete callable-signature adapter owns new callable-signatures.ts and its ast-utils test,
+   the bounded argument-bindings.ts core extraction, and type-binding-matches.ts only if the shared
+   matcher needs a full per-role compatibility predicate. Preserve the existing resolver's pairs and
+   diagnostics. Compare readonly input domains contravariantly, caller-owned writable domains in
+   both directions, omission separately from none, and full known/open failure bounds. Local slot
+   binder aliases do not replace public role identity. The coordinator publishes the export hook.
+   Associated capability/method/converter source remains unreleased.
+4. C's numeric/unit proposal remains read-only until its exact interfaces and ownership release
+   are recorded. No concurrent Type, grammar, dispatch or native-publication edits are authorized.
 
 ## Binding and effects
 
