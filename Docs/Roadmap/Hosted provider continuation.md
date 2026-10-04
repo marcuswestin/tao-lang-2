@@ -353,7 +353,8 @@ The earlier hostile probe targets the standalone pilot's row layout. Direct serv
 for the new `users/{uid}/stores/{store}/{entity}/{id}` layout remains open and needs matching probe
 requests against deployed rules; do not substitute UI filtering or local rule assertions. Appwrite
 realtime device debugging remains deferred. Jazz/Convex/Pylon gates remain separate. Sharing the
-compact run screen with the regular dev loop and landing remain pending Developer decisions.
+compact run screen with the regular dev loop remains a pending Developer decision. The Developer
+authorized landing this source slice on 2026-10-04; new-app acceptance remains separate.
 
 Main's project/module migration is integrated: the generated app uses literal identity and
 `.tao/project.json`, and the regular launch command is now `tao run`. Firebase stays a built-in
@@ -379,4 +380,10 @@ that directory, generated root `tsconfig.json`, and task-created root `tao.conne
 ignored `.artifacts/hosted-provider/root-state-backup/`; the move is complete with contents intact.
 No secrets were read. Keep the production ownership rule. The repaired tree passes changed verification, including Studio and the Tao app suites. Full
 verification, the integration commit, and finalize record repository readiness separately from
-hosted device or server acceptance; landing still requires explicit authorization.
+hosted device or server acceptance. The Developer authorized landing on 2026-10-04. The first
+landing attempt caught a Studio preview packaging defect: its Expo config retained a local Jazz
+plugin reference while the isolated runtime omitted the plugins directory. Preview creation now
+copies that directory, with a regression assertion for the configured plugin. The focused Studio
+suite and an isolated real headless Studio launch pass. The repair is recorded in the
+[developer-environment archive](<Developer environment upgrades archive.md>). The full landing
+workflow must establish the final host gates before publishing.
