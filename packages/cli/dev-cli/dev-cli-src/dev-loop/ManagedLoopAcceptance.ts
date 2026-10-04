@@ -44,7 +44,7 @@ type OwnedSession = {
 }
 type VisibleFlag = '--show-browser' | '--show-simulator' | '--show-emulator'
 
-export type ManagedLoopMobileInteraction = (context: {
+type ManagedLoopMobileInteraction = (context: {
   receipt: DevLoopReceipt
   target: 'ios' | 'android'
   artifactRoot: string

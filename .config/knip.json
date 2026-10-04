@@ -74,6 +74,8 @@
         "dev-cli-src/dev.ts",
         "dev-cli-src/performance/language-performance.ts",
         "dev-cli-src/repo-lint-entry.ts",
+        "dev-cli-src/dev-loop/ManagedLoopTargetFaultsQuarantineChild.ts",
+        "dev-cli-tests/subprocess-test-api.ts",
         "dev-cli-tests/**/*.test.{ts,tsx}",
         "performance-checks/**/*.test.{ts,tsx}"
       ],

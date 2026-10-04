@@ -1228,7 +1228,7 @@ for (const outcome of ['preparation-failure', 'publication-failure', 'output-clo
     };
       import { managedIosRuntimeRealChildSourceOperations, managedIosRuntimeSourceStage } from ${
       JSON.stringify(
-        Repo.resolvePath('packages/cli/dev-cli/dev-cli-tests/managed-loop-acceptance-ios-runtime-fixture.ts'),
+        Repo.resolvePath('packages/cli/dev-cli/dev-cli-tests/subprocess-test-api.ts'),
       )
     };
       let created = false, booted = false, name = '', taoStarts = 0, registered = 0;

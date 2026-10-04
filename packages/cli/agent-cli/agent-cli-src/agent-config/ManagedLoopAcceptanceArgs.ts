@@ -1,6 +1,6 @@
 import { Errors } from '@shared'
 
-export const MANAGED_LOOP_ACCEPTANCE_CASES = [
+const MANAGED_LOOP_ACCEPTANCE_CASES = [
   'commands',
   'lifecycle',
   'lifecycle-faults',

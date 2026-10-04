@@ -10,7 +10,7 @@ import {
   runManagedIosCommandBarrier,
 } from './ManagedIosCommandBarrier'
 
-export type PrivateIosCreate = { name: string; type: string; runtime: string }
+type PrivateIosCreate = { name: string; type: string; runtime: string }
 export type PrivateIosSelection = {
   namePrefix: string
   /** Exact minted journal plus proved shutdown; never adopt a matching name. */
