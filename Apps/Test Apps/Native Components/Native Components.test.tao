@@ -1,4 +1,4 @@
-use Button, DatePicker, Picker, SegmentedControl, Slider, Spinner, Switch from @tao/ui
+use Button, DatePicker, Picker, SegmentedControl, Slider, Switch from @tao/ui
 use NativeComponents from ./
 
 // The behavior every implementation of these components must share. Each test declares the
@@ -72,8 +72,8 @@ test SegmentedControl "Segmented control behavior" {
    }
 }
 
-test DatePicker, Spinner "Date picker and spinner behavior" {
-   test "renders both and reports each day change where the platform host is absent" {
+test DatePicker "Date picker behavior" {
+   test "reports each day change where the platform host is absent" {
       run NativeComponents
 
       // Every check holds the clock at a fixed instant, so the degraded reading is deterministic.

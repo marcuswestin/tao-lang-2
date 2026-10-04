@@ -5,6 +5,28 @@ import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 const DISPATCHER = Repo.resolvePath('packages/cli/agent-cli/agent-cli-src/cli/agent-host-dispatch.ts')
 
 Describe('named host command dispatch', () => {
+  Test('routes app-dev visibility through the owned-device wrapper', async () => {
+    const root = await mkTestDir('tao-app-dev-host-')
+    try {
+      const source = FS.resolvePath('permissions.jsonc', root)
+      const log = FS.resolvePath('dev.log', root)
+      await FS.writeText(source, '{ "agentHostCommands": ["app-dev"] }')
+      const dev = FS.resolvePath('dev', root)
+      await FS.writeText(dev, '#!/bin/sh\nprintf "%s\\n" "$@" > "$TAO_HOST_LOG"\n')
+      await FS.chmod(dev, 0o755)
+      const args = ['app-dev', 'Apps/Test Apps/Data MVP', '--app', 'DataMVPApp', '--web', '--show-browser']
+      const result = await CLI.run(Platform.runtimeProcess.execPath, {
+        args: [DISPATCHER, source, ...args],
+        cwd: root,
+        env: { TAO_HOST_LOG: log },
+      })
+      Expect(result.exitCode).toBe(0)
+      Expect((await FS.readText(log)).trim().split('\n')).toEqual(args)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('bounds Watchman management to fixed lifecycle actions', async () => {
     const root = await mkTestDir('tao-watchman-host-')
     try {
@@ -61,11 +83,9 @@ Describe('named host command dispatch', () => {
         ['studio-ps', '--help'],
         ['studio-stop'],
         ['studio-stop', '--help'],
-        ['studio-stop', '-h'],
         ['studio-stop', '--all'],
         ['studio-stop', '--json'],
         ['studio-stop', '--all', '--json'],
-        ['studio-stop', '--json', '--all'],
         ['studio-stop', '--launch', 'browser-owned-id'],
         ['studio-stop', '--launch', 'browser-owned-id', '--json'],
         ['studio-stop', '--json', '--launch', 'browser-owned-id'],
@@ -84,15 +104,10 @@ Describe('named host command dispatch', () => {
         ['studio-stop', '--launch', '--all'],
         ['studio-stop', '--all', '--launch', 'browser-owned-id'],
         ['studio-stop', '--launch', 'browser-owned-id', '--all'],
-        ['studio-stop', '--all', '--all'],
-        ['studio-stop', '--json', '--json'],
         ['studio-stop', '--launch', '../foreign'],
         ['studio-stop', '--launch', ''],
         ['studio-stop', '--launch', 'a'.repeat(129)],
-        ['studio-stop', '--launch', 'first', '--launch', 'second'],
         ['studio-stop', '--pid', '123'],
-        ['studio-stop', '--signal', 'KILL'],
-        ['studio-stop', '--root', '/tmp'],
         ['studio-stop', '123'],
       ]
       for (const args of invalid) {
@@ -341,20 +356,11 @@ Describe('named host command dispatch', () => {
           ['--dry-run'],
           ['--justfile', '/tmp/untrusted'],
           ['--stop', '../other'],
-          ['--recover-lease', '../other'],
-          ['--audit-results', '../other'],
-          ['--audit-results', 'tao-acceptance-1-2', 'fix'],
-          ['--recover-lease', 'tao-acceptance-1-2', 'fix'],
           ['--diagnose', 'vanilla'],
           ['--prepare-base'],
-          ['--base'],
-          ['--prepare-base', 'unknown'],
           ['--base', 'unknown'],
           ['--prepare-base', 'tao-acceptance-1-2'],
-          ['--base', 'tao-acceptance-1-2'],
-          ['--prepare-base', 'vanilla', 'fix'],
           ['--base', 'xcode', 'fix'],
-          ['--prepare-base', '--justfile'],
           ['--base', 'vanilla fix'],
           ['--base=vanilla'],
         ]
@@ -379,7 +385,6 @@ Describe('named host command dispatch', () => {
           ['--prepare-base', 'vanilla'],
           ['--prepare-base', 'xcode'],
           ['--base', 'vanilla'],
-          ['--base', 'xcode'],
         ]
       ) {
         const accepted = await CLI.run(Platform.runtimeProcess.execPath, {

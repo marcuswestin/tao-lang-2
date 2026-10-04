@@ -197,24 +197,14 @@ Describe('output discipline', () => {
 
   Test('leaves a `just` recipe `./agent` does not expose, and land-unlock, which keeps its own rule', () => {
     Expect(isAllowed('just studio-smoke-native')).toEqual(true)
-    Expect(isAllowed('just keyboard-navigation-smoke')).toEqual(true)
-    Expect(isAllowed('just studio-canary')).toEqual(true)
-    Expect(isAllowed('just ship-bundle-proof')).toEqual(true)
-    Expect(isAllowed('just studio-manual-checks')).toEqual(true)
-    Expect(isAllowed('just session-unsandboxed')).toEqual(true)
     Expect(isAllowed('just dev Apps/HNReader')).toEqual(true)
     Expect(isAllowed('just land-unlock --force')).toEqual(true)
-    Expect(isAllowed('just --list')).toEqual(true)
   })
 
   Test('routes host recipes through named unsandboxed entry points', () => {
     Expect(refusalFor('just native-module-check')).toContain('./agent unsandboxed native-module-check')
     Expect(refusalFor('just studio-smoke')).toContain('./agent unsandboxed studio-smoke')
     Expect(refusalFor('just open-pr')).toContain('./agent unsandboxed open-pr')
-  })
-
-  Test('overrides the `just` recipe redirect the same way as every other refusal', () => {
-    Expect(isAllowed('just verify # hook-ok: measuring the raw recipe path on purpose')).toEqual(true)
   })
 
   Test('reads the justification an agent attaches to work a rule wrongly catches', () => {

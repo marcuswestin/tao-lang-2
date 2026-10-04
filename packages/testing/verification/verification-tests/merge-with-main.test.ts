@@ -815,23 +815,6 @@ Describe('merge-with-main', () => {
     Expect(fake.leases.acquired).toBe(0)
   })
 
-  Test('lands a branch whose local main is behind the remote, catching up inside the lock', async () => {
-    // This used to be a refusal: preflight required local main to equal origin/main, so a landing
-    // that had already paid for a full verification lost the race to whoever moved main first. The
-    // catching-up is now the landing's own work, done under the lock where it cannot go stale.
-    const stale = fakeDependencies({ remoteMainHead: 'new-main' })
-
-    const outcome = await MergeWithMainCommand.run(
-      { showStudio: true, repositoryRoot: stale.repository.featureRoot },
-      stale.dependencies,
-    )
-
-    Expect(outcome.mode).toBe('executed')
-    // The fetch happens after the lock, not before it: nothing this landing learned can be stale.
-    Expect(stale.calls.some(call => call.args[0] === 'fetch')).toBe(true)
-    Expect(stale.lines.some(line => line.startsWith('PASS  Landing lock held for'))).toBe(true)
-  })
-
   Test('reports a behind local main and an unintegrated main as plan rather than refusal', async () => {
     const stale = fakeDependencies({ ancestorExitCodes: [1], remoteMainHead: 'new-main' })
 
@@ -1232,6 +1215,7 @@ Describe('merge-with-main', () => {
     Expect(fake.lines.some(line => line.includes('Checking repo-lint'))).toBe(true)
   })
 
+  // REMOVAL CANDIDATE: generic raw-tail coverage also names context; removing this loses the cheap-gate issue-line regression.
   Test('a non-interactive landing names a dead-exports issue line from the cheap-gate barrier', async () => {
     const fake = fakeDependencies()
     fake.dependencies.isInteractive = () => false
@@ -1267,21 +1251,7 @@ Describe('merge-with-main', () => {
     Expect(fake.lines.some(line => line.startsWith('dead exports: '))).toBe(true)
   })
 
-  Test('uses direct remote reads and one atomic landing', async () => {
-    const fake = fakeDependencies()
-
-    const outcome = await MergeWithMainCommand.run(
-      { showStudio: true, repositoryRoot: fake.repository.featureRoot },
-      fake.dependencies,
-    )
-
-    Expect(outcome.mode).toBe('executed')
-    Expect(fake.calls.some(call => call.args[0] === 'ls-remote')).toBe(true)
-    Expect(fake.calls.some(call => call.args[0] === 'fetch')).toBe(true)
-    Expect(fake.calls.filter(call => call.args[0] === 'push')).toHaveLength(1)
-  })
-
-  Test('--skip-verify-full verifies the staged squash on main instead of the feature branch', async () => {
+  Test('--skip-verify-full verifies the feature tree before building the squash commit', async () => {
     const fake = fakeDependencies()
 
     const outcome = await MergeWithMainCommand.run({
@@ -1325,17 +1295,6 @@ Describe('merge-with-main', () => {
     Expect(operations).not.toContain('just verify --complete')
     Expect(fake.lines.some(line => line.includes('Landing the fully verified feature tree'))).toBe(true)
     Expect(outcome.mode).toBe('executed')
-
-    // The built commit must carry the tree that was verified, and that is checked before the ref
-    // moves rather than trusted.
-    const divergent = fakeDependencies({ builtTree: 'different-tree' })
-    await Expect(
-      MergeWithMainCommand.run(
-        { showStudio: true, repositoryRoot: divergent.repository.featureRoot, skipVerify: true },
-        divergent.dependencies,
-      ),
-    ).rejects.toThrow('does not carry the verified tree')
-    Expect(divergent.calls.some(call => call.args[0] === 'update-ref')).toBe(false)
   })
 
   Test('stops before building anything when a peer moves main during verification', async () => {

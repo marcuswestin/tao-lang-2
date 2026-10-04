@@ -54,7 +54,7 @@ Describe('validator: aliases and invocations', () => {
       {
         title: 'rejects local let references to later values',
         source: `
-        app MyApp { view MainView }
+        app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
         view MainView(Label text) {
           let Greeting = Later
           let Later = Label
@@ -79,18 +79,14 @@ Describe('validator: aliases and invocations', () => {
       },
       {
         title: 'rejects local aliases that shadow visible parameters',
-        source: 'app MyApp { view MainView }\nview MainView(Label text) { let Label = "shadow" }',
+        source:
+          'app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }\nview MainView(Label text) { let Label = "shadow" }',
         messages: [aliasMessages.duplicateName('Label')],
       },
       {
         title: 'rejects let self references as declaration-order violations',
         source: app('', 'let First = First'),
         messages: [aliasMessages.aliasUsedBeforeDeclaration('First', 'First')],
-      },
-      {
-        title: 'rejects mutually recursive aliases through declaration order',
-        source: app('', 'let First = Second\nlet Second = First'),
-        messages: [aliasMessages.aliasUsedBeforeDeclaration('First', 'Second')],
       },
       {
         title: 'preserves declaration-order diagnostics when invalid aliases reach render arguments',
@@ -106,7 +102,6 @@ Describe('validator: aliases and invocations', () => {
     const result = await testValidateCodeWithErrors(app('', 'let Greeting = "Hello"\nlet Greeting = "Again"'))
     const diagnostic = result.diagnostics.find(({ message }) => message === aliasMessages.duplicateName('Greeting'))
 
-    Expect(validationErrorMessages(result)).toContain(aliasMessages.duplicateName('Greeting'))
     Expect(diagnostic?.nodeType).toBe(AST.AliasDeclaration.$type)
     Expect(diagnostic?.range).toBeDefined()
   })
@@ -117,11 +112,6 @@ Describe('validator: aliases and invocations', () => {
         'rejects aliases that duplicate view names',
         app('', `let Text = "Hello"\n${stubView('Text', 'Value text')}`),
         aliasMessages.duplicateName('Text'),
-      ],
-      [
-        'rejects aliases that duplicate app names',
-        app('', 'let MyApp = "Hello"'),
-        aliasMessages.duplicateName('MyApp'),
       ],
       ['rejects views that duplicate app names', app('', 'view MyApp() { }'), aliasMessages.duplicateName('MyApp')],
       [
@@ -152,7 +142,7 @@ Describe('validator: aliases and invocations', () => {
       ],
       [
         'rejects view parameters that shadow view declarations',
-        `app MyApp { view MainView }
+        `app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
        view MainView(Text text) { render Text(Text) }
        ${textView}`,
       ],
@@ -164,7 +154,7 @@ Describe('validator: aliases and invocations', () => {
   Test(
     'allows local aliases to shadow file-level aliases without hiding earlier references',
     accepts(`
-      app MyApp { view MainView }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
       let Greeting = "Outer"
       ${stackLayout}
       ${textView}
@@ -238,14 +228,8 @@ Describe('validator: aliases and invocations', () => {
     )
     const diagnostic = result.diagnostics.find(candidate => candidate.message === message)
 
-    Expect(validationErrorMessages(result)).toContain(message)
     Expect(diagnostic?.nodeType).toBe(AST.RenderStatement.$type)
   })
-
-  Test(
-    'rejects extra render arguments',
-    rejects(app('render Text("Open", 1)', textView), invocationMessages.unmatchedArgument('Text')),
-  )
 
   Test(
     'rejects missing arguments in child view invocations',

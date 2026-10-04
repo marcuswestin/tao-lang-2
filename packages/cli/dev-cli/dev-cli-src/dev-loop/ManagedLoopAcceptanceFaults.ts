@@ -1434,7 +1434,7 @@ async function runChild(): Promise<void> {
     }
     do {
       outcome = await runDevLoop(
-        receipt.selection!,
+        { ...receipt.selection!, appId: 'data-mvp' },
         lineDevLoopReporter(),
         plan.scenario.startsWith('combined-')
           ? ['web', 'ios', 'android']

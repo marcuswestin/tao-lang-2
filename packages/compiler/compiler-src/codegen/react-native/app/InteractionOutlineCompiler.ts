@@ -17,8 +17,8 @@ type OutlineNode =
  */
 export const InteractionOutlineCompiler = {
   /** OutlineTable emits the module's static outline nodes, or nothing when the module has none. */
-  OutlineTable(taoFile: AST.TaoFile): Compiled {
-    const nodes = outlineNodesOf(taoFile)
+  OutlineTable(taoFile: AST.TaoFile, statements: readonly AST.Statement[] = taoFile.statements): Compiled {
+    const nodes = outlineNodesOf(statements)
     const first = nodes[0]
     if (!first) {
       return gen.noop()
@@ -59,15 +59,15 @@ export const InteractionOutlineCompiler = {
   },
 } as const
 
-function outlineNodesOf(taoFile: AST.TaoFile): OutlineNode[] {
+function outlineNodesOf(statements: readonly AST.Statement[]): OutlineNode[] {
   const nodes: OutlineNode[] = []
-  for (const owner of taoFile.statements.filter(AST.isViewDeclaration)) {
+  for (const owner of statements.filter(AST.isViewDeclaration)) {
     const descriptor = ASTUtils.outlineSiblingRegionDescriptor(owner)
     if (descriptor) {
       nodes.push({ descriptor, kind: 'region', owner })
     }
   }
-  for (const node of AST.streamAllContents(taoFile)) {
+  for (const node of statements.flatMap(statement => [statement, ...AST.streamAllContents(statement)])) {
     const owner = AST.findOwningView(node)
     if (!owner) {
       continue

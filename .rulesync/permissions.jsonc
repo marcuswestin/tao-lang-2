@@ -3,6 +3,8 @@
   // Canonical agent permission rules for this repository. `./agent setup` renders them into
   // .claude/settings.json (via rulesync) plus .codex/config.toml and .codex/rules/tao.rules
   // (via tao-agent-cli's CodexConfigGenerator). Edit this file, never the generated ones.
+  // Git metadata paths are checkout-specific: setup installs exact common/worktree directory
+  // grants in the machine-local Codex user profile, never in the tracked project config.
   "permission": {
     "bash": {
       // `--force` breaks a lock this session did not necessarily take, on the strength of a dead
@@ -99,10 +101,12 @@
   // per first operation name; the wrapper checks deeper argv and HostCommandTargets implements
   // tool operations. This editable-wrapper trust boundary is tracked for later replacement.
   "agentHostCommands": [
-    "land", "finalize", "merge-main", "merge-recover", "landed", "capabilities", "open-pr", "fix-agent-config",
-    "test-host", "studio-smoke", "studio-proof-real-app", "admission-experiment",
+    "notify-developer",
+    "stop",
+    "land", "finalize", "merge-main", "merge-recover", "landed", "capabilities", "open-pr", "fix-agent-config", "verify-full",
+    "test-host", "qa-capture", "studio-smoke", "studio-proof-real-app", "admission-experiment",
     "native-module-check", "reclaim --execute",
-    "prepare-release studio", "prepare-release ide-extension",
+    "prepare-release studio", "prepare-release ide-extension", "ide-extension-acceptance",
     "app-dev", "dev-loop", "test-watch", "standalone-cli-acceptance", "studio", "studio-native", "studio-ps", "studio-stop", "studio-canary", "studio-manual-checks",
     "docker-desktop start",
     "watchman start", "watchman status", "watchman stop",

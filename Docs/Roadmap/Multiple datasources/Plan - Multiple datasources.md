@@ -351,7 +351,7 @@ four-member case vocabulary: `loading` (first fill in flight, nothing to show ye
 (rows present and renderable, a fill runs behind them), `stale` (rows present, the latest fill
 failed), `error` (fill failed and nothing to show). `refreshing` and `stale` are advisory: a guard
 that does not name them falls through and renders content, and they never route to the app-wide
-`guard default` net — only nothing-to-show cases do. A case is also a predicate:
+app-scoped `guard` net — only nothing-to-show cases do. A case is also a predicate:
 `if FrontPage is refreshing { Spinner() }`. Offline stays a non-error: a failed refresh over cached
 rows is `stale`, never `error`.
 

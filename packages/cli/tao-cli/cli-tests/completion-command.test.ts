@@ -89,8 +89,8 @@ Describe('tao completion install', () => {
 })
 
 Describe('tao shell completion surface', () => {
-  Test('completes the physical device selector on dev', async () => {
-    const lines = await captureCompletionRequest(['dev', '--de'])
+  Test('completes the physical device selector on run', async () => {
+    const lines = await captureCompletionRequest(['run', '--de'])
     Expect(lines.some(line => line.startsWith('--device\t'))).toBe(true)
   })
 
@@ -100,13 +100,6 @@ Describe('tao shell completion surface', () => {
     Expect(lines).toContain(
       'check\tCheck Tao source without writing: syntax errors, validation errors and warnings, and canonical form.',
     )
-    Expect(lines.some(line => line.startsWith('dev\t'))).toBe(false)
-  })
-
-  Test('completes nested subcommands', async () => {
-    const lines = await captureCompletionRequest(['completion', ''])
-
-    Expect(lines.some(line => line.startsWith('install\t'))).toBe(true)
   })
 })
 

@@ -1,12 +1,16 @@
-import { ASTUtils } from '@ast-utils'
+import { ASTUtils, Packages } from '@ast-utils'
 import { Workspace } from '@compiler/workspace'
 import Formatter from '@formatter'
 import { AST, Parser } from '@parser'
+import { ProjectTooling } from '@project-tooling'
 import { Errors, FS, Platform, Repo } from '@shared'
+import { TaoAppModules } from './app-modules'
 import { findTaoProjectSource } from './project-root'
 import type { ShipVersion } from './ship-model'
 
 export type ShipProjectApp = {
+  id: string
+  version: ShipVersion
   baseAppName?: string
   displayName: string
   hasLocalDatasourceEndpoint: boolean
@@ -41,42 +45,31 @@ const appleDatasourceProviders: ReadonlyArray<{ importPath: string; service: Shi
 
 export type ShipProject = {
   apps: ShipProjectApp[]
-  defaultApp?: string
-  id: string
   name: string
   primaryAppName: string
-  projectSourcePath: string
   root: string
-  version: ShipVersion
 }
 
-/** discoverShipProject climbs from a file or directory until it finds one direct project declaration. */
+/** Discover runnable apps in the nearest marked project after a fresh disk check. */
 export async function discoverShipProject(targetPath: string): Promise<ShipProject> {
   const found = await findTaoProjectSource(targetPath)
-  return await readShipProject(found.root, found)
-}
-
-async function readShipProject(
-  root: string,
-  found: { path: string; project: AST.ProjectDeclaration },
-): Promise<ShipProject> {
-  const statements = found.project.block.statements
-  const id = oneProjectString(statements, 'ProjectId', 'id', found.path)
-  const name = oneProjectString(statements, 'ProjectName', 'name', found.path)
-  const version = oneProjectString(statements, 'ProjectVersion', 'version', found.path)
-  if (!id || !name || !version) {
+  const refreshed = await ProjectTooling.refresh(found.root, { runtimeRoot: TaoAppModules.runtimeRoot() })
+  if (refreshed.status !== 'fresh') {
     Errors.throwUserInput(
-      `Project metadata in ${found.path} must declare id, name, and version before it can ship.`,
+      refreshed.diagnostics.map(item => item.message).join('\n') || 'Tao project is not ready to ship.',
     )
   }
-  if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u.test(version)) {
-    Errors.throwUserInput(`Project version '${version}' in ${found.path} must be numeric SemVer such as "1.2.3".`)
-  }
-  const defaultApp = statements.find(AST.isProjectDefaultApp)?.app.$refText
+  return await readShipProject(found.root)
+}
+
+async function readShipProject(root: string): Promise<ShipProject> {
   const apps: ShipProjectApp[] = []
   const workspace = await Workspace.open(root)
   for (const path of await Repo.filesUnder(root, { extensions: ['.tao'] })) {
     if (path.endsWith('.test.tao')) {
+      continue
+    }
+    if (await Packages.containingProjectRoot(FS.dirname(path)) !== root) {
       continue
     }
     const parsed = await workspace.parse(path)
@@ -84,9 +77,19 @@ async function readShipProject(
       const declarationSource = declaration.$cstNode?.text ?? ''
       const bindings = resolvedAppDatasources(declaration)
       const icloud = deriveICloudBinding(bindings)
+      const configuration = ASTUtils.effectiveAppConfiguration(declaration)
+      const requiredText = (field: 'id' | 'version' | 'name'): string => {
+        const value = configuration.get(field)?.value
+        if (value === undefined || !AST.isStringLiteral(value)) {
+          Errors.throwUserInput(`App '${declaration.name}' in ${path} requires literal ${field} before shipping.`)
+        }
+        return value.value
+      }
       apps.push({
+        id: requiredText('id'),
+        version: requiredText('version') as ShipVersion,
         baseAppName: directAppBaseName(declarationSource),
-        displayName: authoredAppName(declarationSource) ?? declaration.name,
+        displayName: requiredText('name'),
         hasLocalDatasourceEndpoint: bindings.some(hasLocalInstantEndpoint),
         ...(icloud === undefined ? {} : { icloud }),
         isVariant: AST.isAliasDeclaration(declaration)
@@ -105,27 +108,16 @@ async function readShipProject(
   }
   const unique = new Map(apps.map(app => [app.name, app]))
   const uniqueApps = [...unique.values()].toSorted((left, right) => left.name.localeCompare(right.name))
-  const defaultDefinition = unique.get(defaultApp ?? '')
-  const primaryAppName = defaultDefinition?.baseAppName
-    ?? (defaultDefinition?.isVariant === false ? defaultDefinition.name : undefined)
-    ?? uniqueApps.find(app => !app.isVariant)?.name
+  const primaryAppName = uniqueApps.find(app => !app.isVariant)?.name ?? uniqueApps[0]?.name
   if (!primaryAppName) {
     Errors.throwUserInput(`No primary Tao app declaration was found in ${root}.`)
   }
   return {
     apps: uniqueApps,
-    defaultApp,
-    id,
-    name,
+    name: FS.basename(root),
     primaryAppName,
-    projectSourcePath: found.path,
     root,
-    version: version as ShipVersion,
   }
-}
-
-function authoredAppName(source: string): string | undefined {
-  return /\bName\s+"([^"]+)"/u.exec(source)?.[1]
 }
 
 function directAppBaseName(source: string): string | undefined {
@@ -223,21 +215,8 @@ function deriveICloudBinding(
     : { serviceBindings: serviceBindings.toSorted((left, right) => left.service.localeCompare(right.service)) }
 }
 
-function oneProjectString(
-  statements: readonly AST.ProjectStatement[],
-  type: string,
-  label: string,
-  path: string,
-): string | undefined {
-  const matches = statements.filter(statement => statement.$type === type) as Array<{ value?: string }>
-  if (matches.length > 1) {
-    Errors.throwUserInput(`Project metadata in ${path} declares ${label} more than once.`)
-  }
-  return matches[0]?.value
-}
-
 export function selectShipApp(project: ShipProject, requested?: string): ShipProjectApp | undefined {
-  const selected = requested ?? project.defaultApp
+  const selected = requested ?? (project.apps.length === 1 ? project.apps[0]?.name : undefined)
   if (selected === undefined) {
     return undefined
   }
@@ -252,24 +231,42 @@ export function selectShipApp(project: ShipProject, requested?: string): ShipPro
   return app
 }
 
-/** writeProjectVersion updates only the authored project version then restores canonical formatting. */
-export async function writeProjectVersion(project: ShipProject, version: ShipVersion): Promise<void> {
-  const source = await FS.readText(project.projectSourcePath)
+/** Update the selected app's own version, inserting an override for an inherited version. */
+export async function writeProjectVersion(app: ShipProjectApp, version: ShipVersion): Promise<void> {
+  const source = await FS.readText(app.sourcePath)
   const parsed = await Parser.parseCode(source, { validation: false })
-  const declaration = parsed.entry.ast.statements.find(AST.isProjectDeclaration)
+  const declaration = AST.appValueDeclarationsInFile(parsed.entry.ast).find(candidate => candidate.name === app.name)
   if (!declaration) {
-    Errors.throwUnexpected(`Project declaration disappeared from ${project.projectSourcePath}.`)
+    Errors.throwUnexpected(`App '${app.name}' disappeared from ${app.sourcePath}.`)
   }
-  const versionNode = declaration.block.statements.find(AST.isProjectVersion)
-  const cst = versionNode?.$cstNode
-  if (!cst) {
-    Errors.throwUnexpected(`Project version in ${project.projectSourcePath} has no source location.`)
+  const directProperty = AST.isAppDeclaration(declaration)
+    ? AST.blockStatements(declaration).filter(AST.isAppProperty).find(property => property.name === 'version')
+    : undefined
+  const refinement = declaration.value && AST.isRefinementExpression(declaration.value)
+    ? declaration.value
+    : undefined
+  const directEntry = refinement?.patchBlock.entries.find(entry => entry.name === 'version')
+  const ownNode = directProperty?.value ?? directEntry?.value
+  let replaced: string
+  if (ownNode?.$cstNode) {
+    const cst = ownNode.$cstNode
+    replaced = `${source.slice(0, cst.offset)}${JSON.stringify(version)}${source.slice(cst.end)}`
+  } else {
+    const block = refinement?.patchBlock.$cstNode
+      ?? (AST.isAppDeclaration(declaration) ? declaration.block?.$cstNode : undefined)
+    if (!block) {
+      Errors.throwUnexpected(`App '${app.name}' in ${app.sourcePath} has no editable configuration block.`)
+    }
+    const close = source.lastIndexOf('}', block.end - 1)
+    if (close < block.offset) {
+      Errors.throwUnexpected(`App '${app.name}' in ${app.sourcePath} has no closing brace.`)
+    }
+    replaced = `${source.slice(0, close)}\n   version ${JSON.stringify(version)}\n${source.slice(close)}`
   }
-  const replaced = `${source.slice(0, cst.offset)}version ${JSON.stringify(version)}${source.slice(cst.end)}`
-  const temporary = `${project.projectSourcePath}.${Platform.runtimeProcess.pid}-${Platform.randomUUID()}.tmp`
+  const temporary = `${app.sourcePath}.${Platform.runtimeProcess.pid}-${Platform.randomUUID()}.tmp`
   try {
     await FS.writeText(temporary, await Formatter.formatCode(replaced))
-    await FS.move(temporary, project.projectSourcePath)
+    await FS.move(temporary, app.sourcePath)
   } finally {
     await FS.remove(temporary).catch(() => {})
   }

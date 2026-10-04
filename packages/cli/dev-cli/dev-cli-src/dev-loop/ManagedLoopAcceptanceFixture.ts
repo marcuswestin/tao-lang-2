@@ -57,10 +57,11 @@ export class ManagedLoopAcceptanceFixtures {
     const fixture = { root, appPath, sourceIdentity: '' }
     this.projects.push(fixture)
     await this.save()
+    await FS.writeJson(FS.resolvePath('.tao/project.json', root), {})
     let source = await FS.readText(Repo.resolvePath('Apps/Test Apps/Data MVP/Data MVP.tao'))
     if (shape === 'ambiguous') {
       source +=
-        '\napp OtherMemoryApp {\n   Name "Other Memory"\n   Navigator StackNav { Initial MainView }\n   Datasource Memory { }\n}\n'
+        '\napp OtherMemoryApp {\n   name "Other Memory"\n   id "dev.tao.acceptance.other"\n   version "1.0.0"\n   Navigator StackNav { Initial MainView }\n   Datasource Memory { }\n}\n'
     }
     if (shape === 'invalid') {
       // Discovery still finds a well-formed app; compilation must reject the disposable scene.

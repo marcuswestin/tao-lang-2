@@ -118,13 +118,15 @@ Describe('contended failure confirmation', () => {
     Expect(state.attempts?.[1]?.fullOutput).toBe('ok on its own')
   })
 
-  Test('releases isolation between serial confirmations', async () => {
+  Test('reports progress before waiting and running while releasing isolation between confirmations', async () => {
     const root = await mkTestDir('tao-contention-isolation-')
     const location = RunArtifacts.locate({ lane: 'verify', repositoryRoot: root })
     const states = ['first', 'second'].map(name => failedState(name, 'timed out after 5000ms'))
     const events: string[] = []
+    const progress: string[] = []
     const machineLane: MachineLane = {
       acquireExclusive: async () => {
+        Expect(progress.at(-1)).toContain('waiting for an exclusive retry')
         events.push('exclusive')
         return {
           release: async () => {
@@ -151,7 +153,9 @@ Describe('contended failure confirmation', () => {
       contention: contended,
       location,
       machineLane,
+      onProgress: message => progress.push(message),
       runNode: async state => {
+        Expect(progress.at(-1)).toContain('running an isolated retry')
         events.push(`run-${state.name}`)
         return { exitCode: 0 }
       },

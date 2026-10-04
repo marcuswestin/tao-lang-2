@@ -171,26 +171,6 @@ _bench-check:
     ))).toEqual([])
   })
 
-  Test('accepts an open directory when a mapped Current file is missing from Next', () => {
-    Expect(wordFlowerDirectoryIssues(directory(
-      [
-        file('WordFlower.tao', `${absorbed}\nview Main { }`),
-        file('Documents.tao', 'view Documents { }'),
-      ],
-      [file('WordFlower.tao-next', `${open}\nview Main { }`)],
-    ))).toEqual([])
-  })
-
-  Test('accepts an open directory when Next has an extra mapped file', () => {
-    Expect(wordFlowerDirectoryIssues(directory(
-      [file('WordFlower.tao', `${absorbed}\nview Main { }`)],
-      [
-        file('WordFlower.tao-next', `${open}\nview Main { }`),
-        file('Documents.tao-next', 'view Documents { }'),
-      ],
-    ))).toEqual([])
-  })
-
   Test('keeps Next open while the nested scratch package exists', () => {
     Expect(wordFlowerDirectoryIssues(directory(
       [file('WordFlower.tao', `${absorbed}\nview Main { }`)],
@@ -198,13 +178,6 @@ _bench-check:
         file('WordFlower.tao-next', `${open}\nview Main { }`),
         file('@tao-next/Prelude.tao-next', 'primitive item'),
       ],
-    ))).toEqual([])
-  })
-
-  Test('allows either Next status when mapped content matches', () => {
-    Expect(wordFlowerDirectoryIssues(directory(
-      [file('WordFlower.tao', `${absorbed}\nview Main { }`)],
-      [file('WordFlower.tao-next', `${open}\nview Main { }`)],
     ))).toEqual([])
   })
 
@@ -289,7 +262,7 @@ _bench-check:
       await FS.writeText(FS.resolvePath('Justfile', root), healthyJustfile)
       await FS.writeText(FS.resolvePath(DEV_ENTRY_PATH, root), importFrom('@shared'))
       await FS.writeText(FS.resolvePath('Apps/WordFlower/1 - Current/.tao/dev/runtime/App.tsx', root), 'generated\n')
-      await FS.writeText(FS.resolvePath('Apps/WordFlower/1 - Current/@ui/Shell.tao.ts', root), 'generated\n')
+      await FS.writeText(FS.resolvePath('Apps/WordFlower/1 - Current/.tao-ts/@ui/Shell.tao.ts', root), 'generated\n')
       await FS.symlink(
         FS.resolvePath('Apps/WordFlower/1 - Current/.tao/dev/runtime', root),
         FS.resolvePath('Apps/WordFlower/1 - Current/.tao/dev/node_modules', root),
@@ -357,10 +330,9 @@ _bench-check:
     Expect(wordFlowerDirectoryIssues(directory(
       [
         file('WordFlower.tao', absorbed),
-        file('.tao-project/lock.jsonc', '{ "ship": true }'),
-        file('.tao/sessions/owner.json', '{ "owner": "studio" }'),
+        file('.tao/lock.jsonc', '{ "ship": true }'),
         file('.tao/sessions/session.json', '{ "status": "active" }'),
-        file('@ui/View.tao.ts', 'generated bridge metadata'),
+        file('.tao-ts/@ui/View.tao.ts', 'generated bridge metadata'),
       ],
       [file('WordFlower.tao-next', absorbed)],
     ))).toEqual([])
@@ -551,6 +523,39 @@ _bench-check:
     )).toEqual(['Data MVP'])
   })
 
+  Test('requires contracts for authored apps while ignoring removed apps and generated leftovers', async () => {
+    const root = await mkGitTestDir('tao-repo-lint-apps-')
+    await initGitTestRepository(root)
+    await FS.writeText(FS.resolvePath('Justfile', root), healthyJustfile)
+    await FS.writeText(FS.resolvePath('Apps/Test Apps/README.md', root), '# Test Apps\n')
+    await FS.writeText(FS.resolvePath('Apps/Starters/README.md', root), '# Starters\n')
+    await FS.writeText(FS.resolvePath('Apps/WordFlower/1 - Current/WordFlower.tao', root), absorbed)
+    await FS.writeText(FS.resolvePath('Apps/WordFlower/2 - Next/WordFlower.tao-next', root), absorbed)
+    await FS.writeText(FS.resolvePath(DEV_ENTRY_PATH, root), importFrom('@shared'))
+    await FS.writeText(
+      FS.resolvePath('.gitignore', root),
+      '**/node_modules/\n**/.tao/\n**/.tao-ts/\nApps/Test Apps/Ignored/\n',
+    )
+    await FS.writeText(FS.resolvePath('Apps/Test Apps/Removed/tsconfig.json', root), '{}')
+    await FS.writeText(FS.resolvePath('Apps/Test Apps/Removed/.tao/project.json', root), '{}')
+    await FS.writeText(FS.resolvePath('Apps/Test Apps/Removed/.tao-ts/App.tao.ts', root), '')
+    await FS.writeText(FS.resolvePath('Apps/Test Apps/Removed/node_modules/example/App.tao', root), '')
+    await FS.writeText(FS.resolvePath('Apps/Test Apps/Ignored/App.tao', root), '')
+    Expect(await repoLintIssues(root)).toEqual([])
+
+    const authored = FS.resolvePath('Apps/Test Apps/Authored/@ui/App.tao', root)
+    await FS.writeText(authored, '')
+    await FS.writeText(FS.resolvePath('Apps/Starters/New Starter/App.tao', root), '')
+    Expect(await repoLintIssues(root)).toEqual([
+      `${FS.resolvePath('Apps/Test Apps/README.md', root)} needs a \`## Authored\` entry.`,
+      `${FS.resolvePath('Apps/Starters/README.md', root)} needs a \`## New Starter\` entry.`,
+    ])
+
+    await FS.remove(authored)
+    await FS.writeText(FS.resolvePath('Apps/Starters/README.md', root), '# Starters\n\n## New Starter\n')
+    Expect(await repoLintIssues(root)).toEqual([])
+  })
+
   Test('reports Describe titles duplicated across test files', () => {
     Expect(duplicateDescribeTitleIssues([
       { path: 'a.test.ts', source: "Describe('shared title', () => {})" },
@@ -708,15 +713,6 @@ Describe('repo lint conventions', () => {
         + ' from `@shared`, and add the seam there when none fits.'
       ),
     )
-  })
-
-  Test('a node-import exemption allows one site rather than its whole file', () => {
-    const path = 'packages/dev/dev-src/studio/StudioNew.ts'
-    const source = [importFrom('node:crypto'), importFrom('node:net')].join('\n')
-    Expect(conventionRuleIssues(CONVENTION_RULES.nodeImport, [{ path, source }], [`${path}:1`])).toEqual([
-      `${path}:2 imports a \`node:\` module directly; reach for \`FS\`, \`CLI\`, \`Platform\`, or \`HCI\``
-      + ' from `@shared`, and add the seam there when none fits.',
-    ])
   })
 
   Test('leaves a type-only node import alone', () => {

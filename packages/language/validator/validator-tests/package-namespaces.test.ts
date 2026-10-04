@@ -1,28 +1,8 @@
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Test } from '@shared/test'
+import { InvocationsValidator } from '../validator-src/validators/invocations-validator'
 import { usePackageValidationMessages } from '../validator-src/validators/use-package-validator'
 import { ViewsValidator } from '../validator-src/validators/views-validator'
-import { type ValidatedFiles, validationErrorMessages, withValidatedFiles } from './test-validate'
-
-type TaoFiles = Record<string, string>
-
-function checksFiles(files: TaoFiles, check: (result: ValidatedFiles) => void): () => Promise<void> {
-  return async () => await withValidatedFiles('Main.tao', files, check)
-}
-
-function acceptsFiles(files: TaoFiles): () => Promise<void> {
-  return checksFiles(files, result => {
-    Expect(validationErrorMessages(result)).toEqual([])
-  })
-}
-
-function rejectsFiles(files: TaoFiles, ...messages: readonly string[]): () => Promise<void> {
-  return checksFiles(files, result => {
-    const errors = validationErrorMessages(result).join('\n')
-    for (const message of messages) {
-      Expect(errors).toContain(message)
-    }
-  })
-}
+import { acceptsFiles, rejectsFiles } from './test-validate'
 
 const widgetsPackage = `
 public
@@ -51,7 +31,7 @@ Describe('validator: package namespaces and view aliases', () => {
         use package @widgets
         use package @widgets as w
 
-        app Aliases { view Main }
+        app Aliases { id "aliases" version "1.0.0" name "Aliases" view Main }
         view Main() {
            render Published("one")
         }
@@ -73,7 +53,7 @@ Describe('validator: package namespaces and view aliases', () => {
           use package @widgets
           use package @widgets
 
-          app Aliases { view Main }
+          app Aliases { id "aliases" version "1.0.0" name "Aliases" view Main }
           view Main() {
              render Mine("x")
           }
@@ -92,7 +72,7 @@ Describe('validator: package namespaces and view aliases', () => {
         'Main.tao': `
           use package @nowhere
 
-          app Aliases { view Main }
+          app Aliases { id "aliases" version "1.0.0" name "Aliases" view Main }
           view Main() {
              render Mine("x")
           }
@@ -110,7 +90,7 @@ Describe('validator: package namespaces and view aliases', () => {
         'Main.tao': `
           use package @widgets
 
-          app Aliases { view Main }
+          app Aliases { id "aliases" version "1.0.0" name "Aliases" view Main }
           view Main() {
              render Mine("x")
           }
@@ -129,7 +109,7 @@ Describe('validator: package namespaces and view aliases', () => {
         'Main.tao': `
           use package @middle
 
-          app Aliases { view Main }
+          app Aliases { id "aliases" version "1.0.0" name "Aliases" view Main }
           view Main() {
             render Published()
           }
@@ -201,7 +181,7 @@ Describe('validator: package namespaces and view aliases', () => {
         'Main.tao': `
           use package @widgets
 
-          app Aliases { view Main }
+          app Aliases { id "aliases" version "1.0.0" name "Aliases" view Main }
           view Main() {
              render Mine(1)
           }
@@ -211,7 +191,7 @@ Describe('validator: package namespaces and view aliases', () => {
         '@widgets/Widgets.tao': widgetsPackage,
       },
       // The alias carries Badge's `Label text` parameter, so a number argument does not bind.
-      'Mine',
+      InvocationsValidator.messages.unmatchedArgument('Mine'),
     ),
   )
 })

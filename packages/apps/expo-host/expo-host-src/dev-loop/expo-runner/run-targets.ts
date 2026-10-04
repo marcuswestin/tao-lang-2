@@ -1,6 +1,6 @@
 /// <reference path="./better-opn.d.ts" />
 
-import { CLI, Errors, Platform, Repo, Time } from '@shared'
+import { CLI, Errors, Platform, ReleaseCapabilities, Repo, Time } from '@shared'
 import type { DevLoopTargetReceipt } from '@shared/DevLoopControl'
 import betterOpen from 'better-opn'
 import { DevLoopOutput } from '../DevLoopOutput'
@@ -115,6 +115,7 @@ export function createExpoTargets(
 
 /** openAndroid opens the current app on Android, launching an emulator and installing its runtime. */
 async function openAndroid(context: ExpoTargetContext): Promise<boolean> {
+  ReleaseCapabilities.require('android')
   try {
     await context.android.ensureEmulator()
     await context.android.ensureRuntime()
@@ -134,6 +135,7 @@ async function openIosSimulator(
   context: ExpoTargetContext,
   shouldStop: () => boolean = () => false,
 ): Promise<boolean> {
+  ReleaseCapabilities.require('ios-simulator')
   const simulator = await ensureIosSimulator(context.config, shouldStop, context.iosLaunch)
   if (!simulator) {
     return false
@@ -141,7 +143,8 @@ async function openIosSimulator(
   if (shouldStop()) {
     return false
   }
-  const inCompanion = await prepareCompanionOnSimulator(context, simulator, shouldStop)
+  const inCompanion = ReleaseCapabilities.allows('companion')
+    && await prepareCompanionOnSimulator(context, simulator, shouldStop)
   if (shouldStop()) {
     return false
   }
@@ -290,6 +293,7 @@ function retainsIosTargetLease(error: unknown): boolean {
 
 /** openPreparedAndroid opens the current app in the runtime prepared on the Android emulator. */
 async function openPreparedAndroid(context: ExpoTargetContext, url?: string): Promise<void> {
+  ReleaseCapabilities.require('android')
   await context.android.openRuntime(url)
 }
 

@@ -56,6 +56,8 @@ export type ExtractedFailure = {
 
 /** GateResult records one node's outcome. */
 export type GateResult = {
+  /** Ordering prerequisites, which must settle before admission. */
+  after?: readonly string[]
   elapsedMs: number
   exitCode?: number
   /** What the timings store predicted this node would take, when it had a prediction. */
@@ -793,20 +795,26 @@ function mergeShards(suite: string, shards: readonly GateResult[]): GateResult {
   const failed = shards.filter(shard => shard.status === 'failed')
   const status: GateStatus = failed.length > 0
     ? 'failed'
-    : shards.every(shard => shard.status === 'skipped')
-    ? 'skipped'
-    : 'passed'
+    : shards.every(shard => shard.status === 'passed')
+    ? 'passed'
+    : 'skipped'
   // A suite reported as one line must not lose the fact that one of its shards only passed because
   // a flake was tolerated; that is the whole point of saying it out loud.
   const tolerated = shards.flatMap(shard => shard.tolerated ?? [])
+  const skipped = shards.filter(shard => shard.status === 'skipped')
   const shardReason = `${shards.length} shards, ${OutputText.formatElapsed(workMs)} of work`
+    + (skipped.length > 0 && skipped.length < shards.length
+      ? `; ${skipped.length} not run: ${skipped[0]?.reason ?? 'incomplete'}`
+      : '')
   return {
     elapsedMs: longest,
     failureKind: failed[0]?.failureKind,
     logPath: failed[0]?.logPath ?? shards[0]?.logPath,
     name: suite,
     reason: status === 'skipped'
-      ? shards[0]?.reason
+      ? shards.every(shard => shard.status === 'skipped')
+        ? shards[0]?.reason
+        : shardReason
       : tolerated.length === 0
       ? shardReason
       : `${shardReason}; tolerated ${tolerated.length} known flake${tolerated.length === 1 ? '' : 's'}`,
@@ -859,6 +867,7 @@ function nodeResult(
     logPath: state.logPath,
     name: state.name,
     needs: state.node.needs,
+    after: state.node.after,
     reason: state.reason ?? (failed ? `exited ${exitCode ?? 'unknown'} (${failureKind})` : undefined),
     resources: state.node.resources,
     retried: state.retried,

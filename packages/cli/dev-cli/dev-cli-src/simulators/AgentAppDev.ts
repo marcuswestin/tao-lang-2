@@ -262,7 +262,7 @@ export async function runAgentAppDev(
       }
     }
     child = operations.start(Repo.resolvePath('tao'), {
-      args: ['dev', ...forwarded],
+      args: ['run', ...forwarded],
       env: {
         TAO_AGENT_SIMULATOR_QUIET: '1',
         TAO_AGENT_SIMULATOR_UDID: selected?.simulator.udid ?? '',

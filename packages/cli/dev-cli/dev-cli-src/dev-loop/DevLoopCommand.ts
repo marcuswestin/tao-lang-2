@@ -124,7 +124,7 @@ async function startDevLoop(
   }
   // Selection is a pure child phase before any simulator, browser, or project lease side effect.
   const selected = await CLI.run(Repo.resolvePath('tao'), {
-    args: ['dev', ...selectionArgs(args)],
+    args: ['run', ...selectionArgs(args)],
     env: { TAO_DEV_LOOP_SELECTION_ONLY: '1', TAO_DEV_LOOP_WORKER_CREDENTIALS: '' },
   })
   if (selected.exitCode !== 0 || selected.error !== undefined) {

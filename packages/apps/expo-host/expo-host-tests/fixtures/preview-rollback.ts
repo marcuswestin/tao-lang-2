@@ -54,7 +54,7 @@ const initialGraph = await graph()
 if (mode !== 'migration-order') {
   await FS.writeText(
     appPath,
-    'app Preview { view Main }\nview Main() { render inject ```ts return <RN.Text>After</RN.Text> ``` }',
+    'app Preview { id "preview" version "1.0.0" name "Preview" view Main }\nview Main() { render inject ```ts return <RN.Text>After</RN.Text> ``` }',
   )
 }
 const revision = mode === 'migration-order' ? 1 : 3

@@ -5,9 +5,9 @@ Describe('formatter: minimal design', () => {
   Test(
     'formats flat tokens and named combined bundles deterministically',
     formats(
-      'workspace   design   Theme{paper   #fff alpha #abcd overlayColor #121826cc screen[fill,content top stretch,pad 16,bg paper] title[size 28,weight 700,fg paper]}',
+      'project   design   Theme{paper   #fff alpha #abcd overlayColor #121826cc screen[fill,content top stretch,pad 16,bg paper] title[size 28,weight 700,fg paper]}',
       `
-        workspace
+        project
         design Theme {
            paper #fff
            alpha #abcd
@@ -22,7 +22,7 @@ Describe('formatter: minimal design', () => {
   Test(
     'keeps one blank line an author left between design members and entries, and adds none',
     formats(
-      `workspace
+      `project
 design Theme {
    colors {
       paper #fff
@@ -40,7 +40,7 @@ design Theme {
    }
 }`,
       `
-        workspace
+        project
         design Theme {
            colors {
               paper #fff
@@ -63,7 +63,7 @@ design Theme {
   Test(
     'formats a declaration header clause and a clearing term like a render clause',
     formats(
-      `workspace
+      `project
 design Theme{paper #fff}
 view   Card()[pad 12,bg paper]{
 render Surface()[bg none,pad left none]
@@ -73,7 +73,7 @@ render Surface()
 }
 view Surface(){}`,
       `
-        workspace
+        project
         design Theme {
            paper #fff
         }

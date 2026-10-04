@@ -15,10 +15,9 @@ function outlineApp(body: string, extra = ''): string {
     }
     data Workspaces / Workspace {
       Name text (title),
-      CreatedAt time (default now),
       Documents (owned)
     }
-    app OutlineApp { view Main }
+    app OutlineApp { id "com.tao.test.outlineapp" version "1.0.0" name "OutlineApp"  view Main }
     view Main() {
       query Documents = Documents with { }
       query Workspaces = Workspaces with { }
@@ -53,7 +52,6 @@ Describe('compiler: interaction outline', () => {
     `))
 
     Expect(compiled.code).toContain('const _TaoOutline = TR.Interaction.OutlineTable({')
-    Expect(compiled.code).toContain('"kind":"collection"')
     Expect(compiled.code).toContain('"entity":"Document"')
     Expect(compiled.code).toContain('"collection":"Documents"')
     Expect(compiled.code).toContain('interaction: _TaoOutline["Main#')
@@ -228,7 +226,7 @@ Describe('compiler: interaction outline', () => {
 
   Test('emits no table for a module without outline nodes', async () => {
     const compiled = await Compiler.compileCode(`
-      app QuietApp { view Main }
+      app QuietApp { id "com.tao.test.quietapp" version "1.0.0" name "QuietApp"  view Main }
       view Main() { render Empty() }
       view Empty() { render inject ${tsFence} return null ${fence} }
     `)

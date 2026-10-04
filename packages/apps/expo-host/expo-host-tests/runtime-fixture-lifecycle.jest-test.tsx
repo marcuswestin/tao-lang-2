@@ -37,7 +37,7 @@ Describe('runtime fixture lifetime', () => {
     Expect(result).toMatchObject({ name: 'AbortError' })
 
     await testCompileFiles('Current.tao', { 'Current.tao': '' }, screen => {
-      Expect(screen.getByText('Current.tao')).toBeDefined()
+      screen.getByText('Current.tao')
     })
     Expect(mount).toHaveBeenCalledTimes(1)
   })
@@ -58,7 +58,7 @@ Describe('runtime fixture lifetime', () => {
     await testCompileFiles('Current.tao', { 'Current.tao': '' }, async screen => {
       compiled.resolve({ testAppPath: 'Old.tao' })
       Expect(await expired).toMatchObject({ name: 'AbortError' })
-      Expect(screen.getByText('Current.tao')).toBeDefined()
+      screen.getByText('Current.tao')
       Expect(mount).toHaveBeenCalledTimes(1)
       Expect(assertions).not.toHaveBeenCalled()
     })
@@ -75,7 +75,7 @@ Describe('runtime fixture lifetime', () => {
     previous.abort(Errors.abortError('Previous test ended.'))
     Expect(oldUnmount).toHaveBeenCalledTimes(1)
     Expect(currentUnmount).not.toHaveBeenCalled()
-    Expect(currentScreen.getByText('Current.tao')).toBeDefined()
+    currentScreen.getByText('Current.tao')
     current.abort(Errors.abortError('Current test ended.'))
     Expect(currentUnmount).toHaveBeenCalledTimes(1)
   })

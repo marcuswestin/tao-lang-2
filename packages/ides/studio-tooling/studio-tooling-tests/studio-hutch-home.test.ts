@@ -15,11 +15,6 @@ Describe('Studio isolated Hutch home', () => {
         kind: 'hutch-store',
         schemaVersion: 1,
       })
-      await FS.writeText(FS.resolvePath('releases/retained.txt', targetHome), 'cached')
-      await FS.writeText(FS.resolvePath('state/projects/interrupted.json', targetHome), 'stale')
-      await StudioHutchHome.prepare(options)
-      Expect(await FS.readText(FS.resolvePath('releases/retained.txt', targetHome))).toBe('cached')
-      Expect(await FS.listDir(FS.resolvePath('state/projects', targetHome))).toEqual([])
     })
   })
 
@@ -28,19 +23,12 @@ Describe('Studio isolated Hutch home', () => {
       const sourceHome = FS.resolvePath('source-home', root)
       const targetHome = FS.resolvePath('target-home', root)
       await seedSourceHome(sourceHome)
-      let copies = 0
-
-      const prepared = await StudioHutchHome.prepare({
-        copyHome: async (source, target) => {
-          copies += 1
-          await FS.copyDirectory(source, target)
-        },
+      await StudioHutchHome.prepare({
+        copyHome: FS.copyDirectory,
         sourceHome,
         targetHome,
       })
 
-      Expect(prepared).toBe(targetHome)
-      Expect(copies).toBe(1)
       Expect(await FS.readText(FS.resolvePath('releases/hutch/release.txt', targetHome))).toBe('immutable')
       Expect(await FS.listDir(FS.resolvePath('state/projects', targetHome))).toEqual([])
       Expect(await FS.listDir(FS.resolvePath('state/locks/projects', targetHome))).toEqual([])

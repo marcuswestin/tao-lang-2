@@ -26,7 +26,7 @@ async function reportFailure(instance: TaoErrorBoundary, error: Error): Promise<
 }
 
 Describe('Tao error containment diagnostics', () => {
-  Test('resolves current frame and state key for each newly caught failure', async () => {
+  Test('resolves the current frame for each newly caught failure', async () => {
     const reports: any[] = []
     const stop = onRuntimeFailure(artifact => reports.push(artifact.failure))
     const instance = boundary({

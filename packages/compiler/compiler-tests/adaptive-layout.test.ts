@@ -6,7 +6,7 @@ Describe('compiler: adaptive layout', () => {
     const compiled = await Compiler.compileCode(`
       use Col from @tao/ui
 
-      app AdaptiveApp { view MainView }
+      app AdaptiveApp { id "com.tao.test.adaptiveapp" version "1.0.0" name "AdaptiveApp"  view MainView }
       view MainView() {
         render Col() [width max 720]
       }

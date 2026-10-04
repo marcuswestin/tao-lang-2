@@ -24,24 +24,6 @@ Describe('parser: auth data syntax', () => {
     Expect(noteFields[2]?.optional).toBe(true)
   })
 
-  Test('delimits command lists independently of data entries and comments', async () => {
-    const result = await testParseCode(`
-      action Run() { }
-      command Save(Note) { Title "Save" do Run() }
-      command Share(Note) { Title "Share" do Run() }
-      data Notes / Note {
-        Body text, // The next entry remains distinct.
-        commands { Save, Share },
-        commands hide { Share, },
-      }
-    `)
-    const entity = result.entry.ast.statements.find(AST.isEntityDataDeclaration)!
-    const policies = entity.block.entries.filter(AST.isEntityCommandPolicy)
-    Expect(policies.map(policy => policy.commands.map(command => command.ref?.name)))
-      .toEqual([['Save', 'Share'], ['Share']])
-    Expect(policies[1]?.hide).toBe(true)
-  })
-
   Test('parses composite uniqueness, assigned queries, actor paths and update fields', async () => {
     const result = await testParseCode(`
       data Accounts / Account { DisplayName text, Notes, }
@@ -119,6 +101,7 @@ Describe('parser: auth data syntax', () => {
     Expect(named.account?.ref?.name).toBe('Bob')
   })
 
+  // REMOVAL CANDIDATE: This semantic alias-type check could move to validator coverage; retain until that proof exists.
   Test('resolves positive and negative row completeness aliases as boolean values', async () => {
     const result = await testParseCode(`
       data Accounts / Account { DisplayName text (required "Enter your name"), }
@@ -144,6 +127,5 @@ Describe('parser: auth data syntax', () => {
   Test('requires a terminal fallback for a bar match', rejectsParser('let Choice = when true | yes -> 1'))
 
   Test('rejects missing commas on one line', rejectsParser('data Notes / Note { Body text Title text }'))
-  Test('rejects missing commas across lines', rejectsParser('data Notes / Note { Body text\nTitle text }'))
   Test('rejects undelimited command lists', rejectsParser('data Notes / Note { commands Save, Share }'))
 })

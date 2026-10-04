@@ -4,7 +4,7 @@ import { TestCompiler as Compiler } from './test-compile'
 Describe('compiler: optional parameter types', () => {
   Test('unwraps a foreign action parameter with a none default to its JavaScript value', async () => {
     const compiled = await Compiler.compileCode(`
-      app Example { view Main }
+      app Example { id "com.tao.test.example" version "1.0.0" name "Example"  view Main }
       action ImpactAsync(Style text? default none) from ./Bindings.ts
       action Run() { do ImpactAsync() do ImpactAsync(Style: none) }
       view Main() {

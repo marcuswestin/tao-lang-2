@@ -10,6 +10,11 @@ export async function runAuthReviewJourney(
 ): Promise<AccountProtocol.Snapshot> {
   const project = FS.resolvePath('project', root)
   await FS.mkdir(project)
+  await FS.mkdir(FS.resolvePath('.tao', project))
+  await FS.copyFile(
+    Repo.resolvePath('Apps/Test Apps/Auth Review/.tao/project.json'),
+    FS.resolvePath('.tao/project.json', project),
+  )
   await FS.writeText(
     FS.resolvePath('Auth Review.tao', project),
     source.replaceAll('http://127.0.0.1:4738', server.url),

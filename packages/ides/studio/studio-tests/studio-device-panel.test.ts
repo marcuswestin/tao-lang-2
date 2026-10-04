@@ -1,5 +1,5 @@
 import { Errors } from '@shared/core'
-import { Expect, Test, until } from '@shared/test'
+import { Expect, setClockForTest, Test, testOverrideSlot, until } from '@shared/test'
 import { StudioApiError, type StudioHandshake } from '../studio-src/client/StudioApiClient'
 import { StudioDeviceCapture } from '../studio-src/client/StudioDeviceCapture'
 import {
@@ -262,10 +262,8 @@ Test('Studio device panel model lists trusted devices, the gateway, and install 
   Expect(model.url).toBeUndefined()
 })
 
-Test('Studio shell places the Device button before Beta ship and a hidden popover outside every portal target', () => {
+Test('Studio shell keeps the hidden device popover outside every portal target', () => {
   const markup = studioShellMarkup()
-  Expect(markup.indexOf('class="studio-device"')).toBeGreaterThan(markup.indexOf('studio-toolbar-actions'))
-  Expect(markup.indexOf('class="studio-device"')).toBeLessThan(markup.indexOf('class="studio-beta-ship"'))
   Expect(markup).toContain('<section class="studio-device-popover" hidden role="dialog"')
   Expect(markup.indexOf('studio-device-popover')).toBeLessThan(markup.indexOf('class="studio-body"'))
 })
@@ -353,6 +351,7 @@ Test('Studio device capture saves an app-bound artifact and restores through a f
 
 Test('Studio device panel drives pairing, launch, scenario, and revoke requests through the API', async () => {
   const dom = installFakeDocument()
+  const restoreClock = setClockForTest(Date.parse('2026-09-02T10:00:00.000Z'))
   try {
     const calls: string[] = []
     let launchDescriptions = 0
@@ -433,7 +432,7 @@ Test('Studio device panel drives pairing, launch, scenario, and revoke requests 
     Expect(dom.find(popover, 'studio-device-code')?.textContent).toBe('123 456')
     Expect(dom.find(popover, 'studio-device-url')?.textContent).toBe(deviceUrl)
     Expect(dom.find(popover, 'studio-device-install-command')).toBeUndefined()
-    Expect(dom.find(popover, 'studio-device-countdown')?.textContent).toMatch(/^Pairing open · (59|60)s left$/)
+    Expect(dom.find(popover, 'studio-device-countdown')?.textContent).toBe('Pairing open · 60s left')
     Expect(dom.find(popover, 'studio-device-revision')?.textContent).toBe('applied ✓ (5)')
 
     dom.click(dom.find(popover, 'studio-device-trust')!)
@@ -489,6 +488,7 @@ Test('Studio device panel drives pairing, launch, scenario, and revoke requests 
     ])
     panel.dispose()
   } finally {
+    restoreClock()
     dom.restore()
   }
 })
@@ -574,11 +574,20 @@ Test(
   },
 )
 
+const qrSlot = testOverrideSlot({
+  read: () => StudioDeviceQr.svg,
+  write: value => {
+    ;(StudioDeviceQr as { svg: typeof value }).svg = value
+  },
+})
+
 Test('Studio device panel renders the dev-client URL as an SVG QR and copies it through the clipboard', async () => {
-  const svg = await StudioDeviceQr.svg(deviceUrl)
-  Expect(svg.startsWith('<svg xmlns="http://www.w3.org/2000/svg"')).toBe(true)
-  Expect(svg).toContain('viewBox="0 0 39 39"')
-  Expect(svg).toContain('<path')
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0h1v1H0z"/></svg>'
+  const requested: string[] = []
+  const restoreQr = qrSlot.install(async url => {
+    requested.push(url)
+    return svg
+  })
 
   const dom = installFakeDocument()
   try {
@@ -615,6 +624,7 @@ Test('Studio device panel renders the dev-client URL as an SVG QR and copies it 
 
     dom.click(dom.find(popover, 'studio-device-qr')!)
     await until(() => dom.find(popover, 'studio-device-qr-box') !== undefined)
+    Expect(requested).toEqual([deviceUrl])
     Expect(dom.find(popover, 'studio-device-qr-box')?.innerHTML).toBe(svg)
     Expect(dom.find(popover, 'studio-device-qr')?.textContent).toBe('Hide QR')
     dom.click(dom.find(popover, 'studio-device-qr')!)
@@ -626,6 +636,7 @@ Test('Studio device panel renders the dev-client URL as an SVG QR and copies it 
     await until(() => dom.find(popover, 'studio-device-status')?.textContent === 'Device URL copied.')
     panel.dispose()
   } finally {
+    restoreQr()
     dom.restore()
   }
 })

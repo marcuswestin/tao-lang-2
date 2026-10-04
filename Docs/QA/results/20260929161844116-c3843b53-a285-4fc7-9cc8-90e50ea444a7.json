@@ -1,0 +1,45 @@
+{
+  "id": "20260929161844116-c3843b53-a285-4fc7-9cc8-90e50ea444a7",
+  "runId": "20260929161318907-772bb9ea-4c23-4e35-b1e5-f9d53f1c6e6a",
+  "createdAt": "2026-09-29T16:18:44.115Z",
+  "recordedAt": "2026-09-29T16:18:44.115Z",
+  "commit": "0aa8ebcfae088acc4c8b53cb1a122b7771370e15",
+  "phase": 1,
+  "executionProfile": "development",
+  "provenance": {
+    "snapshotBasis": "observation-time",
+    "originalDependencies": "recorded",
+    "observedMetadataEvidence": [
+      "Docs/QA/evidence/recheck-0aa8ebcf/notebook/devices-phone-9b47fe3ba371.png",
+      "Docs/QA/evidence/recheck-0aa8ebcf/notebook/source-snapshot.json"
+    ]
+  },
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "runtime": "bun:1.4.2"
+  },
+  "inputs": {
+    "source": "packages/cli/tao-cli",
+    "dependencySnapshot": "Docs/QA/inputs/1b8ea0038e4a1018886700293ba031b97d41de1e474b00f5bb81e7db38f253b5.json"
+  },
+  "surfaceId": "visual:notebook",
+  "dimension": "visual",
+  "outcome": "friction",
+  "reviewer": "agent",
+  "channel": "phone",
+  "evidence": [
+    {
+      "path": "Docs/QA/evidence/recheck-0aa8ebcf/notebook/devices-phone-9b47fe3ba371.png",
+      "sha256": "f84bfb2f4baf4a3964c44d32a7e45df993a8b71fabc4aa40f05242f182482e99"
+    },
+    {
+      "path": "Docs/QA/evidence/recheck-0aa8ebcf/notebook/source-snapshot.json",
+      "sha256": "45768385f0df29989fe42fb6fcd59985267cdce7c031e8ab941a45d60ab7a279"
+    }
+  ],
+  "notes": "Recheck at 0aa8ebcf: light phone list renders with the palette, header action and three rows legible. The NEW NOTE panel carries roughly 50px of empty space below its button, the phone-width form of QA-NOTEBOOK-PANEL-STRETCH.",
+  "sourceHash": "ac5d72f5da72e6a1750a7cc9a4e49438d48d49555b9b34060b609ce48ad7dfc9",
+  "rendererHash": "57869b7252c5b7865f2daa3ec40253907eb27fb81491de78ceffcb6473ca3fb4",
+  "profileHash": "c1bb9d6add2e225907faed5f0c6ca5736166bf2163ff04631811b56048eef38b"
+}

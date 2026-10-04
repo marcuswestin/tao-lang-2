@@ -1,6 +1,5 @@
-import { ASTUtils, Type } from '@ast-utils'
+import { ASTUtils, Packages, Type } from '@ast-utils'
 import { AST } from '@parser'
-import { FS } from '@shared'
 import type { ValidationContext } from '../validation'
 
 /**
@@ -70,22 +69,19 @@ export function validateDatasourceMembership(file: AST.TaoFile, ctx: ValidationC
 }
 
 /**
- * The project is the nearest ancestor directory holding a `project { }` declaration. In a batch
+ * The project is the nearest ancestor directory holding a .tao/ marker. In a batch
  * validation that is the entry's whole graph; in the editor, where every document in the repository
  * is loaded, it keeps one project's datasources from partitioning another project's collections.
  */
 export function projectDataScope(file: AST.TaoFile, ctx: ValidationContext): ProjectDataScope {
   const path = AST.getDocument(file).uri.path
-  const projectDirectories = ctx.memo('datasource-membership.projectDirectories', () =>
-    ctx.workspaceFiles
-      .filter(candidate => candidate.statements.some(AST.isProjectDeclaration))
-      .map(candidate => FS.dirname(AST.getDocument(candidate).uri.path))
-      .toSorted((left, right) => right.length - left.length))
-  const root = projectDirectories.find(directory => FS.pathIsWithin(path, directory))
+  const root = Packages.projectRootForPath(ctx.packagesContext.index, path)
   return ctx.memo(`datasource-membership.scope.${root ?? path}`, () => {
     const files = root === undefined
       ? [file]
-      : ctx.workspaceFiles.filter(candidate => FS.pathIsWithin(AST.getDocument(candidate).uri.path, root))
+      : ctx.workspaceFiles.filter(candidate =>
+        Packages.projectRootForPath(ctx.packagesContext.index, AST.getDocument(candidate).uri.path) === root
+      )
     const collections = files.flatMap(candidate => candidate.statements.filter(AST.isEntityDataDeclaration))
     const datasources = files.flatMap(candidate => candidate.statements.filter(AST.isDatasourceDeclaration))
     return {

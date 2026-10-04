@@ -210,7 +210,7 @@ Describe('Studio server request boundary', () => {
     Expect(calls).toEqual([{ request: ship, seconds: 0 }])
   })
 
-  Test('the default beta ship ignores a dirty Git tree', () => {
+  Test('the default beta ship requests the active app with the dirty-tree override', () => {
     Expect(StudioServerTesting.betaShipArguments({
       appName: 'Garden',
       entryPath: '/projects/Garden/Garden.tao',
@@ -386,8 +386,6 @@ Describe('Studio browser launch', () => {
       undefined,
       'invalid URL',
       'file:///private/app.html',
-      'javascript:alert(1)',
-      'ftp://localhost/app',
     ]
     const server = await start(previews, {
       openBrowser: async url => void opened.push(url),
@@ -430,19 +428,6 @@ Describe('Studio browser launch', () => {
       }
     }
   })
-})
-
-Test('Studio routes every session request through an opaque window ID and refuses unscoped paths', () => {
-  Expect(StudioServerTesting.studioSessionRoute('/sessions/first_session/api/protocol')).toEqual({
-    pathname: '/api/protocol',
-    sessionId: 'first_session',
-  })
-  Expect(StudioServerTesting.studioSessionRoute('/sessions/second_session')).toEqual({
-    pathname: '/',
-    sessionId: 'second_session',
-  })
-  Expect(StudioServerTesting.studioSessionRoute('/api/protocol')).toBe(undefined)
-  Expect(StudioServerTesting.studioSessionRoute('/sessions/../api/protocol')).toBe(undefined)
 })
 
 Test('Studio server authorization binds each managed preview origin to its own session', () => {

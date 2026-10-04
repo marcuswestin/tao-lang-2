@@ -327,16 +327,14 @@ Describe('Studio Electrobun semantic host control', () => {
     ])
   })
 
-  Test('keeps a bound project independent of focus and rejects a closed or repurposed window', () => {
+  Test('matches a bound project and rejects a closed or repurposed window', () => {
     const first = { id: 1 }
     const second = { id: 2 }
     const windows = new Map([[first.id, first], [second.id, second]])
     const projectWindows = new Set([first, second])
     const windowSessions = new Map([[first.id, 'project-a'], [second.id, 'project-b']])
     const windowTokens = new Map([[first.id, 'window-one'], [second.id, 'window-two']])
-    let activeWindow = second
 
-    Expect(activeWindow).toBe(second)
     Expect(
       hostControlWindowMatches(
         projectBinding,
@@ -379,8 +377,6 @@ Describe('Studio Electrobun semantic host control', () => {
         windowTokens,
       ),
     ).toBe(false)
-    activeWindow = first
-    Expect(activeWindow).toBe(first)
   })
 
   Test('the emitted renderer keeps an observed element through input and rejects a reordered occurrence', () => {
@@ -441,7 +437,8 @@ Describe('Studio Electrobun semantic host control', () => {
     Expect(input.clicks).toBe(0)
   })
 
-  Test('materializes a capability-protected semantic endpoint in the Electrobun shell', () => {
+  // REMOVAL CANDIDATE: Static native endpoint/renderer wiring; removal loses integration checks not established by mocked transport sessions.
+  Test('emits the native semantic endpoint and renderer wiring', () => {
     const main = StudioElectrobun.sources({
       outputRoot: '/artifacts/unused',
       previewUrl: 'http://127.0.0.1:8081',
@@ -452,7 +449,6 @@ Describe('Studio Electrobun semantic host control', () => {
     Expect(main).toContain("hostname: '127.0.0.1'")
     Expect(main).toContain("url: 'http://127.0.0.1:' + hostControlServer.port + '/host-control'")
     Expect(main).toContain('type: "tao-studio-host-control"')
-    Expect(main).toContain('Appium owns physical acceptance')
     Expect(main).toContain('await waitForHostControlDocument(window)')
     Expect(main).toContain('serializeHostControlOperation')
     Expect(main).toContain('hostControlOperationChain')

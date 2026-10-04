@@ -1,7 +1,9 @@
 .DS_Store
+# Watchman creates disposable query-synchronization files in watched roots.
+.watchman-cookie-*
 node_modules/
 *.tsbuildinfo
-*.tao.ts
+.tao-ts/
 
 .devenv/
 .direnv/
@@ -22,10 +24,16 @@ local.properties
 .artifacts/*
 !.artifacts/.gitkeep
 _gen_*/
-**/.tao-project/studio/sketches.jsonc.*.tmp
-Apps/WordFlower/1 - Current/.tao-project/lock.jsonc
-# Project-local development sessions and generated runtime state.
-**/.tao/
+# Project markers and reproducible locks are tracked; generated tooling and runtime state are not.
+**/.tao/*
+!**/.tao/.gitkeep
+!**/.tao/project.json
+!**/.tao/lock.jsonc
+!**/.tao/skills.version
+# Existing authored Studio sketches stay portable across clones.
+!**/.tao/studio/
+**/.tao/studio/*
+!**/.tao/studio/sketches.jsonc
 
 # Disposable package diagnostics. Scripts here inherit their package tsconfig and workspace context.
 packages/*/.scratch/

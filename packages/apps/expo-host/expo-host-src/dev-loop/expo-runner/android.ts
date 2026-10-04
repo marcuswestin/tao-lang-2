@@ -217,7 +217,7 @@ async function prepareAvailableRuntime(
     DevLoopOutput.logDevLoop('dev', 'No booted Android emulator found; skipping Android launch.')
     return false
   }
-  // A newcomer opening Android from `tao dev` has no `./dev` to run first, so this path installs the
+  // A newcomer opening Android from `tao run` has no `./dev` to run first, so this path installs the
   // runtime itself and announces what it installs. A failure leaves Android skipped with its reason
   // rather than ending the dev loop.
   try {

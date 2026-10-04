@@ -1,11 +1,9 @@
-import { FS, Platform, Repo, TaoFiles, TaoStdlib } from '@shared'
+import { Errors, FS, Platform, ProjectIdentity, ReleaseCapabilities, Repo, TaoFiles, TaoStdlib } from '@shared'
 import { verdictPackageFiles } from './toolchain-packages'
 
 /**
- * `tao check` re-reads every `.tao` file of every workspace to learn about the one that moved. The
- * canonical-source pass costs about what `tao fix` costs; the rest is `Workspace.validateFiles`,
- * which parses each entry's whole graph once per entry and dominates the run. Changing one file in
- * one app pays that for all of them.
+ * `tao check` checks canonical source and asks ProjectTooling to refresh each marked project. A
+ * source change in one project should not recheck every other unchanged project.
  *
  * This module is the per-workspace answer to that, and it is the same content stamp
  * `packages/testing/verification/verification-src/ParserGenerate.ts` puts in front of Langium and
@@ -36,18 +34,13 @@ import { verdictPackageFiles } from './toolchain-packages'
  *   generated parser tree, which Git ignores and that traversal therefore cannot see; the root
  *   `bun.lock` and `package.json`; and the declared `TAO_STDLIB_ROOT`, which is refused outright when
  *   it names a stdlib the `packages/` hash does not cover.
- * - the **workspace tree**: every Git-visible file under the workspace root, discovered exactly the
- *   way `tao check` discovers the files it checks, so the two can never disagree about what is there.
- *   Package resolution is bounded by the project root, so this is the whole of what one workspace's
- *   parse can reach inside itself.
- * - the **ancestors that decide the root**: `Packages.containingProjectRoot` walks upward reading
- *   every `.tao` file directly in each ancestor directory, looking for a `project` declaration. A
- *   file appearing there moves the workspace root, so each of those directories' own `.tao` files are
- *   hashed too.
+ * - the **project tree**: authored Tao, sidecars, root TypeScript configuration, and the shared lock,
+ *   plus the marker directories that determine project ownership.
  * - the **entry set**: which files of the workspace this run was asked to check. A check of one
  *   subdirectory validates a different graph than a check of the whole workspace and gets its own entry.
- * Generated bridge modules are ignored outputs, so a clean stamp also records their paths and
- * refuses replay if any module from the checked import graph has been deleted.
+ * Generated contracts and the tooling base config are checked by content before replay. A project
+ * with local dependency roots, external sidecars, or installed packages beyond the
+ * repository-owned runtime always refreshes, because those inputs can change outside this tree.
  */
 
 /**
@@ -58,7 +51,7 @@ import { verdictPackageFiles } from './toolchain-packages'
 const STAMP_PATH = '.artifacts/tao-check-stamp.json'
 
 /** The stamp layout and the composition above. An older or unreadable stamp is no stamp. */
-const STAMP_VERSION = 3
+const STAMP_VERSION = 5
 
 /**
  * The opt-outs. `TAO_CHECK_NO_CACHE` is this command's own, spelled the way `TAO_TEST_NO_CACHE` is
@@ -100,6 +93,8 @@ export type CheckCacheDiagnostic = {
 /** CheckCacheRecord is one workspace's clean verdict, offered for stamping. */
 type CheckCacheRecord = {
   diagnostics: readonly CheckCacheDiagnostic[]
+  dependencyRoots: readonly string[]
+  externalSidecarInputPaths: readonly string[]
   metadataPaths: readonly string[]
   workspaceRoot: string
 }
@@ -133,7 +128,9 @@ export const CheckCache = {
 type CheckStampEntry = {
   diagnostics: readonly CheckCacheDiagnostic[]
   inputs: string
+  metadataInputs: string
   metadataPaths: readonly string[]
+  status: 'fresh'
 }
 
 type CheckStamp = {
@@ -175,7 +172,15 @@ function createSession(repositoryRoot: string, toolchain: string): CheckCacheSes
   const pending = new Map<string, PendingWorkspace>()
   return {
     async commit(records: readonly CheckCacheRecord[]): Promise<void> {
-      const stampable = records.filter(record => pending.has(FS.resolvePath(record.workspaceRoot)))
+      const candidates = records.filter(record =>
+        record.dependencyRoots.length === 0 && record.externalSidecarInputPaths.length === 0
+        && pending.has(FS.resolvePath(record.workspaceRoot))
+      )
+      const stampable = (await Promise.all(
+        candidates.map(async record =>
+          await cacheableModules(repositoryRoot, record.workspaceRoot) ? record : undefined
+        ),
+      )).filter((record): record is CheckCacheRecord => record !== undefined)
       if (stampable.length === 0) {
         return
       }
@@ -198,7 +203,9 @@ function createSession(repositoryRoot: string, toolchain: string): CheckCacheSes
           entries[held.entryKey] = {
             diagnostics: record.diagnostics,
             inputs: held.inputs,
+            metadataInputs: await metadataIdentity(workspaceRoot, record.metadataPaths),
             metadataPaths: record.metadataPaths.map(path => FS.relativePath(workspaceRoot, FS.resolvePath(path))),
+            status: 'fresh',
           }
         }
         await writeStamp(stampPath, repositoryRoot, { entries: capEntries(entries), version: STAMP_VERSION })
@@ -211,6 +218,19 @@ function createSession(repositoryRoot: string, toolchain: string): CheckCacheSes
     ): Promise<CheckCacheReplay | undefined> {
       const resolvedRoot = FS.resolvePath(workspaceRoot)
       if (!FS.pathIsWithin(resolvedRoot, repositoryRoot)) {
+        return undefined
+      }
+      // Refresh would create this marker; do it before capturing inputs so the first verdict can be reused.
+      try {
+        await ProjectIdentity.ensure(resolvedRoot)
+      } catch (error) {
+        if (!(error instanceof Errors.UserInputError)) {
+          throw error
+        }
+        return undefined
+      }
+      // Only the repository-owned runtime is covered by the toolchain hash.
+      if (!await cacheableModules(repositoryRoot, resolvedRoot)) {
         return undefined
       }
       const entryKey = workspaceEntryKey(repositoryRoot, resolvedRoot, entryFiles)
@@ -228,6 +248,12 @@ function createSession(repositoryRoot: string, toolchain: string): CheckCacheSes
         if (!FS.pathIsWithin(path, resolvedRoot) || !await FS.isFile(path)) {
           return undefined
         }
+      }
+      if (
+        await metadataIdentity(resolvedRoot, entry.metadataPaths.map(path => FS.resolvePath(path, resolvedRoot)))
+          !== entry.metadataInputs
+      ) {
+        return undefined
       }
       return { diagnostics: entry.diagnostics }
     },
@@ -265,11 +291,55 @@ async function workspaceInputIdentity(
   workspaceRoot: string,
 ): Promise<string> {
   return FS.contentIdentity([
+    `release-profile\n${ReleaseCapabilities.fingerprint()}`,
     `version\n${String(STAMP_VERSION)}`,
     `toolchain\n${toolchain}`,
     `tree\n${await treeIdentity(workspaceRoot)}`,
-    `ancestors\n${await ancestorDeclarationIdentity(repositoryRoot, workspaceRoot)}`,
+    `modules\n${await moduleLinkIdentity(workspaceRoot)}`,
+    await fileEntry(workspaceRoot, FS.resolvePath('tsconfig.json', workspaceRoot)),
+    await fileEntry(workspaceRoot, FS.resolvePath('.tao/lock.jsonc', workspaceRoot)),
+    await fileEntry(workspaceRoot, FS.resolvePath('.tao/project.json', workspaceRoot)),
+    `markers\n${await ancestorMarkerIdentity(repositoryRoot, workspaceRoot)}`,
   ])
+}
+
+/** A lone runtime link resolves into the toolchain package tree already covered by the stamp. */
+async function cacheableModules(repositoryRoot: string, workspaceRoot: string): Promise<boolean> {
+  const modules = FS.resolvePath('node_modules', workspaceRoot)
+  if (!await FS.exists(modules)) {
+    return true
+  }
+  if (!await FS.isDirectory(modules) || await FS.isSymbolicLink(modules)) {
+    return false
+  }
+  const names = await FS.listDir(modules)
+  if (names.length === 0) {
+    return true
+  }
+  if (names.length !== 1 || names[0] !== '@tao') {
+    return false
+  }
+  const scope = FS.resolvePath('@tao', modules)
+  if (!await FS.isDirectory(scope) || await FS.isSymbolicLink(scope)) {
+    return false
+  }
+  if ((await FS.listDir(scope)).join('\n') !== 'runtime') {
+    return false
+  }
+  const runtime = FS.resolvePath('runtime', scope)
+  if (!await FS.isSymbolicLink(runtime)) {
+    return false
+  }
+  const target = await FS.realPath(runtime).catch(() => undefined)
+  return target !== undefined && FS.pathIsWithin(target, FS.resolvePath('packages', repositoryRoot))
+}
+
+async function moduleLinkIdentity(workspaceRoot: string): Promise<string> {
+  const runtime = FS.resolvePath('node_modules/@tao/runtime', workspaceRoot)
+  if (!await FS.isSymbolicLink(runtime)) {
+    return TaoStdlib.ABSENT
+  }
+  return await FS.realPath(runtime).catch(() => TaoStdlib.ABSENT)
 }
 
 /**
@@ -333,32 +403,50 @@ async function treeIdentity(root: string): Promise<string> {
   // Git lists directory symlinks as entries. They are not files, and reading one raises EISDIR.
   const files = (await Promise.all(paths.map(async path => await FS.isFile(path) ? path : undefined)))
     .filter((path): path is string => path !== undefined)
-  return await FS.filesIdentity(files.map(path => [FS.relativePath(root, path), path]))
+  const directories = new Set<string>()
+  for (const file of files) {
+    let directory = FS.dirname(file)
+    while (FS.pathIsWithin(directory, root)) {
+      directories.add(directory)
+      if (directory === root) {
+        break
+      }
+      directory = FS.dirname(directory)
+    }
+  }
+  const markers = await Promise.all(
+    [...directories].toSorted().map(async directory =>
+      `${FS.relativePath(root, directory)}:${await FS.isDirectory(FS.resolvePath('.tao', directory))}`
+    ),
+  )
+  return FS.contentIdentity([
+    await FS.filesIdentity(files.map(path => [FS.relativePath(root, path), path])),
+    `markers\n${markers.join('\n')}`,
+  ])
 }
 
 /**
- * ancestorDeclarationIdentity hashes what decides where a workspace starts. `containingProjectRoot`
- * walks upward from a file reading every `.tao` file lying directly in each ancestor directory and
- * stops at the first that declares a project, so those files — not only `Project.tao` — are the
- * input. Directories are walked to the repository root, which is where that search stops.
+ * Project ownership is set by the nearest `.tao` directory. Include markers even when the marker
+ * directory has no visible files, so adding or removing a root cannot replay an old verdict.
  */
-async function ancestorDeclarationIdentity(repositoryRoot: string, workspaceRoot: string): Promise<string> {
-  const entries: (readonly [string, string])[] = []
-  let directory = FS.dirname(workspaceRoot)
+async function ancestorMarkerIdentity(repositoryRoot: string, workspaceRoot: string): Promise<string> {
+  const entries: string[] = []
+  let directory = workspaceRoot
   while (FS.pathIsWithin(directory, repositoryRoot)) {
-    for (const name of (await FS.listDir(directory).catch(() => [])).toSorted()) {
-      const path = FS.resolvePath(name, directory)
-      if (FS.extname(path) === '.tao' && await FS.isFile(path)) {
-        entries.push([FS.relativePath(repositoryRoot, path), path])
-      }
-    }
+    entries.push(
+      `${FS.relativePath(repositoryRoot, directory)}:${await FS.isDirectory(FS.resolvePath('.tao', directory))}`,
+    )
     const parent = FS.dirname(directory)
     if (parent === directory) {
       break
     }
     directory = parent
   }
-  return await FS.filesIdentity(entries)
+  return FS.contentIdentity(entries)
+}
+
+async function metadataIdentity(workspaceRoot: string, paths: readonly string[]): Promise<string> {
+  return await FS.filesIdentity(paths.map(path => [FS.relativePath(workspaceRoot, path), path]))
 }
 
 /** fileEntry is the identity of one declared file, which may legitimately not exist. */
@@ -406,7 +494,8 @@ function parseStampEntry(entry: unknown): CheckStampEntry | undefined {
   }
   const candidate = entry as Partial<CheckStampEntry>
   if (
-    typeof candidate.inputs !== 'string' || !Array.isArray(candidate.diagnostics)
+    typeof candidate.inputs !== 'string' || candidate.status !== 'fresh'
+    || typeof candidate.metadataInputs !== 'string' || !Array.isArray(candidate.diagnostics)
     || !Array.isArray(candidate.metadataPaths)
     || candidate.metadataPaths.some(path => typeof path !== 'string')
   ) {
@@ -432,7 +521,13 @@ function parseStampEntry(entry: unknown): CheckStampEntry | undefined {
       path: diagnostic.path,
     })
   }
-  return { diagnostics, inputs: candidate.inputs, metadataPaths: candidate.metadataPaths }
+  return {
+    diagnostics,
+    inputs: candidate.inputs,
+    metadataInputs: candidate.metadataInputs,
+    metadataPaths: candidate.metadataPaths,
+    status: 'fresh',
+  }
 }
 
 /**

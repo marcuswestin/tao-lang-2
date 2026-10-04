@@ -1,6 +1,7 @@
 use ResizableSplitApp from ./
 
 test "Resizable Split" {
+   // REMOVAL CANDIDATE: The state journey mounts this split too; removing this smoke drops its main-pane presence assertion.
    test "renders every pane of a resizable split" {
       run ResizableSplitApp
 
@@ -26,14 +27,5 @@ test "Resizable Split" {
       relaunch fresh
       expect text "Sidebar width 360"
       expect text "Sidebar note unwritten"
-   }
-   // Every check launches onto a device nobody has used, so the widening the check above persisted
-   // is gone. This check only proves that by following it: order it earlier and it proves nothing.
-   test "opens on the declared width after an earlier check persisted a wider one" {
-      run ResizableSplitApp
-
-      expect text "Sidebar width 280"
-      relaunch
-      expect text "Sidebar width 280"
    }
 }

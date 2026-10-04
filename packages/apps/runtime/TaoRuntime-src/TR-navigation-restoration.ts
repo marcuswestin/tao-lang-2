@@ -420,11 +420,6 @@ export class NavigationRestorationController {
   }
 
   private storageKey(): string | undefined {
-    const identity = this.app.declaration.canonicalIdentity?.canonical
-    if (!identity) {
-      return undefined
-    }
-    const policy = this.policy()
     const provider = appProviderIdentity(this.app.definition.datasources?.() ?? [])
     if (provider === undefined) {
       return undefined
@@ -438,9 +433,7 @@ export class NavigationRestorationController {
         )
       }`
       : ''
-    return `tao-navigation:${encodeURIComponent(identity)}:${encodeURIComponent(policy.variant)}:${
-      encodeURIComponent(provider)
-    }${scope}${auth}`
+    return `tao-navigation:${encodeURIComponent(this.app.definition.id)}:${encodeURIComponent(provider)}${scope}${auth}`
   }
 
   private storage(): TaoKeyValueStorage {

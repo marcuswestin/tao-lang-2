@@ -1,9 +1,10 @@
 import { Packages } from '@ast-utils'
 import { AST, codeProjectRoot } from '@parser'
-import { Assert, Diagnostics } from '@shared'
+import { Assert, Diagnostics, ReleaseCapabilities, type ReleaseProfile } from '@shared'
 import Validator, { type ValidationResult } from '@validator'
 import { designValidationCodes } from '@validator/diagnostic-codes'
 import { Backends } from './codegen/Backend'
+import type { DependencyEnvironment } from './compiler-dependencies'
 import { compileStudioPreviewManifest, type StudioPreviewManifest } from './studio-preview-manifest'
 import { compileTestPlan, type TaoTestPlan } from './test-plan-compiler'
 
@@ -16,11 +17,15 @@ export type CompiledFile = {
 
 /** CompileResult declares generated output for a Tao app entry. */
 export type CompileResult = {
+  appId: string
+  appVersion: string
   target?: 'react-native' | 'watchos'
   entryArtifact?: string
-  /** displayName is a native app's literal Name, suitable for the host app label. */
+  /** displayName is the effective app name, suitable for the native host label. */
   displayName?: string
   appNames: string[]
+  /** Physical project environments needed by this selected app's dependency graph. */
+  dependencyEnvironments: readonly DependencyEnvironment[]
   validation: ValidationResult
   code: string
   files: CompiledFile[]
@@ -51,11 +56,16 @@ export type CompilerSession = {
 export type CompilerContext = {
   packagesContext: Packages.Context
   sourceRoot: string
+  releaseProfile: ReleaseProfile
 }
 
 /** createContext creates compiler invocation state. */
-function createContext(packagesContext: Packages.Context, sourceRoot: string): CompilerContext {
-  return { packagesContext, sourceRoot }
+function createContext(
+  packagesContext: Packages.Context,
+  sourceRoot: string,
+  releaseProfile: ReleaseProfile = ReleaseCapabilities.current(),
+): CompilerContext {
+  return { packagesContext, sourceRoot, releaseProfile }
 }
 
 /**
@@ -94,6 +104,20 @@ function compileValidated(
   context: CompilerContext,
   options: CompileOptions = {},
 ): CompileResult {
+  const releaseDiagnostics = Validator.releaseDiagnostics(Validator.createContext(
+    context.packagesContext,
+    validationResult.files.map(file => file.ast),
+    validationResult.entry.path,
+    undefined,
+    context.releaseProfile,
+  ))
+  validationResult = {
+    ...validationResult,
+    diagnostics: Diagnostics.unique([...validationResult.diagnostics, ...releaseDiagnostics]),
+  }
+  if (options.studio) {
+    ReleaseCapabilities.require('studio', context.releaseProfile)
+  }
   validationResult = validationForCompileMode(validationResult, options.validationMode ?? 'development')
   const errors = Diagnostics.errorMessages(validationResult.diagnostics)
   Assert(errors.length === 0, `Cannot compile Tao source with validation errors: ${errors.join('; ')}`, {
@@ -163,5 +187,8 @@ namespace Compiler {
   /** TestPlan declares compiled Tao v0 test-plan IR. */
   export type TestPlan = TaoTestPlan
 }
+
+export { CompilerDependencies } from './compiler-dependencies'
+export type { DependencyEnvironment, DependencySelection, SidecarImport } from './compiler-dependencies'
 
 export default Compiler

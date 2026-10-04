@@ -4,7 +4,7 @@ Status: authoritative executable contract for the current Tao Studio development
 
 Tao Studio is a local development product over a Tao project. Tao source is the durable authority for
 executable product behavior. The one current exception is unsnapped freehand geometry, whose explicit
-project authority is Studio's committed `.tao-project/studio/sketches.jsonc` catalog. The editor and
+project authority is Studio's committed `.tao/studio/sketches.jsonc` catalog. The editor and
 flowed visual tools submit versioned source actions; Studio keeps no other hidden layout, example, or
 runtime state as project truth. `fixture` and grouped `scenarios` are the shared Tao-owned source for
 examples; there is no `example` declaration or Studio-only cases file.
@@ -120,11 +120,11 @@ inside an app while remaining isolated from other cells.
 
 When the selected app has no applicable scenarios, Studio launches the ordinary app in both the
 browser preview and the paired native device. It applies no scenario fixtures, environment overrides,
-preparation or replay steps. Local `tao dev` also launches the ordinary app; scenario declarations
+preparation or replay steps. Local `tao run` also launches the ordinary app; scenario declarations
 remain metadata there. Removing the last scenario during a Studio session returns the device to the
 ordinary app once the matching bundle is loaded.
 
-For direct physical-device development without Studio, `tao dev --device <name-or-id>` opens the
+For direct physical-device development without Studio, `tao run --device <name-or-id>` opens the
 ordinary app in the installed Tao Companion. It shares the device-launch contract with Studio,
 but starts no Studio gateway or scenario host. Stop Studio's session first if it owns that project.
 
@@ -284,7 +284,7 @@ source but do not rewrite it.
 
 ### Freehand Draw, Snap, and Feed catalog
 
-The Draw slice stores each unsnapped rectangle in `.tao-project/studio/sketches.jsonc`. The file is
+The Draw slice stores each unsnapped rectangle in `.tao/studio/sketches.jsonc`. The file is
 JSONC on input and canonical indented JSON on every Studio write. It is committed project state, not
 an artifact or browser preference. Format version 1 has this shape:
 

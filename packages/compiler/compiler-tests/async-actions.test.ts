@@ -4,7 +4,7 @@ import { TestCompiler as Compiler } from './test-compile'
 Describe('compiler: async actions', () => {
   Test('launches an isolated action block without awaiting the following statement', async () => {
     const compiled = await Compiler.compileCode(`
-      app AsyncApp { view Main }
+      app AsyncApp { id "com.tao.test.asyncapp" version "1.0.0" name "AsyncApp"  view Main }
       view Main() {
         state Ready = false
         action Launch() {
@@ -29,7 +29,7 @@ Describe('compiler: async actions', () => {
     Expect(launch).toBeGreaterThan(-1)
     Expect(launchedToggle).toBeGreaterThan(launch)
     Expect(followingSet).toBeGreaterThan(launchedToggle)
-    Expect(code.slice(launch, followingSet)).not.toContain('await TR.Async')
+    Expect(code).not.toMatch(/\bawait\s+TR\.Async\s*\(/)
     Expect(code.slice(launch, followingSet)).toContain('TR.BlockScope(_Scope, async _Scope =>')
   })
 })

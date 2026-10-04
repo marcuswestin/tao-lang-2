@@ -11,6 +11,8 @@ import { hostCommandKind } from '../agent-cli-src/agent-config/HostCommandPolicy
 import { HOST_COMMAND_TARGETS, hostCommandTarget } from '../agent-cli-src/agent-config/HostCommandTargets'
 
 const expected = [
+  'notify-developer',
+  'stop',
   'land',
   'finalize',
   'merge-main',
@@ -19,7 +21,9 @@ const expected = [
   'capabilities',
   'open-pr',
   'fix-agent-config',
+  'verify-full',
   'test-host',
+  'qa-capture',
   'studio-smoke',
   'studio-proof-real-app',
   'admission-experiment',
@@ -27,6 +31,7 @@ const expected = [
   'reclaim --execute',
   'prepare-release studio',
   'prepare-release ide-extension',
+  'ide-extension-acceptance',
   'app-dev',
   'dev-loop',
   'test-watch',
@@ -97,13 +102,23 @@ Describe('agent host command permissions', () => {
     )
     const prefixes = agentHostCommands(source)
     Expect(prefixes).toEqual(expected.map(command => command.split(' ')))
+    Expect(hostCommandKind(['verify-full', '--no-cache'], prefixes)).toBe('agent')
+    Expect(hostCommandKind(['verify-full-sandbox'], prefixes)).toBeUndefined()
+    Expect(hostCommandKind(['verify-repo'], prefixes)).toBeUndefined()
     Expect(hostCommandKind(['prepare-release', 'studio', '--version', '0.0.1'], prefixes)).toBe('named')
     Expect(hostCommandKind(['prepare-release', 'ide-extension'], prefixes)).toBe('named')
     Expect(hostCommandKind(['prepare-release', 'other'], prefixes)).toBeUndefined()
     Expect(hostCommandKind(['prepare-release'], prefixes)).toBeUndefined()
     Expect(hostCommandKind(['reclaim', '--execute'], prefixes)).toBe('named')
     Expect(hostCommandKind(['reclaim', '--report-json'], prefixes)).toBeUndefined()
-    Expect(Object.keys(HOST_COMMAND_TARGETS)).toEqual(['merge-recover', ...expected.slice(13)])
+    Expect(hostCommandKind(['notify-developer', '--message', 'question'], prefixes)).toBe('named')
+    Expect(hostCommandKind(['stop'], prefixes)).toBe('named')
+    Expect(Object.keys(HOST_COMMAND_TARGETS)).toEqual([
+      'notify-developer',
+      'stop',
+      'merge-recover',
+      ...expected.slice(expected.indexOf('reclaim --execute')),
+    ])
     const rules = CodexConfigGenerator.renderRules(source)
     const settings = JSON.parse(await FS.readText(Repo.resolvePath('.claude/settings.json'))) as {
       permissions: { allow: string[] }
@@ -153,7 +168,7 @@ Describe('agent host command permissions', () => {
     Expect(() => agentHostCommands({ agentHostCommands: ['land', 'land'] })).toThrow()
     Expect(() => agentHostCommands({ agentHostCommands: ['land', 42] })).toThrow()
     Expect(() => agentHostCommands({ agentHostCommands: ['xcrun simctl list devices'] })).toThrow()
-    Expect(() => agentHostCommands({ agentHostCommands: ['./tao dev'] })).toThrow()
+    Expect(() => agentHostCommands({ agentHostCommands: ['./tao run'] })).toThrow()
     Expect(() => agentHostCommands({ agentHostCommands: ['xcrun  simctl'] })).toThrow()
     Expect(() => agentHostCommands({ agentHostCommands: ['xcrun *'] })).toThrow()
   })

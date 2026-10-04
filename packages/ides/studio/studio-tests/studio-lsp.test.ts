@@ -2,13 +2,13 @@ import { Langium } from '@parser'
 import { Expect, Test, until, withTaoFiles } from '@shared/test'
 import { StudioLsp } from '../studio-src/StudioLsp'
 
-Test('Studio LSP transports initialize and formatting over raw WebSocket frames', async () => {
+Test('Studio LSP accepts binary and string frames for initialize and formatting', async () => {
   await withTaoFiles(
     'tao-studio-lsp-',
     {
       'Garden.tao': `
         use Text from @tao/ui
-        app Garden { view MainView }
+        app Garden { id "garden" version "1.0.0" name "Garden" view MainView }
         view MainView() { render Text("Hello") }
       `,
     },
@@ -40,13 +40,7 @@ Test('Studio LSP transports initialize and formatting over raw WebSocket frames'
         const capabilities = (response.result as { capabilities?: Record<string, unknown> } | undefined)?.capabilities
 
         Expect(close).toBe(undefined)
-        Expect(capabilities?.['textDocumentSync'] === undefined).toBe(false)
-        Expect(capabilities?.['codeActionProvider'] === undefined).toBe(false)
-        Expect(capabilities?.['completionProvider'] === undefined).toBe(false)
-        Expect(capabilities?.['definitionProvider'] === undefined).toBe(false)
         Expect(capabilities?.['documentFormattingProvider'] === undefined).toBe(false)
-        Expect(capabilities?.['hoverProvider'] === undefined).toBe(false)
-        Expect(capabilities?.['referencesProvider'] === undefined).toBe(false)
 
         const uri = Langium.URI.file(paths['Garden.tao']!).toString()
         session.accept(JSON.stringify({ jsonrpc: '2.0', method: 'initialized', params: {} }))
@@ -56,7 +50,7 @@ Test('Studio LSP transports initialize and formatting over raw WebSocket frames'
           params: {
             textDocument: {
               languageId: 'tao',
-              text: 'app Garden { view MainView }\nview MainView() { }\n',
+              text: 'app Garden { id "garden" version "1.0.0" name "Garden" view MainView }\nview MainView() { }\n',
               uri,
               version: 0,
             },

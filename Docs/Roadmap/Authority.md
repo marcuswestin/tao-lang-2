@@ -226,7 +226,7 @@ on press -> { do LeaveKitchen(MyMembership) }
    own sentence ("A kitchen needs an owner. …"); a plain access grant yields the
    `unauthorized` shape (no sentence of its own — access rules deliberately carry none).
 5. The outcome lands exactly as a local refusal would: `rejected` with `Problem`, or
-   `unauthorized` through `guard default` — same vocabulary, same copy, translated the same
+   `unauthorized` through app-scoped `guard` — same vocabulary, same copy, translated the same
    way. In the Studio v2 failure ladder, this is a provider failure that selects a _declared_
    case and sentence; a genuinely unmapped provider error (rule drift, outage) stays `error`.
 

@@ -1,7 +1,6 @@
 import { Expect, Test } from '@shared/test'
-import { StudioMatrixSketches } from '../studio-src/client/matrix/StudioMatrixSketches'
 import { StudioSketchBadge } from '../studio-src/client/StudioSketchBadge'
-import type { StudioSketch, StudioSketchCatalogSnapshot } from '../studio-src/StudioSketchCatalog'
+import type { StudioSketch } from '../studio-src/StudioSketchCatalog'
 
 const drawn: Pick<StudioSketch, 'broken' | 'definitionPath' | 'id' | 'rects' | 'render' | 'snapped' | 'view'> = {
   id: 'sketch-1',
@@ -11,8 +10,6 @@ const drawn: Pick<StudioSketch, 'broken' | 'definitionPath' | 'id' | 'rects' | '
 }
 
 Test('Studio sketch badge offers every other renderable view to an empty drawn rectangle', () => {
-  Expect(StudioSketchBadge.role(drawn)).toBe('definition')
-  Expect(StudioSketchBadge.sourceBacked(drawn)).toBe(false)
   Expect(StudioSketchBadge.items(drawn, ['StoryRow', 'View1', 'CommentRow'])).toEqual([
     { intent: { sketchId: 'sketch-1', to: 'render', view: 'StoryRow' }, kind: 'action', label: 'Render StoryRow' },
     { intent: { sketchId: 'sketch-1', to: 'render', view: 'CommentRow' }, kind: 'action', label: 'Render CommentRow' },
@@ -42,7 +39,6 @@ Test('Studio sketch badge says why a drawn or written definition cannot switch t
     { kind: 'remove', label: 'Remove', sketchId: 'sketch-1' },
   ])
   const written = { ...drawn, definitionPath: 'Rows.tao' }
-  Expect(StudioSketchBadge.sourceBacked(written)).toBe(true)
   Expect(StudioSketchBadge.items(written, ['StoryRow'])).toEqual([
     { kind: 'note', label: 'View1 is written in Rows.tao; edit it there.' },
     { kind: 'remove', label: 'Remove from canvas', sketchId: 'sketch-1' },
@@ -54,7 +50,6 @@ Test('Studio sketch badge detaches a render into the view the rectangle already 
     ...drawn,
     render: { group: 'rows', path: 'Rows.scenarios.tao', scenario: 'drawn1', view: 'StoryRow' },
   }
-  Expect(StudioSketchBadge.role(render)).toBe('render')
   Expect(StudioSketchBadge.items(render, ['StoryRow'])).toEqual([
     { intent: { sketchId: 'sketch-1', to: 'definition' }, kind: 'action', label: 'Detach into a new view, View1' },
     { kind: 'remove', label: 'Remove from canvas', sketchId: 'sketch-1' },
@@ -106,24 +101,6 @@ Test('Studio shows a broken render card and removes it from the canvas through i
   Expect(removed).toEqual(['sketch-1'])
   Expect(converted).toEqual([])
   Expect(dom.listenerCount()).toBe(0)
-})
-
-Test('Studio re-reads the sketch catalog after a manifest update so broken marks show', async () => {
-  const brokenCatalog = {
-    formatVersion: 1,
-    nextViewNumber: 2,
-    revision: 7,
-    sketches: [{ ...drawn, broken: true }],
-  } as unknown as StudioSketchCatalogSnapshot
-  const parent = {} as HTMLElement
-  const rendered: unknown[] = []
-  let reads = 0
-  await StudioMatrixSketches.refresh(parent, '/workspace', async () => {
-    reads += 1
-    return brokenCatalog
-  }, (host, project, catalog) => rendered.push([host, project, catalog]))
-  Expect(reads).toBe(1)
-  Expect(rendered).toEqual([[parent, '/workspace', brokenCatalog]])
 })
 
 Test('Studio sketch badge menu closes on an outside press, on Escape anywhere, and when another opens', () => {

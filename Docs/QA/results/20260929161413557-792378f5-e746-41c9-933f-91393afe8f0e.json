@@ -1,0 +1,40 @@
+{
+  "id": "20260929161413557-792378f5-e746-41c9-933f-91393afe8f0e",
+  "runId": "20260929161318907-772bb9ea-4c23-4e35-b1e5-f9d53f1c6e6a",
+  "createdAt": "2026-09-29T16:14:13.556Z",
+  "recordedAt": "2026-09-29T16:14:13.556Z",
+  "commit": "0aa8ebcfae088acc4c8b53cb1a122b7771370e15",
+  "phase": 1,
+  "executionProfile": "development",
+  "provenance": {
+    "snapshotBasis": "observation-time",
+    "originalDependencies": "recorded",
+    "observedMetadataEvidence": [
+      "Apps/Starters/Notebook/AGENTS.md"
+    ]
+  },
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "runtime": "bun:1.4.2"
+  },
+  "inputs": {
+    "source": "Apps/Starters/Notebook/AGENTS.md",
+    "dependencySnapshot": "Docs/QA/inputs/1b8ea0038e4a1018886700293ba031b97d41de1e474b00f5bb81e7db38f253b5.json"
+  },
+  "surfaceId": "doc:Apps/Starters/Notebook/AGENTS.md",
+  "dimension": "text",
+  "outcome": "fail",
+  "reviewer": "agent",
+  "channel": "source",
+  "evidence": [
+    {
+      "path": "Apps/Starters/Notebook/AGENTS.md",
+      "sha256": "c45190d2742524dd1fe23787f1a0454b4848a209af33a05af931a480a82a4c0f"
+    }
+  ],
+  "notes": "QA-STARTER-AGENTS-LATER-TOOLS.",
+  "sourceHash": "c45190d2742524dd1fe23787f1a0454b4848a209af33a05af931a480a82a4c0f",
+  "rendererHash": "not-applicable",
+  "profileHash": "c1bb9d6add2e225907faed5f0c6ca5736166bf2163ff04631811b56048eef38b"
+}

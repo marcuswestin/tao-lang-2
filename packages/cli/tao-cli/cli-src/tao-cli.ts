@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import tab from '@bomb.sh/tab/commander'
 import { Command } from '@commander-js/extra-typings'
-import { Diagnostic, Errors, FS, HCI, Platform } from '@shared'
+import { Diagnostic, Errors, FS, HCI, Platform, ReleaseCapabilities } from '@shared'
 import type { Command as BaseCommand } from 'commander'
 import * as DiagnosticReport from './diagnostic-report'
 import type { InPlace } from './in-place-files'
@@ -39,7 +39,7 @@ export async function runTaoCli(argv = Platform.runtimeProcess.argv): Promise<vo
   await createCommands().parseAsync(argv, { from: 'node' })
 }
 
-function createCommands(): Command {
+export function createCommands(): Command {
   const commands = new Command()
     .name('tao')
     .description('Tao language CLI.')
@@ -107,25 +107,6 @@ function createCommands(): Command {
           ...(options.skipTests === true ? { runTests: false } : {}),
           ...(options.yes === true ? { yes: true } : {}),
         })
-      } catch (error) {
-        HCI.writeErrorLine(Errors.formatForUser(error))
-        Platform.runtimeProcess.exit(1)
-      }
-    })
-
-  commands
-    .command('project')
-    .description('Manage checked-in Tao project metadata.')
-    .command('id')
-    .argument('<id>', 'Opaque project id to persist.')
-    .argument('[path]', 'Project .tao file or directory to search.', '.')
-    .option('--replace', 'Replace an existing id when making an independent project.')
-    .description('Add or deliberately replace a project id.')
-    .action(async (id: string, path: string, options: { replace?: boolean }) => {
-      try {
-        const { setProjectId } = await import('./project-command')
-        const projectPath = await setProjectId(id, path, options)
-        HCI.writeSuccess(`Project id '${id}' in ${FS.displayPath(projectPath)}\n`)
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.exit(1)
@@ -224,7 +205,7 @@ function createCommands(): Command {
     )
 
   commands
-    .command('dev')
+    .command('run')
     .argument('[path]', 'Tao file or directory whose runnable apps should be discovered.', '.')
     .option('--app <name>', 'Select a uniquely named app without prompting.')
     .option(
@@ -235,7 +216,7 @@ function createCommands(): Command {
     .option('--android', 'Open Android after Metro starts.')
     .option('--web', 'Open the web app after Metro starts.')
     .option('--desktop', 'Open the Tao desktop app after Metro starts.')
-    .description('Start Metro for a Tao app without opening a target unless requested.')
+    .description('Refresh and watch a Tao project, then start Metro for a selected app.')
     .action(
       async (
         path: string,
@@ -256,6 +237,42 @@ function createCommands(): Command {
         }
       },
     )
+
+  commands
+    .command('watch')
+    .argument('[path]', 'Tao file or directory in the project to watch.', '.')
+    .description('Refresh and watch a Tao project without starting a runtime.')
+    .action(async (path: string) => {
+      try {
+        const { runTaoWatch } = await import('./watch-command')
+        Platform.runtimeProcess.setExitCode(await runTaoWatch(path))
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.setExitCode(1)
+      }
+    })
+
+  commands
+    .command('install')
+    .argument('[path]', 'Tao file or directory in the project to install.', '.')
+    .option('--app <name>', 'Install dependencies of one app.')
+    .option('--publication <name>', 'Install dependencies of one named publication.')
+    .option('--default-publication', 'Install dependencies of the unnamed publication.')
+    .description('Resolve local Tao requirements and install npm aliases for all apps and publications.')
+    .action(async (path: string, options: { app?: string; publication?: string; defaultPublication?: boolean }) => {
+      try {
+        HCI.writeLine('Loading dependency installer...')
+        const { runTaoInstall } = await import('./install-command')
+        await runTaoInstall(path, {
+          appName: options.app,
+          publicationName: options.publication,
+          defaultPublication: options.defaultPublication,
+        })
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.setExitCode(1)
+      }
+    })
 
   commands
     .command('build')
@@ -778,11 +795,48 @@ function createCommands(): Command {
       }
     })
 
+  commands.command('release-profile')
+    .description('Print the immutable release profile used by this toolchain.')
+    .action(() =>
+      HCI.writeLine(
+        JSON.stringify({
+          version: TaoVersion.current(),
+          ...ReleaseCapabilities.current(),
+          fingerprint: ReleaseCapabilities.fingerprint(),
+        }),
+      )
+    )
+
+  // Remove unavailable surfaces before completion registration so discovery and parsing agree.
+  // Unclassified commands and options are deferred, so a new surface stays out of public builds.
+  pruneReleaseSurface(commands as unknown as BaseCommand, '')
+
   // Registers `tao complete <shell>` to print a completion script, and the hidden request protocol it calls.
   // The adapter types against plain Commander, which extra-typings' generic Command does not widen to.
   tab(commands as unknown as BaseCommand)
 
   return commands
+}
+
+/** pruneReleaseSurface removes the subcommands and options this release profile does not ship, at every depth. */
+function pruneReleaseSurface(command: BaseCommand, path: string): void {
+  if (path) {
+    const registeredOptions = command.options as BaseCommand['options'][number][]
+    for (const option of [...registeredOptions]) {
+      if (!ReleaseCapabilities.allows(ReleaseCapabilities.optionCapability(path, option.long ?? option.flags))) {
+        registeredOptions.splice(registeredOptions.indexOf(option), 1)
+      }
+    }
+  }
+  const registeredCommands = command.commands as BaseCommand[]
+  for (const child of [...registeredCommands]) {
+    const childPath = path ? `${path} ${child.name()}` : child.name()
+    if (!ReleaseCapabilities.allows(ReleaseCapabilities.commandCapability(childPath))) {
+      registeredCommands.splice(registeredCommands.indexOf(child), 1)
+      continue
+    }
+    pruneReleaseSurface(child, childPath)
+  }
 }
 
 function parseBetaRecipients(value: boolean | string | undefined): string[] | undefined {

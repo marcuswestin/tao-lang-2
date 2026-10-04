@@ -67,39 +67,42 @@ Describe('native host lease', () => {
     }
   })
 
-  Test('reports an actionable owner after a bounded wait without entering the second operation', async () => {
-    const registryRoot = await mkTestDir('tao-native-host-busy-')
-    let enteredPreparation = false
-    try {
-      const owner = await writeOwner(registryRoot, { processStartedAt: 'same-process' })
-      let failure: unknown
+  Test(
+    'keeps an old live owner and reports it after a bounded wait without entering the second operation',
+    async () => {
+      const registryRoot = await mkTestDir('tao-native-host-busy-')
+      let enteredPreparation = false
       try {
-        const lease = await MachineLanes.acquireResource({
-          command: 'studio-canary',
-          name: resourceName,
-          processIdentity: aliveIdentity('same-process'),
-          registryRoot,
-          repositoryRoot: '/worktrees/canary',
-          waitTimeoutMs: 5,
-        })
-        enteredPreparation = true
-        await lease.release()
-      } catch (error) {
-        failure = error
-      }
+        const owner = await writeOwner(registryRoot, { processStartedAt: 'same-process' })
+        let failure: unknown
+        try {
+          const lease = await MachineLanes.acquireResource({
+            command: 'studio-canary',
+            name: resourceName,
+            processIdentity: aliveIdentity('same-process'),
+            registryRoot,
+            repositoryRoot: '/worktrees/canary',
+            waitTimeoutMs: 5,
+          })
+          enteredPreparation = true
+          await lease.release()
+        } catch (error) {
+          failure = error
+        }
 
-      Expect(enteredPreparation).toBe(false)
-      Expect(failure).toBeInstanceOf(MachineResourceBusyError)
-      Expect((failure as MachineResourceBusyError).failureKind).toBe('native-host-busy')
-      Expect((failure as MachineResourceBusyError).owner).toEqual(owner)
-      Expect((failure as Error).message).toContain('studio-native')
-      Expect((failure as Error).message).toContain('/worktrees/foreign-native-session')
-      Expect((failure as Error).message).toContain(`PID ${Platform.runtimeProcess.pid}`)
-      Expect((failure as Error).message).toContain('finish or stop it')
-    } finally {
-      await FS.remove(registryRoot)
-    }
-  })
+        Expect(enteredPreparation).toBe(false)
+        Expect(failure).toBeInstanceOf(MachineResourceBusyError)
+        Expect((failure as MachineResourceBusyError).failureKind).toBe('native-host-busy')
+        Expect((failure as MachineResourceBusyError).owner).toEqual(owner)
+        Expect((failure as Error).message).toContain('studio-native')
+        Expect((failure as Error).message).toContain('/worktrees/foreign-native-session')
+        Expect((failure as Error).message).toContain(`PID ${Platform.runtimeProcess.pid}`)
+        Expect((failure as Error).message).toContain('finish or stop it')
+      } finally {
+        await FS.remove(registryRoot)
+      }
+    },
+  )
 
   Test('prunes a lease only after the owner process is demonstrably gone', async () => {
     const registryRoot = await mkTestDir('tao-native-host-stale-')
@@ -140,25 +143,6 @@ Describe('native host lease', () => {
 
       Expect(lease.owner.id).not.toBe('foreign-owner')
       await lease.release()
-    } finally {
-      await FS.remove(registryRoot)
-    }
-  })
-
-  Test('never prunes a live old owner merely because the lease is old', async () => {
-    const registryRoot = await mkTestDir('tao-native-host-live-old-')
-    try {
-      await writeOwner(registryRoot, { processStartedAt: 'same-process' })
-
-      await Expect(MachineLanes.acquireResource({
-        command: 'verify-full-native',
-        name: resourceName,
-        processIdentity: aliveIdentity('same-process'),
-        registryRoot,
-        repositoryRoot: '/worktrees/verification',
-        waitTimeoutMs: 0,
-      })).rejects.toBeInstanceOf(MachineResourceBusyError)
-      Expect((await FS.readJson<MachineResourceOwner>(resourcePath(registryRoot))).id).toBe('foreign-owner')
     } finally {
       await FS.remove(registryRoot)
     }

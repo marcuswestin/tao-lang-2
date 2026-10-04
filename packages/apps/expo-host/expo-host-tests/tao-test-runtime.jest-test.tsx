@@ -38,7 +38,7 @@ Describe('Expo runtime', () => {
         `,
         'Main.tao': `
           use Text from @tao/ui
-          app RenderApp { view Main }
+          app RenderApp { id "renderapp" version "1.0.0" name "RenderApp" view Main }
           view Main() { render Text("Hello from a journey") }
         `,
       },
@@ -105,7 +105,7 @@ Describe('Expo runtime', () => {
         'Main.tao': `
           use StackNav from @tao/nav
           use Col, FormButton from @tao/ui
-          app AttentionApp { Name "Attention" Navigator StackNav { Initial Home } }
+          app AttentionApp { id "attentionapp" version "1.0.0" name "Attention" Navigator StackNav { Initial Home } }
           scene Home() {
             Title "Home"
             action DoNothing() { }
@@ -137,7 +137,7 @@ Describe('Expo runtime', () => {
         'Main.tao': `
           use StackNav from @tao/nav
           use Col, FormButton from @tao/ui
-          app AttentionApp { Name "Attention" Navigator StackNav { Initial Home } }
+          app AttentionApp { id "attentionapp" version "1.0.0" name "Attention" Navigator StackNav { Initial Home } }
           scene Home() {
             Title "Home"
             action DoNothing() { }
@@ -193,7 +193,7 @@ Describe('Expo runtime', () => {
         }
       `,
         'Main.tao': `
-        app DuplicateTextApp { view MainView }
+        app DuplicateTextApp { id "duplicatetextapp" version "1.0.0" name "DuplicateTextApp" view MainView }
         view MainView() {
           render Stack(){
             Text("Repeated")
@@ -206,61 +206,6 @@ Describe('Expo runtime', () => {
           \`\`\`
         }
         view Text(Value text) {
-          render inject Value \`\`\`ts
-            return <RN.Text>{Value}</RN.Text>
-          \`\`\`
-        }
-      `,
-      },
-      async paths => {
-        await RuntimeTesting.runTaoTestPlan(paths['Main.test.tao']!)
-      },
-    )
-  })
-
-  Test('runs Tao press text steps before later expectations', async () => {
-    await withTaoFiles(
-      'tao-runtime-test-plan-',
-      {
-        'Main.test.tao': `
-        use PressTextApp from ./
-
-        test "Press text" {
-          test "updates rendered state" {
-            run PressTextApp
-            expect text "0"
-            press text "Add"
-            expect text "1"
-          }
-        }
-      `,
-        'Main.tao': `
-        app PressTextApp { view MainView }
-        view MainView() {
-          state Count = 0
-          action AddOne() {
-            set Count += 1
-          }
-          render Stack(){
-            NativeButton("Add", AddOne)
-            Number(Count)
-          }
-        }
-        view Stack() {
-          render inject Content @@content, Layout @@layout, Tag @@tag \`\`\`ts
-            return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
-          \`\`\`
-        }
-        view NativeButton(Title text, Action action()) {
-          render inject Title, Action \`\`\`ts
-            return (
-              <RN.Pressable accessibilityRole="button" onPress={() => Action.invoke()}>
-                <RN.Text>{Title}</RN.Text>
-              </RN.Pressable>
-            )
-          \`\`\`
-        }
-        view Number(Value number) {
           render inject Value \`\`\`ts
             return <RN.Text>{Value}</RN.Text>
           \`\`\`
@@ -300,7 +245,7 @@ Describe('Expo runtime', () => {
         }
       `,
         'Main.tao': `
-        app PointerPhaseApp { view MainView }
+        app PointerPhaseApp { id "pointerphaseapp" version "1.0.0" name "PointerPhaseApp" view MainView }
         view MainView() {
           state Phase = "idle"
           action SetPhase(Value text) { set Phase = Value }
@@ -361,7 +306,7 @@ Describe('Expo runtime', () => {
         }
       `,
         'Main.tao': `
-        app AsyncActionApp { view MainView }
+        app AsyncActionApp { id "asyncactionapp" version "1.0.0" name "AsyncActionApp" view MainView }
         view MainView() {
           state Ready = false
           state Count = 0
@@ -426,8 +371,7 @@ Describe('Expo runtime', () => {
 
         type ConfirmResult is one of Confirmed
 
-        app AskTestApp {
-          Name "Ask test"
+        app AskTestApp { id "asktestapp" version "1.0.0" name "Ask test"
           Navigator StackNav { Initial Home }
         }
 
@@ -474,7 +418,7 @@ Describe('Expo runtime', () => {
         }
       `,
         'Main.tao': `
-        app MissingPressApp { view MainView }
+        app MissingPressApp { id "missingpressapp" version "1.0.0" name "MissingPressApp" view MainView }
 
         view MainView() {
           render Text("Ready")
@@ -514,8 +458,7 @@ Describe('Expo runtime', () => {
           use StackNav from @tao/nav
           use Text from @tao/ui
 
-          app ToolbarApp {
-            Name "Toolbar"
+          app ToolbarApp { id "toolbarapp" version "1.0.0" name "Toolbar"
             Navigator StackNav { Initial Home }
           }
 
@@ -560,7 +503,7 @@ Describe('Expo runtime', () => {
         }
       `,
         'Main.tao': `
-        app InputApp { view MainView }
+        app InputApp { id "inputapp" version "1.0.0" name "InputApp" view MainView }
         view MainView() {
           state Draft = ""
           state Status = "Waiting"
@@ -646,8 +589,7 @@ Describe('Expo runtime', () => {
 
         data Items / Item { Name text }
 
-        app TaggedApp {
-          Name "Tagged"
+        app TaggedApp { id "taggedapp" version "1.0.0" name "Tagged"
           Navigator StackNav { Initial Main }
           Datasource Memory { }
         }
@@ -661,7 +603,7 @@ Describe('Expo runtime', () => {
           render Col() {
             guard Items {
               loading -> { Text("Loading") }
-              error -> Message { Text(Message) }
+              error -> Context { Text(Context.Message) }
             }
             #field
             TextInput(Value: Draft, Label: "Name", Placeholder: "Name") {
@@ -710,7 +652,7 @@ Describe('Expo runtime', () => {
 
           let Workspaces = ["Chapter one", "Chapter two"]
 
-          app TaggedRowsApp { view Main }
+          app TaggedRowsApp { id "taggedrowsapp" version "1.0.0" name "TaggedRowsApp" view Main }
 
           view Main() {
             render Col() {
@@ -732,7 +674,7 @@ Describe('Expo runtime', () => {
     await testCompileApp(
       `
         use Col, Text from @tao/ui
-        app LoopHierarchyApp { view Main }
+        app LoopHierarchyApp { id "loophierarchyapp" version "1.0.0" name "LoopHierarchyApp" view Main }
         view Main() {
           render Col() {
             #taggedRows
@@ -752,10 +694,8 @@ Describe('Expo runtime', () => {
           untaggedRow = untaggedRow.parent
         }
         Expect(untaggedRow).not.toBeNull()
-        Expect(taggedRow.type).toBe(untaggedRow?.type)
         Expect(taggedRow.children.map((child: any) => typeof child === 'string' ? 'string' : child.type))
           .toEqual(untaggedRow?.children.map((child: any) => typeof child === 'string' ? 'string' : child.type))
-        Expect(taggedRow.props.testID).toBe('taggedRows')
         Expect(untaggedRow?.props.testID).toBeUndefined()
       },
     )
@@ -783,12 +723,11 @@ Describe('Expo runtime', () => {
         'Main.tao': `
         use StackNav from @tao/nav
 
-        app NavigationApp {
-          Name "Navigation"
+        app NavigationApp { id "navigationapp" version "1.0.0" name "Navigation"
           Navigator StackNav { Initial Home }
         }
 
-        workspace scene Home() {
+        project scene Home() {
           Title "Home"
           action Open() { present Detail() }
           render Stack(){
@@ -797,7 +736,7 @@ Describe('Expo runtime', () => {
           }
         }
 
-        workspace scene Detail() {
+        project scene Detail() {
           Title "Detail"
           render Text("Detail")
         }
@@ -846,7 +785,7 @@ Describe('Expo runtime', () => {
         }
       `,
         'Main.tao': `
-        app BrokenTextApp { view MainView }
+        app BrokenTextApp { id "brokentextapp" version "1.0.0" name "BrokenTextApp" view MainView }
         view MainView() {
           render Text("Actual")
         }
@@ -880,7 +819,7 @@ Describe('Expo runtime', () => {
         }
       `,
         'Main.tao': `
-        app BrokenTextApp { view MainView }
+        app BrokenTextApp { id "brokentextapp" version "1.0.0" name "BrokenTextApp" view MainView }
         view MainView() {
           render Text("Actual")
         }
@@ -922,7 +861,7 @@ Describe('Expo runtime', () => {
         }
       `,
         'First.tao': `
-        app FirstApp { view MainView }
+        app FirstApp { id "firstapp" version "1.0.0" name "FirstApp" view MainView }
         view MainView() {
           render Text("First")
         }
@@ -933,7 +872,7 @@ Describe('Expo runtime', () => {
         }
       `,
         'Second.tao': `
-        app SecondApp { view MainView }
+        app SecondApp { id "secondapp" version "1.0.0" name "SecondApp" view MainView }
         view MainView() {
           render Text("Second")
         }

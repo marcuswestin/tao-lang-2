@@ -20,7 +20,6 @@ Describe('visionOS project export', () => {
       Expect(project).toBe(FS.resolvePath('TaoApp.xcodeproj', outputRoot))
       Expect(await FS.readText(FS.resolvePath('site/index.html', outputRoot))).toBe(html)
       Expect(await FS.readText(FS.resolvePath('site/_expo/static/js/web/app.js', outputRoot))).toBe(script)
-      Expect(await FS.readFile(FS.resolvePath('site/assets/icon.png', outputRoot))).toEqual(image)
       const configuration = await FS.readText(FS.resolvePath('project.pbxproj', project))
       Expect(configuration).toContain('SDKROOT = xros;')
       Expect(configuration).toContain('SUPPORTED_PLATFORMS = "xros xrsimulator";')

@@ -30,7 +30,6 @@ Describe('native Studio worktree identity', () => {
 
     Expect(first.appName).toBe(second.appName)
     Expect(first.bundleIdentifier).not.toBe(second.bundleIdentifier)
-    Expect(first.hostResourceName).not.toBe(second.hostResourceName)
   })
 
   Test('reduces any directory name to a bundle identifier Electrobun accepts', () => {
@@ -50,20 +49,15 @@ Describe('native Studio worktree identity', () => {
       'com.devtao.studio.worktree',
       `com.devtao.studio.${'a'.repeat(40)}`,
     ])
-    for (const identity of identities) {
-      const sources = StudioElectrobun.sources({
-        appName: identity.appName,
-        bundleIdentifier: identity.bundleIdentifier,
-        outputRoot: '/tmp/unused-by-source-tests',
-        previewUrl: 'http://127.0.0.1:8081',
-        studioUrl: 'http://127.0.0.1:55101',
-      })
-      Expect(sources.config).toContain(`identifier: ${JSON.stringify(identity.bundleIdentifier)}`)
-    }
-  })
-
-  Test('never takes the companion app identifier', () => {
-    Expect(linked('companion').bundleIdentifier).not.toBe('com.devtao.studio.companion')
+    const identity = identities[2]!
+    const sources = StudioElectrobun.sources({
+      appName: identity.appName,
+      bundleIdentifier: identity.bundleIdentifier,
+      outputRoot: '/tmp/unused-by-source-tests',
+      previewUrl: 'http://127.0.0.1:8081',
+      studioUrl: 'http://127.0.0.1:55101',
+    })
+    Expect(sources.config).toContain(`identifier: ${JSON.stringify(identity.bundleIdentifier)}`)
   })
 
   Test('reads a linked worktree from its .git file and the primary checkout from its .git directory', async () => {

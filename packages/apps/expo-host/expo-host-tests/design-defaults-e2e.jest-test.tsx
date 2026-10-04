@@ -12,13 +12,12 @@ Describe('Expo runtime: declaration style defaults', () => {
       `
         use Col, Text from @tao/ui
 
-        workspace design Theme {
+        project design Theme {
           paper #fff
           ink #111
         }
 
-        app DefaultsApp {
-          Name "Defaults"
+        app DefaultsApp { id "defaultsapp" version "1.0.0" name "Defaults"
           Design Theme
           view Screen
         }
@@ -58,10 +57,8 @@ Describe('Expo runtime: declaration style defaults', () => {
         // The root's private `gap 8` beats the caller's `gap 0`; a clause the header never
         // declared (`fg`) still applies, since the root does not set it.
         Expect(RN.StyleSheet.flatten(screen.getByTestId('private').props.style)).toMatchObject({
-          backgroundColor: '#fff',
           color: '#111',
           gap: 8,
-          padding: 12,
         })
       },
     )

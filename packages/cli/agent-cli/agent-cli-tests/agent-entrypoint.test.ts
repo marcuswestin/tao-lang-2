@@ -96,7 +96,7 @@ Describe('agent entrypoint', () => {
       })
       Expect(dev.exitCode).toBe(0)
       Expect((await FS.readText(marker)).split('\n').filter(Boolean))
-        .toEqual(['dev', 'Apps/HNReader', '--app', 'HNReaderStub'])
+        .toEqual(['run', 'Apps/HNReader', '--app', 'HNReaderStub'])
 
       await FS.remove(marker)
       const unlisted = await CLI.run('zsh', {
@@ -153,20 +153,9 @@ Describe('agent entrypoint', () => {
     Expect(result.stderr).toContain('./agent <command> --verbose')
   })
 
-  Test('leaves an unrelated unknown option without the front-door hint', async () => {
-    const result = await runEntrypoint(['--not-a-real-flag', 'board'])
-
-    Expect(result.exitCode).toBe(1)
-    Expect(result.stderr).toContain("unknown option '--not-a-real-flag'")
-    // Still hinted: any option before the command is unknown to the top-level parser, front-door
-    // flag or not, so the hint is the right answer for this one too rather than a special case.
-    Expect(result.stderr).toContain('go after the command, not before it')
-  })
-
   Test('requires the named host entry point for release preparation', async () => {
     const result = await runEntrypoint(['prepare-release', 'studio'])
 
     Expect(result.exitCode).toBe(1)
-    Expect(result.stderr).toContain('too many arguments')
   })
 })

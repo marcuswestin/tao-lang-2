@@ -32,7 +32,7 @@ action Exercise() {
       const results = await runCheck(root)
       Expect(results.flatMap(result => result.diagnostics ?? []).filter(diagnostic => diagnostic.severity === 'error'))
         .toEqual([])
-      Expect(await FS.isFile(FS.resolvePath('Bindings.tao.ts', root))).toBe(true)
+      Expect(await FS.isFile(FS.resolvePath('.tao-ts/Bindings.tao.ts', root))).toBe(true)
     })
   })
 

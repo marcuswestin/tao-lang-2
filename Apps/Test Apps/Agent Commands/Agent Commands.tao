@@ -2,13 +2,10 @@ use AgentCommandEntries, AgentCommandEntry from @data
 use Local from @tao/data/providers/local
 use Col, FormButton, Text from @tao/ui
 
-project {
-   id "agent-commands"
-   name "Agent Commands"
-}
-
 app AgentCommandsProof {
-   Name "Agent Commands"
+   id "agent-commands"
+   version "0.1.0"
+   name "Agent Commands"
    Datasource Local {
       StorageKey "AgentCommandsProof"
    }

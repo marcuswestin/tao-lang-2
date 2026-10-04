@@ -78,7 +78,7 @@ Describe('validator: test device and fixture clauses', () => {
         }
         datasource Feed = Memory { Data { Stories } }
         datasource Personal = Local { StorageKey "personal" Data { Bookmarks } }
-        app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource { Feed } }
+        app Reader { id "reader" version "1.0.0" name "Reader" Navigator StackNav { Initial Main } Datasource { Feed } }
         test "Reader" with Notes {
           test "opens" { run Reader }
         }
@@ -88,7 +88,7 @@ Describe('validator: test device and fixture clauses', () => {
   )
 
   Test(
-    'accepts a fixture whose entity the running app does bind, alongside a sibling app that cannot',
+    'accepts a fixture whose entity the running app does bind',
     accepts(
       `
         use Local from @tao/data/providers/local
@@ -102,7 +102,7 @@ Describe('validator: test device and fixture clauses', () => {
         }
         datasource Feed = Memory { Data { Stories } }
         datasource Personal = Local { StorageKey "personal" Data { Bookmarks } }
-        app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource { Feed, Personal } }
+        app Reader { id "reader" version "1.0.0" name "Reader" Navigator StackNav { Initial Main } Datasource { Feed, Personal } }
         test "Reader" with Notes {
           test "opens" { run Reader }
         }

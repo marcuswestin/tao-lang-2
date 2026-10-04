@@ -1,9 +1,13 @@
 import { ASTUtils, Packages, Type } from '@ast-utils'
-import { AST, codeProjectRoot, type ParsedFile } from '@parser'
-import { Assert, Errors, FS } from '@shared'
+import { AST, codeProjectRoot, type ParsedFile, type ProjectGraph } from '@parser'
+import { Assert, Errors, FS, ProjectIdentity } from '@shared'
 import type { ValidationResult } from '@validator'
+import { appMetadata } from '../../app-metadata'
 import { authPolicy } from '../../auth-policy'
 import { BridgeMetadata } from '../../bridge-metadata'
+import { CompilerDependencies } from '../../compiler-dependencies'
+import { sidecarModuleSpecifiers } from '../../sidecar-module-specifiers'
+import { inspectSidecarSourceGraph, sidecarSourceBelongsToProject } from '../../sidecar-source-graph'
 import { storedDataSchemaFile, storedDataSchemas } from '../../stored-data-schema'
 import {
   compileStudioPreviewManifest,
@@ -24,18 +28,14 @@ import {
 } from './app/declaration-identity'
 import {
   bridgeBindingName,
-  bridgedExpressionsOf,
   bridgeExportName,
   foreignActionBindingName,
-  foreignActionsOf,
   foreignViewBindingName,
-  foreignViewsOf,
   type InlineInjection,
-  inlineInjectionsOf,
   withInlineInjectionBindings,
 } from './app/injection-plan'
 import { RuntimeGen } from './app/RuntimeGen'
-import { LocalDataBindings, ReadNetBinding } from './codegen-util'
+import { LocalDataBindings } from './codegen-util'
 
 import type { CompiledFile, CompileOptions, CompilerContext, CompileResult } from '../../compiler'
 import type { Backend } from '../Backend'
@@ -52,12 +52,6 @@ const localCatalogBindings = [LocalDataBindings.catalog, LocalDataBindings.datas
 type ResolvedImports = {
   bySource: Map<string, Set<string>>
   scopeBindings: Map<string, string>
-}
-
-/** ImportTarget is one workspace file an import path reaches, and what it may name in it. */
-type ImportTarget = {
-  declarationsNamed: (name: string) => AST.Declaration[]
-  path: string
 }
 
 type DataCatalogPlan = {
@@ -105,33 +99,98 @@ type PlannedOutputs = {
 /** ReactNativeBackend owns TypeScript planning and Expo-compatible output. */
 export const ReactNativeBackend: Backend = {
   compile: ({ validation, context, app, appPath, options }) =>
-    compileReactNative(validation, context, app.name, appPath, options),
+    compileReactNative(validation, context, app, appPath, options),
 }
 
 function compileReactNative(
   validationResult: ValidationResult,
   context: CompilerContext,
-  selectedAppName: string,
+  selectedApp: AST.AppValueDeclaration,
   selectedAppPath: string,
   options: CompileOptions,
 ): CompileResult {
   const studio = options.studio === true
   const journeyObservations = options.journeyObservations === true
+  const selectedAppName = selectedApp.name
   const entryPath = validationResult.entry.path
-  const sourceFiles = validationResult.files.filter(file =>
-    file.ast.statements.length === 0
-    || !file.ast.statements.every(statement =>
-      AST.isPrimitiveDeclaration(statement) || AST.isProjectDeclaration(statement)
-    )
+  const graph = Packages.createResolver(context.packagesContext).projectGraph({
+    fromFilePath: selectedAppPath,
+    workspaceFiles: validationResult.files.map(file => file.ast),
+  })
+  const selectedRequirements = graph.appRequirements.find(entry => entry.app === selectedApp)?.requirements ?? []
+  const selectedPublications = selectedPublicationSources(selectedRequirements)
+  const dependencyOwnerBySourcePath = new Map(selectedPublications.projectRootBySourcePath)
+  const sidecarTaoSources = selectedSidecarTaoSources(
+    selectedPublications,
+    validationResult.files,
+    context.packagesContext.index,
   )
-  const identityProjects = declarationIdentityProjects(validationResult.files, context)
+  for (const [path, owner] of sidecarTaoSources.projectRootBySourcePath) {
+    dependencyOwnerBySourcePath.set(path, owner)
+  }
+  const retainedDependencyDeclarations = new Set(
+    [...selectedPublications.declarationsBySourcePath.values()].flatMap(declarations => [...declarations]),
+  )
+  for (const declarations of sidecarTaoSources.runtimeDeclarationsBySourcePath.values()) {
+    declarations.forEach(declaration => retainedDependencyDeclarations.add(declaration))
+  }
+  const accessBySourcePath = new Map<string, Set<AST.AccessDeclaration>>()
+  for (const file of validationResult.files) {
+    for (const access of file.ast.statements.filter(AST.isAccessDeclaration)) {
+      const entity = access.entity.ref
+      if (!entity || !retainedDependencyDeclarations.has(entity)) {
+        continue
+      }
+      const entityPath = AST.getDocument(entity).uri.path
+      const owner = dependencyOwnerBySourcePath.get(entityPath)
+      if (!owner || !FS.pathIsWithin(file.path, owner)) {
+        continue
+      }
+      const statements = accessBySourcePath.get(file.path) ?? new Set<AST.AccessDeclaration>()
+      statements.add(access)
+      accessBySourcePath.set(file.path, statements)
+      dependencyOwnerBySourcePath.set(file.path, owner)
+    }
+  }
+  const selectedSources = new Set([
+    selectedAppPath,
+    ...graph.projectFiles.map(file => AST.getDocument(file).uri.path),
+    ...selectedPublications.sourcePaths,
+    ...sidecarTaoSources.projectRootBySourcePath.keys(),
+    ...accessBySourcePath.keys(),
+    ...(studio
+      ? validationResult.files
+        .filter(file => file.path.endsWith('.test.tao') && FS.pathIsWithin(file.path, graph.projectRoot))
+        .map(file => file.path)
+      : []),
+  ])
+  const sourceFiles = validationResult.files.filter(file =>
+    (selectedSources.has(file.path) || FS.pathIsWithin(file.path, context.packagesContext.stdlibRoot))
+    && (sidecarTaoSources.projectRootBySourcePath.has(file.path) || file.ast.statements.length === 0
+      || !file.ast.statements.every(statement =>
+        AST.isPrimitiveDeclaration(statement) || AST.isPackageDeclaration(statement)
+      ))
+  )
+  const identityProjects = declarationIdentityProjects(
+    sourceFiles,
+    context,
+    graph,
+    dependencyOwnerBySourcePath,
+  )
   const sourceByPath = new Map(sourceFiles.map(file => [file.path, file]))
-  const dataCatalog = planDataCatalog(sourceFiles, entryPath)
-  // Validation allows one `guard default` per project, and every app in the project carries it.
-  const readNetOwnerPath = sourceFiles.find(file => file.ast.statements.some(AST.isGuardDefaultStatement))?.path
+  const selectedStatements = (file: ParsedFile): readonly AST.Statement[] =>
+    selectedPublications.declarationsBySourcePath.has(file.path) || accessBySourcePath.has(file.path)
+      || sidecarTaoSources.projectRootBySourcePath.has(file.path)
+      ? file.ast.statements.filter(statement =>
+        selectedPublications.declarationsBySourcePath.get(file.path)?.has(statement as AST.Declaration)
+        || sidecarTaoSources.runtimeDeclarationsBySourcePath.get(file.path)?.has(statement as AST.Declaration)
+        || (AST.isAccessDeclaration(statement) && accessBySourcePath.get(file.path)?.has(statement))
+      )
+      : file.ast.statements
+  const dataCatalog = planDataCatalog(sourceFiles, entryPath, selectedStatements)
   const studioViews = studio
     ? sourceFiles.flatMap(file =>
-      file.ast.statements.filter(AST.isScenarioGroupDeclaration).flatMap(group =>
+      selectedStatements(file).filter(AST.isScenarioGroupDeclaration).flatMap(group =>
         AST.scenarioDeclarations(group).flatMap(scenario => {
           const subject = AST.scenarioSubjectDeclaration(scenario)
           return AST.isViewDeclaration(subject)
@@ -142,6 +201,10 @@ function compileReactNative(
     )
     : []
   const outputPaths = planOutputPaths(sourceFiles, selectedAppPath, context.sourceRoot, {
+    projectRoot: graph.projectRoot,
+    index: context.packagesContext.index,
+    dependencyRootBySourcePath: dependencyOwnerBySourcePath,
+    selectedStatements,
     localDataProvider: dataCatalog?.localOnly
       ? {
         ownerPath: dataCatalog.ownerPath,
@@ -152,11 +215,13 @@ function compileReactNative(
   const compiledFiles = sourceFiles.flatMap(file =>
     compileSourceFile(file, {
       dataCatalog,
-      readNetOwnerPath,
       sourceByPath,
+      selectedStatements: selectedStatements(file),
+      selectedStatementsFor: selectedStatements,
+      sidecarRuntimeExports: sidecarTaoSources.runtimeExportsBySourcePath.get(file.path),
       outputPaths,
-      packagesContext: context.packagesContext,
       identityProjects,
+      identityOwnerBySourcePath: dependencyOwnerBySourcePath,
       projectRoot: context.sourceRoot,
       selectedAppDatasourceConfiguration: options.appDatasourceConfiguration,
       selectedAppName: file.path === selectedAppPath ? selectedAppName : undefined,
@@ -200,13 +265,135 @@ function compileReactNative(
   }
 
   return {
-    ...compileResultForApp(validationResult, compiledFiles, selectedAppPath),
+    ...compileResultForApp(validationResult, compiledFiles, selectedApp, selectedAppPath),
+    dependencyEnvironments: CompilerDependencies.collect(graph, { kind: 'app', app: selectedApp }),
     ...(studioManifest === undefined ? {} : { studioManifest }),
   }
 }
 
+function selectedPublicationSources(requirements: ProjectGraph['requirements']): {
+  sourcePaths: readonly string[]
+  projectRootBySourcePath: ReadonlyMap<string, string>
+  declarationsBySourcePath: ReadonlyMap<string, ReadonlySet<AST.Declaration>>
+} {
+  const sources = new Set<string>()
+  const projectRootBySourcePath = new Map<string, string>()
+  const declarationsBySourcePath = new Map<string, Set<AST.Declaration>>()
+  const visited = new Set<AST.PackageDeclaration>()
+  const visit = (requirement: ProjectGraph['requirements'][number]): void => {
+    const publication = requirement.selectedPublication
+    if (publication === undefined || visited.has(publication.declaration)) {
+      return
+    }
+    visited.add(publication.declaration)
+    const projectRoot = requirement.targetProjectRoot
+      ?? FS.dirname(AST.getDocument(publication.declaration).uri.path)
+    for (const file of publication.sourceFiles) {
+      const path = AST.getDocument(file).uri.path
+      sources.add(path)
+      projectRootBySourcePath.set(path, projectRoot)
+    }
+    for (const declaration of publication.sourceDeclarations) {
+      const path = AST.getDocument(declaration).uri.path
+      const selected = declarationsBySourcePath.get(path) ?? new Set<AST.Declaration>()
+      selected.add(declaration)
+      declarationsBySourcePath.set(path, selected)
+    }
+    publication.requirements.forEach(visit)
+  }
+  requirements.forEach(visit)
+  return { sourcePaths: [...sources], projectRootBySourcePath, declarationsBySourcePath }
+}
+
+type SelectedSidecarTaoSources = {
+  projectRootBySourcePath: ReadonlyMap<string, string>
+  runtimeDeclarationsBySourcePath: ReadonlyMap<string, ReadonlySet<AST.Declaration>>
+  runtimeExportsBySourcePath: ReadonlyMap<string, ReadonlySet<AST.Declaration>>
+}
+
+/** Authored sidecars can name internal Tao types or load exact runtime declarations. */
+function selectedSidecarTaoSources(
+  selected: ReturnType<typeof selectedPublicationSources>,
+  availableFiles: readonly ParsedFile[],
+  index: Packages.Index,
+): SelectedSidecarTaoSources {
+  const available = new Map(availableFiles.map(file => [file.path, file]))
+  const allFiles = availableFiles.map(file => file.ast)
+  const ownerBySourcePath = new Map(selected.projectRootBySourcePath)
+  const projectRootBySourcePath = new Map<string, string>()
+  const runtimeDeclarationsBySourcePath = new Map<string, Set<AST.Declaration>>()
+  const runtimeExportsBySourcePath = new Map<string, Set<AST.Declaration>>()
+  const queue = [...selected.declarationsBySourcePath.values()].flatMap(declarations => [...declarations])
+  const visitedDeclarations = new Set<AST.Declaration>()
+  const visitedSidecars = new Set<string>()
+  while (queue.length > 0) {
+    const sourceDeclaration = queue.shift()!
+    if (visitedDeclarations.has(sourceDeclaration)) {
+      continue
+    }
+    visitedDeclarations.add(sourceDeclaration)
+    const sourcePath = AST.getDocument(sourceDeclaration).uri.path
+    const owner = ownerBySourcePath.get(sourcePath)
+    if (owner === undefined) {
+      continue
+    }
+    for (const root of BridgeMetadata.implementationSidecarRoots([sourceDeclaration])) {
+      const visitKey = `${owner}\0${root}`
+      if (visitedSidecars.has(visitKey)) {
+        continue
+      }
+      visitedSidecars.add(visitKey)
+      for (const sidecarPath of sidecarSourceGraph(root, owner, index)) {
+        if (!FS.existsSync(sidecarPath)) {
+          continue
+        }
+        for (
+          const edge of CompilerDependencies.taoSidecarEdges({
+            sourcePath: sidecarPath,
+            sourceText: FS.readTextSync(sidecarPath),
+          })
+        ) {
+          const target = available.get(edge.targetPath)
+          if (!target || Packages.projectRootForPath(index, target.path) !== owner) {
+            continue
+          }
+          projectRootBySourcePath.set(target.path, owner)
+          const seeds = CompilerDependencies.taoSidecarValueDeclarations(target.ast, edge)
+          if (seeds.length === 0) {
+            continue
+          }
+          const exports = runtimeExportsBySourcePath.get(target.path) ?? new Set<AST.Declaration>()
+          seeds.forEach(declaration => exports.add(declaration))
+          runtimeExportsBySourcePath.set(target.path, exports)
+          for (
+            const declaration of Packages.reachableProjectDeclarations(
+              seeds,
+              allFiles,
+              owner,
+              index,
+            )
+          ) {
+            const path = AST.getDocument(declaration).uri.path
+            projectRootBySourcePath.set(path, owner)
+            ownerBySourcePath.set(path, owner)
+            const reached = runtimeDeclarationsBySourcePath.get(path) ?? new Set<AST.Declaration>()
+            reached.add(declaration)
+            runtimeDeclarationsBySourcePath.set(path, reached)
+            queue.push(declaration)
+          }
+        }
+      }
+    }
+  }
+  return { projectRootBySourcePath, runtimeDeclarationsBySourcePath, runtimeExportsBySourcePath }
+}
+
 /** PlanOutputPathsOptions carries sidecars the compiler owns rather than a source file naming them. */
 type PlanOutputPathsOptions = {
+  projectRoot: string
+  index: Packages.Index
+  dependencyRootBySourcePath: ReadonlyMap<string, string>
+  selectedStatements: (file: ParsedFile) => readonly AST.Statement[]
   localDataProvider?: { ownerPath: string; sourcePath: string }
 }
 
@@ -214,15 +401,20 @@ function planOutputPaths(
   sourceFiles: readonly ParsedFile[],
   entryPath: string,
   sourceRoot: string,
-  options: PlanOutputPathsOptions = {},
+  options: PlanOutputPathsOptions,
 ): PlannedOutputs {
   // Basename buckets in moduleOutputPath can collide across distinct sources;
   // suffix deterministically instead of silently overwriting generated files.
   const modulePathBySourcePath = new Map<string, string>()
   const usedOutputPaths = new Set<string>()
   for (const file of sourceFiles) {
-    const preferredPath = file.path === entryPath ? 'App.tsx' : moduleOutputPath(file.path, entryPath, sourceRoot)
-    modulePathBySourcePath.set(file.path, reserveModuleOutputPath(file, preferredPath, usedOutputPaths))
+    const preferredPath = file.path === entryPath
+      ? 'App.tsx'
+      : moduleOutputPath(file.path, entryPath, sourceRoot, options)
+    modulePathBySourcePath.set(
+      file.path,
+      reserveModuleOutputPath(file, preferredPath, usedOutputPaths, options.selectedStatements(file)),
+    )
   }
 
   const bySourcePath = new Map<string, PlannedSourceOutputs>()
@@ -233,7 +425,9 @@ function planOutputPaths(
   for (const file of sourceFiles) {
     const modulePath = modulePathBySourcePath.get(file.path)
     Assert.defined(modulePath, compiledSourceOutputPathMessage, { sourcePath: file.path })
-    const injections = inlineInjectionsOf(file.ast).map((node, index) => ({
+    const statements = options.selectedStatements(file)
+    const nodes = statements.flatMap(statement => [statement, ...AST.streamAllContents(statement)])
+    const injections = nodes.filter(AST.isInjection).map((node, index) => ({
       // Bindings are local to this generated module. An inherited implementation may be owned
       // by another Tao file, whose own ordinal must not collide with this file's injections.
       binding: `__tao_injection_${index + 1}__`,
@@ -246,11 +440,19 @@ function planOutputPaths(
         usedOutputPaths,
       ),
     }))
+    // A selected sidecar may import a private type from its owning Tao file even when no Tao
+    // declaration references that type. Emit its type companion without selecting its runtime
+    // implementation or copying that implementation's sidecar.
     const declarations = file.ast.statements.filter(isRuntimeConfigurableDeclaration)
+    const hasErasedCaseSets = options.dependencyRootBySourcePath.has(file.path)
+      && file.ast.statements.some(statement =>
+        AST.isTypeDeclaration(statement) && AST.isCaseSetTypeExpression(statement.type)
+        && !statements.includes(statement)
+      )
     const companionDirectory = declarations.length === 0
       ? outputDirectory(modulePath)
       : companionOutputDirectory(file.path, modulePath, usedOutputPaths)
-    const declarationsPath = declarations.length === 0
+    const declarationsPath = declarations.length === 0 && !hasErasedCaseSets
       ? undefined
       : reserveOutputPath(
         outputPathInDirectory(companionDirectory, `${FS.basename(file.path)}.d.ts`),
@@ -259,11 +461,41 @@ function planOutputPaths(
     const sidecarCopies: PlannedSidecarCopy[] = []
     // A sidecar is named relative to the file that declares it, which an imported file may own, so
     // every path resolves against its own declaring document rather than this one.
-    const planSidecar = (node: AST.Node, path: string, exportName: string, binding: string): PlannedSidecar => {
-      const sourcePath = FS.resolvePath(path, FS.dirname(AST.getDocument(node).uri.path))
+    const planSidecar = (
+      node: AST.Node,
+      path: string,
+      exportName: string,
+      binding: string,
+      syntheticProvider = false,
+    ): PlannedSidecar => {
+      const declarationPath = AST.getDocument(node).uri.path
+      const sourcePath = FS.resolvePath(path, FS.dirname(declarationPath))
+      const dependencyOwner = options.dependencyRootBySourcePath.get(declarationPath)
+      const sourceOwner = dependencyOwner
+        ?? (Packages.projectRootForPath(options.index, declarationPath) === options.projectRoot
+          ? options.projectRoot
+          : undefined)
+      const allowUnmarkedOutside = sourceOwner === options.projectRoot && dependencyOwner === undefined
+      const ownership = sourceOwner === undefined ? undefined : {
+        projectRoot: sourceOwner,
+        index: options.index,
+        allowUnmarkedOutside,
+      }
+      // Ownership belongs to each binding, even when an earlier binding already copied this file.
+      if (
+        !syntheticProvider && ownership !== undefined
+        && !sidecarSourceBelongsToProject(sourcePath, ownership)
+      ) {
+        Errors.throwUserInput(`Sidecar implementation '${sourcePath}' crosses a Tao project boundary.`)
+      }
       let relativePath = sidecarPathBySourcePath.get(sourcePath)
       if (relativePath === undefined) {
-        const graph = sidecarSourceGraph(sourcePath)
+        const graph = sidecarSourceGraph(
+          sourcePath,
+          syntheticProvider ? undefined : sourceOwner,
+          options.index,
+          allowUnmarkedOutside,
+        )
         const plannedGraph = planSidecarGraphOutputs(
           graph,
           sourcePath,
@@ -281,7 +513,7 @@ function planOutputPaths(
       return { binding, exportName, sourcePath, relativePath }
     }
     const sidecars = [
-      ...declarations.flatMap(declaration => {
+      ...statements.filter(isRuntimeConfigurableDeclaration).flatMap(declaration => {
         if (isTransparentConfigurableAlias(declaration)) {
           return []
         }
@@ -296,15 +528,15 @@ function planOutputPaths(
             configurationSidecarBindingName(declaration),
           )]
       }),
-      ...bridgedExpressionsOf(file.ast).map(bridge =>
+      ...nodes.filter(AST.isFromExpression).map(bridge =>
         planSidecar(bridge, bridge.path, bridgeExportName(bridge), bridgeBindingName(bridge))
       ),
-      ...foreignViewsOf(file.ast).map(view => {
+      ...statements.filter(AST.isViewDeclaration).filter(view => view.foreign !== undefined).map(view => {
         const foreign = view.foreign
         Assert.defined(foreign, 'planned foreign view has a sidecar implementation')
         return planSidecar(view, foreign.path, view.name, foreignViewBindingName(view))
       }),
-      ...foreignActionsOf(file.ast).map(action => {
+      ...nodes.filter(AST.isActionDeclaration).filter(action => action.foreign !== undefined).map(action => {
         const foreign = action.foreign
         Assert.defined(foreign, 'planned foreign action has a sidecar implementation')
         return planSidecar(action, foreign.path, action.name, foreignActionBindingName(action))
@@ -315,6 +547,7 @@ function planOutputPaths(
           options.localDataProvider.sourcePath,
           localProviderExportName,
           LocalDataBindings.provider,
+          true,
         )]
         : []),
     ]
@@ -325,12 +558,13 @@ function planOutputPaths(
 
 type CompileSourceFileOptions = {
   dataCatalog: DataCatalogPlan | undefined
-  /** readNetOwnerPath is the file declaring the project's `guard default`, when there is one. */
-  readNetOwnerPath: string | undefined
   sourceByPath: Map<string, ParsedFile>
+  selectedStatements: readonly AST.Statement[]
+  selectedStatementsFor: (file: ParsedFile) => readonly AST.Statement[]
+  sidecarRuntimeExports: ReadonlySet<AST.Declaration> | undefined
   outputPaths: PlannedOutputs
-  packagesContext: Packages.Context
   identityProjects: readonly DeclarationIdentityProject[]
+  identityOwnerBySourcePath: ReadonlyMap<string, string>
   projectRoot: string
   selectedAppDatasourceConfiguration?: Readonly<Record<string, string>>
   selectedAppName: string | undefined
@@ -343,11 +577,13 @@ type CompileSourceFileOptions = {
 function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions): CompiledFile[] {
   const {
     dataCatalog,
-    readNetOwnerPath,
     sourceByPath,
+    selectedStatements,
+    selectedStatementsFor,
+    sidecarRuntimeExports,
     outputPaths,
-    packagesContext,
     identityProjects,
+    identityOwnerBySourcePath,
     projectRoot,
     selectedAppDatasourceConfiguration,
     selectedAppName,
@@ -356,7 +592,7 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
     studioViews,
     debug,
   } = options
-  const imports = resolveImports(file.path, file.ast, sourceByPath, packagesContext)
+  const imports = resolveImports(file.path, file.ast, sourceByPath, selectedStatements, selectedStatementsFor)
   const ownsDataCatalog = dataCatalog?.ownerPath === file.path
   const needsStudioDataCatalog = studio && selectedAppName !== undefined && dataCatalog !== undefined
   // A studio preview renders any view of the app, so its root reads the catalog whether or not
@@ -386,18 +622,21 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
       addResolvedImport(imports, dataCatalog.ownerPath, binding)
     }
   }
-  // Every app carries the project's read net, so a module declaring an app reads it from its owner.
-  const ownsReadNet = readNetOwnerPath === file.path
-  if (
-    readNetOwnerPath !== undefined && !ownsReadNet && AST.appValueDeclarationsInFile(file.ast).length > 0
-  ) {
-    addResolvedImport(imports, readNetOwnerPath, ReadNetBinding)
-  }
   const planned = outputPaths.bySourcePath.get(file.path)
   Assert.defined(planned, compiledSourceOutputPathMessage, { sourcePath: file.path })
+  const typeStatements = file.ast.statements.filter(statement => {
+    if (!isRuntimeConfigurableDeclaration(statement)) {
+      return false
+    }
+    if (!isTransparentConfigurableAlias(statement)) {
+      return true
+    }
+    const target = statement.aliasTarget?.member.ref
+    return target !== undefined && outputPaths.modulePathBySourcePath.has(AST.getDocument(target).uri.path)
+  })
   const importLines = [
     ...importLinesForCompiledFile(imports, planned.modulePath, outputPaths.modulePathBySourcePath),
-    ...configurationAliasImportLines(file, planned.modulePath, outputPaths),
+    ...configurationAliasImportLines(file, planned.modulePath, outputPaths, typeStatements),
     ...planned.injections.map(injection =>
       `import ${injection.binding} from '${relativeImportPath(planned.modulePath, injection.relativePath)}'`
     ),
@@ -410,14 +649,11 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
   const scopeBindings = [...imports.scopeBindings].map(([binding, imported]) =>
     `TR.Use(_Scope, '${binding}', () => ${imported})`
   )
-  const exportedBindings = file.ast.statements
+  const exportedBindings = selectedStatements
     .filter(AST.isExportableDeclaration)
     .filter(declarationEmitsRuntimeBinding)
-    .filter(declarationVisibleOutsideFile)
+    .filter(declaration => declarationVisibleOutsideFile(declaration) || sidecarRuntimeExports?.has(declaration))
     .map((declaration: AST.Declaration) => exportedBinding(runtimeBindingName(declaration)))
-  if (ownsReadNet) {
-    exportedBindings.push(exportedBinding(ReadNetBinding))
-  }
   if (ownsDataCatalog) {
     exportedBindings.push(...syncedCatalogBindings(dataCatalog).map(exportedBinding))
     if (dataCatalog.localOnly) {
@@ -431,23 +667,22 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
     withDataStorePlan(
       dataCatalog?.stores,
       () =>
-        withDeclarationIdentityContext(identityProjects, () =>
+        withDeclarationIdentityContext(identityProjects, identityOwnerBySourcePath, () =>
           withInlineInjectionBindings(
             new Map(planned.injections.map(injection => [injection.node, injection.binding])),
             () =>
               withActionInstrumentation(debug, () =>
                 RuntimeGen.TaoFile(file.ast, {
-                  bridgeTypes: BridgeMetadata.typesFor(file.ast),
+                  bridgeTypes: BridgeMetadata.typesFor(file.ast, selectedStatements),
                   configurationTypes: planned.declarationsPath === undefined
                     ? undefined
-                    : RuntimeGen.ConfigurationTypes(file.ast),
+                    : RuntimeGen.ConfigurationTypes(file.ast, typeStatements),
                   dataEntities: ownsDataCatalog ? dataCatalog.entities : [],
                   dataAccess: ownsDataCatalog ? dataCatalog.access : [],
                   emitDataCatalog: ownsDataCatalog,
                   importLines,
                   localDataCatalog: usesLocalDataCatalog,
                   journeyObservations,
-                  readNet: readNetOwnerPath !== undefined,
                   scopeBindings,
                   exportedBindings,
                   selectedAppDatasourceConfiguration,
@@ -457,7 +692,8 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
                   studio,
                   debug,
                   studioViews: studio && selectedAppName !== undefined ? studioViews : [],
-                  viewRegistrations: RuntimeGen.ViewRegistrations(file.ast, { studio }),
+                  viewRegistrations: RuntimeGen.ViewRegistrations(file.ast, { studio }, selectedStatements),
+                  selectedStatements,
                 })),
           )),
     ),
@@ -467,8 +703,14 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
     declarationsPath,
     RuntimeGen.ConfigurationDeclarations(
       file.ast,
-      configurationAliasImportLines(file, declarationsPath, outputPaths),
-      BridgeMetadata.typesFor(file.ast),
+      configurationAliasImportLines(file, declarationsPath, outputPaths, typeStatements),
+      [
+        BridgeMetadata.typesFor(file.ast, selectedStatements),
+        identityOwnerBySourcePath.has(file.path)
+          ? BridgeMetadata.caseSetTypesFor(file.ast.statements)
+          : '',
+      ].filter(Boolean).join('\n'),
+      typeStatements,
     ),
   )]
   const injections = planned.injections.map(injection =>
@@ -497,196 +739,24 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
   return [module, ...injections, ...declarations, ...copiedSidecars.values()]
 }
 
-const sidecarModuleExtensions = ['.ts', '.tsx', '.js', '.jsx', '.json'] as const
-
-/** sidecarSourceGraph follows authored relative module edges while leaving package imports installed. */
-function sidecarSourceGraph(rootPath: string): readonly string[] {
-  if (!FS.existsSync(rootPath)) {
-    return [rootPath]
+/** Keep compilation's existing user error while graph inspection stays diagnostic-only. */
+function sidecarSourceGraph(
+  rootPath: string,
+  owner?: string,
+  index?: Packages.Index,
+  allowUnmarkedOutside = false,
+): readonly string[] {
+  const inspection = inspectSidecarSourceGraph(
+    rootPath,
+    owner === undefined || index === undefined
+      ? undefined
+      : { projectRoot: owner, index, allowUnmarkedOutside },
+  )
+  const first = inspection.diagnostics[0]
+  if (first !== undefined) {
+    Errors.throwUserInput(first.message, first.range === undefined ? undefined : { diagnostics: [first] })
   }
-  const graph: string[] = []
-  const visited = new Set<string>()
-  const visit = (sourcePath: string): void => {
-    if (visited.has(sourcePath)) {
-      return
-    }
-    visited.add(sourcePath)
-    graph.push(sourcePath)
-    const source = FS.readTextSync(sourcePath)
-    for (const specifier of relativeModuleSpecifiers(source)) {
-      if (specifier.value.endsWith('.tao')) {
-        continue
-      }
-      const dependency = resolveRelativeSidecarImport(sourcePath, specifier.value)
-      if (dependency === undefined) {
-        const message = `Sidecar relative import '${specifier.value}' could not be resolved.`
-        Errors.throwUserInput(message, {
-          diagnostics: [{
-            filePath: sourcePath,
-            message,
-            range: sidecarSourceRange(source, specifier.start, specifier.end),
-            severity: 'error',
-            source: 'compiler',
-          }],
-        })
-      }
-      visit(dependency)
-    }
-  }
-  visit(rootPath)
-  return graph
-}
-
-type SidecarToken = Readonly<{
-  end: number
-  kind: 'identifier' | 'punctuation' | 'string'
-  start: number
-  value: string
-}>
-
-type SidecarSpecifier = Readonly<{ end: number; start: number; value: string }>
-
-/** Covers imports, re-exports, side-effect imports, and dynamic import calls without false comment/string edges. */
-function relativeModuleSpecifiers(source: string): SidecarSpecifier[] {
-  const tokens = sidecarTokens(source)
-  const specifiers: SidecarSpecifier[] = []
-  const add = (token: SidecarToken | undefined): void => {
-    if (token?.kind === 'string' && (token.value.startsWith('./') || token.value.startsWith('../'))) {
-      specifiers.push({ end: token.end, start: token.start, value: token.value })
-    }
-  }
-  for (let index = 0; index < tokens.length; index++) {
-    const token = tokens[index]
-    if (!isModuleKeyword(token)) {
-      continue
-    }
-    const next = tokens[index + 1]
-    if (token.value === 'import' && next?.value === '(') {
-      add(tokens[index + 2])
-      continue
-    }
-    if (token.value === 'import' && next?.kind === 'string') {
-      add(next)
-      continue
-    }
-    for (let cursor = index + 1; cursor < tokens.length; cursor++) {
-      const candidate = tokens[cursor]
-      if (candidate?.value === ';' || candidate?.value === 'import' || candidate?.value === 'export') {
-        break
-      }
-      if (candidate?.kind === 'identifier' && candidate.value === 'from') {
-        add(tokens[cursor + 1])
-        break
-      }
-    }
-  }
-  const firstByValue = new Map<string, SidecarSpecifier>()
-  for (const specifier of specifiers) {
-    if (!firstByValue.has(specifier.value)) {
-      firstByValue.set(specifier.value, specifier)
-    }
-  }
-  return [...firstByValue.values()]
-}
-
-/** isModuleKeyword identifies the keyword that can begin a module specifier: `import` or `export`. */
-function isModuleKeyword(token: SidecarToken | undefined): token is SidecarToken {
-  return token?.kind === 'identifier' && (token.value === 'import' || token.value === 'export')
-}
-
-function sidecarSourceRange(source: string, start: number, end: number): {
-  start: { line: number; character: number }
-  end: { line: number; character: number }
-} {
-  const position = (offset: number) => {
-    const prefix = source.slice(0, offset)
-    const lines = prefix.split('\n')
-    return { line: lines.length - 1, character: lines.at(-1)?.length ?? 0 }
-  }
-  return { start: position(start), end: position(end) }
-}
-
-/** sidecarTokens is a deliberately small JS/TS lexical scanner; comments and literal bodies never become code. */
-function sidecarTokens(source: string): SidecarToken[] {
-  const tokens: SidecarToken[] = []
-  for (let index = 0; index < source.length;) {
-    const current = source[index]!
-    const next = source[index + 1]
-    if (/\s/.test(current)) {
-      index += 1
-      continue
-    }
-    if (current === '/' && next === '/') {
-      index = source.indexOf('\n', index + 2)
-      if (index < 0) {
-        break
-      }
-      continue
-    }
-    if (current === '/' && next === '*') {
-      const close = source.indexOf('*/', index + 2)
-      index = close < 0 ? source.length : close + 2
-      continue
-    }
-    if (current === '"' || current === "'" || current === '`') {
-      const start = index
-      const literal = quotedLiteralAt(source, index)
-      index = literal.end
-      // Module specifiers are string literals. Reading the complete template too, and emitting no
-      // token for it, prevents its prose and interpolation text from manufacturing graph edges.
-      if (current !== '`') {
-        tokens.push({ end: index, kind: 'string', start, value: literal.value })
-      }
-      continue
-    }
-    if (/[A-Za-z_$]/.test(current)) {
-      const start = index
-      let end = index + 1
-      while (end < source.length && /[\w$]/.test(source[end]!)) {
-        end += 1
-      }
-      tokens.push({ end, kind: 'identifier', start, value: source.slice(index, end) })
-      index = end
-      continue
-    }
-    tokens.push({ end: index + 1, kind: 'punctuation', start: index, value: current })
-    index += 1
-  }
-  return tokens
-}
-
-/** quotedLiteralAt reads the quoted or template literal starting at `start`, resolving its escapes. */
-function quotedLiteralAt(source: string, start: number): { end: number; value: string } {
-  const quote = source[start]
-  let value = ''
-  let index = start + 1
-  while (index < source.length && source[index] !== quote) {
-    if (source[index] === '\\' && index + 1 < source.length) {
-      value += source[index + 1]
-      index += 2
-    } else {
-      value += source[index]
-      index += 1
-    }
-  }
-  return { end: index + (index < source.length ? 1 : 0), value }
-}
-
-function resolveRelativeSidecarImport(sourcePath: string, specifier: string): string | undefined {
-  const requested = FS.resolvePath(specifier, FS.dirname(sourcePath))
-  const extension = FS.extname(requested)
-  const candidates = extension === ''
-    ? [
-      ...sidecarModuleExtensions.map(extension => `${requested}${extension}`),
-      ...sidecarModuleExtensions.map(extension => FS.resolvePath(`index${extension}`, requested)),
-    ]
-    : [
-      requested,
-      ...(extension === '.js' || extension === '.jsx'
-        ? ['.ts', '.tsx'].map(authoredExtension => `${requested.slice(0, -extension.length)}${authoredExtension}`)
-        : []),
-    ]
-  return candidates.find(FS.existsSync)
+  return inspection.sourcePaths
 }
 
 function planSidecarGraphOutputs(
@@ -743,39 +813,75 @@ function rewriteSidecarTaoImports(
   relativePath: string,
   outputPaths: PlannedOutputs,
 ): string {
-  return source.replace(/(['"])(\.\.?\/[^'"]+\.tao)\1/g, (match, quote: string, specifier: string) => {
-    const taoSourcePath = FS.resolvePath(specifier, FS.dirname(sourcePath))
+  let rewritten = source
+  for (const specifier of sidecarModuleSpecifiers(source, sourcePath).toReversed()) {
+    if (!specifier.value.startsWith('./') && !specifier.value.startsWith('../')) {
+      continue
+    }
+    if (!specifier.value.endsWith('.tao')) {
+      continue
+    }
+    const taoSourcePath = FS.resolvePath(specifier.value, FS.dirname(sourcePath))
     const planned = outputPaths.bySourcePath.get(taoSourcePath)
     if (!planned) {
-      return match
+      continue
     }
-    const target = planned.declarationsPath ?? planned.modulePath
-    return `${quote}${relativeImportPath(relativePath, target)}${quote}`
-  })
+    const target = specifier.runtimeNamespace || specifier.valueNames.length > 0
+      ? planned.modulePath
+      : planned.declarationsPath ?? planned.modulePath
+    const quote = source[specifier.start]
+    rewritten = `${rewritten.slice(0, specifier.start)}${quote}${relativeImportPath(relativePath, target)}${quote}${
+      rewritten.slice(specifier.end)
+    }`
+  }
+  return rewritten
 }
 
 function declarationIdentityProjects(
   files: readonly ParsedFile[],
   context: CompilerContext,
+  graph: ProjectGraph,
+  semanticOwners: ReadonlyMap<string, string>,
 ): DeclarationIdentityProject[] {
-  const projects = files.flatMap(file =>
-    file.ast.statements.filter(AST.isProjectDeclaration).flatMap(project => {
-      const id = AST.blockStatementOf(project, { filter: AST.isProjectId })[0]?.value
-      return id === undefined ? [] : [{ id, root: FS.dirname(file.path) }]
-    })
-  )
-  if (context.sourceRoot === codeProjectRoot && !projects.some(project => project.root === codeProjectRoot)) {
-    projects.push({ id: 'tao-compiler-test', root: codeProjectRoot })
+  const roots = [
+    graph.projectRoot,
+    context.packagesContext.stdlibRoot,
+    ...context.packagesContext.index.projectRoots,
+    ...semanticOwners.values(),
+  ]
+  const projects = new Map<string, DeclarationIdentityProject>()
+  for (const file of files) {
+    const root = semanticOwners.get(file.path)
+      ?? roots.filter(candidate => FS.pathIsWithin(file.path, candidate))
+        .toSorted((left, right) => right.length - left.length)[0]
+      ?? FS.dirname(file.path)
+    if (!projects.has(root)) {
+      projects.set(root, identityProject(root))
+    }
   }
-  return projects
+  return [...projects.values()]
+}
+
+function identityProject(root: string): DeclarationIdentityProject {
+  if (root === codeProjectRoot) {
+    return { id: 'ephemeral:source', root }
+  }
+  const id = ProjectIdentity.read(root)
+  if (id === undefined) {
+    Errors.throwUserInput(
+      `Tao project identity is missing in ${root}/.tao/project.json. Run tao check to initialize it.`,
+    )
+  }
+  return { id, root }
 }
 
 function configurationAliasImportLines(
   file: ParsedFile,
   currentOutputPath: string,
   outputPaths: PlannedOutputs,
+  statements: readonly AST.Statement[] = file.ast.statements,
 ): string[] {
-  const importLines = file.ast.statements.filter(isTransparentConfigurableAlias).flatMap(declaration => {
+  const importLines = statements.filter(isTransparentConfigurableAlias).flatMap(declaration => {
     const target = declaration.aliasTarget?.member.ref
     if (!target || !AST.isTypeDeclaration(target)) {
       return []
@@ -794,11 +900,15 @@ function configurationAliasImportLines(
   return [...new Set(importLines)]
 }
 
-function planDataCatalog(sourceFiles: readonly ParsedFile[], entryPath: string): DataCatalogPlan | undefined {
-  const entities = sourceFiles.flatMap(file => file.ast.statements.filter(AST.isEntityDataDeclaration))
-  const datasources = sourceFiles.flatMap(file => file.ast.statements.filter(AST.isDatasourceDeclaration))
+function planDataCatalog(
+  sourceFiles: readonly ParsedFile[],
+  entryPath: string,
+  selectedStatements: (file: ParsedFile) => readonly AST.Statement[],
+): DataCatalogPlan | undefined {
+  const entities = sourceFiles.flatMap(file => selectedStatements(file).filter(AST.isEntityDataDeclaration))
+  const datasources = sourceFiles.flatMap(file => selectedStatements(file).filter(AST.isDatasourceDeclaration))
   const pathsOf = (matches: (file: ParsedFile) => boolean) => new Set(sourceFiles.filter(matches).map(f => f.path))
-  const directUserPaths = pathsOf(fileUsesDataCatalog)
+  const directUserPaths = pathsOf(file => fileUsesDataCatalog(file, selectedStatements(file)))
   if (entities.length === 0 && directUserPaths.size === 0) {
     return undefined
   }
@@ -809,19 +919,20 @@ function planDataCatalog(sourceFiles: readonly ParsedFile[], entryPath: string):
     // Every app root seeds the project's synced stores when a test or Studio fixture is mounted,
     // including an app that leaves its datasource at the default. A project with only local-only
     // rows does not need the empty synced catalog in those roots.
-    ...pathsOf(file => seedsSyncedRows && AST.appValueDeclarationsInFile(file.ast).length > 0),
+    ...pathsOf(file => seedsSyncedRows && selectedAppValues(file, selectedStatements(file)).length > 0),
   ])
-  const ownerPath = sourceFiles.find(file => file.ast.statements.some(AST.isEntityDataDeclaration))?.path ?? entryPath
+  const ownerPath = sourceFiles.find(file => selectedStatements(file).some(AST.isEntityDataDeclaration))?.path
+    ?? entryPath
   // Both catalogs are emitted by one owner file, so a project that mixes stores still has a single
   // module every user imports from and a single sidecar copy of the local provider. An app root
   // binds the companion catalog whether or not it configures a Datasource, so a file that declares
   // an app is a companion user even when it never names the catalog itself.
   const localUserPaths = pathsOf(file =>
-    fileUsesDataCatalog(file) || AST.appValueDeclarationsInFile(file.ast).length > 0
+    fileUsesDataCatalog(file, selectedStatements(file)) || selectedAppValues(file, selectedStatements(file)).length > 0
   )
   return {
     entities,
-    access: sourceFiles.flatMap(file => file.ast.statements.filter(AST.isAccessDeclaration)),
+    access: sourceFiles.flatMap(file => selectedStatements(file).filter(AST.isAccessDeclaration)),
     localOnly: entities.some(Type.dataEntityIsLocalOnly),
     localUserPaths,
     ownerPath,
@@ -844,14 +955,20 @@ function syncedCatalogBindings(plan: DataCatalogPlan): readonly string[] {
   return plan.stores.stores.filter(store => store.kind !== 'device').map(store => store.binding)
 }
 
-function fileUsesDataCatalog(file: ParsedFile): boolean {
-  if (AST.appValueDeclarationsInFile(file.ast).some(app => ASTUtils.appBoundDatasources(app).length > 0)) {
+function fileUsesDataCatalog(file: ParsedFile, statements: readonly AST.Statement[] = file.ast.statements): boolean {
+  if (selectedAppValues(file, statements).some(app => ASTUtils.appBoundDatasources(app).length > 0)) {
     return true
   }
-  return AST.streamAllContents(file.ast).some(node =>
-    AST.isEntityQueryDeclaration(node) || AST.isCreateStatement(node)
-    || (AST.isValueReference(node) && AST.isAuthLibraryDeclaration(node.target.ref, 'Account'))
+  return statements.some(statement =>
+    [statement, ...AST.streamAllContents(statement)].some(node =>
+      AST.isEntityQueryDeclaration(node) || AST.isCreateStatement(node)
+      || (AST.isValueReference(node) && AST.isAuthLibraryDeclaration(node.target.ref, 'Account'))
+    )
   )
+}
+
+function selectedAppValues(file: ParsedFile, statements: readonly AST.Statement[]): AST.AppValueDeclaration[] {
+  return AST.appValueDeclarationsInFile(file.ast).filter(app => statements.includes(app))
 }
 
 function addResolvedImport(imports: ResolvedImports, sourcePath: string, binding: string): void {
@@ -898,14 +1015,16 @@ function importLinesForCompiledFile(
 function compileResultForApp(
   validationResult: ValidationResult,
   compiledFiles: CompiledFile[],
+  selectedApp: AST.AppValueDeclaration,
   selectedAppPath: string,
-): CompileResult {
+): Omit<CompileResult, 'dependencyEnvironments'> {
   const appNames = validationResult.files.flatMap(file => AST.appValueDeclarationsInFile(file.ast).map(app => app.name))
   const entryCode = compiledFiles.find((compiledFile: CompiledFile) =>
     compiledFile.sourcePath === selectedAppPath && compiledFile.relativePath === 'App.tsx'
   )?.code
   Assert.defined(entryCode, 'selected app compiled code exists', { selectedAppPath })
   return {
+    ...appMetadata(selectedApp),
     appNames,
     validation: validationResult,
     code: entryCode,
@@ -913,9 +1032,20 @@ function compileResultForApp(
   }
 }
 
-// Module output paths must stay inside the generated app root, so out-of-root
-// sources fall back to entry-relative and basename buckets instead of `..` segments.
-function moduleOutputPath(filePath: string, entryPath: string, sourceRoot: string): string {
+// Selected dependency projects keep a stable physical-root namespace, so copied sidecars resolve
+// their own npm environment. Other out-of-root sources use the existing fallback buckets.
+function moduleOutputPath(
+  filePath: string,
+  entryPath: string,
+  sourceRoot: string,
+  options: PlanOutputPathsOptions,
+): string {
+  const dependencyRoot = options.dependencyRootBySourcePath.get(filePath)
+  if (dependencyRoot !== undefined && dependencyRoot !== options.projectRoot) {
+    const relative = FS.relativePath(dependencyRoot, filePath)
+    Assert(!relative.startsWith('..'), 'dependency project contains its source', { dependencyRoot, filePath })
+    return `modules/dependencies/${BridgeMetadata.dependencyNamespace(dependencyRoot)}/${relative}.tsx`
+  }
   const sourceRelative = FS.relativePath(sourceRoot, filePath)
   if (!sourceRelative.startsWith('..')) {
     return `modules/${sourceRelative}.tsx`
@@ -931,44 +1061,22 @@ function resolveImports(
   filePath: string,
   file: AST.TaoFile,
   sourceByPath: Map<string, ParsedFile>,
-  packagesContext: Packages.Context,
+  statements: readonly AST.Statement[] = file.statements,
+  selectedStatementsFor: (file: ParsedFile) => readonly AST.Statement[] = file => file.ast.statements,
 ): ResolvedImports {
   const bySource = new Map<string, Set<string>>()
   const scopeBindings = new Map<string, string>()
-  const sourcePaths = new Set(sourceByPath.keys())
-  // Both `use` and a package alias name their target the same way: resolve the import path, keep
-  // the workspace files it matches, and take the declarations each of them lets that name reach.
-  const importTargets = (importPath: string | undefined): ImportTarget[] => {
-    const resolution = Packages.resolve(packagesContext, { importPath, fromFilePath: filePath })
-    if (resolution.relation === 'invalid') {
-      return []
-    }
-    return [...sourceByPath.values()]
-      .filter(candidate =>
-        Packages.targetMatches(packagesContext, resolution, {
-          filePath: candidate.path,
-          workspaceFilePaths: sourcePaths,
-        })
-      )
-      .map(candidate => ({
-        declarationsNamed: (name: string) =>
-          candidate.ast.statements.filter(declarationEmitsRuntimeBinding).filter(declaration =>
-            declaration.name === name && Packages.declarationIsImportableFromUse(declaration, resolution)
-          ),
-        path: candidate.path,
-      }))
-  }
   // A `folder` declaration is in scope without a `use` statement, so the generated module still
   // has to import it by name from the sibling file that declares it.
   const currentDirectory = FS.dirname(filePath)
   // Only what this file actually names: importing every folder-visible sibling declaration would
   // make each file in the folder import every other one, dead bindings and cycles included.
-  const referencedNames = ASTUtils.referencedNames(file)
+  const referencedNames = ASTUtils.referencedNames(file, { statements })
   for (const candidate of sourceByPath.values()) {
     if (candidate.path === filePath || FS.dirname(candidate.path) !== currentDirectory) {
       continue
     }
-    for (const declaration of candidate.ast.statements) {
+    for (const declaration of selectedStatementsFor(candidate)) {
       if (
         !declarationEmitsRuntimeBinding(declaration)
         || Packages.visibilityOf(declaration) !== 'folder'
@@ -984,7 +1092,7 @@ function resolveImports(
   // A transparent view or configurable-type alias imports its target under a private local name;
   // the alias's own exported binding points at that exact value, preserving declaration identity.
   for (
-    const declaration of file.statements.filter(statement =>
+    const declaration of statements.filter(statement =>
       AST.isViewDeclaration(statement) || isTransparentConfigurableAlias(statement)
     )
   ) {
@@ -992,48 +1100,55 @@ function resolveImports(
     if (!aliasTarget) {
       continue
     }
+    const target = aliasTarget.member.ref
+    if (!target || !declarationEmitsRuntimeBinding(target)) {
+      continue
+    }
+    const targetPath = AST.getDocument(target).uri.path
+    if (!sourceByPath.has(targetPath)) {
+      continue
+    }
     const namespaceName = aliasTarget.namespace.$refText
-    const namespaceStatement = file.statements
-      .filter(AST.isUsePackageStatement)
-      .find(statement => AST.packageNamespaceName(statement) === namespaceName)
-    if (!namespaceStatement) {
-      continue
-    }
     const memberName = aliasTarget.member.$refText
-    const imported = importTargets(namespaceStatement.importPath)
-      .flatMap(target => target.declarationsNamed(memberName).map(found => ({ path: target.path, found })))[0]
-    if (!imported) {
-      continue
-    }
     const localBinding = `__tao_package_${namespaceName}_${memberName}`
-    addImportedName(bySource, imported.path, `${runtimeBindingName(imported.found)} as ${localBinding}`)
+    addImportedName(bySource, targetPath, `${runtimeBindingName(target)} as ${localBinding}`)
     scopeBindings.set(runtimeBindingName(declaration), localBinding)
   }
   // An auth provider type named only by `accepts { Kind from Auth }` is compared by name at runtime,
   // so its module — and the sign-in SDK its sidecar loads — stays out of this module's imports.
   const pairingIssuers = new Set(
-    AST.streamAllContents(file).filter(AST.isConfigurationAcceptedProof).flatMap(proof =>
-      proof.issuer ? [proof.issuer.root] : []
+    statements.flatMap(statement => AST.streamAllContents(statement)).filter(AST.isConfigurationAcceptedProof).flatMap(
+      proof => proof.issuer ? [proof.issuer.root] : [],
     ),
   )
-  const runtimeNames = pairingIssuers.size > 0 ? ASTUtils.referencedNames(file, { runtimeOnly: true }) : referencedNames
+  const runtimeNames = pairingIssuers.size > 0
+    ? ASTUtils.referencedNames(file, { runtimeOnly: true, statements })
+    : referencedNames
   for (const useStatement of file.statements.filter(AST.isUseStatement)) {
-    const targets = importTargets(useStatement.importPath)
-    for (const importedName of useStatement.importedDeclarations.map(reference => reference.$refText)) {
+    for (const reference of useStatement.importedDeclarations) {
+      const importedName = reference.$refText
+      if (statements !== file.statements && !referencedNames.has(importedName)) {
+        continue
+      }
       if (pairingIssuers.has(importedName) && !runtimeNames.has(importedName)) {
         continue
       }
-      // The first target that declares the name wins; a later one would bind the same name twice.
-      const target = targets
-        .map(candidate => ({ declarations: candidate.declarationsNamed(importedName), path: candidate.path }))
-        .find(candidate => candidate.declarations.length > 0)
-      if (!target) {
+      const declaration = reference.ref
+      if (!declaration || !declarationEmitsRuntimeBinding(declaration)) {
         continue
       }
-      for (const declaration of target.declarations) {
-        const binding = runtimeBindingName(declaration)
-        addImportedName(bySource, target.path, binding)
-        scopeBindings.set(binding, binding)
+      const targetPath = AST.getDocument(declaration).uri.path
+      const targetFile = sourceByPath.get(targetPath)
+      if (targetFile) {
+        // A configurable type can also expose its generated same-name value. Keep both runtime
+        // bindings, while the resolved reference fixes the source origin through local aliases.
+        const declarations = selectedStatementsFor(targetFile).filter(declarationEmitsRuntimeBinding)
+          .filter(candidate => candidate.name === importedName)
+        for (const candidate of declarations) {
+          const binding = runtimeBindingName(candidate)
+          addImportedName(bySource, targetPath, binding)
+          scopeBindings.set(binding, binding)
+        }
       }
     }
   }
@@ -1090,12 +1205,13 @@ function reserveModuleOutputPath(
   file: ParsedFile,
   preferredPath: string,
   usedOutputPaths: Set<string>,
+  statements: readonly AST.Statement[] = file.ast.statements,
 ): string {
   if (!usedOutputPaths.has(preferredPath)) {
     usedOutputPaths.add(preferredPath)
     return preferredPath
   }
-  if (!file.ast.statements.some(isRuntimeConfigurableDeclaration)) {
+  if (!statements.some(isRuntimeConfigurableDeclaration)) {
     return reserveOutputPath(preferredPath, usedOutputPaths)
   }
 

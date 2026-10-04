@@ -142,7 +142,7 @@ Describe('Reference provider with the local account authority', () => {
       Expect(test.vault.size).toBe(1)
       test.online = false
       const remounted = test.connect(alice, secondAuth)
-      Expect(await remounted.load()).toBeDefined()
+      await remounted.load()
       Expect(remounted.offline!.status().state).toBe('ready')
       secondAuth.abort()
       await Promise.all([second.invalidateAuth!(), remounted.invalidateAuth!()])

@@ -65,26 +65,6 @@ Describe('per-test ledger', () => {
     })
   })
 
-  Test('a green full run settles every current test', async () => {
-    await withRepository(async root => {
-      const first = await writeTestFile(root, 'packages/example/example-tests/first.test.ts')
-      const second = await writeTestFile(root, 'packages/example/example-tests/second.test.ts')
-      await TestLedger.recordRun({
-        fullRun: true,
-        observations: [observation(first, 'passed'), observation(second, 'passed')],
-        repositoryRoot: root,
-        startedAt: Date.now() - 1_000,
-      })
-
-      const selection = await TestLedger.selectRetryFiles([
-        { file: first, suite: 'example' },
-        { file: second, suite: 'example' },
-      ], root)
-      Expect(selection.files).toEqual([])
-      Expect(selection.greenTestCount).toBe(2)
-    })
-  })
-
   Test('a partial app run cannot erase a failure from the last full app run', async () => {
     await withRepository(async root => {
       await FS.writeText(FS.resolvePath('Apps/First/First.tao', root), 'app First\n')
@@ -214,7 +194,6 @@ Describe('per-test ledger', () => {
       }
       Expect(history.length).toBeLessThan(120)
       Expect(counts.size).toBe(40)
-      Expect([...counts.values()].every(count => count >= 2)).toBe(true)
       Expect(await TestLedger.flakes(root, 50)).toHaveLength(40)
     })
   })

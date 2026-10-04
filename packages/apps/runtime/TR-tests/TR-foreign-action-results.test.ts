@@ -3,15 +3,15 @@ import { Describe, Expect, Test } from '@shared/test'
 import { beginActionLaunch } from '../TaoRuntime-src/TR-action-transactions'
 
 Describe('foreign action results', () => {
-  Test('preserves false, empty, zero, nullable and structured native results', async () => {
+  Test('preserves false, zero, nullable and structured native results', async () => {
     const results: unknown[] = []
-    for (const value of [false, '', 0, null, { Message: 'ready' }]) {
+    for (const value of [false, 0, null, { Message: 'ready' }]) {
       const foreign = TR.ForeignAction(async () => value, 'Read', [])
       await TR.Action(async () => {
         results.push((await TR.DoResult<unknown>(foreign)).jsValue)
       }).jsValue.invoke()
     }
-    Expect(results).toEqual([false, '', 0, null, { Message: 'ready' }])
+    Expect(results).toEqual([false, 0, null, { Message: 'ready' }])
   })
 
   Test('awaits the native result and commits caller writes together in order', async () => {

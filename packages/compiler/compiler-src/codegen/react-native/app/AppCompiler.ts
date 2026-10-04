@@ -1,7 +1,8 @@
 import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert } from '@shared'
-import { type CodegenOptions, type Compiled, gen, ReadNetBinding, resolveRef } from '../codegen-util'
+import { appMetadata } from '../../../app-metadata'
+import { type CodegenOptions, type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 import { compileAccountBinding, needsAuthContext } from './auth-context'
 import { activeDataStorePlan, activeFixtureStores } from './data-store-context'
@@ -39,44 +40,53 @@ export const AppCompiler = {
 } as const
 
 function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions = {}): Compiled {
+  const metadata = appMetadata(app)
   const base = directAppBase(app)
   const root = ASTUtils.rootAppValue(app)
   Assert.defined(root, 'validated app derivation is acyclic')
   const crossModuleBase = base && appInheritanceLeavesModule(app, base) ? base : undefined
-  const configuration = crossModuleBase ? directAppConfiguration(app) : ASTUtils.effectiveAppConfiguration(app)
-  const baseReference = crossModuleBase ? appDefinitionReference(crossModuleBase) : undefined
-  const inheritedConfiguration = crossModuleBase ? ASTUtils.effectiveAppConfiguration(crossModuleBase) : undefined
+  const configuration = base ? directAppConfiguration(app) : ASTUtils.effectiveAppConfiguration(app)
+  const effectiveConfiguration = ASTUtils.effectiveAppConfiguration(app)
+  const baseReference = base ? appDefinitionReference(base) : undefined
+  const ownGuard = directAppGuard(app)
+  const readNet = ownGuard
+    ? gen`TR.MergeReadNet(${base ? gen`_TaoBaseBinding.readNet?.()` : gen`undefined`}, ${
+      Compile.AppGuardStatement(ownGuard, options)
+    })`
+    : base
+    ? gen`_TaoBaseBinding.readNet?.()`
+    : undefined
   const authNavigation = needsAuthContext(root) || needsAuthContext(app)
   const navigator = compileResolvedAppProperty(
     configuration.get('Navigator'),
     'Navigator',
-    baseReference,
+    base ? gen`_TaoBaseBinding` : undefined,
     authNavigation,
   )
   Assert.defined(navigator, 'validated app value has a Navigator')
   const name = compileResolvedAppProperty(
-    configuration.get('Name'),
-    'Name',
-    inheritedConfiguration?.has('Name') ? baseReference : undefined,
+    configuration.get('name'),
+    'name',
+    base ? gen`_TaoBaseBinding` : undefined,
   )
   const design = compileResolvedAppProperty(
     configuration.get('Design'),
     'Design',
-    inheritedConfiguration?.has('Design') ? baseReference : undefined,
+    base ? gen`_TaoBaseBinding` : undefined,
   )
-  const auth = compileResolvedAppProperty(
-    configuration.get('Auth'),
-    'Auth',
-    inheritedConfiguration?.has('Auth') ? baseReference : undefined,
-  )
+  const effectiveAuth = effectiveConfiguration.get('Auth')?.value
+  const auth = effectiveAuth && !AST.isNoneLiteral(effectiveAuth)
+    ? compileResolvedAppProperty(configuration.get('Auth'), 'Auth', base ? gen`_TaoBaseBinding` : undefined)
+    : undefined
   const restoration = effectiveRestorationPolicy(app)
   const definition = { name: `_TaoAppDefinition_${app.name}` }
-  const rootDeclaration = crossModuleBase
+  const bindApp = { name: `_TaoBindApp_${app.name}` }
+  const boundApp = { name: `_TaoBoundApp_${app.name}` }
+  const moduleScope = { name: `_TaoAppModuleScope_${app.name}` }
+  const rootDeclaration = base
     ? gen`${baseReference}.declaration`
-    : root === app
-    ? gen`TR.Navigation.AppDeclaration(${gen.jsLiteral(app.name)}, ${compileDeclarationIdentity(app)})`
-    : gen`${appDefinitionReference(root)}.declaration`
-  const auxiliaries = crossModuleBase ? [] : rootAuxiliaryNavigators(root)
+    : gen`TR.Navigation.AppDeclaration(${gen.jsLiteral(app.name)}, ${compileDeclarationIdentity(app)})`
+  const auxiliaries = base ? [] : rootAuxiliaryNavigators(root)
   const persistedStates = AST.isAppDeclaration(root) && root.block
     ? root.block.statements.filter(AST.isStateDeclaration)
     : []
@@ -88,52 +98,80 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
   const selectedDatasourceConfiguration = app.name === options.selectedAppName
     ? options.selectedAppDatasourceConfiguration
     : undefined
-  const datasources = compileAppDatasources(app, crossModuleBase, selectedDatasourceConfiguration)
-  const compiledAgentCommands = compileAgentCommands(configuration, baseReference)
+  const datasources = compileAppDatasources(app, base, selectedDatasourceConfiguration)
+  const compiledAgentCommands = compileAgentCommands(configuration, base !== undefined)
   return gen`
-    ${gen.list(declaredPersistedStates, Compile.StateDeclaration)}
-    ${gen.list(declaredAppActions, Compile.ActionDeclaration)}
-    const ${gen.Name(definition)} = TR.Navigation.App({
-      declaration: ${rootDeclaration},
-      ${auth ? gen`auth: () => ${auth},` : gen.noop()}
-      name: ${name ? gen`${name}.evaluate().jsValue as string` : gen.jsLiteral(app.name)},
-      navigator: ${
+    const ${gen.Name(moduleScope)} = _Scope
+    function ${gen.Name(bindApp)}(_TaoAppId: string) {
+      ${
+    crossModuleBase
+      ? gen`const _TaoBaseBinding = ${gen.Name(moduleScope)}.${gen.Name(crossModuleBase)}.definition.bindApp!(_TaoAppId)
+          const _Scope = Object.create(${gen.Name(moduleScope)})`
+      : base
+      ? gen`const _TaoBaseBinding = ${gen.Name({ name: `_TaoBindApp_${base.name}` })}(_TaoAppId)
+          const _Scope = Object.create(${gen.Name(moduleScope)})`
+      : gen`const _Scope = Object.create(${gen.Name(moduleScope)})`
+  }
+      ${gen.list(declaredPersistedStates, Compile.StateDeclaration)}
+      ${gen.list(declaredAppActions, Compile.ActionDeclaration)}
+      return {
+        scope: _Scope,
+        name: () => ${name ? gen`${name}.evaluate().jsValue as string` : gen.jsLiteral(app.name)},
+        navigator: ${
     authNavigation
       ? gen`(_TaoAuthScope?: TR.AuthScope) => { void _TaoAuthScope; return ${navigator} }`
       : gen`() => ${navigator}`
   },
-      agentCommands: () => ${compiledAgentCommands},
-      useSetup: () => {
-        ${
-    crossModuleBase
-      ? gen`${baseReference}.definition.useSetup?.()`
-      : gen.list(persistedStates, state => gen`TR.UsePersistedState(${gen.scopeName(state)})`)
+        design: () => ${design ?? gen`undefined`},
+        auth: () => ${auth ?? gen`undefined`},
+        agentCommands: () => ${compiledAgentCommands},
+        datasources: () => ${datasources ?? gen`[]`},
+        ${readNet ? gen`readNet: () => ${readNet},` : gen.noop()}
+        auxiliaries: ${authNavigation ? gen`(_TaoAuthScope?: TR.AuthScope)` : gen`()`} => ({
+          ${
+    base
+      ? gen`..._TaoBaseBinding.auxiliaries(${authNavigation ? gen`_TaoAuthScope` : gen.noop()}),`
+      : gen.noop()
   }
-      },
+          ${
+    gen.list(auxiliaries, auxiliary =>
+      gen`${gen.jsLiteral(auxiliary.name.slice(1))}: ${Compile.ConfiguredValue(auxiliary.value)},`)
+  }
+        }),
+        useSetup: () => {
+          ${
+    !base
+      ? gen.list(persistedStates, state => gen`TR.UsePersistedState(${gen.scopeName(state)})`)
+      : gen`_TaoBaseBinding.useSetup()`
+  }
+        },
+      }
+    }
+    const ${gen.Name(boundApp)} = ${gen.Name(bindApp)}(${gen.jsLiteral(metadata.appId)})
+    const ${gen.Name(definition)} = ((_Scope: any) => TR.Navigation.App({
+      declaration: ${rootDeclaration},
+      id: ${gen.jsLiteral(metadata.appId)},
+      version: ${gen.jsLiteral(metadata.appVersion)},
+      bindApp: ${gen.Name(bindApp)},
+      ${auth ? gen`auth: ${gen.Name(boundApp)}.auth,` : gen.noop()}
+      name: ${gen.Name(boundApp)}.name(),
+      navigator: ${gen.Name(boundApp)}.navigator,
+      agentCommands: ${gen.Name(boundApp)}.agentCommands,
+      useSetup: ${gen.Name(boundApp)}.useSetup,
       restoration: {
         exclusions: ${gen.jsLiteral(restoration.exclusions)},
         mode: ${gen.jsLiteral(restoration.mode)},
         variant: ${gen.jsLiteral(app.name)},
       },
-      ${datasources ? gen`datasources: () => ${datasources},` : gen.noop()}
+      ${datasources ? gen`datasources: ${gen.Name(boundApp)}.datasources,` : gen.noop()}
       ${
     design
-      ? gen`design: () => ${design},`
+      ? gen`design: ${gen.Name(boundApp)}.design,`
       : gen.noop()
   }
-      ${options.readNet ? gen`readNet: () => ${gen.scopeName({ name: ReadNetBinding })},` : gen.noop()}
-      auxiliaries: ${authNavigation ? gen`(_TaoAuthScope?: TR.AuthScope)` : gen`()`} => ({
-        ${
-    crossModuleBase
-      ? gen`...${baseReference}.definition.auxiliaries(${authNavigation ? gen`_TaoAuthScope` : gen.noop()}),`
-      : gen.noop()
-  }
-        ${
-    gen.list(auxiliaries, auxiliary =>
-      gen`${gen.jsLiteral(auxiliary.name.slice(1))}: ${Compile.ConfiguredValue(auxiliary.value)},`)
-  }
-      }),
-    })
+      ${readNet ? gen`readNet: ${gen.Name(boundApp)}.readNet,` : gen.noop()}
+      auxiliaries: ${gen.Name(boundApp)}.auxiliaries,
+    }))(${gen.Name(boundApp)}.scope)
     function ${gen.Name({ name: `TaoApp_${app.name}` })}() {
       ${gen.Name(definition)}.definition.useSetup?.()
       ${
@@ -184,14 +222,14 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
   `
 }
 
-/** App variants replace the allowlist, preserving imported base command identities through its getter. */
+/** App variants replace the allowlist; otherwise they retain the immediate base's bound commands. */
 function compileAgentCommands(
   configuration: ASTUtils.EffectiveAppConfiguration,
-  baseReference: Compiled | undefined,
+  hasBase: boolean,
 ): Compiled {
   const value = configuration.get('AgentCommands')?.value
   if (!value) {
-    return baseReference ? gen`${baseReference}.definition.agentCommands?.() ?? []` : gen`[]`
+    return hasBase ? gen`_TaoBaseBinding.agentCommands()` : gen`[]`
   }
   Assert.is(value, AST.isListLiteral, 'validated agent allowlist is a literal list')
   return gen`[${
@@ -318,6 +356,8 @@ function compileStudioSubjects(
           ${compileDeclarationIdentity(app, { kind: 'studio-subject-app' })},
         ),
         design: () => ${gen.Name(appDefinition)}.design,
+        id: ${gen.Name(appDefinition)}.definition.id,
+        useSetup: ${gen.Name(appDefinition)}.definition.useSetup,
         name: ${gen.Name(appDefinition)}.definition.name,
         readNet: () => ${gen.Name(appDefinition)}.readNet,
         navigator: () =>
@@ -335,6 +375,7 @@ function compileStudioSubjects(
             },
           ),
         restoration: { exclusions: [], mode: 'fresh' as const, variant: ${gen.jsLiteral(app.name)} },
+        version: ${gen.Name(appDefinition)}.definition.version,
       }),`)
   }
     }
@@ -424,6 +465,17 @@ function directAppBase(app: AST.AppValueDeclaration): AST.AppValueDeclaration | 
   return target
 }
 
+/** directAppGuard returns only this declaration's guard, so each variant patches its immediate base. */
+function directAppGuard(app: AST.AppValueDeclaration): AST.AppGuardStatement | undefined {
+  if (AST.isAppDeclaration(app) && app.block) {
+    return app.block.statements.find(AST.isAppGuardStatement)
+  }
+  const expression = app.value
+  return expression && AST.isRefinementExpression(expression)
+    ? expression.patchBlock.entries.find(entry => entry.appGuard)?.appGuard
+    : undefined
+}
+
 /** appInheritanceLeavesModule keeps every chain containing a foreign ancestor on runtime values. */
 function appInheritanceLeavesModule(
   app: AST.AppValueDeclaration,
@@ -442,7 +494,7 @@ function appInheritanceLeavesModule(
   return false
 }
 
-/** directAppConfiguration keeps cross-module inheritance on the imported runtime app value. */
+/** directAppConfiguration compiles only the declarations authored in a derived app's own scope. */
 function directAppConfiguration(app: AST.AppValueDeclaration): ASTUtils.EffectiveAppConfiguration {
   const configuration: ASTUtils.EffectiveAppConfiguration = new Map()
   const expression = app.value
@@ -460,6 +512,10 @@ function applyDirectConfigurationBlock(
   for (const entry of block.entries) {
     if (entry.rootView) {
       configuration.set('Navigator', { patches: [], value: entry.rootView })
+      continue
+    }
+    if (entry.name && entry.block) {
+      configuration.set(entry.name, { block: entry.block, patches: [] })
       continue
     }
     if (!entry.name || !entry.value) {
@@ -480,7 +536,7 @@ function applyDirectConfigurationBlock(
 
 function compileResolvedAppProperty(
   property: ASTUtils.EffectiveAppProperty | undefined,
-  name: 'Name' | 'Navigator' | 'Design' | 'Auth',
+  name: 'name' | 'Navigator' | 'Design' | 'Auth',
   base: Compiled | undefined,
   authNavigation = false,
 ): Compiled | undefined {
@@ -511,16 +567,16 @@ function compileResolvedAppProperty(
 
 function inheritedAppProperty(
   base: Compiled,
-  name: 'Name' | 'Navigator' | 'Design' | 'Auth',
+  name: 'name' | 'Navigator' | 'Design' | 'Auth',
   authNavigation: boolean,
 ): Compiled {
-  if (name === 'Name') {
-    return gen`TR.Value(${base}.definition.name)`
+  if (name === 'name') {
+    return gen`TR.Value(${base}.name())`
   }
   if (name === 'Navigator') {
-    return gen`${base}.definition.navigator(${authNavigation ? gen`_TaoAuthScope` : gen.noop()})`
+    return gen`${base}.navigator(${authNavigation ? gen`_TaoAuthScope` : gen.noop()})`
   }
-  return name === 'Auth' ? gen`${base}.definition.auth?.()` : gen`${base}.definition.design?.()`
+  return name === 'Auth' ? gen`${base}.auth()` : gen`${base}.design()`
 }
 
 /** PlannedDatasourceBinding is one datasource an app binds, with the store it fills. */
@@ -560,7 +616,7 @@ function plannedDatasourceBindings(app: AST.AppValueDeclaration): readonly Plann
 /**
  * compileAppDatasources lists the stores an app mounts, or nothing for an app that mounts none.
  *
- * A variant whose base lives in another module and which names no datasource of its own inherits
+ * A variant which names no datasource of its own inherits
  * its base's bindings as runtime values, exactly as it inherits the base's navigator: the base's
  * datasource was written against names imported only where the base is declared. The variant's own
  * slot patches and the ship-time release override still land on those inherited values, one patch
@@ -568,16 +624,16 @@ function plannedDatasourceBindings(app: AST.AppValueDeclaration): readonly Plann
  */
 function compileAppDatasources(
   app: AST.AppValueDeclaration,
-  crossModuleBase: AST.AppValueDeclaration | undefined,
+  base: AST.AppValueDeclaration | undefined,
   datasourceConfiguration: Readonly<Record<string, string>> | undefined,
 ): Compiled | undefined {
   const planned = plannedDatasourceBindings(app)
   if (planned.length === 0) {
     return undefined
   }
-  const own = crossModuleBase ? directAppConfiguration(app).get('Datasource') : undefined
-  if (crossModuleBase && !own?.value) {
-    const inherited = gen`${appDefinitionReference(crossModuleBase)}.definition.datasources()`
+  const own = base ? directAppConfiguration(app).get('Datasource') : undefined
+  if (base && !own?.value && !own?.block) {
+    const inherited = gen`_TaoBaseBinding.datasources()`
     const patches = planned.map(({ binding }) => [
       ...(own?.patches ?? []).map(patch => Compile.ConfigurationPatchObject(patch)),
       ...compileReleasePatch(binding, datasourceConfiguration),

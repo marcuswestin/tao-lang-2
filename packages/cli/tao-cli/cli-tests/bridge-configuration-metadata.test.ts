@@ -29,7 +29,7 @@ export function MemoryProvider(): TR.DataProvider {
       const good = await runCheck(root)
       Expect(good.flatMap(result => result.diagnostics ?? []).filter(diagnostic => diagnostic.severity === 'error'))
         .toEqual([])
-      const metadataPath = FS.resolvePath('Main.tao.ts', root)
+      const metadataPath = FS.resolvePath('.tao-ts/Main.tao.ts', root)
       const metadata = await FS.readText(metadataPath)
       const runtimeImport = metadata.split('\n').find(line => line.startsWith('import type TR from '))
       Expect(runtimeImport).toMatch(/^import type TR from "\.\.?\/.*"$/)
@@ -47,7 +47,7 @@ export function MemoryProvider(): TR.DataProvider {
       const wrong = await runCheck(root)
       Expect(
         wrong.flatMap(result => result.diagnostics ?? []).some(diagnostic =>
-          diagnostic.message.includes('TypeScript bridge:')
+          diagnostic.message.startsWith('TypeScript:')
         ),
       ).toBe(true)
     })

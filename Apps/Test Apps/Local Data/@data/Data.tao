@@ -1,13 +1,13 @@
 // The catalog spans both stores. `Note` follows whatever the app configures as its `Datasource`;
 // `FocusSession` declares `local only`, so it lives in the device-local store either way.
-workspace
+project
 data Notes / Note {
    Title text,
 
    order by Title,
 }
 
-workspace
+project
 data FocusSessions / FocusSession {
    Label text,
    StartedAt time (default now),

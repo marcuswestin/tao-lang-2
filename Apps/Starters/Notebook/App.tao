@@ -1,21 +1,15 @@
 use Local from @tao/data/providers/local
 
-project {
-   id "notebook"
-   name "Notebook"
-   version "0.1.0"
-   app Notebook
-   remote none
-}
-
 // Notebook: Keeps short notes on this device.
 //
 // Created by tao create from: A notebook for short notes I can pin.
 //
-// This file holds the project and the app. The navigation is in Chrome.tao, the entities in
+// This file holds the app. The navigation is in Chrome.tao, the entities in
 // Data.tao, the design in Design.tao, and each feature has its own folder.
 app Notebook {
-   Name "Notebook"
+   id "notebook"
+   version "0.1.0"
+   name "Notebook"
    Navigator NotebookNavigator
    Datasource Local {
       StorageKey "notebook"

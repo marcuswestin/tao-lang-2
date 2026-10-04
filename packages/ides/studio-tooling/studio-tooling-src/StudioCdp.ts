@@ -37,6 +37,8 @@ export type StudioCdpTransport = {
 }
 
 export type StudioCdpBrowserEvent = {
+  /** The frame whose own page logged it, so a review can tell which preview cell failed. */
+  frameId?: string
   kind: 'console' | 'exception'
   level: string
   text: string
@@ -357,18 +359,37 @@ export class StudioCdp {
         const element = document.querySelector(selector)
         if (!(element instanceof HTMLElement)) throw new Error('Missing ' + label + ' element: ' + selector)
         const rect = element.getBoundingClientRect()
-        // An element taller or wider than the window — a scrolled editor's content, a long list —
-        // has its own centre outside the window, where pointer input never reaches it. The centre
-        // of the part actually on screen is both inside the element and somewhere a person could
-        // aim at.
-        const left = Math.max(rect.left, 0)
-        const right = Math.min(rect.right, window.innerWidth)
-        const top = Math.max(rect.top, 0)
-        const bottom = Math.min(rect.bottom, window.innerHeight)
+        let left = Math.max(rect.left, 0)
+        let right = Math.min(rect.right, window.innerWidth)
+        let top = Math.max(rect.top, 0)
+        let bottom = Math.min(rect.bottom, window.innerHeight)
+        for (let ancestor = element.parentElement; ancestor !== null; ancestor = ancestor.parentElement) {
+          const style = getComputedStyle(ancestor)
+          const box = ancestor.getBoundingClientRect()
+          // The client box excludes borders and scrollbars. Only an axis with clipping overflow
+          // constrains pointer reachability; a long editor may overflow its other axis freely.
+          if (['auto', 'clip', 'hidden', 'scroll', 'overlay'].includes(style.overflowX)) {
+            left = Math.max(left, box.left + ancestor.clientLeft)
+            right = Math.min(right, box.left + ancestor.clientLeft + ancestor.clientWidth)
+          }
+          if (['auto', 'clip', 'hidden', 'scroll', 'overlay'].includes(style.overflowY)) {
+            top = Math.max(top, box.top + ancestor.clientTop)
+            bottom = Math.min(bottom, box.top + ancestor.clientTop + ancestor.clientHeight)
+          }
+        }
         if (right <= left || bottom <= top) {
           throw new Error('No visible part of the ' + label + ' element: ' + selector)
         }
-        return { x: (left + right) / 2, y: (top + bottom) / 2 }
+        const x = (left + right) / 2
+        const y = (top + bottom) / 2
+        const covering = document.elementFromPoint(x, y)
+        if (covering !== element && !element.contains(covering)) {
+          throw new Error(
+            'Visible center of the ' + label + ' element ' + selector
+              + ' lands on ' + (covering?.tagName.toLowerCase() ?? 'nothing') + ', not the element',
+          )
+        }
+        return { x, y }
       }
       return {
         start: center(${JSON.stringify(fromSelector)}, 'drag source'),
@@ -981,10 +1002,34 @@ export class StudioCdp {
     }
     const args = Array.isArray(params['args']) ? params['args'] : []
     this.collectedBrowserEvents.push(withTimestamp({
+      ...this.eventFrame(params['executionContextId']),
       kind: 'console',
       level: typeof params['type'] === 'string' ? params['type'] : 'log',
       text: args.map(formatRemoteObject).join(' '),
     }, params['timestamp']))
+  }
+
+  private eventFrame(contextId: unknown): { frameId?: string } {
+    for (const [frameId, id] of this.frameWorlds) {
+      if (id === contextId) {
+        return { frameId }
+      }
+    }
+    return {}
+  }
+
+  /** frameIdOf names the frame an `<iframe>` element hosts, matching `StudioCdpBrowserEvent.frameId`. */
+  async frameIdOf(selector: string): Promise<string | undefined> {
+    const { root } = await this.client.send<{ root: { nodeId: number } }>('DOM.getDocument', { depth: 0 })
+    const { nodeId } = await this.client.send<{ nodeId: number }>('DOM.querySelector', {
+      nodeId: root.nodeId,
+      selector,
+    })
+    if (!nodeId) {
+      return undefined
+    }
+    const { node } = await this.client.send<{ node: { frameId?: string } }>('DOM.describeNode', { nodeId })
+    return node.frameId
   }
 
   private trackExecutionContext(params: unknown): void {
@@ -1024,6 +1069,7 @@ export class StudioCdp {
       ? details['text']
       : 'Uncaught browser exception'
     this.collectedBrowserEvents.push(withTimestamp({
+      ...this.eventFrame(details['executionContextId']),
       kind: 'exception',
       level: 'error',
       text,

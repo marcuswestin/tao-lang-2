@@ -3,7 +3,7 @@ const nodePath = require('node:path')
 
 /**
  * createExpoAppConfig derives Expo's checked-in host configuration from an optional ship manifest,
- * or from the dev data facts `tao dev` places in the environment (`env` defaults to the process's).
+ * or from the dev data facts `tao run` places in the environment (`env` defaults to the process's).
  */
 function createExpoAppConfig(config, projectRoot, env = process.env) {
   const shipManifestPath = nodePath.resolve(projectRoot, '_gen_tao-app', 'ship.json')
@@ -83,7 +83,7 @@ function createExpoAppConfig(config, projectRoot, env = process.env) {
 
 /**
  * withDevData writes the tao-dev-data-v1 bootstrap fact a development build reads from its Expo
- * manifest when `tao dev` hosts a dev data server. A shipped build never carries it: the ship
+ * manifest when `tao run` hosts a dev data server. A shipped build never carries it: the ship
  * manifest path above returns before this runs, and a plain `expo start` sets neither variable.
  * The variable names mirror `expo-host-src/dev-loop/dev-data/DevDataBootstrap.ts`.
  */

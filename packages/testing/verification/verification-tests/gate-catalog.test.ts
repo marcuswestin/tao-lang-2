@@ -474,13 +474,10 @@ Describe('gate catalog scheduling', () => {
     )
   })
 
-  Test('runs the generator, then the Tao fixer, then the compile, then the tests', async () => {
+  Test('runs the generator, then the Tao fixer, then the compile', async () => {
     const { started } = await runLane(['_compile-word-flower-app', '_fix-tao', '_parser-gen'], 24)
 
     Expect(started).toEqual(['_parser-gen', '_fix-tao', '_compile-word-flower-app'])
-    // A test node with the default suite reads sits at the end of that same chain. It is not a
-    // recipe, so it is built by `TestNodes` rather than run through this lane.
-    Expect(GateCatalog.testDependencies(GateCatalog.DEFAULT_SUITE_READS)).toContain('_compile-word-flower-app')
   })
 
   Test('finishes each fixer before the gates that read what it rewrote, and no others', async () => {

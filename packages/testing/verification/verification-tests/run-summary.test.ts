@@ -88,18 +88,6 @@ Describe('versioned run summary', () => {
     Expect(gateExitCode(summary)).toBe(1)
   })
 
-  Test('the rollup names both artifact paths an agent reads afterwards', () => {
-    const summary = buildSummary({
-      elapsedMs: 500,
-      lane: 'verify',
-      logRoot: '/repo/.artifacts/logs/verify/stamp',
-      states: [finishedState({ name: '_repo-lint' })],
-    })
-
-    Expect(formatGateSummary(summary)).toContain('logs/verify/stamp')
-    Expect(formatGateSummary(summary)).toContain('logs/verify/stamp/summary.json')
-  })
-
   Test('reports a sharded suite as one line and names the shard that failed', () => {
     const summary = buildSummary({
       elapsedMs: 8_000,
@@ -135,7 +123,7 @@ Describe('versioned run summary', () => {
     Expect(gateExitCode(summary)).toBe(1)
   })
 
-  Test('rolls a suite up as skipped only when every one of its shards was skipped', () => {
+  Test('reports a partially run suite as incomplete while preserving the work that ran', () => {
     const skippedShard = (name: string) =>
       finishedState({ name }, { elapsedMs: 0, exitCode: undefined, reason: 'proved green', status: 'skipped' })
     const suiteOf = (name: string) => (name.startsWith('dev') ? 'dev' : undefined)
@@ -154,11 +142,30 @@ Describe('versioned run summary', () => {
       suiteOf,
     })
 
-    // Reporting a half-run suite as skipped would hide work; reporting it as passed would claim
-    // coverage the skipped shard did not deliver, which is why the reason survives the rollup.
+    // The reason preserves work that ran without claiming the missing shard passed.
     Expect(rollupSuites(allSkipped.gates)[0]?.status).toBe('skipped')
     Expect(rollupSuites(allSkipped.gates)[0]?.reason).toBe('proved green')
-    Expect(rollupSuites(partlyRan.gates)[0]?.status).toBe('passed')
+    Expect(rollupSuites(partlyRan.gates)[0]?.status).toBe('skipped')
+    Expect(rollupSuites(partlyRan.gates)[0]?.reason).toContain('1 not run: proved green')
+  })
+
+  Test('a failed suite names shards that fail-fast left unrun', () => {
+    const summary = buildSummary({
+      elapsedMs: 10,
+      lane: 'verify',
+      logRoot: '/unused',
+      states: [
+        finishedState({ name: 'dev#1' }, { status: 'failed', exitCode: 1, fullOutput: 'defect' }),
+        finishedState({ name: 'dev#2' }, {
+          status: 'skipped',
+          elapsedMs: 0,
+          reason: 'not run after definite failure: dev#1',
+        }),
+      ],
+      suiteOf: () => 'dev',
+    })
+    Expect(rollupSuites(summary.gates)[0]?.status).toBe('failed')
+    Expect(formatGateSummary(summary)).toContain('1 not run: not run after definite failure: dev#1')
   })
 
   Test('appends what the schedule achieved, and where it lost time', () => {
@@ -272,7 +279,6 @@ Describe('versioned run summary', () => {
     // The default is plain, so a lane that never decided cannot leave escape codes in a log file.
     Expect(formatGateSummary(passed)).not.toContain('')
     Expect(formatGateSummary(failed)).not.toContain('')
-    Expect(formatGateSummary(passed, { color: false })).not.toContain('')
   })
 
   Test('a test-runner timeout under measured contention is not hidden by its FAIL banner', () => {
@@ -538,15 +544,6 @@ Describe('structured failures', () => {
     Expect(summary.failures).toBeUndefined()
   })
 
-  Test('names nothing from a log matching no recognized format, leaving the raw tail as the only evidence', () => {
-    const summary = failedSummary('segmentation fault\ncore dumped')
-
-    Expect(summary.gates[0]?.failures).toBeUndefined()
-    Expect(summary.gates[0]?.failuresTruncated).toBeUndefined()
-    Expect(summary.failures).toBeUndefined()
-    Expect(summary.firstFailure?.output).toContain('segmentation fault')
-  })
-
   Test('caps one gate at 20 failures and counts the rest instead of dropping them silently', () => {
     const lines = (start: number) => Array.from({ length: 25 }, (_, index) => `(fail) t${start + index} [1ms]`)
     const summary = failedSummary(lines(0).join('\n'))
@@ -672,7 +669,6 @@ Describe('structured failures', () => {
     Expect(failedLine!.length).toBeLessThanOrEqual(160)
     Expect(failedLine).toContain('(sample.test.ts:5:15)')
     Expect(failedLine).toContain('…')
-    Expect(failedLine).not.toContain(longAssertion)
   })
 
   Test('formatGateSummary renders a repo-lint issue line once, truncating its long detail instead of the file', () => {

@@ -9,7 +9,7 @@ import {
 import { restoreRuntimeCapture, type TaoRuntimeJson } from '../TaoRuntime-src/TR-runtime-capture'
 
 Describe('TR runtime capture', () => {
-  Test('restores bounded action diagnostics through the built-in domain', async () => {
+  Test('restores sanitized action diagnostics through the built-in domain', async () => {
     resetActionDiagnostics()
     const stopListening = onActionFailure(() => {})
     try {

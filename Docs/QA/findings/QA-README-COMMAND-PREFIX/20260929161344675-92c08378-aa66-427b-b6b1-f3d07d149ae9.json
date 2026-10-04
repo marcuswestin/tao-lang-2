@@ -1,0 +1,38 @@
+{
+  "id": "QA-README-COMMAND-PREFIX",
+  "status": "open",
+  "phase": 1,
+  "surfaceId": "doc:README.md",
+  "dimension": "text",
+  "channel": "source",
+  "severity": "minor",
+  "title": "README command table uses tao where only ./tao works",
+  "observed": "The command table says `tao …`, but the only working route the README gives is `./tao …` from a checkout.",
+  "impact": "A newcomer types `tao create` and gets \"command not found\".",
+  "location": "README.md:60, 99-104",
+  "affectedPhases": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "expected": "Commands match the install route the README provides.",
+  "recheck": "Run the table commands after following Install.",
+  "evidence": [
+    "README.md"
+  ],
+  "evidenceHashes": [
+    {
+      "path": "README.md",
+      "sha256": "13f55bbdabb00f9793c0bee10d2bb8efcacc05fdc5dcfb89ebaf356e0003eafc"
+    }
+  ],
+  "createdAt": "2026-09-29T16:13:44.675Z",
+  "updatedAt": "2026-09-29T16:13:44.675Z",
+  "confidence": "confirmed",
+  "requiredReviewer": "agent",
+  "relatedStories": [
+    "CLI2"
+  ]
+}

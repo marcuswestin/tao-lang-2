@@ -1,30 +1,30 @@
 use SelectionNav, StackNav from @tao/nav
 use Button, Col, Text from @tao/ui
 
-project {
-   id "navigation-shell-variants"
-   name "Navigation Shell Variants"
-}
-
 // This complete harness exists only to prove that a view can be an app shell around an ordinary
 // rendered navigator. Keeping its three configurations beside their checks prevents implementation-
 // only apps from crowding the interactive picker.
 app ShellApp {
-   Name "Shell"
+   id "navigation-shell-variants"
+   version "0.1.0"
+   name "Shell"
    view Shell(CenterStack, "Primary shell")
 }
 
 // A variant rebinds the root: the same shell, a different navigator inside it. The label the
 // variant passes is what proves the arguments reach the view.
 app OtherShellApp = ShellApp with {
-   Name "Shell - Other"
+   id "navigation-other-shell-app"
+   name "Shell - Other"
    view Shell(OtherStack, "Other shell")
 }
 
 // The rendered navigator may itself be a selection, and `present @key` reaches it through the
 // shell: the app asks its root, and the root reaches the navigator its view renders.
 app SelectionShellApp {
-   Name "Shell - Selection"
+   id "navigation-selection-shell-app"
+   version "0.1.0"
+   name "Shell - Selection"
    view Shell(ShellTabs, "Selection shell")
 }
 

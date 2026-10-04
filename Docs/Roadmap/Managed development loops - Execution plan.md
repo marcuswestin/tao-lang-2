@@ -13,6 +13,15 @@ landing, review the coupled ownership changes, and use the ordinary landing veri
 resume target launches, host faults, visible checks, dependency changes or machine-setting changes.
 Older execution instructions below describe the resume catalog, not authorization to continue now.
 
+Main integration for authorized landing incorporates `854427134`: project/module tooling refresh,
+hidden generated contracts and the public `tao run` entrypoint. Managed selection and app-dev's
+inner dispatch use `run`; the named app-dev operation retains its owned-device and quiet-UI wrapper.
+Disposable acceptance projections carry the new project marker and app metadata. The merged
+integrated check `16-36-15-932Z-78350-1d498e02` passes8/0/0 including typecheck; focused runtime22,
+selection10, recovery18, named dispatch11 and landing60 pass. These are source integration evidence,
+not renewed host acceptance. The Developer explicitly requested resolving the integration conflicts
+and continuing the merge; the post-MVP acceptance stopping decision remains in force.
+
 Pause preparation source evidence: the final integrated check
 `16-10-43-794Z-25879-ae6a0c6d` passes8/0/0 including typecheck. The latest affected suites pass
 emulator34, Controller46 and Faults80; borrowing17, recorded recovery22, literal-argument route2

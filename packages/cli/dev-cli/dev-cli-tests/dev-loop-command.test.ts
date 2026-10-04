@@ -269,7 +269,7 @@ Test('stop recovery cannot overwrite a generation rotated while process exit was
   try {
     const result = await stopDisposed(record, recovery)
     Expect(result.result).toBe(1)
-    Expect(JSON.parse(result.stdout).error).toContain('owner changed during stop recovery')
+    Expect(JSON.parse(result.stdout).error).toContain('The durable dev-loop owner changed during interrupted recovery.')
     const saved = await readDevLoopReceipt(record.session)
     Expect(saved.generation).toBe(replacement.generation)
     Expect(saved.state).toBe('starting')
@@ -321,10 +321,13 @@ Test(
       })
       const recovery = deadRecovery()
       const effects: string[] = []
-      let absenceProbes = 0
-      recovery.processIsAlive = () => {
-        absenceProbes += 1
-        if (absenceProbes === 2) {
+      let controllerAbsenceProbes = 0
+      recovery.processIsAlive = pid => {
+        if (pid !== record.controller!.pid) {
+          return false
+        }
+        controllerAbsenceProbes += 1
+        if (controllerAbsenceProbes === 2) {
           Errors.throwHostEnvironment('Late private absence unavailable')
         }
         return false
@@ -348,6 +351,7 @@ Test(
       const failed = await stopDisposed(record, recovery)
       Expect(failed.result).toBe(1)
       Expect(JSON.parse(failed.stdout).error).toContain('Late private absence unavailable')
+      Expect(controllerAbsenceProbes).toBe(2)
       Expect(await MachineResources.readOwner({ name, registryRoot })).toBeUndefined()
       const intermediate = await readDevLoopReceipt(record.session)
       Expect(intermediate.state).toBe('failed')

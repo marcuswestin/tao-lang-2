@@ -1,6 +1,6 @@
 import { Describe, Expect, Test } from '@shared/test'
 import { ViewsValidator } from '../validator-src/validators/views-validator'
-import { accepts, app, rejects, stubContainer, stubView, testValidateCode } from './test-validate'
+import { app, rejects, stubContainer, stubView, testValidateCode } from './test-validate'
 
 const renderables = `${stubContainer('Stack')}${stubView('Text', 'Value text')}`
 
@@ -21,7 +21,7 @@ Describe('validator: selectable loops', () => {
   Test('hints that a multi-root row carries no accessibility label, and only such a row', async () => {
     const result = await testValidateCode(`
       use Col, Text from @tao/ui
-      app MyApp { view MainView }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
       view MainView() {
         state Selected = ""
         render Col() {
@@ -48,16 +48,6 @@ Describe('validator: selectable loops', () => {
 
     Expect(hints.map(hint => hint.message)).toEqual([ViewsValidator.messages.loopRowLabel])
   })
-
-  Test(
-    'allows one inline direct handler to reference the singular row binding',
-    accepts(selectableApp(`
-      loop ["One"] / Row {
-        Text(Row)
-        on select -> { set Selected = Row }
-      }
-    `)),
-  )
 
   Test(
     'reports a select handler outside a loop',

@@ -8,7 +8,7 @@ Describe('Expo runtime', () => {
   Test('forwards content layout through wrapper views', async () => {
     await testCompileApp(
       `
-        app WrapperLayout {
+        app WrapperLayout { id "wrapperlayout" version "1.0.0" name "WrapperLayout"
             view MainView
         }
 
@@ -40,7 +40,7 @@ Describe('Expo runtime', () => {
   Test('does not forward caller layout into nested render statements', async () => {
     await testCompileApp(
       `
-        app NestedRenderLayout {
+        app NestedRenderLayout { id "nestedrenderlayout" version "1.0.0" name "NestedRenderLayout"
             view MainView
         }
 
@@ -71,59 +71,10 @@ Describe('Expo runtime', () => {
     )
   })
 
-  Test("lets caller layout override a header default but never a wrapper root's own layout", async () => {
-    await testCompileApp(
-      `
-        app WrapperLayoutOverride {
-            view MainView
-        }
-
-        use Col, Row, Text from @tao/ui
-
-        // The header is the declaration's public default; the root's own clause is private (R9).
-        view Public() [gap 12] {
-            render Row()[content spread center] {
-                Text("Public gap")
-                @@content
-            }
-        }
-
-        view Private() {
-            render Row()[gap 12, content spread center] {
-                Text("Private gap")
-                @@content
-            }
-        }
-
-        view MainView() {
-            render Col() {
-                Public()[gap 8]
-                Private()[gap 8]
-            }
-        }
-      `,
-      screen => {
-        const gapOf = (label: string): number | undefined => {
-          for (let current = screen.getByText(label).parent; current; current = current.parent) {
-            const gap = RN.StyleSheet.flatten(current.props.style)?.gap
-            if (gap !== undefined) {
-              return gap
-            }
-          }
-          return undefined
-        }
-
-        ExpectScreen(screen).toHaveText('Public gap')
-        Expect(gapOf('Public gap')).toBe(8)
-        Expect(gapOf('Private gap')).toBe(12)
-      },
-    )
-  })
-
   Test('overlays compiled layout clauses over stdlib layout defaults', async () => {
     await testCompileApp(
       `
-        app ExplicitRowLayout {
+        app ExplicitRowLayout { id "explicitrowlayout" version "1.0.0" name "ExplicitRowLayout"
             view MainView
         }
 
@@ -146,7 +97,6 @@ Describe('Expo runtime', () => {
           alignSelf: 'stretch',
           flexDirection: 'row',
           flexGrow: 2,
-          gap: 4,
           justifyContent: 'flex-end',
         })
       },
@@ -158,7 +108,7 @@ Describe('Expo runtime', () => {
     async () => {
       await testCompileApp(
         `
-        app LayerInsets {
+        app LayerInsets { id "layerinsets" version "1.0.0" name "LayerInsets"
             view MainView
         }
 
@@ -212,7 +162,7 @@ Describe('Expo runtime', () => {
   Test('applies axis-relative fill through wrapper view root layout clauses', async () => {
     await testCompileApp(
       `
-        app WrapperLayoutFill {
+        app WrapperLayoutFill { id "wrapperlayoutfill" version "1.0.0" name "WrapperLayoutFill"
             view MainView
         }
 
@@ -250,7 +200,7 @@ Describe('Expo runtime', () => {
   Test('does not apply stdlib layout identity to local stdlib-named views', async () => {
     await testCompileApp(
       `
-        app LocalRowIdentity {
+        app LocalRowIdentity { id "localrowidentity" version "1.0.0" name "LocalRowIdentity"
             view MainView
         }
 

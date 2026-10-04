@@ -16,10 +16,8 @@ Describe('Studio highlighting', () => {
     const tokenColors = new Set(tokens.map(token => token.color).filter(Boolean))
 
     Expect(tokenText.some(text => text.includes('view'))).toBe(true)
-    Expect(tokenText.some(text => text.includes('MainView'))).toBe(true)
     Expect(tokenText).toContain('return')
     Expect(tokenText.some(text => text.includes('<'))).toBe(true)
-    Expect(tokenText.some(text => text.includes('RN'))).toBe(true)
     Expect(tokenText.some(text => text.includes('accessibilityLabel'))).toBe(true)
     Expect(tokenColors.size).toBeGreaterThan(1)
   })

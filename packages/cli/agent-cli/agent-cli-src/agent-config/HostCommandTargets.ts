@@ -1,5 +1,5 @@
 export type HostCommandTarget = {
-  argsPolicy?: 'none' | 'pid' | 'standalone-vm' | 'studio-list' | 'studio-stop' | 'dev-loop' | 'studio-proof'
+  argsPolicy?: 'none' | 'notify' | 'pid' | 'standalone-vm' | 'studio-list' | 'studio-stop' | 'dev-loop' | 'studio-proof'
   command: string
   /** Environment the tool needs whatever shell dispatches it, merged over the inherited one. */
   env?: Readonly<Record<string, string>>
@@ -15,11 +15,14 @@ const UTF8_LOCALE = { LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' } as const
 
 /** Implementations for named host operations. Permissions still come solely from agentHostCommands. */
 export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> = {
+  'notify-developer': { command: 'just', fixedArgs: ['notify-developer'], argsPolicy: 'notify' },
+  'stop': { command: 'just', fixedArgs: ['stop'], argsPolicy: 'none' },
   'merge-recover': { command: './dev', fixedArgs: ['merge-recover'] },
   // Keep read-only reclaim sandboxed; only its guarded removal action needs host filesystem access.
   'reclaim --execute': { command: './dev', fixedArgs: ['reclaim', '--execute'], argsPolicy: 'none' },
   'prepare-release studio': { command: './dev', fixedArgs: ['prepare-release', 'studio'] },
   'prepare-release ide-extension': { command: './dev', fixedArgs: ['prepare-release', 'ide-extension'] },
+  'ide-extension-acceptance': { command: './dev', fixedArgs: ['ide-extension-acceptance'], argsPolicy: 'none' },
   'app-dev': { command: './dev', fixedArgs: ['app-dev'], server: true },
   'dev-loop': { command: './dev', fixedArgs: ['dev-loop'], argsPolicy: 'dev-loop' },
   'test-watch': { command: './tao', fixedArgs: ['test', '--watch'], server: true },

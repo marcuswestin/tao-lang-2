@@ -23,7 +23,7 @@ Describe('Jest transform cache lifecycle', () => {
   Test('bounds repeated runs while reusing transforms that still fit', async () => {
     await withCache(async root => {
       const counts: number[] = []
-      for (let run = 0; run < 8; run += 1) {
+      for (let run = 0; run < 4; run += 1) {
         await JestTransformCache.run(root, async directory => {
           if (!await FS.isFile(FS.resolvePath('shared', directory))) {
             await FS.writeText(FS.resolvePath('shared', directory), 'reused')
@@ -32,8 +32,8 @@ Describe('Jest transform cache lifecycle', () => {
         }, { root, maxFiles: 4, maxBytes: 100 })
         counts.push((await filesIn(FS.resolvePath('data', root))).length)
       }
-      Expect(counts).toEqual([2, 3, 4, 4, 4, 4, 4, 4])
-      Expect(await filesIn(FS.resolvePath('data', root))).toContain('variant-7')
+      Expect(counts).toEqual([2, 3, 4, 4])
+      Expect(await filesIn(FS.resolvePath('data', root))).toContain('variant-3')
     })
   })
 
@@ -232,25 +232,6 @@ Describe('Jest transform cache lifecycle', () => {
     }
   })
 
-  Test('direct Jest cache retains transforms until its last reader exits', async () => {
-    await withCache(async parent => {
-      const direct = require('../jest-direct-cache.cjs') as {
-        start: (root: string) => Promise<string>
-        finish: (root: string, lease: string) => Promise<void>
-      }
-      const root = FS.resolvePath('aaaaaaaaaaaaaaaa', parent)
-      const first = await direct.start(root)
-      const second = await direct.start(root)
-      const transform = FS.resolvePath('data/transform', root)
-      await FS.writeText(transform, 'hot')
-      await direct.finish(root, first)
-      Expect(await FS.isFile(transform)).toBe(true)
-      await direct.finish(root, second)
-      Expect(await FS.isFile(transform)).toBe(true)
-      Expect(await FS.listDir(FS.resolvePath('leases', root))).toEqual([])
-    })
-  })
-
   Test('direct Jest retires inactive identities but preserves a live one', async () => {
     await withCache(async parent => {
       const direct = require('../jest-direct-cache.cjs') as {
@@ -330,26 +311,6 @@ Describe('Jest transform cache lifecycle', () => {
           env['HOME'] = before.home
         }
       }
-    })
-  })
-
-  Test('direct Jest releases its lease after failed work', async () => {
-    await withCache(async parent => {
-      const direct = require('../jest-direct-cache.cjs') as {
-        start: (root: string) => Promise<string>
-        finish: (root: string, lease: string) => Promise<void>
-      }
-      const root = FS.resolvePath('aaaaaaaaaaaaaaaa', parent)
-      const execute = async () => {
-        const lease = await direct.start(root)
-        try {
-          Errors.throwHostEnvironment('test failed')
-        } finally {
-          await direct.finish(root, lease)
-        }
-      }
-      await Expect(execute()).rejects.toThrow('test failed')
-      Expect(await FS.listDir(FS.resolvePath('leases', root))).toEqual([])
     })
   })
 

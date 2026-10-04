@@ -4,15 +4,11 @@ use SlotNav from @tao/nav
 // the host publishes versioned browser-local selection state into the external editor boundary.
 use StudioRoot, StudioToggleFolder from @ui
 
-project {
-   id "tao-studio-client"
-   name "Tao Studio Client"
-   version "0.1.0"
-}
-
 // File contents remain editor buffers and never appear in Files or any related entity.
 app TaoStudioFiles {
-   Name "Tao Studio Files"
+   id "tao-studio-client"
+   version "0.1.0"
+   name "Tao Studio Files"
    state CollapsedFolders is list of text = [] (persist)
    action ToggleFolder(FolderPath text) {
       set CollapsedFolders = StudioToggleFolder(CollapsedFolders, FolderPath)

@@ -217,7 +217,7 @@ export function simulatorsFromSimctl(stdout: string): CompanionSimulator[] {
 }
 
 /** simulatorRuntimeName turns `com.apple.CoreSimulator.SimRuntime.iOS-26-5` into `iOS 26.5`; other platforms are skipped. */
-export function simulatorRuntimeName(identifier: string): string | undefined {
+function simulatorRuntimeName(identifier: string): string | undefined {
   const match = /SimRuntime\.iOS-(\d+)(?:-(\d+))?(?:-(\d+))?$/.exec(identifier)
   if (match === null) {
     return undefined

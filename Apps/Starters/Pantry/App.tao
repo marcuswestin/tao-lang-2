@@ -1,21 +1,15 @@
 use Local from @tao/data/providers/local
 
-project {
-   id "pantry"
-   name "Pantry"
-   version "0.1.0"
-   app Pantry
-   remote none
-}
-
 // Pantry: Tracks what is in the kitchen and the recipes that use it.
 //
 // Created by tao create from: Track what is in my kitchen and the recipes that use it.
 //
-// This file holds the project and the app. The navigation is in Chrome.tao, the entities in
+// This file holds the app. The navigation is in Chrome.tao, the entities in
 // Data.tao, the design in Design.tao, and each feature has its own folder.
 app Pantry {
-   Name "Pantry"
+   id "pantry"
+   version "0.1.0"
+   name "Pantry"
    Navigator PantryNavigator
    Datasource Local {
       StorageKey "pantry"

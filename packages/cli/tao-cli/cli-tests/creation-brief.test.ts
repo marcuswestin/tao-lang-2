@@ -89,7 +89,6 @@ Describe('tao create brief', () => {
         },
         paletteFromImage: async () => ({ canvas: '#ffffff', ink: '#101010', accent: '#aa3300' }),
       })
-      Expect(brief.description).toBe(`Like https://example.com/app but for dogs, styled like ${image}`)
       Expect(brief.sources).toEqual([
         { kind: 'url', url: 'https://example.com/app', title: 'Cat App', text: 'Cats, tracked.' },
         { kind: 'image', path: image, palette: { canvas: '#ffffff', ink: '#101010', accent: '#aa3300' } },

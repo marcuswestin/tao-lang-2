@@ -5,7 +5,7 @@ Describe('formatter: scenes', () => {
   Test(
     'formats a scene exactly as it formats a view',
     formats(
-      `workspace
+      `project
 scene    Home()   {
 Title    "Home"
 render Text("Hello")
@@ -14,7 +14,7 @@ view   Row()  {
 render Text("Hello")
 }`,
       `
-        workspace
+        project
         scene Home() {
            Title "Home"
            render Text("Hello")

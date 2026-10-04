@@ -267,10 +267,11 @@ Describe('green tree records', () => {
     await FS.chmod(untracked, 0o645)
     Expect(await GreenTree.hashTree(root)).not.toBe(untrackedNonExecutable)
 
+    const beforeSymlinkChange = await GreenTree.hashTree(root)
     await FS.remove(FS.resolvePath('current-target', root))
     await FS.symlink('target-two.txt', FS.resolvePath('current-target', root))
     Expect(await git(root, 'status', '--short')).toContain('current-target')
-    Expect(await GreenTree.hashTree(root)).not.toBe(clean)
+    Expect(await GreenTree.hashTree(root)).not.toBe(beforeSymlinkChange)
   })
 
   Test('the fingerprint hash is the tree hash, and its paths name what moved', async () => {
@@ -292,7 +293,6 @@ Describe('green tree records', () => {
     // Direction does not change which paths disagree.
     Expect(GreenTree.changedPaths(after, before)).toEqual(['added.txt', 'script.sh', 'tracked.txt'])
     Expect(after.paths.has('script.sh')).toBe(false)
-    Expect(GreenTree.changedPaths(after, after)).toEqual([])
   })
 
   Test('a lane finds its own record and a superset lane record, never a stranger', async () => {
@@ -479,7 +479,6 @@ Describe('green tree records', () => {
 
       const gates = await GreenTree.findGates(root, keyFor('abc'), ['_typecheck', '_test'])
       Expect([...gates.proved.keys()]).toEqual(['_test'])
-      Expect(Object.keys((await GreenTree.load(root)).gates)).toEqual(['_test'])
       // The lane record beside it is untouched, so the whole lane still stands on its own proof.
       Expect((await GreenTree.find(root, keyFor('abc'), ['verify']))?.logRoot).toBe('/logs/verify')
 

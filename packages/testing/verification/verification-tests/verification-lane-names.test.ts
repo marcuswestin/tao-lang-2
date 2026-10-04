@@ -41,7 +41,7 @@ Describe('verification lane names', () => {
     Expect(missing).toEqual([])
   })
 
-  Test('the lanes accepted as proof of verify are real, and ordered widest-last', async () => {
+  Test('accepts real full and sandbox lanes as proof of verify', async () => {
     const recipes = await justRecipeNames()
     Expect(VerificationLanes.VERIFY_OR_WIDER.filter(lane => !recipes.has(lane))).toEqual([])
     // The exact bug: two of these three used to be `full-verify`-style names that match no record.

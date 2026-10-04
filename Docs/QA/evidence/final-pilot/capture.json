@@ -1,0 +1,127 @@
+{
+  "cells": [
+    {
+      "environment": {
+        "network": {
+          "latencyMs": 0,
+          "outcome": "normal"
+        },
+        "scheme": {
+          "capability": "reactive-browser",
+          "requested": "light",
+          "resolved": "light",
+          "source": "scenario"
+        },
+        "viewport": {
+          "height": 844,
+          "presetId": "phone",
+          "width": 390
+        }
+      },
+      "group": "QA views",
+      "key": "[\"ReadingList.tao\",\"QA views\",\"phone\",\"{\\\"arguments\\\":{},\\\"fixtureId\\\":\\\"/Users/ro/.codex/worktrees/8a04/tao-lang-2/.artifacts/scratch/qa-capture/6b84c0c2-e58f-4341-b11b-7534369fd853/project/ReadingList.tao#fixture:Sample\\\",\\\"prepare\\\":[],\\\"stateLayers\\\":[],\\\"steps\\\":[]}\",\"{\\\"network\\\":{\\\"latencyMs\\\":0,\\\"outcome\\\":\\\"normal\\\"},\\\"scheme\\\":{\\\"capability\\\":\\\"reactive-browser\\\",\\\"requested\\\":\\\"light\\\",\\\"resolved\\\":\\\"light\\\",\\\"source\\\":\\\"scenario\\\"},\\\"viewport\\\":{\\\"height\\\":844,\\\"presetId\\\":\\\"phone\\\",\\\"width\\\":390}}\"]",
+      "label": "phone",
+      "renderInputs": {
+        "arguments": {},
+        "fixtureId": "/Users/ro/.codex/worktrees/8a04/tao-lang-2/.artifacts/scratch/qa-capture/6b84c0c2-e58f-4341-b11b-7534369fd853/project/ReadingList.tao#fixture:Sample",
+        "prepare": [],
+        "stateLayers": [],
+        "steps": []
+      },
+      "screenshot": "reading-list-phone.png",
+      "sha256": "94d3f329e159b7b46b31780370ef920334bd2bea552e429b3fbf6e04c5d0af7c",
+      "status": "captured"
+    },
+    {
+      "environment": {
+        "network": {
+          "latencyMs": 0,
+          "outcome": "normal"
+        },
+        "scheme": {
+          "capability": "reactive-browser",
+          "requested": "light",
+          "resolved": "light",
+          "source": "scenario"
+        },
+        "viewport": {
+          "height": 900,
+          "presetId": "tablet",
+          "width": 1280
+        }
+      },
+      "error": "The preview changed between two consecutive settled captures.",
+      "group": "QA views",
+      "key": "[\"ReadingList.tao\",\"QA views\",\"desktop\",\"{\\\"arguments\\\":{},\\\"fixtureId\\\":\\\"/Users/ro/.codex/worktrees/8a04/tao-lang-2/.artifacts/scratch/qa-capture/6b84c0c2-e58f-4341-b11b-7534369fd853/project/ReadingList.tao#fixture:Sample\\\",\\\"prepare\\\":[],\\\"stateLayers\\\":[],\\\"steps\\\":[]}\",\"{\\\"network\\\":{\\\"latencyMs\\\":0,\\\"outcome\\\":\\\"normal\\\"},\\\"scheme\\\":{\\\"capability\\\":\\\"reactive-browser\\\",\\\"requested\\\":\\\"light\\\",\\\"resolved\\\":\\\"light\\\",\\\"source\\\":\\\"scenario\\\"},\\\"viewport\\\":{\\\"height\\\":900,\\\"presetId\\\":\\\"tablet\\\",\\\"width\\\":1280}}\"]",
+      "label": "desktop",
+      "renderInputs": {
+        "arguments": {},
+        "fixtureId": "/Users/ro/.codex/worktrees/8a04/tao-lang-2/.artifacts/scratch/qa-capture/6b84c0c2-e58f-4341-b11b-7534369fd853/project/ReadingList.tao#fixture:Sample",
+        "prepare": [],
+        "stateLayers": [],
+        "steps": []
+      },
+      "screenshot": "reading-list-desktop.png",
+      "sha256": "d6bcf17837ba4cdca84bebeae0d4f57c9a1a4fc691ac645ca782f4938ed8567f",
+      "status": "failed"
+    },
+    {
+      "environment": {
+        "network": {
+          "latencyMs": 0,
+          "outcome": "normal"
+        },
+        "scheme": {
+          "capability": "reactive-browser",
+          "requested": "dark",
+          "resolved": "dark",
+          "source": "scenario"
+        },
+        "viewport": {
+          "height": 844,
+          "presetId": "phone",
+          "width": 390
+        }
+      },
+      "group": "QA views",
+      "key": "[\"ReadingList.tao\",\"QA views\",\"dark\",\"{\\\"arguments\\\":{},\\\"fixtureId\\\":\\\"/Users/ro/.codex/worktrees/8a04/tao-lang-2/.artifacts/scratch/qa-capture/6b84c0c2-e58f-4341-b11b-7534369fd853/project/ReadingList.tao#fixture:Sample\\\",\\\"prepare\\\":[],\\\"stateLayers\\\":[],\\\"steps\\\":[]}\",\"{\\\"network\\\":{\\\"latencyMs\\\":0,\\\"outcome\\\":\\\"normal\\\"},\\\"scheme\\\":{\\\"capability\\\":\\\"reactive-browser\\\",\\\"requested\\\":\\\"dark\\\",\\\"resolved\\\":\\\"dark\\\",\\\"source\\\":\\\"scenario\\\"},\\\"viewport\\\":{\\\"height\\\":844,\\\"presetId\\\":\\\"phone\\\",\\\"width\\\":390}}\"]",
+      "label": "dark",
+      "renderInputs": {
+        "arguments": {},
+        "fixtureId": "/Users/ro/.codex/worktrees/8a04/tao-lang-2/.artifacts/scratch/qa-capture/6b84c0c2-e58f-4341-b11b-7534369fd853/project/ReadingList.tao#fixture:Sample",
+        "prepare": [],
+        "stateLayers": [],
+        "steps": []
+      },
+      "screenshot": "reading-list-dark.png",
+      "sha256": "94d3f329e159b7b46b31780370ef920334bd2bea552e429b3fbf6e04c5d0af7c",
+      "status": "captured"
+    }
+  ],
+  "createdAt": "2026-09-26T23:36:15.128Z",
+  "project": {
+    "appName": "ReadingList",
+    "entryPath": "ReadingList.tao"
+  },
+  "renderer": {
+    "colorGamut": "srgb",
+    "deviceScaleFactor": 1,
+    "fontFingerprint": "e95ce0e5c372599506ea25e8eb62e744fec18c391b4d639d5d0bd6d63f0815c6",
+    "jsVersion": "15.3.76.13",
+    "locale": "en-US",
+    "platform": "MacIntel",
+    "product": "Chrome/153.0.8010.53",
+    "protocolVersion": "1.3",
+    "timezone": "America/New_York",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36"
+  },
+  "reviewId": "2026-09-26T23-36-15Z-cb18ad85",
+  "studio": {
+    "compileRevision": 1,
+    "manifestRevision": "compile:1",
+    "sourceVersions": {
+      "ReadingList.tao": "text-v1:6093:0ehwykx11h00w5"
+    }
+  },
+  "version": 1
+}

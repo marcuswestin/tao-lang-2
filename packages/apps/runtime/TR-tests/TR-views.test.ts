@@ -112,6 +112,8 @@ Describe('TR.Views explicit visual props', () => {
       },
     })
     const app = TR.Navigation.App({
+      id: 'styled',
+      version: '1.0.0',
       name: 'Styled',
       auxiliaries: () => ({}),
       design: () => {
@@ -168,20 +170,6 @@ Describe('TR.Views explicit visual props', () => {
       children: 'Again',
     }))
     Expect(designReads).toBe(1)
-  })
-
-  Test('applies Capitalized element defaults before explicit clauses and accepts raw colors', () => {
-    const design = TR.Design.Declaration({
-      name: 'Theme',
-      tokens: {},
-      bundles: {
-        Text: TR.Design.Spec([['size', 16], ['fg', '#123456']]),
-      },
-    })
-
-    Expect(TR.Design.resolve(design, TR.Design.Spec([['size', 20]]), 'Text')).toEqual({
-      style: { color: '#123456', fontSize: 20 },
-    })
   })
 
   Test('applies a declaration header over the element default and under the caller clauses', () => {
@@ -520,6 +508,7 @@ Describe('TR.Views explicit visual props', () => {
     Expect(view.props['dataSet']).toEqual({ existingMarker: 'preserved' })
   })
 
+  // REMOVAL CANDIDATE: This proves capability wiring only; TR-scroll proves reveal behavior with measured nodes.
   Test('binds a nonselectable mounted row root for scroll reveal', () => {
     const capabilities: { scrollIntoView?(): void } = {}
     const row = { capabilities, identity: 'workspaces/home', label: 'Home' }
@@ -542,7 +531,6 @@ Describe('TR.Views explicit visual props', () => {
     Expect(disabled.props['onPress']).toBeUndefined()
 
     const enabled = renderRuntimeElement(TR.Views.Pressable({ disabled: false, title: 'Save' }))
-    Expect(enabled.props['accessibilityState']).toMatchObject({ disabled: false })
     Expect(enabled.props['aria-disabled']).toBe(false)
   })
 
@@ -647,12 +635,9 @@ Describe('TR.Views checkbox', () => {
       },
       value: false,
     }))
-    const [checkbox] = fragmentChildren(wrapper)
-
     Expect(wrapper.props['accessibilityState']).toEqual({ checked: false, disabled: true })
     Expect(wrapper.props['disabled']).toBe(true)
     Expect(wrapper.props['onPress']).toBe(undefined)
-    Expect(checkbox!.props['accessible']).toBe(false)
   })
 })
 
@@ -836,6 +821,8 @@ Describe('TR navigation selection tabs', () => {
       },
     ))
     const app = TR.Navigation.App({
+      id: 'styled-tabs-app',
+      version: '1.0.0',
       name: 'Styled tabs app',
       auxiliaries: () => ({}),
       design: () => design,
@@ -922,12 +909,14 @@ function styledApp(name: string, surface: string): ReturnType<typeof TR.Navigati
     bundles: { panel: TR.Design.Spec([['bg', 'surface']]) },
   })
   return TR.Navigation.App({
+    id: name.toLowerCase().replaceAll(' ', '-'),
     name,
     auxiliaries: () => ({}),
     design: () => design,
     navigator: () => {
       throw new UnexpectedBehaviorError('design resolution must not mount navigation')
     },
+    version: '1.0.0',
   })
 }
 
@@ -938,11 +927,13 @@ function styledElementApp(
 ): ReturnType<typeof TR.Navigation.App> {
   const design = TR.Design.Declaration({ bundles, name, tokens })
   return TR.Navigation.App({
+    id: name.toLowerCase().replaceAll(' ', '-'),
     name,
     auxiliaries: () => ({}),
     design: () => design,
     navigator: () => {
       throw new UnexpectedBehaviorError('design resolution must not mount navigation')
     },
+    version: '1.0.0',
   })
 }

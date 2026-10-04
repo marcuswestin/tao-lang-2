@@ -1,5 +1,8 @@
 # Repo-local filesystem, network, and approval settings for Tao development.
-# Git metadata writes outside the worktree are routed through Auto-review.
+# Setup adds exact Git common/worktree directory grants to the machine-local Codex user
+# profile. Start a fresh session after first setup or moving a checkout; session hooks
+# cannot extend the permissions of an already running session.
+# See packages/cli/agent-cli/agent-cli-src/agent-config/CodexGitPermissions.ts.
 #
 # Tracked so a new worktree has its permission profile before setup or session hooks run.
 # It names no login: Codex accepts only absolute Unix socket paths, so a home-relative socket
@@ -97,7 +100,6 @@ extends = ":workspace"
 description = "Tao worktree: write the workspace, read the reference repo, reach documentation and package hosts."
 
 [permissions.tao-workspace.filesystem]
-"~/code/tao-lang-2/.git" = "write"
 # Caches and shared state the pinned toolchain writes outside the worktree. One list serves
 # both harnesses: these are Claude Code's sandbox write paths, spelled as Codex rules.
 "~/.tao" = "write"

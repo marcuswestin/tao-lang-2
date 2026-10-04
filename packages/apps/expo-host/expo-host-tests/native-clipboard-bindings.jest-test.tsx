@@ -71,7 +71,7 @@ Describe('generated native Clipboard bindings', () => {
       ...await generatedFiles(),
       'App.tao': `
         use GetStringAsync, SetStringAsync, HasStringAsync, GetStringOptions, SetStringOptions, StringFormat from ./Bindings.tao
-        app ClipboardText { view Main }
+        app ClipboardText { id "clipboardtext" version "1.0.0" name "ClipboardText" view Main }
         view Main() {
           state Status = "before"
           state Saved = true
@@ -100,17 +100,17 @@ Describe('generated native Clipboard bindings', () => {
         pending = Promise.resolve(fireEvent.press(screen.getByText('Read')))
         await settle()
         Expect(native.getStringAsync.mock.calls).toEqual([[]])
-        Expect(screen.getByText('before')).toBeDefined()
+        screen.getByText('before')
         await act(async () => {
           read.resolve('copied')
           await pending
         })
-        Expect(screen.getByText('read:copied')).toBeDefined()
+        screen.getByText('read:copied')
         await act(async () => {
           await fireEvent.press(screen.getByText('ReadHtml'))
         })
-        Expect(screen.getByText('empty:')).toBeDefined()
-        Expect(screen.getByText('saved:false,has:false')).toBeDefined()
+        screen.getByText('empty:')
+        screen.getByText('saved:false,has:false')
         Expect(native.getStringAsync.mock.calls).toEqual([[], [{ preferredFormat: 'html' }]])
         Expect(native.setStringAsync.mock.calls).toEqual([['', { inputFormat: 'html' }]])
       } finally {
@@ -133,7 +133,7 @@ Describe('generated native Clipboard bindings', () => {
       'App.tao': `
         use GetImageAsync, SetImageAsync, HasImageAsync, GetImageOptions, GetImageOptionsFormat, ClipboardImage from ./Bindings.tao
         type Holder is { Image ClipboardImage? }
-        app ClipboardImages { view Main }
+        app ClipboardImages { id "clipboardimages" version "1.0.0" name "ClipboardImages" view Main }
         view Main() {
           state Result is Holder = Holder { }
           state HasImage = true
@@ -156,14 +156,14 @@ Describe('generated native Clipboard bindings', () => {
       await act(async () => {
         await fireEvent.press(screen.getByText('PNG'))
       })
-      Expect(screen.getByText('{"Data":"data:image/png;base64,abc","Size":{"Width":0,"Height":12}}')).toBeDefined()
-      Expect(screen.getByText('has-image:false')).toBeDefined()
+      screen.getByText('{"Data":"data:image/png;base64,abc","Size":{"Width":0,"Height":12}}')
+      screen.getByText('has-image:false')
       Expect(native.setImageAsync.mock.calls).toEqual([['abc']])
       Expect(native.hasImageAsync.mock.calls).toEqual([[]])
       await act(async () => {
         await fireEvent.press(screen.getByText('JPEG'))
       })
-      Expect(screen.getByText('null')).toBeDefined()
+      screen.getByText('null')
       Expect(native.getImageAsync.mock.calls).toEqual([[{ format: 'png' }], [{ format: 'jpeg', jpegQuality: 0 }]])
     })
   })
@@ -177,7 +177,7 @@ Describe('generated native Clipboard bindings', () => {
       'App.tao': `
         use GetUrlAsync, SetUrlAsync, HasUrlAsync from ./Bindings.tao
         type Holder is { Url text? }
-        app ClipboardUrls { view Main }
+        app ClipboardUrls { id "clipboardurls" version "1.0.0" name "ClipboardUrls" view Main }
         view Main() {
           state Result is Holder = Holder { }
           state HasUrl = true
@@ -199,13 +199,13 @@ Describe('generated native Clipboard bindings', () => {
       await act(async () => {
         await fireEvent.press(screen.getByText('Read URL'))
       })
-      Expect(screen.getByText('no-url')).toBeDefined()
-      Expect(screen.getByText('has-url:false')).toBeDefined()
+      screen.getByText('no-url')
+      screen.getByText('has-url:false')
       await act(async () => {
         await fireEvent.press(screen.getByText('Read URL'))
       })
-      Expect(screen.getByText('https://example.com/copied')).toBeDefined()
-      Expect(screen.getByText('has-url:true')).toBeDefined()
+      screen.getByText('https://example.com/copied')
+      screen.getByText('has-url:true')
       await act(async () => {
         await fireEvent.press(screen.getByText('Write URL'))
       })
@@ -224,7 +224,7 @@ Describe('generated native Clipboard bindings', () => {
       ...await generatedFiles(),
       'App.tao': `
         use AddClipboardListener, SetStringAsync, ClipboardEvent from ./Bindings.tao
-        app ClipboardEvents { view Main }
+        app ClipboardEvents { id "clipboardevents" version "1.0.0" name "ClipboardEvents" view Main }
         view Main() {
           state Count = 0
           state Event is ClipboardEvent = ClipboardEvent { ContentTypes: [] }
@@ -249,8 +249,8 @@ Describe('generated native Clipboard bindings', () => {
         listener!({ contentTypes: ['plain-text', 'image'] })
         await settle()
       })
-      Expect(screen.getByText('ContentType_PLAIN_TEXT,IMAGE')).toBeDefined()
-      Expect(screen.getByText('events:1')).toBeDefined()
+      screen.getByText('ContentType_PLAIN_TEXT,IMAGE')
+      screen.getByText('events:1')
       Expect(native.setStringAsync.mock.calls).toEqual([['event']])
       Expect(remove).not.toHaveBeenCalled()
       screen.unmount()
@@ -275,7 +275,7 @@ Describe('generated native Clipboard bindings', () => {
         ...await generatedFiles(),
         'App.tao': `
         use AddClipboardListener, RemoveClipboardListener, ClipboardEvent from ./Bindings.tao
-        app ClipboardRemoval { view Main }
+        app ClipboardRemoval { id "clipboardremoval" version "1.0.0" name "ClipboardRemoval" view Main }
         view Main() {
           state Count = 0
           action Receive(Event ClipboardEvent) { set Count += 1 }
@@ -302,10 +302,9 @@ Describe('generated native Clipboard bindings', () => {
           listener!({ contentTypes: ['html'] })
           await settle()
         })
-        Expect(screen.getByText('events:0')).toBeDefined()
+        screen.getByText('events:0')
         if (mode === 'deprecated') {
           Expect(native.removeClipboardListener).toHaveBeenCalledTimes(2)
-          Expect(typeof native.removeClipboardListener.mock.calls[0]?.[0].remove).toBe('function')
         }
         screen.unmount()
         Expect(remove).toHaveBeenCalledTimes(1)

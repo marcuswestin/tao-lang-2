@@ -1,0 +1,19 @@
+// Safe display context carried by every exceptional render guard and app read net.
+public
+type ReadContext is {
+   State text
+   Message text
+   ReadKind text
+   SubjectLabel text?
+   SubjectType text?
+   LoadingPhase text?
+   ElapsedSeconds number?
+   ProgressCompleted number?
+   ProgressTotal number?
+   MissingReason text?
+   UnauthorizedReason text?
+   Recovery action()?
+   ErrorCategory text?
+   Retryable boolean?
+   Retry action()?
+}

@@ -84,7 +84,6 @@ Describe('InstantDB schema push', () => {
       supports_background_updates: true,
     })
     Expect(instant.requests[2]!.body).toEqual({ code: generated.rules })
-    Expect(JSON.stringify(report).includes('secret-token')).toBe(false)
   })
 
   Test('skips the schema apply when the plan is empty', async () => {

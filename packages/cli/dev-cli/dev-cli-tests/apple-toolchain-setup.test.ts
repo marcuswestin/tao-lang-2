@@ -218,10 +218,11 @@ Describe('shared Apple toolchain setup', () => {
     Expect(result.calls.filter(call => call.spec.args?.includes('runtimes'))).toHaveLength(2)
     Expect(result.writes.some(path => path.startsWith('/repo/.artifacts/watchos-setup/27.1-27.1/'))).toBe(true)
     Expect(
-      result.calls.filter(call => call.name.endsWith('/xcode-select')).every(call =>
-        call.spec.args?.join() === '-p' && call.spec.env?.['DEVELOPER_DIR'] === undefined
-      ),
-    ).toBe(true)
+      result.calls.filter(call => call.name.endsWith('/xcode-select')).map(call => ({
+        args: call.spec.args,
+        developerDir: call.spec.env?.['DEVELOPER_DIR'],
+      })),
+    ).toEqual([{ args: ['-p'], developerDir: undefined }, { args: ['-p'], developerDir: undefined }])
     const absent = await prepare({ platform: 'watchos', runtimeVersion: '27.1', installedVersion: '27.0' })
     Expect(absent.receipt.status).toBe('needs-action')
     Expect(absent.calls.some(call => call.spec.args?.includes('-downloadPlatform'))).toBe(false)

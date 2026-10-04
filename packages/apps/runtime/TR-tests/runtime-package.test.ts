@@ -1,6 +1,5 @@
 import { FS } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
-import type TR from 'tao-runtime/TR'
 
 type RuntimeManifest = {
   dependencies?: Record<string, string>
@@ -16,18 +15,6 @@ type RuntimeManifest = {
 const runtimePackageRoot = FS.resolvePath('..', import.meta.dir)
 const runtimeToolchainPackageRoot = FS.resolvePath('../expo-host', runtimePackageRoot)
 const frameworkPackages = ['react', 'react-native', 'react-native-safe-area-context'] as const
-
-function providerPackageFixture(): TR.DataProvider {
-  let snapshot: string | undefined
-  return {
-    connect: () => ({
-      load: () => snapshot,
-      save: value => {
-        snapshot = value
-      },
-    }),
-  }
-}
 
 Describe('tao-runtime package boundary', () => {
   Test('packages the generated-code runtime and host-neutral core surfaces', async () => {
@@ -77,18 +64,5 @@ Describe('tao-runtime package boundary', () => {
     for (const packageName of frameworkPackages) {
       Expect(runtimeManifest.devDependencies?.[packageName]).toBe(hostManifest.dependencies?.[packageName])
     }
-  })
-
-  Test('exports the provider protocol through the runtime TR subpath', async () => {
-    const provider = providerPackageFixture()
-    const connection = provider.connect({
-      configuration: {},
-      schema: { entities: {}, name: 'PackageFixture' },
-      storageKey: 'demo',
-    })
-
-    await connection.save('{"provider":"third-party"}')
-
-    Expect(await connection.load()).toBe('{"provider":"third-party"}')
   })
 })

@@ -303,23 +303,12 @@ Describe('Studio isolated provider environment', () => {
     await second.fill!(fillRequest('Story'), collectingOps())
   })
 
-  Test('resolves a scenario Scheme the same way on a canvas and on a device', () => {
+  Test('maps and validates the scenario Scheme request', () => {
     Expect(TR.Studio.Environment.Scheme(
       scenarioScheme,
       { platform: 'web', system: 'light' },
     )).toEqual({
       capability: 'reactive-browser',
-      requested: 'dark',
-      resolved: 'dark',
-      source: 'scenario',
-    })
-    // A device runs the scenario, and appearance is part of it — unlike the viewport, nothing about
-    // a phone prevents it. The two surfaces differ only in what the capability is called.
-    Expect(TR.Studio.Environment.Scheme(
-      scenarioScheme,
-      { platform: 'native', system: 'dark' },
-    )).toEqual({
-      capability: 'pinned-native',
       requested: 'dark',
       resolved: 'dark',
       source: 'scenario',

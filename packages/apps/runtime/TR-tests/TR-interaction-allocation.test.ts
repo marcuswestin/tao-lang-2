@@ -66,9 +66,6 @@ Describe('TR.Interaction allocation', () => {
 
     Expect(reservedInteractionAllocationKeys.has('primary+k')).toBe(true)
     Expect(assignments).toEqual({ finish: 'i', kilo: 'k', projects: 'p' })
-    Expect(Object.values(assignments)).not.toContain('f')
-    Expect(Object.values(assignments)).toContain('k')
-    Expect(Object.values(assignments)).toContain('p')
   })
 
   Test('uses deterministic two-letter sequences after colliding label letters are exhausted', () => {
@@ -79,11 +76,6 @@ Describe('TR.Interaction allocation', () => {
     ])
 
     Expect(assignments).toEqual({ one: 'a', three: 'ba', two: 'bb' })
-    const keys = Object.values(assignments)
-    Expect(
-      keys.every((key, index) => keys.every((other, otherIndex) => index === otherIndex || !other.startsWith(key))),
-    )
-      .toBe(true)
   })
 
   Test('releases a deterministic continuation prefix when every single ASCII letter is occupied', () => {

@@ -1,4 +1,4 @@
-import { Assert, FS, Switch } from '@shared'
+import { Assert, FS, ReleaseCapabilities, type ReleaseProfile, Switch } from '@shared'
 import { PROJECT_TSCONFIG } from '../app-modules'
 import { deriveSchemeColors, type DesignColors } from './creation-colors'
 import {
@@ -11,11 +11,14 @@ import {
   derivedDeclarationNames,
   titleFieldOf,
 } from './creation-plan'
+import { projectStarterRelease } from './release-starter-projection'
 
 /** CreationFiles maps project-relative paths to Tao source, before canonical formatting. */
 export type CreationFiles = Record<string, string>
 
 export type LowerCreationPlanOptions = {
+  /** Internal builds and tests select a profile; public commands use their build stamp. */
+  releaseProfile?: ReleaseProfile
   /** The description the plan came from, recorded in the app file for provenance. */
   description?: string
 }
@@ -35,11 +38,13 @@ export function lowerCreationPlan(plan: CreationPlan, options: LowerCreationPlan
     'App.tao': appFile(plan, names, options.description),
     'Data.tao': dataFile(plan, names),
     'Chrome.tao': chromeFile(plan, names),
-    'Design.tao': designFile(plan, names),
+    'Design.tao': designFile(plan, names, options.releaseProfile),
     'Scenarios.tao': scenariosFile(plan, names),
     [`${names.app}.test.tao`]: testFile(plan, names),
     'tsconfig.json': PROJECT_TSCONFIG,
-    '.gitignore': '*.tao.ts\n.tao/\nnode_modules/\n',
+    '.gitignore':
+      '/.tao-ts/\n/.tao/*\n!/.tao/.gitkeep\n!/.tao/project.json\n!/.tao/lock.jsonc\n!/.tao/skills.version\nnode_modules/\n',
+    '.tao/.gitkeep': '',
     // The reserved root generated package exists from day one, committed empty, so Studio and the
     // compiler have their folder before the first generated file lands.
     '@/.gitkeep': '',
@@ -47,7 +52,7 @@ export function lowerCreationPlan(plan: CreationPlan, options: LowerCreationPlan
   for (const entity of plan.entities) {
     files[`${entity.plural}/${entity.plural}.tao`] = featureFile(entity, names)
   }
-  return files
+  return projectStarterRelease(files, options.releaseProfile)
 }
 
 /** writeCreationFiles writes lowered sources under `directory`, creating feature folders as needed. */
@@ -80,20 +85,14 @@ function appFile(plan: CreationPlan, names: ProjectNames, description: string | 
     : `//\n${commentLines(`Created by tao create from: ${description}`)}\n`
   return `use Local from @tao/data/providers/local
 
-project {
-   id ${taoString(plan.id)}
-   name ${taoString(plan.name)}
-   version "0.1.0"
-   app ${names.app}
-   remote none
-}
-
 ${commentLines(`${plan.name}: ${plan.summary}`)}
 ${provenance}//
-// This file holds the project and the app. The navigation is in Chrome.tao, the entities in
+// This file holds the app. The navigation is in Chrome.tao, the entities in
 // Data.tao, the design in Design.tao, and each feature has its own folder.
 app ${names.app} {
-   Name ${taoString(plan.name)}
+   id ${taoString(plan.id)}
+   version "0.1.0"
+   name ${taoString(plan.name)}
    Navigator ${names.navigator}
    Datasource Local {
       StorageKey ${taoString(plan.id)}
@@ -182,21 +181,26 @@ ${tabs}
 
 // -- Design.tao ------------------------------------------------------------------------------------
 
-function designFile(plan: CreationPlan, names: ProjectNames): string {
+function designFile(plan: CreationPlan, names: ProjectNames, releaseProfile?: ReleaseProfile): string {
   const colors = deriveSchemeColors(plan.palette)
   const tokens = Object.keys(colors.light) as (keyof DesignColors)[]
   const raw = (scheme: 'light' | 'dark', suffix: string) =>
     tokens.map(token => `      ${token}${suffix} ${colors[scheme][token]}`).join('\n')
   const semantic = tokens.map(token => `      ${token} when Scheme is Dark ${token}Dark / not ${token}Light`).join('\n')
-  return `// The design: a palette, element defaults, and the bundles the scenes apply at render sites.
-folder
-design ${names.design} {
-   colors {
-${raw('light', 'Light')}
+  // Scheme-conditional colors and value paths are advanced design, so an early release names one palette.
+  const palette = ReleaseCapabilities.allows('advanced-design', releaseProfile)
+    ? `${raw('light', 'Light')}
 ${raw('dark', 'Dark')}
 
       // Every bundle spells these names, which follow the person's light or dark setting.
-${semantic}
+${semantic}`
+    : `      // Every bundle spells these names.
+${raw('light', '')}`
+  return `// The design: a palette and the bundles the scenes apply at render sites.
+folder
+design ${names.design} {
+   colors {
+${palette}
    }
 
    styles {
@@ -214,13 +218,13 @@ ${semantic}
       NavigationChromeButton [pad 8, radius 8, ink accentStrong, weight 600]
 
       screen [fill, content top stretch, pad 24, background canvas]
-      column [width max 720, gap 16]
+      column [width max 720, gap 16, centered]
       eyebrow [size 13, line 18, weight 700, ink accentStrong]
       sectionTitle [size 20, line 26, weight 700, ink ink]
       body [size 16, line 24, ink inkMuted]
       caption [size 14, line 20, ink inkMuted]
-      panel [gap 14, pad 20, radius 18, background surface, border line]
-      card [gap 10, pad 16, radius 14, background surface, border line]
+      panel [hug, gap 14, pad 20, radius 18, background surface, border line]
+      card [hug, gap 10, pad 16, radius 14, background surface, border line]
       buttonSecondary [background surface, border line, ink accentStrong]
       buttonDanger [background dangerSoft, border danger, ink danger]
    }
@@ -330,9 +334,9 @@ scene ${listScene(entity)}() {
          }
          guard ${entity.plural} {
             loading -> { Spinner() }
-            error -> Message {
+            error -> Context {
                Text(${taoString(`${pluralWords} could not be loaded`)}) [sectionTitle]
-               TextMultiline(Message) [body]
+               TextMultiline(Context.Message) [body]
             }
          }
          guard ${entity.plural} empty -> {
@@ -392,8 +396,8 @@ ${flagActions.map(action => `${action}\n`).join('')}   action Delete${singular}(
          guard ${singular} {
             loading -> { Spinner() }
             missing -> { TextMultiline(${taoString(`This ${singularWords} no longer exists.`)}) [body] }
-            error -> Message { TextMultiline(${
-    taoString(`The ${singularWords} could not be loaded: { Message }`)
+            error -> Context { TextMultiline(${
+    taoString(`The ${singularWords} could not be loaded: { Context.Message }`)
   }) [body] }
          }
 ${detailInputs.join('\n')}${detailNumbers.join('')}${detailFlags.join('\n')}
@@ -538,16 +542,6 @@ function testFile(plan: CreationPlan, names: ProjectNames): string {
       expect text ${taoString(renamed)}
    }`
   })
-  const firstEntity = plan.entities[0]!
-  const firstTitle = titleField(firstEntity)
-  const firstValue = String(plan.samples[firstEntity.plural]![0]![firstTitle.name])
-  journeys.push(`   test ${taoString(`keeps ${humanize(firstEntity.plural).toLowerCase()} across a relaunch`)} {
-      run ${names.app}
-      enter ${taoString(firstValue)} into #${lowerFirst(firstEntity.singular)}${firstTitle.name}
-      press #add${firstEntity.singular}
-      relaunch
-      expect text ${taoString(firstValue)}
-   }`)
   return `use ${names.app} from ./
 
 test ${taoString(plan.name)} {

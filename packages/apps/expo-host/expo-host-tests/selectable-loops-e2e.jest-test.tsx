@@ -10,7 +10,7 @@ Describe('selectable loop runtime', () => {
       `
         use Col, Text from @tao/ui
 
-        app SelectableLoopApp { view Main }
+        app SelectableLoopApp { id "selectableloopapp" version "1.0.0" name "SelectableLoopApp" view Main }
         view Main() {
           state Selected = "Nothing selected"
           state SelectionCount = 0
@@ -50,7 +50,6 @@ Describe('selectable loop runtime', () => {
         Expect(new Set(rowButtons).size).toBe(2)
         for (const [index, rowButton] of rowButtons.entries()) {
           Expect(rowButton.props.accessible).toBe(true)
-          Expect(rowButton.props.accessibilityRole).toBe('button')
           Expect(rowButton.props.testID).toBeUndefined()
           Expect(within(rowButton).getByTestId('selectableRows')).toBe(selectableRoots[index])
           Expect(within(rowButton).queryByTestId('staticRows')).toBeNull()
@@ -61,8 +60,8 @@ Describe('selectable loop runtime', () => {
           fireEvent.press(screen.getByText('Second'))
         })
 
-        Expect(screen.getByText('Selected Second')).toBeDefined()
-        Expect(screen.getByText('Selections: 1')).toBeDefined()
+        screen.getByText('Selected Second')
+        screen.getByText('Selections: 1')
       },
     )
   })

@@ -3,7 +3,7 @@ import { testValidationMessages } from '../validator-src/validators/tests-valida
 import { validationErrorMessages, withValidatedFiles } from './test-validate'
 
 const declarations = `
-  app Demo { view Main }
+  app Demo { id "demo" version "1.0.0" name "Demo" view Main }
   view Main() { render inject \`\`\`ts return null \`\`\` }
   type ExportFailure is one of Offline, TooLarge
   action Export() fails Offline "Offline." from ./Export.ts

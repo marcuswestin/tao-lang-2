@@ -6,8 +6,6 @@ Describe('Tao skills bundle', () => {
     Expect(await FS.realPath(Repo.resolvePath('agents/skills/tao-skills'))).toBe(
       Repo.resolvePath('packages/ai/tao-skills/skills'),
     )
-    Expect(await FS.readText(Repo.resolvePath('agents/skills/tao-skills/SKILL.md')))
-      .toContain('name: tao-skills')
   })
 
   Test('installs embedded Markdown from a relocated Bun bundle', async () => {

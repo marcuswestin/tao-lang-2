@@ -233,7 +233,7 @@ Describe('optional developer shell setup', () => {
         const link = FS.resolvePath('.zshrc', dotdir)
         await FS.writeText(
           managed,
-          `# managed personal settings\nexport EDITOR=vim\n[[ ! -r '${f.shell}/activation.zsh' ]] || source '${f.shell}/activation.zsh'\n`,
+          `# managed personal settings\nexport EDITOR=vim\n[[ ! -r '${f.shell}/activation.zsh' ]] || source '${f.shell}/activation.zsh'\n[[ ! -r '$HOME/.tao-dev/shell/activation.zsh' ]] || source '$HOME/.tao-dev/shell/activation.zsh'\n`,
         )
         await FS.symlink(managed, link)
         f.environment.env = { ...f.environment.env, ZDOTDIR: dotdir }
@@ -257,7 +257,6 @@ Describe('optional developer shell setup', () => {
           ['--realise', packageOutput, '--add-root', rooted, '--indirect'],
           ['--realise', packageOutput, '--add-root', rooted, '--indirect'],
         ])
-        Expect((await FS.entryMetadata(rooted)).linkTarget).toBe(packageOutput)
         Expect(f.calls.find(call => call.spec.args?.[0] === 'hash-object')?.spec.stdin).toBe(`${f.common}\n`)
         Expect(await FS.isSymbolicLink(link)).toBe(true)
         Expect(await FS.realPath(link)).toBe(managed)

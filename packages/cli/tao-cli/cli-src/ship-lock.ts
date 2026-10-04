@@ -1,4 +1,4 @@
-import { Errors, FS, Json, Platform, Text } from '@shared'
+import { Errors, FS, Json, Platform, ReleaseCapabilities, type ReleaseProfile, Text } from '@shared'
 import { PROJECT_LOCK_RELATIVE_PATH } from './project-lock-path'
 import { withShipLockWrite } from './ship-transaction'
 
@@ -68,15 +68,22 @@ export type ShipLockEntry = {
  * preserves it while updating the independent `ship` concern in the same Tao-written project lock.
  */
 export type InstallsLock = {
-  lockfileVersion: 1
-  projects: Record<string, {
-    projectId: string
-    resolvedCommit: string
-    resolvedVersion?: string
+  lockfileVersion: 2
+  environments: Record<string, {
+    projectRoot: string
+    npm: Record<string, {
+      name: string
+      requested: string
+      version: string
+    }>
+    publications: ReadonlyArray<{ name?: string; version: string }>
   }>
-  requires: Record<string, {
-    ref?: string
-    version?: string
+  local: Record<string, {
+    sourceRoot: string
+    publication?: string
+    root: string
+    version: string
+    bindings: Readonly<Record<string, string>>
   }>
 }
 
@@ -88,6 +95,7 @@ export type TaoProjectLock = {
   }
   /** The Tao release this project runs under; `toolchain-pin.ts` reads and writes it. */
   toolchain?: {
+    releaseProfile?: ReleaseProfile & { fingerprint: string }
     version: string
   }
 }
@@ -167,7 +175,32 @@ export function mergeProjectLocks(fresh: TaoProjectLock, incoming: TaoProjectLoc
   const shipping = fresh.ship === undefined && incoming.ship === undefined
     ? {}
     : { ship: { ...fresh.ship, ...incoming.ship, apps } }
-  return { ...fresh, ...incoming, ...shipping }
+  const installs = fresh.installs === undefined && incoming.installs === undefined
+    ? {}
+    : {
+      installs: {
+        lockfileVersion: 2 as const,
+        local: { ...fresh.installs?.local, ...incoming.installs?.local },
+        environments: Object.fromEntries(
+          [
+            ...new Set([
+              ...Object.keys(fresh.installs?.environments ?? {}),
+              ...Object.keys(incoming.installs?.environments ?? {}),
+            ]),
+          ].toSorted().map(namespace => {
+            const before = fresh.installs?.environments[namespace]
+            const after = incoming.installs?.environments[namespace]
+            const source = after ?? before!
+            return [namespace, {
+              projectRoot: source.projectRoot,
+              publications: source.publications,
+              npm: { ...before?.npm, ...after?.npm },
+            }]
+          }),
+        ),
+      } satisfies InstallsLock,
+    }
+  return { ...fresh, ...incoming, ...shipping, ...installs }
 }
 
 /**
@@ -176,7 +209,15 @@ export function mergeProjectLocks(fresh: TaoProjectLock, incoming: TaoProjectLoc
  */
 export async function writeToolchainPin(projectRoot: string, version: string): Promise<string> {
   const lock = await readProjectLock(projectRoot)
-  return await writeProjectLock(projectRoot, { ...lock, toolchain: { version } })
+  return await writeProjectLock(projectRoot, {
+    ...lock,
+    toolchain: {
+      version,
+      ...(ReleaseCapabilities.current().phase === 'development'
+        ? {}
+        : { releaseProfile: { ...ReleaseCapabilities.current(), fingerprint: ReleaseCapabilities.fingerprint() } }),
+    },
+  })
 }
 
 function shipLockEntry(lock: TaoProjectLock, identity: string): ShipLockEntry | undefined {

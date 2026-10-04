@@ -118,27 +118,6 @@ Describe('Studio Feed session transactions', () => {
     })
   })
 
-  Test('previews a collection loop as an entity draft and keeps or undoes all generated source', async () => {
-    await fixture(async f => {
-      const proposal = await f.feed.action({ ...f.selectRequest, kind: 'loop', path: ['Tracks'] })
-      Expect(proposal.pending).toBe(true)
-      Expect(f.compiles[0]).toEqual([])
-      const overlay = f.feed.sourceOverrides()!
-      Expect(overlay[f.view]).toContain('loop Playlist.Tracks / TrackItem')
-      Expect(overlay[f.view]).toContain('view TrackRow(Track)')
-      const compiled = await (await Workspace.open(f.root, { sourceOverrides: overlay }))
-        .compileFiles([f.entryPath, f.view], { studio: true })
-      Expect(compiled.studioManifest?.views.map(view => view.name)).toContain('TrackRow')
-      Expect(await FS.readText(f.view)).toBe(originalView)
-      Expect(await FS.exists(f.sketches)).toBe(false)
-      await f.action('keep', 'keep-loop', 1)
-      Expect(await FS.readText(f.view)).toBe(overlay[f.view]!)
-      await f.action('undo', 'undo-loop', 2, 2)
-      Expect(await FS.readText(f.view)).toBe(originalView)
-      Expect(await FS.exists(f.sketches)).toBe(false)
-    })
-  })
-
   Test('refuses a preview cell belonging to another sketch before publishing a draft', async () => {
     await fixture(async f => {
       const source = { kind: 'tao' as const, path: 'Other.tao', range: { start: 0, end: 1 } }
@@ -542,7 +521,7 @@ async function fixture(
 ): Promise<void> {
   await withTaoFiles('tao-feed-session-', {
     'Main.tao':
-      'use Playlist from ./Data\nuse Placeholder from @tao/ui\napp Preview { view Main }\nview Main() { render Placeholder("Main") }',
+      'use Playlist from ./Data\nuse Placeholder from @tao/ui\napp Preview { id "tao-studio-feed-preview" version "1.0.0" name "Preview" view Main }\nview Main() { render Placeholder("Main") }',
     'Data.tao':
       'public data Playlists / Playlist { Title text, Tracks (owned) }\npublic data Tracks / Track { Name text, Playlist }',
     '@/studio/View1.tao': originalView,

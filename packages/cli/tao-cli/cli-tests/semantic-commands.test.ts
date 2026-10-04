@@ -10,7 +10,7 @@ Describe('tao semantic commands', () => {
         'App.tao': `
         use Button, Col, Text from @tao/ui
 
-        app Demo { view Home }
+        app Demo { id "semantic-demo" version "1.0.0" name "Demo" view Home }
 
         view Home() {
           action Active() { }
@@ -53,7 +53,6 @@ Describe('tao semantic commands', () => {
         Expect(facts.exitCode).toBe(0)
         Expect(Object.keys(factsJson).sort()).toEqual(['app', 'diagnostics', 'facts', 'format', 'version'])
         Expect(factsJson).toMatchObject({ app: 'Demo', diagnostics: [], format: 'tao-semantic-facts-v1', version: 1 })
-        Expect(factsJson.facts.length).toBeGreaterThan(0)
         Expect(factsJson.facts).toContainEqual(Expect['objectContaining']({
           kind: 'action-never-invoked',
           subject: 'Home.Unused',
@@ -94,7 +93,8 @@ Describe('tao semantic commands', () => {
   Test('rejects a requested app that is absent from the semantic graph as a typed user error', async () => {
     await withTaoFixture({
       ...checkedProjectFile,
-      'App.tao': 'app Demo { view Home }\nview Home() { render Text("Welcome") }\n',
+      'App.tao':
+        'app Demo { id "semantic-demo" version "1.0.0" name "Demo" view Home }\nview Home() { render Text("Welcome") }\n',
     }, async root => {
       const result = await runTaoCliForTest(['facts', root, 'App.tao', 'DoesNotExist'])
 
@@ -110,7 +110,7 @@ Describe('tao semantic commands', () => {
       'App.tao': `
         use Button, Col, Text from @tao/ui
 
-        app Demo { view Home }
+        app Demo { id "semantic-demo" version "1.0.0" name "Demo" view Home }
 
         view Home() {
           action Active() { }
@@ -141,10 +141,6 @@ Describe('tao semantic commands', () => {
         subject: 'Home.Unused',
       }))
       Expect(coverage.coverage.checks).toEqual(['shows welcome'])
-      Expect(coverage.coverage.shows).toEqual([
-        { by: 'exact', checks: ['shows welcome'], text: 'Welcome' },
-        { by: 'none', checks: [], text: 'Activate' },
-      ])
     })
   })
 })

@@ -277,7 +277,7 @@ test "Skillet" {
       signed in as Sam
       run Skillet at RecipeLink(Shakshuka)
       collaborator Mira { delete SamMember }
-      // Nothing in Recipes.tao-revolution writes this screen: `guard default` supplies it.
+      // Nothing in Recipes.tao-revolution writes this screen: the app read net supplies it.
       expect text "You don't have access to this"
    }
 

@@ -38,9 +38,9 @@ scene RecipeList() {
          }  }
          guard Recipes {
             loading -> { Spinner() }
-            error -> Message {
+            error -> Context {
                Text("Recipes could not be loaded") [sectionTitle]
-               TextMultiline(Message) [body]
+               TextMultiline(Context.Message) [body]
          }  }
          guard Recipes empty -> { Col() [panel] {
             Text("No recipes yet") [sectionTitle]
@@ -102,7 +102,7 @@ scene RecipeDetail(Recipe) {
          guard Recipe {
             loading -> { Spinner() }
             missing -> { TextMultiline("This recipe no longer exists.") [body] }
-            error -> Message { TextMultiline("The recipe could not be loaded: { Message }") [body] }
+            error -> Context { TextMultiline("The recipe could not be loaded: { Context.Message }") [body] }
          }
 
          #recipeTitleDraft

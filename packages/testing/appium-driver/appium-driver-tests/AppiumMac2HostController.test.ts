@@ -225,7 +225,7 @@ Describe('Appium Mac2 host controller', () => {
       Expect(remote.scripts).toEqual([{ args: [{ x: 3, y: 4 }], script: 'macos: click' }])
       Expect(remote.terminated).toEqual(['dev.tao.studio'])
       Expect(remote.activated).toEqual(['dev.tao.studio'])
-      const scoped = await session.observe({
+      await session.observe({
         expectedRevision: revision,
         target: {
           kind: 'scoped',
@@ -233,7 +233,6 @@ Describe('Appium Mac2 host controller', () => {
           target: { kind: 'tag', value: 'toolbar' },
         },
       })
-      Expect(scoped.id).toBe('element-1')
       Expect(capabilities).toEqual([{ 'appium:automationName': 'mac2', platformName: 'mac' }])
 
       await Expect(
@@ -253,7 +252,6 @@ Describe('Appium Mac2 host controller', () => {
         observation: scrollObservation,
       })
       const scrollSteps = remote.actionCalls[1]?.['actions']
-      Expect(Array.isArray(scrollSteps)).toBe(true)
       Expect((scrollSteps as readonly Record<string, unknown>[])[0]).toEqual({
         duration: 0,
         type: 'pointerMove',

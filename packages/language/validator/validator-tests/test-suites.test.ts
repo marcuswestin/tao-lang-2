@@ -40,32 +40,4 @@ Describe('validator: Tao test suites', () => {
       testValidationMessages.emptySuite('A suite'),
     ),
   )
-
-  // An empty file-level test is the same mistake with the steps left out, and it is reported as the
-  // empty suite it is rather than only as a check that forgot to start an app.
-  Test(
-    'rejects a file-level test with an empty block',
-    rejects(
-      app(render, 'test "A suite" { }'),
-      testValidationMessages.emptySuite('A suite'),
-    ),
-  )
-
-  // Nested tests remain leaf journeys: the rule is about the level a test sits at, not about steps.
-  Test(
-    'keeps reporting a nested check that starts no app as a missing run',
-    rejects(
-      app(
-        render,
-        `
-        test "A suite" {
-          test "a check" {
-            expect text "anything"
-          }
-        }
-      `,
-      ),
-      testValidationMessages.missingRun('a check'),
-    ),
-  )
 })

@@ -272,9 +272,10 @@ Describe('Studio structured panel projection', () => {
     })
     Expect(feed.Rows[0]?.Selected).toBe(true)
     Expect(feed.Rows[1]?.Selected).toBe(false)
-    Expect(feed.Rows[0]?.SelectAction).toEqual({
+    const selectAction = feed.Rows[0]!.SelectAction
+    Expect({ Name: selectAction.Name, Payload: JSON.parse(selectAction.Payload) }).toEqual({
       Name: 'feed-action',
-      Payload: '{"type":"select-row","rowId":"row-0"}',
+      Payload: { type: 'select-row', rowId: 'row-0' },
     })
     Expect(JSON.parse(feed.Rows[0]?.DragPayload ?? '{}')).toEqual({ kind: 'entity', entity: 'Posts', rowId: 'row-0' })
     Expect(JSON.parse(feed.Rows[0]?.Fields[0]?.DragPayload ?? '{}')).toEqual({

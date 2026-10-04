@@ -6,12 +6,8 @@ use OpenUrl from @tao/linking
 use SelectionNav, StackNav from @tao/nav
 use Col, FormButton, Row, ScrollView, Spinner, Text, TextMultiline from @tao/ui
 
-project {
-   id "hnreader"
-   name "HNReader"
-   version "0.1.0"
-   app HNReader
-   remote none
+package {
+   version 0.1.0
    license MIT
 }
 
@@ -20,7 +16,9 @@ project {
 // datasource states the collections it stores, and cross-store rows name stories with a `reference`.
 folder
 app HNReader {
-   Name "HNReader"
+   id "hnreader"
+   version "0.1.0"
+   name "HNReader"
    Navigator HNNavigator
    // The shipped reader keeps its bookmarks under their own key. The patch derives this app's copy
    // where it is bound; the declaration stays as it is.
@@ -37,7 +35,8 @@ app HNReader {
 // The stub variant swaps the feed while keeping bookmarks and reading history, so journeys exercise
 // the real fill machinery and persistent local history deterministically, with no network.
 app HNReaderStub = HNReader with {
-   Name "HNReader Stub"
+   id "hnreader-stub"
+   name "HNReader Stub"
    Datasource {
       StubNews,
       Personal,
@@ -192,9 +191,9 @@ scene FrontPage() {
          loading -> { Col() [stateBox] {
             Spinner()
          } }
-         error -> Message { Col() [stateBox, gap 6] {
+         error -> Context { Col() [stateBox, gap 6] {
             Text("Couldn't reach Hacker News") [problemTitle]
-            Text(Message) [meta]
+            Text(Context.Message) [meta]
          } }
       }
       if TopStories is refreshing {
@@ -343,9 +342,9 @@ scene StoryScreen(Story) {
                   loading -> { Col() [stateBox] {
                      Spinner()
                   } }
-                  error -> Message { Col() [stateBox, gap 6] {
+                  error -> Context { Col() [stateBox, gap 6] {
                      Text("Couldn't load comments") [problemTitle]
-                     Text(Message) [meta]
+                     Text(Context.Message) [meta]
                   } }
                }
                when Thread {
@@ -385,7 +384,7 @@ view BookmarkRow(Bookmark) {
       guard Bookmark.Story {
          loading -> { Text("Loading story…") [notice] }
          missing -> { Text("This story is not in the feed right now.") [notice] }
-         error -> Message { Text(Message) [notice] }
+         error -> Context { Text(Context.Message) [notice] }
       }
       TextMultiline(Bookmark.Story.Title) [storyTitle]
       Text("{ Bookmark.Story.Score } points by { Bookmark.Story.Author }") [meta]

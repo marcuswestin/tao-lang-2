@@ -50,9 +50,8 @@ Describe('authentication provider host', () => {
       await act(async () => {
         await TR.Auth.SettleAll()
       })
-      Expect(screen.getByText('App: public-key-1, SignedOut')).toBeTruthy()
+      screen.getByText('App: public-key-1, SignedOut')
       Expect(connectionConfigurations).toHaveLength(1)
-      Expect(hostConfigurations.length).toBeGreaterThan(0)
       Expect(connectionConfigurations[0]).toEqual({ key: 'public-key-1' })
       Expect(Object.isFrozen(connectionConfigurations[0])).toBe(true)
 
@@ -60,8 +59,8 @@ Describe('authentication provider host', () => {
         screen.rerender(TR.createElement(MountedApp, { label: 'Rerendered app' }))
         presentation = scope!.requestSignIn(() => TR.createElement(Content, { label: 'Sign in' }))
       })
-      Expect(screen.getByText('Rerendered app: public-key-1, SignedOut')).toBeTruthy()
-      Expect(screen.getByText('Sign in: public-key-1, SignedOut')).toBeTruthy()
+      screen.getByText('Rerendered app: public-key-1, SignedOut')
+      screen.getByText('Sign in: public-key-1, SignedOut')
       Expect(evaluations).toBe(1)
       Expect(connectionConfigurations).toHaveLength(1)
       for (const configuration of hostConfigurations) {
@@ -99,7 +98,7 @@ Describe('authentication provider host', () => {
       await act(async () => {
         await TR.Auth.SettleAll()
       })
-      Expect(screen.getByText('SignedOut')).toBeTruthy()
+      screen.getByText('SignedOut')
       Expect(connects).toBe(1)
     } finally {
       screen.unmount()

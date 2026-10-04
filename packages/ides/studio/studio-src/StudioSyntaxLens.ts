@@ -157,9 +157,6 @@ function describe(node: AST.Node, range: StudioLensRange): StudioLensDescription
   if (AST.isAppDeclaration(node) || AST.isNavDeclaration(node) || AST.isDatasourceDeclaration(node)) {
     return head('wiring', 'configuration', AST.propertyRange(node, 'block') ?? tail(AST.keywordRange(node, '='), range))
   }
-  if (AST.isProjectDeclaration(node)) {
-    return head('wiring', 'project', AST.propertyRange(node, 'block'))
-  }
   if (AST.isInjection(node)) {
     return head(
       'wiring',

@@ -16,7 +16,7 @@ import { StandaloneScenarios } from './standalone-scenarios'
 /** A PATH with the system tools and nothing a Tao developer's shell would add. */
 const SYSTEM_PATH = '/usr/bin:/bin'
 
-/** DEV_START_TIMEOUT_MS bounds how long `tao dev` may take to bring Metro up. */
+/** DEV_START_TIMEOUT_MS bounds how long `tao run` may take to bring Metro up. */
 const DEV_START_TIMEOUT_MS = 180_000
 
 /** HOST_INSTALL_NOTICE opens the line an installed Tao prints while it installs its host. */
@@ -131,6 +131,31 @@ async function accept(release: string): Promise<void> {
         },
       },
       {
+        name: 'bundled stdlib identity, typed sidecars, and native modules',
+        run: async () => {
+          const resources = FS.resolvePath(`.tao/versions/${version}/resources`, home)
+          const stdlib = FS.resolvePath('stdlib', resources)
+          const identity = await FS.readJson<{ id: string }>(FS.resolvePath('.tao/project.json', stdlib))
+          if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(identity.id)) {
+            Errors.throwUnexpected('The installed stdlib has no stable project identity.')
+          }
+          for (
+            const path of [
+              'stdlib/Package.tao',
+              'stdlib/@tao/text/Text.tao',
+              'stdlib/@tao/text/Text.ts',
+              'stdlib/@tao/device/haptic/Haptic.tao',
+              'stdlib/@tao/device/haptic/Haptic.ts',
+              'modules/@tao/runtime/TaoRuntime-src/TR-haptic.ts',
+            ]
+          ) {
+            if (!await FS.isFile(FS.resolvePath(path, resources))) {
+              Errors.throwUnexpected(`The installed resource bundle omitted ${path}.`)
+            }
+          }
+        },
+      },
+      {
         name: 'create a deterministic starter outside a checkout',
         run: () => shell(home, 'tao create "A tally counter" --ai none --yes --skip-tests'),
       },
@@ -219,8 +244,12 @@ async function accept(release: string): Promise<void> {
         run: () => prepareBrowserClickProject(environment, project),
       }]),
       {
-        name: 'dev serves web and runs the available browser journey',
+        name: 'run serves web and runs the available browser journey',
         run: () => devLoopServesWeb(environment, project, 'ATallyCounter'),
+      },
+      {
+        name: 'watch refreshes a saved TypeScript bridge',
+        run: () => watchRefreshesSavedBridge(environment, project),
       },
     ], summary)
     HCI.logProcessInfo(
@@ -243,6 +272,53 @@ async function accept(release: string): Promise<void> {
       }
       await FS.remove(root)
     }
+  }
+}
+
+/** Exercise the installed watcher and its generated contract after a saved Tao edit. */
+async function watchRefreshesSavedBridge(environment: Platform.ProcessEnv, project: string): Promise<void> {
+  const taoPath = FS.resolvePath('WatchProbe.tao', project)
+  const typescriptPath = FS.resolvePath('WatchProbe.ts', project)
+  const contractPath = FS.resolvePath('.tao-ts/WatchProbe.tao.ts', project)
+  await FS.writeText(typescriptPath, 'export const Answer = (): number => 42\n')
+  let output = ''
+  const watch = CLI.start('/bin/sh', {
+    args: ['-c', 'exec tao watch .'],
+    cwd: project,
+    env: environment,
+    processPolicy: 'test',
+    timeoutMs: 900_000,
+    onOutput: (_stream, chunk) => {
+      output += String(chunk)
+    },
+    stdio: 'pipe',
+  })
+  try {
+    await waitForFreshWatchRevision(watch, () => output, 1)
+    await FS.writeText(taoPath, 'function Answer() returns number {\n   return Answer() from ./WatchProbe.ts\n}\n')
+    await waitForFreshWatchRevision(watch, () => output, 2)
+    if (!await FS.isFile(contractPath)) {
+      Errors.throwUnexpected(`tao watch reported a refresh but wrote no ${contractPath}.`)
+    }
+  } finally {
+    watch.kill('SIGTERM')
+    await watch.waitForClose()
+    await FS.remove(taoPath)
+    await FS.remove(typescriptPath)
+  }
+}
+
+async function waitForFreshWatchRevision(
+  watch: ReturnType<typeof CLI.start>,
+  output: () => string,
+  expected: number,
+): Promise<void> {
+  const deadline = Date.now() + DEV_START_TIMEOUT_MS
+  while ([...output().matchAll(/Tao project fresh \(revision \d+\)\./gu)].length < expected) {
+    if (watch.exitCode !== null || Date.now() > deadline) {
+      Errors.throwUnexpected(`tao watch did not report fresh revision ${expected}:\n${output()}`)
+    }
+    await Time.sleep(250)
   }
 }
 
@@ -368,16 +444,10 @@ async function prepareBrowserClickProject(environment: Platform.ProcessEnv, proj
     `use StackNav from @tao/nav
 use Button, Col, Text from @tao/ui
 
-project {
-   id "a-tally-counter"
-   name "Browser Click"
-   version "0.1.0"
-   app ATallyCounter
-   remote none
-}
-
 app ATallyCounter {
-   Name "Browser Click"
+   id "a-tally-counter"
+   version "0.1.0"
+   name "Browser Click"
    Navigator StackNav {
       Initial CounterView
    }
@@ -408,7 +478,7 @@ scene CounterView() {
  * release listing.
  */
 async function versionPinWorks(environment: Platform.ProcessEnv, project: string, version: string): Promise<void> {
-  const lock = JSON.parse(Text.stripJsonc(await FS.readText(FS.resolvePath('.tao-project/lock.jsonc', project))))
+  const lock = JSON.parse(Text.stripJsonc(await FS.readText(FS.resolvePath('.tao/lock.jsonc', project))))
   if (lock?.toolchain?.version !== version) {
     Errors.throwUnexpected(`tao create pinned ${JSON.stringify(lock?.toolchain)}, not Tao ${version}.`)
   }
@@ -426,14 +496,14 @@ async function versionPinWorks(environment: Platform.ProcessEnv, project: string
 }
 
 /**
- * devLoopServesWeb starts `tao dev` in `project`, waits for Metro to report its port, fetches the
+ * devLoopServesWeb starts `tao run` in `project`, waits for Metro to report its port, fetches the
  * web bundle from it, and stops the loop. The bundle must name the app, so a Metro that answers
  * with an error page does not pass.
  */
 async function devLoopServesWeb(environment: Platform.ProcessEnv, project: string, appName: string): Promise<void> {
   let output = ''
   const dev = CLI.start('/bin/sh', {
-    args: ['-c', 'exec tao dev'],
+    args: ['-c', 'exec tao run'],
     cwd: project,
     env: environment,
     processPolicy: 'test',
@@ -449,7 +519,7 @@ async function devLoopServesWeb(environment: Platform.ProcessEnv, project: strin
     while (port === undefined) {
       port = /Waiting on http:\/\/localhost:(\d+)/.exec(output)?.[1]
       if (port === undefined && (dev.exitCode !== null || Date.now() > deadline)) {
-        Errors.throwUnexpected(`tao dev did not start Metro:\n${output}`)
+        Errors.throwUnexpected(`tao run did not start Metro:\n${output}`)
       }
       await Time.sleep(250)
     }
@@ -458,7 +528,7 @@ async function devLoopServesWeb(environment: Platform.ProcessEnv, project: strin
     } as RequestInit)
     const bundle = await response.text()
     if (response.status !== 200 || !bundle.includes(appName)) {
-      Errors.throwUnexpected(`tao dev's Metro answered ${response.status} without ${appName} in its web bundle.`)
+      Errors.throwUnexpected(`tao run's Metro answered ${response.status} without ${appName} in its web bundle.`)
     }
     const browserDriver = Platform.runtimeProcess.env['TAO_ACCEPTANCE_BROWSER_DRIVER']
     if (browserDriver !== undefined) {

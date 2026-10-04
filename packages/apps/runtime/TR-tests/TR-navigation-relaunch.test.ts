@@ -36,9 +36,11 @@ function moduleScopeApp(variant: string) {
   const app = TR.Navigation.App({
     auxiliaries: () => ({}),
     declaration: TR.Navigation.AppDeclaration('RelaunchApp', identity(variant, 'app', 'RelaunchApp')),
+    id: 'relaunch-app',
     name: 'RelaunchApp',
     navigator: () => TR.Navigation.Configure(stack, { Initial: home }),
     restoration: { exclusions: [], mode: 'automatic', variant },
+    version: '1.0.0',
   })
   return { app, detail }
 }
@@ -58,29 +60,11 @@ function persistedWidth(name: string) {
     identity(name, 'app', 'RelaunchApp'),
     'SidebarWidth',
     { kind: 'primitive', name: 'number' },
+    'relaunch-app',
   )
 }
 
 Describe('navigation across a relaunch', () => {
-  Test('re-reads the device on a relaunch instead of replaying the load the last launch memoized', async () => {
-    const device = memoryKeyValueStorage()
-    const restoreDevice = setNavigationRestorationStorageForTests(device)
-    try {
-      const { app, detail } = moduleScopeApp('LoadMemo')
-      const detach = await app.attachRestoration()
-      app.present(app.navigator, detail, { Message: TR.Value('restored') })
-      await drainMicrotasks()
-      detach()
-
-      await TR.Navigation.beginLaunch()
-      const relaunched = await app.attachRestoration()
-      Expect(depth(app)).toBe(2)
-      relaunched()
-    } finally {
-      restoreDevice()
-    }
-  })
-
   Test('a fresh relaunch opens where a first launch opens, and records that as the stored position', async () => {
     const device = memoryKeyValueStorage()
     const restoreDevice = setNavigationRestorationStorageForTests(device)

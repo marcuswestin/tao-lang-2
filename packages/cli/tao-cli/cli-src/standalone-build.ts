@@ -1,5 +1,5 @@
 import { DesktopHost } from '@expo-host'
-import { CLI, Errors, FS, HCI, Platform, Repo, TaoResources } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, ReleaseCapabilities, Repo, TaoResources } from '@shared'
 import { AgentClientBuild } from './agent-client-build'
 import { TaoAppModules } from './app-modules'
 import { StandaloneResources } from './standalone-resources'
@@ -35,7 +35,7 @@ const RELEASE_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/
  * standalone plan removes its line when it lands, so a release cannot overstate the binary.
  */
 const KNOWN_GAPS = [
-  '`tao dev` serves the web target from the standalone binary; the iOS Simulator and Android do not open from it yet.',
+  '`tao run` serves the web target from the standalone binary; the iOS Simulator and Android do not open from it yet.',
   '`tao ship` cannot prebuild an iCloud-backed app from the standalone binary because its host lacks the tao-icloud config plugin.',
   '`tao review` is not in the standalone binary.',
   'The binary is not signed or notarized yet.',
@@ -43,9 +43,12 @@ const KNOWN_GAPS = [
 
 /** Package paths the payload copies, each package to its place in the resource layout. */
 const COPIED_TREES = [
-  // The stdlib root is the package: its packages under `@tao/`, and the `Project.tao` that gives
-  // their declarations the project identity every compiled app's navigation is keyed on.
-  { source: 'packages/apps/stdlib', within: ['@tao', 'Project.tao'], target: TaoResources.STDLIB_DIRECTORY },
+  // The identity is authored; generated `.tao` state and TypeScript contracts are refreshed after install.
+  {
+    source: 'packages/apps/stdlib',
+    within: ['@tao', 'Package.tao', '.tao/project.json'],
+    target: TaoResources.STDLIB_DIRECTORY,
+  },
   { source: 'packages/apps/expo-host', within: ['.'], target: TaoResources.HOST_DIRECTORY },
   // The stdlib's data-provider sidecars import `@shared/core`, which Metro resolves by path, and the
   // journey harness `tao test` runs under Jest imports the rest of `@shared`.
@@ -79,10 +82,21 @@ try {
 
 async function main(args: readonly string[]): Promise<void> {
   const version = optionValue(args, '--release')
+  const phaseValue = optionValue(args, '--phase')
+  if (version === undefined && phaseValue !== undefined) {
+    Errors.throwUserInput('A public standalone profile requires --release <version>.')
+  }
+  const phase = phaseValue === undefined
+    ? (version === undefined ? 'development' : undefined)
+    : Number(phaseValue)
+  if (phase === undefined || (phase !== 'development' && ![1, 2, 3, 4, 5].includes(phase))) {
+    Errors.throwUserInput('A public release requires --phase 1, 2, 3, 4, or 5 at build time.')
+  }
+  const profile = ReleaseCapabilities.profile(phase as 1 | 2 | 3 | 4 | 5 | 'development')
   if (version === undefined) {
-    await buildBinary(args[0] ?? `${BUILD_ROOT}/tao`)
+    await buildBinary(args[0] ?? `${BUILD_ROOT}/tao`, undefined, profile)
   } else {
-    await buildRelease(version, optionValue(args, '--releases'))
+    await buildRelease(version, optionValue(args, '--releases'), profile)
   }
 }
 
@@ -92,7 +106,11 @@ async function main(args: readonly string[]): Promise<void> {
  * SHA-256; the install script pointed at these releases; a release index; and draft notes. It prints
  * the `gh release create` command rather than running it, because publishing is the Developer's step.
  */
-async function buildRelease(version: string, releasesOption: string | undefined): Promise<void> {
+async function buildRelease(
+  version: string,
+  releasesOption: string | undefined,
+  profile: ReturnType<typeof ReleaseCapabilities.profile>,
+): Promise<void> {
   if (!RELEASE_VERSION.test(version)) {
     Errors.throwUserInput(`A release version is semver like 0.4.0; ${JSON.stringify(version)} is not.`)
   }
@@ -101,7 +119,7 @@ async function buildRelease(version: string, releasesOption: string | undefined)
   const target = hostTarget()
   const directory = FS.resolvePath(`${RELEASE_ROOT}/v${version}`, repoRoot)
   const binary = FS.resolvePath(`${BUILD_ROOT}/standalone/tao-${version}`, repoRoot)
-  await buildBinary(binary, { releases, version })
+  await buildBinary(binary, { releases, version }, profile)
 
   await FS.remove(directory)
   const asset = `tao-${target}.gz`
@@ -121,6 +139,7 @@ async function buildRelease(version: string, releasesOption: string | undefined)
     version,
     commit,
     targets: { [target]: { asset, sha256 } },
+    releaseProfile: { ...profile, fingerprint: ReleaseCapabilities.fingerprint(profile) },
   })
   await FS.writeText(FS.resolvePath('notes.md', directory), releaseNotes(version, releases))
 
@@ -137,7 +156,11 @@ async function buildRelease(version: string, releasesOption: string | undefined)
  * buildBinary stages and packs the resource payload, then compiles the binary around it. A release
  * build also stamps in its version and where its releases are published.
  */
-async function buildBinary(outfile: string, release?: { releases: string; version: string }): Promise<void> {
+async function buildBinary(
+  outfile: string,
+  release: { releases: string; version: string } | undefined,
+  profile: ReturnType<typeof ReleaseCapabilities.profile>,
+): Promise<void> {
   const repoRoot = Repo.getRoot()
   const portableBun = (await CLI.mustRun('bash', { args: [PORTABLE_BUN_SCRIPT], cwd: repoRoot })).stdout.trim()
   const staging = FS.resolvePath(`${BUILD_ROOT}/standalone/${TaoResources.INSTALLED_DIRECTORY}`, repoRoot)
@@ -160,6 +183,11 @@ async function buildBinary(outfile: string, release?: { releases: string; versio
   )
   await makeHostInstallable(repoRoot, FS.resolvePath(TaoResources.HOST_DIRECTORY, staging), portableBun)
   await recordManagedNode(repoRoot, staging)
+  await FS.writeJson(FS.resolvePath('release-profile.json', staging), {
+    version: release?.version ?? 'development',
+    ...profile,
+    fingerprint: ReleaseCapabilities.fingerprint(profile),
+  })
   const fileCount = await packTree(staging, archive)
   HCI.logProcessInfo('standalone', `Packed ${fileCount} resource files into ${FS.relativePath(repoRoot, archive)}.`)
 
@@ -170,7 +198,13 @@ async function buildBinary(outfile: string, release?: { releases: string; versio
     '--define',
     `TAO_RELEASES_URL=${JSON.stringify(release.releases)}`,
   ]
-  const defines = ['--define', 'TAO_STANDALONE=true', ...stamp]
+  const defines = [
+    '--define',
+    'TAO_STANDALONE=true',
+    '--define',
+    `TAO_RELEASE_PHASE=${JSON.stringify(profile.phase)}`,
+    ...stamp,
+  ]
   await CLI.mustRun(portableBun, {
     args: ['build', '--compile', ...defines, '--outfile', FS.resolvePath(outfile, repoRoot), ENTRY_POINT, archive],
     cwd: repoRoot,

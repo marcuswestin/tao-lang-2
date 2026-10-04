@@ -1,14 +1,15 @@
 import { lineDevLoopReporter } from '@expo-host/dev-loop/DevLoopOutput'
 import { type DevAppSelection, type DevLoopOutcome, runDevLoop } from '@expo-host/dev-loop/expo-dev-loop'
 import type { DevStartupTarget } from '@expo-host/dev-loop/expo-runner/run-targets'
-import { Errors, FS, HCI, ProjectDevSession, Switch } from '@shared'
-import { Platform } from '@shared'
+import { ProjectTooling, type ProjectToolingWatch } from '@project-tooling'
+import { Errors, FS, HCI, Platform, ProjectDevSession, ReleaseCapabilities, Switch } from '@shared'
 import { connectDevLoopWorker, type DevLoopControlHooks } from '@shared/DevLoopControl'
 import type { Readable, Writable } from 'node:stream'
 import { TaoAppModules } from './app-modules'
 import { discoverTaoDevProjects, type TaoDevApp } from './dev-app-discovery'
 import { selectTaoDevApp, type TaoDevSelectionResult } from './dev-app-selection'
 import { createInkDevLoopReporter } from './dev/dev-loop-tui'
+import * as DiagnosticReport from './diagnostic-report'
 
 /** TaoDevCommandOptions supplies explicit selection, terminal state, and a focused loop seam. */
 type TaoDevCommandOptions = {
@@ -27,6 +28,12 @@ export async function runTaoDev(
   targetPath = '.',
   options: TaoDevCommandOptions = {},
 ): Promise<number> {
+  if (options.device !== undefined) {
+    ReleaseCapabilities.require('companion')
+  }
+  for (const target of options.startupTargets ?? []) {
+    ReleaseCapabilities.require(ReleaseCapabilities.targetCapability(target))
+  }
   const target = FS.resolvePath(targetPath)
   const selectionOnly = Platform.runtimeProcess.env['TAO_DEV_LOOP_SELECTION_ONLY'] === '1'
   // Private worker state is consumed once, so downstream subprocesses cannot join its control plane.
@@ -36,7 +43,7 @@ export async function runTaoDev(
   let managed: Awaited<ReturnType<typeof connectDevLoopWorker>> | undefined
   let control = options.control
   const managedRequest = credentials !== undefined && credentials !== ''
-  // `runDevLoop` renders through whichever reporter it is given; the dashboard is `tao dev`'s to
+  // `runDevLoop` renders through whichever reporter it is given; the dashboard is `tao run`'s to
   // own, so this is the one place that wires the Ink implementation in.
   const runLoop = options.runLoop
     ?? ((selection, device) =>
@@ -62,6 +69,7 @@ export async function runTaoDev(
   managed = managedRequest ? await connectDevLoopWorker(credentials) : undefined
   control ??= managed
   let lease: Awaited<ReturnType<typeof ProjectDevSession.acquire>> | undefined
+  let toolingWatch: ProjectToolingWatch | undefined
   try {
     while (true) {
       if (control?.stopRequested?.()) {
@@ -70,6 +78,20 @@ export async function runTaoDev(
       if (lease === undefined) {
         lease = await ProjectDevSession.acquire(currentApp.projectRoot, 'cli')
         await TaoAppModules.ensureProject(currentApp.projectRoot)
+        toolingWatch = await ProjectTooling.watch(currentApp.projectRoot, {
+          runtimeRoot: TaoAppModules.runtimeRoot(),
+          onResult: result => {
+            if (result.status === 'stale') {
+              for (const diagnostic of result.diagnostics) {
+                HCI.writeErrorLine(DiagnosticReport.renderDiagnostic(diagnostic))
+              }
+            }
+          },
+          onError: error => HCI.writeErrorLine(Errors.formatForUser(error)),
+        })
+        if (toolingWatch.lastResult.status !== 'fresh') {
+          return exitTaoDev(1, options)
+        }
       }
       const previousProject = currentApp.projectRoot
       const outcome = await runLoop(currentApp, options.device)
@@ -95,20 +117,29 @@ export async function runTaoDev(
         return exitTaoDev(exitCode, options)
       }
       if (currentApp.projectRoot !== previousProject) {
+        await toolingWatch?.dispose()
+        toolingWatch = undefined
         await lease.release()
         lease = undefined
       }
     }
   } finally {
-    await lease?.release()
-    await managed?.close()
+    try {
+      await toolingWatch?.dispose()
+    } finally {
+      try {
+        await lease?.release()
+      } finally {
+        await managed?.close()
+      }
+    }
   }
 }
 
 /** exitTaoDev announces the exit; closing the dev-loop dashboard restores the primary screen, which
  * still shows the stale app selector, so a silent exit reads as returning to app selection. */
 function exitTaoDev(exitCode: number, options: TaoDevCommandOptions): number {
-  HCI.writeLine('Exited Tao dev.', options)
+  HCI.writeLine('Exited Tao run.', options)
   return exitCode
 }
 

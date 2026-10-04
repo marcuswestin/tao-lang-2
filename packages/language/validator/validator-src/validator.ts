@@ -1,10 +1,11 @@
 import { Packages } from '@ast-utils'
 import { AST, codeProjectRoot, Parser, type ParseResult, type ParserServices } from '@parser'
-import { type Diagnostic, Diagnostics, FS } from '@shared'
+import { type Diagnostic, Diagnostics, FS, ReleaseCapabilities, type ReleaseProfile } from '@shared'
 import { registerTaoValidationChecks } from './langium-validation'
 import { Validate } from './Validate'
 import { Validation, type ValidationRunContext } from './validation'
-import { validateProjectWorkspace } from './validators/project-validator'
+import { validatePackageWorkspace } from './validators/package-validator'
+import { validateReleaseCapabilities } from './validators/release-capabilities-validator'
 
 /** ValidationResult declares validated Tao source and diagnostics. */
 export type ValidationResult = Pick<ParseResult, 'entry' | 'files'> & {
@@ -22,9 +23,11 @@ function createContext(
   workspaceFiles: readonly AST.TaoFile[],
   entryFilePath: string,
   projectFiles?: readonly AST.TaoFile[],
+  releaseProfile: ReleaseProfile = ReleaseCapabilities.current(),
 ): ValidationRunContext {
   return {
     entryFilePath,
+    releaseProfile,
     packagesContext,
     workspaceFiles,
     ...(projectFiles === undefined ? {} : { projectFiles }),
@@ -37,7 +40,11 @@ function createContext(
  * joins a Langium container, so the core and LSP workspace flavors install it the same way; the
  * standalone session below validates a parse result directly instead and never installs it.
  */
-function installLangiumChecks(services: ParserServices, packagesContext: Packages.Context): void {
+function installLangiumChecks(
+  services: ParserServices,
+  packagesContext: Packages.Context,
+  editorRelease = false,
+): void {
   let batch: {
     contexts: ReadonlyMap<AST.TaoFile, ValidationRunContext>
     pending: Set<AST.TaoFile>
@@ -95,7 +102,7 @@ function installLangiumChecks(services: ParserServices, packagesContext: Package
           || Packages.projectRootForPath(packagesContext.index, path) === projectRoot
       })
     return createContext(packagesContext, workspaceFiles, entryFilePath)
-  })
+  }, editorRelease)
 }
 
 /** validateParseResult validates an existing parse result. */
@@ -111,12 +118,13 @@ async function validateParseResult(
   // validators tolerate unresolved references.
   const validationDiagnostics = Validation.collectDiagnostics()
   const ctx = Validation.createContext(validationDiagnostics.accept, {
+    releaseProfile: context.releaseProfile,
     entryFilePath: context.entryFilePath,
     packagesContext: context.packagesContext,
     workspaceFiles: context.workspaceFiles,
     ...(context.projectFiles === undefined ? {} : { projectFiles: context.projectFiles }),
   })
-  validateProjectWorkspace(ctx)
+  validatePackageWorkspace(ctx)
   for (const file of context.workspaceFiles) {
     const nodes = Validate.TaoFile(file, ctx)
     Validate.Types(file, nodes, ctx)
@@ -134,7 +142,10 @@ async function validateParseResult(
  * source text alone does not invalidate it because each call replaces the
  * synthetic Langium document.
  */
-async function createSession(packagesContext?: Packages.Context): Promise<ValidatorSession> {
+async function createSession(
+  packagesContext?: Packages.Context,
+  releaseProfile: ReleaseProfile = ReleaseCapabilities.current(),
+): Promise<ValidatorSession> {
   const sharedPackagesContext = packagesContext ?? await Packages.createContext(codeProjectRoot)
   const parserContext = Parser.createContext({
     packages: Packages.createResolver(sharedPackagesContext),
@@ -153,6 +164,8 @@ async function createSession(packagesContext?: Packages.Context): Promise<Valida
             sharedPackagesContext,
             parseResult.files.map(file => file.ast),
             parseResult.entry.path,
+            undefined,
+            releaseProfile,
           ),
         )
       })
@@ -163,14 +176,28 @@ async function createSession(packagesContext?: Packages.Context): Promise<Valida
 }
 
 /** validateCode validates Tao source code using fresh standalone services. */
-async function validateCode(code: string): Promise<ValidationResult> {
-  return await (await createSession()).validateCode(code)
+async function validateCode(
+  code: string,
+  releaseProfile: ReleaseProfile = ReleaseCapabilities.current(),
+): Promise<ValidationResult> {
+  return await (await createSession(undefined, releaseProfile)).validateCode(code)
+}
+
+/** releaseDiagnostics always applies eligibility, including compiler paths that already validated types. */
+function releaseDiagnostics(context: ValidationRunContext): readonly Diagnostic[] {
+  const collector = Validation.collectDiagnostics()
+  const ctx = Validation.createContext(collector.accept, context)
+  for (const file of context.workspaceFiles) {
+    validateReleaseCapabilities(file, ctx)
+  }
+  return collector.diagnostics
 }
 
 /** Validator exposes Tao source validation functions. */
 const Validator = {
   createContext,
   createSession,
+  releaseDiagnostics,
   installLangiumChecks,
   validateCode,
   validateParseResult,

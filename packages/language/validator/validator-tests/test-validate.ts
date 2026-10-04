@@ -17,12 +17,13 @@ export async function withValidatedFiles<
   files: Files,
   testFunction: (validated: ValidatedFiles) => Promise<void> | void,
 ): Promise<void> {
-  const fixtureFiles = Object.values(files).some(source => /\bproject\s*\{/u.test(source))
-    ? files
-    : { ...files, 'Project.tao': 'project { id "tao-validator-test" name "Validator test" }' }
+  const fixtureFiles: Record<string, string> = {
+    ...Object.fromEntries(Object.entries(files).map(([path, source]) => [path, Text.stripIndent(source)])),
+    '.tao/.gitkeep': '',
+  }
   await withTaoFiles('tao-validator-', fixtureFiles, async paths => {
-    await testFunction(await Workspace.validate(paths[entryFile]))
-  }, { location: 'host' })
+    await testFunction(await Workspace.validate(paths[entryFile]!))
+  }, { location: 'host', verbatim: true })
 }
 
 export type TaoFiles = Record<string, string>
@@ -66,7 +67,7 @@ export function rejectsFilesFrom(
 
 /** visibleView returns a workspace-visible no-op view fixture. */
 export function visibleView(name: string, parameters = ''): string {
-  return stubView(name, parameters).replace('view ', 'workspace view ')
+  return stubView(name, parameters).replace('view ', 'project view ')
 }
 
 export async function withValidationParse<T>(
@@ -81,15 +82,10 @@ export async function withValidationParse<T>(
   const rootDir = await mkTestDir('tao-validator-parse-')
   try {
     const sourcePath = FS.resolvePath('Source.tao', rootDir)
+    await FS.writeText(FS.resolvePath('.tao/.gitkeep', rootDir), '')
     await FS.writeText(sourcePath, Text.stripIndent(source))
     for (const [name, contents] of Object.entries(siblingFiles)) {
       await FS.writeText(FS.resolvePath(name, rootDir), contents)
-    }
-    if (!/\bproject\s*\{/u.test(source)) {
-      await FS.writeText(
-        FS.resolvePath('Project.tao', rootDir),
-        'project { id "tao-validator-parse" name "Validator parse" }',
-      )
     }
     const workspace = await Workspace.open(rootDir)
     const validated = await workspace.validate(sourcePath)

@@ -1,9 +1,8 @@
 use ToggleNavigation, ToggleWithView from ./
 
 test "Toggle Navigation" {
-   // The stack's header moves into the bar, so the title and the toolbar each appear exactly once —
-   // a second copy would make these single-match expectations fail.
-   test "shows the visible screen's title and toolbar in the bottom bar" {
+   // The active screen exposes its declared title and toolbar through the toggle navigator.
+   test "exposes the visible screen's title and toolbar through the toggle navigator" {
       run ToggleNavigation
       expect navigation title "Top stories"
       press "Open story"
@@ -45,16 +44,5 @@ test "Toggle Navigation" {
       expect navigation title "Top stories"
       press label "Notes"
       expect navigation title "Notes"
-   }
-   // The selection and the stack inside it restore together.
-   test "reopens on the stack and screen it left" {
-      run ToggleNavigation
-      press "Open story"
-      press label "Reading"
-      press label "Top"
-      relaunch
-      expect navigation title "Story"
-      press label "Reading"
-      expect navigation title "Reading list"
    }
 }

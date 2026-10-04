@@ -1,3 +1,4 @@
+import { ReleaseCapabilities } from '@shared/core'
 import { StudioApiClient } from '../StudioApiClient'
 import type { StudioClientView } from '../StudioShell'
 import { showSourceActionError } from '../StudioVisualEditing'
@@ -17,6 +18,9 @@ export type StudioBetaShipHandle = Readonly<{
 /** The Beta Ship button: one ship at a time, behind an overlay, from saved files only. */
 export function mountStudioBetaShip(deps: StudioBetaShipDeps): StudioBetaShipHandle {
   const { view } = deps
+  if (!ReleaseCapabilities.allows('ship')) {
+    return { active: () => false, dispose: () => {} }
+  }
   let active = false
   const listener = (): void => {
     if (active || !deps.requireAllTabsSaved('Save or revert unsaved files before beta shipping.')) {
