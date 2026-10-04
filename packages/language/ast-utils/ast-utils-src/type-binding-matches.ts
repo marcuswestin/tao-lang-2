@@ -45,6 +45,8 @@ export type BindingRules<Candidate, Target> = {
   namedTypeAccepts(actual: TaoType, expected: TaoType): boolean
   /** Domain admission for unnamed compatible values; defaults to ordinary upward assignability. */
   compatibleTypeAccepts?(actual: TaoType, expected: TaoType): boolean
+  /** Full domain admission, including non-type metadata; applies before every matching pass. */
+  pairAccepts?(candidate: Candidate, target: Target): boolean
   afterNamedBinding?(state: BindingState<Candidate, Target>): void
   /** Report targets that share a type only while unlabelled candidates remain to be told apart by type. */
   duplicateTargetTypesOnlyWithCandidates?: boolean
@@ -77,11 +79,13 @@ export function resolveBindings<Candidate, Target>(
   rules.afterNamedBinding?.({ bind, remainingCandidates, remainingTargets })
 
   const blocked = (candidate: Candidate): boolean => rules.candidateType(candidate).kind === 'unresolved'
+  const pairAccepts = (candidate: Candidate, target: Target): boolean => rules.pairAccepts?.(candidate, target) ?? true
   const assignable = (candidate: Candidate, target: Target): boolean =>
-    (rules.compatibleTypeAccepts ?? Type.isAssignable)(rules.candidateType(candidate), rules.targetType(target))
+    pairAccepts(candidate, target)
+    && (rules.compatibleTypeAccepts ?? Type.isAssignable)(rules.candidateType(candidate), rules.targetType(target))
   bindUnambiguousPairs(remainingCandidates, remainingTargets, blocked, (candidate, target) => {
     const actualKey = Type.identityKey(rules.candidateType(candidate))
-    return !!actualKey && actualKey === Type.identityKey(rules.targetType(target))
+    return pairAccepts(candidate, target) && !!actualKey && actualKey === Type.identityKey(rules.targetType(target))
   }, bind)
   bindUnambiguousPairs(remainingCandidates, remainingTargets, blocked, assignable, bind)
 
@@ -124,7 +128,10 @@ function bindNamed<Candidate, Target>(
     }
     const actual = rules.candidateType(candidate)
     const expected = rules.targetType(target)
-    if (actual.kind !== 'unresolved' && expected.kind !== 'unresolved' && !rules.namedTypeAccepts(actual, expected)) {
+    if (
+      rules.pairAccepts?.(candidate, target) === false
+      || (actual.kind !== 'unresolved' && expected.kind !== 'unresolved' && !rules.namedTypeAccepts(actual, expected))
+    ) {
       diagnostics.push({ kind: 'named-type', candidate, target })
     }
     state.bind(candidate, target)
