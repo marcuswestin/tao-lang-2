@@ -14,9 +14,9 @@ import { VerificationLanes } from '@verification/VerificationLanes'
 import { WorkReporter } from '@verification/WorkReporter'
 import { CleanCommand } from './clean/CleanCommand'
 import { devZshCompletion } from './completion/DevCompletion'
-import { readAgentCapabilities, unavailableLandingCapabilities } from './doctor/AgentCapabilities'
 import { AgentCapabilitiesCommand } from './doctor/AgentCapabilitiesCommand'
 import { BoardCommand } from './doctor/BoardCommand'
+import { landingHostGateMessage, prepareLandingHost } from './doctor/LandingHost'
 import { MyStatusCommand } from './doctor/MyStatusCommand'
 import { ReclaimCommand } from './doctor/ReclaimCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
@@ -329,15 +329,9 @@ await runWithCommands(commands => {
           UiVisibility.warn(UiVisibility.studioWarnings)
         }
         if (options.dryRun !== true && options.skipVerifyFull !== true) {
-          const host = await readAgentCapabilities()
-          const missing = unavailableLandingCapabilities(host)
-          if (missing.length > 0) {
-            Errors.throwHostEnvironment(
-              'Landing needs a host-capable unsandboxed shell before entering the ready queue. '
-                + missing.map(check => `${check.name}: ${check.detail}. `).join('')
-                + 'Run `./agent capabilities` for details, then run `./agent land` in an approved '
-                + 'unsandboxed session. Do not retry the host gate inside this sandbox.',
-            )
+          const host = await prepareLandingHost()
+          if (host.missing.length > 0) {
+            Errors.throwHostEnvironment(landingHostGateMessage(host.missing, host.report.sandboxDetected))
           }
         }
         await LandCommand.run({

@@ -17,10 +17,13 @@ change that addressed it.
 - [DEVENV-020 — Companion lifecycle and diagnostics](<Developer environment upgrades/DEVENV-020-companion-lifecycle-and-diagnostics.md>) — In progress
 - [DEVENV-024 — Branch-local semantic cleanup](<Developer environment upgrades/DEVENV-024-branch-local-semantic-cleanup.md>) — Blocked
 - [DEVENV-CLOUD-AGENT-EXECUTIONS-LACK-PORTABLE-BOOTSTRAP — Cloud agent executions lack a portable bootstrap](<Developer environment upgrades/DEVENV-CLOUD-AGENT-EXECUTIONS-LACK-PORTABLE-BOOTSTRAP.md>) — In progress
+- [DEVENV-FINALIZE-HIDES-PROGRESS-IN-A-SECOND-LOG — Finalize hides progress in a second log](<Developer environment upgrades/DEVENV-FINALIZE-HIDES-PROGRESS-IN-A-SECOND-LOG.md>) — Candidate
 - [DEVENV-IOS-BUILD-HIDES-POD-INSTALL-FAILURES — iOS build hides pod install failures](<Developer environment upgrades/DEVENV-IOS-BUILD-HIDES-POD-INSTALL-FAILURES.md>) — Candidate
 - [DEVENV-NATIVE-MODULE-CHECK-CANNOT-LIST-SWIFT-PACKAGE-PODS — native module check cannot list Swift package Pods](<Developer environment upgrades/DEVENV-NATIVE-MODULE-CHECK-CANNOT-LIST-SWIFT-PACKAGE-PODS.md>) — Candidate
 - [DEVENV-NESTED-TAO-JOURNEYS-RUN-IN-OVERLAPPING-SHARDS — Nested Tao journeys run in overlapping shards](<Developer environment upgrades/DEVENV-NESTED-TAO-JOURNEYS-RUN-IN-OVERLAPPING-SHARDS.md>) — Open
+- [DEVENV-NO-FRONT-DOOR-REPEATS-A-TEST-UNDER-CPU-LOAD — No front door repeats a test under CPU load](<Developer environment upgrades/DEVENV-NO-FRONT-DOOR-REPEATS-A-TEST-UNDER-CPU-LOAD.md>) — Candidate
 - [DEVENV-PERSISTENT-UI-CONTROLLER-POST-MVP — Persistent UI controller after MVP](<Developer environment upgrades/DEVENV-PERSISTENT-UI-CONTROLLER-POST-MVP.md>) — Planned
+- [DEVENV-SANDBOXED-BRANCH-CHECKOUT-STOPS-HALF-SWITCHED — Sandboxed branch checkout stops half-switched](<Developer environment upgrades/DEVENV-SANDBOXED-BRANCH-CHECKOUT-STOPS-HALF-SWITCHED.md>) — Candidate
 - [DEVENV-STUDIO-STARTUP-STAGES-NEED-MEASUREMENT — Studio startup stages need measurement](<Developer environment upgrades/DEVENV-STUDIO-STARTUP-STAGES-NEED-MEASUREMENT.md>) — Planned
 
 ## External and observational findings

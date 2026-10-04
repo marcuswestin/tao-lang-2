@@ -4,7 +4,7 @@
     "lockfileVersion": 2,
     "local": {},
     "environments": {
-      "adc9aebda84d1143207bab3ef7d3e66af2f6d5f3a17c0f50cd2bfe605cbf95a8": {
+      ".": {
         "projectRoot": ".",
         "publications": [],
         "npm": {

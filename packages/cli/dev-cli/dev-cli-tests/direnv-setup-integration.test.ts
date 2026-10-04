@@ -8,7 +8,14 @@ Describe('developer shell setup ordering', () => {
       const justfile = await FS.readText(Repo.resolvePath('Justfile'))
       const setup = justfile.match(/^_setup:.*\n(?:[ \t].*\n)*/m)?.[0]
       Assert.defined(setup, 'The setup recipe exists')
-      const prerequisites = ['_deps', '_agent-config', '_git-hooks', '_initial-dev-branch', '_shell-completion']
+      const prerequisites = [
+        '_deps',
+        '_tao-project-deps',
+        '_agent-config',
+        '_git-hooks',
+        '_initial-dev-branch',
+        '_shell-completion',
+      ]
       const log = FS.resolvePath('steps.log', fixture)
       await FS.writeText(FS.resolvePath('dev', fixture), '#!/bin/sh\nprintf "%s\\n" "$*" >> steps.log\n')
       await FS.chmod(FS.resolvePath('dev', fixture), 0o755)
