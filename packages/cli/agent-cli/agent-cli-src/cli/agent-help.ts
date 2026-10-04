@@ -128,6 +128,10 @@ Examples:
   ./agent unsandboxed studio Apps/HNReader
   ./agent unsandboxed studio-ps --json
   ./agent unsandboxed studio-stop --launch <launch-id>
+  ./agent unsandboxed studio-canary
+  ./agent unsandboxed studio-manual-checks --show-studio
+  ./agent unsandboxed test-host managed-loop --case lifecycle
+  ./agent unsandboxed test-host managed-loop-recover --invocation <uuid>
   ./agent unsandboxed studio-smoke --native packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts
   ./agent unsandboxed studio-smoke --native --show-studio packages/ides/studio-tooling/studio-smoke/studio-host-control.test.ts
   ./agent unsandboxed studio-smoke --native --show-studio packages/ides/studio-tooling/studio-smoke/studio-mac2-acceptance.test.ts

@@ -147,7 +147,7 @@ await runWithCommands(commands => {
     .description('Run the opt-in real-host testing prototype, independently of existing suites.')
     .argument(
       '[mode]',
-      'check, lint, typecheck, format, driver, prepare, export, browser, android, ios, device, watchos, catalyst, agents, or setup.',
+      'check, lint, typecheck, format, driver, prepare, export, browser, android, ios, device, watchos, catalyst, agents, managed-loop, managed-loop-recover, or setup.',
       'check',
     )
     .option(
@@ -166,7 +166,31 @@ await runWithCommands(commands => {
     .option('--browser-channel <name>', 'Installed browser channel (chrome), or chromium after setup.', 'chrome')
     .option('--fault', 'Inject a subject application fault for a compiled host journey; expected to exit nonzero.')
     .option('--demo', 'For agents: build the example, print discovery, invoke one command, then stop.')
+    .option('--case <name>', 'For managed-loop: one bounded acceptance case.')
+    .option('--session <uuid>', 'For managed-loop: recorded session for bounded interaction only.')
+    .option('--target <platform>', 'For managed-loop mobile interaction: ios or android.')
+    .option('--invocation <uuid>', 'For managed-loop-recover: one recorded Android borrowing invocation.')
     .action(async (mode, options) => {
+      if (mode === 'managed-loop-recover') {
+        const { parseManagedLoopAcceptanceRecoveryArgs } = await import(
+          '@agent-cli/agent-config/ManagedLoopAcceptanceRecoveryArgs'
+        )
+        const args = Platform.runtimeProcess.argv.slice(2)
+        const commandIndex = args.indexOf('test-host')
+        const request = parseManagedLoopAcceptanceRecoveryArgs(args.slice(commandIndex + 2))
+        const { runManagedLoopAcceptanceRecovery } = await import('./dev-loop/ManagedLoopAcceptanceRecovery')
+        Platform.runtimeProcess.setExitCode(await runManagedLoopAcceptanceRecovery(request))
+        return
+      }
+      if (mode === 'managed-loop') {
+        const { parseManagedLoopAcceptanceArgs } = await import('@agent-cli/agent-config/ManagedLoopAcceptanceArgs')
+        const args = Platform.runtimeProcess.argv.slice(2)
+        const commandIndex = args.indexOf('test-host')
+        const request = parseManagedLoopAcceptanceArgs(args.slice(commandIndex + 2))
+        const { runManagedLoopAcceptance } = await import('./dev-loop/ManagedLoopAcceptance')
+        Platform.runtimeProcess.setExitCode(await runManagedLoopAcceptance(request))
+        return
+      }
       if (mode === 'watchos') {
         const { runWatchProof } = await import('./watchos/WatchProof')
         await runWatchProof(options)

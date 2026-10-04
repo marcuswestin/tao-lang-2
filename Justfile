@@ -161,8 +161,9 @@ companion-host-publish:
 
 # Run the opt-in real-host testing prototype; does not run or replace the existing suites
 [group('Host proofs')]
+[positional-arguments]
 test-host *ARGS:
-    ./dev test-host {{ ARGS }}
+    ./dev test-host "$@"
 
 # Build the agent-command example, list commands, invoke one in a separate CLI process, and stop (macOS)
 [group('Run')]
