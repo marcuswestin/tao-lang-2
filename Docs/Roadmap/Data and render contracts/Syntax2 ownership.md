@@ -58,7 +58,11 @@ their branches. The coordinator reviews and validates the combined tree before l
 1. B's accessibility-prefix repair owns source-actions' studio-source-text.ts, studio-render-tree.ts,
    studio-extract-view.ts and its new render-prefixes.test.ts. Removal, movement, wrapping and
    extraction use AST.renderPrefixCluster so metadata remains attached to the original occurrence.
-   Preserve the integrated wildcard-import work. No parameterized-slot source is released yet.
+   Preserve the integrated wildcard-import work. The reviewed repair returned these paths. B's next
+   runtime-only renderer slice owns new TR-render-slots.tsx, TR-render-slots.test.ts and mounted
+   render-slots-runtime.jest-test.tsx. Stable body components receive current captured environments;
+   placements retain independent state, defaults use own-property selection, and explicit empty
+   suppresses the default. No facade, slot grammar/compiler or foreign-adapter ownership is released.
 2. D's runtime lexical-cleanup slice owns TR-action-transactions.ts, TR-errors.ts, TR-effect-outcomes.ts
    and TR-defer-actions.test.ts, plus focused parity assertions in the corresponding existing runtime
    tests. Publish runActionScope, registerDeferredAction and actionExitOf. Cleanup is joined, serial
