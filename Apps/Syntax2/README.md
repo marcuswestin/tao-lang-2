@@ -3,10 +3,15 @@
 Future-source forcing app for the accepted render, nominal typing, capability, quantity and action
 contracts. Requested 2026-10-04. The goal is to implement everything required to run this app, in
 vertical slices, progressively moving source from `.tao.future` to `.tao`. This is an implementation
-target, not a runnable project today. No source discovery or parser acceptance has been changed.
+target. A minimal executable shell now uses the first render foundation; unsupported future source
+remains undiscovered.
 
 ## Source and authority
 
+- [Main.tao](Main.tao): active shell with a quoted Library header, bare zero-argument render calls,
+  and a Group button switching ordinary boolean state between two quoted labels.
+- [Library.test.tao](Library.test.tao): active journey asserting the header and both directions of
+  the grouping display transition. It exercises no book collection or acquisition behavior.
 - [Main.tao.future](Main.tao.future): project/app boundary, controls, slots, units and bounded list UI.
 - [library/Library.tao.future](library/Library.tao.future): nominal signatures, structural capabilities,
   generics, native operator, entities, associated actions/rendering and cleanup.
@@ -28,9 +33,17 @@ they do not authorize an implementer to silently settle remaining language judgm
 The high-level plan is ready after the 2026-10-04 final audit: coordinator foundation, parallel
 language workstreams, data/lazy-list integration, then complete graduation and acceptance.
 No blocking author question remains for that plan. Exact ABI/path assignment and prototypes belong
-to its prerequisite wave; implementation has not started.
+to its prerequisite wave. The first render foundation is implemented; broader graduation is pending.
 
 ## Graduation
+
+The active shell is intentionally dependency-complete and small. It compiles and passes source
+checks; the runtime journey verdict is recorded by the integration owner. The original future Main,
+library modules, adapter sketch, standard-library target and future journey remain intact.
+The shell demonstrates quotation and a reachable grouping-state transition, with ordinary existing
+types and actions. It does not implement the future collection, nominal/capability, quantity,
+parameterized-slot, failure/cleanup or adapter contracts. Bare text-value placement and empty-value
+suppression are deferred; a quoted empty string still retains the explicit Text node.
 
 1. Extract small feature modules from the future files when necessary. Move working declarations,
    not a duplicate future/current mirror. Keep the remaining target readable.

@@ -3,6 +3,7 @@ import { Langium } from './langium-exports'
 import { bridgesToATypeScriptExport, unresolvedReferenceMessage } from './linker-diagnostics'
 import { emptyPackageResolver, type PackageResolver } from './package-resolver'
 import * as AST from './parserASTExport'
+import { createQuotedRenderParser, quotedTextImport } from './quoted-render'
 import { ReleaseCompletionProvider } from './release-completion-provider'
 import { TaoLexerErrorMessageProvider, TaoParserErrorMessageProvider } from './syntax-diagnostics'
 import { TaoDocumentValidator } from './tao-document-validator'
@@ -414,9 +415,9 @@ function taoLspSharedModule() {
 function taoLanguageModule(packages: PackageResolver) {
   return {
     parser: {
-      // Tao deliberately resolves token-identical configured constructors and one-field
-      // unlabeled item forms from their linked owner declarations.
-      ParserConfig: () => ({ skipValidations: true }),
+      // Production metadata owns runtime lookahead policy; grammar generation still validates
+      // separately. Reserved payload/fill alternatives must not print into worker JSON streams.
+      LangiumParser: (services: Langium.LangiumCoreServices) => createQuotedRenderParser(services),
       LexerErrorMessageProvider: () => new TaoLexerErrorMessageProvider(),
       ParserErrorMessageProvider: () => new TaoParserErrorMessageProvider(),
       TokenBuilder: () => new TaoTokenBuilder(),
@@ -678,6 +679,15 @@ async function loadReferencedDocuments(
     return []
   }
   const referencedDocuments: AST.Document[] = []
+  if (AST.streamAllContents(ast).some(AST.isQuotedRender)) {
+    for (
+      const path of await context.packages.candidateFilePaths(quotedTextImport(), { fromFilePath: document.uri.path })
+    ) {
+      if (!loadedDocuments.has(path)) {
+        referencedDocuments.push(await documentFromFilePath(context, path, loaded))
+      }
+    }
+  }
   // A sibling may carry `folder` declarations this file reaches without naming them in a `use`,
   // so the whole folder is loaded rather than only what the imports point at.
   for (const siblingPath of await siblingTaoFilePaths(context, document.uri.path, siblingScans)) {

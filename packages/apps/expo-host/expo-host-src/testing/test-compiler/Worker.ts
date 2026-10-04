@@ -1,10 +1,12 @@
-import { CLI, Errors, FS, Repo, Switch } from '@shared'
+import { warnContainedFailure } from '@runtime/TR-errors'
+import { CLI, Errors, FS, Json, Repo, Switch } from '@shared'
 import { RuntimeToolchainPaths } from '../../runtime-toolchain-paths'
 import { TestRunRoot } from '../test-run-root'
 import { Protocol } from './Protocol'
 import type * as TestCompiler from './TestCompiler'
 
 type PendingRequest = {
+  kind: TestCompiler.Worker.Input['kind']
   reject: (error: Error) => void
   resolve: (output: TestCompiler.Worker.Output) => void
 }
@@ -51,7 +53,11 @@ export type CompileTestPlanOptions = {
 
 /** WorkerSession owns one Tao test compiler process; its requests run serially in that process. */
 export class WorkerSession {
-  private readonly session = new Session()
+  private readonly session: Session
+
+  constructor(startCommand: typeof CLI.start = CLI.start) {
+    this.session = new Session(startCommand)
+  }
 
   /** compileApp compiles one Tao app into a runtime test app module. */
   async compileApp(
@@ -170,6 +176,8 @@ class Session {
   private stopped = false
   private stdout = { pending: '' }
 
+  constructor(private readonly startCommand: typeof CLI.start) {}
+
   async request(input: TestCompiler.Worker.Input): Promise<TestCompiler.Worker.Output> {
     if (this.stopped) {
       Errors.throwUnexpected('Test compiler worker session is stopped.')
@@ -182,7 +190,7 @@ class Session {
 
     const id = this.nextRequestId++
     const output = new Promise<TestCompiler.Worker.Output>((resolve, reject) => {
-      this.pending.set(id, { reject, resolve })
+      this.pending.set(id, { kind: input.kind, reject, resolve })
     })
     if (!command.writeStdin(Protocol.requestLine({ id, input }))) {
       this.pending.delete(id)
@@ -219,7 +227,7 @@ class Session {
     if (this.command !== undefined) {
       return
     }
-    const command = CLI.start(executable, {
+    const command = this.startCommand(executable, {
       args: ['run', WORKER_PATH],
       cwd: workerWorkingDirectory(),
       onOutput: (stream, chunk) => this.handleOutput(stream, chunk),
@@ -238,19 +246,41 @@ class Session {
   }
 
   private handleOutput(stream: CLI.CommandOutputStream, chunk: Buffer): void {
+    if (this.stopped) {
+      return
+    }
     if (stream === 'stderr') {
       this.stderr = boundedWorkerStderr(`${this.stderr}${chunk.toString('utf8')}`)
       return
     }
     for (const line of Protocol.lines(this.stdout, chunk.toString('utf8'))) {
       this.handleResponse(line)
+      if (this.stopped) {
+        break
+      }
     }
   }
 
   private handleResponse(line: string): void {
-    const response = Protocol.parseResponse(line)
+    let response: TestCompiler.Worker.Response
+    try {
+      const parsed: unknown = Protocol.parseResponse(line)
+      if (!isWorkerResponse(parsed)) {
+        this.failProtocol()
+        return
+      }
+      response = parsed
+    } catch {
+      this.failProtocol()
+      return
+    }
     const pending = this.pending.get(response.id)
     if (pending === undefined) {
+      this.failProtocol()
+      return
+    }
+    if (response.output !== undefined && response.output.kind !== pending.kind) {
+      this.failProtocol()
       return
     }
     this.pending.delete(response.id)
@@ -265,12 +295,122 @@ class Session {
     pending.resolve(response.output)
   }
 
-  private rejectPending(message: string): void {
+  private failProtocol(): void {
+    this.rejectPending(
+      new Errors.UnexpectedBehaviorError('Test compiler worker returned an invalid protocol response.'),
+    )
+    void this.stop().catch(error => warnContainedFailure('Test compiler worker cleanup failed.', error))
+  }
+
+  private rejectPending(error: string | Error): void {
     for (const pending of this.pending.values()) {
-      pending.reject(new Errors.HostEnvironmentError(message))
+      pending.reject(typeof error === 'string' ? new Errors.HostEnvironmentError(error) : error)
     }
     this.pending.clear()
   }
+}
+
+function isWorkerResponse(value: unknown): value is TestCompiler.Worker.Response {
+  if (!Json.isRecord(value) || !Number.isSafeInteger(value['id']) || (value['id'] as number) < 1) {
+    return false
+  }
+  const failure = value['error']
+  const output = value['output']
+  if (failure !== undefined) {
+    return output === undefined && Json.isRecord(failure)
+      && ['host', 'unexpected', 'user'].includes(failure['category'] as string)
+      && typeof failure['message'] === 'string'
+  }
+  if (!Json.isRecord(output) || typeof output['kind'] !== 'string') {
+    return false
+  }
+  return Switch<string, boolean>(output['kind'], {
+    app: () => Json.isRecord(output['app']) && typeof output['app']['testAppPath'] === 'string',
+    testPlan: () => isWorkerTestFile(output['file']),
+    validate: () =>
+      Array.isArray(output['errors'])
+      && output['errors'].every(error =>
+        Json.isRecord(error) && typeof error['path'] === 'string' && Array.isArray(error['messages'])
+        && error['messages'].every(message => typeof message === 'string')
+      ),
+  })
+}
+
+function isWorkerTestFile(value: unknown): boolean {
+  return Json.isRecord(value) && value['version'] === 1 && typeof value['sourcePath'] === 'string'
+    && Array.isArray(value['suites'])
+    && value['suites'].every(suite =>
+      Json.isRecord(suite) && typeof suite['name'] === 'string' && isWorkerTestSource(suite['source'])
+      && Array.isArray(suite['checks']) && suite['checks'].every(check =>
+        Json.isRecord(check) && typeof check['name'] === 'string' && isWorkerTestSource(check['source'])
+        && Json.isRecord(check['app']) && typeof check['app']['modulePath'] === 'string'
+        && typeof check['app']['sourcePath'] === 'string'
+        && Array.isArray(check['steps']) && check['steps'].every(isWorkerTestStep)
+      )
+    )
+}
+
+function isWorkerTestSource(value: unknown): boolean {
+  if (!Json.isRecord(value) || typeof value['filePath'] !== 'string') {
+    return false
+  }
+  const range = value['range']
+  return range === undefined || (Json.isRecord(range)
+    && [range['start'], range['end']].every(position =>
+      Json.isRecord(position) && Number.isInteger(position['line']) && Number.isInteger(position['character'])
+      && (position['line'] as number) >= 0 && (position['character'] as number) >= 0
+    ))
+}
+
+function isWorkerTestStep(value: unknown): boolean {
+  if (!Json.isRecord(value) || typeof value['kind'] !== 'string' || !isWorkerTestSource(value['source'])) {
+    return false
+  }
+  const strings = (...keys: string[]) => keys.every(key => typeof value[key] === 'string')
+  const target = () => strings('selector', 'target')
+  const label = () => strings('label')
+  const tag = () => strings('tag')
+  return Switch<string, boolean>(value['kind'], {
+    advance: () => typeof value['milliseconds'] === 'number' && Number.isFinite(value['milliseconds']),
+    back: () => true,
+    datasourceFailure: () =>
+      strings('entity', 'message') && ['create', 'delete', 'update'].includes(value['operation'] as string),
+    enter: () => target() && strings('value'),
+    expect: () => strings('selector', 'text') && typeof value['missing'] === 'boolean',
+    expectCheckboxState: () => tag() && typeof value['checked'] === 'boolean',
+    expectFocusRegion: label,
+    expectGroup: () =>
+      (value['scopeTag'] === undefined || typeof value['scopeTag'] === 'string')
+      && Array.isArray(value['expectations']) && value['expectations'].every(expectation =>
+        Json.isRecord(expectation) && typeof expectation['kind'] === 'string'
+        && Switch<string, boolean>(expectation['kind'], {
+          inputValue: () => typeof expectation['value'] === 'string',
+          match: () =>
+            typeof expectation['missing'] === 'boolean' && typeof expectation['target'] === 'string'
+            && ['label', 'placeholder', 'text'].includes(expectation['selector'] as string),
+        })
+      ),
+    expectInputValue: () => target() && strings('value'),
+    expectNavigationTitle: () => strings('title'),
+    expectTarget: label,
+    expectToolbarCommand: () => label() && typeof value['enabled'] === 'boolean',
+    expectVerbs: () => Array.isArray(value['labels']) && value['labels'].every(item => typeof item === 'string'),
+    focus: tag,
+    hover: target,
+    narrow: () => strings('text'),
+    network: () => ['offline', 'online'].includes(value['mode'] as string),
+    press: () => strings('selector', 'text'),
+    pressDown: target,
+    pressKey: () => strings('key'),
+    pressToolbarCommand: label,
+    pressUp: target,
+    relaunch: () => typeof value['fresh'] === 'boolean',
+    select: () =>
+      tag() && Number.isInteger(value['index']) && (value['index'] as number) >= 1
+      && Array.isArray(value['steps']) && value['steps'].every(isWorkerTestStep),
+    submit: target,
+    waitForSync: () => true,
+  })
 }
 
 /** Gives a worker EOF, then escalates through TERM and KILL without waiting forever. */

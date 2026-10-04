@@ -1,0 +1,26 @@
+use Button, Col, Spacer from @tao/ui
+
+app LibraryApp {
+   id "com.tao.syntax2"
+   name "Syntax2 Library"
+   version "0.1.0"
+   view Library
+}
+
+view Banner(Heading text) {
+   render Col {
+      "{ Heading }" [weight bold]
+}  }
+
+view Library {
+   state GroupMode is boolean = false
+   render Col {
+      Banner("Library")
+      Spacer
+      Button("Group") {
+         on press -> { toggle GroupMode }
+      }
+      when GroupMode {
+         true -> "Grouped books."
+         otherwise -> "All books."
+}  }  }

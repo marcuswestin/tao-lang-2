@@ -1,0 +1,12 @@
+# DEVENV-COMPILER-WORKER-STDOUT-CONTAMINATION-HANGS-TEST-PREPARATION — Compiler worker stdout contamination hangs test preparation
+
+- **Status:** Resolved
+- **Area:** Parser runtime initialization and test compiler worker protocol
+- **Impact:** Parser ambiguity diagnostics corrupted the worker's JSONL response stream. Runtime tests failed with a JSON parse error, while app test preparation retained unresolved requests and did not finish.
+- **Evidence:** Observed on `feat/syntax2-render-foundation` in the 2026-10-04 verification run. Installed Langium derives runtime parser validation from generated language metadata, overriding the earlier `ParserConfig.skipValidations` setting. Development LLStar initialization printed ambiguity diagnostics to stdout; `Protocol.parseResponse` threw inside the worker output callback. The repaired `worker-session.test.ts` passes all 37 tests, including multiple pending request rejection, required test-plan structure checks, shutdown and a real worker sending exactly two JSONL responses. Temporarily restoring development metadata made the real-worker test observe 115 lines instead of two. Restoring shallow test-plan checking failed 17 malformed-plan regressions. The three previously failing runtime test files pass after repair. This is distinct from a Jest process remaining open after successful journeys.
+- **Workaround:** None needed after the repair; cancelling a stuck owned preparer only drains the failed run and is not verification evidence.
+- **Proposed change:** Generate production runtime parser metadata while retaining independent grammar-generation validation. Contain malformed worker responses, reject all pending work with a categorized protocol error, stop the owned worker and reject subsequent requests.
+- **Dependencies:** None; no dependency versions or lockfiles changed.
+- **Acceptance:** `./agent test-file packages/apps/expo-host/expo-host-tests/worker-session.test.ts` passes. The real-worker regression retains the guard-payload grammar overlap and bare render syntax, verifies request IDs, and closes stdin. Malformed-output regressions prove pending work settles and owned resources close. Focused reruns of `tao-test-runtime.jest-test.tsx`, `interaction-outline-e2e.jest-test.tsx` and `capture-restore-e2e.jest-test.tsx` pass.
+- **Source:** Syntax2 render foundation verification, 2026-10-04.
+- **Archived:** 2026-10-04
