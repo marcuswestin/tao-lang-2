@@ -112,6 +112,7 @@ change that addressed it.
 - [DEVENV-RELEASE-ACCEPTANCE-DIRECTORY-OPERATIONS-FAIL-IN-MANAGED-SHELL — Release acceptance directory operations fail in the managed shell](<Developer environment upgrades/DEVENV-RELEASE-ACCEPTANCE-DIRECTORY-OPERATIONS-FAIL-IN-MANAGED-SHELL.md>) — Candidate
 - [DEVENV-RUNTIME-JOURNEY-OBSERVATION-TEST-TIMES-OUT — Runtime journey observation test can time out in a broad lane](<Developer environment upgrades/DEVENV-RUNTIME-JOURNEY-OBSERVATION-TEST-TIMES-OUT.md>) — Candidate
 - [DEVENV-SANDBOXED-GIT-XCRUN-CACHE-WARNING-FAILS-STDERR-ASSERTIONS — Sandboxed git's xcrun cache warning fails stderr assertions](<Developer environment upgrades/DEVENV-SANDBOXED-GIT-XCRUN-CACHE-WARNING-FAILS-STDERR-ASSERTIONS.md>) — Candidate
+- [DEVENV-SANDBOXED-TEST-CACHE-REGISTRATION-DENIED — Sandboxed test cache registration denied](<Developer environment upgrades/DEVENV-SANDBOXED-TEST-CACHE-REGISTRATION-DENIED.md>) — Candidate
 - [DEVENV-SANDBOXED-VERIFY-FAILS-DEV-CLI-SHELL-TESTS — Sandboxed verification fails the dev-cli shell tests](<Developer environment upgrades/DEVENV-SANDBOXED-VERIFY-FAILS-DEV-CLI-SHELL-TESTS.md>) — Candidate
 - [DEVENV-SECRET-MATERIALIZATION-MISSING-FROM-AGENT-COMMANDS — Secret materialization is missing from agent commands](<Developer environment upgrades/DEVENV-SECRET-MATERIALIZATION-MISSING-FROM-AGENT-COMMANDS.md>) — Candidate
 - [DEVENV-STUDIO-LEGACY-LOCK-TEST-IS-INTERMITTENT — Studio legacy-lock test is intermittent](<Developer environment upgrades/DEVENV-STUDIO-LEGACY-LOCK-TEST-IS-INTERMITTENT.md>) — Candidate

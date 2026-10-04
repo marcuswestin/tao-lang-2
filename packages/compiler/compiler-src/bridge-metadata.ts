@@ -31,6 +31,8 @@ export const bridgeGeneratedMarker =
 /** BridgeMetadata is the TypeScript-facing contract generated beside each Tao boundary source. */
 export const BridgeMetadata = {
   resultType: typescriptType,
+  /** Expected result of a native expression at its explicitly typed Tao boundary. */
+  bridgeResultType: bridgedResultType,
   /** Source sidecar roots referenced by a reachable declaration closure, without sibling declarations. */
   implementationSidecarRoots(declarations: readonly AST.Declaration[]): readonly string[] {
     const roots = new Set<string>()
