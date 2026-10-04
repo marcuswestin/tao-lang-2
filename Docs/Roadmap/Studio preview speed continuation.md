@@ -48,7 +48,7 @@ replay makes the regression fail; restoring it passes. Focused editor/navigation
 source/type checks pass. The regression is an explicit headless lane:
 
 ```sh
-./agent unsandboxed studio-smoke packages/ides/studio-tooling/studio-smoke/studio-preview-source-navigation.test.ts source-navigation
+./agent unsandboxed studio-smoke --run-id source-navigation packages/ides/studio-tooling/studio-smoke/studio-preview-source-navigation.test.ts
 ```
 
 ### Activation baseline, 2026-10-03
@@ -277,7 +277,7 @@ ordered cold-diagnostic parity after source, generated contract, package-resolut
 mapping changes. Independent cache review found an omitted raw-configuration identity: a
 semantically neutral extended-config edit failed the new regression before correction. The corrected
 cache passed review and complete `verify-changed` before commit `b0f544a19` (43 passed gates, no
-failures, one explicit skip). Final integrated measurements remain pending.
+failures, one explicit skip). The final integrated measurements follow below.
 
 Main `883ea9ee8` adds managed-loop publication identities, native ownership isolation, and
 Firebase-first project creation. Integration retains those behaviors while adapting incoming
@@ -287,6 +287,37 @@ The merged Firebase and auth configuration overrides also participate in the emi
 fingerprint. Four independent changed/removed-configuration regressions failed before correction,
 preventing unchanged Tao sources from retaining a previous backend's generated configuration.
 Exact merged-source acceptance and final readiness outcomes belong to the task checkpoint.
+
+The final source at `6829f0b64` passes the real-app smoke `final-main-real-app-20261004`
+(four journeys, 80 assertions, 98.9s), the one-press source-navigation regression (4.7s), and
+concurrent restored loading of all six previews (first/last paint 749/865ms). Both fresh activation
+screenshots were inspected and shown. `final-main-design-20261004` passes all three cases and
+128 assertions, including the coordinated bundle/consumer rename, with zero iframe reloads or
+browser console errors. Imported focused, imported whole-app, and same-file focused warm paint
+medians are 584/589/639ms at load 6.8–7.6 on 18 CPUs. The packaged agent-only desktop proof also
+builds and executes its command successfully in 8.9s; this is command-host proof, not foreground
+native UI or device acceptance.
+
+The final harness `final-main-latency-20261004` passes all 32 saves in 102.4s, with no iframe reloads
+or recorded `RevisionNotFoundError`. No other tests or agents from this task ran concurrently.
+Each case uses eight saves; warm statistics discard the first.
+
+| Case                      | Source→published p50 / p95 ms | Total p50 / p95 ms | One-minute load min–max / 18 CPUs |
+| ------------------------- | ----------------------------- | ------------------ | --------------------------------- |
+| One-file, publication on  | 242 / 275                     | 502 / 547          | 6.35–6.47                         |
+| One-file, publication off | 239 / 246                     | 492 / 512          | 6.88–6.90                         |
+| HNReader, publication on  | 717 / 828                     | 1463 / 1480        | 7.53–7.97                         |
+| HNReader, publication off | 782 / 823                     | 1076 / 1111        | 7.09–8.32                         |
+
+The correction closes much of the first integrated regression, but does not restore the pre-main
+HNReader total median of about 270ms. These end-to-end runs also span the newer main integration,
+so they are not a pure A/B attribution to the native-program cache. The audited warm native phase
+measurements above establish that cache's narrower effect. Fresh Tao validation and duplicate
+watch/preview refreshes under the project lock remain compiler-side work. Publication-on additionally
+has a 606ms HMR→DOM median, versus 148ms with publication off; a compiler gain is not proof of an
+equivalent paint gain. Raw stage samples, machine load, browser events, and Metro messages remain
+under `.artifacts/tests/studio-smoke/preview-latency/`. Selective design subscriptions remain deferred;
+the closed refresh-indicator investigation is not reopened.
 
 ### Refresh indicator diagnostic, 2026-10-04 — closed
 
@@ -335,7 +366,7 @@ Historical handoff state:
    and, where the step says so, a real Metro smoke. The branch is unlanded, and
    landing waits for the Developer's explicit authorization.
 3. The edit-to-paint harness runs with
-   `./agent unsandboxed studio-smoke packages/ides/studio-tooling/studio-smoke/studio-preview-latency.test.ts <run-id>`.
+   `./agent unsandboxed studio-smoke --run-id <run-id> packages/ides/studio-tooling/studio-smoke/studio-preview-latency.test.ts`.
    Under the machine's usual load (load average near 100 during this branch) timings are
    indicative only; record the load beside every number.
 
@@ -401,7 +432,7 @@ each preview has its own toggle, off by default; the active set is per developer
    pending save, for scenario and whole-app previews:
 
    ```sh
-   ./agent unsandboxed studio-smoke packages/ides/studio-tooling/studio-smoke/studio-preview-activation.test.ts preview-activation
+   ./agent unsandboxed studio-smoke --run-id preview-activation packages/ides/studio-tooling/studio-smoke/studio-preview-activation.test.ts
    ```
 
 ## Where to look
@@ -424,7 +455,7 @@ each preview has its own toggle, off by default; the active set is per developer
 
 Measured on 2026-09-29 on the Developer's machine under ordinary load; warm figures exclude the
 first edit after launch. Run the harness with
-`./agent unsandboxed studio-smoke packages/ides/studio-tooling/studio-smoke/studio-preview-latency.test.ts <run-id>`.
+`./agent unsandboxed studio-smoke --run-id <run-id> packages/ides/studio-tooling/studio-smoke/studio-preview-latency.test.ts`.
 
 1. **Edit-to-paint, real Metro, 8 edits per case, 0 iframe loads in every passing case.**
 

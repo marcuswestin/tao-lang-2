@@ -280,6 +280,12 @@ Integration with main `883ea9ee8` also adapts its hosted-provider writers, check
 metadata and installed guidance to the decided layout. Managed-loop and native source-projection
 cleanup guards inspect `local/sessions/owner.json`, preserving a live owner before deleting a fixture.
 The development loop prepares its desktop shell in `cache/dev/desktop-host/`.
+The final merged-source real Metro run `final-main-real-app-20261004` passes all four journeys
+and 80 assertions, including persisted reopen and publication-off rendering. The packaged
+agent-only desktop proof repeats successfully in 8.9s with its `agents/` entry point. Both host
+temporary project fixtures were removed and their absence checked; retained proof output stays
+inside the task worktree. Exact-tree whole-project verification and finalization remain recorded
+in the task checkpoint rather than inferred from these focused acceptance runs.
 
 Historical starting point:
 
