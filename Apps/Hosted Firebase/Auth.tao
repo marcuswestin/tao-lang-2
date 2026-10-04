@@ -1,6 +1,6 @@
 use Account, Session, SignInFlow, SignOut from @tao/auth
 use StackNav from @tao/nav
-use Col, Text, TextInput, TextMultiline from @tao/ui
+use Col, Spacer, Text, TextInput, TextMultiline from @tao/ui
 use FormButton from @tao/ui/basic
 use ItemList from ./Items
 
@@ -42,38 +42,51 @@ view FirebaseNotesSignIn() {
       set Flow.Registration = true
       do Flow.Submit()
    }
-   // TODO: Remove this synthetic validation shortcut after hosted acceptance.
-   action FillValidationCredentials() {
-      set Flow.Email = "tao-hosted-validation@example.test"
-      set Flow.Password = "Tao-validation-only-2026!"
+   // TODO: Remove these temporary account-fill shortcuts after hosted acceptance.
+   action FillCrudAccount() {
+      set Flow.Email = "narcvs+crud@gmail.com"
+      set Flow.Password = "123456789"
    }
-   render Col() [fill] {
-      Text("Sign in to Firebase Notes")
+   action FillMainAccount() {
+      set Flow.Email = "narcvs@gmail.com"
+      set Flow.Password = "123456789"
+   }
+   render Col() [screen] {
+      Col() [panel] {
+         Text("Sign in to Firebase Notes")
 
-      #email
-      TextInput(Value: Flow.Email, Label: "Email") {
-         on submit ExistingAccount
-      }
+         #email
+         TextInput(Value: Flow.Email, Label: "Email") {
+            on submit ExistingAccount
+         }
 
-      #password
-      TextInput(Value: Flow.Password, Label: "Password", Secure: true) {
-         on submit ExistingAccount
-      }
+         #password
+         TextInput(Value: Flow.Password, Label: "Password", Secure: true) {
+            on submit ExistingAccount
+         }
 
-      #signIn
-      FormButton("Sign in", Disabled: Flow.Running) {
-         on press ExistingAccount
-      }
+         #signIn
+         FormButton("Sign in", Disabled: Flow.Running) {
+            on press ExistingAccount
+         }
 
-      #createAccount
-      FormButton("Create account", Disabled: Flow.Running) {
-         on press CreateAccount
-      }
-      if Flow.Problem is not empty {
-         TextMultiline(Flow.Problem)
-      }
+         #createAccount
+         FormButton("Create account", Disabled: Flow.Running) {
+            on press CreateAccount
+         }
+         if Flow.Problem is not empty {
+            TextMultiline(Flow.Problem)
+      }  }
+      Spacer() [fill]
+      Col() [column, hug] {
+         Text("Validation accounts") [caption]
 
-      #fillValidationCredentials
-      FormButton("Fill validation credentials") {
-         on press FillValidationCredentials
-}  }  }
+         #fillCrudAccount
+         FormButton("narcvs+crud@gmail.com", Disabled: Flow.Running) [buttonSecondary] {
+            on press FillCrudAccount
+         }
+
+         #fillMainAccount
+         FormButton("narcvs@gmail.com", Disabled: Flow.Running) [buttonSecondary] {
+            on press FillMainAccount
+}  }  }  }

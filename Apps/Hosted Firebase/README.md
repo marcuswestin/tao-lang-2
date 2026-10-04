@@ -14,4 +14,4 @@ From this project directory:
 
 Run `tao test .` for the local Memory/TestAuth journeys. They do not contact Firebase.
 
-The Fill validation credentials button only fills synthetic example values and never submits. Remove it after hosted validation.
+The two temporary validation-account buttons at the bottom of sign-in fill the Developer-selected test accounts without submitting. Remove them after hosted validation. The CLI generator retains generic synthetic values for other apps.

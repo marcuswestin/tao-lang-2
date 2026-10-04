@@ -347,10 +347,12 @@ cd /Users/ro/.codex/worktrees/hosted-acceptance-evidence/tao-lang-2
 ```
 
 In that dev loop, press `p` to choose a connected physical device. Sign in locally on iPhone and
-Simulator; validate create/edit/toggle/delete in both directions, restart offline with queued
-writes and reconnect replay, then switch accounts online and offline without foreign rows or
-writes crossing sessions. The temporary fill button supplies synthetic values only; it does not
-sign in. Existing pilot acceptance does not automatically accept this generated Tao application.
+Simulator for the live-sync sender/receiver check. Validate create/edit/toggle/delete, restart
+offline with queued writes and reconnect replay, then switch accounts online and offline without
+foreign rows or writes crossing sessions. Each required manual verification may be performed on
+either iPhone or Simulator; do not duplicate the checklist on both. The two temporary account-fill
+buttons at the bottom of sign-in fill the Developer-selected accounts without submitting. Existing
+pilot acceptance does not automatically accept this generated Tao application.
 
 The earlier hostile probe targets the standalone pilot's row layout. Direct server acceptance
 for the new `users/{uid}/stores/{store}/{entity}/{id}` layout remains open and needs matching probe
@@ -405,3 +407,19 @@ Integrated changed verification also exposed a main-native diagnostic fixture wh
 address exceeded the Unix socket path limit under this worktree. Its nonexistent socket address
 now uses a short unique path without creating external files or changing native registration
 behavior. All 55 focused fixture tests pass; the original diagnostic assertions remain intact.
+
+### Validation follow-up — 2026-10-04
+
+The source slice landed on main as `883ea9ee8`. The validation app now has two temporary
+account-fill buttons at the bottom of sign-in for the Developer-selected accounts; they fill
+without submitting. The reusable CLI generator still uses generic synthetic values.
+
+For the new Firebase app, the Developer accepts each manual verification on either iPhone or
+Simulator; do not duplicate the checklist on both. Realtime observation still needs one sender
+and one receiver. Hosted CRUD/realtime, offline restart/replay, online/offline account isolation,
+and direct server authorization against the new store layout remain unproved. A matching
+hostile-request probe still needs implementation; the standalone pilot probe is insufficient.
+Remove the temporary account buttons after acceptance. Appwrite's realtime repair still needs
+host acceptance, followed by offline/restart/replay, account isolation, and direct requests that
+separately test forged ownerId and explicit row permissions. Its full Tao adapter and CLI-created
+app flow are later implementation work after the Firebase flow is accepted.
