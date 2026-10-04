@@ -1,6 +1,6 @@
 # Appwrite + Legend State experiment
 
-The adapter uses Appwrite email/password sessions and a free serverless TablesDB table for the shared notes contract. Legend State v3 `syncedCrud` keeps optimistic notes in AsyncStorage and persists pending writes for retry. A 30-second poll refreshes remote changes. The installed React Native SDK's `client.subscribe` path reads `window.localStorage` when a socket connects, so this experiment does not use Realtime. It is an Expo Go experiment, not a Tao datasource or an AccessRules implementation.
+The adapter uses Appwrite email/password sessions and a free serverless TablesDB table for the shared notes contract. Legend State v3 `syncedCrud` keeps optimistic notes in AsyncStorage and persists pending writes for retry. A dedicated Appwrite Realtime client uses a short-lived account JWT to subscribe to this table's row events and refresh the account-filtered note list on incoming changes. It renews the socket before JWT expiry and retains a 30-second poll for missed events and offline recovery. The installed SDK's older `client.subscribe` path makes an uncaught `window.localStorage` access when a socket connects; the dedicated `Realtime` class catches missing storage and sends the JWT in the native WebSocket header. Device delivery of Realtime events still needs acceptance testing. This is an Expo Go experiment, not a Tao datasource or an AccessRules implementation.
 
 ## Cloud setup
 

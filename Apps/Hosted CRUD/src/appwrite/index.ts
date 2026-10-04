@@ -4,9 +4,10 @@ import { observable, observe, syncState, when } from '@legendapp/state'
 import { observablePersistAsyncStorage } from '@legendapp/state/persist-plugins/async-storage'
 import { syncedCrud } from '@legendapp/state/sync-plugins/crud'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { Account, Client, ID, Query, TablesDB } from 'react-native-appwrite'
+import { Account, Channel, Client, ID, Query, Realtime, TablesDB } from 'react-native-appwrite'
 import type { CrudAdapter, CrudConnection, CrudNote, CrudUser } from '../contract'
 import { AppwriteNotesError, restoreAccount, storageName, syncStatus, toNote } from './model'
+import { watchOwnedRows } from './realtime'
 
 export type AppwriteConfig = Readonly<{
   endpoint: string
@@ -17,8 +18,6 @@ export type AppwriteConfig = Readonly<{
 }>
 
 const pageSize = 100
-const refreshIntervalMs = 30_000
-
 export function createAppwriteAdapter(config: AppwriteConfig): CrudAdapter {
   const client = new Client()
     .setEndpoint(config.endpoint)
@@ -98,6 +97,7 @@ export function createAppwriteAdapter(config: AppwriteConfig): CrudAdapter {
       await closeConnections()
 
       let closed = false
+      let stopRealtime: (() => Promise<void>) | undefined
       const notes$ = observable(syncedCrud<CrudNote>({
         list: () => listNotes(user.id),
         create: async note => {
@@ -130,12 +130,45 @@ export function createAppwriteAdapter(config: AppwriteConfig): CrudAdapter {
         },
         generateId: () => ID.unique(),
         subscribe: ({ refresh }) => {
-          const timer = setInterval(() => {
-            if (!closed) {
-              void refresh()
-            }
-          }, refreshIntervalMs)
-          return () => clearInterval(timer)
+          const watcher = watchOwnedRows(
+            user.id,
+            refresh,
+            async (onEvent, onOpen) => {
+              const { jwt } = await account.createJWT({ duration: 3600 })
+              const realtimeClient = new Client()
+                .setEndpoint(config.endpoint)
+                .setProject(config.projectId)
+                .setPlatform(config.platform)
+                .setJWT(jwt)
+              const realtime = new Realtime(realtimeClient)
+              realtime.onOpen(onOpen)
+              realtime.onError((_error, statusCode) => {
+                if (!closed) {
+                  console.warn('Appwrite Realtime error; polling continues', statusCode)
+                }
+              })
+              try {
+                await realtime.subscribe(
+                  Channel.tablesdb(config.databaseId).table(config.tableId).row(),
+                  onEvent,
+                )
+                return { disconnect: () => realtime.disconnect() }
+              } catch (error) {
+                await realtime.disconnect()
+                throw error
+              }
+            },
+            30_000,
+            () => {
+              if (!closed) {
+                console.warn('Appwrite Realtime unavailable; polling continues')
+              }
+            },
+          )
+          stopRealtime = () => watcher.stop()
+          return () => {
+            void watcher.stop()
+          }
         },
         persist: {
           name: storageName(config.endpoint, config.projectId, config.databaseId, config.tableId, user.id),
@@ -203,6 +236,7 @@ export function createAppwriteAdapter(config: AppwriteConfig): CrudAdapter {
           }
           closed = true
           state$.isSyncEnabled.set(false)
+          await stopRealtime?.()
           dispose()
           connections.delete(connection)
         },

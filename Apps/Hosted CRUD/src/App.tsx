@@ -222,6 +222,16 @@ export default function App() {
             value={password}
             onChangeText={setPassword}
           />
+          {__DEV__ && (
+            <Button
+              title="Fill email + password"
+              disabled={busy}
+              onPress={() => {
+                setEmail('tao-hosted-validation@example.test')
+                setPassword('Tao-validation-only-2026!')
+              }}
+            />
+          )}
           <View style={styles.actions}>
             <Button title="Sign in" disabled={busy} onPress={() => auth('signIn')} />
             <Button title="Create account" disabled={busy} onPress={() => auth('register')} />
