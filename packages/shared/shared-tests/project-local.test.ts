@@ -73,6 +73,26 @@ Describe('project local state', () => {
     }
   })
 
+  Test('moves both desktop host cache layouts without replacing conflicts', async () => {
+    const project = await mkTestDir('tao-desktop-layout-')
+    const path = (relative: string) => FS.resolvePath(relative, project)
+    try {
+      await FS.writeText(path('.tao/dev/desktop/legacy.txt'), 'legacy')
+      await FS.writeText(path('.tao/cache/dev/desktop/current.txt'), 'current')
+      await FS.writeText(path('.tao/cache/dev/desktop/conflict.txt'), 'source conflict')
+      await FS.writeText(path('.tao/cache/dev/desktop-host/conflict.txt'), 'destination conflict')
+      await ProjectLocal.prepare(project)
+      Expect(await FS.readText(path('.tao/cache/dev/desktop-host/legacy.txt'))).toBe('legacy')
+      Expect(await FS.readText(path('.tao/cache/dev/desktop-host/current.txt'))).toBe('current')
+      Expect(await FS.readText(path('.tao/cache/dev/desktop-host/conflict.txt'))).toBe('destination conflict')
+      Expect(await FS.readText(path('.tao/cache/dev/desktop/conflict.txt'))).toBe('source conflict')
+      await ProjectLocal.prepare(project)
+      Expect(await FS.readText(path('.tao/cache/dev/desktop-host/legacy.txt'))).toBe('legacy')
+    } finally {
+      await FS.remove(project)
+    }
+  })
+
   Test('folds a lone skills version and moves WIP cache entries', async () => {
     const project = await mkTestDir('tao-project-wip-migration-')
     const inProject = (relative: string) => FS.resolvePath(relative, project)
@@ -113,6 +133,75 @@ Describe('project local state', () => {
       Expect(await ignored('.tao/cache/runtime.js')).toBe(0)
       Expect(await ignored('local-only/data.json')).toBe(0)
       Expect(await ignored('Generated.tao.ts')).toBe(0)
+    } finally {
+      await FS.remove(project)
+    }
+  })
+
+  Test('migrates CRLF blanket ignores without hiding the store or exposing retained private files', async () => {
+    const project = await mkGitTestDir('tao-project-crlf-ignore-migration-')
+    const inProject = (relative: string) => FS.resolvePath(relative, project)
+    try {
+      await initGitTestRepository(project)
+      await FS.writeText(inProject('.gitignore'), '# custom\r\n.tao/\r\nnode_modules/\r\n')
+      await FS.writeText(inProject('.tao/.gitignore'), '*\r\n')
+      await FS.writeText(inProject('.tao/unknown-private.json'), '{}')
+      await FS.writeText(inProject('.tao-project/lock.jsonc'), '{ "schemaVersion": 1 }\n')
+
+      await ProjectLocal.prepare(project)
+
+      const rewritten = await FS.readText(inProject('.gitignore'))
+      Expect(rewritten.slice(0, '# custom\r\nnode_modules/\r\n'.length)).toBe('# custom\r\nnode_modules/\r\n')
+      const ignored = async (path: string) =>
+        (await CLI.run('git', { args: ['-C', project, 'check-ignore', '-q', path], stdio: 'pipe' })).exitCode
+      Expect(await ignored('.tao/store/lock.jsonc')).toBe(1)
+      Expect(await ignored('.tao/unknown-private.json')).toBe(0)
+      Expect(await ignored('.tao/local/session.json')).toBe(0)
+      Expect(await ignored('.tao/cache/runtime.js')).toBe(0)
+    } finally {
+      await FS.remove(project)
+    }
+  })
+
+  Test('refuses custom nested ignore rules before moving legacy state or exposing private files', async () => {
+    const project = await mkGitTestDir('tao-project-custom-nested-ignore-')
+    const inProject = (relative: string) => FS.resolvePath(relative, project)
+    const rootIgnore = '# root rule\nlocal-only/\n'
+    const nestedIgnore = '# private store data\nlocal/\ncache/\nstore/private/\n'
+    try {
+      await initGitTestRepository(project)
+      await FS.writeText(inProject('.gitignore'), rootIgnore)
+      await FS.writeText(inProject('.tao/.gitignore'), nestedIgnore)
+      await FS.writeText(inProject('.tao/store/private/secret.json'), 'private')
+      await FS.writeText(inProject('.tao/store/public.json'), 'shared')
+      await FS.writeText(inProject('.tao/sessions/legacy.json'), 'legacy session')
+      await FS.writeText(inProject('.tao-project/lock.jsonc'), '{ "schemaVersion": 1 }\n')
+
+      await Expect(ProjectLocal.prepare(project)).rejects.toThrow('Move custom rules to the project root .gitignore')
+
+      Expect(await FS.readText(inProject('.gitignore'))).toBe(rootIgnore)
+      Expect(await FS.readText(inProject('.tao/.gitignore'))).toBe(nestedIgnore)
+      Expect(await FS.readText(inProject('.tao/sessions/legacy.json'))).toBe('legacy session')
+      Expect(await FS.exists(inProject('.tao/local/sessions/legacy.json'))).toBe(false)
+      Expect(await FS.readText(inProject('.tao-project/lock.jsonc'))).toBe('{ "schemaVersion": 1 }\n')
+      Expect(await FS.exists(inProject('.tao/store/lock.jsonc'))).toBe(false)
+      const ignored = async (path: string) =>
+        (await CLI.run('git', { args: ['-C', project, 'check-ignore', '-q', path], stdio: 'pipe' })).exitCode
+      Expect(await ignored('.tao/store/private/secret.json')).toBe(0)
+      Expect(await ignored('.tao/store/public.json')).toBe(1)
+    } finally {
+      await FS.remove(project)
+    }
+  })
+
+  Test('accepts comments and blank lines around recognized nested ignore rules', async () => {
+    const project = await mkTestDir('tao-project-commented-ignore-')
+    try {
+      await FS.writeText(FS.resolvePath('.tao/.gitignore', project), '# prior layout\n\n*\nlocal/\ncache/\n')
+      await FS.writeText(FS.resolvePath('.tao/sessions/legacy.json', project), 'legacy session')
+      await ProjectLocal.prepare(project)
+      Expect(await FS.readText(FS.resolvePath('.tao/.gitignore', project))).toBe('local/\ncache/\n')
+      Expect(await FS.readText(FS.resolvePath('.tao/local/sessions/legacy.json', project))).toBe('legacy session')
     } finally {
       await FS.remove(project)
     }

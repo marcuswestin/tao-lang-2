@@ -51,7 +51,8 @@ async function prepare(projectRoot: string): Promise<void> {
     }
     const rootIgnore = await FS.isFile(rootIgnorePath) ? await FS.readText(rootIgnorePath) : ''
     const nestedIgnore = await FS.isFile(nestedIgnorePath) ? await FS.readText(nestedIgnorePath) : ''
-    const hadLegacyBlanket = rootIgnore.split('\n').includes('.tao/') || nestedIgnore.split('\n').includes('*')
+    assertRecognizedNestedIgnore(nestedIgnore, nestedIgnorePath)
+    const hadLegacyBlanket = rootIgnore.split(/\r?\n/u).includes('.tao/') || nestedIgnore.split(/\r?\n/u).includes('*')
     await FS.mkdirWithinBoundary(storeResolve('', project), project)
     await FS.mkdirWithinBoundary(localResolve('', project), project)
     await migrateOldTao(folder, project)
@@ -66,6 +67,20 @@ async function prepare(projectRoot: string): Promise<void> {
       await FS.move(stagedPath, nestedIgnorePath)
     }
   }, { lockDirectory })
+}
+
+/** Replacing a custom nested rule could expose project data that its owner kept private. */
+function assertRecognizedNestedIgnore(content: string, path: string): void {
+  for (const [index, rawLine] of content.split(/\r?\n/u).entries()) {
+    if (rawLine === '' || rawLine.startsWith('#') || ['*', 'local/', 'cache/'].includes(rawLine)) {
+      continue
+    }
+    Errors.throwHostEnvironment(
+      `Cannot migrate ${path}: custom ignore rule on line ${
+        index + 1
+      }. Move custom rules to the project root .gitignore, then retry.`,
+    )
+  }
 }
 
 /** Remove only the old generated rule that hid the entire committed `.tao/` tree. */
@@ -84,7 +99,7 @@ async function removeLegacyRootIgnore(project: string, captured: readonly string
     ? current
     : current.slice(0, previousStart > 0 && current[previousStart - 1] === '\n' ? previousStart - 1 : previousStart)
       + current.slice(previousEnd + LEGACY_IGNORE_END.length)
-  const withoutBlanket = withoutManaged.split('\n').filter(line => line !== '.tao/').join('\n')
+  const withoutBlanket = withoutManaged.split('\n').filter(line => line !== '.tao/' && line !== '.tao/\r').join('\n')
   const retained = previousEnd < 0
     ? captured
     : current.slice(previousStart + LEGACY_IGNORE_START.length, previousEnd).split('\n').filter(Boolean)
@@ -150,9 +165,11 @@ async function migrateOldTao(folder: string, project: string): Promise<void> {
 
   await migrateDevData(FS.resolvePath('dev/data', folder), project)
   await migrateDevData(storeResolve('dev-data', project), project)
-  for (const name of ['runtime', 'node_modules', 'expo-home', 'desktop'] as const) {
+  for (const name of ['runtime', 'node_modules', 'expo-home'] as const) {
     await moveIfFree(FS.resolvePath(`dev/${name}`, folder), cacheResolve(`dev/${name}`, project), project)
   }
+  await moveIfFree(FS.resolvePath('dev/desktop', folder), cacheResolve('dev/desktop-host', project), project)
+  await moveIfFree(cacheResolve('dev/desktop', project), cacheResolve('dev/desktop-host', project), project)
   await moveIfFree(FS.resolvePath('dev/logs', folder), cacheResolve('logs', project), project)
   await moveIfFree(cacheResolve('dev/logs', project), cacheResolve('logs', project), project)
   await moveIfFree(
