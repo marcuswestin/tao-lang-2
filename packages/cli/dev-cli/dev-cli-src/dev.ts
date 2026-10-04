@@ -451,15 +451,21 @@ await runWithCommands(commands => {
     // uncaught stack with a code frame from inside the error helper.
     .action(async (gates: string[], options: GatesCommandOptions = {}) => {
       await runExitCommand(async () => {
-        UiVisibility.preflightGates(
-          options.skipUnsandboxed === true
-            ? gates.filter(name => GateCatalog.metadata(name).requiresUnsandboxed !== true)
-            : gates,
-          options.showStudio,
-        )
+        const runnable = options.skipUnsandboxed === true
+          ? gates.filter(name => GateCatalog.metadata(name).requiresUnsandboxed !== true)
+          : gates
+        UiVisibility.preflightGates(runnable, options.showStudio)
         // Keep this process-wide change at the CLI boundary, not in the reusable gate runner.
         // Gate children inherit it; the invoking shell and landing process keep their priority.
         if (VerificationLanes.VERIFY_OR_WIDER.includes(options.lane ?? VerificationLanes.VERIFY)) {
+          const { WatchmanCommand } = await import('./doctor/WatchmanCommand')
+          const watchmanStart = await WatchmanCommand.startBeforeLoweringPriority(
+            runnable.some(name => GateCatalog.metadata(name).usesWatchman === true),
+            { hostPlatform: Platform.hostPlatform },
+          )
+          if (watchmanStart !== undefined && watchmanStart !== 0) {
+            HCI.logProcessWarn('verify', 'Could not start Watchman at normal priority; Studio gates may refuse it.')
+          }
           try {
             Platform.lowerProcessPriority()
           } catch (error) {
