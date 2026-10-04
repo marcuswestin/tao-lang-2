@@ -126,7 +126,7 @@ function renderWholeApp(parent: HTMLElement, connection: StudioPreviewConnection
   label.className = 'studio-preview-cell-label'
   const name = document.createElement('span')
   name.textContent = `${appName} · whole app`
-  label.replaceChildren(name, previewActivationToggle(connection))
+  label.replaceChildren(previewActivationToggle(connection), name)
   const viewport = card.querySelector<HTMLElement>(':scope > .studio-preview-cell-viewport')
     ?? document.createElement('div')
   viewport.className = 'studio-preview-cell-viewport'
@@ -135,10 +135,7 @@ function renderWholeApp(parent: HTMLElement, connection: StudioPreviewConnection
       viewport.replaceChildren(connection.iframe)
     }
   } else {
-    const hint = document.createElement('span')
-    hint.className = 'studio-preview-inactive-hint'
-    hint.textContent = 'Activate preview to load the app.'
-    viewport.replaceChildren(hint)
+    viewport.replaceChildren(previewActivationToggle(connection, 'activate'))
   }
   if (label.parentElement !== card) {
     card.append(label)

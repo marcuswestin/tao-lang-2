@@ -750,14 +750,15 @@ kbd {
 .studio-whole-app-preview > .studio-preview-cell-viewport { height: 100%; width: 100%; }
 .studio-preview-cell:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 8px; }
 .studio-preview-cell-label {
-  align-items: center; color: var(--studio-text); display: flex; font-size: 12px; font-weight: 600; gap: 8px; justify-content: space-between; width: 100%;
+  align-items: center; color: var(--studio-text); display: flex; font-size: 12px; font-weight: 600; gap: 8px; width: 100%;
 }
-.studio-preview-activation-toggle { margin-left: auto; width: 26px; height: 26px; display: inline-grid; place-items: center; border: 0; background: transparent; color: #898d96; cursor: pointer; }
-.studio-preview-activation-toggle svg { width: 17px; height: 17px; fill: none; }
+.studio-preview-activation-toggle { flex: none; width: 26px; height: 26px; display: inline-grid; place-items: center; border: 0; background: transparent; color: #898d96; cursor: pointer; }
+.studio-preview-activation-toggle svg, .studio-preview-inactive-activate svg { width: 17px; height: 17px; fill: none; }
 .studio-preview-activation-toggle[aria-pressed="true"] { color: #c5a32f; }
 .studio-preview-activation-toggle[aria-pressed="true"] svg { fill: #ead57b; }
-.studio-preview-inactive-hint { display: grid; place-items: center; width: 100%; height: 100%; color: var(--studio-text-dim); font-size: 12px; }
-.studio-preview-cell-details { color: var(--studio-text-dim); font: 11px var(--studio-mono); font-weight: 400; }
+.studio-preview-inactive-activate { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; height: 100%; border: 0; border-radius: inherit; padding: 0; background: transparent; color: var(--studio-text-dim); cursor: pointer; font: inherit; font-size: 12px; }
+.studio-preview-inactive-activate:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: -4px; }
+.studio-preview-cell-details { margin-left: auto; color: var(--studio-text-dim); font: 11px var(--studio-mono); font-weight: 400; }
 .studio-preview-cell[data-preview-interactive="true"] > .studio-preview-cell-label { color: var(--studio-accent-strong); }
 .studio-preview-cell-viewport {
   background: #fff; border-radius: 26px; box-shadow: 0 0 0 5px var(--studio-bezel), 0 0 0 6px var(--studio-stroke-strong), 0 24px 48px -12px rgba(0, 0, 0, .8);

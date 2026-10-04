@@ -535,6 +535,10 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
     if (deps.enabled?.() === false) {
       return
     }
+    // Native buttons use Space to activate; their key must not start canvas panning.
+    if (event.key === ' ' && event.target instanceof Element && event.target.closest('button, [role="button"]')) {
+      return
+    }
     if (event.key === ' ' && !event.isComposing && !isStudioTypingTarget(event.target)) {
       event.preventDefault()
       event.stopPropagation()

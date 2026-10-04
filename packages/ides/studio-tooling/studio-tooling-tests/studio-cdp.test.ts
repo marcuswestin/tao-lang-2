@@ -512,6 +512,7 @@ Describe('Studio browser CDP harness', () => {
 
     await browser.pressShortcut('k')
     await browser.pressKey('/')
+    await browser.pressKey('Enter')
 
     Expect(transport.calls.filter(call => call.method === 'Input.dispatchKeyEvent')).toEqual([
       {
@@ -524,11 +525,19 @@ Describe('Studio browser CDP harness', () => {
       },
       {
         method: 'Input.dispatchKeyEvent',
-        params: { code: 'Slash', key: '/', modifiers: 0, type: 'rawKeyDown', windowsVirtualKeyCode: 191 },
+        params: { code: 'Slash', key: '/', modifiers: 0, text: '/', type: 'keyDown', windowsVirtualKeyCode: 191 },
       },
       {
         method: 'Input.dispatchKeyEvent',
         params: { code: 'Slash', key: '/', modifiers: 0, type: 'keyUp', windowsVirtualKeyCode: 191 },
+      },
+      {
+        method: 'Input.dispatchKeyEvent',
+        params: { code: 'Enter', key: 'Enter', modifiers: 0, text: '\r', type: 'keyDown', windowsVirtualKeyCode: 13 },
+      },
+      {
+        method: 'Input.dispatchKeyEvent',
+        params: { code: 'Enter', key: 'Enter', modifiers: 0, type: 'keyUp', windowsVirtualKeyCode: 13 },
       },
     ])
     await Expect(browser.pressKey('unsupported')).rejects.toThrow('browser key is unsupported')

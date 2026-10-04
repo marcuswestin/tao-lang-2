@@ -135,10 +135,11 @@ The Developer's decisions: show every preview but render none until the develope
 each preview has its own toggle, off by default; the active set is per developer and per project.
 
 1. **Every preview starts inactive**, the whole-app cell included. An inactive cell shows its
-   scenario name and a short hint to activate it, and has no iframe, so it loads no bundle and
-   registers no HMR client.
-2. **The toggle** is an icon-only button in each cell's header: a tiny lightning bolt. Active, the
-   bolt is filled a subtle yellow; inactive, it is a grey outline with no fill. It carries
+   scenario name and a pressable lightning icon plus "activate" inside the viewport. It has no iframe,
+   so it loads no bundle and registers no HMR client.
+2. **The toggle** is an icon-only button at the top left of each cell's header, before its preview
+   name: a tiny lightning bolt. Active, the bolt is filled a subtle yellow; inactive, it is a grey
+   outline with no fill. It carries
    `aria-pressed`, and its label and tooltip read "Activate preview" or "Deactivate preview".
    Deactivating removes the cell's iframe.
 3. **Naming in code.** "Active" now means activated. Rename `StudioActivePreview`
@@ -169,6 +170,12 @@ each preview has its own toggle, off by default; the active set is per developer
    Studio restart, no suspension); then the HNReader race case under real Metro with several cells
    active, editing while scrolling, with no `RevisionNotFoundError`. Show the Developer a screenshot
    of both toggle states.
+   The focused control lane checks pointer and Space/Enter activation, and a second press during a
+   pending save, for scenario and whole-app previews:
+
+   ```sh
+   ./agent unsandboxed studio-smoke packages/ides/studio-tooling/studio-smoke/studio-preview-activation.test.ts preview-activation
+   ```
 
 ## Where to look
 

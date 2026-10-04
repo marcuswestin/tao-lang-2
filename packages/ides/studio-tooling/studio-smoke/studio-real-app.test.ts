@@ -139,14 +139,35 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
     await browser.goto(studio.readiness.sessionUrl)
     await browser.waitFor("document.querySelector('.studio-preview-activation-toggle') !== null")
     Expect(await browser.evaluate("document.querySelectorAll('.studio-preview-cell iframe').length")).toBe(0)
+    Expect(await browser.evaluate("document.querySelector('.studio-preview-inactive-activate')?.textContent"))
+      .toBe('activate')
+    Expect(
+      await browser.evaluate(`(() => {
+      const header = document.querySelector('.studio-preview-cell-label')
+      const toggle = header?.querySelector('.studio-preview-activation-toggle')
+      const name = toggle?.nextElementSibling
+      return header instanceof HTMLElement && toggle instanceof HTMLButtonElement && name instanceof HTMLElement
+        && toggle.getBoundingClientRect().left <= header.getBoundingClientRect().left + 1
+        && toggle.getBoundingClientRect().right <= name.getBoundingClientRect().left
+    })()`),
+    ).toBe(true)
     await browser.captureScreenshot('preview-inactive')
-    await activateSmokePreviews(browser)
+    await browser.click('.studio-preview-inactive-activate')
     await browser.waitFor(
       `document.querySelector('.studio-preview-cell iframe') instanceof HTMLIFrameElement`,
       { timeoutMs: 30_000 },
     )
     // The native button renders its title uppercase on web, and innerText reports the transformed text.
     await waitForPreview(browser, studio, previewUrl, `document.body?.textContent?.includes('Increment') === true`)
+    Expect(await browser.evaluate("document.querySelector('.studio-preview-inactive-activate')")).toBe(null)
+    Expect(
+      await browser.evaluate(
+        "document.querySelector('.studio-preview-activation-toggle')?.getAttribute('aria-pressed')",
+      ),
+    )
+      .toBe('true')
+    // Keep the header's active bolt visible even when waiting for the tall iframe scrolled it away.
+    await browser.evaluate("document.querySelector('.studio-preview-cell-label')?.scrollIntoView({ block: 'nearest' })")
     await browser.captureScreenshot('preview-active')
 
     await browser.click('[data-preset="design"]')

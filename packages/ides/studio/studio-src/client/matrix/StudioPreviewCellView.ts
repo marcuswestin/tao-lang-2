@@ -22,6 +22,8 @@ import {
 import { StudioReviewDom } from './StudioReviewDom'
 import { studioReplayConfiguration } from './StudioRuntimeCapture'
 
+const pendingActivations = new WeakSet<StudioPreviewConnection>()
+
 /** The cell's one status line: a state for styling and the sentence the person reads. */
 type StudioCellStatus = {
   element: HTMLSpanElement
@@ -106,7 +108,7 @@ export function renderCellPreview(
   label.className = 'studio-preview-cell-label'
   const name = document.createElement('span')
   name.textContent = scenario?.label ?? cell.scenarioId
-  label.append(name, previewActivationToggle(connection))
+  label.append(previewActivationToggle(connection), name)
   connection.scenarioLabel = scenario?.label ?? cell.scenarioId
 
   const details = document.createElement('span')
@@ -190,10 +192,7 @@ export function renderCellPreview(
       viewport.replaceChildren(connection.iframe)
     }
   } else {
-    const hint = document.createElement('span')
-    hint.className = 'studio-preview-inactive-hint'
-    hint.textContent = 'Activate preview to load this scenario.'
-    viewport.replaceChildren(hint)
+    viewport.replaceChildren(previewActivationToggle(connection, 'activate'))
   }
 
   const remount = async (
@@ -474,7 +473,7 @@ export function renderCellPreview(
   frame.onclick = () => connection.focus?.()
   frame.onfocus = () => connection.focus?.()
   frame.onkeydown = event => {
-    if (event.key === 'Enter' || event.key === ' ') {
+    if (event.target === frame && (event.key === 'Enter' || event.key === ' ')) {
       event.preventDefault()
       connection.focus?.()
     }
@@ -491,22 +490,40 @@ export function renderCellPreview(
   connection.changed?.()
 }
 
-export function previewActivationToggle(connection: StudioPreviewConnection): HTMLButtonElement {
+export function previewActivationToggle(connection: StudioPreviewConnection, label?: string): HTMLButtonElement {
   const button = document.createElement('button')
-  button.className = 'studio-preview-activation-toggle'
+  button.className = label === undefined ? 'studio-preview-activation-toggle' : 'studio-preview-inactive-activate'
   button.type = 'button'
+  button.disabled = pendingActivations.has(connection)
   const title = connection.activated ? 'Deactivate preview' : 'Activate preview'
   button.title = title
   button.setAttribute('aria-label', title)
   button.setAttribute('aria-pressed', String(connection.activated === true))
   button.innerHTML =
     '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.4 2 4 13h7l-.4 9L20 10h-7l.4-8Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>'
+  if (label !== undefined) {
+    button.append(label)
+  }
   button.addEventListener('click', event => {
     event.stopPropagation()
-    button.disabled = true
-    void connection.toggleActivation?.().catch(error => {
-      button.disabled = false
+    if (pendingActivations.has(connection)) {
+      return
+    }
+    pendingActivations.add(connection)
+    const controls = (): Iterable<HTMLButtonElement> =>
+      connection.frame?.querySelectorAll<HTMLButtonElement>(
+        '.studio-preview-activation-toggle, .studio-preview-inactive-activate',
+      ) ?? [button]
+    for (const control of controls()) {
+      control.disabled = true
+    }
+    void Promise.resolve().then(() => connection.toggleActivation?.()).catch(error => {
       button.title = String(error)
+    }).finally(() => {
+      pendingActivations.delete(connection)
+      for (const control of controls()) {
+        control.disabled = false
+      }
     })
   })
   return button
