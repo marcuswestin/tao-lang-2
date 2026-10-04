@@ -6,6 +6,7 @@ import {
 } from './app-configuration'
 import { rootAppValue } from './apps'
 import { resolveArgumentBindings } from './argument-bindings'
+import { bindCallableArguments, callableSignatureOf, compareCallableSignatures } from './callable-signatures'
 import { colorValues } from './color-values'
 import {
   commandSlots,
@@ -95,6 +96,9 @@ export const ASTUtils = {
   reservedCommandShortcuts,
   mentionFills,
   colorValues,
+  bindCallableArguments,
+  callableSignatureOf,
+  compareCallableSignatures,
   guardBranches,
   datasourceMembershipSlot,
   datasourceCollectionNames,
@@ -162,6 +166,10 @@ export namespace ASTUtils {
   export type EffectiveAppProperty = import('./app-configuration').EffectiveAppProperty
   export type ListedEntry = import('./app-configuration').ListedEntry
   export type ArgumentBindingDiagnostic = import('./argument-bindings').ArgumentBindingDiagnostic
+  export type CallableInput = import('./callable-signatures').CallableInput
+  export type CallableSignature = import('./callable-signatures').CallableSignature
+  export type CallableSignatureComparison = import('./callable-signatures').CallableSignatureComparison
+  export type CallableSignatureDiagnostic = import('./callable-signatures').CallableSignatureDiagnostic
   export type CommandSlot = import('./commands').CommandSlot
   export type ParsedShortcut = import('./commands').ParsedShortcut
   export type EffectDeclaration = import('./effect-outcomes').EffectDeclaration
