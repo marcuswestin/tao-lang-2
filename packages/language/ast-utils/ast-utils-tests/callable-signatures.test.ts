@@ -1,6 +1,7 @@
-import { AST, Parser } from '@parser'
+import { ASTUtils, Packages } from '@ast-utils'
+import { AST, Parser, URI } from '@parser'
 import { Assert } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { resolveArgumentBindings } from '../ast-utils-src/argument-bindings'
 import {
   bindCallableArguments,
@@ -12,6 +13,152 @@ import { type TaoType, Type } from '../ast-utils-src/Type'
 import { resolveBindings } from '../ast-utils-src/type-binding-matches'
 
 Describe('Concrete callable signature substitution', () => {
+  Test('retains owned parameter metadata and writable forwarding through readonly arrays', async () => {
+    const { Supplied } = await signatures(`
+      type Book is text
+      view Supplied(mutable Value Book, Entry Book default Book "fallback", Caption text?, copy Count number, Values list of Book, Forwarded Book) {
+        render Child(Forwarded)
+      }
+      view Child(mutable Book) { }
+      view Required() { }
+    `)
+    const parameters: readonly AST.ParameterDeclaration[] = Supplied.inputs.map(input => input.declaration).toReversed()
+    const failures = { cases: ['Missing'], open: false }
+    const fromArray = ASTUtils.callableSignatureOf(parameters, failures)
+    Expect(inputMetadata(fromArray)).toEqual(inputMetadata(Supplied).toReversed())
+    Expect(fromArray.inputs.every((input, index) => input.declaration === parameters[index])).toBe(true)
+    Expect(fromArray.inputs.map(input => [input.localName, input.acceptsNone, input.omissible, input.callerWritable]))
+      .toEqual([
+        ['Forwarded', false, false, true],
+        ['Values', false, false, false],
+        ['Count', false, false, false],
+        ['Caption', true, false, false],
+        ['Entry', false, true, false],
+        ['Value', false, false, true],
+      ])
+    Expect(fromArray.failures === failures).toBe(true)
+    Expect(ASTUtils.callableSignatureOf(parameters).failures).toEqual({ cases: [], open: true })
+    const empty = ASTUtils.callableSignatureOf([])
+    Expect(empty.inputs).toHaveLength(0)
+    Expect(compareCallableSignatures(empty, { ...empty, failures }).compatible).toBe(false)
+  })
+
+  Test('forwards renamed array binders using receiving labels, defaults and storage contracts', async () => {
+    const parsed = await Parser.parseCode(`
+      type Base is text
+      type Leaf is Base
+      type Other is text
+      type Occurrence is number
+      view Supplied(Occurrence, Value Base default Base "fallback") { }
+      view Required(Value Leaf default Leaf "fallback", Occurrence) { }
+      view Writer(Occurrence, mutable Value Base default Base "fallback") { }
+      view Copied(Occurrence, copy Value Base default Base "fallback") { }
+      view Main() {
+        render Supplied(Occurrence 1)
+        render Supplied(Value: Leaf "provided", Occurrence: Occurrence 1)
+        render Supplied(Value: Other "rejected", Occurrence: Occurrence 1)
+      }
+    `)
+    Expect(parsed.diagnostics).toEqual([])
+    const views = parsed.entry.ast.statements.filter(AST.isViewDeclaration)
+    const arraySignature = (name: string): CallableSignature => {
+      const view = views.find(candidate => candidate.name === name)
+      Expect.Is(view, AST.isViewDeclaration)
+      return ASTUtils.callableSignatureOf(AST.parametersOf(view), { cases: ['Missing'], open: false })
+    }
+    const supplied = arraySignature('Supplied')
+    const receiving = arraySignature('Required')
+    const aliased: CallableSignature = {
+      ...supplied,
+      inputs: supplied.inputs.map(input => ({
+        ...input,
+        localName: input.role === 'Value' ? 'Entry' : input.localName,
+      })),
+    }
+    const comparison = compareCallableSignatures(aliased, receiving)
+    Expect(comparison.diagnostics.map(diagnostic => diagnostic.kind)).toEqual([])
+    Expect(comparison.correspondence.map(pair => [pair.required.localName, pair.supplied.localName])).toEqual([
+      ['Occurrence', 'Occurrence'],
+      ['Value', 'Entry'],
+    ])
+    Expect(aliased.inputs[1]!.declaration === supplied.inputs[1]!.declaration).toBe(true)
+    Expect(aliased.inputs[1]!.labelName).toBe('Value')
+    Expect(compareCallableSignatures(arraySignature('Writer'), receiving).compatible).toBe(false)
+    Expect(compareCallableSignatures(arraySignature('Copied'), receiving).compatible).toBe(true)
+    const main = views.find(view => view.name === 'Main')
+    Expect.Is(main, AST.isViewDeclaration)
+    const bindings = [0, 1, 2].map(index => {
+      const render = AST.blockStatementOf(main, index)
+      Expect.Is(render, AST.isRenderStatement)
+      return bindCallableArguments(aliased, AST.argumentsOf(render))
+    })
+    Expect(bindings.map(binding => binding.diagnostics.map(diagnostic => diagnostic.kind))).toEqual([
+      [],
+      [],
+      ['named-argument-type'],
+    ])
+    Expect(bindings[0]!.pairs.map(pair => Type.parameterName(pair.parameter))).toEqual(['Occurrence'])
+    Expect(bindings[1]!.pairs.map(pair => [pair.argument.label, Type.parameterName(pair.parameter)])).toEqual([
+      ['Occurrence', 'Occurrence'],
+      ['Value', 'Value'],
+    ])
+    Expect(bindings[1]!.pairs[1]!.parameter === supplied.inputs[1]!.declaration).toBe(true)
+    Expect(compareCallableSignatures({ ...aliased, failures: { cases: [], open: true } }, receiving).compatible).toBe(
+      false,
+    )
+  })
+
+  Test('keeps complete correspondence and real ambiguity for array signatures', async () => {
+    const { Supplied, Required, get } = await signatures(`
+      type Base is text
+      type Leaf is Base
+      type Book is text
+      view Supplied(Leaf default Leaf "fallback", Base) { }
+      view Required(Leaf) { }
+      view Repeated(First Book, Second Book) { }
+    `)
+    const fromArray = (signature: CallableSignature): CallableSignature =>
+      ASTUtils.callableSignatureOf(signature.inputs.map(input => input.declaration))
+    const complete = compareCallableSignatures(fromArray(Supplied), fromArray(Required))
+    Expect(complete.diagnostics.map(diagnostic => diagnostic.kind)).toEqual([])
+    Expect(complete.correspondence.map(pair => pair.supplied.localName)).toEqual(['Base'])
+    const repeated = fromArray(get('Repeated'))
+    const ambiguous = compareCallableSignatures(repeated, {
+      ...repeated,
+      inputs: repeated.inputs.map(input => ({ ...input, role: undefined })),
+    })
+    Expect(ambiguous.compatible).toBe(false)
+    Expect(ambiguous.correspondence).toHaveLength(0)
+    Expect(ambiguous.diagnostics.map(diagnostic => diagnostic.kind)).toContain('duplicate-candidate-type')
+  })
+
+  Test('keeps the view-alias route tied to the real target parameter list', async () => {
+    await withTaoFiles('tao-callable-alias-', {
+      'Main.tao': `
+        package { version 1.0.0 includes @widgets }
+        use package @widgets
+        view Renamed = widgets.Badge
+      `,
+      '@widgets/Badge.tao': 'public view Badge(Value text default "fallback") { }',
+    }, async (paths, rootDir) => {
+      const packages = Packages.createResolver(await Packages.createContext(rootDir))
+      const parsed = await Parser.parse(Parser.createContext({ packages }), URI.file(paths['Main.tao']))
+      Expect(parsed.diagnostics).toEqual([])
+      const alias = parsed.entry.ast.statements.find(AST.isViewDeclaration)
+      Expect.Is(alias, AST.isViewDeclaration)
+      Expect.Is(alias.aliasTarget, AST.isPackageMemberReference)
+      const target = alias.aliasTarget.member.ref
+      Expect.Is(target, AST.isViewDeclaration)
+      Expect(alias.parameterList === undefined).toBe(true)
+      const view = ASTUtils.callableSignatureOf(alias)
+      const array = ASTUtils.callableSignatureOf(AST.parametersOf(target))
+      Expect(inputMetadata(view)).toEqual(inputMetadata(array))
+      Expect(view.inputs).toHaveLength(1)
+      Expect(view.inputs[0]!.declaration === array.inputs[0]!.declaration).toBe(true)
+      Expect(bindCallableArguments(view, []).diagnostics.map(diagnostic => diagnostic.kind)).toEqual([])
+    }, { location: 'worktree' })
+  })
+
   Test('accepts an ancestor input domain and rejects narrowing to a descendant', async () => {
     const { Supplied, Required } = await signatures(`
       type Base is text
@@ -544,6 +691,18 @@ Describe('Concrete callable signature substitution', () => {
     Expect(adapted.diagnostics.map(diagnostic => diagnostic.kind)).toEqual(['unknown-named-argument'])
   })
 })
+
+function inputMetadata(signature: CallableSignature): unknown[] {
+  return signature.inputs.map(input => ({
+    role: input.role,
+    labelName: input.labelName,
+    localName: input.localName,
+    type: Type.identityKey(input.type),
+    acceptsNone: input.acceptsNone,
+    omissible: input.omissible,
+    callerWritable: input.callerWritable,
+  }))
+}
 
 async function signatures(source: string): Promise<{
   Supplied: CallableSignature

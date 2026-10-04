@@ -44,13 +44,23 @@ export type CallableSignatureComparison = Readonly<{
   diagnostics: readonly CallableSignatureDiagnostic[]
 }>
 
-/** callableSignatureOf extracts concrete view inputs; unknown body failures remain open. */
+/** callableSignatureOf extracts view or concrete parameter inputs; unknown body failures remain open. */
 export function callableSignatureOf(
   view: AST.ViewDeclaration,
+  failures?: FailureContract,
+): CallableSignature
+export function callableSignatureOf(
+  parameters: readonly AST.ParameterDeclaration[],
+  failures?: FailureContract,
+): CallableSignature
+export function callableSignatureOf(
+  source: AST.ViewDeclaration | readonly AST.ParameterDeclaration[],
   failures: FailureContract = { cases: [], open: true },
 ): CallableSignature {
+  // Keep real parameter ownership for storage analysis; view aliases still resolve through AST.
+  const parameters = AST.isViewDeclaration(source) ? AST.parametersOf(source) : source
   return {
-    inputs: AST.parametersOf(view).map(parameter => {
+    inputs: parameters.map(parameter => {
       const type = inputDomain(parameter)
       const name = Type.parameterName(parameter)
       return {
