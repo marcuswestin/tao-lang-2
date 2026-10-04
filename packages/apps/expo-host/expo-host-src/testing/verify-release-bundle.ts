@@ -71,7 +71,17 @@ async function verifyReleaseBundle(): Promise<void> {
 }
 
 async function copyHost(hostRoot: string): Promise<void> {
-  for (const file of ['app.json', 'app.config.js', 'app-config.cjs', 'index.ts', 'metro.config.cjs', 'package.json']) {
+  for (
+    const file of [
+      'app.json',
+      'app.config.js',
+      'app-config.cjs',
+      'index.ts',
+      'expo-host-src/ManagedLoopIdentityMarker.ts',
+      'metro.config.cjs',
+      'package.json',
+    ]
+  ) {
     await FS.copyFile(
       FS.resolvePath(file, RuntimeToolchainPaths.packageRoot),
       FS.resolvePath(file, hostRoot),

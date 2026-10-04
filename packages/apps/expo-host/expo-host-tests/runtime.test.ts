@@ -192,6 +192,49 @@ Describe('Tao runtime app generation', () => {
     Expect(await FS.modifiedTimeMs(generated.outputPath)).toBe(firstWrite)
   })
 
+  Test('publishes managed source and compiled identity with a fresh mounted nonce', async () => {
+    const runtimePackageRoot = await createRuntimePackageRoot()
+    await withTaoFiles('tao-managed-publication-', {
+      'Main.tao':
+        'app Preview { id "preview" version "1.0.0" name "Preview" view Home }\nview Home() { render inject ```ts return "Before" ``` }',
+    }, async paths => {
+      const managedPublication = {
+        session: 'session-1',
+        checkout: Repo.getRoot(),
+        loopGeneration: 'loop-1',
+        projectRoot: FS.dirname(paths['Main.tao']!),
+        appName: 'Preview',
+      }
+      const first = await Runtime.generateApp(paths['Main.tao']!, {
+        appName: 'Preview',
+        runtimePackageRoot,
+        managedPublication,
+      })
+      Expect(first.managedPublication?.appName).toBe('Preview')
+      Expect(first.managedPublication?.sourceRevision).toMatch(/^[a-f0-9]{64}$/u)
+      Expect(first.managedPublication?.compiledRevision).toMatch(/^[a-f0-9]{64}$/u)
+      Expect(await FS.readText(generatedPreviewPath(runtimePackageRoot, 'ManagedLoopIdentity.ts'))).toContain(
+        '"session":"session-1"',
+      )
+      await FS.writeText(
+        paths['Main.tao']!,
+        'app Preview { id "preview" version "1.0.0" name "Preview" view Home }\nview Home() { render inject ```ts return "After" ``` }',
+      )
+      const second = await Runtime.generateApp(paths['Main.tao']!, {
+        appName: 'Preview',
+        runtimePackageRoot,
+        managedPublication,
+      })
+      Expect(second.managedPublication?.sourceRevision).not.toBe(first.managedPublication?.sourceRevision)
+      Expect(second.managedPublication?.compiledRevision).not.toBe(first.managedPublication?.compiledRevision)
+      Expect(second.managedPublication?.nonce).not.toBe(first.managedPublication?.nonce)
+      await Runtime.generateApp(paths['Main.tao']!, { appName: 'Preview', runtimePackageRoot })
+      Expect(await FS.readText(generatedPreviewPath(runtimePackageRoot, 'ManagedLoopIdentity.ts'))).toBe(
+        'export default null\n',
+      )
+    })
+  })
+
   Test('resolves relative app paths from an explicit working directory', async () => {
     const outsideRoot = await createRuntimePackageRoot()
     const runtimePackageRoot = FS.resolvePath('runtime', outsideRoot)
@@ -205,6 +248,42 @@ Describe('Tao runtime app generation', () => {
     Expect(generated.sourcePath).toBe(FS.resolvePath('WordFlower.tao', wordFlowerDir))
     Expect(generated.outputPath).toBe(generatedAppPath(runtimePackageRoot))
     Expect(await FS.readText(generated.outputPath)).toBe(generated.code)
+  })
+
+  Test('uses the declaring project root for local Firebase settings in a nested app', async () => {
+    const runtimePackageRoot = await createRuntimePackageRoot()
+    await withTaoFiles('tao-runtime-firebase-config-', {
+      'src/Main.tao': `
+        use FirebaseAuth from @tao/auth/firebase
+        use Firebase from @tao/data/providers/firebase
+        data Notes / Note { Title text }
+        app NotesApp {
+          id "com.tao.test.notesapp" version "1.0.0" name "NotesApp"
+          Auth FirebaseAuth { ApiKey "source-key" ProjectId "source-project" }
+          Datasource Firebase { ApiKey "source-key" ProjectId "source-project" }
+          view Main
+        }
+        view Main() { render Label("Ready") }
+        view Label(Value text) { render inject Value \`\`\`ts return null \`\`\` }
+      `,
+    }, async (paths, root) => {
+      await FS.writeJson(FS.resolvePath('.tao/local/connections.json', root), {
+        firebase: {
+          apiKey: 'project-key',
+          projectId: 'project-id',
+          appId: 'project-app',
+          authDomain: 'project.firebaseapp.com',
+        },
+      })
+      await Runtime.generateApp(paths['src/Main.tao'], { runtimePackageRoot })
+      const generated = Object.values(await generatedGraph(runtimePackageRoot))
+        .find(code => code.includes('_TaoAppDefinition_NotesApp'))
+      Assert.defined(generated, 'Firebase app module is generated')
+      Expect(generated.match(/"ApiKey": TR.Value\("project-key"\)/gu)).toHaveLength(2)
+      Expect(generated.match(/"ProjectId": TR.Value\("project-id"\)/gu)).toHaveLength(2)
+      Expect(generated.match(/"AppId": TR.Value\("project-app"\)/gu)).toHaveLength(2)
+      Expect(generated).toContain('"AuthDomain": TR.Value("project.firebaseapp.com")')
+    })
   })
 
   Test('publishes a typed ship manifest only with a release graph and removes it on development compile', async () => {
@@ -749,6 +828,7 @@ Describe('Tao runtime app generation', () => {
         }
         Expect(generatedFiles).toContain('App.injection-1.tsx')
         Expect(generatedFiles).toContain('App.tsx')
+        Expect(generatedFiles).toContain('ManagedLoopIdentity.ts')
         Expect(generatedFiles).not.toContain('App.injection-120.tsx')
       },
     )
@@ -786,6 +866,10 @@ Describe('Tao runtime app generation', () => {
         }
         Expect(generatedFiles).toContain('App.injection-1.tsx')
         Expect(generatedFiles).toContain('App.tsx')
+        Expect(generatedFiles).toContain('ManagedLoopIdentity.ts')
+        Expect(generatedFiles).toContain('TaoApp.tsx')
+        Expect(generatedFiles).toContain('TaoAppRefresh.tsx')
+        Expect(generatedFiles).toContain('TaoStudioManifest.ts')
         Expect(generatedFiles).toContain('TaoStudioPublication.ts')
         Expect(generatedFiles).not.toContain('App.injection-120.tsx')
       },

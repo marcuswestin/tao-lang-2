@@ -1,5 +1,5 @@
-import type TR from '@runtime/TR'
-import { Assert } from '@shared/core'
+import TR from '@runtime/TR'
+import { Assert, Switch } from '@shared/core'
 import type { InstantMapping } from './instant-schema'
 
 /**
@@ -88,69 +88,39 @@ export function rowOperations(
   intents: readonly TR.DataWriteIntent[],
   identities: RowIdentities,
 ): InstantRowOperation[] {
-  const before = previous === undefined ? undefined : parseRows(previous)
-  const after = parseRows(next)
-  const creates: InstantRowOperation[] = []
-  const links: InstantRowOperation[] = []
-  const deletes: InstantRowOperation[] = []
-  for (const entityName of Object.keys(definition.entities)) {
-    const mapped = mapping.entities[entityName]!
-    const previousRows = new Map((before?.rows[entityName] ?? []).map(row => [row['Id'] as string, row]))
-    const nextRows = after.rows[entityName] ?? []
-    const nextIds = new Set<string>()
-    for (const row of nextRows) {
-      const localId = row['Id'] as string
-      nextIds.add(localId)
-      const id = identities.remote(localId)
-      const old = previousRows.get(localId)
-      const touched = new Set(
-        intents.filter(intent => intent.entity === entityName && intent.id === localId).flatMap(intent =>
-          intent.fields
+  return TR.DataRows.rowOperations(definition, previous, next, intents).flatMap(operation => {
+    // InstaML unlink names a target id; it has no clear-unknown-target transaction.
+    if (operation.kind === 'unlink' && operation.target === null) {
+      return []
+    }
+    const mapped = mapping.entities[operation.entity]!
+    const id = identities.remote(operation.id)
+    return [Switch.on(operation, 'kind', {
+      delete: (): InstantRowOperation => ({ id, kind: 'delete', namespace: mapped.namespace }),
+      link: (link): InstantRowOperation => ({
+        id,
+        kind: 'link',
+        label: mapped.relations[link.field]!.label,
+        namespace: mapped.namespace,
+        target: identities.remote(link.target),
+      }),
+      unlink: (unlink): InstantRowOperation => ({
+        id,
+        kind: 'unlink',
+        label: mapped.relations[unlink.field]!.label,
+        namespace: mapped.namespace,
+        target: identities.remote(unlink.target!),
+      }),
+      update: (update): InstantRowOperation => ({
+        attributes: Object.fromEntries(
+          Object.entries(update.fields).map(([field, value]) => [mapped.attributes[field]!, value]),
         ),
-      )
-      const attributes: Record<string, unknown> = {}
-      for (const [field, label] of Object.entries(mapped.attributes)) {
-        const value = row[field] ?? null
-        if (old === undefined ? value !== null : touched.has(field) || !sameValue(old[field] ?? null, value)) {
-          attributes[label] = value
-        }
-      }
-      if (old === undefined || Object.keys(attributes).length > 0) {
-        creates.push({ attributes, id, kind: 'update', namespace: mapped.namespace })
-      }
-      for (const [field, relation] of Object.entries(mapped.relations)) {
-        const target = (row[field] ?? null) as string | null
-        const oldTarget = old === undefined ? null : (old[field] ?? null) as string | null
-        if (target === oldTarget && !(target !== null && touched.has(field))) {
-          continue
-        }
-        if (target === null) {
-          links.push({
-            id,
-            kind: 'unlink',
-            label: relation.label,
-            namespace: mapped.namespace,
-            target: identities.remote(oldTarget!),
-          })
-          continue
-        }
-        // A has-one link replaces whatever the row linked before.
-        links.push({
-          id,
-          kind: 'link',
-          label: relation.label,
-          namespace: mapped.namespace,
-          target: identities.remote(target),
-        })
-      }
-    }
-    for (const localId of previousRows.keys()) {
-      if (!nextIds.has(localId)) {
-        deletes.push({ id: identities.remote(localId), kind: 'delete', namespace: mapped.namespace })
-      }
-    }
-  }
-  return [...creates, ...links, ...deletes]
+        id,
+        kind: 'update',
+        namespace: mapped.namespace,
+      }),
+    })]
+  })
 }
 
 /**
@@ -295,10 +265,6 @@ function defaultValue(field: Field): unknown {
     time: 0,
   }
   return zero[field.kind]
-}
-
-function sameValue(left: unknown, right: unknown): boolean {
-  return left === right || JSON.stringify(left) === JSON.stringify(right)
 }
 
 function parseRows(snapshot: string): Envelope {

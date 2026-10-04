@@ -92,6 +92,7 @@ function tao_activate_devenv_profile() {
     export ANDROID_HOME="$android_sdk"
     export ANDROID_SDK_ROOT="$android_sdk"
     export ANDROID_USER_HOME="$worktree_dir/.android"
+    export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
   fi
 }
 

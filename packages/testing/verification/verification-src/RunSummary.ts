@@ -233,6 +233,8 @@ const WARNING_PATTERN = /\b(warning|warn):|is declared but never referenced|depr
 export type ClassifyContext = {
   contention?: ContentionReport
   interrupted?: boolean
+  /** The runner's node identity, used to distinguish a tool's source display from diagnostics. */
+  nodeName?: string
 }
 
 /** describesTimeout reports whether a node's output says it ran out of time rather than failed. */
@@ -248,6 +250,15 @@ export function describesTimeout(output: string): boolean {
 export function classifyFailure(output: string, context: ClassifyContext = {}): FailureKind {
   if (context.interrupted === true) {
     return 'user-interruption'
+  }
+  // dprint check prints numbered old/new source rows beneath `from <path>:`. Historical
+  // permission errors in those rows describe the document, not this run. Keep every other line:
+  // a formatting refusal can still accompany a genuine tool permission failure.
+  if (context.nodeName === '_dprint-check') {
+    const plain = OutputText.stripAnsi(output)
+    if (/^from .+:\r?$/m.test(plain)) {
+      output = plain.split('\n').filter(line => !/^\s*\d+(?:\s+\d+)?\s*\|/.test(line)).join('\n')
+    }
   }
   // Bun appends `(fail)` to every failed test, including one whose browser process was rejected by
   // the host before CDP existed. Recognize that exact boundary without letting it outrank a real
@@ -841,6 +852,7 @@ function nodeResult(
     ? classifyFailure(state.fullOutput, {
       contention: state.retried === true ? undefined : contention,
       interrupted: state.failure?.kind === 'interrupted',
+      nodeName: state.name,
     })
     : undefined
   const found = failed ? extractFailures(state.fullOutput) : []

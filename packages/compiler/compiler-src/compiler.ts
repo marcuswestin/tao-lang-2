@@ -37,6 +37,10 @@ export type CompileOptions = {
   appName?: string
   /** appDatasourceConfiguration replaces selected-app datasource slots for a derived release host. */
   appDatasourceConfiguration?: Readonly<Record<string, string>>
+  /** appFirebaseConfiguration applies project-local public Firebase settings to the selected app's Firebase datasource. */
+  appFirebaseConfiguration?: Readonly<Record<string, string>>
+  /** appAuthConfiguration applies project-local public settings to the selected app's Firebase auth. */
+  appAuthConfiguration?: Readonly<Record<string, string>>
   /** studio emits preview-only render occurrence metadata into generated Tao props. */
   studio?: boolean
   /** journeyObservations emits test-harness-only render locators into generated Tao props. */

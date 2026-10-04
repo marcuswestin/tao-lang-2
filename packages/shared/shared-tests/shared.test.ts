@@ -538,7 +538,15 @@ Describe('FS', () => {
     await FS.writeText(FS.resolvePath('value.txt', sourceDir), 'current')
     await FS.writeText(FS.resolvePath('value.txt', targetDir), 'stale')
     const lockPath = `${await FS.realPath(targetDir)}.tao-file-mutation.lock`
-    await FS.writeJson(lockPath, { pid: Number.MAX_SAFE_INTEGER, token: 'dead-owner' })
+    const exited = await CLI.run(Platform.runtimeProcess.execPath, {
+      args: ['--eval', 'console.log(process.pid)'],
+      stdio: 'pipe',
+    })
+    Expect(exited.exitCode).toBe(0)
+    const ownerPid = Number(exited.stdout.trim())
+    Expect(ownerPid).toBeGreaterThan(0)
+    Expect(Platform.processIsAlive(ownerPid)).toBe(false)
+    await FS.writeJson(lockPath, { pid: ownerPid, token: 'dead-owner' })
 
     await FS.synchronizeDirectoryFiles(sourceDir, targetDir, { boundaryPath: root })
 
@@ -828,6 +836,34 @@ Describe('HCI', () => {
 
     Expect(confirm).toBe(true)
     Expect(choice).toBe('two')
+  })
+
+  Test('puts the default choice first and redraws labeled options after an invalid answer', async () => {
+    const streams = fakeTerminal('wrong\n\n')
+    const choice = await HCI.askChoice({
+      message: 'Open the app on',
+      choices: [{ value: 'iphone', label: 'iPhone' }, { value: 'simulator', label: 'iOS Simulator' }],
+      defaultValue: 'simulator',
+      ...streams,
+    })
+
+    const output = stripAnsi(streams.outputText())
+    Expect(choice).toBe('simulator')
+    Expect(output.split('1. iOS Simulator (default)').length - 1).toBe(2)
+    Expect(output.split('2. iPhone').length - 1).toBe(2)
+    Expect(output).toContain('ctrl+c to quit')
+  })
+
+  Test('labels the tenth choice with a and accepts it followed by Enter', async () => {
+    const streams = fakeTerminal('a\n')
+    const choice = await HCI.askChoice({
+      message: 'Pick',
+      choices: Array.from({ length: 10 }, (_, index) => ({ value: `option-${index}` })),
+      ...streams,
+    })
+
+    Expect(choice).toBe('option-9')
+    Expect(stripAnsi(streams.outputText())).toContain('a. option-9')
   })
 
   Test('renders the confirmation hint from the shared suffix in the asked question', async () => {

@@ -1,7 +1,8 @@
 import { Workspace } from '@compiler/workspace'
 import { AST } from '@parser'
 import { findProjectRoot } from '@project-tooling'
-import { Assert, FS } from '@shared'
+import { Assert, type FirebaseConnection, FS, Platform, readFirebaseConnections } from '@shared'
+import type { DevLoopMobilePublication } from '@shared/DevLoopControl'
 import { withGeneratedModuleLinks } from './generated-module-links'
 import { expoUpdateArtifacts, proveReleaseBundle } from './release-bundle-proof'
 import { RuntimeToolchainPaths } from './runtime-toolchain-paths'
@@ -49,6 +50,7 @@ export type GenerateAppOptions = {
   runtimePackageRoot?: string
   ship?: ShipManifest
   validationMode?: 'development' | 'release'
+  managedPublication?: Omit<DevLoopMobilePublication, 'sourceRevision' | 'compiledRevision' | 'nonce'>
 }
 
 export type ShipUpdatesConfig = {
@@ -94,6 +96,7 @@ export type GeneratedApp = {
   shipManifest?: ShipManifest
   shipManifestPath?: string
   studioManifest?: NonNullable<Awaited<ReturnType<typeof Workspace.compile>>['studioManifest']>
+  managedPublication?: DevLoopMobilePublication
 }
 
 const generationQueues = new Map<string, Promise<void>>()
@@ -123,8 +126,18 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
       opts.ship === undefined || opts.preview === undefined,
       'a release ship manifest is not combined with a Studio preview publication',
     )
+    Assert(
+      opts.managedPublication === undefined || opts.validationMode !== 'release',
+      'managed development identity is not included in a release publication',
+    )
+    const requesterRoot = await findProjectRoot(sourcePath)
+    Assert.input(requesterRoot !== undefined, `No Tao project marker (.tao directory) was found for ${sourcePath}.`)
+    const firebase = await readFirebaseConnections(requesterRoot)
+    const firebaseConfiguration = firebase === undefined ? undefined : firebaseConfigurationSlots(firebase)
     const compileOptions = {
       appDatasourceConfiguration: opts.datasourceConfiguration,
+      appFirebaseConfiguration: firebaseConfiguration,
+      appAuthConfiguration: firebaseConfiguration,
       appName: opts.appName,
       // A Studio preview carries debugger gates so a breakpoint can pause it. Nothing else does:
       // an app built for a device or a test run compiles exactly as it did before.
@@ -133,6 +146,9 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
       studio: opts.preview !== undefined,
       validationMode: opts.validationMode,
     }
+    const sourceRevision = opts.managedPublication === undefined
+      ? undefined
+      : await managedSourceRevision(opts.managedPublication.projectRoot)
     const compiled = opts.preview === undefined
       ? await Workspace.compile(sourcePath, compileOptions)
       : await compileStudioPreview(sourcePath, opts.preview, compileOptions)
@@ -145,11 +161,25 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
     const compiledFiles = preview === undefined
       ? compiled.files
       : filesWithStablePreviewRoot(compiled.files, preview)
-    const generatedFiles = opts.ship === undefined
+    const compiledGeneratedFiles = opts.ship === undefined
       ? compiledFiles
       : [...compiledFiles, { relativePath: 'ship.json', code: `${JSON.stringify(opts.ship, null, 2)}\n` }]
-    const requesterRoot = await findProjectRoot(sourcePath)
-    Assert.input(requesterRoot !== undefined, `No Tao project marker (.tao directory) was found for ${sourcePath}.`)
+    const publication = opts.managedPublication === undefined ? undefined : {
+      ...opts.managedPublication,
+      sourceRevision: sourceRevision!,
+      compiledRevision: Platform.sha256Hex(JSON.stringify(compiledGeneratedFiles)),
+      nonce: Platform.randomUUID(),
+    }
+    if (publication !== undefined) {
+      Assert.input(
+        sourceRevision === await managedSourceRevision(publication.projectRoot),
+        'Managed app sources changed during compilation; retry compilation before attachment.',
+      )
+    }
+    const generatedFiles = [...compiledGeneratedFiles, {
+      relativePath: 'ManagedLoopIdentity.ts',
+      code: `export default ${JSON.stringify(publication ?? null)}\n`,
+    }]
     await withGeneratedModuleLinks(generatedAppRoot, requesterRoot, compiled.dependencyEnvironments, async () => {
       await writeGeneratedFiles(
         generatedAppRoot,
@@ -170,6 +200,7 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
       sourcePath,
       outputPath: generatedAppPath,
       code: generatedAppCode ?? compiled.code,
+      ...(publication === undefined ? {} : { managedPublication: publication }),
       ...(opts.ship === undefined ? {} : { shipManifest: opts.ship, shipManifestPath }),
       ...(preview === undefined
         ? {}
@@ -180,6 +211,31 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
         }),
     }
   })
+}
+
+function firebaseConfigurationSlots(connection: FirebaseConnection): Readonly<Record<string, string>> {
+  return {
+    ApiKey: connection.apiKey,
+    ProjectId: connection.projectId,
+    AppId: connection.appId,
+    ...(connection.authDomain === undefined ? {} : { AuthDomain: connection.authDomain }),
+    ...(connection.storageBucket === undefined ? {} : { StorageBucket: connection.storageBucket }),
+    ...(connection.messagingSenderId === undefined ? {} : { MessagingSenderId: connection.messagingSenderId }),
+  }
+}
+
+async function managedSourceRevision(projectRoot: string): Promise<string> {
+  const files: Array<readonly [string, string]> = []
+  for await (
+    const path of FS.walk(projectRoot, {
+      extensions: ['.tao'],
+      excludeDirectory: name => name === 'node_modules' || name.startsWith('_gen_') || name.startsWith('.'),
+    })
+  ) {
+    files.push([FS.relativePath(projectRoot, path), await FS.readText(path)])
+  }
+  files.sort(([left], [right]) => left.localeCompare(right))
+  return Platform.sha256Hex(JSON.stringify(files))
 }
 
 async function compileStudioPreview(

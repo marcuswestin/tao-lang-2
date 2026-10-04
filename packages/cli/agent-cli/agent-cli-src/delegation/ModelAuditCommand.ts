@@ -1,5 +1,6 @@
-import { Errors, FS, HCI, Platform, Repo } from '@shared'
+import { Errors, FS, HCI, Json, Platform, Repo } from '@shared'
 import { primaryCheckout, siblingWorktreeRoot } from '../agent-hooks/WorktreePlacement'
+import { DELEGATION_SKILL_PATH, tierModels } from './DelegationProfiles'
 import { auditModelRouting, type ModelAuditOptions, type ModelAuditReport } from './ModelAudit'
 
 type RunModelAuditOptions = { brief?: boolean; days?: number; json?: boolean; repoRoot?: string; until?: string }
@@ -54,7 +55,42 @@ function briefLine(findings: readonly string[]): string | undefined {
 
 /** briefFindings is the one-day, tail-only audit that session start and `./agent doctor` share. */
 async function briefFindings(repoRoot: string): Promise<string[]> {
-  return (await auditModelRouting(await resolvedOptions({ brief: true, repoRoot }))).findings
+  return (await audit(await resolvedOptions({ brief: true, repoRoot }))).findings
+}
+
+/** Personal configuration stays local: only its subagent model is reflected in the report. */
+async function audit(options: ModelAuditOptions): Promise<ModelAuditReport> {
+  const report = await auditModelRouting(options)
+  const configPath = FS.resolvePath('config.toml', options.codexHome)
+  if (!(await FS.isFile(configPath))) {
+    return report
+  }
+  let parsed: unknown
+  try {
+    parsed = Platform.parseToml(await FS.readText(configPath))
+  } catch {
+    report.notes.push('personal Codex configuration could not be read; its subagent default was not compared')
+    return report
+  }
+  const agents = Json.isRecord(parsed) ? parsed['agents'] : undefined
+  const personal = Json.isRecord(agents) ? agents['default_subagent_model'] : undefined
+  if (personal === undefined) {
+    return report
+  }
+  if (typeof personal !== 'string' || !/^[a-z0-9][a-z0-9._-]*$/.test(personal)) {
+    report.notes.push('personal Codex subagent default is not a model ID; it was not compared')
+    return report
+  }
+  const skillPath = FS.resolvePath(DELEGATION_SKILL_PATH, options.repoRoot)
+  const standard = await FS.isFile(skillPath)
+    ? tierModels(await FS.readText(skillPath), 'codex').get('standard')
+    : undefined
+  if (standard !== undefined && personal !== standard) {
+    report.findings.push(
+      `personal Codex subagent default names '${personal}', differing from repository standard '${standard}'`,
+    )
+  }
+  return report
 }
 
 function formatStats(stats: { count: number; max: number; p50: number; p90: number }): string {
@@ -109,8 +145,8 @@ function writeModelAuditReport(report: ModelAuditReport, options: RunModelAuditO
 }
 
 async function run(options: RunModelAuditOptions = {}): Promise<number> {
-  writeModelAuditReport(await auditModelRouting(await resolvedOptions(options)), options)
+  writeModelAuditReport(await audit(await resolvedOptions(options)), options)
   return 0
 }
 
-export const ModelAuditCommand = { briefFindings, run, write: writeModelAuditReport }
+export const ModelAuditCommand = { audit, briefFindings, run, write: writeModelAuditReport }

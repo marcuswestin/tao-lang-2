@@ -1,0 +1,12 @@
+use Clerk from @tao/auth/clerk
+
+// Each entity is a Convex table. Deploy the generated schema, functions, and Clerk auth config
+// before running the app. The deployment verifies every read and write against Tao's grants.
+public
+type Convex is datasource with {
+   DeploymentURL text
+   accepts { IdentityToken from Clerk }
+   supports { Relations, AccessRules, FieldUpdates }
+
+   provider ConvexProvider from ./Convex.ts
+}

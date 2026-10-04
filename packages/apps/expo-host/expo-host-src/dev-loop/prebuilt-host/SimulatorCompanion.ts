@@ -1,5 +1,6 @@
 import { CLI, Errors, FS, Platform } from '@shared'
 import { DevLoopOutput } from '../DevLoopOutput'
+import { type FixedIosLaunchOperations, runFixedIosLaunchCommand } from '../expo-runner/fixedIosLaunchCommand'
 import { CompanionIdentity } from './CompanionIdentity'
 import type { HostSearch, PrebuiltHost } from './PrebuiltHosts'
 
@@ -16,6 +17,8 @@ export type SimulatorCompanionDependencies = {
   findPrebuiltHost: () => Promise<HostSearch>
   install?: (udid: string, host: PrebuiltHost) => Promise<void>
   installedMatches?: (udid: string, host: PrebuiltHost) => Promise<boolean>
+  shouldStop?: () => boolean
+  launchOperations?: FixedIosLaunchOperations
 }
 
 /**
@@ -28,7 +31,15 @@ export async function prepareSimulatorCompanion(
   simulatorName: string,
   dependencies: SimulatorCompanionDependencies,
 ): Promise<boolean> {
+  const shouldStop = dependencies.shouldStop ?? (() => false)
+  const checkStop = () => {
+    if (shouldStop()) {
+      throw Errors.abortError('iOS Companion preparation cancelled.')
+    }
+  }
+  checkStop()
   const search = await dependencies.findPrebuiltHost()
+  checkStop()
   for (const reason of search.refused) {
     DevLoopOutput.logDevLoop('dev', `Passed over the prebuilt host at ${reason}.`, 'warn')
   }
@@ -37,12 +48,19 @@ export async function prepareSimulatorCompanion(
     return false
   }
   const described = `${CompanionIdentity.name} ${host.manifest.hostVersion}`
-  if (await (dependencies.installedMatches ?? installedCompanionMatches)(udid, host)) {
+  const matches = await (dependencies.installedMatches ?? installedCompanionMatches)(udid, host)
+  checkStop()
+  if (matches) {
     DevLoopOutput.logDevLoop('dev', `${described} is already installed on ${simulatorName}.`)
     return true
   }
   DevLoopOutput.logDevLoop('dev', `Installing ${described} on ${simulatorName} from ${FS.displayPath(host.directory)}.`)
-  await (dependencies.install ?? installCompanion)(udid, host)
+  if (dependencies.install !== undefined) {
+    await dependencies.install(udid, host)
+  } else {
+    await installCompanion(udid, host, shouldStop, dependencies.launchOperations)
+  }
+  checkStop()
   return true
 }
 
@@ -75,6 +93,27 @@ async function appExecutable(appPath: string): Promise<string> {
   return name
 }
 
-async function installCompanion(udid: string, host: PrebuiltHost): Promise<void> {
-  await CLI.mustRun('xcrun', { args: ['simctl', 'install', udid, host.binaryPath], stdio: 'inherit' })
+async function installCompanion(
+  udid: string,
+  host: PrebuiltHost,
+  shouldStop: () => boolean,
+  operations?: FixedIosLaunchOperations,
+): Promise<void> {
+  const result = await runFixedIosLaunchCommand(
+    {
+      stage: 'install',
+      udid,
+      appPath: host.binaryPath,
+      artifactRoot: host.directory,
+    },
+    shouldStop,
+    operations,
+  )
+  if (result.error !== undefined || result.exitCode !== 0 || result.signal !== null) {
+    Errors.throwHostEnvironment(
+      `Could not install ${CompanionIdentity.name}: ${
+        result.stderr.trim() || result.error?.message || result.signal || result.exitCode
+      }`,
+    )
+  }
 }

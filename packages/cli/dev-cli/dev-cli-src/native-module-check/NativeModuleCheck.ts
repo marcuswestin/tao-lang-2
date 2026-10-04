@@ -11,6 +11,7 @@ const HOST_FILES = [
   'app.config.js',
   'app-config.cjs',
   'index.ts',
+  'expo-host-src/ManagedLoopIdentityMarker.ts',
   'metro.config.cjs',
   'package.json',
 ] as const

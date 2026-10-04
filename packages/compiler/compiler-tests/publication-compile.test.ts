@@ -54,7 +54,7 @@ Describe('compiler: selected package publications', () => {
       const result = await (await Workspace.open(appRoot)).compile(paths['App/Main.tao']!)
       Expect(result.files.some(file => file.sourcePath === paths['Host/Widget.tsx'])).toBe(true)
       Expect(result.files.some(file => file.sourcePath === paths['Host/Helper.ts'])).toBe(true)
-    }, { verbatim: true })
+    }, { location: 'host', verbatim: true })
   })
 
   Test('checks publication ownership when an own-project binding already uses the same sidecar', async () => {

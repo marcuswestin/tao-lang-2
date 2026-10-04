@@ -92,26 +92,48 @@ export function createCommands(): Command {
     .option('--id <id>', 'Checked-in project id and directory name. Suggested from the name when omitted.')
     .option('--yes', 'Accept the suggested id, the plan, and the first available AI lane without asking.')
     .option('--ai <lane>', 'How to shape the plan: auto, claude, codex, ollama, apple, or none.', 'auto')
+    .option('--provider <provider>', 'Use a hosted datasource and sign-in (development: firebase).')
+    .option('--validation-tools', 'Include temporary sample credential tools with --provider firebase.')
     .option('--skip-tests', "Skip running the new project's tests after creating it.")
     .description('Create a new Tao project from a description.')
-    .action(async (description: string, options: { ai: string; id?: string; skipTests?: boolean; yes?: boolean }) => {
-      try {
-        const { createAiOptions, runCreate } = await import('./create/create-command')
-        const ai = createAiOptions.find(candidate => candidate === options.ai)
-        if (ai === undefined) {
-          Errors.throwUserInput(`--ai must be one of ${createAiOptions.join(', ')}, not '${options.ai}'.`)
+    .action(
+      async (
+        description: string,
+        options: {
+          ai: string
+          id?: string
+          provider?: string
+          validationTools?: boolean
+          skipTests?: boolean
+          yes?: boolean
+        },
+      ) => {
+        try {
+          const { createAiOptions, runCreate } = await import('./create/create-command')
+          const ai = createAiOptions.find(candidate => candidate === options.ai)
+          if (ai === undefined) {
+            Errors.throwUserInput(`--ai must be one of ${createAiOptions.join(', ')}, not '${options.ai}'.`)
+          }
+          if (options.provider !== undefined && options.provider !== 'firebase') {
+            Errors.throwUserInput('The hosted creation provider must be firebase.')
+          }
+          if (options.validationTools === true && options.provider !== 'firebase') {
+            Errors.throwUserInput('--validation-tools requires --provider firebase.')
+          }
+          await runCreate(description, {
+            ...(options.provider === undefined ? {} : { provider: options.provider as 'firebase' }),
+            ...(options.validationTools === true ? { validationTools: true } : {}),
+            ai,
+            ...(options.id === undefined ? {} : { id: options.id }),
+            ...(options.skipTests === true ? { runTests: false } : {}),
+            ...(options.yes === true ? { yes: true } : {}),
+          })
+        } catch (error) {
+          HCI.writeErrorLine(Errors.formatForUser(error))
+          Platform.runtimeProcess.exit(1)
         }
-        await runCreate(description, {
-          ai,
-          ...(options.id === undefined ? {} : { id: options.id }),
-          ...(options.skipTests === true ? { runTests: false } : {}),
-          ...(options.yes === true ? { yes: true } : {}),
-        })
-      } catch (error) {
-        HCI.writeErrorLine(Errors.formatForUser(error))
-        Platform.runtimeProcess.exit(1)
-      }
-    })
+      },
+    )
 
   const secrets = commands
     .command('secrets')
@@ -203,6 +225,29 @@ export function createCommands(): Command {
         HCI.writeSuccess(`Removed ${name} from ${FS.displayPath(await removeProjectSecret(name, path))}.\n`)
       })
     )
+
+  commands
+    .command('connect')
+    .argument('<provider>', 'Hosted service to connect (firebase or appwrite), or run to start the pilot in Expo Go.')
+    .argument('[path]', 'Project directory to configure or run.', '.')
+    .description('Save local Firebase settings, configure the Hosted CRUD Appwrite pilot, or run the pilot in Expo Go.')
+    .action(async (provider: string, path: string) => {
+      try {
+        if (provider === 'run') {
+          const { runHostedCrud } = await import('./hosted-crud-run')
+          await runHostedCrud(path)
+          return
+        }
+        if (provider !== 'firebase' && provider !== 'appwrite') {
+          Errors.throwUserInput(`Unknown provider '${provider}'. Choose firebase, appwrite, or run.`)
+        }
+        const { runTaoConnect } = await import('./connect-command')
+        await runTaoConnect(provider, path)
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.setExitCode(1)
+      }
+    })
 
   commands
     .command('run')
@@ -404,6 +449,31 @@ export function createCommands(): Command {
         Platform.runtimeProcess.setExitCode(1)
       }
     })
+
+  for (const provider of ['jazz', 'convex', 'pylon', 'firebase'] as const) {
+    commands
+      .command(provider)
+      .description(`Generate deployable ${provider} backend source for a Tao app.`)
+      .command('generate')
+      .argument('[path]', 'Tao file or directory whose app should be generated.', '.')
+      .option('--app <name>', 'Select a named app.')
+      .requiredOption('--output <directory>', 'Directory for generated backend source files.')
+      .option('--force', 'Replace generated files whose content differs.')
+      .description(`Generate ${provider} backend source from the app's compiled schema and supported policy.`)
+      .action(async (path: string, options: { app?: string; force?: boolean; output: string }) => {
+        try {
+          const { runHostedProviderGenerate } = await import('./hosted-provider-generate')
+          await runHostedProviderGenerate(provider, path, {
+            appName: options.app,
+            force: options.force,
+            output: options.output,
+          })
+        } catch (error) {
+          HCI.writeErrorLine(Errors.formatForUser(error))
+          Platform.runtimeProcess.setExitCode(1)
+        }
+      })
+  }
 
   commands
     .command('clean')

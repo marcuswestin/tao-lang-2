@@ -1,15 +1,18 @@
 import { jsonSchema } from 'ai'
 
+type JsonSchemaObject = Exclude<Parameters<typeof jsonSchema>[0], PromiseLike<unknown> | (() => unknown)>
+type JsonSchemaProperties = NonNullable<JsonSchemaObject['properties']>
+
 /** objectSchema declares one tool's input as a closed object with the given required keys. */
-export function objectSchema<Input>(properties: Record<string, unknown>, required: readonly string[]) {
+export function objectSchema<Input>(properties: JsonSchemaProperties, required: readonly string[]) {
   return jsonSchema<Input>({ additionalProperties: false, properties, required: [...required], type: 'object' })
 }
 
 /** TEXT is a described string property. */
-export const TEXT = (description: string) => ({ description, type: 'string' })
+export const TEXT = (description: string) => ({ description, type: 'string' }) as const
 
 /** LIST is a described list-of-strings property. */
-export const LIST = (description: string) => ({ description, items: { type: 'string' }, type: 'array' })
+export const LIST = (description: string) => ({ description, items: { type: 'string' }, type: 'array' }) as const
 
 /**
  * refusal is how a tool says no. The model reads it and adapts; nothing throws, because a thrown tool is a
