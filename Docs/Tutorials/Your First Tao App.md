@@ -445,16 +445,16 @@ nav LibraryStack = StackNav {
 }
 
 nav ReadingListNavigator = SelectionNav {
-   Initial @library
-   Display "automatic"
+   Initial @library,
+   Display "automatic",
    @library {
-      Label "Library"
-      Icon "books.vertical"
+      Label "Library",
+      Icon "books.vertical",
       Content LibraryStack
-   }
+   },
    @about {
-      Label "About"
-      Icon "info.circle"
+      Label "About",
+      Icon "info.circle",
       Content About
 }  }
 ```
@@ -683,16 +683,16 @@ nav LibraryStack = StackNav {
 }
 
 nav ReadingListNavigator = SelectionNav {
-   Initial @library
-   Display "automatic"
+   Initial @library,
+   Display "automatic",
    @library {
-      Label "Library"
-      Icon "books.vertical"
+      Label "Library",
+      Icon "books.vertical",
       Content LibraryStack
-   }
+   },
    @about {
-      Label "About"
-      Icon "info.circle"
+      Label "About",
+      Icon "info.circle",
       Content About
 }  }
 
