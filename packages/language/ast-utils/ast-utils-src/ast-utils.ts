@@ -31,11 +31,16 @@ import { resolveDatasourceValue } from './datasource-values'
 import { design } from './design'
 import {
   effectFailureCases,
+  effectFailureContract,
   effectOutcomeWords,
+  failureContractSatisfiesBound,
   invocationFailureCases,
+  invocationFailureContract,
   invokedEffect,
   isRootEffectInvocation,
   unhandledOutcomeCases,
+  unhandledOutcomeContract,
+  unionFailureContracts,
 } from './effect-outcomes'
 import { guardBranches } from './guards'
 import { injectionArgumentName } from './injections'
@@ -103,11 +108,16 @@ export const ASTUtils = {
   resolveDatasourceValue,
   design,
   effectFailureCases,
+  effectFailureContract,
   effectOutcomeWords,
+  failureContractSatisfiesBound,
   invocationFailureCases,
+  invocationFailureContract,
   invokedEffect,
   isRootEffectInvocation,
   unhandledOutcomeCases,
+  unhandledOutcomeContract,
+  unionFailureContracts,
   injectionArgumentName,
   layoutEntryValues,
   layoutTermValue,
@@ -155,6 +165,7 @@ export namespace ASTUtils {
   export type CommandSlot = import('./commands').CommandSlot
   export type ParsedShortcut = import('./commands').ParsedShortcut
   export type EffectDeclaration = import('./effect-outcomes').EffectDeclaration
+  export type FailureContract = import('./effect-outcomes').FailureContract
   export type EffectInvocation = import('./effect-outcomes').EffectInvocation
   export type DataWriteBindingDiagnostic = import('./data-write-bindings').DataWriteBindingDiagnostic
   export type DataWriteBindingPair = import('./data-write-bindings').DataWriteBindingPair
