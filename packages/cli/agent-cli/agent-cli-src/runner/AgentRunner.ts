@@ -129,6 +129,15 @@ export async function runAgentCommand(options: RunAgentCommandOptions): Promise<
   }
 
   const runStdio = resolveRunStdio(options.command, flags, isInteractive)
+  // Subscribe before spawning: a signal between the two would otherwise kill this process by default
+  // and orphan the child it was meant to stop. Listeners run on the event loop, after `child` is set.
+  let cancelledBy: Platform.ProcessSignal | undefined
+  const unsubscribes = TERMINATION_SIGNALS.map(signal =>
+    onProcessSignal(signal, () => {
+      cancelledBy ??= signal
+      child.kill(signal)
+    })
+  )
   const child = start(options.spawnCommand, {
     args: [...options.spawnArgs, ...flags.rest],
     cwd: repositoryRoot,
@@ -144,13 +153,6 @@ export async function runAgentCommand(options: RunAgentCommandOptions): Promise<
     appendOutput(Buffer.from(runStdio.note, 'utf8'))
   }
 
-  let cancelledBy: Platform.ProcessSignal | undefined
-  const unsubscribes = TERMINATION_SIGNALS.map(signal =>
-    onProcessSignal(signal, () => {
-      cancelledBy ??= signal
-      child.kill(signal)
-    })
-  )
   const closeResult = await child.waitForClose()
   for (const unsubscribe of unsubscribes) {
     unsubscribe()
