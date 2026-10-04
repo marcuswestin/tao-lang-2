@@ -83,6 +83,7 @@ export function compareCallableSignatures(
     namedTypeAccepts: Type.isAssignable,
     pairAccepts: (caller, implementation) => inputIncompatibilities(caller, implementation).length === 0,
     targetRequiresValue: input => !input.omissible,
+    completeCorrespondence: true,
     duplicateTargetTypesOnlyWithCandidates: true,
     unresolvedCandidatesExcuseMissing: false,
   })

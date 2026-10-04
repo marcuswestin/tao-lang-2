@@ -9,6 +9,7 @@ import {
   compareCallableSignatures,
 } from '../ast-utils-src/callable-signatures'
 import { type TaoType, Type } from '../ast-utils-src/Type'
+import { resolveBindings } from '../ast-utils-src/type-binding-matches'
 
 Describe('Concrete callable signature substitution', () => {
   Test('accepts an ancestor input domain and rejects narrowing to a descendant', async () => {
@@ -314,6 +315,168 @@ Describe('Concrete callable signature substitution', () => {
     const result = compareCallableSignatures(Supplied, Required)
     Expect(result.diagnostics.map(diagnostic => diagnostic.kind)).toEqual([])
     Expect(result.correspondence.map(pair => pair.supplied.localName)).toEqual(['Base'])
+  })
+
+  Test('leaves an exact default unused when forwarding must fill an ancestor input', async () => {
+    for (const parameters of ['Leaf default Leaf "x", Base', 'Base, Leaf default Leaf "x"']) {
+      const source = `
+        type Base is text
+        type Leaf is Base
+        view Supplied(${parameters}) { }
+        view Required(Leaf) { }
+        view Main() { render Supplied(Leaf "provided") }
+      `
+      const { Supplied, Required } = await signatures(source)
+      const comparison = compareCallableSignatures(Supplied, Required)
+      Expect(comparison.diagnostics.map(diagnostic => diagnostic.kind)).toEqual([])
+      Expect(comparison.correspondence.map(pair => [pair.required.localName, pair.supplied.localName])).toEqual([
+        ['Leaf', 'Base'],
+      ])
+      const parsed = await Parser.parseCode(source)
+      Expect(parsed.diagnostics).toEqual([])
+      const main = parsed.entry.ast.statements.find(node => AST.isViewDeclaration(node) && node.name === 'Main')
+      Expect.Is(main, AST.isViewDeclaration)
+      const render = AST.blockStatementOf(main, 0)
+      Expect.Is(render, AST.isRenderStatement)
+      const target = render.view?.ref
+      Expect.Is(target, AST.isViewDeclaration)
+      const ordinary = bindCallableArguments(callableSignatureOf(target), AST.argumentsOf(render))
+      Expect(ordinary.diagnostics.map(diagnostic => diagnostic.kind)).toEqual([])
+      Expect(ordinary.pairs.map(pair => Type.parameterName(pair.parameter))).toEqual(['Base'])
+    }
+  })
+
+  Test('uses optional inputs to complete correspondence before preferring exact edges', async () => {
+    for (const parameters of ['Base, Leaf default Leaf "x"', 'Leaf default Leaf "x", Base']) {
+      const { Supplied, Required } = await signatures(`
+        type Base is text
+        type Leaf is Base
+        view Supplied(${parameters}) { }
+        view Required(Leaf, Base) { }
+      `)
+      const result = compareCallableSignatures(Supplied, Required)
+      Expect(result.diagnostics.map(diagnostic => diagnostic.kind)).toEqual([])
+      Expect(result.correspondence.map(pair => [pair.required.localName, pair.supplied.localName])).toEqual(
+        Supplied.inputs.map(input => [input.localName, input.localName]),
+      )
+    }
+  })
+
+  Test('prefers exact edges among complete assignments without using declaration order', async () => {
+    for (const parameters of ['Base, Leaf default Leaf "x"', 'Leaf default Leaf "x", Base']) {
+      const { Supplied, Required } = await signatures(`
+        type Base is text
+        type Leaf is Base
+        type Twig is Leaf
+        view Supplied(${parameters}) { }
+        view Required(Leaf, Twig) { }
+      `)
+      const result = compareCallableSignatures(Supplied, Required)
+      Expect(result.diagnostics.map(diagnostic => diagnostic.kind)).toEqual([])
+      Expect(result.correspondence.map(pair => [pair.required.localName, pair.supplied.localName])).toEqual(
+        Supplied.inputs.map(input => [input.localName === 'Base' ? 'Twig' : 'Leaf', input.localName]),
+      )
+    }
+  })
+
+  Test('retains ambiguity when individually feasible exact edges cannot coexist', async () => {
+    const { Supplied, Required } = await signatures(`
+      type X is text
+      type Y is text
+      type Z is text
+      type Mandatory is text
+      view Supplied(X default X "x", Y default Y "y", Mandatory) { }
+      view Required(X, Y, Z) { }
+    `)
+    for (const candidates of [Required.inputs, Required.inputs.toReversed()]) {
+      for (const targets of [Supplied.inputs, Supplied.inputs.toReversed()]) {
+        const result = resolveBindings({
+          candidates,
+          targets,
+          candidateLabel: () => undefined,
+          targetName: input => input.localName,
+          candidateType: input => input.type,
+          targetType: input => input.type,
+          namedTypeAccepts: () => true,
+          compatibleTypeAccepts: () => true,
+          pairAccepts: (candidate, target) =>
+            ({
+              X: ['X', 'Mandatory'],
+              Y: ['Y', 'Mandatory'],
+              Z: ['X', 'Y'],
+            })[candidate.localName as 'X' | 'Y' | 'Z'].includes(target.localName),
+          targetRequiresValue: input => !input.omissible,
+          completeCorrespondence: true,
+          unresolvedCandidatesExcuseMissing: false,
+        })
+        Expect(result.pairs).toHaveLength(0)
+        Expect(result.diagnostics.some(diagnostic => diagnostic.kind === 'ambiguous-candidate')).toBe(true)
+      }
+    }
+  })
+
+  Test('agrees with enumerated complete assignments across small admission graphs', async () => {
+    const { Supplied, Required } = await signatures(`
+      type X is text
+      type Y is text
+      type Z is text
+      view Supplied(X, Y, Z) { }
+      view Required(X, Y, Z) { }
+    `)
+    for (let count = 1; count <= 3; count++) {
+      const candidates = Required.inputs.slice(0, count)
+      // With three candidates every target is filled, so varying mandatory targets adds no cases.
+      const mandatoryMasks = count === 3 ? [7] : Array.from({ length: 8 }, (_, mask) => mask)
+      for (let graph = 0; graph < 2 ** (count * 3); graph++) {
+        const admits = (row: number, column: number): boolean => (graph & (1 << (row * 3 + column))) !== 0
+        for (const mandatory of mandatoryMasks) {
+          const assignments: number[][] = []
+          const enumerate = (columns: number[]): void => {
+            if (columns.length === count) {
+              if ([0, 1, 2].every(column => !(mandatory & (1 << column)) || columns.includes(column))) {
+                assignments.push(columns)
+              }
+              return
+            }
+            for (const column of [0, 1, 2]) {
+              if (!columns.includes(column) && admits(columns.length, column)) {
+                enumerate([...columns, column])
+              }
+            }
+          }
+          enumerate([])
+          const exactCount = (columns: number[]): number => columns.filter((column, row) => column === row).length
+          const best = assignments.filter(columns => exactCount(columns) === Math.max(...assignments.map(exactCount)))
+          const result = resolveBindings({
+            candidates,
+            targets: Supplied.inputs,
+            candidateLabel: () => undefined,
+            targetName: input => input.localName,
+            candidateType: input => input.type,
+            targetType: input => input.type,
+            namedTypeAccepts: () => true,
+            compatibleTypeAccepts: () => true,
+            pairAccepts: (candidate, target) => admits(candidates.indexOf(candidate), Supplied.inputs.indexOf(target)),
+            targetRequiresValue: target => (mandatory & (1 << Supplied.inputs.indexOf(target))) !== 0,
+            completeCorrespondence: true,
+            unresolvedCandidatesExcuseMissing: false,
+          })
+          if (best.length === 0) {
+            Expect(result.diagnostics.length > 0).toBe(true)
+            continue
+          }
+          const forced = best[0]!.flatMap((column, row) =>
+            best.every(columns => columns[row] === column) ? [`${row}:${column}`] : []
+          ).toSorted()
+          Expect(
+            result.pairs.map(([candidate, target]) =>
+              `${candidates.indexOf(candidate)}:${Supplied.inputs.indexOf(target)}`
+            ).toSorted(),
+          ).toEqual(forced)
+          Expect(result.diagnostics.length === 0).toBe(best.length === 1)
+        }
+      }
+    }
   })
 
   Test('extracts inferred writable forwarding without recursing through signature extraction', async () => {
