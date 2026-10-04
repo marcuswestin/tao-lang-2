@@ -1,5 +1,6 @@
 import { AST } from '@parser'
 import { collapsesToOneLine, type FormatHandlers } from '../formatting'
+import { renderPrefixLine } from './ViewsFormatter'
 
 export const StatementsFormatter = {
   /** Block formats `{ }` bodies with one indented statement per line. */
@@ -17,7 +18,15 @@ export const StatementsFormatter = {
     // A tag names the element below it, so it reads as that element's opening line rather than as
     // one more statement in the run above it.
     if (!AST.isTestDeclaration(f.node.$container)) {
-      f.separateIndentedLines(f.node.statements, (_previous, next) => AST.isTagStatement(next) ? 2 : 1)
+      const prefixLines = f.node.statements.filter(AST.isRender).map(renderPrefixLine).filter(line => line.length > 0)
+      const continuations = new Set<AST.Statement>(prefixLines.map(line => line[1]!))
+      f.separateIndentedLines(
+        f.node.statements.filter(statement => !continuations.has(statement)),
+        (_previous, next) => AST.isTagStatement(next) || AST.isRenderAccessibilityStatement(next) ? 2 : 1,
+      )
+      for (const line of prefixLines) {
+        f.spaceSeparatedList(line)
+      }
     }
     if (AST.isTestDeclaration(f.node.$container)) {
       f.separateIndentedLines(f.node.statements, () => 2)
