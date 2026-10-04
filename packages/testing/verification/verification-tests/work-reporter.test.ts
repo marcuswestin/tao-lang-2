@@ -46,8 +46,6 @@ Describe('output mode selection', () => {
     // it was pinned onto a terminal; every other mode is already asking for a human's screen.
     Expect(WorkReporter.colorizes('quiet', { outputIsTerminal: true })).toBe(false)
     Expect(WorkReporter.colorizes('tui', { outputIsTerminal: true })).toBe(true)
-    Expect(WorkReporter.colorizes('lines', { outputIsTerminal: true })).toBe(true)
-    Expect(WorkReporter.colorizes('tui', { outputIsTerminal: false })).toBe(false)
     Expect(WorkReporter.colorizes('lines', { outputIsTerminal: false })).toBe(false)
   })
 

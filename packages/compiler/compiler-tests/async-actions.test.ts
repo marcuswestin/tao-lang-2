@@ -29,7 +29,7 @@ Describe('compiler: async actions', () => {
     Expect(launch).toBeGreaterThan(-1)
     Expect(launchedToggle).toBeGreaterThan(launch)
     Expect(followingSet).toBeGreaterThan(launchedToggle)
-    Expect(code.slice(launch, followingSet)).not.toContain('await TR.Async')
+    Expect(code).not.toMatch(/\bawait\s+TR\.Async\s*\(/)
     Expect(code.slice(launch, followingSet)).toContain('TR.BlockScope(_Scope, async _Scope =>')
   })
 })

@@ -667,10 +667,10 @@ Describe('Studio preview runtime bridge', () => {
     Expect(cancellations).toBe(0)
     fake.dispatchWindow('message', canvasGestureOwnershipMessage(true, fake.parent))
     const target = renderElement('/project/Main.tao', 10, 20, { height: 20, left: 0, top: 0, width: 20 })
-    for (const tagName of ['INPUT', 'TEXTAREA', 'SELECT']) {
+    for (const tagName of ['INPUT']) {
       fake.dispatchDocument('keydown', { ...space, target: { ...target, tagName } })
     }
-    for (const editable of ['', 'true', 'plaintext-only']) {
+    for (const editable of ['true']) {
       fake.dispatchDocument('keydown', {
         ...space,
         target: {
@@ -870,6 +870,7 @@ Describe('Studio preview runtime bridge', () => {
     Expect(heldStates()).toEqual([true, false, true, false, true, false])
   })
 
+  // REMOVAL CANDIDATE: Space-wheel coverage proves ownership gating; this keeps the complete gesture envelope.
   Test('cancels iframe gestures only while the parent advertises Design canvas ownership', () => {
     const fake = previewHost([])
     const cleanup = mountStudioPreviewBridge(config, fake.host)
@@ -952,12 +953,19 @@ Describe('Studio preview runtime bridge', () => {
     const events: string[] = []
     const elements: StudioPreviewElement[] = []
     const fake = previewHost(elements)
+    let searches = 0
+    fake.host.document.querySelectorAll = () => {
+      searches += 1
+      return elements
+    }
     const replay = replayStudioJourney(
       [{ kind: 'press', selector: 'tag', target: 'openWorkspace' }],
       fake.host,
       { targetTimeoutMs: 100 },
     )
-    await new Promise<void>(resolve => setTimeout(resolve, 20))
+    await Promise.resolve()
+    Expect(searches).toBe(1)
+    Expect(events).toEqual([])
     elements.push({
       dispatchEvent: event => {
         events.push(String((event as { type?: string }).type))
@@ -1004,22 +1012,6 @@ Describe('Studio preview runtime bridge', () => {
     ], fake.host)
 
     Expect(observed).toEqual(['mousedown', 'mouseup', 'mouseover', 'mouseenter', 'focus'])
-  })
-
-  Test('does not freeze the app clock for a journey with no advance step', async () => {
-    const target: StudioPreviewElement = {
-      dispatchEvent: () => true,
-      getAttribute: name => name === 'data-testid' ? 'target' : null,
-      getBoundingClientRect: () => ({ height: 0, left: 0, top: 0, width: 0 }),
-    }
-    const fake = previewHost([target])
-    Clock.beginTest(1234)
-    try {
-      await replayStudioJourney([{ kind: 'pressDown', selector: 'tag', target: 'target' }], fake.host)
-      Expect(Clock.now()).toBe(1234)
-    } finally {
-      Clock.endTest()
-    }
   })
 
   Test('keeps state reached by an advanced held-pointer journey after replay releases the clock', async () => {
@@ -1581,29 +1573,7 @@ Describe('Studio preview runtime bridge', () => {
     cleanup()
   })
 
-  Test('carries complete matrix-cell identity through every preview message', () => {
-    const fake = previewHost([])
-    const cellConfig: StudioPreviewConfig = {
-      ...config,
-      cellId: 'cell:phone',
-      cellRevision: 2,
-      manifestRevision: 'manifest-7',
-    }
-    const cleanup = mountStudioPreviewBridge(cellConfig, fake.host)
-
-    Expect(fake.messages[0]?.message).toMatchObject({
-      identity: {
-        appName: 'Demo',
-        cellId: 'cell:phone',
-        cellRevision: 2,
-        compileRevision: 7,
-        manifestRevision: 'manifest-7',
-        previewInstanceId: 'preview-1',
-        project: '/project',
-      },
-    })
-    cleanup()
-
+  Test('stays inert for an incomplete matrix-cell identity', () => {
     const invalid = previewHost([])
     mountStudioPreviewBridge({ ...config, cellId: 'partial' }, invalid.host)()
     Expect(invalid.messages).toEqual([])

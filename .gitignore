@@ -1,4 +1,6 @@
 .DS_Store
+# Watchman creates disposable query-synchronization files in watched roots.
+.watchman-cookie-*
 node_modules/
 *.tsbuildinfo
 *.tao.ts

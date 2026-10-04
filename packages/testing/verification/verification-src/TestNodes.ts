@@ -71,6 +71,8 @@ export type TestNodeState = WorkState & {
 
 export type BuildTestNodesOptions = {
   ledger: TestLedgerStore
+  /** Partition the catalog's small core files before expensive suites, without widening selection. */
+  preflight?: boolean
   /** Node names the caller has already proved and does not want scheduled. */
   proved?: ReadonlySet<string>
   selected: readonly SelectedSuite[]
@@ -120,9 +122,24 @@ const IDLE_TIMEOUT_FLOOR_MS = 240_000
 function build(options: BuildTestNodesOptions): TestNodePlan {
   const plans: ShardPlan[] = []
   const states: TestNodeState[] = []
+  const preflightNames: string[] = []
   const warnings: string[] = []
   for (const suite of options.selected) {
     const tuning = GateCatalog.suiteTuning(suite.name)
+    const preflightFiles = options.preflight === true && suite.shardUnits === undefined
+      ? suite.files.filter(file => tuning.preflightFiles?.includes(file) === true)
+      : []
+    if (preflightFiles.length > 0) {
+      const name = `${suite.name}:core`
+      if (options.proved?.has(name) !== true) {
+        states.push(nodeState(suite, name, preflightFiles, 1, options.timings))
+        preflightNames.push(name)
+      }
+    }
+    const remaining = (suite.shardUnits ?? suite.files).filter(file => !preflightFiles.includes(file))
+    if (remaining.length === 0 && preflightFiles.length > 0) {
+      continue
+    }
     // A suite whose runner cannot attribute time to a single test has nothing trustworthy to say
     // about relative per-file cost either, so shards fall back to the mean-cost packing
     // `TestShards.packFiles` already gives an unmeasured file. `GateCatalog` owns which suites those
@@ -136,14 +153,14 @@ function build(options: BuildTestNodesOptions): TestNodePlan {
       fileCostMs: suite.shardUnits === undefined || suite.unitCostMs === undefined
         ? ledgerCosts
         : suite.unitCostMs,
-      files: suite.shardUnits ?? suite.files,
+      files: remaining,
       fixedMs: tuning.fixedMs ?? GateCatalog.BUN_SUITE_FIXED_MS,
       measuredMs: RunTimings.expectedMs(options.timings, suite.name),
       shardable: tuning.shardable,
       suite: suite.name,
     })
     plans.push(plan)
-    const units = (suite.shardUnits ?? suite.files).length
+    const units = remaining.length
     if (plan.unshardedCause === 'no-recorded-duration' && units >= UNSHARDED_WARNING_UNITS) {
       warnings.push(
         `${suite.name} ran whole across ${units} units: no recorded duration under that name, so it could not be sharded. `
@@ -152,12 +169,21 @@ function build(options: BuildTestNodesOptions): TestNodePlan {
     }
     const count = plan.shards.length
     plan.shards.forEach((files, index) => {
-      const name = TestShards.shardName(suite.name, index, count)
+      // The ordinary remainder is a shard even when it needs only one process: keeping
+      // the bare suite name would make reporting count both the rollup and the remainder.
+      const name = TestShards.shardName(suite.name, index, preflightFiles.length > 0 ? Math.max(2, count) : count)
       if (options.proved?.has(name) === true) {
         return
       }
       states.push(nodeState(suite, name, files, count, options.timings))
     })
+  }
+  for (const state of states) {
+    if (GateCatalog.suiteTuning(state.suite).afterPreflight === true) {
+      // Admission stops on a definite failure; timeout confirmation and proven flakes
+      // retain their existing policy rather than turning into hard dependency failures.
+      state.node.after = [...new Set([...(state.node.after ?? []), ...preflightNames])]
+    }
   }
   return { plans, states, warnings }
 }

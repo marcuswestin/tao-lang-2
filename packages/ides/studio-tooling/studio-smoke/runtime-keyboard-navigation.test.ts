@@ -201,6 +201,7 @@ Test('generated keyboard navigation works in a real browser', async () => {
   }
 }, 180_000)
 
+// REMOVAL CANDIDATE: Repeats browser narrowing and hints; dropping it would lose WordFlower nested-action/navigation integration.
 Test('generated WordFlower keyboard navigation works in a real browser', async () => {
   const repositoryRoot = Repo.getRoot()
   const artifactBase = Platform.runtimeProcess.env['TAO_STUDIO_SMOKE_ARTIFACT_ROOT']

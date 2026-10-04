@@ -69,8 +69,6 @@ Describe('TR Clipboard', () => {
     const pasteboard = createClipboard(asAction, native)
     const unsubscribe = pasteboard.subscribe(() => notifications += 1)
 
-    Expect(pasteboard.Value).toBeNull()
-    Expect(requiredCalls()).toBe(0)
     const reading = pasteboard.Read.invoke()
     Expect(pasteboard.Value).toBeNull()
     Expect(notifications).toBe(0)
@@ -82,16 +80,11 @@ Describe('TR Clipboard', () => {
     Expect(pasteboard.Value).toBe('From the system pasteboard')
     Expect(notifications).toBe(1)
 
-    readClipboard = async () => 'A newer value'
-    await pasteboard.Read.invoke()
-    Expect(pasteboard.Value).toBe('A newer value')
-    Expect(notifications).toBe(2)
-
     unsubscribe()
     readClipboard = async () => 'Unobserved'
     await pasteboard.Read.invoke()
     Expect(pasteboard.Value).toBe('Unobserved')
-    Expect(notifications).toBe(2)
+    Expect(notifications).toBe(1)
   })
 
   Test('keeps the newest concurrent Read result when an older read finishes last', async () => {

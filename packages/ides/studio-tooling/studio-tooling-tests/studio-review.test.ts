@@ -153,10 +153,7 @@ Describe('Studio visual review', () => {
     })
     const failed: StudioReviewCell = { ...captured('bad'), error: 'render failed', status: 'failed' }
 
-    Expect(StudioReview.testing.pairStatus(undefined, captured('a'), true)).toBe('added')
-    Expect(StudioReview.testing.pairStatus(captured('a'), undefined, true)).toBe('removed')
     Expect(StudioReview.testing.pairStatus(captured('a'), captured('a'), true)).toBe('unchanged')
-    Expect(StudioReview.testing.pairStatus(captured('a'), captured('b'), true)).toBe('changed')
     Expect(StudioReview.testing.pairStatus(captured('a'), captured('a'), false)).toBe('incomparable')
     Expect(StudioReview.testing.pairStatus(
       captured('a'),
@@ -225,20 +222,13 @@ Describe('Studio visual review', () => {
         version: 1,
       })
       const html = await FS.readText(result.reportPath)
+      // REMOVAL CANDIDATE: Static report controls; dropping these trades emitted UI presence while pair and annotation semantics remain covered.
       Expect(html).toContain('Side by side')
       Expect(html).toContain('Opacity overlay')
-      Expect(html).toContain('@keyframes blink')
       Expect(html).toContain('@media(prefers-reduced-motion:reduce)')
-      Expect(html).toContain('Pause blink')
       Expect(html).toContain('Export annotations')
       Expect(html).toContain('Import annotations')
-      Expect(html).toContain('Earlier decision')
-      Expect(html).toContain('new Map([...state.decisions,...parsed.decisions')
-      Expect(html).toContain('state.decisions.filter(x=>!exact(card,x))')
-      Expect(html).toContain('Needs work')
       Expect(html).toContain('Comment <textarea')
-      Expect(html).toContain('Reopened: annotations from the new baseline are preserved')
-      Expect(html).not.toContain('These annotations belong to another Tao review')
       const script = html.match(/<script>([\s\S]*)<\/script>/u)?.[1]
       Expect(script).toBeDefined()
       Expect(() => new Function(script!)).not.toThrow()

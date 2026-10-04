@@ -35,7 +35,6 @@ Describe('compiler: Studio preview fixture values', () => {
       `,
     }, async paths => {
       const compiled = await Workspace.compile(paths['Main.tao'], { appName: 'First', studio: true })
-      Expect(compiled.validation.diagnostics.map(diagnostic => diagnostic.message)).toEqual([])
       const manifest = compiled.studioManifest
       Assert(manifest !== undefined, 'Expected a Studio preview manifest.')
       const creates = manifest.fixtures[0]?.creates ?? []

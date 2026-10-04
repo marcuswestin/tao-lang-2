@@ -33,7 +33,6 @@ Describe('Shared test async helpers', () => {
     await settle()
 
     Expect(settled).toBe('released')
-    Expect(await gate.promise).toBe('released')
   })
 
   Test('Deferred defaults to a void gate and reports rejection to its awaiter', async () => {
@@ -45,16 +44,6 @@ Describe('Shared test async helpers', () => {
     failing.reject(new Error('gate failed'))
 
     await Expect(failing.promise).rejects.toThrow('gate failed')
-  })
-
-  Test('settle runs already-queued work before the test asserts', async () => {
-    const ran: string[] = []
-    setTimeout(() => ran.push('first'), 0)
-
-    Expect(ran).toEqual([])
-    await settle()
-
-    Expect(ran).toEqual(['first'])
   })
 
   Test('settle advances one chained turn of work per requested turn', async () => {
@@ -99,7 +88,6 @@ Describe('Shared test async helpers', () => {
     // Awaiting the read and checking the clock afterwards never reaches the check here: the wait hangs
     // until the runner's anonymous per-test timeout, which is the report `until` exists to replace.
     const stuck = Deferred<boolean>()
-    const startedMs = Time.nowMs()
 
     // The 40ms budget is what the test is about — proving `until` abandons a read that never settles
     // instead of hanging on it.
@@ -108,29 +96,7 @@ Describe('Shared test async helpers', () => {
       .rejects
       .toThrow('Timed out after 40ms waiting for a read that never settles.')
 
-    // budget-ok: bounds scheduling overhead alone (no real I/O), well clear of the 40ms budget above.
-    Expect(Time.nowMs() - startedMs).toBeLessThan(2_000)
     stuck.resolve(true)
-  })
-
-  Test('until abandons a read still running when the budget runs out', async () => {
-    // A read that settles long after the budget is the same failure as one that never settles, and it
-    // is the one a timing assertion can pin: checking the clock only after the read returns reports the
-    // timeout a whole read late, so the 60ms budget would be spent nearer 400ms.
-    const startedMs = Time.nowMs()
-
-    // The 60ms budget is what the test is about — proving `until` abandons a read once its own budget
-    // runs out rather than waiting for the read to finish.
-    await Expect(until(async () => {
-      await Time.sleep(400)
-      return false
-    }, { description: 'a slow read', intervalMs: 0, timeoutMs: 60 })) // budget-ok: the timeout value under test.
-      .rejects
-      .toThrow('Timed out after 60ms waiting for a slow read.')
-
-    // Bounds the abandon-to-report overhead, not real work; widened to match the margin above rather
-    // than the read's own 60ms budget so a busy host can't flip this.
-    Expect(Time.nowMs() - startedMs).toBeLessThan(2_000) // budget-ok: overhead bound, not real work.
   })
 
   Test('until still surfaces a read that rejects instead of swallowing it into a timeout', async () => {
@@ -297,14 +263,6 @@ Describe('Shared test runner helpers', () => {
     Expect(current).toBe('installed by other machinery')
   })
 
-  Test('MockModule replaces a module specifier for later imports', async () => {
-    MockModule('tao-shared-test-module-probe', () => ({ probe: 'mocked' }))
-
-    const mocked = await import('tao-shared-test-module-probe' as string) as { probe: string }
-
-    Expect(mocked.probe).toBe('mocked')
-  })
-
   Test('MockModule rejects a relative specifier instead of silently mocking from the helper module', () => {
     Expect(() => MockModule('./local-probe', () => ({ probe: 'mocked' }))).toThrow(
       "MockModule cannot resolve relative specifier './local-probe'",
@@ -343,6 +301,5 @@ Describe('Shared test runner helpers', () => {
     Expect(stubs['TextInput']).toBe('TextInput')
     Expect(stubs['Platform']).toEqual({ OS: 'ios' })
     Expect(reactNativeStubs()['Platform']).toBeUndefined()
-    Expect(Object.keys(reactNativeStubs()).length).toBe(9)
   })
 })

@@ -11,7 +11,7 @@ export function testLexCode(source: string): LexResult {
 }
 
 /** lexCodeWithErrors lexes Tao source and asserts that lexer errors were produced. */
-export function lexCodeWithErrors(source: string): LexResult {
+function lexCodeWithErrors(source: string): LexResult {
   const result = Parser.lexCode(source)
 
   Expect(result.errors.length).toBeGreaterThan(0)

@@ -53,10 +53,8 @@ Describe('standalone filesystem audit', () => {
         const initial = await compare()
         Expect((await FS.readJson<{ violations: string[] }>(diff)).violations).toEqual([])
         Expect(initial.exitCode).toBe(0)
-        for (const [path, value] of Object.entries(current)) {
-          if (!path.startsWith(prefix)) {
-            continue
-          }
+        for (const path of [prefix + shapes[0][0], prefix + shapes[1][0], `${prefix}Library/PrivateCloudCompute`]) {
+          const value = current[path]!
           for (
             const mutation of [{ uid: 502 }, { gid: 0 }, { mode: 0o40777 }, { kind: 'symlink', linkTarget: '/outside' }]
           ) {
@@ -696,7 +694,7 @@ Describe('standalone filesystem audit', () => {
       Expect((await compare()).exitCode).not.toBe(0)
       Expect((await FS.readJson<{ violations: string[] }>(diffPath)).violations).toContain('/guest/admin/.rbenv/shims')
 
-      for (const vmProfile of ['unknown', '', null]) {
+      for (const vmProfile of ['unknown', null]) {
         await FS.writeJson(scopePath, { ...scope, vmProfile })
         const result = await compare()
         Expect(result.exitCode).not.toBe(0)

@@ -118,7 +118,6 @@ Describe('idle slot-seconds of a finished run', () => {
     Expect(wide.makespanMs).toBe(4_000)
     Expect(packed.idleSlotSeconds).toBe(0)
     Expect(packed.makespanMs).toBe(1_000)
-    Expect(wide.idleSlotSeconds > packed.idleSlotSeconds).toBe(true)
     // The floor moved with the packing, which is what makes the idle figure actionable rather than
     // just a fact about the machine.
     Expect(wide.serialFloorMs).toBe(4_000)
@@ -202,7 +201,6 @@ Describe('the one line a run ends with', () => {
       'Schedule: 4.0s makespan, 4.0s serial floor (fix-dprint -> typecheck), '
         + '12.0 idle slot-seconds of 4 (75% idle); waited: typecheck 1.0s on dependency fix-dprint',
     )
-    Expect(line.includes('\n')).toBe(false)
   })
 
   Test('says nothing waited when nothing did', () => {

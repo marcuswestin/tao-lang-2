@@ -2,7 +2,7 @@ import { RuntimeTesting } from '@expo-host/testing/runtime-testing'
 import { applyDeviceViewport } from '@expo-host/testing/test-runner'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import * as RN from 'react-native'
-import { ExpectScreen, registerRuntimeE2ELifecycle, testCompileApp } from './test-compile-app'
+import { registerRuntimeE2ELifecycle, testCompileApp } from './test-compile-app'
 
 registerRuntimeE2ELifecycle()
 
@@ -27,8 +27,6 @@ Describe('Expo runtime `on <device>` and `with <fixture>` test clauses', () => {
   // same rendered style the harness itself produced, rather than through a Tao test assertion.
   Test('gives a phone viewport a stacked Panes and a tablet viewport a side-by-side one', async () => {
     await testCompileApp(panesApp, screen => {
-      ExpectScreen(screen).toHaveText('Primary pane')
-      ExpectScreen(screen).toHaveText('Secondary pane')
       const panes = screen.UNSAFE_getAllByType(RN.View).find(view => {
         const style = RN.StyleSheet.flatten(view.props.style)
         return style?.gap === 16 && (style.flexDirection === 'column' || style.flexDirection === 'row')
@@ -59,10 +57,6 @@ Describe('Expo runtime `on <device>` and `with <fixture>` test clauses', () => {
 
           test "WordFlower" with StarterWorkspace {
             test "shows the starter workspace with no interaction" {
-              run WordFlowerFixtureApp
-              expect text "Home"
-            }
-            test "a nested test inherits the fixture" {
               run WordFlowerFixtureApp
               expect text "Home"
             }

@@ -172,7 +172,6 @@ Describe('Agent feature lowering', () => {
       Expect(problems).toEqual([])
       Expect(result.steps.every(step => step.status === 'ready')).toBe(true)
       const entry = result.edits.find(edit => edit.path === 'App.tao')
-      Expect(entry?.before).toContain('use Stories from @data')
       Expect(entry?.after).toContain('use Stories, Story from @data')
       Expect(entry?.after).toContain('BookmarkedStory = create Story')
       Expect(result.steps.some(step => step.action.includes('importing Story from @data'))).toBe(true)

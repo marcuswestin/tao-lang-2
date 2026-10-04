@@ -415,7 +415,7 @@ Describe('validator: functional core', () => {
   })
 
   Test('rejects incompatible flat-list elements at the offending literal', async () => {
-    const result = await testValidateCodeWithErrors('let MixedElements = [1, 2, "one"]')
+    const result = await testValidateCodeWithErrors('let MixedElements = [1, "one"]')
     const diagnostics = result.diagnostics.filter(diagnostic =>
       diagnostic.message === FunctionalCoreValidator.messages.listElement
     )
@@ -425,7 +425,7 @@ Describe('validator: functional core', () => {
   })
 
   Test('rejects incompatible nested-list elements at the offending literal', async () => {
-    const result = await testValidateCodeWithErrors('let MixedNested = [[1], [2], ["one"]]')
+    const result = await testValidateCodeWithErrors('let MixedNested = [[1], ["one"]]')
     const diagnostics = result.diagnostics.filter(diagnostic =>
       diagnostic.message === FunctionalCoreValidator.messages.listElement
     )

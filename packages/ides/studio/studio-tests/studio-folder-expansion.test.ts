@@ -6,6 +6,7 @@ import {
 } from '../studio-src/StudioFolderExpansion'
 
 Describe('Tao Studio persisted folder expansion', () => {
+  // REMOVAL CANDIDATE: Source phrases protect persisted-state wiring only; removing them loses that static smoke while toggle semantics remain tested below.
   Test('owns recursive folder expansion in persisted app state with an explicit root binding', async () => {
     const source = (await Promise.all([
       'TaoStudioClient.tao',

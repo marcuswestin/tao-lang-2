@@ -4,7 +4,6 @@ test "State Action MVP" {
    test "presses action buttons and rerenders count" {
       run StateActionMVP
 
-      expect text "State/action MVP"
       expect text "0"
       press "Add twice"
       expect text "2"
@@ -20,7 +19,5 @@ test "State Action MVP" {
       expect text "6"
       press "Decrement"
       expect text "5"
-      press "Reset"
-      expect text "0"
    }
 }

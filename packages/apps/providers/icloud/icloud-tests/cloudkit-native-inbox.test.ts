@@ -4,6 +4,7 @@ import { Describe, Expect, Test } from '@shared/test'
 const nativeSourcePath = Repo.resolvePath('packages/apps/providers/icloud/ios/TaoCloudKitModule.swift')
 
 Describe('tao-icloud durable CloudKit inbox', () => {
+  // REMOVAL CANDIDATE: Source-text checks stand in for a native failure-order proof; retain until that lane exists.
   Test('fails before restoring an advanced checkpoint when an existing inbox cannot be read exactly', async () => {
     const source = await FS.readText(nativeSourcePath)
     const restoreInbox = source.indexOf('inbox = try Self.loadInbox(at: inboxURL)')

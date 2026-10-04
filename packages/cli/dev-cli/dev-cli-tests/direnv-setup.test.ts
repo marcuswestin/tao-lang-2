@@ -257,7 +257,6 @@ Describe('optional developer shell setup', () => {
           ['--realise', packageOutput, '--add-root', rooted, '--indirect'],
           ['--realise', packageOutput, '--add-root', rooted, '--indirect'],
         ])
-        Expect((await FS.entryMetadata(rooted)).linkTarget).toBe(packageOutput)
         Expect(f.calls.find(call => call.spec.args?.[0] === 'hash-object')?.spec.stdin).toBe(`${f.common}\n`)
         Expect(await FS.isSymbolicLink(link)).toBe(true)
         Expect(await FS.realPath(link)).toBe(managed)

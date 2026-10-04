@@ -218,9 +218,12 @@ function unresolvedDependencyPath(
     return [state.name]
   }
   const nextVisiting = new Set(visiting).add(state.name)
-  for (const need of state.node.needs ?? []) {
+  for (const need of new Set([...(state.node.needs ?? []), ...(state.node.after ?? [])])) {
     const dependency = byName.get(need)
-    if (dependency !== undefined && dependency.status !== 'passed') {
+    const unresolved = dependency !== undefined && (state.node.needs?.includes(need) === true
+      ? dependency.status !== 'passed'
+      : dependency.status === 'pending' || dependency.status === 'running')
+    if (dependency !== undefined && unresolved) {
       return [...unresolvedDependencyPath(dependency, byName, nextVisiting), state.name]
     }
   }

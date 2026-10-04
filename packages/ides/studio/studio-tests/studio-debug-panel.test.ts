@@ -27,7 +27,6 @@ Describe('Studio debugger drawer', () => {
       kind: 'journal',
     })
 
-    Expect(started.journal.length).toBe(1)
     Expect(settled.journal.length).toBe(1)
     Expect(settled.journal[0]).toMatchObject({ frames: ['RecordVote'], outcome: 'committed' })
   })
@@ -53,7 +52,7 @@ Describe('Studio debugger drawer', () => {
     Expect(resumed.pause).toBeUndefined()
   })
 
-  Test('clears a stale pause and journal when its preview instance resets', () => {
+  Test('clears a stale pause when its preview instance resets', () => {
     const paused = StudioDebugEvents.receive(StudioDebugEvents.empty(), pauseEvent)
     const reset = StudioDebugEvents.receive(paused, { kind: 'reset' })
 

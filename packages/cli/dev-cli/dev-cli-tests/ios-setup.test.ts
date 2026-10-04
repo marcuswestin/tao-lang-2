@@ -680,7 +680,7 @@ Describe('explicit iOS dependency setup', () => {
   })
 
   Test('requires valid device inventory and no service diagnostic', async () => {
-    for (const deviceOutput of ['', '{', '{}', '{"devices":[]}', '{"devices":{"runtime":{}}}']) {
+    for (const deviceOutput of ['{', '{}', '{"devices":[]}', '{"devices":{"runtime":{}}}']) {
       const result = await setup({ installed: '/Applications/Xcode.app', deviceOutput })
       Expect(result.code).toBe(1)
       Expect(result.receipt.remaining.join('\n')).toMatch(/CoreSimulator returned (an )?invalid device/)

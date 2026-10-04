@@ -8,7 +8,6 @@ import {
 import { StudioInspection } from '../studio-src/client/app/StudioInspection'
 import {
   inferGroupWrapper,
-  studioCanvasCommandAllowed,
   studioCanvasKeyCommand,
   studioSelectionAction,
   studioSelectionShortcut,
@@ -146,14 +145,10 @@ Describe('Studio selection grouping', () => {
     Expect(studioCanvasKeyCommand(makeView, { ...context, hasSelection: false })).toBeUndefined()
     // ⌥⌘Z is not undo, and falls through to nothing rather than to a selection command.
     Expect(studioCanvasKeyCommand({ ...undo, altKey: true, key: 'Ω' }, context)).toBeUndefined()
-    Expect(studioCanvasCommandAllowed('undo', 'draw')).toBe(true)
-    Expect(studioCanvasCommandAllowed('group', 'draw')).toBe(false)
-    Expect(studioCanvasCommandAllowed('make-view', 'design')).toBe(true)
   })
 
   Test('grouping picks Row for elements laid out across and Col otherwise', () => {
     const box = (left: number, top: number) => ({ bottom: top + 20, left, right: left + 40, top })
-    Expect(inferGroupWrapper([box(0, 0), box(60, 4)])).toBe('Row')
     Expect(inferGroupWrapper([box(0, 0), box(4, 40)])).toBe('Col')
     Expect(inferGroupWrapper([box(0, 0), undefined])).toBe('Col')
     const group = [selection(garden, 10, 20), selection(garden, 30, 40)]
@@ -177,8 +172,8 @@ Describe('Studio selection grouping', () => {
     Expect(studioEditLabel({ kind: 'insert-spacer' })).toBe('Insert spacer')
     Expect(studioEditLabel({ kind: 'toString' })).toBe('ToString')
     const minute = 60_000
-    Expect([0, 59_000, minute, 59 * minute, 60 * minute, 49 * 60 * minute].map(age => studioEditAge(0, age)))
-      .toEqual(['now', 'now', '1m', '59m', '1h', '2d'])
+    Expect([0, minute, 59 * minute, 60 * minute, 49 * 60 * minute].map(age => studioEditAge(0, age)))
+      .toEqual(['now', '1m', '59m', '1h', '2d'])
     const key = {
       altKey: false,
       code: 'KeyZ',

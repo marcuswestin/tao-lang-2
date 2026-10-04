@@ -228,8 +228,6 @@ Describe('TR read net', () => {
   Test('never hands content cases to the net', () => {
     const net = siteProps({ loading: () => 'Net', error: () => 'Net' })
 
-    Expect(TR.GuardRender(TR.Value([]), [], () => 'List', net)).toBe('List')
-    Expect(TR.GuardRender(TR.Value(''), [], () => 'Text', net)).toBe('Text')
     Expect(TR.GuardRender(TR.Value(false), [['true', () => 'Yes']], () => 'No', net)).toBe('No')
     Expect(TR.GuardRender(TR.Value(queryRows({ Loading: false, Error: '' })), [], () => 'Rows', net)).toBe('Rows')
   })

@@ -88,6 +88,7 @@ Describe('parsing a workspace batch with one build', () => {
   // validated against its own graph. The Navigation app is the one to hold to it, because its
   // validators read the whole of an entry's graph — reachability, selection keys — and fourteen
   // entries share most of their files.
+  // REMOVAL CANDIDATE: Real-app parity repeats many validators and entry builds; focused graph/isolation tests survive, but this protects whole-graph diagnostics across a larger shared batch.
   Test('reports exactly what a build per entry reports, on an app whose validators read the whole graph', async () => {
     const root = Repo.resolvePath('Apps/Test Apps/Navigation')
     const entryFiles = (await Repo.filesUnder(root)).filter(path => path.endsWith('.tao')).sort()

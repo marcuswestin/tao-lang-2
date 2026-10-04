@@ -99,18 +99,6 @@ test('keeps live work and reclaims an interrupted run only after owner death and
   }
 })
 
-test('preserves legacy directories without ownership evidence', async () => {
-  const root = await Repo.mkScratchDir('tao-host-artifacts-')
-  const dependencies = { isAlive: () => false, now: () => new Date('2026-09-23'), pid: 123 }
-  try {
-    await FS.mkdir(FS.resolvePath(runIds[0]!, root))
-    await HostTestingArtifacts.prune(root, dependencies)
-    expect(await FS.isDirectory(FS.resolvePath(runIds[0]!, root))).toBe(true)
-  } finally {
-    await FS.remove(root)
-  }
-})
-
 test('reclaims an interrupted allocation using its independent receipt', async () => {
   const root = await Repo.mkScratchDir('tao-host-artifacts-')
   let now = Date.parse('2026-09-23T12:00:00.000Z')

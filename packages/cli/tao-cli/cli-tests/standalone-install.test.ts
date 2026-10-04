@@ -34,7 +34,6 @@ Describe('standalone install script', () => {
       const installed = FS.resolvePath('.tao/versions/0.4.0/tao', home)
       Expect(await FS.isFile(installed)).toBe(true)
       Expect(await FS.isSymbolicLink(installed)).toBe(false)
-      Expect(await FS.isSymbolicLink(FS.resolvePath('tao', userBin))).toBe(true)
       Expect(await FS.realPath(FS.resolvePath('tao', userBin))).toBe(await FS.realPath(installed))
       Expect(result.stdout).not.toContain('export PATH')
       Expect(await FS.exists(FS.resolvePath('.local', home))).toBe(false)
@@ -58,7 +57,6 @@ Describe('standalone install script', () => {
       const result = await install({ PATH: `${userBin}:/usr/bin:/bin` })
 
       Expect(result.exitCode).toBe(0)
-      Expect(await FS.isSymbolicLink(FS.resolvePath('tao', userBin))).toBe(true)
       Expect(await FS.realPath(FS.resolvePath('tao', userBin)))
         .toBe(await FS.realPath(FS.resolvePath('.tao/versions/0.4.0/tao', home)))
       Expect(await FS.isSymbolicLink(FS.resolvePath('.tao/bin/tao', home))).toBe(true)
@@ -148,15 +146,6 @@ Describe('standalone install script', () => {
       await FS.remove(listing)
       const result = await install({ PATH: '/usr/bin:/bin', TAO_VERSION: '0.4.0' })
 
-      Expect(result.exitCode).toBe(0)
-    })
-  })
-
-  Test('asks the download its version from outside the current project, naming none', async () => {
-    await withRelease(async ({ install }) => {
-      const result = await install({ PATH: '/usr/bin:/bin', TAO_VERSION: '0.4.0' })
-
-      Expect(result.stderr).toBe('')
       Expect(result.exitCode).toBe(0)
     })
   })

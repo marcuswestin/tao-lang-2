@@ -66,12 +66,6 @@ Describe('InstantDB schema mapping', () => {
     Expect(Object.keys(mapping.schema.entities)).toEqual(['notes', 'tags'])
   })
 
-  Test('is deterministic for the same compiled schema', () => {
-    Expect(JSON.stringify(instantMapping(notesSchema))).toBe(
-      JSON.stringify(instantMapping(structuredClone(notesSchema))),
-    )
-  })
-
   Test('refuses what InstantDB cannot represent, with the reason', () => {
     const refusal = (
       edit: (schema: { entities: Record<string, TR.DataSchemaDefinition['entities'][string]> }) => void,

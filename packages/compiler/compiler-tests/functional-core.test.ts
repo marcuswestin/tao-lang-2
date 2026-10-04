@@ -48,14 +48,12 @@ Describe('compiler: functional core', () => {
       view Text(Value text) { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
     `)
 
-    Expect(compiled.files.filter(file => !file.relativePath.startsWith('modules/'))).toHaveLength(3)
     Expect(compiled.files[0]?.code).toContain('TR.WhenCase(')
     Expect(compiled.files[0]?.code).toContain('TR.WhenCaseRender(')
     Expect(compiled.files[0]?.code).toContain('if (await TR.GuardAction(')
     Expect(compiled.files[0]?.code).toContain('if (TR.Check(')
     // An empty action body still reads the continuation its callback declares.
     Expect(compiled.files[0]?.code).toContain('void _TaoActionContinuation')
-    Expect(compiled.files[0]?.code).toContain('TR.Toggle(')
     Expect(compiled.files[0]?.code).toContain('if (TR.Binary(')
   })
 

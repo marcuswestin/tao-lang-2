@@ -155,7 +155,7 @@ describe('Studio device host acknowledgement', () => {
     const stub = stubClient()
     const screen = renderHost(() => createElement(Text, null, 'rendered'), stub.client)
 
-    await waitFor(() => expect(screen.getByText('rendered')).toBeTruthy())
+    await waitFor(() => screen.getByText('rendered'))
     await waitFor(() => expect(stub.applied).toHaveLength(1))
     expect(stub.applied[0]).toMatchObject({ cellId: 'states#cell', compileRevision: 4 })
     expect(stub.reports).toEqual([])
@@ -165,7 +165,7 @@ describe('Studio device host acknowledgement', () => {
     const stub = stubClient()
     const screen = renderHost((): never => Errors.throwUnexpected('the cell exploded'), stub.client)
 
-    await waitFor(() => expect(screen.getByText(/Tao Studio preview error/)).toBeTruthy())
+    await waitFor(() => screen.getByText(/Tao Studio preview error/))
     await waitFor(() => expect(stub.reports).toHaveLength(1))
     expect(stub.reports[0]).toMatchObject({ level: 'error' })
     expect(stub.reports[0]?.message).toContain('the cell exploded')
@@ -193,17 +193,17 @@ describe('Studio device host acknowledgement', () => {
       publication,
     }))
     fireEvent.press(screen.getByText('Count 0'))
-    expect(screen.getByText('Count 1')).toBeTruthy()
+    screen.getByText('Count 1')
     expect(cellRuntime).not.toHaveBeenCalled()
     expect(stub.applied).toEqual([])
     expect(stub.appliedApps).toEqual([{ compileRevision: 4, manifestRevision: 'compile:4' }])
     expect(screen.queryByText('Waiting for a scenario')).toBeNull()
-    expect(screen.getByTestId('tao-studio-device-badge')).toBeTruthy()
+    screen.getByTestId('tao-studio-device-badge')
 
     act(() => stub.update({ phase: 'disconnected' }))
     expect(screen.queryByText('Count 1')).toBeNull()
     act(() => stub.update({ phase: 'connected' }))
-    expect(screen.getByText('Count 0')).toBeTruthy()
+    screen.getByText('Count 0')
     expect(stub.appliedApps).toHaveLength(2)
   })
 
@@ -213,7 +213,7 @@ describe('Studio device host acknowledgement', () => {
       manifest: { compileRevision: 4, manifestRevision: 'compile:4', scenarios: [] },
     })
     const screen = renderHost((): never => Errors.throwUnexpected('ordinary app exploded'), stub.client)
-    expect(screen.getByText(/Tao Studio preview error/)).toBeTruthy()
+    screen.getByText(/Tao Studio preview error/)
     expect(stub.reports[0]?.message).toContain('ordinary app exploded')
     expect(stub.appliedApps).toEqual([])
   })
@@ -221,7 +221,7 @@ describe('Studio device host acknowledgement', () => {
   test('unmounts scenario providers when the last scenario disappears, then accepts a new assignment', () => {
     const stub = stubClient()
     const screen = renderHost(() => createElement(Text, null, 'app content'), stub.client)
-    expect(screen.getByTestId('tao-studio-device-cell')).toBeTruthy()
+    screen.getByTestId('tao-studio-device-cell')
     act(() =>
       stub.update({
         assignment: undefined,
@@ -229,10 +229,10 @@ describe('Studio device host acknowledgement', () => {
       })
     )
     expect(screen.queryByTestId('tao-studio-device-cell')).toBeNull()
-    expect(screen.getByText('app content')).toBeTruthy()
+    screen.getByText('app content')
     expect(stub.appliedApps).toHaveLength(1)
     act(() => stub.update({ assignment: { identity, runtime: {} } }))
-    expect(screen.getByTestId('tao-studio-device-cell')).toBeTruthy()
+    screen.getByTestId('tao-studio-device-cell')
     expect(stub.applied).toHaveLength(2)
   })
 })
@@ -258,7 +258,7 @@ test('a nested selected render inherits the state change that caused its commit'
     createElement(StudioLensRender, { identity: parent }, createElement(Counter)),
   ))
   fireEvent.press(screen.getByTestId('lens-counter'))
-  await waitFor(() => expect(screen.getByText('1')).toBeTruthy())
+  await waitFor(() => screen.getByText('1'))
   expect(samples.findLast(sample => sample.identity.start === 10 && sample.phase === 'update')?.causes)
     .toContainEqual({ kind: 'state' })
 })
@@ -285,7 +285,7 @@ describe('Studio device host safe area', () => {
     const stub = stubClient()
     const screen = renderHost(() => createElement(Text, null, 'bare view'), stub.client, 'view')
 
-    await waitFor(() => expect(screen.getByText('bare view')).toBeTruthy())
+    await waitFor(() => screen.getByText('bare view'))
     expect(flatStyle(screen.getByTestId('tao-studio-device-cell').props['style'])).toMatchObject({
       paddingBottom: insets.bottom,
       paddingTop: insets.top,
@@ -296,7 +296,7 @@ describe('Studio device host safe area', () => {
     const stub = stubClient()
     const screen = renderHost(() => createElement(Text, null, 'whole app'), stub.client, 'app')
 
-    await waitFor(() => expect(screen.getByText('whole app')).toBeTruthy())
+    await waitFor(() => screen.getByText('whole app'))
     const style = flatStyle(screen.getByTestId('tao-studio-device-cell').props['style'])
     expect(style['paddingTop']).toBeUndefined()
     expect(style['paddingBottom']).toBeUndefined()
@@ -306,7 +306,7 @@ describe('Studio device host safe area', () => {
     const stub = stubClient()
     const screen = renderHost(() => createElement(Text, null, 'whole app'), stub.client)
 
-    await waitFor(() => expect(screen.getByTestId('tao-studio-device-badge')).toBeTruthy())
+    await waitFor(() => screen.getByTestId('tao-studio-device-badge'))
     // The badge is the only way into the companion menu, so an inset it ignores is a menu a thumb
     // has to fight the home indicator to reach. Pinned exactly, not as a lower bound: the margin
     // above the inset is the part that keeps it off the indicator rather than merely level with it.
@@ -329,7 +329,7 @@ describe('Studio device host failure containment', () => {
       const stub = stubClient()
       const screen = renderHost(() => createElement(Text, null, 'rendered'), stub.client)
 
-      await waitFor(() => expect(screen.getByText('rendered')).toBeTruthy())
+      await waitFor(() => screen.getByText('rendered'))
       expect(ignoreAllLogs).toHaveBeenCalledWith(true)
     } finally {
       ignoreAllLogs.mockRestore()
@@ -339,15 +339,15 @@ describe('Studio device host failure containment', () => {
   test('names a failure nobody in the program could observe, and sends it to Studio', async () => {
     const stub = stubClient()
     const screen = renderHost(() => createElement(Text, null, 'rendered'), stub.client)
-    await waitFor(() => expect(screen.getByText('rendered')).toBeTruthy())
+    await waitFor(() => screen.getByText('rendered'))
 
     const failure = new Error("Cannot delete missing Workspace 'Workspace-1'.")
     act(() => {
       TR.Errors.reportUnowned(failure)
     })
 
-    await waitFor(() => expect(screen.getByTestId('tao-studio-device-failure')).toBeTruthy())
-    expect(screen.getByText(/Cannot delete missing Workspace 'Workspace-1'\./)).toBeTruthy()
+    await waitFor(() => screen.getByTestId('tao-studio-device-failure'))
+    screen.getByText(/Cannot delete missing Workspace 'Workspace-1'\./)
     const [report] = stub.reports
     expect(report?.level).toBe('error')
     expect(report?.message).toContain("Cannot delete missing Workspace 'Workspace-1'.")
@@ -355,7 +355,7 @@ describe('Studio device host failure containment', () => {
     // reason someone reads a phone's failure on their Mac.
     expect(report?.message).toContain('\n  at ')
     // The cell keeps rendering underneath: the notice reports, it does not replace the screen.
-    expect(screen.getByText('rendered')).toBeTruthy()
+    screen.getByText('rendered')
 
     // A failure a live query reproduces on every revision arrives again and again from the same
     // place. Answering each one with a state update and a frame to Studio is how a contained
@@ -372,24 +372,24 @@ describe('Studio device host failure containment', () => {
   test('carries the layout-bounds toggle, so the app needs no floating menu of its own', async () => {
     const stub = stubClient()
     const screen = renderHost(() => createElement(Text, null, 'rendered'), stub.client)
-    await waitFor(() => expect(screen.getByTestId('tao-studio-device-badge')).toBeTruthy())
+    await waitFor(() => screen.getByTestId('tao-studio-device-badge'))
 
     expect(TR.Dev.isMenuHidden()).toBe(true)
     fireEvent.press(screen.getByTestId('tao-studio-device-badge'))
     const toggle = screen.getByTestId('tao-studio-device-menu-layout-bounds')
-    expect(screen.getByText('Layout bounds')).toBeTruthy()
+    screen.getByText('Layout bounds')
 
     fireEvent.press(toggle)
     expect(TR.Dev.isLayoutBoundsEnabled()).toBe(true)
     fireEvent.press(screen.getByTestId('tao-studio-device-badge'))
-    expect(screen.getByText('Layout bounds: on')).toBeTruthy()
+    screen.getByText('Layout bounds: on')
     TR.setDevMode()
   })
 
   test('keeps inspect guidance pointer-transparent without a deprecated native prop', async () => {
     const stub = stubClient()
     const screen = renderHost(() => createElement(Text, null, 'rendered'), stub.client)
-    await waitFor(() => expect(screen.getByTestId('tao-studio-device-badge')).toBeTruthy())
+    await waitFor(() => screen.getByTestId('tao-studio-device-badge'))
 
     fireEvent.press(screen.getByTestId('tao-studio-device-badge'))
     fireEvent.press(screen.getByTestId('tao-studio-device-menu-inspect'))

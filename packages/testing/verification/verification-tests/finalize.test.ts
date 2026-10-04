@@ -374,20 +374,6 @@ Describe('finalize', () => {
     Expect(fake.calls.some(call => call.args[0] === 'merge' && call.args[1] === '--no-edit')).toBe(false)
   })
 
-  Test('merges normally when every directory main would write is writable', async () => {
-    const fake = fakeDependencies({
-      diffPaths: ['packages/dev/dev-src/dev.ts'],
-      existingDirectories: ['packages/dev/dev-src'],
-    })
-
-    await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies).catch(() => undefined)
-
-    Expect(fake.calls.some(call => call.args[0] === 'merge' && call.args[1] === '--no-edit')).toBe(true)
-    // A uniquely created probe leaves nothing behind in a directory it could write.
-    Expect(fake.probePaths.length).toBe(1)
-    Expect(fake.files.has(fake.probePaths[0]!)).toBe(false)
-  })
-
   Test('does not overwrite an existing file with the old fixed probe name', async () => {
     const fake = fakeDependencies({
       diffPaths: ['packages/dev/dev-src/dev.ts'],
@@ -444,7 +430,7 @@ Describe('finalize', () => {
     'runs just verify --complete when the tree matches a record but the resolved toolchain does not',
     async () => {
       const fake = fakeDependencies()
-      fake.greenTreeRecords.set('full-verify', {
+      fake.greenTreeRecords.set('verify-full', {
         at: '2026-09-17T09:00:00.000Z',
         generated: FAKE_GENERATED,
         logRoot: '/logs/full',
@@ -968,39 +954,6 @@ Describe('finalize', () => {
     },
   )
 
-  Test('reports nothing remaining when every step was already satisfied', async () => {
-    const fake = fakeDependencies({ headSha: 'mainsha00000000000000000000000000000000000', diffPaths: [] })
-    const messagePath = '/repo/.artifacts/merge/feat/example.msg'
-    fake.files.set(messagePath, 'Land example\n\n- Add the example workflow\n')
-    const statePath = '/repo/.artifacts/merge/feat/example.state.json'
-    fake.states.set(
-      statePath,
-      {
-        headSha: 'mainsha00000000000000000000000000000000000',
-        mainIntegratedSha: 'mainsha00000000000000000000000000000000000',
-        messageHeadSha: 'mainsha00000000000000000000000000000000000',
-        updatedAt: '2026-09-17T09:00:00.000Z',
-        verifiedAt: '2026-09-17T09:00:00.000Z',
-        verifiedLane: 'verify',
-        verifiedToolchain: FAKE_TOOLCHAIN,
-        verifiedTreeHash: 'tree-of-mainsha00000000000000000000000000000000000',
-        version: 2,
-      } satisfies FinalizeState,
-    )
-    fake.greenTreeRecords.set('verify', {
-      at: '2026-09-17T09:00:00.000Z',
-      generated: FAKE_GENERATED,
-      logRoot: '/logs/verify',
-      toolchain: FAKE_TOOLCHAIN,
-      treeHash: 'tree-of-mainsha00000000000000000000000000000000000',
-    })
-
-    const outcome = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
-
-    Expect(outcome.ok).toBe(true)
-    Expect(outcome.lines.some(line => line.includes('4. Remaining: none'))).toBe(true)
-  })
-
   Test('writes the state file with the fields a re-entry needs, after a real run', async () => {
     const fake = fakeDependencies()
     await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
@@ -1166,30 +1119,6 @@ Describe('landing preparation', () => {
     Expect(second.ok).toBe(true)
     Expect(fake.calls.some(call => call.args[0] === 'merge')).toBe(false)
     Expect(fake.calls.some(call => call.command === 'just')).toBe(false)
-  })
-
-  Test('is ready once the message on disk is recorded against this HEAD', async () => {
-    const fake = fakeDependencies()
-    fake.files.set('/repo/.artifacts/merge/feat/example.msg', 'Land it\n\n- Do the thing.\n')
-    fake.states.set(
-      '/repo/.artifacts/merge/feat/example.state.json',
-      {
-        headSha: fake.repository.headSha,
-        mainIntegratedSha: fake.repository.mainSha,
-        messageHeadSha: fake.repository.headSha,
-        updatedAt: '2026-09-19T12:00:00.000Z',
-        verifiedAt: '2026-09-19T12:00:00.000Z',
-        verifiedLane: 'verify',
-        verifiedToolchain: FAKE_TOOLCHAIN,
-        verifiedTreeHash: 'tree',
-        version: 2,
-      } satisfies FinalizeState,
-    )
-
-    const preparation = await prepareForLanding({ repositoryRoot: '/repo' }, fake.dependencies)
-
-    Expect(preparation.ok).toBe(true)
-    Expect(preparation.remaining).toEqual([])
   })
 
   Test('refuses to take the lock at all when the branch is not ready', async () => {

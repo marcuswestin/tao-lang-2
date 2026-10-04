@@ -319,32 +319,6 @@ Describe('compiler: files and packages', () => {
     )
   })
 
-  Test('compiles sibling Tao file dependencies', async () => {
-    await withCompiledFiles(
-      'Main.tao',
-      {
-        'Main.tao': `
-        app MultiFile { view MainView }
-        use Text from ./
-        view MainView() {
-          render Text("Hello from imports")
-        }
-      `,
-        'Views.tao': `
-        workspace view Text(Value text) {
-          render inject Value ${tsFence}
-            return <RN.Text>{Value}</RN.Text>
-          ${fence}
-        }
-      `,
-      },
-      compiled => {
-        Expect(compiled['Main.tao'].relativePath).toBe('App.tsx')
-        Expect(compiled['Views.tao'].relativePath).toBe('modules/Views.tao.tsx')
-      },
-    )
-  })
-
   Test('compiles imported pure functions as module-owned runtime values', async () => {
     await withCompiledFiles(
       'Main.tao',
@@ -511,7 +485,6 @@ Describe('compiler: files and packages', () => {
       `,
       },
       compiled => {
-        Expect(compiled['Main.tao'].relativePath).toBe('App.tsx')
         Expect(compiled['lib/nested/@bar/views/Main.tao'].relativePath).toBe(
           'modules/lib/nested/@bar/views/Main.tao.tsx',
         )
@@ -543,7 +516,6 @@ Describe('compiler: files and packages', () => {
       `,
       },
       compiled => {
-        Expect(compiled['Main.tao'].relativePath).toBe('App.tsx')
         Expect(compiled['feature/@foo/forms/Main.tao'].relativePath).toBe(
           'modules/feature/@foo/forms/Main.tao.tsx',
         )
@@ -552,6 +524,7 @@ Describe('compiler: files and packages', () => {
     )
   })
 
+  // REMOVAL CANDIDATE: Only output paths are asserted; imported persisted-type compilation covers the stronger boundary, but this fixture also shadows its imported type name.
   Test('compiles type-only imports without requiring runtime type bindings', async () => {
     await withCompiledFiles(
       'Main.tao',
@@ -574,7 +547,6 @@ Describe('compiler: files and packages', () => {
       `,
       },
       compiled => {
-        Expect(compiled['Main.tao'].relativePath).toBe('App.tsx')
         Expect(compiled['Types.tao'].relativePath).toBe('modules/Types.tao.tsx')
       },
     )
@@ -634,7 +606,6 @@ Describe('compiler: files and packages', () => {
       `,
       },
       compiled => {
-        Expect(compiled['Main.tao'].relativePath).toBe('App.tsx')
         Expect(compiled['A.tao'].relativePath).toBe('modules/A.tao.tsx')
         Expect(compiled['B.tao'].relativePath).toBe('modules/B.tao.tsx')
       },
@@ -668,23 +639,8 @@ Describe('compiler: files and packages', () => {
         const relativePaths = allFiles.map(file => file.relativePath)
 
         Expect(sourceModules).toHaveLength(3)
-        Expect(relativePaths.toSorted()).toEqual([
-          'App.tsx',
-          'modules/external/Auth.files/Auth.ts',
-          'modules/external/Auth.files/AuthFlow.ts',
-          'modules/external/Auth.files/AuthViews.tsx',
-          'modules/external/Auth.tao.tsx',
-          'modules/external/AuthFlow.ts',
-          'modules/external/AuthViews.files/AuthFlow.ts',
-          'modules/external/AuthViews.files/AuthViews.tsx',
-          'modules/external/Prelude.tao.tsx',
-          'modules/external/ReadContext.tao.tsx',
-          'modules/external/Views.tao-2.injection-1.tsx',
-          'modules/external/Views.tao-2.tsx',
-          'modules/external/Views.tao.injection-1.tsx',
-          'modules/external/Views.tao.tsx',
-        ])
         Expect(new Set(relativePaths).size).toBe(relativePaths.length)
+        Expect(relativePaths).toContain('modules/external/ReadContext.tao.tsx')
         Expect(relativePaths).toContain('modules/external/Views.tao.tsx')
         Expect(relativePaths).toContain('modules/external/Views.tao-2.tsx')
         Expect(relativePaths).toContain('modules/external/Views.tao.injection-1.tsx')

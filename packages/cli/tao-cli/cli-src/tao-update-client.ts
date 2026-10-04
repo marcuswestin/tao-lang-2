@@ -268,7 +268,7 @@ export class TaoUpdateClient {
 }
 
 /** expoUpdateRequestHeaders is the client request half of the Expo Updates v1 wire contract. */
-export function expoUpdateRequestHeaders(input: {
+function expoUpdateRequestHeaders(input: {
   channel: string
   platform: ExpoUpdatePlatform
   runtimeVersion: string

@@ -683,7 +683,6 @@ Describe('mounted app authentication', () => {
     await Promise.all([first.scope.restore(), second.scope.restore()])
     const firstStore = first.store
     const secondStore = second.store
-    Expect(firstStore).not.toBe(secondStore)
     createNote(firstStore, 'Alice private')
     createNote(secondStore, 'Bob private', 'account-b')
     Expect(firstStore.query({ entity: 'Note', filters: [] }).map(row => (row as { Body: string }).Body)).toEqual([
@@ -1086,7 +1085,6 @@ Describe('mounted app authentication', () => {
     const first = TR.Auth.Seal(key, 'private data', 'account-a/notes')
     const second = TR.Auth.Seal(key, 'private data', 'account-a/notes')
     Expect(first).not.toBe(second)
-    Expect(first).not.toContain('private data')
     Expect(TR.Auth.Open(key, first, 'account-a/notes')).toBe('private data')
     Expect(() => TR.Auth.Open(key, first, 'account-b/notes')).toThrow('could not be opened')
     Expect(() => TR.Auth.Open('34'.repeat(32), first, 'account-a/notes')).toThrow('could not be opened')

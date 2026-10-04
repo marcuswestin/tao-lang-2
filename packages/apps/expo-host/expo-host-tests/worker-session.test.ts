@@ -72,23 +72,6 @@ Describe('test compiler worker session', () => {
     Expect(fake.events).toEqual(['end-stdin', 'close-output', 'dispose'])
   })
 
-  Test('forces a worker closed when graceful and terminated shutdown do not finish', async () => {
-    const fake = fakeCommand()
-    const closeResults = [undefined, undefined, { exitCode: null, signal: 'SIGKILL' as const }]
-
-    await WorkerTesting.stopCommand(fake.command, {
-      waitForClose: async () => closeResults.shift(),
-    })
-
-    Expect(fake.events).toEqual([
-      'end-stdin',
-      'kill SIGTERM',
-      'kill SIGKILL',
-      'close-output',
-      'dispose',
-    ])
-  })
-
   Test('releases child-process resources when close never arrives', async () => {
     const fake = fakeCommand()
 

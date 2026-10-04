@@ -19,6 +19,7 @@ const expected = [
   'capabilities',
   'open-pr',
   'fix-agent-config',
+  'verify-full',
   'test-host',
   'qa-capture',
   'studio-smoke',
@@ -94,13 +95,19 @@ Describe('agent host command permissions', () => {
     )
     const prefixes = agentHostCommands(source)
     Expect(prefixes).toEqual(expected.map(command => command.split(' ')))
+    Expect(hostCommandKind(['verify-full', '--no-cache'], prefixes)).toBe('agent')
+    Expect(hostCommandKind(['verify-full-sandbox'], prefixes)).toBeUndefined()
+    Expect(hostCommandKind(['verify-repo'], prefixes)).toBeUndefined()
     Expect(hostCommandKind(['prepare-release', 'studio', '--version', '0.0.1'], prefixes)).toBe('named')
     Expect(hostCommandKind(['prepare-release', 'ide-extension'], prefixes)).toBe('named')
     Expect(hostCommandKind(['prepare-release', 'other'], prefixes)).toBeUndefined()
     Expect(hostCommandKind(['prepare-release'], prefixes)).toBeUndefined()
     Expect(hostCommandKind(['reclaim', '--execute'], prefixes)).toBe('named')
     Expect(hostCommandKind(['reclaim', '--report-json'], prefixes)).toBeUndefined()
-    Expect(Object.keys(HOST_COMMAND_TARGETS)).toEqual(['merge-recover', ...expected.slice(14)])
+    Expect(Object.keys(HOST_COMMAND_TARGETS)).toEqual([
+      'merge-recover',
+      ...expected.slice(expected.indexOf('reclaim --execute')),
+    ])
     const rules = CodexConfigGenerator.renderRules(source)
     const settings = JSON.parse(await FS.readText(Repo.resolvePath('.claude/settings.json'))) as {
       permissions: { allow: string[] }

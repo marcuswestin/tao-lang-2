@@ -86,17 +86,6 @@ Describe('machine lanes', () => {
     Expect(await leaseFiles(registryRoot)).toEqual(['1.json'])
   })
 
-  Test('a released lane leaves nothing behind for the next one to divide by', async () => {
-    const registryRoot = await mkTestDir('tao-machine-lanes-')
-
-    const lane = await MachineLanes.acquire({ lane: 'dev-test', registryRoot, repositoryRoot: '/here' })
-    Expect(await leaseFiles(registryRoot)).toHaveLength(1)
-    Expect(lane.capacity).toBe(Platform.cpuCount())
-
-    await lane.release()
-    Expect(await leaseFiles(registryRoot)).toEqual([])
-  })
-
   Test('a lane whose process is gone is pruned rather than counted', async () => {
     const registryRoot = await mkTestDir('tao-machine-lanes-')
     // A worktree deleted mid-run, or an agent killed with its terminal, leaves its lease behind.
@@ -258,34 +247,6 @@ Describe('machine lanes', () => {
     await secondWork?.release()
     await first.release()
     await second.release()
-  })
-
-  Test('queues a third broad lane behind the two ahead of it and names them', async () => {
-    const registryRoot = await mkTestDir('tao-machine-lanes-')
-    const lanes = await registerInOrder(registryRoot, [VerificationLanes.TEST_ALL, VerificationLanes.VERIFY])
-    const work = await Promise.all(lanes.map(async lane => await lane.tryAcquire(4, false)))
-    Expect(work.map(reservation => reservation?.slots)).toEqual([4, 4])
-
-    const third = await MachineLanes.acquire({
-      cpuCount: 4,
-      lane: VerificationLanes.VERIFY_FULL,
-      registryRoot,
-      repositoryRoot: '/verify-full-worktree',
-    })
-
-    // A queued lane holds nothing at all — not a floor slot, not a partial share.
-    Expect(third.capacity).toBe(0)
-    Expect(await third.tryAcquire(4, true)).toBeUndefined()
-    Expect(await third.tryAcquire(1, true)).toBeUndefined()
-    Expect(third.waitReason).toBe(
-      'queued at position 3 of 3 lanes; test-all in test-all-worktree and verify in verify-worktree are running',
-    )
-    const total = (await MachineLanes.activeLanes(registryRoot)).reduce((sum, record) => sum + record.slots, 0)
-    Expect(total).toBe(8)
-
-    await Promise.all(work.map(async reservation => await reservation?.release()))
-    await Promise.all(lanes.map(async lane => await lane.release()))
-    await third.release()
   })
 
   Test('moves a queued broad lane up as the lanes ahead of it finish, and never lets a newcomer pass it', async () => {

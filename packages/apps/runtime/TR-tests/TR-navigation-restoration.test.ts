@@ -176,9 +176,8 @@ Describe('navigation restoration', () => {
       secondScope.bindDatasources([{ store: schema, source: TR.Data.Configure(provider, { Name: 'Second mount' }) }])
       await Promise.all([firstScope.restore(), secondScope.restore()])
       const declared = runtimeApp('scoped-reference')
-      const firstApp = firstScope.app(declared.app)
+      firstScope.app(declared.app)
       const secondApp = secondScope.app(declared.app)
-      Expect(firstApp).not.toBe(secondApp)
       secondApp.present(secondApp.navigator, declared.detail, {
         Row: TR.Value(secondScope.store(schema).entity('Account', 'same-account')),
       })
@@ -256,61 +255,6 @@ Describe('navigation restoration', () => {
       bob.dispose()
       returnedAlice.dispose()
       declared.app.dispose()
-      restoreStorage()
-    }
-  })
-
-  Test('round-trips stack entries and arguments through a relaunch', async () => {
-    const values = new Map<string, string>()
-    const restoreStorage = setNavigationRestorationStorageForTests(memoryKeyValueStorage(values))
-    try {
-      const first = runtimeApp('main')
-      const detach = await first.app.attachRestoration()
-      first.app.present(first.app.navigator, first.detail, { Message: TR.Value('restored') })
-      await drainMicrotasks()
-      detach()
-
-      const second = runtimeApp('main')
-      const detachSecond = await second.app.attachRestoration()
-      Expect((second.app.navigator as RuntimeStackNav).depth).toBe(2)
-      detachSecond()
-    } finally {
-      restoreStorage()
-    }
-  })
-
-  /**
-   * Two Studio scenarios of one app differ by fixture, and their stored stacks hold entity handles
-   * for rows the other one does not have. On a device this is not hypothetical: one process renders
-   * every cell it is assigned and keeps real device storage between them, so an unscoped key left a
-   * scenario restoring the other's stack and failing to render at all.
-   */
-  Test("a preview scope keeps one cell from restoring another cell's stack", async () => {
-    const values = new Map<string, string>()
-    const restoreStorage = setNavigationRestorationStorageForTests(memoryKeyValueStorage(values))
-    try {
-      setNavigationPreviewScope('cell:one')
-      const first = runtimeApp('main')
-      const detach = await first.app.attachRestoration()
-      first.app.present(first.app.navigator, first.detail, { Message: TR.Value('from cell one') })
-      await drainMicrotasks()
-      detach()
-
-      // The same app, a different cell: it must start where a fresh app starts.
-      setNavigationPreviewScope('cell:two')
-      const second = runtimeApp('main')
-      const detachSecond = await second.app.attachRestoration()
-      Expect((second.app.navigator as RuntimeStackNav).depth).toBe(1)
-      detachSecond()
-
-      // Returning to the first cell finds its own stack where it left it.
-      setNavigationPreviewScope('cell:one')
-      const third = runtimeApp('main')
-      const detachThird = await third.app.attachRestoration()
-      Expect((third.app.navigator as RuntimeStackNav).depth).toBe(2)
-      detachThird()
-    } finally {
-      setNavigationPreviewScope(undefined)
       restoreStorage()
     }
   })

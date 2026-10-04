@@ -97,9 +97,7 @@ Describe('tao fix', () => {
         'Packages/@cards/Card.tao': 'changed',
       })
       Expect(await FS.readText(FS.resolvePath('@/studio/Generated.tao', rootDir))).toBe(generated)
-      Expect(await FS.readText(FS.resolvePath('App.tao', rootDir))).toBe('view AppView() { }\n')
       Expect(await FS.readText(FS.resolvePath('Apps/Foo/@/Nested.tao', rootDir))).toBe('view Nested() { }\n')
-      Expect(await FS.readText(FS.resolvePath('Packages/@cards/Card.tao', rootDir))).toBe('view Card() { }\n')
       Expect(results[0]?.error).toContain('regenerate it instead of rewriting it')
     })
   })

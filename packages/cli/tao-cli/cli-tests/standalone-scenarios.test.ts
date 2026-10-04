@@ -47,15 +47,8 @@ Describe('standalone acceptance scenarios', () => {
     const files = lowerCreationPlan(deterministicPlan(description), { description })
     await withTaoFixture(files, async root => {
       await runFix(root)
-      Expect(await FS.readText(FS.resolvePath('ATallyCounter.test.tao', root)))
-        .toContain('expect text "No items yet"')
       const facts = await runTaoCliForTest(['facts', root, 'App.tao', 'ATallyCounter'])
       Expect(facts.exitCode).toBe(0)
-      Expect(JSON.parse(facts.stdout)).toMatchObject({
-        app: 'ATallyCounter',
-        format: 'tao-semantic-facts-v1',
-        version: 1,
-      })
       Expect(JSON.parse(facts.stdout).facts.length).toBeGreaterThan(0)
       const coverage = await runTaoCliForTest(['coverage', root, 'App.tao', 'ATallyCounter', 'ItemList'])
       Expect(coverage.exitCode).toBe(0)

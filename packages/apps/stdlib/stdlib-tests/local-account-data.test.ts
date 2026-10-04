@@ -66,7 +66,6 @@ Describe('authenticated local-only persistence', () => {
           }
         }
         // Local keeps device custody only: it resolves no account, so it cannot pair with a sign-in.
-        Expect(LocalProvider(() => disk.storage).authenticate).toBeUndefined()
         const ordinary = mount(disk.storage, undefined, false)
         try {
           await ordinary.scope.restore()

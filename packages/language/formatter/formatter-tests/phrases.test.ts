@@ -16,6 +16,7 @@ Describe('phrases formatter', () => {
     ),
   )
 
+  // REMOVAL CANDIDATE: Phrase calls use ordinary function-call formatting; deleting this would drop the explicit whitespace-normalization input.
   Test(
     'keeps phrase call parentheses tight',
     formats(

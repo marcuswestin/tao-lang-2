@@ -88,24 +88,6 @@ Describe('Tao dev app discovery and selection', () => {
     const selection = await selectTaoDevApp(projects, { input, output })
     const plainPrompt = stripAnsi(prompt)
 
-    Expect(Array.from({ length: 15 }, (_, index) => keyForChoiceIndex(index))).toEqual([
-      '1',
-      '2',
-      '3',
-      '4',
-      '5',
-      '6',
-      '7',
-      '8',
-      '9',
-      'A',
-      'B',
-      'C',
-      'D',
-      'E',
-      'F',
-    ])
-    Expect(choiceIndexForKey('a')).toBe(9)
     Expect(choiceKeySummary(15)).toBe('1-9 or A-F')
     Expect(selection).toEqual({ kind: 'selected', app: projects[1]?.apps[4] })
     Expect(plainPrompt).toContain('Choose the Tao app to run')

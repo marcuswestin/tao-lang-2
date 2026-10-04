@@ -99,12 +99,24 @@ Describe('TR.ForEach selectable rows', () => {
       Expect(selections).toBe(0)
 
       InteractionControls.PressKey('Escape')
-      ;(web.props['onPointerDown'] as (event: { button: number; clientX: number; clientY: number }) => void)({
-        button: 0,
-        clientX: 10,
-        clientY: 10,
-      })
-      await new Promise(resolve => setTimeout(resolve, 550))
+      const schedule = globalThis.setTimeout
+      let heldPress: (() => void) | undefined
+      globalThis.setTimeout = ((callback: () => void, delay: number) => {
+        Expect(delay).toBe(500)
+        heldPress = callback
+        return 1 as unknown as ReturnType<typeof setTimeout>
+      }) as typeof setTimeout
+      try {
+        ;(web.props['onPointerDown'] as (event: { button: number; clientX: number; clientY: number }) => void)({
+          button: 0,
+          clientX: 10,
+          clientY: 10,
+        })
+        Expect(heldPress).toBeDefined()
+        heldPress!()
+      } finally {
+        globalThis.setTimeout = schedule
+      }
       Expect(InteractionControls.Attention.read().mode).toBe('verbs')
       ;(web.props['onPointerLeave'] as () => void)()
       ;(web.props['onPointerUp'] as () => void)()
@@ -170,7 +182,6 @@ Describe('TR.ForEach selectable rows', () => {
     const item = rows[0]!.props['children'] as RuntimeElement
 
     Expect((item.props as { select?: unknown }).select).toBeUndefined()
-    Expect((item.props as { render: unknown }).render).toBeDefined()
   })
 
   Test('does not capture healthy list-item arguments before a failure', () => {
