@@ -13,6 +13,7 @@ import { HOST_COMMAND_TARGETS, hostCommandTarget } from '../agent-cli-src/agent-
 const expected = [
   'notify-developer',
   'stop',
+  'setup',
   'land',
   'finalize',
   'merge-main',
