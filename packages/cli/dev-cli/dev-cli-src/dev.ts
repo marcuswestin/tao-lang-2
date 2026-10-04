@@ -834,6 +834,9 @@ await runWithCommands(commands => {
       try {
         const { AgentConfigGenerator } = await import('@agent-cli/agent-config/AgentConfigGenerator')
         await AgentConfigGenerator.generate({ root: Repo.resolvePath() })
+        // Local Git metadata paths must never enter the tracked adapters or freshness render.
+        const { CodexGitPermissions } = await import('@agent-cli/agent-config/CodexGitPermissions')
+        await CodexGitPermissions.install({ root: Repo.resolvePath() })
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.exit(1)

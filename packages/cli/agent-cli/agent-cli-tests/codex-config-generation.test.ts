@@ -1,6 +1,6 @@
 import { Errors, FS, Platform, Repo } from '@shared'
 import * as CLI from '@shared/CLI'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { Describe, Expect, initGitTestRepository, mkGitTestDir, mkTestDir, Test } from '@shared/test'
 import { parseProfiles, readProfiles } from '../agent-cli-src/agent-config/AgentProfiles'
 import { CodexConfigGenerator } from '../agent-cli-src/agent-config/CodexConfigGenerator'
 import { DELEGATION_SKILL_PATH, tierModels } from '../agent-cli-src/delegation/DelegationProfiles'
@@ -120,14 +120,13 @@ Describe('Codex config generation', () => {
       CodexConfigGenerator.parsePermissions(canonicalRules),
       parseProfiles(canonicalProfiles),
       '',
-      '/clones/elsewhere/tao/.git',
     )
     const parsed = Platform.parseToml(rendered) as Record<string, any>
     const profile = parsed['permissions']['tao-workspace']
 
     Expect(parsed['default_permissions']).toBe('tao-workspace')
     Expect(profile['extends']).toBe(':workspace')
-    Expect(profile['filesystem']['/clones/elsewhere/tao/.git']).toBe('write')
+    Expect(profile['filesystem']['/clones/elsewhere/tao/.git']).toBeUndefined()
     Expect(profile['filesystem']['~/code/tao-lang']).toBe('read')
     Expect(profile['filesystem']['~/.ssh/**']).toBeUndefined()
     Expect(parsed['permissions']['tao-review']['filesystem']['~/.ssh/**']).toBe('deny')
@@ -252,10 +251,9 @@ Describe('Codex config generation', () => {
   })
 
   Test('generates the committed profile in a checkout outside the home directory', async () => {
-    const root = await mkTestDir('tao-codex-portable-', { location: 'host' })
+    const root = await mkGitTestDir('tao-codex-portable-')
     try {
-      const initialized = await CLI.run('git', { args: ['init', '--quiet', root] })
-      Expect(initialized.exitCode).toBe(0)
+      await initGitTestRepository(root)
       for (const path of ['.rulesync/permissions.jsonc', '.rulesync/profiles.jsonc', DELEGATION_SKILL_PATH]) {
         await FS.writeText(FS.resolvePath(path, root), await FS.readText(Repo.resolvePath(path)))
       }
@@ -270,6 +268,46 @@ Describe('Codex config generation', () => {
       Expect(outputs.get('.codex/config.toml')).toBe(await FS.readText(Repo.resolvePath('.codex/config.toml')))
     } finally {
       await FS.remove(root)
+    }
+  })
+
+  Test('keeps complete config bytes identical across home and relocated checkout locations', async () => {
+    const insideHome = await mkTestDir('tao-codex-home-location-')
+    const outsideHome = await mkGitTestDir('tao-codex-other-location-')
+    try {
+      Expect(insideHome.startsWith(`${FS.homeDir()}/`)).toBe(true)
+      Expect(outsideHome.startsWith(`${FS.homeDir()}/`)).toBe(false)
+      const expected = await FS.readText(Repo.resolvePath('.codex/config.toml'))
+      // Different synthetic login/clone layouts exercise the whole renderer without changing
+      // process HOME or writing a real user config. Git location is deliberately not an input.
+      for (
+        const root of [
+          insideHome,
+          FS.resolvePath('home-alice/code/clone', outsideHome),
+          FS.resolvePath('home-bob/relocated/clone', outsideHome),
+        ]
+      ) {
+        await FS.mkdir(root)
+        // Nested Git fixtures are forbidden in a sandboxed worktree. The real home-scoped
+        // checkout is covered by the fresh-render test; relocated Git fixtures live outside it.
+        if (root !== insideHome) {
+          await initGitTestRepository(root)
+        }
+        for (const path of ['.rulesync/permissions.jsonc', '.rulesync/profiles.jsonc', DELEGATION_SKILL_PATH]) {
+          await FS.writeText(FS.resolvePath(path, root), await FS.readText(Repo.resolvePath(path)))
+        }
+        const outputs = new Map<string, string>()
+        await CodexConfigGenerator.generate({
+          root,
+          writeText: async (path, content) => {
+            outputs.set(FS.relativePath(root, path), content)
+          },
+        })
+        Expect(outputs.get('.codex/config.toml')).toBe(expected)
+      }
+    } finally {
+      await FS.remove(insideHome)
+      await FS.remove(outsideHome)
     }
   })
 
@@ -333,7 +371,6 @@ Describe('Codex config generation', () => {
       CodexConfigGenerator.parsePermissions(await FS.readText(FS.resolvePath('.rulesync/permissions.jsonc', root))),
       await readProfiles(root),
       await FS.readText(FS.resolvePath(DELEGATION_SKILL_PATH, root)),
-      await CodexConfigGenerator.gitDirectory(root),
     )
 
     Expect(await FS.readText(FS.resolvePath('.codex/config.toml', root))).toBe(rendered)
@@ -379,14 +416,7 @@ Describe('Codex config generation', () => {
     const config = Platform.parseToml(configText) as any
     Expect(config.default_permissions).toBe('tao-workspace')
     Expect(config.permissions['tao-workspace'].extends).toBe(':workspace')
-    const commonGit = await CLI.run('git', {
-      args: ['rev-parse', '--path-format=absolute', '--git-common-dir'],
-      cwd: root,
-    })
-    Expect(commonGit.exitCode).toBe(0)
-    const writable = Object.entries(config.permissions['tao-workspace'].filesystem)
-      .filter(([, mode]) => mode === 'write')
-      .map(([path]) => path.startsWith('~/') ? FS.resolvePath(path.slice(2), FS.homeDir()) : path)
-    Expect(writable).toContain(commonGit.stdout.trim())
+    // Machine-specific Git grants belong to the local user profile, never this tracked file.
+    Expect(Object.keys(config.permissions['tao-workspace'].filesystem).some(path => path.includes('.git'))).toBe(false)
   })
 })
