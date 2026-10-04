@@ -14,6 +14,19 @@
   clear and integrated check8/0/0 including typecheck. Borrowing17/recovery22 also pass. Producer
   refresh/death admission and fence-aware borrowing are implemented; their new host cases remain
   deferred. The retained sentinel cleanup was rejected before dispatch under the pause scope.
+  Current disposition: implementation landed as `20bbeff06b95`, with current-main full landing
+  verification passed. The Developer explicitly authorized scoped retained-resource cleanup after
+  landing; this supersedes the earlier approval boundary only. Borrowing/lifecycle/abrupt-exit,
+  parallel/combined and quarantine acceptance, the queued-stop regression and startup-generation
+  diagnostic remain post-MVP. Unknown legacy ownership remains quarantined; public Android scope
+  stays beyond release 5. Original ledgers and fixed named recovery determine cleanup authority.
+  Authorized original-invocation cleanup first exposes valid `lsof -Fp` descriptor fields rejected
+  by its PID-only parser. The fixed probe now uses `-t +w`, preserving warnings and strict identity
+  checks;29 focused source cases/typecheck pass and independent review is clear. Retry
+  `18-41-50-255Z-17710` ends retained/unproved on unknown descendants. Known sentinel70463 and
+  actor61520 close and both listeners/emulator5582 disappear, but AVD/INI/project and original
+  console fence remain. Foreign historical serial lease/retention bytes stay unchanged. No complete
+  cleanup verdict or historical ownership adoption follows from that partial result.
   Fresh quiet Android lifecycle `bb7ab550` proves three real workspace additions
   across reload/restart and complete primary owned driver/target cleanup, with private AVD/project
   and physical pair independently absent. Overall acceptance remains incomplete: its borrowing

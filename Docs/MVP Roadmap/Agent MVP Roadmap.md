@@ -13,6 +13,14 @@ own the public sequence. This work inventory spans those releases and later work
 of prerequisites for release 1. Existing implementation records do not establish current QA or
 distribution readiness. The [QA register](../QA/README.md) holds on-demand evidence and findings.
 
+**Managed automation disposition, 2026-10-04:** the completed managed-loop and isolated-native
+implementation is on `main` (`20bbeff06b95`). Remaining special host/human acceptance and unified
+UI control are post-MVP, as decided in the companion Developer roadmap. Scoped ownership-proved
+retained-resource cleanup is immediate housekeeping, with uncertain assets quarantined. This does
+not waive release-1 installed CLI/marketplace/browser-tutorial proof, separate physical Vision Pro
+acceptance, or genuine simulator and native Studio acceptance before releases 2 and 3 respectively.
+The [execution handoff](<../Roadmap/Managed development loops - Execution plan.md>) owns details.
+
 Each entry states what it is, why it blocks or serves the release, where the context lives, and what
 done looks like. None of them is a plan; each is enough to gather context and write one.
 

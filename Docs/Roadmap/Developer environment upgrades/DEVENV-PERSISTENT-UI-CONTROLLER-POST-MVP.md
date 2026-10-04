@@ -9,9 +9,12 @@
   host control, and Mac2 facilities. A unified persistent controller was explicitly deferred until
   after MVP.
   Managed app-loop start/status/logs/stop/restart/reload is an approved lifecycle improvement;
-  it does not add the deferred cross-surface attachment or interaction service. Existing mobile
-  proof drivers cannot share a device lease held by a live loop; any future sharing contract must
-  keep one mutation owner and coordinate cancellation and teardown.
+  it does not add the deferred cross-surface attachment or interaction service. Managed mobile
+  attachment now delegates a revocable non-releasing `preheldTargetLease` view from the
+  reservation holder, binds it to session/loop/target/resource generations and retains one release
+  owner. This landed as `20bbeff06b95`; source proof and limited Android interaction do not complete
+  the host matrix. Confirmed 2026-10-04: the unified persistent controller remains post-MVP, with
+  no additional implementation in the cleanup/documentation follow-up.
 - **Workaround:** Use existing named workflows and drivers, with scoped visibility permission and
   target-specific `--show-*` options for visible checks.
 - **Proposed change:** After MVP, design one persistent session interface for attaching to owned

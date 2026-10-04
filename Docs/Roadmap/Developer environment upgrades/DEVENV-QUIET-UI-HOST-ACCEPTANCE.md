@@ -16,6 +16,19 @@
   preservation passes54 source cases and review. New host recovery was rejected before dispatch
   because the pause did not authorize signalling/deletion; resources remain retained. These are
   source results and an approval boundary, not fresh host acceptance.
+  Current disposition: implementation landed as `20bbeff06b95`, with complete current-main
+  landing verification passed. The Developer then explicitly authorized ownership-proved retained
+  cleanup and documentation landing; fresh target allocation, input and human acceptance remain
+  deferred. This cleanup authorization supersedes the earlier approval rejection, without changing
+  any recorded uncertainty or supplying missing shutdown proof. Release-1 distribution/browser
+  acceptance and physical Vision Pro remain separate pre-MVP obligations; releases 2 and 3 still
+  require genuine simulator and installed native Studio proof respectively.
+  Authorized cleanup retry `18-41-50-255Z-17710` closes the known borrowing sentinel/finite actor,
+  with both listeners and emulator5582 absent, but records unknown descendants and retained/unproved
+  recovery. The AVD/INI/project remain; no console release or private collection is proved.
+  Unrelated serial ownership bytes, protected process timestamps, public session state and simulator
+  inventory are preserved. Stop the affected lane; the execution handoff owns the exact evidence
+  and remaining quarantine. The listener-format repair passes29 source cases and independent review.
   Final readiness repair preserves zombie identities only in enumerated macOS group/descendant
   snapshots; direct identity-query exit semantics and uncertainty refusal stay unchanged. Darwin28,
   genuine orphan-group3 and real exited-owner lock96 pass; independent review is clear. The quiet

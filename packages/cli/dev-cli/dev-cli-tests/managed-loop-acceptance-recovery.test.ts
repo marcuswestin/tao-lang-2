@@ -129,11 +129,11 @@ async function fixture() {
     processIsAlive: pid => pid === process.pid && alive,
     runSync: (command, spec) => {
       Expect(command).toBe('lsof')
-      Expect(spec?.args).toEqual(['-nP', '-iTCP:5582-5583', '-sTCP:LISTEN', '-Fp'])
+      Expect(spec?.args).toEqual(['-nP', '-iTCP:5582-5583', '-sTCP:LISTEN', '-t', '+w'])
       return {
         command,
         args: [...spec?.args ?? []],
-        stdout: alive ? `p${process.pid}\n` : '',
+        stdout: alive ? `${process.pid}\n` : '',
         stderr: '',
         exitCode: alive ? 0 : 1,
         signal: null,
@@ -329,7 +329,7 @@ for (
           exitCode: 0,
           signal: null,
           stderr: '',
-          stdout: 'p536870913\n',
+          stdout: '536870913\n',
         })
       } else if (problem === 'missing-ancestry') {
         f.setAlive(false)
@@ -340,7 +340,57 @@ for (
           repositoryRoot: '/foreign',
         })
       }
-      Expect((await f.run()).disposition).toBe('retained')
+      const result = await f.run()
+      Expect(result.disposition).toBe('retained')
+      if (problem === 'unknown-listener') {
+        Expect(result.detail).toContain('A borrowing listener lacks original captured kernel ownership.')
+      }
+      await f.noDestruction()
+    } finally {
+      await FS.remove(f.checkout)
+    }
+  })
+}
+
+for (const exitCode of [0, 1]) {
+  Test(`recorded borrowing recovery rejects listener inspection warnings with exit ${exitCode}`, async () => {
+    const f = await fixture()
+    try {
+      f.operations.runSync = () => ({
+        command: 'lsof',
+        args: [],
+        exitCode,
+        signal: null,
+        stderr: 'lsof: process information unavailable\n',
+        stdout: exitCode === 0 ? `${f.process.pid}\n` : '',
+      })
+      const result = await f.run()
+      Expect(result.disposition).toBe('retained')
+      Expect(result.phase).toBe('unproved')
+      Expect(result.detail).toContain('Both borrowing listeners cannot be read completely; recovery remains retained.')
+      await f.noDestruction()
+    } finally {
+      await FS.remove(f.checkout)
+    }
+  })
+}
+
+for (const output of ['', 'p536870912\nf56\n', '536870912\nunknown\n', '0\n', '9007199254740992\n']) {
+  Test(`recorded borrowing recovery rejects malformed PID-only listener output ${JSON.stringify(output)}`, async () => {
+    const f = await fixture()
+    try {
+      f.operations.runSync = () => ({
+        command: 'lsof',
+        args: [],
+        exitCode: 0,
+        signal: null,
+        stderr: '',
+        stdout: output,
+      })
+      const result = await f.run()
+      Expect(result.disposition).toBe('retained')
+      Expect(result.phase).toBe('unproved')
+      Expect(result.detail).toContain('Borrowing listener inspection returned malformed ownership evidence.')
       await f.noDestruction()
     } finally {
       await FS.remove(f.checkout)
