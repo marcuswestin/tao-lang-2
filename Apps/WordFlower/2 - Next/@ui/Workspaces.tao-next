@@ -274,8 +274,8 @@ let WordFlowerTagline = "A quiet place for words that matter."
 // as invocations: `Field: value` labels a field, and an unlabeled typed value binds by type.
 let StarterTags = PromptTags ["daily", "warmup"]
 let StarterPrompt = WritingPrompt {
-   PromptTitle: "Morning pages"
-   PromptMinutes: 10
+   PromptTitle: "Morning pages",
+   PromptMinutes: 10,
    StarterTags // unlabeled: binds the PromptTags field by type
    // PromptSubtitle is optional and omitted here
 }
