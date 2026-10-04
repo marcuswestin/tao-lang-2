@@ -12,6 +12,22 @@ export type EffectInvocation =
   | AST.LoopSelectHandler
   | AST.CommandDoClause
 
+/** Known modeled failures and whether the complete propagated set remains unknown. */
+export type FailureContract = Readonly<{ cases: readonly string[]; open: boolean }>
+
+/** Union retains every known case in source order and never loses an open remainder. */
+export function unionFailureContracts(contracts: readonly FailureContract[]): FailureContract {
+  return {
+    cases: uniqueCases(contracts.flatMap(contract => contract.cases)),
+    open: contracts.some(contract => contract.open),
+  }
+}
+
+/** An unknown actual contract cannot satisfy a closed failure bound. */
+export function failureContractSatisfiesBound(actual: FailureContract, bound: FailureContract): boolean {
+  return bound.open || (!actual.open && actual.cases.every(failureCase => bound.cases.includes(failureCase)))
+}
+
 /** The three outcomes every `when do` may name, beside the cases its verb declares. */
 export const effectOutcomeWords = ['saved', 'rejected', 'error'] as const
 
@@ -25,50 +41,67 @@ type EffectBody =
   | AST.AsyncActionStatement
 
 /**
- * effectFailureCases is an effect's effective failure contract, as case names in declaration order:
+ * effectFailureContract is an effect's effective failure contract in declaration order:
  * the cases its own `fail` or `fails` declare, plus the cases of every verb it reaches through a
- * plain `do`, minus the cases a `when do` inside it handles. A cycle contributes nothing new.
+ * plain `do`, minus the cases a `when do` inside it handles. A traversal cycle cannot prove closure.
  */
-export function effectFailureCases(
+export function effectFailureContract(
   effect: EffectDeclaration,
   seen: ReadonlySet<EffectDeclaration> = new Set(),
-): string[] {
+): FailureContract {
   if (seen.has(effect)) {
-    return []
+    return { cases: [], open: true }
   }
   const path = new Set(seen).add(effect)
   if (AST.isCommandDeclaration(effect)) {
     const clause = AST.commandDoClauseOf(effect)
-    return clause ? invocationFailureCases(clause, path) : []
+    return clause ? invocationFailureContract(clause, path) : { cases: [], open: true }
   }
   if (AST.isActionDeclaration(effect) && effect.foreign) {
-    return uniqueCases(effect.foreign.failures.map(failure => failure.case.$refText))
+    const cases = uniqueCases(effect.foreign.failures.map(failure => failure.case.$refText))
+    return { cases, open: cases.length === 0 }
   }
   const block = effect.block
   if (!block) {
-    return []
+    return { cases: [], open: true }
   }
-  const cases = AST.streamAllContents(block)
+  const contracts = AST.streamAllContents(block)
     .filter(node => effectBodyOf(node) === effect)
     .flatMap(node => {
       if (AST.isFailStatement(node)) {
-        return [node.case.$refText]
+        return [{ cases: [node.case.$refText], open: false }]
       }
       if (AST.isDoStatement(node) && !AST.isWhenDoStatement(node.$container)) {
-        return invocationFailureCases(node, path)
+        return [invocationFailureContract(node, path)]
       }
-      return AST.isWhenDoStatement(node) ? unhandledOutcomeCases(node, path) : []
+      return AST.isWhenDoStatement(node) ? [unhandledOutcomeContract(node, path)] : []
     })
-  return uniqueCases(cases)
+  return unionFailureContracts(contracts)
 }
 
-/** invocationFailureCases is the effective contract of the verb one site runs; a dynamic verb has none. */
+/** A dynamic or unresolved verb has an open contract, rather than no failures. */
+export function invocationFailureContract(
+  invocation: EffectInvocation,
+  seen: ReadonlySet<EffectDeclaration> = new Set(),
+): FailureContract {
+  const effect = invokedEffect(invocation)
+  return effect ? effectFailureContract(effect, seen) : { cases: [], open: true }
+}
+
+/** Compatibility projection for consumers that only name known cases, never prove completeness. */
+export function effectFailureCases(
+  effect: EffectDeclaration,
+  seen: ReadonlySet<EffectDeclaration> = new Set(),
+): string[] {
+  return [...effectFailureContract(effect, seen).cases]
+}
+
+/** Compatibility projection; an empty list does not establish failure freedom. */
 export function invocationFailureCases(
   invocation: EffectInvocation,
   seen: ReadonlySet<EffectDeclaration> = new Set(),
 ): string[] {
-  const effect = invokedEffect(invocation)
-  return effect ? effectFailureCases(effect, seen) : []
+  return [...invocationFailureContract(invocation, seen).cases]
 }
 
 /** invokedEffect is the declared verb one site runs, when it is statically known. */
@@ -82,18 +115,30 @@ export function invokedEffect(invocation: EffectInvocation): EffectDeclaration |
 }
 
 /**
- * unhandledOutcomeCases is what a `when do` lets through: its verb's cases, less the ones it names,
- * and nothing at all once it names `rejected`.
+ * A known-case handler only subtracts that case. Open contracts need both failure categories or
+ * `otherwise` to close their remainder: `rejected` handles modeled cases, `error` undeclared faults.
  */
+export function unhandledOutcomeContract(
+  statement: AST.WhenDoStatement,
+  seen: ReadonlySet<EffectDeclaration> = new Set(),
+): FailureContract {
+  const named = new Set(statement.outcomes.map(outcome => outcome.case))
+  if (statement.otherwise) {
+    return { cases: [], open: false }
+  }
+  const contract = invocationFailureContract(statement, seen)
+  return {
+    cases: named.has('rejected') ? [] : contract.cases.filter(failureCase => !named.has(failureCase)),
+    open: contract.open && !(named.has('rejected') && named.has('error')),
+  }
+}
+
+/** Compatibility projection for the existing declared-case root warning policy. */
 export function unhandledOutcomeCases(
   statement: AST.WhenDoStatement,
   seen: ReadonlySet<EffectDeclaration> = new Set(),
 ): string[] {
-  const named = new Set(statement.outcomes.map(outcome => outcome.case))
-  if (named.has('rejected') || statement.otherwise) {
-    return []
-  }
-  return invocationFailureCases(statement, seen).filter(failureCase => !named.has(failureCase))
+  return [...unhandledOutcomeContract(statement, seen).cases]
 }
 
 /**

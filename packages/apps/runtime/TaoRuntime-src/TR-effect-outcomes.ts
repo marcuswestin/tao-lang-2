@@ -10,11 +10,11 @@ type TaoEffectOutcome = readonly [string, (message: string) => unknown]
 /** TaoEffectContract is what the compiler knows about the verb a `when do` runs. */
 export type TaoEffectContract = Readonly<{
   /**
-   * declared lists the verb's effective failure cases; any other failure is an `error`. It is `null`
-   * for a dynamic verb, whose contract the compiler cannot know: every declared failure it raises then
-   * counts as `rejected`, and only an undeclared throw is an `error`.
+   * declared lists the verb's known effective failure cases. Legacy `null` contracts are open.
    */
   declared: readonly string[] | null
+  /** An open contract also accepts other deliberate action failures, but never arbitrary throws. */
+  open?: boolean
   /** name is the verb a fallback message names. */
   name: string
   /** Authentication completes a flow; it does not acknowledge a saved data write. */
@@ -60,8 +60,8 @@ export function runEffectOutcome(
 }
 
 /**
- * failureOutcome picks the named case, then `rejected` for any declared case, then `error`. With an
- * unknown contract any deliberate action failure counts as declared, since the site cannot tell.
+ * failureOutcome picks the named case, then `rejected` for a declared case, then `error`. An open
+ * remainder accepts other deliberate action failures without treating arbitrary throws as modeled.
  */
 function failureOutcome(
   failure: TaoActionFailure,
@@ -69,7 +69,9 @@ function failureOutcome(
   contract: TaoEffectContract,
   outcomes: readonly TaoEffectOutcome[],
 ): TaoEffectOutcome[1] | undefined {
-  const declared = contract.declared === null ? deliberate : contract.declared.includes(failure.caseName)
+  const declared = deliberate && (
+    contract.declared?.includes(failure.caseName) === true || contract.open === true || contract.declared === null
+  )
   if (!declared) {
     return outcomeNamed('error', outcomes)
   }
