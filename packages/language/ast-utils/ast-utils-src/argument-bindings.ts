@@ -54,6 +54,7 @@ export function resolveArgumentBindings(
     candidateType: argument => Type.ofArgument(argument),
     targetType: parameter => Type.ofParameter(parameter),
     namedTypeAccepts: (actual, expected) => Type.isAssignable(actual, expected),
+    duplicateTargetTypesOnlyWithCandidates: true,
     afterNamedBinding: ({ remainingTargets }) => {
       // Optional parameters are explicit-only for type-based view/action binding. This keeps a
       // defaulted text/number/etc. parameter from competing with an unnamed required parameter.

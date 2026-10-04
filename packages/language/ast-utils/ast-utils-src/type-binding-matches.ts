@@ -9,8 +9,8 @@ import { type TaoType, Type } from './Type'
  * The passes, in order:
  * 1. Named binding: every labelled candidate binds to the target of that name, or reports why not.
  * 2. The domain's own adjustment (`afterNamedBinding`): drop targets that must be named, bind by identity.
- * 3. Duplicate-type reports: targets that share a type cannot be told apart, nor can candidates.
- * 4. Typed binding: exact type identity first, then assignability, each until no unambiguous pair remains.
+ * 3. Typed binding: exact type identity first, then assignability, each until no unambiguous pair remains.
+ * 4. Duplicate-type reports: remaining targets or candidates that share a type cannot be told apart.
  * 5. What is left is reported as ambiguous, unmatched, or missing.
  */
 export type BindingDiagnostic<Candidate, Target> =
@@ -43,6 +43,8 @@ export type BindingRules<Candidate, Target> = {
   targetType(target: Target): TaoType
   /** Whether a named candidate's value may take its target: assignability for arguments, cast compatibility for values. */
   namedTypeAccepts(actual: TaoType, expected: TaoType): boolean
+  /** Domain admission for unnamed compatible values; defaults to ordinary upward assignability. */
+  compatibleTypeAccepts?(actual: TaoType, expected: TaoType): boolean
   afterNamedBinding?(state: BindingState<Candidate, Target>): void
   /** Report targets that share a type only while unlabelled candidates remain to be told apart by type. */
   duplicateTargetTypesOnlyWithCandidates?: boolean
@@ -74,22 +76,19 @@ export function resolveBindings<Candidate, Target>(
   bindNamed(rules, { bind, remainingCandidates, remainingTargets }, pairs, diagnostics)
   rules.afterNamedBinding?.({ bind, remainingCandidates, remainingTargets })
 
-  if (rules.duplicateTargetTypesOnlyWithCandidates !== true || remainingCandidates.size > 0) {
-    reportDuplicateTargetTypes(rules, [...remainingTargets], diagnostics)
-  }
-  const duplicateCandidateTypes = reportDuplicateCandidateTypes(rules, [...remainingCandidates], diagnostics)
-  const blocked = (candidate: Candidate): boolean => {
-    const key = Type.identityKey(rules.candidateType(candidate))
-    return !!key && duplicateCandidateTypes.has(key)
-  }
+  const blocked = (candidate: Candidate): boolean => rules.candidateType(candidate).kind === 'unresolved'
   const assignable = (candidate: Candidate, target: Target): boolean =>
-    Type.isAssignable(rules.candidateType(candidate), rules.targetType(target))
+    (rules.compatibleTypeAccepts ?? Type.isAssignable)(rules.candidateType(candidate), rules.targetType(target))
   bindUnambiguousPairs(remainingCandidates, remainingTargets, blocked, (candidate, target) => {
     const actualKey = Type.identityKey(rules.candidateType(candidate))
     return !!actualKey && actualKey === Type.identityKey(rules.targetType(target))
   }, bind)
   bindUnambiguousPairs(remainingCandidates, remainingTargets, blocked, assignable, bind)
 
+  if (rules.duplicateTargetTypesOnlyWithCandidates !== true || remainingCandidates.size > 0) {
+    reportDuplicateTargetTypes(rules, [...remainingTargets], diagnostics)
+  }
+  const duplicateCandidateTypes = reportDuplicateCandidateTypes(rules, [...remainingCandidates], diagnostics)
   reportRemaining(rules, remainingCandidates, remainingTargets, duplicateCandidateTypes, assignable, diagnostics)
 
   const order = rules.targetOrder ?? rules.targets
@@ -181,7 +180,7 @@ type MatchGraph<Candidate, Target> = {
   candidatesByTarget: Map<Target, Candidate[]>
 }
 
-/** bindUnambiguousPairs binds every candidate that matches exactly one target that matches only it, until none is left. */
+/** Bind only edges shared by every maximum matching; source order never breaks a tie. */
 function bindUnambiguousPairs<Candidate, Target>(
   candidates: Set<Candidate>,
   targets: Set<Target>,
@@ -193,18 +192,40 @@ function bindUnambiguousPairs<Candidate, Target>(
   while (madeProgress) {
     madeProgress = false
     const graph = matchGraph(candidates, targets, isCandidateBlocked, matches)
-    for (const [candidate, matchedTargets] of graph.targetsByCandidate) {
-      if (matchedTargets.length !== 1) {
-        continue
+    const matching = maximumMatching(graph.targetsByCandidate)
+    for (const [candidate, target] of matching) {
+      // Removing a required edge lowers cardinality. Every other edge has an equally valid
+      // alternative, even when a greedy traversal happened to choose it first.
+      if (maximumMatching(graph.targetsByCandidate, [candidate, target]).size < matching.size) {
+        bind(candidate, target)
+        madeProgress = true
       }
-      const target = matchedTargets[0]!
-      if (graph.candidatesByTarget.get(target)?.length !== 1) {
-        continue
-      }
-      bind(candidate, target)
-      madeProgress = true
     }
   }
+}
+
+function maximumMatching<Candidate, Target>(
+  graph: ReadonlyMap<Candidate, readonly Target[]>,
+  excluded?: readonly [Candidate, Target],
+): Map<Candidate, Target> {
+  const candidateByTarget = new Map<Target, Candidate>()
+  const augment = (candidate: Candidate, visited: Set<Target>): boolean => {
+    for (const target of graph.get(candidate) ?? []) {
+      if (visited.has(target) || (excluded?.[0] === candidate && excluded[1] === target)) {
+        continue
+      }
+      visited.add(target)
+      if (!candidateByTarget.has(target) || augment(candidateByTarget.get(target)!, visited)) {
+        candidateByTarget.set(target, candidate)
+        return true
+      }
+    }
+    return false
+  }
+  for (const candidate of graph.keys()) {
+    augment(candidate, new Set())
+  }
+  return new Map([...candidateByTarget].map(([target, candidate]) => [candidate, target]))
 }
 
 function matchGraph<Candidate, Target>(
