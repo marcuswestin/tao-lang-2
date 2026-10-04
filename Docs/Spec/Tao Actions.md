@@ -277,8 +277,10 @@ cleanup failures are diagnostic metadata. A cleanup-only failure prevents succes
 Generated continuations must capture the active frame and restore it after suspension. Scoped
 foreign thenables are adopted once for both joining and the caller's observation.
 
-This runtime API is opt-in. The selected Tao `defer` syntax and automatic compiler frame lowering
-remain future work; existing action blocks do not acquire cleanup merely by using the runtime.
+The public `TR.ActionScope(body)` and `TR.Defer(cleanup)` runtime APIs are opt-in. A scope preserves
+synchronous completion when its body, joined work and cleanup are synchronous. The selected Tao
+`defer` syntax and automatic compiler frame lowering remain future work; existing action blocks do
+not acquire cleanup merely by using the runtime.
 
 ## Effect outcomes
 

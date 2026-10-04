@@ -8,9 +8,11 @@ import {
   deferDetached,
   existingTransactionResource,
   markExternalEffect,
+  registerDeferredAction,
   resumeActionContinuation,
   runAction,
   runActionResult,
+  runActionScope,
   skippedActionRun,
   type TaoActionContinuation,
   type TaoActionReceipt,
@@ -536,6 +538,16 @@ class TR {
   /** ResumeActionContinuation restores one generated segment's transaction before it runs. */
   static ResumeActionContinuation(continuation: TaoActionContinuation): void {
     resumeActionContinuation(continuation)
+  }
+
+  /** ActionScope joins one lexical action block before draining its cleanup. */
+  static ActionScope<T>(body: () => T | PromiseLike<T>): T | Promise<T> {
+    return runActionScope(body)
+  }
+
+  /** Defer registers cleanup with the current lexical action block. */
+  static Defer(body: () => unknown | PromiseLike<unknown>): void {
+    registerDeferredAction(body)
   }
 
   /** ForeignAction adapts a named TypeScript effect and its declared Tao failure contract. */

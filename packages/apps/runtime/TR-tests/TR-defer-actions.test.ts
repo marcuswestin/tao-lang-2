@@ -60,7 +60,7 @@ Describe('Tao lexical action cleanup', () => {
       await root(() => {
         const body = async () => {
           if (scoped) {
-            registerDeferredAction(() => seen.push('cleanup'))
+            TR.Defer(() => seen.push('cleanup'))
           }
           const result = await TR.WhenDo(() => undefined, { name: 'LazyWork', declared: [] }, [
             ['saved', () => ({
@@ -74,7 +74,7 @@ Describe('Tao lexical action cleanup', () => {
           Expect(result).toBe('settled value')
           seen.push('after-work')
         }
-        return scoped ? runActionScope(body) : body()
+        return scoped ? TR.ActionScope(body) : body()
       })
       Expect(calls).toBe(1)
       Expect(seen).toEqual(scoped ? ['work 1', 'after-work', 'cleanup'] : ['work 1', 'after-work'])
@@ -85,8 +85,8 @@ Describe('Tao lexical action cleanup', () => {
     const value = { saved: true }
     const seen: string[] = []
     await root(() => {
-      const result = runActionScope(() => {
-        registerDeferredAction(() => seen.push('cleanup'))
+      const result = TR.ActionScope(() => {
+        TR.Defer(() => seen.push('cleanup'))
         const handled = TR.WhenDo(() => undefined, { name: 'SyncWork', declared: [] }, [
           ['saved', () => value],
         ])
