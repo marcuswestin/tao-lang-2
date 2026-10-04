@@ -9,6 +9,7 @@ import {
   prepareForLanding,
   recordMergeMessage,
   StartBranchCommand,
+  TakeBranchCommand,
 } from '../verification-src/Finalize'
 import {
   GeneratedEvidence,
@@ -64,6 +65,11 @@ type FakeRepository = {
   localMainSha?: string
   mainSha: string
   remoteReachable: boolean
+  /** Feature branches the remote has, for take-branch's fetch. */
+  remoteBranches?: Record<string, string>
+  /** Stderr of a fetch the sandbox refuses before it reaches the remote. */
+  refusedFetchStderr?: string
+  setupExitCode?: number
   status: string
   verifyExitCode?: number
 }
@@ -106,8 +112,21 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
     if (args[0] === 'show-ref' && args[1] === '--verify') {
       return result(args, spec.cwd, '', repository.branchExists === true ? 0 : 1)
     }
+    if (args[0] === 'fetch' && repository.refusedFetchStderr !== undefined) {
+      return result(args, spec.cwd, '', 128, repository.refusedFetchStderr)
+    }
     if (joined === `fetch --quiet origin main`) {
       return result(args, spec.cwd, '', repository.remoteReachable ? 0 : 1)
+    }
+    const remoteBranch = /^fetch --quiet origin \+refs\/heads\/(.+):refs\/remotes\/origin\/\1$/.exec(joined)?.[1]
+    if (remoteBranch !== undefined) {
+      return repository.remoteBranches?.[remoteBranch] === undefined
+        ? result(args, spec.cwd, '', 128, `fatal: couldn't find remote ref refs/heads/${remoteBranch}`)
+        : result(args, spec.cwd)
+    }
+    const trackedBranch = /^rev-parse origin\/(feat\/.+)$/.exec(joined)?.[1]
+    if (trackedBranch !== undefined && repository.remoteBranches?.[trackedBranch] !== undefined) {
+      return result(args, spec.cwd, `${repository.remoteBranches[trackedBranch]}\n`)
     }
     if (joined === 'rev-parse origin/main') {
       return result(args, spec.cwd, `${repository.mainSha}\n`)
@@ -143,6 +162,13 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
     if (args[0] === 'switch' && args[1] === '--no-track') {
       headAfterMerge = repository.mainSha
       return result(args, spec.cwd)
+    }
+    if (args[0] === 'switch' && args[1] === '--track') {
+      headAfterMerge = repository.remoteBranches?.[args[3]!] ?? headAfterMerge
+      return result(args, spec.cwd)
+    }
+    if (command === './agent' && joined === 'setup') {
+      return result(args, spec.cwd, '', repository.setupExitCode ?? 0)
     }
     if (joined === 'diff --name-only --diff-filter=U') {
       return result(args, spec.cwd, repository.conflictOnMerge === true ? 'conflicted.ts\n' : '')
@@ -1509,6 +1535,31 @@ Describe('start-branch', () => {
         === 'switch --no-track -c feat/next mainsha00000000000000000000000000000000000'
     )).toBe(true)
     Expect(fake.lines.some(line => line.includes("Started 'feat/next' from origin/main"))).toBe(true)
+    const switched = fake.calls.findIndex(call => call.args[0] === 'switch')
+    const setUp = fake.calls.findIndex(call => call.command === './agent' && call.args.join(' ') === 'setup')
+    Expect(setUp).toBeGreaterThan(switched)
+  })
+
+  Test('names its host operation when the sandbox refuses the fetch', async () => {
+    const fake = fakeDependencies({
+      branch: '',
+      refusedFetchStderr: 'fatal: could not read Username for https://github.com: Operation not permitted',
+    })
+
+    const failure = await StartBranchCommand.run('feat/next', { repositoryRoot: '/repo' }, fake.dependencies)
+      .catch(error => error)
+
+    Expect(Errors.formatForUser(failure)).toContain('./agent unsandboxed start-branch feat/next')
+    Expect(fake.calls.some(call => call.args[0] === 'switch')).toBe(false)
+  })
+
+  Test('reports a failed setup after the switch without hiding that it switched', async () => {
+    const fake = fakeDependencies({ branch: '', setupExitCode: 1 })
+
+    const failure = await StartBranchCommand.run('feat/next', { repositoryRoot: '/repo' }, fake.dependencies)
+      .catch(error => error)
+
+    Expect(Errors.formatForUser(failure)).toContain("Switched to 'feat/next', but ./agent setup failed")
   })
 
   Test('probes a pathname containing a newline as one protected file', async () => {
@@ -1539,6 +1590,72 @@ Describe('start-branch', () => {
       await Expect(StartBranchCommand.run(name, { repositoryRoot: '/repo' }, fake.dependencies)).rejects.toThrow()
       Expect(fake.calls.some(call => call.args[0] === 'fetch')).toBe(false)
       Expect(fake.calls.some(call => call.args[0] === 'switch')).toBe(false)
+    }
+  })
+})
+
+Describe('take-branch', () => {
+  const pushedSha = 'pushedsha000000000000000000000000000000000'
+
+  Test('fetches a pushed branch, switches to it with tracking, then runs setup', async () => {
+    const fake = fakeDependencies({
+      branch: '',
+      diffPaths: ['Docs/Roadmap/plan.md'],
+      existingDirectories: ['Docs/Roadmap'],
+      remoteBranches: { 'feat/pushed': pushedSha },
+    })
+
+    await TakeBranchCommand.run('feat/pushed', { repositoryRoot: '/repo' }, fake.dependencies)
+
+    const joined = fake.calls.map(call => `${call.command} ${call.args.join(' ')}`)
+    const fetched = joined.indexOf('git fetch --quiet origin +refs/heads/feat/pushed:refs/remotes/origin/feat/pushed')
+    const switched = joined.indexOf('git switch --track -c feat/pushed origin/feat/pushed')
+    const setUp = joined.indexOf('./agent setup')
+    Expect(fetched).toBeGreaterThanOrEqual(0)
+    Expect(switched).toBeGreaterThan(fetched)
+    Expect(setUp).toBeGreaterThan(switched)
+    Expect(fake.lines.some(line => line.includes("Took over 'feat/pushed'"))).toBe(true)
+  })
+
+  Test('refuses a protected checkout path before switching, naming its host command', async () => {
+    const fake = fakeDependencies({
+      branch: '',
+      diffPaths: ['.claude/settings.json'],
+      existingDirectories: ['.claude'],
+      remoteBranches: { 'feat/pushed': pushedSha },
+      unwritableFiles: ['.claude/settings.json'],
+    })
+
+    const failure = await TakeBranchCommand.run('feat/pushed', { repositoryRoot: '/repo' }, fake.dependencies)
+      .catch(error => error)
+
+    Expect(Errors.formatForUser(failure)).toContain('./agent unsandboxed take-branch feat/pushed')
+    Expect(fake.calls.some(call => call.args[0] === 'switch')).toBe(false)
+    Expect(fake.calls.some(call => call.command === './agent')).toBe(false)
+  })
+
+  Test('points a branch the remote lacks at start-branch, and a refused fetch at the host', async () => {
+    const missing = fakeDependencies({ branch: '' })
+    const absent = await TakeBranchCommand.run('feat/unpushed', { repositoryRoot: '/repo' }, missing.dependencies)
+      .catch(error => error)
+    Expect(Errors.formatForUser(absent)).toContain('./agent start-branch feat/unpushed')
+
+    const refused = fakeDependencies({ branch: '', refusedFetchStderr: 'fatal: Operation not permitted' })
+    const denied = await TakeBranchCommand.run('feat/pushed', { repositoryRoot: '/repo' }, refused.dependencies)
+      .catch(error => error)
+    Expect(Errors.formatForUser(denied)).toContain('./agent unsandboxed take-branch feat/pushed')
+
+    for (const fake of [missing, refused]) {
+      Expect(fake.calls.some(call => call.args[0] === 'switch')).toBe(false)
+    }
+  })
+
+  Test('requires a clean worktree and no local branch of that name before fetching', async () => {
+    for (const overrides of [{ status: ' M tracked.ts\n' }, { branchExists: true }]) {
+      const fake = fakeDependencies({ ...overrides, remoteBranches: { 'feat/pushed': pushedSha } })
+      await Expect(TakeBranchCommand.run('feat/pushed', { repositoryRoot: '/repo' }, fake.dependencies))
+        .rejects.toThrow()
+      Expect(fake.calls.some(call => call.args[0] === 'fetch')).toBe(false)
     }
   })
 })

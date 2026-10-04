@@ -127,7 +127,7 @@
     "pods install", "pods spec",
     "android devices", "android state", "android emulators", "android boot", "android ensure", "android recover",
     "remote fetch", "remote refs", "remote heads", "remote exists",
-    "processes list", "processes started", "start-branch",
+    "processes list", "processes started", "start-branch", "take-branch",
     "storage sync", "storage qa", "storage push",
   ],
   "claudecode": {
