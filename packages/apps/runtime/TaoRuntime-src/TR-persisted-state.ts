@@ -4,8 +4,10 @@ import { RuntimeAssert } from './TR-assert'
 import type { TaoKeyValueStorage } from './TR-data'
 import { memoryKeyValueStorage, platformKeyValueStorage } from './TR-data-provider'
 import { warnContainedFailure } from './TR-errors'
+import { getJSValue, type TaoJSValue } from './TR-js-value'
 import { runtimeRevisionStore } from './TR-listeners'
 import type { TaoDeclarationIdentity } from './TR-navigation-identity'
+import type { TaoRuntimeValue } from './TR-reactive-values'
 import { registerRuntimeCaptureDomain, type TaoRuntimeJson } from './TR-runtime-capture'
 import RuntimeSwitch from './TR-switch'
 import { runtimeTestOverrideSlot } from './TR-test-override'
@@ -36,8 +38,9 @@ type PersistedEnvelope = Readonly<{
 }>
 
 export type TaoWritableState<T> = Readonly<{
-  defaultValue(): EvaluableValue<T>
-  evaluate(): EvaluableValue<T>
+  defaultValue(): TaoRuntimeValue<T>
+  evaluate(): TaoRuntimeValue<T>
+  getJSValue(): TaoJSValue<T>
   reset(): void
   set(value: EvaluableValue<T>): void
 }>
@@ -131,12 +134,16 @@ export class RuntimePersistedState<T> implements TaoWritableState<T> {
     constructed.add(this)
   }
 
-  defaultValue(): EvaluableValue<T> {
+  defaultValue(): TaoRuntimeValue<T> {
     return value(this.#default)
   }
 
-  evaluate(): EvaluableValue<T> {
+  evaluate(): TaoRuntimeValue<T> {
     return value(existingTransactionResource<{ value: T }>(this)?.value ?? this.#value)
+  }
+
+  getJSValue(): TaoJSValue<T> {
+    return getJSValue(this)
   }
 
   reset(): void {
@@ -496,9 +503,20 @@ function storage(): TaoKeyValueStorage {
   return storageOverride ?? platformKeyValueStorage()
 }
 
-function value<T>(jsValue: T): EvaluableValue<T> {
-  const result: EvaluableValue<T> = { evaluate: () => result, jsValue }
-  return result
+class PersistedValue<T> implements TaoRuntimeValue<T> {
+  constructor(readonly jsValue: T) {}
+
+  evaluate(): TaoRuntimeValue<T> {
+    return this
+  }
+
+  getJSValue(): TaoJSValue<T> {
+    return getJSValue(this)
+  }
+}
+
+function value<T>(jsValue: T): TaoRuntimeValue<T> {
+  return new PersistedValue(jsValue)
 }
 
 registerRuntimeCaptureDomain({

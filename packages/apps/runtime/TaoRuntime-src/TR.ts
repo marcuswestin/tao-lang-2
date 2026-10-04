@@ -112,6 +112,7 @@ import {
   useOutlineCollection,
   useOutlineItem,
 } from './TR-interaction-outline'
+import { getJSValue, type TaoJSValue } from './TR-js-value'
 import { LayoutControls } from './TR-layout'
 import { openUrl } from './TR-linking'
 import { NativeHosts } from './TR-native-hosts'
@@ -161,6 +162,7 @@ import { selectPluralForm, type TaoPluralCategory, type TaoPluralForms } from '.
 import { requireReactNativeRuntime } from './TR-react-native'
 import { isReactiveValue, markReactiveValue } from './TR-reactive'
 import {
+  completeRuntimeValue,
   copyValue,
   createWritableCell,
   isWritable,
@@ -168,7 +170,9 @@ import {
   nativeMutationLease,
   reactiveValue,
   type TaoRuntimeValue,
+  type TaoRuntimeValueInput,
   type TaoWritable,
+  type TaoWritableInput,
   useNativeMutationLease,
   useParameterCell,
   writablePath,
@@ -279,7 +283,7 @@ class TR {
    * to offer.
    */
   static Plural(count: TR.Evaluable, forms: TR.PluralForms, locale?: string): TR.Value<string> {
-    return selectPluralForm(count.evaluate().jsValue, forms, locale).evaluate()
+    return completeRuntimeValue<string>(selectPluralForm(count.evaluate().jsValue, forms, locale).evaluate())
   }
 
   /** Enum creates declaration-owned case identities and registers their stable persistence names. */
@@ -344,7 +348,7 @@ class TR {
     otherwise: () => TR.Evaluable,
   ): TR.Value<T> {
     const matched = firstMatchedBranch(subject.evaluate().jsValue, branches)
-    return (matched ? matched.result.evaluate() : otherwise().evaluate()) as TR.Value<T>
+    return completeRuntimeValue<T>(matched ? matched.result.evaluate() : otherwise().evaluate())
   }
 
   /** WhenCaseRender evaluates one subject once and renders one matching case. */
@@ -465,7 +469,7 @@ class TR {
   }
 
   /** Function creates a Tao pure-function value. */
-  static Function(body: (...args: any[]) => TR.Value<any>): TR.Function {
+  static Function(body: (...args: any[]) => TR.Evaluable | TR.Function): TR.Function {
     return new RuntimeFunction(body)
   }
 
@@ -622,9 +626,9 @@ class TR {
 
   /** CompoundSet returns the value produced by a validated compound state update. */
   static CompoundSet<T extends number | string>(
-    state: Pick<TR.Writable<T>, 'evaluate'>,
+    state: Pick<TaoWritableInput<T>, 'evaluate'>,
     operator: TR.CompoundSetOperator,
-    value: TR.Value<T>,
+    value: TaoRuntimeValueInput<T>,
   ): TR.Value<T> {
     return new RuntimeValue(
       runtimeSwitchHandler(operator, compoundSetOperations)(
@@ -670,13 +674,13 @@ class TR {
   }
 
   /** Set updates a Tao state value. */
-  static Set<T>(state: Pick<TR.Writable<T>, 'set'>, value: () => TR.Value<T>): void | Promise<void> {
+  static Set<T>(state: Pick<TR.Writable<T>, 'set'>, value: () => TaoRuntimeValueInput<T>): void | Promise<void> {
     return state.set(value())
   }
 
   /** Cell creates detached transaction-aware storage for a copied action input. */
   static Cell<T>(initial: { evaluate(): { jsValue: T } }): TR.Writable<T> {
-    return createWritableCell(initial.evaluate() as TR.Value<T>)
+    return createWritableCell(reactiveValue(initial.evaluate().jsValue))
   }
 
   /** Copy detaches ordinary structure while retaining entity handles and their identity. */
@@ -688,7 +692,7 @@ class TR {
 
   /** Mapped joins a supplied Tao action whenever a writable view parameter changes. */
   static Mapped<T>(
-    read: () => TR.Value<T>,
+    read: () => TaoRuntimeValueInput<T>,
     change: TR.Action<[TR.Value<T>]>,
   ): TR.Writable<T> {
     return mappedWritable(read, change.evaluate().jsValue)
@@ -704,7 +708,7 @@ class TR {
     initial: { evaluate(): { jsValue: T } },
     options: Readonly<{ copy?: boolean }> = {},
   ): TR.Writable<T> {
-    return useParameterCell(initial as TaoRuntimeValue<T>, options)
+    return useParameterCell(initial, options)
   }
 
   /** NativeMutationLease makes a callback capability that rejects after its native receiver unmounts. */
@@ -718,7 +722,7 @@ class TR {
   }
 
   /** Toggle inverts a boolean state. Validation limits this to boolean states. */
-  static Toggle(state: Pick<TR.Writable<boolean>, 'evaluate' | 'set'>): void | Promise<void> {
+  static Toggle(state: TaoWritableInput<boolean>): void | Promise<void> {
     return state.set(new RuntimeValue(!state.evaluate().jsValue))
   }
 
@@ -732,10 +736,10 @@ class TR {
    * ticker or device reading — is held like any other value, and the holder re-renders while it is
    * mounted, which is what gives the value the holder's lifetime.
    */
-  static State<T>(initialValue: () => TR.Value<T>): TR.State<T> {
+  static State<T>(initialValue: () => TaoRuntimeValueInput<T>): TR.State<T> {
     const lensScope = useStudioLensScope()
     const initial = React.useRef<TR.Value<T> | undefined>(undefined)
-    initial.current ??= initialValue().evaluate()
+    initial.current ??= reactiveValue(initialValue().evaluate().jsValue)
     const [jsValue, setJsValue] = React.useState<T>(() => initial.current!.jsValue)
     const [, onSelfDrivenChange] = React.useReducer((count: number) => count + 1, 0)
     React.useEffect(
@@ -755,7 +759,7 @@ class TR {
 
   /** PersistedState creates one app-declaration-owned, device-local state store. */
   static PersistedState<T>(
-    initialValue: () => TR.Value<T>,
+    initialValue: () => TaoRuntimeValueInput<T>,
     identity: TR.DeclarationIdentity,
     name: string,
     type: import('./TR-persisted-state').TaoPersistedStateType,
@@ -1073,6 +1077,10 @@ class RuntimeValue<T> {
   evaluate(): RuntimeValue<T> {
     return this
   }
+
+  getJSValue(): TaoJSValue<T> {
+    return getJSValue(this)
+  }
 }
 
 /** Live reads are non-enumerable so React prop inspection cannot evaluate a retired provider. */
@@ -1090,6 +1098,10 @@ class RuntimeReadonlyValue<T> implements TR.Value<T> {
   get jsValue(): T {
     return this.evaluate().jsValue
   }
+
+  getJSValue(): TaoJSValue<T> {
+    return getJSValue(this)
+  }
 }
 
 class RuntimeAlias<Source extends TR.Evaluable> {
@@ -1097,6 +1109,10 @@ class RuntimeAlias<Source extends TR.Evaluable> {
 
   evaluate(): TR.AliasValue<Source> {
     return (typeof this.value === 'function' ? this.value() : this.value).evaluate() as TR.AliasValue<Source>
+  }
+
+  getJSValue(): TaoJSValue<TR.AliasValue<Source>['jsValue']> {
+    return getJSValue(this)
   }
 }
 
@@ -1120,11 +1136,15 @@ class RuntimeState<T> {
     return this.evaluate().jsValue
   }
 
+  getJSValue(): TaoJSValue<T> {
+    return getJSValue(this)
+  }
+
   at(path: readonly string[]): TaoWritable<unknown> {
     return writablePath(this as unknown as TaoWritable<unknown>, path)
   }
 
-  set(value: TR.Value<T>): void {
+  set(value: TaoRuntimeValueInput<T>): void {
     const nextValue = value.evaluate().jsValue
     const overlay = transactionResource(
       this,
@@ -1301,10 +1321,11 @@ class RuntimeAction<Args extends any[] = any[]> {
 }
 
 class RuntimeFunction {
-  constructor(private readonly body: (...args: any[]) => TR.Value<any>) {}
+  constructor(private readonly body: (...args: any[]) => TR.Evaluable | TR.Function) {}
 
-  invoke(...args: TR.Evaluable[]): TR.Value<any> {
-    return this.body(...args)
+  invoke(...args: TR.Evaluable[]): TR.Value<any> | TR.Function {
+    const result = this.body(...args)
+    return result instanceof RuntimeFunction ? result : completeRuntimeValue(result)
   }
 }
 
@@ -1448,7 +1469,7 @@ namespace TR {
   /** State declares a runtime Tao state wrapper. */
   export type State<T> = RuntimeState<T> | TaoWritableState<T>
   /** Writable is a state or parameter lens that may be the target of generated mutation. */
-  export type Writable<T> = Pick<TaoWritable<T>, 'evaluate' | 'set'>
+  export type Writable<T> = Pick<TaoWritable<T>, 'evaluate' | 'getJSValue' | 'set'>
   /** MemberValue is read-only by default and carries mutation methods only for writable roots. */
   export type MemberValue<T> = TR.Value<T> & Partial<TR.Writable<T>>
   /** RequiredField pairs a field a `required` trait names with the sentence the trait states. */

@@ -33,9 +33,9 @@ Describe('reactive writable values', () => {
       return TR.Member(TR.Value(note), ['Title'])
     }))
 
-    Expect(argument.jsValue).toBe('Before')
+    Expect(argument.getJSValue()).toBe('Before')
     TR.Data.Update(TR.Value(note), { Title: TR.Value('After') })
-    Expect(argument.jsValue).toBe('After')
+    Expect(argument.getJSValue()).toBe('After')
     Expect('set' in argument).toBe(false)
     schema.configure(memoryConnection())
 
@@ -44,6 +44,9 @@ Describe('reactive writable values', () => {
     Expect(() => Object.assign({}, argument)).not.toThrow()
     Expect(reads).toBe(2)
     Expect(() => argument.evaluate()).toThrow(
+      "Entity handle 'Note-1' belongs to an inactive provider generation.",
+    )
+    Expect(() => argument.getJSValue()).toThrow(
       "Entity handle 'Note-1' belongs to an inactive provider generation.",
     )
   })
@@ -115,13 +118,14 @@ Describe('reactive writable values', () => {
     const copied = TR.Cell(TR.Value({ Body: 'Copied body', Title: 'Copied title' }))
     const change = TR.Action((next: TR.Value<{ Body: string; Title: string }>) => TR.Set(shared, () => next))
     const sharedParameter = TR.Mapped(() => shared.evaluate(), change)
+    const title = TR.Member(sharedParameter, ['Title']) as TR.Writable<string>
+    let during: unknown[] = []
     const Failure = TR.Enum(identity('WriteRejected'), ['Rejected'])
     const reject = TR.Action(() => {
       TR.Set(TR.Member(sharedParameter, ['Title']) as TR.Writable<string>, () => TR.Value('Changed shared'))
       TR.Set(TR.Member(copied, ['Title']) as TR.Writable<string>, () => TR.Value('Changed copied'))
 
-      Expect(shared.evaluate().jsValue).toEqual({ Body: 'Shared body', Title: 'Changed shared' })
-      Expect(copied.evaluate().jsValue).toEqual({ Body: 'Copied body', Title: 'Changed copied' })
+      during = [shared.getJSValue(), sharedParameter.getJSValue(), title.getJSValue(), copied.getJSValue()]
       TR.Fail(Failure['Rejected']!, 'Do not commit drafts.')
     })
 
@@ -129,8 +133,16 @@ Describe('reactive writable values', () => {
     await reject.evaluate().jsValue.invoke()
     stop()
 
-    Expect(shared.evaluate().jsValue).toEqual({ Body: 'Shared body', Title: 'Shared title' })
-    Expect(copied.evaluate().jsValue).toEqual({ Body: 'Copied body', Title: 'Copied title' })
+    Expect(during).toEqual([
+      { Body: 'Shared body', Title: 'Changed shared' },
+      { Body: 'Shared body', Title: 'Changed shared' },
+      'Changed shared',
+      { Body: 'Copied body', Title: 'Changed copied' },
+    ])
+    Expect(shared.getJSValue()).toEqual({ Body: 'Shared body', Title: 'Shared title' })
+    Expect(sharedParameter.getJSValue()).toEqual({ Body: 'Shared body', Title: 'Shared title' })
+    Expect(title.getJSValue()).toBe('Shared title')
+    Expect(copied.getJSValue()).toEqual({ Body: 'Copied body', Title: 'Copied title' })
   })
 
   Test('routes a live native mutation through its Tao action and rejects it after revocation', async () => {
