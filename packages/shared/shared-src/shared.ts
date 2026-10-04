@@ -20,6 +20,7 @@ import { ProcessListeners } from './ProcessListeners'
 import { ProcessTree } from './ProcessTree'
 import { ProjectDevSession } from './ProjectDevSession'
 import * as ProjectIdentity from './ProjectIdentity'
+import { ReleaseCapabilities } from './ReleaseCapabilities'
 import * as Repo from './Repo'
 import * as SecretsFile from './SecretsFile'
 import { TaoFiles } from './TaoFiles'
@@ -35,6 +36,7 @@ export type {
 } from './core/shared-core'
 
 export type { ProcessListener } from './ProcessListeners'
+export type { ReleaseCapability, ReleasePhase, ReleaseProfile } from './ReleaseCapabilities'
 
 export type { ProcessSignalSeams, ProcessTableEntry, TrackedProcess } from './ProcessTree'
 
@@ -56,6 +58,7 @@ export {
   ProcessTree,
   ProjectDevSession,
   ProjectIdentity,
+  ReleaseCapabilities,
   Repo,
   SecretsFile,
   Switch,
@@ -67,3 +70,5 @@ export {
   Text,
   Time,
 }
+
+export { ReleaseToolchain } from './ReleaseToolchain'

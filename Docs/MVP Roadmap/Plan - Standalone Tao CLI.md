@@ -1,5 +1,10 @@
 # Plan - Standalone Tao CLI
 
+The [staged public release plan](<Plan - Staged public releases.md>) owns public scope as of
+2026-09-26. Release 1 requires signing/notarization and the local/browser app/test journey;
+release 2 adds iOS Simulator, release 5 TestFlight shipping. Android and other distribution
+channels remain beyond release 5. Implementation records below are not release acceptance.
+
 ## Intermediate landing boundary (2026-09-25)
 
 The standalone macOS CLI, installer, pinned toolchain, interactive developer shell, and clean-machine
@@ -808,7 +813,8 @@ public repository. What it settled:
   copy of the releases.
 - `curl` sets no `com.apple.quarantine`, only `com.apple.provenance`, which Gatekeeper does not act
   on, so an unsigned binary fetched by the install script runs without a Gatekeeper prompt. Signing
-  still matters for a binary someone downloads with a browser.
+  is nevertheless mandatory before the first public release under the revised 2026-09-26 decision;
+  the browser-download/quarantine experience requires its own acceptance evidence.
 - `standalone-install.test.ts` covers the install script in the ordinary suite with a stand-in
   binary. `just standalone-cli-acceptance` installs a real release through `curl | sh` into a
   throwaway `$HOME` and runs `create`, `check`, and `compile` from `PATH`. It stays a recipe rather
@@ -987,14 +993,14 @@ this list makes their effect on the implementation sequence explicit.
 6. Do not publish an npm CLI wrapper in the first release. The final app-safe licence structure for
    the repository and any future public packages must be settled before public publication (`R1`).
 7. Host release binaries, checksums, and the version index on GitHub Releases in the public repo.
-   App OTA updates are separate and deferred from the first release (`R11`).
+   Public app OTA claims remain beyond release 5 (`R11` and the staged release plan).
 8. Leave `tao review` out of the first binary. Its dynamic import pulls in the Studio graph today,
    so this choice requires a packaging change rather than only hiding the command (`R12`).
 
 ## Implementation decisions, 2026-09-22
 
 Settled in the dialogue that opened the implementation. These refine the first-release decisions
-above; where the two disagree, these are later and win.
+above, except where the 2026-09-26 staged-release decision explicitly supersedes them.
 
 1. **Slice order** is 2 → 7 → 3 → 4 → 5 → 8 → 9, each its own landing. Release engineering runs
    second so an installable artifact exists early. Slice 6 leaves the first release under `R4`.
@@ -1005,9 +1011,11 @@ above; where the two disagree, these are later and win.
 3. **Toolchain commands**: `tao check-for-updates` is the only public verb. A missing pinned
    version is fetched by the shim, which asks first. There is no public `tao install` — that name
    is already the package installer.
-4. **The first release is `0.4.0`**, semver, tagged `v0.4.0`, published unsigned and labelled as
-   needing later slices for `dev` and `test`. Signing and notarization follow on the Developer's machine once
-   the Developer ID certificate exists.
+4. **Revised 2026-09-26:** the earlier decision to publish `0.4.0` unsigned and without complete
+   `dev`/`test` support is superseded. Release 1 must be signed and notarized and must support its
+   local/browser app and behavior-test journey. `0.4.0` / `v0.4.0` remains the recorded version
+   choice, not evidence that such a candidate is ready or published. See
+   [the staged public releases](<Plan - Staged public releases.md>).
 5. **The install script** is served from the public repository's Releases. It detects whichever
    user-writable bin directory is already on `PATH`, symlinks the shim there, and prints the `PATH`
    line only when there is none. It lists published GitHub releases, ignores drafts, prereleases,

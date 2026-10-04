@@ -50,7 +50,7 @@ scene Main() {
    }
    render Col() {
       guard Notes {
-         error -> Message { Text(Message) }
+         error -> Context { Text(Context.Message) }
       }
 
       #draft

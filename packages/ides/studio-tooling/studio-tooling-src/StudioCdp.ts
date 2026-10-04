@@ -37,6 +37,8 @@ export type StudioCdpTransport = {
 }
 
 export type StudioCdpBrowserEvent = {
+  /** The frame whose own page logged it, so a review can tell which preview cell failed. */
+  frameId?: string
   kind: 'console' | 'exception'
   level: string
   text: string
@@ -981,10 +983,34 @@ export class StudioCdp {
     }
     const args = Array.isArray(params['args']) ? params['args'] : []
     this.collectedBrowserEvents.push(withTimestamp({
+      ...this.eventFrame(params['executionContextId']),
       kind: 'console',
       level: typeof params['type'] === 'string' ? params['type'] : 'log',
       text: args.map(formatRemoteObject).join(' '),
     }, params['timestamp']))
+  }
+
+  private eventFrame(contextId: unknown): { frameId?: string } {
+    for (const [frameId, id] of this.frameWorlds) {
+      if (id === contextId) {
+        return { frameId }
+      }
+    }
+    return {}
+  }
+
+  /** frameIdOf names the frame an `<iframe>` element hosts, matching `StudioCdpBrowserEvent.frameId`. */
+  async frameIdOf(selector: string): Promise<string | undefined> {
+    const { root } = await this.client.send<{ root: { nodeId: number } }>('DOM.getDocument', { depth: 0 })
+    const { nodeId } = await this.client.send<{ nodeId: number }>('DOM.querySelector', {
+      nodeId: root.nodeId,
+      selector,
+    })
+    if (!nodeId) {
+      return undefined
+    }
+    const { node } = await this.client.send<{ node: { frameId?: string } }>('DOM.describeNode', { nodeId })
+    return node.frameId
   }
 
   private trackExecutionContext(params: unknown): void {
@@ -1024,6 +1050,7 @@ export class StudioCdp {
       ? details['text']
       : 'Uncaught browser exception'
     this.collectedBrowserEvents.push(withTimestamp({
+      ...this.eventFrame(details['executionContextId']),
       kind: 'exception',
       level: 'error',
       text,

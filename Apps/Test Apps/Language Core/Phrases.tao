@@ -1,0 +1,27 @@
+use StackNav from @tao/nav
+use Button, Col, Text from @tao/ui
+
+app Phrases {
+   id "phrases"
+   version "0.1.0"
+   name "Phrases"
+   Navigator StackNav {
+      Initial PhrasesView
+}  }
+
+phrase ItemCount(Count number) = one "{ Count } item" / other "{ Count } items"
+
+phrase DocumentGone = "That document is gone."
+
+scene PhrasesView() {
+   Title "Phrases"
+   state Count = 0
+   action AddItem() {
+      set Count += 1
+   }
+   render Col() {
+      Text(ItemCount(Count))
+      Text(DocumentGone)
+      Button("Add item") {
+         on press AddItem
+}  }  }

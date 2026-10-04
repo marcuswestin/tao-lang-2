@@ -1,4 +1,4 @@
-import { FS, Platform, Repo, TaoFiles, TaoStdlib } from '@shared'
+import { FS, Platform, ReleaseCapabilities, Repo, TaoFiles, TaoStdlib } from '@shared'
 import { inPlace } from './in-place-files'
 import { verdictPackageFiles } from './toolchain-packages'
 
@@ -113,6 +113,7 @@ async function fingerprint(request: FingerprintRequest): Promise<string | undefi
       return undefined
     }
     return FS.contentIdentity([
+      `release-profile\n${ReleaseCapabilities.fingerprint()}`,
       `version\n${VERSION}`,
       `runtime-root\n${FS.resolvePath(request.runtimeRoot)}`,
       `test-paths\n${request.testPaths.map(path => FS.resolvePath(path)).toSorted().join('\n')}`,

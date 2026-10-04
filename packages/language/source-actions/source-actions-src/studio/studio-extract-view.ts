@@ -114,8 +114,19 @@ export async function extractView(
     { end: selection.end, replacement: `${selection.leading}${call}`, start: selection.start },
     { end: owner.$cstNode.end, replacement: `\n\n${declaration}`, start: owner.$cstNode.end },
   ])
+  const withUi = root === undefined ? extracted : ensureUiNamesImported(extracted, file, [root], context.files)
+  const readContext = AST.readContextDeclaration(owner)
+  const needsReadContext = readContext !== undefined
+    && parameters.some(parameter => parameter.typeDeclaration === readContext)
+  const visibleContext = AST.visibleFileDeclarations(file, AST.isTypeDeclaration)
+    .find(type => type.name === 'ReadContext')
+  if (needsReadContext && visibleContext !== undefined && visibleContext !== readContext) {
+    Errors.throwUserInput("Studio cannot import 'ReadContext' because a visible project type already owns that name.")
+  }
+  // Prepend after the other edits so their original source offsets remain valid. A second use
+  // from @tao/data is legal when the file already imports a different contract from it.
   return await Formatter.formatCode(
-    root === undefined ? extracted : ensureUiNamesImported(extracted, file, [root], context.files),
+    needsReadContext && visibleContext === undefined ? `use ReadContext from @tao/data\n\n${withUi}` : withUi,
   )
 }
 
@@ -254,7 +265,7 @@ function requireSiblingSelection(document: AST.Document, renderIds: unknown, ope
   return { block, body, end: last.end, indent, leading: beginsLine ? indent : '', renders, start }
 }
 
-type ExtractedParameter = Readonly<{ declaration: string; name: string }>
+type ExtractedParameter = Readonly<{ declaration: string; name: string; typeDeclaration?: AST.TypeDefinition }>
 
 type ExtractedValue = StudioLexicalValue | AST.CasePayload
 
@@ -291,7 +302,14 @@ function selectionParameters(selection: SiblingSelection, owner: AST.ViewDeclara
       }
     }
   }
-  return [...read].map(([name, value]) => ({ declaration: parameterDeclaration(name, value), name }))
+  return [...read].map(([name, value]) => {
+    const type = Type.ofValueDeclaration(value)
+    return {
+      declaration: parameterDeclaration(name, value),
+      name,
+      typeDeclaration: type.kind === 'item' ? type.nominal : undefined,
+    }
+  })
 }
 
 /** enclosingCasePayloads lists the case payloads (`error -> Message`) of the branches around a block, innermost last. */
@@ -346,7 +364,7 @@ function sourceTypeName(type: ASTUtils.TaoType): string | undefined {
   return Switch.kind(type, {
     entity: plain,
     enum: plain,
-    item: () => undefined,
+    item: item => item.nominal === undefined ? undefined : plain(),
     list: list => list.element === undefined || sourceTypeName(list.element) === undefined ? undefined : plain(),
     primitive: primitive => primitive.primitive === 'action' ? undefined : plain(),
     union: () => undefined,

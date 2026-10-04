@@ -1,6 +1,6 @@
 import { Packages } from '@ast-utils'
 import { AST, Langium } from '@parser'
-import { type Diagnostic, Diagnostics, FS } from '@shared'
+import { type Diagnostic, Diagnostics, FS, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test, until, withTaoFiles } from '@shared/test'
 import { LSPWorkspace, Workspace } from '../../compiler-src/workspace/index'
 import { createWorkspaceLspServices } from '../../compiler-src/workspace/langium-services'
@@ -45,6 +45,12 @@ Describe('directory-rooted Tao workspace pipeline', () => {
         ])
         Expect(compiled.files.map(file => file.sourcePath)).toContain(paths['@/studio/View.tao'])
         Expect(compiled.files.map(file => file.sourcePath)).toContain(paths['Data.tao'])
+        Expect(compiled.files.map(file => file.sourcePath)).toContain(
+          Repo.resolvePath('packages/apps/stdlib/@tao/Prelude.tao'),
+        )
+        Expect(compiled.files.map(file => file.sourcePath)).toContain(
+          Repo.resolvePath('packages/apps/stdlib/@tao/data/ReadContext.tao'),
+        )
       },
     )
   })

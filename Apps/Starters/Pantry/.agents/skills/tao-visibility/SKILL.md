@@ -51,6 +51,10 @@ Implemented standard package paths include:
 - `@tao/device/haptic`, `@tao/device/clipboard`, `@tao/device/share`
 - `@tao/keys` and `@tao/code-editor`
 
+These paths describe the development checkout. The public release-1 datasource surface is Local,
+Memory, and Dev; Http arrives in release 2 and private CloudKit sync in release 4. InstantDB and
+iCloud remain outside the five public releases. See `tao-data` for datasource usage by release.
+
 An `unknown name` diagnostic usually means the declaration is still file-local, a `use` is missing,
 or the import names the wrong folder. Widen only as far as needed.
 

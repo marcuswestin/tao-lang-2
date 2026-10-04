@@ -20,6 +20,12 @@ app AuthReview {
    Datasource Memory { }
    Navigator StackNav {
       Initial Authentication(Leave: Leave)
+   }
+   guard {
+      loading -> Text("Opening account…")
+      missing -> Text("Account data is missing")
+      unauthorized -> Text("You do not have access")
+      error -> Context { Text(Context.Message) }
 }  }
 
 app AuthReviewLocal = AuthReview with {
@@ -102,13 +108,6 @@ access Note {
 }
 
 // Authenticated does not imply that the application profile has finished loading.
-guard default {
-   loading -> Text("Opening account…")
-   missing -> Text("Account data is missing")
-   unauthorized -> Text("You do not have access")
-   error -> Message { Text(Message) }
-}
-
 scene Authentication(Leave action()) {
    Title "Auth Review"
    render ScrollView() {

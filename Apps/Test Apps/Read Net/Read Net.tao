@@ -1,6 +1,6 @@
 use Memory from @tao/data/providers/memory
 use StackNav from @tao/nav
-use Col, FormButton, Text, TextInput from @tao/ui
+use Col, FormButton, Spinner, Text, TextInput from @tao/ui
 
 app ReadNetApp {
    id "read-net"
@@ -10,12 +10,34 @@ app ReadNetApp {
       Initial NotesView
    }
    Datasource Memory { }
-}
+   guard {
+      missing -> { Text("Read Net: this note is gone") }
+}  }
 
-// The project's net replaces only `missing`; every other exceptional case keeps the runtime's.
-guard default {
-   missing -> { Text("Read Net: this note is gone") }
-}
+// This app replaces only `missing`; every other exceptional case keeps the runtime's.
+app ReadNetMissingVariant = ReadNetApp with {
+   Name "Read Net Missing Variant"
+   guard {
+      missing -> { Text("Variant: this note is gone") }
+}  }
+
+app ReadNetErrorVariant = ReadNetApp with {
+   Name "Read Net Error Variant"
+   guard {
+      error -> Context { Text("Read Net error: { Context.Message }") }
+}  }
+
+// An independent app in this project replaces loading and error while leaving missing to the runtime.
+app RuntimeDefaultApp {
+   Name "Read Net Runtime Default"
+   Navigator StackNav {
+      Initial RuntimeNotesView
+   }
+   Datasource Memory { }
+   guard {
+      loading -> Spinner()
+      error -> Context { Text("Runtime Default: { Context.Message }") }
+}  }
 
 project
 data Notes / Note {
@@ -57,7 +79,7 @@ scene NotesView() {
                on press -> { present SiteNoteView(Note) }
 }  }  }  }  }
 
-// A bare guard names no case, so a deleted note reaches the project's net.
+// A bare guard names no case, so a deleted note reaches the app's net.
 scene NetNoteView(Note) {
    Title "Bare guard"
    render Col() {
@@ -84,4 +106,50 @@ scene SiteNoteView(Note) {
       #deleteNote
       FormButton("Delete note") {
          on press -> { delete Note }
+}  }  }
+
+workspace
+data RuntimeNotes / RuntimeNote {
+   Title text,
+}
+
+scene RuntimeNotesView() {
+   Title "Notes"
+   state TitleDraft = ""
+   query RuntimeNotes = RuntimeNotes with { }
+   action AddRuntimeNote() {
+      create RuntimeNote {
+         Title: TitleDraft
+      }
+      set TitleDraft = ""
+   }
+   render Col() {
+      #runtimeNoteTitle
+      TextInput(Value: TitleDraft, Label: "Note title") {
+         on submit AddRuntimeNote
+      }
+
+      #addRuntimeNote
+      FormButton("Add note") {
+         on press AddRuntimeNote
+      }
+      guard RuntimeNotes
+      loop RuntimeNotes / RuntimeNote {
+         Col() {
+            Text(RuntimeNote.Title)
+
+            #openRuntimeNote
+            FormButton("Open") {
+               on press -> { present RuntimeNoteView(RuntimeNote) }
+}  }  }  }  }
+
+scene RuntimeNoteView(RuntimeNote) {
+   Title "Note"
+   render Col() {
+      guard RuntimeNote
+      Text(RuntimeNote.Title)
+
+      #deleteRuntimeNote
+      FormButton("Delete note") {
+         on press -> { delete RuntimeNote }
 }  }  }

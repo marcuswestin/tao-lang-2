@@ -29,7 +29,7 @@ scene ItemsPage() {
    render Col() {
       guard Items {
          loading -> { Text("Loading items…") }
-         error -> Message { Text(Message) }
+         error -> Context { Text(Context.Message) }
       }
       loop Items / Item {
          Col() {

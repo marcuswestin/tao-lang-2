@@ -2,7 +2,7 @@ import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert } from '@shared'
 import { appMetadata } from '../../../app-metadata'
-import { type CodegenOptions, type Compiled, gen, ReadNetBinding, resolveRef } from '../codegen-util'
+import { type CodegenOptions, type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 import { compileAccountBinding, needsAuthContext } from './auth-context'
 import { activeDataStorePlan, activeFixtureStores } from './data-store-context'
@@ -48,6 +48,14 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
   const configuration = base ? directAppConfiguration(app) : ASTUtils.effectiveAppConfiguration(app)
   const effectiveConfiguration = ASTUtils.effectiveAppConfiguration(app)
   const baseReference = base ? appDefinitionReference(base) : undefined
+  const ownGuard = directAppGuard(app)
+  const readNet = ownGuard
+    ? gen`TR.MergeReadNet(${base ? gen`_TaoBaseBinding.readNet?.()` : gen`undefined`}, ${
+      Compile.AppGuardStatement(ownGuard, options)
+    })`
+    : base
+    ? gen`_TaoBaseBinding.readNet?.()`
+    : undefined
   const authNavigation = needsAuthContext(root) || needsAuthContext(app)
   const navigator = compileResolvedAppProperty(
     configuration.get('Navigator'),
@@ -118,6 +126,7 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
         auth: () => ${auth ?? gen`undefined`},
         agentCommands: () => ${compiledAgentCommands},
         datasources: () => ${datasources ?? gen`[]`},
+        ${readNet ? gen`readNet: () => ${readNet},` : gen.noop()}
         auxiliaries: ${authNavigation ? gen`(_TaoAuthScope?: TR.AuthScope)` : gen`()`} => ({
           ${
     base
@@ -160,7 +169,7 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
       ? gen`design: ${gen.Name(boundApp)}.design,`
       : gen.noop()
   }
-      ${options.readNet ? gen`readNet: () => ${gen.scopeName({ name: ReadNetBinding })},` : gen.noop()}
+      ${readNet ? gen`readNet: ${gen.Name(boundApp)}.readNet,` : gen.noop()}
       auxiliaries: ${gen.Name(boundApp)}.auxiliaries,
     }))(${gen.Name(boundApp)}.scope)
     function ${gen.Name({ name: `TaoApp_${app.name}` })}() {
@@ -454,6 +463,17 @@ function directAppBase(app: AST.AppValueDeclaration): AST.AppValueDeclaration | 
   const target = resolveRef(expression.target)
   Assert.is(target, AST.isAppValueDeclaration, 'validated app reference resolves a complete app value')
   return target
+}
+
+/** directAppGuard returns only this declaration's guard, so each variant patches its immediate base. */
+function directAppGuard(app: AST.AppValueDeclaration): AST.AppGuardStatement | undefined {
+  if (AST.isAppDeclaration(app) && app.block) {
+    return app.block.statements.find(AST.isAppGuardStatement)
+  }
+  const expression = app.value
+  return expression && AST.isRefinementExpression(expression)
+    ? expression.patchBlock.entries.find(entry => entry.appGuard)?.appGuard
+    : undefined
 }
 
 /** appInheritanceLeavesModule keeps every chain containing a foreign ancestor on runtime values. */

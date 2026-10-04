@@ -10,6 +10,7 @@ import {
   type ServerOptions,
   TransportKind,
 } from 'vscode-languageclient/node'
+import { requireMatchingEditorRelease } from '../language/release-profile'
 import { startProjectTooling } from './project-tooling-integration'
 import { workspaceServerPlan } from './workspace-server-roots'
 
@@ -38,7 +39,8 @@ async function reconcileLanguageClients(context: vscode.ExtensionContext): Promi
       folders.map(folder => folder.uri.fsPath),
       Platform.runtimeProcess.cwd(),
     )
-    const additions = plan.add.map(root => {
+    const additions = plan.add.map(async root => {
+      await requireMatchingEditorRelease(root)
       const client = new LanguageClient(
         `tao-${++clientSequence}`,
         folders.length > 1 ? `Tao Language Server (${FS.basename(root)})` : 'Tao Language Server',
@@ -51,7 +53,8 @@ async function reconcileLanguageClients(context: vscode.ExtensionContext): Promi
         throw error
       })
     })
-    await Promise.all(additions)
+    // One folder refusing its editor release must not strand the other folders' starts or the removals.
+    const started = await Promise.allSettled(additions)
     const removed = plan.remove.flatMap(root => {
       const client = clients.get(root)
       return client === undefined ? [] : [[root, client] as const]
@@ -59,6 +62,13 @@ async function reconcileLanguageClients(context: vscode.ExtensionContext): Promi
     await Promise.all(removed.map(([, client]) => client.stop()))
     for (const [root] of removed) {
       clients.delete(root)
+    }
+    const failures = started.flatMap(result => result.status === 'rejected' ? [result.reason as unknown] : [])
+    if (failures.length === 1) {
+      throw failures[0]
+    }
+    if (failures.length) {
+      throw new AggregateError(failures, failures.map(failure => Errors.formatForUser(failure)).join('\n'))
     }
   })
   return await clientReconciliation
@@ -133,6 +143,9 @@ async function runTaoSourceAction(command: TaoSourceActionCommand): Promise<void
   }
 
   try {
+    await requireMatchingEditorRelease(
+      editor.document.uri.scheme === 'file' ? editor.document.uri.fsPath : workspaceRootForDocument(editor.document),
+    )
     const currentText = editor.document.getText()
     const documentUri = Langium.URI.parse(editor.document.uri.toString())
     const workspace = await Workspace.open(workspaceRootForDocument(editor.document))

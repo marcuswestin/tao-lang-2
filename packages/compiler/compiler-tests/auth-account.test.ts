@@ -175,6 +175,7 @@ Describe('compiler: app-scoped auth and account data', () => {
       view Label(Value text) { render inject Value \`\`\`ts return null \`\`\` }
     `)
     const code = result.code.replace(/\s+/g, ' ')
-    Expect(code).toContain('TR.GuardRender(TR.Call(_Scope.Me, TR.Value(_TaoAuthScope)).evaluate(), [')
+    Expect(code).toContain('TR.WhenReadRender(TR.Call(_Scope.Me, TR.Value(_TaoAuthScope)).evaluate(), [')
+    Expect(code).toContain('}), _ViewProps.__tao)')
   })
 })

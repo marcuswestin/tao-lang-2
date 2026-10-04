@@ -4,7 +4,18 @@ import { BridgeMetadata } from '@compiler/bridge-metadata'
 import { discoverProjectTaoFiles, Workspace } from '@compiler/workspace'
 import Runtime, { HostDependencies, RuntimeToolchainPaths } from '@expo-host'
 import { ProjectTooling } from '@project-tooling'
-import { Assert, CLI, Diagnostics, Errors, FS, HCI, Platform, ProjectIdentity, Repo } from '@shared'
+import {
+  Assert,
+  CLI,
+  Diagnostics,
+  Errors,
+  FS,
+  HCI,
+  Platform,
+  ProjectIdentity,
+  ReleaseCapabilities,
+  Repo,
+} from '@shared'
 import { AgentClientBuild } from './agent-client-build'
 import { TaoAppModules } from './app-modules'
 import { buildDesktopApp } from './desktop-build'
@@ -22,6 +33,7 @@ export type BuildRecord = {
   projectRoot: string
   results: Partial<Record<BuildTarget, { artifact: string; status: 'succeeded' } | { error: string; status: 'failed' }>>
   schemaVersion: 1
+  releaseProfile: string
   sourceDigest?: string
   targets: BuildTarget[]
   toolchainVersion: string
@@ -48,9 +60,15 @@ const excludedSourceDirectories = new Set(['.git', '.tao', '.tao-ts', '.artifact
 
 /** Build each requested target from the same immutable source snapshot, retaining every result. */
 export async function runTaoBuild(path: string, options: BuildOptions): Promise<number> {
+  if (options.agents) {
+    ReleaseCapabilities.require('app-commands')
+  }
   const selectedTargets = await chooseTargets(
     options.agents && options.targets.length === 0 ? ['desktop'] : options.targets,
   )
+  for (const target of selectedTargets) {
+    ReleaseCapabilities.require(ReleaseCapabilities.targetCapability(target))
+  }
   if (options.agents && (options.compileOnly || selectedTargets.some(target => target !== 'desktop'))) {
     Errors.throwUserInput('--agents requires a packaged desktop build.')
   }
@@ -89,6 +107,7 @@ export async function runTaoBuild(path: string, options: BuildOptions): Promise<
     projectRoot: app.projectRoot,
     results: {},
     schemaVersion: 1,
+    releaseProfile: ReleaseCapabilities.fingerprint(),
     targets: [...selectedTargets],
     toolchainVersion:
       (await FS.readJson<{ version: string }>(FS.resolvePath('package.json', RuntimeToolchainPaths.packageRoot)))
@@ -310,6 +329,9 @@ class BuildProgress {
 async function chooseTargets(requested: readonly BuildTarget[]): Promise<BuildTarget[]> {
   if (requested.length > 0) {
     return targets.filter(target => requested.includes(target))
+  }
+  if (ReleaseCapabilities.current().phase !== 'development') {
+    return ['web']
   }
   if (!HCI.isInteractive()) {
     Errors.throwUserInput(

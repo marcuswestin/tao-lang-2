@@ -185,6 +185,16 @@ studio-host-control-smoke run_id="local":
 studio-mac2-acceptance run_id="local":
     ./dev studio-smoke --native --run-id "{{ run_id }}" packages/ides/studio-tooling/studio-smoke/studio-mac2-acceptance.test.ts
 
+# Capture a bounded headless QA review; capture alone is not a visual judgment
+[group('Host proofs')]
+qa-capture *ARGS: _parser-gen
+    ./dev qa-capture {{ ARGS }}
+
+# Inventory, run bounded checks, record observations, and report on-demand QA
+[group('Report')]
+qa *ARGS:
+    ./dev qa {{ ARGS }}
+
 # Prove Studio compile/edit/undo against the real HNReader app
 [group('Host proofs')]
 studio-proof-real-app run_id="local":
@@ -252,13 +262,13 @@ standalone-cli-build: _parser-gen
 
 # Build the files one standalone Tao release publishes, and print the command that publishes them
 [group('Ship')]
-standalone-cli-release version: _parser-gen
-    "{{ BUN }}" run packages/cli/tao-cli/cli-src/standalone-build.ts --release "{{ version }}"
+standalone-cli-release version="0.4.0" phase="1": _parser-gen
+    "{{ BUN }}" run packages/cli/tao-cli/cli-src/standalone-build.ts --release "{{ version }}" --phase "{{ phase }}"
 
 # Build a release, install it through curl | sh into a throwaway HOME, and prove create, check, compile, and build --compile-only work with no Bun or Node on PATH
 [group('Ship')]
 standalone-cli-acceptance: _parser-gen
-    "{{ BUN }}" run packages/cli/tao-cli/cli-src/standalone-build.ts --release 0.0.0
+    "{{ BUN }}" run packages/cli/tao-cli/cli-src/standalone-build.ts --release 0.0.0 --phase 1
     "{{ BUN }}" run packages/cli/tao-cli/cli-src/standalone-acceptance.ts .artifacts/release/v0.0.0
 
 # Install the VSIX in an isolated VS Code window and verify activation, diagnostics, hover, and navigation
@@ -487,7 +497,7 @@ check no_cache='false':
 
 # Build a VSIX without installing it, for VS Code packager compatibility checks
 [group('Dev')]
-ide-extension-package: _ide-extension-package
+ide-extension-package release_version="development" phase="development": (_ide-extension-package release_version phase)
 
 # Run the repository lint on its own
 [group('Dev')]
@@ -745,9 +755,9 @@ _compile-word-flower-app: _parser-gen
 _ide-extension-build: _parser-gen
     cd packages/ides/ide-extension && "{{ BUN }}" esbuild.config.ts
 
-_ide-extension-package: _parser-gen
+_ide-extension-package release_version="development" phase="development": _parser-gen
     mkdir -p .artifacts/build
-    cd packages/ides/ide-extension && "{{ BUN }}" esbuild.config.ts --minify
+    cd packages/ides/ide-extension && "{{ BUN }}" esbuild.config.ts --minify {{ if release_version == "development" { "" } else { "--release " + quote(release_version) + " --phase " + quote(phase) } }}
     cd packages/ides/ide-extension && "{{ BUNX }}" @vscode/vsce package --no-dependencies --out "{{ IDE_EXTENSION_VSIX }}" 1> /dev/null
 
 _tao-check: _parser-gen

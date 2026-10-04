@@ -748,6 +748,7 @@ Describe('Tao runtime app generation', () => {
           generatedFiles.push(FS.relativePath(generatedRoot, path))
         }
         Expect(generatedFiles).toContain('App.injection-1.tsx')
+        Expect(generatedFiles).toContain('App.tsx')
         Expect(generatedFiles).not.toContain('App.injection-120.tsx')
       },
     )
@@ -784,6 +785,7 @@ Describe('Tao runtime app generation', () => {
           generatedFiles.push(FS.relativePath(generatedRoot, path))
         }
         Expect(generatedFiles).toContain('App.injection-1.tsx')
+        Expect(generatedFiles).toContain('App.tsx')
         Expect(generatedFiles).toContain('TaoStudioPublication.ts')
         Expect(generatedFiles).not.toContain('App.injection-120.tsx')
       },

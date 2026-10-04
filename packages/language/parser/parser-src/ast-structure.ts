@@ -11,6 +11,18 @@ export type RenderablePrimitive = 'view' | 'scene' | 'nav'
 const resolvedUseTargets = new WeakMap<AST.UseStatement | AST.UsePackageStatement, readonly AST.Declaration[]>()
 const visibleWorkspaceFiles = new WeakMap<AST.TaoFile, readonly AST.TaoFile[]>()
 
+/** readContextDeclaration finds the intrinsic public contract without making its name implicit. */
+export function readContextDeclaration(node: AST.Node): AST.TypeDeclaration | undefined {
+  const root = findRoot(node)
+  if (!AST.isTaoFile(root)) {
+    return undefined
+  }
+  const contract = (visibleWorkspaceFiles.get(root) ?? []).find(file =>
+    AST.getDocument(file).uri.path.endsWith('/@tao/data/ReadContext.tao')
+  )
+  return contract?.statements.filter(AST.isTypeDeclaration).find(declaration => declaration.name === 'ReadContext')
+}
+
 /**
  * isTestSidecarPath says whether a path names a `.test.tao` sidecar. An app file's graph never holds
  * one: the loader leaves them out of a folder's siblings, and folder scope leaves them out too, so

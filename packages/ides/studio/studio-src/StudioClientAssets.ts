@@ -1,5 +1,5 @@
 import Runtime from '@expo-host'
-import { Errors, FS, Repo } from '@shared'
+import { Errors, FS, ReleaseCapabilities, type ReleaseProfile, Repo } from '@shared'
 import { existsSync } from 'node:fs'
 import { studioClientStylesheet } from './StudioClientStylesheet'
 
@@ -14,11 +14,11 @@ export type StudioClientBundleMode = 'development' | 'release'
 
 /** StudioClientAssetProvider supplies one browser shell revision to the Studio HTTP server. */
 export type StudioClientAssetProvider = {
-  bundle: (options?: { validationMode?: StudioClientBundleMode }) => Promise<string>
+  bundle: (options?: { validationMode?: StudioClientBundleMode; releaseProfile?: ReleaseProfile }) => Promise<string>
   html: (config: StudioClientConfig) => string
 }
 
-const clientBundles = new Map<StudioClientBundleMode, Promise<string>>()
+const clientBundles = new Map<string, Promise<string>>()
 let prebuiltClientBundle: string | undefined
 const clientModuleInputs = new Map<StudioClientBundleMode, readonly string[]>()
 
@@ -34,17 +34,24 @@ export const StudioClientAssets = {
   },
 } as const
 
-async function bundle(options: { validationMode?: StudioClientBundleMode } = {}): Promise<string> {
+async function bundle(
+  options: { validationMode?: StudioClientBundleMode; releaseProfile?: ReleaseProfile } = {},
+): Promise<string> {
   if (prebuiltClientBundle !== undefined) {
     return prebuiltClientBundle
   }
   const validationMode = options.validationMode ?? 'development'
-  return await cachedBundle(clientBundles, validationMode, () => buildClientBundle(validationMode))
+  const profile = options.releaseProfile ?? ReleaseCapabilities.current()
+  return await cachedBundle(
+    clientBundles,
+    `${validationMode}:${ReleaseCapabilities.fingerprint(profile)}`,
+    () => buildClientBundle(validationMode, profile),
+  )
 }
 
 async function cachedBundle(
-  cache: Map<StudioClientBundleMode, Promise<string>>,
-  validationMode: StudioClientBundleMode,
+  cache: Map<string, Promise<string>>,
+  validationMode: string,
   build: () => Promise<string>,
 ): Promise<string> {
   let pending = cache.get(validationMode)
@@ -104,7 +111,7 @@ function html(config: StudioClientConfig): string {
 `
 }
 
-async function buildClientBundle(validationMode: StudioClientBundleMode): Promise<string> {
+async function buildClientBundle(validationMode: StudioClientBundleMode, profile: ReleaseProfile): Promise<string> {
   const generatedRoot = await Repo.mkScratchDirOrHost('tao-studio-browser-')
   let generated: Awaited<ReturnType<typeof Runtime.generateApp>>
   try {
@@ -119,6 +126,7 @@ async function buildClientBundle(validationMode: StudioClientBundleMode): Promis
   }
   try {
     const result = await Bun.build({
+      define: { TAO_RELEASE_PHASE: JSON.stringify(profile.phase) },
       entrypoints: [FS.resolvePath('TaoStudioBrowser.tsx', import.meta.dir)],
       metafile: true,
       minify: validationMode === 'release',

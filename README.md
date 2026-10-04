@@ -7,7 +7,7 @@ Tao is a new programming language, and it takes care of that 80% for you. Every 
 
 It was first prototyped fifteen years ago. This year, it was finally built.
 
-The current version is a fully functional preview. Production ready in 2027.
+Tao is a development preview. The staged public releases are planned, not yet published.
 
 ## What a Tao app looks like
 
@@ -39,20 +39,22 @@ Data, editing, design, a layout that adapts from phone to desktop, and behavior 
 whole app are declared the same way. [Your First Tao App](<Docs/Tutorials/Your First Tao App.md>)
 builds a complete reading-list app in nine steps, about thirty minutes.
 
-Tao compiles to TypeScript for Expo and React Native, so a Tao app runs on iOS, Android, and the
-web.
+Tao compiles to TypeScript for Expo and React Native. The first public release targets web app
+execution on a supported Apple Silicon Mac. iOS Simulator is planned for release 2; Android and
+desktop app builds are deferred beyond the five planned releases.
 
 ## Install
 
-<!-- The standalone CLI release replaces this section with its one-line install (macOS on Apple Silicon first). -->
+The signed, notarized standalone CLI for macOS on Apple Silicon has not been published. A public
+install command cannot be given yet. Release 1 also requires the editor extension to be published
+in both marketplaces; a source checkout or local VSIX does not establish that publication.
 
-The standalone `tao` command for macOS on Apple Silicon is on its way. Until it ships, run Tao from
-a checkout on macOS with [Nix](https://nixos.org) and [devenv](https://devenv.sh) installed:
+For repository development, clone this repository on macOS with [Nix](https://nixos.org) and
+[devenv](https://devenv.sh) installed, enter the checkout, then run:
 
 ```sh
-git clone <repository> tao && cd tao
 ./enter-tao-dev-env
-./tao create "A reading list"
+./agent tao create "A reading list" --ai none
 ```
 
 The entry script enters the pinned environment once, runs `./agent setup`, and opens your interactive
@@ -87,16 +89,25 @@ Noninteractive setup never prompts or changes personal shell settings. Run `./ag
 to change your choice or refresh the installed integration, or `./agent setup --environment` to rebuild the pinned toolchain after its
 dependencies change. Automatic activation currently supports zsh; the manual entry script remains
 available for other shells. Turning off automatic trust preserves existing direnv authorizations;
-those remain under direnv's own control. Then:
+those remain under direnv's own control.
 
-| Command      | What it does                                                                          |
-| ------------ | ------------------------------------------------------------------------------------- |
-| `tao create` | Creates a new project from a one-line description                                     |
-| `tao run`    | Runs the app on the web, an iOS simulator, Android, or the desktop, reloading on save |
-| `tao check`  | Reports syntax and validation errors, and canonical form                              |
-| `tao fix`    | Applies every automatic source fix: formatting and organized `use`s                   |
-| `tao test`   | Runs the behavior tests declared in `.tao` files                                      |
-| `tao ship`   | Builds and ships to TestFlight                                                        |
+The checkout runs Tao CLI commands through `./agent tao`; an installed standalone CLI will use
+`tao` directly. `create` generates a multi-file starter. [Your First Tao App](<Docs/Tutorials/Your First Tao App.md>)
+instead builds a separate, single-file reading list by hand.
+
+| Command or surface                                            | Availability and purpose                                                                                                                                                       |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `./agent tao create "A reading list" --ai none`               | Checkout analogue of release-1 creation; `--ai none` forces the plain starter in the development checkout. The public release-1 command will be `tao create "A reading list"`. |
+| `./agent tao run Apps/Starters/Notebook --app Notebook --web` | Development checkout: run the checked-in starter in a browser. Release-1 creation projects its later design features into supported styles.                                    |
+| `./agent tao check Apps/Starters/Notebook`                    | Development checkout: check the named starter. Public `check` starts in release 1 for source supported by that release.                                                        |
+| `./agent tao fix Apps/Starters/Notebook`                      | Development checkout: apply source fixes to the named starter. Public `fix` starts in release 1.                                                                               |
+| `./agent tao test Apps/Starters/Notebook`                     | Development checkout: run the starter's behavior tests. Public `test` starts in release 1.                                                                                     |
+| `./agent tao run Apps/Starters/Notebook --app Notebook --ios` | Development checkout: run the checked-in starter in iOS Simulator. Public Simulator support starts in release 2 for supported source.                                          |
+| Native Studio                                                 | Release 3: native workbench and interactive scenario review, after distribution.                                                                                               |
+| `tao ship --beta`                                             | Release 5: TestFlight, after distribution and acceptance.                                                                                                                      |
+
+Android, desktop app builds, over-the-air updates, and `tao review` in the standalone CLI are
+deferred. The development checkout may expose commands that a release-1 build hides.
 
 ## Where things are
 
@@ -113,10 +124,8 @@ Tao is 0.x. Expect breaking changes between versions, each named in the release 
 built is tested; what is designed but not built is marked as such in the specification and the
 decisions.
 
-Tao is built by its author working with coding agents. Commit trailers are omitted for a clean
-history.
-
 ## Licence
 
 Tao is released under the GNU Affero General Public License v3.0; see [LICENSE](LICENSE). The
-licence structure for apps built with Tao is being settled before the first public release.
+licence structure for apps built with Tao remains an unresolved pre-release decision. Do not infer
+an app licence from Tao's repository licence.

@@ -109,8 +109,9 @@ export namespace Packages {
       },
       async intrinsicFilePaths() {
         const prelude = FS.resolvePath('@tao/Prelude.tao', context.stdlibRoot)
+        const readContext = FS.resolvePath('@tao/data/ReadContext.tao', context.stdlibRoot)
         return await Promise.all(
-          [prelude].map(async path => path && await FS.isFile(path) ? path : undefined),
+          [prelude, readContext].map(async path => path && await FS.isFile(path) ? path : undefined),
         )
           .then(paths => paths.filter((path): path is string => path !== undefined))
       },

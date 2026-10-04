@@ -40,7 +40,7 @@ export const StatementsCompiler = {
       ExpectToolbarCommandStep: Compile.ExpectToolbarCommandStep,
       ForStatement: value => Compile.ForStatement(value, options),
       FunctionDeclaration: Compile.FunctionDeclaration,
-      GuardDefaultStatement: value => Compile.GuardDefaultStatement(value, options),
+      GuardDefaultStatement: () => gen.noop(),
       GuardRenderStatement: value => Compile.GuardRenderStatement(value, [], options),
       IfRenderStatement: value => Compile.IfRenderStatement(value, options),
       WhenRenderStatement: value => Compile.WhenRenderStatement(value, options),

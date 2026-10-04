@@ -1,0 +1,44 @@
+{
+  "id": "QA-README-AVAILABILITY",
+  "status": "open",
+  "phase": 1,
+  "surfaceId": "doc:README.md",
+  "dimension": "text",
+  "channel": "source",
+  "severity": "major",
+  "title": "the front door mixes future and initial release surfaces",
+  "observed": "Rechecked at 4651560f: the README says a Tao app \"runs on iOS, Android, and the web\", `tao dev` \"Runs the app on the web, an iOS simulator, Android, or the desktop\", and lists `tao ship`. A release-1 CLI hides --ios, --android, --desktop and ship.",
+  "impact": "Readers can choose a route unsupported by the initial public artifact.",
+  "location": "README.md:47-48, 99-104",
+  "affectedPhases": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "expected": "the phase-1 entry point clearly distinguishes supported web authoring from later\n  releases and repository-development capabilities.",
+  "recheck": "Read the Install section, platform statement and complete command table against the phase-1 public artifact. Confirm every later or repository-only surface has explicit availability.",
+  "evidence": [
+    "README.md",
+    "packages/shared/shared-src/ReleaseCapabilities.ts"
+  ],
+  "evidenceHashes": [
+    {
+      "path": "README.md",
+      "sha256": "13f55bbdabb00f9793c0bee10d2bb8efcacc05fdc5dcfb89ebaf356e0003eafc"
+    },
+    {
+      "path": "packages/shared/shared-src/ReleaseCapabilities.ts",
+      "sha256": "4f5ee98341c3d7439bcc53efdccb7c6881a489c452cd2720bcabac736f6c18be"
+    }
+  ],
+  "createdAt": "2026-09-26T22:46:00.000Z",
+  "updatedAt": "2026-09-29T16:13:44.015Z",
+  "confidence": "confirmed",
+  "requiredReviewer": "agent",
+  "relatedStories": [
+    "WEB3",
+    "DOC4"
+  ]
+}

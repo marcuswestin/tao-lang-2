@@ -1,6 +1,7 @@
 import { Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Describe, Expect, Test } from '@shared/test'
+import { AppValidator } from '../validator-src/validators/app-validator'
 import { FunctionalCoreValidator } from '../validator-src/validators/FunctionalCoreValidator'
 import { StateValidator } from '../validator-src/validators/StateValidator'
 import { typeValidationMessages } from '../validator-src/validators/types-validator'
@@ -8,7 +9,6 @@ import {
   accepts,
   app,
   rejects,
-  rejectsFiles,
   stubContainer,
   stubView,
   testValidateCode,
@@ -220,18 +220,61 @@ Describe('validator: functional core', () => {
   )
 
   Test(
-    'rejects payloads on payload-free entity cases',
+    'accepts read context binders on exceptional entity cases',
+    accepts(`
+      data Documents / Document { Final yes / Draft no }
+      view Main(Document) {
+        render Stack(){ guard Document { missing -> Context { Text(Context.Message) } } }
+      }
+      ${runtimeViews}
+    `),
+  )
+
+  Test(
+    'rejects a member outside the read context contract',
     rejects(
       `
-        data Documents / Document { Final yes / Draft no }
-        view Main(Document) {
-          render Stack(){ guard Document { missing -> Message { Text(Message) } } }
-        }
-        ${runtimeViews}
-      `,
-      FunctionalCoreValidator.messages.invalidCasePayload,
+    app NetApp { id "netapp" version "1.0.0" name "NetApp" view Main guard { error -> Context { Text(Context.Unknown) } } }
+    view Main() { render Text("Ready") }
+    ${runtimeViews}
+  `,
+      typeValidationMessages.unknownMember('ReadContext', 'Unknown'),
     ),
   )
+
+  Test(
+    'keeps ordinary when payloads as text',
+    rejects(
+      `
+    data Documents / Document { Title text }
+    view Main(Document) {
+      render Stack() {
+        when Document {
+          error -> Message { Text(Message.Message) }
+          otherwise -> { Text("Ready") }
+        }
+      }
+    }
+    ${runtimeViews}
+  `,
+      typeValidationMessages.memberNotItem('Message'),
+    ),
+  )
+
+  Test('infers optional recovery actions from the public read context', async () => {
+    const result = await testValidateCode(`
+      app NetApp { id "netapp" version "1.0.0" name "NetApp" view Main guard {
+        error -> Context { Text(Context.Message) }
+      } }
+      view Main() { render Text("Ready") }
+      ${runtimeViews}
+    `)
+    const payload = [...AST.streamAllContents(result.entry.ast)].find(AST.isCasePayload)
+    Expect.Is(payload, AST.isCasePayload)
+    const context = Type.ofValueDeclaration(payload)
+    Expect(Type.displayName(Type.atMemberPath(context, ['Retry']))).toBe('action() | none')
+    Expect(Type.displayName(Type.atMemberPath(context, ['Recovery']))).toBe('action() | none')
+  })
 
   Test(
     'accepts the advisory refreshing and stale cases on query subjects',
@@ -264,14 +307,15 @@ Describe('validator: functional core', () => {
   )
 
   Test(
-    'accepts bare guards over entity and query subjects and a file-level read net',
+    'accepts bare guards over entity and query subjects and an app read net',
     accepts(`
-      guard default {
+      app NetApp { id "netapp" version "1.0.0" name "NetApp" view Shell guard {
         loading -> Text("Opening…")
         missing -> { Text("Gone") }
-        error -> Message { Text(Message) }
-      }
+        error -> Context { Text(Context.Message) }
+      } }
       data Documents / Document { Title text }
+      view Shell() { render Text("Ready") }
       view Main(Document) {
         query Recent = Documents with { }
         render Stack(){
@@ -315,55 +359,57 @@ Describe('validator: functional core', () => {
   )
 
   Test(
-    'rejects read net cases that are content, repeated, or carry a message outside error',
+    'rejects app read net cases that are content or repeated',
     rejects(
       `
-        guard default {
+        app NetApp { id "netapp" version "1.0.0" name "NetApp" view Main guard {
           empty -> { Text("Nothing yet") }
           rejected -> { Text("Refused") }
           loading -> { Text("One") }
           loading -> { Text("Two") }
-          missing -> Message { Text(Message) }
-        }
+          missing -> Context { Text(Context.Message) }
+        } }
+        view Main() { render Text("Ready") }
         ${runtimeViews}
       `,
-      FunctionalCoreValidator.messages.guardDefaultCase('empty'),
-      FunctionalCoreValidator.messages.guardDefaultCase('rejected'),
+      FunctionalCoreValidator.messages.appGuardCase('empty'),
+      FunctionalCoreValidator.messages.appGuardCase('rejected'),
       FunctionalCoreValidator.messages.duplicateCase('loading'),
-      FunctionalCoreValidator.messages.invalidCasePayload,
     ),
   )
 
   Test(
-    'rejects a read net declared inside a view',
+    'reports the retired file-level read net',
     rejects(
       `
-        view Main() {
-          render Stack(){
-            guard default { loading -> { Text("Loading") } }
-          }
-        }
+        guard default { loading -> { Text("Loading") } }
         ${runtimeViews}
       `,
-      FunctionalCoreValidator.messages.guardDefaultPlacement,
+      FunctionalCoreValidator.messages.retiredGuardDefault,
     ),
   )
 
   Test(
-    'rejects a second read net anywhere in the project',
-    rejectsFiles(
-      {
-        'Main.tao': `
-          use Other from ./Other
-          guard default { loading -> { Other() } }
-        `,
-        'Other.tao': `
-          guard default { missing -> { Other() } }
-          project view Other() { render inject \`\`\`ts\nreturn null\n\`\`\` }
-        `,
-      },
-      FunctionalCoreValidator.messages.guardDefaultDuplicate,
+    'rejects a second guard in one app',
+    rejects(
+      `app NetApp { id "netapp" version "1.0.0" name "NetApp" view Main guard { loading -> { Text("Loading") } } guard { missing -> { Text("Gone") } } }
+      view Main() { render Text("Ready") }
+      ${runtimeViews}`,
+      AppValidator.messages.guardDuplicate('NetApp'),
     ),
+  )
+
+  Test(
+    'accepts a guard in an app variant with its own identity',
+    accepts(`
+      app NetApp { id "netapp" version "1.0.0" name "NetApp" view Main }
+      app Offline = NetApp with {
+        id "offline"
+        guard { missing -> { Text("Unavailable") } }
+      }
+      view Main() { render Text("Ready") }
+      ${runtimeViews}
+    `),
   )
 
   Test('unifies nested list values with an empty list on either side', async () => {

@@ -51,7 +51,7 @@ view FileTree(FolderPath text, CollapsedFolders list of text, ToggleFolder actio
    render Col() {
       guard Children {
          loading -> { Text("Loading Studio files…") }
-         error -> Message { Text(Message) }
+         error -> Context { Text(Context.Message) }
       }
       loop Children / File {
          when File.Folder {
@@ -177,7 +177,7 @@ view ProjectViewsPanel() {
    render StudioPanelSurface("Project views") {
       guard ProjectViews {
          loading -> { Text("Loading compiled views…") }
-         error -> Message { Text(Message) }
+         error -> Context { Text(Context.Message) }
       }
       loop ProjectViews / View {
          ProjectViewRow(View)
@@ -196,7 +196,7 @@ view ScreensPanel() {
    render StudioPanelSurface("Screens") {
       guard ProjectScreens {
          loading -> { Text("Loading compiled screens…") }
-         error -> Message { Text(Message) }
+         error -> Context { Text(Context.Message) }
       }
       loop ProjectScreens / Screen {
          ScreenRow(Screen)
@@ -229,7 +229,7 @@ view DesignTokensPanel() {
    render StudioPanelSurface("Design") {
       guard Tokens {
          loading -> { Text("Loading parser-owned design values…") }
-         error -> Message { Text(Message) }
+         error -> Context { Text(Context.Message) }
       }
       DesignTokenKindGroup(TokenKind: "color", Title: "colors")
       DesignTokenKindGroup(TokenKind: "bundle", Title: "bundles")

@@ -186,7 +186,7 @@ async function expectFreshBuildForIneligibleCheckpoint(
   }, async paths => {
     if (checkpoint.processingState !== undefined || checkpoint.dirty === true) {
       await initGitTestRepository(FS.dirname(paths['App.tao']!), {
-        commit: { files: { '.tao-project/lock.jsonc': JSON.stringify(lock), 'App.tao': source } },
+        commit: { files: { '.tao/lock.jsonc': JSON.stringify(lock), 'App.tao': source } },
       })
     }
     const terminal = fakeTerminal()

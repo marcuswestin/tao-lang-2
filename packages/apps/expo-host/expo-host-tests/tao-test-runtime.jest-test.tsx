@@ -603,7 +603,7 @@ Describe('Expo runtime', () => {
           render Col() {
             guard Items {
               loading -> { Text("Loading") }
-              error -> Message { Text(Message) }
+              error -> Context { Text(Context.Message) }
             }
             #field
             TextInput(Value: Draft, Label: "Name", Placeholder: "Name") {

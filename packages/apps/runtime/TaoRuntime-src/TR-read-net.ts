@@ -4,65 +4,167 @@ import { Views } from './TR-views'
 
 /**
  * The read net is the handling every render guard falls back on for the exceptional read cases it
- * does not name. The runtime always supplies it; a project's `guard default` replaces it case by
+ * does not name. The runtime always supplies it; an app's guard replaces it case by
  * case. Emptiness is content rather than failure, so no case here is ever `empty`.
  */
-export const readNetCases = ['loading', 'missing', 'unauthorized', 'error'] as const
+const readNetCases = ['loading', 'missing', 'unauthorized', 'error'] as const
 
 /** One exceptional read case the net handles. */
 export type TaoReadNetCase = typeof readNetCases[number]
 
+/** Optional facts the compiler can prove about the expression at a guard site. */
+export type TaoReadHint = Readonly<{
+  readKind?: 'account' | 'entity' | 'query' | 'reference' | 'unknown'
+  subjectLabel?: string
+  subjectType?: string
+}>
+
+/** Public, provider-neutral facts passed to an exceptional read handler. */
+export type TaoReadContext = Readonly<{
+  State: TaoReadNetCase
+  Message: string
+  ReadKind: NonNullable<TaoReadHint['readKind']>
+  SubjectLabel?: string
+  SubjectType?: string
+  LoadingPhase?: 'initial' | 'refresh'
+  ElapsedSeconds?: number
+  ProgressCompleted?: number
+  ProgressTotal?: number
+  MissingReason?: 'not-found' | 'unresolved-reference'
+  UnauthorizedReason?: 'signed-out' | 'access-denied'
+  Recovery?: () => void | Promise<void>
+  ErrorCategory?: string
+  Retryable?: boolean
+  Retry?: () => void | Promise<void>
+}>
+
+const runtimeMessages: Record<TaoReadNetCase, string> = {
+  loading: 'Loading this item.',
+  missing: 'This item could not be found.',
+  unauthorized: "You don't have access to this item.",
+  error: 'Unable to load this item.',
+}
+
+const queryMessages: Record<TaoReadNetCase, string> = {
+  loading: 'Loading items.',
+  missing: 'These items could not be found.',
+  unauthorized: "You don't have access to these items.",
+  error: 'Unable to load these items.',
+}
+
+function readMessage(
+  state: TaoReadNetCase,
+  hint: TaoReadHint,
+  facts: Readonly<Partial<Pick<TaoReadContext, 'MissingReason' | 'UnauthorizedReason'>>>,
+): string {
+  const label = hint.subjectLabel?.trim()
+  const type = hint.subjectType?.trim()
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2')
+    .toLowerCase()
+  const subject = label || (type ? `this ${type}` : undefined)
+  if (state === 'unauthorized' && facts.UnauthorizedReason === 'signed-out') {
+    return `Sign in to view ${subject ?? 'this item'}.`
+  }
+  if (state === 'missing' && facts.MissingReason === 'unresolved-reference') {
+    return subject ? `Could not resolve the link to ${subject}.` : 'Could not resolve this link.'
+  }
+  if (!subject) {
+    return (hint.readKind === 'query' ? queryMessages : runtimeMessages)[state]
+  }
+  if (state === 'loading') {
+    return `Loading ${subject}.`
+  }
+  if (state === 'missing') {
+    return `${label ? subject : `This ${type}`} could not be found.`
+  }
+  if (state === 'unauthorized') {
+    return `You don't have access to ${subject}.`
+  }
+  return `Could not load ${subject}.`
+}
+
+/** Keep provider diagnostics out of both local and app-authored read handlers. */
+export function readContext(
+  state: TaoReadNetCase,
+  hint: TaoReadHint = {},
+  facts: Readonly<Partial<Pick<TaoReadContext, 'ElapsedSeconds' | 'MissingReason' | 'UnauthorizedReason'>>> = {},
+): TaoReadContext {
+  // TODO: Docs/Roadmap/Tao Revolution/Follow-ups - Read context producers.md tracks proven
+  // elapsed time, progress, recovery, category, and retry producers. Do not invent a capability or no-op action.
+  return Object.freeze({
+    State: state,
+    Message: readMessage(state, hint, facts),
+    ReadKind: hint.readKind ?? 'unknown',
+    SubjectLabel: hint.subjectLabel,
+    SubjectType: hint.subjectType,
+    LoadingPhase: state === 'loading' ? 'initial' : undefined,
+    ElapsedSeconds: facts.ElapsedSeconds,
+    ProgressCompleted: undefined,
+    ProgressTotal: undefined,
+    MissingReason: facts.MissingReason,
+    UnauthorizedReason: facts.UnauthorizedReason,
+    Recovery: undefined,
+    ErrorCategory: undefined,
+    Retryable: undefined,
+    Retry: undefined,
+  })
+}
+
 /**
- * One `guard default` handler. It renders at the guard that reached the net, as that guard's own
- * branch would, so it receives the guarding view's props; `error` also receives its message.
+ * One app guard handler. It renders at the guard that reached the net, as that guard's own
+ * branch would, so it receives the guarding view's props and a safe read context.
  */
 type TaoReadNetHandler = (
   siteProps: { __tao?: TaoProps },
-  message: { evaluate(): { jsValue: unknown } },
+  context: { evaluate(): { jsValue: TaoReadContext } },
 ) => React.ReactNode
 
-/** A project's `guard default`: the cases it replaces. Every case it omits keeps the runtime's. */
+/** An app guard: the cases it replaces. Every case it omits keeps the runtime's. */
 export type TaoReadNet = Readonly<Partial<Record<TaoReadNetCase, TaoReadNetHandler>>>
 
-/** ReadNet freezes the handlers a compiled `guard default` declares. */
+/** ReadNet freezes the handlers a compiled app guard declares. */
 export function ReadNet(handlers: TaoReadNet): TaoReadNet {
   return Object.freeze({ ...handlers })
 }
 
+/** Merge an inherited app net with this variant's own cases. */
+export function MergeReadNet(base: TaoReadNet | undefined, own: TaoReadNet): TaoReadNet {
+  return ReadNet({ ...base, ...own })
+}
+
 /**
- * renderReadNet renders one exceptional case through the mounted app's `guard default`, or through
+ * renderReadNet renders one exceptional case through the mounted app's guard, or through
  * the runtime's own handling when the app declares none for that case.
  */
 export function renderReadNet(
   caseName: TaoReadNetCase,
-  message: { evaluate(): { jsValue: unknown } },
+  context: { evaluate(): { jsValue: TaoReadContext } },
   siteProps: TaoProps | undefined,
 ): React.ReactNode {
   const override = TaoPropsControls.appInChain(siteProps)?.readNet?.[caseName]
   if (override) {
-    return override({ __tao: siteProps }, message)
+    return override({ __tao: siteProps }, context)
   }
-  return runtimeReadNet(caseName, message, siteProps)
+  return runtimeReadNet(caseName, context.evaluate().jsValue, siteProps)
 }
 
 /**
- * The runtime's net speaks plainly, in the app's own `Spinner` and `Text` element defaults. An error
- * shows its own message, which the data layer always supplies.
+ * The runtime's net speaks plainly, in the app's own `Spinner` and `Text` element defaults.
  */
-const runtimeSentences = {
-  missing: 'This is gone',
-  unauthorized: "You don't have access to this",
-} as const satisfies Record<Exclude<TaoReadNetCase, 'loading' | 'error'>, string>
-
 function runtimeReadNet(
   caseName: TaoReadNetCase,
-  message: { evaluate(): { jsValue: unknown } },
+  context: TaoReadContext,
   siteProps: TaoProps | undefined,
 ): React.ReactNode {
   const ambient = TaoPropsControls.ambientContext(siteProps)
   if (caseName === 'loading') {
-    return Views.Spinner({}, { ...ambient, designDefault: 'Spinner' })
+    return Views.View({
+      children: [
+        Views.Spinner({ label: context.Message }, { ...ambient, designDefault: 'Spinner' }),
+        Views.Text({ children: [context.Message] }, { ...ambient, designDefault: 'Text' }),
+      ],
+    }, { ...ambient, designDefault: 'View' })
   }
-  const sentence = caseName === 'error' ? String(message.evaluate().jsValue) : runtimeSentences[caseName]
-  return Views.Text({ children: [sentence] }, { ...ambient, designDefault: 'Text' })
+  return Views.Text({ children: [context.Message] }, { ...ambient, designDefault: 'Text' })
 }

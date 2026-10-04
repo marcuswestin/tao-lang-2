@@ -24,7 +24,7 @@ use Editor as ProseEditor from @prose // imports may be renamed locally
 //   §1  visibility — `file` narrows, no marker is folder-visible, `public` widens
 //   §2  typed slots, unit literals and duration arithmetic, entities, yes/no poles, relation traits,
 //       `validate` / `required` / `together`, `local only`, case types with text-literal cases
-//   §5  direct write verbs, the one `guard default` read net, `when do` effect outcomes
+//   §5  direct write verbs, the one the app read net read net, `when do` effect outcomes
 //   §6  live `query … from <path>`, field selection, relation traversal
 //   §7  reactive parameters, explicit copies, projected input items, and document write recovery
 //   §8  commands with parameter-list slots, private actions, `check` early exit, `when` / `if`,
@@ -218,13 +218,7 @@ design WordFlowerDesign {
 // Declared once, anonymously, and covering the states of whatever subject a site reads. A site names
 // only the cases it treats specially, so `unauthorized` can never be accidentally skipped and no
 // screen below repeats a spinner. Emptiness is content, not failure, so it stays at the site.
-guard default {
-   loading -> Spinner(Label: "Opening WordFlower…")
-   missing -> EmptyState(Icon: "questionmark.folder", Title: "This is gone")
-   unauthorized -> EmptyState(Icon: "lock", Title: "You don't have access to this")
-   rejected -> Problem { Text(Problem) [body, destructive] }
-   error -> Message { Text(Message) [body] }
-}
+
 
 // ---------------------------------------------------------------------------------------------
 // §10. Navigation
@@ -342,6 +336,13 @@ app WordFlower {
    // Restoration is default-on and host managed; `Restore` is written only to deviate. Toasts and
    // asked occurrences never restore by language rule, so the subtraction here is the declared part.
    Restore automatic { Exclude sheets, menus, toasts }
+
+   guard {
+      loading -> Spinner(Label: "Opening WordFlower…")
+      missing -> EmptyState(Icon: "questionmark.folder", Title: "This is gone")
+      unauthorized -> EmptyState(Icon: "lock", Title: "You don't have access to this")
+      error -> Context { Text(Context.Message) [body] }
+   }
 }
 
 // `with` copies public properties into a configured variant; WordFlower and WordFlowerShell are

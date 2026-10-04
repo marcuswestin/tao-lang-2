@@ -4,7 +4,21 @@ import { ExpoRunner } from '@expo-host/dev-loop/expo-runner/ExpoRunner'
 import { detectLanIPv4 } from '@expo-host/dev-loop/expo-runner/lan-host'
 import { CompanionIdentity } from '@expo-host/dev-loop/prebuilt-host/CompanionIdentity'
 import { type AppleFoundationModelsService, startAppleFoundationModelsService } from '@generation/apple-server'
-import { CLI, Errors, FS, HCI, Json, Platform, ProjectDevSession, Repo, SecretsFile, Time } from '@shared'
+import {
+  Assert,
+  CLI,
+  Errors,
+  FS,
+  HCI,
+  Json,
+  Platform,
+  ProjectDevSession,
+  ReleaseCapabilities,
+  ReleaseToolchain,
+  Repo,
+  SecretsFile,
+  Time,
+} from '@shared'
 import {
   openStudioPreviewSession,
   resolveStudioProjectRoot,
@@ -86,6 +100,10 @@ export const StudioDev = {
 
 /** runStudioDev owns the local Studio server, file watcher, preview compiler, and Expo process. */
 export async function runStudioDev(options: StudioDevOptions): Promise<number> {
+  ReleaseCapabilities.require('studio')
+  if (options.device !== undefined) {
+    ReleaseCapabilities.require('companion')
+  }
   let finish: ((exitCode: number) => void) | undefined
   const finished = new Promise<number>(resolve => {
     finish = resolve
@@ -133,30 +151,32 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       : undefined
     // The gateway starts before any project so its port can be written into every preview manifest,
     // and it finds sessions through the manager that is created right after it.
-    trustStore = await StudioDeviceTrustStore.open(FS.resolvePath('device-trust', userStateRoot))
-    deviceGateway = await StudioDeviceGateway.start({
-      hosts: async () => [await detectLanIPv4()].filter(host => host !== 'localhost'),
-      log: line => HCI.logProcessInfo('studio-device', line),
-      sessions: {
-        get: sessionId => {
-          const resource = manager?.get(sessionId)
-          return resource === undefined
-            ? undefined
-            : { previewUrl: resource.previewUrl, session: resource.session, sessionId }
-        },
-        list: () =>
-          (manager?.list().current ?? []).flatMap(item => {
-            const resource = manager?.get(item.sessionId)
+    if (ReleaseCapabilities.allows('companion')) {
+      trustStore = await StudioDeviceTrustStore.open(FS.resolvePath('device-trust', userStateRoot))
+      deviceGateway = await StudioDeviceGateway.start({
+        hosts: async () => [await detectLanIPv4()].filter(host => host !== 'localhost'),
+        log: line => HCI.logProcessInfo('studio-device', line),
+        sessions: {
+          get: sessionId => {
+            const resource = manager?.get(sessionId)
             return resource === undefined
-              ? []
-              : [{ previewUrl: resource.previewUrl, session: resource.session, sessionId: item.sessionId }]
-          }),
-      },
-      trustStore,
-    })
-    lifecycle.record({ component: 'device-gateway', event: 'port-allocated', port: deviceGateway.port })
-    HCI.logProcessInfo('studio', `Device gateway: tao-studio-device-v1 on port ${deviceGateway.port}`)
-    const gatewayPort = deviceGateway.port
+              ? undefined
+              : { previewUrl: resource.previewUrl, session: resource.session, sessionId }
+          },
+          list: () =>
+            (manager?.list().current ?? []).flatMap(item => {
+              const resource = manager?.get(item.sessionId)
+              return resource === undefined
+                ? []
+                : [{ previewUrl: resource.previewUrl, session: resource.session, sessionId: item.sessionId }]
+            }),
+        },
+        trustStore,
+      })
+      lifecycle.record({ component: 'device-gateway', event: 'port-allocated', port: deviceGateway?.port })
+      HCI.logProcessInfo('studio', `Device gateway: tao-studio-device-v1 on port ${deviceGateway?.port}`)
+    }
+    const gatewayPort = deviceGateway?.port
     // One dev data server serves every project this Studio opens; each project's preview manifest
     // names its own app key, so the projects' `Dev` datasources never share a stream.
     devDataServer = await DevDataServer.start({
@@ -287,6 +307,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       if (await waitForReadyUrl(sessionUrl)) {
         await launch.update({ state: 'ready' })
         if (options.device !== undefined && !requestedStop) {
+          Assert.defined(deviceGateway, 'Studio device startup requires the Companion gateway.')
           if (initialResource.previewUrl === undefined) {
             Errors.throwHostEnvironment('Studio has no Metro preview to launch on the requested device.')
           }
@@ -306,7 +327,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
             appName: options.appName,
             artifactRoot,
             devDataPort: devDataServer.port,
-            deviceGatewayPort: deviceGateway.port,
+            deviceGatewayPort: deviceGateway?.port,
             launchId: launch.launchId,
             lifecycleLogPath: lifecycle.path,
             manifestPath: launch.path,
@@ -520,6 +541,7 @@ export async function openStudioProjectResource(
   },
 ): Promise<StudioSessionResource> {
   const project = await resolveStudioProjectRoot(request.projectPath)
+  await ReleaseToolchain.requireMatchingProjectRelease(project.projectRoot, 'Studio')
   const ownership = await ProjectDevSession.acquire(project.projectRoot, 'studio')
   const expo = await ExpoRunner.createSessionWithAvailablePort(options.preferredExpoPort, {
     scheme: CompanionIdentity.scheme,

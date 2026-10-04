@@ -108,6 +108,13 @@ app Hearth {
    link SharedListLink "/shared/{SharedList}" -> {
       present SharedListScreen(SharedList) as root
    }
+
+   guard {
+      loading -> Spinner(Label: "Opening Hearth…")
+      missing -> EmptyState(Icon: "questionmark.folder", Title: "This is gone", Body: "Someone in your home may have cleared it.")
+      unauthorized -> EmptyState(Icon: "lock", Title: "You don't have access to this", Body: "Ask someone at home to invite you back.")
+      error -> Context { Text(Context.Message) [body] }
+   }
 }
 
 app HearthOnDevice = Hearth with {

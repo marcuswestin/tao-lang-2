@@ -34,9 +34,8 @@ export const FilesCompiler = {
     const moduleCommands = statements.filter(AST.isCommandDeclaration)
     const dataEntities = opts.dataEntities ?? statements.filter(AST.isEntityDataDeclaration)
     const hasRuntimeStatements = statements.some(statement =>
-      AST.isGuardDefaultStatement(statement)
-      || (AST.isEmittingRuntimeBinding(statement)
-        && (!AST.isTypeDeclaration(statement) || isRuntimeConfigurableDeclaration(statement)))
+      AST.isEmittingRuntimeBinding(statement)
+      && (!AST.isTypeDeclaration(statement) || isRuntimeConfigurableDeclaration(statement))
     )
     if (!hasRuntimeStatements && !importLines && !scopeBindings && !exportLines && !bridgeTypes) {
       return gen`export {}`

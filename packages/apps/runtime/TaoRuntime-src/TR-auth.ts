@@ -1354,6 +1354,8 @@ export const AuthControls = {
             ? { status: 'loading' }
             : scope.session.state === 'Error'
             ? { status: 'error', message: scope.session.message ?? 'Unable to load your account.' }
+            : scope.session.state === 'SignedOut'
+            ? { status: 'unauthorized', reason: 'signed-out' }
             : { status: 'unauthorized' },
         )
       },

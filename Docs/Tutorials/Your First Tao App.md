@@ -15,6 +15,20 @@ it. About thirty minutes, start to finish.
 Every snippet is copy-and-paste. The app grows one step at a time. Nothing is left as an exercise.
 The last section is the finished file.
 
+This tutorial builds one file by hand; `tao create` generates a different, multi-file starter. Until
+the signed standalone CLI is published, use the repository-development setup in the [README](../../README.md#install).
+From the checkout root, save the first block below as `ReadingList.tao`, then run:
+
+```sh
+./agent tao check ReadingList.tao
+./agent tao dev ReadingList.tao --app ReadingList --web
+```
+
+The second command opens the browser app and watches the file. Keep it running as you replace and
+add snippets. After step 9, stop the dev process and run the test command shown there. The example's
+`license MIT` is a choice for this sample app; the licensing policy for apps built with Tao remains
+an unresolved pre-release decision.
+
 ## What you will have built
 
 One file with:
@@ -222,7 +236,7 @@ scene BookList() {
          Text("Reading List") [title]
          guard Books {
             loading -> { Spinner() }
-            error -> Message { Text("Could not load your books: { Message }") [body] }
+            error -> Context { Text("Could not load your books: { Context.Message }") [body] }
          }
          guard Books empty -> { Text("No books yet") [body] }
 
@@ -244,12 +258,13 @@ Four new ideas:
   screen re-renders.
 - **`guard`** handles a value's exceptional states. If a case matches, it renders and the rest of
   the enclosing block does not — so the lines after it can assume the data is there. `error ->
-  Message` binds the message for that branch only.
+  Context` binds a read context for that branch only; `Context.Message` is safe display copy.
 - **`guard Books empty -> { … }`** is the same construct with a single case.
 - **`loop Books / Book { … }`** repeats its body per row, binding each row to `Book`. `#books` above
   it is a **tag**: a name for tests to select, invisible to the person using the app.
 
-`{ Message }` inside a string is interpolation — any expression goes between the braces.
+`{ Context.Message }` inside a string is interpolation. Text, number, boolean, and `none` values
+can be interpolated; the context itself is an item, so use its `Message` member.
 
 `view BookRow(Book)` is reusable inline content. The presented `BookList` scene and this row share
 the same view body grammar; `scene` adds only host-facing chrome and the rule that it is presented,
@@ -285,7 +300,7 @@ scene BookList() {
          Text("Reading List") [title]
          guard Books {
             loading -> { Spinner() }
-            error -> Message { Text("Could not load your books: { Message }") [body] }
+            error -> Context { Text("Could not load your books: { Context.Message }") [body] }
          }
 
          #newTitle
@@ -369,7 +384,7 @@ scene BookScreen(Book) {
          guard Book {
             loading -> { Spinner() }
             missing -> { Text("That book is gone.") [body] }
-            error -> Message { Text("Could not load that book: { Message }") [body] }
+            error -> Context { Text("Could not load that book: { Context.Message }") [body] }
          }
          Text(Book.Title) [title]
 
@@ -515,7 +530,7 @@ scene BookList() {
          Text("Reading List") [title]
          guard Books {
             loading -> { Spinner() }
-            error -> Message { Text("Could not load your books: { Message }") [body] }
+            error -> Context { Text("Could not load your books: { Context.Message }") [body] }
          }
 
          #newTitle
@@ -548,7 +563,8 @@ scene BookList() {
 }  }  }  }  }  }
 ```
 
-`Books as CurrentlyReading` renames the source so one screen can hold several views of it, and
+`query CurrentlyReading = Books with { ... }` names a second query over Books so one screen can hold
+several views of it, and
 `where is Reading` filters by the case name the entity declared. The `guard Books empty` branch is
 gone: each column now says for itself when it has nothing in it.
 
@@ -609,6 +625,14 @@ test "Reading List" {
 - **`select #reading[1] { … }`** scopes the steps inside it to the first tagged row.
 - **`back`** is the same operation as the platform's Back.
 - **`expect { … }`** groups assertions that must all hold at that moment.
+
+Save the file and run this from the checkout root:
+
+```sh
+./agent tao test ReadingList.tao
+```
+
+The complete file below is the same result as applying the steps, not a second file to create.
 
 ## The complete app
 
@@ -694,7 +718,7 @@ scene BookList() {
          Text("Reading List") [title]
          guard Books {
             loading -> { Spinner() }
-            error -> Message { Text("Could not load your books: { Message }") [body] }
+            error -> Context { Text("Could not load your books: { Context.Message }") [body] }
          }
 
          #newTitle
@@ -755,7 +779,7 @@ scene BookScreen(Book) {
          guard Book {
             loading -> { Spinner() }
             missing -> { Text("That book is gone.") [body] }
-            error -> Message { Text("Could not load that book: { Message }") [body] }
+            error -> Context { Text("Could not load that book: { Context.Message }") [body] }
          }
          Text(Book.Title) [title]
 

@@ -185,6 +185,7 @@ ConfigurationEntry:
     restoration=RestorationPolicy
     | rootView=AppView
     | requirement=PackageRequires
+    | appGuard=AppGuardStatement
     | key=USE_IMPORT_PATH block=ConfigurationBlock
     | label=ID ':' expression=Expression
     | name=MetadataName ('.' nameMembers+=ID)* (value=ConfigurationValue | block=ConfigurationBlock)
