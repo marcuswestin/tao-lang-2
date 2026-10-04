@@ -1,8 +1,9 @@
 import Runtime, { RuntimeToolchainPaths, type ShipManifest } from '@expo-host'
-import { Assert, CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
+import { Assert, CLI, Errors, FS, HCI, Platform, ProjectIdentity, Repo } from '@shared'
 
 /** verifyReleaseBundle exports real release and preview bundles in an isolated host. */
 async function verifyReleaseBundle(): Promise<void> {
+  HCI.logProcessInfo('bundle-proof', 'Preparing release and preview bundle proof...')
   const runRoot = await Repo.mkScratchDir('tao-ship-bundle-proof-')
   let primaryFailure: unknown
   try {
@@ -11,6 +12,7 @@ async function verifyReleaseBundle(): Promise<void> {
     const sourcePath = FS.resolvePath('BundleProof.tao', sourceRoot)
     await copyHost(hostRoot)
     await FS.writeText(FS.resolvePath('.tao/.gitignore', sourceRoot), '*\n')
+    await ProjectIdentity.ensure(sourceRoot)
     await FS.writeText(
       sourcePath,
       `app BundleProof { id "bundle-proof" version "1.0.0" name "Tao Bundle Proof" view Main }
@@ -22,6 +24,7 @@ async function verifyReleaseBundle(): Promise<void> {
       FS.resolvePath('node_modules', hostRoot),
     )
 
+    HCI.logProcessInfo('bundle-proof', 'Compiling release app...')
     await Runtime.generateApp(sourcePath, {
       appName: 'BundleProof',
       runtimePackageRoot: hostRoot,
@@ -29,9 +32,11 @@ async function verifyReleaseBundle(): Promise<void> {
       validationMode: 'release',
     })
     const releaseRoot = FS.resolvePath('release', runRoot)
+    HCI.logProcessInfo('bundle-proof', 'Exporting and checking release bundle...')
     await expoExport(hostRoot, releaseRoot)
     await Runtime.proveReleaseBundle(releaseRoot)
 
+    HCI.logProcessInfo('bundle-proof', 'Compiling preview control app...')
     await Runtime.generateApp(sourcePath, {
       appName: 'BundleProof',
       preview: {
@@ -42,6 +47,7 @@ async function verifyReleaseBundle(): Promise<void> {
       runtimePackageRoot: hostRoot,
     })
     const previewRoot = FS.resolvePath('preview', runRoot)
+    HCI.logProcessInfo('bundle-proof', 'Exporting and checking preview control bundle...')
     await expoExport(hostRoot, previewRoot)
     await assertPreviewControlFails(previewRoot)
   } catch (error) {
@@ -49,6 +55,7 @@ async function verifyReleaseBundle(): Promise<void> {
     throw error
   } finally {
     try {
+      HCI.logProcessInfo('bundle-proof', 'Cleaning proof workspace...')
       await FS.remove(runRoot)
     } catch (cleanupError) {
       const message = `Failed to remove release-bundle proof root ${runRoot}.`
