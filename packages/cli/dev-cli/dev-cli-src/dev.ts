@@ -9,6 +9,7 @@ import { landedReport, MergeWithMainCommand } from '@verification/MergeWithMain'
 import { formatGateSummary, formatVerdict, gateExitCode } from '@verification/RunSummary'
 import { TestRunner } from '@verification/TestRunner'
 import { VerificationLanes } from '@verification/VerificationLanes'
+import { VerifyPartition } from '@verification/VerifyPartition'
 import { WorkReporter } from '@verification/WorkReporter'
 import { CleanCommand } from './clean/CleanCommand'
 import { devZshCompletion } from './completion/DevCompletion'
@@ -51,6 +52,7 @@ type GatesCommandOptions = {
   json?: string
   lane?: string
   output?: string
+  partition?: string
   skipUnsandboxed?: boolean
   skipped?: string[]
 }
@@ -383,6 +385,10 @@ await runWithCommands(commands => {
     .option('--json <path>', 'Also write the summary as a JSON artifact at this path.')
     .option('--lane <name>', 'Artifact lane the run writes its logs and summary under.', 'verify')
     .option('--output <mode>', OUTPUT_OPTION_HELP)
+    .option(
+      '--partition <index/count>',
+      "Run this machine's share of the lane's readers, one-based, e.g. 2/8; the prepare phase runs in full.",
+    )
     .option('--skip-unsandboxed', 'Skip gates whose catalog metadata requires an unsandboxed host.')
     .option('--skipped <entry...>', 'Gates deliberately not run in this lane, as name=reason.')
     .option(
@@ -417,6 +423,7 @@ await runWithCommands(commands => {
             jsonPath: options.json,
             lane: options.lane,
             outputMode,
+            partition: options.partition === undefined ? undefined : VerifyPartition.parse(options.partition),
             skipUnsandboxed: options.skipUnsandboxed === true,
             skipped: options.skipped,
           })

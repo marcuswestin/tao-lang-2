@@ -32,6 +32,7 @@ import { TestNodes } from './TestNodes'
 import { TestRunner } from './TestRunner'
 import { TestShards } from './TestShards'
 import { VerificationLanes } from './VerificationLanes'
+import { type PartitionSpec, VerifyPartition } from './VerifyPartition'
 import {
   type WorkCommand,
   type WorkEvent,
@@ -92,6 +93,11 @@ export type RunGatesOptions = {
     sharedRoot?: string
   }
   jobs?: number
+  /**
+   * Run only this machine's share of the lane's readers; the prepare phase still runs in full. Every
+   * machine of the split runs the same command with its own index and publishes the plan's digest.
+   */
+  partition?: PartitionSpec
   /** Path to write an extra stable copy of the JSON summary to, for the lane's known-path readers. */
   jsonPath?: string
   /**
@@ -225,6 +231,20 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   const testGate = runnableGates.find(isTestGate)
   const testPlan = testGate === undefined ? undefined : await testNodes(testGate, location)
   const suiteOfNode = new Map((testPlan?.states ?? []).map(state => [state.name, state.suite]))
+  const timings = await RunTimings.load({ repositoryRoot: location.repositoryRoot })
+  const expectedMs = (name: string) => RunTimings.expectedMs(timings, name)
+
+  // One machine's share of a lane split across several. It is planned over every reader before any
+  // record is consulted, because records can differ between machines and the plan must not.
+  const partition = options.partition === undefined ? undefined : VerifyPartition.plan([
+    ...recipeGates.filter(name => !GateCatalog.isPrepare(name)).map(name => ({ expectedMs: expectedMs(name), name })),
+    ...(testPlan?.states ?? []).map(state => ({
+      expectedMs: expectedMs(state.name),
+      files: state.selectedTestFiles,
+      name: state.name,
+    })),
+  ], options.partition)
+  const elsewhere = (name: string) => partition !== undefined && !VerifyPartition.owns(partition, name)
 
   // What another lane already proved at this exact tree and toolchain. Only work whose verdict the
   // key fully describes qualifies: a node that rewrites the tree or fills a generated directory
@@ -255,8 +275,23 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
       sharedRoot: options.greenTree?.sharedRoot,
     })
 
-  const gatesToRun = recipeGates.filter(name => !proved.proved.has(name))
-  const testStates = (testPlan?.states ?? []).filter(state => !proved.proved.has(state.suite))
+  const gatesToRun = recipeGates.filter(name => !proved.proved.has(name) && !elsewhere(name))
+  const testStates = (testPlan?.states ?? []).filter(state => !proved.proved.has(state.suite) && !elsewhere(state.name))
+  const partitionSkips = partition === undefined ? [] : [
+    ...recipeGates.filter(elsewhere).map((name): GateResult => ({
+      elapsedMs: 0,
+      name,
+      reason: VerifyPartition.describe(partition, name),
+      status: 'skipped',
+    })),
+    ...(testPlan?.states ?? []).filter(state => elsewhere(state.name)).map((state): GateResult => ({
+      elapsedMs: 0,
+      name: state.name,
+      reason: VerifyPartition.describe(partition, state.name),
+      status: 'skipped',
+      suite: state.suite,
+    })),
+  ]
   const greenSkips = [...proved.proved].map(([name, record]): GateResult => ({
     elapsedMs: 0,
     name,
@@ -267,6 +302,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   const declaredSkips = [
     ...[...options.skipped ?? [], ...hostSkips].map(skippedResult),
     ...greenSkips,
+    ...partitionSkips,
   ]
     .filter(result => !gatesToRun.includes(result.name))
     .filter((result, index, results) => results.findIndex(candidate => candidate.name === result.name) === index)
@@ -276,8 +312,6 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
     ...TaoAppSharedRun.attach(testStates, location.logRoot, location.repositoryRoot),
   ]
   await RunArtifacts.assignLogPaths(states, location)
-  const timings = await RunTimings.load({ repositoryRoot: location.repositoryRoot })
-  const expectedMs = (name: string) => RunTimings.expectedMs(timings, name)
   const reporter = createReporter(options, location.logRoot)
   const liveArtifacts = RunArtifacts.liveWriter(location, event => reporter.handle(event))
   // A lane registers before it takes any other lease. A landing priority window captures existing
@@ -519,7 +553,8 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   // A lane record is only written when the lane's own membership is fully describable by the key,
   // for the same reason it is only read then. A lane whose nodes include a host-dependent one, or a
   // suite the flake ledger has seen flip, records its nodes and not itself.
-  const recordsLane = wholeLaneRecordable && unstable.size === 0
+  // A partition never stands for its lane: the rest of the lane ran on other machines.
+  const recordsLane = wholeLaneRecordable && unstable.size === 0 && partition === undefined
   if (options.greenTree !== undefined && summary.status === 'passed' && !result.interrupted) {
     await recordGreen({
       canStandOnRecord,
@@ -552,6 +587,9 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
     })
   }
   summary.overlap = overlap
+  if (partition !== undefined) {
+    summary.partition = { count: partition.count, digest: partition.digest, index: partition.index + 1 }
+  }
   if (HISTORY_LANES.includes(location.lane)) {
     // Written while a broad lane still holds the landing lock, and kept outside this worktree, so a
     // reclaimed checkout does not take the machine's only timing record with it.

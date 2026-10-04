@@ -1,0 +1,142 @@
+name: Verify
+
+# Runs verify-full's portable membership (`./agent verify-full-sandbox`) split across free Linux
+# runners, so an agent on a small machine can open a pull request and read one verdict instead of
+# running the full lane itself. Each partition runs the whole prepare phase and its own share of the
+# readers; the final `Verify` job is the one verdict, and it refuses a set of partitions that did not
+# compute the same plan, because a disagreement there means some node ran nowhere.
+#
+# What this does not prove: the host-only lanes (Studio smokes, browser, native shell, simulator,
+# canary), which need macOS and a window server. `./agent unsandboxed verify-full` still owns those.
+#
+# PARTITIONS and the matrix list below must change together. Never cache `.artifacts`: the plan
+# reads recorded timings, and partitions that restored different ones would place nodes differently.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main]
+  merge_group:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  PARTITIONS: 8
+  # Per-gate green records travel between runs of the same tree through the Actions cache.
+  TAO_GREEN_STORE: ${{ github.workspace }}/../tao-green
+
+jobs:
+  partition:
+    name: Partition ${{ matrix.partition }}/8
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        partition: [1, 2, 3, 4, 5, 6, 7, 8]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Identify the tree
+        id: tree
+        run: echo "hash=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
+
+      - name: Restore green records for this tree
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.TAO_GREEN_STORE }}
+          key: tao-green-${{ runner.os }}-${{ runner.arch }}-${{ steps.tree.outputs.hash }}-${{ matrix.partition }}-of-${{ env.PARTITIONS }}
+          restore-keys: |
+            tao-green-${{ runner.os }}-${{ runner.arch }}-${{ steps.tree.outputs.hash }}-
+
+      # Installs a checksum-pinned single-user Nix, builds the locked Linux profile, then runs
+      # `./agent setup`; the same path the native Linux contributor acceptance proves.
+      - name: Bootstrap Nix, the pinned toolchain, and Tao setup
+        run: ./.config/bootstrap-tao-dev-env --install-nix
+
+      - name: Verify partition ${{ matrix.partition }}/${{ env.PARTITIONS }}
+        run: ./agent verify-full-sandbox --partition ${{ matrix.partition }}/${{ env.PARTITIONS }}
+
+      # Locally the prepare phase fixes formatting and regenerates indexes in place; here a rewrite
+      # means the pull request carries unformatted or stale files, which is a failure.
+      - name: Require the prepare phase to leave the tree unchanged
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "The prepare phase rewrote tracked files; run ./agent fix and commit the result:"
+            git status --porcelain
+            git diff --stat
+            exit 1
+          fi
+
+      - name: Collect the run's logs and summary
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/verify-logs"
+          if [ -e .artifacts/logs/verify-full-sandbox/latest ]; then
+            cp -RL .artifacts/logs/verify-full-sandbox/latest/. "$RUNNER_TEMP/verify-logs/"
+          fi
+
+      - name: Upload the run's logs and summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-partition-${{ matrix.partition }}
+          path: ${{ runner.temp }}/verify-logs
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Save green records for this tree
+        if: always()
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.TAO_GREEN_STORE }}
+          key: tao-green-${{ runner.os }}-${{ runner.arch }}-${{ steps.tree.outputs.hash }}-${{ matrix.partition }}-of-${{ env.PARTITIONS }}
+
+  verify:
+    name: Verify
+    needs: partition
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Download every partition's summary
+        uses: actions/download-artifact@v4
+        with:
+          pattern: verify-partition-*
+          path: partitions
+
+      - name: Require every partition green and every plan identical
+        env:
+          PARTITION_RESULT: ${{ needs.partition.result }}
+        run: |
+          status=0
+          summaries=$(find partitions -name summary.json | sort)
+          count=$(printf '%s\n' "$summaries" | grep -c . || true)
+          if [ "$count" != "$PARTITIONS" ]; then
+            echo "Expected $PARTITIONS partition summaries, found $count."
+            status=1
+          fi
+          digests=$(for summary in $summaries; do jq -r '.partition.digest // "missing"' "$summary"; done | sort -u)
+          if [ "$(printf '%s\n' "$digests" | grep -c .)" != 1 ] || [ "$digests" = missing ]; then
+            echo "Partitions disagreed about the plan, so some node may have run nowhere:"
+            printf '%s\n' "$digests"
+            status=1
+          fi
+          for summary in $summaries; do
+            jq -r '"partition \(.partition.index // "?")/\(.partition.count // "?"): \(.status), \([.gates[] | select(.status == "passed")] | length) passed, \([.gates[] | select(.status == "failed")] | length) failed in \(.elapsedMs / 1000 | floor)s"' "$summary"
+            jq -r '.gates[] | select(.status == "failed") | "  failed: \(.name)"' "$summary"
+          done
+          if [ "$PARTITION_RESULT" != success ]; then
+            echo "At least one partition did not succeed ($PARTITION_RESULT); its artifact holds the logs."
+            status=1
+          fi
+          exit $status

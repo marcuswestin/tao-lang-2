@@ -118,6 +118,11 @@ export type GateSummary = {
    * looked, which a broad lane trips on its own; this says whether the run was actually alone.
    */
   overlap?: OverlapReport
+  /**
+   * This run's share of a lane split across machines: one-based `index` of `count`, and the digest
+   * of the whole plan, which every machine of one split must report identically.
+   */
+  partition?: { count: number; digest: string; index: number }
   /** What the schedule achieved and where it lost time; absent for a run that did not schedule. */
   schedule?: ScheduleReport
   status: 'failed' | 'passed'

@@ -79,6 +79,15 @@ on its size.
   `~/.cache/tao/machine-lanes/history/` (`runs.jsonl`, `landings.jsonl`), which outlives reclaimed
   worktrees. Compare timings there, not in one checkout's `.artifacts/`.
 
+## Hosted verification
+
+`.github/workflows/verify.yml` runs `verify-full-sandbox` split across eight free Linux runners
+(`--partition k/8`) on every pull request push, merge-queue entry, and push to `main`; its `Verify`
+job is the single verdict. It proves the portable gates only — never the host-only lanes — and it
+does not replace `./agent unsandboxed land`. Each partition's logs and `summary.json` are the
+`verify-partition-<k>` artifact: read the failed partition's artifact, reproduce with
+`./agent test-file` locally, push the fix, and read the next verdict.
+
 ## Reporting while a lane runs
 
 A lane running for many minutes is the one place where backgrounding a gate is right, because the Developer is

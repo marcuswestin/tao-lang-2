@@ -670,11 +670,12 @@ verify-changed no_cache='false': _deps
 verify-full no_cache='false': _deps
     ./dev gates {{ VERIFY_FULL_GATES }} --lane verify-full {{ if VERIFY_FULL_SKIPPED == "" { "" } else { "--skipped \"" + VERIFY_FULL_SKIPPED + "\"" } }} --green-tree verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
 
-# Run verify-full's gate membership in a managed shell, skipping the host-only lanes and claiming nothing about them. --no-cache ignores a recorded green tree
+# Run verify-full's gate membership in a managed shell, skipping the host-only lanes and claiming nothing about them. --no-cache ignores a recorded green tree; --partition k/n runs one CI machine's share
 [arg('no_cache', long='no-cache', value='true')]
+[arg('partition', long='partition')]
 [group('Dev')]
-verify-full-sandbox no_cache='false':
-    ./dev gates {{ VERIFY_FULL_GATES }} --skip-unsandboxed --lane verify-full-sandbox {{ if VERIFY_FULL_SKIPPED == "" { "" } else { "--skipped \"" + VERIFY_FULL_SKIPPED + "\"" } }} --green-tree verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
+verify-full-sandbox no_cache='false' partition='':
+    ./dev gates {{ VERIFY_FULL_GATES }} --skip-unsandboxed --lane verify-full-sandbox {{ if VERIFY_FULL_SKIPPED == "" { "" } else { "--skipped \"" + VERIFY_FULL_SKIPPED + "\"" } }} --green-tree verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }} {{ if partition == "" { "" } else { "--partition " + partition } }}
 
 # `verify-repo` is the end of the widening order, past where a scope can go: it is the only entry
 # that gives up every shortcut the others keep. `clean` removes the build outputs and the generated
