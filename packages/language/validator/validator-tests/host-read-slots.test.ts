@@ -326,7 +326,9 @@ Describe('validator: host-read slots and commands', () => {
       use StackNav from @tao/nav
       ${leaf}
       app Demo {
-        Name "Demo"
+        id "demo"
+        version "1.0.0"
+        name "Demo"
         Navigator StackNav { Initial Home }
         @detail StackNav { Initial AuxiliaryRoot }
       }
