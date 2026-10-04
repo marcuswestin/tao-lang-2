@@ -1,6 +1,6 @@
 # DEVENV-APP-DEV-WEB-OPENS-CHROME-IN-THE-FOREGROUND — `app-dev --web` opens Chrome in the foreground
 
-- **Status:** In progress
+- **Status:** Planned
 - **Section:** External
 - **Area:** `./agent unsandboxed app-dev --web`, quiet UI workflows.
 - **Impact:** An agent following the documented web loop takes over the Developer's desktop, against the quiet-UI rule.
@@ -44,7 +44,9 @@
 - **Proposed change:** Use owned headless Chrome for the managed agent web runner, with `--show-browser`
   only for a requested window. Prefer the served URL in the in-app browser for interactive review,
   and explicitly attach a CDP client when checking the runner's exact Chrome session.
-- **Dependencies:** None.
+- **Dependencies:** Remaining human focus/Spaces observations are deferred until post-MVP by the
+  Developer's 2026-10-04 stopping decision. Complete them before promoting the corresponding
+  quiet/visible automation guarantee; ordinary release-1 browser acceptance remains separate.
 - **Acceptance:** Managed Chrome screenshots/clicks, reload/restart, profile/full-loop cleanup and
   unrelated Chrome/Metro preservation are proved by the current real-host cases. Still open:
   human focus observations during quiet and explicitly visible launch. `app-dev --web` must never raise a desktop window

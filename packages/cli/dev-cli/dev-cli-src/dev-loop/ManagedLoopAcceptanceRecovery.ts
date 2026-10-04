@@ -475,7 +475,7 @@ function observeKernel(
   let result: Pick<CLI.CommandResult, 'stdout' | 'stderr' | 'exitCode' | 'error'>
   try {
     result = operations.runSync('lsof', {
-      args: ['-nP', `-iTCP:${capsule.consolePort}-${capsule.consolePort + 1}`, '-sTCP:LISTEN', '-Fp'],
+      args: ['-nP', `-iTCP:${capsule.consolePort}-${capsule.consolePort + 1}`, '-sTCP:LISTEN', '-t', '+w'],
     })
   } catch (error) {
     if (!(error instanceof Errors.CommandExecutionError)) {
@@ -490,10 +490,13 @@ function observeKernel(
     Errors.throwHostEnvironment('Both borrowing listeners cannot be read completely; recovery remains retained.')
   }
   const lines = result.stdout.trim() === '' ? [] : result.stdout.trim().split(/\r?\n/u)
-  if (lines.some(line => !/^p[1-9][0-9]*$/u.test(line)) || result.exitCode === 0 && lines.length === 0) {
+  if (
+    lines.some(line => !/^[1-9][0-9]*$/u.test(line) || !Number.isSafeInteger(Number(line)))
+    || result.exitCode === 0 && lines.length === 0
+  ) {
     Errors.throwHostEnvironment('Borrowing listener inspection returned malformed ownership evidence.')
   }
-  const listeners = [...new Set(lines.map(line => Number(line.slice(1))))]
+  const listeners = [...new Set(lines.map(line => Number(line)))]
   const listeningIdentities = tree.identities(listeners)
   if (
     listeners.some(pid =>

@@ -1,14 +1,87 @@
 # Managed development loops — Implementation and acceptance execution plan
 
 Prepared 2026-10-03 against `dev/ro` at `b13ddc54d`, in the shared primary checkout
-`$HOME/code/tao-lang-2`. Status: **remaining acceptance deferred until post-MVP; prepare readiness and hold landing**.
+`$HOME/code/tao-lang-2`. Status: **implementation landed; scoped retained-resource cleanup authorized;
+remaining managed-loop and isolated native acceptance deferred until post-MVP**.
 
-## Developer stopping decision — 2026-10-04
+## Accepted follow-up priorities — 2026-10-04
 
-Latest instruction: **prepare fully for landing and report readiness; do not land**. The resolved
-main integration is committed as `a364e093f`, followed by subprocess entrypoint cleanup `9fcb6b9bb`
-and the real exited-process lock fixture `ccadf7da8`. No current task landing has occurred; the
-remote personal-branch archive reported by `landed` is the historical 2026-09-29 archive.
+The completed implementation landed on `main` as `20bbeff06b95b393d8a6d6418ad36c3d71ab567d`.
+The landing integrated the latest installed-editor acceptance fixes, passed full verification
+(`18-22-53-695Z-39947-a7bc4898`, 222 seconds), and archived the source tip as
+`merged/ro/2026-10-04T18-22-27-031Z`; the supported `landed dev/ro` query confirmed that archive.
+These are repository and ordinary host-gate results, not completion of this document's matrix.
+
+The Developer subsequently authorized marking the priorities below, ownership-proved retained
+cleanup, and landing that follow-up. This supersedes the earlier cleanup approval boundary only;
+it does not resume fresh mobile/native allocations, fault cases, physical input or human checks.
+Use the existing fixed named recovery routes. Preserve any refusal, unknown owner, generation
+mismatch, unpublished ownership or missing shutdown evidence rather than forcing collection.
+
+| Priority                                                   | Disposition and owner                                                                                                                                                                                                                                                                                                                                        |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Retained-resource housekeeping                             | **Now, this follow-up.** Inspect original ledgers, recover only provably owned resources through supported routes, and record each collected or quarantined asset. No cleanup authority arises from PID absence.                                                                                                                                             |
+| Additional managed-loop implementation or acceptance       | **Post-MVP.** Close this thread after scoped cleanup and documentation land; do not restart the broad acceptance program.                                                                                                                                                                                                                                    |
+| Installed CLI, marketplace extensions and browser tutorial | **Before release 1, separate release work.** The [staged release plan](<../MVP Roadmap/Plan - Staged public releases.md>) requires distributed signed/notarized CLI installation, both actual marketplace installs, tutorial editing, passing/failing tests, persistence and recovery.                                                                       |
+| Physical Vision Pro                                        | **Before MVP, separate device work.** The [Developer MVP Roadmap](<../MVP Roadmap/Developer MVP Roadmap.md#pre-mvp-device-acceptance>) still requires physical install/launch and observed increments/reset; this pause waives none of it.                                                                                                                   |
+| iOS Simulator and native Studio                            | **After browser-first MVP, before their public phases.** Release 2 needs genuine installed simulator interaction/relaunch; release 3 needs installed native launch, input, editing/recovery/windows and applicable consent, focus and coexistence observations. These release gates remain mandatory even though this special automation matrix is deferred. |
+| Android and rare lifecycle/ownership cases                 | **Post-MVP.** Finish borrowing, abrupt-exit recovery, iOS lower-launch diagnosis, parallel/combined cases, quarantine and interaction failure evidence; add the queued-stop regression and correct the Android startup-generation diagnostic. Public Android remains beyond release 5.                                                                       |
+| Broader quiet/visible automation and unified UI control    | **Post-MVP.** Preserve unanswered focus/Spaces, Mac2 physical input, consent/coexistence and manual window verdicts. Keep the persistent cross-surface controller deferred; settle its interface in its owning entry before implementation.                                                                                                                  |
+
+A dedicated recurring repository pass is recommended before publication because the last recorded
+review boundary predates this runtime/host-control work. It is a separate review, not permission to
+resume the deferred acceptance matrix. The staged public release plan remains the scope authority.
+
+## Authorized cleanup disposition — 2026-10-04
+
+The fixed named command was attempted only for original borrowing invocation
+`bb7ab550-7b1e-4215-96e0-84a1866bccf1`:
+
+```sh
+cd "$HOME/code/tao-lang-2"
+./agent unsandboxed test-host managed-loop-recover --invocation bb7ab550-7b1e-4215-96e0-84a1866bccf1
+```
+
+The first attempt (`18-33-55-389Z-52173`) refused before signaling because the listener parser
+rejected valid `lsof -Fp` file-descriptor fields. The narrowly scoped correction requests PID-only
+output with `-t +w`, explicitly restoring warnings; strict PID, original kernel, group, lineage,
+generation and every-request cleanup admission remain enforced. The causal pre-change regression
+failed; the corrected source suite passes29, integrated typecheck passes, and independent ownership
+review is clear. This changes the fixed cleanup probe format, not its selectors or ownership authority.
+
+The retry (`18-41-50-255Z-17710`) reached captured ownership but ended retained/unproved with:
+`The borrowing root has unknown descendants; recovery will not signal them.` No private asset was
+deleted and no console release was proved. Independent after-inventory finds the original sentinel
+PID70463 and finite actor PID61520 absent, both5582/5583 listeners absent and emulator5582 absent;
+the original finite actor also closed with exit1. These observations do not supply the missing
+descendant proof and do not authorize releasing the original console generation.
+
+The private sentinel AVD/INI and external project `tao-managed-loop-project-1IPFbw` remain present,
+with original ownership and cleanup conditions. Historical serial generation
+`86559-786fc398-dc5c-4616-9b53-e36259852c7c` and its lease/retention bytes are unchanged. Public
+session state and simulator inventory are byte-identical before/after; protected emulator10411,
+Chrome31441 and Metro76829 retain their original timestamps. Shared caches/build outputs were
+preserved. Baseline Gradle36036 was already absent before this cleanup; its absence is not attributed
+to the attempt. No target/window was launched, settings changed or consent reset.
+
+**Stop this lane on the recorded unknown-descendant refusal.** Remaining private assets for older
+already-stopped sessions `52e4962c` and `8f382a4c` have no supported private-collector re-entry route.
+All other unknown-driver, launch-intent, partial-preparation and lower-launch receipts remain
+quarantined. Do not substitute manual deletion or PID absence for their missing proof. Safe next
+action is original provenance diagnosis, then an explicitly scoped, reviewed recovery when enough
+evidence exists; do not expand cleanup tooling or resume acceptance in this follow-up.
+
+Local receipts, separate attempt stdout/stderr, named before/after inventories and preservation
+hashes are retained under `.artifacts/managed-loop-cleanup-*`; the invocation's
+`recovery-receipt.json` and `.artifacts/managed-loop-retained-resources.md` own precise asset custody.
+This is partial cleanup evidence and a safe stopping point, not a complete recovery or acceptance pass.
+
+## Readiness history — 2026-10-04
+
+The earlier stopping instruction was to prepare fully for landing and report readiness without
+landing. Main integration was committed as `a364e093f`, followed by subprocess entrypoint cleanup
+`9fcb6b9bb` and the real exited-process lock fixture `ccadf7da8`. The notes below record successive
+attempts before the completed landing above; their former holds and partial results are historical.
 
 The first full landing verification stopped without pushing: macOS process enumeration included
 zombies while its BSD identity query excluded them, and a lock fixture used an OS-invalid PID.
@@ -115,7 +188,7 @@ Post-MVP resume order:
    control deferred; preserve six public loop verbs, no default timer, target-specific visibility,
    authenticated control and borrowed-resource preservation.
 
-Current retained resources are a cleanup obligation, not acceptance success. Invocation
+At the earlier acceptance pause, retained resources were a cleanup obligation, not acceptance success. Invocation
 `bb7ab550-7b1e-4215-96e0-84a1866bccf1` retains its sentinel
 `70463/1791125799:515407`, console generation
 `70463-d1c1dfdd-2349-416b-a07a-14621edbcae2`, private AVD
