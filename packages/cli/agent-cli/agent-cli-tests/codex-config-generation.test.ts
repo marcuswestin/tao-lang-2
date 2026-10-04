@@ -251,6 +251,28 @@ Describe('Codex config generation', () => {
     }
   })
 
+  Test('generates the committed profile in a checkout outside the home directory', async () => {
+    const root = await mkTestDir('tao-codex-portable-', { location: 'host' })
+    try {
+      const initialized = await CLI.run('git', { args: ['init', '--quiet', root] })
+      Expect(initialized.exitCode).toBe(0)
+      for (const path of ['.rulesync/permissions.jsonc', '.rulesync/profiles.jsonc', DELEGATION_SKILL_PATH]) {
+        await FS.writeText(FS.resolvePath(path, root), await FS.readText(Repo.resolvePath(path)))
+      }
+      const outputs = new Map<string, string>()
+      await CodexConfigGenerator.generate({
+        root,
+        writeText: async (path, content) => {
+          outputs.set(FS.relativePath(root, path), content)
+        },
+      })
+
+      Expect(outputs.get('.codex/config.toml')).toBe(await FS.readText(Repo.resolvePath('.codex/config.toml')))
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('keeps the committed Claude Code settings in step with the canonical rules', async () => {
     // The generator skips this write when a sandbox denies it, so an agent can edit the canonical
     // rules, watch `./agent setup` succeed, and commit rules that never reached the settings file.
