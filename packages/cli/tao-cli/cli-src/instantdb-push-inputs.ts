@@ -2,9 +2,11 @@ import { ASTUtils } from '@ast-utils'
 import { storedDataSchemaFile, type StoredDataSchemas } from '@compiler/stored-data-schema'
 import { Workspace } from '@compiler/workspace'
 import { AST } from '@parser'
+import { findProjectRoot, ProjectTooling } from '@project-tooling'
 import type TR from '@runtime/TR'
 import { Diagnostics, Errors, FS } from '@shared'
 import type { TaoDataPolicy } from 'tao-instantdb/push'
+import { TaoAppModules } from './app-modules'
 
 /**
  * What `tao instantdb push` reads from a Tao app before it talks to InstantDB: which InstantDB app
@@ -30,6 +32,15 @@ const policyFile = 'TaoDataPolicy.json'
 
 /** readInstantPushInputs compiles one app and reads what pushing its InstantDB datasource needs. */
 export async function readInstantPushInputs(appPath: string, appName: string): Promise<InstantPushInputs> {
+  await TaoAppModules.ensureForPath(appPath)
+  const projectRoot = await findProjectRoot(appPath)
+  if (projectRoot === undefined) {
+    Errors.throwUserInput(`No Tao project root was found from ${appPath}. Add a .tao directory to the project root.`)
+  }
+  const refreshed = await ProjectTooling.refresh(projectRoot, { runtimeRoot: TaoAppModules.runtimeRoot() })
+  if (refreshed.status !== 'fresh') {
+    Errors.throwUserInput(refreshed.diagnostics.map(diagnostic => diagnostic.message).join('\n'))
+  }
   const workspace = await Workspace.open(FS.dirname(appPath))
   const validation = await workspace.validate(appPath)
   if (Diagnostics.hasError(validation.diagnostics)) {

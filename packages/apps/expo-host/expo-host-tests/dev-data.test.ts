@@ -20,14 +20,16 @@ const schema = { entities: {}, name: 'DevNotes' } as const
 const testCapability = 'test_capability_0123456789abcdef0123456789abcdef'
 
 Describe('dev data bootstrap', () => {
-  Test('keys an app by its name and its project, so same-named apps in two projects stay apart', () => {
-    const first = devDataAppKey('/work/first', 'Notes')
-    const second = devDataAppKey('/work/second', 'Notes')
+  Test('keys local app data by effective ID across project moves and app renames', () => {
+    const first = devDataAppKey('notes')
+    const second = devDataAppKey('other-notes')
 
-    Expect(first).toMatch(/^Notes-[0-9a-f]{8}$/)
+    Expect(first).toMatch(/^notes-[0-9a-f]{8}$/)
+    Expect(second).toMatch(/^other-notes-[0-9a-f]{8}$/)
     Expect(first).not.toBe(second)
-    Expect(devDataAppKey('/work/first', 'Notes')).toBe(first)
-    Expect(devDataAppKey('/work/first', '  Odd name/with:chars')).toMatch(/^Odd_name_with_chars-[0-9a-f]{8}$/)
+    Expect(devDataAppKey('notes')).toBe(first)
+    Expect(devDataAppKey('odd/name')).toMatch(/^odd_name-[0-9a-f]{8}$/)
+    Expect(devDataAppKey('odd/name')).not.toBe(devDataAppKey('odd:name'))
   })
 
   Test('writes the same fact as a manifest value and as Expo environment', () => {

@@ -16,14 +16,14 @@ const CANONICAL_VIEW = 'use Text from @tao/ui\n\nview MainView() {\n   render Te
 
 const TWO_WORKSPACES = {
   'AppOne/Main.tao': CANONICAL_VIEW,
-  'AppOne/Project.tao': 'project {\n   id "check-cache-one"\n   name "Check cache one"\n}\n',
+  'AppOne/.tao/.gitkeep': '',
   'AppTwo/Main.tao': CANONICAL_VIEW,
-  'AppTwo/Project.tao': 'project {\n   id "check-cache-two"\n   name "Check cache two"\n}\n',
+  'AppTwo/.tao/.gitkeep': '',
 } as const
 
 const NESTED_WORKSPACE = {
   'App/Main.tao': CANONICAL_VIEW,
-  'App/Project.tao': 'project {\n   id "check-cache-nested"\n   name "Check cache nested"\n}\n',
+  'App/.tao/.gitkeep': '',
   'App/Sub/Other.tao': CANONICAL_VIEW.replace('MainView', 'OtherView'),
 } as const
 
@@ -65,7 +65,11 @@ Describe('tao check per-workspace stamp', () => {
       Expect(deniedByWalk).toEqual(['denied'])
       const app = results.find(result => result.path === appPath)
       Expect(app?.error).toBeUndefined()
-      Expect(app?.diagnostics?.some(Diagnostic.isError)).toBe(true)
+      Expect(results.flatMap(result => result.diagnostics ?? []).some(Diagnostic.isError)).toBe(true)
+      Expect(
+        results.flatMap(result => result.diagnostics ?? [])
+          .some(diagnostic => diagnostic.message.includes('No Tao project marker')),
+      ).toBe(true)
     } finally {
       await FS.remove(rootDir)
     }
@@ -88,8 +92,8 @@ Describe('tao check per-workspace stamp', () => {
 
   Test('regenerates deleted metadata for an imported bridge on a targeted cached check', async () => {
     await withGitTaoFixture({
-      'App/.gitignore': '*.tao.ts\n.tao/\nnode_modules/\n',
-      'App/Project.tao': 'project {\n   id "check-cache-bridge"\n   name "Check cache bridge"\n}\n',
+      'App/.gitignore': '/.tao-ts/\n/.tao/*\n!/.tao/.gitkeep\n!/.tao/lock.jsonc\nnode_modules/\n',
+      'App/.tao/.gitkeep': '',
       'App/Main.tao': `use CountWords from ./Bridge.tao
 
 function Total() returns number {
@@ -103,7 +107,7 @@ function Total() returns number {
       'App/Words.ts': 'export function CountWords(value: string): number { return value.length }\n',
     }, async rootDir => {
       const main = FS.resolvePath('App/Main.tao', rootDir)
-      const metadata = FS.resolvePath('App/Bridge.tao.ts', rootDir)
+      const metadata = FS.resolvePath('App/.tao-ts/Bridge.tao.ts', rootDir)
       await runFix(FS.resolvePath('App', rootDir))
       const first = await runCheck(main, { cache: { repositoryRoot: rootDir } })
       Expect(first.flatMap(result => result.diagnostics ?? []).filter(Diagnostic.isError)).toEqual([])
@@ -125,6 +129,68 @@ function Total() returns number {
       )
 
       Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'checked', AppTwo: 'replayed' })
+    })
+  })
+
+  Test('invalidates a clean verdict when root configuration or the shared lock changes', async () => {
+    await withTaoFixture(TWO_WORKSPACES, async rootDir => {
+      await checkedWorkspaces(rootDir)
+      Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'replayed', AppTwo: 'replayed' })
+      await FS.writeText(
+        FS.resolvePath('AppOne/tsconfig.json', rootDir),
+        '{"extends":"./.tao/typescript/tsconfig.json","compilerOptions":{"strict":false}}\n',
+      )
+      Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'checked', AppTwo: 'replayed' })
+      await FS.writeText(FS.resolvePath('AppOne/.tao/lock.jsonc', rootDir), '{"schemaVersion":1}\n')
+      Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'checked', AppTwo: 'replayed' })
+    })
+  })
+
+  Test('does not replay a clean verdict through an external extended TypeScript config', async () => {
+    await withTaoFixture({
+      ...TWO_WORKSPACES,
+      'AppOne/Sidecar.ts': 'export function answer() { const unused = 1; return 42 }\n',
+    }, async rootDir => {
+      const sharedConfig = FS.resolvePath('shared/tsconfig.json', rootDir)
+      await FS.writeText(sharedConfig, '{"compilerOptions":{"noUnusedLocals":false}}\n')
+      await FS.writeText(
+        FS.resolvePath('AppOne/tsconfig.json', rootDir),
+        '{"extends":["./.tao/typescript/tsconfig.json","../shared/tsconfig.json"]}\n',
+      )
+      const cold = await runCheck(FS.resolvePath('AppOne', rootDir), { cache: { repositoryRoot: rootDir } })
+      Expect(cold.flatMap(result => result.diagnostics ?? []).filter(Diagnostic.isError)).toEqual([])
+      Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'checked', AppTwo: 'checked' })
+
+      await FS.writeText(sharedConfig, '{"compilerOptions":{"noUnusedLocals":true}}\n')
+      const changed = await runCheck(FS.resolvePath('AppOne', rootDir), { cache: { repositoryRoot: rootDir } })
+      Expect(changed.flatMap(result => result.diagnostics ?? []).some(diagnostic => diagnostic.code === 'TS6133'))
+        .toBe(true)
+      Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'checked', AppTwo: 'replayed' })
+    })
+  })
+
+  Test('does not replay through a mutable root node_modules installation', async () => {
+    await withTaoFixture(TWO_WORKSPACES, async rootDir => {
+      await checkedWorkspaces(rootDir)
+      await FS.writeText(
+        FS.resolvePath('AppOne/node_modules/installed/package.json', rootDir),
+        '{"name":"installed","version":"1.0.0"}\n',
+      )
+      Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'checked', AppTwo: 'replayed' })
+    })
+  })
+
+  Test('replays with only the repository-owned runtime link installed', async () => {
+    await withTaoFixture({
+      ...TWO_WORKSPACES,
+      'packages/apps/runtime/package.json': '{"name":"@tao/runtime","version":"1.0.0"}\n',
+    }, async rootDir => {
+      await checkedWorkspaces(rootDir)
+      const scope = FS.resolvePath('AppOne/node_modules/@tao', rootDir)
+      await FS.mkdir(scope)
+      await FS.symlink(FS.resolvePath('packages/apps/runtime', rootDir), FS.resolvePath('runtime', scope))
+      Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'checked', AppTwo: 'replayed' })
+      Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'replayed', AppTwo: 'replayed' })
     })
   })
 
@@ -150,6 +216,54 @@ function Total() returns number {
         Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'checked', AppTwo: 'replayed' })
       },
     )
+  })
+
+  Test('checks an unmarked external helper after a clean check and reports its type error', async () => {
+    await withGitTaoFixture({
+      'App/.tao/.gitkeep': '',
+      'App/Main.tao': 'view Main() from ../Host/Widget.tsx\n',
+      'Host/Widget.tsx': `import { value } from './Helper'
+export function Main(_props: unknown) { return value.toUpperCase() ? null : null }
+`,
+      'Host/Helper.ts': "export const value = 'ready'\n",
+    }, async rootDir => {
+      const app = FS.resolvePath('App', rootDir)
+      const first = await runCheck(app, { cache: { repositoryRoot: rootDir } })
+      Expect(first.flatMap(result => result.diagnostics ?? []).filter(Diagnostic.isError)).toEqual([])
+      Expect(await checkedWorkspaces(rootDir, app)).toEqual({ App: 'checked' })
+
+      await FS.writeText(FS.resolvePath('Host/Helper.ts', rootDir), 'export const value = 1\n')
+      const outcomes: CheckWorkspaceOutcome[] = []
+      const changed = await runCheck(app, {
+        cache: { repositoryRoot: rootDir },
+        onWorkspace: outcome => outcomes.push(outcome),
+      })
+      Expect(outcomes.map(outcome => outcome.resolution)).toEqual(['checked'])
+      Expect(changed.flatMap(result => result.diagnostics ?? []).some(diagnostic => diagnostic.code === 'TS2339'))
+        .toBe(true)
+    })
+  })
+
+  Test('invalidates a warm verdict when a sidecar directory gains an empty project marker', async () => {
+    await withGitTaoFixture({
+      'App/.tao/.gitkeep': '',
+      'App/Main.tao': 'view Main() from ./Host/Widget.tsx\n',
+      'App/Host/Widget.tsx': 'export function Main(_props: unknown) { return null }\n',
+    }, async rootDir => {
+      const app = FS.resolvePath('App', rootDir)
+      const first = await runCheck(app, { cache: { repositoryRoot: rootDir } })
+      Expect(first.flatMap(result => result.diagnostics ?? []).filter(Diagnostic.isError)).toEqual([])
+      Expect(await checkedWorkspaces(rootDir, app)).toEqual({ App: 'replayed' })
+
+      await FS.mkdir(FS.resolvePath('Host/.tao', app))
+      const outcomes: CheckWorkspaceOutcome[] = []
+      const changed = await runCheck(app, {
+        cache: { repositoryRoot: rootDir },
+        onWorkspace: outcome => outcomes.push(outcome),
+      })
+      Expect(outcomes.map(outcome => outcome.resolution)).toEqual(['checked'])
+      Expect(changed.flatMap(result => result.diagnostics ?? []).some(Diagnostic.isError)).toBe(true)
+    })
   })
 
   Test('re-checks every workspace when the Tao stdlib changed', async () => {

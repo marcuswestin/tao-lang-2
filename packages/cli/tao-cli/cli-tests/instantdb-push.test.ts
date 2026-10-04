@@ -25,12 +25,10 @@ function notesSource(settings: DatasourceSettings = {}, datasource?: string): st
 use InstantDB from @tao/data/providers/instantdb
 use Text from @tao/ui
 
-project {
-   id "instant-push-notes"
-   name "Instant push notes"
-}
-
 app PushNotes {
+   id "instant-push-notes"
+   version "1.0.0"
+   name "Instant push notes"
    Auth TestAuth { }
 ${
     datasource ?? `   Datasource TestedInstant {
@@ -74,7 +72,7 @@ access Note {
 }
 
 async function withNotesApp(source: string, run: (appPath: string) => Promise<void>): Promise<void> {
-  await withTaoFixture({ 'Notes.tao': source }, async root => {
+  await withTaoFixture({ '.tao/.gitkeep': '', 'Notes.tao': source }, async root => {
     await run(FS.resolvePath('Notes.tao', root))
   })
 }

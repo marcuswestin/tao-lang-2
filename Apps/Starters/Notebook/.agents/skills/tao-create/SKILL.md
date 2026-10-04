@@ -36,7 +36,7 @@ design in `Design.tao`, fixtures in `Scenarios.tao`, and journeys in `<App>.test
 5. Add representative rows to a `fixture` and add app and row `scenarios` in `Scenarios.tao`.
    Scenario syntax is in release 1; interactive Studio review arrives in release 3.
 6. Add a journey that creates a row, selects it, edits it, returns, and observes the changed label.
-7. Run `tao fix <path>`, `tao check <path>`, `tao test <path>`, then `tao dev <path> --web`.
+7. Run `tao fix <path>`, `tao check <path>`, `tao test <path>`, then `tao run <path> --web`.
 
 This is a compact feature file using the existing `Ingredients` entity:
 

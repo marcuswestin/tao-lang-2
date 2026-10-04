@@ -1,4 +1,4 @@
-import { ASTUtils, Type } from '@ast-utils'
+import { ASTUtils, Packages, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { FS, Switch } from '@shared'
 import { type NodeValidationCheck, type NodeValidationChecks } from '../node-validation'
@@ -145,12 +145,10 @@ function validateDatasourceFailureTarget(step: AST.DatasourceFailureStep, ctx: V
     return
   }
   const appPath = AST.getDocument(app).uri.path
-  const projectRoot = ctx.workspaceFiles
-    .filter(file => file.statements.some(AST.isProjectDeclaration))
-    .map(file => FS.dirname(AST.getDocument(file).uri.path))
-    .filter(directory => FS.pathIsWithin(appPath, directory))
-    .toSorted((left, right) => right.length - left.length)[0] ?? FS.dirname(appPath)
-  const files = ctx.workspaceFiles.filter(file => FS.pathIsWithin(AST.getDocument(file).uri.path, projectRoot))
+  const projectRoot = Packages.projectRootForPath(ctx.packagesContext.index, appPath) ?? FS.dirname(appPath)
+  const files = ctx.workspaceFiles.filter(file =>
+    Packages.projectRootForPath(ctx.packagesContext.index, AST.getDocument(file).uri.path) === projectRoot
+  )
   const collections = files.flatMap(file => file.statements.filter(AST.isEntityDataDeclaration))
   const entity = collections.find(candidate => candidate.singularName === step.entity)
   if (!entity) {

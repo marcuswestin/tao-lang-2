@@ -5,6 +5,7 @@ import "./data"
 import "./terminals"
 import "./restoration"
 import "./visibility"
+import "./project"
 
 entry AppGrammarEntrypoint:
     AppDeclaration;
@@ -20,7 +21,7 @@ AppBlock:
     '{' statements+=(AppStatement | AppBlockDiagnosticStatement)* '}';
 
 AppStatement:
-    AppAuxiliaryNavigator | AppView | AppProperty | RestorationPolicy | AppGuardStatement;
+    AppAuxiliaryNavigator | AppView | AppProperty | PackageRequires | RestorationPolicy | AppGuardStatement;
 
 AppAuxiliaryNavigator:
     name=USE_IMPORT_PATH value=ConfigurationConstructor;
@@ -34,4 +35,4 @@ AppView:
 
 // Primitive app contracts are Prelude-owned, so supplied slots remain parseable without a grammar edit.
 AppProperty:
-    name=ID (patch=PropertyConfigurationPatch | value=Expression);
+    name=MetadataName (patch=PropertyConfigurationPatch | value=Expression);

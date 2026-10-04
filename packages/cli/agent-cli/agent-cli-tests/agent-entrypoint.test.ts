@@ -96,7 +96,7 @@ Describe('agent entrypoint', () => {
       })
       Expect(dev.exitCode).toBe(0)
       Expect((await FS.readText(marker)).split('\n').filter(Boolean))
-        .toEqual(['dev', 'Apps/HNReader', '--app', 'HNReaderStub'])
+        .toEqual(['run', 'Apps/HNReader', '--app', 'HNReaderStub'])
 
       await FS.remove(marker)
       const unlisted = await CLI.run('zsh', {

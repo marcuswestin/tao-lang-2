@@ -51,7 +51,7 @@ lanes, from least to most ceremony:
 
 | Lane                                   | Tester needs                                   | Developer needs                                  | Verdict                                                                                                                                                                                                                                                                                                                                                                  |
 | -------------------------------------- | ---------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `tao dev` + Expo Go on the LAN (today) | Expo Go, same Wi-Fi                            | nothing                                          | Not distribution. Stays the local dev loop.                                                                                                                                                                                                                                                                                                                              |
+| `tao run` + Expo Go on the LAN (today) | Expo Go, same Wi-Fi                            | nothing                                          | Not distribution. Stays the local dev loop.                                                                                                                                                                                                                                                                                                                              |
 | EAS Update opened in Expo Go           | Expo Go, a free Expo account in the owning org | an Expo account, nothing from Apple              | **The only zero-Apple-account iOS lane, and a fragile one.** Since 2026-05-12 Expo Go loads updates only for projects the viewer's account or organization owns, so the friend joins the developer's Expo organization as a Viewer. Since 2026-09-03 the iOS App Store build also requires that viewer to be logged in to Expo Go itself, on top of the ownership check. |
 | EAS internal distribution (ad hoc)     | one-time device registration link, then a URL  | Apple Developer Program, Expo account            | **iOS fallback, Android default.** Every new iPhone costs a device registration and a rebuild; Apple caps registrations at 100 per membership year. Android is just an APK link.                                                                                                                                                                                         |
 | TestFlight                             | the TestFlight app; an invite or a public link | Apple Developer Program, Expo account            | **iOS default.** No device registration. Internal groups take up to 100 team members with no review; external groups take up to 10,000 with a one-time Beta App Review and a public link. Builds live 90 days.                                                                                                                                                           |
@@ -87,24 +87,23 @@ uses local Xcode and App Store Connect, while OTA uses Tao's Expo-protocol updat
   Xcode archive/export, resumable App Store Connect/TestFlight lifecycle, and Tao-hosted OTA publish
   and compatible rollback.
 - The command is serialized per repository and filesystem-only. It atomically writes the authored
-  project version and the `ship` concern of `.tao-project/lock.jsonc`, while preserving concurrent
+  selected-app version and the `ship` concern of `.tao/lock.jsonc`, while preserving concurrent
   lock concerns, the Git index, refs, and commit history byte-for-byte.
 - Release provenance records the exact HEAD and dirty-tree fingerprint without requiring a clean
   checkout. Build numbers are monotonic over local and remote history.
 - Runtime compatibility combines the native fingerprint used as the Expo runtime version with a
   canonical semantic data-schema fingerprint. Publication and rollback must be compatible with
   every supported binary; assets are exported and published as resolvable Expo artifacts.
-- `tao dev` starts Metro with `expo start --host lan` without opening a target by default; explicit
+- `tao run` starts Metro with `expo start --host lan` without opening a target by default; explicit
   targets and the interactive controls can open supported runtimes. The physical-iPhone lane can no
   longer depend on the App Store's Expo Go: since 2026-09-03 Expo Go 57 on iOS requires a
-  developer to be logged in to both the Expo CLI and the Expo Go app, and `tao dev`'s Metro server
+  developer to be logged in to both the Expo CLI and the Expo Go app, and `tao run`'s Metro server
   runs under a repository-local Expo home directory that a developer's own `expo login` session
   never reaches, so that login can never be satisfied. The lane now needs a development build. The
   build this plan produces is that build's natural ancestor, so slice 4 folds the two together.
-- WordFlower already declares what the command derives from: `project { id "wordflower" name
-  "WordFlower" … }`, `app WordFlower { Name … Datasource DeviceStore }`, and the sync variant
-  `app WordFlowerInstantDB = WordFlower with { Name "WordFlower - InstantDB" Datasource
-  WordFlowerInstantDBStore }`. Its datasource uses Instant Cloud and the existing app ID; the
+- WordFlower declares app-owned identity, version, and display name in `app WordFlower`, alongside
+  `Datasource DeviceStore`. Its sync variant `app WordFlowerInstantDB = WordFlower with { … }`
+  overrides identity and display name and selects `Datasource WordFlowerInstantDBStore`. Its datasource uses Instant Cloud and the existing app ID; the
   separate `WordFlowerLocalInstantDB` variant keeps the local fixture for development. The hosted
   app and live phone-to-browser/browser-to-phone sync were confirmed through a development build on
   2026-09-23. TestFlight installation and beta distribution remain untested.
@@ -308,7 +307,7 @@ the one credential the tool needs.
    Agreement accepted (Apple's 403 `REQUIRED_AGREEMENTS_MISSING_OR_EXPIRED`, and the "API Keys
    cannot be created due to an invalid Program License Agreement" message seen on 2026-09-02, are
    this precursor, named with the two URLs where the Account Holder accepts it), the app name
-   resolving to one declaration, `project { id, name, version }` present, the lock's accepted
+   resolving to one declaration, effective lowercase app `id`, `name`, and `version` present, the lock's accepted
    identifiers complete, exact Git/dirty provenance when a repository exists, and for the InstantDB variant a
    non-localhost `ApiURI`. Every miss is a `UserInputError` or `HostEnvironmentError` with the
    exact fix; in an interactive terminal the missing accepted identifiers are prompted and
@@ -323,7 +322,7 @@ the one credential the tool needs.
    embedded commit hash and dirty fingerprint, proven export-compliance metadata when known, icon
    and splash. The
    checked-in host gains an `app.config.js` that reads `ship.json` when present and falls back to
-   today's "Tao Runtime" values when absent, so `tao dev` and every existing test see no change.
+   today's "Tao Runtime" values when absent, so `tao run` and every existing test see no change.
 4. **Bundle proof.** `expo export` of the release bundle, then an assertion that no Studio module
    marker appears in it. This is the missing production-bundle assertion the exploration calls
    for, and it runs before the archive.
@@ -358,7 +357,7 @@ follows slice 1 immediately rather than waiting for the migration program.
 Each slice lands per the repository's ordinary definition of done: focused tests while working,
 `./agent verify` green, and a recorded live acceptance in this document, in the style of the
 InstantDB provider's _Live acceptance_ section. No slice needs a WordFlower tranche: none adds
-grammar. The one spot that would — `project { targets }`, `version`, `Icon` — is deferred to
+grammar. The one spot that would — app target configuration, `version`, and `Icon` — is deferred to
 decisions 2 and 4 and can be pulled into a tranche independently.
 
 ### Slice 0 — now the `--expo` flag
@@ -421,7 +420,7 @@ through `eas testflight:feedback` in a summary line. Android stays out of scope.
 ### Slice 4 — one host for dev and ship
 
 Scope: a development build of the same derived host with `expo-dev-client`, so the phone lane of
-`tao dev` no longer depends on the App Store Expo Go; it is the companion app's ancestor and
+`tao run` no longer depends on the App Store Expo Go; it is the companion app's ancestor and
 converges with that program. The EAS lanes this slice once listed are dropped with Expo.
 
 ### Slice 5 — schema fingerprint and the additive class
@@ -473,8 +472,8 @@ capability exists only if a real feature in one of the four apps forces it — s
 
 Five versions coexist and must be told apart, not unified:
 
-1. **Store version** ("1.4.2") — marketing, authored or auto-bumped. Implemented: `project { version
-   "…" }`, bumped per _Command surface_ above.
+1. **Store version** ("1.4.2") — marketing, authored or auto-bumped. Authored in the selected app’s lowercase `version` field, bumped per _Command surface_ above.
+   Tao retains full SemVer, including prereleases; native packaging receives its numeric core.
 2. **Build number** — monotonic, derived; `tao ship` counts it. Implemented.
 3. **Runtime fingerprint** — derived from the native closure; gates OTA compatibility. Implemented,
    computed from the host rather than hand-declared (the `runtimeVersion` an EAS pipeline would have
@@ -483,7 +482,7 @@ Five versions coexist and must be told apart, not unified:
    below). Distinct from the runtime fingerprint: a copy change moves neither; a new sidecar moves 3
    but not 4; a new field moves 4 but not 3. The fingerprint itself is computed (`ship-executor.ts`);
    the migration machinery that acts on a change in it is not built — see below.
-5. **Project version** — `tao publish`'s package-registry version (`Docs/Spec/Tao Packages.md`), a
+5. **Publication version** — a `package` declaration’s package-registry version (`Docs/Spec/Tao Packages.md`), a
    different product surface that happens to share the word.
 
 ## Secrets & deploy configuration
@@ -496,7 +495,7 @@ split them:
    the ship pipeline must honor its guarantees (a `secret` never serializes into a prompt, never into
    an error report — see _Error reports in production_ below).
 2. **Deploy credentials and provider configuration**: App Store Connect keys (the accepted ones —
-   `issuerId`, `keyId` — already live in `.tao-project/lock.jsonc`, per _Precedent: accepted project
+   `issuerId`, `keyId` — already live in `.tao/lock.jsonc`, per _Precedent: accepted project
    metadata_ below), Play service-account keys, InstantDB admin tokens, API keys a sidecar needs. No
    general owner yet; an app's `AppId` values are still hardcoded in `.tao` source, survivable only
    because InstantDB app ids are public client values.
@@ -509,7 +508,7 @@ datasource WordFlowerStore = InstantDB { AppId config InstantAppId }
 ```
 
 with `tao ship` resolving `InstantAppId` per variant from the ship service's config store (or a
-local `.tao-project/` file for the fully-local lane), prompting on first miss. Admin-grade values (an
+local `.tao/` file for the fully-local lane), prompting on first miss. Admin-grade values (an
 Instant admin token, an ASC key) never reach the client bundle at all — they are consumed
 server-side by the ship/backend service; the type system can enforce the split (client-config vs
 server-credential) because the compiler knows which side each consumer runs on. **Seam flag**: the
@@ -800,7 +799,7 @@ Each has a recommended default so slice 1 can start on the ruling alone.
    replaced by `tao ship` recipes.
 2. **Where the identifier facts live.** Settled on 2026-09-02, after the search the Developer asked for;
    see _Precedent: accepted project metadata_ below. The ship facts are accepted project metadata
-   in the project's `.tao-project/` folder: the `ship` section of one repository-tracked
+   in the project's `.tao/` folder: the `ship` section of one repository-tracked
    `lock.jsonc` that the developer commits,
    written by `tao ship` and never hand-edited, with the bundle identifier rule
    `<namespace>.<project id>[.<variant>]`. The Developer's follow-up ruling the same day: one lock file for
@@ -844,17 +843,17 @@ on 2026-09-02 found it in three places, and together they say what decision 2 sh
   `maxEditScope` bounds what generation may touch. Its rules are the useful ones: never rewrite a
   user-locked value, keep generated changes explainable, prefer edits at the token and recipe
   level.
-- **This repository's packages spec**, `Docs/Spec/Tao Packages.md`, names `.tao-project/` at the
-  project root. The single Tao-written `.tao-project/lock.jsonc` has independent `installs` and
+- **This repository's packages spec**, `Docs/Spec/Tao Packages.md`, names `.tao/` at the
+  project root. The single Tao-written `.tao/lock.jsonc` has independent `installs` and
   `ship` concerns plus top-level `schemaVersion`; writers atomically merge fresh state.
 
 What the precedent settles for ship. The identifier facts are exactly this category of data:
 Tao derives or accepts them once, production builds read them, nobody types them into source,
 and a stale or missing entry must fail the build rather than ship something wrong. So they
-belong in `.tao-project/`, not in a bespoke file beside the entry declaration, and they follow
+belong in `.tao/`, not in a bespoke file beside the entry declaration, and they follow
 the design lock's contract rather than inventing one:
 
-- `.tao-project/lock.jsonc` is the project's one Tao-written lock, with a top-level section per
+- `.tao/lock.jsonc` is the project's one Tao-written lock, with a top-level section per
   concern. `tao ship` owns the `ship` section: per app variant, the bundle identifier, lifecycle
   checkpoints, build provenance, update channel, supported binaries, runtime identity, and
   semantic schema identity. Every
@@ -893,7 +892,7 @@ to. It is the native-device Studio canvas the Studio v1 exploration already desi
 first verdict was "Expo development build on the LAN, adopt": pairing, the control plane, cell
 assignment, and source actions all ride the same binary. And it removes the account-login
 dependence of the Expo Go bridge — Expo Go 57 now requires its own signed-in session, which
-`tao dev`'s isolated Expo home directory can never present — because Tao ships its own shell and
+`tao run`'s isolated Expo home directory can never present — because Tao ships its own shell and
 updates it on its own schedule. The
 Studio pairing, the LAN and tunnel development-server lanes, and the compiled-bundle update
 lane all reuse what slices 1 and 2 build; the new pieces are the shell itself, project
@@ -901,9 +900,9 @@ membership, and the invitation flow.
 
 **Does it make sense?** As a developer's tool, strongly. A Tao developer today needs the App
 Store Expo Go on their phone, and since 2026-09-03 that Expo Go requires its own `expo login`
-session that `tao dev`'s isolated Expo home directory can never present to Metro, closing the
+session that `tao run`'s isolated Expo home directory can never present to Metro, closing the
 lane on a physical iPhone regardless of SDK. The Tao
-app is the phone lane of `tao dev` and of Studio, under Tao's control, and it is where the
+app is the phone lane of `tao run` and of Studio, under Tao's control, and it is where the
 on-device visual edit mode lives if that ever ships. As a proposed collaboration preview channel it is the Expo Go model
 exactly: the tester installs the Tao app, accepts a project invitation, and runs the app inside
 Tao's shell with no Apple account on either side. It is not a replacement for TestFlight when

@@ -136,7 +136,7 @@ let activeReporter: DevLoopReporter = lineDevLoopReporter()
 
 /**
  * setDevLoopReporter installs the reporter every dev-loop module reports through, returning a
- * restorer. `runDevLoop` calls this once with whichever reporter its caller injected — `tao dev`
+ * restorer. `runDevLoop` calls this once with whichever reporter its caller injected — `tao run`
  * passes the Ink dashboard; a caller that injects none keeps the plain line-writer default.
  */
 export function setDevLoopReporter(reporter: DevLoopReporter): () => void {

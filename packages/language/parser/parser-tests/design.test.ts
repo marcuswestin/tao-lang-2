@@ -7,7 +7,7 @@ import { testParseCode } from './test-parse'
 Describe('parser: minimal design declarations', () => {
   Test('parses flat colors, named combined bundles, app selection, and render use', async () => {
     const parsed = await testParseCode(`
-      workspace design WordFlowerDesign {
+      project design WordFlowerDesign {
         short #abc
         alpha #abcd
         ink #121826
@@ -28,7 +28,7 @@ Describe('parser: minimal design declarations', () => {
     `)
 
     const design = parsed.entry.ast.statements.find(AST.isDesignDeclaration)
-    Expect(design?.visibility).toBe('workspace')
+    Expect(design?.visibility).toBe('project')
     Expect(design?.block.members.filter(AST.isDesignToken).map(token => token.value)).toEqual([
       '#abc',
       '#abcd',
@@ -383,7 +383,7 @@ Describe('parser: minimal design declarations', () => {
 
 Describe('parser: color values', () => {
   const colorSource = `
-    workspace design Theme {
+    project design Theme {
       colors {
         accent #2f6b4f { 20 #cfe3d8 }
         inkMuted #6b7280
@@ -477,7 +477,7 @@ Describe('parser: color values', () => {
   Test('renames a shade through a color argument', async () => {
     const { services } = Parser.createLspContext()
     const source =
-      `workspace design Theme { colors { accent #fff { 20 #ccc } } } app Demo { view Main Design Theme } view Main() { render Badge(Tint: accent.20) } view Badge(Tint color) { }`
+      `project design Theme { colors { accent #fff { 20 #ccc } } } app Demo { view Main Design Theme } view Main() { render Badge(Tint: accent.20) } view Badge(Tint color) { }`
     const doc = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(
       source,
       URI.file('/colors/Rename.tao'),
@@ -510,8 +510,8 @@ Describe('parser: color values', () => {
   Test('relinks a color argument after the mounted design changes in the same parser context', async () => {
     const context = Parser.createContext()
     const source = (design: string) => `
-      workspace design Light { colors { accent #fff } }
-      workspace design Dark { colors { accent #000 } }
+      project design Light { colors { accent #fff } }
+      project design Dark { colors { accent #000 } }
       app Demo { view Main Design ${design} }
       view Main() { render Badge(Tint: accent) }
       view Badge(Tint color) { }
@@ -535,7 +535,7 @@ Describe('parser: color values', () => {
       `,
       'App.tao': 'app Demo { view Main Design Light }',
       'View.tao': `
-        workspace view Main() { render Badge(Tint: accent) }
+        project view Main() { render Badge(Tint: accent) }
         view Badge(Tint color) { }
       `,
     }, async paths => {
@@ -575,7 +575,7 @@ Describe('parser: color values', () => {
 
   Test('offers design colors only where a color argument or default may be expected', async () => {
     const parsed = await Parser.parseCode(`
-      workspace design Theme { colors { accent #2f6b4f } }
+      project design Theme { colors { accent #2f6b4f } }
       app Demo { view Main Design Theme }
       view Main() {
         state Stored = accent
@@ -598,8 +598,8 @@ Describe('parser: color values', () => {
         'app Second { view Main Design Rich }',
       ]
       const parsed = await testParseCode(`
-        workspace design Plain { colors { accent #2f6b4f } }
-        workspace design Rich { colors { accent #2f6b4f { 20 #cfe3d8 } } }
+        project design Plain { colors { accent #2f6b4f } }
+        project design Rich { colors { accent #2f6b4f { 20 #cfe3d8 } } }
         ${(plainFirst ? apps : apps.toReversed()).join('\n')}
         view Main() { render Badge(Tint: accent.20) }
         view Badge(Tint color) { }
@@ -614,8 +614,8 @@ Describe('parser: color values', () => {
 
   Test('links a color that only a design mounted through a refinement declares', async () => {
     const parsed = await testParseCode(`
-      workspace design Light { colors { accent #2f6b4f } }
-      workspace design Dark { colors { glow #ffcc00 } }
+      project design Light { colors { accent #2f6b4f } }
+      project design Dark { colors { glow #ffcc00 } }
       app Demo { view Main Design Light }
       app DemoDark = Demo with { Design Dark }
       view Main() { render Badge(Tint: glow) }
@@ -632,9 +632,9 @@ Describe('parser: color values', () => {
   Test('finds a style declared only by a design mounted through an app refinement', async () => {
     const { services } = Parser.createContext()
     const source = `
-      workspace design Light { styles { daylight [pad 8] } }
-      workspace design Dark { styles { night [pad 8] } }
-      workspace design Unmounted { styles { night [pad 12] } }
+      project design Light { styles { daylight [pad 8] } }
+      project design Dark { styles { night [pad 8] } }
+      project design Unmounted { styles { night [pad 12] } }
       app Demo { view Main Design Light }
       app DemoDark = Demo with { Design Dark }
       view Main() { render Surface() [night] }

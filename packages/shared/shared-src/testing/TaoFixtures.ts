@@ -7,7 +7,7 @@ export const fence = '```'
 /** app wraps a MainView body in the standard standalone Tao app fixture. */
 export function app(body: string, extra = ''): string {
   return `
-    app MyApp { view MainView }
+    app MyApp { id "tao-test-app" version "1.0.0" name "MyApp" view MainView }
     view MainView() { ${body} }
     ${extra}
   `
@@ -58,7 +58,7 @@ export function promptTagsApp(): string {
       return Join(Values, Separator) from ./Join.ts
     }
 
-    app TypedTags { view Main }
+    app TypedTags { id "tao-test-typed-tags" version "1.0.0" name "TypedTags" view Main }
     view Main() { render TagSummary(StarterPrompt.PromptTags) }
     view TagSummary(Tags PromptTags) {
       let Positional = Join(Tags, Separator: ", ")
@@ -76,26 +76,34 @@ export function primitiveAppValueSpellings(navImplementation = 'nav TestNavImpl 
       Initial view
       ${navImplementation}
     }
-    workspace type CompleteTestStack is TestStack with { Initial is Home }
-    workspace nav HeadNavigation = CompleteTestStack { }
-    workspace nav HeadWithNavigation = CompleteTestStack with { }
-    workspace let LetNavigation = CompleteTestStack { }
-    workspace let LetWithNavigation = CompleteTestStack with { }
+    project type CompleteTestStack is TestStack with { Initial is Home }
+    project nav HeadNavigation = CompleteTestStack { }
+    project nav HeadWithNavigation = CompleteTestStack with { }
+    project let LetNavigation = CompleteTestStack { }
+    project let LetWithNavigation = CompleteTestStack with { }
 
     app HeadApp {
-      Name "Head"
+      id "tao-test-head"
+      version "1.0.0"
+      name "Head"
       Navigator HeadNavigation
     }
     app HeadWithApp = app with {
-      Name "Head with"
+      id "tao-test-head-with"
+      version "1.0.0"
+      name "Head with"
       Navigator HeadWithNavigation
     }
-    workspace let LetApp = app {
-      Name "Let"
+    project let LetApp = app {
+      id "tao-test-let"
+      version "1.0.0"
+      name "Let"
       Navigator LetNavigation
     }
-    workspace let LetWithApp = app with {
-      Name "Let with"
+    project let LetWithApp = app with {
+      id "tao-test-let-with"
+      version "1.0.0"
+      name "Let with"
       Navigator LetWithNavigation
     }
 

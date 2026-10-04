@@ -755,8 +755,9 @@ class TR {
     identity: TR.DeclarationIdentity,
     name: string,
     type: import('./TR-persisted-state').TaoPersistedStateType,
+    appId: string,
   ): RuntimePersistedState<T> {
-    return new RuntimePersistedState(initialValue(), identity, name, type)
+    return new RuntimePersistedState(initialValue(), identity, name, type, appId)
   }
 
   /** UsePersistedState mounts one persisted store and begins its asynchronous load. */

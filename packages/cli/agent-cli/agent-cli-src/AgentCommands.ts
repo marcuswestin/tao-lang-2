@@ -21,6 +21,7 @@ export const JUST_COMMANDS = [
   // policy excludes. An agent has to be able to reach it by the name the failure prints.
   'fix-agent-config',
   'fmt',
+  'fmt-file',
   'ide-extension-package',
   'land',
   // The landing lock is the turn-taking primitive every broad lane and the landing itself go
@@ -55,6 +56,7 @@ export const JUST_COMMANDS = [
   'setup-clerk',
   'shell-setup',
   'simplify-audit',
+  'standalone-cli-build',
   'stop',
   // The browser and native UI lanes are final validation like any other gate, and AGENTS.md
   // requires them before a branch that touches Studio is called ready. They stayed reachable only

@@ -112,6 +112,7 @@ export class RuntimePersistedState<T> implements TaoWritableState<T> {
     identity: TaoDeclarationIdentity,
     name: string,
     type: TaoPersistedStateType,
+    appId: string,
   ) {
     this.#default = initial.evaluate().jsValue
     RuntimeAssert(
@@ -121,7 +122,7 @@ export class RuntimePersistedState<T> implements TaoWritableState<T> {
     )
     this.#value = this.#default
     this.#type = type
-    this.key = `tao.persisted-state.v1:${identity.canonical}:${name}`
+    this.key = `tao.persisted-state.v2:${JSON.stringify([appId, identity.canonical, name])}`
     const restored = pendingRestore.get(this.key)
     const decoded = restored === undefined ? undecoded : decodePersistedValue(restored, this.#type)
     if (decoded.ok) {

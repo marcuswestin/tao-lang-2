@@ -6,8 +6,9 @@ import { Workspace } from '../../compiler-src/workspace/index'
 Describe('workspace source overlays', () => {
   Test('compiles virtual imports and shared fixtures from an immutable source snapshot', async () => {
     await withTaoFiles('tao-workspace-overlays-', {
-      'Project.tao': 'project { id "overlays" name "Overlays" remote none }',
-      'Main.tao': 'app Preview { view Main } view Main() { render inject ```ts return null ``` }',
+      'Package.tao': 'package { version "1.0.0" license AGPL-3.0-only }',
+      'Main.tao':
+        'app Preview { id "com.tao.test.preview" version "1.0.0" name "Preview"  view Main } view Main() { render inject ```ts return null ``` }',
       'Data.tao': 'public data Playlists / Playlist { Title text }',
       '@/studio/Row.tao': 'public view PlaylistRow() { render inject ```ts return null ``` }',
     }, async (paths, root) => {

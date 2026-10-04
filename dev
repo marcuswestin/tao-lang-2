@@ -17,7 +17,7 @@ fi
 set -e
 
 # Repository development tooling: package tests and Expo device preparation.
-# This is not the Tao CLI; `./tao dev` runs the app development loop.
+# This is not the Tao CLI; `./tao run` runs the app development loop.
 SCRIPT_DIR="${0:A:h}"
 DEVENV_PROFILE="$SCRIPT_DIR/.devenv/profile"
 DEPENDENCY_SCRIPT="$SCRIPT_DIR/packages/cli/dev-cli/dev-cli-src/cli/ensure-dependencies.zsh"

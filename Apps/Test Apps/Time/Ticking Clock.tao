@@ -3,7 +3,9 @@ use Interval from @tao/time
 use Col, FormButton, Text from @tao/ui
 
 app TickingClock {
-   Name "Ticking Clock"
+   id "time-ticking-clock"
+   version "0.1.0"
+   name "Ticking Clock"
    // Device-local, so it survives a relaunch. A view-local `now` cannot witness the clock across
    // one: the launched instance re-reads it and every elapsed reading starts at zero again.
    state FirstStartedAt is time = now (persist)

@@ -73,7 +73,7 @@ From the repository root:
 ./tao check "Apps/WordFlower/1 - Current/WordFlower.tao"
 ./tao test "Apps/WordFlower/1 - Current"
 ./tao compile "Apps/WordFlower/1 - Current/WordFlower.tao" --app WordFlower
-./tao dev "Apps/WordFlower/1 - Current" --app WordFlower
+./tao run "Apps/WordFlower/1 - Current" --app WordFlower
 just dev "Apps/WordFlower/1 - Current/WordFlower.tao" WordFlowerInstantDB
 ```
 
@@ -125,7 +125,7 @@ The local variant's `localhost` endpoints work from web and the iOS Simulator. A
 Android emulator needs endpoints using an address from which it can reach the Mac. The ordinary
 `WordFlower` app continues to use device-local storage.
 
-Files may declare more than one app. `tao dev` discovers runnable apps under any path, and both
+Files may declare more than one app. `tao run` discovers runnable apps under any path, and both
 `compile` and `dev` accept `--app <Name>`; without it they prompt when attached to an interactive
 terminal and fail with the available names in noninteractive environments. They never select by
 filename or source order.

@@ -278,7 +278,22 @@ Describe('tao ship cross-process transactions', () => {
       Expect((await ship).exitCode).toBe(0)
 
       const lock = await readProjectLock(root)
-      Expect(lock.installs).toEqual(freshInstalls)
+      Expect(lock.installs).toEqual({
+        lockfileVersion: 2,
+        environments: {
+          fresh: {
+            projectRoot: 'fresh',
+            npm: { fresh: { name: 'fresh', requested: 'fresh-ref', version: 'fresh-version' } },
+            publications: [],
+          },
+          stale: {
+            projectRoot: 'stale',
+            npm: { stale: { name: 'stale', requested: 'stale-ref', version: 'stale-version' } },
+            publications: [],
+          },
+        },
+        local: {},
+      })
       Expect(lock.ship?.apps['notes/Notes']?.inputHash).toBe('current-input')
     } finally {
       await FS.remove(root)
@@ -358,13 +373,15 @@ function staleContenderSource(root: string, coordinationRoot: string, index: num
 
 function installsLock(label: string) {
   return {
-    lockfileVersion: 1 as const,
-    projects: {
-      [label]: { projectId: label, resolvedCommit: `${label}-commit` },
+    lockfileVersion: 2 as const,
+    environments: {
+      [label]: {
+        projectRoot: label,
+        npm: { [label]: { name: label, requested: `${label}-ref`, version: `${label}-version` } },
+        publications: [],
+      },
     },
-    requires: {
-      [label]: { ref: `${label}-ref` },
-    },
+    local: {},
   }
 }
 

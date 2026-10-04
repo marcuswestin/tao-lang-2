@@ -239,9 +239,27 @@ async function intern(runRoot: string, generatedRoot: string): Promise<string> {
   // `App.tsx` steps aside into a directory of its own, so that what is left is exactly the tree.
   const appStage = FS.resolvePath('app', FS.dirname(generatedPath))
   await FS.move(appFilePath, FS.resolvePath(APP_FILE_NAME, appStage))
-  const treeHash = await FS.filesIdentity(
-    (await walkedFiles(generatedPath)).map(path => [FS.relativePath(generatedPath, path), path]),
-  )
+  const treeFiles: [string, string][] = []
+  const directoryLinks: [string, string][] = []
+  for (const path of await walkedFiles(generatedPath)) {
+    const label = FS.relativePath(generatedPath, path)
+    const metadata = await FS.entryMetadata(path)
+    if (metadata.kind === 'symlink' && await FS.isDirectory(path)) {
+      Assert.defined(metadata.linkTarget, 'directory symlink has a target', { path })
+      directoryLinks.push([label, metadata.linkTarget])
+    } else {
+      treeFiles.push([label, path])
+    }
+  }
+  const filesHash = await FS.filesIdentity(treeFiles)
+  const treeHash = directoryLinks.length === 0
+    ? filesHash
+    : FS.contentIdentity([
+      'tree-directory-links-v1',
+      filesHash,
+      ...directoryLinks.toSorted(([left], [right]) => left.localeCompare(right))
+        .map(([label, target]) => JSON.stringify([label, target])),
+    ])
   await moveIntoStore(generatedPath, FS.resolvePath(treeHash, storeRoot))
   for (const name of treeEntries) {
     // Relative, so the store survives a moved or renamed checkout.
@@ -405,8 +423,7 @@ async function publish(
 }
 
 /**
- * contentBytes sums the bytes of everything under one run root and of every compiled app its
- * manifest names, following each app's symlink to its module tree, skipping whatever it cannot read.
+ * contentBytes sums retained run, app, and compiled-tree entries without walking dependency links.
  *
  * A module tree several apps share is counted once per app, and one several run roots share once
  * per run root, so the budget spends more than the disk does; it is a bound on retained output, not
@@ -414,18 +431,52 @@ async function publish(
  * file that vanishes under a concurrent cleanup is simply not counted rather than failing a publish.
  */
 async function contentBytes(runRoot: string): Promise<number> {
-  let total = 0
-  const roots = [runRoot, ...new Set((await manifestModulePaths(runRoot)).map(path => FS.dirname(path)))]
-  for (const root of roots) {
-    try {
-      for await (const path of FS.walk(root, { followSymlinks: true, includeHidden: true })) {
-        total += await FS.byteSize(path).catch(() => 0)
-      }
-    } catch {
+  let total = await ownedContentBytes(runRoot)
+  const storeRoot = FS.resolvePath(COMPILED_STORE_DIRECTORY_NAME, FS.dirname(runRoot))
+  for (const appRoot of new Set((await manifestModulePaths(runRoot)).map(path => FS.dirname(path)))) {
+    if (FS.dirname(appRoot) !== storeRoot) {
       continue
+    }
+    total += await ownedContentBytes(appRoot)
+    for (const treeRoot of await linkedCompiledTreeRoots(appRoot, storeRoot)) {
+      total += await ownedContentBytes(treeRoot)
     }
   }
   return total
+}
+
+/** Count entry bytes themselves; a symlink contributes its link, not its external target tree. */
+async function ownedContentBytes(root: string): Promise<number> {
+  let total = 0
+  try {
+    for await (const path of FS.walk(root, { includeHidden: true })) {
+      total += (await FS.entryMetadata(path).catch(() => undefined))?.size ?? 0
+    }
+  } catch {
+    // A concurrent cleanup may remove a generated root while a publish measures it.
+  }
+  return total
+}
+
+/** Read only an app link's immediate target; realpath would pass through node_modules to a host tree. */
+async function linkedCompiledTreeRoots(appRoot: string, storeRoot: string): Promise<readonly string[]> {
+  const roots = new Set<string>()
+  for (const name of await listDirectory(appRoot)) {
+    const entry = FS.resolvePath(name, appRoot)
+    const metadata = await FS.entryMetadata(entry).catch(() => undefined)
+    if (metadata?.kind !== 'symlink' || metadata.linkTarget === undefined) {
+      continue
+    }
+    const target = FS.resolvePath(metadata.linkTarget, appRoot)
+    if (!FS.pathIsWithin(target, storeRoot)) {
+      continue
+    }
+    const entryName = FS.relativePath(storeRoot, target).split('/')[0]
+    if (entryName !== undefined && COMPILED_ENTRY_NAME.test(entryName) && entryName !== FS.basename(appRoot)) {
+      roots.add(FS.resolvePath(entryName, storeRoot))
+    }
+  }
+  return [...roots]
 }
 
 /**
@@ -529,15 +580,8 @@ async function pruneCompiledStore(
         continue
       }
       referenced.add(FS.basename(appRoot))
-      for (const name of await listDirectory(appRoot)) {
-        const entry = FS.resolvePath(name, appRoot)
-        if (!await FS.isSymbolicLink(entry)) {
-          continue
-        }
-        const target = await FS.realPath(entry).catch(() => undefined)
-        if (target !== undefined && FS.pathIsWithin(target, storeRoot)) {
-          referenced.add(FS.relativePath(storeRoot, target).split('/')[0]!)
-        }
+      for (const treeRoot of await linkedCompiledTreeRoots(appRoot, storeRoot)) {
+        referenced.add(FS.basename(treeRoot))
       }
     }
   }

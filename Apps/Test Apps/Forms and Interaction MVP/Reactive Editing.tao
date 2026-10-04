@@ -2,13 +2,17 @@ use StackNav from @tao/nav
 use Col, FormButton, Text, TextInput from @tao/ui
 
 app ReactiveEditing {
-   Name "Reactive Editing"
+   id "reactive-editing"
+   version "0.1.0"
+   name "Reactive Editing"
    Navigator StackNav {
       Initial ReactiveEditingView
 }  }
 
 app BoundReactiveEditing {
-   Name "Bound Reactive Editing"
+   id "reactive-editing-bound-reactive-editing"
+   version "0.1.0"
+   name "Bound Reactive Editing"
    state BoundValue is text = "Bound" (persist)
    Navigator StackNav {
       Initial BoundReactiveEditingView(Value: BoundValue)

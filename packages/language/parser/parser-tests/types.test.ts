@@ -3,6 +3,16 @@ import { Describe, Expect, Test } from '@shared/test'
 import { testParseCode } from './test-parse'
 
 Describe('parser: types', () => {
+  Test('parses app type contracts with lowercase metadata slots', async () => {
+    const parseResult = await testParseCode('type ReusableApp is app with { name text is "Reusable" }')
+
+    Expect(parseResult.diagnostics).toEqual([])
+    const declaration = parseResult.entry.ast.statements.find(AST.isTypeDeclaration)
+    Expect.Is(declaration, AST.isTypeDeclaration)
+    Expect.Is(declaration.type, AST.isDerivedTypeExpression)
+    Expect(declaration.type.slots.properties[0]?.name).toBe('name')
+  })
+
   Test('parses projected input types and typed copies', async () => {
     const parseResult = await testParseCode(`
       data Documents / Document { Title text, Body text, Owner text, CreatedAt time }

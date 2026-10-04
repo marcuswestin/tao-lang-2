@@ -1,5 +1,5 @@
 import Workspace from '@compiler/workspace'
-import { Errors, FS, Platform, Repo } from '@shared'
+import { Errors, FS, Platform, ProjectIdentity, Repo } from '@shared'
 import { Expect, mkTestDir } from '@shared/test'
 import { installTaoSkills } from 'tao-skills'
 import { lowerCreationPlan, writeCreationFiles } from '../cli-src/create/creation-lowering'
@@ -72,7 +72,11 @@ export async function updateStarterFiles(generated: string, checkedIn: string): 
   await FS.withFileMutationLock(checkedIn, boundary, async () => {
     const sources = await checkedProjectFiles(generated, boundary, false)
     const targets = await checkedProjectFiles(checkedIn, boundary, true)
+    const preserveIdentity = ProjectIdentity.read(checkedIn) !== undefined
     for (const relativePath of sources) {
+      if (preserveIdentity && relativePath === '.tao/project.json') {
+        continue
+      }
       const source = FS.resolvePath(relativePath, generated)
       const target = FS.resolvePath(relativePath, checkedIn)
       await FS.mkdirWithinBoundary(FS.dirname(target), boundary)
@@ -82,6 +86,9 @@ export async function updateStarterFiles(generated: string, checkedIn: string): 
       await FS.copyFile(source, target)
     }
     const wanted = new Set(sources)
+    if (preserveIdentity) {
+      wanted.add('.tao/project.json')
+    }
     for (const relativePath of targets) {
       if (!wanted.has(relativePath)) {
         await FS.removeFileWithinBoundary(FS.resolvePath(relativePath, checkedIn), boundary)

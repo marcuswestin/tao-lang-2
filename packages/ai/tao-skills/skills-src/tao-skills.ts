@@ -71,7 +71,7 @@ function installedSkillFiles(): Record<string, string> {
   files['.claude/skills/tao-layout/references/flexbox-mapping.md'] = flexboxMapping
   files['AGENTS.md'] = skillBody(taoProject)
   files['CLAUDE.md'] = '@AGENTS.md\n'
-  files['.tao-project/skills.version'] = `${TAO_SKILLS_VERSION}\n`
+  files['.tao/skills.version'] = `${TAO_SKILLS_VERSION}\n`
   return files
 }
 

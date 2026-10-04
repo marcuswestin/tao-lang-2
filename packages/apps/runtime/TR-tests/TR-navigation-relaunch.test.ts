@@ -36,9 +36,11 @@ function moduleScopeApp(variant: string) {
   const app = TR.Navigation.App({
     auxiliaries: () => ({}),
     declaration: TR.Navigation.AppDeclaration('RelaunchApp', identity(variant, 'app', 'RelaunchApp')),
+    id: 'relaunch-app',
     name: 'RelaunchApp',
     navigator: () => TR.Navigation.Configure(stack, { Initial: home }),
     restoration: { exclusions: [], mode: 'automatic', variant },
+    version: '1.0.0',
   })
   return { app, detail }
 }
@@ -58,6 +60,7 @@ function persistedWidth(name: string) {
     identity(name, 'app', 'RelaunchApp'),
     'SidebarWidth',
     { kind: 'primitive', name: 'number' },
+    'relaunch-app',
   )
 }
 

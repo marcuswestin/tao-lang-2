@@ -49,7 +49,7 @@ Describe('tao ship project lock', () => {
     const root = await mkTestDir('tao-ship-lock-')
     try {
       await FS.writeText(
-        FS.resolvePath('.tao-project/lock.jsonc', root),
+        FS.resolvePath('.tao/lock.jsonc', root),
         `{
         // Tao owns this file.
         "schemaVersion": 1,
@@ -66,11 +66,11 @@ Describe('tao ship project lock', () => {
 
   Test('keeps installs and shipping as independent sections of the one project lock', () => {
     const installs = {
-      lockfileVersion: 1 as const,
-      projects: {
-        design: { projectId: 'design', resolvedCommit: 'abc123', resolvedVersion: '1.2.3' },
+      lockfileVersion: 2 as const,
+      environments: {},
+      local: {
+        design: { sourceRoot: '.', root: '../design', version: '1.2.3', bindings: { '@ui': '@design' } },
       },
-      requires: { design: { version: '^1.2.0' } },
     }
     const withInstalls = putInstallsLock({ schemaVersion: 1 }, installs)
     const shipping = putShipLockEntry({ schemaVersion: 1 }, promoteShipEntry(suggestion()))

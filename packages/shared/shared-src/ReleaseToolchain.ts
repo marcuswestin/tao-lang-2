@@ -26,7 +26,7 @@ async function readLock(path: string, surface: 'editor' | 'Studio'): Promise<unk
         `The Tao project lock at ${path} is not valid JSONC (${problem}), so this ${surface} cannot tell which Tao release the project pins.`,
         'To recover, either:',
         '  1. Fix the syntax in the file. Nothing is lost.',
-        '  2. If the project is in Git, run `git restore .tao-project/lock.jsonc` to return to the last committed lock. Changes since that commit are lost, such as a newer shipped build number or package resolution.',
+        '  2. If the project is in Git, run `git restore .tao/lock.jsonc` to return to the last committed lock. Changes since that commit are lost, such as a newer shipped build number or package resolution.',
         '  3. Move the file aside, for example to lock.jsonc.broken. The project then pins no Tao release, packages resolve again on the next run, and `tao ship` forgets the app identity and last build it recorded; copy those back by hand from the moved file.',
       ].join('\n'),
     )
@@ -44,7 +44,7 @@ async function requireMatchingProjectRelease(
     directory = FS.dirname(directory)
   }
   while (true) {
-    const path = FS.resolvePath('.tao-project/lock.jsonc', directory)
+    const path = FS.resolvePath('.tao/lock.jsonc', directory)
     if (await FS.isFile(path)) {
       const lock = await readLock(path, surface)
       const toolchain = Json.isRecord(lock) ? lock['toolchain'] : undefined

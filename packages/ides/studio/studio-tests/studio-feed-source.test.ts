@@ -129,7 +129,7 @@ Describe('Studio Feed source preparation', () => {
   Test('compiles canonical project-package entity imports in the view and virtual shared fixture', async () => {
     await withTaoFiles('tao-studio-feed-package-', {
       'Main.tao':
-        'use Playlist from @model\napp Feed { view Main }\nview Main() { render inject ```ts return null ``` }',
+        'use Playlist from @model\napp Feed { id "tao-studio-feed-source" version "1.0.0" name "Feed" view Main }\nview Main() { render inject ```ts return null ``` }',
       '@model/Data.tao': 'public data Playlists / Playlist { Title text }',
       '@/studio/View1.tao': viewSource,
     }, async (paths, root) => {

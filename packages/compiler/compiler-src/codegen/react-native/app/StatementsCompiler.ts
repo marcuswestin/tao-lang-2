@@ -53,7 +53,7 @@ export const StatementsCompiler = {
       PhraseDeclaration: Compile.PhraseDeclaration,
       PressToolbarCommandStep: Compile.PressToolbarCommandStep,
       TagPressStep: Compile.TagPressStep,
-      ProjectDeclaration: Compile.ProjectDeclaration,
+      PackageDeclaration: () => gen.noop(),
       PrimitiveDeclaration: Compile.PrimitiveDeclaration,
       RenderStatement: value => Compile.RenderStatement(value, options),
       RenderSlotDeclaration: Compile.RenderSlotDeclaration,

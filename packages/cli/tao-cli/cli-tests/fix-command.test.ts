@@ -60,14 +60,14 @@ Describe('tao fix', () => {
     })
   })
 
-  Test('keeps package imports from a project declared in an ordinary source file', async () => {
+  Test('keeps package imports from separate marked project roots', async () => {
     await withTaoFixture({
-      'First/Main.tao': 'project { id "first-inline" name "First inline" }\n',
-      'First/@data/Data.tao': 'workspace data Labels / Label {\n   Value text\n}\n',
-      'First/@ui/View.tao': 'use Labels from @data\n\nworkspace scene Greeting() {\n   query Labels { }\n}\n',
-      'Second/Main.tao': 'project { id "second-inline" name "Second inline" }\n',
-      'Second/@data/Data.tao': 'workspace data Labels / Label {\n   Value text\n}\n',
-      'Second/@ui/View.tao': 'use Labels from @data\n\nworkspace scene Greeting() {\n   query Labels { }\n}\n',
+      'First/.tao/.gitkeep': '',
+      'First/@data/Data.tao': 'public data Labels / Label {\n   Value text\n}\n',
+      'First/@ui/View.tao': 'use Labels from @data\n\nscene Greeting() {\n   query Labels { }\n}\n',
+      'Second/.tao/.gitkeep': '',
+      'Second/@data/Data.tao': 'public data Labels / Label {\n   Value text\n}\n',
+      'Second/@ui/View.tao': 'use Labels from @data\n\nscene Greeting() {\n   query Labels { }\n}\n',
     }, async rootDir => {
       const firstPath = FS.resolvePath('First/@ui/View.tao', rootDir)
       const secondPath = FS.resolvePath('Second/@ui/View.tao', rootDir)
@@ -105,7 +105,7 @@ Describe('tao fix', () => {
   Test('checks an explicitly named generated root-package file without rewriting it', async () => {
     const generated = 'view   Generated() { }'
     await withTaoFixture({
-      'Project.tao': 'project { id "generated-fix" name "Generated fix" }\n',
+      '.tao/.gitkeep': '',
       '@/studio/Generated.tao': generated,
     }, async rootDir => {
       const path = FS.resolvePath('@/studio/Generated.tao', rootDir)
@@ -123,7 +123,7 @@ Describe('tao fix', () => {
   Test('protects generated roots owned by nested Tao projects during a repository-wide fix', async () => {
     const generated = 'view   Generated() { }'
     await withTaoFixture({
-      'Nested/Project.tao': 'project {\n   id "nested-fix"\n   name "Nested fix"\n}\n',
+      'Nested/.tao/.gitkeep': '',
       'Nested/@/studio/Generated.tao': generated,
       'Nested/Authored.tao': 'view   Authored() { }',
       'Outer.tao': 'view   Outer() { }',
@@ -133,7 +133,6 @@ Describe('tao fix', () => {
       Expect(statusByFile(results, rootDir)).toEqual({
         'Nested/@/studio/Generated.tao': 'error',
         'Nested/Authored.tao': 'changed',
-        'Nested/Project.tao': 'unchanged',
         'Outer.tao': 'changed',
       })
       Expect(await FS.readText(FS.resolvePath('Nested/@/studio/Generated.tao', rootDir))).toBe(generated)
@@ -144,7 +143,7 @@ Describe('tao fix', () => {
   Test('does not mistake an undeclared nested @ directory for the ancestor project root package', async () => {
     const generated = 'view   Generated() { }'
     await withTaoFixture({
-      'Project.tao': 'project {\n   id "outer-fix"\n   name "Outer fix"\n}\n',
+      '.tao/.gitkeep': '',
       'Apps/Created/@/studio/Generated.tao': generated,
       'Apps/Created/Authored.tao': 'view   Authored() { }',
     }, async rootDir => {
@@ -153,7 +152,6 @@ Describe('tao fix', () => {
       Expect(statusByFile(results, rootDir)).toEqual({
         'Apps/Created/@/studio/Generated.tao': 'changed',
         'Apps/Created/Authored.tao': 'changed',
-        'Project.tao': 'unchanged',
       })
       Expect(await FS.readText(FS.resolvePath('Apps/Created/@/studio/Generated.tao', rootDir))).toBe(
         'view Generated() { }\n',
@@ -165,7 +163,7 @@ Describe('tao fix', () => {
   Test('formats an explicitly named nested @ file that is not the project-root package', async () => {
     const generated = 'view   Generated() { }'
     await withTaoFixture({
-      'Project.tao': 'project {\n   id "outer-fix-file"\n   name "Outer fix file"\n}\n',
+      '.tao/.gitkeep': '',
       'Apps/Created/@/studio/Generated.tao': generated,
     }, async rootDir => {
       const path = FS.resolvePath('Apps/Created/@/studio/Generated.tao', rootDir)
@@ -184,6 +182,9 @@ Describe('tao fix', () => {
         use Text from @tao/ui
 
         app MyApp {
+           id "my-app"
+           version "1.0.0"
+           name "My App"
            Design AppDesign
            view MainView
         }
@@ -206,15 +207,18 @@ Describe('tao fix', () => {
           .filter(code => code !== undefined && legacyDesignCodes.includes(code))
 
       const before = await runCheck(rootDir)
-      Expect(statusByFile(before, rootDir)).toEqual({ 'App.tao': 'changed', 'Project.tao': 'unchanged' })
+      Expect(statusByFile(before, rootDir)).toEqual({ 'App.tao': 'changed' })
       Expect(new Set(legacyCodes(before))).toEqual(new Set(legacyDesignCodes))
 
-      Expect(statusByFile(await runFix(rootDir), rootDir)).toEqual({ 'App.tao': 'changed', 'Project.tao': 'unchanged' })
+      Expect(statusByFile(await runFix(rootDir), rootDir)).toEqual({ 'App.tao': 'changed' })
       Expect(await FS.readText(path)).toBe(`${
         Text.stripIndent(`
         use Text from @tao/ui
 
         app MyApp {
+           id "my-app"
+           version "1.0.0"
+           name "My App"
            Design AppDesign
            view MainView
         }
@@ -237,7 +241,7 @@ Describe('tao fix', () => {
       }\n`)
 
       const after = await runCheck(rootDir)
-      Expect(statusByFile(after, rootDir)).toEqual({ 'App.tao': 'unchanged', 'Project.tao': 'unchanged' })
+      Expect(statusByFile(after, rootDir)).toEqual({ 'App.tao': 'unchanged' })
       Expect(after.flatMap(result => result.diagnostics ?? [])).toEqual([])
     })
   })

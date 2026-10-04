@@ -54,7 +54,7 @@ Describe('validator: aliases and invocations', () => {
       {
         title: 'rejects local let references to later values',
         source: `
-        app MyApp { view MainView }
+        app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
         view MainView(Label text) {
           let Greeting = Later
           let Later = Label
@@ -79,7 +79,8 @@ Describe('validator: aliases and invocations', () => {
       },
       {
         title: 'rejects local aliases that shadow visible parameters',
-        source: 'app MyApp { view MainView }\nview MainView(Label text) { let Label = "shadow" }',
+        source:
+          'app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }\nview MainView(Label text) { let Label = "shadow" }',
         messages: [aliasMessages.duplicateName('Label')],
       },
       {
@@ -141,7 +142,7 @@ Describe('validator: aliases and invocations', () => {
       ],
       [
         'rejects view parameters that shadow view declarations',
-        `app MyApp { view MainView }
+        `app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
        view MainView(Text text) { render Text(Text) }
        ${textView}`,
       ],
@@ -153,7 +154,7 @@ Describe('validator: aliases and invocations', () => {
   Test(
     'allows local aliases to shadow file-level aliases without hiding earlier references',
     accepts(`
-      app MyApp { view MainView }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
       let Greeting = "Outer"
       ${stackLayout}
       ${textView}

@@ -1,13 +1,9 @@
 use StackNav from @tao/nav
 
-project {
-   id "type-system-tests"
-   name "Type System Tests"
-   version "0.1.0"
-}
-
 app TypeSystemTests {
-   Name "Type System Tests"
+   id "type-system-tests"
+   version "0.1.0"
+   name "Type System Tests"
    Navigator StackNav {
       Initial Demo
 }  }

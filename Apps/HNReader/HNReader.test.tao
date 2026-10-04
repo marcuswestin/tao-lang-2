@@ -6,7 +6,9 @@ use Col, FormButton, ScrollView, Text from @tao/ui
 use HNDesign, HNReaderStub, ReadingHistoryRow, TrackedStoryRow from ./
 
 app HNReaderAvailabilityHarness {
-   Name "HNReader availability harness"
+   id "hnreader-availability-harness"
+   version "0.1.0"
+   name "HNReader availability harness"
    Navigator StackNav {
       Initial HistoryAvailabilityHarness
    }

@@ -1,5 +1,5 @@
 import TR from '@runtime/TR'
-import { Assert, CLI, FS, Repo } from '@shared'
+import { Assert, CLI, FS, ProjectIdentity, Repo } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { act, render, waitFor } from '@testing-library/react-native'
 import { type ComponentType, createElement } from 'react'
@@ -15,7 +15,7 @@ Describe('generated debugger instrumentation', () => {
       'tao-debugger-generated-',
       {
         'Main.tao': `
-          app DebugApp { view Main }
+          app DebugApp { id "debugapp" version "1.0.0" name "DebugApp" view Main }
 
           view Main() {
             state Count = 0
@@ -36,7 +36,6 @@ Describe('generated debugger instrumentation', () => {
             \`\`\`
           }
         `,
-        'Project.tao': 'project { id "tao-debugger-generated" name "Generated debugger" }',
       },
       async (paths, root) => {
         const runtimePackageRoot = FS.resolvePath('runtime', root)
@@ -80,7 +79,19 @@ Describe('generated debugger instrumentation', () => {
 
           screen.getByText('0')
           Expect(TR.Debug.Paused()?.step).toMatchObject({ action: 'AddTwo', path: '0' })
-          Expect(TR.Debug.Paused()?.step.declaration).toContain('tao-debugger-generated')
+          const projectId = ProjectIdentity.read(root)
+          Expect(projectId).toBeDefined()
+          const declaration = TR.Debug.Paused()?.step.declaration
+          Assert.defined(declaration, 'the debugger pause includes a declaration identity')
+          Expect(JSON.parse(declaration)).toEqual([
+            'tao.declaration',
+            1,
+            projectId,
+            '@workspace',
+            'Main',
+            'view',
+            'Main',
+          ])
           Expect(TR.Debug.Paused()?.step.statement).toBe('block.statements[1].block.statements[0]')
 
           act(() => TR.Debug.Continue())

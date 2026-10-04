@@ -1,10 +1,10 @@
 import { Packages } from '@ast-utils'
-import { BridgeMetadata } from '@compiler/bridge-metadata'
 import Workspace from '@compiler/workspace'
 import Formatter, { type FormatAttempt, type FormatterSession } from '@formatter'
+import { ensureProjectTypeScriptConfig, ProjectTooling } from '@project-tooling'
 import { Diagnostic, Diagnostics, FS } from '@shared'
 import SourceActions from '@source-actions'
-import { checkBridgeModules } from './bridge-check'
+import { TaoAppModules } from './app-modules'
 import { CheckCache, type CheckCacheDiagnostic, type CheckCacheOptions } from './check-cache'
 import { type InPlace, inPlace } from './in-place-files'
 import { findTaoFiles } from './tao-files'
@@ -106,8 +106,16 @@ async function runCanonicalSource(path: string, options: CanonicalSourceOptions)
    * already have fixed, and the exit code rides on them, so a workspace with any error is never
    * stamped and is always checked from source.
    */
-  const cleared = new Map<string, { diagnostics: readonly CheckCacheDiagnostic[]; metadataPaths: readonly string[] }>()
+  const cleared = new Map<string, {
+    dependencyRoots: readonly string[]
+    diagnostics: readonly CheckCacheDiagnostic[]
+    externalSidecarInputPaths: readonly string[]
+    metadataPaths: readonly string[]
+  }>()
   for (const [workspaceRoot, partition] of partitions) {
+    if (options.validate === true) {
+      await ensureProjectTypeScriptConfig(workspaceRoot, { runtimeRoot: TaoAppModules.runtimeRoot() })
+    }
     const replayed = await cache?.reuse(workspaceRoot, partition.entryFiles)
     if (replayed !== undefined) {
       partition.replayed = replayed.diagnostics
@@ -121,22 +129,21 @@ async function runCanonicalSource(path: string, options: CanonicalSourceOptions)
     const parsedFiles = await parseWorkspaceFiles(workspace, partition.entryFiles)
     partition.parsed = parsedFiles
     if (options.validate === true) {
-      const validation = parsedFiles === undefined
-        ? await workspace.validateFiles(partition.entryFiles)
-        : await workspace.validateParsedFiles([...parsedFiles.values()])
-      const diagnostics = [...validation.diagnostics]
-      let modules: string[] = []
-      if (!Diagnostics.hasError(diagnostics)) {
-        const localFiles = validation.files.filter(file => FS.pathIsWithin(file.path, workspaceRoot))
-        modules = await BridgeMetadata.write(localFiles)
-        diagnostics.push(...await checkBridgeModules(workspaceRoot, modules))
-      }
+      const refreshed = await ProjectTooling.refresh(workspaceRoot, { runtimeRoot: TaoAppModules.runtimeRoot() })
+      const diagnostics = [...refreshed.diagnostics]
       mergeDiagnostics(diagnosticsByFile, indexDiagnostics(diagnostics))
-      if (!Diagnostics.hasError(diagnostics)) {
+      if (refreshed.status === 'fresh' && !Diagnostics.hasError(diagnostics)) {
         // Offered for stamping, and withdrawn below by any file this workspace cannot report clean.
         cleared.set(workspaceRoot, {
+          dependencyRoots: refreshed.dependencyRoots,
           diagnostics: recordableWarnings(workspaceRoot, diagnostics),
-          metadataPaths: modules,
+          externalSidecarInputPaths: refreshed.externalSidecarInputPaths,
+          metadataPaths: [
+            ...refreshed.contractPaths,
+            ...refreshed.configInputPaths,
+            FS.resolvePath('tsconfig.json', workspaceRoot),
+            FS.resolvePath('.tao/typescript/tsconfig.json', workspaceRoot),
+          ],
         })
       }
     }

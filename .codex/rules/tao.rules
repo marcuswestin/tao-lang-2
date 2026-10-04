@@ -20,6 +20,7 @@ prefix_rule(pattern=["./agent","unsandboxed","admission-experiment"], decision="
 prefix_rule(pattern=["./agent","unsandboxed","native-module-check"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
 prefix_rule(pattern=["./agent","unsandboxed","reclaim"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
 prefix_rule(pattern=["./agent","unsandboxed","prepare-release"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
+prefix_rule(pattern=["./agent","unsandboxed","ide-extension-acceptance"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
 prefix_rule(pattern=["./agent","unsandboxed","app-dev"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
 prefix_rule(pattern=["./agent","unsandboxed","test-watch"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
 prefix_rule(pattern=["./agent","unsandboxed","standalone-cli-acceptance"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")

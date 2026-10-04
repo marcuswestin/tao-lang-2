@@ -218,9 +218,9 @@ Describe('runTestWatchLoop', () => {
 Describe('runTestWatchCommand watch-set wiring', () => {
   Test('watches both selected projects and forwards their changes to the loop', async () => {
     await withTaoFixture({
-      'One/Project.tao': 'project { id "watch-one" name "Watch One" }\n',
+      'One/.tao/.gitkeep': '',
       'One/Sample.test.tao': 'test "Sample" { }\n',
-      'Two/Project.tao': 'project { id "watch-two" name "Watch Two" }\n',
+      'Two/.tao/.gitkeep': '',
       'Two/Sample.test.tao': 'test "Sample" { }\n',
     }, async rootDir => {
       const roots = [FS.resolvePath('One', rootDir), FS.resolvePath('Two', rootDir)]
@@ -257,7 +257,7 @@ Describe('runTestWatchCommand watch-set wiring', () => {
 
   Test('watches a selected directory even when it has no tests yet', async () => {
     await withTaoFixture({
-      'Project.tao': 'project { id "watch-empty" name "Watch Empty" }\n',
+      '.tao/.gitkeep': '',
     }, async rootDir => {
       const watch = fakeWatch()
       const started = deferred<void>()

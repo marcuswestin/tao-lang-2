@@ -64,7 +64,7 @@ Describe('validator: optional parameter types', () => {
   Test(
     'accepts nullable view arguments and defaults',
     accepts(`
-    app Example { view Main }
+    app Example { id "example" version "1.0.0" name "Example" view Main }
     view Main() { render Accept() }
     view Explicit() { render Accept(Value: none) }
     view Concrete() { render Accept(Value: "ready") }
@@ -76,7 +76,7 @@ Describe('validator: optional parameter types', () => {
     'still requires a nullable view argument',
     rejects(
       `
-    app Example { view Main }
+    app Example { id "example" version "1.0.0" name "Example" view Main }
     view Main() { render Accept() }
     ${stubView('Accept', 'Value text?')}
   `,

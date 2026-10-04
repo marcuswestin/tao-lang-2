@@ -8,7 +8,7 @@ Describe('validator: layout clauses', () => {
   Test(
     'accepts content clauses on ordinary views with runtime-resolved direction',
     accepts(`
-      app MyApp { view MainView }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
       use Col, Text from @tao/ui
       view Card() {
         render Col(){
@@ -24,7 +24,7 @@ Describe('validator: layout clauses', () => {
   Test(
     'accepts content clauses without stdlib declaration identity',
     accepts(`
-      app MyApp { view MainView }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
       view Row() {
         render inject ${tsFence}
           return null
@@ -115,7 +115,7 @@ Describe('validator: layout clauses', () => {
     'rejects layout clauses on render inject',
     rejects(
       `
-      app MyApp { view MainView }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
       view MainView() {
         render inject ${tsFence}
           return null

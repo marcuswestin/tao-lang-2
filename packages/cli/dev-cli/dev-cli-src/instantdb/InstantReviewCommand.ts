@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, HCI, Platform, Repo, SecretsFile } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, ProjectIdentity, Repo, SecretsFile } from '@shared'
 
 const APP_NAME = 'AuthReviewInstant'
 /** The variant signed in through Clerk, which InstantDB verifies with the app's registered Clerk client. */
@@ -29,6 +29,7 @@ type TaoChild = {
 type ReviewEnvironment = {
   secrets: typeof SecretsFile.readDecryptedSecrets
   source: () => Promise<string>
+  projectIdentity: () => string
   project: () => Promise<string>
   writeOwnership: (path: string, ownership: Record<string, unknown>) => Promise<void>
   runTao: (args: readonly string[], options: TaoRunOptions) => TaoChild
@@ -40,6 +41,13 @@ function liveEnvironment(): ReviewEnvironment {
   return {
     secrets: SecretsFile.readDecryptedSecrets,
     source: async () => await FS.readText(Repo.resolvePath('Apps/Test Apps/Auth Review/Auth Review.tao')),
+    projectIdentity: () => {
+      const identity = ProjectIdentity.read(Repo.resolvePath('Apps/Test Apps/Auth Review'))
+      if (identity === undefined) {
+        Errors.throwUnexpected('Auth Review source project must have a checked-in identity.')
+      }
+      return identity
+    },
     // Source discovery honors Git ignores, so this source cannot live under .artifacts.
     project: async () => await FS.mkTmpDir('tao-instant-review-'),
     writeOwnership: FS.writeJson,
@@ -103,6 +111,7 @@ export async function runInstantReview(
   const { appId, publishableKey, token } = await loadCredentials(environment, options.clerk === true)
   const fingerprint = appId.slice(0, 8)
   const source = await environment.source()
+  const projectIdentity = environment.projectIdentity()
   const placeholders = source.split(PLACEHOLDER).length - 1
   if (placeholders !== 2) {
     Errors.throwUnexpected(
@@ -163,10 +172,7 @@ export async function runInstantReview(
         ? substituted
         : substituted.replaceAll(PUBLISHABLE_KEY_PLACEHOLDER, publishableKey),
     )
-    await FS.writeText(
-      FS.resolvePath('Project.tao', projectRoot),
-      'project { id "tao-instant-review" name "Instant review" }\n',
-    )
+    await FS.writeJson(FS.resolvePath('.tao/project.json', projectRoot), { id: projectIdentity })
     environment.write(`Instant review: ${appName} against Instant app ${fingerprint}…`)
     if (options.skipPush !== true) {
       stage = options.dryRun === true ? 'plan InstantDB push' : 'push InstantDB schema and rules'
@@ -197,8 +203,8 @@ export async function runInstantReview(
       return signalCode ?? exitCode
     }
     environment.write('Press Ctrl+C to stop the dev loop and remove this review project.')
-    stage = 'run tao dev'
-    exitCode = (await run(['dev', entryPath, '--app', appName, ...targets], { captureOutput: false })).exitCode
+    stage = 'run tao run'
+    exitCode = (await run(['run', entryPath, '--app', appName, ...targets], { captureOutput: false })).exitCode
   } catch {
     if (signalCode === undefined) {
       // Child and filesystem failures can embed the App ID or token.

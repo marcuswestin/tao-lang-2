@@ -25,8 +25,8 @@ Describe('toolchain pin', () => {
       const inside = FS.resolvePath('Items/Detail', project)
       await FS.mkdir(inside)
 
-      Expect(await ToolchainPin.requestedVersion(['dev'], {}, inside))
-        .toEqual({ args: ['dev'], source: 'project', version: '0.4.0' })
+      Expect(await ToolchainPin.requestedVersion(['run'], {}, inside))
+        .toEqual({ args: ['run'], source: 'project', version: '0.4.0' })
     })
   })
 
@@ -34,9 +34,9 @@ Describe('toolchain pin', () => {
   Test('a nearer project without a pin does not inherit the outer one', async () => {
     await withProject('0.4.0', async project => {
       const nested = FS.resolvePath('experiments/sketch', project)
-      await FS.writeText(FS.resolvePath('.tao-project/lock.jsonc', nested), '{ "schemaVersion": 1 }\n')
+      await FS.writeText(FS.resolvePath('.tao/lock.jsonc', nested), '{ "schemaVersion": 1 }\n')
 
-      Expect(await ToolchainPin.requestedVersion(['dev'], {}, nested)).toBeUndefined()
+      Expect(await ToolchainPin.requestedVersion(['run'], {}, nested)).toBeUndefined()
     })
   })
 
@@ -215,7 +215,7 @@ async function withProject(pin: string, run: (project: string) => Promise<void>)
   try {
     const project = FS.resolvePath('tally', root)
     await FS.writeText(
-      FS.resolvePath('.tao-project/lock.jsonc', project),
+      FS.resolvePath('.tao/lock.jsonc', project),
       `{\n  // written by tao create\n  "schemaVersion": 1,\n  "toolchain": { "version": "${pin}" }\n}\n`,
     )
     await run(project)

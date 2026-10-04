@@ -4,6 +4,7 @@ import { Assert, Diagnostics, ReleaseCapabilities, type ReleaseProfile } from '@
 import Validator, { type ValidationResult } from '@validator'
 import { designValidationCodes } from '@validator/diagnostic-codes'
 import { Backends } from './codegen/Backend'
+import type { DependencyEnvironment } from './compiler-dependencies'
 import { compileStudioPreviewManifest, type StudioPreviewManifest } from './studio-preview-manifest'
 import { compileTestPlan, type TaoTestPlan } from './test-plan-compiler'
 
@@ -16,11 +17,15 @@ export type CompiledFile = {
 
 /** CompileResult declares generated output for a Tao app entry. */
 export type CompileResult = {
+  appId: string
+  appVersion: string
   target?: 'react-native' | 'watchos'
   entryArtifact?: string
-  /** displayName is a native app's literal Name, suitable for the host app label. */
+  /** displayName is the effective app name, suitable for the native host label. */
   displayName?: string
   appNames: string[]
+  /** Physical project environments needed by this selected app's dependency graph. */
+  dependencyEnvironments: readonly DependencyEnvironment[]
   validation: ValidationResult
   code: string
   files: CompiledFile[]
@@ -182,5 +187,8 @@ namespace Compiler {
   /** TestPlan declares compiled Tao v0 test-plan IR. */
   export type TestPlan = TaoTestPlan
 }
+
+export { CompilerDependencies } from './compiler-dependencies'
+export type { DependencyEnvironment, DependencySelection, SidecarImport } from './compiler-dependencies'
 
 export default Compiler

@@ -101,7 +101,7 @@ function nominalApp(
   renderedType: 'boolean' | 'number' | 'text',
 ): string {
   return `
-    app ${appName} { view MainView }
+    app ${appName} { id "${appName.toLowerCase()}" version "1.0.0" name "${appName}" view MainView }
     type Name is ${nominalBase}
     view MainView() { render ${renderedView}(Name ${value}) }
     view ${renderedView}(Value ${renderedType}) {

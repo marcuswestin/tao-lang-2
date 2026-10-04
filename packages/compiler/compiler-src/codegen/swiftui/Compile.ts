@@ -1,3 +1,4 @@
+import { Packages } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert, Diagnostics, FS, TaoResources } from '@shared'
 import type { ValidationResult } from '@validator'
@@ -5,7 +6,9 @@ import {
   type TargetCapabilities,
   TargetCapabilitiesValidator,
 } from '@validator/validators/target-capabilities-validator'
+import { appMetadata } from '../../app-metadata'
 import type { CompileOptions, CompilerContext, CompileResult } from '../../compiler'
+import { CompilerDependencies } from '../../compiler-dependencies'
 import type { Backend } from '../Backend'
 import { AppCompiler } from './app/AppCompiler'
 import { ExpressionsCompiler } from './app/ExpressionsCompiler'
@@ -44,21 +47,25 @@ function compileSwiftUI(
   )
   Assert(AST.isAppDeclaration(app), 'validated watch app is a direct app declaration')
   const files = Compile.App(app, profile)
-  const name = app.block?.statements.find(statement => AST.isAppProperty(statement) && statement.name === 'Name')
-  const displayName = AST.isAppProperty(name) && AST.isStringLiteral(name.value) ? name.value.value : undefined
+  const metadata = appMetadata(app)
+  const graph = Packages.createResolver(context.packagesContext).projectGraph({
+    fromFilePath: AST.getDocument(app).uri.path,
+    workspaceFiles: validation.files.map(file => file.ast),
+  })
   const runtimePath = TaoResources.resolve(`${TaoResources.RUNTIME_DIRECTORY}/swiftui/TaoValues.swift`)
     ?? FS.resolvePath('../../../../apps/runtime/swiftui/TaoValues.swift', import.meta.dirname)
   files.push({ sourcePath: runtimePath, relativePath: 'TaoValues.swift', code: FS.readTextSync(runtimePath) })
   return {
     target: 'watchos',
     entryArtifact: 'WatchApp.swift',
-    ...(displayName === undefined ? {} : { displayName }),
+    ...metadata,
     code: files[0]!.code,
     files,
     validation,
     appNames: validation.files.flatMap(file =>
       AST.appValueDeclarationsInFile(file.ast).map(candidate => candidate.name)
     ),
+    dependencyEnvironments: CompilerDependencies.collect(graph, { kind: 'app', app }),
   }
 }
 

@@ -1,4 +1,4 @@
-import { FS, Repo, Time } from '@shared'
+import { FS, HCI, Repo, Time } from '@shared'
 import { ContentionRetry } from './ContentionRetry'
 import { FailurePolicy } from './FailurePolicy'
 import { FlakeTolerance } from './FlakeTolerance'
@@ -389,6 +389,9 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
         contention: machineLane.report(),
         location,
         machineLane,
+        onProgress: options.outputMode === undefined || options.outputMode === 'quiet'
+          ? undefined
+          : message => HCI.writeLine(message),
         runNode,
         states,
       })

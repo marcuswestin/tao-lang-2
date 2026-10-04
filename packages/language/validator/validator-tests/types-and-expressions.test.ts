@@ -66,7 +66,7 @@ Describe('validator: types and expressions', () => {
       data Documents / Document { Title text, Body text, Owner text, CreatedAt time }
       type DocumentInput is Document { Title, Body }
       type DraftFields is { Title text, Body text }
-      app EditorApp { view Main }
+      app EditorApp { id "editorapp" version "1.0.0" name "EditorApp" view Main }
       view Main() { render Empty() }
       view Editor(Document) {
         state Input = copy Document as DocumentInput
@@ -83,7 +83,7 @@ Describe('validator: types and expressions', () => {
     'accepts entity write-status members',
     accepts(`
       data Documents / Document { Title text }
-      app EditorApp { view Main }
+      app EditorApp { id "editorapp" version "1.0.0" name "EditorApp" view Main }
       view Main() { render Empty() }
       view Editor(Document) {
         let Queued = Document.WritesQueued
@@ -102,7 +102,7 @@ Describe('validator: types and expressions', () => {
       data Documents / Document { Title text (required "Name this document"), Body text }
       type DocumentInput is Document { Title, Body }
       type BodyInput is Document without { Title }
-      app EditorApp { view Main }
+      app EditorApp { id "editorapp" version "1.0.0" name "EditorApp" view Main }
       view Main() { render Empty() }
       view Editor(Document) {
         state Input = copy Document as DocumentInput
@@ -123,7 +123,7 @@ Describe('validator: types and expressions', () => {
     rejects(
       `
         type Draft is { Title text }
-        app EditorApp { view Main }
+        app EditorApp { id "editorapp" version "1.0.0" name "EditorApp" view Main }
         view Main() {
           let Value = Draft { Title: "" }
           let Missing = Value.Problems
@@ -157,7 +157,7 @@ Describe('validator: types and expressions', () => {
       `
         data Notes / Note { Title text (required "Name it") }
         type NoteInput is Note { Title }
-        app EditorApp { view Main }
+        app EditorApp { id "editorapp" version "1.0.0" name "EditorApp" view Main }
         view Flip(Value boolean) {
           action Go() { toggle Value }
           render Empty()
@@ -181,7 +181,7 @@ Describe('validator: types and expressions', () => {
     const result = await testValidateCodeWithErrors(`
       data Notes / Note { Title text (required "Name it") }
       type NoteInput is Note { Title }
-      app EditorApp { view Main }
+      app EditorApp { id "editorapp" version "1.0.0" name "EditorApp" view Main }
       view Main() { render Empty() }
       view Editor(Input NoteInput) {
         action Break() { set Input.Incomplete = true }
@@ -198,7 +198,7 @@ Describe('validator: types and expressions', () => {
     accepts(`
       data Workspaces / Workspace { Name text (required "Name this workspace"), Pinned yes / no }
       type WorkspaceInput is Workspace { Name }
-      app EditorApp { view Main }
+      app EditorApp { id "editorapp" version "1.0.0" name "EditorApp" view Main }
       view Main() {
         state Input = WorkspaceInput { Name: "" }
         action Add() { create Workspace with Input }
@@ -217,7 +217,7 @@ Describe('validator: types and expressions', () => {
         type NameOnly is Workspace { Name }
         type WithDocuments is Workspace { Name, Motto, Documents }
         type TitleOnly is Document { Title }
-        app EditorApp { view Main }
+        app EditorApp { id "editorapp" version "1.0.0" name "EditorApp" view Main }
         view Main() {
           state Short = NameOnly { Name: "" }
           state Listed = WithDocuments { Name: "", Motto: "" }
@@ -245,7 +245,7 @@ Describe('validator: types and expressions', () => {
         data Accounts / Account { Name text }
         type BadInput is Document { Missing, Missing }
         type AccountInput is Account { Name }
-      app EditorApp { view Main }
+      app EditorApp { id "editorapp" version "1.0.0" name "EditorApp" view Main }
       view Main() { render Empty() }
         view Editor(Document, Account) {
           state Input = copy Account as AccountInput
@@ -267,7 +267,7 @@ Describe('validator: types and expressions', () => {
         data Documents / Document { Title text, Body text }
         type DocumentInput is Document { Title, Body }
         type TitleInput is Document { Title }
-        app EditorApp { view Main }
+        app EditorApp { id "editorapp" version "1.0.0" name "EditorApp" view Main }
         view Main() { render Empty() }
         view Editor(Document) {
           state Scalar = copy "bad" as number
@@ -289,7 +289,7 @@ Describe('validator: types and expressions', () => {
         data Parents / Parent { Children (owned) }
         data Children / Child { Parent }
         type ParentInput is Parent { Children }
-        app EditorApp { view Main }
+        app EditorApp { id "editorapp" version "1.0.0" name "EditorApp" view Main }
         view Main() { render Empty() }
         view Editor(Parent) {
           state Input = copy Parent as ParentInput
@@ -355,7 +355,7 @@ Describe('validator: types and expressions', () => {
     await withTaoFiles('tao-validator-nominal-names-', {
       'Entry.tao': `
         use OtherPerson from ./Other.tao
-        app MyApp { view MainView }
+        app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
         type Person is text
         let LocalPerson = Person "Ada"
         view MainView() { render Text(LocalPerson) }
@@ -363,7 +363,7 @@ Describe('validator: types and expressions', () => {
       `,
       'Other.tao': `
         type Person is text
-        workspace let OtherPerson = Person "Grace"
+        project let OtherPerson = Person "Grace"
         view OtherView() { }
       `,
     }, async paths => {
@@ -713,7 +713,7 @@ Describe('validator: types and expressions', () => {
   Test('keeps cross-view values out of scope with a located linker diagnostic', async () => {
     const message = "No value named 'Secret' is in scope."
     const result = await testValidateCodeWithErrors(`
-      app MyApp { view Target }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view Target }
       ${stubView('Text', 'Value text')}
       ${stubView('Source', 'Secret text')}
       view Target() { render Text(Secret) }
@@ -729,7 +729,7 @@ Describe('validator: types and expressions', () => {
     'keeps toggle targets inside their lexical state scope',
     rejects(
       `
-      app MyApp { view Target }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view Target }
       view Source() { state Ready = false render Empty() }
       view Target() { action Flip() { toggle Ready } render Empty() }
       ${stubView('Empty')}
@@ -812,7 +812,7 @@ function rejectsWithout(
 function caseScopeApp(body: string, declarations = ''): string {
   return `
     data Workspaces / Workspace { Name text }
-    app ScopeApp { view Main }
+    app ScopeApp { id "scopeapp" version "1.0.0" name "ScopeApp" view Main }
     view Main() {
       ${declarations}
       query Workspaces = Workspaces with { }

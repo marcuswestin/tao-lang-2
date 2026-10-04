@@ -38,7 +38,7 @@ Describe('Expo runtime', () => {
         `,
         'Main.tao': `
           use Text from @tao/ui
-          app RenderApp { view Main }
+          app RenderApp { id "renderapp" version "1.0.0" name "RenderApp" view Main }
           view Main() { render Text("Hello from a journey") }
         `,
       },
@@ -105,7 +105,7 @@ Describe('Expo runtime', () => {
         'Main.tao': `
           use StackNav from @tao/nav
           use Col, FormButton from @tao/ui
-          app AttentionApp { Name "Attention" Navigator StackNav { Initial Home } }
+          app AttentionApp { id "attentionapp" version "1.0.0" name "Attention" Navigator StackNav { Initial Home } }
           scene Home() {
             Title "Home"
             action DoNothing() { }
@@ -137,7 +137,7 @@ Describe('Expo runtime', () => {
         'Main.tao': `
           use StackNav from @tao/nav
           use Col, FormButton from @tao/ui
-          app AttentionApp { Name "Attention" Navigator StackNav { Initial Home } }
+          app AttentionApp { id "attentionapp" version "1.0.0" name "Attention" Navigator StackNav { Initial Home } }
           scene Home() {
             Title "Home"
             action DoNothing() { }
@@ -193,7 +193,7 @@ Describe('Expo runtime', () => {
         }
       `,
         'Main.tao': `
-        app DuplicateTextApp { view MainView }
+        app DuplicateTextApp { id "duplicatetextapp" version "1.0.0" name "DuplicateTextApp" view MainView }
         view MainView() {
           render Stack(){
             Text("Repeated")
@@ -245,7 +245,7 @@ Describe('Expo runtime', () => {
         }
       `,
         'Main.tao': `
-        app PointerPhaseApp { view MainView }
+        app PointerPhaseApp { id "pointerphaseapp" version "1.0.0" name "PointerPhaseApp" view MainView }
         view MainView() {
           state Phase = "idle"
           action SetPhase(Value text) { set Phase = Value }
@@ -306,7 +306,7 @@ Describe('Expo runtime', () => {
         }
       `,
         'Main.tao': `
-        app AsyncActionApp { view MainView }
+        app AsyncActionApp { id "asyncactionapp" version "1.0.0" name "AsyncActionApp" view MainView }
         view MainView() {
           state Ready = false
           state Count = 0
@@ -371,8 +371,7 @@ Describe('Expo runtime', () => {
 
         type ConfirmResult is one of Confirmed
 
-        app AskTestApp {
-          Name "Ask test"
+        app AskTestApp { id "asktestapp" version "1.0.0" name "Ask test"
           Navigator StackNav { Initial Home }
         }
 
@@ -419,7 +418,7 @@ Describe('Expo runtime', () => {
         }
       `,
         'Main.tao': `
-        app MissingPressApp { view MainView }
+        app MissingPressApp { id "missingpressapp" version "1.0.0" name "MissingPressApp" view MainView }
 
         view MainView() {
           render Text("Ready")
@@ -459,8 +458,7 @@ Describe('Expo runtime', () => {
           use StackNav from @tao/nav
           use Text from @tao/ui
 
-          app ToolbarApp {
-            Name "Toolbar"
+          app ToolbarApp { id "toolbarapp" version "1.0.0" name "Toolbar"
             Navigator StackNav { Initial Home }
           }
 
@@ -505,7 +503,7 @@ Describe('Expo runtime', () => {
         }
       `,
         'Main.tao': `
-        app InputApp { view MainView }
+        app InputApp { id "inputapp" version "1.0.0" name "InputApp" view MainView }
         view MainView() {
           state Draft = ""
           state Status = "Waiting"
@@ -591,8 +589,7 @@ Describe('Expo runtime', () => {
 
         data Items / Item { Name text }
 
-        app TaggedApp {
-          Name "Tagged"
+        app TaggedApp { id "taggedapp" version "1.0.0" name "Tagged"
           Navigator StackNav { Initial Main }
           Datasource Memory { }
         }
@@ -655,7 +652,7 @@ Describe('Expo runtime', () => {
 
           let Workspaces = ["Chapter one", "Chapter two"]
 
-          app TaggedRowsApp { view Main }
+          app TaggedRowsApp { id "taggedrowsapp" version "1.0.0" name "TaggedRowsApp" view Main }
 
           view Main() {
             render Col() {
@@ -677,7 +674,7 @@ Describe('Expo runtime', () => {
     await testCompileApp(
       `
         use Col, Text from @tao/ui
-        app LoopHierarchyApp { view Main }
+        app LoopHierarchyApp { id "loophierarchyapp" version "1.0.0" name "LoopHierarchyApp" view Main }
         view Main() {
           render Col() {
             #taggedRows
@@ -726,12 +723,11 @@ Describe('Expo runtime', () => {
         'Main.tao': `
         use StackNav from @tao/nav
 
-        app NavigationApp {
-          Name "Navigation"
+        app NavigationApp { id "navigationapp" version "1.0.0" name "Navigation"
           Navigator StackNav { Initial Home }
         }
 
-        workspace scene Home() {
+        project scene Home() {
           Title "Home"
           action Open() { present Detail() }
           render Stack(){
@@ -740,7 +736,7 @@ Describe('Expo runtime', () => {
           }
         }
 
-        workspace scene Detail() {
+        project scene Detail() {
           Title "Detail"
           render Text("Detail")
         }
@@ -789,7 +785,7 @@ Describe('Expo runtime', () => {
         }
       `,
         'Main.tao': `
-        app BrokenTextApp { view MainView }
+        app BrokenTextApp { id "brokentextapp" version "1.0.0" name "BrokenTextApp" view MainView }
         view MainView() {
           render Text("Actual")
         }
@@ -823,7 +819,7 @@ Describe('Expo runtime', () => {
         }
       `,
         'Main.tao': `
-        app BrokenTextApp { view MainView }
+        app BrokenTextApp { id "brokentextapp" version "1.0.0" name "BrokenTextApp" view MainView }
         view MainView() {
           render Text("Actual")
         }
@@ -865,7 +861,7 @@ Describe('Expo runtime', () => {
         }
       `,
         'First.tao': `
-        app FirstApp { view MainView }
+        app FirstApp { id "firstapp" version "1.0.0" name "FirstApp" view MainView }
         view MainView() {
           render Text("First")
         }
@@ -876,7 +872,7 @@ Describe('Expo runtime', () => {
         }
       `,
         'Second.tao': `
-        app SecondApp { view MainView }
+        app SecondApp { id "secondapp" version "1.0.0" name "SecondApp" view MainView }
         view MainView() {
           render Text("Second")
         }

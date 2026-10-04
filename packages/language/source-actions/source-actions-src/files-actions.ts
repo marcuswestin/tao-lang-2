@@ -6,7 +6,7 @@ import { synthesizeImportSection } from './use-actions'
 /**
  * canonicalizeTopLevel returns the document text with the canonical top-level statement order:
  * the synthesized import section (merged, deduplicated, sorted, unused imports dropped), then
- * project metadata, app declarations, and all other statements in their original relative order.
+ * package publications, app declarations, and all other statements in their original relative order.
  * Future top-level kinds such as `theme` and `datasource` slot into the rank list when they exist.
  */
 export function canonicalizeTopLevel(document: AST.Document): string {
@@ -33,13 +33,13 @@ function isUsePackageSlice(slice: StatementSlice<AST.Statement>): slice is State
   return AST.isUsePackageStatement(slice.statement)
 }
 
-const ProjectStatementRank = 0
+const PackageStatementRank = 0
 const AppDeclarationRank = 1
 const DefaultStatementRank = 2
 function statementRank(statement: AST.Statement): number {
   return (
-    AST.isProjectDeclaration(statement)
-      ? ProjectStatementRank
+    AST.isPackageDeclaration(statement)
+      ? PackageStatementRank
       : AST.isAppDeclaration(statement)
       ? AppDeclarationRank
       : DefaultStatementRank

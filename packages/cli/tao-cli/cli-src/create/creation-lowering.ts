@@ -42,7 +42,9 @@ export function lowerCreationPlan(plan: CreationPlan, options: LowerCreationPlan
     'Scenarios.tao': scenariosFile(plan, names),
     [`${names.app}.test.tao`]: testFile(plan, names),
     'tsconfig.json': PROJECT_TSCONFIG,
-    '.gitignore': '*.tao.ts\n.tao/\nnode_modules/\n',
+    '.gitignore':
+      '/.tao-ts/\n/.tao/*\n!/.tao/.gitkeep\n!/.tao/project.json\n!/.tao/lock.jsonc\n!/.tao/skills.version\nnode_modules/\n',
+    '.tao/.gitkeep': '',
     // The reserved root generated package exists from day one, committed empty, so Studio and the
     // compiler have their folder before the first generated file lands.
     '@/.gitkeep': '',
@@ -83,20 +85,14 @@ function appFile(plan: CreationPlan, names: ProjectNames, description: string | 
     : `//\n${commentLines(`Created by tao create from: ${description}`)}\n`
   return `use Local from @tao/data/providers/local
 
-project {
-   id ${taoString(plan.id)}
-   name ${taoString(plan.name)}
-   version "0.1.0"
-   app ${names.app}
-   remote none
-}
-
 ${commentLines(`${plan.name}: ${plan.summary}`)}
 ${provenance}//
-// This file holds the project and the app. The navigation is in Chrome.tao, the entities in
+// This file holds the app. The navigation is in Chrome.tao, the entities in
 // Data.tao, the design in Design.tao, and each feature has its own folder.
 app ${names.app} {
-   Name ${taoString(plan.name)}
+   id ${taoString(plan.id)}
+   version "0.1.0"
+   name ${taoString(plan.name)}
    Navigator ${names.navigator}
    Datasource Local {
       StorageKey ${taoString(plan.id)}

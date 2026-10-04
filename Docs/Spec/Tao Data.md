@@ -377,7 +377,9 @@ use Local from @tao/data/providers/local
 use Memory from @tao/data/providers/memory
 
 app WordFlower {
-   Name "WordFlower"
+   id "wordflower"
+   version "0.1.0"
+   name "WordFlower"
    Navigator WordFlowerNavigator
    Datasource Local {
       StorageKey "WordFlowerData"
@@ -385,6 +387,7 @@ app WordFlower {
 }
 
 let WordFlowerDemo = WordFlower with {
+   id "wordflower-demo"
    Datasource Memory { }
 }
 
@@ -392,7 +395,8 @@ datasource PreviewStore = Local {
    StorageKey "WordFlowerPreviewData"
 }
 
-workspace let WordFlowerPreview = WordFlower with {
+project let WordFlowerPreview = WordFlower with {
+   id "wordflower-preview"
    Datasource with {
       StorageKey "WordFlowerPreviewData"
    }
@@ -652,7 +656,7 @@ modelled, and an account switch stops sync until the app relaunches.
 ## The Dev datasource
 
 `Dev` is the development-only datasource. It holds nothing on the device: the Tao dev server —
-`tao dev` or Studio — stores each app's snapshots on the development machine and syncs them live
+`tao run` or Studio — stores each app's snapshots on the development machine and syncs them live
 to every device, browser tab, and simulator running that app's development build, so two phones
 and a browser tab editing the same app see one set of rows.
 
@@ -671,7 +675,7 @@ by the dev server:
 
 - **Storage is per app.** The dev server keys every stream by the app it is running — the app
   name plus a digest of its project root — and by storage key, so several apps developing side by
-  side never see each other's rows. `tao dev` and Studio derive the same key for the same app.
+  side never see each other's rows. `tao run` and Studio derive the same key for the same app.
 - **Storage survives the dev server.** Snapshots live as one file per app and storage key under
   `.artifacts/user/dev-data/`, written whole through a rename; the next dev server serves them
   again.

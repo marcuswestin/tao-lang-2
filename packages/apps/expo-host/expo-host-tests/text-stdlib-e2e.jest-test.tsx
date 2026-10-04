@@ -9,7 +9,7 @@ Describe('Tao text stdlib runtime', () => {
       `
         use CountWords, Join from @tao/text
 
-        app TextStdlib { view Main }
+        app TextStdlib { id "textstdlib" version "1.0.0" name "TextStdlib" view Main }
 
         view Main() {
           let Count = CountWords(" one two　three ")

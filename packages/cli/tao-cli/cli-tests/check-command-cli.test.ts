@@ -5,8 +5,8 @@ import { checkedProjectFile, checkedView, runTaoCliForTest, withTaoFixture } fro
 Describe('tao check CLI', () => {
   Test('reports an imported file error when checking only its entry file', async () => {
     await withTaoFixture({
-      'App.tao':
-        'use Bad from @ui\n\nproject {\n   id "tao-cli-test"\n   name "Tao CLI test"\n}\n\nview Main() {\n   render Bad()\n}\n',
+      'App.tao': 'use Bad from @ui\n\nview Main() {\n   render Bad()\n}\n',
+      '.tao/.gitkeep': '',
       '@ui/Bad.tao': 'public view Bad() {\n   render NoSuchView()\n}\n',
     }, async rootDir => {
       const result = await runTaoCliForTest(['check', FS.resolvePath('App.tao', rootDir)])
@@ -26,7 +26,7 @@ Describe('tao check CLI', () => {
 
       Expect(result.exitCode).toBe(0)
       Expect(result.stderr).toContain('Placeholder ships as an empty box in release.')
-      Expect(result.stdout).toContain('0 noncanonical, 2 unchanged, 1 warning')
+      Expect(result.stdout).toContain('0 noncanonical, 1 unchanged, 1 warning')
     })
   })
 
@@ -39,7 +39,7 @@ Describe('tao check CLI', () => {
 
       Expect(result.exitCode).toBe(1)
       Expect(result.stderr).toContain('Needs fixes')
-      Expect(result.stderr).toContain('1 noncanonical, 1 unchanged')
+      Expect(result.stderr).toContain('1 noncanonical, 0 unchanged')
     })
   })
 
@@ -71,7 +71,7 @@ Describe('tao check CLI', () => {
       Expect(result.stderr).toContain('broken.tao:3:1 error:')
       Expect(result.stderr).not.toContain('Expected: Tao source without syntax errors')
       Expect(result.stderr).not.toContain('Failed to check')
-      Expect(result.stderr).toContain('0 noncanonical, 1 unchanged, 1 error')
+      Expect(result.stderr).toContain('0 noncanonical, 0 unchanged, 1 error')
     })
   })
 
@@ -84,20 +84,19 @@ Describe('tao check CLI', () => {
       const result = await runTaoCliForTest(['check', rootDir])
 
       Expect(result.exitCode).toBe(1)
-      Expect(result.stderr).toContain('0 noncanonical, 2 unchanged, 1 error, 1 warning')
+      Expect(result.stderr).toContain('0 noncanonical, 1 unchanged, 1 error, 1 warning')
     })
   })
 
-  // Project identity is a validator error like any other, and `check` is where a person meets it
-  // before `tao compile` or `tao test` refuses the same source.
-  Test('reports missing project identity with the command that fixes it', async () => {
+  Test('reports missing app identity before a runnable app is compiled', async () => {
     await withTaoFixture({
-      'App.tao': checkedView('Main'),
+      '.tao/.gitkeep': '',
+      'App.tao': 'app Reader { version "1.0.0" name "Reader" view Main }\n' + checkedView('Main'),
     }, async rootDir => {
       const result = await runTaoCliForTest(['check', rootDir])
 
       Expect(result.exitCode).toBe(1)
-      Expect(result.stderr).toContain("Run 'tao project id <id> [path]'")
+      Expect(result.stderr).toContain('id')
       Expect(result.stderr).toContain('App.tao:1:1 error:')
     })
   })

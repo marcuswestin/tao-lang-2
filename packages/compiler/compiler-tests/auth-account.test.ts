@@ -7,7 +7,7 @@ Describe('compiler: app-scoped auth and account data', () => {
     const result = await Compiler.compileCode(`
       use TestAuth from @tao/auth/testing
       data Drafts / Draft { Body text, local only }
-      app Notes { Auth TestAuth { State "SignedOut" } view Main }
+      app Notes { id "com.tao.test.notes" version "1.0.0" name "Notes"  Auth TestAuth { State "SignedOut" } view Main }
       view Main() {
         query Drafts = Drafts with { }
         action Add() { create Draft { Body: "Local" } }
@@ -23,13 +23,14 @@ Describe('compiler: app-scoped auth and account data', () => {
     Expect(code).toContain('TR.Data.Query( TR.Auth.Store(_TaoAuthScope, _Scope._TaoLocalDataCatalog)')
     Expect(code).toContain('TR.Data.Create( TR.Auth.Store(_TaoAuthScope, _Scope._TaoLocalDataCatalog)')
     Expect(code).not.toContain('TR.Data.UseConfigured(')
-    Expect(code).not.toContain('datasources: () =>')
+    Expect(code).toContain('datasources: () => []')
+    Expect(code).not.toContain('datasources: _TaoBoundApp_Notes.datasources')
   })
 
   Test('binds independent auth configuration and mounts the scoped host', async () => {
     const result = await Compiler.compileCode(`
       use TestAuth from @tao/auth/testing
-      app Notes { Name "Notes" Auth TestAuth { State "SignedOut" } view Main }
+      app Notes { id "com.tao.test.notes" version "1.0.0"  name "Notes" Auth TestAuth { State "SignedOut" } view Main }
       view Main() { render Label("Welcome") }
       view Label(Value text) { render inject Value \`\`\`ts return null \`\`\` }
     `)
@@ -48,7 +49,7 @@ Describe('compiler: app-scoped auth and account data', () => {
       let Me = Account
       action Leave() { do SignOut() }
       action Enter() { when do SignIn() { completed -> { } cancelled -> { } rejected -> Message { } error -> Message { } } }
-      app NotesApp { Auth TestAuth { } view Main }
+      app NotesApp { id "com.tao.test.notesapp" version "1.0.0" name "NotesApp"  Auth TestAuth { } view Main }
       view Main() {
         query Mine = Me.Notes
         render Label("Welcome")
@@ -69,7 +70,7 @@ Describe('compiler: app-scoped auth and account data', () => {
       use SignOut from @tao/auth
       use TestAuth from @tao/auth/testing
       use FormButton from @tao/ui
-      app Notes {
+      app Notes { id "com.tao.test.notes" version "1.0.0" name "Notes"
         Auth TestAuth { }
         action Leave() { do SignOut() }
         view Main(Leave: Leave)
@@ -90,10 +91,10 @@ Describe('compiler: app-scoped auth and account data', () => {
     const result = await Compiler.compileCode(`
       use Session, SignInFlow, SignInView from @tao/auth
       use TestAuth from @tao/auth/testing
-      app Notes { Auth TestAuth { } view Main }
+      app Notes { id "com.tao.test.notes" version "1.0.0" name "Notes"  Auth TestAuth { } view Main }
       view Main() { state Flow = SignInFlow() render SignInView(Flow) }
     `)
-    const contract = BridgeMetadata.collect(result.validation.files).find(file =>
+    const contract = BridgeMetadata.collect(result.validation.files, '/').find(file =>
       file.path.endsWith('/@tao/auth/Auth.tao.ts')
     )
     Expect(contract).toBeDefined()
@@ -111,8 +112,8 @@ Describe('compiler: app-scoped auth and account data', () => {
     const result = await Compiler.compileCode(
       `
       use TestAuth from @tao/auth/testing
-      app Notes { Auth TestAuth { State "SignedOut" } view Main }
-      app Preview = Notes with { Auth with { State "Restoring" } }
+      app Notes { id "com.tao.test.notes" version "1.0.0" name "Notes"  Auth TestAuth { State "SignedOut" } view Main }
+      app Preview = Notes with { id "com.tao.test.preview"  Auth with { State "Restoring" } }
       view Main() { render Label("Welcome") }
       view Label(Value text) { render inject Value \`\`\`ts return null \`\`\` }
     `,
@@ -134,7 +135,7 @@ Describe('compiler: app-scoped auth and account data', () => {
       data Memberships / Membership { Person Account, Role, unique Person + Role }
       access Account { Account can read; Account can update DisplayName }
       access Note { Owner can read, create, delete; Owner can update Body }
-      app NotesApp {
+      app NotesApp { id "com.tao.test.notesapp" version "1.0.0" name "NotesApp"
         // Reference pairs with an Auth whose sign-in proof its server accepts.
         Auth LocalAuth { Endpoint "http://localhost:4738" Resource "test" }
         Datasource Reference { ServerURL "http://localhost:4738" Resource "test" Offline { Me, Me.Notes } }
@@ -166,7 +167,7 @@ Describe('compiler: app-scoped auth and account data', () => {
       use Col from @tao/ui
       data Accounts / Account { DisplayName text }
       let Me = Account
-      app NotesApp { Auth TestAuth { } view Main }
+      app NotesApp { id "com.tao.test.notesapp" version "1.0.0" name "NotesApp"  Auth TestAuth { } view Main }
       view Main() {
         render Col() { when Me | otherwise -> Label("Ready") }
       }

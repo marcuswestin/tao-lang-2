@@ -1,11 +1,11 @@
 import { Errors, FS, Json, Platform, Repo } from '@shared'
 
 /*
- * A prebuilt host is a build of the Tao Companion — an `.apk` or `.app` — that `tao dev` installs
+ * A prebuilt host is a build of the Tao Companion — an `.apk` or `.app` — that `tao run` installs
  * once and points at Metro in place of Expo Go. Whether it can run a Tao version's bundle depends
  * on one thing: it must carry every native module that version's app host requires, built from the
  * same code. A module it lacks crashes the app at require time; one built from other code fails
- * somewhere stranger. So each host carries a manifest naming its native kit, and `tao dev` compares
+ * somewhere stranger. So each host carries a manifest naming its native kit, and `tao run` compares
  * that manifest — never the directory the host was cached under — with the kit it computes for
  * itself. Two Tao versions whose kits differ can share a cache path and still never launch each
  * other's host.

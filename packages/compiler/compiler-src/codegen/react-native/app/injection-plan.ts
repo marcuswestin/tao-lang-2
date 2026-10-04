@@ -2,17 +2,12 @@ import { AST } from '@parser'
 import { Assert } from '@shared'
 
 /** bridgedExpressionsOf returns every `<expression> from <path>` in one generated source module. */
-export function bridgedExpressionsOf(file: AST.TaoFile): AST.FromExpression[] {
+function bridgedExpressionsOf(file: AST.TaoFile): AST.FromExpression[] {
   return [...AST.streamAllContents(file).filter(AST.isFromExpression)]
 }
 
-/** foreignViewsOf returns sidecar-backed visual declarations owned by one Tao source module. */
-export function foreignViewsOf(file: AST.TaoFile): AST.ViewDeclaration[] {
-  return file.statements.filter(AST.isViewDeclaration).filter(view => view.foreign !== undefined)
-}
-
 /** foreignActionsOf returns sidecar-backed action declarations owned by one Tao source module. */
-export function foreignActionsOf(file: AST.TaoFile): AST.ActionDeclaration[] {
+function foreignActionsOf(file: AST.TaoFile): AST.ActionDeclaration[] {
   return AST.streamAllContents(file).filter(AST.isActionDeclaration).filter(action => action.foreign !== undefined)
 }
 
@@ -55,7 +50,7 @@ export type InlineInjection = AST.Injection
 let activeBindings: ReadonlyMap<InlineInjection, string> | undefined
 
 /** inlineInjectionsOf returns every inline implementation emitted by one generated source module. */
-export function inlineInjectionsOf(file: AST.TaoFile): InlineInjection[] {
+function inlineInjectionsOf(file: AST.TaoFile): InlineInjection[] {
   const injections = AST.streamAllContents(file).filter(isInlineInjection)
   return injections
 }

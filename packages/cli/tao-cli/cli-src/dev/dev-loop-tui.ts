@@ -55,9 +55,9 @@ const DEV_LOOP_STREAM_ORDER = [
 ] as const
 
 /**
- * createInkDevLoopReporter builds the interactive `tao dev` dashboard: an Ink `DevLoopReporter`
+ * createInkDevLoopReporter builds the interactive `tao run` dashboard: an Ink `DevLoopReporter`
  * that mounts an alternate-screen dashboard when stdout is a TTY, and otherwise falls back to
- * plain HCI lines — the same behavior the dev loop always had. `tao dev` is the only caller: the
+ * plain HCI lines — the same behavior the dev loop always had. `tao run` is the only caller: the
  * dev loop itself takes a `DevLoopReporter` and knows nothing about React or Ink.
  */
 export function createInkDevLoopReporter(): DevLoopReporter {

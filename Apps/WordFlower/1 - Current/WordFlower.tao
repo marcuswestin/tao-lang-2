@@ -99,14 +99,12 @@ use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 // development, empty at its declared size in release, and warned about by `tao check`. `Spacer()` is
 // the semantic flexible-space leaf, with implicit `claim 1` and an overridable `[claim N]`.
 //
-// PROJECT RELEASE METADATA. This tranche gives local release tooling the source-owned version and
-// default runnable app it needs without making either value part of runtime behavior.
+// APP RELEASE METADATA. Each runnable app owns its stable id, version, and display name.
 //
 // This tranche decides:
-// - `version` is the version currently under development, written as numeric SemVer core only:
+// - `version` is the version currently under development, written as quoted SemVer core:
 //   exactly `major.minor.patch`, with no leading zeroes, prerelease, or build suffix
-// - `app` names one app declaration from this project. Command-line `--app` selection still
-//   overrides it, and projects may omit it when interactive selection is preferable
+// - `--app` selects among complete app declarations in this project.
 //
 // STUDIO SCENARIOS. This tranche implements the decided fixture and app-running scenario subset
 // shared by Tao tests, review tooling, and Studio. `fixture` owns reusable data/identity setup;
@@ -124,7 +122,7 @@ use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 //
 // The contract is now a DIRECTORY. Every mapped source and test file here is part of it:
 //
-//   WordFlower       this entry file — project, apps, navigation, datasources, variants, shell
+//   WordFlower       this entry file — package, apps, navigation, datasources, variants, shell
 //   Design           the design catalog and structured forcing subset — implemented last, see that file
 //   @ui/             the workspace, document, and focus-session areas
 //   @nav/            the navigation values and the deterministic harness navigator
@@ -135,7 +133,7 @@ use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 // marker; `folder` reaches the rest of this directory with no `use` line, which is why the sibling
 // import lists are gone. Entities, apps, and case sets still resolve through their own paths, so
 // those keep an explicit `use`. `ui` and `nav` are separate folders, so what they publish across a
-// boundary is `workspace` and is imported by path.
+// boundary is `project` and is imported by path.
 //
 // Each tranche's scratch contracts graduate before its boundary: the Prelude and `@tao/text` to
 // `packages/stdlib/@tao` and
@@ -590,12 +588,8 @@ use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 //   overview`, `Actions for <target>`, and `Command palette`; allocated rows expose an uppercase key
 //   and label as `<KEY> — <label>`. These strings let product journeys prove that a layer exists
 //   only after its key, rather than vacuously asserting text already supplied by app content
-project {
-   id "wordflower"
-   name "WordFlower"
-   version "1.0.0"
-   app WordFlower
-   remote none
+package {
+   version 1.0.0
    license MIT
 }
 
@@ -603,7 +597,9 @@ project {
 // content. Tao mounts a navigator around a view root, so nothing here names one. Overlay and toast
 // hosting are universal capabilities, so no app declares them.
 app WordFlower {
-   Name "WordFlower"
+   id "wordflower"
+   version "1.0.0"
+   name "WordFlower"
    Design WordFlowerDesign
    view WordFlowerShell(WordFlowerNavigator)
    Datasource DeviceStore // offline-first: the device owns the writing; sync is a variant
@@ -620,25 +616,29 @@ app WordFlower {
 }  }
 
 app WordFlowerDrawer = WordFlower with {
-   Name "WordFlower - Drawer Preview"
+   id "wordflower-drawer"
+   name "WordFlower - Drawer Preview"
    view WordFlowerShell(WordFlowerDrawerNavigator) // the same shell, a different navigator in it
 }
 
 // The explicit dark preview mounts a complete dark design and keeps the portable tab surface on
 // every target, so the preview does not depend on the host operating system's current appearance.
 app WordFlowerDark = WordFlower with {
-   Name "WordFlower - Dark"
+   id "wordflower-dark"
+   name "WordFlower - Dark"
    Design WordFlowerDarkDesign
    view WordFlowerShell(WordFlowerTabsNavigator)
 }
 
 app WordFlowerInstantDB = WordFlower with {
-   Name "WordFlower - InstantDB"
+   id "wordflower-instantdb"
+   name "WordFlower - InstantDB"
    Datasource WordFlowerInstantDBStore
 }
 
 app WordFlowerLocalInstantDB = WordFlower with {
-   Name "WordFlower - Local InstantDB"
+   id "wordflower-local-instantdb"
+   name "WordFlower - Local InstantDB"
    Datasource WordFlowerLocalInstantDBStore
 }
 

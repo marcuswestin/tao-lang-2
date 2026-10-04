@@ -7,7 +7,6 @@ Describe('compiler release eligibility', () => {
   Test('source overrides retain the selected release policy', async () => {
     await withTaoFiles('release-overrides-', {
       'Main.tao': 'let Label = "Original"',
-      'Project.tao': 'project { id "release-overrides" name "Overrides" }',
     }, async (paths, root) => {
       const options = { sourceOverrides: { 'Main.tao': 'use Http from @tao/data/providers/http\ntype Remote is Http' } }
       const early = await Workspace.openProfile(root, ReleaseCapabilities.profile(1), options)
@@ -22,8 +21,9 @@ Describe('compiler release eligibility', () => {
     'editor checks nested project pins before validation and completion while compiler development remains available',
     async () => {
       await withTaoFiles('release-editor-pin-', {
-        'Nested/Main.tao': 'project { id "nested" name "Nested" }\nlet Label = "Hello"',
-        'Nested/.tao-project/lock.jsonc': '{"toolchain":{"version":"0.1.1","releaseProfile":{"phase":1}}}',
+        'Nested/Main.tao': 'let Label = "Hello"',
+        'Nested/.tao/.gitkeep': '',
+        'Nested/.tao/lock.jsonc': '{"toolchain":{"version":"0.1.1","releaseProfile":{"phase":1}}}',
       }, async (paths, root) => {
         const workspace = await LSPWorkspace.open(root)
         const document = workspace.services.shared.workspace.LangiumDocuments.getDocument(
@@ -41,7 +41,7 @@ Describe('compiler release eligibility', () => {
         const provider = workspace.services.language.lsp.CompletionProvider!
         await Expect(provider.getCompletion(document, {
           textDocument: { uri: document.uri.toString() },
-          position: { line: 1, character: 0 },
+          position: { line: 0, character: 0 },
         })).rejects.toThrow('pins Tao 0.1.1')
         const ordinary = await Workspace.open(root)
         const result = await ordinary.validate(paths['Nested/Main.tao'])
@@ -54,11 +54,10 @@ Describe('compiler release eligibility', () => {
       'Main.tao': `
         use Http from @tao/data/providers/http
         type Remote is Http
-        app Demo { view Home }
+        app Demo { id "demo" version "1.0.0" name "Demo" view Home }
         view Home() { render inject \`\`\`ts return null \`\`\` }
       `,
       'Main.test.tao': 'use Demo from ./Main\ntest "Suite" { test "home" { run Demo expect text "Hello" } }',
-      'Project.tao': 'project { id "release-compiler" name "Release" }',
     }, async (paths, root) => {
       const early = await Workspace.shared(root, ReleaseCapabilities.profile(1))
       const later = await Workspace.shared(root, ReleaseCapabilities.profile(2))

@@ -8,7 +8,8 @@ it. `Docs/Spec/Tao Studio.md` owns what Studio _is_ as an implemented product co
 ```text
 Apps/Tao Studio/
   TaoStudioClient.tao          app, design, and datasource configuration
-  Project.tao                  this app's own project identity
+  .tao/.gitkeep                tracked project-root marker
+  tsconfig.json                extends the hidden generated TypeScript configuration
   StudioServerDataProvider.ts  sibling stub the StudioServer datasource requires; re-exports the
                                 implementation from packages/ides/studio, which stays there
   @data/
@@ -21,7 +22,7 @@ Apps/Tao Studio/
     PanelState.tao             drawer panel contracts and initial values
     Drawer.tao                 drawer, data, debug, tests, logs, and search
     Scenario.tao               scenario and journey controls
-  @code-editor/                the code editor as an app-local package
+  @code-editor/                the code editor as an app-local module
     CodeEditor.tao             the foreign view declaration, naming TaoStudioProductHost.tsx
 ```
 
@@ -33,3 +34,8 @@ has none of its own. `StudioServerDataProvider.ts` is a sibling stub because a
 and must not have one: naming `TaoStudioProductHost.tsx` directly, as the client's other views do,
 is what keeps the editor and the host on one copy of the product-host module graph, and so on one
 instance of the revisioned host state they share.
+
+This app's `tsconfig.json` composes the hidden Tao configuration with
+`packages/ides/studio/tsconfig.json`, since its sidecars use that package's TypeScript sources and
+repository import aliases. Its explicit source lists retain generated Tao contract checks. Ordinary
+standalone Tao apps need only the default hidden-configuration `extends` entry.

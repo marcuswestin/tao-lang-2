@@ -11,7 +11,9 @@ const PATH = 'App.tao'
 const TEST_PATH = 'App.test.tao'
 
 const SOURCE = `app Reader {
-   Name "Reader"
+   id "reader"
+   version "1.0.0"
+   name "Reader"
 }
 
 data Stories / Story {

@@ -91,7 +91,7 @@ Describe('validator: host-read slots and commands', () => {
       `
         ${leaf}
         let ExpectedTitle = "Home"
-        app Demo { view Leaf }
+        app Demo { id "demo" version "1.0.0" name "Demo" view Leaf }
         test Demo "chrome" {
           run Demo
           expect navigation title ExpectedTitle
@@ -294,8 +294,7 @@ Describe('validator: host-read slots and commands', () => {
       `
         use StackNav from @tao/nav
         ${leaf}
-        app Demo {
-          Name "Demo"
+        app Demo { id "demo" version "1.0.0" name "Demo"
           Navigator StackNav { Initial Home }
           @detail StackNav { Initial AuxiliaryRoot }
         }
@@ -327,7 +326,9 @@ Describe('validator: host-read slots and commands', () => {
       use StackNav from @tao/nav
       ${leaf}
       app Demo {
-        Name "Demo"
+        id "demo"
+        version "1.0.0"
+        name "Demo"
         Navigator StackNav { Initial Home }
         @detail StackNav { Initial AuxiliaryRoot }
       }
@@ -350,7 +351,9 @@ Describe('validator: host-read slots and commands', () => {
       `
         use StackNav from @tao/nav
         ${leaf}
-        nav Main = StackNav { Initial Home }
+        app Demo { id "demo" version "1.0.0" name "Demo"
+          Navigator StackNav { Initial Home }
+        }
         scene Home() {
           Title "Home"
           action Open() { present Modal() as sheet }
@@ -403,8 +406,7 @@ function strictAuxiliaryPresentation(detailTitle: string): string {
   return `
     use StackNav from @tao/nav
     ${leaf}
-    app Demo {
-      Name "Demo"
+    app Demo { id "demo" version "1.0.0" name "Demo"
       Navigator StackNav { Initial Home }
       @detail StackNav { Initial AuxiliaryRoot }
     }

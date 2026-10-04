@@ -184,9 +184,6 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (isAppReference) {
       return this.createRunAppScope(container)
     }
-    if (context.property === 'app' && AST.isProjectDefaultApp(container)) {
-      return this.createProjectDefaultAppScope(container)
-    }
     if (context.property === 'response' && AST.isViewDeclaration(container)) {
       return this.createDeclarationScope(container, AST.isTypeDeclaration)
     }
@@ -198,29 +195,6 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     // on which files a command happened to load. A reference the grammar gains without a rule above
     // resolves to nothing and says so, rather than to whatever is loaded.
     return this.createScopeForNodes([])
-  }
-
-  /**
-   * `app Name` inside project metadata names one app declaration from this project, wherever it is
-   * declared; a project declaration imports nothing. The declaring file goes first so that its own
-   * app wins over a same-named one elsewhere in the project.
-   */
-  private createProjectDefaultAppScope(node: AST.ProjectDefaultApp): Langium.Scope {
-    const root = AST.findRoot(node)
-    if (!AST.isTaoFile(root)) {
-      return this.createScopeForNodes([])
-    }
-    const workspaceFiles = Array.from(this.coreServices.shared.workspace.LangiumDocuments.all)
-      .map(document => document.parseResult.value)
-      .filter(AST.isTaoFile)
-    const projectFiles = this.packages.projectSourceFiles({
-      fromFilePath: AST.getDocument(root).uri.path,
-      workspaceFiles,
-    })
-    return this.createScopeForNodes(
-      [root, ...projectFiles.filter(file => file !== root)]
-        .flatMap(file => file.statements.filter(AST.isAppDeclaration)),
-    )
   }
 
   /**

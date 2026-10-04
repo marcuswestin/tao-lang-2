@@ -9,7 +9,9 @@ import { APPROVAL_REQUIRED, stageChange, writeTools } from '../studio-src/agent-
 const PATH = 'App.tao'
 
 const SOURCE = `app Reader {
-   Name "Reader"
+   id "reader"
+   version "1.0.0"
+   name "Reader"
 }
 
 view Greeting() {
@@ -131,7 +133,9 @@ Describe('Studio agent chat writes', () => {
 
   Test('proposing multiple declarations at once stages a single change with multiple diff definitions', async () => {
     const source = `app Reader {
-   Name "Reader"
+   id "reader"
+   version "1.0.0"
+   name "Reader"
 }
 
 view FrontPage() {
@@ -147,7 +151,13 @@ view StoryScreen() {
       const start = source.indexOf(needle)
       return { end: start + needle.length, start }
     }
-    nodes.set('app:Reader', { id: 'app:Reader', kind: 'app', name: 'Reader', path: PATH, ...spanOf('app Reader {') })
+    nodes.set('app:Reader', {
+      id: 'app:Reader',
+      kind: 'app',
+      name: 'Reader',
+      path: PATH,
+      ...spanOf('app Reader { id "reader" version "1.0.0" name "Reader"'),
+    })
     nodes.set('view:FrontPage', {
       id: 'view:FrontPage',
       kind: 'view',

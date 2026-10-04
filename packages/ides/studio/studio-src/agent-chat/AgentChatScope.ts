@@ -67,9 +67,6 @@ function kindOf(node: AST.Node): string | undefined {
   if (AST.isPrimitiveDeclaration(node)) {
     return 'primitive'
   }
-  if (AST.isProjectDeclaration(node)) {
-    return 'project'
-  }
   if (AST.isTypeDeclaration(node)) {
     return 'type'
   }

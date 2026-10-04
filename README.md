@@ -11,21 +11,16 @@ Tao is a development preview. The staged public releases are planned, not yet pu
 
 ## What a Tao app looks like
 
-One file declares the project, the app, its navigation, and its screens:
+One file declares the app, its navigation, and its screens:
 
 ```tao
 use StackNav from @tao/nav
 use Col, Text from @tao/ui
 
-project {
-   id "reading-list"
-   name "ReadingList"
-   remote none
-   license MIT
-}
-
 app ReadingList {
-   Name "Reading List"
+   id "reading-list"
+   version "0.1.0"
+   name "Reading List"
    Navigator LibraryStack
 }
 
@@ -103,11 +98,11 @@ instead builds a separate, single-file reading list by hand.
 | Command or surface                                            | Availability and purpose                                                                                                                                                       |
 | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `./agent tao create "A reading list" --ai none`               | Checkout analogue of release-1 creation; `--ai none` forces the plain starter in the development checkout. The public release-1 command will be `tao create "A reading list"`. |
-| `./agent tao dev Apps/Starters/Notebook --app Notebook --web` | Development checkout: run the checked-in starter in a browser. Release-1 creation projects its later design features into supported styles.                                    |
+| `./agent tao run Apps/Starters/Notebook --app Notebook --web` | Development checkout: run the checked-in starter in a browser. Release-1 creation projects its later design features into supported styles.                                    |
 | `./agent tao check Apps/Starters/Notebook`                    | Development checkout: check the named starter. Public `check` starts in release 1 for source supported by that release.                                                        |
 | `./agent tao fix Apps/Starters/Notebook`                      | Development checkout: apply source fixes to the named starter. Public `fix` starts in release 1.                                                                               |
 | `./agent tao test Apps/Starters/Notebook`                     | Development checkout: run the starter's behavior tests. Public `test` starts in release 1.                                                                                     |
-| `./agent tao dev Apps/Starters/Notebook --app Notebook --ios` | Development checkout: run the checked-in starter in iOS Simulator. Public Simulator support starts in release 2 for supported source.                                          |
+| `./agent tao run Apps/Starters/Notebook --app Notebook --ios` | Development checkout: run the checked-in starter in iOS Simulator. Public Simulator support starts in release 2 for supported source.                                          |
 | Native Studio                                                 | Release 3: native workbench and interactive scenario review, after distribution.                                                                                               |
 | `tao ship --beta`                                             | Release 5: TestFlight, after distribution and acceptance.                                                                                                                      |
 

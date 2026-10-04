@@ -63,7 +63,7 @@ Describe('Immutable public release surfaces', () => {
           HCI.writeLine(JSON.stringify({
             phase: ReleaseCapabilities.current().phase,
             commands: commands.commands.map(command => command.name()),
-            dev: commands.commands.find(command => command.name() === 'dev').options.map(option => option.long),
+            run: commands.commands.find(command => command.name() === 'run').options.map(option => option.long),
             build: commands.commands.find(command => command.name() === 'build').options.map(option => option.long),
             ship: commands.commands.find(command => command.name() === 'ship')?.options.map(option => option.long),
             errors,
@@ -85,7 +85,7 @@ Describe('Immutable public release surfaces', () => {
         const value = JSON.parse(result.stdout) as {
           build: string[]
           commands: string[]
-          dev: string[]
+          run: string[]
           errors: string[]
           phase: number
           ship?: string[]
@@ -99,11 +99,11 @@ Describe('Immutable public release surfaces', () => {
         Expect(value.build).toContain('--web')
         Expect(value.build).not.toContain('--visionos')
         Expect(value.build).not.toContain('--watchos')
-        Expect(value.dev).toContain('--web')
-        Expect(value.dev).not.toContain('--desktop')
-        Expect(value.dev).not.toContain('--android')
-        Expect(value.dev.includes('--ios')).toBe(phase >= 2)
-        Expect(value.dev.includes('--device')).toBe(phase >= 4)
+        Expect(value.run).toContain('--web')
+        Expect(value.run).not.toContain('--desktop')
+        Expect(value.run).not.toContain('--android')
+        Expect(value.run.includes('--ios')).toBe(phase >= 2)
+        Expect(value.run.includes('--device')).toBe(phase >= 4)
         Expect(value.commands.includes('ship')).toBe(phase === 5)
         Expect(value.ship ?? []).not.toContain('--update')
         Expect(value.errors).toHaveLength(phase < 4 ? 6 : 5)

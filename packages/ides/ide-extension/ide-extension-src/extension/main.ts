@@ -11,11 +11,13 @@ import {
   TransportKind,
 } from 'vscode-languageclient/node'
 import { requireMatchingEditorRelease } from '../language/release-profile'
+import { startProjectTooling } from './project-tooling-integration'
 import { workspaceServerPlan } from './workspace-server-roots'
 
 let clients = new Map<string, LanguageClient>()
 let clientSequence = 0
 let clientReconciliation: Promise<void> = Promise.resolve()
+let stopProjectTooling: (() => Promise<void>) | undefined
 
 /** activate starts the bundled Tao language server client. */
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
@@ -26,6 +28,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     })
   }))
   await reconcileLanguageClients(context)
+  stopProjectTooling = await startProjectTooling(context)
 }
 
 async function reconcileLanguageClients(context: vscode.ExtensionContext): Promise<void> {
@@ -73,12 +76,16 @@ async function reconcileLanguageClients(context: vscode.ExtensionContext): Promi
 
 /** deactivate stops the Tao language server client. */
 export function deactivate(): Thenable<void> | undefined {
-  if (clients.size === 0) {
+  if (clients.size === 0 && stopProjectTooling === undefined) {
     return undefined
   }
   const stopping = clientReconciliation.then(async () => {
-    await Promise.all([...clients.values()].map(client => client.stop()))
+    await Promise.all([
+      ...[...clients.values()].map(client => client.stop()),
+      stopProjectTooling?.(),
+    ])
     clients.clear()
+    stopProjectTooling = undefined
   })
   return stopping
 }

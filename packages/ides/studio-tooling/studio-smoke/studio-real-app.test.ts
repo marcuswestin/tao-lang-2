@@ -25,7 +25,7 @@ async function canvasTranslation(browser: StudioCdp): Promise<{ x: number; y: nu
 
 const fastRefreshSource = `use Button, Col, Number, Text from @tao/ui
 
-app RefreshSmoke { view MainView }
+app RefreshSmoke { id "refreshsmoke" version "1.0.0" name "RefreshSmoke" view MainView }
 
 view MainView() {
    state Count = 0
@@ -56,11 +56,12 @@ Test('Studio compiles, applies insertion and undo, and publishes the real HNRead
     ?? FS.resolvePath('.artifacts/tests/studio-smoke/real-app', Repo.getRoot())
   const projectRoot = await mkTestDir('tao-studio-hnreader-')
   const previewRuntimeRoot = FS.resolvePath('runtime', artifactRoot)
-  await FS.remove(previewRuntimeRoot)
-  await FS.copyDirectory(Repo.resolvePath('Apps/HNReader'), projectRoot)
-
   let preview: Awaited<ReturnType<typeof openStudioPreviewSession>> | undefined
   try {
+    await FS.remove(previewRuntimeRoot)
+    await FS.copyDirectory(Repo.resolvePath('Apps/HNReader'), projectRoot)
+    await FS.remove(FS.resolvePath('.tao/typescript/outputs.json', projectRoot))
+    await FS.remove(FS.resolvePath('.tao-ts', projectRoot))
     preview = await openStudioPreviewSession({
       appName: 'HNReaderStub',
       entryPath: FS.resolvePath('HNReader.tao', projectRoot),
@@ -119,10 +120,7 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
   let studio: Awaited<ReturnType<typeof startStudioSmokeLaunch>> | undefined
   try {
     await FS.writeText(sourcePath, fastRefreshSource)
-    await FS.writeText(
-      FS.resolvePath('Project.tao', projectRoot),
-      'project { id "tao-studio-fast-refresh-smoke" name "Fast refresh smoke" }\n',
-    )
+    await FS.mkdir(FS.resolvePath('.tao', projectRoot))
     studio = await startStudioSmokeLaunch({
       appName: 'RefreshSmoke',
       projectRoot,
@@ -295,7 +293,7 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
     )
 
     const movedSource = await FS.readText(sourcePath)
-    await replaceEditorSource(browser, 'view Broken( {\n')
+    await replaceEditorSource(browser, 'view Broken( {\n', { requireInsertedSource: true })
     await waitForStudioStatus(browser, 'error')
     Expect(await FS.readText(sourcePath)).toBe(movedSource)
     await waitForPreview(
@@ -585,10 +583,23 @@ async function waitForStudioStatus(browser: StudioCdp, expected: string): Promis
   }
 }
 
-async function replaceEditorSource(browser: StudioCdp, source: string): Promise<void> {
-  await browser.click('.cm-content')
+async function replaceEditorSource(
+  browser: StudioCdp,
+  source: string,
+  options: { requireInsertedSource?: boolean } = {},
+): Promise<void> {
+  await browser.clickAtOffset('.studio-editor .cm-scroller', { x: 120, y: 60 })
+  await browser.waitFor("document.querySelector('.cm-content')?.contains(document.activeElement) === true")
   await browser.pressShortcut('a')
   await browser.insertText(source)
+  if (options.requireInsertedSource === true) {
+    const inserted = await browser.evaluate<string>("document.querySelector('.cm-content')?.textContent ?? ''")
+    if (inserted.trim() !== source.trim()) {
+      Errors.throwHostEnvironment(
+        `Studio editor did not contain the invalid draft before save: ${JSON.stringify(inserted)}`,
+      )
+    }
+  }
   await browser.pressShortcut('s')
 }
 

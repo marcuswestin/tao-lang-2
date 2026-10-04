@@ -489,10 +489,13 @@ Tao side and passed as plain JavaScript values; the result is wrapped as a Tao v
 Tao owns the type. A bridged value therefore needs a declared one — a `returns` clause, or a
 `let Name is Type =` ascription — and that declaration is the contract the sidecar must satisfy. The
 compiler copies the named sidecar beside its generated module and imports the export from there.
-`tao check`, `tao compile`, and the development compile refresh a generated `<source>.tao.ts`
-module beside each Tao source with a TypeScript boundary or a configuration declaration. The module
+`tao check`, `tao compile`, and the shared development refresh publish
+`.tao-ts/<source-path-from-root>.tao.ts` for Tao sources with a TypeScript boundary, configuration
+declaration, or case-set declaration. The initial root TypeScript configuration extends `.tao/typescript/tsconfig.json`, whose
+authored/generated overlay resolves unchanged relative imports such as
+`import type { Drawer } from './Drawer.tao'` in handwritten sidecars. The module
 exports Tao-derived contract types and checks each sidecar's named export with `satisfies`.
-Configuration declarations also export their `<Declaration>Config` type there. It is ignored by Git;
+Configuration declarations also export their `<Declaration>Config` type there. Generated output is ignored by Git;
 authors edit the Tao declaration and handwritten sidecar, and may import its generated types if
 useful. Compiled Tao modules and their
 configuration declaration companions export the same contract types for copied sidecars. `tao check`
@@ -501,6 +504,14 @@ parameter or result mismatch as an error. The check includes the callable arity,
 too few or too many parameters cannot silently satisfy a call boundary. Tao fills defaulted foreign
 action and view parameters before invoking the sidecar, so its TypeScript signature receives every
 declared parameter. Action-valued foreign arguments retain an invokable runtime action value.
+
+Sidecars may import existing case-set values from their Tao module, or refer to their types using
+`import type` and `typeof import('./Kinds.tao').Kind`. Type-only references retain erased declarations;
+value imports retain the named runtime case binding and its private implementation dependencies.
+Neither exposes private helpers through the publication's Tao API. Relative sidecar imports cannot
+enter another marked Tao project, including a nested project. Local compilation may follow private
+TypeScript helpers in an unmarked host tree, as Studio does. Consumed publication snapshots keep
+their implementation sources inside the publication's originating project.
 
 An explicitly action-typed bare export is the effectful form of the same boundary:
 
@@ -631,5 +642,6 @@ complete about its own boundaries.
 Retired forms worth knowing about, because older material may still show them: `alias` (now `let`),
 `.Empty`/`.Loading`/`.Error` members (now `is empty` and subject cases), explicit `interpolate` (now
 interpolated strings), condition-list `when` (now subject `when`), `for … in` (now `loop`), `.Name`
-dot-arguments (now `Name:` labels), and the `project`/`publish` visibility words (now `workspace`
-and `public`).
+dot-arguments (now `Name:` labels), `workspace` visibility (now `project`), and `publish`
+visibility (now `public`). The former `project { ... }` metadata declaration is retired; apps own
+identity and dependencies, and root `package { ... }` blocks define publications.

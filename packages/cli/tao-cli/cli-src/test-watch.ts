@@ -13,7 +13,7 @@ export type TestWatchDeps = {
   runOnce: () => Promise<TestRunOutcome>
   /** Starts a watcher that calls `onChange` once per debounced change; closed once `signal` aborts. */
   startWatcher: (onChange: () => void) => DebouncedWatcher
-  /** Stops the loop the way Ctrl-C stops `tao dev`. */
+  /** Stops the loop the way Ctrl-C stops `tao run`. */
   signal: AbortSignal
   /** Prints the between-runs status line naming what is being watched. */
   reportWaiting: () => void

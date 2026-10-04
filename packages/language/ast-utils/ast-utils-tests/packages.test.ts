@@ -14,7 +14,7 @@ Describe('Tao package discovery', () => {
       const index = await Packages.createIndex(root)
 
       Expect(index.packages.has('@visible')).toBe(true)
-      Expect(index.packages.has('@generated')).toBe(true)
+      Expect(index.packages.has('@generated')).toBe(false)
     } finally {
       await FS.remove(root)
     }
@@ -126,9 +126,11 @@ Describe('Tao package discovery', () => {
     try {
       const firstRoot = FS.resolvePath('First', root)
       const secondRoot = FS.resolvePath('Second', root)
-      await FS.writeText(FS.resolvePath('Main.tao', firstRoot), 'project { id "first" name "First" }')
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', firstRoot), '')
+      await FS.writeText(FS.resolvePath('Main.tao', firstRoot), '')
       await FS.writeText(FS.resolvePath('@data/Data.tao', firstRoot), '')
-      await FS.writeText(FS.resolvePath('Main.tao', secondRoot), 'project { id "second" name "Second" }')
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', secondRoot), '')
+      await FS.writeText(FS.resolvePath('Main.tao', secondRoot), '')
       await FS.writeText(FS.resolvePath('@data/Data.tao', secondRoot), '')
       const context = await Packages.createContext(root)
 
@@ -164,7 +166,7 @@ Describe('Tao package discovery', () => {
     try {
       const firstRoot = FS.resolvePath('First', root)
       const externalFile = FS.resolvePath('External.tao', root)
-      await FS.writeText(FS.resolvePath('Project.tao', firstRoot), 'project { id "first" name "First" }')
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', firstRoot), '')
       await FS.writeText(FS.resolvePath('@data/Data.tao', firstRoot), '')
       await FS.writeText(externalFile, '')
       const context = await Packages.createContext(firstRoot)
@@ -189,7 +191,7 @@ Describe('Tao package discovery', () => {
       const projectRoot = FS.resolvePath('Project', root)
       const outside = FS.resolvePath('Outside', root)
       const packageRoot = FS.resolvePath('@data', projectRoot)
-      await FS.writeText(FS.resolvePath('Project.tao', projectRoot), 'project { id "project" name "Project" }')
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', projectRoot), '')
       await FS.writeText(FS.resolvePath('Seed.tao', packageRoot), '')
       await FS.writeText(FS.resolvePath('Secret.tao', outside), 'public let Secret = "outside"')
       await FS.symlink(outside, FS.resolvePath('escaped', packageRoot))
@@ -223,7 +225,7 @@ Describe('Tao package discovery', () => {
       const outside = FS.resolvePath('Outside', root)
       const linked = FS.resolvePath('linked', packageRoot)
       const linkedFile = FS.resolvePath('Value.tao', linked)
-      await FS.writeText(FS.resolvePath('Project.tao', projectRoot), 'project { id "project" name "Project" }')
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', projectRoot), '')
       await FS.writeText(FS.resolvePath('Value.tao', inside), 'public let Value = "inside"')
       await FS.writeText(FS.resolvePath('Value.tao', outside), 'public let Value = "outside"')
       await FS.symlink(inside, linked)
@@ -268,7 +270,7 @@ Describe('Tao package discovery', () => {
       const seed = FS.resolvePath('Seed.tao', packageRoot)
       const later = FS.resolvePath('Later.tao', packageRoot)
       const elsewhere = FS.resolvePath('Elsewhere.tao', projectRoot)
-      await FS.writeText(FS.resolvePath('Project.tao', projectRoot), 'project { id "project" name "Project" }')
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', projectRoot), '')
       await FS.writeText(seed, '')
       await FS.writeText(elsewhere, '')
       const context = await Packages.createContext(projectRoot)
@@ -297,7 +299,7 @@ Describe('Tao package discovery', () => {
     try {
       const physicalRoot = FS.resolvePath('Physical', root)
       const linkedRoot = FS.resolvePath('Linked', root)
-      await FS.writeText(FS.resolvePath('Project.tao', physicalRoot), 'project { id "linked" name "Linked" }')
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', physicalRoot), '')
       await FS.writeText(FS.resolvePath('@data/Data.tao', physicalRoot), '')
       await FS.symlink(physicalRoot, linkedRoot)
       const context = await Packages.createContext(linkedRoot)
@@ -323,9 +325,9 @@ Describe('Tao package discovery', () => {
       const packageMain = FS.resolvePath('@outer/Main.tao', root)
       const nestedRoot = FS.resolvePath('@outer/Child', root)
       const nestedFile = FS.resolvePath('Hidden.tao', nestedRoot)
-      await FS.writeText(FS.resolvePath('Project.tao', root), 'project { id "outer" name "Outer" }')
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', root), '')
       await FS.writeText(packageMain, '')
-      await FS.writeText(FS.resolvePath('Project.tao', nestedRoot), 'project { id "child" name "Child" }')
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', nestedRoot), '')
       await FS.writeText(nestedFile, '')
       const context = await Packages.createContext(root)
 
@@ -348,10 +350,8 @@ Describe('Tao package discovery', () => {
     const root = await mkTestDir('tao-packages-project-generated-roots-')
     try {
       for (const project of ['First', 'Second']) {
-        await FS.writeText(
-          FS.resolvePath(`${project}/Main.tao`, root),
-          `project { id "${project.toLowerCase()}" name "${project}" }`,
-        )
+        await FS.writeText(FS.resolvePath(`${project}/.tao/.gitkeep`, root), '')
+        await FS.writeText(FS.resolvePath(`${project}/Main.tao`, root), '')
         await FS.writeText(FS.resolvePath(`${project}/@/studio/.gitkeep`, root), '')
       }
       const context = await Packages.createContext(root)
@@ -378,7 +378,8 @@ Describe('Tao package discovery', () => {
     const root = await mkTestDir('tao-packages-containing-project-')
     try {
       const nestedRoot = FS.resolvePath('screens', root)
-      await FS.writeText(FS.resolvePath('Main.tao', root), 'project { id "root" name "Root" }')
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', root), '')
+      await FS.writeText(FS.resolvePath('Main.tao', root), '')
       await FS.writeText(FS.resolvePath('Main.tao', nestedRoot), '')
       await FS.writeText(FS.resolvePath('@data/Data.tao', root), '')
       const context = await Packages.createContext(nestedRoot)
@@ -399,7 +400,7 @@ Describe('Tao package discovery', () => {
   Test('never climbs past the temp-directory boundary to a project declared there', async () => {
     const boundary = await mkTestDir('tao-packages-temp-boundary-')
     try {
-      await FS.writeText(FS.resolvePath('Stray.tao', boundary), 'project { id "stray" name "Stray" }')
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', boundary), '')
       const fixture = FS.resolvePath('fixture', boundary)
       await FS.writeText(FS.resolvePath('Main.tao', fixture), '')
 
@@ -415,7 +416,7 @@ Describe('Tao package discovery', () => {
     const boundary = await mkTestDir('tao-packages-temp-boundary-nested-')
     try {
       const projectRoot = FS.resolvePath('project', boundary)
-      await FS.writeText(FS.resolvePath('Project.tao', projectRoot), 'project { id "project" name "Project" }')
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', projectRoot), '')
       const nested = FS.resolvePath('screens', projectRoot)
       await FS.writeText(FS.resolvePath('Main.tao', nested), '')
 

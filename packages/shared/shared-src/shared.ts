@@ -19,6 +19,7 @@ import * as Platform from './Platform'
 import { ProcessListeners } from './ProcessListeners'
 import { ProcessTree } from './ProcessTree'
 import { ProjectDevSession } from './ProjectDevSession'
+import * as ProjectIdentity from './ProjectIdentity'
 import { ReleaseCapabilities } from './ReleaseCapabilities'
 import * as Repo from './Repo'
 import * as SecretsFile from './SecretsFile'
@@ -56,6 +57,7 @@ export {
   ProcessListeners,
   ProcessTree,
   ProjectDevSession,
+  ProjectIdentity,
   ReleaseCapabilities,
   Repo,
   SecretsFile,

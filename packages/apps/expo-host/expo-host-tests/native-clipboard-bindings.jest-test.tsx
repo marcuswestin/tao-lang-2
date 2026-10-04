@@ -71,7 +71,7 @@ Describe('generated native Clipboard bindings', () => {
       ...await generatedFiles(),
       'App.tao': `
         use GetStringAsync, SetStringAsync, HasStringAsync, GetStringOptions, SetStringOptions, StringFormat from ./Bindings.tao
-        app ClipboardText { view Main }
+        app ClipboardText { id "clipboardtext" version "1.0.0" name "ClipboardText" view Main }
         view Main() {
           state Status = "before"
           state Saved = true
@@ -133,7 +133,7 @@ Describe('generated native Clipboard bindings', () => {
       'App.tao': `
         use GetImageAsync, SetImageAsync, HasImageAsync, GetImageOptions, GetImageOptionsFormat, ClipboardImage from ./Bindings.tao
         type Holder is { Image ClipboardImage? }
-        app ClipboardImages { view Main }
+        app ClipboardImages { id "clipboardimages" version "1.0.0" name "ClipboardImages" view Main }
         view Main() {
           state Result is Holder = Holder { }
           state HasImage = true
@@ -177,7 +177,7 @@ Describe('generated native Clipboard bindings', () => {
       'App.tao': `
         use GetUrlAsync, SetUrlAsync, HasUrlAsync from ./Bindings.tao
         type Holder is { Url text? }
-        app ClipboardUrls { view Main }
+        app ClipboardUrls { id "clipboardurls" version "1.0.0" name "ClipboardUrls" view Main }
         view Main() {
           state Result is Holder = Holder { }
           state HasUrl = true
@@ -224,7 +224,7 @@ Describe('generated native Clipboard bindings', () => {
       ...await generatedFiles(),
       'App.tao': `
         use AddClipboardListener, SetStringAsync, ClipboardEvent from ./Bindings.tao
-        app ClipboardEvents { view Main }
+        app ClipboardEvents { id "clipboardevents" version "1.0.0" name "ClipboardEvents" view Main }
         view Main() {
           state Count = 0
           state Event is ClipboardEvent = ClipboardEvent { ContentTypes: [] }
@@ -275,7 +275,7 @@ Describe('generated native Clipboard bindings', () => {
         ...await generatedFiles(),
         'App.tao': `
         use AddClipboardListener, RemoveClipboardListener, ClipboardEvent from ./Bindings.tao
-        app ClipboardRemoval { view Main }
+        app ClipboardRemoval { id "clipboardremoval" version "1.0.0" name "ClipboardRemoval" view Main }
         view Main() {
           state Count = 0
           action Receive(Event ClipboardEvent) { set Count += 1 }

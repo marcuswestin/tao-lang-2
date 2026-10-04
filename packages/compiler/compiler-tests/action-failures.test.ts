@@ -4,7 +4,7 @@ import { TestCompiler as Compiler } from './test-compile'
 Describe('compiler: action failures', () => {
   Test('lowers native failures and foreign contracts to the transaction runtime', async () => {
     const compiled = await Compiler.compileCode(`
-      app FailureApp { view Main }
+      app FailureApp { id "com.tao.test.failureapp" version "1.0.0" name "FailureApp"  view Main }
       type SaveFailure is one of Offline
       action Save() { fail Offline "Could not save." }
       view Main() {
@@ -24,7 +24,7 @@ Describe('compiler: action failures', () => {
 
   Test('binds foreign action defaults before crossing the JavaScript boundary', async () => {
     const compiled = await Compiler.compileCode(`
-      app DefaultsApp { view Main }
+      app DefaultsApp { id "com.tao.test.defaultsapp" version "1.0.0" name "DefaultsApp"  view Main }
       view Main() {
         action Publish(Title text default "Untitled", Copies number default 1) from ./Api.ts
         render Label("Ready")
@@ -43,7 +43,7 @@ Describe('compiler: action failures', () => {
 
   Test('does not mark an outer action interruptible for a respond owned by a nested action value', async () => {
     const compiled = await Compiler.compileCode(`
-      app RespondApp { view Prompt }
+      app RespondApp { id "com.tao.test.respondapp" version "1.0.0" name "RespondApp"  view Prompt }
       type Result is one of Done
       view Prompt() responds Result {
         action Outer() { do action { respond Done }() }
@@ -58,7 +58,7 @@ Describe('compiler: action failures', () => {
 
   Test('marks an action interruptible when its detached async block can respond', async () => {
     const compiled = await Compiler.compileCode(`
-      app RespondApp { view Prompt }
+      app RespondApp { id "com.tao.test.respondapp" version "1.0.0" name "RespondApp"  view Prompt }
       type Result is one of Done
       view Prompt() responds Result {
         action ReplyLater() { async { respond Done } }

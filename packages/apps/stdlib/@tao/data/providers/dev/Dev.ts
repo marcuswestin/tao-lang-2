@@ -8,7 +8,7 @@ function hostError(message: string): Error {
 
 /**
  * DevProvider is the device side of tao-dev-data-v1: one WebSocket per connection to the dev data
- * server that `tao dev` and Studio host, keyed by the app the dev server is running and the
+ * server that `tao run` and Studio host, keyed by the app the dev server is running and the
  * datasource's storage key. The server holds the snapshot; this client loads it on open, saves
  * through an acknowledged frame, and receives every peer's snapshot as it lands. A dropped socket
  * reconnects on its own and the server's current snapshot replaces local state when it does.
@@ -273,7 +273,7 @@ function createDevDataConnection(host: DevDataHost, storageKey: string): TR.Data
       return
     }
     failReadyWaiters(
-      `Could not reach the Tao dev data server${serverName()}${detail}. Is \`tao dev\` or Studio running?`,
+      `Could not reach the Tao dev data server${serverName()}${detail}. Is \`tao run\` or Studio running?`,
     )
       || publish({ error: hostError(`The Tao dev data server disconnected${detail}; reconnecting.`) })
     scheduleReconnect()
@@ -331,7 +331,7 @@ function createDevDataConnection(host: DevDataHost, storageKey: string): TR.Data
         }
         if (bootstrap.kind === 'missing') {
           const message = `The Dev datasource needs a running Tao dev server, but ${bootstrap.missing.join(', and ')}.`
-            + ' Start `tao dev` or Studio and reload the app.'
+            + ' Start `tao run` or Studio and reload the app.'
           failReadyWaiters(message) || publish({ error: hostError(message) })
           scheduleReconnect()
           return
@@ -414,7 +414,7 @@ function createDevDataConnection(host: DevDataHost, storageKey: string): TR.Data
     await ready(false)
     const current = socket
     if (current === undefined || !opened) {
-      throw hostError(`The Tao dev data server${serverName()} is not connected. Is \`tao dev\` or Studio running?`)
+      throw hostError(`The Tao dev data server${serverName()} is not connected. Is \`tao run\` or Studio running?`)
     }
     await new Promise<void>((resolve, reject) => {
       pending.set(message.seq, { reject, resolve })
