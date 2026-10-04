@@ -1,4 +1,4 @@
-import { Assert, CLI, FS, Platform } from '@shared'
+import { Assert, CLI, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import * as ts from 'typescript'
 import { BridgeMetadata } from '../compiler-src/bridge-metadata'
@@ -118,11 +118,15 @@ Describe('compiler: erased native bridge checks', () => {
   })
 
   Test('loading an emitted companion never loads its sidecar, including a native back-import', async () => {
+    const platformImport = `import * as Platform from ${
+      JSON.stringify(FS.resolvePath('packages/shared/shared-src/Platform.ts', Repo.getRoot()))
+    }`
     await withTaoFiles('tao-erased-bridge-load-', {
       'Main.tao': 'action Read() returns text from ./Native.ts',
       'Native.ts': [
+        platformImport,
         "import * as Companion from './.tao-ts/Main.tao.js'",
-        'console.log("native initialized")',
+        'Platform.runtimeConsole.info("native initialized")',
         'export function Read(): string { return String(Object.keys(Companion).length) }',
       ].join('\n'),
     }, async (paths, root) => {
@@ -147,22 +151,25 @@ Describe('compiler: erased native bridge checks', () => {
         args: [
           '-e',
           [
+            platformImport,
             "await import('./.tao-ts/Main.tao.js')",
-            'console.log("companion loaded")',
+            'Platform.runtimeConsole.info("companion loaded")',
             "const native = await import('./Native.js')",
-            'console.log("native result=" + native.Read())',
+            'Platform.runtimeConsole.info("native result=" + native.Read())',
           ].join('\n'),
         ],
         processPolicy: 'test',
       })
-      Expect(run.exitCode).toBe(0)
-      Expect(run.stderr).toBe('')
+      Expect({ exitCode: run.exitCode, stderr: run.stderr }).toEqual({ exitCode: 0, stderr: '' })
       Expect(run.stdout).toBe('companion loaded\nnative initialized\nnative result=0\n')
       // Keep the import resolver honest: an executable sidecar import must be observable.
       await FS.writeText(companion.path.replace(/\.ts$/, '.js'), `${javascript}\nimport '../Native.js'\n`)
       const mutation = await CLI.run(Platform.runtimeProcess.execPath, {
         cwd: root,
-        args: ['-e', "await import('./.tao-ts/Main.tao.js'); console.log('companion loaded')"],
+        args: [
+          '-e',
+          `${platformImport}\nawait import('./.tao-ts/Main.tao.js'); Platform.runtimeConsole.info('companion loaded')`,
+        ],
         processPolicy: 'test',
       })
       Expect(mutation.exitCode).toBe(0)
