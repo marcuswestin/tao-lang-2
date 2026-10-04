@@ -30,6 +30,18 @@ export type MachineResourceOwner = {
     quarantined: boolean
     reason: string
     resourceNames: string[]
+    /** Permanent capture uncertainty is distinct from a provisional launch quarantine. */
+    ownershipRefusal?: {
+      version: 1
+      reason: string
+      managed?: {
+        session: string
+        generation: string
+        physicalGeneration: string
+        checkout: string
+        controller: TrackedProcess
+      }
+    }
   }
 }
 
@@ -39,7 +51,50 @@ type RetainResourcesOptions = {
   processGroupPid?: number
   quarantined: boolean
   reason: string
+  ownershipRefusal?: NonNullable<MachineResourceOwner['retention']>['ownershipRefusal']
   registryRoot?: string
+}
+
+const synchronousAdmissions = new Set<string>()
+
+function assertNoAdmissionReentry(root: string): void {
+  if (synchronousAdmissions.has(FS.resolvePath(root))) {
+    Errors.throwUnexpected('A synchronous machine-resource admission cannot reenter its registry.')
+  }
+}
+
+/** Validate an exact snapshot and perform one synchronous host admission under the registry mutex. */
+async function withCurrentOwners<T>(
+  options: { owners: readonly MachineResourceOwner[]; registryRoot?: string },
+  syncAction: () => T & (T extends PromiseLike<unknown> ? never : unknown),
+): Promise<T> {
+  const root = options.registryRoot ?? registryRoot()
+  assertNoAdmissionReentry(root)
+  const snapshot = structuredClone(options.owners)
+  if (snapshot.length === 0 || new Set(snapshot.map(owner => owner.name)).size !== snapshot.length) {
+    Errors.throwUnexpected('Machine-resource admission requires a nonempty, duplicate-free owner snapshot.')
+  }
+  return await withRegistryLock(root, async () => {
+    for (const expected of snapshot) {
+      if (!sameOwner(await readResourceOwner(root, expected.name), expected)) {
+        throw new MachineResourceFenceError(expected.name, expected.id)
+      }
+    }
+    const key = FS.resolvePath(root)
+    synchronousAdmissions.add(key)
+    try {
+      const value = syncAction()
+      if (
+        value !== null && (typeof value === 'object' || typeof value === 'function')
+        && 'then' in value && typeof value.then === 'function'
+      ) {
+        Errors.throwUnexpected('Machine-resource admission action must be synchronous.')
+      }
+      return value
+    } finally {
+      synchronousAdmissions.delete(key)
+    }
+  })
 }
 
 type RecoverResourcesOptions = {
@@ -131,6 +186,7 @@ function registryRoot(): string {
 
 /** acquire waits briefly for a named target, then reports the exact owning worktree and command. */
 async function acquire(options: AcquireResourceOptions): Promise<MachineResourceLease> {
+  assertNoAdmissionReentry(options.registryRoot ?? registryRoot())
   const waitTimeoutMs = Math.max(0, options.waitTimeoutMs ?? RESOURCE_WAIT_TIMEOUT_MS)
   const deadline = Time.nowMs() + waitTimeoutMs
   while (true) {
@@ -181,6 +237,7 @@ async function waitForAcquisitionPoll(milliseconds: number, signal: AbortSignal 
 
 /** tryAcquire atomically claims one named host target across all worktrees. */
 async function tryAcquire(options: ResourceOptions): Promise<MachineResourceLease | undefined> {
+  assertNoAdmissionReentry(options.registryRoot ?? registryRoot())
   return (await claim(options)).lease
 }
 
@@ -274,12 +331,52 @@ async function readOwner(
   options: Pick<ResourceOptions, 'name' | 'registryRoot'>,
 ): Promise<MachineResourceOwner | undefined> {
   const root = options.registryRoot ?? registryRoot()
+  assertNoAdmissionReentry(root)
   return await readResourceOwner(root, options.name)
+}
+
+/** Read the complete retained-generation chain without granting new cleanup authority. */
+async function readRetainedLineage(
+  options: Pick<ResourceOptions, 'name' | 'registryRoot'> & { generation: string },
+): Promise<MachineResourceOwner[] | undefined> {
+  const root = options.registryRoot ?? registryRoot()
+  assertNoAdmissionReentry(root)
+  const records = await retentionRecords(root)
+  const starts = records.filter(({ record }) =>
+    record.retainedOwner.id === options.generation
+    && record.retainedOwner.retention!.resourceNames.includes(options.name)
+  )
+  if (starts.length !== 1) {
+    return undefined
+  }
+  const forName = (record: RetentionRecord): MachineResourceOwner => {
+    const original = record.originalOwners.find(owner => owner.name === options.name)
+    if (original === undefined || !record.retainedOwner.retention!.resourceNames.includes(options.name)) {
+      Errors.throwHostEnvironment('Retained resource lineage has an inconsistent fence manifest.')
+    }
+    return { ...record.retainedOwner, name: options.name, command: original.command }
+  }
+  const owners = [forName(starts[0]!.record)]
+  const seen = new Set([owners[0]!.id])
+  for (;;) {
+    const last = owners[owners.length - 1]!
+    const next = records.filter(({ record }) => record.originalOwners.some(owner => sameOwner(last, owner)))
+    if (next.length === 0) {
+      return sameOwner(await readResourceOwner(root, options.name), last) ? owners : undefined
+    }
+    if (next.length !== 1 || seen.has(next[0]!.record.retainedOwner.id)) {
+      Errors.throwHostEnvironment('Retained resource lineage is ambiguous or cyclic; cleanup authority is unavailable.')
+    }
+    const successor = forName(next[0]!.record)
+    owners.push(successor)
+    seen.add(successor.id)
+  }
 }
 
 /** listOwners includes retained fences even if an interrupted recovery removed an original lease file. */
 async function listOwners(options: { registryRoot?: string } = {}): Promise<MachineResourceOwner[]> {
   const root = options.registryRoot ?? registryRoot()
+  assertNoAdmissionReentry(root)
   // Diagnostics do not create mutex files. Mutations recheck the snapshot under the registry lock.
   return await (async () => {
     const names = new Set<string>()
@@ -316,16 +413,35 @@ async function listOwners(options: { registryRoot?: string } = {}): Promise<Mach
 /** retain atomically transfers all target fences to a surviving process and rotates their generation. */
 async function retain(options: RetainResourcesOptions): Promise<MachineResourceOwner> {
   const root = options.registryRoot ?? registryRoot()
+  assertNoAdmissionReentry(root)
   const first = options.owners[0]
   if (first === undefined) {
     Errors.throwUnexpected('Expected at least one resource to retain.')
   }
   return await withRegistryLock(root, async () => {
+    const currentOwners: MachineResourceOwner[] = []
     for (const expected of options.owners) {
       const current = await readResourceOwner(root, expected.name)
       if (!sameOwner(current, expected)) {
         throw new MachineResourceFenceError(expected.name, expected.id)
       }
+      currentOwners.push(current!)
+      if (current!.retention?.resourceNames.some(name => !options.owners.some(owner => owner.name === name))) {
+        Errors.throwHostEnvironment('Retained resource rotation requires its complete existing fence manifest.')
+      }
+    }
+    const previousRefusal = currentOwners.find(owner => owner.retention?.ownershipRefusal)?.retention?.ownershipRefusal
+    if (
+      currentOwners.some(owner =>
+        owner.retention?.ownershipRefusal !== undefined
+        && JSON.stringify(owner.retention.ownershipRefusal) !== JSON.stringify(previousRefusal)
+      )
+    ) {
+      Errors.throwHostEnvironment('Retained resource manifests have conflicting permanent ownership refusal custody.')
+    }
+    const ownershipRefusal = structuredClone(previousRefusal ?? options.ownershipRefusal)
+    if (!validOwnershipRefusal(ownershipRefusal)) {
+      Errors.throwHostEnvironment('Permanent machine-resource ownership refusal metadata is invalid.')
     }
     const survivor = options.processes[0]
     const generation = `${survivor?.pid ?? first.pid}-${Platform.randomUUID()}`
@@ -335,6 +451,7 @@ async function retain(options: RetainResourcesOptions): Promise<MachineResourceO
       quarantined: options.quarantined || survivor === undefined,
       reason: options.reason,
       resourceNames: options.owners.map(owner => owner.name),
+      ...(ownershipRefusal === undefined ? {} : { ownershipRefusal }),
     }
     const retainedOwner: MachineResourceOwner = {
       ...first,
@@ -363,6 +480,11 @@ async function recoverRetained(options: RecoverResourcesOptions): Promise<void> 
     const owner = await readResourceOwner(root, options.name)
     if (owner?.id !== options.generation || owner.name !== options.name || owner.retention === undefined) {
       throw new MachineResourceFenceError(options.name, options.generation)
+    }
+    if (owner.retention.ownershipRefusal !== undefined) {
+      Errors.throwHostEnvironment(
+        `Machine resource '${options.name}' has permanent ownership refusal: ${owner.retention.ownershipRefusal.reason}`,
+      )
     }
     return owner
   })
@@ -465,6 +587,7 @@ async function withRegistryLock<T>(
   timeoutMs = MUTEX_ACQUIRE_TIMEOUT_MS,
   signal?: AbortSignal,
 ): Promise<T> {
+  assertNoAdmissionReentry(root)
   throwIfAcquisitionAborted(signal)
   await FS.mkdir(root)
   const ownerRoot = FS.resolvePath('.mutex-contenders', root)
@@ -589,6 +712,30 @@ async function readRecord<T>(path: string): Promise<T | undefined> {
   }
 }
 
+function validOwnershipRefusal(value: NonNullable<MachineResourceOwner['retention']>['ownershipRefusal']): boolean {
+  if (value === undefined) {
+    return true
+  }
+  if (
+    value === null || typeof value !== 'object' || value.version !== 1 || typeof value.reason !== 'string'
+    || value.reason.length === 0 || value.reason.length > 1_024
+  ) {
+    return false
+  }
+  const managed = value.managed
+  return managed === undefined || managed !== null && typeof managed === 'object'
+      && typeof managed.session === 'string'
+      && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(managed.session)
+      && typeof managed.generation === 'string' && managed.generation.length > 0 && managed.generation.length <= 128
+      && typeof managed.physicalGeneration === 'string' && managed.physicalGeneration.length > 0
+      && managed.physicalGeneration.length <= 128
+      && typeof managed.checkout === 'string' && managed.checkout.length > 0 && managed.checkout.length <= 4_096
+      && managed.controller !== null && typeof managed.controller === 'object'
+      && Number.isSafeInteger(managed.controller.pid) && managed.controller.pid > 1
+      && typeof managed.controller.startedAt === 'string' && managed.controller.startedAt.length > 0
+      && managed.controller.startedAt.length <= 256 && typeof managed.controller.command === 'string'
+}
+
 function normalizeResourceRecord(value: unknown): MachineResourceOwner | undefined {
   if (typeof value !== 'object' || value === null) {
     return undefined
@@ -599,6 +746,7 @@ function normalizeResourceRecord(value: unknown): MachineResourceOwner | undefin
     typeof retention === 'object' && retention !== null
     && typeof retention.reason === 'string'
     && typeof retention.quarantined === 'boolean'
+    && validOwnershipRefusal(retention.ownershipRefusal)
     && Array.isArray(retention.resourceNames) && retention.resourceNames.length > 0
     && retention.resourceNames.every(name => typeof name === 'string')
     && retention.resourceNames.includes(record.name!)
@@ -705,8 +853,10 @@ export const MachineResources = {
   listOwners,
   ownerIsLive,
   readOwner,
+  readRetainedLineage,
   recoverRetained,
   retain,
   registryRoot,
   tryAcquire,
+  withCurrentOwners,
 } as const

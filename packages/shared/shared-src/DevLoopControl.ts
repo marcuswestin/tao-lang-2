@@ -9,9 +9,40 @@ export type DevLoopActions = {
   reload: () => Promise<void>
 }
 
+/** Target launch evidence is descriptive; clients must recheck the recorded kernel identity. */
+export type DevLoopTargetReceipt = {
+  target: string
+  dispatched: boolean
+  browser?: { devToolsUrl: string; profile: string; process?: TrackedProcess }
+  mobile?: DevLoopMobileRuntime
+  mobileDispatch?: Pick<DevLoopMobileRuntime, 'kind' | 'appId' | 'devUrl'>
+}
+
+/** Published by compilation and observed on the mounted app, never supplied by an input client. */
+export type DevLoopMobilePublication = Readonly<{
+  session: string
+  checkout: string
+  loopGeneration: string
+  projectRoot: string
+  appName: string
+  sourceRevision: string
+  compiledRevision: string
+  nonce: string
+}>
+
+export type DevLoopMobileRuntime =
+  & DevLoopMobilePublication
+  & Readonly<{
+    kind: 'companion' | 'expo-go'
+    appId: string
+    devUrl: string
+  }>
+
+export const devLoopMobileIdentityId = 'tao-managed-loop-identity'
+
 export type DevLoopLifecycle =
   | { type: 'starting' }
-  | { type: 'ready'; url: string; targets: readonly { target: string; dispatched: boolean }[] }
+  | { type: 'ready'; url: string; targets: readonly DevLoopTargetReceipt[] }
   | { type: 'failed'; message: string }
   | { type: 'cleanup-failed'; message: string }
 
@@ -19,6 +50,7 @@ export type DevLoopControlHooks = {
   bind: (actions: DevLoopActions) => () => void
   emit: (event: DevLoopLifecycle) => Promise<void>
   stopRequested?: () => boolean
+  identity?: () => Readonly<{ session: string; generation: string }>
 }
 
 /** Credentials stay in a private file and are never command-line arguments. */
@@ -98,6 +130,7 @@ export async function connectDevLoopWorker(
     }
   })()
   return {
+    identity: () => ({ session: connection.session, generation }),
     stopRequested: () => stopRequested,
     bind: next => {
       actions = next

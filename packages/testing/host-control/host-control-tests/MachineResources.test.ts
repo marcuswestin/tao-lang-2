@@ -10,6 +10,278 @@ import {
 
 const resourceName = 'browser-session-1'
 
+Test(
+  'retained lineage resolves every rotation from an original generation without changing custody files',
+  async () => {
+    const root = await mkTestDir('tao-retained-lineage-')
+    try {
+      const lease = await MachineResources.acquire({
+        name: 'android-console-port:5582',
+        registryRoot: root,
+        command: 'source sentinel',
+        repositoryRoot: root,
+      })
+      const process = { pid: 536_870_912, startedAt: 'original-kernel', command: 'captured root' }
+      const first = await MachineResources.retain({
+        owners: [lease.owner],
+        processes: [process],
+        processGroupPid: process.pid,
+        quarantined: false,
+        reason: 'initial capture',
+        registryRoot: root,
+      })
+      const second = await MachineResources.retain({
+        owners: [first],
+        processes: [process],
+        processGroupPid: process.pid,
+        quarantined: true,
+        reason: 'retained cleanup',
+        registryRoot: root,
+      })
+      const firstPath = FS.resolvePath(`.retentions/${first.id}.json`, root)
+      const secondPath = FS.resolvePath(`.retentions/${second.id}.json`, root)
+      const before = [await FS.readText(firstPath), await FS.readText(secondPath)]
+      Expect(
+        await MachineResources.readRetainedLineage({
+          name: lease.owner.name,
+          generation: first.id,
+          registryRoot: root,
+        }),
+      )
+        .toEqual([first, second])
+      Expect(
+        await MachineResources.readRetainedLineage({
+          name: lease.owner.name,
+          generation: 'foreign-generation',
+          registryRoot: root,
+        }),
+      )
+        .toBeUndefined()
+      Expect(
+        await MachineResources.readRetainedLineage({
+          name: 'android-console-port:5584',
+          generation: first.id,
+          registryRoot: root,
+        }),
+      )
+        .toBeUndefined()
+      Expect([await FS.readText(firstPath), await FS.readText(secondPath)]).toEqual(before)
+      Expect(await MachineResources.readOwner({ name: lease.owner.name, registryRoot: root })).toEqual(second)
+    } finally {
+      await FS.remove(root)
+    }
+  },
+)
+
+Test(
+  'retained lineage rejects malformed or forked custody instead of selecting a generation by enumeration order',
+  async () => {
+    const root = await mkTestDir('tao-retained-lineage-refusal-')
+    try {
+      const lease = await MachineResources.acquire({
+        name: 'android-console-port:5582',
+        registryRoot: root,
+        command: 'source sentinel',
+        repositoryRoot: root,
+      })
+      const process = { pid: 536_870_912, startedAt: 'original-kernel', command: 'captured root' }
+      const first = await MachineResources.retain({
+        owners: [lease.owner],
+        processes: [process],
+        processGroupPid: process.pid,
+        quarantined: false,
+        reason: 'initial capture',
+        registryRoot: root,
+      })
+      const second = await MachineResources.retain({
+        owners: [first],
+        processes: [process],
+        processGroupPid: process.pid,
+        quarantined: true,
+        reason: 'retained cleanup',
+        registryRoot: root,
+      })
+      const forkPath = FS.resolvePath('.retentions/fork.json', root)
+      await FS.writeJson(forkPath, {
+        originalOwners: [first],
+        retainedOwner: { ...second, id: 'source-fork-generation' },
+      })
+      await Expect(
+        MachineResources.readRetainedLineage({ name: lease.owner.name, generation: first.id, registryRoot: root }),
+      )
+        .rejects.toThrow('ambiguous or cyclic')
+      await FS.writeText(forkPath, '{unreadable')
+      await Expect(
+        MachineResources.readRetainedLineage({ name: lease.owner.name, generation: first.id, registryRoot: root }),
+      )
+        .rejects.toThrow('Cannot read retained machine resource identities')
+    } finally {
+      await FS.remove(root)
+    }
+  },
+)
+
+Test('permanent resource refusal rotates the complete pair and cannot be cleared or recovered', async () => {
+  const root = await mkTestDir('tao-resource-permanent-refusal-')
+  try {
+    const avd = await MachineResources.acquire({
+      name: 'android-avd:OWNED',
+      command: 'source fixture',
+      registryRoot: root,
+      repositoryRoot: root,
+    })
+    const serial = await MachineResources.acquire({
+      name: 'android-emulator:emulator-5586',
+      command: 'source fixture',
+      registryRoot: root,
+      repositoryRoot: root,
+    })
+    const captured = { command: 'owned emulator', pid: 536_870_912, startedAt: 'captured-kernel' }
+    const refused = await MachineResources.retain({
+      owners: [avd.owner, serial.owner],
+      processes: [captured],
+      processGroupPid: captured.pid,
+      quarantined: false,
+      reason: 'known root with unknown descendant',
+      registryRoot: root,
+      ownershipRefusal: { version: 1, reason: 'Unknown captured group member' },
+    })
+    const pair = [avd.owner, serial.owner].map(owner => ({ ...refused, name: owner.name, command: owner.command }))
+    Expect(refused.id).not.toBe(avd.generation)
+    Expect((await MachineResources.readOwner({ name: serial.owner.name, registryRoot: root }))?.id).toBe(refused.id)
+    await Expect(MachineResources.retain({
+      owners: [pair[0]!],
+      processes: [captured],
+      quarantined: false,
+      reason: 'partial clearing attempt',
+      registryRoot: root,
+    })).rejects.toThrow('complete existing fence manifest')
+    const rotated = await MachineResources.retain({
+      owners: pair.map(owner => ({ ...owner, retention: { ...owner.retention!, ownershipRefusal: undefined } })),
+      processes: [captured],
+      processGroupPid: captured.pid,
+      quarantined: false,
+      reason: 'later empty group observation',
+      registryRoot: root,
+    })
+    Expect(rotated.id).not.toBe(refused.id)
+    Expect(rotated.retention?.ownershipRefusal).toEqual({ version: 1, reason: 'Unknown captured group member' })
+    let shutdowns = 0
+    await Expect(MachineResources.recoverRetained({
+      name: avd.owner.name,
+      generation: rotated.id,
+      registryRoot: root,
+      shutdown: async () => {
+        shutdowns++
+        return true
+      },
+    })).rejects.toThrow('permanent ownership refusal')
+    Expect(shutdowns).toBe(0)
+    for (const name of [avd.owner.name, serial.owner.name]) {
+      Expect((await MachineResources.readOwner({ name, registryRoot: root }))?.id).toBe(rotated.id)
+    }
+  } finally {
+    await FS.remove(root)
+  }
+})
+
+Test('permanent refusal publication fences a recovery already waiting on shutdown', async () => {
+  const root = await mkTestDir('tao-resource-refusal-race-')
+  try {
+    const avd = await MachineResources.acquire({
+      name: 'android-avd:OWNED',
+      command: 'source fixture',
+      registryRoot: root,
+      repositoryRoot: root,
+    })
+    const serial = await MachineResources.acquire({
+      name: 'android-emulator:emulator-5586',
+      command: 'source fixture',
+      registryRoot: root,
+      repositoryRoot: root,
+    })
+    const captured = { command: 'owned emulator', pid: 536_870_912, startedAt: 'captured-kernel' }
+    const known = await MachineResources.retain({
+      owners: [avd.owner, serial.owner],
+      processes: [captured],
+      processGroupPid: captured.pid,
+      quarantined: false,
+      reason: 'captured',
+      registryRoot: root,
+    })
+    const entered = Deferred<void>()
+    const finish = Deferred<boolean>()
+    const recovery = MachineResources.recoverRetained({
+      name: avd.owner.name,
+      generation: known.id,
+      registryRoot: root,
+      shutdown: async () => {
+        entered.resolve()
+        return await finish.promise
+      },
+    })
+    const failed = Expect(recovery).rejects.toBeInstanceOf(MachineResourceFenceError)
+    await entered.promise
+    const sealed = await MachineResources.retain({
+      owners: [avd.owner, serial.owner].map(owner => ({ ...known, name: owner.name, command: owner.command })),
+      processes: [captured],
+      processGroupPid: captured.pid,
+      quarantined: false,
+      reason: 'unknown during recovery',
+      ownershipRefusal: { version: 1, reason: 'Permanent capture uncertainty' },
+      registryRoot: root,
+    })
+    finish.resolve(true)
+    await failed
+    for (const name of [avd.owner.name, serial.owner.name]) {
+      const owner = await MachineResources.readOwner({ name, registryRoot: root })
+      Expect(owner?.id).toBe(sealed.id)
+      Expect(owner?.retention?.ownershipRefusal?.reason).toBe('Permanent capture uncertainty')
+    }
+  } finally {
+    await FS.remove(root)
+  }
+})
+
+Test('refusal rotation preserves a changed serial owner and refuses stale pair publication', async () => {
+  const root = await mkTestDir('tao-resource-refusal-changed-owner-')
+  try {
+    const avd = await MachineResources.acquire({
+      name: 'android-avd:OWNED',
+      command: 'source fixture',
+      registryRoot: root,
+      repositoryRoot: root,
+    })
+    const serial = await MachineResources.acquire({
+      name: 'android-emulator:emulator-5586',
+      command: 'source fixture',
+      registryRoot: root,
+      repositoryRoot: root,
+    })
+    await serial.release()
+    const replacement = await MachineResources.acquire({
+      name: serial.owner.name,
+      command: 'source fixture',
+      registryRoot: root,
+      repositoryRoot: root,
+    })
+    await Expect(MachineResources.retain({
+      owners: [avd.owner, serial.owner],
+      processes: [],
+      quarantined: true,
+      reason: 'stale pair',
+      registryRoot: root,
+      ownershipRefusal: { version: 1, reason: 'Unknown ownership' },
+    })).rejects.toBeInstanceOf(MachineResourceFenceError)
+    Expect((await MachineResources.readOwner({ name: avd.owner.name, registryRoot: root }))?.id).toBe(avd.generation)
+    Expect((await MachineResources.readOwner({ name: serial.owner.name, registryRoot: root }))?.id).toBe(
+      replacement.generation,
+    )
+  } finally {
+    await FS.remove(root)
+  }
+})
+
 function resourcePath(root: string): string {
   return FS.resolvePath(`resource-${resourceName}.lease`, root)
 }
