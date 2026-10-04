@@ -494,15 +494,47 @@ export function directLoopForSelectHandler(handler: AST.LoopSelectHandler): AST.
     : undefined
 }
 
-/** attachedTag returns the tag statement immediately preceding a render or loop in its block. */
-export function attachedTag(node: AST.Render | AST.ForStatement): AST.TagStatement | undefined {
-  const block = node.$container
+/** RenderPrefix is occurrence metadata kept as an ordinary sibling in its visual block. */
+export type RenderPrefix = AST.TagStatement | AST.RenderAccessibilityStatement
+
+function isRenderPrefix(node: AST.Statement | undefined): node is RenderPrefix {
+  return AST.isTagStatement(node) || AST.isRenderAccessibilityStatement(node)
+}
+
+/** renderPrefixTarget resolves the next non-prefix sibling without crossing a lexical boundary. */
+export function renderPrefixTarget(prefix: RenderPrefix): AST.Statement | undefined {
+  const block = prefix.$container
   if (!AST.isBlock(block)) {
     return undefined
   }
+  const index = block.statements.indexOf(prefix)
+  if (index < 0) {
+    return undefined
+  }
+  let targetIndex = index + 1
+  while (isRenderPrefix(block.statements[targetIndex])) {
+    targetIndex += 1
+  }
+  return block.statements[targetIndex]
+}
+
+/** renderPrefixCluster returns only contiguous metadata immediately before this occurrence. */
+export function renderPrefixCluster(node: AST.Render | AST.ForStatement): RenderPrefix[] {
+  const block = node.$container
+  if (!AST.isBlock(block)) {
+    return []
+  }
   const index = block.statements.indexOf(node)
-  const previous = index > 0 ? block.statements[index - 1] : undefined
-  return AST.isTagStatement(previous) ? previous : undefined
+  let start = index
+  while (start > 0 && isRenderPrefix(block.statements[start - 1])) {
+    start -= 1
+  }
+  return index < 0 ? [] : block.statements.slice(start, index).filter(isRenderPrefix)
+}
+
+/** attachedTag preserves the occurrence tag even when accessibility metadata intervenes. */
+export function attachedTag(node: AST.Render | AST.ForStatement): AST.TagStatement | undefined {
+  return renderPrefixCluster(node).find(AST.isTagStatement)
 }
 
 /** slotFillRootTag returns a leading tag that configures the visual root filling one named render slot. */

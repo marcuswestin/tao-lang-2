@@ -917,20 +917,44 @@ class TR {
     return TRTaoProps.TaoPropsControls.visualTag(props)
   }
 
-  /** VisualNativeProps lowers private Studio identity and a test tag onto an injected native root. */
+  /** VisualNativeProps lowers private occurrence identity, accessibility labels and a test tag onto a native root. */
   static VisualNativeProps(layout: TR.TaoVisualLayout | undefined, tag?: string): Record<string, unknown> {
     return TRTaoProps.TaoPropsControls.visualNativeProps(layout, tag)
   }
 
   /** VisualNativeRoot preserves filtered native controls while making their Studio occurrence selectable. */
   static VisualNativeRoot(layout: TR.TaoVisualLayout | undefined, child: React.ReactNode): React.ReactNode {
-    if (TRTaoProps.TaoPropsControls.visualRowRoot(layout)) {
-      return createElement(NativeVisualRowRoot, { child, layout })
+    const { accessibilityLabel, ...props } = TRTaoProps.TaoPropsControls.visualNativeProps(layout)
+    let nativeChild = child
+    if (accessibilityLabel !== undefined) {
+      const runtime = requireReactNativeRuntime() as ReturnType<typeof requireReactNativeRuntime> & {
+        Button?: React.ElementType
+      }
+      RuntimeAssert.input(
+        React.isValidElement(child)
+          && child.type !== React.Fragment
+          && (typeof child.type === 'string'
+            || [
+              runtime.ActivityIndicator,
+              runtime.Button,
+              runtime.Image,
+              runtime.Pressable,
+              runtime.ScrollView,
+              runtime.Switch,
+              runtime.Text,
+              runtime.TextInput,
+              runtime.View,
+            ].some(component => component !== undefined && component === child.type)),
+        'An accessibility label on an injected visual requires a supported native root; fragments and custom component roots cannot receive it.',
+      )
+      nativeChild = React.cloneElement(child as React.ReactElement<Record<string, unknown>>, { accessibilityLabel })
     }
-    const props = TRTaoProps.TaoPropsControls.visualNativeProps(layout)
+    if (TRTaoProps.TaoPropsControls.visualRowRoot(layout)) {
+      return createElement(NativeVisualRowRoot, { child: nativeChild, layout })
+    }
     return Object.keys(props).length === 0
-      ? child
-      : createElement(requireReactNativeRuntime().View, props, child)
+      ? nativeChild
+      : createElement(requireReactNativeRuntime().View, props, nativeChild)
   }
 
   /** setDevMode configures Tao runtime development-only diagnostics. */
@@ -1763,7 +1787,7 @@ function NativeVisualRowRoot({ child, layout }: {
   child: React.ReactNode
   layout: TR.TaoVisualLayout | undefined
 }): React.ReactElement {
-  const props = InteractionControls.UseNativeRowRoot(layout)
+  const { accessibilityLabel: _accessibilityLabel, ...props } = InteractionControls.UseNativeRowRoot(layout)
   return createElement(requireReactNativeRuntime().View, props, child)
 }
 

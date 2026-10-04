@@ -51,6 +51,8 @@ type TaoInteractionProps = {
 
 /** TaoProps declares the Tao-owned props bag generated views receive as the `__tao` prop. */
 export type TaoProps = TaoLayoutProps & {
+  /** accessibilityLabel names this visual occurrence without changing its visible content. */
+  accessibilityLabel?: string
   /** app is private Tao metadata for app-owned transient presentation such as keyed toasts. */
   app?: TaoRuntimeApp
   /** callerProps preserves inherited Tao metadata across generated view boundaries. */
@@ -134,6 +136,7 @@ export type TaoViewRuntimeProps = TaoProps & {
 }
 
 type MergedTaoViewProps = {
+  readonly accessibilityLabel: string | undefined
   readonly children?: React.ReactNode
   readonly direction?: TaoLayoutDirection
   readonly interaction: TaoInteractionProps | undefined
@@ -144,13 +147,14 @@ type MergedTaoViewProps = {
 }
 
 type PrivateVisualMetadata = {
+  accessibilityLabel?: string
   interaction?: TaoInteractionProps
   occurrence?: TaoInteractionOccurrence
   studio?: TaoStudioIdentity
 }
 
 // Injected visual implementations receive a deliberately layout-only value. Studio occurrence
-// identity and outline metadata follow that exact object through a private side table so
+// identity, accessibility labels and outline metadata follow that exact object through a private side table so
 // standard-library wrappers do not need a new language-visible ambient channel or access to the
 // complete private __tao bag.
 const privateMetadataByVisualLayout = new WeakMap<object, PrivateVisualMetadata>()
@@ -298,6 +302,9 @@ function mergeViewProps(
   const design = mountedApp?.design
   const scheme = schemeInChain(taoRuntimeProps) ?? schemeInChain(explicitLayoutProps) ?? 'light'
   return {
+    accessibilityLabel: accessibilityLabelInChain(props.__tao)
+      ?? privateMetadataForVisualLayout(props.layout)?.accessibilityLabel
+      ?? accessibilityLabelInChain(taoRuntimeProps),
     children: props.children,
     direction,
     nativeProps,
@@ -373,13 +380,17 @@ function visualLayout(props: TaoProps | undefined): TaoVisualLayout | undefined 
     ParentDirectionContext.propsForDirection(ParentDirectionContext.use()),
   )
   const studio = studioIdentityInChain(props)
+  const accessibilityLabel = accessibilityLabelInChain(props)
   const interaction = interactionInChain(props)
   const occurrence = interactionOccurrence(props)
-  if (studio === undefined && interaction === undefined && occurrence === undefined) {
+  if (
+    studio === undefined && interaction === undefined && occurrence === undefined && accessibilityLabel === undefined
+  ) {
     return resolved
   }
   const visualLayout = resolved ?? {}
   privateMetadataByVisualLayout.set(visualLayout, {
+    ...(accessibilityLabel === undefined ? {} : { accessibilityLabel }),
     ...(interaction === undefined ? {} : { interaction }),
     ...(occurrence === undefined ? {} : { occurrence }),
     ...(studio === undefined ? {} : { studio }),
@@ -400,11 +411,15 @@ function visualTag(props: TaoProps | undefined): string | undefined {
   return testTagInChain(props)
 }
 
-/** Lowers private Studio identity and the public test tag onto an injected native root. */
+/** Lowers private occurrence identity, accessibility labels and the public tag onto an injected native root. */
 function visualNativeProps(layout: TaoVisualLayout | undefined, tag?: string): Record<string, unknown> {
   const metadata = privateMetadataForVisualLayout(layout)
   const nativeProps = nativePropsWithStudioIdentity({}, metadata?.studio)
-  return tag ? { ...nativeProps, testID: tag } : nativeProps
+  return {
+    ...nativeProps,
+    ...(metadata?.accessibilityLabel === undefined ? {} : { accessibilityLabel: metadata.accessibilityLabel }),
+    ...(tag ? { testID: tag } : {}),
+  }
 }
 
 function visualRowRoot(layout: TaoVisualLayout | undefined): TaoOutlineRowRoot | undefined {
@@ -413,7 +428,10 @@ function visualRowRoot(layout: TaoVisualLayout | undefined): TaoOutlineRowRoot |
 
 function nativePropsWithStyle(merged: MergedTaoViewProps): Record<string, unknown> {
   const nativeProps = LayoutRuntime.nativePropsWithStyle(merged.nativeProps, merged.props, merged.direction)
-  const nativePropsWithStudio = nativePropsWithStudioIdentity(nativeProps, merged.studio)
+  const nativePropsWithStudio = nativePropsWithStudioIdentity({
+    ...nativeProps,
+    ...(merged.accessibilityLabel === undefined ? {} : { accessibilityLabel: merged.accessibilityLabel }),
+  }, merged.studio)
   return merged.testTag ? { ...nativePropsWithStudio, testID: merged.testTag } : nativePropsWithStudio
 }
 
@@ -477,4 +495,8 @@ function testTagInChain(props: TaoProps | undefined): string | undefined {
     return undefined
   }
   return props.testTag ?? testTagInChain(props.callerProps)
+}
+
+function accessibilityLabelInChain(props: TaoProps | undefined): string | undefined {
+  return props?.accessibilityLabel ?? (props ? accessibilityLabelInChain(props.callerProps) : undefined)
 }
