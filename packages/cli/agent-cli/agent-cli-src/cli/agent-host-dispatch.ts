@@ -26,7 +26,7 @@ async function run(): Promise<number> {
   const args = argv.slice(prefix.length)
   if (target.argsPolicy === 'notify' && !validNotifyArgs(args)) {
     HCI.writeErrorLine(
-      'Usage: ./agent unsandboxed notify-developer [--shutdown-id <id>] [--sound <name>] [--message <text>] [--context <text>] [--flash-screen] [--stop] | --help',
+      'Usage: ./agent unsandboxed notify-developer [--sound <name>] [--message <text>] [--context <text>] [--flash-screen] [--stop] | --help',
     )
     return 2
   }
@@ -108,12 +108,11 @@ async function run(): Promise<number> {
   return result.exitCode ?? 1
 }
 
-/** Attention alerts accept only safe IDs and acknowledgement, never arbitrary shell arguments. */
+/** Attention alerts accept only bounded display text and supported effects. */
 function validNotifyArgs(args: readonly string[]): boolean {
   if (args.length === 1 && ['--help', '-h'].includes(args[0]!)) {
     return true
   }
-  let id = false
   let stop = false
   let sound = false
   let flash = false
@@ -122,11 +121,6 @@ function validNotifyArgs(args: readonly string[]): boolean {
     const arg = args[index]
     if (arg === '--stop' && !stop) {
       stop = true
-    } else if (arg === '--shutdown-id' && !id) {
-      if (!/^[A-Za-z0-9_][A-Za-z0-9_-]{0,127}$/u.test(args[++index] ?? '')) {
-        return false
-      }
-      id = true
     } else if (arg === '--sound' && !sound) {
       const name = args[++index]
       if (!NOTIFICATION_SOUNDS.some(candidate => candidate.toLowerCase() === name?.toLowerCase())) {

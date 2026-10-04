@@ -7,7 +7,6 @@ await runWithCommands(command => {
     .description(
       'Post a macOS notification, sound every four seconds with volume rising over two minutes, and flash after 30 seconds.',
     )
-    .option('--shutdown-id <id>', 'Identify this alert so it can be stopped independently', 'default')
     .option(
       '--sound <name>',
       `Choose a macOS notification sound: ${NOTIFICATION_SOUNDS.join(', ')}`,
@@ -17,9 +16,9 @@ await runWithCommands(command => {
     .option('--message <text>', 'Explain what needs attention in the notification (one line, up to 2000 characters)')
     .option(
       '--context <text>',
-      'Identify the task in the notification (one line, up to 256 characters; defaults to checkout and shutdown ID)',
+      'Identify the task in the notification (one line, up to 256 characters; defaults to checkout)',
     )
-    .option('--stop', 'Acknowledge and stop this alert')
+    .option('--stop', 'Stop the machine-wide attention loop from any worktree (also: just stop)')
     .action(async options => {
       await notifyDeveloper(options)
     })

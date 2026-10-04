@@ -84,6 +84,8 @@
     "excludedCommands": [
       "./agent unsandboxed notify-developer",
       "./agent unsandboxed notify-developer *",
+      "./agent unsandboxed stop",
+      "./agent unsandboxed stop *",
       "./agent unsandboxed land",
       "./agent unsandboxed land *",
       "./agent unsandboxed finalize",
@@ -295,6 +297,8 @@
       "mcp__claude-in-chrome__*",
       "Bash(./agent unsandboxed notify-developer)",
       "Bash(./agent unsandboxed notify-developer *)",
+      "Bash(./agent unsandboxed stop)",
+      "Bash(./agent unsandboxed stop *)",
       "Bash(./agent unsandboxed land)",
       "Bash(./agent unsandboxed land *)",
       "Bash(./agent unsandboxed finalize)",

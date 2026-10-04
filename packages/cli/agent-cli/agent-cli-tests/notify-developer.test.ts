@@ -1,8 +1,125 @@
 import { Assert, CLI, Errors, FS, Platform, Repo, Time } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { AttentionState } from '../agent-cli-src/attention/AttentionState'
 import { notifyDeveloper } from '../agent-cli-src/attention/NotifyDeveloper'
 
 Describe('developer attention', () => {
+  Test('global stop cancels a joining request before its stalled notification can post', async () => {
+    const directory = await mkTestDir('notify-joining-stop-')
+    const state = new AttentionState(directory)
+    let aborted = false
+    try {
+      const token = await state.claim('first-worktree')
+      Assert.defined(token, 'Expected the first loop to own the claim.')
+      await notifyDeveloper({}, {
+        root: 'second-worktree',
+        stateDirectory: directory,
+        notify: async (_message, _context, signal) =>
+          new Promise<void>(resolve => {
+            signal.addEventListener('abort', () => {
+              aborted = true
+              resolve()
+            }, { once: true })
+          }),
+        sleep: async () => {
+          await state.stop()
+        },
+        play: async () => {
+          Errors.throwUnexpected('Expected no joining sound loop.')
+        },
+      })
+      Expect(aborted).toBe(true)
+      Expect(await state.active(token)).toBe(false)
+      await state.release(token)
+    } finally {
+      await FS.remove(directory)
+    }
+  })
+
+  Test('concurrent worktrees share one loop, and another worktree stops it without a queued restart', async () => {
+    const stateDirectory = await mkTestDir('notify-singleton-')
+    const worktrees = ['worktree-a', 'worktree-b', 'worktree-c']
+    let plays = 0
+    let flashes = 0
+    const notifications: string[] = []
+    let joined = false
+    try {
+      await notifyDeveloper({ flashScreen: true }, {
+        root: worktrees[0],
+        stateDirectory,
+        notify: async (_message, context) => {
+          notifications.push(context)
+        },
+        play: async () => {
+          plays++
+        },
+        flash: async () => {
+          flashes++
+        },
+        sleep: async () => {
+          if (!joined) {
+            joined = true
+            await Promise.all(
+              worktrees.slice(1).map(root =>
+                notifyDeveloper({}, {
+                  root,
+                  stateDirectory,
+                  notify: async (_message, context) => {
+                    notifications.push(context)
+                  },
+                  play: async () => {
+                    Errors.throwUnexpected('Expected one sound loop.')
+                  },
+                  flash: async () => {
+                    Errors.throwUnexpected('Expected one flash loop.')
+                  },
+                })
+              ),
+            )
+            await notifyDeveloper({ stop: true }, { root: worktrees[2], stateDirectory })
+          }
+        },
+      })
+      Expect(plays).toBe(1)
+      Expect(flashes).toBe(1)
+      Expect(notifications.sort()).toEqual(worktrees)
+      Expect(await FS.exists(FS.resolvePath('owner.json', stateDirectory))).toBe(false)
+    } finally {
+      await FS.remove(stateDirectory)
+    }
+  })
+
+  Test(
+    'a stop keeps ownership until effects drain, while stale claims and old cleanup cannot fence a new owner',
+    async () => {
+      const directory = await mkTestDir('notify-state-')
+      const state = new AttentionState(directory)
+      try {
+        const token = await state.claim('first')
+        Assert.defined(token, 'Expected the singleton claim.')
+        await state.stop()
+        Expect(await state.active(token)).toBe(false)
+        Expect(await new AttentionState(directory).claim('second')).toBeUndefined()
+        await state.release(token)
+        await FS.writeJson(state.path, {
+          token: 'stale',
+          pid: Platform.runtimeProcess.pid,
+          startedAt: 'reused-pid',
+          stop: false,
+          root: 'old',
+        })
+        const next = await state.claim('new')
+        Assert.defined(next, 'Expected stale ownership to be reclaimed.')
+        await state.release(token)
+        Expect(await state.active(next)).toBe(true)
+        await state.release(next)
+        await state.stop()
+      } finally {
+        await FS.remove(directory)
+      }
+    },
+  )
+
   Test('acknowledgement cancels stalled notification, sound and flash effects', async () => {
     const root = await mkTestDir('notify-stalled-effects-')
     const aborted: string[] = []
@@ -16,15 +133,16 @@ Describe('developer attention', () => {
     try {
       await notifyDeveloper({ flashScreen: true }, {
         root,
+        stateDirectory: root,
         notify: async (_message, _context, signal) => stall('notification', signal),
         play: async (_sound, _volume, signal) => stall('sound', signal),
         flash: async signal => stall('flash', signal),
         sleep: async () => {
-          await notifyDeveloper({ stop: true }, { root })
+          await notifyDeveloper({ stop: true }, { root, stateDirectory: root })
         },
       })
       Expect(aborted.sort()).toEqual(['flash', 'notification', 'sound'])
-      Expect(await FS.exists(FS.resolvePath('.artifacts/notify-developer/default.txt', root))).toBe(false)
+      Expect(await FS.exists(FS.resolvePath('owner.json', root))).toBe(false)
     } finally {
       await FS.remove(root)
     }
@@ -41,6 +159,7 @@ Describe('developer attention', () => {
     try {
       await notifyDeveloper(options, {
         root,
+        stateDirectory: root,
         notify,
         now: () => now,
         sleep: async ms => {
@@ -48,15 +167,18 @@ Describe('developer attention', () => {
         },
         play: async () => {
           if (now >= 8_000) {
-            await notifyDeveloper({ stop: true }, { root, notify })
+            await notifyDeveloper({ stop: true }, { root, stateDirectory: root, notify })
           }
         },
       })
       Expect(notifications).toEqual([[options.message, options.context]])
-      await Expect(notifyDeveloper({ message: 'bad\nmessage' }, { root, notify })).rejects.toThrow(
-        'Notification message',
+      await Expect(notifyDeveloper({ message: 'bad\nmessage' }, { root, stateDirectory: root, notify })).rejects
+        .toThrow(
+          'Notification message',
+        )
+      await Expect(notifyDeveloper({ context: '' }, { root, stateDirectory: root, notify })).rejects.toThrow(
+        'Notification context',
       )
-      await Expect(notifyDeveloper({ context: '' }, { root, notify })).rejects.toThrow('Notification context')
     } finally {
       await FS.remove(root)
     }
@@ -72,11 +194,12 @@ Describe('developer attention', () => {
       try {
         await Expect(notifyDeveloper({}, {
           root,
+          stateDirectory: root,
           now: () => now,
           sleep: async ms => {
             now += ms
             if (now >= 35_000) {
-              await notifyDeveloper({ stop: true }, { root })
+              await notifyDeveloper({ stop: true }, { root, stateDirectory: root })
             }
           },
           notify: async () => {
@@ -91,7 +214,7 @@ Describe('developer attention', () => {
         })).rejects.toThrow('notifications unavailable')
         Expect(sounds).toEqual([0, 4_000, 8_000, 12_000, 16_000, 20_000, 24_000, 28_000, 32_000])
         Expect(flashes).toEqual([30_000, 34_000])
-        Expect(await FS.exists(FS.resolvePath('.artifacts/notify-developer/default.txt', root))).toBe(false)
+        Expect(await FS.exists(FS.resolvePath('owner.json', root))).toBe(false)
       } finally {
         await FS.remove(root)
       }
@@ -105,6 +228,7 @@ Describe('developer attention', () => {
     try {
       await notifyDeveloper({}, {
         root,
+        stateDirectory: root,
         notify: async () => {},
         now: () => now,
         sleep: async ms => {
@@ -114,7 +238,7 @@ Describe('developer attention', () => {
         play: async (_sound, volume) => {
           samples.set(now, volume)
           if (now >= 124_000) {
-            await notifyDeveloper({ stop: true }, { root })
+            await notifyDeveloper({ stop: true }, { root, stateDirectory: root })
           }
         },
       })
@@ -128,15 +252,14 @@ Describe('developer attention', () => {
     }
   })
 
-  Test('sounds immediately and every four seconds, then acknowledgement stops only its own alert', async () => {
+  Test('sounds immediately and every four seconds, then acknowledgement stops the loop', async () => {
     const root = await mkTestDir('notify-developer-')
     let now = 0
     const soundedAt: number[] = []
     try {
-      const other = FS.resolvePath('.artifacts/notify-developer/other.txt', root)
-      await FS.writeText(other, 'another alert')
-      await notifyDeveloper({ shutdownId: 'question', sound: 'ping' }, {
+      await notifyDeveloper({ sound: 'ping' }, {
         root,
+        stateDirectory: root,
         notify: async () => {},
         now: () => now,
         sleep: async ms => {
@@ -147,14 +270,13 @@ Describe('developer attention', () => {
           soundedAt.push(now)
           now += 300 // Playback duration must not add drift to the four-second interval.
           if (soundedAt.length === 3) {
-            await notifyDeveloper({ shutdownId: 'question', stop: true }, { root })
+            await notifyDeveloper({ stop: true }, { root, stateDirectory: root })
           }
         },
       })
       Expect(soundedAt).toEqual([0, 4_000, 8_000])
-      Expect(await FS.exists(FS.resolvePath('.artifacts/notify-developer/question.txt', root))).toBe(false)
-      Expect(await FS.readText(other)).toBe('another alert')
-      await notifyDeveloper({ shutdownId: 'question', stop: true }, { root })
+      Expect(await FS.exists(FS.resolvePath('owner.json', root))).toBe(false)
+      await notifyDeveloper({ stop: true }, { root, stateDirectory: root })
     } finally {
       await FS.remove(root)
     }
@@ -167,6 +289,7 @@ Describe('developer attention', () => {
     try {
       await notifyDeveloper({}, {
         root,
+        stateDirectory: root,
         notify: async () => {},
         play: async sound => {
           Expect(sound).toBe('Bottle')
@@ -184,7 +307,7 @@ Describe('developer attention', () => {
       })
       Expect(plays).toBe(1)
       Expect(signals.size).toBe(0)
-      Expect(await FS.exists(FS.resolvePath('.artifacts/notify-developer/default.txt', root))).toBe(false)
+      Expect(await FS.exists(FS.resolvePath('owner.json', root))).toBe(false)
     } finally {
       await FS.remove(root)
     }
@@ -195,14 +318,16 @@ Describe('developer attention', () => {
     try {
       await Expect(notifyDeveloper({}, {
         root,
+        stateDirectory: root,
         notify: async () => {},
         play: async () => {
           Errors.throwHostEnvironment('audio unavailable')
         },
       })).rejects.toThrow('audio unavailable')
-      Expect(await FS.exists(FS.resolvePath('.artifacts/notify-developer/default.txt', root))).toBe(false)
-      await Expect(notifyDeveloper({ shutdownId: '../foreign', stop: true }, { root })).rejects.toThrow('Shutdown ID')
-      await Expect(notifyDeveloper({ sound: '../foreign' }, { root })).rejects.toThrow('Choose a notification sound')
+      Expect(await FS.exists(FS.resolvePath('owner.json', root))).toBe(false)
+      await Expect(notifyDeveloper({ sound: '../foreign' }, { root, stateDirectory: root })).rejects.toThrow(
+        'Choose a notification sound',
+      )
     } finally {
       await FS.remove(root)
     }
@@ -254,9 +379,7 @@ Describe('developer attention', () => {
       const result = await CLI.run(Repo.resolvePath('agent'), {
         args: [
           'notify-developer',
-          '--shutdown-id',
-          `text-test-${Platform.randomUUID()}`,
-          '--stop',
+          '--help',
           '--message',
           `Review "$(touch '${marker}')"; task needs attention`,
           '--context',
@@ -265,7 +388,7 @@ Describe('developer attention', () => {
         cwd: Repo.getRoot(),
       })
       Expect(result.exitCode).toBe(0)
-      Expect(result.stdout).toContain('Acknowledged attention alert')
+      Expect(result.stdout).toContain('Usage:')
       Expect(await FS.exists(marker)).toBe(false)
     } finally {
       await FS.remove(root)
@@ -285,8 +408,6 @@ Describe('developer attention', () => {
         await FS.writeText(just, '#!/bin/sh\nprintf "%s\\n" "$@" > "$TAO_NOTIFY_TEST_ARGS"\n')
         await FS.chmod(just, 0o755)
         const args = [
-          '--shutdown-id',
-          'question',
           '--sound',
           'ping',
           '--flash-screen',
@@ -319,6 +440,7 @@ Describe('developer attention', () => {
     try {
       await notifyDeveloper({}, {
         root,
+        stateDirectory: root,
         notify: async () => {},
         now: () => now,
         sleep: async ms => {
@@ -328,7 +450,7 @@ Describe('developer attention', () => {
         flash: async () => {
           flashes.push(now)
           if (flashes.length === 3) {
-            await notifyDeveloper({ stop: true }, { root })
+            await notifyDeveloper({ stop: true }, { root, stateDirectory: root })
           }
         },
       })
@@ -346,12 +468,13 @@ Describe('developer attention', () => {
         let flashes = 0
         await notifyDeveloper({ flashScreen }, {
           root,
+          stateDirectory: root,
           notify: async () => {},
           now: () => now,
           sleep: async ms => {
             now += ms
             if (now >= 28_000) {
-              await notifyDeveloper({ stop: true }, { root })
+              await notifyDeveloper({ stop: true }, { root, stateDirectory: root })
             }
           },
           play: async () => {},
@@ -379,6 +502,7 @@ Describe('developer attention', () => {
     try {
       await notifyDeveloper({}, {
         root,
+        stateDirectory: root,
         notify: async () => {},
         now: () => now,
         play: async () => {
@@ -397,7 +521,7 @@ Describe('developer attention', () => {
             effect.finish()
           }
           if (now >= 39_500) {
-            await notifyDeveloper({ stop: true }, { root })
+            await notifyDeveloper({ stop: true }, { root, stateDirectory: root })
             for (const effect of pending) {
               effect.finish()
             }

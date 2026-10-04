@@ -1,4 +1,5 @@
 import { Assert, CLI, Errors, FS, HCI, Platform, Repo, Time } from '@shared'
+import { AttentionState } from './AttentionState'
 
 /** macOS sounds accepted by the CLI and host policy; the first is the default. */
 export const NOTIFICATION_SOUNDS = [
@@ -19,7 +20,6 @@ export const NOTIFICATION_SOUNDS = [
 ] as const
 
 type NotifyOptions = {
-  shutdownId?: string
   stop?: boolean
   sound?: string
   flashScreen?: boolean
@@ -28,6 +28,7 @@ type NotifyOptions = {
 }
 type NotifyDependencies = {
   root?: string
+  stateDirectory?: string
   now?: () => number
   sleep?: (ms: number) => Promise<void>
   play?: (sound: string, volume: number, signal: AbortSignal) => Promise<void>
@@ -36,49 +37,64 @@ type NotifyDependencies = {
   onSignal?: typeof Platform.onProcessSignal
 }
 
-/** Runs one scoped attention alert until acknowledged, superseded, or cancelled. */
+/** Runs the one machine-wide attention loop; another caller reuses it without queuing a loop. */
 export async function notifyDeveloper(
   options: NotifyOptions = {},
   dependencies: NotifyDependencies = {},
 ): Promise<void> {
-  const id = options.shutdownId ?? 'default'
-  Assert.input(
-    /^[A-Za-z0-9_][A-Za-z0-9_-]{0,127}$/.test(id),
-    'Shutdown ID must be 1–128 letters, digits, underscores or dashes and must not start with a dash.',
-  )
+  const state = new AttentionState(dependencies.stateDirectory)
+  if (options.stop) {
+    await state.stop()
+    HCI.writeLine('Stop requested for the machine-wide attention alert.')
+    return
+  }
   const sound = NOTIFICATION_SOUNDS.find(name =>
     name.toLowerCase() === (options.sound ?? NOTIFICATION_SOUNDS[0]).toLowerCase()
   )
   Assert.input(sound !== undefined, `Choose a notification sound: ${NOTIFICATION_SOUNDS.join(', ')}.`)
   const root = dependencies.root ?? Repo.getRoot()
   const message = options.message ?? 'An agent is waiting for your attention. Return to the task to reply.'
-  const context = options.context ?? `${FS.basename(root)} · ${id}`
+  const context = options.context ?? FS.basename(root)
   Assert.input(isNotificationText(message, 2_000), 'Notification message must be 1–2000 characters on one line.')
   Assert.input(isNotificationText(context, 256), 'Notification context must be 1–256 characters on one line.')
-  const state = FS.resolvePath(`.artifacts/notify-developer/${id}.txt`, root)
-  const token = Platform.randomUUID()
   const now = dependencies.now ?? Time.nowMs
   const sleep = dependencies.sleep ?? Time.sleep
   const play = dependencies.play ?? playNotificationSound
   const flash = dependencies.flash ?? flashScreen
   const notify = dependencies.notify ?? postNotification
   const onSignal = dependencies.onSignal ?? Platform.onProcessSignal
-  const read = async (): Promise<string | undefined> => {
-    try {
-      return await FS.readText(state)
-    } catch (cause) {
-      if ((cause as NodeJS.ErrnoException).code === 'ENOENT') {
-        return undefined
-      }
-      throw cause
+  const token = await state.claim(root)
+  if (token === undefined) {
+    HCI.writeLine('The machine-wide attention loop is already running. Stop it from any worktree with just stop.')
+    const effects = new AbortController()
+    const currentToken = await state.currentToken()
+    if (currentToken === undefined) {
+      return
     }
-  }
-  const mutate = async (work: () => Promise<void>): Promise<void> => {
-    await FS.withFileMutationLock(state, root, work)
-  }
-  if (options.stop) {
-    await mutate(() => FS.remove(state))
-    HCI.writeLine(`Acknowledged attention alert '${id}'.`)
+    let finished = false
+    let failure: unknown
+    const unsubscribe = (['SIGINT', 'SIGTERM', 'SIGHUP'] as const).map(signal =>
+      onSignal(signal, () => effects.abort())
+    )
+    const posting = Promise.resolve().then(() => notify(message, context, effects.signal)).catch(cause => {
+      failure = cause
+    }).finally(() => {
+      finished = true
+    })
+    try {
+      while (!finished && !effects.signal.aborted && await state.active(currentToken)) {
+        await sleep(100)
+      }
+    } finally {
+      effects.abort()
+      await posting
+      for (const remove of unsubscribe) {
+        remove()
+      }
+    }
+    if (failure !== undefined) {
+      throw failure
+    }
     return
   }
 
@@ -96,11 +112,10 @@ export async function notifyDeveloper(
     })
   )
   try {
-    await mutate(() => FS.writeText(state, token))
     HCI.writeLine(
-      `Attention alert '${id}': ${sound} every four seconds${
+      `Attention alert: ${sound} every four seconds${
         options.flashScreen ? ', flashing immediately' : ', flashing after 30 seconds'
-      }. Acknowledge with ./agent notify-developer --shutdown-id ${id} --stop.`,
+      }. Stop from any worktree with just stop (agents: ./agent unsandboxed stop).`,
     )
     notification = Promise.resolve().then(() => notify(message, context, effects.signal)).catch(cause => {
       notificationFailure = cause
@@ -109,7 +124,7 @@ export async function notifyDeveloper(
     const startedAt = now()
     let nextSoundAt = startedAt
     let nextFlashAt = nextSoundAt + (options.flashScreen ? 0 : 30_000)
-    while (!cancelled && effectFailure === undefined && await read() === token) {
+    while (!cancelled && effectFailure === undefined && await state.active(token)) {
       if (now() >= nextSoundAt && playback === undefined) {
         const volume = 0.2 + 0.8 * Math.min(1, Math.max(0, (now() - startedAt) / 120_000))
         nextSoundAt = now() + 4_000
@@ -119,7 +134,7 @@ export async function notifyDeveloper(
           playback = undefined
         })
       }
-      if (!cancelled && now() >= nextFlashAt && flashing === undefined && await read() === token) {
+      if (!cancelled && now() >= nextFlashAt && flashing === undefined && await state.active(token)) {
         nextFlashAt = now() + 4_000
         flashing = Promise.resolve().then(() => flash(effects.signal)).catch(cause => {
           effectFailure ??= cause
@@ -127,7 +142,7 @@ export async function notifyDeveloper(
           flashing = undefined
         })
       }
-      if (!cancelled && effectFailure === undefined && await read() === token) {
+      if (!cancelled && effectFailure === undefined && await state.active(token)) {
         await sleep(Math.max(1, Math.min(100, nextSoundAt - now(), nextFlashAt - now())))
       }
     }
@@ -140,11 +155,7 @@ export async function notifyDeveloper(
     for (const remove of unsubscribe) {
       remove()
     }
-    await mutate(async () => {
-      if (await read() === token) {
-        await FS.remove(state)
-      }
-    })
+    await state.release(token)
   }
   if (notificationFailure !== undefined) {
     throw notificationFailure
