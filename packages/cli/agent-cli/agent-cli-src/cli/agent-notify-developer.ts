@@ -5,7 +5,7 @@ await runWithCommands(command => {
   command
     .name('notify-developer')
     .description(
-      'Sound every four seconds, ramping volume from 20% to 100% over two minutes while waiting for developer attention.',
+      'Post a macOS notification, sound every four seconds with volume rising over two minutes, and flash after 30 seconds.',
     )
     .option('--shutdown-id <id>', 'Identify this alert so it can be stopped independently', 'default')
     .option(
@@ -14,6 +14,11 @@ await runWithCommands(command => {
       NOTIFICATION_SOUNDS[0],
     )
     .option('--flash-screen', 'Start flashing immediately instead of waiting 30 seconds')
+    .option('--message <text>', 'Explain what needs attention in the notification (one line, up to 2000 characters)')
+    .option(
+      '--context <text>',
+      'Identify the task in the notification (one line, up to 256 characters; defaults to checkout and shutdown ID)',
+    )
     .option('--stop', 'Acknowledge and stop this alert')
     .action(async options => {
       await notifyDeveloper(options)

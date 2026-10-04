@@ -1,7 +1,7 @@
 import { CLI, FS, HCI, Platform } from '@shared'
 import { agentHostCommands, hostCommandKind, hostCommandPrefix } from '../agent-config/HostCommandPolicy'
 import { hostCommandTarget } from '../agent-config/HostCommandTargets'
-import { NOTIFICATION_SOUNDS } from '../attention/NotifyDeveloper'
+import { isNotificationText, NOTIFICATION_SOUNDS } from '../attention/NotifyDeveloper'
 import { runAgentCommand } from '../runner/AgentRunner'
 
 const [sourcePath, ...argv] = Platform.runtimeProcess.argv.slice(2)
@@ -26,7 +26,7 @@ async function run(): Promise<number> {
   const args = argv.slice(prefix.length)
   if (target.argsPolicy === 'notify' && !validNotifyArgs(args)) {
     HCI.writeErrorLine(
-      'Usage: ./agent unsandboxed notify-developer [--shutdown-id <id>] [--sound <name>] [--flash-screen] [--stop] | --help',
+      'Usage: ./agent unsandboxed notify-developer [--shutdown-id <id>] [--sound <name>] [--message <text>] [--context <text>] [--flash-screen] [--stop] | --help',
     )
     return 2
   }
@@ -117,6 +117,7 @@ function validNotifyArgs(args: readonly string[]): boolean {
   let stop = false
   let sound = false
   let flash = false
+  const textOptions = new Set<string>()
   for (let index = 0; index < args.length; index++) {
     const arg = args[index]
     if (arg === '--stop' && !stop) {
@@ -134,6 +135,11 @@ function validNotifyArgs(args: readonly string[]): boolean {
       sound = true
     } else if (arg === '--flash-screen' && !flash) {
       flash = true
+    } else if ((arg === '--message' || arg === '--context') && !textOptions.has(arg)) {
+      if (!isNotificationText(args[++index], arg === '--message' ? 2_000 : 256)) {
+        return false
+      }
+      textOptions.add(arg)
     } else {
       return false
     }

@@ -3,6 +3,101 @@ import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { notifyDeveloper } from '../agent-cli-src/attention/NotifyDeveloper'
 
 Describe('developer attention', () => {
+  Test('acknowledgement cancels stalled notification, sound and flash effects', async () => {
+    const root = await mkTestDir('notify-stalled-effects-')
+    const aborted: string[] = []
+    const stall = (name: string, signal: AbortSignal): Promise<void> =>
+      new Promise(resolve => {
+        signal.addEventListener('abort', () => {
+          aborted.push(name)
+          resolve()
+        }, { once: true })
+      })
+    try {
+      await notifyDeveloper({ flashScreen: true }, {
+        root,
+        notify: async (_message, _context, signal) => stall('notification', signal),
+        play: async (_sound, _volume, signal) => stall('sound', signal),
+        flash: async signal => stall('flash', signal),
+        sleep: async () => {
+          await notifyDeveloper({ stop: true }, { root })
+        },
+      })
+      Expect(aborted.sort()).toEqual(['flash', 'notification', 'sound'])
+      Expect(await FS.exists(FS.resolvePath('.artifacts/notify-developer/default.txt', root))).toBe(false)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('posts the question and task context once, without reposting on each sound or acknowledgement', async () => {
+    const root = await mkTestDir('notify-message-')
+    const notifications: string[][] = []
+    let now = 0
+    const options = { message: 'Review "ready"; $(touch ignored)', context: 'Task: developer attention' }
+    const notify = async (message: string, context: string) => {
+      notifications.push([message, context])
+    }
+    try {
+      await notifyDeveloper(options, {
+        root,
+        notify,
+        now: () => now,
+        sleep: async ms => {
+          now += ms
+        },
+        play: async () => {
+          if (now >= 8_000) {
+            await notifyDeveloper({ stop: true }, { root, notify })
+          }
+        },
+      })
+      Expect(notifications).toEqual([[options.message, options.context]])
+      await Expect(notifyDeveloper({ message: 'bad\nmessage' }, { root, notify })).rejects.toThrow(
+        'Notification message',
+      )
+      await Expect(notifyDeveloper({ context: '' }, { root, notify })).rejects.toThrow('Notification context')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test(
+    'notification failure leaves sound and flash running until acknowledgement, then reports the failure',
+    async () => {
+      const root = await mkTestDir('notify-message-failure-')
+      let now = 0
+      const sounds: number[] = []
+      const flashes: number[] = []
+      try {
+        await Expect(notifyDeveloper({}, {
+          root,
+          now: () => now,
+          sleep: async ms => {
+            now += ms
+            if (now >= 35_000) {
+              await notifyDeveloper({ stop: true }, { root })
+            }
+          },
+          notify: async () => {
+            Errors.throwHostEnvironment('notifications unavailable')
+          },
+          play: async () => {
+            sounds.push(now)
+          },
+          flash: async () => {
+            flashes.push(now)
+          },
+        })).rejects.toThrow('notifications unavailable')
+        Expect(sounds).toEqual([0, 4_000, 8_000, 12_000, 16_000, 20_000, 24_000, 28_000, 32_000])
+        Expect(flashes).toEqual([30_000, 34_000])
+        Expect(await FS.exists(FS.resolvePath('.artifacts/notify-developer/default.txt', root))).toBe(false)
+      } finally {
+        await FS.remove(root)
+      }
+    },
+  )
+
   Test('ramps playback volume from twenty percent to full over two minutes and caps it there', async () => {
     const root = await mkTestDir('notify-volume-')
     let now = 0
@@ -10,6 +105,7 @@ Describe('developer attention', () => {
     try {
       await notifyDeveloper({}, {
         root,
+        notify: async () => {},
         now: () => now,
         sleep: async ms => {
           now += ms
@@ -41,6 +137,7 @@ Describe('developer attention', () => {
       await FS.writeText(other, 'another alert')
       await notifyDeveloper({ shutdownId: 'question', sound: 'ping' }, {
         root,
+        notify: async () => {},
         now: () => now,
         sleep: async ms => {
           now += ms
@@ -70,6 +167,7 @@ Describe('developer attention', () => {
     try {
       await notifyDeveloper({}, {
         root,
+        notify: async () => {},
         play: async sound => {
           Expect(sound).toBe('Bottle')
           plays++
@@ -97,6 +195,7 @@ Describe('developer attention', () => {
     try {
       await Expect(notifyDeveloper({}, {
         root,
+        notify: async () => {},
         play: async () => {
           Errors.throwHostEnvironment('audio unavailable')
         },
@@ -123,6 +222,12 @@ Describe('developer attention', () => {
           ['--shutdown-id'],
           ['--id', 'old'],
           ['--flash-screen', '--flash-screen'],
+          ['--message'],
+          ['--message', ''],
+          ['--message', 'x'.repeat(2_001)],
+          ['--context', 'x'.repeat(257)],
+          ['--message', 'first', '--message', 'second'],
+          ['--context', 'bad\ncontext'],
         ]
       ) {
         const result = await CLI.run(Platform.runtimeProcess.execPath, {
@@ -142,32 +247,70 @@ Describe('developer attention', () => {
     }
   })
 
-  Test('host dispatcher forwards supported sound and flash options without changing them', async () => {
-    const root = await mkTestDir('notify-host-options-')
+  Test('the real recipe preserves notification text as data instead of executing shell syntax', async () => {
+    const root = await mkTestDir('notify-text-argv-')
+    const marker = FS.resolvePath('must-not-exist', root)
     try {
-      const source = FS.resolvePath('permissions.jsonc', root)
-      const bin = FS.resolvePath('bin', root)
-      const log = FS.resolvePath('args.txt', root)
-      await FS.writeJson(source, { agentHostCommands: ['notify-developer'] })
-      const just = FS.resolvePath('just', bin)
-      await FS.writeText(just, '#!/bin/sh\nprintf "%s\\n" "$@" > "$TAO_NOTIFY_TEST_ARGS"\n')
-      await FS.chmod(just, 0o755)
-      const args = ['--shutdown-id', 'question', '--sound', 'ping', '--flash-screen']
-      const result = await CLI.run(Platform.runtimeProcess.execPath, {
+      const result = await CLI.run(Repo.resolvePath('agent'), {
         args: [
-          Repo.resolvePath('packages/cli/agent-cli/agent-cli-src/cli/agent-host-dispatch.ts'),
-          source,
           'notify-developer',
-          ...args,
+          '--shutdown-id',
+          `text-test-${Platform.randomUUID()}`,
+          '--stop',
+          '--message',
+          `Review "$(touch '${marker}')"; task needs attention`,
+          '--context',
+          "Developer's task",
         ],
-        env: { PATH: `${bin}:${Platform.runtimeProcess.env['PATH'] ?? ''}`, TAO_NOTIFY_TEST_ARGS: log },
+        cwd: Repo.getRoot(),
       })
       Expect(result.exitCode).toBe(0)
-      Expect((await FS.readText(log)).trim().split('\n')).toEqual(['notify-developer', ...args])
+      Expect(result.stdout).toContain('Acknowledged attention alert')
+      Expect(await FS.exists(marker)).toBe(false)
     } finally {
       await FS.remove(root)
     }
   })
+
+  Test(
+    'host dispatcher forwards supported sound, flash and contextual notification options without changing them',
+    async () => {
+      const root = await mkTestDir('notify-host-options-')
+      try {
+        const source = FS.resolvePath('permissions.jsonc', root)
+        const bin = FS.resolvePath('bin', root)
+        const log = FS.resolvePath('args.txt', root)
+        await FS.writeJson(source, { agentHostCommands: ['notify-developer'] })
+        const just = FS.resolvePath('just', bin)
+        await FS.writeText(just, '#!/bin/sh\nprintf "%s\\n" "$@" > "$TAO_NOTIFY_TEST_ARGS"\n')
+        await FS.chmod(just, 0o755)
+        const args = [
+          '--shutdown-id',
+          'question',
+          '--sound',
+          'ping',
+          '--flash-screen',
+          '--message',
+          'Review "ready"; $(touch ignored)',
+          '--context',
+          'Task: developer attention',
+        ]
+        const result = await CLI.run(Platform.runtimeProcess.execPath, {
+          args: [
+            Repo.resolvePath('packages/cli/agent-cli/agent-cli-src/cli/agent-host-dispatch.ts'),
+            source,
+            'notify-developer',
+            ...args,
+          ],
+          env: { PATH: `${bin}:${Platform.runtimeProcess.env['PATH'] ?? ''}`, TAO_NOTIFY_TEST_ARGS: log },
+        })
+        Expect(result.exitCode).toBe(0)
+        Expect((await FS.readText(log)).trim().split('\n')).toEqual(['notify-developer', ...args])
+      } finally {
+        await FS.remove(root)
+      }
+    },
+  )
 
   Test('flashes first at thirty seconds and repeats every four seconds independently of sound ticks', async () => {
     const root = await mkTestDir('notify-flash-')
@@ -176,6 +319,7 @@ Describe('developer attention', () => {
     try {
       await notifyDeveloper({}, {
         root,
+        notify: async () => {},
         now: () => now,
         sleep: async ms => {
           now += ms
@@ -202,6 +346,7 @@ Describe('developer attention', () => {
         let flashes = 0
         await notifyDeveloper({ flashScreen }, {
           root,
+          notify: async () => {},
           now: () => now,
           sleep: async ms => {
             now += ms
@@ -234,6 +379,7 @@ Describe('developer attention', () => {
     try {
       await notifyDeveloper({}, {
         root,
+        notify: async () => {},
         now: () => now,
         play: async () => {
           sounds.push(now)

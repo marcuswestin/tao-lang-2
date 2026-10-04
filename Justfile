@@ -551,10 +551,11 @@ delegation-report *ARGS:
 model-audit *ARGS:
     ./dev model-audit {{ ARGS }}
 
-# Sound every four seconds and flash after 30 seconds; --flash-screen flashes immediately, --shutdown-id scopes --stop
+# Post a contextual macOS notification, sound every four seconds and flash after 30 seconds; --shutdown-id scopes --stop
 [group('Sessions')]
+[positional-arguments]
 notify-developer *ARGS:
-    "{{ BUN }}" run packages/cli/agent-cli/agent-cli-src/cli/agent-notify-developer.ts {{ ARGS }}
+    "{{ BUN }}" run packages/cli/agent-cli/agent-cli-src/cli/agent-notify-developer.ts "$@"
 
 # Measure what a simplification pass targets: size, dispatch chains, allowlists, instructions, docs
 [group('Report')]
