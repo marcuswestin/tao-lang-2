@@ -30,6 +30,8 @@ Test(
         FS.resolvePath('packages/ides/studio-tooling/studio-smoke/fixtures/studio-network-simulation', repositoryRoot),
         projectRoot,
       )
+      await FS.remove(FS.resolvePath('.tao/typescript/outputs.json', projectRoot))
+      await FS.remove(FS.resolvePath('.tao-ts', projectRoot))
       studio = await startStudioSmokeLaunch({
         appName: 'NetworkSimApp',
         projectRoot,

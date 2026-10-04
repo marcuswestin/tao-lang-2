@@ -28,6 +28,10 @@ export async function exerciseHnreaderFeed(): Promise<void> {
       }
     }
     await FS.copyDirectory(FS.resolvePath('@model', fixtureRoot), FS.resolvePath('@model', projectRoot))
+    await FS.copyFile(
+      FS.resolvePath('.tao/project.json', fixtureRoot),
+      FS.resolvePath('.tao/project.json', projectRoot),
+    )
     studio = await startStudioSmokeLaunch({ appName: 'HNReaderStub', projectRoot, repositoryRoot: Repo.getRoot() })
     browser = await StudioCdp.launchChrome({ artifactRoot: studio.readiness.artifactRoot })
     const driver = browser

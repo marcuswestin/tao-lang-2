@@ -56,11 +56,12 @@ Test('Studio compiles, applies insertion and undo, and publishes the real HNRead
     ?? FS.resolvePath('.artifacts/tests/studio-smoke/real-app', Repo.getRoot())
   const projectRoot = await mkTestDir('tao-studio-hnreader-')
   const previewRuntimeRoot = FS.resolvePath('runtime', artifactRoot)
-  await FS.remove(previewRuntimeRoot)
-  await FS.copyDirectory(Repo.resolvePath('Apps/HNReader'), projectRoot)
-
   let preview: Awaited<ReturnType<typeof openStudioPreviewSession>> | undefined
   try {
+    await FS.remove(previewRuntimeRoot)
+    await FS.copyDirectory(Repo.resolvePath('Apps/HNReader'), projectRoot)
+    await FS.remove(FS.resolvePath('.tao/typescript/outputs.json', projectRoot))
+    await FS.remove(FS.resolvePath('.tao-ts', projectRoot))
     preview = await openStudioPreviewSession({
       appName: 'HNReaderStub',
       entryPath: FS.resolvePath('HNReader.tao', projectRoot),

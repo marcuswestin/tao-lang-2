@@ -9,7 +9,10 @@ import {
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
 
 const initialSource = `use Text from @tao/ui
-app AgentBrowser { id "agentbrowser" version "1.0.0" name "Agent Browser"
+app AgentBrowser {
+   id "agentbrowser"
+   version "1.0.0"
+   name "Agent Browser"
    view MainView
 }
 
