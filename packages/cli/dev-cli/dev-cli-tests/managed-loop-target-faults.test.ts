@@ -14,8 +14,7 @@ const peerUdid = '11111111-1111-1111-1111-111111111111'
 const ownedUdid = '22222222-2222-2222-2222-222222222222'
 
 async function fixture(unprovedShutdown = false) {
-  const temporary = await mkTestDir('managed-loop-target-faults-')
-  const root = FS.resolvePath(Platform.randomUUID(), temporary)
+  const root = Repo.resolvePath(`.artifacts/host-acceptance/managed-loops/${Platform.randomUUID()}`)
   await FS.mkdir(root)
   const registryRoot = FS.resolvePath('registry', root)
   const calls: string[][] = []
@@ -665,6 +664,10 @@ async function androidFixture(outputCloseRejected = false) {
         return real === undefined ? [] : [[pid, real] as const]
       })),
     descendants: () => [],
+    groupMembers: (pid: number) =>
+      pid === process.pid ? (alive ? [process] : []) : pid === deletionProcess.pid
+        ? (deleting ? [deletionProcess] : [])
+        : ProcessTree.groupMembers(pid),
     isGroupAlive: (pid: number) => pid === deletionProcess.pid ? deleting : alive,
     processGroupOf: (pid: number) => pid,
     signalTracked: (processes: readonly TrackedProcess[], signal: Platform.ProcessSignal) => {

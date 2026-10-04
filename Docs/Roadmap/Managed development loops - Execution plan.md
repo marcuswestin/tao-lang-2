@@ -18,6 +18,11 @@ review is clear; Darwin28, genuine orphan-group3 and lock96 source checks pass. 
 browser proof passes3/0 at `16-57-14-777Z-70546`, including previously failed cleanup. Full readiness
 verification must cover the final committed tree. None of this resumes deferred special acceptance.
 
+The next broad run passed the executed browser/native proofs and typecheck but exposed stale
+source-test fixtures. Named wrapper entry3, strict target-fault fixtures26, retained reservation3
+and synthetic native port leases6 now pass after fixture-only repairs; negative ownership and
+visibility guards remain. Repeat full verification before claiming readiness.
+
 The Developer requested a pause at a good stopping point to preserve effort and tokens for other
 work, and explicitly deferred all remaining managed-loop and isolated native acceptance until
 post-MVP. The subsequent instruction authorizes committing the completed implementation in chunks

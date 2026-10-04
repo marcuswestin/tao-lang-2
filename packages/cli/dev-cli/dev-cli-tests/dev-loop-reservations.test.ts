@@ -107,6 +107,8 @@ Test('managed iOS keeps a durable fence before boot and releases it only after v
 })
 
 Test('failed managed simulator boot keeps its durable generation quarantined', async () => {
+  const holder = ProcessTree.identities([Platform.runtimeProcess.pid]).get(Platform.runtimeProcess.pid)
+    ?? Errors.throwUnexpected('Expected the test process kernel identity.')
   let released = false
   const devices: AgentAppDevDevice[] = []
   const lease = {
@@ -115,6 +117,7 @@ Test('failed managed simulator boot keeps its durable generation quarantined', a
       released = true
     },
   }
+  const retainedOwner = { ...lease.owner, id: 'retained-generation' }
   const operations: AgentAppDevOperations = {
     acquireResource: async options =>
       options.name === 'tao-agent-simulator-pool' ? { ...lease, release: async () => {} } : lease,
@@ -122,7 +125,11 @@ Test('failed managed simulator boot keeps its durable generation quarantined', a
     onSignal: () => () => {},
     write: () => {},
     writeError: () => {},
-    retainResources: async () => ({ ...lease.owner, id: 'retained-generation' }),
+    retainResources: async options => {
+      Expect(options.owners).toEqual([lease.owner])
+      Expect(options.quarantined).toBe(true)
+      return retainedOwner
+    },
     run: async (_command, spec) => ({
       command: 'xcrun',
       args: [],
@@ -157,5 +164,7 @@ Test('failed managed simulator boot keeps its durable generation quarantined', a
     owned: true,
     state: 'retained',
     generation: 'retained-generation',
+    holder,
+    resources: [retainedOwner],
   })
 })
