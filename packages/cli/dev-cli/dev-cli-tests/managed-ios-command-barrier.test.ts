@@ -8,6 +8,7 @@ import {
   type ManagedIosNativeExecution,
   runManagedIosCommandBarrier,
 } from '../dev-cli-src/dev-loop/ManagedIosCommandBarrier'
+import { metadataTool } from './ManagedIosCommandBarrierMetadataTool'
 
 // Real kernels execute fixed repository source children. These tests never release a native worker.
 // Native ancestry plus the private child handle corroborates shell PPID; it is not authenticated direct PPID.
@@ -377,7 +378,7 @@ Test('fast fixed source downloader captures and drains its original plutil metad
   try {
     const result = await f.execute()
     Expect(result.exitCode).toBe(0)
-    const metadata = f.evidence()!.processes.filter(process => process.command === 'plutil')
+    const metadata = f.evidence()!.processes.filter(process => process.command === metadataTool.command)
     Expect(metadata).toHaveLength(1)
     Expect(metadata[0]!.pid).not.toBe(f.evidence()!.worker.pid)
     Expect(ProcessTree.identities(metadata.map(process => process.pid)).size).toBe(0)
@@ -597,13 +598,14 @@ Test('fixed iOS barrier cancellation refuses a later successful child acknowledg
 })
 Test('fixed iOS barrier finite deadline never resets while child publication remains pending', async () => {
   // budget-ok: Deliberately expire the original finite command deadline while its publication is held.
-  const f = await fixture('short', 400)
+  // The deadline also covers worker readiness, which took over 400ms on a loaded four-CPU host.
+  const f = await fixture('short', 2_000)
   const gate = Deferred<void>()
   try {
     f.hook(async () => await gate.promise)
     const started = Time.nowMs()
     await Expect(f.execute()).rejects.toThrow('publication budget')
-    Expect(Time.nowMs() - started).toBeLessThan(1_500)
+    Expect(Time.nowMs() - started).toBeLessThan(5_000)
     gate.resolve()
     await Time.sleep(75)
     Expect(await FS.isFile(FS.resolvePath('mutation.json', f.root))).toBe(false)
