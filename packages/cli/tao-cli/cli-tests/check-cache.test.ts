@@ -299,7 +299,7 @@ export function Main(_props: unknown) { return value.toUpperCase() ? null : null
     await withTaoFixture(
       {
         ...TWO_WORKSPACES,
-        'AppOne/Main.tao': 'use Column, Text from @tao/ui\n\nview MainView() {\n   render Column {\n   }\n}\n',
+        'AppOne/Main.tao': 'use Column, Text from @tao/ui\n\nview MainView() {\n   render Column(,) {\n   }\n}\n',
       },
       async rootDir => {
         const results = await runCheck(rootDir, { cache: { repositoryRoot: rootDir } })

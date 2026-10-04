@@ -4,8 +4,8 @@ Status: source implementation written. Release validation and acceptance are tra
 [the execution plan](../Roadmap/Plan%20-%20Tao%20projects%20modules%20and%20packages.md).
 
 The implemented package surface includes `@tao/text`, `@tao/time`, `@tao/linking`, and the curated
-`@tao/device/{haptic,clipboard,share}` capabilities, and requires parentheses on every view, action,
-and function declaration parameter list.
+`@tao/device/{haptic,clipboard,share}` capabilities. Zero-argument view declarations may omit `()`;
+argumentful views and every action/function declaration retain parentheses.
 
 `@tao/text` exports `CountWords(Value text)` and `Join(Values list of text, Separator text)`.
 `CountWords` trims and counts Unicode-whitespace-delimited words, returning zero for empty or

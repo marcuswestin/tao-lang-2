@@ -82,7 +82,7 @@ type FileStatement = Declaration | AccessDeclaration | PackageDeclaration | UseS
 type TopLevelStatement = Declaration | AccessDeclaration | PackageDeclaration | UseStatement | UsePackageStatement | TestDeclaration | ScenarioGroupDeclaration | GuardDefaultStatement;
 // View statements are the declarations and render sites accepted by view/layout bodies.
 ViewStatement returns Statement:
-    ParsedStatement | DeclarationSlotFill;
+    DeclarationSlotFill | ParsedStatement;
 type Statement = AppBlockDiagnosticStatement | ViewRender | RenderSlotUse | CallerContentStatement | CommandDeclaration | DeclarationSlotFill | ViewCommandExclusion | InteractionWordStep;
 type NamedDeclaration = Declaration | ParameterDeclaration | StateDeclaration | EntityQueryDeclaration | ForStatement | CasePayload | EntityDataField | CaseSetCase | AskStatement | ActionResultStatement | DesignColor;
 type MutableDeclaration = StateDeclaration | ParameterDeclaration;

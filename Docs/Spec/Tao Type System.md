@@ -66,7 +66,8 @@ An explicit annotation remains available as `let Name is Type = Value`. `Age Nam
 arbitrary type-headed value declarations are not part of this contract; only the named primitive
 value heads are privileged.
 
-Every `view`, `action`, and `function` declaration has a parenthesized parameter list, including
+An argumentful `view` declaration has a parenthesized parameter list; a zero-argument view may
+omit `()`. Action and function declarations retain a parenthesized parameter list, including
 `()` when empty. Product functions use statement blocks,
 explicit `return`, and an optional inferred return type:
 
@@ -124,8 +125,8 @@ implementation's responsibility.
 ### Owner-bound arguments
 
 Rendering, actions, functions, presentation, constructors, configured values, and data writes share
-one non-positional binder. Calls and presentation always delimit arguments with parentheses and use
-commas between multiple arguments:
+one non-positional binder. Argumentful calls and presentation delimit arguments with parentheses
+and use commas between multiple arguments:
 
 ```tao
 render Card(Title: "Inbox", Tone: "quiet") [fill, gap 8] {
@@ -152,9 +153,29 @@ slot (`Style FeedbackStyle?`) and a shorthand slot (`FeedbackStyle?`). It does n
 omittable by itself: use `Style FeedbackStyle? default none` when omission should supply `none`.
 An explicit value for that defaulted slot uses its label, such as `Play(Style: Soft)`.
 
-Empty calls use `()`. A render layout clause and child block follow the closing parenthesis and are
-never part of the argument list. The `render` keyword may be omitted only for child invocations
-inside a render block; parentheses remain mandatory.
+Zero-argument view renders may omit `()`; explicit empty calls remain valid. A render layout clause
+and child block follow the view name or argument list. The `render` keyword may be omitted for child
+invocations inside a render block. Actions, functions and presentation retain their call parentheses.
+Existing guard/when payload syntax retains priority: `loading -> Context { ... }` binds Context
+to the case payload. To render a view with children in that branch, write
+`loading -> { Handler { ... } }` or retain `Handler() { ... }` where that handler form is accepted.
+Removing those parentheses would change ownership; the bare-view shorthand does not override it.
+
+Quoted render entries use the standard-library `Text` view, including its layout and native text
+defaults. This shorthand works without importing `Text` and is unaffected by a local view named
+`Text`; an explicit `Text(...)` call resolves normally. Interpolations remain reactive. Both a
+quoted empty string and explicit `Text("")` retain a text node. Bare text-value placement is not
+part of this implementation slice.
+
+```tao
+view Greeting(Name text) {
+   render Col [gap 8] {
+      "Hello { Name }" [pad 4]
+      Spacer
+      Spacer()
+   }
+}
+```
 
 View references may be recursive directly or through other views. Resolution and validation do not
 reject the cycle or compare argument identity. The runtime counts generated view frames, accepts exactly
