@@ -7,7 +7,6 @@ import {
   StudioSessionManager,
 } from '@studio'
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
-import { activateSmokePreviews } from '../studio-tooling-src/StudioSmokePreviews'
 
 const initialSource = `use Text from @tao/ui
 app AgentBrowser {
@@ -137,7 +136,6 @@ Test('Studio agent streams, serializes turns, and refuses stale undo in Chrome',
     browser = await StudioCdp.launchChrome({ artifactRoot: artifactParent })
     await browser.setViewport(1_440, 900)
     await browser.goto(`${studio.url}/sessions/${encodeURIComponent(current.sessionId)}`)
-    await activateSmokePreviews(browser)
     try {
       await browser.waitFor(`document.querySelector('.chat-cloud:not(:disabled)') instanceof HTMLInputElement`, {
         timeoutMs: 30_000,
@@ -158,6 +156,13 @@ Test('Studio agent streams, serializes turns, and refuses stale undo in Chrome',
       .toBe('true')
     await browser.click('.studio-agent-collapse')
     await browser.waitFor(`document.querySelector('.studio-agent-panel')?.getAttribute('data-minimized') === 'false'`)
+    await browser.waitFor(`(() => {
+      const cloud = document.querySelector('.chat-cloud')
+      if (!(cloud instanceof HTMLInputElement) || cloud.disabled) return false
+      const rect = cloud.getBoundingClientRect()
+      return rect.width > 0 && rect.height > 0
+        && document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2) === cloud
+    })()`)
     await browser.click('.chat-cloud')
     await browser.waitFor(`document.querySelector('.chat-status')?.getAttribute('data-state') === 'on'`)
 

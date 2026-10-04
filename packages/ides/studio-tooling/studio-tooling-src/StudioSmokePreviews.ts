@@ -2,12 +2,15 @@ import { Errors } from '@shared'
 import type { StudioCdp } from './StudioCdp'
 
 /** Activates the listed cells a real-Metro smoke uses, through each cell's own toggle. */
-export async function activateSmokePreviews(browser: StudioCdp): Promise<void> {
+export async function activateSmokePreviews(browser: StudioCdp, requestedCellIds?: readonly string[]): Promise<void> {
   await browser.waitFor("document.querySelector('.studio-preview-activation-toggle') !== null")
-  const cellIds = await browser.evaluate<string[]>(
+  const availableCellIds = await browser.evaluate<string[]>(
     "[...document.querySelectorAll('.studio-preview-cell')].filter(cell => cell.querySelector('.studio-preview-activation-toggle')).map(cell => cell.dataset.taoStudioCell ?? cell.dataset.cellId)",
   )
-  for (const cellId of cellIds) {
+  for (const cellId of requestedCellIds ?? availableCellIds) {
+    if (!availableCellIds.includes(cellId)) {
+      Errors.throwHostEnvironment(`Missing Studio preview activation control for ${cellId}.`)
+    }
     const toggle =
       `[...document.querySelectorAll('.studio-preview-cell')].find(cell => (cell.dataset.taoStudioCell ?? cell.dataset.cellId) === ${
         JSON.stringify(cellId)

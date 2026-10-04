@@ -3,6 +3,7 @@ import { Expect, runCleanups, Test } from '@shared/test'
 import {
   openStudioPreviewSession,
   startStudioSessionServer,
+  StudioCanvasViewportStore,
   studioProtocolChannel,
   studioProtocolVersion,
   StudioSessionManager,
@@ -160,6 +161,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
     const current = manager.add({ previewUrl: preview.url, session })
     pendingShutdown.add('Studio server')
     studio = await startStudioSessionServer(manager, {
+      canvasViewportStore: new StudioCanvasViewportStore(FS.resolvePath('legacy-viewports', artifactRoot)),
       hostname: '127.0.0.1',
       port: smokePort('TAO_STUDIO_SMOKE_SERVER_PORT', 42_000),
     })
@@ -583,7 +585,6 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       )).toBe(true)
 
       await browser.goto(projectUrl)
-      await activateSmokePreviews(browser)
       await enterDrawPreset(browser)
       await browser.waitFor(
         `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch="${persistedSketch.id}"]`)})
@@ -659,7 +660,6 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       Expect(snappedCatalog.sketches[0]?.rectOrder).toEqual([persistedRect.id, ...playlistRectIds])
 
       await browser.goto(projectUrl)
-      await activateSmokePreviews(browser)
       await enterDrawPreset(browser)
       await browser.waitFor(
         `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`)})

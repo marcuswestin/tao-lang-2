@@ -22,6 +22,16 @@ and `verify-changed` across source, compiler, runtime, CLI, and app checks. The 
 and integration state are recorded in the task checkpoint.
 The landing integration with main `3bcd71647` retains bare render support and moves the incoming
 Syntax2 app's project identity and TypeScript base configuration to the decided store/cache layout.
+The first full host landing lane exposed obsolete smoke assumptions. The agent-panel smoke now
+keeps its intentional zero-preview setup and waits for its expanding cloud control to receive input;
+the network smoke selects the named cell without pressing its activation bolt; the simulated-user
+fixture installs its persisted session store and activates only previews its current journey uses.
+Their focused browser runs pass (21 assertions in 6.2s, 5 in 12.8s, and 102 in 29.7s), with an
+independent five-file review. The launch smoke still opens this worktree's live HNReader project:
+landing stopped without a push because the Developer's session owns it. Fixture isolation or an
+explicitly authorized session stop is required before the next landing attempt; the live session
+was preserved. [The launch-smoke ledger entry](<Developer environment upgrades/DEVENV-STUDIO-LAUNCH-SMOKE-USES-SHARED-PROJECT.md>)
+records that remaining workflow obstruction.
 Mutation checks caught deliberately removed activation serialization and callback rewiring. A real
 browser run exposed an empty session-save response; the endpoint now returns JSON, with a real HTTP
 regression. The corrected real-app Metro smoke passes all four journeys (run

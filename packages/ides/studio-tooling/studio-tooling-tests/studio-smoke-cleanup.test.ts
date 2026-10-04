@@ -1,6 +1,7 @@
 import { discoverProjectTaoFiles } from '@compiler/workspace'
 import { Assert, CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, runCleanups, Test, withCapturedOutput } from '@shared/test'
+import { StudioCanvasViewportStore } from '@studio'
 import { StudioMac2TestRun } from '../studio-tooling-src/StudioMac2TestRun'
 
 type SmokeEntry = 'studio-host-control' | 'studio-mac2-acceptance' | 'studio-simulated-user'
@@ -154,6 +155,7 @@ async function withSmokeEntry(
         return {}
       },
     },
+    StudioCanvasViewportStore,
     StudioSessionManager: class {
       add() {
         return { sessionId: 'fixture' }

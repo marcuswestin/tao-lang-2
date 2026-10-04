@@ -217,7 +217,7 @@ async function captureFailureDiagnostics(
 
 function cellFrameExpr(label: string): string {
   return `[...document.querySelectorAll('.studio-preview-cell')].find(frame =>
-    frame.querySelector('.studio-preview-cell-label')?.childNodes?.[0]?.textContent === ${JSON.stringify(label)})`
+    frame.dataset.taoReviewLabel === ${JSON.stringify(label)})`
 }
 
 async function cellIframeSrc(browser: StudioCdp, label: string): Promise<string> {
@@ -235,15 +235,16 @@ async function cellIframeSrc(browser: StudioCdp, label: string): Promise<string>
 async function focusCell(browser: StudioCdp, label: string): Promise<void> {
   const point = await browser.evaluate<{ x: number; y: number }>(`(() => {
     const frame = ${cellFrameExpr(label)}
-    const header = frame?.querySelector('.studio-preview-cell-label')
-    if (!(header instanceof HTMLElement)) throw new Error('Missing Studio preview cell header for ' + ${
+    const name = frame?.querySelector('.studio-preview-cell-label > span:not(.studio-preview-cell-details)')
+    if (!(name instanceof HTMLElement)) throw new Error('Missing Studio preview cell name for ' + ${
     JSON.stringify(label)
   })
-    header.scrollIntoView({ block: 'center', inline: 'center' })
-    const rect = header.getBoundingClientRect()
-    return { x: rect.left + Math.min(20, rect.width / 2), y: rect.top + rect.height / 2 }
+    name.scrollIntoView({ block: 'center', inline: 'center' })
+    const rect = name.getBoundingClientRect()
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
   })()`)
   await browser.clickAt(point)
+  await browser.waitFor(`(${cellFrameExpr(label)})?.getAttribute('aria-current') === 'true'`)
 }
 
 /**
@@ -283,11 +284,11 @@ type CellNetworkDraft = Readonly<{
 
 /**
  * Edits the currently focused cell's Network control (the one place Studio exposes latency, offline,
- * and declared-failure simulation, per `Docs/Spec/Tao Studio.md`) and applies it. `cellA` is the
- * default focused cell, so this file never needs to activate it explicitly except once, defensively,
- * after activating `cellB` for a write.
+ * and declared-failure simulation, per `Docs/Spec/Tao Studio.md`) and applies it. Focus the named
+ * cell explicitly because activating the previews can leave another cell focused.
  */
 async function applyCellNetwork(browser: StudioCdp, label: string, network: CellNetworkDraft): Promise<void> {
+  await focusCell(browser, label)
   const previousSrc = await cellIframeSrc(browser, label)
   const outcomeIndex = { error: 3, normal: 1, offline: 2 }[network.outcome]
   await browser.click(
