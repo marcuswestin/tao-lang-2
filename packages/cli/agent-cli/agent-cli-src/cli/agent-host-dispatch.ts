@@ -1,6 +1,7 @@
 import { CLI, FS, HCI, Platform } from '@shared'
 import { agentHostCommands, hostCommandKind, hostCommandPrefix } from '../agent-config/HostCommandPolicy'
 import { hostCommandTarget } from '../agent-config/HostCommandTargets'
+import { NOTIFICATION_SOUNDS } from '../attention/NotifyDeveloper'
 import { runAgentCommand } from '../runner/AgentRunner'
 
 const [sourcePath, ...argv] = Platform.runtimeProcess.argv.slice(2)
@@ -24,7 +25,9 @@ async function run(): Promise<number> {
   }
   const args = argv.slice(prefix.length)
   if (target.argsPolicy === 'notify' && !validNotifyArgs(args)) {
-    HCI.writeErrorLine('Usage: ./agent unsandboxed notify-developer [--id <id>] [--stop] | --help')
+    HCI.writeErrorLine(
+      'Usage: ./agent unsandboxed notify-developer [--shutdown-id <id>] [--sound <name>] [--flash-screen] [--stop] | --help',
+    )
     return 2
   }
   if (
@@ -112,15 +115,25 @@ function validNotifyArgs(args: readonly string[]): boolean {
   }
   let id = false
   let stop = false
+  let sound = false
+  let flash = false
   for (let index = 0; index < args.length; index++) {
     const arg = args[index]
     if (arg === '--stop' && !stop) {
       stop = true
-    } else if (arg === '--id' && !id) {
+    } else if (arg === '--shutdown-id' && !id) {
       if (!/^[A-Za-z0-9_][A-Za-z0-9_-]{0,127}$/u.test(args[++index] ?? '')) {
         return false
       }
       id = true
+    } else if (arg === '--sound' && !sound) {
+      const name = args[++index]
+      if (!NOTIFICATION_SOUNDS.some(candidate => candidate.toLowerCase() === name?.toLowerCase())) {
+        return false
+      }
+      sound = true
+    } else if (arg === '--flash-screen' && !flash) {
+      flash = true
     } else {
       return false
     }

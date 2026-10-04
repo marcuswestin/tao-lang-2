@@ -551,7 +551,7 @@ delegation-report *ARGS:
 model-audit *ARGS:
     ./dev model-audit {{ ARGS }}
 
-# Play an attention sound every five seconds until acknowledged with --stop; --id scopes an alert
+# Sound every four seconds and flash after 30 seconds; --flash-screen flashes immediately, --shutdown-id scopes --stop
 [group('Sessions')]
 notify-developer *ARGS:
     "{{ BUN }}" run packages/cli/agent-cli/agent-cli-src/cli/agent-notify-developer.ts {{ ARGS }}
