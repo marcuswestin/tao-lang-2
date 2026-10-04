@@ -144,6 +144,14 @@ its exact or nominal type identifies exactly one remaining slot; declaration or 
 breaks a tie. The validator reports unknown and duplicate labels, label/type-name collisions,
 same-type ambiguity, unmatched values, and missing required slots.
 
+Implicit nominal admission follows declared ancestry upward; it does not narrow a typed ancestor
+into a descendant or cross sibling branches. Parameters referencing an existing named type preserve
+that identity. After explicit labels and exact identities, the binder considers compatible assignments
+together and accepts only pairs present in every maximum matching. Ambiguous alternatives remain
+errors instead of depending on argument order. Repeated primitive roles require explicit owner labels
+when unlabelled values cannot distinguish them. Contextual construction of literals and declared field
+contracts remains separate from callable admission, including member writes and configured slots.
+
 Defaults may be omitted. A defaulted slot does not compete for an unlabeled value, so override it
 with its owner label. A required parameter cannot follow a defaulted one; a default must match its
 parameter type and may refer only to earlier parameters in the same declaration.

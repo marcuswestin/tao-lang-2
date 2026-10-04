@@ -345,6 +345,14 @@ verb it reaches through a plain `do`, transitively and cycle-safe, minus those a
 handles. A `when do` that names `rejected` handles every declared case. An `async` block is a boundary:
 it runs as its own root after the action returns, so nothing inside it joins the action's contract.
 
+Effective contracts retain known cases and a separate open remainder. Foreign, dynamic, bodyless or
+unresolved recursive calls can remain open; listing known cases does not prove completeness. Handling
+known cases preserves that remainder. In the current `when do` spelling, `otherwise`, or both
+`rejected` and `error`, covers it. Detached actions keep their own contracts. Raw foreign throws retain
+their original error provenance, while deliberately declared/provider failures follow `rejected`.
+Mandatory app-wide coverage and the selected future `then`, `done` and `fails` bounds are not yet
+implemented by this foundation.
+
 An unhandled failure stays silent at runtime, but the compiler warns at a root invocation whose effective
 contract is not covered: a view event handler (`on press Verb` or a `do` in `on press -> { … }`), an
 `on select` handler, a command's `do` clause, or a `do` directly inside an `async` block. The warning names the cases and points at `when do`; at a

@@ -18,6 +18,20 @@ contract with older spellings and a multi-kind declaration surface (`ui`, `frame
 `dialogue`); the unified view tranche collapsed those into `view`, and this document uses the
 current public `view`, `content`, and `@@content` names.
 
+Occurrence accessibility labels are implemented as contiguous prefixes before a concrete render:
+
+```tao
+#heading accessible label "Library"
+Banner("Library")
+```
+
+`a11y label` is accepted and formats as `accessible label`. Safe adjacent tag/label clusters format
+on one line with the tag first; grouping and comments remain intact. Labels can be reactive and
+attach only to the next render in the same block. Duplicate, dangling or misplaced labels fail
+validation. An explicit occurrence label overrides the root control's default accessible name while
+preserving its visible text, handlers and native root identity. Unsupported opaque/fragment roots
+fail explicitly. Declaration-level defaults and additional accessibility properties remain future work.
+
 ## Layout Introduction
 
 Styling and layout remain distinct typed concerns, but Tao combines both in one bracketed spec surface. Named specs may contain other named specs and may package layout and visual styling together.

@@ -15,6 +15,7 @@ view Banner(Heading text) {
 view Library {
    state GroupMode is boolean = false
    render Col {
+      #heading accessible label "Library"
       Banner("Library")
       Spacer
       Button("Group") {
