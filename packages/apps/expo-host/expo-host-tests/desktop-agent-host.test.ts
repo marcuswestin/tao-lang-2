@@ -97,12 +97,16 @@ Describe('packaged desktop agent host', () => {
   })
 
   HostTest('replaces a dead owner and reuses its persistent origin after shutdown', async fixture => {
-    const exited = await CLI.run(Platform.runtimeProcess.execPath, {
-      args: ['--eval', 'console.log(process.pid)'],
+    const exited = CLI.start(Platform.runtimeProcess.execPath, {
+      args: ['--eval', ''],
       stdio: 'pipe',
     })
-    Expect(exited.exitCode).toBe(0)
-    const ownerPid = Number(exited.stdout.trim())
+    const ownerPid = exited.pid ?? 0
+    try {
+      Expect((await exited.waitForClose()).exitCode).toBe(0)
+    } finally {
+      exited.dispose()
+    }
     Expect(ownerPid).toBeGreaterThan(0)
     Expect(Platform.processIsAlive(ownerPid)).toBe(false)
     await FS.writeJson(fixture.sessionPath, { pid: ownerPid, instanceId: 'dead-instance' })

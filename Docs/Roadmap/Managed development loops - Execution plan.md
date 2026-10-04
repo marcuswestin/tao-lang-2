@@ -42,6 +42,13 @@ no-execution readiness preview accepts the reviewed message and clean branch at 
 (`17-23-04-599Z-46425`); it changed no refs/worktrees and performed no push. A subsequent commit
 requires refreshing that message review. None of these partial broad runs is complete verification.
 
+The fourth readiness run stops at repository lint before costly lanes: inline child `console.log`
+is forbidden in the new fixtures. They now capture the PID directly from `CLI.start`, await its
+authoritative close and dispose the wrapper. Desktop8 and ship6 pass again at
+`17-31-36-651Z-64657-f957f050` and `17-31-37-648Z-64962-c09b4319`; repository lint and typecheck
+pass in the integrated check `17-31-34-815Z-64289-9d1bb9d7`. No output exception or production
+liveness policy was added. Full readiness remains unproved until a complete final-tree gate passes.
+
 The Developer requested a pause at a good stopping point to preserve effort and tokens for other
 work, and explicitly deferred all remaining managed-loop and isolated native acceptance until
 post-MVP. The subsequent instruction authorizes committing the completed implementation in chunks

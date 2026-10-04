@@ -302,12 +302,16 @@ Describe('tao ship cross-process transactions', () => {
 })
 
 async function exitedChildPid(): Promise<number> {
-  const exited = await CLI.run(Platform.runtimeProcess.execPath, {
-    args: ['--eval', 'console.log(process.pid)'],
+  const exited = CLI.start(Platform.runtimeProcess.execPath, {
+    args: ['--eval', ''],
     stdio: 'pipe',
   })
-  Expect(exited.exitCode).toBe(0)
-  const pid = Number(exited.stdout.trim())
+  const pid = exited.pid ?? 0
+  try {
+    Expect((await exited.waitForClose()).exitCode).toBe(0)
+  } finally {
+    exited.dispose()
+  }
   Expect(pid).toBeGreaterThan(0)
   Expect(Platform.processIsAlive(pid)).toBe(false)
   return pid
