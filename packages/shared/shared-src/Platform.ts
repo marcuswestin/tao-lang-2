@@ -445,6 +445,10 @@ export const runtimeProcess = {
   get pid(): number {
     return process.pid
   },
+  /** The user id on POSIX hosts, or undefined where the platform has none. */
+  get uid(): number | undefined {
+    return process.getuid?.()
+  },
   exit(exitCode?: number | string | null): never {
     process.exit(exitCode)
     throwUnexpected(`process.exit(${exitCode ?? 0}) returned unexpectedly.`)
