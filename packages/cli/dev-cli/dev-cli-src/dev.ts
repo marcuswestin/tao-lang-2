@@ -411,7 +411,7 @@ await runWithCommands(commands => {
             gates,
             greenTree: options.greenTree === undefined || options.greenTree.length === 0
               ? undefined
-              : { lanes: options.greenTree, noCache: options.cache === false },
+              : { lanes: options.greenTree, noCache: options.cache === false, sharedRoot: GreenTree.sharedRoot() },
             hostPlatform: Platform.hostPlatform,
             jobs: parseOptionalPositiveInteger(options.jobs, '--jobs'),
             jsonPath: options.json,

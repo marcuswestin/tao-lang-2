@@ -84,6 +84,12 @@ export type RunGatesOptions = {
     /** Injected by tests; defaults to hashing the generator-owned ignored inputs and outputs. */
     captureGenerated?: GeneratedEvidenceCapture
     lanes: readonly string[]
+    /**
+     * The store per-gate records are also read from and published to, so a gate proved in another
+     * checkout or on another machine at this exact tree is not run again. Absent, records stay in
+     * this checkout; the CLI passes `GreenTree.sharedRoot()`.
+     */
+    sharedRoot?: string
   }
   jobs?: number
   /** Path to write an extra stable copy of the JSON summary to, for the lane's known-path readers. */
@@ -244,7 +250,10 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   const unstable = await unstableSuites(location.repositoryRoot, testPlan?.states ?? [])
   const proved = !readsGreenTree || startingKey === undefined
     ? { excluded: [] as readonly string[], proved: new Map<string, GreenTreeRecord>() }
-    : await GreenTree.findGates(location.repositoryRoot, startingKey, recordable, { excluded: unstable })
+    : await GreenTree.findGates(location.repositoryRoot, startingKey, recordable, {
+      excluded: unstable,
+      sharedRoot: options.greenTree?.sharedRoot,
+    })
 
   const gatesToRun = recipeGates.filter(name => !proved.proved.has(name))
   const testStates = (testPlan?.states ?? []).filter(state => !proved.proved.has(state.suite))
@@ -519,6 +528,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
       lanes: options.greenTree.lanes,
       location,
       provedCount: proved.proved.size,
+      sharedRoot: options.greenTree.sharedRoot,
       startingTree,
       suiteOf: name => suiteOfNode.get(name),
       states,
@@ -639,6 +649,8 @@ async function recordGreen(options: {
   /** How many nodes this run skipped on an earlier proof, which the tree it leaves must still match. */
   provedCount: number
   startingTree?: TreeFingerprint
+  /** The shared store gate records are published to as well, when the lane reads one. */
+  sharedRoot?: string
   /** The suite a node reports under, so a suite is recorded rather than its shards. */
   suiteOf: (name: string) => string | undefined
   states: readonly WorkState[]
@@ -673,6 +685,7 @@ async function recordGreen(options: {
       neverRecord: new Set(
         options.states.filter(state => !GateCatalog.isRecordable(state.name)).map(state => state.name),
       ),
+      sharedRoot: options.sharedRoot,
     },
   )
 }
