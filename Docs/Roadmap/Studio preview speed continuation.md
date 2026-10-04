@@ -86,6 +86,19 @@ reproduce or explain the reported roughly two-second HNReader delay. That requir
 save/compile/HMR trace, distinguishing visual padding from the actual queued work.
 Raw timelines are retained under `.artifacts/tests/studio-smoke/preview-latency/refresh-indicator-*.json`.
 
+A follow-up copied-HNReader feed diagnostic (`refresh-indicator-hnreader-phone-20261004`) exercised
+the shipping app's phone scenario with five cells activated. Both modes passed eight editor saves,
+zero iframe reloads and no `RevisionNotFoundError`. All 16 edits painted with the badge shown;
+publication-on sent four following draft requests while the preceding badge was still shown.
+Warm save-to-paint ranged from 619ms to 1079ms. The first publication-off save took 3620ms,
+including 3169ms awaiting the Studio draft response, before Metro's update started at 3335ms.
+These are contention-affected diagnostic timings: observed load was 18.54–23.70 on 18 CPUs, and
+the workflow board reported three lanes elsewhere. They are not a comparison against the baseline.
+The first badge hide or removal after each paint occurred within 223ms; this run still does not
+reproduce a two-second post-paint linger. A quiet HNReader compile-queue trace remains the next
+diagnostic. The initial two attempts selected the stub app, which excludes the shipping app's phone
+scenario; those attempts failed before edits and are excluded. Only copied authored inputs were edited.
+
 Historical handoff state:
 
 1. The branch carries Next slice steps 1–4 (`709a58700`, `b49ea2df3`, `e36cdd8df`, `25369076f`),
