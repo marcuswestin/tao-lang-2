@@ -293,7 +293,7 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
     )
 
     const movedSource = await FS.readText(sourcePath)
-    await replaceEditorSource(browser, 'view Broken( {\n')
+    await replaceEditorSource(browser, 'view Broken( {\n', { requireInsertedSource: true })
     await waitForStudioStatus(browser, 'error')
     Expect(await FS.readText(sourcePath)).toBe(movedSource)
     await waitForPreview(
@@ -583,10 +583,23 @@ async function waitForStudioStatus(browser: StudioCdp, expected: string): Promis
   }
 }
 
-async function replaceEditorSource(browser: StudioCdp, source: string): Promise<void> {
-  await browser.click('.cm-content')
+async function replaceEditorSource(
+  browser: StudioCdp,
+  source: string,
+  options: { requireInsertedSource?: boolean } = {},
+): Promise<void> {
+  await browser.clickAtOffset('.studio-editor .cm-scroller', { x: 120, y: 60 })
+  await browser.waitFor("document.querySelector('.cm-content')?.contains(document.activeElement) === true")
   await browser.pressShortcut('a')
   await browser.insertText(source)
+  if (options.requireInsertedSource === true) {
+    const inserted = await browser.evaluate<string>("document.querySelector('.cm-content')?.textContent ?? ''")
+    if (inserted.trim() !== source.trim()) {
+      Errors.throwHostEnvironment(
+        `Studio editor did not contain the invalid draft before save: ${JSON.stringify(inserted)}`,
+      )
+    }
+  }
   await browser.pressShortcut('s')
 }
 
