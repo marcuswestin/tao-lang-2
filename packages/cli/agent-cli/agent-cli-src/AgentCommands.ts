@@ -39,6 +39,7 @@ export const JUST_COMMANDS = [
   'merge-main',
   'model-audit',
   'native-module-check',
+  'notify-developer',
   // Pushes the branch, opens or reuses its pull request, and stays attached to stream the checks a
   // newly opened one starts —
   // the one command both the Developer and an agent run to get GitHub's own CI signal without a

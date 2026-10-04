@@ -551,6 +551,11 @@ delegation-report *ARGS:
 model-audit *ARGS:
     ./dev model-audit {{ ARGS }}
 
+# Play an attention sound every five seconds until acknowledged with --stop; --id scopes an alert
+[group('Sessions')]
+notify-developer *ARGS:
+    "{{ BUN }}" run packages/cli/agent-cli/agent-cli-src/cli/agent-notify-developer.ts {{ ARGS }}
+
 # Measure what a simplification pass targets: size, dispatch chains, allowlists, instructions, docs
 [group('Report')]
 simplify-audit *ARGS:

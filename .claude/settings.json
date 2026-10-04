@@ -82,6 +82,8 @@
   "sandbox": {
     "enabled": true,
     "excludedCommands": [
+      "./agent unsandboxed notify-developer",
+      "./agent unsandboxed notify-developer *",
       "./agent unsandboxed land",
       "./agent unsandboxed land *",
       "./agent unsandboxed finalize",
@@ -291,6 +293,8 @@
       "mcp__Claude_Browser__*",
       "mcp__Claude_Code_iOS_Simulator__*",
       "mcp__claude-in-chrome__*",
+      "Bash(./agent unsandboxed notify-developer)",
+      "Bash(./agent unsandboxed notify-developer *)",
       "Bash(./agent unsandboxed land)",
       "Bash(./agent unsandboxed land *)",
       "Bash(./agent unsandboxed finalize)",

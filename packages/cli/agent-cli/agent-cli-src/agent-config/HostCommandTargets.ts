@@ -1,5 +1,5 @@
 export type HostCommandTarget = {
-  argsPolicy?: 'none' | 'pid' | 'standalone-vm' | 'studio-list' | 'studio-stop'
+  argsPolicy?: 'none' | 'notify' | 'pid' | 'standalone-vm' | 'studio-list' | 'studio-stop'
   command: string
   /** Environment the tool needs whatever shell dispatches it, merged over the inherited one. */
   env?: Readonly<Record<string, string>>
@@ -15,6 +15,7 @@ const UTF8_LOCALE = { LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' } as const
 
 /** Implementations for named host operations. Permissions still come solely from agentHostCommands. */
 export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> = {
+  'notify-developer': { command: 'just', fixedArgs: ['notify-developer'], argsPolicy: 'notify' },
   'merge-recover': { command: './dev', fixedArgs: ['merge-recover'] },
   // Keep read-only reclaim sandboxed; only its guarded removal action needs host filesystem access.
   'reclaim --execute': { command: './dev', fixedArgs: ['reclaim', '--execute'], argsPolicy: 'none' },

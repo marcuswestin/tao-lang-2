@@ -11,6 +11,7 @@ import { hostCommandKind } from '../agent-cli-src/agent-config/HostCommandPolicy
 import { HOST_COMMAND_TARGETS, hostCommandTarget } from '../agent-cli-src/agent-config/HostCommandTargets'
 
 const expected = [
+  'notify-developer',
   'land',
   'finalize',
   'merge-main',
@@ -99,7 +100,8 @@ Describe('agent host command permissions', () => {
     Expect(hostCommandKind(['prepare-release'], prefixes)).toBeUndefined()
     Expect(hostCommandKind(['reclaim', '--execute'], prefixes)).toBe('named')
     Expect(hostCommandKind(['reclaim', '--report-json'], prefixes)).toBeUndefined()
-    Expect(Object.keys(HOST_COMMAND_TARGETS)).toEqual(['merge-recover', ...expected.slice(13)])
+    Expect(hostCommandKind(['notify-developer', '--id', 'question'], prefixes)).toBe('named')
+    Expect(Object.keys(HOST_COMMAND_TARGETS)).toEqual(['notify-developer', 'merge-recover', ...expected.slice(14)])
     const rules = CodexConfigGenerator.renderRules(source)
     const settings = JSON.parse(await FS.readText(Repo.resolvePath('.claude/settings.json'))) as {
       permissions: { allow: string[] }

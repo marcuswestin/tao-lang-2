@@ -1,6 +1,7 @@
 import { CLI, FS, HCI, Platform } from '@shared'
 import { agentHostCommands, hostCommandKind, hostCommandPrefix } from '../agent-config/HostCommandPolicy'
 import { hostCommandTarget } from '../agent-config/HostCommandTargets'
+import { runAgentCommand } from '../runner/AgentRunner'
 
 const [sourcePath, ...argv] = Platform.runtimeProcess.argv.slice(2)
 
@@ -22,6 +23,10 @@ async function run(): Promise<number> {
     return 2
   }
   const args = argv.slice(prefix.length)
+  if (target.argsPolicy === 'notify' && !validNotifyArgs(args)) {
+    HCI.writeErrorLine('Usage: ./agent unsandboxed notify-developer [--id <id>] [--stop] | --help')
+    return 2
+  }
   if (
     (target.argsPolicy === 'studio-list' || target.argsPolicy === 'studio-stop')
     && !validStudioArgs(args, target.argsPolicy === 'studio-stop')
@@ -63,6 +68,16 @@ async function run(): Promise<number> {
     }
     return await openSimulator(args[0])
   }
+  // The attention loop must end when its tool session is cancelled. The workflow runner forwards
+  // parent signals to the owned process tree; a raw server-policy CLI.run would leave it sounding.
+  if (target.argsPolicy === 'notify') {
+    return await runAgentCommand({
+      args: [],
+      command: 'notify-developer',
+      spawnArgs: [...target.fixedArgs, ...args],
+      spawnCommand: target.command,
+    })
+  }
   let cwd: string | undefined
   let forwardedArgs = args
   if (prefix.join(' ') === 'pods install') {
@@ -88,6 +103,29 @@ async function run(): Promise<number> {
     HCI.writeErrorLine(`FAIL  ${prefix.join(' ')}: ${result.error.message}`)
   }
   return result.exitCode ?? 1
+}
+
+/** Attention alerts accept only safe IDs and acknowledgement, never arbitrary shell arguments. */
+function validNotifyArgs(args: readonly string[]): boolean {
+  if (args.length === 1 && ['--help', '-h'].includes(args[0]!)) {
+    return true
+  }
+  let id = false
+  let stop = false
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index]
+    if (arg === '--stop' && !stop) {
+      stop = true
+    } else if (arg === '--id' && !id) {
+      if (!/^[A-Za-z0-9_][A-Za-z0-9_-]{0,127}$/u.test(args[++index] ?? '')) {
+        return false
+      }
+      id = true
+    } else {
+      return false
+    }
+  }
+  return true
 }
 
 /** Lifecycle commands select recorded launches, never arbitrary processes or roots. */
