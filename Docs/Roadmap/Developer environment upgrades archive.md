@@ -92,6 +92,7 @@ hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 - [DEVENV-GUEST-AGENT-AUDIT-PRIVACY — Guest agent audit privacy](<Developer environment upgrades/Archive/DEVENV-GUEST-AGENT-AUDIT-PRIVACY.md>) — Resolved
 - [DEVENV-HOST-TEST-ARTIFACTS-ACCUMULATE-WITHOUT-BOUND — Host-test artifacts accumulate without bound](<Developer environment upgrades/Archive/DEVENV-HOST-TEST-ARTIFACTS-ACCUMULATE-WITHOUT-BOUND.md>) — Resolved
 - [DEVENV-IDLE-RESET-FIXTURE-ASSUMES-SLEEP-CADENCE — Idle-reset fixture assumes sleep cadence](<Developer environment upgrades/Archive/DEVENV-IDLE-RESET-FIXTURE-ASSUMES-SLEEP-CADENCE.md>) — Resolved
+- [DEVENV-INSTALLED-EDITOR-PROBE-STALLS-BEFORE-STARTUP — Installed editor probe stalls before startup](<Developer environment upgrades/Archive/DEVENV-INSTALLED-EDITOR-PROBE-STALLS-BEFORE-STARTUP.md>) — Resolved
 - [DEVENV-JEST-CACHE-IDENTITIES-AND-DIRECT-RUNS-GROW-WITHOUT-BOUND — Jest cache identities and direct runs grow without bound](<Developer environment upgrades/Archive/DEVENV-JEST-CACHE-IDENTITIES-AND-DIRECT-RUNS-GROW-WITHOUT-BOUND.md>) — Resolved
 - [DEVENV-JEST-TRANSFORM-CACHE-GROWS-WITHOUT-BOUND — Jest's transform cache grows without bound](<Developer environment upgrades/Archive/DEVENV-JEST-TRANSFORM-CACHE-GROWS-WITHOUT-BOUND.md>) — Resolved
 - [DEVENV-LANDING-PREFLIGHT-MISSES-HUTCH-LAUNCHER — Landing preflight misses the native Hutch launcher](<Developer environment upgrades/Archive/DEVENV-LANDING-PREFLIGHT-MISSES-HUTCH-LAUNCHER.md>) — Resolved
