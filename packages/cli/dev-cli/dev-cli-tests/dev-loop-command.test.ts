@@ -1,13 +1,387 @@
-import { FS, Http, Platform, Repo } from '@shared'
+import { MachineResources } from '@host-control'
+import { Errors, FS, Http, Platform, Repo } from '@shared'
 import { ProcessTree } from '@shared/ProcessTree'
-import { Deferred, Expect, Test, withCapturedOutput } from '@shared/test'
+import { Deferred, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import { acknowledgeDevLoopController, runDevLoopCommand } from '../dev-cli-src/dev-loop/DevLoopCommand'
 import {
   devLoopDirectory,
   type DevLoopReceipt,
+  readDevLoopReceipt,
   writeDevLoopConnection,
   writeDevLoopReceipt,
 } from '../dev-cli-src/dev-loop/DevLoopStore'
+
+type RecoveryOperations = NonNullable<Parameters<typeof runDevLoopCommand>[1]>['recovery']
+
+function disposedFailure(state: 'failed' | 'cleanup-failed' = 'failed'): DevLoopReceipt {
+  const stamp = new Date().toISOString()
+  return {
+    version: 1,
+    session: Platform.randomUUID(),
+    checkout: FS.realPathSync(Repo.getRoot()),
+    args: [],
+    generation: Platform.randomUUID(),
+    state,
+    provenance: 'complete',
+    createdAt: stamp,
+    updatedAt: stamp,
+    children: [],
+    controller: { command: 'old controller', pid: 987, startedAt: 'old-start' },
+    controllerDisposed: true,
+    failures: ['Intentional compile failure'],
+    cleanupOutcome: 'unknown',
+    message: 'Intentional compile failure',
+  }
+}
+
+function deadRecovery(): NonNullable<RecoveryOperations> {
+  return {
+    identities: () => new Map(),
+    descendants: () => [],
+    signal: () => {},
+    sleep: async () => {},
+    now: () => 0,
+    processIsAlive: () => false,
+    groupMembers: () => [],
+    isGroupAlive: () => false,
+  }
+}
+
+async function stopDisposed(
+  record: DevLoopReceipt,
+  recovery: RecoveryOperations,
+  beforeRecovery?: () => Promise<void>,
+) {
+  return await withCapturedOutput(() =>
+    runDevLoopCommand(['stop', '--session', record.session, '--json'], {
+      status: () => readDevLoopReceipt(record.session),
+      launchController: async () => Errors.throwUnexpected('Stop must not launch a controller.'),
+      recovery,
+      beforeRecovery,
+    })
+  )
+}
+
+for (const state of ['failed', 'cleanup-failed'] as const) {
+  Test(`stop recovers a disposed ${state} controller only under the recovery lock and preserves failures`, async () => {
+    const record = disposedFailure(state)
+    await writeDevLoopReceipt(record)
+    await writeDevLoopConnection({
+      session: record.session,
+      generation: record.generation,
+      controller: record.controller,
+      origin: 'http://127.0.0.1:1',
+      token: 'private-fixture-token',
+    })
+    let enteredRecovery = 0
+    try {
+      const recovery = deadRecovery()
+      recovery.identities = () => {
+        Expect(enteredRecovery).toBe(1)
+        Expect(FS.existsSync(FS.resolvePath('recovery.lock.tao-file-mutation.lock', devLoopDirectory(record.session))))
+          .toBe(true)
+        return new Map()
+      }
+      const result = await stopDisposed(record, recovery, async () => {
+        enteredRecovery += 1
+      })
+      Expect(result.result).toBe(0)
+      const saved = await readDevLoopReceipt(record.session)
+      Expect(saved.state).toBe('stopped')
+      Expect(saved.cleanupOutcome).toBe('proved')
+      Expect(saved.controllerDisposed).toBe(true)
+      Expect(saved.generation).toBe(record.generation)
+      Expect(saved.failures).toEqual(['Intentional compile failure'])
+      Expect(await FS.exists(FS.resolvePath('active-control', devLoopDirectory(record.session)))).toBe(false)
+    } finally {
+      await FS.remove(devLoopDirectory(record.session))
+    }
+  })
+}
+
+for (
+  const evidence of [
+    'live-controller',
+    'unknown-controller',
+    'controller-pid-reuse',
+    'unavailable-probe',
+    'uncertain-tree',
+    'unknown-group',
+    'retained-driver',
+    'changed-device-fence',
+    'proved-device-fence',
+  ] as const
+) {
+  Test(`disposed failure stop respects ${evidence} and cannot release unproved device fences`, async () => {
+    const record = disposedFailure('cleanup-failed')
+    const owner = {
+      name: 'ios-simulator:FIXTURE',
+      id: 'retained-owner',
+      pid: record.controller!.pid,
+      processStartedAt: record.controller!.startedAt,
+      repositoryRoot: record.checkout,
+      command: 'retained simulator',
+      startedAt: '',
+    }
+    record.processGroups = [{ command: 'old group', pid: 654, startedAt: 'group-start' }]
+    record.devices = [{
+      platform: 'ios',
+      id: 'FIXTURE',
+      owned: true,
+      state: 'retained',
+      generation: owner.id,
+      holder: record.controller,
+      resources: [owner],
+    }]
+    if (evidence === 'uncertain-tree') {
+      record.provenance = 'uncertain'
+    }
+    if (evidence === 'retained-driver') {
+      record.mobileDriverCleanup = 'retained'
+    }
+    const mutations: string[] = []
+    const recovery = deadRecovery()
+    if (evidence === 'live-controller') {
+      recovery.identities = () => new Map([[987, record.controller!]])
+    }
+    if (evidence === 'unknown-controller') {
+      recovery.processIsAlive = () => true
+    }
+    if (evidence === 'controller-pid-reuse') {
+      recovery.identities = () => new Map([[987, { ...record.controller!, startedAt: 'reused-start' }]])
+    }
+    if (evidence === 'unavailable-probe') {
+      recovery.processIsAlive = () => Errors.throwHostEnvironment('Kernel absence probe unavailable')
+    }
+    if (evidence === 'unknown-group') {
+      recovery.groupMembers = () => Errors.throwHostEnvironment('Group inspection unavailable')
+    }
+    recovery.signal = processes => {
+      if (processes.length > 0) {
+        mutations.push('signal')
+      }
+    }
+    recovery.readOwner = async () => evidence === 'changed-device-fence' ? { ...owner, id: 'new-owner' } : owner
+    recovery.recoverResources = async options => {
+      mutations.push('recover-fence')
+      Expect(await options.shutdown(owner)).toBe(true)
+    }
+    recovery.run = async (command, spec) => {
+      mutations.push(spec!.args!.includes('shutdown') ? 'shutdown' : 'confirm-shutdown')
+      return {
+        command,
+        args: [...spec!.args!],
+        exitCode: 0,
+        signal: null,
+        stderr: '',
+        stdout: JSON.stringify({ devices: { ios: [{ udid: 'FIXTURE', state: 'Shutdown' }] } }),
+      }
+    }
+    await writeDevLoopReceipt(record)
+    await writeDevLoopConnection({
+      session: record.session,
+      generation: record.generation,
+      controller: record.controller,
+      origin: 'http://127.0.0.1:1',
+      token: 'private-fixture-token',
+    })
+    try {
+      const result = await stopDisposed(record, recovery)
+      const saved = await readDevLoopReceipt(record.session)
+      const proved = evidence === 'proved-device-fence'
+      Expect(result.result).toBe(proved ? 0 : 1)
+      if (!proved) {
+        const error = JSON.parse(result.stdout).error as string
+        Expect(error).toContain(
+          evidence === 'unavailable-probe'
+            ? 'Kernel absence probe unavailable'
+            : ['live-controller', 'unknown-controller', 'controller-pid-reuse'].includes(evidence)
+            ? 'controller absence is unproved'
+            : 'cleanup remains unproved',
+        )
+      }
+      Expect(saved.state).toBe(proved ? 'stopped' : 'cleanup-failed')
+      Expect(saved.failures).toContain('Intentional compile failure')
+      Expect(saved.devices![0]!.state).toBe(proved ? 'released' : 'retained')
+      Expect(mutations).toEqual(proved ? ['recover-fence', 'shutdown', 'confirm-shutdown'] : [])
+      Expect(await FS.exists(FS.resolvePath('active-control', devLoopDirectory(record.session)))).toBe(!proved)
+    } finally {
+      await FS.remove(devLoopDirectory(record.session))
+    }
+  })
+}
+
+Test('a late controller absence failure preserves the failed receipt and private credentials', async () => {
+  const record = disposedFailure()
+  await writeDevLoopReceipt(record)
+  await writeDevLoopConnection({
+    session: record.session,
+    generation: record.generation,
+    controller: record.controller,
+    origin: 'http://127.0.0.1:1',
+    token: 'private-fixture-token',
+  })
+  const recovery = deadRecovery()
+  let absenceProbes = 0
+  recovery.processIsAlive = () => {
+    absenceProbes += 1
+    if (absenceProbes === 2) {
+      Errors.throwHostEnvironment('Private cleanup absence probe unavailable')
+    }
+    return false
+  }
+  try {
+    const result = await stopDisposed(record, recovery)
+    Expect(result.result).toBe(1)
+    Expect(JSON.parse(result.stdout).error).toContain('Private cleanup absence probe unavailable')
+    Expect(absenceProbes).toBe(2)
+    const saved = await readDevLoopReceipt(record.session)
+    Expect(saved.state).toBe('failed')
+    Expect(saved.cleanupOutcome).toBe('unknown')
+    Expect(saved.failures).toEqual(['Intentional compile failure'])
+    Expect(saved.generation).toBe(record.generation)
+    Expect(await FS.exists(FS.resolvePath('active-control', devLoopDirectory(record.session)))).toBe(true)
+  } finally {
+    await FS.remove(devLoopDirectory(record.session))
+  }
+})
+
+Test('stop recovery cannot overwrite a generation rotated while process exit was being proved', async () => {
+  const record = disposedFailure()
+  const child = { command: 'recorded child', pid: 123, startedAt: 'child-start' }
+  record.children = [child]
+  const replacement = { ...record, generation: Platform.randomUUID(), state: 'starting' as const }
+  let childAlive = true
+  const recovery = deadRecovery()
+  recovery.identities = pids => new Map(childAlive && pids.includes(child.pid) ? [[child.pid, child]] : [])
+  recovery.sleep = async () => {
+    await writeDevLoopReceipt(replacement)
+    childAlive = false
+  }
+  await writeDevLoopReceipt(record)
+  await writeDevLoopConnection({
+    session: record.session,
+    generation: record.generation,
+    controller: record.controller,
+    origin: 'http://127.0.0.1:1',
+    token: 'private-fixture-token',
+  })
+  try {
+    const result = await stopDisposed(record, recovery)
+    Expect(result.result).toBe(1)
+    Expect(JSON.parse(result.stdout).error).toContain('owner changed during stop recovery')
+    const saved = await readDevLoopReceipt(record.session)
+    Expect(saved.generation).toBe(replacement.generation)
+    Expect(saved.state).toBe('starting')
+    Expect(saved.failures).toEqual(['Intentional compile failure'])
+    Expect(await FS.exists(FS.resolvePath('active-control', devLoopDirectory(record.session)))).toBe(true)
+  } finally {
+    await FS.remove(devLoopDirectory(record.session))
+  }
+})
+
+Test(
+  'stop preserves a released target fence through late private failure and retries without touching its next owner',
+  async () => {
+    const record = disposedFailure()
+    const registryRoot = await mkTestDir('disposed-stop-fence')
+    const name = 'ios-simulator:FIXTURE'
+    let replacement: Awaited<ReturnType<typeof MachineResources.acquire>> | undefined
+    try {
+      const lease = await MachineResources.acquire({
+        name,
+        registryRoot,
+        repositoryRoot: record.checkout,
+        command: 'fixture simulator',
+      })
+      const owner = await MachineResources.retain({
+        owners: [lease.owner],
+        processes: [record.controller!],
+        registryRoot,
+        quarantined: false,
+        reason: 'Fixture interrupted shutdown',
+      })
+      record.processGroups = [{ command: 'old group', pid: 654, startedAt: 'group-start' }]
+      record.devices = [{
+        platform: 'ios',
+        id: 'FIXTURE',
+        owned: true,
+        state: 'retained',
+        generation: owner.id,
+        holder: record.controller,
+        resources: [owner],
+      }]
+      await writeDevLoopReceipt(record)
+      await writeDevLoopConnection({
+        session: record.session,
+        generation: record.generation,
+        controller: record.controller,
+        origin: 'http://127.0.0.1:1',
+        token: 'private-fixture-token',
+      })
+      const recovery = deadRecovery()
+      const effects: string[] = []
+      let absenceProbes = 0
+      recovery.processIsAlive = () => {
+        absenceProbes += 1
+        if (absenceProbes === 2) {
+          Errors.throwHostEnvironment('Late private absence unavailable')
+        }
+        return false
+      }
+      recovery.readOwner = options => MachineResources.readOwner({ ...options, registryRoot })
+      recovery.recoverResources = async options => {
+        effects.push('release-fence')
+        await MachineResources.recoverRetained({ ...options, registryRoot })
+      }
+      recovery.run = async (command, spec) => {
+        effects.push(spec!.args!.includes('shutdown') ? 'shutdown' : 'confirm-shutdown')
+        return {
+          command,
+          args: [...spec!.args!],
+          exitCode: 0,
+          signal: null,
+          stderr: '',
+          stdout: JSON.stringify({ devices: { ios: [{ udid: 'FIXTURE', state: 'Shutdown' }] } }),
+        }
+      }
+      const failed = await stopDisposed(record, recovery)
+      Expect(failed.result).toBe(1)
+      Expect(JSON.parse(failed.stdout).error).toContain('Late private absence unavailable')
+      Expect(await MachineResources.readOwner({ name, registryRoot })).toBeUndefined()
+      const intermediate = await readDevLoopReceipt(record.session)
+      Expect(intermediate.state).toBe('failed')
+      Expect(intermediate.cleanupOutcome).toBe('unknown')
+      Expect(intermediate.devices![0]!.state).toBe('released')
+      Expect(intermediate.failures).toEqual(['Intentional compile failure'])
+      Expect(intermediate.generation).toBe(record.generation)
+      Expect(await FS.exists(FS.resolvePath('active-control', devLoopDirectory(record.session)))).toBe(true)
+
+      replacement = await MachineResources.acquire({
+        name,
+        registryRoot,
+        repositoryRoot: record.checkout,
+        command: 'next simulator owner',
+      })
+      Expect(replacement.owner.id).not.toBe(owner.id)
+      recovery.processIsAlive = () => false
+      const retried = await stopDisposed(intermediate, recovery)
+      Expect(retried.result).toBe(0)
+      const stopped = await readDevLoopReceipt(record.session)
+      Expect(stopped.state).toBe('stopped')
+      Expect(stopped.cleanupOutcome).toBe('proved')
+      Expect(stopped.devices![0]!.state).toBe('released')
+      Expect(stopped.failures).toEqual(['Intentional compile failure'])
+      Expect((await MachineResources.readOwner({ name, registryRoot }))?.id).toBe(replacement.owner.id)
+      Expect(effects).toEqual(['release-fence', 'shutdown', 'confirm-shutdown'])
+      Expect(await FS.exists(FS.resolvePath('active-control', devLoopDirectory(record.session)))).toBe(false)
+    } finally {
+      await replacement?.release()
+      await FS.remove(registryRoot)
+      await FS.remove(devLoopDirectory(record.session))
+    }
+  },
+)
 
 for (const controllerDiesDuringStatus of [false, true]) {
   Test(
@@ -30,6 +404,7 @@ for (const controllerDiesDuringStatus of [false, true]) {
         controller: controllerDiesDuringStatus
           ? ProcessTree.identities([Platform.runtimeProcess.pid]).get(Platform.runtimeProcess.pid)
           : undefined,
+        controllerDisposed: controllerDiesDuringStatus ? undefined : true,
       }
       const session = current.session
       await writeDevLoopReceipt(current)
@@ -84,7 +459,7 @@ for (const controllerDiesDuringStatus of [false, true]) {
           const first = runDevLoopCommand(['restart', '--session', session, '--json'], operations)
           if (controllerDiesDuringStatus) {
             await initialStatus.promise
-            current = { ...current, controller: undefined }
+            current = { ...current, controller: undefined, controllerDisposed: true }
             await writeDevLoopReceipt(current)
             controllerDied.resolve()
           }
@@ -199,7 +574,7 @@ Test(
       const result = await acknowledgeDevLoopController(record.session, { exitCode: null }, {
         readConnection: async () => {
           await writeDevLoopReceipt(terminal)
-          throw new Error('The private endpoint already disposed')
+          Errors.throwHostEnvironment('The private endpoint already disposed')
         },
       })
       Expect(result.session).toBe(record.session)

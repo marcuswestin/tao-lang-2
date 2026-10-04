@@ -35,8 +35,10 @@ Test('Android recovery stops captured survivors and releases both fences after p
       registryRoot: root,
       // budget-ok: immediate synthetic process transitions, no host shutdown latency.
       shutdownTimeoutMs: 10,
+      readManagedCustody: async () => ({ kind: 'none' }),
       processTree: {
         descendants: () => [],
+        groupMembers: () => [],
         identities: () => identities,
         processGroupOf: pid => pid,
         isGroupAlive: () => groupAlive,
@@ -100,8 +102,10 @@ Test('Android recovery never signals a reused PID and refuses quarantine or an u
         registryRoot: root,
         // budget-ok: synthetic unknown-group timeout, with no real emulator or host shutdown.
         shutdownTimeoutMs: 10,
+        readManagedCustody: async () => ({ kind: 'none' }),
         processTree: {
           descendants: () => [],
+          groupMembers: () => [],
           identities: () => new Map([[current.pid, current]]),
           isGroupAlive: () => mode === 'unknown-group',
           processGroupOf: pid => pid,
@@ -113,9 +117,7 @@ Test('Android recovery never signals a reused PID and refuses quarantine or an u
         },
       }
       const recovery = AndroidRecovery.recover(name, retained.id, operations)
-      if (mode === 'reused-pid') {
-        await recovery
-      } else {
+      {
         await Expect(recovery).rejects.toBeInstanceOf(Errors.HostEnvironmentError)
         await Expect(MachineResources.acquire({
           command: 'contender',
@@ -131,3 +133,74 @@ Test('Android recovery never signals a reused PID and refuses quarantine or an u
     }
   }
 })
+
+for (const evidence of ['unknown-member', 'unreadable-member', 'inspection-error'] as const) {
+  Test(`standalone Android ${evidence} refusal remains permanent after group disappearance`, async () => {
+    const registryRoot = await mkTestDir('android-permanent-custody-')
+    try {
+      const names = ['android-avd:SOURCE', 'android-emulator:emulator-5586']
+      const leases = await Promise.all(names.map(name =>
+        MachineResources.acquire({
+          name,
+          command: 'source fixture',
+          registryRoot,
+          repositoryRoot: registryRoot,
+        })
+      ))
+      const process = { command: 'captured emulator', pid: 2 ** 29, startedAt: 'captured-kernel' }
+      const known = await MachineResources.retain({
+        owners: leases.map(lease => lease.owner),
+        processes: [process],
+        processGroupPid: process.pid,
+        quarantined: false,
+        reason: 'known pending closure',
+        registryRoot,
+      })
+      let unknown = true
+      const signals: string[] = []
+      const operations: AndroidRecoveryOperations = {
+        registryRoot,
+        readManagedCustody: async () => ({ kind: 'none' }),
+        processIsAlive: pid => unknown && evidence === 'unreadable-member' && pid === process.pid,
+        processTree: {
+          identities: () => new Map(),
+          descendants: () => [],
+          processGroupOf: pid => pid,
+          groupMembers: () => {
+            if (!unknown) {
+              return []
+            }
+            if (evidence === 'inspection-error') {
+              return Errors.throwHostEnvironment('source group inspection denied')
+            }
+            return [{ command: 'unknown group child', pid: 2 ** 29 + 1, startedAt: 'unknown-kernel' }]
+          },
+          isGroupAlive: () => unknown,
+          signalTracked: (_processes, signal) => {
+            signals.push(signal)
+          },
+        },
+      }
+      await Expect(AndroidRecovery.recover('SOURCE', known.id, operations)).rejects.toThrow(
+        'permanently retains unknown ownership',
+      )
+      const sealed = await MachineResources.readOwner({ name: names[0]!, registryRoot })
+      Expect(sealed?.id).not.toBe(known.id)
+      Expect(sealed?.retention?.ownershipRefusal?.reason).toContain(
+        evidence === 'inspection-error'
+          ? 'source group inspection denied'
+          : evidence === 'unreadable-member'
+          ? 'unreadable surviving identity'
+          : 'unrecorded member',
+      )
+      unknown = false
+      await Expect(AndroidRecovery.recover('SOURCE', sealed!.id, operations)).rejects.toThrow(
+        'permanent ownership refusal',
+      )
+      Expect(signals).toEqual([])
+      Expect((await MachineResources.readOwner({ name: names[1]!, registryRoot }))?.id).toBe(sealed?.id)
+    } finally {
+      await FS.remove(registryRoot)
+    }
+  })
+}

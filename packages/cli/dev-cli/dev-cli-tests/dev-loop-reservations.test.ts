@@ -1,10 +1,34 @@
-import { CLI, Errors } from '@shared'
+import { CLI, Errors, Platform } from '@shared'
+import { ProcessTree } from '@shared/ProcessTree'
 import { Deferred, Expect, Test, until } from '@shared/test'
 import {
   type AgentAppDevDevice,
   type AgentAppDevOperations,
+  appDevReservation,
   runAgentAppDev,
 } from '../dev-cli-src/simulators/AgentAppDev'
+
+Test('managed reservation refuses a stale kernel identity even while its registry generation matches', async () => {
+  const identity = ProcessTree.identities([Platform.runtimeProcess.pid]).get(Platform.runtimeProcess.pid)
+    ?? Errors.throwUnexpected('Expected the test process kernel identity.')
+  const owner = {
+    id: 'retained',
+    name: 'android-emulator:emulator-5554',
+    pid: identity.pid,
+    processStartedAt: identity.startedAt,
+    command: 'test',
+    repositoryRoot: '.',
+    startedAt: '',
+  }
+  await appDevReservation('android', 'emulator-5554', [owner], async () => owner).assertCurrent()
+  const stale = { ...owner, processStartedAt: `${identity.startedAt}-previous` }
+  await Expect(
+    appDevReservation('android', 'emulator-5554', [stale], async () => stale).assertCurrent(),
+  ).rejects.toThrow('lost its process identity')
+  await Expect(
+    appDevReservation('android', 'emulator-5554', [owner], async () => ({ ...owner, id: 'rotated' })).assertCurrent(),
+  ).rejects.toThrow('changed ownership')
+})
 
 Test('managed iOS keeps a durable fence before boot and releases it only after verified shutdown', async () => {
   let state = 'Shutdown'

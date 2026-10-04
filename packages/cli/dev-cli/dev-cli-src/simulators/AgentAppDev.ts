@@ -1,8 +1,14 @@
 import { type MachineResourceOwner, MachineResources } from '@host-control'
 import { CLI, Errors, HCI, Platform, Repo } from '@shared'
+import { ProcessTree, type TrackedProcess } from '@shared/ProcessTree'
 import { MachineLanes, type MachineResourceLease } from '@verification/MachineLanes'
 import { UiVisibility } from '@verification/UiVisibility'
-import { type AgentAndroidReservation, reserveAndroidEmulator } from './AgentAndroidEmulator'
+import type { PrivateIosPreparation, PrivateIosSelection } from '../dev-loop/ManagedLoopAcceptanceIosRuntime'
+import {
+  type AgentAndroidOperations,
+  type AgentAndroidReservation,
+  reserveAndroidEmulator,
+} from './AgentAndroidEmulator'
 
 type Simulator = {
   deviceTypeIdentifier?: string
@@ -25,6 +31,14 @@ export type AgentAppDevOperations = {
   writeError: (message: string) => void
   retainResources?: typeof MachineResources.retain
   recoverResources?: typeof MachineResources.recoverRetained
+  readResourceOwner?: typeof MachineResources.readOwner
+  /** Invocation-owned host fixtures select a private pool and reserve its launch identity. */
+  avdPrefix?: AgentAndroidOperations['avdPrefix']
+  launchReservation?: AgentAndroidOperations['launchReservation']
+  withCurrentOwners?: typeof MachineResources.withCurrentOwners
+  /** Fixed host fixtures mint isolated devices; normal selection keeps its existing fallback. */
+  privateIos?: PrivateIosSelection
+  prepareOwnedIosRuntime?: (input: PrivateIosPreparation) => Promise<void>
 }
 
 const liveOperations: AgentAppDevOperations = {
@@ -43,14 +57,75 @@ export type AgentAppDevDevice = {
   owned: boolean
   state: 'reserved' | 'booted' | 'released' | 'retained'
   generation?: string
+  avdName?: string
+  consolePort?: number
+  resources?: readonly MachineResourceOwner[]
+  holder?: TrackedProcess
 }
+
+/** Assertion-only view; the reservation holder remains the sole release owner. */
+export type AgentAppDevReservation = Readonly<{
+  platform: 'ios' | 'android'
+  id: string
+  resources: readonly MachineResourceOwner[]
+  assertCurrent: () => Promise<void>
+}>
+
+export function appDevReservation(
+  platform: AgentAppDevReservation['platform'],
+  id: string,
+  resources: readonly MachineResourceOwner[],
+  readOwner: typeof MachineResources.readOwner = MachineResources.readOwner,
+): AgentAppDevReservation {
+  const snapshot = structuredClone(resources).map(owner => Object.freeze(owner))
+  return Object.freeze({
+    platform,
+    id,
+    resources: Object.freeze(snapshot),
+    assertCurrent: async () => {
+      for (const expected of snapshot) {
+        const current = await readOwner({ name: expected.name })
+        if (
+          current?.id !== expected.id || current.pid !== expected.pid
+          || current.processStartedAt !== expected.processStartedAt
+          || current.repositoryRoot !== expected.repositoryRoot
+        ) {
+          Errors.throwHostEnvironment(`Managed target resource '${expected.name}' changed ownership.`)
+        }
+        if (
+          expected.processStartedAt !== undefined
+          && ProcessTree.identities([expected.pid]).get(expected.pid)?.startedAt !== expected.processStartedAt
+        ) {
+          Errors.throwHostEnvironment(`Managed target resource '${expected.name}' lost its process identity.`)
+        }
+      }
+    },
+  })
+}
+
+/** A gated supervisor and worker captured before the worker may dispatch native input. */
+export type ManagedChildCapture = Readonly<{
+  version: 1
+  root: TrackedProcess
+  members: readonly TrackedProcess[]
+}>
 
 type ManagedAppDev = {
   childEnv: Platform.ProcessEnv
-  onChild: (child: CLI.StartedCommand) => Promise<void>
+  onChild: (child: CLI.StartedCommand, capture?: ManagedChildCapture) => Promise<void>
   shouldStop: () => boolean
   onOutput: NonNullable<CLI.CommandSpec['onOutput']>
   onDevice?: (device: AgentAppDevDevice) => Promise<void>
+  onReservation?: (reservation: AgentAppDevReservation) => Promise<void>
+  /** The owned Android producer supplies this authority separately from assertion-only reservations. */
+  onAndroidOwnershipRefresh?: (refresh: () => Promise<void>) => Promise<void>
+  beforeTargetCleanup?: () => Promise<void>
+}
+
+function reportAppDevSecondaryFailure(operations: Pick<AgentAppDevOperations, 'writeError'>, message: string): void {
+  try {
+    void Promise.resolve(operations.writeError(message)).catch(() => {})
+  } catch { /* Output failure must not bypass retention or replace the primary lifecycle failure. */ }
 }
 
 /** Agent app-dev owns its device reservations for the lifetime of its dev loop. */
@@ -109,7 +184,9 @@ export async function runAgentAppDev(
     operations.writeError(`WARNING: ${warning}`)
   }
   let androidSelected: AgentAndroidReservation | undefined
+  let borrowedAndroidDevice: AgentAppDevDevice | undefined
   let child: CLI.StartedCommand | undefined
+  let preparationRefusal: Errors.HostEnvironmentError | undefined
   const removeSignals = (['SIGHUP', 'SIGINT', 'SIGTERM'] as const).map(signal =>
     operations.onSignal(signal, () => child?.kill(signal === 'SIGHUP' ? 'SIGTERM' : signal))
   )
@@ -121,16 +198,32 @@ export async function runAgentAppDev(
     if (managed?.shouldStop()) {
       return 0
     }
-    androidSelected = android ? await reserveAndroidEmulator(operations, requestedSerial, androidVisible) : undefined
+    androidSelected = android
+      ? await reserveAndroidEmulator(
+        operations,
+        requestedSerial,
+        androidVisible,
+        managed === undefined ? undefined : async device => {
+          if (!device.owned) {
+            borrowedAndroidDevice = structuredClone(device)
+          }
+          await managed?.onDevice?.(device)
+          if (device.state === 'booted' && device.resources !== undefined) {
+            await managed?.onReservation?.(
+              appDevReservation('android', device.id, device.resources, operations.readResourceOwner),
+            )
+          }
+        },
+        managed?.shouldStop,
+      )
+      : undefined
     if (androidSelected !== undefined && managed !== undefined) {
-      const owner = await MachineResources.readOwner({ name: `android-avd:${androidSelected.avdName}` })
-      await managed?.onDevice?.({
-        platform: 'android',
-        id: androidSelected.serial,
-        owned: androidSelected.autoStarted,
-        state: 'booted',
-        generation: owner?.retention === undefined ? undefined : owner.id,
-      })
+      if (androidSelected.refreshOwnership !== undefined) {
+        await managed.onAndroidOwnershipRefresh?.(androidSelected.refreshOwnership)
+      }
+      await managed?.onReservation?.(
+        appDevReservation('android', androidSelected.serial, androidSelected.resources(), operations.readResourceOwner),
+      )
     }
     if (managed?.shouldStop()) {
       return 0
@@ -141,6 +234,32 @@ export async function runAgentAppDev(
           iosVisible ? 'viewer requested' : 'no viewer opened'
         }.`,
       )
+      if (
+        operations.privateIos !== undefined && selected.autoSelected && selected.bootedHere
+        && operations.prepareOwnedIosRuntime !== undefined
+      ) {
+        try {
+          await operations.prepareOwnedIosRuntime({
+            device: selected.device,
+            reservation: appDevReservation(
+              'ios',
+              selected.simulator.udid,
+              [selected.retained ?? selected.lease.owner],
+              operations.readResourceOwner,
+            ),
+            shouldStop: managed?.shouldStop ?? (() => false),
+            onChild: managed?.onChild,
+          })
+        } catch (error) {
+          if (error instanceof Errors.HostEnvironmentError && error.details?.['retainsTargetLease'] === true) {
+            preparationRefusal = error
+          }
+          throw error
+        }
+        if (managed?.shouldStop()) {
+          return 0
+        }
+      }
     }
     child = operations.start(Repo.resolvePath('tao'), {
       args: ['dev', ...forwarded],
@@ -157,6 +276,7 @@ export async function runAgentAppDev(
         ...managed?.childEnv,
       },
       processPolicy: 'server',
+      detached: managed !== undefined,
       stdio: managed === undefined ? 'inherit' : 'pipe',
       onOutput: managed?.onOutput,
     })
@@ -171,17 +291,34 @@ export async function runAgentAppDev(
       remove()
     }
     try {
+      await managed?.beforeTargetCleanup?.()
       await androidSelected?.release()
-      if (androidSelected !== undefined) {
+      if (androidSelected !== undefined && !androidSelected.autoStarted && managed !== undefined) {
+        if (
+          borrowedAndroidDevice === undefined || borrowedAndroidDevice.id !== androidSelected.serial
+          || borrowedAndroidDevice.avdName !== androidSelected.avdName || borrowedAndroidDevice.owned
+        ) {
+          Errors.throwUnexpected('Expected the exact selected borrowed Android reservation publication.')
+        }
         await managed?.onDevice?.({
-          platform: 'android',
-          id: androidSelected.serial,
-          owned: androidSelected.autoStarted,
+          ...borrowedAndroidDevice,
           state: 'released',
         })
       }
     } finally {
+      if (selected !== undefined && preparationRefusal) {
+        try {
+          await managed?.onDevice?.({ ...selected.device, state: 'retained' })
+        } catch (publicationError) {
+          reportAppDevSecondaryFailure(
+            operations,
+            `Additional iOS retained publication failure: ${Errors.formatForUser(publicationError).slice(0, 2048)}`,
+          )
+        }
+        throw preparationRefusal
+      }
       if (selected !== undefined) {
+        await managed?.beforeTargetCleanup?.()
         let shutdownProved = true
         try {
           if (selected.autoSelected && selected.bootedHere) {
@@ -190,7 +327,8 @@ export async function runAgentAppDev(
             })
             if (shutdown.exitCode !== 0 || shutdown.error !== undefined) {
               shutdownProved = false
-              operations.writeError(
+              reportAppDevSecondaryFailure(
+                operations,
                 `Could not shut down owned simulator ${selected.simulator.udid}: ${
                   shutdown.stderr.trim() || shutdown.error?.message || 'unknown error'
                 }`,
@@ -202,7 +340,7 @@ export async function runAgentAppDev(
           }
         } catch (error) {
           shutdownProved = false
-          operations.writeError(Errors.formatForUser(error))
+          reportAppDevSecondaryFailure(operations, Errors.formatForUser(error))
         } finally {
           if (shutdownProved) {
             if (selected.retained !== undefined) {
@@ -215,27 +353,31 @@ export async function runAgentAppDev(
               await selected.lease.release()
             }
             await managed?.onDevice?.({
-              platform: 'ios',
-              id: selected.simulator.udid,
-              owned: selected.autoSelected && selected.bootedHere,
+              ...selected.device,
               state: 'released',
             })
           } else {
             if (selected.retained === undefined) {
-              await (operations.retainResources ?? MachineResources.retain)({
+              selected.retained = await (operations.retainResources ?? MachineResources.retain)({
                 owners: [selected.lease.owner],
                 processes: [],
                 quarantined: true,
                 reason: `Shutdown of owned simulator ${selected.simulator.udid} was not proved.`,
               })
             }
-            await managed?.onDevice?.({
-              platform: 'ios',
-              id: selected.simulator.udid,
-              owned: true,
-              state: 'retained',
-              generation: selected.retained?.id,
-            })
+            try {
+              await managed?.onDevice?.({
+                ...selected.device,
+                state: 'retained',
+                generation: selected.retained.id,
+                resources: [selected.retained],
+              })
+            } catch (publicationError) {
+              reportAppDevSecondaryFailure(
+                operations,
+                `Additional iOS retained publication failure: ${Errors.formatForUser(publicationError).slice(0, 2048)}`,
+              )
+            }
           }
         }
         if (!shutdownProved) {
@@ -258,10 +400,13 @@ async function reserveSimulator(
   autoSelected: boolean
   simulator: Simulator
   retained?: MachineResourceOwner
+  device: AgentAppDevDevice
 }> {
   const pool = await operations.acquireResource({
     command: 'agent app-dev simulator selection',
-    name: 'tao-agent-simulator-pool',
+    name: operations.privateIos === undefined
+      ? 'tao-agent-simulator-pool'
+      : `tao-agent-simulator-pool:${operations.privateIos.namePrefix}`,
     repositoryRoot: Repo.getRoot(),
     waitTimeoutMs: 60_000,
   })
@@ -269,6 +414,61 @@ async function reserveSimulator(
     const devices = await listSimulators(operations)
     if (devices.length === 0) {
       Errors.throwHostEnvironment('No available iOS simulator or iOS runtime was found.')
+    }
+    if (operations.privateIos !== undefined && requestedUdid === undefined) {
+      const privateIos = operations.privateIos
+      if (!/^Tao Managed [0-9a-f-]{36}_[0-9a-f-]{36}_$/iu.test(privateIos.namePrefix)) {
+        Errors.throwHostEnvironment('Private iOS selection requires its fixed invocation prefix.')
+      }
+      const reuse = await privateIos.reuse?.()
+      if (reuse !== undefined) {
+        const simulator = devices.find(device =>
+          device.udid === reuse.id && device.name === reuse.name
+          && device.runtime === reuse.runtime && device.deviceTypeIdentifier === reuse.type
+          && device.state === 'Shutdown'
+        )
+        if (simulator === undefined) {
+          Errors.throwHostEnvironment('Private iOS reuse lost exact minted shutdown proof.')
+        }
+        const lease = await operations.acquireResource({
+          name: `ios-simulator:${reuse.id}`,
+          command: 'private iOS restart',
+          repositoryRoot: Repo.getRoot(),
+          waitTimeoutMs: 0,
+        })
+        return await bootReservedSimulator(operations, simulator, lease, true, managed)
+      }
+      if (devices.some(device => device.name.startsWith(privateIos.namePrefix))) {
+        Errors.throwHostEnvironment('Private iOS selection refuses preexisting names; no name-only adoption.')
+      }
+      const template = devices.find(device =>
+        device.name.includes('iPhone') && device.deviceTypeIdentifier !== undefined
+      )
+      if (template?.deviceTypeIdentifier === undefined) {
+        Errors.throwHostEnvironment('Private iOS selection requires an available iPhone runtime/type.')
+      }
+      const intent = {
+        name: `${privateIos.namePrefix}1`,
+        type: template.deviceTypeIdentifier,
+        runtime: template.runtime,
+      }
+      await privateIos.beforeCreate(intent)
+      const created = await operations.run('xcrun', {
+        args: ['simctl', 'create', intent.name, intent.type, intent.runtime],
+      })
+      if (created.exitCode !== 0 || created.error !== undefined) {
+        Errors.throwHostEnvironment('Private iOS creation did not complete successfully.')
+      }
+      const id = created.stdout.trim()
+      await privateIos.afterCreate({ ...intent, id })
+      const simulator = { ...template, name: intent.name, udid: id, state: 'Shutdown' }
+      const lease = await operations.acquireResource({
+        name: `ios-simulator:${id}`,
+        command: 'private iOS app-dev',
+        repositoryRoot: Repo.getRoot(),
+        waitTimeoutMs: 0,
+      })
+      return await bootReservedSimulator(operations, simulator, lease, true, managed)
     }
     if (requestedUdid !== undefined) {
       const simulator = devices.find(device => device.udid === requestedUdid)
@@ -364,48 +564,58 @@ async function bootReservedSimulator(
   managed?: ManagedAppDev,
 ) {
   let retained: MachineResourceOwner | undefined
+  let reservedDevice: AgentAppDevDevice | undefined
   try {
     const bootedHere = simulator.state !== 'Booted'
-    if (managed !== undefined && autoSelected && bootedHere) {
+    if (managed !== undefined) {
       retained = await (operations.retainResources ?? MachineResources.retain)({
         owners: [lease.owner],
         processes: [],
         quarantined: true,
-        reason: `Owned simulator ${simulator.udid} requires verified shutdown before release.`,
+        reason: `Managed simulator ${simulator.udid} requires verified driver cleanup${
+          autoSelected && bootedHere ? ' and shutdown' : ''
+        } before release.`,
       })
     }
-    await managed?.onDevice?.({
+    reservedDevice = {
       platform: 'ios',
       id: simulator.udid,
       owned: autoSelected && bootedHere,
       state: 'reserved',
       generation: retained?.id,
-    })
+      resources: [retained ?? lease.owner],
+      holder: ProcessTree.identities([Platform.runtimeProcess.pid]).get(Platform.runtimeProcess.pid),
+    }
+    await managed?.onDevice?.(structuredClone(reservedDevice))
     if (bootedHere) {
       const boot = await operations.run('xcrun', { args: ['simctl', 'boot', simulator.udid] })
       if (boot.exitCode !== 0 || boot.error !== undefined) {
         Errors.throwHostEnvironment(`Could not boot ${simulator.name}: ${boot.stderr.trim() || boot.error?.message}`)
       }
     }
-    await managed?.onDevice?.({
-      platform: 'ios',
-      id: simulator.udid,
-      owned: autoSelected && bootedHere,
+    const device: AgentAppDevDevice = {
+      ...reservedDevice,
       state: 'booted',
-      generation: retained?.id,
-    })
-    return { autoSelected, bootedHere, lease, simulator, retained }
+    }
+    await managed?.onDevice?.(structuredClone(device))
+    await managed?.onReservation?.(
+      appDevReservation('ios', simulator.udid, [retained ?? lease.owner], operations.readResourceOwner),
+    )
+    return { autoSelected, bootedHere, lease, simulator, retained, device }
   } catch (error) {
     if (retained === undefined) {
       await lease.release()
     } else {
-      await managed?.onDevice?.({
-        platform: 'ios',
-        id: simulator.udid,
-        owned: true,
-        state: 'retained',
-        generation: retained.id,
-      })
+      try {
+        if (reservedDevice !== undefined) {
+          await managed?.onDevice?.({ ...reservedDevice, state: 'retained' })
+        }
+      } catch (publicationError) {
+        reportAppDevSecondaryFailure(
+          operations,
+          `Additional iOS retained publication failure: ${Errors.formatForUser(publicationError).slice(0, 2048)}`,
+        )
+      }
     }
     throw error
   }

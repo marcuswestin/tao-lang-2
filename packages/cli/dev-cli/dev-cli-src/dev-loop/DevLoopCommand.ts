@@ -17,6 +17,7 @@ type DevLoopCommandOperations = {
   launchController: typeof launchController
   status: typeof statusOf
   beforeRecovery?: () => Promise<void>
+  recovery?: Parameters<typeof recoverDevLoopProcesses>[1]
 }
 
 export async function runDevLoopCommand(
@@ -293,6 +294,38 @@ async function controlSession(
     )
   }
   const receipt = await operations.status(session)
+  const recoverStopped = async () => {
+    const recovered = await recoverDevLoopProcesses(receipt, operations.recovery)
+    const saved = await readDevLoopReceipt(session)
+    if (
+      saved.generation !== receipt.generation
+      || !ProcessTree.sameProcess(saved.controller, receipt.controller!)
+    ) {
+      Errors.throwHostEnvironment('The dev-loop owner changed during stop recovery; its current records are preserved.')
+    }
+    if (recovered.state !== 'stopped') {
+      await writeDevLoopReceipt(recovered)
+      Errors.throwHostEnvironment(recovered.message!)
+    }
+    // Target fences may already be released. Keep those proved facts retryable if private cleanup
+    // fails, while the session remains unsuccessful until every cleanup proof has completed.
+    await writeDevLoopReceipt({
+      ...recovered,
+      state: receipt.state === 'failed' ? 'failed' : 'cleanup-failed',
+      cleanupOutcome: 'unknown',
+      message: receipt.message ?? 'Private control cleanup remains unproved.',
+    })
+    const disposed = await disposeDeadDevLoopConnection(
+      recovered,
+      operations.recovery?.identities,
+      operations.recovery?.processIsAlive,
+    )
+    await writeDevLoopReceipt(disposed)
+    if (disposed.state !== 'stopped') {
+      Errors.throwHostEnvironment(disposed.message!)
+    }
+    return disposed
+  }
   if (receipt.state === 'stopped') {
     const current = receipt.controller === undefined
       ? undefined
@@ -305,14 +338,7 @@ async function controlSession(
         if (!recoveryLocked) {
           return await recover()
         }
-        const recovered = await recoverDevLoopProcesses(receipt)
-        await writeDevLoopReceipt(recovered)
-        const disposed = recovered.state === 'stopped' ? await disposeDeadDevLoopConnection(recovered) : recovered
-        await writeDevLoopReceipt(disposed)
-        if (disposed.state !== 'stopped') {
-          Errors.throwHostEnvironment(disposed.message!)
-        }
-        return disposed
+        return await recoverStopped()
       }
     }
     if (action !== 'stop' && !receipt.controllerDisposed && ProcessTree.sameProcess(current, receipt.controller!)) {
@@ -347,25 +373,15 @@ async function controlSession(
       return await operations.launchController(restarting)
     }
   }
-  if (receipt.controllerDisposed) {
+  if (receipt.controllerDisposed && action !== 'stop') {
     Errors.throwHostEnvironment(receipt.message ?? 'The dev-loop worker ended without proved cleanup.')
   }
-  if (receipt.state === 'interrupted' || receipt.controller === undefined) {
+  if (receipt.controllerDisposed || receipt.state === 'interrupted' || receipt.controller === undefined) {
     if (!recoveryLocked) {
       return await recover()
     }
     if (action === 'stop') {
-      const recovered = await recoverDevLoopProcesses(receipt)
-      await writeDevLoopReceipt(recovered)
-      if (recovered.state === 'stopped') {
-        const disposed = await disposeDeadDevLoopConnection(recovered)
-        await writeDevLoopReceipt(disposed)
-        if (disposed.state === 'stopped') {
-          return disposed
-        }
-        Errors.throwHostEnvironment(disposed.message!)
-      }
-      Errors.throwHostEnvironment(recovered.message!)
+      return await recoverStopped()
     }
     Errors.throwHostEnvironment(
       'The controller is unavailable; process and device cleanup must be verified before recovery.',

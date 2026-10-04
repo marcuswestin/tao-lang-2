@@ -1,10 +1,13 @@
 import { type MachineResourceOwner, MachineResources } from '@host-control'
 import { CLI, Errors, Platform, ProcessTree, Time, type TrackedProcess } from '@shared'
+import { readManagedAndroidRecoveryCustody } from '../dev-loop/DevLoopStore'
 
-type ProcessOperations = Pick<
-  typeof ProcessTree,
-  'descendants' | 'identities' | 'isGroupAlive' | 'processGroupOf' | 'signalTracked'
->
+type ProcessOperations =
+  & Pick<
+    typeof ProcessTree,
+    'descendants' | 'identities' | 'isGroupAlive' | 'processGroupOf' | 'signalTracked'
+  >
+  & Partial<Pick<typeof ProcessTree, 'groupMembers'>>
 
 export type AndroidRecoveryOperations = {
   processTree?: ProcessOperations
@@ -12,6 +15,9 @@ export type AndroidRecoveryOperations = {
   shutdownTimeoutMs?: number
   retainResources?: typeof MachineResources.retain
   recoverResources?: typeof MachineResources.recoverRetained
+  readOwner?: typeof MachineResources.readOwner
+  readManagedCustody?: typeof readManagedAndroidRecoveryCustody
+  processIsAlive?: (pid: number) => boolean
 }
 
 type Capture = {
@@ -170,6 +176,7 @@ async function stop(
     serial?: string
     started: CLI.StartedCommand
     writeError: (message: string) => void
+    onRetained?: (owner: MachineResourceOwner) => Promise<void>
   },
 ): Promise<boolean> {
   const state = capture(options.started, options, options.capture)
@@ -248,6 +255,7 @@ async function stop(
       quarantined ? 'quarantined' : 'retained'
     }. Recovery generation: ${retained.id}. Run ./agent unsandboxed android recover --avd ${options.avdName} --generation ${retained.id}.`,
   )
+  await options.onRetained?.(retained)
   return false
 }
 
@@ -259,7 +267,10 @@ async function recover(avdName: string, generation: string, operations: AndroidR
     registryRoot: operations.registryRoot,
     shutdown: async owner => {
       const retention = owner.retention
-      if (retention === undefined || retention.quarantined || retention.processes.length === 0) {
+      if (
+        retention === undefined || retention.ownershipRefusal !== undefined || retention.quarantined
+        || retention.processes.length === 0
+      ) {
         Errors.throwHostEnvironment(
           `Android emulator ${avdName} generation ${generation} is quarantined: ${
             retention?.reason ?? 'missing process identity'
@@ -268,26 +279,132 @@ async function recover(avdName: string, generation: string, operations: AndroidR
             + 'Run ./agent unsandboxed processes list to investigate surviving descendants; retain these fences until their shutdown is proved.',
         )
       }
+      const custody = await (operations.readManagedCustody ?? readManagedAndroidRecoveryCustody)(owner)
+      if (custody.kind === 'refused' || custody.kind === 'ambiguous') {
+        Errors.throwHostEnvironment(`Android recovery retains managed custody: ${custody.reason}`)
+      }
+      if (custody.kind === 'known') {
+        const controller = custody.receipt.controller!
+        if (
+          tree.identities([controller.pid]).get(controller.pid) !== undefined
+          || (operations.processIsAlive ?? Platform.processIsAlive)(controller.pid)
+        ) {
+          Errors.throwHostEnvironment('Managed Android recovery cannot prove its captured controller absent.')
+        }
+      }
       const state: Capture = {
         processes: [...retention.processes],
         rootPid: retention.processGroupPid,
         uncertain: false,
       }
-      // Discover descendants of each still-identical captured process before sending a signal.
-      for (const expected of [...state.processes]) {
-        const current = tree.identities([expected.pid]).get(expected.pid)
-        if (current?.startedAt === expected.startedAt) {
-          state.processes.push(...tree.descendants(expected.pid))
+      let refusal: string | undefined
+      const observe = (): boolean => {
+        try {
+          const live = tree.identities(state.processes.map(process => process.pid))
+          let closed = true
+          for (const expected of state.processes) {
+            const current = live.get(expected.pid)
+            if (current === undefined && (operations.processIsAlive ?? Platform.processIsAlive)(expected.pid)) {
+              refusal = `Captured Android process ${expected.pid} has an unreadable surviving identity.`
+              return false
+            }
+            closed &&= current === undefined || current.startedAt !== expected.startedAt
+          }
+          if (state.rootPid === undefined) {
+            refusal = 'Captured Android process group identity is missing.'
+            return false
+          }
+          const root = state.processes.find(process => process.pid === state.rootPid)
+          const currentRoot = live.get(state.rootPid)
+          if (root === undefined || currentRoot !== undefined && currentRoot.startedAt !== root.startedAt) {
+            refusal = 'Captured Android process group has changed kernel identity.'
+            return false
+          }
+          const groupMembers = operations.processTree === undefined ? ProcessTree.groupMembers : tree.groupMembers
+          if (groupMembers === undefined) {
+            refusal = 'Captured Android group membership inspection is unavailable.'
+            return false
+          }
+          const members = groupMembers(state.rootPid)
+          for (const member of members) {
+            if (
+              !state.processes.some(expected => expected.pid === member.pid && expected.startedAt === member.startedAt)
+            ) {
+              refusal = `Captured Android process group ${state.rootPid} contains an unrecorded member ${member.pid}.`
+              return false
+            }
+            const currentMember = tree.identities([member.pid]).get(member.pid)
+            if (
+              currentMember === undefined
+                ? (operations.processIsAlive ?? Platform.processIsAlive)(member.pid)
+                : currentMember.startedAt !== member.startedAt
+            ) {
+              refusal = `Captured Android group member ${member.pid} has unreadable or changed identity.`
+              return false
+            }
+          }
+          return closed && members.length === 0 && !tree.isGroupAlive(state.rootPid)
+        } catch (error) {
+          refusal = `Captured Android ownership inspection failed: ${Errors.messageOf(error).slice(0, 768)}`
+          return false
         }
       }
+      const retainRefusal = async () => {
+        if (refusal === undefined) {
+          return
+        }
+        const owners = await Promise.all(
+          retention.resourceNames.map(name =>
+            (operations.readOwner ?? MachineResources.readOwner)({ name, registryRoot: operations.registryRoot })
+          ),
+        )
+        if (
+          owners.some(current =>
+            current?.id !== generation || current.pid !== owner.pid
+            || current.processStartedAt !== owner.processStartedAt || current.repositoryRoot !== owner.repositoryRoot
+          )
+        ) {
+          Errors.throwHostEnvironment(
+            'Android permanent refusal publication found changed physical owners; fences are preserved.',
+          )
+        }
+        const record = custody.kind === 'known' ? custody.receipt : undefined
+        await (operations.retainResources ?? MachineResources.retain)({
+          owners: owners.map(current => current!),
+          processes: retention.processes,
+          processGroupPid: retention.processGroupPid,
+          quarantined: retention.quarantined,
+          reason: refusal,
+          registryRoot: operations.registryRoot,
+          ownershipRefusal: {
+            version: 1,
+            reason: refusal,
+            ...(record === undefined ? {} : {
+              managed: {
+                session: record.session,
+                generation: record.generation,
+                physicalGeneration: generation,
+                checkout: record.checkout,
+                controller: record.controller!,
+              },
+            }),
+          },
+        })
+        Errors.throwHostEnvironment(`Android recovery permanently retains unknown ownership: ${refusal}`)
+      }
+      if (observe()) {
+        return true
+      }
+      await retainRefusal()
       for (const signal of ['SIGTERM', 'SIGKILL'] as const) {
         tree.signalTracked(state.processes, signal)
         if (
-          await Time.pollUntil(() => treeStopped(state, operations) ? true : undefined, {
+          await Time.pollUntil(() => observe() || refusal !== undefined ? true : undefined, {
             intervalMs: 100,
             timeoutMs: operations.shutdownTimeoutMs ?? SHUTDOWN_TIMEOUT_MS,
           }) === true
         ) {
+          await retainRefusal()
           return true
         }
       }
