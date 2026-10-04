@@ -1,0 +1,45 @@
+{
+  "id": "20260929164745704-ed103852-c9b5-4943-88e7-845ce08c5db6",
+  "runId": "20260929164657843-e6414d4f-c4d8-47a0-b8be-c662a133fa3d",
+  "createdAt": "2026-09-29T16:47:45.704Z",
+  "recordedAt": "2026-09-29T16:47:45.704Z",
+  "commit": "442e6416f4c705efb8f236021cf8220b4d02306e",
+  "phase": 1,
+  "executionProfile": "development",
+  "provenance": {
+    "snapshotBasis": "observation-time",
+    "originalDependencies": "recorded",
+    "observedMetadataEvidence": [
+      "Docs/Tutorials/Your First Tao App.md",
+      "README.md"
+    ]
+  },
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "runtime": "bun:1.4.2"
+  },
+  "inputs": {
+    "source": "Docs/MVP Roadmap/Plan - Initial release QA.md",
+    "dependencySnapshot": "Docs/QA/inputs/05cbff5f9dfc1dec547312675fc241fe7cc49dfa9a7d639908466aceb22f3c0a.json"
+  },
+  "surfaceId": "story:DOC1",
+  "dimension": "text",
+  "outcome": "fail",
+  "reviewer": "agent",
+  "channel": "public-docs",
+  "evidence": [
+    {
+      "path": "Docs/Tutorials/Your First Tao App.md",
+      "sha256": "7a4b7e1952404036618d0f2c89693d58e1afd2f311c6a24c050120649fd4d1c6"
+    },
+    {
+      "path": "README.md",
+      "sha256": "13f55bbdabb00f9793c0bee10d2bb8efcacc05fdc5dcfb89ebaf356e0003eafc"
+    }
+  ],
+  "notes": "Text only: front door to tutorial route fails on QA-INSTALL-PLACEHOLDER, QA-TUTORIAL-ENTRY and QA-README-CREATE-VS-TUTORIAL. Re-recorded at 442e6416: the document bytes are unchanged since the 2026-09-29 recheck; the release catalog now classifies subcommands, which none of these findings depends on.",
+  "sourceHash": "cef3f54b94931d54010252c71cc8faa558496a20190a52f24f985815befe7a4f",
+  "rendererHash": "bd0a77e7580bf225b4b439da249856535dc4d4d7c3a64adda691ccb4a53d7ee2",
+  "profileHash": "b5e443edb0ccd5952dd86869fb2a97f104715bfcbd7612b7bf7e2c50df3b94c8"
+}

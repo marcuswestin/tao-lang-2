@@ -74,6 +74,7 @@ const CONSTRUCT_WORDS: Readonly<Record<string, string>> = {
   AppBlock: 'app member',
   AppBlockDiagnosticStatement: 'declaration',
   AppStatement: 'app member',
+  AppGuardStatement: 'app guard case',
   Block: 'view member',
   Declaration: 'declaration',
   Expression: 'value',

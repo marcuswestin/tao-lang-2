@@ -11,6 +11,9 @@ app feature and Tao test proves each capability).
 The public MVP release has its own two lists: `Docs/MVP Roadmap/Agent MVP Roadmap.md` for the work
 agents can execute without a new decision, and `Docs/MVP Roadmap/Developer MVP Roadmap.md` for the
 judgments that are the Developer's. Both point back into this file and into `Docs/Roadmap/` for context.
+[The staged release plan](<Docs/MVP Roadmap/Plan - Staged public releases.md>) owns five cumulative
+public releases and supersedes older all-at-once launch scope. [The QA register](Docs/QA/README.md)
+tracks on-demand coverage and evidence; later roadmap work is not automatically a release-1 blocker.
 
 ## Tao tooling performance
 

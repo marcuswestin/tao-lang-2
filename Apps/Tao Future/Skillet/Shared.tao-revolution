@@ -16,22 +16,16 @@ let MyKitchen = MyMembership.Household
 
 // -- The safety net -----------------------------------------------------------------------------------------
 //
-// Every case a guard does not name lands here. Declaring it is not optional — an app without a
-// `guard default` is a validator error — which is how `unauthorized` becomes unskippable without making
-// every read site spell five branches. A guard is availability only. Emptiness is content, not failure,
+// Every exceptional case a guard does not name reaches the app's read net, then the runtime's
+// fallback. Skillet restyles its four cases in Skillet.tao-revolution. A guard is availability only.
+// Emptiness is content, not failure,
 // so it is `if X is empty` at the site that cares.
 //
 // There is no second, write-only net and no catch-all case: effect outcomes belong to the calling site,
 // so a site that fires an effect and names no outcome gets no automatic message. (An unhandled rejection
 // of `save X` invalidates X instead, so it shows beside the draft's fields — the one write outcome with a
 // defined home.) This is why the `when do …` blocks below name the outcomes they act on.
-guard default {
-   loading -> Spinner(Label: "Opening Skillet…")
-   missing -> EmptyState(Icon: "questionmark.folder", Title: "This is gone", Body: "Someone in your kitchen may have removed it.")
-   unauthorized -> EmptyState(Icon: "lock", Title: "You don't have access to this", Body: "Ask someone in the kitchen to invite you back.")
-   rejected -> Problem { Text(Problem) [caption, danger] }
-   error -> Message { Text(Message) [body] }
-}
+
 
 // -- Frames and layouts ---------------------------------------------------------------------------------------
 

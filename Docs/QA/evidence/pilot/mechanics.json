@@ -1,0 +1,15 @@
+{
+  "runId": "20260926231443226-eff76eee-5fe5-4a4e-96f4-81d77c40b9a6",
+  "links": {
+    "checked": 318,
+    "outcome": "pass",
+    "broken": [],
+    "scope": "Local inline link existence only; anchors, reference links, external destinations and prose comprehension require review."
+  },
+  "tutorial": {
+    "command": "./agent test-file packages/cli/tao-cli/cli-tests/tutorials.test.ts",
+    "outcome": "pass",
+    "evidence": ".artifacts/qa/runs/20260926231443226-eff76eee-5fe5-4a4e-96f4-81d77c40b9a6/tutorial.log",
+    "scope": "source tests only; no text, visual, installed artifact, or human acceptance"
+  }
+}

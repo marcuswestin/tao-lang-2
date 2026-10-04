@@ -57,6 +57,7 @@ test "Data MVP" {
       datasource fails after create Workspace "save was rejected"
       enter "Rejected" into #workspaceName
       press #addWorkspace
-      expect text "Could not save data: save was rejected"
+      expect text "Unable to load these items."
+      expect missing text "save was rejected"
    }
 }

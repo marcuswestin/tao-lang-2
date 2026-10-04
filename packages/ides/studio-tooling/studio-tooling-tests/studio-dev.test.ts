@@ -594,7 +594,16 @@ Describe('Studio native wrapper foundation', () => {
   Test('requires HTTPS release hosting before invoking Hutch packaging', async () => {
     await Expect(StudioNative.packageApp({
       releaseBaseUrl: 'http://releases.example.com/tao-studio',
+      releasePhase: 3,
+      version: '0.4.3',
     })).rejects.toThrow('Studio release base URL must be a valid HTTPS URL.')
+  })
+
+  Test('requires a toolchain version before invoking public Studio packaging', async () => {
+    await Expect(StudioNative.packageApp({
+      releaseBaseUrl: 'https://releases.example.com/tao-studio',
+      releasePhase: 3,
+    })).rejects.toThrow('A public Studio package requires --version matching its Tao toolchain release.')
   })
 
   Test('validates the executable Studio client with targeted release gates before native packaging', async () => {

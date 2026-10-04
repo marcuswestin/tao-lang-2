@@ -87,7 +87,7 @@ view JoinHome(Code secret) {
          Text("Sign in first — this invitation will be waiting.") [body]
          SignInPanel()
       }  }
-      guard Invited // loading and missing fall to `guard default`; an expired invitation is refused with a sentence on Join
+      guard Invited // loading and missing fall to the app read net; an expired invitation is refused with a sentence on Join
       Text("You're invited to { Invited.Name }") [title]
       Text("You'll see its lists, add to them, and take care of things together.") [body, muted]
       if Refusal is not empty { Status(Refusal, Tone: Warning, Announce: yes) }

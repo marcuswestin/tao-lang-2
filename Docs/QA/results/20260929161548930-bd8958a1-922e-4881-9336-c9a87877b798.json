@@ -1,0 +1,45 @@
+{
+  "id": "20260929161548930-bd8958a1-922e-4881-9336-c9a87877b798",
+  "runId": "20260929161318907-772bb9ea-4c23-4e35-b1e5-f9d53f1c6e6a",
+  "createdAt": "2026-09-29T16:15:48.929Z",
+  "recordedAt": "2026-09-29T16:15:48.929Z",
+  "commit": "0aa8ebcfae088acc4c8b53cb1a122b7771370e15",
+  "phase": 1,
+  "executionProfile": "development",
+  "provenance": {
+    "snapshotBasis": "observation-time",
+    "originalDependencies": "recorded",
+    "observedMetadataEvidence": [
+      "Docs/QA/evidence/recheck-0aa8ebcf/qa-views-phone-184182d83ba4.png",
+      "Docs/QA/evidence/recheck-0aa8ebcf/source-snapshot.json"
+    ]
+  },
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "runtime": "bun:1.4.2"
+  },
+  "inputs": {
+    "source": "Docs/Tutorials/Your First Tao App.md",
+    "dependencySnapshot": "Docs/QA/inputs/1b8ea0038e4a1018886700293ba031b97d41de1e474b00f5bb81e7db38f253b5.json"
+  },
+  "surfaceId": "visual:reading-list",
+  "dimension": "visual",
+  "outcome": "friction",
+  "reviewer": "agent",
+  "channel": "phone-light",
+  "evidence": [
+    {
+      "path": "Docs/QA/evidence/recheck-0aa8ebcf/qa-views-phone-184182d83ba4.png",
+      "sha256": "e4f8a7745e6116be0ad7fa5275efb9d92c11a83d439183de6d39eebd2ae3ad8e"
+    },
+    {
+      "path": "Docs/QA/evidence/recheck-0aa8ebcf/source-snapshot.json",
+      "sha256": "eb9df49164e9a329bf63e91b1eb1ea06871fd0aae6de1247473227eaac5a35b4"
+    }
+  ],
+  "notes": "Recheck at 0aa8ebcf: navigation still renders \"LibraryAbout\" as one joined label (QA-TUTORIAL-NAVIGATION) and a large empty band still separates Reading from Finished (QA-TUTORIAL-VERTICAL-SPACE). Book row joins title and author with no visible separation.",
+  "sourceHash": "ac5d72f5da72e6a1750a7cc9a4e49438d48d49555b9b34060b609ce48ad7dfc9",
+  "rendererHash": "57869b7252c5b7865f2daa3ec40253907eb27fb81491de78ceffcb6473ca3fb4",
+  "profileHash": "c1bb9d6add2e225907faed5f0c6ca5736166bf2163ff04631811b56048eef38b"
+}

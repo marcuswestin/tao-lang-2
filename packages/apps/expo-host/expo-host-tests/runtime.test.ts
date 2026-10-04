@@ -750,6 +750,7 @@ Describe('Tao runtime app generation', () => {
           'modules/external/AuthViews.files/AuthFlow.ts',
           'modules/external/AuthViews.files/AuthViews.tsx',
           'modules/external/Prelude.tao.tsx',
+          'modules/external/ReadContext.tao.tsx',
         ])
       },
     )
@@ -800,6 +801,7 @@ Describe('Tao runtime app generation', () => {
           'modules/external/AuthViews.files/AuthFlow.ts',
           'modules/external/AuthViews.files/AuthViews.tsx',
           'modules/external/Prelude.tao.tsx',
+          'modules/external/ReadContext.tao.tsx',
         ])
       },
     )

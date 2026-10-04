@@ -1,0 +1,221 @@
+use StackNav from @tao/nav
+use Col, FormButton, Text, TextInput from @tao/ui
+
+app ReactiveEditing {
+   Name "Reactive Editing"
+   Navigator StackNav {
+      Initial ReactiveEditingView
+}  }
+
+app BoundReactiveEditing {
+   Name "Bound Reactive Editing"
+   state BoundValue is text = "Bound" (persist)
+   Navigator StackNav {
+      Initial BoundReactiveEditingView(Value: BoundValue)
+}  }
+
+type FirstName is text
+
+type LastName is text
+
+type Profile is {
+   FirstName,
+   LastName
+}
+
+action AppendCommandValue(Value text) {
+   set Value += "A"
+}
+
+action CaptureCopiedCommandValue(Value text, Result text) {
+   set Value += "A"
+   set Result = Value
+}
+
+command AppendCommand(Value text) {
+   Title "Append configured command"
+   do AppendCommandValue(Value)
+}
+
+command CopyCommand(copy Value text, Result text) {
+   Title "Copy configured command"
+   do CaptureCopiedCommandValue(Value: Value, Result: Result)
+}
+
+view SharedEditor(Value text) {
+   action AddA() {
+      set Value += "A"
+   }
+   action Submit() { }
+   render Col() [gap 4] {
+      #sharedInput
+      TextInput(Value: Value, Submit: Submit, Label: "Shared child")
+
+      #sharedAppend
+      FormButton(Title: "Append shared") {
+         on press AddA
+}  }  }
+
+view LiteralEditor(Value text, First boolean) {
+   action AddA() {
+      set Value += "A"
+   }
+   action Submit() { }
+   render Col() [gap 4] {
+      when First {
+         true -> {
+            #firstLiteralInput
+            TextInput(Value: Value, Submit: Submit, Label: "First literal")
+
+            #firstLiteralAppend
+            FormButton(Title: "Append first literal") {
+               on press AddA
+         }  }
+         otherwise -> {
+            #secondLiteralInput
+            TextInput(Value: Value, Submit: Submit, Label: "Second literal")
+
+            #secondLiteralAppend
+            FormButton(Title: "Append second literal") {
+               on press AddA
+}  }  }  }  }
+
+view CopyEditor(copy Value text) {
+   action AddA() {
+      set Value += "A"
+   }
+   action Submit() { }
+   render Col() [gap 4] {
+      #copyInput
+      TextInput(Value: Value, Submit: Submit, Label: "Copied child")
+
+      #copyAppend
+      FormButton(Title: "Append copied") {
+         on press AddA
+}  }  }
+
+view ProfileEditor(Value text) {
+   action Submit() { }
+   render Col() [gap 4] {
+      #profileFirstName
+      TextInput(Value: Value, Submit: Submit, Label: "Profile first name")
+}  }
+
+scene BoundReactiveEditingView(Value text) {
+   Title "Bound Reactive Editing"
+   action Append() {
+      set Value += "A"
+   }
+   action Submit() { }
+   render Col() [gap 4] {
+      #boundViewInput
+      TextInput(Value: Value, Submit: Submit, Label: "Bound view input")
+
+      #boundViewAppend
+      FormButton(Title: "Append bound view") {
+         on press Append
+}  }  }
+
+scene ReactiveEditingView() {
+   Title "Reactive Editing"
+   state Shared = "Shared"
+   state Source = "Source"
+   state CommandSource = "Command source"
+   state Profile = Profile {
+      FirstName "Ada",
+      LastName "Lovelace"
+   }
+   state Refresh = 0
+   state CopiedActionResult = ""
+   state CopiedCommandResult = ""
+   action AppendParent() {
+      set Shared += "A"
+   }
+   action ChangeSource() {
+      set Source = "Changed source"
+   }
+   action Rerender() {
+      set Refresh += 1
+   }
+   action SetProfileFirstName() {
+      set Profile.FirstName = "Grace"
+   }
+   action AppendSharedAction(Value text) {
+      set Value += "A"
+   }
+   action RunSharedAction() {
+      do AppendSharedAction(Shared)
+   }
+   let BoundAppendCommand = AppendCommand with {
+      Value: Shared
+   }
+   action RunBoundAppendCommand() {
+      do BoundAppendCommand()
+   }
+   let BoundCopyCommand = CopyCommand with {
+      Value: CommandSource,
+      Result: CopiedCommandResult
+   }
+   action RunBoundCopyCommand() {
+      do BoundCopyCommand()
+   }
+   action CopyAction(copy Value text) {
+      set Value += "A"
+      set CopiedActionResult = Value
+   }
+   action RunCopyAction() {
+      do CopyAction(Source)
+   }
+   render Col() [gap 8, pad 16] {
+      Text("Shared parent: { Shared }")
+
+      #parentAppend
+      FormButton(Title: "Append parent") {
+         on press AppendParent
+      }
+      SharedEditor(Value: Shared)
+
+      #sharedAction
+      FormButton(Title: "Append through shared action") {
+         on press RunSharedAction
+      }
+
+      #boundAppendCommand
+      FormButton(Title: "Append through configured command") {
+         on press RunBoundAppendCommand
+      }
+      Text("Literal render: { Refresh }")
+      LiteralEditor(Value: "First", First: true)
+      LiteralEditor(Value: "Second", First: false)
+
+      #rerender
+      FormButton(Title: "Rerender literals") {
+         on press Rerender
+      }
+      Text("Source: { Source }")
+      CopyEditor(Value: Source)
+
+      #changeSource
+      FormButton(Title: "Change source") {
+         on press ChangeSource
+      }
+      Text("Profile: { Profile.FirstName } { Profile.LastName }")
+      ProfileEditor(Value: Profile.FirstName)
+
+      #setProfileFirstName
+      FormButton(Title: "Set profile first name") {
+         on press SetProfileFirstName
+      }
+      Text("Copied action result: { CopiedActionResult }")
+
+      #copyAction
+      FormButton(Title: "Run copied action") {
+         on press RunCopyAction
+      }
+      Text("Command source: { CommandSource }")
+      Text("Copied command result: { CopiedCommandResult }")
+
+      #boundCopyCommand
+      FormButton(Title: "Run copied command") {
+         on press RunBoundCopyCommand
+}  }  }

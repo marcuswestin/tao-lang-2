@@ -640,6 +640,7 @@ Describe('compiler: files and packages', () => {
 
         Expect(sourceModules).toHaveLength(3)
         Expect(new Set(relativePaths).size).toBe(relativePaths.length)
+        Expect(relativePaths).toContain('modules/external/ReadContext.tao.tsx')
         Expect(relativePaths).toContain('modules/external/Views.tao.tsx')
         Expect(relativePaths).toContain('modules/external/Views.tao-2.tsx')
         Expect(relativePaths).toContain('modules/external/Views.tao.injection-1.tsx')

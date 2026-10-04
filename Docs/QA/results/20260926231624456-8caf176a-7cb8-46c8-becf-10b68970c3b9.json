@@ -1,0 +1,45 @@
+{
+  "id": "20260926231624456-8caf176a-7cb8-46c8-becf-10b68970c3b9",
+  "runId": "20260926231443226-eff76eee-5fe5-4a4e-96f4-81d77c40b9a6",
+  "createdAt": "2026-09-26T22:51:38.590Z",
+  "recordedAt": "2026-09-26T23:16:24.456Z",
+  "commit": "d5bdeaefd037",
+  "phase": 1,
+  "executionProfile": "development",
+  "provenance": {
+    "snapshotBasis": "import-time",
+    "originalDependencies": "unknown",
+    "observedMetadataEvidence": [
+      "Docs/QA/evidence/pilot/captures.json",
+      "Docs/QA/evidence/pilot/notebook-groceries.png"
+    ]
+  },
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "runtime": "bun:1.4.2"
+  },
+  "inputs": {
+    "source": "packages/cli/tao-cli",
+    "dependencySnapshot": "Docs/QA/inputs/92c4876e2405722bf46cb97a1a79aa61d1bb85cd1771356188c16d405d9009d7.json"
+  },
+  "surfaceId": "visual:notebook",
+  "dimension": "visual",
+  "outcome": "pass",
+  "reviewer": "agent",
+  "channel": "notes-groceries",
+  "evidence": [
+    {
+      "path": "Docs/QA/evidence/pilot/captures.json",
+      "sha256": "a61898d829eaa337006ada8a9916a1250f920eb8199366c41ec2031d2dbb0a52"
+    },
+    {
+      "path": "Docs/QA/evidence/pilot/notebook-groceries.png",
+      "sha256": "77dc4b7af622e6348bdd53ca9f88b6757c46926beae08018e97e37bb7eb2d74d"
+    }
+  ],
+  "notes": "Isolated Groceries card has legible title/body and Open control, without clipping. Component captures fill the scenario viewport. Development starter only; interaction, focus, empty/loading/error states and new phase-1 projected starter appearance are excluded.",
+  "sourceHash": "historical:15fee3189209e2dd93b1097e5037290e28add93e9ebe418968743a936a351e52",
+  "rendererHash": "de0898a7394ca0735139bfe8c677018eb2cca131e86f569e9252afd6dad79ea9",
+  "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
+}

@@ -1,0 +1,40 @@
+{
+  "id": "20260926231619160-57cfe8d3-d8db-4bc2-ba6c-984277f401ba",
+  "runId": "20260926231443226-eff76eee-5fe5-4a4e-96f4-81d77c40b9a6",
+  "createdAt": "2026-09-26T22:51:02.299Z",
+  "recordedAt": "2026-09-26T23:16:19.159Z",
+  "commit": "d5bdeaefd037",
+  "phase": 1,
+  "executionProfile": "development",
+  "provenance": {
+    "snapshotBasis": "import-time",
+    "originalDependencies": "unknown",
+    "observedMetadataEvidence": [
+      "Docs/QA/evidence/pilot/execution.md"
+    ]
+  },
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "runtime": "bun:1.4.2"
+  },
+  "inputs": {
+    "source": "Docs/MVP Roadmap/Plan - Initial release QA.md",
+    "dependencySnapshot": "Docs/QA/inputs/92c4876e2405722bf46cb97a1a79aa61d1bb85cd1771356188c16d405d9009d7.json"
+  },
+  "surfaceId": "story:IDE2",
+  "dimension": "functional",
+  "outcome": "pass",
+  "reviewer": "agent",
+  "channel": "source-test",
+  "evidence": [
+    {
+      "path": "Docs/QA/evidence/pilot/execution.md",
+      "sha256": "8a5851883a4c5964988ba49e65ae25d28f00048ed4029040232a2ab0c3e0c52b"
+    }
+  ],
+  "notes": "Programmatic editor source integration passed. No GUI activation, installed VSIX, either marketplace, or public-profile artifact was tested. Supplementary evidence only.",
+  "sourceHash": "historical:86baeeb9e701091dcb709bc275f5e21318535d2ef9d3a16525a15084b87f926b",
+  "rendererHash": "de0898a7394ca0735139bfe8c677018eb2cca131e86f569e9252afd6dad79ea9",
+  "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
+}

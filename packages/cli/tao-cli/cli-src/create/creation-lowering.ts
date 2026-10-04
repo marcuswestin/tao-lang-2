@@ -1,4 +1,4 @@
-import { Assert, FS, Switch } from '@shared'
+import { Assert, FS, ReleaseCapabilities, type ReleaseProfile, Switch } from '@shared'
 import { PROJECT_TSCONFIG } from '../app-modules'
 import { deriveSchemeColors, type DesignColors } from './creation-colors'
 import {
@@ -11,11 +11,14 @@ import {
   derivedDeclarationNames,
   titleFieldOf,
 } from './creation-plan'
+import { projectStarterRelease } from './release-starter-projection'
 
 /** CreationFiles maps project-relative paths to Tao source, before canonical formatting. */
 export type CreationFiles = Record<string, string>
 
 export type LowerCreationPlanOptions = {
+  /** Internal builds and tests select a profile; public commands use their build stamp. */
+  releaseProfile?: ReleaseProfile
   /** The description the plan came from, recorded in the app file for provenance. */
   description?: string
 }
@@ -35,7 +38,7 @@ export function lowerCreationPlan(plan: CreationPlan, options: LowerCreationPlan
     'App.tao': appFile(plan, names, options.description),
     'Data.tao': dataFile(plan, names),
     'Chrome.tao': chromeFile(plan, names),
-    'Design.tao': designFile(plan, names),
+    'Design.tao': designFile(plan, names, options.releaseProfile),
     'Scenarios.tao': scenariosFile(plan, names),
     [`${names.app}.test.tao`]: testFile(plan, names),
     'tsconfig.json': PROJECT_TSCONFIG,
@@ -47,7 +50,7 @@ export function lowerCreationPlan(plan: CreationPlan, options: LowerCreationPlan
   for (const entity of plan.entities) {
     files[`${entity.plural}/${entity.plural}.tao`] = featureFile(entity, names)
   }
-  return files
+  return projectStarterRelease(files, options.releaseProfile)
 }
 
 /** writeCreationFiles writes lowered sources under `directory`, creating feature folders as needed. */
@@ -182,21 +185,26 @@ ${tabs}
 
 // -- Design.tao ------------------------------------------------------------------------------------
 
-function designFile(plan: CreationPlan, names: ProjectNames): string {
+function designFile(plan: CreationPlan, names: ProjectNames, releaseProfile?: ReleaseProfile): string {
   const colors = deriveSchemeColors(plan.palette)
   const tokens = Object.keys(colors.light) as (keyof DesignColors)[]
   const raw = (scheme: 'light' | 'dark', suffix: string) =>
     tokens.map(token => `      ${token}${suffix} ${colors[scheme][token]}`).join('\n')
   const semantic = tokens.map(token => `      ${token} when Scheme is Dark ${token}Dark / not ${token}Light`).join('\n')
-  return `// The design: a palette, element defaults, and the bundles the scenes apply at render sites.
-folder
-design ${names.design} {
-   colors {
-${raw('light', 'Light')}
+  // Scheme-conditional colors and value paths are advanced design, so an early release names one palette.
+  const palette = ReleaseCapabilities.allows('advanced-design', releaseProfile)
+    ? `${raw('light', 'Light')}
 ${raw('dark', 'Dark')}
 
       // Every bundle spells these names, which follow the person's light or dark setting.
-${semantic}
+${semantic}`
+    : `      // Every bundle spells these names.
+${raw('light', '')}`
+  return `// The design: a palette and the bundles the scenes apply at render sites.
+folder
+design ${names.design} {
+   colors {
+${palette}
    }
 
    styles {
@@ -214,13 +222,13 @@ ${semantic}
       NavigationChromeButton [pad 8, radius 8, ink accentStrong, weight 600]
 
       screen [fill, content top stretch, pad 24, background canvas]
-      column [width max 720, gap 16]
+      column [width max 720, gap 16, centered]
       eyebrow [size 13, line 18, weight 700, ink accentStrong]
       sectionTitle [size 20, line 26, weight 700, ink ink]
       body [size 16, line 24, ink inkMuted]
       caption [size 14, line 20, ink inkMuted]
-      panel [gap 14, pad 20, radius 18, background surface, border line]
-      card [gap 10, pad 16, radius 14, background surface, border line]
+      panel [hug, gap 14, pad 20, radius 18, background surface, border line]
+      card [hug, gap 10, pad 16, radius 14, background surface, border line]
       buttonSecondary [background surface, border line, ink accentStrong]
       buttonDanger [background dangerSoft, border danger, ink danger]
    }
@@ -330,9 +338,9 @@ scene ${listScene(entity)}() {
          }
          guard ${entity.plural} {
             loading -> { Spinner() }
-            error -> Message {
+            error -> Context {
                Text(${taoString(`${pluralWords} could not be loaded`)}) [sectionTitle]
-               TextMultiline(Message) [body]
+               TextMultiline(Context.Message) [body]
             }
          }
          guard ${entity.plural} empty -> {
@@ -392,8 +400,8 @@ ${flagActions.map(action => `${action}\n`).join('')}   action Delete${singular}(
          guard ${singular} {
             loading -> { Spinner() }
             missing -> { TextMultiline(${taoString(`This ${singularWords} no longer exists.`)}) [body] }
-            error -> Message { TextMultiline(${
-    taoString(`The ${singularWords} could not be loaded: { Message }`)
+            error -> Context { TextMultiline(${
+    taoString(`The ${singularWords} could not be loaded: { Context.Message }`)
   }) [body] }
          }
 ${detailInputs.join('\n')}${detailNumbers.join('')}${detailFlags.join('\n')}

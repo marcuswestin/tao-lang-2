@@ -1,0 +1,45 @@
+{
+  "id": "20260926231711837-006444a8-956f-4b6d-9f13-df549bdef208",
+  "runId": "20260926231631786-b0697bb4-6b3b-4f92-93bb-ceef302dae7b",
+  "createdAt": "2026-09-26T22:53:18.080Z",
+  "recordedAt": "2026-09-26T23:17:11.837Z",
+  "commit": "d5bdeaefd037",
+  "phase": 2,
+  "executionProfile": "development",
+  "provenance": {
+    "snapshotBasis": "import-time",
+    "originalDependencies": "unknown",
+    "observedMetadataEvidence": [
+      "Docs/QA/evidence/pilot/hnreader-leading.png",
+      "Docs/QA/evidence/pilot/captures.json"
+    ]
+  },
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "runtime": "bun:1.4.2"
+  },
+  "inputs": {
+    "source": "Apps/HNReader",
+    "dependencySnapshot": "Docs/QA/inputs/92c4876e2405722bf46cb97a1a79aa61d1bb85cd1771356188c16d405d9009d7.json"
+  },
+  "surfaceId": "visual:hnreader",
+  "dimension": "visual",
+  "outcome": "pass",
+  "reviewer": "agent",
+  "channel": "rows-leading",
+  "evidence": [
+    {
+      "path": "Docs/QA/evidence/pilot/hnreader-leading.png",
+      "sha256": "99c7a540cce071a35825c31f5a3b7cd8e12b90e338f0baa7dd13767e666ae5c6"
+    },
+    {
+      "path": "Docs/QA/evidence/pilot/captures.json",
+      "sha256": "a61898d829eaa337006ada8a9916a1250f920eb8199366c41ec2031d2dbb0a52"
+    }
+  ],
+  "notes": "Inspected the isolated leading row: legible title and metadata, no clipping. This is not whole-app, scrolling, live-data or native acceptance.",
+  "sourceHash": "historical:15fee3189209e2dd93b1097e5037290e28add93e9ebe418968743a936a351e52",
+  "rendererHash": "de0898a7394ca0735139bfe8c677018eb2cca131e86f569e9252afd6dad79ea9",
+  "profileHash": "309a8cdc77be80bd99a0edca19b0903db6bf15223da038448fc9710dbd81db7a"
+}

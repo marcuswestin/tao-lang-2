@@ -2716,7 +2716,7 @@ Describe('Studio make view and group', () => {
     await expectCanonical(patch.content)
   })
 
-  Test('extract-view passes a guard error message as a text parameter', async () => {
+  Test('extract-view passes a guard read context as a named parameter', async () => {
     await withStudioProject(
       {
         'Main.tao': `
@@ -2731,8 +2731,8 @@ Describe('Studio make view and group', () => {
            render Col() {
               guard Notes {
                  loading -> { Text("Loading") }
-                 error -> Message {
-                    Text(Message)
+                 error -> Context {
+                    Text(Context.Message)
                     Text("Try again")
               }  }
               Text("After")
@@ -2744,10 +2744,11 @@ Describe('Studio make view and group', () => {
         const content = await project.patch({
           kind: 'extract-view',
           name: 'Failure',
-          renderIds: [renderId(requireRenderBySource(project.document, 'Text(Message)'))],
+          renderIds: [renderId(requireRenderBySource(project.document, 'Text(Context.Message)'))],
         })
-        Expect(content).toContain('Failure(Message: Message)')
-        Expect(content).toContain('view Failure(Message text) {\n   render Text(Message)\n}')
+        Expect(content).toContain('Failure(Context: Context)')
+        Expect(content).toContain('use ReadContext from @tao/data')
+        Expect(content).toContain('view Failure(Context ReadContext) {\n   render Text(Context.Message)\n}')
       },
     )
   })

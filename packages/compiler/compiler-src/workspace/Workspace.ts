@@ -1,6 +1,6 @@
 import { Packages } from '@ast-utils'
 import { type AST, Langium, Parser, type ParseResult } from '@parser'
-import { Assert, type Diagnostic, Diagnostics, FS } from '@shared'
+import { Assert, type Diagnostic, Diagnostics, FS, ReleaseCapabilities, type ReleaseProfile } from '@shared'
 import Validator, { type ValidationResult } from '@validator'
 import { BridgeMetadata } from '../bridge-metadata'
 import Compiler, { type CompileOptions, type CompileResult } from '../compiler'
@@ -15,11 +15,23 @@ type CompileTestPlanOptions = {
 export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> {
   private static readonly sharedWorkspaces = new Map<string, Promise<Workspace>>()
 
-  protected constructor(protected readonly project: ProjectContext<ServicesT>) {}
+  protected constructor(
+    protected readonly project: ProjectContext<ServicesT>,
+    readonly releaseProfile: ReleaseProfile = ReleaseCapabilities.current(),
+  ) {}
 
   /** open creates a Workspace rooted at `directoryPath`. */
   static async open(
     directoryPath: string,
+    options: { sourceOverrides?: Readonly<Record<string, string>> } = {},
+  ): Promise<Workspace> {
+    return Workspace.openProfile(directoryPath, ReleaseCapabilities.current(), options)
+  }
+
+  /** openProfile applies one release profile to ordinary and source-override workspaces. */
+  static async openProfile(
+    directoryPath: string,
+    releaseProfile: ReleaseProfile,
     options: { sourceOverrides?: Readonly<Record<string, string>> } = {},
   ): Promise<Workspace> {
     const root = FS.resolvePath(directoryPath)
@@ -47,19 +59,24 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
         context => createWorkspaceServices(context, snapshot),
         Object.keys(snapshot),
       ),
+      releaseProfile,
     )
   }
 
   /** shared returns a process-shared Workspace rooted at `directoryPath`. */
-  static async shared(directoryPath: string): Promise<Workspace> {
+  static async shared(
+    directoryPath: string,
+    releaseProfile: ReleaseProfile = ReleaseCapabilities.current(),
+  ): Promise<Workspace> {
     const root = FS.resolvePath(directoryPath)
-    let workspace = Workspace.sharedWorkspaces.get(root)
+    const key = `${root}:${ReleaseCapabilities.fingerprint(releaseProfile)}`
+    let workspace = Workspace.sharedWorkspaces.get(key)
     if (workspace === undefined) {
-      workspace = Workspace.open(root).catch(error => {
-        Workspace.sharedWorkspaces.delete(root)
+      workspace = Workspace.openProfile(root, releaseProfile).catch(error => {
+        Workspace.sharedWorkspaces.delete(key)
         throw error
       })
-      Workspace.sharedWorkspaces.set(root, workspace)
+      Workspace.sharedWorkspaces.set(key, workspace)
     }
     return await workspace
   }
@@ -207,11 +224,12 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
       parseResult.files.map(file => file.ast),
       parseResult.entry.path,
       projectFiles,
+      this.releaseProfile,
     )
   }
 
   private compilerContext(): Compiler.Context {
-    return Compiler.createContext(this.project.packagesContext, this.project.root)
+    return Compiler.createContext(this.project.packagesContext, this.project.root, this.releaseProfile)
   }
 
   private async writeBridgeMetadata(files: readonly ParseResult['entry'][]): Promise<void> {

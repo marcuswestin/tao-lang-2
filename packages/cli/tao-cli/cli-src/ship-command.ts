@@ -1,4 +1,4 @@
-import { Errors, FS, HCI } from '@shared'
+import { Errors, FS, HCI, ReleaseCapabilities } from '@shared'
 import type { Readable, Writable } from 'node:stream'
 import { planShipActions } from './ship-actions'
 import { inspectShipGit, type ShipGitState, shipSourceMatchesBuild } from './ship-git'
@@ -76,6 +76,13 @@ export async function runShipCommand(
   options: ShipCommandOptions = {},
   dependencies: ShipCommandDependencies = {},
 ): Promise<'cancelled' | 'dry-run' | 'shipped'> {
+  ReleaseCapabilities.require('ship')
+  if (options.update || options.rollback) {
+    ReleaseCapabilities.require('ota')
+  }
+  if (options.betaRecipients === undefined && !options.update) {
+    ReleaseCapabilities.require('external-distribution')
+  }
   validateOptions(options)
   const project = await discoverShipProject(targetPath)
   return await withShipTransaction(project.root, async () => {
