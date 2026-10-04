@@ -1,7 +1,7 @@
-use ReadNetApp from ./
+use ReadNetApp, ReadNetErrorVariant, ReadNetMissingVariant, RuntimeDefaultApp from ./
 
 test "Read Net" {
-   test "shows the project's net for a deleted note behind a bare guard" {
+   test "shows the app's net for a deleted note behind a bare guard" {
       run ReadNetApp
       enter "Groceries" into #noteTitle
       press #addNote
@@ -20,5 +20,33 @@ test "Read Net" {
       expect text "Deleted here"
       expect text "The deleted note kept its id"
       expect missing text "Read Net: this note is gone"
+   }
+   test "uses the variant's missing handler" {
+      run ReadNetMissingVariant
+      enter "Variant note" into #noteTitle
+      press #addNote
+      press #openNetNote
+      press #deleteNote
+      expect text "Variant: this note is gone"
+      expect missing text "Read Net: this note is gone"
+   }
+   test "inherits the base missing handler when the variant replaces error" {
+      run ReadNetErrorVariant
+      enter "Inherited note" into #noteTitle
+      press #addNote
+      press #openNetNote
+      press #deleteNote
+      expect text "Read Net: this note is gone"
+      expect missing text "Inherited note"
+   }
+   test "uses the runtime missing handler when the app replaces other cases" {
+      run RuntimeDefaultApp
+      enter "Receipts" into #runtimeNoteTitle
+      press #addRuntimeNote
+      press #openRuntimeNote
+      expect text "Receipts"
+      press #deleteRuntimeNote
+      expect text "This runtime note could not be found."
+      expect missing text "Receipts"
    }
 }

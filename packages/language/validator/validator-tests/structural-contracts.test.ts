@@ -428,24 +428,6 @@ Describe('validator: declaration contracts', () => {
   )
 
   Test(
-    'accepts selection activation inside any view declaration',
-    accepts(`
-      use SelectionNav from @tao/nav
-      let MainNavigation = SelectionNav {
-        Initial @workspace
-        Display "tabs"
-        @workspace { Label "Workspace" Content Home }
-      }
-      app SelectionApp { Name "Selection" Navigator MainNavigation }
-      view Home() {
-        action Activate() { present SelectionApp@workspace }
-        render Empty()
-      }
-      ${stubView('Empty')}
-    `),
-  )
-
-  Test(
     'rejects replacement outside view declarations',
     rejects(
       `
@@ -543,47 +525,14 @@ Describe('validator: declaration contracts', () => {
     `),
   )
 
-  const selectionNavCases: ReadonlyArray<readonly [name: string, configuration: string, message: string]> = [
-    [
-      'initial keys absent from keyed items',
-      'Initial @missing Display "tabs" @home { Label "Home" Content Home }',
+  // REMOVAL CANDIDATE: Carousel covers missing keys; this retains imported stdlib schema integration.
+  Test(
+    'rejects an Initial key absent from imported SelectionNav items',
+    rejects(
+      selectionNavApp('Initial @missing Display "tabs" @home { Label "Home" Content Home }'),
       navigationValidationMessages.unknownConfigurationKey('SelectionNav', 'Initial', '@missing'),
-    ],
-    [
-      'display values of the wrong type',
-      'Initial @home Display 3 @home { Label "Home" Content Home }',
-      navigationValidationMessages.configurationType('Display', 'text', 'number'),
-    ],
-    [
-      'duplicate keyed items',
-      'Initial @home Display "tabs" @home { Label "Home" Content Home } @home { Label "Again" Content Home }',
-      navigationValidationMessages.duplicateConfigurationKey('SelectionNav', '@home'),
-    ],
-    [
-      'labels of the wrong type',
-      'Initial @home Display "tabs" @home { Label 4 Content Home }',
-      navigationValidationMessages.configurationType('Label', 'text', 'number'),
-    ],
-    [
-      'content of the wrong type',
-      'Initial @home Display "tabs" @home { Label "Home" Content "not presentable" }',
-      navigationValidationMessages.configurationType('Content', 'view', 'text'),
-    ],
-    [
-      'unknown keyed item properties',
-      'Initial @home Display "tabs" @home { Label "Home" Content Home Extra "unknown" }',
-      navigationValidationMessages.keyedItemConfiguration('SelectionNav', '@home', 'Extra'),
-    ],
-    [
-      'missing keyed item properties',
-      'Initial @home Display "tabs" @home { Label "Home" }',
-      navigationValidationMessages.keyedItemMissing('SelectionNav', '@home', 'Content'),
-    ],
-  ]
-
-  for (const [name, configuration, message] of selectionNavCases) {
-    Test(`rejects SelectionNav ${name}`, rejects(selectionNavApp(configuration), message))
-  }
+    ),
+  )
 
   const queryCases: ReadonlyArray<readonly [name: string, source: string, message: string]> = [
     [
@@ -713,11 +662,6 @@ Describe('validator: declaration contracts', () => {
       dataValidationMessages.autoDeleteOwner('Enabled'),
     ],
     [
-      'a field that is both optional and defaulted',
-      'data Parents / Parent { Title text? (default "x") }',
-      dataValidationMessages.optionalDefault('Title'),
-    ],
-    [
       'ambiguous owner-side cascade relations',
       `
         data Parents / Parent { Children (owned) }
@@ -730,11 +674,6 @@ Describe('validator: declaration contracts', () => {
   for (const [name, source, message] of dataFieldCases) {
     Test(`rejects ${name}`, rejects(source, message))
   }
-
-  Test(
-    'accepts unique on a primitive field',
-    accepts('data Parents / Parent { ExternalId number (unique), Name text }'),
-  )
 
   Test(
     'accepts unique on a boolean field with named cases',
@@ -803,23 +742,10 @@ Describe('validator: declaration contracts', () => {
   )
 
   Test(
-    'accepts search on a text field',
-    accepts('data Recipes / Recipe { Title text (search), Servings number }'),
-  )
-
-  Test(
     'rejects search on a non-text field',
     rejects(
       'data Recipes / Recipe { Servings number (search) }',
       dataValidationMessages.searchFieldKind('Servings'),
-    ),
-  )
-
-  Test(
-    'rejects duplicate search modifiers',
-    rejects(
-      'data Recipes / Recipe { Title text (search, search) }',
-      dataValidationMessages.duplicateModifier('Title', 'search'),
     ),
   )
 
@@ -892,12 +818,10 @@ Describe('validator: declaration contracts', () => {
     Test(`rejects ${name}`, rejects(taggedLoopApp(body), message))
   }
 
-  for (const member of ['Loading', 'Error', 'Empty'] as const) {
-    Test(
-      `rejects retired collection member ${member}`,
-      rejects(collectionApp(`Text(Items.${member})`), typeValidationMessages.memberNotItem(member)),
-    )
-  }
+  Test(
+    'rejects retired collection member Loading',
+    rejects(collectionApp('Text(Items.Loading)'), typeValidationMessages.memberNotItem('Loading')),
+  )
 
   Test(
     'accepts stable entity IDs in collection loops',

@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import tab from '@bomb.sh/tab/commander'
 import { Command } from '@commander-js/extra-typings'
-import { Diagnostic, Errors, FS, HCI, Platform } from '@shared'
+import { Diagnostic, Errors, FS, HCI, Platform, ReleaseCapabilities } from '@shared'
 import type { Command as BaseCommand } from 'commander'
 import * as DiagnosticReport from './diagnostic-report'
 import type { InPlace } from './in-place-files'
@@ -39,11 +39,29 @@ export async function runTaoCli(argv = Platform.runtimeProcess.argv): Promise<vo
   await createCommands().parseAsync(argv, { from: 'node' })
 }
 
-function createCommands(): Command {
+export function createCommands(): Command {
   const commands = new Command()
     .name('tao')
     .description('Tao language CLI.')
     .version(TaoVersion.current(), '-v, --version', 'Print the Tao release this is, or `development` from source.')
+
+  commands
+    .command('doctor')
+    .option('--json', 'Print the environment fingerprint as JSON.')
+    .option('--fingerprint', 'Print only the pasteable environment fingerprint.')
+    .description('Show a privacy-filtered environment fingerprint for a feedback report.')
+    .action(async (options: { fingerprint?: boolean; json?: boolean }) => {
+      const { runVisitorDoctor } = await import('./feedback-command')
+      await runVisitorDoctor(options)
+    })
+
+  commands
+    .command('bug-report')
+    .description('Prepare a feedback report with links and a pasteable environment fingerprint.')
+    .action(async () => {
+      const { runBugReport } = await import('./feedback-command')
+      await runBugReport()
+    })
 
   commands
     .command('bridge')
@@ -113,6 +131,97 @@ function createCommands(): Command {
         Platform.runtimeProcess.exit(1)
       }
     })
+
+  const secrets = commands
+    .command('secrets')
+    .description('Manage age-encrypted secrets committed in a Tao project.')
+
+  secrets
+    .command('identity')
+    .description('Create or show this Mac’s public secrets recipient.')
+    .action(async () =>
+      await runSecretAction(async () => {
+        const { projectSecretsIdentity } = await import('./project-secrets-command')
+        HCI.writeLine(await projectSecretsIdentity())
+      })
+    )
+
+  secrets
+    .command('init')
+    .argument('[path]', 'Project file or directory to search.', '.')
+    .description('Create a committed encrypted store for the nearest Tao project.')
+    .action(async (path: string) =>
+      await runSecretAction(async () => {
+        const { initProjectSecrets } = await import('./project-secrets-command')
+        HCI.writeSuccess(`Created ${FS.displayPath(await initProjectSecrets(path))}. Commit this file.\n`)
+      })
+    )
+
+  secrets
+    .command('grant')
+    .argument('<recipient>', 'Public recipient from another developer’s `tao secrets identity`.')
+    .argument('[path]', 'Project file or directory to search.', '.')
+    .description('Grant an enrolled collaborator access to every project secret.')
+    .action(async (recipient: string, path: string) =>
+      await runSecretAction(async () => {
+        const { grantProjectSecrets } = await import('./project-secrets-command')
+        const granted = await grantProjectSecrets(recipient, path)
+        HCI.writeLine(granted ? 'Recipient granted. Commit the updated secrets file.' : 'Recipient already has access.')
+      })
+    )
+
+  secrets
+    .command('set')
+    .argument('<name>', 'Environment-style secret name, such as INSTANT_APP_ADMIN_TOKEN.')
+    .argument('[path]', 'Project file or directory to search.', '.')
+    .description('Enter a hidden value and encrypt it into the project store.')
+    .action(async (name: string, path: string) =>
+      await runSecretAction(async () => {
+        const { setProjectSecret } = await import('./project-secrets-command')
+        const result = await setProjectSecret(name, path)
+        HCI.writeSuccess(
+          `${result.replaced ? 'Replaced' : 'Added'} ${name} in ${FS.displayPath(result.path)}. Commit the file.\n`,
+        )
+      })
+    )
+
+  secrets
+    .command('get')
+    .argument('<name>', 'Name of the value to decrypt and write to stdout.')
+    .argument('[path]', 'Project file or directory to search.', '.')
+    .description('Decrypt one value and write its exact bytes to stdout.')
+    .action(async (name: string, path: string) =>
+      await runSecretAction(async () => {
+        const { readProjectSecret } = await import('./project-secrets-command')
+        HCI.write(await readProjectSecret(name, path))
+      })
+    )
+
+  secrets
+    .command('list')
+    .argument('[path]', 'Project file or directory to search.', '.')
+    .description('List secret names without decrypting values.')
+    .action(async (path: string) =>
+      await runSecretAction(async () => {
+        const { listProjectSecrets } = await import('./project-secrets-command')
+        const entries = await listProjectSecrets(path)
+        for (const name of Object.keys(entries).sort()) {
+          HCI.writeLine(name)
+        }
+      })
+    )
+
+  secrets
+    .command('remove')
+    .argument('<name>', 'Name of the value to remove from the current store.')
+    .argument('[path]', 'Project file or directory to search.', '.')
+    .description('Remove current ciphertext; Git history and provider revocation remain separate.')
+    .action(async (name: string, path: string) =>
+      await runSecretAction(async () => {
+        const { removeProjectSecret } = await import('./project-secrets-command')
+        HCI.writeSuccess(`Removed ${name} from ${FS.displayPath(await removeProjectSecret(name, path))}.\n`)
+      })
+    )
 
   commands
     .command('connect')
@@ -287,7 +396,7 @@ function createCommands(): Command {
     )
     .description(
       "Push the app's generated InstantDB schema (additive changes only, unless forced) and permission rules."
-        + ' Reads the token from INSTANT_APP_ADMIN_TOKEN, or asks for it at a terminal.',
+        + ' Reads INSTANT_APP_ADMIN_TOKEN from the environment or project secrets, or asks at a terminal.',
     )
     .action(async (path: string, options: { app?: string; dryRun?: boolean; force?: boolean }) => {
       try {
@@ -717,11 +826,48 @@ function createCommands(): Command {
       }
     })
 
+  commands.command('release-profile')
+    .description('Print the immutable release profile used by this toolchain.')
+    .action(() =>
+      HCI.writeLine(
+        JSON.stringify({
+          version: TaoVersion.current(),
+          ...ReleaseCapabilities.current(),
+          fingerprint: ReleaseCapabilities.fingerprint(),
+        }),
+      )
+    )
+
+  // Remove unavailable surfaces before completion registration so discovery and parsing agree.
+  // Unclassified commands and options are deferred, so a new surface stays out of public builds.
+  pruneReleaseSurface(commands as unknown as BaseCommand, '')
+
   // Registers `tao complete <shell>` to print a completion script, and the hidden request protocol it calls.
   // The adapter types against plain Commander, which extra-typings' generic Command does not widen to.
   tab(commands as unknown as BaseCommand)
 
   return commands
+}
+
+/** pruneReleaseSurface removes the subcommands and options this release profile does not ship, at every depth. */
+function pruneReleaseSurface(command: BaseCommand, path: string): void {
+  if (path) {
+    const registeredOptions = command.options as BaseCommand['options'][number][]
+    for (const option of [...registeredOptions]) {
+      if (!ReleaseCapabilities.allows(ReleaseCapabilities.optionCapability(path, option.long ?? option.flags))) {
+        registeredOptions.splice(registeredOptions.indexOf(option), 1)
+      }
+    }
+  }
+  const registeredCommands = command.commands as BaseCommand[]
+  for (const child of [...registeredCommands]) {
+    const childPath = path ? `${path} ${child.name()}` : child.name()
+    if (!ReleaseCapabilities.allows(ReleaseCapabilities.commandCapability(childPath))) {
+      registeredCommands.splice(registeredCommands.indexOf(child), 1)
+      continue
+    }
+    pruneReleaseSurface(child, childPath)
+  }
 }
 
 function parseBetaRecipients(value: boolean | string | undefined): string[] | undefined {
@@ -737,6 +883,15 @@ function parseBetaRecipients(value: boolean | string | undefined): string[] | un
     Errors.throwUserInput(`TestFlight recipient '${invalid}' is not an email address.`)
   }
   return [...new Set(recipients)]
+}
+
+async function runSecretAction(work: () => Promise<void>): Promise<void> {
+  try {
+    await work()
+  } catch (error) {
+    HCI.writeErrorLine(Errors.formatForUser(error))
+    Platform.runtimeProcess.setExitCode(1)
+  }
 }
 
 function shipBump(

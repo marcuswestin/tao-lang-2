@@ -1,6 +1,6 @@
 import { Workspace } from '@compiler/workspace'
 import Runtime, { HostDependencies, RuntimeToolchainPaths } from '@expo-host'
-import { Assert, CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
+import { Assert, CLI, Errors, FS, HCI, Platform, ReleaseCapabilities, Repo } from '@shared'
 import { AgentClientBuild } from './agent-client-build'
 import { buildDesktopApp } from './desktop-build'
 import { chooseTaoApp } from './dev-app-selection'
@@ -16,6 +16,7 @@ export type BuildRecord = {
   projectRoot: string
   results: Partial<Record<BuildTarget, { artifact: string; status: 'succeeded' } | { error: string; status: 'failed' }>>
   schemaVersion: 1
+  releaseProfile: string
   sourceDigest?: string
   targets: BuildTarget[]
   toolchainVersion: string
@@ -42,6 +43,12 @@ const excludedSourceDirectories = new Set(['.git', '.tao', '.artifacts', '.expo'
 
 /** Build each requested target from the same immutable source snapshot, retaining every result. */
 export async function runTaoBuild(path: string, options: BuildOptions): Promise<number> {
+  if (options.agents) {
+    ReleaseCapabilities.require('app-commands')
+  }
+  for (const target of options.targets) {
+    ReleaseCapabilities.require(ReleaseCapabilities.targetCapability(target))
+  }
   const selectedTargets = await chooseTargets(
     options.agents && options.targets.length === 0 ? ['desktop'] : options.targets,
   )
@@ -70,6 +77,7 @@ export async function runTaoBuild(path: string, options: BuildOptions): Promise<
     projectRoot: app.projectRoot,
     results: {},
     schemaVersion: 1,
+    releaseProfile: ReleaseCapabilities.fingerprint(),
     targets: [...selectedTargets],
     toolchainVersion:
       (await FS.readJson<{ version: string }>(FS.resolvePath('package.json', RuntimeToolchainPaths.packageRoot)))
@@ -257,6 +265,9 @@ class BuildProgress {
 async function chooseTargets(requested: readonly BuildTarget[]): Promise<BuildTarget[]> {
   if (requested.length > 0) {
     return targets.filter(target => requested.includes(target))
+  }
+  if (ReleaseCapabilities.current().phase !== 'development') {
+    return ['web']
   }
   if (!HCI.isInteractive()) {
     Errors.throwUserInput(

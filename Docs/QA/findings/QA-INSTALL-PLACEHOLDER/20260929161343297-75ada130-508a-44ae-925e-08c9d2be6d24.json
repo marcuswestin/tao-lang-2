@@ -1,0 +1,40 @@
+{
+  "id": "QA-INSTALL-PLACEHOLDER",
+  "status": "open",
+  "phase": 1,
+  "surfaceId": "doc:README.md",
+  "dimension": "text",
+  "channel": "source",
+  "severity": "blocking",
+  "title": "the public first step is not runnable",
+  "observed": "Rechecked at 4651560f: Install still says the standalone command \"is on its way\" and shows `git clone <repository> tao`, followed by about 30 lines of checkout-only direnv, ~/.tao-dev, zsh and Nix garbage-root setup.",
+  "impact": "A newcomer cannot complete the public first step.",
+  "location": "README.md:52-95",
+  "affectedPhases": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "expected": "a newcomer can follow the actual published, signed CLI installation route.",
+  "recheck": "follow the final public instructions on a clean supported Mac, then create/run an app.",
+  "evidence": [
+    "README.md"
+  ],
+  "evidenceHashes": [
+    {
+      "path": "README.md",
+      "sha256": "13f55bbdabb00f9793c0bee10d2bb8efcacc05fdc5dcfb89ebaf356e0003eafc"
+    }
+  ],
+  "createdAt": "2026-09-26T22:46:00.000Z",
+  "updatedAt": "2026-09-29T16:13:43.297Z",
+  "confidence": "confirmed",
+  "requiredReviewer": "agent",
+  "relatedStories": [
+    "CLI1",
+    "WEB2"
+  ],
+  "existingIssue": "Docs/MVP Roadmap/Agent MVP Roadmap.md#A2"
+}

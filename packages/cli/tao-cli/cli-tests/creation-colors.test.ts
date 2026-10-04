@@ -4,7 +4,6 @@ import { type CreationPalette, DEFAULT_PALETTE } from '../cli-src/create/creatio
 
 const palettes: readonly (readonly [string, CreationPalette])[] = [
   ['the Notebook starter', DEFAULT_PALETTE],
-  ['the Pantry starter', { canvas: '#f7f3ea', ink: '#2b2118', accent: '#b5562a' }],
   ['a dark canvas', { canvas: '#101612', ink: '#edf3ee', accent: '#8fbea0' }],
   ['a pale ink close to its canvas', { canvas: '#ffffff', ink: '#6b6b6b', accent: '#3f6f9a' }],
 ]

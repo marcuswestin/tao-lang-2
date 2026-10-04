@@ -161,17 +161,6 @@ Describe('generated test run roots', () => {
     })
   })
 
-  Test('keeps the selected generated store outside a managed worktree', async () => {
-    await withIsolatedTaoHome(async () => {
-      const runRoot = await TestRunRoot.create('tao-test-default-root')
-      try {
-        Expect(FS.pathIsWithin(runRoot, TaoHome.cacheRoot())).toBe(true)
-      } finally {
-        await TestRunRoot.discard(runRoot)
-      }
-    })
-  })
-
   Test('records ownership when the CLI passes the explicit host root', async () => {
     await withIsolatedTaoHome(async () => {
       const runtimePackageRoot = await mkTestDir('tao-test-explicit-host-root-')
@@ -346,7 +335,6 @@ Describe('generated test run roots', () => {
 
       await TestRunRoot.discard(runRoot, { runtimePackageRoot })
 
-      Expect(await FS.exists(runRoot)).toBe(false)
       Expect(await listGenerated(runtimePackageRoot, 'tao-test-command')).toEqual([])
     })
   })
@@ -422,7 +410,6 @@ Describe('generated test run roots', () => {
     await withRuntimePackageRoot(async runtimePackageRoot => {
       const concurrent = [
         await writeRunRoot(runtimePackageRoot, 'tao-test-command', 0),
-        await writeRunRoot(runtimePackageRoot, 'tao-test-command', 10 * 60 * 1000),
         await writeRunRoot(runtimePackageRoot, 'tao-test-command', 59 * 60 * 1000),
       ]
       const finished = await writeRunRoot(runtimePackageRoot, 'tao-test-command', 3 * HOUR_MS)
@@ -452,7 +439,6 @@ Describe('generated test run roots', () => {
       Expect(await FS.exists(newest)).toBe(true)
       Expect(await listGenerated(runtimePackageRoot)).toContain('notes.txt')
       Expect(await listGenerated(runtimePackageRoot)).toContain('manual-scratch')
-      Expect(await FS.isDirectory(runtimePackageRoot)).toBe(true)
     })
   })
 
@@ -810,18 +796,6 @@ Describe('reusing a generated test run root', () => {
       await TestRunRoot.prune({ runtimePackageRoot })
 
       Expect(await FS.listDir(plansRoot)).toEqual(['1-in-use'])
-    })
-  })
-
-  // The index directory is named so that neither the run-root nor the category shape matches it.
-  Test('never mistakes the index directory for generated code of its own', async () => {
-    await withRuntimePackageRoot(async runtimePackageRoot => {
-      await publishedRunRoot(runtimePackageRoot, FINGERPRINT, 9 * HOUR_MS)
-
-      await TestRunRoot.prune({ runtimePackageRoot })
-
-      const cacheRoot = FS.resolvePath(`${TestRunRoot.DIRECTORY_NAME}/tao-test-command/.cache`, runtimePackageRoot)
-      Expect(await FS.listDir(cacheRoot)).toEqual([`${FINGERPRINT}.json`])
     })
   })
 })

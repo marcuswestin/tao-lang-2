@@ -6,6 +6,8 @@
   "module": "cli-kit-src/cli-kit.ts",
   "exports": {
     ".": "./cli-kit-src/cli-kit.ts",
+    "./secrets": "./cli-kit-src/secrets/SecretStore.ts",
+    "./age-cipher": "./cli-kit-src/secrets/AgeCipher.ts",
     "./OutputText": "./cli-kit-src/OutputText.ts",
     "./RunWithCommands": "./cli-kit-src/RunWithCommands.ts"
   },

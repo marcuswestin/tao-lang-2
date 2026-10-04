@@ -83,11 +83,11 @@ Describe('TR.Interaction generated layers', () => {
     await act(async () => {
       TR.Interaction.PressKey('?')
     })
-    Expect(screen.getByText('Interaction hints')).toBeDefined()
+    screen.getByText('Interaction hints')
     Expect(layerHost.props.importantForAccessibility).toBe('no')
     Expect(layerHost.props.style.pointerEvents).toBe('none')
-    Expect(screen.getByText('H — Home')).toBeDefined()
-    Expect(screen.getByText('P — Projects')).toBeDefined()
+    screen.getByText('H — Home')
+    screen.getByText('P — Projects')
     const projectRow = screen.getByTestId('tao-interaction-row:projects')
     Expect(projectRow.props.accessibilityLabel).toBe('P — Projects')
     Expect(projectRow.props.accessibilityRole).toBe('text')
@@ -126,15 +126,15 @@ Describe('TR.Interaction generated layers', () => {
     await act(async () => {
       TR.Interaction.PressKey('p')
     })
-    Expect(screen.getByText('Narrowing “p”')).toBeDefined()
-    Expect(screen.getByText('Projects')).toBeDefined()
+    screen.getByText('Narrowing “p”')
+    screen.getByText('Projects')
     Expect(screen.queryByText('Home')).toBeNull()
 
     await act(async () => {
       TR.Interaction.PressKey('z')
     })
-    Expect(screen.getByText('Narrowing “pz”')).toBeDefined()
-    Expect(screen.getByText('No matching targets')).toBeDefined()
+    screen.getByText('Narrowing “pz”')
+    screen.getByText('No matching targets')
 
     screen.unmount()
     withdraw.forEach(dispose => dispose())
@@ -155,9 +155,9 @@ Describe('TR.Interaction generated layers', () => {
     await act(async () => {
       TR.Interaction.PressKey('Escape')
     })
-    Expect(screen.getByText('Interaction overview')).toBeDefined()
-    Expect(screen.getByText('W — WordFlower')).toBeDefined()
-    Expect(screen.getByText('O — Focus session')).toBeDefined()
+    screen.getByText('Interaction overview')
+    screen.getByText('W — WordFlower')
+    screen.getByText('O — Focus session')
     Expect(screen.queryByText('F — Focus session')).toBeNull()
     await act(async () => {
       TR.Interaction.PressKey('o')
@@ -185,9 +185,9 @@ Describe('TR.Interaction generated layers', () => {
     await act(async () => {
       TR.Interaction.PressKey('?')
     })
-    Expect(within(screen.getByTestId('tao-interaction-row:one')).getByText('A — A')).toBeDefined()
-    Expect(within(screen.getByTestId('tao-interaction-row:three')).getByText('BA — A')).toBeDefined()
-    Expect(within(screen.getByTestId('tao-interaction-row:two')).getByText('BB — A')).toBeDefined()
+    within(screen.getByTestId('tao-interaction-row:one')).getByText('A — A')
+    within(screen.getByTestId('tao-interaction-row:three')).getByText('BA — A')
+    within(screen.getByTestId('tao-interaction-row:two')).getByText('BB — A')
 
     await act(async () => {
       TR.Interaction.PressKey('b')
@@ -216,8 +216,8 @@ Describe('TR.Interaction generated layers', () => {
     await act(async () => {
       TR.Interaction.PressKey('?')
     })
-    Expect(within(screen.getByTestId('tao-interaction-row:zebra')).getByText('A — Alpha')).toBeDefined()
-    Expect(within(screen.getByTestId('tao-interaction-row:zulu')).getByText('L — Alpha')).toBeDefined()
+    within(screen.getByTestId('tao-interaction-row:zebra')).getByText('A — Alpha')
+    within(screen.getByTestId('tao-interaction-row:zulu')).getByText('L — Alpha')
 
     await act(async () => {
       TR.Interaction.PressKey('?')
@@ -227,7 +227,7 @@ Describe('TR.Interaction generated layers', () => {
     await act(async () => {
       TR.Interaction.PressKey('?')
     })
-    Expect(within(screen.getByTestId('tao-interaction-row:aardvark')).getByText('P — Alpha')).toBeDefined()
+    within(screen.getByTestId('tao-interaction-row:aardvark')).getByText('P — Alpha')
 
     await act(async () => {
       TR.Interaction.PressKey('p')
@@ -308,20 +308,20 @@ Describe('TR.Interaction generated layers', () => {
     await act(async () => {
       TR.Interaction.PressKey('.')
     })
-    Expect(screen.getByText('Actions for Draft the intro')).toBeDefined()
-    Expect(screen.getByText('F — Finish document')).toBeDefined()
+    screen.getByText('Actions for Draft the intro')
+    screen.getByText('F — Finish document')
 
     await act(async () => {
       TR.Interaction.PressKey('Escape')
       TR.Interaction.PressKey('primary+k')
     })
-    Expect(screen.getByText('Command palette')).toBeDefined()
-    Expect(screen.getByText(/Duplicate document$/)).toBeDefined()
+    screen.getByText('Command palette')
+    screen.getByText(/Duplicate document$/)
     await act(async () => {
       TR.Interaction.Narrow('dup doc')
     })
     Expect(TR.Interaction.Attention.read().targetLabel).toBe('Duplicate document')
-    Expect(screen.getByText(/Duplicate document$/)).toBeDefined()
+    screen.getByText(/Duplicate document$/)
     Expect(screen.queryByText(/Delete document$/)).toBeNull()
 
     screen.unmount()
@@ -395,9 +395,9 @@ Describe('TR.Interaction generated layers', () => {
       TR.Interaction.PressKey('.')
       TR.Interaction.PressKey('m')
     })
-    Expect(screen.getByText('Choose Workspace for Move document')).toBeDefined()
-    Expect(screen.getByText('Home')).toBeDefined()
-    Expect(screen.getByTestId('tao-interaction-pending-search')).toBeDefined()
+    screen.getByText('Choose Workspace for Move document')
+    screen.getByText('Home')
+    screen.getByTestId('tao-interaction-pending-search')
 
     await act(async () => {
       fireEvent.press(screen.getByTestId('tao-interaction-pending-search'))
@@ -518,6 +518,7 @@ Describe('TR.Interaction generated layers', () => {
               declaration: `@test/${name}`,
               identity: `@test#${name}`,
               kind: 'control',
+              nameStatus: 'missing',
               role: 'action',
               view: name,
             },

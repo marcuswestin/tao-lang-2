@@ -1,4 +1,4 @@
-import { Repo } from '@shared'
+import { FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { dueReminders, formatReminders, readDueReminders, REMINDERS_PATH } from '../dev-cli-src/doctor/Reminders'
 
@@ -41,10 +41,9 @@ Describe('reminders', () => {
     Expect(await readDueReminders(await mkTestDir('reminders-empty'), '2099-01-01')).toEqual([])
   })
 
-  Test('reads the reminders this repository ships, and finds the re-measurement among them', async () => {
-    const reminders = await readDueReminders(Repo.getRoot(), '2099-01-01')
-
-    Expect(reminders.length).toBeGreaterThan(0)
-    Expect(reminders.some(reminder => reminder.text.includes('Re-measure agent context usage'))).toEqual(true)
+  Test('reads the configured reminder file from the requested checkout', async () => {
+    const root = await mkTestDir('reminders-file')
+    await FS.writeText(FS.resolvePath(REMINDERS_PATH, root), '- 2026-09-21 — Check it.\n')
+    Expect(await readDueReminders(root, '2026-09-21')).toEqual([{ due: '2026-09-21', text: 'Check it.' }])
   })
 })

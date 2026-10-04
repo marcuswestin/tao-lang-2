@@ -7,6 +7,7 @@ import {
   commandCatalog,
   interactionAttention,
 } from './TR-interaction-catalog'
+import { contextualHelp } from './TR-interaction-help'
 import { interactionKeyboardPresence } from './TR-interaction-keys'
 import {
   interactionMeasurements,
@@ -56,7 +57,7 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
   // One index per render. Every surface below resolves identities against it rather than scanning
   // the mounted outline once per candidate on every keystroke.
   const nodesByIdentity = new Map(nodes.map(node => [node.identity, node]))
-  const visible = interactionKeyboardPresence.read()
+  const visible = (interactionKeyboardPresence.read() || attention.mode === 'verbs')
     && (attention.mode === 'hints'
       || attention.mode === 'overview'
       || attention.mode === 'narrowing'
@@ -94,7 +95,7 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
     rows = attention.candidates.flatMap(identity => {
       const node = nodesByIdentity.get(identity)
       const label = node?.label()
-      return !node || !label ? [] : [{ identity, label }]
+      return !node || !label ? [] : [{ identity, label, selected: identity === attention.target }]
     })
     if (rows.length === 0) {
       rows = [{ identity: '@tao/narrowing/no-match', label: 'No matching targets' }]
@@ -129,50 +130,92 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
 
   const runtime = requireReactNativeRuntime()
   const hidden = !visible || heading === undefined
+  const help = visible ? contextualHelp(attention, commandCatalog, interactionOutline) : undefined
   const anchored = attention.mode === 'hints' || attention.mode === 'overview'
+  const helpSurface = help === undefined ? undefined : createElement(
+    runtime.View,
+    { accessible: false, style: helpStyle, testID: 'tao-contextual-help' },
+    createElement(runtime.Text, { accessibilityRole: 'header', style: headingStyle }, 'Help'),
+    createElement(runtime.Text, null, `Region: ${help.region}`),
+    createElement(runtime.Text, null, `Target: ${help.target}`),
+    createElement(runtime.Text, null, 'Enter: select · .: actions'),
+    ...help.actions.map((action, index) =>
+      createElement(
+        runtime.View,
+        { key: index },
+        createElement(
+          runtime.Text,
+          null,
+          `${action.label} — ${action.invocation}${action.enabled ? '' : ' (unavailable)'}`,
+        ),
+        ...(action.description === undefined ? [] : [createElement(runtime.Text, null, action.description)]),
+      )
+    ),
+  )
   const rowElements = rows.map(row => {
     const pending = attention.mode === 'verb-pending' ? attention.verbPending : undefined
     const searchResult = pending?.request === 'search'
       ? interactionAttention.pendingSearchResults().find(result => result.identity === row.identity)
       : undefined
     const onPress = pending === undefined
-      ? undefined
+      ? attention.mode === 'verbs' && attention.target !== undefined
+        ? () => interactionAttention.invokeVerb(attention.target!, row.identity)
+        : undefined
       : searchResult === undefined
       ? () => interactionAttention.choosePendingTarget(row.identity)
       : () => interactionAttention.choosePendingSearchResult(searchResult.value)
-    return (
+    const rowElement = createElement(
+      onPress === undefined ? runtime.View : runtime.Pressable,
+      {
+        accessibilityLabel: rowText(attention.mode, row),
+        accessibilityRole: onPress === undefined ? 'text' : 'button',
+        ...(row.enabled === false || row.selected === true
+          ? accessibilityStateProps({
+            ...(row.enabled === false ? { disabled: true } : {}),
+            ...(row.selected === true ? { selected: true } : {}),
+          })
+          : {}),
+        accessible: true,
+        key: row.identity,
+        ...(onPress === undefined ? {} : { onPress }),
+        style: [
+          rowStyle,
+          row.selected === true ? selectedRowStyle : undefined,
+          mountedDesignStyle(props.taoProps, kind),
+          row.bounds === undefined ? undefined : anchoredStyle(row.bounds),
+        ],
+        testID: `tao-interaction-row:${row.identity}`,
+      },
       createElement(
-        pending === undefined ? runtime.View : runtime.Pressable,
-        {
-          accessibilityLabel: rowText(attention.mode, row),
-          accessibilityRole: pending === undefined ? 'text' : 'button',
-          ...(row.enabled === false || row.selected === true
-            ? accessibilityStateProps({
-              ...(row.enabled === false ? { disabled: true } : {}),
-              ...(row.selected === true ? { selected: true } : {}),
-            })
-            : {}),
-          accessible: true,
-          key: row.identity,
-          ...(onPress === undefined ? {} : { onPress }),
-          style: [
-            rowStyle,
-            mountedDesignStyle(props.taoProps, kind),
-            row.bounds === undefined ? undefined : anchoredStyle(row.bounds),
-          ],
-          testID: `tao-interaction-row:${row.identity}`,
-        },
-        createElement(
-          runtime.Text,
-          { accessible: false },
-          rowText(attention.mode, row),
-        ),
-      )
+        runtime.Text,
+        { accessible: false },
+        rowText(attention.mode, row),
+      ),
     )
+    return helpSurface === undefined || attention.mode !== 'narrowing' || row.selected !== true
+      ? rowElement
+      : createElement(runtime.View, { key: row.identity, style: helpPairStyle }, rowElement, helpSurface)
   })
   const pendingControls = attention.mode !== 'verb-pending' || attention.verbPending === undefined
     ? []
     : pendingSurfaceControls(runtime, attention.verbPending)
+  const mainSurface = createElement(
+    runtime.View,
+    {
+      accessible: false,
+      // The pending surface accepts pointer input; ordinary keyboard surfaces stay transparent.
+      style: attention.mode === 'verb-pending' || attention.mode === 'verbs'
+        ? [surfaceStyle, mountedDesignStyle(props.taoProps, 'Overview'), interactiveSurfaceStyle]
+        : [surfaceStyle, mountedDesignStyle(props.taoProps, 'Overview')],
+    },
+    createElement(runtime.Text, {
+      accessibilityLabel: heading,
+      accessibilityRole: 'header',
+      style: headingStyle,
+    }, heading),
+    ...pendingControls,
+    ...(anchored ? [] : rowElements),
+  )
   return createElement(
     runtime.View,
     {
@@ -183,7 +226,7 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
       importantForAccessibility: hidden ? 'no-hide-descendants' : 'no',
       // Ordinary generated rows are keyboard affordances; pending rows become pointer controls so
       // entity and scalar slots can be completed without leaving the interaction surface.
-      style: attention.mode === 'verb-pending'
+      style: attention.mode === 'verb-pending' || attention.mode === 'verbs'
         ? [interactionLayerHostStyle, interactiveLayerHostStyle]
         : interactionLayerHostStyle,
       testID: 'tao-interaction-layers',
@@ -193,26 +236,7 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
       : createElement(
         React.Fragment,
         null,
-        createElement(
-          runtime.View,
-          {
-            accessible: false,
-            // `box-none` on the host lets touches fall through to the app on native, but the web
-            // runtime renders it as a plain `pointer-events: none` that descendants inherit. The
-            // pending surface therefore re-enables pointer input on itself, so its search control
-            // and chooser rows stay clickable while the rest of the overlay stays transparent.
-            style: attention.mode === 'verb-pending'
-              ? [surfaceStyle, mountedDesignStyle(props.taoProps, 'Overview'), interactiveSurfaceStyle]
-              : [surfaceStyle, mountedDesignStyle(props.taoProps, 'Overview')],
-          },
-          createElement(runtime.Text, {
-            accessibilityLabel: heading,
-            accessibilityRole: 'header',
-            style: headingStyle,
-          }, heading),
-          ...pendingControls,
-          ...(anchored ? [] : rowElements),
-        ),
+        mainSurface,
         ...(anchored ? rowElements : []),
       ),
   )
@@ -375,6 +399,18 @@ const surfaceStyle = {
 } as const
 
 const headingStyle = { fontSize: 16, fontWeight: '600' } as const
+const helpPairStyle = { alignItems: 'flex-start', flexDirection: 'row' } as const
+const helpStyle = {
+  backgroundColor: '#ffffff',
+  borderColor: '#1f2937',
+  borderRadius: 12,
+  borderWidth: 1,
+  gap: 6,
+  marginLeft: 8,
+  maxWidth: 320,
+  padding: 12,
+} as const
 const pendingControlStyle = { padding: 6 } as const
 const pendingInputStyle = { borderWidth: 1, minWidth: 240, padding: 8 } as const
 const rowStyle = { backgroundColor: '#ffffff', borderRadius: 6, flexDirection: 'row', padding: 6 } as const
+const selectedRowStyle = { backgroundColor: '#e0f2fe' } as const

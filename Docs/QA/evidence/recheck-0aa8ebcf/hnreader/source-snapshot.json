@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "id": "e5d95fd8-3b89-4f4d-ad63-2cf004583ce2",
+  "originalProject": "/Users/ro/code/tao-lang-2.worktrees/staged-release-qa-work-1831d4/Apps/HNReader",
+  "stagedProject": "/Users/ro/code/tao-lang-2.worktrees/staged-release-qa-work-1831d4/.artifacts/scratch/qa-capture/e5d95fd8-3b89-4f4d-ad63-2cf004583ce2/project",
+  "output": "/Users/ro/code/tao-lang-2.worktrees/staged-release-qa-work-1831d4/.artifacts/qa/captures/hnreader-0aa8ebcf-2",
+  "createdAt": "2026-09-29T16:21:05.831Z",
+  "owner": "qa-capture",
+  "cleanup": "Retained for diagnosis. Remove this owned scratch directory only after its capture processes have stopped.",
+  "status": "complete",
+  "files": [
+    {
+      "path": ".tao-project/studio/sketches.jsonc",
+      "sha256": "f386929504a1a627ce88f0442c377f7f12d66119469be3b20569952dcd16cb74"
+    },
+    {
+      "path": "@/studio/View1.tao",
+      "sha256": "cbb67b85dbf0caa710faf142b9088baeb9b4f6d2d4efdbea4ec066b9c93f6064"
+    },
+    {
+      "path": "@/studio/View2.tao",
+      "sha256": "26cac303dca0c098c19e18b6167b7b3cd304c409e52d79d75c32baf17dae6f82"
+    },
+    {
+      "path": "@/studio/View3.tao",
+      "sha256": "a26b6b52dbdbcdba71c76dce41d601a8112204c6055f1c2ce7daf4298a95919a"
+    },
+    {
+      "path": "@/studio/View4.tao",
+      "sha256": "a07c3a4c39bccb5410d7d7b4ffe52ec79c20fb1d3d5a8b2dee3a8cc72156562a"
+    },
+    {
+      "path": "@model/Data.tao",
+      "sha256": "f7ff417a534b567783554c5ae8d2b195e0f5398fcfba472055b5bdb9315c5050"
+    },
+    {
+      "path": "HNAdapter.ts",
+      "sha256": "24a67d6c506836e5b1d161c886310e021025020c5c775b5e6cd3cd40af33cead"
+    },
+    {
+      "path": "HNReader.scenarios.tao",
+      "sha256": "ad7530e1f2c2ac510315f91e19a51bc289dc3ef0e0352681beddd2082eaec798"
+    },
+    {
+      "path": "HNReader.tao",
+      "sha256": "0774a356c29fa00cbd9e909f61e5fd179a42aa178a0f3cd20ebc78cb3a9a2803"
+    },
+    {
+      "path": "HNReader.test.tao",
+      "sha256": "3a052639b42a38f212fcff711702a5acdb1040dc4c9ab889f6f6a2b37e1ba9c2"
+    },
+    {
+      "path": "README.md",
+      "sha256": "43d215449483a5268b378940d4a45dc49930649d870a5a39f395941d3a5c6c9c"
+    },
+    {
+      "path": "StubAdapter.ts",
+      "sha256": "2c71344552b075ca2a60e881fccdc0606991a3d42bdbd31f7e836f08e2c60df8"
+    },
+    {
+      "path": "UnavailableHistoryAdapter.ts",
+      "sha256": "1f053a97b1ef52700a31fb16be9997b43fc9ad79d8c8226ec6176ffaa81b3ce1"
+    }
+  ],
+  "excluded": [],
+  "cells": [
+    {
+      "key": "[\"HNReader.scenarios.tao\",\"rows\",\"leading\",\"{\\\"arguments\\\":{\\\"Story\\\":{\\\"handle\\\":\\\"Lead\\\",\\\"kind\\\":\\\"fixture-reference\\\"}},\\\"fixtureId\\\":\\\"/Users/ro/code/tao-lang-2.worktrees/staged-release-qa-work-1831d4/.artifacts/scratch/qa-capture/e5d95fd8-3b89-4f4d-ad63-2cf004583ce2/project/HNReader.scenarios.tao#fixture:HNFrontPage\\\",\\\"prepare\\\":[],\\\"stateLayers\\\":[],\\\"steps\\\":[]}\",\"{\\\"network\\\":{\\\"latencyMs\\\":0,\\\"outcome\\\":\\\"normal\\\"},\\\"scheme\\\":{\\\"capability\\\":\\\"reactive-browser\\\",\\\"requested\\\":\\\"light\\\",\\\"resolved\\\":\\\"light\\\",\\\"source\\\":\\\"scenario\\\"},\\\"viewport\\\":{\\\"height\\\":844,\\\"presetId\\\":\\\"phone\\\",\\\"width\\\":390}}\"]",
+      "group": "rows",
+      "label": "leading",
+      "status": "captured",
+      "screenshot": "screenshots/rows-leading-0d5d3f0fdd2e.png",
+      "sha256": "4bb4dc4520e079ff7d3dff613c7b16ec154104051c22b873767026aeea1d78a8"
+    },
+    {
+      "key": "[\"HNReader.scenarios.tao\",\"rows\",\"wrapping\",\"{\\\"arguments\\\":{\\\"Story\\\":{\\\"handle\\\":\\\"Runner\\\",\\\"kind\\\":\\\"fixture-reference\\\"}},\\\"fixtureId\\\":\\\"/Users/ro/code/tao-lang-2.worktrees/staged-release-qa-work-1831d4/.artifacts/scratch/qa-capture/e5d95fd8-3b89-4f4d-ad63-2cf004583ce2/project/HNReader.scenarios.tao#fixture:HNFrontPage\\\",\\\"prepare\\\":[{\\\"fields\\\":{\\\"Rank\\\":128,\\\"Title\\\":\\\"A very long headline about local-first sync that has to wrap across several lines\\\"},\\\"target\\\":\\\"Runner\\\"}],\\\"stateLayers\\\":[],\\\"steps\\\":[]}\",\"{\\\"network\\\":{\\\"latencyMs\\\":0,\\\"outcome\\\":\\\"normal\\\"},\\\"scheme\\\":{\\\"capability\\\":\\\"reactive-browser\\\",\\\"requested\\\":\\\"light\\\",\\\"resolved\\\":\\\"light\\\",\\\"source\\\":\\\"scenario\\\"},\\\"viewport\\\":{\\\"height\\\":844,\\\"presetId\\\":\\\"phone\\\",\\\"width\\\":390}}\"]",
+      "group": "rows",
+      "label": "wrapping",
+      "status": "captured",
+      "screenshot": "screenshots/rows-wrapping-7ace074bcdf7.png",
+      "sha256": "97e859a57b9440a0f93a2d81a953dbfe4958c7ed46252ff4196a6e1ff9e3db2e"
+    },
+    {
+      "key": "[\"@/studio/View1.tao\",\"sketch\",\"draft\",\"{\\\"arguments\\\":{},\\\"fixtureId\\\":null,\\\"prepare\\\":[],\\\"stateLayers\\\":[],\\\"steps\\\":[]}\",\"{\\\"network\\\":{\\\"latencyMs\\\":0,\\\"outcome\\\":\\\"normal\\\"},\\\"scheme\\\":{\\\"capability\\\":\\\"reactive-browser\\\",\\\"requested\\\":\\\"system\\\",\\\"resolved\\\":\\\"light\\\",\\\"source\\\":\\\"system\\\"},\\\"viewport\\\":{\\\"height\\\":844,\\\"presetId\\\":\\\"phone\\\",\\\"width\\\":390}}\"]",
+      "group": "sketch",
+      "label": "draft",
+      "status": "captured",
+      "screenshot": "screenshots/sketch-draft-355d5a7f7994.png",
+      "sha256": "9446d9e0a7a1d96fda3aa93b56cbd17bb8ec16a40b689d3f49d7e06612d47dbc"
+    },
+    {
+      "key": "[\"@/studio/View2.tao\",\"sketch\",\"draft\",\"{\\\"arguments\\\":{},\\\"fixtureId\\\":null,\\\"prepare\\\":[],\\\"stateLayers\\\":[],\\\"steps\\\":[]}\",\"{\\\"network\\\":{\\\"latencyMs\\\":0,\\\"outcome\\\":\\\"normal\\\"},\\\"scheme\\\":{\\\"capability\\\":\\\"reactive-browser\\\",\\\"requested\\\":\\\"system\\\",\\\"resolved\\\":\\\"light\\\",\\\"source\\\":\\\"system\\\"},\\\"viewport\\\":{\\\"height\\\":844,\\\"presetId\\\":\\\"phone\\\",\\\"width\\\":390}}\"]",
+      "group": "sketch",
+      "label": "draft",
+      "status": "captured",
+      "screenshot": "screenshots/sketch-draft-3e216aaa808d.png",
+      "sha256": "1577b1f7abf89a3a7506fcb773c707c06ec4ce097680b5b7dc76d127ffd3665e"
+    },
+    {
+      "key": "[\"@/studio/View3.tao\",\"sketch\",\"draft\",\"{\\\"arguments\\\":{},\\\"fixtureId\\\":null,\\\"prepare\\\":[],\\\"stateLayers\\\":[],\\\"steps\\\":[]}\",\"{\\\"network\\\":{\\\"latencyMs\\\":0,\\\"outcome\\\":\\\"normal\\\"},\\\"scheme\\\":{\\\"capability\\\":\\\"reactive-browser\\\",\\\"requested\\\":\\\"system\\\",\\\"resolved\\\":\\\"light\\\",\\\"source\\\":\\\"system\\\"},\\\"viewport\\\":{\\\"height\\\":844,\\\"presetId\\\":\\\"phone\\\",\\\"width\\\":390}}\"]",
+      "group": "sketch",
+      "label": "draft",
+      "status": "captured",
+      "screenshot": "screenshots/sketch-draft-befdbb9f5f49.png",
+      "sha256": "e1cfda85b112c4d384754d71de906dbe66c6c968e63917bbb1a9f2c384d6cc99"
+    },
+    {
+      "key": "[\"@/studio/View4.tao\",\"sketch\",\"draft\",\"{\\\"arguments\\\":{},\\\"fixtureId\\\":null,\\\"prepare\\\":[],\\\"stateLayers\\\":[],\\\"steps\\\":[]}\",\"{\\\"network\\\":{\\\"latencyMs\\\":0,\\\"outcome\\\":\\\"normal\\\"},\\\"scheme\\\":{\\\"capability\\\":\\\"reactive-browser\\\",\\\"requested\\\":\\\"system\\\",\\\"resolved\\\":\\\"light\\\",\\\"source\\\":\\\"system\\\"},\\\"viewport\\\":{\\\"height\\\":844,\\\"presetId\\\":\\\"phone\\\",\\\"width\\\":390}}\"]",
+      "group": "sketch",
+      "label": "draft",
+      "status": "captured",
+      "screenshot": "screenshots/sketch-draft-0b815324ba80.png",
+      "sha256": "de98640daf353015e2957857a0c455e220d93e4e11124dd70692bdd3cc953fe6"
+    }
+  ]
+}

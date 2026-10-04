@@ -1,5 +1,43 @@
 # Tao CLI
 
+## Project secrets
+
+`tao secrets` keeps encrypted values in `secrets/secrets.jsonc` beside the nearest Tao project
+declaration. Commit that file so collaborators can use it. Secret names and recipient public keys are
+readable; values are encrypted with `age`. On macOS, install `age` and `age-plugin-se` (for example,
+`brew install age age-plugin-se`). Tao creates one machine identity backed by the Secure Enclave and
+asks for Touch ID or the Mac passcode when it unlocks a project store. There is no shared password.
+
+```sh
+tao secrets init [project-path]
+tao secrets set INSTANT_APP_ADMIN_TOKEN [project-path]
+tao secrets list [project-path]
+tao secrets get INSTANT_APP_ADMIN_TOKEN [project-path]
+tao secrets remove INSTANT_APP_ADMIN_TOKEN [project-path]
+```
+
+`set` prompts without echoing the value. `get` writes the exact plaintext to stdout, so use it only
+where that output is intended; avoid transcript or command log capture. `tao instantdb push` reads
+`INSTANT_APP_ADMIN_TOKEN` from the environment first, then from the project store, and otherwise
+prompts at a terminal. It does not print the token.
+
+For another developer, run `tao secrets identity` on their Mac. Verify the public recipient with
+them, then an existing collaborator runs `tao secrets grant <recipient> [project-path]` and commits
+the updated store. Every enrolled recipient can read every secret. Adding a recipient to a text file
+alone does not grant access. If the last enrolled machine is lost, Tao cannot recover the store key;
+restore access from another enrolled machine or replace the provider credentials. Removing a value
+from the current file does not remove Git history or revoke the credential at its provider.
+
+## Report a problem
+
+From an installed CLI, `tao doctor --json` prints a privacy-filtered environment fingerprint with
+the Tao release, OS and architecture, available tool versions, Xcode on macOS, and the installed
+resource bundle hash. `tao doctor` presents the same facts for a person to read.
+
+Run `tao bug-report` for a short report draft, links to the two feedback issue forms, and an optional
+fingerprint to paste into the Environment field. The command reads the local environment but sends
+nothing; review the draft before submitting it. Neither command requires a source checkout.
+
 ## Experimental visionOS project export
 
 `tao build <project> --visionos` retains a native Xcode project that embeds the compiled Tao web UI

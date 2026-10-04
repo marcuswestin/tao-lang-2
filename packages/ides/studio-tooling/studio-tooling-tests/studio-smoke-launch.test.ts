@@ -64,9 +64,10 @@ Describe('Studio smoke launch', () => {
 
   Test('starts Studio with --json and --no-browser and returns its readiness', async () => {
     const root = await mkTestDir('tao-smoke-launch-')
+    let launch: Awaited<ReturnType<typeof startStudioSmokeLaunch>> | undefined
     try {
       let started: readonly string[] = []
-      const launch = await startStudioSmokeLaunch({
+      launch = await startStudioSmokeLaunch({
         appName: 'HNReader',
         port: 42_000,
         projectRoot: '/w/Apps/HNReader',
@@ -91,6 +92,7 @@ Describe('Studio smoke launch', () => {
       Expect(launch.readiness.launchId).toBe('browser-42')
       Expect(launch.output()).toContain('"sessionUrl"')
     } finally {
+      await launch?.stop()
       await FS.remove(root)
     }
   })
@@ -136,8 +138,8 @@ Describe('Studio smoke launch', () => {
       const command = fakeCommand()
       let thrown: unknown
       try {
-        // `start` is a fake that returns synchronously, so this budget is never actually waited out —
-        // it exists to prove the readiness-timeout path fires.
+        // This selects one readiness attempt. The helper still performs its poll wait;
+        // the assertion proves timeout cleanup and output retention, not elapsed time.
         await startStudioSmokeLaunch({
           projectRoot: '/w/Apps/HNReader',
           repositoryRoot: root,
@@ -145,7 +147,7 @@ Describe('Studio smoke launch', () => {
             onOutput(Buffer.from('[studio]: Expo exited with code=1\n'))
             return command
           },
-          timeoutMs: 1, // budget-ok: fake start, never actually waited out.
+          timeoutMs: 1, // budget-ok: Select one readiness attempt; no elapsed-time assertion.
         })
       } catch (error) {
         thrown = error

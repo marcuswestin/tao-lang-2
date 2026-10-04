@@ -201,6 +201,29 @@ Describe('tao instantdb push', () => {
     })
   })
 
+  Test('uses a stored project token when the environment has no override', async () => {
+    await withNotesApp(notesSource(), async appPath => {
+      const instant = fakeInstant({ 'current-attrs': [], steps: [] })
+      const terminal = captured()
+      const lookedUp: string[] = []
+      await runInstantDBPush(appPath, {
+        env: {},
+        fetch: instant.fetcher,
+        output: terminal.output,
+        projectSecret: async (name, root) => {
+          lookedUp.push(`${name}:${root}`)
+          return 'project-token'
+        },
+      })
+      Expect(lookedUp).toEqual([`INSTANT_APP_ADMIN_TOKEN:${FS.dirname(appPath)}`])
+      Expect(instant.requests.map(request => request.authorization)).toEqual([
+        'Bearer project-token',
+        'Bearer project-token',
+      ])
+      Expect(terminal.text()).not.toContain('project-token')
+    })
+  })
+
   Test('--dry-run only plans, and says what a push would change', async () => {
     await withNotesApp(notesSource(), async appPath => {
       const instant = fakeInstant({ 'current-attrs': [], steps: [addBody] })
@@ -286,7 +309,7 @@ Describe('tao instantdb push', () => {
       const push = runInstantDBPush(appPath, { env: {}, fetch: instant.fetcher, interactive: false })
       await Expect(push).rejects.toBeInstanceOf(Errors.UserInputError)
       await Expect(push).rejects.toThrow(
-        "Set INSTANT_APP_ADMIN_TOKEN to the InstantDB app's admin token, or run this command in a terminal to enter it.",
+        'Store INSTANT_APP_ADMIN_TOKEN with `tao secrets set`, set the environment variable, or run this command in a terminal to enter it.',
       )
       Expect(instant.requests).toEqual([])
     })

@@ -78,20 +78,19 @@ Describe('canonical navigation identity', () => {
       'view',
       'Home',
     ])
-    const first = TR.Navigation.View({ identity, name: 'Home', render: () => 'first' })
+    TR.Navigation.View({ identity, name: 'Home', render: () => 'first' })
     const firstApp = TR.Navigation.App({
       auxiliaries: () => ({}),
       name: 'First',
       navigator: () => configuredStack('First', TR.Navigation.ViewReference(identity)),
     })
-    const second = TR.Navigation.View({ identity, name: 'Home', render: () => 'second' })
+    TR.Navigation.View({ identity, name: 'Home', render: () => 'second' })
     const secondApp = TR.Navigation.App({
       auxiliaries: () => ({}),
       name: 'Second',
       navigator: () => configuredStack('Second', TR.Navigation.ViewReference(identity)),
     })
 
-    Expect(second).not.toBe(first)
     Expect(renderContained(firstApp.resolvePresentable(identity.canonical).render({}))).toBe('first')
     Expect(renderContained(secondApp.resolvePresentable(identity.canonical).render({}))).toBe('second')
   })

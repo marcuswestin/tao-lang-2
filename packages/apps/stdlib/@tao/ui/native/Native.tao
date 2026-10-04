@@ -11,24 +11,29 @@
 // keeps the same behavior and reports the same events, so one journey covers every platform.
 // The platform button: system-styled per OS, following its human-interface conventions.
 public
-view Button(Title text, Press action(), Disabled boolean default false) {
-   render inject Title, Press, Disabled, Layout @@layout, Tag @@tag ```ts
+view Button(Title text, Press action(), Disabled boolean default false, Description text default "") {
+   render inject Title, Press, Disabled, Description, Layout @@layout, Tag @@tag ```ts
       TR.WarnUnhonoredLayout('Button', Layout)
       const Interaction = TR.Interaction.FromVisualLayout(Layout)
       TR.Interaction.Enabled(Interaction, !Disabled)
+      const AccessibilityVerbs = TR.Interaction.UseAccessibilityVerbs(Interaction?.control)
       const AccessibilityRef = TR.Interaction.AccessibilityRef(Interaction, Title)
       return TR.VisualNativeRoot(
         Layout,
-        TR.Element(RN.Button, {
-          accessibilityLabel: Title,
-          disabled: Disabled,
-          onBlur: () => TR.Interaction.Pressed(Interaction, false),
-          onFocus: () => TR.Interaction.Target(Interaction),
-          onPress: TR.Interaction.Activate(Interaction, () => Press.invoke()),
-          ref: AccessibilityRef,
-          testID: Tag,
-          title: Title,
-        }),
+        TR.Element(
+          RN.Button,
+          TR.Interaction.AccessibilityVerbProps(Interaction, {
+            accessibilityLabel: Title,
+            accessibilityHint: Description || undefined,
+            disabled: Disabled,
+            onBlur: () => TR.Interaction.Pressed(Interaction, false),
+            onFocus: () => TR.Interaction.Target(Interaction),
+            onPress: TR.Interaction.Activate(Interaction, () => Press.invoke()),
+            ref: AccessibilityRef,
+            testID: Tag,
+            title: Title,
+          }, AccessibilityVerbs),
+        ),
       )
    ```
 }
@@ -36,26 +41,31 @@ view Button(Title text, Press action(), Disabled boolean default false) {
 // The form button: the same interface as the wireframe one, including its busy state, rendered as
 // the platform's own button. A busy button shows the saving title and refuses presses.
 public
-view FormButton(Title text, Press action(), Id text default "", Disabled boolean default false, Submitting boolean default false) {
-   render inject Title, Press, Id, Disabled, Submitting, Layout @@layout, Tag @@tag ```ts
+view FormButton(Title text, Press action(), Id text default "", Disabled boolean default false, Submitting boolean default false, Description text default "") {
+   render inject Title, Press, Id, Disabled, Submitting, Description, Layout @@layout, Tag @@tag ```ts
       TR.WarnUnhonoredLayout('FormButton', Layout)
       const busy = Disabled || Submitting
       const Interaction = TR.Interaction.FromVisualLayout(Layout)
       TR.Interaction.Enabled(Interaction, !busy)
+      const AccessibilityVerbs = TR.Interaction.UseAccessibilityVerbs(Interaction?.control)
       const AccessibilityRef = TR.Interaction.AccessibilityRef(Interaction, Title)
       return TR.VisualNativeRoot(
         Layout,
-        TR.Element(RN.Button, {
-          accessibilityLabel: Title,
-          accessibilityState: { busy: Submitting, disabled: busy },
-          disabled: busy,
-          onBlur: () => TR.Interaction.Pressed(Interaction, false),
-          onFocus: () => TR.Interaction.Target(Interaction),
-          onPress: TR.Interaction.Activate(Interaction, () => Press.invoke()),
-          ref: AccessibilityRef,
-          testID: Tag || Id || undefined,
-          title: Submitting ? 'Saving…' : Title,
-        }),
+        TR.Element(
+          RN.Button,
+          TR.Interaction.AccessibilityVerbProps(Interaction, {
+            accessibilityLabel: Title,
+            accessibilityHint: Description || undefined,
+            accessibilityState: { busy: Submitting, disabled: busy },
+            disabled: busy,
+            onBlur: () => TR.Interaction.Pressed(Interaction, false),
+            onFocus: () => TR.Interaction.Target(Interaction),
+            onPress: TR.Interaction.Activate(Interaction, () => Press.invoke()),
+            ref: AccessibilityRef,
+            testID: Tag || Id || undefined,
+            title: Submitting ? 'Saving…' : Title,
+          }, AccessibilityVerbs),
+        ),
       )
    ```
 }
@@ -63,17 +73,20 @@ view FormButton(Title text, Press action(), Id text default "", Disabled boolean
 // The platform switch — a true native host control — paired with its label, since the platform
 // switch renders no text of its own.
 public
-view Switch(Value boolean, Change action(boolean), Label text, Disabled boolean default false) {
-   render inject Value, Change, Label, Disabled, Layout @@layout, Tag @@tag ```ts
+view Switch(Value boolean, Change action(boolean), Label text, Disabled boolean default false, Description text default "") {
+   render inject Value, Change, Label, Disabled, Description, Layout @@layout, Tag @@tag ```ts
       TR.WarnUnhonoredLayout('Switch', Layout)
+      const NativeRootProps = TR.Interaction.UseNativeRowRoot(Layout, Tag)
       const Interaction = TR.Interaction.FromVisualLayout(Layout)
       TR.Interaction.Enabled(Interaction, !Disabled)
       const AccessibilityRef = TR.Interaction.AccessibilityRef(Interaction, Label)
       return TR.Element(
         RN.View,
-        { ...TR.VisualNativeProps(Layout, Tag), style: { alignItems: 'center', flexDirection: 'row', gap: 8 } },
+        { ...NativeRootProps, style: { alignItems: 'center', flexDirection: 'row', gap: 8 } },
         TR.Element(RN.Switch, {
           accessibilityLabel: Label,
+          accessibilityHint: Description || undefined,
+          accessibilityState: { checked: Value, disabled: Disabled },
           disabled: Disabled,
           key: 'control',
           onBlur: () => TR.Interaction.Disengage(Interaction),
@@ -93,9 +106,10 @@ view Switch(Value boolean, Change action(boolean), Label text, Disabled boolean 
 // The platform's continuous value control. Without the host it degrades to a stepped control that
 // still reports through `Change`, so one journey drives every implementation.
 public
-view Slider(Value number, Change action(number), Label text, Minimum number default 0, Maximum number default 1, Disabled boolean default false) {
-   render inject Value, Change, Label, Minimum, Maximum, Disabled, Layout @@layout, Tag @@tag ```ts
+view Slider(Value number, Change action(number), Label text, Minimum number default 0, Maximum number default 1, Disabled boolean default false, Description text default "") {
+   render inject Value, Change, Label, Minimum, Maximum, Disabled, Description, Layout @@layout, Tag @@tag ```ts
       TR.WarnUnhonoredLayout('Slider', Layout)
+      const NativeRootProps = TR.Interaction.UseNativeRowRoot(Layout, Tag)
       const host = TR.Hosts.Slider()
       const Interaction = TR.Interaction.FromVisualLayout(Layout)
       TR.Interaction.Enabled(Interaction, !Disabled)
@@ -103,9 +117,10 @@ view Slider(Value number, Change action(number), Label text, Minimum number defa
         const step = (Maximum - Minimum) / 10
         return TR.Element(
           RN.View,
-          { ...TR.VisualNativeProps(Layout, Tag), style: { alignItems: 'center', flexDirection: 'row', gap: 8 } },
+          { ...NativeRootProps, style: { alignItems: 'center', flexDirection: 'row', gap: 8 } },
           TR.Element(RN.Button, {
             accessibilityLabel: `Decrease ${Label}`,
+            accessibilityHint: Description || undefined,
             disabled: Disabled,
             key: 'decrease',
             onFocus: () => TR.Interaction.Engage(Interaction),
@@ -118,6 +133,7 @@ view Slider(Value number, Change action(number), Label text, Minimum number defa
           TR.Element(RN.Text, { key: 'reading' }, `${Label}: ${Value}`),
           TR.Element(RN.Button, {
             accessibilityLabel: `Increase ${Label}`,
+            accessibilityHint: Description || undefined,
             disabled: Disabled,
             key: 'increase',
             onFocus: () => TR.Interaction.Engage(Interaction),
@@ -130,8 +146,9 @@ view Slider(Value number, Change action(number), Label text, Minimum number defa
         )
       }
       return TR.Element(host, {
-        ...TR.VisualNativeProps(Layout, Tag),
+        ...NativeRootProps,
         accessibilityLabel: Label,
+        accessibilityHint: Description || undefined,
         disabled: Disabled,
         maximumValue: Maximum,
         minimumValue: Minimum,
@@ -151,8 +168,9 @@ public
 view Spinner() {
    render inject Layout @@layout, Tag @@tag ```ts
       TR.WarnUnhonoredLayout('Spinner', Layout)
+      const NativeRootProps = TR.Interaction.UseNativeRowRoot(Layout, Tag)
       return TR.Element(RN.ActivityIndicator, {
-        ...TR.VisualNativeProps(Layout, Tag),
+        ...NativeRootProps,
         accessibilityLabel: 'Loading',
         accessibilityRole: 'progressbar',
         accessibilityState: { busy: true },
@@ -165,17 +183,19 @@ view Spinner() {
 // of labels, and the change reports the chosen label rather than an index, so product code never
 // carries positions.
 public
-view Picker(Value text, Change action(text), Options list of text, Label text) {
-   render inject Value, Change, Options, Label, Layout @@layout, Tag @@tag ```ts
+view Picker(Value text, Change action(text), Options list of text, Label text, Description text default "") {
+   render inject Value, Change, Options, Label, Description, Layout @@layout, Tag @@tag ```ts
       TR.WarnUnhonoredLayout('Picker', Layout)
+      const NativeRootProps = TR.Interaction.UseNativeRowRoot(Layout, Tag)
       const host = TR.Hosts.Picker()
       const Interaction = TR.Interaction.FromVisualLayout(Layout)
       if (!host) {
         return TR.Element(
           RN.View,
-          TR.VisualNativeProps(Layout, Tag),
+          NativeRootProps,
           ...Options.map((option: string) =>
             TR.Element(RN.Button, {
+              accessibilityHint: Description || undefined,
               accessibilityState: { selected: option === Value },
               key: option,
               onFocus: () => TR.Interaction.Engage(Interaction),
@@ -191,8 +211,9 @@ view Picker(Value text, Change action(text), Options list of text, Label text) {
       return TR.Element(
         host.Picker,
         {
-          ...TR.VisualNativeProps(Layout, Tag),
+          ...NativeRootProps,
           accessibilityLabel: Label,
+          accessibilityHint: Description || undefined,
           onBlur: () => TR.Interaction.Disengage(Interaction),
           onFocus: () => TR.Interaction.Engage(Interaction),
           onValueChange: (option: string) => {
@@ -209,21 +230,24 @@ view Picker(Value text, Change action(text), Options list of text, Label text) {
 // The iOS segmented control. Android has no system equivalent, so it degrades to a labeled row of
 // buttons that reports the same selection.
 public
-view SegmentedControl(Value text, Change action(text), Options list of text, Label text) {
-   render inject Value, Change, Options, Label, Layout @@layout, Tag @@tag ```ts
+view SegmentedControl(Value text, Change action(text), Options list of text, Label text, Description text default "") {
+   render inject Value, Change, Options, Label, Description, Layout @@layout, Tag @@tag ```ts
       TR.WarnUnhonoredLayout('SegmentedControl', Layout)
+      const NativeRootProps = TR.Interaction.UseNativeRowRoot(Layout, Tag)
       const host = RN.Platform?.OS === 'ios' ? TR.Hosts.SegmentedControl() : undefined
       const Interaction = TR.Interaction.FromVisualLayout(Layout)
       if (!host) {
         return TR.Element(
           RN.View,
           {
-            ...TR.VisualNativeProps(Layout, Tag),
+            ...NativeRootProps,
             accessibilityLabel: Label,
+            accessibilityHint: Description || undefined,
             style: { flexDirection: 'row', gap: 4 },
           },
           ...Options.map((option: string) =>
             TR.Element(RN.Button, {
+              accessibilityHint: Description || undefined,
               accessibilityState: { selected: option === Value },
               key: option,
               onFocus: () => TR.Interaction.Engage(Interaction),
@@ -237,8 +261,9 @@ view SegmentedControl(Value text, Change action(text), Options list of text, Lab
         )
       }
       return TR.Element(host, {
-        ...TR.VisualNativeProps(Layout, Tag),
+        ...NativeRootProps,
         accessibilityLabel: Label,
+        accessibilityHint: Description || undefined,
         onBlur: () => TR.Interaction.Disengage(Interaction),
         onFocus: () => TR.Interaction.Engage(Interaction),
         onValueChange: (option: string) => {
@@ -255,9 +280,10 @@ view SegmentedControl(Value text, Change action(text), Options list of text, Lab
 // calendar arithmetic rather than carrying its own format. Without the host it degrades to a
 // day-stepping control that still reports through `Change`.
 public
-view DatePicker(Value time, Change action(time), Label text) {
-   render inject Value, Change, Label, Layout @@layout, Tag @@tag ```ts
+view DatePicker(Value time, Change action(time), Label text, Description text default "") {
+   render inject Value, Change, Label, Description, Layout @@layout, Tag @@tag ```ts
       TR.WarnUnhonoredLayout('DatePicker', Layout)
+      const NativeRootProps = TR.Interaction.UseNativeRowRoot(Layout, Tag)
       const os = RN.Platform?.OS
       const host = os === 'ios' || os === 'android' ? TR.Hosts.DateTimePicker() : undefined
       const Interaction = TR.Interaction.FromVisualLayout(Layout)
@@ -265,9 +291,10 @@ view DatePicker(Value time, Change action(time), Label text) {
         const day = 24 * 60 * 60 * 1000
         return TR.Element(
           RN.View,
-          { ...TR.VisualNativeProps(Layout, Tag), style: { alignItems: 'center', flexDirection: 'row', gap: 8 } },
+          { ...NativeRootProps, style: { alignItems: 'center', flexDirection: 'row', gap: 8 } },
           TR.Element(RN.Button, {
             accessibilityLabel: `Previous ${Label}`,
+            accessibilityHint: Description || undefined,
             key: 'previous',
             onFocus: () => TR.Interaction.Engage(Interaction),
             onPress: () => {
@@ -279,6 +306,7 @@ view DatePicker(Value time, Change action(time), Label text) {
           TR.Element(RN.Text, { key: 'reading' }, `${Label}: ${new Date(Value).toISOString().slice(0, 10)}`),
           TR.Element(RN.Button, {
             accessibilityLabel: `Next ${Label}`,
+            accessibilityHint: Description || undefined,
             key: 'next',
             onFocus: () => TR.Interaction.Engage(Interaction),
             onPress: () => {
@@ -290,8 +318,9 @@ view DatePicker(Value time, Change action(time), Label text) {
         )
       }
       return TR.Element(host, {
-        ...TR.VisualNativeProps(Layout, Tag),
+        ...NativeRootProps,
         accessibilityLabel: Label,
+        accessibilityHint: Description || undefined,
         mode: 'date',
         onChange: (_event: unknown, selected?: Date) => {
           if (selected) {

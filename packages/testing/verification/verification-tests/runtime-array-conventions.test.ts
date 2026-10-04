@@ -20,7 +20,6 @@ Describe('runtime array ordering boundary', () => {
       'for ({ reverse } in values) {}',
     ].join('\n')
     const issues = runtimeArrayConventionIssues([{ path: runtimePath, source }])
-    Expect(issues).toHaveLength(12)
     Expect(issues.map(issue => issue.split(' accesses')[0])).toEqual([
       `${runtimePath}:1`,
       `${runtimePath}:2`,

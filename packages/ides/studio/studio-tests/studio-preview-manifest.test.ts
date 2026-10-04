@@ -13,7 +13,6 @@ Describe('Studio preview manifest', () => {
     const defined = StudioPreviewManifest.define(manifest)
 
     Expect(defined.subjects.map(subject => subject.kind)).toEqual(['view', 'app'])
-    Expect(defined.version).toBe(2)
     Expect(defined.scenarios.map(scenario => scenario.group)).toEqual(['Cards', 'Application'])
     Expect(defined.cells.map(cell => cell.cellId)).toEqual(['card-phone', 'app-desktop'])
     Expect(defined.cells[0]?.environment).toEqual({
@@ -54,10 +53,10 @@ Describe('Studio preview manifest', () => {
     Expect(() => StudioPreviewManifest.define(missingGroup)).toThrow('scenario group')
   })
 
-  Test('preserves Catalyst and native scenario Scheme captures without accepting invalid native pins', () => {
+  Test('preserves reactive and pinned native Scheme captures without accepting invalid native pins', () => {
     for (
       const scheme of [
-        { capability: 'reactive-catalyst', requested: 'system', resolved: 'dark', source: 'system' },
+        { capability: 'reactive-native', requested: 'system', resolved: 'dark', source: 'system' },
         { capability: 'pinned-native', requested: 'dark', resolved: 'dark', source: 'scenario' },
       ] as const
     ) {
@@ -154,11 +153,9 @@ Describe('Studio preview manifest', () => {
     const malformed: readonly (readonly [unknown, string])[] = [
       [{ not: 'an array' }, 'steps must be an array'],
       [[null], 'object with a supported kind'],
-      [[{}], 'object with a supported kind'],
       [[{ kind: 'tap', selector: 'tag', target: 'save' }], 'Unsupported Studio journey step kind: tap'],
       [[{ kind: 'advance', milliseconds: -0.5 }], 'non-negative number'],
       [[{ kind: 'advance', milliseconds: Number.POSITIVE_INFINITY }], 'non-negative number'],
-      [[{ kind: 'advance', milliseconds: Number.NaN }], 'non-negative number'],
       [[{ kind: 'focus', tag: '' }], 'focus tag must not be empty'],
       [[{ kind: 'press', selector: 'role', target: 'save' }], 'press selector is invalid'],
       [[{ kind: 'enter', selector: 'tag', target: 'name', value: 42 }], 'enter value must be text'],

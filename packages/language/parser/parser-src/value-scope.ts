@@ -49,10 +49,12 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
   /** getScope returns Tao values visible to a value reference. */
   override getScope(context: Langium.ReferenceInfo): Langium.Scope {
     const container = context.container
-    const isStateTargetReference = context.property === 'target'
-      && (AST.isSetStatement(container) || AST.isToggleStatement(container))
+    const isStateTargetReference = context.property === 'target' && AST.isSetStatement(container)
     if (isStateTargetReference) {
       return this.createMutableScope(container)
+    }
+    if (context.property === 'target' && AST.isToggleStatement(container)) {
+      return this.createValueScope(container)
     }
     if (context.property === 'target' && AST.isValueReference(context.container)) {
       if (AST.isDataWriteField(context.container.$container)) {
@@ -1006,7 +1008,7 @@ function scopeCarriersContaining(node: AST.Node): ScopeCarrier[] {
     }
     if (
       (AST.isGuardActionBranch(current) || AST.isGuardRenderBranch(current) || AST.isWhenRenderBranch(current)
-        || AST.isWhenDoOutcome(current) || AST.isGuardDefaultBranch(current))
+        || AST.isWhenDoOutcome(current) || AST.isGuardDefaultBranch(current) || AST.isAppGuardBranch(current))
       && current.payload
     ) {
       carriers.push({ kind: 'payload', payload: current.payload })
@@ -1076,7 +1078,8 @@ function preferredConstructorDeclarations(
   node: AST.ConfiguredValue,
   candidates: readonly AST.ConstructorDeclaration[],
 ): AST.ConstructorDeclaration[] {
-  const rootName = node.type.$refText
+  // Completion creates a partial constructor before it has a reference token.
+  const rootName = node.type?.$refText
   const sameName = candidates.filter(candidate => candidate.name === rootName)
   if (sameName.length <= 1) {
     return [...candidates]

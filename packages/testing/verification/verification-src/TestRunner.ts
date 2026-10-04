@@ -1,5 +1,6 @@
 import * as Shared from '@shared'
 import { ContentionRetry } from './ContentionRetry'
+import { FailurePolicy } from './FailurePolicy'
 import { FlakeTolerance } from './FlakeTolerance'
 import { GateCatalog } from './GateCatalog'
 import { type MachineLane, MachineLanes } from './MachineLanes'
@@ -56,6 +57,7 @@ export type TestRunRequest =
 type PreparedRun = {
   changed?: ChangedSelection
   evidenceMode?: 'mutation'
+  failurePolicy: FailurePolicy
   files?: readonly TestFile[]
   kind: TestRunRequest['kind']
   pattern: string
@@ -289,7 +291,13 @@ async function testNodesFor(options: {
       ? RunTimings.load({ repositoryRoot: options.repositoryRoot })
       : Promise.resolve(options.timings),
   ])
-  const plan = TestNodes.build({ ledger, proved: options.proved, selected, timings })
+  const plan = TestNodes.build({
+    ledger,
+    preflight: options.prepared.failurePolicy === 'fail-fast',
+    proved: options.proved,
+    selected,
+    timings,
+  })
   return { plans: plan.plans, states: plan.states as SuiteState[], warnings: plan.warnings }
 }
 
@@ -423,12 +431,19 @@ async function runSuites(options: RunSuitesOptions): Promise<number> {
   const expectedMs = (name: string) => RunTimings.expectedMs(timings, name)
   const reporter = WorkReporter.create({ lane: location.lane, logRoot: location.logRoot, mode })
   const liveArtifacts = RunArtifacts.liveWriter(location, event => reporter.handle(event))
+  const failure = FailurePolicy.create({
+    observe: observationsFor,
+    policy: prepared.failurePolicy,
+    repositoryRoot: location.repositoryRoot,
+    tests: states,
+  })
 
   const result = await WorkGraph.run(graphStates, {
     expectedMs,
     jobs: machineLane.ceiling,
     onEvent: event => liveArtifacts.handle(event),
     slotBroker: machineLane,
+    stopOnFailure: failure.stopOnFailure,
   })
   await liveArtifacts.finish()
   await reporter.finish()
@@ -463,19 +478,20 @@ async function runSuites(options: RunSuitesOptions): Promise<number> {
   // verdict is decided, which is why the exit code below is taken from it.
   const tolerance = result.interrupted || mutation
     ? FlakeTolerance.empty()
-    : FlakeTolerance.apply(states, await TestLedger.tolerated(location.repositoryRoot))
+    : FlakeTolerance.apply(states, await failure.tolerated())
   const toleratedFlakes = tolerance.demoted.map(flake => ({
     evidence: flake.evidence,
     file: flake.file,
     id: flake.id,
     node: flake.node,
   }))
+  const fullRun = completeRun(prepared, graphStates)
   const ledger = mutation
     ? TestLedger.empty()
     : result.interrupted
     ? await TestLedger.load(location.repositoryRoot)
     : await TestLedger.recordRun({
-      fullRun: completeRun(prepared),
+      fullRun,
       observations,
       partialFiles: partialTaoAppRun(prepared) ? ['Apps'] : undefined,
       repositoryRoot: location.repositoryRoot,
@@ -503,7 +519,7 @@ async function runSuites(options: RunSuitesOptions): Promise<number> {
     cpuOnly: contention.contended,
     location,
     extraDurations: TestNodes.suiteDurations(states),
-    recordTimings: completeRun(prepared),
+    recordTimings: fullRun,
     states: graphStates,
     summary,
   })
@@ -542,8 +558,12 @@ async function runSuites(options: RunSuitesOptions): Promise<number> {
  * every suite but skipped most of the tests inside them, so it can neither say a test is green nor
  * say what a suite costs.
  */
-function completeRun(prepared: PreparedRun): boolean {
+function completeRun(
+  prepared: Pick<PreparedRun, 'evidenceMode' | 'kind' | 'pattern'>,
+  states?: readonly WorkState[],
+): boolean {
   return prepared.evidenceMode !== 'mutation' && prepared.kind === 'full' && prepared.pattern.length === 0
+    && (states === undefined || states.every(state => state.status === 'passed' || state.status === 'failed'))
 }
 
 function partialTaoAppRun(prepared: PreparedRun): boolean {
@@ -553,7 +573,13 @@ function partialTaoAppRun(prepared: PreparedRun): boolean {
 
 async function prepareRun(request: TestRunRequest, repositoryRoot: string): Promise<PreparedRun> {
   // The pattern rides along every scope: it filters the tests inside whatever suites the scope chose.
-  const settings = { evidenceMode: request.evidenceMode, pattern: request.pattern ?? '' }
+  const rootTarget = request.kind === 'file'
+    && Shared.FS.resolvePath(request.path, repositoryRoot) === Shared.FS.resolvePath(repositoryRoot)
+  const settings = {
+    evidenceMode: request.evidenceMode,
+    failurePolicy: FailurePolicy.forTests(request, rootTarget),
+    pattern: request.pattern ?? '',
+  }
   if (request.kind === 'full') {
     return { kind: 'full', ...settings }
   }
@@ -620,6 +646,10 @@ function isConcurrentSuite(suite: string): boolean {
 async function observationsFor(states: readonly SuiteState[], repositoryRoot: string): Promise<TestObservation[]> {
   const observations: TestObservation[] = []
   for (const state of states) {
+    if (state.status !== 'passed' && state.status !== 'failed') {
+      state.testObservations = undefined
+      continue
+    }
     state.testObservations = state.suite === TAO_APPS
       ? [{
         durationMs: state.elapsedMs,
@@ -836,7 +866,9 @@ async function testFilesAt(inputPath: string, repositoryRoot = Shared.Repo.getRo
   if (!Shared.FS.pathIsWithin(absolutePath, repositoryRoot) || !await Shared.FS.isDirectory(absolutePath)) {
     return [await testFile(inputPath, repositoryRoot)]
   }
-  const prefix = `${repositoryRelative(absolutePath, repositoryRoot)}/`
+  const prefix = absolutePath === Shared.FS.resolvePath(repositoryRoot)
+    ? ''
+    : `${repositoryRelative(absolutePath, repositoryRoot)}/`
   const files = (await suiteRegistry(repositoryRoot))
     .flatMap(source => source.files.filter(file => file.startsWith(prefix)).map(file => ({ file, suite: source.name })))
     .sort((left, right) => left.file.localeCompare(right.file))

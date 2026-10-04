@@ -11,6 +11,8 @@ description: >-
 Run a host-only lane through its listed wrapper shape, such as `./agent unsandboxed studio-smoke`;
 the plain `./agent` shape stays sandboxed.
 
+- After a broad failure, let the runner finish cleanup and release its leases, diagnose the failed scope with an explicit file or name target, fix it, then repeat broad verification. An aborted or filtered run is not complete coverage. Command help owns the failure policy; keep diagnostic scope explicit instead of repeatedly paying for a broad inventory of failures.
+
 ## The machine-wide landing lock
 
 You do not claim it by hand. Ready `./agent unsandboxed land` processes queue FIFO, ahead of new broad lanes;
@@ -25,6 +27,10 @@ separates a lock doing useful work from one waiting on an agent. Nothing takes i
 forcing one is the Developer's call, so bring `./agent board` to the Developer rather than running `--force` yourself.
 
 ## `./agent finalize`
+
+For a Developer-directed edit or commit in the primary `dev/<name>` checkout, do not run `finalize`.
+Use available focused checks, commit the exact reviewed paths when asked, and leave full verification
+to authorized landing. Other work may be in progress in that shared checkout.
 
 It is the iteration-time readiness command when landing is not yet authorized, not a step of an
 already authorized landing — `./agent unsandboxed land` does

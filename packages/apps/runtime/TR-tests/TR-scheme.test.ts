@@ -32,13 +32,7 @@ Describe('TR Scheme environment', () => {
     })
   })
 
-  Test('keeps cells independent, and takes a scenario pin on native while still not following the device', () => {
-    const first = TR.Scheme.resolve({ scenario: 'dark' }, { platform: 'web', system: 'light' })
-    const second = TR.Scheme.resolve({ appearance: 'system' }, { platform: 'web', system: 'light' })
-
-    Expect(first.resolved).toBe('dark')
-    Expect(second.resolved).toBe('light')
-
+  Test('pins native scenarios and follows device appearance in shipped apps', () => {
     // A scenario's appearance is part of the scenario, so a device running that cell renders it.
     // `devices:tabletDark` declares dark and used to arrive on the phone in Light.
     Expect(TR.Scheme.resolve({ scenario: 'dark' }, { platform: 'native', system: 'light' })).toEqual({
@@ -48,19 +42,11 @@ Describe('TR Scheme environment', () => {
       source: 'scenario',
     })
 
-    // What native still cannot do is follow the device's own appearance, which is what the fixed
-    // boundary was always about. A shipped app never pins, so nothing about it changes.
     Expect(TR.Scheme.resolve({ appearance: 'system' }, { platform: 'native', system: 'dark' })).toEqual({
-      capability: 'fixed-light-native',
+      capability: 'reactive-native',
       requested: 'system',
-      resolved: 'light',
-      source: 'native-fixed',
-    })
-    Expect(TR.Scheme.resolve({ appearance: 'dark' }, { platform: 'native', system: 'dark' })).toEqual({
-      capability: 'fixed-light-native',
-      requested: 'dark',
-      resolved: 'light',
-      source: 'native-fixed',
+      resolved: 'dark',
+      source: 'system',
     })
   })
 
@@ -84,7 +70,7 @@ Describe('TR Scheme environment', () => {
     Expect(TR.Scheme.appearancePin(replayed)).toBe('dark')
   })
 
-  Test('Catalyst follows System while preserving preference, scenario, and replay precedence', () => {
+  Test('Catalyst follows System and keeps a scenario reactive', () => {
     const environment = { platform: 'catalyst', system: 'dark' } as const
     const captured = TR.Scheme.resolve({}, environment)
     Expect(captured).toEqual({
@@ -93,22 +79,12 @@ Describe('TR Scheme environment', () => {
       resolved: 'dark',
       source: 'system',
     })
-    Expect(TR.Scheme.resolve({ appearance: 'light' }, environment)).toEqual({
-      capability: 'reactive-catalyst',
-      requested: 'light',
-      resolved: 'light',
-      source: 'preference',
-    })
     Expect(TR.Scheme.resolve({ appearance: 'dark', scenario: 'light' }, environment)).toEqual({
       capability: 'reactive-catalyst',
       requested: 'light',
       resolved: 'light',
       source: 'scenario',
     })
-    Expect(TR.Scheme.resolve({ replay: captured, scenario: 'light' }, {
-      platform: 'catalyst',
-      system: 'light',
-    })).toBe(captured)
   })
 
   Test('rejects replay snapshots that claim an impossible native resolution', () => {

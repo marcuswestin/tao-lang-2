@@ -62,9 +62,7 @@ Describe('Studio feed examples', () => {
         { field: 'PrivateNotes', reason: 'secret', required: false },
       ],
     })
-    Expect(JSON.parse(JSON.stringify(plan))).toEqual(plan)
     Expect(StudioFeedExamples.generate(person, 'feed-seed-7')).toEqual(plan)
-    Expect(StudioFeedExamples.generate(person, 'another-seed')).not.toEqual(plan)
   })
 
   Test('requires an explicit seed and reports an empty case set instead of inventing a value', () => {

@@ -108,13 +108,14 @@ view Image(Source text, Decorative boolean default false, Label text default "")
 }
 
 public
-view Checkbox(Value boolean, Change action(boolean), Label text, Disabled boolean default false) {
-   render inject Value, Change, Label, Disabled, Layout @@layout, Tag @@tag ```ts
+view Checkbox(Value boolean, Change action(boolean), Label text, Disabled boolean default false, Description text default "") {
+   render inject Value, Change, Label, Disabled, Description, Layout @@layout, Tag @@tag ```ts
       return TR.Views.Checkbox({
         layout: Layout,
         tag: Tag,
         value: Value,
         label: Label,
+        description: Description || undefined,
         disabled: Disabled,
         onChange: value => Change.invoke(TR.Value(value)),
       })
@@ -181,14 +182,15 @@ view Number(Value number) {
 }
 
 public
-view TextInput(mutable Value text, Change action(text), Submit action(), Label text, Placeholder text default "", Id text default "", Disabled boolean default false, Secure boolean default false) {
-   render inject Value, Submit, Label, Placeholder, Id, Disabled, Secure, Layout @@layout, Tag @@tag ```ts
+view TextInput(mutable Value text, Change action(text), Submit action(), Label text, Placeholder text default "", Id text default "", Disabled boolean default false, Secure boolean default false, Description text default "") {
+   render inject Value, Submit, Label, Placeholder, Id, Disabled, Secure, Description, Layout @@layout, Tag @@tag ```ts
       return TR.Views.TextInput(
         {
           layout: Layout,
           tag: Tag,
           value: Value.value,
           label: Label,
+          description: Description || undefined,
           placeholder: Placeholder,
           id: Id,
           disabled: Disabled,

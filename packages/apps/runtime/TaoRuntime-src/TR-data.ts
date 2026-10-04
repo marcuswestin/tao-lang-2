@@ -37,7 +37,8 @@ type RelationDeleteBehavior = 'cascade' | 'restrict'
 
 /** TaoEntityAvailability is the provider-neutral live state of one entity handle. */
 export type TaoEntityAvailability =
-  | { status: 'available' | 'loading' | 'missing' | 'unauthorized' }
+  | { status: 'available' | 'loading' | 'missing' }
+  | { reason?: 'signed-out' | 'access-denied'; status: 'unauthorized' }
   | { message: string; status: 'error' }
 
 export type TaoDataField = {
@@ -547,6 +548,16 @@ export const DataControls = {
     const handle = entityHandle(row.evaluate().jsValue)
     RuntimeAssert.input(handle, 'Data update expects an entity handle.')
     metadataOf(handle).schema.update(handle, evaluatedFields(fields))
+  },
+
+  /** Toggle reads the transaction's current row once and records one concrete field update. */
+  Toggle(row: Evaluable, field: string): void {
+    const handle = entityHandle(row.evaluate().jsValue)
+    RuntimeAssert.input(handle, 'Data toggle expects an entity handle.')
+    const schema = metadataOf(handle).schema
+    const current = schema.read(handle, field)
+    RuntimeAssert.input(typeof current === 'boolean', `Data toggle expects a yes/no field '${field}'.`)
+    schema.update(handle, { [field]: !current })
   },
 
   /** UpdateWith submits every own supplied input field and preserves omitted fields. */

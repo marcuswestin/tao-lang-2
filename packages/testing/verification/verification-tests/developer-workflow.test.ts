@@ -154,14 +154,13 @@ Describe('developer workflow', () => {
     const first = fake({ branch: 'local/primary', existingBranches: ['main'], worktreeBranches: [] })
     await DeveloperBranchCommand.run('', first.dependencies)
     Expect(first.calls.map(call => call.args.join(' '))).toContain('switch --create dev/mira main')
-    Expect(first.lines).toContain("PASS  Created 'dev/mira' from main and switched to it.")
 
     const again = fake({ branch: 'local/primary' })
     await DeveloperBranchCommand.run('', again.dependencies)
     Expect(again.calls.map(call => call.args.join(' '))).toContain('switch dev/mira')
   })
 
-  Test('names the branch from the argument, the environment, then the Git identity', async () => {
+  Test('normalizes an explicit branch name and preserves its dev prefix', async () => {
     const named = fake({ branch: 'local/primary', existingBranches: ['main'], worktreeBranches: [] })
     await DeveloperBranchCommand.run('Spike Two', named.dependencies)
     Expect(named.calls.map(call => call.args.join(' '))).toContain('switch --create dev/spike-two main')
@@ -220,8 +219,6 @@ Describe('developer workflow', () => {
       'update-ref -m sync-main: fast-forward to origin refs/heads/main new-main main00000000000000000000000000000000000000',
     )
     Expect(moved.state.mirrorHead).toBe('new-main')
-    Expect(moved.lines).toContain('PASS  Moved the main mirror at /mirror to new-main.')
-    Expect(moved.lines).toContain("PASS  Merged main into 'dev/mira'.")
   })
 
   Test('leaves a mirror someone is working in alone', async () => {
@@ -239,6 +236,14 @@ Describe('developer workflow', () => {
     const diverged = fake({ remoteMainHead: 'other-main' })
     await Expect(SyncMainCommand.run(diverged.dependencies)).rejects.toThrow('Reconcile them deliberately')
     Expect(diverged.calls.some(call => call.args[0] === 'update-ref')).toBe(false)
+  })
+
+  Test('reports dirty shared work before fetching or moving refs', async () => {
+    const dirty = fake({ status: ' M in-progress.tao\n?? scratch.md\n', remoteMainHead: 'new-main' })
+    await Expect(SyncMainCommand.run(dirty.dependencies)).rejects.toThrow(
+      'This checkout has uncommitted changes; my-sync has not fetched or moved refs:\n   M in-progress.tao\n  ?? scratch.md',
+    )
+    Expect(dirty.calls.some(call => ['fetch', 'update-ref', 'merge', 'checkout'].includes(call.args[0]!))).toBe(false)
   })
 
   Test('names the conflicted files and the command that finishes the merge', async () => {

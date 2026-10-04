@@ -14,7 +14,8 @@
     },
     "ios": {
       "supportsTablet": true,
-      "deploymentTarget": "17.0"
+      "deploymentTarget": "17.0",
+      "userInterfaceStyle": "automatic"
     },
     "web": {
       "bundler": "metro"

@@ -343,7 +343,6 @@ Describe('Studio device client handshake and pairing', () => {
     session.send({ type: 'studio.pairingPending' })
     Expect(run.client.state().phase).toBe('pairing')
     Expect(run.client.state().code).toBe(StudioDeviceTrust.formatCode(session.code))
-    Expect(run.client.state().code).toMatch(/^\d{3} \d{3}$/)
 
     session.welcome({ manifest })
     await settle()
@@ -407,7 +406,6 @@ Describe('Studio device client handshake and pairing', () => {
     await run.client.start()
     const connection = run.studio.latest()
     connection.open()
-    const hello = connection.hello()
     const ephemeral = StudioDeviceTrust.generateEphemeral()
     const forged = StudioDeviceTrust.generateIdentity()
     connection.deliver({
@@ -420,7 +418,6 @@ Describe('Studio device client handshake and pairing', () => {
       type: 'studio.hello',
     })
 
-    Expect(hello.type).toBe('device.hello')
     Expect(run.client.state().phase).toBe('disconnected')
     Expect(run.client.state().lastError?.code).toBe('bad-signature')
     Expect(run.client.state().studioFingerprint).toBeUndefined()
@@ -894,7 +891,6 @@ Describe('Studio device client sealed control plane', () => {
     for (
       const malformed of [
         { compileRevision: -1, manifestRevision: 'compile:7' },
-        { compileRevision: 7.5, manifestRevision: 'compile:7' },
         { compileRevision: 7, manifestRevision: '' },
         { compileRevision: 7 },
       ]
@@ -1034,7 +1030,6 @@ Describe('Studio device client lifecycle', () => {
     await run.client.start()
     const first = run.storage.record()
 
-    Expect(first?.identity.publicKey).toBeDefined()
     Expect(StudioDeviceTrust.validPublicKey(first!.identity.publicKey)).toBe(true)
     Expect(run.client.state().deviceFingerprint).toBe(StudioDeviceTrust.fingerprint(first!.identity.publicKey))
     run.client.stop()

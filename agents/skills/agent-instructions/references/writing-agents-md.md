@@ -69,7 +69,9 @@ so that a later reader disagrees with the argument rather than re-running the re
 
 ## After editing
 
-- `./agent verify --complete`; `repo-lint` checks the budgets and `dead-exports` the code behind any
-  rule you moved into enforcement.
+- Follow the checkout's `AGENTS.md` validation policy. On a feature branch, `./agent verify` runs
+  `repo-lint` for budgets and `dead-exports` for code behind rules moved into enforcement. In a
+  Developer-directed primary `dev/<name>` checkout, use focused checks and defer full verification
+  until authorized landing.
 - Search for what you removed — a deleted rule usually has a second mention somewhere, and that
   mention is now the only owner of a rule nobody enforces.

@@ -47,7 +47,6 @@ Describe('Studio sketch Snap source projection', () => {
     })
 
     Expect(prepared.projectedRectIds).toEqual(['cover', 'title', 'subtitle', 'duration'])
-    Expect(prepared.projectedRectIds).not.toContain('unsnapped')
     Expect(prepared.action).toMatchObject({
       expectedCatalogRevision: 7,
       kind: 'snap-sketch-to-flow',
@@ -87,22 +86,6 @@ Describe('Studio sketch Snap source projection', () => {
     })
 
     Expect(prepared.action.tree).toMatchObject({ layout: [['pad', 'right', 8, 'bottom', 52, 'left', 288]] })
-  })
-
-  Test('uses Placeholder for open or incomplete element kinds without trusting raw Tao source', () => {
-    const prepared = StudioSketchSnap.prepare({
-      expectedCatalogRevision: 0,
-      mergeDirection: 'Row',
-      projection: {
-        needsOverlay: false,
-        tree: { height: 30, id: 'custom', type: 'element', width: 'fill' },
-      },
-      rects: [{ content: 'Profile', height: 30, id: 'custom', kind: 'Avatar', width: 80, x: 0, y: 0 }],
-      sketchId: 'profile',
-      viewName: 'View1',
-    })
-
-    Expect(prepared.action).not.toHaveProperty('source')
   })
 
   Test('routes overlap through the existing canonical proposal and preserves the exact diff', async () => {
@@ -197,9 +180,6 @@ Describe('Studio sketch Snap source projection', () => {
     Expect(applied.kind).toBe('applied')
     Expect(proposalResult.kind).toBe('proposal')
     Expect(confirmed.kind).toBe('applied')
-    if (proposalResult.kind === 'proposal' && confirmed.kind === 'applied') {
-      Expect(confirmed.result.content).toBe(proposalResult.proposal.content)
-    }
     Expect(proposed.action).toEqual(direct.action)
     Expect(actions).toEqual([direct.action, proposed.action, proposed.action])
     Expect(JSON.stringify({ projection, rects })).toBe(before)

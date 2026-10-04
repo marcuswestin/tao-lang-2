@@ -45,6 +45,8 @@ export const JUST_COMMANDS = [
   // second spelling.
   'open-pr',
   'parser-gen',
+  'qa',
+  'qa-capture',
   'reclaim',
   // One report rather than two: flakes and slowest read the same ledger and are consulted together.
   'report-test-stats',

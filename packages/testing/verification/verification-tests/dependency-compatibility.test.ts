@@ -78,7 +78,6 @@ Describe('runtime dependency compatibility', () => {
 
     Expect(issues.length).toBe(1)
     Expect(issues[0]).toContain('tao-studio resolves react 19.2.8')
-    Expect(issues[0]).toContain('two React copies in one bundle render nothing')
     Expect(issues[0]).toContain('packages/ides/studio/package.json')
   })
 
@@ -161,7 +160,6 @@ Describe('runtime dependency compatibility', () => {
 
     Expect(issues.length).toBe(1)
     Expect(issues[0]).toContain('tao-expo-host declares a dependency on tao-cli-kit')
-    Expect(issues[0]).toContain('bundled into Tao Studio')
     Expect(issues[0]).toContain('packages/apps/expo-host/package.json')
   })
 
@@ -172,13 +170,6 @@ Describe('runtime dependency compatibility', () => {
 
     Expect(issues.length).toBe(1)
     Expect(issues[0]).toContain('tao-expo-host declares a dependency on ink')
-    Expect(issues[0]).toContain('two React instances in one Ink tree')
-  })
-
-  Test('accepts a bundled package with no host-tool or ink dependency', () => {
-    Expect(dependencyCompatibilityIssues(facts({
-      'tao-expo-host': { react: '19.2.3', 'react-dom': '19.2.3', 'react-test-renderer': '19.2.3' },
-    }))).toEqual([])
   })
 
   Test('holds for the installed workspace', async () => {

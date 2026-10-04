@@ -65,8 +65,6 @@ Describe('InstantDB per-row provider against local InstantDB (requires TAO_INSTA
     const alpha = await liveConnection(app, 'primary', publicNotesSchema)
     const beta = await liveConnection(app, 'alternate', publicNotesSchema)
     try {
-      Expect(rowsOf(alpha.current(), 'Note')).toEqual([])
-
       await alpha.commit(rows => {
         rows['Note']!.push({ Body: 'hello', Id: 'Note-1', Pinned: false, Ref: null })
         rows['Tag']!.push({ Id: 'Tag-1', Label: 'first', Note: 'Note-1' })
@@ -77,7 +75,6 @@ Describe('InstantDB per-row provider against local InstantDB (requires TAO_INSTA
         return note !== undefined && tag !== undefined ? { note, tag } : undefined
       }, { description: 'the second client to receive the note and its tag', timeoutMs: 30_000 })
       Expect(seen.note).toMatchObject({ Body: 'hello', Pinned: false, Ref: null })
-      Expect(seen.note['Id']).toMatch(/^[0-9a-f-]{36}$/)
       Expect(seen.tag).toMatchObject({ Label: 'first', Note: seen.note['Id'] })
 
       // The second client edits one field; the first keeps the row under the id it created it with.

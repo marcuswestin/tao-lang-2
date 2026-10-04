@@ -15,7 +15,6 @@ Describe('runtime element creation boundary', () => {
       'const e = <>{children}</>',
     ].join('\n')
     const issues = runtimeElementConventionIssues([{ path: runtimePath, source }])
-    Expect(issues).toHaveLength(6)
     Expect(issues.map(issue => issue.split(' ')[0])).toEqual([
       `${runtimePath}:1`,
       `${runtimePath}:2`,
@@ -35,7 +34,6 @@ Describe('runtime element creation boundary', () => {
       'const { createElement } = React',
     ].join('\n')
     const issues = runtimeElementConventionIssues([{ path: runtimePath, source }])
-    Expect(issues).toHaveLength(3)
     Expect(issues.map(issue => issue.split(' ')[0])).toEqual([
       `${runtimePath}:1`,
       `${runtimePath}:2`,

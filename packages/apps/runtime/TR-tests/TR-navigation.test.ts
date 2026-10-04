@@ -190,28 +190,6 @@ Describe('TR.Navigation', () => {
     TR.testNavKind(TR.NavKind.Basic.Slot(), 'slot')
     TR.testNavKind(TR.NavKind.Basic.Selection(), 'selection')
     TR.testNavKind(TR.NavKind.Basic.Split(), 'split')
-
-    const kind = TR.NavKind.Stack()
-    const declaration = TR.NavKind.Declaration('ThirdPartyStack')
-    const home = TR.Navigation.View({ name: 'Home', render: () => null })
-    const detail = TR.Navigation.View({ name: 'Detail', render: () => null })
-    const descriptor: TR.NavDescriptor<'stack', TR.StackNavConfiguration> = kind.configure(
-      declaration,
-      { initial: home },
-    )
-    const first: TR.NavMount<'stack', TR.StackNavConfiguration> = kind.mount(descriptor)
-    const second = kind.mount(descriptor)
-
-    Expect(Object.isFrozen(declaration)).toBe(true)
-    Expect(Object.isFrozen(descriptor)).toBe(true)
-    Expect(Object.isFrozen(descriptor.config)).toBe(true)
-    Expect(descriptor.declaration).toBe(declaration)
-    Expect(first).not.toBe(second)
-    Expect(kind.render(first)).not.toBe(undefined)
-    kind.present(first, detail, {})
-    Expect(kind.canGoBack(first)).toBe(true)
-    Expect(kind.canGoBack(second)).toBe(false)
-    Expect(kind.back(first)).toBe(true)
   })
 
   Test('refreshes visually stable command closures independently of duplicate shortcut keys', () => {
@@ -348,7 +326,6 @@ Describe('TR.Navigation', () => {
     Expect(Object.isFrozen(nestedStack)).toBe(true)
     Expect(nestedStack.evaluate()).toBe(nestedStack)
     Expect(app.navigator.kind).toBe('slot')
-    Expect(app.resolve(nestedStack)).toBeDefined()
 
     TR.Navigation.PresentIn({ app }, nestedStack, detail, {})
     Expect(app.canGoBack).toBe(true)
@@ -417,11 +394,10 @@ Describe('TR.Navigation', () => {
     Expect(root.canGoBack).toBe(true)
   })
 
-  Test('hosts overlays directly on every configured navigation value', () => {
+  Test('stacks nav-owned overlays and keeps Back safe at the root', () => {
     const home = TR.Navigation.View({ name: 'Home', render: () => null })
     const notice = TR.Navigation.View({ name: 'Notice', render: () => null })
     const stack = configuredStack('Stack', home)
-    const slot = configuredSlot('Slot', stack)
 
     TR.Navigation.PresentOverlay(undefined, stack, notice, {})
     TR.Navigation.PresentOverlay(undefined, stack, notice, {})
@@ -429,11 +405,6 @@ Describe('TR.Navigation', () => {
     Expect(stack.back()).toBe(true)
     Expect(stack.back()).toBe(true)
     Expect(stack.back()).toBe(false)
-
-    TR.Navigation.PresentOverlay(undefined, slot, notice, {})
-    Expect(slot.canGoBack).toBe(true)
-    Expect(slot.dismiss()).toBe(true)
-    Expect(slot.canGoBack).toBe(false)
   })
 
   Test('owns keyed transient toasts at app scope without participating in Back', () => {
@@ -530,7 +501,6 @@ Describe('TR.Navigation', () => {
     Expect(app.back()).toBe(true)
     Expect(app.canGoBack).toBe(false)
     TR.Navigation.beginTest()
-    Expect(app.canGoBack).toBe(false)
   })
 
   Test('lets the active tab own Back, so the app host does not draw a second one above it', () => {

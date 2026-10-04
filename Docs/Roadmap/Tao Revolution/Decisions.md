@@ -746,6 +746,12 @@ toggle Recipe.Favorite
 update each Grocery where Bought is no { Bought }   // a bulk form
 ```
 
+The MVP subset is single-row `create`, `update`, `delete`, and `toggle`. An entity-field `toggle`
+requires a nonoptional yes/no field, reads its current value once for that logical write, and
+persists the inverse through the ordinary single-row update path; retrying that write does not
+invert it a second time. A state-variable `toggle` keeps its existing local-state meaning. Bulk
+verbs and named transactions remain post-MVP.
+
 - **One structured outcome vocabulary for every effect.** It distinguishes `queued` (durably
   accepted on this device, offline) from `saved` (confirmed by the provider), alongside rejection,
   conflict, and error. Offline is never modelled as an error:
@@ -759,19 +765,23 @@ when do LeaveKitchen(MyMembership) {
 ```
 
 - **Every app has a read safety net, supplied by the standard library when omitted.** An app may
-  declare `guard default { … }` once to customize it. Resolution is per case: site override, then
+  declare `guard { … }` once inside its app body to customize it. Resolution is per case: site override, then
   app override, then the standard fallback. The net covers the states of the _subject_ being read.
   Default copy is generic (for example, "Loading…"), and error text is safe for users rather than
   raw backend diagnostics. This does not catch auth action outcomes or silently propagate a
   receiver's availability through arbitrary member access. An app customization looks like:
 
-```swift
-guard default {
-   loading      -> Spinner(Label: "Opening Skillet…")
-   missing      -> EmptyState(Icon: "questionmark.folder", Title: "This is gone")
-   unauthorized -> EmptyState(Icon: "lock", Title: "You don't have access to this")
-   rejected     -> Problem { Text(Problem) [caption, danger] }
-   error        -> Message { Text(Message) [body] }
+```tao
+app Skillet {
+   guard {
+      loading -> Context {
+         Spinner()
+         Text(Context.Message)
+      }
+      missing -> Context { Text(Context.Message) }
+      unauthorized -> Context { Text(Context.Message) }
+      error -> Context { Text(Context.Message) }
+   }
 }
 
 // A site overrides only what differs — a public screen never invites sign-in for a dead link.
@@ -816,9 +826,35 @@ when do ExportDocument(Document, Format: Format) {
   warning naming the cases and pointing at `when do`. The contract counts the cases an effect's own
   `fail` and `fails` declare and those of the effects it reaches through a plain `do`.
 - **The net is always present; an app restyles it case by case.** The runtime supplies `loading`,
-  `missing`, `unauthorized`, and `error -> Message`. A file-level `guard default { … }` replaces
-  only the cases it names and covers every app in the project. A bare `guard Subject` sends every
-  exceptional case to the net; `guard Subject { … }` sends the cases it does not name.
+  `missing`, `unauthorized`, and `error`. An app-level `guard { … }` replaces only the cases it names.
+  A variant inherits unnamed cases from its base and replaces only its own named cases, transitively.
+  A bare `guard Subject` sends every exceptional case to the net; `guard Subject { … }` sends the
+  cases it does not name.
+
+### 2026-10-03 amendment: app-owned read contexts
+
+The app owns its read net: at most one `guard { … }` inside an app; a variant's `with { guard { … } }`
+overrides named cases and inherits the rest. File-level `guard default` is retired. Resolution is
+site case, app case, then the runtime fallback; the handler renders at the read guard's site with
+that site's design and navigation context. No navigator-specific net is added.
+
+Every exceptional render-guard branch may bind a `ReadContext`, including app nets and local
+`guard Subject` branches.
+`error -> Context { Text(Context.Message) }` reads safe runtime-authored display copy, never raw
+provider diagnostics. Ordinary `when`, action guards and effect outcomes retain their existing payloads.
+Cached `refreshing` and `stale` states remain content/advisory states and never enter the net.
+
+The context contains `State`, `Message` and `ReadKind`; optional `SubjectLabel`, `SubjectType`,
+`LoadingPhase`, `ElapsedSeconds`, `ProgressCompleted`, `ProgressTotal`, `MissingReason`,
+`UnauthorizedReason`, `Recovery`, `ErrorCategory`, `Retryable` and `Retry` carry only known facts.
+Reasons do not invent deletion or reveal protected content's existence. Timing explicitly names
+seconds. A recovery or retry action exists only when it can perform a real operation. Unknown and
+unimplemented fields are `none`, with deferred producers tracked in
+[Read context producers](<Follow-ups - Read context producers.md>).
+
+The runtime's fallback uses the context's safe message with the app's element defaults: labeled
+loading activity, a truthful missing sentence, generic access copy unless a cause is known, and a
+safe load-failure sentence. It offers recovery controls only when a real action exists.
 
 - **Availability is a state, not an empty collection.** Loading, missing, unauthorized, and error
   are distinct from "there are zero rows":
@@ -903,7 +939,7 @@ imperative fetch actions:
 - **Availability is cache-first and per query.** `refreshing` (a fill running behind renderable
   rows) and `stale` (a failed refill behind renderable rows) join `loading` / `empty` / `error` as
   **advisory** cases: a guard that does not name them falls through to content, and they never
-  route to the `guard default` net (§5). A failed refresh over cached rows is `stale`, never
+  route to the app read net (§5). A failed refresh over cached rows is `stale`, never
   `error` — offline stays a non-error.
 - **Staleness is declared** (`CacheFor` on the datasource), measured on the runtime clock a check
   holds; journeys bind a deterministic stub adapter through an ordinary app variant (§11, §16).
@@ -1120,6 +1156,8 @@ part has landed.
   descriptor whose mounted roots coalesce without introducing a wrapper or layout node. A target is
   selected eagerly but never activated implicitly; narrowing uses locale-aware, case-insensitive
   word-prefix subsequences across rendered text, and a sole candidate becomes the target.
+  Mounted rows outside the viewport remain candidates and are scrolled into view when targeted;
+  unmounted virtualized rows are a later capability.
 - **Keyboard and pointer input share semantic operations.** Enter activates or engages, and
   engaging clears the narrowing that selected the target so narrowing never outlives its
   engagement; Escape disengages without losing the target, clears narrowing, ascends, then opens
@@ -1132,6 +1170,7 @@ part has landed.
   movement may target an input without engaging it; Enter engages the already targeted input.
   Engaged input, modal occurrence, target, focused scene, app command, then reducer key is the
   dispatch order. Modifier chords invoke directly. Pointer activation first targets the same node.
+  Long-press and right-click target an item and open its existing verbs without activating it.
 - **Command policy folds from authored surfaces.** An entity orders defaults with
   `commands A, B` and withholds one with `commands hide C`; a view promotes commands using
   `Commands { … }` and excludes inherited defaults with `hide C`. The folded verb order is view
@@ -1151,7 +1190,10 @@ part has landed.
   and hidden layers are removed from accessibility traversal. Hints use cached app-relative bounds,
   overview lists mounted regions, the verb menu preserves the command tiers above, and the palette lists every
   titled command and entity while applying the same locale-aware word-prefix subsequence matcher as
-  attention. Help remains unimplemented.
+  attention. Contextual Help appears only while keyboard typing narrows choices, beside the
+  highlighted top choice. It explains the current region and target, available actions, short
+  descriptions, and invocation keys. It disappears when narrowing ends or text input takes the
+  typing; ordinary focus alone does not open it.
 - **Generated keys are deterministic runtime policy** (KEY-D13). Existing identities retain their keys across
   reorders; new identities are considered in canonical identity order and receive the first free
   label-derived letter, then another distinctive label letter, then a two-letter sequence. One

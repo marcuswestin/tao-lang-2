@@ -1,4 +1,4 @@
-import { ASTUtils, Packages, Type } from '@ast-utils'
+import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
 import type { NodeValidationChecks } from '../node-validation'
@@ -19,11 +19,9 @@ const messages = {
   bareGuardSubject:
     "A bare `guard` sends its subject's exceptional cases to the read net, so its subject must be an entity or a query.",
   emptyGuardCases: 'A `guard` case block names at least one case; to send every case to the read net, drop the braces.',
-  guardDefaultCase: (name: string) =>
-    `\`guard default\` handles only loading, missing, unauthorized, and error; '${name}' is not one of them.`,
-  guardDefaultDuplicate:
-    'A project declares at most one `guard default`, and this one is not the only one; keep one and delete the others.',
-  guardDefaultPlacement: '`guard default` covers every app in the project, so it is declared at file level.',
+  appGuardCase: (name: string) =>
+    `App guard handles only loading, missing, unauthorized, and error; '${name}' is not one of them.`,
+  retiredGuardDefault: '`guard default` moved into the app: write `guard { ... }` inside an app block.',
   conditionalBranch: '`when` branches must produce compatible value types.',
   compactWhenSubject: 'The compact `when Subject Value / label Value` form requires a yes/no subject.',
   compactWhenLabel: (label: string, expected: string) =>
@@ -90,7 +88,8 @@ export const FunctionalCoreValidator = {
       validateReadNetReach(statement, ctx)
       validateRenderControlPlacement(statement, ctx)
     },
-    [AST.GuardDefaultStatement.$type]: validateGuardDefault,
+    [AST.AppGuardStatement.$type]: validateAppGuard,
+    [AST.GuardDefaultStatement.$type]: (statement, ctx) => ctx.error(statement, messages.retiredGuardDefault),
     [AST.GuardActionStatement.$type]: (statement, ctx) => {
       validateSubjectCases(statement.subject, ASTUtils.guardBranches(statement), ctx)
       // §8 keeps `guard` for views; an action stops with `check`. Retired with a warning for now.
@@ -374,7 +373,10 @@ function validateSubjectCases(
     if (!allowed.has(name)) {
       ctx.error(branch, messages.invalidCase(branch.case, subjectCaseLabel(category)))
     }
-    if ('payload' in branch && branch.payload && branch.case !== 'error') {
+    if (
+      'payload' in branch && branch.payload && branch.case !== 'error'
+      && !(AST.isGuardRenderBranch(branch) && readNetCaseNames.has(name))
+    ) {
       ctx.error(branch.payload, messages.invalidCasePayload)
     }
   }
@@ -409,13 +411,9 @@ function readNetCases(category: SubjectCaseCategory): ReadonlySet<string> {
 }
 
 /**
- * `guard default` is the one file-level override of the runtime's read net, so it names only net
- * cases, each at most once, carries a message only on `error`, and exists once per project.
+ * An app guard overrides exceptional read cases for its app; any named case can bind ReadContext.
  */
-function validateGuardDefault(statement: AST.GuardDefaultStatement, ctx: ValidationContext): void {
-  if (!AST.isTaoFile(statement.$container)) {
-    ctx.error(statement, messages.guardDefaultPlacement)
-  }
+function validateAppGuard(statement: AST.AppGuardStatement, ctx: ValidationContext): void {
   const seen = new Set<string>()
   for (const branch of statement.branches) {
     if (seen.has(branch.case)) {
@@ -423,35 +421,9 @@ function validateGuardDefault(statement: AST.GuardDefaultStatement, ctx: Validat
     }
     seen.add(branch.case)
     if (!readNetCaseNames.has(branch.case)) {
-      ctx.error(branch, messages.guardDefaultCase(branch.case))
-    }
-    if (branch.payload && branch.case !== 'error') {
-      ctx.error(branch.payload, messages.invalidCasePayload)
+      ctx.error(branch, messages.appGuardCase(branch.case))
     }
   }
-  if (projectGuardDefaults(statement, ctx).length > 1) {
-    ctx.error(statement, messages.guardDefaultDuplicate)
-  }
-}
-
-/** projectGuardDefaults lists every `guard default` in the project that declares `statement`. */
-function projectGuardDefaults(
-  statement: AST.GuardDefaultStatement,
-  ctx: ValidationContext,
-): AST.GuardDefaultStatement[] {
-  const projectRootOf = (node: AST.Node) =>
-    Packages.projectRootForPath(ctx.packagesContext.index, AST.getDocument(node).uri.path)
-  const byProject = ctx.memo('functional-core.guardDefaultsByProject', () => {
-    const index = new Map<string | undefined, AST.GuardDefaultStatement[]>()
-    for (const file of ctx.projectFiles ?? ctx.workspaceFiles) {
-      for (const net of file.statements.filter(AST.isGuardDefaultStatement)) {
-        const root = projectRootOf(net)
-        index.set(root, [...index.get(root) ?? [], net])
-      }
-    }
-    return index
-  })
-  return byProject.get(projectRootOf(statement)) ?? [statement]
 }
 
 type SubjectCaseCategory = 'enum' | 'boolean' | 'entity' | 'list' | 'query' | 'text' | 'unresolved' | 'unsupported'

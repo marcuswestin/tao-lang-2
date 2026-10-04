@@ -45,9 +45,6 @@ Describe('parser: test device and fixture clauses', () => {
       app WordFlower { view Main }
 
       test "WordFlower" on tablet 900 x 1200 {
-        test "on a tablet" {
-          run WordFlower
-        }
         test "on a phone" on phone {
           run WordFlower
         }
@@ -62,10 +59,8 @@ Describe('parser: test device and fixture clauses', () => {
     Expect(device.width).toBe(900)
     Expect(device.height).toBe(1200)
 
-    const [inherited, overridden] = suite.block.statements.filter(AST.isTestDeclaration)
-    Expect.Is(inherited, AST.isTestDeclaration)
+    const [overridden] = suite.block.statements.filter(AST.isTestDeclaration)
     Expect.Is(overridden, AST.isTestDeclaration)
-    Expect(AST.effectiveTestClause(inherited, AST.isTestDeviceClause)).toBe(device)
     const overriddenDevice = AST.effectiveTestClause(overridden, AST.isTestDeviceClause)
     Expect.Is(overriddenDevice, AST.isTestDeviceClause)
     Expect(overriddenDevice.device).toBe('phone')

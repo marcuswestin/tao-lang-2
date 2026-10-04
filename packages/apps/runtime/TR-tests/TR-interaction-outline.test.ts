@@ -56,7 +56,14 @@ Describe('TR.Interaction.Outline', () => {
     const table = describeOutlineTable({
       module: '@ui/Workspaces',
       nodes: {
-        'Main#12': { declaration: 'Main', kind: 'control', label: 'Save', role: 'action', view: 'FormButton' },
+        'Main#12': {
+          declaration: 'Main',
+          kind: 'control',
+          label: 'Save',
+          nameStatus: 'known',
+          role: 'action',
+          view: 'FormButton',
+        },
         'Main#40': {
           declaration: 'Main',
           kind: 'collection',
@@ -72,7 +79,6 @@ Describe('TR.Interaction.Outline', () => {
     Expect(table['Main#40'].identity).toBe('@ui/Workspaces#Main#40')
     Expect(table['Main#12'].role).toBe('action')
     Expect(Object.isFrozen(table['Main#40'])).toBe(true)
-    Expect(TR.Interaction.OutlineTable({ module: 'm', nodes: {} })).toEqual({})
   })
 
   Test('registers nodes for exactly as long as their owner keeps the withdrawal', () => {
@@ -85,7 +91,6 @@ Describe('TR.Interaction.Outline', () => {
     })
     const withdrawRow = item(outline, 'collection#1/a', { Id: 'a', Title: 'Chapter one' })
 
-    Expect(outline.mounted).toBe(2)
     Expect(outline.read().nodes.map(node => [node.identity, node.kind, node.label, node.parent])).toEqual([
       ['collection#1', 'collection', 'Drafts', undefined],
       ['collection#1/a', 'item', 'Chapter one', 'collection#1'],

@@ -1,0 +1,45 @@
+{
+  "id": "20261003215642084-91c248d9-653a-46de-883b-0936ebfd4f4c",
+  "runId": "20261003215600240-a1982a20-0df3-4479-a05c-3c6a44395734",
+  "createdAt": "2026-10-03T21:56:42.078Z",
+  "recordedAt": "2026-10-03T21:56:42.078Z",
+  "commit": "4b566ac5e0bb211b7dd97d4695d9458c351e226d",
+  "phase": 1,
+  "executionProfile": "development",
+  "provenance": {
+    "snapshotBasis": "observation-time",
+    "originalDependencies": "recorded",
+    "observedMetadataEvidence": [
+      "Docs/QA/evidence/recheck-d667648/notebook/devices-tabletdark-e772c18f649e.png",
+      "Docs/QA/evidence/recheck-d667648/notebook/source-snapshot.json"
+    ]
+  },
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "runtime": "bun:1.4.2"
+  },
+  "inputs": {
+    "source": "packages/cli/tao-cli",
+    "dependencySnapshot": "Docs/QA/inputs/17be91674d108c268b1db99a7f629fa5df64f34e37b1719e521c78dd4f0c57a1.json"
+  },
+  "surfaceId": "visual:notebook",
+  "dimension": "visual",
+  "outcome": "pass",
+  "reviewer": "developer",
+  "channel": "tablet-dark",
+  "evidence": [
+    {
+      "path": "Docs/QA/evidence/recheck-d667648/notebook/devices-tabletdark-e772c18f649e.png",
+      "sha256": "d142d2c9f45880bdd29753a2100b2d8b589d08cf50795b7ab7a59e7fa6fc6145"
+    },
+    {
+      "path": "Docs/QA/evidence/recheck-d667648/notebook/source-snapshot.json",
+      "sha256": "956287eba18b103c24747fae9525c9e7876bc6b03ef125c065cf9e0131024fb6"
+    }
+  ],
+  "notes": "Developer accepted this existing 1024 x 1366 tabletDark capture on 2026-10-03: \"Yes, it looks centered. Record it and close.\" The 720px content column has equal 152px horizontal margins. This receipt records that centering approval; it does not claim a new capture of the current renderer or acceptance of guard-state rendering.",
+  "sourceHash": "3f6796b5d227ab7f1715a6166bf2a6a23a563b4266ca74428236f225220e9d16",
+  "rendererHash": "c6f8be71249e2dcb13624d84de118cf44103411247fc8f1faeba5cec5c73589f",
+  "profileHash": "b5e443edb0ccd5952dd86869fb2a97f104715bfcbd7612b7bf7e2c50df3b94c8"
+}

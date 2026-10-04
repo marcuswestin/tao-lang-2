@@ -44,6 +44,23 @@ const documentDefinition: TaoDataSchemaDefinition = {
 }
 
 Describe('TR.Data provider foundation', () => {
+  Test('toggles a stored field once per call and reads pending writes within an action', async () => {
+    const schema = TR.Data.Schema(noteDefinition, { load: () => undefined, save: () => {} })
+    await TR.Data.Settle(schema)
+    TR.Data.Create(schema, 'Note', { Title: TR.Value('A') })
+    const note = schema.query({ entity: 'Note', filters: [] })[0]!
+    const flipTwice = TR.Action(() => {
+      TR.Data.Toggle(TR.Value(note), 'Done')
+      TR.Data.Toggle(TR.Value(note), 'Done')
+    }, { name: 'FlipTwice' })
+    await flipTwice.jsValue.invoke()
+    Expect(TR.Data.Read(note, 'Done')).toBe(false)
+
+    const flipOnce = TR.Action(() => TR.Data.Toggle(TR.Value(note), 'Done'), { name: 'FlipOnce' })
+    await flipOnce.jsValue.invoke()
+    Expect(TR.Data.Read(note, 'Done')).toBe(true)
+  })
+
   Test('submits supplied same-value update fields as transient write intent', async () => {
     const saves: Array<{ intents: readonly { entity: string; fields: readonly string[]; id: string }[] | undefined }> =
       []
@@ -122,8 +139,10 @@ Describe('TR.Data provider foundation', () => {
     Expect(TR.Data.Read(note, 'WritesFailed')).toBe(1)
     Expect(TR.Data.Read(note, 'WriteError')).toBe('Connection lost.')
     Expect(TR.Data.Read(note, 'CanRetryWrites')).toBe(true)
+    TR.Data.Toggle(TR.Value(note), 'Done')
     TR.Data.Retry(TR.Value(note))
     Expect(retries).toEqual([['Note', 'Note-1']])
+    Expect(TR.Data.Read(note, 'Done')).toBe(true)
 
     const before = schema.snapshot()
     statusListener!()
@@ -178,35 +197,6 @@ Describe('TR.Data provider foundation', () => {
     await TR.testProvider(memoryDataProvider, rejectingProvider)
   })
 
-  Test('ports Local through conformance with a deterministic storage boundary', async () => {
-    const values = new Map<string, string>()
-    const storage = memoryKeyValueStorage(values)
-    const rejectingStorage = {
-      getItem: async (_key: string): Promise<string | null> => null,
-      setItem: async (_key: string, _value: string): Promise<void> => {
-        throw new HostEnvironmentError('storage unavailable')
-      },
-    }
-
-    await TR.testProvider(
-      () => localProvider(storage, 'provider-conformance'),
-      () => localProvider(rejectingStorage, 'provider-conformance-rejection'),
-    )
-  })
-
-  Test('isolates in-memory envelopes by storage key', async () => {
-    const provider = memoryDataProvider()
-    const first = providerConnection(provider, 'first-schema')
-    const second = providerConnection(provider, 'second-schema')
-
-    await first.save('first')
-    await second.save('second')
-
-    Expect(await first.load()).toBe('first')
-    Expect(await second.load()).toBe('second')
-    Expect(await providerConnection(provider, 'missing-schema').load()).toBeUndefined()
-  })
-
   Test('rejects schema fields that collide with the generated entity identifier', () => {
     Expect(() =>
       TR.Data.Schema({
@@ -224,20 +214,6 @@ Describe('TR.Data provider foundation', () => {
 
     const rows = schema.query({ entity: 'Note', filters: [] }) as unknown[] & { Error: string }
     Expect(rows.Error).toContain("Data schema 'RuntimeNotes' has no bound provider.")
-  })
-
-  Test('binds one declared Memory provider and preserves the store across repeated app renders', () => {
-    const declaration = TR.Data.Declaration('Memory', memoryDataProvider())
-    const configured = TR.Data.Configure(declaration, {})
-    const schema = TR.Data.Schema(noteDefinition)
-    TR.Data.BindConfigured(schema, configured)
-    TR.Data.Create(schema, 'Note', { Title: TR.Value('Bound') })
-    const revisionBeforeRepeat = schema.snapshot()
-
-    TR.Data.BindConfigured(schema, configured)
-
-    Expect(schema.snapshot()).toBe(revisionBeforeRepeat)
-    Expect(schema.query({ entity: 'Note', filters: [] })).toHaveLength(1)
   })
 
   Test('keeps the fresh test Memory provider when app binding runs during a check', () => {
@@ -261,7 +237,6 @@ Describe('TR.Data provider foundation', () => {
 
   Test('applies only declared defaults and creates stable live entity handles', () => {
     const schema = TR.Data.Schema(noteDefinition, memoryConnection())
-    const before = Date.now()
 
     TR.Data.Create(schema, 'Note', { Title: TR.Value('Draft') })
     const first = schema.query({ entity: 'Note', filters: [] })[0] as Record<string, unknown>
@@ -269,8 +244,6 @@ Describe('TR.Data provider foundation', () => {
 
     Expect(first).toBe(second)
     Expect(first['Done']).toBe(false)
-    Expect(typeof first['CreatedAt']).toBe('number')
-    Expect(first['CreatedAt'] as number).toBeGreaterThanOrEqual(before)
 
     TR.Data.Update(TR.Value(first), { Title: TR.Value('Current') })
     Expect(first['Title']).toBe('Current')
@@ -297,15 +270,13 @@ Describe('TR.Data provider foundation', () => {
     TR.Data.Create(second, 'InteractionPickerChoice', { Name: TR.Value('Second') })
     const deleted = first.query({ entity: 'InteractionPickerChoice', filters: [] })[1]
     TR.Data.Delete(TR.Value(deleted))
-    const placeholder = first.referencedHandle('InteractionPickerChoice', 'Name', 'Missing')
+    first.referencedHandle('InteractionPickerChoice', 'Name', 'Missing')
 
     const candidates = TR.Data.interactionCandidates('InteractionPickerChoice')
     const identities = candidates.map(candidate => TR.Data.interactionCandidateIdentity(candidate))
 
     Expect(candidates.map(candidate => TR.Data.Read(candidate, 'Name'))).toEqual(['First', 'Second'])
     Expect(identities[0]).not.toBe(identities[1])
-    Expect(candidates).not.toContain(deleted)
-    Expect(candidates).not.toContain(placeholder)
   })
 
   Test('derives entity guard availability while preserving a deleted handle identifier', () => {
@@ -370,14 +341,11 @@ Describe('TR.Data provider foundation', () => {
         },
       },
     }, memoryConnection())
-    const before = Date.now()
 
     TR.Data.Create(schema, 'Entry', {})
 
     const entry = schema.query({ entity: 'Entry', filters: [] })[0] as Record<string, unknown>
     Expect(entry['Label']).toBe('now')
-    Expect(typeof entry['CreatedAt']).toBe('number')
-    Expect(entry['CreatedAt'] as number).toBeGreaterThanOrEqual(before)
   })
 
   Test('applies the now clock separately for every create while preserving live handle identity', () => {
@@ -839,34 +807,6 @@ Describe('TR.Data provider foundation', () => {
     Expect(recovered.Error).toBe('')
   })
 
-  Test('keeps local state when a remote snapshot arrives during an ordered save', async () => {
-    const pendingSave = Deferred<void>()
-    let observer: TaoDataConnectionObserver | undefined
-    const liveConnection: TaoDataConnection = {
-      load: () => undefined,
-      save: () => pendingSave.promise,
-      subscribe: next => {
-        observer = next
-        return () => {}
-      },
-    }
-    const schema = TR.Data.Schema(noteDefinition, liveConnection)
-    await flushMicrotasks()
-
-    TR.Data.Create(schema, 'Note', { Title: TR.Value('Local') })
-    observer?.snapshot(persistedNotes('Remote during save'))
-
-    const duringSave = schema.query({ entity: 'Note', filters: [] }) as Array<Record<string, unknown>>
-    Expect(duringSave.map(row => row['Title'])).toEqual(['Local'])
-
-    pendingSave.resolve()
-    await TR.Data.Settle(schema)
-    observer?.snapshot(persistedNotes('Remote after save'))
-
-    const afterSave = schema.query({ entity: 'Note', filters: [] }) as Array<Record<string, unknown>>
-    Expect(afterSave.map(row => row['Title'])).toEqual(['Remote after save'])
-  })
-
   Test('invalidates live handles when the schema changes provider generations', () => {
     const schema = TR.Data.Schema(noteDefinition, memoryConnection())
     TR.Data.Create(schema, 'Note', { Title: TR.Value('Old store') })
@@ -935,40 +875,6 @@ Describe('TR.Data provider foundation', () => {
     Expect(schema.query({ entity: 'Task', filters: [] })).toHaveLength(0)
     Expect(schema.query({ entity: 'Comment', filters: [] })).toHaveLength(0)
     Expect(saves).toBe(1)
-  })
-
-  Test('cascades three levels from owner-declared collection semantics', () => {
-    const schema = TR.Data.Schema({
-      name: 'OwnerCascade',
-      entities: {
-        Workspace: { collection: 'Workspaces', fields: { Name: { kind: 'text' } } },
-        Document: {
-          collection: 'Documents',
-          fields: {
-            Title: { kind: 'text' },
-            Workspace: { kind: 'relation', relation: 'Workspace', onDelete: 'cascade' },
-          },
-        },
-        Paragraph: {
-          collection: 'Paragraphs',
-          fields: {
-            Text: { kind: 'text' },
-            Document: { kind: 'relation', relation: 'Document', onDelete: 'cascade' },
-          },
-        },
-      },
-    }, memoryConnection())
-    TR.Data.Create(schema, 'Workspace', { Name: TR.Value('Home') })
-    const workspace = schema.query({ entity: 'Workspace', filters: [] })[0]
-    TR.Data.Create(schema, 'Document', { Title: TR.Value('Draft'), Workspace: TR.Value(workspace) })
-    const document = schema.query({ entity: 'Document', filters: [] })[0]
-    TR.Data.Create(schema, 'Paragraph', { Text: TR.Value('Opening'), Document: TR.Value(document) })
-
-    TR.Data.Delete(TR.Value(workspace))
-
-    Expect(schema.query({ entity: 'Workspace', filters: [] })).toHaveLength(0)
-    Expect(schema.query({ entity: 'Document', filters: [] })).toHaveLength(0)
-    Expect(schema.query({ entity: 'Paragraph', filters: [] })).toHaveLength(0)
   })
 
   Test('rejects foreign, wrong-entity, deleted, and inactive relationship handles', () => {

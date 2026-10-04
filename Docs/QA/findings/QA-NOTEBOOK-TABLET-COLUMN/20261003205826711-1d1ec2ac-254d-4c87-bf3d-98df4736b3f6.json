@@ -1,0 +1,44 @@
+{
+  "id": "QA-NOTEBOOK-TABLET-COLUMN",
+  "status": "verified-closed",
+  "phase": 1,
+  "surfaceId": "visual:notebook",
+  "dimension": "visual",
+  "channel": "tablet-dark",
+  "severity": "minor",
+  "title": "the Notebook column hugs the left edge on tablet",
+  "observed": "At 0aa8ebcf the 720px-capped column (Design.tao:57 `column [width max 720, gap 16]`) sits at the left of the 1024px tablet viewport, leaving about 270px of empty canvas on the right while the header spans the full width.",
+  "impact": "The tablet layout reads as unfinished; whether a capped column should center is a design call.",
+  "location": "Apps/Starters/Notebook/Design.tao:56-57",
+  "affectedPhases": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "expected": "The Developer decides whether the starter column centers at widths above its cap.",
+  "recheck": "recapture devices/tabletDark after the decision and inspect horizontal placement.",
+  "evidence": [
+    "Apps/Starters/Notebook/Design.tao",
+    "packages/cli/tao-cli/cli-src/create/creation-lowering.ts"
+  ],
+  "evidenceHashes": [
+    {
+      "path": "Docs/QA/evidence/recheck-0aa8ebcf/notebook/devices-tabletdark-ff42616364c6.png",
+      "sha256": "a65695f65b5c2f331d1ce4fb16f98cde8009359c1108219350929614c2bbfa2c"
+    },
+    {
+      "path": "Docs/QA/evidence/recheck-0aa8ebcf/notebook/source-snapshot.json",
+      "sha256": "45768385f0df29989fe42fb6fcd59985267cdce7c031e8ab941a45d60ab7a279"
+    }
+  ],
+  "createdAt": "2026-09-29T16:19:14.731Z",
+  "updatedAt": "2026-10-03T20:58:26.707Z",
+  "confidence": "design-judgment",
+  "requiredReviewer": "developer",
+  "relatedStories": [],
+  "notes": "Developer centering decision accepted from the existing capture: \"Yes, it looks centered. Record it and close.\" The current receipt preserves that approval and identifies the prior screenshot; no new current-renderer capture or guard-state acceptance is claimed.",
+  "owner": "developer",
+  "passingResultId": "20261003205749579-bbb22999-5e36-4d06-afec-ebe7d0e71ecf"
+}

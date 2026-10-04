@@ -1,6 +1,6 @@
 import { Describe, Expect, Test } from '@shared/test'
 import { ActionsValidator } from '../validator-src/validators/ActionsValidator'
-import { accepts, rejects, validationErrorMessages, withValidatedFiles } from './test-validate'
+import { accepts, rejects, withValidatedFiles } from './test-validate'
 
 Describe('validator: action failures', () => {
   Test(
@@ -39,9 +39,6 @@ Describe('validator: action failures', () => {
       'Main.tao':
         'app Missing { view Main } view Main() { action Publish() from ./Missing.ts render Empty() } view Empty() { render inject ```ts return null ``` }',
     }, result => {
-      Expect(validationErrorMessages(result)).toContain(
-        ActionsValidator.messages.foreignActionMissing('./Missing.ts'),
-      )
       const diagnostic = result.diagnostics.find(candidate =>
         candidate.message === ActionsValidator.messages.foreignActionMissing('./Missing.ts')
       )

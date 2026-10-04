@@ -94,7 +94,7 @@ Describe('agent capabilities', () => {
     })
 
     Expect(report.sandboxDetected).toBe(true)
-    Expect(unavailableLandingCapabilities(report)).toEqual([])
+    Expect(unavailableLandingCapabilities(report, 'darwin')).toEqual([])
   })
 
   Test('names only unavailable capabilities required by landing', async () => {
@@ -106,7 +106,26 @@ Describe('agent capabilities', () => {
           : availableProbe(candidate),
     })
 
-    Expect(unavailableLandingCapabilities(report).map(check => check.name)).toEqual(['CoreSimulator service'])
+    Expect(unavailableLandingCapabilities(report, 'darwin').map(check => check.name)).toEqual(['CoreSimulator service'])
+  })
+
+  Test('requires the simulator and native launcher for landing only on macOS', async () => {
+    const report = await readAgentCapabilities({
+      env: {},
+      runProbe: async candidate =>
+        candidate.name === 'CoreSimulator service' || candidate.command === 'hutch'
+          ? { exitCode: 127, stderr: `${candidate.command}: command not found`, stdout: '' }
+          : candidate.command === 'watchman'
+          ? { exitCode: 1, stderr: 'unable to talk to your watchman', stdout: '' }
+          : availableProbe(candidate),
+    })
+
+    Expect(unavailableLandingCapabilities(report, 'linux').map(check => check.name)).toEqual(['Watchman socket'])
+    Expect(unavailableLandingCapabilities(report, 'darwin').map(check => check.name).sort()).toEqual([
+      'CoreSimulator service',
+      'Hutch native launcher',
+      'Watchman socket',
+    ])
   })
 
   Test('classifies every declared probe from its own result', async () => {
@@ -122,7 +141,6 @@ Describe('agent capabilities', () => {
     })
 
     Expect(report.version).toBe(1)
-    Expect(probed.map(candidate => candidate.command)).toContain('docker')
     Expect(probed.find(candidate => candidate.command === 'ps')).toMatchObject({
       args: ['-axo', 'pid=,ppid=,lstart=,command='],
       command: 'ps',
@@ -164,7 +182,7 @@ Describe('agent capabilities', () => {
           : availableProbe(candidate),
     })
 
-    Expect(unavailableLandingCapabilities(report)).toMatchObject([{
+    Expect(unavailableLandingCapabilities(report, 'darwin')).toMatchObject([{
       command: 'hutch --version',
       detail: 'hutch: command not found',
       name: 'Hutch native launcher',
@@ -188,7 +206,7 @@ Describe('agent capabilities', () => {
             : availableProbe(candidate),
       })
 
-      Expect(unavailableLandingCapabilities(report)).toMatchObject([{
+      Expect(unavailableLandingCapabilities(report, 'darwin')).toMatchObject([{
         detail,
         name: 'Hutch native launcher',
         status: 'unavailable',
@@ -206,7 +224,7 @@ Describe('agent capabilities', () => {
     })
 
     Expect(report.checks.find(check => check.name === 'Hutch native launcher')).toMatchObject({ status: 'available' })
-    Expect(unavailableLandingCapabilities(report)).toEqual([])
+    Expect(unavailableLandingCapabilities(report, 'darwin')).toEqual([])
     Expect(probed.filter(candidate => candidate.command === 'hutch').map(candidate => candidate.args))
       .toEqual([['--version']])
   })

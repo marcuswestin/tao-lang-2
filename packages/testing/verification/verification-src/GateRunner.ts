@@ -1,5 +1,6 @@
 import { FS, Repo, Time } from '@shared'
 import { ContentionRetry } from './ContentionRetry'
+import { FailurePolicy } from './FailurePolicy'
 import { FlakeTolerance } from './FlakeTolerance'
 import { GateCatalog } from './GateCatalog'
 import {
@@ -22,7 +23,7 @@ import {
   type MachineResourceLease,
 } from './MachineLanes'
 import { RunArtifacts } from './RunArtifacts'
-import { buildSummary, describesTimeout, type GateResult, type GateSummary, skippedResult } from './RunSummary'
+import { buildSummary, type GateResult, type GateSummary, skippedResult } from './RunSummary'
 import { RunTimings } from './RunTimings'
 import { TaoAppSharedRun } from './TaoAppSharedRun'
 import { TestLedger } from './TestLedger'
@@ -64,6 +65,8 @@ import { WorkSchedule } from './WorkSchedule'
  */
 
 export type RunGatesOptions = {
+  /** Broad lanes fail fast; internal explicitly scoped diagnostic callers may collect failures. */
+  failurePolicy?: FailurePolicy
   /** Gate recipe names, in the order the Justfile declared them. */
   gates: readonly string[]
   /**
@@ -105,6 +108,8 @@ export type RunGatesOptions = {
   onEvent?: (event: WorkEvent) => void
   /** How the run reports itself while it runs. Omitted, it reports nothing but the artifacts. */
   outputMode?: OutputMode
+  /** The OS the lane runs on; off macOS, `requiresMacOS` gates are skipped. Omitted, none is skipped for its OS. */
+  hostPlatform?: string
   /** Injected by tests; defaults to the machine-wide lane registry. */
   registryRoot?: string
   repositoryRoot?: string
@@ -156,6 +161,8 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   })
   const now = options.now ?? Time.nowMs
   const startedAt = now()
+  // Durations use a monotonic clock; retry settlement compares wall-clock timestamps.
+  const testRunStartedAt = Date.now()
   const fingerprintOf = treeFingerprinter(options)
   // Fingerprinted before anything runs. A --no-cache run reads no proof but still needs this seed,
   // because the drift guard below compares what the readers proved against what the run leaves.
@@ -190,14 +197,19 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
 
   // A gate that is both run and declared skipped is run: the declaration is stale, and counting
   // it twice would make the totals disagree with the list above them.
-  const runnableGates = options.skipUnsandboxed === true
-    ? options.gates.filter(name => GateCatalog.metadata(name).requiresUnsandboxed !== true)
-    : [...options.gates]
-  const unsandboxedSkips = options.skipUnsandboxed === true
-    ? options.gates
-      .filter(name => GateCatalog.metadata(name).requiresUnsandboxed === true)
-      .map(name => `${name}=requires unsandboxed host capabilities; run ./agent verify-full outside the sandbox`)
-    : []
+  const { hostPlatform } = options
+  const skipsUnsandboxed = (name: string) =>
+    options.skipUnsandboxed === true && GateCatalog.metadata(name).requiresUnsandboxed === true
+  const skipsMacOS = (name: string) =>
+    hostPlatform !== undefined && hostPlatform !== 'darwin' && GateCatalog.metadata(name).requiresMacOS === true
+  const runnableGates = options.gates.filter(name => !skipsUnsandboxed(name) && !skipsMacOS(name))
+  const hostSkips = options.gates.flatMap(name =>
+    skipsUnsandboxed(name)
+      ? [`${name}=requires unsandboxed host capabilities; run ./agent unsandboxed verify-full`]
+      : skipsMacOS(name)
+      ? [`${name}=requires macOS; not run on ${hostPlatform}`]
+      : []
+  )
 
   const recipeGates = runnableGates.filter(name => !isTestGate(name))
   const testGate = runnableGates.find(isTestGate)
@@ -240,7 +252,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
     ...(suites.includes(name) ? { suite: name } : {}),
   }))
   const declaredSkips = [
-    ...[...options.skipped ?? [], ...unsandboxedSkips].map(skippedResult),
+    ...[...options.skipped ?? [], ...hostSkips].map(skippedResult),
     ...greenSkips,
   ]
     .filter(result => !gatesToRun.includes(result.name))
@@ -262,14 +274,12 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
       .filter(state => (state.node.resources ?? []).includes(GateCatalog.GUI_RESOURCE))
       .map(state => state.name),
   )
-  // Only the full lanes stop early. Iteration lanes keep collecting every failure, while a landing
-  // releases its lock after a failure that neither contention retry nor known-flake tolerance can
-  // clear. Read the flake ledger at the first failure, not before a possibly long machine wait, and
-  // use that same snapshot for the early decision and final verdict.
-  const failFast = location.lane === 'verify-full' || location.lane === 'verify-full-sandbox'
-  let toleratedPromise: ReturnType<typeof TestLedger.tolerated> | undefined
-  const toleratedSnapshot = () => toleratedPromise ??= TestLedger.tolerated(location.repositoryRoot)
-  const testByName = new Map((testPlan?.states ?? []).map(state => [state.name, state]))
+  const failure = FailurePolicy.create({
+    observe: TestRunner.observationsFor,
+    policy: options.failurePolicy ?? 'fail-fast',
+    repositoryRoot: location.repositoryRoot,
+    tests: testPlan?.states ?? [],
+  })
   // Every worktree on this machine reserves against the same CPUs. Registration puts this lane in
   // the machine-wide queue; admission is whole-lane and in arrival order, so a lane either runs at
   // its full requested width or waits with a printed position — it is never thinned to a slot or
@@ -365,26 +375,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
       },
       runNode,
       slotBroker: machineLane,
-      stopOnFailure: failFast
-        ? async state => {
-          // A timeout may be confirmed under isolation after this graph drains. Do not stop on the
-          // process exit alone when its output says a nested test or host wait timed out.
-          if (
-            state.failure?.kind === 'timeout'
-            || state.failure?.kind === 'interrupted'
-            || describesTimeout(state.reason ?? '')
-            || describesTimeout(state.fullOutput)
-          ) {
-            return false
-          }
-          const test = testByName.get(state.name)
-          if (test === undefined) {
-            return true
-          }
-          await TestRunner.observationsFor([test], location.repositoryRoot)
-          return !FlakeTolerance.apply([test], await toleratedSnapshot()).nodes.has(test.name)
-        }
-        : undefined,
+      stopOnFailure: failure.stopOnFailure,
     })
     if (prepareNames.size > 0 && finishedPrepare.size < prepareNames.size) {
       // An interrupted or dependency-skipped prepare phase never emitted its last completion.
@@ -444,7 +435,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
     ? FlakeTolerance.empty()
     : FlakeTolerance.apply(
       testPlan.states.filter(state => states.some(candidate => candidate.name === state.name)),
-      await toleratedSnapshot(),
+      await failure.tolerated(),
     )
   const schedule = WorkSchedule.report(result)
   const summary = buildSummary({
@@ -540,7 +531,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
         ),
       observations,
       repositoryRoot: location.repositoryRoot,
-      startedAt,
+      startedAt: testRunStartedAt,
     })
   }
   await RunArtifacts.finishRun({

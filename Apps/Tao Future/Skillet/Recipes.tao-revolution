@@ -137,7 +137,7 @@ scene RecipeScreen(Recipe) {
    }
 
    render ScrollView [screen] {
-      guard Recipe // loading, missing, unauthorized, and rejected all fall to `guard default`
+      guard Recipe // loading, missing, unauthorized, and error all fall to the app read net
       Col [page, width max 900] {
          Image(Recipe.Photo, Description: Recipe.Title) [height 260, radius lg, fit cover]
          Row [content right center, gap xs, wrap] {

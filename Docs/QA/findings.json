@@ -1,0 +1,287 @@
+[
+  {
+    "id": "QA-INSTALL-PLACEHOLDER",
+    "title": "the public first step is not runnable",
+    "surfaceId": "doc:README.md",
+    "dimension": "text",
+    "phase": 1,
+    "severity": "blocking",
+    "evidence": [
+      "Docs/QA/pilot.md"
+    ],
+    "expected": "a newcomer can follow the actual published, signed CLI installation route.",
+    "recheck": "follow the final public instructions on a clean supported Mac, then create/run an app.",
+    "status": "open",
+    "createdAt": "2026-09-26T22:46:00.000Z",
+    "baseline": "d5bdeaefd037",
+    "updatedAt": "2026-09-26T22:46:00.000Z",
+    "confidence": "confirmed",
+    "channel": "source",
+    "requiredReviewer": "agent",
+    "existingIssue": "Docs/MVP Roadmap/Agent MVP Roadmap.md#A2",
+    "relatedStories": [
+      "CLI1",
+      "WEB2"
+    ],
+    "observed": "The Install section promises a future standalone command and shows git clone <repository>.",
+    "impact": "A newcomer cannot complete the public first step.",
+    "location": "README.md:50-61",
+    "affectedPhases": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ]
+  },
+  {
+    "id": "QA-TUTORIAL-ENTRY",
+    "title": "the tutorial omits the execution instructions",
+    "surfaceId": "doc:Docs/Tutorials/Your First Tao App.md",
+    "dimension": "text",
+    "phase": 1,
+    "severity": "major",
+    "evidence": [
+      "Docs/QA/pilot.md"
+    ],
+    "expected": "a reader knows the starting prerequisites, where to put the source, and how to see\n  and test the result before proceeding through the editing steps.",
+    "recheck": "an uncoached reader reaches the first screen and runs the final journey using the text.",
+    "status": "open",
+    "createdAt": "2026-09-26T22:46:00.000Z",
+    "baseline": "d5bdeaefd037",
+    "updatedAt": "2026-09-26T22:46:00.000Z",
+    "confidence": "confirmed",
+    "channel": "source",
+    "requiredReviewer": "human",
+    "relatedStories": [
+      "DOC1"
+    ],
+    "existingIssue": "Docs/MVP Roadmap/Agent MVP Roadmap.md#A5",
+    "observed": "The tutorial begins with a Tao block without filename, setup or execution instructions.",
+    "impact": "An uncoached reader must guess how to reach the first screen and run its test.",
+    "location": "Docs/Tutorials/Your First Tao App.md:10-31",
+    "affectedPhases": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ]
+  },
+  {
+    "id": "QA-README-AVAILABILITY",
+    "title": "the front door mixes future and initial release surfaces",
+    "surfaceId": "doc:README.md",
+    "dimension": "text",
+    "phase": 1,
+    "severity": "major",
+    "evidence": [
+      "Docs/QA/pilot.md"
+    ],
+    "expected": "the phase-1 entry point clearly distinguishes supported web authoring from later\n  releases and repository-development capabilities.",
+    "recheck": "Read the Install section, platform statement and complete command table against the phase-1 public artifact. Confirm every later or repository-only surface has explicit availability.",
+    "status": "open",
+    "createdAt": "2026-09-26T22:46:00.000Z",
+    "baseline": "d5bdeaefd037",
+    "updatedAt": "2026-09-26T22:46:00.000Z",
+    "confidence": "confirmed",
+    "channel": "source",
+    "requiredReviewer": "agent",
+    "relatedStories": [
+      "WEB3",
+      "DOC4"
+    ],
+    "observed": "The platform and command tables combine web, native, Android, Studio and shipping without phase labels.",
+    "impact": "Readers can choose a route unsupported by the initial public artifact.",
+    "location": "README.md:47-48,66-73",
+    "affectedPhases": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ]
+  },
+  {
+    "id": "QA-TUTORIAL-NAVIGATION",
+    "title": "navigation choices read as one label",
+    "surfaceId": "visual:reading-list",
+    "dimension": "visual",
+    "phase": 1,
+    "severity": "major",
+    "evidence": [
+      "Docs/QA/pilot.md"
+    ],
+    "expected": "a reader can distinguish the two destinations and the active choice.",
+    "recheck": "inspect and operate both tabs at phone and desktop widths. This is an observation of\n  the web-rendered tutorial; it makes no claim about native tabs.",
+    "status": "open",
+    "createdAt": "2026-09-26T22:52:29.463Z",
+    "baseline": "d5bdeaefd037",
+    "updatedAt": "2026-09-26T22:52:29.463Z",
+    "confidence": "confirmed",
+    "channel": "phone-light",
+    "requiredReviewer": "agent",
+    "observed": "The captured navigation reads LibraryAbout without a visible gap or selected treatment.",
+    "impact": "Readers cannot readily distinguish destinations or the active choice.",
+    "location": "Docs/QA/evidence/pilot/reading-list-phone.png:top-left navigation",
+    "affectedPhases": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ]
+  },
+  {
+    "id": "QA-TUTORIAL-VERTICAL-SPACE",
+    "title": "phone sections are separated by a large empty area",
+    "surfaceId": "visual:reading-list",
+    "dimension": "visual",
+    "phase": 1,
+    "severity": "minor",
+    "evidence": [
+      "Docs/QA/pilot.md"
+    ],
+    "expected": "Short and long phone lists remain visually connected with intentional spacing while preserving useful adaptive desktop behavior.",
+    "recheck": "judge short and long lists on a phone; preserve useful adaptive behavior on desktop.",
+    "status": "open",
+    "createdAt": "2026-09-26T22:52:29.463Z",
+    "baseline": "d5bdeaefd037",
+    "updatedAt": "2026-09-26T22:52:29.463Z",
+    "confidence": "design-judgment",
+    "channel": "phone-light",
+    "requiredReviewer": "agent",
+    "observed": "A large empty area separates the single Reading row from the Finished heading.",
+    "impact": "Related lists feel disconnected on the small display; this is a design judgment.",
+    "location": "Docs/QA/evidence/pilot/reading-list-phone.png:between Reading and Finished",
+    "affectedPhases": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ]
+  },
+  {
+    "id": "QA-TUTORIAL-DARK-PALETTE",
+    "title": "dark scenario retains the light presentation",
+    "surfaceId": "visual:reading-list",
+    "dimension": "visual",
+    "phase": 1,
+    "severity": "minor",
+    "evidence": [
+      "Docs/QA/pilot.md"
+    ],
+    "expected": "explicitly support an intentional light-only showcase or provide an accepted\n  dark presentation. The tutorial does not currently promise a dark theme, so this is not a\n  demonstrated violation of its written behavior.",
+    "recheck": "Repeat the exact captured scenario and inspect the result.",
+    "status": "open",
+    "createdAt": "2026-09-26T22:52:29.463Z",
+    "baseline": "d5bdeaefd037",
+    "updatedAt": "2026-09-26T22:52:29.463Z",
+    "confidence": "design-judgment",
+    "channel": "phone-dark",
+    "requiredReviewer": "agent",
+    "observed": "Requested dark scenario retains the light presentation; both inspected phone images have identical digests.",
+    "impact": "Dark appearance remains a design decision; the written tutorial does not promise dark mode.",
+    "location": "Docs/QA/evidence/pilot/reading-list-dark.png",
+    "affectedPhases": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ]
+  },
+  {
+    "id": "QA-CAPTURE-OVERLAY",
+    "title": "desktop evidence contains a transient zoom indicator",
+    "surfaceId": "visual:reading-list",
+    "dimension": "visual",
+    "phase": 1,
+    "severity": "minor",
+    "evidence": [
+      "Docs/QA/pilot.md"
+    ],
+    "expected": "A settled app capture contains app content with no transient review zoom indicator.",
+    "recheck": "capture a settled app view with review overlays absent.",
+    "status": "open",
+    "createdAt": "2026-09-26T22:52:29.463Z",
+    "baseline": "d5bdeaefd037",
+    "updatedAt": "2026-09-26T22:52:29.463Z",
+    "confidence": "confirmed",
+    "channel": "desktop",
+    "requiredReviewer": "agent",
+    "observed": "The desktop screenshot includes a transient 100% zoom indicator.",
+    "impact": "Review-tool chrome contaminates app evidence.",
+    "location": "Docs/QA/evidence/pilot/reading-list-desktop.png:bottom zoom bubble",
+    "affectedPhases": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ]
+  },
+  {
+    "id": "QA-NOTEBOOK-DARK-CAPTURE",
+    "title": "one starter scenario has no usable image",
+    "surfaceId": "visual:notebook",
+    "dimension": "visual",
+    "phase": 1,
+    "severity": "major",
+    "evidence": [
+      "Docs/QA/pilot.md"
+    ],
+    "expected": "The exact tablet-dark scenario reaches a usable captured state and receives an explicit image review.",
+    "recheck": "reproduce that exact scenario and inspect its image. Do not classify the underlying\n  cause as an app defect from the timeout alone.",
+    "status": "open",
+    "createdAt": "2026-09-26T22:51:38.590Z",
+    "baseline": "d5bdeaefd037",
+    "updatedAt": "2026-09-26T22:51:38.590Z",
+    "confidence": "suspected",
+    "channel": "tablet-dark",
+    "requiredReviewer": "agent",
+    "existingIssue": "Docs/Roadmap/Developer environment upgrades/DEVENV-VISUAL-REVIEW-SCENARIO-READINESS-TIMEOUTS.md",
+    "observed": "Notebook devices/tabletDark did not reach a usable capture state.",
+    "impact": "The dark tablet visual state is unreviewed; no product cause is established.",
+    "location": "Docs/QA/evidence/pilot/captures.json:notebook/devices/tabletDark",
+    "affectedPhases": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ]
+  },
+  {
+    "id": "QA-HNREADER-CAPTURE",
+    "title": "The wrapping state remains unreviewed",
+    "surfaceId": "visual:hnreader",
+    "dimension": "visual",
+    "channel": "rows-wrapping",
+    "phase": 2,
+    "severity": "major",
+    "confidence": "suspected",
+    "evidence": [
+      "Docs/QA/evidence/pilot/captures.json",
+      "Docs/QA/pilot.md"
+    ],
+    "expected": "A usable wrapping-state image supports an actual readability judgment.",
+    "recheck": "Reproduce rows/wrapping, capture it, and inspect long-title readability.",
+    "status": "open",
+    "createdAt": "2026-09-26T22:53:18.080Z",
+    "updatedAt": "2026-09-26T22:53:18.080Z",
+    "baseline": "d5bdeaefd037",
+    "requiredReviewer": "agent",
+    "existingIssue": "Docs/Roadmap/Developer environment upgrades/DEVENV-VISUAL-REVIEW-SCENARIO-READINESS-TIMEOUTS.md",
+    "observed": "HNReader rows/wrapping timed out during per-cell capture.",
+    "impact": "Long-title wrapping remains visually unreviewed despite other successful captures.",
+    "location": "Docs/QA/evidence/pilot/captures.json:hnreader-stub/rows/wrapping",
+    "affectedPhases": [
+      2,
+      3,
+      4,
+      5
+    ]
+  }
+]

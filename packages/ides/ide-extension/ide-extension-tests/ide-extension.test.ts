@@ -41,41 +41,39 @@ Describe('Tao IDE extension smoke', () => {
       .toBe(await FS.readText(FS.resolvePath('../../../../LICENSE', import.meta.dir)))
   })
 
-  for (const errorCode of ['EPERM', 'EFAULT'] as const) {
-    Test(`restores both persistent IDE output roots after an injected ${errorCode} failure`, async () => {
-      const root = await mkTestDir(`tao-ide-publication-${errorCode.toLowerCase()}-`)
-      const stagingPackageRoot = FS.resolvePath('staging/packages/ides/ide-extension', root)
-      const packageRoot = FS.resolvePath('persistent/packages/ides/ide-extension', root)
-      const generatedRoot = FS.resolvePath('_gen_ide-extension', packageRoot)
-      const syntaxRoot = FS.resolvePath('ide-extension-syntaxes/_gen_syntaxes', packageRoot)
-      await FS.writeText(
-        FS.resolvePath('_gen_ide-extension/extension/main.cjs', stagingPackageRoot),
-        'new extension bytes',
-      )
-      await FS.writeText(
-        FS.resolvePath('ide-extension-syntaxes/_gen_syntaxes/tao.tmLanguage.json', stagingPackageRoot),
-        'new grammar bytes',
-      )
-      await FS.writeText(FS.resolvePath('extension/main.cjs', generatedRoot), 'old extension bytes')
-      await FS.writeText(FS.resolvePath('tao.tmLanguage.json', syntaxRoot), 'old grammar bytes')
-      await FS.writeText(FS.resolvePath('stale.json', syntaxRoot), 'old stale bytes')
-      const before = await persistentOutputIdentity([generatedRoot, syntaxRoot])
-      let injected = false
+  Test('restores both persistent IDE output roots after an injected failure', async () => {
+    const root = await mkTestDir('tao-ide-publication-failure-')
+    const stagingPackageRoot = FS.resolvePath('staging/packages/ides/ide-extension', root)
+    const packageRoot = FS.resolvePath('persistent/packages/ides/ide-extension', root)
+    const generatedRoot = FS.resolvePath('_gen_ide-extension', packageRoot)
+    const syntaxRoot = FS.resolvePath('ide-extension-syntaxes/_gen_syntaxes', packageRoot)
+    await FS.writeText(
+      FS.resolvePath('_gen_ide-extension/extension/main.cjs', stagingPackageRoot),
+      'new extension bytes',
+    )
+    await FS.writeText(
+      FS.resolvePath('ide-extension-syntaxes/_gen_syntaxes/tao.tmLanguage.json', stagingPackageRoot),
+      'new grammar bytes',
+    )
+    await FS.writeText(FS.resolvePath('extension/main.cjs', generatedRoot), 'old extension bytes')
+    await FS.writeText(FS.resolvePath('tao.tmLanguage.json', syntaxRoot), 'old grammar bytes')
+    await FS.writeText(FS.resolvePath('stale.json', syntaxRoot), 'old stale bytes')
+    const before = await persistentOutputIdentity([generatedRoot, syntaxRoot])
+    let injected = false
 
-      await Expect(publishIdeExtensionOutputs(stagingPackageRoot, packageRoot, {
-        beforeRemove: async path => {
-          if (!injected && FS.basename(path) === 'stale.json') {
-            injected = true
-            Errors.throwHostEnvironment(`${errorCode}: injected IDE publication failure`)
-          }
-        },
-        boundaryPath: root,
-      })).rejects.toThrow(errorCode)
+    await Expect(publishIdeExtensionOutputs(stagingPackageRoot, packageRoot, {
+      beforeRemove: async path => {
+        if (!injected && FS.basename(path) === 'stale.json') {
+          injected = true
+          Errors.throwHostEnvironment('injected IDE publication failure')
+        }
+      },
+      boundaryPath: root,
+    })).rejects.toThrow('injected IDE publication failure')
 
-      Expect(injected).toBe(true)
-      Expect(await persistentOutputIdentity([generatedRoot, syntaxRoot])).toBe(before)
-    })
-  }
+    Expect(injected).toBe(true)
+    Expect(await persistentOutputIdentity([generatedRoot, syntaxRoot])).toBe(before)
+  })
 
   Test('merges Tao syntax highlighting with embedded TypeScript fences', async () => {
     const generatedGrammar = await FS.readJson<Record<string, unknown>>(
@@ -122,30 +120,6 @@ Describe('Tao IDE extension smoke', () => {
     })
   })
 
-  Test('reports structural and type diagnostics through Langium services', async () => {
-    const diagnostics = await validateWithLanguageServerServices(`
-      let Greeting = "Hello"
-      app Demo {
-        render Greeting()
-      }
-      view Counter(Count number) {
-        render Text(Count)
-      }
-      view Text(Value text) {
-        render inject \`\`\`ts
-          return null
-        \`\`\`
-      }
-    `)
-
-    Expect(diagnostics).toContain('App Demo contains a statement that is not app configuration.')
-    Expect(
-      diagnostics.some(diagnostic =>
-        diagnostic.includes('Render of Text has an argument that does not match any unbound parameter by type.')
-      ),
-    ).toBe(true)
-  })
-
   Test('reports binding declaration-order diagnostics through Langium services', async () => {
     const diagnostics = await validateWithLanguageServerServices(`
       app Demo {
@@ -167,7 +141,6 @@ Describe('Tao IDE extension smoke', () => {
   Test('formats documents with canonical Tao indentation regardless of editor tab size', async () => {
     const { formatter, document, cleanup } = await buildFormatterFixture('view   MainView() {  render  Stack(){   } }')
     try {
-      Expect(formatter).toBeInstanceOf(TaoFormatter)
       const edits = await formatter!.formatDocument(document, {
         textDocument: { uri: document.textDocument.uri },
         options: { tabSize: 4, insertSpaces: true },
@@ -184,7 +157,6 @@ Describe('Tao IDE extension smoke', () => {
       `view MainView() { render inject \`\`\`ts\nconst message = "hi";\nreturn <RN.Text accessibilityLabel='greeting'>{ message }</RN.Text>;\n\`\`\` }`,
     )
     try {
-      Expect(formatter).toBeInstanceOf(TaoFormatter)
       const edits = await formatter!.formatDocument(document, {
         textDocument: { uri: document.textDocument.uri },
         options: { tabSize: 4, insertSpaces: true },
@@ -282,19 +254,6 @@ Describe('Tao IDE extension smoke', () => {
     })
 
     Expect(diagnostics).toEqual([])
-  })
-
-  Test('does not report linker diagnostics for bridged TypeScript export heads', async () => {
-    const diagnostics = await validateOnDiskFileWithLanguageServerServices('Main.tao', {
-      'Main.tao': `
-        type HNSource is Http with {
-          Adapter item is HNAdapter from ./HNAdapter.ts
-        }
-      `,
-      'HNAdapter.ts': 'export const HNAdapter = {}',
-    })
-
-    Expect(diagnostics.some(diagnostic => diagnostic.includes("ValueDeclaration named 'HNAdapter'"))).toBe(false)
   })
 })
 

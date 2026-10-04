@@ -86,7 +86,6 @@ Test(
         Expect(applied.path).toBe('Main.tao')
         Expect(applied.checkpoint).toEqual({ id: 'insert-generated-view', status: 'committed' })
         Expect(applied.sourceVersion).not.toBe(original.sourceVersion)
-        Expect(applied.content).toContain('use View1 from @/studio')
         Expect(applied.content).toContain('View1(Playlist: Playlist)\n         Text(Playlist.Title)')
         Expect(await FS.readText(paths['Main.tao'])).toBe(applied.content)
         Expect(await FS.readText(paths['@/studio/View1.tao'])).toBe(generatedSource)

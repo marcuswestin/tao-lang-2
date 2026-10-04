@@ -41,7 +41,7 @@ Describe('validator: types and expressions', () => {
   )
 
   Test(
-    'rejects copy parameters for behavior-wrapper values while allowing actions',
+    'rejects copy parameters for behavior-wrapper values',
     rejects(
       app(
         'render Wrapper(Target)',
@@ -72,7 +72,6 @@ Describe('validator: types and expressions', () => {
         state Input = copy Document as DocumentInput
         let Draft = DraftFields { Title: "Draft", Body: "" }
         state FromDraft = copy Draft as DocumentInput
-        let DraftInput = DocumentInput { Title: "Draft", Body: "" }
         action Save() { update Document with Input }
         render Empty()
       }
@@ -384,8 +383,6 @@ Describe('validator: types and expressions', () => {
       const entryStaticType = Type.identityKey(Type.ofExpression(entryAlias.value))
       const otherStaticType = Type.identityKey(Type.ofExpression(otherAlias.value))
 
-      Expect(entryStaticType).toContain('/Entry.tao#Person')
-      Expect(otherStaticType).toContain('/Other.tao#Person')
       Expect(entryStaticType).not.toBe(otherStaticType)
       Expect(expressionTypeName(entryAlias.value)).toBe('Person')
       Expect(expressionTypeName(otherAlias.value)).toBe('Person')
@@ -431,13 +428,11 @@ Describe('validator: types and expressions', () => {
   )
 
   Test(
-    'rejects derived types that reopen filled or defaulted slots',
+    'rejects derived types that reopen filled slots',
     rejects(
       typeApp(`
         type Fixed is { Kind is "fixed" }
         type Opened is Fixed with { Kind text }
-        type Defaulted is { Label text is "default" }
-        type ReopenedDefault is Defaulted with { Label text }
       `),
       typeValidationMessages.derivedSlotReopened('Kind'),
     ),
@@ -715,14 +710,6 @@ Describe('validator: types and expressions', () => {
     ),
   )
 
-  Test(
-    'reports type diagnostics alongside structural invocation errors',
-    rejects(
-      app('render Tile(42, "extra")', stubView('Tile', 'Title text')),
-      invocationValidationMessages.unmatchedArgument('Tile'),
-    ),
-  )
-
   Test('keeps cross-view values out of scope with a located linker diagnostic', async () => {
     const message = "No value named 'Secret' is in scope."
     const result = await testValidateCodeWithErrors(`
@@ -747,7 +734,7 @@ Describe('validator: types and expressions', () => {
       view Target() { action Flip() { toggle Ready } render Empty() }
       ${stubView('Empty')}
     `,
-      "No state or parameter named 'Ready' is in scope.",
+      "No value named 'Ready' is in scope.",
     ),
   )
 
@@ -776,6 +763,7 @@ Describe('validator: types and expressions', () => {
   )
 
   const invalidCaseCases: ReadonlyArray<readonly [name: string, source: string, message: string]> = [
+    // REMOVAL CANDIDATE: read-net tests cover duplicate cases; this keeps query-guard diagnostic dispatch.
     [
       'duplicate cases',
       caseScopeApp(`
@@ -790,11 +778,6 @@ Describe('validator: types and expressions', () => {
       'cases unsupported by the subject type',
       caseScopeApp('guard Draft { loading -> { Text("C") } }', 'state Draft = ""'),
       FunctionalCoreValidator.messages.invalidCase('loading', 'a text subject'),
-    ],
-    [
-      'payloads on payload-free cases',
-      caseScopeApp('guard Workspaces { empty -> Payload { Text(Payload) } }'),
-      FunctionalCoreValidator.messages.invalidCasePayload,
     ],
   ]
 

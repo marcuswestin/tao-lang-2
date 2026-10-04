@@ -8,6 +8,11 @@ The release these items serve: a small number of outside developers — a Hacker
 install Tao, build something, and tell us what they wanted. Tao does not need to be complete. It
 needs to be installable, explorable, and honest about what it does not do yet.
 
+**Scope revised 2026-09-26:** [five cumulative public releases](<Plan - Staged public releases.md>)
+own the public sequence. This work inventory spans those releases and later work; it is not a list
+of prerequisites for release 1. Existing implementation records do not establish current QA or
+distribution readiness. The [QA register](../QA/README.md) holds on-demand evidence and findings.
+
 Each entry states what it is, why it blocks or serves the release, where the context lives, and what
 done looks like. None of them is a plan; each is enough to gather context and write one.
 
@@ -79,7 +84,8 @@ is `private`. Nobody outside the repository can install Tao.
   evidence, a nine-slice sequence, and the first-release decisions.
 - Progress: slices 1–5, 7, and 8 have landed, and the binary leaves out `tao review` (slice 9).
   `just standalone-cli-release <version>` builds an unsigned macOS arm64 release with its checksum,
-  index, and install script, ready to publish once the repository is public. Installed through
+  index, and install script. That unsigned artifact is not publication-ready: signing/notarization
+  and all applicable publication prerequisites remain required. Installed through
   `curl | sh`, the binary creates a project with its tests, then checks, compiles, tests, builds for
   web, and serves web from `tao dev` outside any checkout, and each project it creates runs under
   the release that made it; `just standalone-cli-acceptance` proves all of that. The plan's
@@ -234,11 +240,41 @@ The point of the release is to learn what people want. Nothing collects that tod
   present, and `doctor --fingerprint` prints it alone. Nothing personal can reach it: each value is
   parsed out of a tool's output and kept only when it already reads as a version, a hash, or a plain
   word, which `environment-fingerprint.test.ts` proves on hostile probe output and on the real host.
-- Remaining: the fingerprint is reachable only from a checkout of this repository, because `tao`
-  has no `doctor`; `tao bug-report` is deliberately not built, so a visitor who installed a released
-  binary has a form to fill but no fingerprint to attach. Revisit once `A2` gives the CLI a shape
-  worth adding a command to. The discussion links currently point at the default `ideas` and `q-a`
-  categories.
+- Earlier limit: the fingerprint was reachable only from a checkout, while an installed CLI had no
+  report command. The discussion links currently point at the default `ideas` and `q-a` categories.
+- Implemented in the installed CLI: `tao doctor`, `tao doctor --json` / `--fingerprint`, and
+  `tao bug-report` expose a privacy-filtered fingerprint and a pasteable report draft with direct
+  links to the existing issue forms. The fingerprint includes the release version, OS, architecture,
+  available tool versions, Xcode where present, and a hash of the installed resource bundle. The
+  commands run without a checkout and send nothing. The bundled CLI passed disposable-home
+  acceptance without Bun, Node, or a checkout on `PATH`; a separate public release install remains
+  part of release QA.
+
+### A21 — Staged-release gates and on-demand QA
+
+The [staged plan](<Plan - Staged public releases.md>) promises each release only what its evidence
+proves, so a public build must hide later surfaces and a reviewer must be able to say what is proved.
+
+- Shape: a release-capability catalog that classifies every CLI command, target, and option by phase
+  and fails closed on anything unclassified; a QA register with an inventory of every surface, pinned
+  runs, immutable observations, finding lifecycles, and per-release packets under `Docs/QA/`.
+- Context: `Docs/QA/README.md`, `packages/cli/dev-cli/dev-cli-src/qa/`, `Plan - Initial release QA.md`.
+- Progress: the first recheck at `0aa8ebcf` reviewed the release-1 front door, tutorial, starters,
+  starter skills, and editor readme, and recaptured the reading-list, Notebook, and HNReader
+  scenarios. The findings it records are report-only; product fixes are separately scoped. Phase-1
+  cells were re-recorded at `442e6416` after the catalog began classifying subcommands by full path.
+  On 2026-10-03 a screenshot whose own preview logs a console error became a failed screenshot, the
+  surface kinds took plain names (release requirements, screenshot sets, dev checks), the starter
+  column and sketch findings became fixed-awaiting-qa, and a re-recorded Notebook capture closed the
+  panel-stretch finding. The Developer accepted the centered tablet column from the recorded
+  screenshot on 2026-10-03. Source documentation repairs clarify release availability, checkout
+  commands, tutorial entry and packaged skills; their required human and published-artifact checks
+  remain separate. Further automated checks are A23.
+- Remaining: human DOC1 and install passes, installed-artifact and marketplace evidence, the
+  unreviewed starter skills, CLI help text, and Spec documents; recapturing HNReader's phase-2
+  cells; declaring capture cells for story visual channels, which agents cannot pass until then.
+- Done: every release packet reports current evidence for each applicable cell, and every open
+  finding has an owner or a recorded decision.
 
 ### A18 — Liquid Glass by default
 
@@ -246,6 +282,49 @@ The point of the release is to learn what people want. Nothing collects that tod
       use it without opting in.
 - Developer decision: requested 2026-09-26. Define platform fallbacks and accessibility behavior
   in the implementation plan, and verify the default in a newly created app before closing this item.
+- Implementation plan: [Liquid Glass default](<Plan - Liquid Glass default.md>). The native runtime
+  now follows system light/dark appearance and the iOS host requests automatic appearance;
+  compatible system tabs, headers and controls supply Liquid Glass. Tao's custom toggle bar uses
+  regular glass when available and an opaque surface under Reduce Transparency. The fresh-app
+  creation test verifies the native imports and automatic tabs in one- and two-feature projects; the
+  packaged CLI acceptance also created and checked a fresh starter outside a checkout.
+  Remaining acceptance: observe the created app on a compatible iOS build with light/dark, Reduce
+  Transparency, Increase Contrast, Reduce Motion, large text and VoiceOver before closing this item.
+  The Developer accepted simulator observation in place of a physical device for A18 on 2026-09-28;
+  build and launch evidence alone does not close the visual and accessibility checks.
+
+### A22 — Light and dark mode in every app
+
+- [ ] **Before MVP:** review every app under `Apps/` (starters, reference apps, the reading-list
+      tutorial app, and test apps a visitor can reach) in light and dark appearance, and give each
+      one a deliberate, legible design in both.
+- Developer decision: requested 2026-10-02, deferred until after the staged-release QA branch. The
+  reading-list tutorial app is the priority and must be excellent in both appearances, since it is
+  the first app a newcomer builds.
+- Context: `Docs/Tutorials/Your First Tao App.md`, `Apps/Starters/`, `Apps/HNReader/`, A18's
+  appearance work, and `./agent unsandboxed storage qa` for a dated screenshot round to review.
+- Done: a screenshot round shows every app correct in both appearances, and the tutorial's finished
+  app has been reviewed by the Developer.
+
+### A23 — Design checks a capture can make on its own
+
+- [ ] **Before release 3:** extend the QA capture so it finds design defects without a reviewer,
+      after the staged-release QA branch lands.
+- Developer decisions, 2026-10-03:
+  - Screenshot every app that declares scenarios, found automatically, so Pantry and new apps are
+    covered without editing the QA inventory by hand.
+  - Add element-tree checks to the browser capture: text contrast, tap-target size, overlapping
+    elements, and content overflowing its container. They read the rendered elements, not pixels.
+  - Let an app state its own design rules in a `rules` section of `Design.tao`, with Tao's defaults
+    when it states none. This is language surface, so it goes through `2 - Next` and `Decisions.md`
+    before it is built.
+  - Agent visual review reuses the existing `--ai` lanes under the deferred `ai-assist` capability.
+  - A separate `--suggest` report offers design recommendations and never creates findings.
+- Context: `packages/ides/studio-tooling/studio-tooling-src/StudioReview.ts` (capture),
+  `packages/cli/dev-cli/dev-cli-src/qa/QaInventory.ts` (the hand-listed screenshot sets),
+  `TR-studio-preview.tsx` (computed styles), and `Docs/QA/README.md`.
+- Done: a capture of every scenario app reports each check per screenshot, a failing check fails
+  that screenshot, and the rules section is decided and implemented.
 
 ## Environment reach
 
@@ -287,7 +366,7 @@ from the development loop, which no virtualization approach can do.
 - Shape: use the companion app as the shared host, release its native shell infrequently, and check
   bundle compatibility explicitly. Build the applicable simulator/emulator artifacts in Tao's CI;
   `tao dev` obtains and launches a compatible host. The physical-iPhone companion is an invitation
-  beta for the first public release.
+  beta in release 4. iOS Simulator is release 2; Android is deferred beyond release 5.
 - Context: `packages/ides/studio-companion-app` (Slice 1 and 2 records under
   `Docs/Roadmap/Tao Studio companion app/`), `packages/apps/expo-host`.
 - Uses the host-scope decision in `R7`; physical-device acceptance and beta distribution remain
@@ -400,7 +479,7 @@ as sibling references. Transcription against a settled decision record, with the
 
 - Context: `Docs/Roadmap/Tao Revolution/Decisions.md`, `Process.md` step 2, `Apps/WordFlower/README.md`.
 - Landed: the tier is written to the decisions section by section — §13's `colors`/`sizes`/`text`/
-  `screens`/`styles`/`rules` in place of the token-and-recipe stack, §5's single `guard default`,
+  `screens`/`styles`/`rules` in place of the token-and-recipe stack, §5's single app-scoped `guard`,
   §8's `check` as the action's early exit, §7's write-through `bind` and composed `draft`, §10's
   `CollapseOrder`, `Width`, `Compact`, `reveal`, and `link`, §15's foreign action and view heads in
   place of `unsafe ts`, and §16's `fixture`, devices, store-query assertions, and `prepare`.
@@ -434,7 +513,7 @@ equals MVP.
 - Scope settled in the 2026-09-25 decision rounds (`Coverage.md` carries the tiers): MVP ships
   `required` forms with `create … with` and `Problems(…)`, `check`, `when do` with `saved` /
   `rejected` / `error` and declared-case branches plus the unhandled-failure warning, the
-  runtime-supplied `guard default`, query `search`, plural `phrase`s, the bridge metadata module, a
+  runtime-supplied app-scoped `guard`, query `search`, plural `phrase`s, the bridge metadata module, a
   document export behind `fails`, and the test world's `on`/`with`, `network`, `wait for sync`,
   and `datasource fails after`. Deferred: `validate` and `refuse when`, `queued`, `group by`,
   preferences with `Me` and `@tao/auth`, copy extraction and `words`, clock and collaborator
@@ -461,7 +540,8 @@ shell-completion tail. Each is a plan-and-execute task on its own.
   mounted design, including refinements. `rules { }` and rule checks are deferred past MVP. The
   plan's "Design values tranche" and "Design rules — deferred past MVP" sections carry the detail.
 
-Additional pre-MVP follow-ups requested in the 2026-09-26 auth design review:
+Follow-ups requested in the 2026-09-26 auth design review; the later staged-release decision places
+auth/access/account-backed offline app data beyond release 5:
 
 - **Drafts and completeness, separate from auth:** keep the new/edit draft and queued-submission
   lifecycle discussion separate from auth. Main already provides required-field completeness;
@@ -470,7 +550,8 @@ Additional pre-MVP follow-ups requested in the 2026-09-26 auth design review:
 - **Auth and account data:** follow the sequenced
   [implementation plan](<../Roadmap/Plan - Auth and account data.md>) for syntax, provider-neutral
   sessions, backend-enforced owner/member rules, supplied/custom UI, and offline data.
-  This plan does not settle the remainder of R5's authority cluster.
+  This plan does not settle the remainder of R5's authority cluster and is not a prerequisite for
+  releases 1–5. CloudKit's narrower release-4 offline/account-switch acceptance remains required.
 
 **Post-MVP deferrals:** text truthiness and named audiences. Neither is an auth prerequisite.
 Scope and review history: [Auth syntax review](<../Roadmap/Auth syntax review.md>).
@@ -486,6 +567,10 @@ a selection an authoritative render had discarded unsnaps the whole flow. That i
 consecutive green runs were re-established on 2026-09-20, which closed DEVENV-042.
 
 ### A16 — A reachable datasource for the public demo
+
+**Scope revised 2026-09-26:** this InstantDB evidence is retained as implementation history. The
+five-release public plan uses local data first and CloudKit private same-person sync at release 4;
+a public hosted InstantDB demo is deferred beyond release 5. It cannot satisfy CloudKit acceptance.
 
 `WordFlowerInstantDB` now selects an Instant Cloud datasource with a hard-coded app ID;
 `WordFlowerLocalInstantDB` preserves the `localhost:9020` fixture for development. Hosted app
@@ -508,9 +593,10 @@ and distribution remain separate release checks.
 - [ ] **Before MVP:** a Tao developer configures an app's InstantDB backend with the `tao` CLI alone:
       store the app's InstantDB admin or platform token as a Tao CLI secret, register auth clients
       such as Clerk, and push the compiler-emitted schema and permission rules as a migration.
-- The Tao CLI has no secrets command today; the encrypted store behind `./agent setup-clerk` is a
-  repository development tool, not something a Tao developer has. This item adds a user-facing
-  secret store to the CLI and keeps the token out of app source, generated output, and logs.
+- The Tao CLI has a project-scoped encrypted secret store, separate from the repository development
+  store behind `./agent setup-clerk`. `tao instantdb push` can read its admin token from that store.
+  The remaining work in this item is backend configuration and migration flow through the CLI;
+  tokens stay out of app source, generated output, and logs.
 - Developer decision: requested 2026-09-27. The first InstantDB-with-auth demo runs on the
   Developer's existing Instant Cloud account and may be configured by hand before this lands.
 

@@ -45,6 +45,59 @@ function item(
 }
 
 Describe('TR.Interaction attention', () => {
+  Test('secondary activation opens row verbs without invoking selection', () => {
+    const outline = new InteractionOutline()
+    const catalog = new CommandCatalog()
+    const attention = new InteractionAttention(outline, catalog)
+    let selections = 0
+    register(outline, region('documents', { primary: true }))
+    register(
+      outline,
+      item('draft', 'documents', 'Draft', {
+        activate: () => {
+          selections += 1
+        },
+      }),
+    )
+    const archive = TR.Interaction.Command({
+      action: () => TR.Action(() => undefined),
+      members: { Title: () => TR.Value('Archive') },
+      name: 'Archive',
+    })
+    catalog.registerSurface({ commands: [archive], hidden: [], identity: 'Draft actions' }, 'draft')
+    attention.revalidateOutline()
+
+    attention.targetAndOpenVerbs('draft')
+
+    Expect(attention.read().target).toBe('draft')
+    Expect(attention.read().mode).toBe('verbs')
+    Expect(attention.read().verbs.map(verb => verb.label)).toEqual(['Archive'])
+    Expect(selections).toBe(0)
+    attention.targetAndOpenVerbs('unmounted')
+    Expect(selections).toBe(0)
+  })
+
+  Test('typing selects a mounted row and asks it to reveal', () => {
+    const outline = new InteractionOutline()
+    const attention = new InteractionAttention(outline, new CommandCatalog())
+    const revealed: string[] = []
+    register(outline, region('documents', { primary: true }))
+    register(outline, item('first', 'documents', 'First'))
+    register(
+      outline,
+      item('below', 'documents', 'Below viewport', {
+        scrollIntoView: () => revealed.push('below'),
+      }),
+    )
+    attention.revalidateOutline()
+
+    attention.narrow('below')
+
+    Expect(attention.read().target).toBe('below')
+    Expect(revealed).toEqual(['below'])
+    Expect(attention.read().candidates).toEqual(['below'])
+  })
+
   Test('orders structural rows independently of scrolling and unequal control heights', () => {
     const nodes = [
       measuredNode('right-tall', { height: 90, width: 20, x: 80, y: 10 }),
@@ -735,6 +788,7 @@ Describe('TR.Interaction attention', () => {
     Expect(attention.read().mode).toBe('navigating')
   })
 
+  // REMOVAL CANDIDATE: The row-targeting shortcut test also selects the first of two colliding surfaces; this additionally uses the same surface identity on both rows.
   Test('dispatches a targeted row surface before a later-mounted sibling with the same chord', () => {
     const outline = new InteractionOutline()
     const catalog = new CommandCatalog()

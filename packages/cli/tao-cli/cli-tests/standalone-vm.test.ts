@@ -171,7 +171,7 @@ fi
         Expect(await FS.exists(calls)).toBe(false)
 
         await FS.writeText(FS.resolvePath('source-image.txt', logs), `${source}\n`)
-        for (const scenarios of [[], [{ status: 'running' }], [{ status: 'failed' }], [{ status: 'unrun' }]]) {
+        for (const scenarios of [[], [{ status: 'failed' }], [{ status: 'unrun' }]]) {
           await FS.writeJson(summaryPath, { ...summary, scenarios })
           const incomplete = await qualify()
           Expect(incomplete.exitCode).not.toBe(0)

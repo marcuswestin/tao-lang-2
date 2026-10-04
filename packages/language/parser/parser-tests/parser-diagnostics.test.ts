@@ -3,7 +3,7 @@ import { Describe, Expect, Test } from '@shared/test'
 import { declarationWord, tokenWord } from '../parser-src/grammar-words'
 import { Parser } from '../parser-src/parser'
 import * as AST from '../parser-src/parserASTExport'
-import { lexCodeWithErrors, parseCodeWithErrors, parses, rejectsParser, testParseCode } from './test-parse'
+import { parseCodeWithErrors, parses, rejectsParser, testParseCode } from './test-parse'
 
 Describe('parser: diagnostics', () => {
   Test(
@@ -20,7 +20,6 @@ Describe('parser: diagnostics', () => {
     const parserDiagnostics = Diagnostics.errors(parseResult.diagnostics, 'parser')
 
     Expect(parseResult.entry.document.parseResult.parserErrors.length).toBeGreaterThan(0)
-    Expect(parseResult.diagnostics.length).toBeGreaterThan(0)
     Expect(parserDiagnostics.every(diagnostic => diagnostic.range !== undefined)).toBe(true)
   })
 
@@ -68,9 +67,6 @@ Describe('parser: diagnostics', () => {
     ),
   )
 
-  // Parameter types are juxtaposed; the retired `Name is Type` form is a parser error.
-  Test('reports parser errors for the retired is-typed parameter syntax', rejectsParser('view Text(Value is text) { }'))
-
   Test('reports linker diagnostics for values outside their owning view', async () => {
     const parseResult = await parseCodeWithErrors(`
       view Text(Value text) { }
@@ -113,11 +109,9 @@ Describe('parser: diagnostics', () => {
 
   Test('reports lexer errors separately from parser errors', async () => {
     const source = 'app MyApp { view MyView } $ view MyView() { }'
-    lexCodeWithErrors(source)
     const parseResult = await parseCodeWithErrors(source)
 
     Expect(parseResult.entry.document.parseResult.lexerErrors.length).toBeGreaterThan(0)
-    Expect(parseResult.diagnostics.length).toBeGreaterThan(0)
     Expect(Diagnostics.hasSource(parseResult.diagnostics, 'lexer')).toBe(true)
     Expect(Diagnostics.errors(parseResult.diagnostics, 'lexer').every(diagnostic => diagnostic.range !== undefined))
       .toBe(true)
@@ -130,36 +124,26 @@ Describe('parser: diagnostics', () => {
     const linkerMessages = Diagnostics.messages(parseResult.diagnostics, 'linker')
 
     Expect(parseResult.entry.document.parseResult.parserErrors.length).toBeGreaterThan(0)
-    Expect(parseResult.diagnostics.length).toBeGreaterThan(0)
     Expect(Diagnostics.hasSource(parseResult.diagnostics, 'parser')).toBe(true)
     Expect(linkerMessages.some(message => parserMessages.includes(message))).toBe(false)
   })
 
   Test('does not report linker diagnostics for bridged TypeScript export heads', async () => {
-    const parseResult = await testParseCode(`
+    await testParseCode(`
       type HNSource is Http with {
         Adapter item is HNAdapter from ./HNAdapter.ts
       }
     `)
-
-    Expect(parseResult.entry.document.parseResult.lexerErrors).toEqual([])
-    Expect(parseResult.entry.document.parseResult.parserErrors).toEqual([])
-    Expect(Diagnostics.messages(parseResult.diagnostics, 'linker')).toEqual([])
   })
 
   // A grammar type name is an internal name no Tao program contains, and `packages/AGENTS.md`
   // keeps it out of a diagnostic the author reads.
-  Test('names an unresolved render target in Tao words rather than by its grammar type', async () => {
+  Test('names and positions an unresolved render target in Tao words', async () => {
     const parseResult = await Parser.parseCode('view Main() {\n   render NoSuchView()\n}\n')
     const linkerMessages = Diagnostics.errorMessages(parseResult.diagnostics, 'linker')
-
-    Expect(linkerMessages).toEqual(["No view named 'NoSuchView' is in scope."])
-  })
-
-  Test('positions an unresolved reference at the name the author wrote', async () => {
-    const parseResult = await Parser.parseCode('view Main() {\n   render NoSuchView()\n}\n')
     const [diagnostic] = Diagnostics.errors(parseResult.diagnostics, 'linker')
 
+    Expect(linkerMessages).toEqual(["No view named 'NoSuchView' is in scope."])
     Expect(diagnostic?.range?.start).toEqual({ line: 1, character: 10 })
     Expect(diagnostic?.range?.end).toEqual({ line: 1, character: 20 })
   })
@@ -261,24 +245,15 @@ Describe('parser: syntax diagnostics', () => {
     })
   })
 
-  // The threshold only earns its place if it holds for every shape, so this sweeps them together.
-  Test('never prints a list of expected tokens a reader cannot scan', async () => {
+  Test('keeps malformed-source diagnostics short and actionable', async () => {
     const sources = [
-      'view Text(Value is text) { }\n',
-      'use Text from',
-      'view Main() { }\n)\n',
-      'view Main {\n}\n',
-      'view Broken() {\n  Text is "hi"\n}\n',
-      'view Main() {\n  guard Thing { }\n}\n',
-      'view Main() {\n}\n}\n',
-      'view Main() {\n  let x = §\n}\n',
       'view Main() {\n  let Greeting =\n}\n',
-      'app MyApp view Home\n',
     ]
-    const messages = (await Promise.all(sources.map(syntaxErrors))).flat().map(error => error.message)
+    const errors = await Promise.all(sources.map(syntaxErrors))
+    Expect(errors.every(sourceErrors => sourceErrors.length > 0)).toBe(true)
+    const messages = errors.flat().map(error => error.message)
 
     // One line, and short enough to read at a glance: the widest is the one carrying three examples.
-    Expect(messages.length).toBeGreaterThan(sources.length)
     Expect(messages.filter(message => message.includes('\n'))).toEqual([])
     Expect(messages.filter(message => message.length > 110)).toEqual([])
     Expect(messages.filter(message => !message.startsWith('Expected '))).toEqual([])

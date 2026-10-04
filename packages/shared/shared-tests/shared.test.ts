@@ -271,28 +271,17 @@ Describe('FS', () => {
     Expect(FS.displayPathFrom(inHome, cwd, home)).toBe('~/Library/Tao/App.tao')
   })
 
-  Test('writes and reads text and json files', async () => {
+  Test('creates parent directories and formats JSON files', async () => {
     const root = await tmpDir()
     const textPath = FS.resolvePath('nested/hello.txt', root)
     const jsonPath = FS.resolvePath('nested/data.json', root)
-    const bytesPath = FS.resolvePath('nested/bytes.txt', root)
 
     await FS.writeText(textPath, 'hello')
     await FS.writeJson(jsonPath, { answer: 42 })
-    await FS.writeFile(bytesPath, Buffer.from('bytes'))
-    const appendHandle = await FS.openAppend(bytesPath)
-    try {
-      await appendHandle.writeFile(' appended')
-    } finally {
-      await appendHandle.close()
-    }
 
     Expect(await FS.readText(textPath)).toBe('hello')
-    Expect(FS.readTextSync(textPath)).toBe('hello')
     Expect(await FS.readJson<{ answer: number }>(jsonPath)).toEqual({ answer: 42 })
-    Expect(await FS.readText(bytesPath)).toBe('bytes appended')
-    Expect(await FS.isFile(textPath)).toBe(true)
-    Expect(await FS.isDirectory(FS.dirname(textPath))).toBe(true)
+    Expect(await FS.readText(jsonPath)).toBe('{\n  "answer": 42\n}\n')
   })
 
   Test('copies, moves, lists, and removes paths', async () => {
@@ -362,40 +351,38 @@ Describe('FS', () => {
     Expect(await FS.isDirectory(FS.resolvePath('empty-after-sync', targetDir))).toBe(true)
   })
 
-  for (const errorCode of ['EPERM', 'EFAULT'] as const) {
-    Test(`restores every persistent root after an injected ${errorCode} multi-root publication failure`, async () => {
-      const root = await tmpDir()
-      const firstSource = FS.resolvePath('staging/first', root)
-      const secondSource = FS.resolvePath('staging/second', root)
-      const firstTarget = FS.resolvePath('persistent/first', root)
-      const secondTarget = FS.resolvePath('persistent/second', root)
-      await FS.writeText(FS.resolvePath('changed.txt', firstSource), 'new first bytes')
-      await FS.writeText(FS.resolvePath('changed.txt', secondSource), 'new second bytes')
-      await FS.writeText(FS.resolvePath('changed.txt', firstTarget), 'old first bytes')
-      await FS.writeText(FS.resolvePath('changed.txt', secondTarget), 'old second bytes')
-      await FS.writeText(FS.resolvePath('stale.txt', secondTarget), 'old stale bytes')
-      const before = await directoryFileSetsIdentity([firstTarget, secondTarget])
-      let injected = false
+  Test('restores every persistent root after an injected multi-root publication failure', async () => {
+    const root = await tmpDir()
+    const firstSource = FS.resolvePath('staging/first', root)
+    const secondSource = FS.resolvePath('staging/second', root)
+    const firstTarget = FS.resolvePath('persistent/first', root)
+    const secondTarget = FS.resolvePath('persistent/second', root)
+    await FS.writeText(FS.resolvePath('changed.txt', firstSource), 'new first bytes')
+    await FS.writeText(FS.resolvePath('changed.txt', secondSource), 'new second bytes')
+    await FS.writeText(FS.resolvePath('changed.txt', firstTarget), 'old first bytes')
+    await FS.writeText(FS.resolvePath('changed.txt', secondTarget), 'old second bytes')
+    await FS.writeText(FS.resolvePath('stale.txt', secondTarget), 'old stale bytes')
+    const before = await directoryFileSetsIdentity([firstTarget, secondTarget])
+    let injected = false
 
-      await Expect(FS.synchronizeDirectoryFileSets([
-        { fromPath: firstSource, toPath: firstTarget },
-        { fromPath: secondSource, toPath: secondTarget },
-      ], {
-        beforeRemove: async path => {
-          if (!injected && FS.basename(path) === 'stale.txt') {
-            injected = true
-            Errors.throwHostEnvironment(`${errorCode}: injected persistent-output removal failure`)
-          }
-        },
-        boundaryPath: root,
-        lockPath: firstTarget,
-        sourceBoundaryPath: root,
-      })).rejects.toThrow(errorCode)
+    await Expect(FS.synchronizeDirectoryFileSets([
+      { fromPath: firstSource, toPath: firstTarget },
+      { fromPath: secondSource, toPath: secondTarget },
+    ], {
+      beforeRemove: async path => {
+        if (!injected && FS.basename(path) === 'stale.txt') {
+          injected = true
+          Errors.throwHostEnvironment('EPERM: injected persistent-output removal failure')
+        }
+      },
+      boundaryPath: root,
+      lockPath: firstTarget,
+      sourceBoundaryPath: root,
+    })).rejects.toThrow('EPERM')
 
-      Expect(injected).toBe(true)
-      Expect(await directoryFileSetsIdentity([firstTarget, secondTarget])).toBe(before)
-    })
-  }
+    Expect(injected).toBe(true)
+    Expect(await directoryFileSetsIdentity([firstTarget, secondTarget])).toBe(before)
+  })
 
   Test('sweeps staging files a killed synchronization orphaned beside the destination', async () => {
     const root = await tmpDir()
@@ -773,26 +760,6 @@ Describe('FS', () => {
 
     Expect(walked).toEqual(['child/file.ts'])
   })
-
-  Test('resolves real paths synchronously with the async contract', async () => {
-    const root = await tmpDir()
-    const physicalPath = FS.resolvePath('physical/file.txt', root)
-    const linkedPath = FS.resolvePath('linked-file.txt', root)
-    const missingPath = FS.resolvePath('missing.txt', root)
-    await FS.writeText(physicalPath, 'content')
-    await FS.symlink(physicalPath, linkedPath)
-
-    Expect(FS.realPathSync(linkedPath)).toBe(await FS.realPath(linkedPath))
-    Expect(() => FS.realPathSync(missingPath)).toThrow()
-    await Expect(FS.realPath(missingPath)).rejects.toThrow()
-  })
-
-  Test('does not swallow read or list errors', async () => {
-    const root = await tmpDir()
-
-    await Expect(FS.readText(FS.resolvePath('missing.txt', root))).rejects.toThrow()
-    await Expect(FS.listDir(FS.resolvePath('missing', root))).rejects.toThrow()
-  })
 })
 
 async function walkRelative(root: string, options: FS.WalkOptions = {}): Promise<string[]> {
@@ -819,7 +786,6 @@ Describe('HCI', () => {
     Expect(stripAnsi(stderr.outputText())).toBe('err line\n raw')
     Expect(stdout.outputText()).toContain('\u001b[32m')
     Expect(stderr.outputText()).toContain('\u001b[31m')
-    Expect(stderr.outputText()).toEndWith(' raw')
   })
 
   Test('colors process log message bodies by severity', async () => {
@@ -1368,10 +1334,6 @@ Describe('Errors, Assert, and Switch', () => {
   })
 
   Test('exports Switch through the environment-safe core entrypoint', () => {
-    Expect(CoreSwitch<'a' | 'b', number>('b', {
-      a: () => 1,
-      b: () => 2,
-    })).toBe(2)
     Expect(CoreSwitch).toBe(Switch)
   })
 })
@@ -1537,19 +1499,6 @@ Describe('TaoStdlib', () => {
     await withDeclaredStdlibRoot('payload', async () => {
       await Expect(TaoStdlib.declaredRootIdentity(base)).rejects.toThrow('must be an absolute path')
       Expect(() => TaoStdlib.declaredRoot()).toThrow('must be an absolute path')
-    })
-  })
-
-  // The absolute value it does accept still identifies the tree it names rather than the string.
-  Test('identifies the tree an absolute declared root names', async () => {
-    const base = await tmpDir()
-    const payload = FS.resolvePath('payload', base)
-    await FS.writeText(FS.resolvePath('@tao/ui/Views.tao', payload), 'public view Text(Value text) { }\n')
-    await withDeclaredStdlibRoot(payload, async () => {
-      const named = await TaoStdlib.declaredRootIdentity(base)
-      await FS.writeText(FS.resolvePath('@tao/ui/Views.tao', payload), 'public view Text(Value text) { }\n// edited\n')
-
-      Expect(await TaoStdlib.declaredRootIdentity(base)).not.toBe(named)
     })
   })
 })

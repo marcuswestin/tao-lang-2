@@ -863,12 +863,17 @@ update Document {
 }
 
 delete Document
+toggle Workspace.Pinned
 ```
 
 `Name: Value` binds a declared field by owner label. An unlabeled value binds only when its nominal
 type identifies exactly one field. Unknown, duplicate, ambiguous, missing, and incorrectly typed
 fields are diagnostics; source order never disambiguates. Omitted defaulted fields receive their
 declared value. Updates and deletes require a live entity handle from the mounted catalog.
+Each direct write affects one row. `toggle Row.Field` requires a nonoptional yes/no entity field,
+reads its current value once, and submits the opposite value as one concrete update. State-variable
+`toggle` retains its existing behavior. A retry replays the recorded update value without
+re-evaluating the toggle. Bulk writes and named transactions are post-MVP.
 
 Iteration uses the same plural/singular order as data declarations:
 
@@ -893,13 +898,14 @@ guard Document {
    loading -> { Text("Loading document…") }
    missing -> { Text("Document { Document.Id } no longer exists.") }
    unauthorized -> { Text("You no longer have access to this document.") }
-   error -> Message { Text("Could not load document: { Message }") }
+   error -> Context { Text(Context.Message) }
 }
 
 Text(Document.Title)
 ```
 
-`loading`, `missing`, `unauthorized`, and `error -> Message` are the exceptional entity cases. If
+`loading`, `missing`, `unauthorized`, and `error` are the exceptional entity cases; each exceptional
+render-guard handler may bind a `ReadContext`. If
 none applies, the entity is available and execution or rendering falls through to the statements
 after the guard. A matched action guard skips the rest of its action block; a matched render guard
 renders its branch instead of the rest of its enclosing render block. A deleted handle becomes
@@ -918,27 +924,62 @@ guard Document
 DocumentEditor(Document)
 ```
 
-The runtime always supplies the net: an activity indicator for `loading`, "This is gone" for
-`missing`, "You don't have access to this" for `unauthorized`, and the message for `error`, in the
-app's `Spinner` and `Text` element defaults. A file-level `guard default` replaces only the cases
-it names, for every app in the project:
+Guard payloads infer `ReadContext`. A reusable view can name the same public type with
+`use ReadContext from @tao/data` and take `Context ReadContext` as a parameter.
+
+The runtime always supplies the net, using the app's `Spinner` and `Text` element defaults.
+Loading uses labeled activity; missing says the item could not be found rather than asserting that
+it was deleted; unauthorized uses generic access copy unless a cause is known; errors use safe
+runtime-authored copy. Raw provider diagnostics are not display context.
+
+An app may replace named cases with one `guard` block:
 
 ```tao
-guard default {
-   loading -> Spinner()
-   missing -> { Text("This is gone") }
-   error -> Message { Text(Message) }
+app Notebook {
+   guard {
+      loading -> Context {
+         Spinner()
+         Text(Context.Message)
+      }
+      missing -> Context { Text(Context.Message) }
+      error -> Context { Text(Context.Message) }
+   }
+}
+
+app NotebookVariant = Notebook with {
+   guard { missing -> Context { Text("This note could not be found") } }
 }
 ```
 
-Its cases are `loading`, `missing`, `unauthorized`, and `error -> Message`; a handler is a render
-block or one bare render. A project declares at most one; the compiler loads it from any file an
-app's files reach, including a sibling in the same folder. It renders at the guard that reached it,
-with that guard's design and navigation context. The net covers query subjects too, for their
-`loading` and `error`. Content cases — `empty`, `refreshing`, `stale`, `true`, and `false` — never
-reach the net; emptiness is content, not failure. A bare guard over a subject with no exceptional
-cases (text, a list, a yes/no value) is an error. Action guards are unchanged: an unnamed case still
-falls through.
+Its four cases are `loading`, `missing`, `unauthorized`, and `error`. A handler is a render block
+or one bare render; each may bind a `ReadContext`. An app declares at most one net. A variant
+replaces only named cases and inherits the rest from its base, transitively through variant
+chains. File-level `guard default` is retired. Resolution is a named site handler, then the app's
+handler, then the runtime fallback. The handler renders where the guard stands with that site's
+design and navigation context.
+
+Exceptional local read guard handlers receive the same context:
+
+```tao
+guard Document {
+   error -> Context { Text(Context.Message) }
+}
+```
+
+`Context.Message` is safe display copy. `State` names the exceptional state and `ReadKind` names
+the known read kind or `unknown`. Optional `SubjectLabel` and `SubjectType` describe the subject
+without requiring a read of its unavailable fields. Optional `LoadingPhase`, `ElapsedSeconds`,
+`ProgressCompleted`, `ProgressTotal`, `MissingReason`, `UnauthorizedReason`, `Recovery`,
+`ErrorCategory`, `Retryable`, and `Retry` carry only known facts. Unknown or unimplemented fields
+are `none`; progress, classification and recovery producers that remain unavailable are tracked in
+[Read context producers](<../Roadmap/Tao Revolution/Follow-ups - Read context producers.md>).
+A recovery or retry control is rendered only when its action actually exists.
+
+The net covers query subjects for `loading` and `error`. Content cases — `empty`, `refreshing`,
+`stale`, `true`, and `false` — never reach the net; cached refreshes remain content. A bare guard
+over a subject with no exceptional cases (text, a list, a yes/no value) is an error. Ordinary value
+cases and effect-outcome payloads retain their existing meanings. Action guards still fall through
+on an unnamed case.
 
 ## Deterministic provider-state tests
 

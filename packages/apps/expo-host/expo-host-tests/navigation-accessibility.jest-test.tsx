@@ -45,9 +45,68 @@ Describe('navigation accessibility', () => {
       }))
 
       const surfaces = screen.getAllByTestId('liquid-glass-surface')
-      Expect(surfaces).toHaveLength(3)
       Expect(surfaces.map(surface => surface.props.glassEffectStyle)).toEqual(['regular', 'regular', 'regular'])
       Expect(surfaces.every(surface => surface.props.isInteractive === true)).toBe(true)
+    } finally {
+      restoreGlass()
+      restoreInsets.mockRestore()
+      restoreRuntime.mockRestore()
+    }
+  })
+
+  Test('uses opaque chrome when Reduce Transparency changes and restores glass when disabled', async () => {
+    let changed: ((enabled: boolean) => void) | undefined
+    let removed = false
+    const runtime = runtimeWithFocus([])
+    const restoreRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue({
+      ...runtime,
+      AccessibilityInfo: {
+        ...runtime.AccessibilityInfo!,
+        addEventListener: (_event, listener) => {
+          changed = listener
+          return {
+            remove: () => {
+              removed = true
+            },
+          }
+        },
+        isReduceTransparencyEnabled: async () => true,
+      },
+    })
+    const restoreInsets = jest.spyOn(TaoAppShell, 'requireSafeAreaContext').mockReturnValue({
+      SafeAreaProvider: RN.View,
+      useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
+    })
+    const restoreGlass = overrideLiquidGlassForTest({
+      GlassView: props => createElement(RN.View, { ...props, testID: 'liquid-glass-surface' }),
+    })
+    try {
+      const screen = render(createElement(SelectionToggleBar, {
+        back: () => undefined,
+        canGoBack: true,
+        chrome: new RuntimeHostReadChannel(),
+        fallbackTitle: 'Home',
+        name: 'Accessible selection',
+        native: true,
+        next: { key: 'settings', label: 'Settings' },
+        observable: true,
+        select: () => undefined,
+      }))
+      await act(async () => {
+        await Promise.resolve()
+      })
+      Expect(screen.queryAllByTestId('liquid-glass-surface')).toHaveLength(0)
+      Expect(
+        screen.UNSAFE_getAllByType(RN.View).filter(view =>
+          RN.StyleSheet.flatten(view.props.style)?.backgroundColor === '#fafafc'
+        ),
+      ).toHaveLength(3)
+      act(() => changed?.(false))
+      Expect(screen.getAllByTestId('liquid-glass-surface')).toHaveLength(3)
+      act(() => changed?.(true))
+      Expect(screen.queryAllByTestId('liquid-glass-surface')).toHaveLength(0)
+      screen.unmount()
+      Expect(removed).toBe(true)
     } finally {
       restoreGlass()
       restoreInsets.mockRestore()
@@ -77,7 +136,7 @@ Describe('navigation accessibility', () => {
     })
     const screen = render(createElement(TR.Navigation.AppHost, { app }))
 
-    Expect(screen.UNSAFE_getByProps({ accessibilityRole: 'tablist' })).toBeDefined()
+    screen.UNSAFE_getByProps({ accessibilityRole: 'tablist' })
     const tabs = screen.getAllByRole('tab')
     Expect(tabs[0]?.props.accessibilityState).toMatchObject({ disabled: false, selected: true })
     Expect(tabs[1]?.props.accessibilityState).toMatchObject({ disabled: false, selected: false })
@@ -99,7 +158,6 @@ Describe('navigation accessibility', () => {
       }))
       const command = interactionOutline.liveNodes().find(node => node.label() === 'Focus command')
 
-      Expect(command?.live?.focus).toBeDefined()
       act(() => command?.live?.focus?.())
       Expect(focusEvents).toHaveLength(1)
       Expect(focusEvents[0]?.eventType).toBe('focus')
@@ -194,13 +252,13 @@ Describe('navigation accessibility', () => {
       })
       const screen = render(createElement(TR.Navigation.AppHost, { app }))
 
-      Expect(screen.getByLabelText('More')).toBeDefined()
+      screen.getByLabelText('More')
       act(() => stack.presentOverlay(notice, {}))
       Expect(screen.queryByLabelText('More')).toBeNull()
-      Expect(screen.getByText('Toggle notice content')).toBeDefined()
+      screen.getByText('Toggle notice content')
 
       act(() => stack.back())
-      Expect(screen.getByLabelText('More')).toBeDefined()
+      screen.getByLabelText('More')
     } finally {
       restoreRuntime.mockRestore()
     }

@@ -35,9 +35,7 @@ Describe('HNReader Studio Feed', () => {
     const browser = StudioFeedBrowser.build(manifest, { seed: 'hnreader-feed' })
     const generated = browser.inventory.entities.find(entity => entity.name === 'Story')!.sources
       .find(source => source.kind === 'generated')!
-    Expect(generated.rows.map(row => row.source.row)).toEqual(['empty', 'typical', 'edge'])
     const example = generated.rows.find(row => row.source.row === 'typical')!
-    Expect(example.fields['Title']).toBe('Example item')
     const result = await StudioFeedDraft.prepare({
       browser,
       catalog: { formatVersion: 1, nextViewNumber: 1000, revision: 1, sketches: [sketch] },

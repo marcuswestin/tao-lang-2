@@ -170,20 +170,6 @@ Describe('TR.Views explicit visual props', () => {
     Expect(designReads).toBe(1)
   })
 
-  Test('applies Capitalized element defaults before explicit clauses and accepts raw colors', () => {
-    const design = TR.Design.Declaration({
-      name: 'Theme',
-      tokens: {},
-      bundles: {
-        Text: TR.Design.Spec([['size', 16], ['fg', '#123456']]),
-      },
-    })
-
-    Expect(TR.Design.resolve(design, TR.Design.Spec([['size', 20]]), 'Text')).toEqual({
-      style: { color: '#123456', fontSize: 20 },
-    })
-  })
-
   Test('applies a declaration header over the element default and under the caller clauses', () => {
     const app = styledElementApp(
       'Declared',
@@ -405,6 +391,7 @@ Describe('TR.Views explicit visual props', () => {
     }, { ink: '#edf3ee', line: '#34453a', surface: '#202a22' })
     const wrapper = renderRuntimeElement(TR.Views.TextInput({
       __tao: { app, designDefault: 'TextInput' },
+      description: 'Name shown in the workspace list',
       label: 'Workspace name',
       placeholder: 'Home',
       value: '',
@@ -413,6 +400,7 @@ Describe('TR.Views explicit visual props', () => {
 
     Expect(label!.props['accessible']).toBe(false)
     Expect(input!.props['accessibilityLabel']).toBe('Workspace name')
+    Expect(input!.props['accessibilityHint']).toBe('Name shown in the workspace list')
     Expect(flattenStyle(wrapper.props['style'])['backgroundColor']).toBe(undefined)
     Expect(flattenStyle(label!.props['style'])['color']).toBe('#edf3ee')
     Expect(flattenStyle(input!.props['style'])).toMatchObject({
@@ -517,6 +505,52 @@ Describe('TR.Views explicit visual props', () => {
 
     Expect(view.props['dataSet']).toEqual({ existingMarker: 'preserved' })
   })
+
+  // REMOVAL CANDIDATE: This proves capability wiring only; TR-scroll proves reveal behavior with measured nodes.
+  Test('binds a nonselectable mounted row root for scroll reveal', () => {
+    const capabilities: { scrollIntoView?(): void } = {}
+    const row = { capabilities, identity: 'workspaces/home', label: 'Home' }
+    const primitive = renderRuntimeElement(TR.Views.View({
+      __tao: { interaction: { row } },
+      children: 'Home',
+    }))
+    const native = renderRuntimeElement(primitive)
+    Expect(native.type).toBe('View')
+    Expect(typeof native.props['onLayout']).toBe('function')
+    Expect(typeof native.props['ref']).toBe('function')
+    Expect(typeof capabilities.scrollIntoView).toBe('function')
+  })
+
+  Test('projects disabled action state to native and web accessibility props', () => {
+    const disabled = renderRuntimeElement(TR.Views.Pressable({ disabled: true, title: 'Save' }))
+    Expect(disabled.props['disabled']).toBe(true)
+    Expect(disabled.props['accessibilityState']).toMatchObject({ disabled: true })
+    Expect(disabled.props['aria-disabled']).toBe(true)
+    Expect(disabled.props['onPress']).toBeUndefined()
+
+    const enabled = renderRuntimeElement(TR.Views.Pressable({ disabled: false, title: 'Save' }))
+    Expect(enabled.props['aria-disabled']).toBe(false)
+  })
+
+  Test('binds an injected native row root without adding an accessibility stop', () => {
+    const capabilities: { scrollIntoView?(): void } = {}
+    const row = { capabilities, identity: 'workspaces/native', label: 'Native' }
+    const useContext = React.useContext
+    React.useContext = (() => undefined) as typeof React.useContext
+    let layout: ReturnType<typeof TR.VisualLayout>
+    try {
+      layout = TR.VisualLayout({ interaction: { row } })
+    } finally {
+      React.useContext = useContext
+    }
+    const wrapped = TR.VisualNativeRoot(layout, React.createElement('Button')) as React.ReactElement
+    const native = renderRuntimeElement(wrapped)
+    Expect(native.type).toBe('View')
+    Expect(native.props['accessible']).toBeUndefined()
+    Expect(typeof native.props['onLayout']).toBe('function')
+    Expect(typeof native.props['ref']).toBe('function')
+    Expect(typeof capabilities.scrollIntoView).toBe('function')
+  })
 })
 
 Describe('TR.Views image', () => {
@@ -560,7 +594,12 @@ Describe('TR.Views checkbox', () => {
   Test('presses the tagged accessible root to toggle checked state', () => {
     const changes: boolean[] = []
     const wrapper = renderRuntimeElement(TR.Views.Checkbox(
-      { label: 'Final', onChange: value => changes.push(value), value: true },
+      {
+        description: 'Keep this document at the top',
+        label: 'Final',
+        onChange: value => changes.push(value),
+        value: true,
+      },
       { testTag: 'final-checkbox' },
     ))
     const [checkbox, label] = fragmentChildren(wrapper)
@@ -569,6 +608,7 @@ Describe('TR.Views checkbox', () => {
     Expect(wrapper.props['testID']).toBe('final-checkbox')
     Expect(wrapper.props['accessibilityRole']).toBe('checkbox')
     Expect(wrapper.props['accessibilityLabel']).toBe('Final')
+    Expect(wrapper.props['accessibilityHint']).toBe('Keep this document at the top')
     Expect(wrapper.props['accessibilityState']).toEqual({ checked: true, disabled: false })
     Expect(checkbox!.type).toBe('Switch')
     Expect(checkbox!.props['accessible']).toBe(false)
@@ -593,12 +633,9 @@ Describe('TR.Views checkbox', () => {
       },
       value: false,
     }))
-    const [checkbox] = fragmentChildren(wrapper)
-
     Expect(wrapper.props['accessibilityState']).toEqual({ checked: false, disabled: true })
     Expect(wrapper.props['disabled']).toBe(true)
     Expect(wrapper.props['onPress']).toBe(undefined)
-    Expect(checkbox!.props['accessible']).toBe(false)
   })
 })
 
@@ -623,9 +660,23 @@ Describe('TR.Views scroll view', () => {
       { flexDirection: 'column', gap: 8, padding: 4 },
       { minHeight: 12 },
     ])
-    const content = scrollView.props['children'] as RuntimeElement
+    const provider = scrollView.props['children'] as RuntimeElement
+    const content = provider.props['children'] as RuntimeElement
     Expect(content.props['direction']).toBe('column')
     Expect(content.props['children']).toBe('Documents')
+    const destinations: unknown[] = []
+    const host = scrollView.props['ref'] as { current: unknown }
+    host.current = {
+      measureInWindow: (receive: (x: number, y: number, width: number, height: number) => void) =>
+        receive(0, 0, 200, 100),
+      scrollTo: (destination: unknown) => destinations.push(destination),
+    }
+    const reveal = provider.props['value'] as (node: unknown) => void
+    reveal({
+      measureInWindow: (receive: (x: number, y: number, width: number, height: number) => void) =>
+        receive(0, 180, 100, 20),
+    })
+    Expect(destinations).toEqual([{ animated: false, x: 0, y: 100 }])
   })
 })
 
@@ -816,13 +867,22 @@ Describe('TR navigation pointer events', () => {
 
 function renderRuntimeElement(element: React.ReactElement): RuntimeElement {
   const useContext = React.useContext
+  const useRef = React.useRef
+  const useCallback = React.useCallback
+  const useSyncExternalStore = React.useSyncExternalStore
   React.useContext = (() => undefined) as typeof React.useContext
+  React.useRef = (value => ({ current: value })) as typeof React.useRef
+  React.useCallback = (callback => callback) as typeof React.useCallback
+  React.useSyncExternalStore = ((_subscribe, getSnapshot) => getSnapshot()) as typeof React.useSyncExternalStore
   try {
     return (element.type as (props: Record<string, unknown>) => RuntimeElement)(
       element.props as Record<string, unknown>,
     )
   } finally {
     React.useContext = useContext
+    React.useRef = useRef
+    React.useCallback = useCallback
+    React.useSyncExternalStore = useSyncExternalStore
   }
 }
 

@@ -53,7 +53,7 @@ RespondStatement:
     'respond' case=[CaseSetCase:ID]?;
 
 ToggleStatement:
-    'toggle' target=[MutableDeclaration:ID] ('.' members+=ID)*;
+    'toggle' target=[ValueDeclaration:ID] ('.' members+=ID)*;
 
 GuardActionStatement:
     'guard' subject=SubjectExpression (caseBlock=GuardActionCaseBlock | single=GuardActionBranch);

@@ -63,12 +63,9 @@ Test('accepts the real compiled WatchHello journey and preserves its limit and r
     'run',
     'expectNavigationTitle',
     'expect',
-    'expect',
-    'expect',
     'press',
     'expect',
     'press',
-    'expect',
     'press',
     'press',
     'press',
@@ -87,17 +84,14 @@ Test('accepts the real compiled WatchHello journey and preserves its limit and r
   ])
   Expect(plan.operations.filter(operation => operation.kind === 'expect').map(operation => operation.text)).toEqual([
     '0 of 12',
-    '100000000000000000000',
-    '0.000001',
     '1 of 12',
-    '2 of 12',
     '12 of 12',
     '12 of 12',
     '0 of 12',
   ])
   Expect(plan.operations[1]).toMatchObject({ kind: 'expectNavigationTitle', title: 'One set' })
-  Expect(plan.operations[23]?.source.filePath).toEndWith('Apps/WatchHello/WatchHello.test.tao')
-  Expect(plan.operations[23]?.source.range?.start.line).toBe(27)
+  Expect(plan.operations.at(-1)?.source.filePath).toEndWith('Apps/WatchHello/WatchHello.test.tao')
+  Expect(plan.operations.at(-1)?.source.range?.start.line).toBe(24)
 })
 
 for (

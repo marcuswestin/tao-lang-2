@@ -41,6 +41,55 @@ const runtimeSlot = testOverrideSlot({
     Object.defineProperty(TaoReactNative, 'requireReactNativeRuntime', { configurable: true, value, writable: true }),
 })
 
+Describe('native appearance', () => {
+  Test('follows a live device appearance change and removes its listener', () => {
+    let system: TR.Scheme = 'light'
+    const listeners = new Set<() => void>()
+    const runtime = TaoReactNative.requireReactNativeRuntime()
+    const restore = runtimeSlot.install(() => ({
+      ActivityIndicator: runtime.ActivityIndicator,
+      Image: runtime.Image,
+      KeyboardAvoidingView: runtime.KeyboardAvoidingView,
+      Pressable: runtime.Pressable,
+      ScrollView: runtime.ScrollView,
+      Switch: runtime.Switch,
+      Text: runtime.Text,
+      TextInput: runtime.TextInput,
+      View: runtime.View,
+      Platform: { OS: 'ios' },
+      Appearance: {
+        getColorScheme: () => system,
+        addChangeListener: listener => {
+          listeners.add(listener)
+          return {
+            remove: () => {
+              listeners.delete(listener)
+            },
+          }
+        },
+      },
+    }))
+    try {
+      const view = render(
+        <TR.Scheme.Provider>
+          <SchemeValue />
+        </TR.Scheme.Provider>,
+      )
+      Expect(view.getByTestId('scheme').props.children).toBe('system:light:system:reactive-native')
+      act(() => {
+        system = 'dark'
+        listeners.forEach(listener => listener())
+      })
+      Expect(view.getByTestId('scheme').props.children).toBe('system:dark:system:reactive-native')
+      view.unmount()
+      Expect(listeners.size).toBe(0)
+    } finally {
+      cleanup()
+      restore()
+    }
+  })
+})
+
 Describe('Catalyst appearance', () => {
   Test('updates mounted defaults, preserves authored colors, and removes appearance listeners', () => {
     let system: TR.Scheme = 'light'
@@ -107,13 +156,6 @@ Describe('Catalyst appearance', () => {
         backgroundColor: '#1c1c1e',
         borderColor: '#48484a',
       })
-      act(() => {
-        system = 'light'
-        listeners.forEach(listener => listener())
-      })
-      Expect(RN.StyleSheet.flatten(view.UNSAFE_getByType(RN.ScrollView).props.style).backgroundColor).toBe('#ffffff')
-      Expect(view.getByTestId('scheme').props.children).toBe('system:light:system:reactive-catalyst')
-      Expect(listeners.size).toBeGreaterThan(0)
       view.unmount()
       Expect(listeners.size).toBe(0)
     } finally {

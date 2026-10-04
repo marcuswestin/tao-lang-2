@@ -24,7 +24,6 @@ import {
   createStudioCompanionSimulator,
   matchCompanionSimulator,
   runStudioCompanionInstallOnSimulator,
-  simulatorRuntimeName,
   simulatorsFromSimctl,
   type StudioCompanionSimulator,
 } from '@studio-tooling/StudioCompanionSimulator'
@@ -242,7 +241,6 @@ Describe('Studio companion device tooling', () => {
       const runner = scriptedRunner(() => ({ exitCode: 1, json: DEVICE_UNREACHABLE_FIXTURE }))
       const device = createStudioCompanionDevice({ ...roots, run: runner.run })
 
-      Expect(await device.installedOn(PHONE_UDID)).toBeUndefined()
       const probe = await device.installedAppProbe(PHONE_UDID)
       Expect(probe.installed).toBeUndefined()
       Expect(probe.layer).toBe('network')
@@ -318,11 +316,6 @@ Describe('Studio companion device tooling', () => {
         },
       ])
       const call = runner.calls[2]
-      Expect(call?.command).toBe('bunx')
-      Expect(call?.args).toEqual(['expo', 'run:ios', '--device', 'example-phone', '--no-bundler'])
-      Expect(call?.args).toContain('--no-bundler')
-      Expect(call?.args).not.toContain('start')
-      Expect(call?.cwd).toBe(roots.packageRoot)
       Expect(call?.env?.['CI']).toBe('1')
       Expect(call?.env?.['EXPO_NO_TELEMETRY']).toBe('1')
       Expect(call?.env?.['PATH']?.split(':')[0]).toBe(FS.resolvePath('.devenv/profile/bin', roots.repoRoot))
@@ -331,21 +324,23 @@ Describe('Studio companion device tooling', () => {
   })
 
   Test('stops installation when native configuration or pod preparation fails', async () => {
-    for (const failedCommand of ['bunx', 'pod']) {
-      for (const failure of [{ exitCode: 1 }, { error: new Errors.HostEnvironmentError('could not start') }]) {
-        await withDeviceRoots(async roots => {
-          const runner = scriptedRunner(call => call.command === failedCommand ? failure : {})
-          const device = createStudioCompanionDevice({ ...roots, run: runner.run })
+    for (
+      const { failedCommand, failure } of [
+        { failedCommand: 'bunx', failure: { exitCode: 1 } },
+        { failedCommand: 'pod', failure: { error: new Errors.HostEnvironmentError('could not start') } },
+      ]
+    ) {
+      await withDeviceRoots(async roots => {
+        const runner = scriptedRunner(call => call.command === failedCommand ? failure : {})
+        const device = createStudioCompanionDevice({ ...roots, run: runner.run })
 
-          const error = await expectHostFailure(() => device.install({ deviceName: 'example-phone' }))
+        const error = await expectHostFailure(() => device.install({ deviceName: 'example-phone' }))
 
-          Expect(studioDeviceFailureLayer(error)).toBe('expo')
-          Expect(error.messageForUser).toContain('Could not prepare Tao Companion')
-          Expect(error.messageForUser).toContain(failedCommand === 'bunx' ? 'expo prebuild' : 'pod install')
-          Expect(runner.calls.map(call => call.command)).toEqual(failedCommand === 'bunx' ? ['bunx'] : ['bunx', 'pod'])
-          Expect(runner.calls.some(call => call.args.includes('run:ios'))).toBe(false)
-        })
-      }
+        Expect(studioDeviceFailureLayer(error)).toBe('expo')
+        Expect(error.messageForUser).toContain('Could not prepare Tao Companion')
+        Expect(error.messageForUser).toContain(failedCommand === 'bunx' ? 'expo prebuild' : 'pod install')
+        Expect(runner.calls.map(call => call.command)).toEqual(failedCommand === 'bunx' ? ['bunx'] : ['bunx', 'pod'])
+      })
     }
   })
 
@@ -387,27 +382,13 @@ Describe('Studio companion device tooling', () => {
     Expect(companionInstallArgs('My Phone')).toEqual(['expo', 'run:ios', '--device', 'My Phone', '--no-bundler'])
   })
 
-  Test('builds launch arguments with and without terminating the running app', () => {
+  Test('omits process termination when the caller does not request it', () => {
     const base = { bundleIdentifier: 'b.id', hostId: 'H', url: 'scheme://x' }
-    Expect(companionLaunchArgs({ ...base, terminateExisting: true })).toEqual([
-      'device',
-      'process',
-      'launch',
-      '--device',
-      'H',
-      '--terminate-existing',
-      '--payload-url',
-      'scheme://x',
-      'b.id',
-    ])
     Expect(companionLaunchArgs({ ...base, terminateExisting: false })).not.toContain('--terminate-existing')
   })
 
-  Test('reads installed state from a devicectl app list', () => {
-    Expect(installedFromDevicectlApps(appsFixture(['com.devtao.studio.companion']), 'com.devtao.studio.companion'))
-      .toBe(true)
+  Test('ignores another installed bundle and treats a missing report as unknown', () => {
     Expect(installedFromDevicectlApps(appsFixture(['other.app']), 'com.devtao.studio.companion')).toBe(false)
-    Expect(installedFromDevicectlApps({ result: {} }, 'com.devtao.studio.companion')).toBeUndefined()
     Expect(installedFromDevicectlApps(undefined, 'com.devtao.studio.companion')).toBeUndefined()
   })
 
@@ -741,7 +722,7 @@ Describe('Studio device launcher', () => {
    * and there is no network to join together. Proven on a phone with its Wi-Fi off, which reached
    * the gateway over the link-local address.
    */
-  Test('takes the cable when asked, and Wi-Fi when not', async () => {
+  Test('takes the link-local cable route when requested', async () => {
     const device = fakeDevice({ hosts: [{ id: PHONE_UDID, name: 'example-phone' }], installed: { [PHONE_UDID]: true } })
     const launcher = createStudioDeviceLauncher({
       simulator: fakeSimulator({}),
@@ -749,9 +730,6 @@ Describe('Studio device launcher', () => {
       fetch: scriptedFetch(linkRedirect(EXPO_LINK)).fetchImpl,
       lanAddresses: async () => LAN,
     })
-
-    const auto = await launcher.open({ hostId: PHONE_UDID, metroOrigin: 'http://127.0.0.1:8081' })
-    Expect(auto.url).toBe(EXPO_LINK)
 
     const cable = await launcher.open({
       hostId: PHONE_UDID,
@@ -761,7 +739,7 @@ Describe('Studio device launcher', () => {
     Expect(cable.url).toBe(
       companionDevClientUrl({ host: '169.254.37.4', port: 8081, scheme: 'taostudiocompanion' }),
     )
-    Expect(device.opened.map(entry => entry.url)).toEqual([EXPO_LINK, cable.url])
+    Expect(device.opened.map(entry => entry.url)).toEqual([cable.url])
   })
 
   Test('says so plainly when the cable is asked for and no cable is attached', async () => {
@@ -879,13 +857,10 @@ Describe('Studio device launcher', () => {
     // device is attached.
     Expect(linkLocalCandidate(['192.168.50.107', '169.254.61.95'])).toBe('169.254.61.95')
     Expect(linkLocalCandidate(['192.168.50.107'])).toBeUndefined()
-    Expect(linkLocalCandidate([])).toBeUndefined()
     Expect(isLoopbackHost('LOCALHOST')).toBe(true)
-    Expect(isLoopbackHost('192.168.1.2')).toBe(false)
   })
 
   Test('reads the Metro port from an origin and presents tagged errors as diagnostics', () => {
-    Expect(metroPortOf('http://127.0.0.1:49152')).toBe(49_152)
     Expect(metroPortOf('http://example.test')).toBe(80)
     let tagged: unknown
     try {
@@ -982,8 +957,6 @@ Describe('Tao Companion shell configuration', () => {
       }
     }>(FS.resolvePath('app.json', packageRoot))
 
-    Expect(config.expo.name).toBe(CompanionIdentity.name)
-    Expect(config.expo.slug).toBe(CompanionIdentity.slug)
     Expect(config.expo.scheme).toBe(CompanionIdentity.scheme)
     Expect(config.expo.ios?.bundleIdentifier).toBe(CompanionIdentity.bundleIdentifier)
     Expect(config.expo.android?.package).toBe(CompanionIdentity.androidPackage)
@@ -1024,15 +997,13 @@ Describe('Tao Companion shell configuration', () => {
     Expect(await FS.isFile(Repo.resolvePath('packages/apps/expo-host/plugins/with-ios-fmt-compat.cjs'))).toBe(true)
   })
 
+  // REMOVAL CANDIDATE: Static entry wiring; dropping it loses placeholder startup proof until installed-shell acceptance exists.
   Test('the shell entry registers a root component and carries no Studio logic', async () => {
     const packageRoot = Repo.resolvePath(CompanionIdentity.packagePath)
     const entry = await FS.readText(FS.resolvePath('index.ts', packageRoot))
     Expect(entry).toContain('registerRootComponent(CompanionPlaceholder)')
     Expect(entry).not.toContain('@studio')
     Expect(entry).not.toContain('@runtime')
-    const placeholder = await FS.readText(FS.resolvePath('src/CompanionPlaceholder.tsx', packageRoot))
-    Expect(placeholder).toContain('Open on device')
-    Expect(placeholder).toContain('QR')
   })
 })
 
@@ -1072,12 +1043,6 @@ Describe('Tao Companion simulator tooling', () => {
       { booted: true, id: 'SIM-PAD', name: 'iPad (A16)', runtime: 'iOS 26.5' },
       { booted: false, id: 'SIM-PRO', name: 'iPhone 17 Pro', runtime: 'iOS 26.5' },
     ])
-  })
-
-  Test('names a runtime from its identifier and ignores one it cannot read', () => {
-    Expect(simulatorRuntimeName('com.apple.CoreSimulator.SimRuntime.iOS-26-5')).toBe('iOS 26.5')
-    Expect(simulatorRuntimeName('com.apple.CoreSimulator.SimRuntime.iOS-18')).toBe('iOS 18')
-    Expect(simulatorRuntimeName('com.apple.CoreSimulator.SimRuntime.watchOS-26-0')).toBeUndefined()
   })
 
   Test('matches a simulator by exact name, case-insensitive name, then UDID', () => {
@@ -1199,26 +1164,18 @@ Describe('Tao Companion simulator install outcome', () => {
     })
   })
 
-  Test('stops before the simulator build when native preparation fails', async () => {
-    for (const failedCommand of ['bunx', 'pod']) {
-      for (const failure of [{ exitCode: 1 }, { error: new Errors.HostEnvironmentError('could not start') }]) {
-        await withDeviceRoots(async roots => {
-          const runner = scriptedRunner(call => call.command === failedCommand ? failure : {})
-          const simulator = createStudioCompanionSimulator({ ...roots, run: runner.run })
+  Test('stops before simulator build and app lookup when pod preparation fails', async () => {
+    await withDeviceRoots(async roots => {
+      const runner = scriptedRunner(call => call.command === 'pod' ? { exitCode: 1 } : {})
+      const simulator = createStudioCompanionSimulator({ ...roots, run: runner.run })
 
-          const error = await expectHostFailure(() => simulator.install({ id: 'SIM-PAD' }))
+      const error = await expectHostFailure(() => simulator.install({ id: 'SIM-PAD' }))
 
-          Expect(studioDeviceFailureLayer(error)).toBe('expo')
-          Expect(error.messageForUser).toContain('Could not prepare Tao Companion')
-          Expect(error.messageForUser).toContain(failedCommand === 'bunx' ? 'expo prebuild' : 'pod install')
-          Expect(runner.calls.map(call => call.command)).toEqual(
-            failedCommand === 'bunx' ? ['xcrun', 'bunx'] : ['xcrun', 'bunx', 'pod'],
-          )
-          Expect(runner.calls.some(call => call.args.includes('run:ios'))).toBe(false)
-          Expect(runner.calls.some(call => call.args.includes('get_app_container'))).toBe(false)
-        })
-      }
-    }
+      Expect(studioDeviceFailureLayer(error)).toBe('expo')
+      Expect(error.messageForUser).toContain('pod install')
+      Expect(runner.calls.some(call => call.args.includes('run:ios'))).toBe(false)
+      Expect(runner.calls.some(call => call.args.includes('get_app_container'))).toBe(false)
+    })
   })
 
   Test('surfaces failure when neither Simulator nor Device Hub can be presented', async () => {

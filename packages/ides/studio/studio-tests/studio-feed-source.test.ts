@@ -1,6 +1,6 @@
 import { Workspace } from '@compiler/workspace'
 import { AST } from '@parser'
-import { Diagnostics, FS } from '@shared'
+import { FS } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { StudioFeedSource } from '../studio-src/StudioFeedSource'
 import { studioGeneratedSourceHeader } from '../studio-src/StudioGeneratedSources'
@@ -133,8 +133,6 @@ Describe('Studio Feed source preparation', () => {
       '@model/Data.tao': 'public data Playlists / Playlist { Title text }',
       '@/studio/View1.tao': viewSource,
     }, async (paths, root) => {
-      const initial = await (await Workspace.open(root)).parse(paths['Main.tao'])
-      Expect(Diagnostics.errorMessages(initial.diagnostics)).toEqual([])
       const result = await StudioFeedSource.prepare({
         entity: 'Playlist',
         entryPath: paths['Main.tao'],

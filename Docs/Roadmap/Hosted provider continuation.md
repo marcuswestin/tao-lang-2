@@ -288,3 +288,14 @@ this does not change Tao language semantics or establish provider capability con
 The selective provider-dependency installation policy and A21 public connection-file placement
 need Developer decisions before changing dependencies or the generated-app configuration flow.
 Sharing the run screen with the dev loop and landing remain pending decisions. Landing still requires explicit authorization for the slice.
+
+Repository integration also reproduced the known ignored orphan-directory lint issue. The
+obsolete task-generated Effect Outcomes contract and bridge-check config were removed after
+checking ownership, inactivity, ignored status, and absence of authored source. The
+[developer-environment ledger](<Developer environment upgrades.md>) records this issue and the
+standalone app-test command gap; these are separate from hosted acceptance.
+
+Main also introduced immutable public release classifications. The inherited `connect`, Jazz,
+Convex, and Pylon pilot commands are classified under the existing development-only hosted-data
+capability. They remain available in the development CLI and excluded from public release phases;
+this integration does not approve a new public release phase.

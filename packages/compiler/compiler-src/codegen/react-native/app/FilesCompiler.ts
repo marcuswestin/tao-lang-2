@@ -31,9 +31,8 @@ export const FilesCompiler = {
     const moduleCommands = taoFile.statements.filter(AST.isCommandDeclaration)
     const dataEntities = opts.dataEntities ?? taoFile.statements.filter(AST.isEntityDataDeclaration)
     const hasRuntimeStatements = taoFile.statements.some(statement =>
-      AST.isGuardDefaultStatement(statement)
-      || (AST.isEmittingRuntimeBinding(statement)
-        && (!AST.isTypeDeclaration(statement) || isRuntimeConfigurableDeclaration(statement)))
+      AST.isEmittingRuntimeBinding(statement)
+      && (!AST.isTypeDeclaration(statement) || isRuntimeConfigurableDeclaration(statement))
     )
     if (!hasRuntimeStatements && !importLines && !scopeBindings && !exportLines && !bridgeTypes) {
       return gen`export {}`

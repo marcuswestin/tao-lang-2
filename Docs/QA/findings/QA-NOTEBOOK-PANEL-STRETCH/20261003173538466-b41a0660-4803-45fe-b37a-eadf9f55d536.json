@@ -1,0 +1,53 @@
+{
+  "id": "QA-NOTEBOOK-PANEL-STRETCH",
+  "status": "verified-closed",
+  "phase": 1,
+  "surfaceId": "visual:notebook",
+  "dimension": "visual",
+  "channel": "tablet-dark",
+  "severity": "major",
+  "title": "Notebook panels and rows grow to fill spare height",
+  "observed": "At 0aa8ebcf the NEW NOTE panel stretches to about 760px on the 1024x1366 tablet with its controls at the top and empty surface below; on phone it carries about 50px of dead space under its button, and an isolated note row fills the whole 844px scenario cell. Col lowers to flexGrow 1 by default (Docs/Spec/Tao Layout and UI.md:706), and the starter never opts its panel or rows out.",
+  "impact": "The first screen of a phase-1 starter looks broken on a tablet and loose on a phone; a newcomer copying the starter inherits the pattern.",
+  "location": "Apps/Starters/Notebook/Design.tao:62-63",
+  "affectedPhases": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "expected": "The NEW NOTE panel and each note row are only as tall as their content at every captured size.",
+  "recheck": "recapture Notebook and inspect devices/phone, devices/tabletDark and both notes states cells.",
+  "evidence": [
+    "Apps/Starters/Notebook/Design.tao",
+    "Apps/Starters/Pantry/Design.tao",
+    "packages/cli/tao-cli/cli-src/create/creation-lowering.ts"
+  ],
+  "evidenceHashes": [
+    {
+      "path": "Docs/QA/evidence/recheck-0aa8ebcf/notebook/devices-tabletdark-ff42616364c6.png",
+      "sha256": "a65695f65b5c2f331d1ce4fb16f98cde8009359c1108219350929614c2bbfa2c"
+    },
+    {
+      "path": "Docs/QA/evidence/recheck-0aa8ebcf/notebook/notes-states-groceries-a28c2dac50de.png",
+      "sha256": "1ffac9375230847ecde968c5386e8609e7dff05d33c66bd8925fb52f0ade351f"
+    },
+    {
+      "path": "Docs/QA/evidence/recheck-0aa8ebcf/notebook/devices-phone-9b47fe3ba371.png",
+      "sha256": "f84bfb2f4baf4a3964c44d32a7e45df993a8b71fabc4aa40f05242f182482e99"
+    },
+    {
+      "path": "Docs/QA/evidence/recheck-0aa8ebcf/notebook/source-snapshot.json",
+      "sha256": "45768385f0df29989fe42fb6fcd59985267cdce7c031e8ab941a45d60ab7a279"
+    }
+  ],
+  "createdAt": "2026-09-29T16:19:14.103Z",
+  "updatedAt": "2026-10-03T17:35:38.464Z",
+  "confidence": "confirmed",
+  "requiredReviewer": "agent",
+  "relatedStories": [],
+  "notes": "Closed 2026-10-03 on a current agent pass of visual:notebook tablet-dark at d667648: the NEW NOTE panel and rows end at their content on tablet; the phone and both notes-states passes show the same.",
+  "owner": "developer",
+  "passingResultId": "20261003173524612-e3558bf0-b9c2-4fa8-af68-2bd1d6de7c35"
+}

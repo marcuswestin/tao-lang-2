@@ -15,7 +15,6 @@ function outlineApp(body: string, extra = ''): string {
     }
     data Workspaces / Workspace {
       Name text (title),
-      CreatedAt time (default now),
       Documents (owned)
     }
     app OutlineApp { view Main }
@@ -53,7 +52,6 @@ Describe('compiler: interaction outline', () => {
     `))
 
     Expect(compiled.code).toContain('const _TaoOutline = TR.Interaction.OutlineTable({')
-    Expect(compiled.code).toContain('"kind":"collection"')
     Expect(compiled.code).toContain('"entity":"Document"')
     Expect(compiled.code).toContain('"collection":"Documents"')
     Expect(compiled.code).toContain('interaction: _TaoOutline["Main#')
@@ -165,8 +163,12 @@ Describe('compiler: interaction outline', () => {
       Text("Quiet")
     `))
 
-    Expect(compiled.code).toContain('"kind":"control","label":"Draft title","role":"input","view":"TextInput"')
-    Expect(compiled.code).toContain('"kind":"control","label":"Save draft","role":"action","view":"FormButton"')
+    Expect(compiled.code).toContain(
+      '"kind":"control","label":"Draft title","nameStatus":"known","role":"input","view":"TextInput"',
+    )
+    Expect(compiled.code).toContain(
+      '"kind":"control","label":"Save draft","nameStatus":"known","role":"action","view":"FormButton"',
+    )
     Expect(compiled.code.match(/"kind":"control"/g)).toHaveLength(2)
     Expect(compiled.code).toContain('TR.Interaction.UseOccurrence(_ViewProps.__tao)')
   })
@@ -190,10 +192,36 @@ Describe('compiler: interaction outline', () => {
       ),
     )
 
-    Expect(compiled.code).toContain('"kind":"control","label":"Save draft","role":"action","view":"FormButton"')
-    Expect(compiled.code).toContain('"kind":"control","label":"Draft title","role":"input","view":"TextInput"')
-    Expect(compiled.code).toContain('"kind":"control","label":"Send draft","role":"action","view":"SubmitControl"')
+    Expect(compiled.code).toContain(
+      '"kind":"control","label":"Save draft","nameStatus":"known","role":"action","view":"FormButton"',
+    )
+    Expect(compiled.code).toContain(
+      '"kind":"control","label":"Draft title","nameStatus":"known","role":"input","view":"TextInput"',
+    )
+    Expect(compiled.code).toContain(
+      '"kind":"control","label":"Send draft","nameStatus":"known","role":"action","view":"SubmitControl"',
+    )
     Expect(compiled.code.match(/"kind":"control"/g)).toHaveLength(3)
+  })
+
+  Test('derives visible control text and keeps Description separate from its name', async () => {
+    const compiled = await Compiler.compileCode(outlineApp(
+      `
+      VisibleAction() { on press -> { } }
+      DescribedAction(Title: "Save", Description: "Writes this draft") { on press -> { } }
+    `,
+      `
+      view VisibleAction(Press action()) { render Col() { Text("Launch") } }
+      view DescribedAction(Title text, Description text, Press action()) { render Text(Title) }
+    `,
+    ))
+
+    Expect(compiled.code).toContain(
+      '"kind":"control","label":"Launch","nameStatus":"known","role":"action","view":"VisibleAction"',
+    )
+    Expect(compiled.code).toContain(
+      '"kind":"control","label":"Save","description":"Writes this draft","nameStatus":"known","role":"action","view":"DescribedAction"',
+    )
   })
 
   Test('emits no table for a module without outline nodes', async () => {

@@ -18,7 +18,7 @@ export function severityWord(diagnostic: Diagnostic): string {
 }
 
 /** diagnosticLocation returns `path:line:column`, or just the path when the diagnostic has no range. */
-export function diagnosticLocation(diagnostic: Diagnostic): string {
+function diagnosticLocation(diagnostic: Diagnostic): string {
   const path = FS.displayPath(diagnostic.filePath ?? '')
   if (diagnostic.range === undefined) {
     return path

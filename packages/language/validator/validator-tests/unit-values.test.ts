@@ -1,12 +1,10 @@
 import { Describe, Test } from '@shared/test'
 import { FunctionalCoreValidator } from '../validator-src/validators/FunctionalCoreValidator'
 import { unitsValidationMessages } from '../validator-src/validators/units-validator'
-import { accepts, app, rejects, stubContainer, stubView } from './test-validate'
-
-const runtimeViews = `${stubContainer('Stack')}${stubView('Text', 'Value text')}`
+import { accepts, app, rejects, stubView } from './test-validate'
 
 function unitApp(declarations: string): string {
-  return `${declarations}\n${app('render Text("Ready")', runtimeViews)}`
+  return `${declarations}\n${app('render Text("Ready")', stubView('Text', 'Value text'))}`
 }
 
 Describe('validator: unit values', () => {

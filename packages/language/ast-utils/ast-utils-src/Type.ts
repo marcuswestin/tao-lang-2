@@ -1170,7 +1170,16 @@ class TypeResolutionContext {
         ask.view.ref?.response?.ref
           ? { kind: 'enum', declaration: ask.view.ref.response.ref }
           : unresolvedType(),
-      CasePayload: () => primitiveType('text'),
+      CasePayload: payload => {
+        const branch = payload.$container
+        const exceptionalReadCase = AST.isGuardRenderBranch(branch)
+          && ['loading', 'missing', 'unauthorized', 'error'].includes(AST.canonicalSubjectCase(branch.case))
+        if (!AST.isAppGuardBranch(branch) && !exceptionalReadCase) {
+          return primitiveType('text')
+        }
+        const context = AST.readContextDeclaration(payload)
+        return context ? this.ofDefinition(context) : unresolvedType()
+      },
       EntityDataField: field => field.negativeName ? primitiveType('boolean') : unresolvedType(),
       EntityQueryDeclaration: query => this.queryDeclarationType(query),
       CaseSetCase: caseSetCase => ({ kind: 'enum', declaration: AST.caseSetOwningCase(caseSetCase) }),

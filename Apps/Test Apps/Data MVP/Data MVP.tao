@@ -56,7 +56,7 @@ scene MainView() {
       Text("Data MVP")
       guard Workspaces {
          loading -> { Text("Loading local data…") }
-         error -> Message { Text(Message) }
+         error -> Context { Text(Context.Message) }
       }
 
       #workspaceName

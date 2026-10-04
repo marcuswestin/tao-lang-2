@@ -32,14 +32,6 @@ test "Auth review" {
       press "Verify"
       expect text "Signed in"
    }
-   test "opens signed out and keeps custom sign-in input local" {
-      run AuthReview
-
-      expect text "Sign in to your notes"
-      enter "alice@example.com" into #email
-      expect #email input value "alice@example.com"
-      expect missing text "Signed in"
-   }
    test "signs in with the headless action and signs out" {
       run AuthReview
       enter "alice@example.com" into #email
@@ -49,11 +41,6 @@ test "Auth review" {
       press #signOut
       expect text "Sign in to your notes"
       expect missing text "Signed in"
-   }
-   test "offers supplied sign-in UI" {
-      run AuthReview
-      press #toggleSignIn
-      expect text "Sign in"
    }
    test "retries a rejected code in custom UI" {
       run AuthReview

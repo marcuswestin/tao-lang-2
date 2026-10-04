@@ -8,6 +8,6 @@ Describe('Node process cleanup on macOS', () => {
     const identities = ProcessTree.identities([process.pid])
 
     Expect(descendants.every(child => child.pid !== process.pid)).toBe(true)
-    Expect([...identities.keys()].every(pid => pid === process.pid)).toBe(true)
+    Expect([...identities.keys()]).toEqual([process.pid])
   })
 })

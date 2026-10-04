@@ -1,0 +1,242 @@
+use Local from @tao/data/providers/local
+use SelectionNav, StackNav from @tao/nav
+use Checkbox, Col, FormButton, Panes, Row, ScrollView, Spinner, Text, TextInput from @tao/ui
+
+project {
+   id "reading-list"
+   name "ReadingList"
+   remote none
+   license MIT
+}
+
+app ReadingList {
+   Name "Reading List"
+   Design ReadingListDesign
+   Navigator ReadingListNavigator
+   Datasource Local {
+      StorageKey "ReadingListData"
+}  }
+
+design ReadingListDesign {
+   // Colors: a name bound to a value; the block says which kind of value every entry is.
+   colors {
+      paper #fbfaf7
+      ink #1b1b1f
+      inkMuted #5f6470
+      line #e3e0d8
+   }
+
+   // Styles: a reusable list of the same clauses a render site can write inline.
+   styles {
+      screen [fill, content top stretch, pad 16, background paper]
+      title [size 28, weight 700, ink ink]
+      body [size 16, line 22, ink inkMuted]
+      card [pad 12, radius 8, background paper, border line]
+   }
+}
+
+data Books / Book {
+   Title text,
+   Author text (default "Unknown"),
+   Finished yes / Reading no,
+   AddedAt time (default now),
+
+   order by AddedAt,
+}
+
+nav LibraryStack = StackNav {
+   Initial BookList
+}
+
+nav ReadingListNavigator = SelectionNav {
+   Initial @library
+   Display "automatic"
+   @library {
+      Label "Library"
+      Icon "books.vertical"
+      Content LibraryStack
+   }
+   @about {
+      Label "About"
+      Icon "info.circle"
+      Content About
+}  }
+
+scene BookList() {
+   Title "Reading List"
+   state NewTitle = ""
+   query Books = Books with { }
+   query CurrentlyReading = Books with {
+      where is Reading
+   }
+   query FinishedBooks = Books with {
+      where is Finished
+   }
+   action AddBook() {
+      check NewTitle is not empty
+      create Book {
+         Title: NewTitle
+      }
+      set NewTitle = ""
+   }
+   render ScrollView() [screen] {
+      Col() [width max 960, centered, gap 10] {
+         Text("Reading List") [title]
+         guard Books {
+            loading -> { Spinner() }
+            error -> Message { Text("Could not load your books: { Message }") [body] }
+         }
+
+         #newTitle
+         TextInput(Value: NewTitle, Label: "Book title", Placeholder: "Add a book") {
+            on submit AddBook
+         }
+
+         #addBook
+         FormButton("Add book", Disabled: NewTitle is empty) {
+            on press AddBook
+         }
+         Panes() [gap 16] {
+            Col() [gap 6] {
+               Text("Reading: { CurrentlyReading.Count }") [title]
+               guard CurrentlyReading empty -> { Text("Nothing on the go") [body] }
+
+               #reading
+               loop CurrentlyReading / Book {
+                  BookRow(Book)
+                  on select -> { present BookScreen(Book) }
+            }  }
+            Col() [gap 6] {
+               Text("Finished: { FinishedBooks.Count }") [title]
+               guard FinishedBooks empty -> { Text("Nothing finished yet") [body] }
+
+               #finished
+               loop FinishedBooks / Book {
+                  BookRow(Book)
+                  on select -> { present BookScreen(Book) }
+}  }  }  }  }  }
+
+view BookRow(Book) {
+   render Row() [card, gap 8] {
+      Text(Book.Title) [body]
+      Text(Book.Author) [body]
+}  }
+
+scene BookScreen(Book) {
+   Title Book.Title
+   state TitleDraft = Book.Title
+   state AuthorDraft = Book.Author
+   action Save() {
+      check TitleDraft is not empty
+      update Book {
+         Title: TitleDraft
+         Author: AuthorDraft
+   }  }
+   action SetFinished(Value boolean) {
+      update Book {
+         Finished: Value
+   }  }
+   action Remove() {
+      delete Book
+      dismiss
+   }
+   render ScrollView() [screen] {
+      Col() [width max 720, centered, gap 10] {
+         guard Book {
+            loading -> { Spinner() }
+            missing -> { Text("That book is gone.") [body] }
+            error -> Message { Text("Could not load that book: { Message }") [body] }
+         }
+         Text(Book.Title) [title]
+
+         #title
+         TextInput(Value: TitleDraft, Label: "Title", Placeholder: "Title") {
+            on submit Save
+         }
+
+         #author
+         TextInput(Value: AuthorDraft, Label: "Author", Placeholder: "Author") {
+            on submit Save
+         }
+
+         #finished
+         Checkbox(Value: Book.Finished is Finished, Label: "Finished") {
+            on change SetFinished
+         }
+
+         #save
+         FormButton("Save", Disabled: TitleDraft is empty) {
+            on press Save
+         }
+
+         #remove
+         FormButton("Remove") {
+            on press Remove
+}  }  }  }
+
+scene About() {
+   Title "About"
+   render Col() [screen, gap 10] {
+      Text("About") [title]
+      Text("A small reading list, written in Tao.") [body]
+}  }
+
+test "Reading List" {
+   test "adds a book, opens it, finishes it, and removes it" {
+      run ReadingList
+      expect navigation title "Reading List"
+      expect text "Nothing on the go"
+      enter "The Dispossessed" into #newTitle
+      press #addBook
+      expect {
+         text "Reading: 1"
+         text "The Dispossessed"
+      }
+      select #reading[1] {
+         press "The Dispossessed"
+      }
+      expect navigation title "The Dispossessed"
+      enter "Ursula K. Le Guin" into #author
+      press #save
+      expect checkbox #finished unchecked
+      press #finished
+      back
+      expect {
+         text "Reading: 0"
+         text "Finished: 1"
+      }
+      select #finished[1] {
+         press "The Dispossessed"
+      }
+      press #remove
+      expect {
+         text "Nothing on the go"
+         text "Nothing finished yet"
+}  }  }
+
+fixture Sample {
+   Dispossessed = create Book {
+      Title: "The Dispossessed"
+      Author: "Ursula K. Le Guin"
+}  }
+
+scenarios ReadingList "QA views" {
+   fixture Sample
+   scenario "phone" {
+      device phone
+      appearance light
+      network online
+      locale "en"
+   }
+   scenario "desktop" {
+      device tablet 1280 x 900
+      appearance light
+      network online
+      locale "en"
+   }
+   scenario "dark" {
+      device phone
+      appearance dark
+      network online
+      locale "en"
+}  }

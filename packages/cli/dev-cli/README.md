@@ -398,8 +398,10 @@ checkout to `dev/<name>` — defaulting to `$TAO_DEV_BRANCH`, then `tao.devBranc
 (`git config --local tao.devBranch dev/<name>` says it once per machine), then the Git identity —
 creating it from `main` the first time and carrying uncommitted work across. `just my-sync` fast-forwards the local
 `main` ref to `origin/main`, moves every mirror that follows it, and merges `main` into the branch,
-naming the conflicted files if there are any. `just my-resolve` hands exactly those conflicts to an
-agent, which resolves them, runs `./agent verify`, and commits the merge. `just my-land` finalizes
+naming the conflicted files if there are any. `just my-status` shows only this checkout's branch,
+changed files, verification record, merge-message state, and next step without changing anything.
+`just my-sync` refuses uncommitted changes before fetching or moving refs. `just my-resolve` hands exactly those conflicts to an
+agent, which resolves them, runs available focused checks, and commits the merge. `just my-land` finalizes
 and lands. A `dev/*` branch lands through the same `merge-with-main` as a `feat/*` branch, with the
 same gates and the same archive.
 

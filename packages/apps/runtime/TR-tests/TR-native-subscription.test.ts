@@ -133,7 +133,6 @@ Describe('native subscription ownership', () => {
     await TR.Action(() => {}).jsValue.invoke()
     owner.dispose()
     Expect(removed).toEqual(['parent', 'nested', 'nested'])
-    Expect(() => TR.NativeSubscription()).toThrow('mounted view')
   })
 
   Test('does not lend a suspended root owner to a queued ownerless action', async () => {

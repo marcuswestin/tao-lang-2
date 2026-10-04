@@ -83,7 +83,13 @@ export async function runDirenvSetup(
   }
   const activation = FS.resolvePath('activation.zsh', shellRoot)
   const zshrc = FS.resolvePath('.zshrc', env['ZDOTDIR'] || home)
-  const sourceLine = `[[ ! -r ${quote(activation)} ]] || source ${quote(activation)}`
+  const sourceLine = '[[ ! -r "$HOME/.tao-dev/shell/activation.zsh" ]] || source "$HOME/.tao-dev/shell/activation.zsh"'
+  const legacySourceLines = new Set([
+    `[[ ! -r ${quote(activation)} ]] || source ${quote(activation)}`,
+    // Hand-porting the absolute line kept its single quotes, so `$HOME` never expanded and
+    // every new shell silently skipped activation.
+    `[[ ! -r '$HOME/.tao-dev/shell/activation.zsh' ]] || source '$HOME/.tao-dev/shell/activation.zsh'`,
+  ])
   const accepted = await environment.confirm({
     defaultValue: false,
     message:
@@ -151,8 +157,24 @@ export async function runDirenvSetup(
           target = await fs.realPath(zshrc)
         }
         const existing = await readOptional(fs, target)
-        if (!existing.split('\n').some(line => line.trim() === sourceLine)) {
-          await fs.writeText(target, `${existing}${existing && !existing.endsWith('\n') ? '\n' : ''}${sourceLine}\n`)
+        // Legacy lines become the portable one in place; only the first activation line survives.
+        let sourced = false
+        const normalized = existing.split('\n').flatMap(line => {
+          const trimmed = line.trim()
+          if (trimmed !== sourceLine && !legacySourceLines.has(trimmed)) {
+            return [line]
+          }
+          if (sourced) {
+            return []
+          }
+          sourced = true
+          return [trimmed === sourceLine ? line : sourceLine]
+        }).join('\n')
+        const updated = sourced
+          ? normalized
+          : `${normalized}${normalized && !normalized.endsWith('\n') ? '\n' : ''}${sourceLine}\n`
+        if (updated !== existing) {
+          await fs.writeText(target, updated)
         }
       } catch (cause) {
         Errors.throwHostEnvironment(

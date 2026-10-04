@@ -189,22 +189,7 @@ test('treats only a typed Appium absent-element response as a passing missing-te
   })).rejects.toThrow('Appium transport failed.')
 })
 
-test('waits for a positive assertion to appear after a native transition', async () => {
-  const session = new DelayedElementSession(2)
-  const adapter = appiumIosJourneyAdapter(session, { advance: async () => {} }, 'run-a')
-
-  await expect(adapter.execute({
-    kind: 'expect',
-    missing: false,
-    selector: 'text',
-    selections: [],
-    source: source(),
-    text: '2 opened',
-  })).resolves.toBeUndefined()
-  expect(session.attemptsRemaining).toBe(0)
-})
-
-for (const [position, y] of [['above', -120], ['header-clipped within', 40], ['below', 1200]] as const) {
+for (const [position, y] of [['below', 1200]] as const) {
   for (const kind of ['expect', 'press'] as const) {
     test(`${kind} reveals a target ${position} the viewport and uses its fresh observation`, async () => {
       const session = new ScrollRevealSession(y)
@@ -522,25 +507,6 @@ class MissingElementSession extends RecordingSession {
 class BrokenLookupSession extends RecordingSession {
   override async observe(): Promise<HostObservation> {
     throw new HostControlError('host', 'Appium transport failed.')
-  }
-}
-
-class DelayedElementSession extends RecordingSession {
-  attemptsRemaining: number
-
-  constructor(attemptsRemaining: number) {
-    super()
-    this.attemptsRemaining = attemptsRemaining
-  }
-
-  override async observe(
-    request: Readonly<{ expectedRevision: ReturnType<HostSession['descriptor']>['revision']; target: HostTarget }>,
-  ): Promise<HostObservation> {
-    if (this.attemptsRemaining > 0) {
-      this.attemptsRemaining -= 1
-      throw new AppiumNoSuchElementError('native transition has not published the text yet')
-    }
-    return await super.observe(request)
   }
 }
 

@@ -200,6 +200,16 @@ studio-host-control-smoke run_id="local":
 studio-mac2-acceptance run_id="local":
     ./dev studio-smoke --native --run-id "{{ run_id }}" packages/ides/studio-tooling/studio-smoke/studio-mac2-acceptance.test.ts
 
+# Capture a bounded headless QA review; capture alone is not a visual judgment
+[group('Host proofs')]
+qa-capture *ARGS: _parser-gen
+    ./dev qa-capture {{ ARGS }}
+
+# Inventory, run bounded checks, record observations, and report on-demand QA
+[group('Report')]
+qa *ARGS:
+    ./dev qa {{ ARGS }}
+
 # Prove Studio compile/edit/undo against the real HNReader app
 [group('Host proofs')]
 studio-proof-real-app run_id="local":
@@ -267,13 +277,13 @@ standalone-cli-build: _parser-gen
 
 # Build the files one standalone Tao release publishes, and print the command that publishes them
 [group('Ship')]
-standalone-cli-release version: _parser-gen
-    "{{ BUN }}" run packages/cli/tao-cli/cli-src/standalone-build.ts --release "{{ version }}"
+standalone-cli-release version="0.4.0" phase="1": _parser-gen
+    "{{ BUN }}" run packages/cli/tao-cli/cli-src/standalone-build.ts --release "{{ version }}" --phase "{{ phase }}"
 
 # Build a release, install it through curl | sh into a throwaway HOME, and prove create, check, compile, and build --compile-only work with no Bun or Node on PATH
 [group('Ship')]
 standalone-cli-acceptance: _parser-gen
-    "{{ BUN }}" run packages/cli/tao-cli/cli-src/standalone-build.ts --release 0.0.0
+    "{{ BUN }}" run packages/cli/tao-cli/cli-src/standalone-build.ts --release 0.0.0 --phase 1
     "{{ BUN }}" run packages/cli/tao-cli/cli-src/standalone-acceptance.ts .artifacts/release/v0.0.0
 
 # Test a release in a disposable macOS VM; --base or --prepare-base vanilla|xcode selects a pinned image
@@ -318,22 +328,22 @@ dev app_path="Apps" APP="":
 # A name pattern narrows the same default scope rather than replacing it: `just test "<name>"` is the
 # changed suites filtered to that name, not every suite filtered to it. Scope and filter compose, so
 # the fast default stays fast and only `test-all` widens it.
-# Run the suites this branch's diff reaches; a wider change can still break a suite it never ran, so `test-all` before a merge. One optional target is a test path or a test name
+# Run changed suites, fail fast; explicit file/name targets collect failures. Selection can miss a regression, so `test-all` before a merge
 [group('Dev')]
 test target="": _compile-word-flower-app
     if [ {{ quote(target) }} = '' ]; then ./dev test-changed; elif [ -e {{ quote(target) }} ]; then printf 'Running tests in %s\n' {{ quote(target) }}; ./dev test-file {{ quote(target) }}; else printf 'Filtering the changed suites to tests matching "%s"\n' {{ quote(target) }}; ./dev test-changed --name {{ quote(target) }}; fi
 
-# Run every test suite, whatever this branch changed; the scope `verify` runs. One optional test-name pattern filters them
+# Run every test suite, fail fast; an explicit test-name pattern collects failures in that filtered scope
 [group('Dev')]
 test-all pattern="": _compile-word-flower-app
     ./dev test{{ if pattern == "" { "" } else { " " + quote(pattern) } }}
 
-# Run tests selected by changes since a ref; defaults to this branch's main merge base
+# Run implicitly selected changed suites, fail fast; defaults to this branch's main merge base
 [group('Dev')]
 test-changed ref="": _compile-word-flower-app
     ./dev test-changed {{ if ref == "" { "" } else { "\"" + ref + "\"" } }}
 
-# Run one package Bun or runtime Jest test file, or every test file under a directory
+# Collect failures in one test file/directory; a repository-root target remains fail fast
 [group('Dev')]
 test-file path: _compile-word-flower-app
     ./dev test-file "{{ path }}"
@@ -343,7 +353,7 @@ test-file path: _compile-word-flower-app
 test-mutation path: _compile-word-flower-app
     ./dev test-mutation {{ quote(path) }}
 
-# Re-run files that are not green since this checkout's latest complete test run
+# Collect failures in files not green since this checkout's latest complete test run
 [group('Dev')]
 test-retry: _compile-word-flower-app
     ./dev test-retry
@@ -391,16 +401,21 @@ merge-main *args:
 my-branch name='':
     ./dev my-branch {{ quote(name) }}
 
+# Show this checkout's branch, changed files, verification, and next step without changing anything
+[group('Mine')]
+my-status:
+    ./dev my-status
+
 # Fast-forward main, move the mirrors that follow it, and merge it into your branch
 [group('Mine')]
 my-sync:
     ./dev sync-main
 
-# Hand the merge conflicts in this checkout to an agent (claude or codex), which resolves them, verifies, and commits
+# Hand merge conflicts in this checkout to an agent for best-effort focused checks and a merge commit
 [group('Mine')]
 my-resolve agent='claude' *ARGS:
     if [ -z "$(git diff --name-only --diff-filter=U)" ]; then printf 'No conflicted files: there is nothing to resolve.\n'; exit 1; fi
-    {{ if agent == "claude" { "claude" } else if agent == "codex" { "codex" } else { error("my-resolve takes claude or codex") } }} {{ ARGS }} "Finish the merge that is in progress in this checkout, on branch $(git symbolic-ref --quiet --short HEAD). Resolve every conflicted file on its merits, keeping both sides' intent rather than taking one side wholesale, and preserving work you did not write. Read AGENTS.md first. Then run \`./agent verify\`, and commit the merge with \`git commit --no-edit\` once it is green. Do not land anything on main, do not push, and do not touch other worktrees. Report what you resolved in each file and what the verification said."
+    {{ if agent == "claude" { "claude" } else if agent == "codex" { "codex" } else { error("my-resolve takes claude or codex") } }} {{ ARGS }} "Finish the merge that is in progress in this checkout, on branch $(git symbolic-ref --quiet --short HEAD). Resolve every conflicted file on its merits, keeping both sides' intent rather than taking one side wholesale, and preserving work you did not write. Read AGENTS.md first. Run available focused checks on the resolved files, report checks that concurrent work prevents, and commit the merge with \`git commit --no-edit\`. Leave full verification to landing. Do not land anything on main, do not push, and do not touch other worktrees. Report what you resolved in each file and what checks ran."
 
 # Squash-merge your dev/* branch into main; the same landing agents use, with the same gates
 [group('Mine')]
@@ -479,7 +494,7 @@ fix: _parser-gen
     ./tao fix
     just --fmt
 
-# Check all code without changing it or running tests: Tao and dprint canonical source, lint, types. --no-cache ignores a recorded green tree
+# Check all code, fail fast between checks: canonical source, lint, types. --no-cache ignores a recorded green tree
 [arg('no_cache', long='no-cache', value='true')]
 [group('Dev')]
 check no_cache='false':
@@ -487,7 +502,7 @@ check no_cache='false':
 
 # Build a VSIX without installing it, for VS Code packager compatibility checks
 [group('Dev')]
-ide-extension-package: _ide-extension-package
+ide-extension-package release_version="development" phase="development": (_ide-extension-package release_version phase)
 
 # Run the repository lint on its own
 [group('Dev')]
@@ -626,18 +641,18 @@ clean-all: clean-scratch
 # Full verification lanes lower their CLI process to below-normal scheduling priority before
 # launching gates; children inherit it. This leaves job counts and admission unchanged.
 # A host or sandbox refusal prints a warning and verification continues at inherited priority.
-# Verify everything: fix, check, and every test suite. --no-cache ignores a recorded green tree
+# Verify everything, fail fast between checks: fix, check, all tests. --no-cache ignores a recorded green tree
 [arg('complete', long='complete', value='true')]
 [arg('no_cache', long='no-cache', value='true')]
 [group('Dev')]
 verify complete='false' no_cache='false': _deps
-    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _hosted-crud-test _test _runtime-pack-check dead-exports --lane verify --json .artifacts/logs/verify/summary.json --skipped "studio-smoke=slow lane; run ./agent studio-smoke or ./agent verify-full" --green-tree verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
+    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _hosted-crud-test _test _runtime-pack-check dead-exports --lane verify --json .artifacts/logs/verify/summary.json --skipped "studio-smoke=slow lane; run ./agent unsandboxed studio-smoke or ./agent unsandboxed verify-full" --green-tree verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
 
-# Verify narrowed to the suites the branch diff reaches: the iteration gate, never merge evidence. --no-cache ignores a recorded green tree
+# Verify changed suites, fail fast: the iteration gate, never merge evidence. --no-cache ignores a recorded green tree
 [arg('no_cache', long='no-cache', value='true')]
 [group('Dev')]
 verify-changed no_cache='false': _deps
-    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _hosted-crud-test _test-changed _runtime-pack-check dead-exports --lane verify-changed --json .artifacts/logs/verify-changed/summary.json --skipped "studio-smoke=slow lane; run ./agent studio-smoke or ./agent verify-full" --green-tree verify-changed verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
+    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _hosted-crud-test _test-changed _runtime-pack-check dead-exports --lane verify-changed --json .artifacts/logs/verify-changed/summary.json --skipped "studio-smoke=slow lane; run ./agent unsandboxed studio-smoke or ./agent unsandboxed verify-full" --green-tree verify-changed verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
 
 # This lane no longer refuses to start beside another one. The gates that genuinely cannot share a
 # host — the native shell and the canary, which contend on the window server — declare `gui` in the
@@ -745,9 +760,9 @@ _compile-word-flower-app: _parser-gen
 _ide-extension-build: _parser-gen
     cd packages/ides/ide-extension && "{{ BUN }}" esbuild.config.ts
 
-_ide-extension-package: _parser-gen
+_ide-extension-package release_version="development" phase="development": _parser-gen
     mkdir -p .artifacts/build
-    cd packages/ides/ide-extension && "{{ BUN }}" esbuild.config.ts --minify
+    cd packages/ides/ide-extension && "{{ BUN }}" esbuild.config.ts --minify {{ if release_version == "development" { "" } else { "--release " + quote(release_version) + " --phase " + quote(phase) } }}
     cd packages/ides/ide-extension && "{{ BUNX }}" @vscode/vsce package --no-dependencies --out "{{ IDE_EXTENSION_VSIX }}" 1> /dev/null
 
 _tao-check: _parser-gen

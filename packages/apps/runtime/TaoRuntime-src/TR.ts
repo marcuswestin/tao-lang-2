@@ -174,7 +174,7 @@ import {
   writablePath,
 } from './TR-reactive-values'
 import { readAvailability } from './TR-read-availability'
-import { ReadNet, readNetCases, renderReadNet } from './TR-read-net'
+import { MergeReadNet, readContext, ReadNet, renderReadNet, type TaoReadHint, type TaoReadNetCase } from './TR-read-net'
 import {
   captureRuntime,
   registerRuntimeCaptureDomain,
@@ -372,36 +372,77 @@ class TR {
   /**
    * GuardRender renders a matching handler, the read net for an exceptional case no handler names,
    * or the untouched remainder of the enclosing block. `siteProps` are the guarding view's own, so
-   * the net renders where the guard stands and finds the mounted app's `guard default`.
+   * the net renders where the guard stands and finds the mounted app's guard.
    */
   static GuardRender(
     subject: TR.Evaluable,
     branches: readonly TR.CaseBranch<React.ReactNode>[],
     remaining: () => React.ReactNode,
     siteProps?: TR.TaoProps,
+    hint?: TaoReadHint,
+  ): React.ReactNode {
+    return TR.renderReadCases(subject, branches, remaining, siteProps, hint, false)
+  }
+
+  /** WhenReadRender keeps an ordinary `when` branch's error-message payload as text. */
+  static WhenReadRender(
+    subject: TR.Evaluable,
+    branches: readonly TR.CaseBranch<React.ReactNode>[],
+    otherwise: () => React.ReactNode,
+    siteProps?: TR.TaoProps,
+  ): React.ReactNode {
+    return TR.renderReadCases(subject, branches, otherwise, siteProps, undefined, true)
+  }
+
+  private static renderReadCases(
+    subject: TR.Evaluable,
+    branches: readonly TR.CaseBranch<React.ReactNode>[],
+    remaining: () => React.ReactNode,
+    siteProps: TR.TaoProps | undefined,
+    hint: TaoReadHint | undefined,
+    legacyPayload: boolean,
   ): React.ReactNode {
     const evaluated = subject.evaluate()
-    const availability = readAvailability(evaluated)
-    if (availability && availability.status !== 'available') {
-      const payload = new RuntimeValue(availability.status === 'error' ? availability.message : undefined)
-      const handler = branches.find(([name]) => name === availability.status)?.[1]
-      return handler ? handler(payload) : renderReadNet(availability.status, payload, siteProps)
-    }
     const value = evaluated.jsValue
+    const accountAvailability = readAvailability(evaluated)
+    const entityAvailability = DataControls.EntityAvailability(value)
+    const query = queryStatus(value)
+    const availability = accountAvailability ?? entityAvailability
+      ?? (query?.status === 'loading' || query?.status === 'error'
+        ? { status: query.status }
+        : undefined)
+    if (availability && availability.status !== 'available') {
+      const status = availability.status as TaoReadNetCase
+      const entity = entityAvailability ? DataControls.EntityInteraction(value)?.entity : undefined
+      const context = new RuntimeValue(readContext(status, {
+        readKind: accountAvailability
+          ? 'account'
+          : hint?.readKind ?? (entityAvailability ? 'entity' : query ? 'query' : 'unknown'),
+        subjectLabel: hint?.subjectLabel,
+        subjectType: hint?.subjectType ?? entity,
+      }, {
+        UnauthorizedReason: availability.status === 'unauthorized' ? availability.reason : undefined,
+      }))
+      const handler = branches.find(([name]) => name === status)?.[1]
+      const payload = legacyPayload
+        ? new RuntimeValue(
+          matchSubjectCase(value, status).payload
+            ?? (accountAvailability?.status === 'error' ? accountAvailability.message : undefined),
+        )
+        : context
+      return handler ? handler(payload) : renderReadNet(status, context, siteProps)
+    }
     const matched = firstMatchedBranch(value, branches)
     if (matched) {
       return matched.result
     }
-    const exceptional = readNetCases
-      .map(caseName => ({ caseName, match: matchSubjectCase(value, caseName) }))
-      .find(({ match }) => match.matched)
-    return exceptional
-      ? renderReadNet(exceptional.caseName, new RuntimeValue(exceptional.match.payload), siteProps)
-      : remaining()
+    return remaining()
   }
 
-  /** ReadNet freezes the handlers a project's compiled `guard default` replaces. */
+  /** ReadNet freezes the handlers a compiled app guard declares. */
   static readonly ReadNet = ReadNet
+  /** MergeReadNet keeps inherited app cases unless this variant replaces them. */
+  static readonly MergeReadNet = MergeReadNet
 
   /** Member reads item fields and the built-in Count collection and text member. */
   static Member(root: TR.Evaluable, path: readonly string[]): TR.MemberValue<any> {
@@ -882,6 +923,9 @@ class TR {
 
   /** VisualNativeRoot preserves filtered native controls while making their Studio occurrence selectable. */
   static VisualNativeRoot(layout: TR.TaoVisualLayout | undefined, child: React.ReactNode): React.ReactNode {
+    if (TRTaoProps.TaoPropsControls.visualRowRoot(layout)) {
+      return createElement(NativeVisualRowRoot, { child, layout })
+    }
     const props = TRTaoProps.TaoPropsControls.visualNativeProps(layout)
     return Object.keys(props).length === 0
       ? child
@@ -1712,6 +1756,14 @@ function queryStatus(
     return { status: 'error', message: query.Error, rows: query, ...advisory }
   }
   return { status: 'ready', rows: query, ...advisory }
+}
+
+function NativeVisualRowRoot({ child, layout }: {
+  child: React.ReactNode
+  layout: TR.TaoVisualLayout | undefined
+}): React.ReactElement {
+  const props = InteractionControls.UseNativeRowRoot(layout)
+  return createElement(requireReactNativeRuntime().View, props, child)
 }
 
 export default TR

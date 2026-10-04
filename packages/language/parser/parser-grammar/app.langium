@@ -20,7 +20,7 @@ AppBlock:
     '{' statements+=(AppStatement | AppBlockDiagnosticStatement)* '}';
 
 AppStatement:
-    AppAuxiliaryNavigator | AppView | AppProperty | RestorationPolicy;
+    AppAuxiliaryNavigator | AppView | AppProperty | RestorationPolicy | AppGuardStatement;
 
 AppAuxiliaryNavigator:
     name=USE_IMPORT_PATH value=ConfigurationConstructor;

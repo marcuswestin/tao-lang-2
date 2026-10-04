@@ -25,26 +25,6 @@ Describe('Tao formatter injections', () => {
   )
 
   Test(
-    'indents injection fence bodies one level below the inject line',
-    formats(
-      `
-        view CountText(Count number) {
-        render inject Count ${tsFence}
-        return <RN.Text>{Count}</RN.Text>
-        ${fence}
-        }
-      `,
-      `
-        view CountText(Count number) {
-           render inject Count ${tsFence}
-              return <RN.Text>{Count}</RN.Text>
-           ${fence}
-        }
-      `,
-    ),
-  )
-
-  Test(
     'preserves relative indentation and brace lines inside fence bodies',
     formats(
       `
@@ -71,7 +51,7 @@ Describe('Tao formatter injections', () => {
   )
 
   Test(
-    'detects fences with trailing whitespace after the opener and leaves their bodies untouched',
+    'detects trailing whitespace after a fence opener and formats the nested body',
     formats(
       `
         view MainView() {

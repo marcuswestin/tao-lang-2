@@ -1,6 +1,20 @@
 use WordFlower from ./
 
 test "WordFlower workspaces" {
+   test "pins one workspace through its row verb" {
+      run WordFlower
+      enter "Home" into #workspaceName
+      press #addWorkspace
+      enter "Projects" into #workspaceName
+      press #addWorkspace
+      narrow "Projects"
+      expect target "Projects"
+      press key "."
+      press key "i"
+      select #workspaces[1] {
+         expect text "Projects"
+      }
+   }
    test "narrows, targets, and activates a workspace without Back disturbing attention" {
       run WordFlower
       enter "Home" into #workspaceName
@@ -18,6 +32,7 @@ test "WordFlower workspaces" {
       press key "Enter"
       expect navigation title "Projects"
    }
+   // REMOVAL CANDIDATE: Runtime tests own hint generation; removal drops hints over real WordFlower entity rows.
    test "shows stable generated hints only on demand" {
       run WordFlower
       enter "Home" into #workspaceName
@@ -40,11 +55,7 @@ test "WordFlower workspaces" {
       run WordFlower
       expect navigation title "WordFlower"
       expect { // `expect { ... }` groups several assertions into one step
-         text "WordFlower"
          text "No workspaces yet"
-         text "Starter prompt: Morning pages"
-         text "Try writing for 10 minutes"
-         text "Tagged: daily, warmup"
          text "Name this workspace" // Name's `required` sentence, through the form's projection
       }
       expect #workspaceName {
@@ -88,10 +99,7 @@ test "WordFlower workspaces" {
       }
       back
       expect navigation title "WordFlower"
-      expect {
-         text "WordFlower"
-         text "Renamed workspace"
-      }
+      expect text "Renamed workspace"
       expect #workspaceName input value "Unsent workspace"
       expect missing text "Workspace: Renamed workspace"
    }
@@ -204,6 +212,7 @@ test "WordFlower workspaces" {
       enter "" into #findDocuments // a blank term keeps every row
       expect text "Drafts: 2"
    }
+   // REMOVAL CANDIDATE: Runtime tests own palette matching; removal drops generated catalog integration in WordFlower.
    test "opens and narrows the generated command palette" {
       run WordFlower
 

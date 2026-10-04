@@ -18,6 +18,7 @@ function attach(states: readonly TestNodeState[], logRoot: string, repositoryRoo
     cost: 8,
     name: prepareName,
     needs: [...new Set(shards.flatMap(shard => shard.node.needs ?? []))],
+    after: [...new Set(shards.flatMap(shard => shard.node.after ?? []))],
     priority: Math.max(0, ...shards.map(shard => shard.node.priority ?? 0)),
     run: {
       args: ['test', '--shared-prepare', handoff, ...roots],

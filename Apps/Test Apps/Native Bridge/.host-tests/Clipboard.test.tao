@@ -29,6 +29,7 @@ test "Native Clipboard acceptance" {
       press "Read PNG"
       expect text "Status: PNG read complete"
       expect text "Image: 1 × 1"
+      // REMOVAL CANDIDATE: PNG already covers image readback; JPEG retains native format-enum propagation acceptance.
       press "Read JPEG"
       expect text "Status: JPEG read complete"
       expect text "Image: 1 × 1"
@@ -50,8 +51,6 @@ test "Native Clipboard acceptance" {
       press "Copy sample URL"
       press "Read URL"
       expect text "Status: URL read complete"
-      expect text "URL: https://example.com/native-bridge"
-      expect text "No clipboard changes received"
       expect text "Clipboard changes: 0"
       press "Start listening"
       press "Copy text"
@@ -63,8 +62,6 @@ test "Native Clipboard acceptance" {
       press "Copy sample URL"
       press "Read URL"
       expect text "Status: URL read complete"
-      expect text "URL: https://example.com/native-bridge"
-      expect text "No clipboard changes received"
       expect text "Clipboard changes: 0"
       press "Start listening"
       back

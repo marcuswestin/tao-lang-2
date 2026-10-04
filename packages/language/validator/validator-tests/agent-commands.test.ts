@@ -107,16 +107,6 @@ Describe('validator: explicit app agent commands', () => {
     ),
   )
   Test(
-    'rejects reference block allowlists',
-    rejects(
-      `
-    ${base}
-    app Main { AgentCommands { Safe } view Home() }
-  `,
-      messages.literal,
-    ),
-  )
-  Test(
     'rejects list patches',
     rejects(
       `

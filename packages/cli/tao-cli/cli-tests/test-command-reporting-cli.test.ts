@@ -65,9 +65,7 @@ Describe('tao test CLI reporting', () => {
           // command's output, so a quiet run must still print it unprefixed.
           Expect(resultCountLine(output)).toBe('Tests:       2 passed, 2 total')
           Expect(output).toContain('Time:        1.234 s')
-          Expect(output).not.toContain(runnerLine(1))
-          Expect(output).not.toContain(runnerLine(RUNNER_REPORT_LINES))
-          Expect(nonEmptyLines(output).length).toBeLessThanOrEqual(12)
+          Expect(output).not.toMatch(/runner-line-/)
         })
       })
     })

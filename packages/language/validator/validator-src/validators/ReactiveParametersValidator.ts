@@ -55,6 +55,9 @@ function reportWritableMutationTarget(
   if (!AST.isParameterDeclaration(target)) {
     return
   }
+  if (AST.isToggleStatement(mutation) && Type.ofValueDeclaration(target).kind === 'entity') {
+    return
+  }
   if (AST.findOwningFunction(mutation)) {
     ctx.error(mutation, reactiveParametersValidationMessages.functionMutation(Type.parameterName(target)))
     return
