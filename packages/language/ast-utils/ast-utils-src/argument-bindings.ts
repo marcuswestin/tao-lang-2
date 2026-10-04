@@ -1,6 +1,6 @@
 import { AST } from '@parser'
 import { Switch } from '@shared'
-import { Type } from './Type'
+import { type TaoType, Type } from './Type'
 import { type BindingDiagnostic, resolveBindings } from './type-binding-matches'
 
 /** RenderInvocationPair declares one resolved render argument-to-parameter pairing. */
@@ -28,7 +28,7 @@ export type ArgumentBindingDiagnostic =
   | { kind: 'unmatched-argument'; argument: AST.Argument }
   | { kind: 'missing-argument'; parameter: AST.ParameterDeclaration }
 
-type ArgumentBindingResult = {
+export type ArgumentBindingResult = {
   pairs: RenderInvocationPair[]
   diagnostics: ArgumentBindingDiagnostic[]
 }
@@ -46,20 +46,33 @@ export function resolveArgumentBindings(
     | AST.ViewBinding
     | AST.AskStatement,
 ): ArgumentBindingResult {
+  return resolveParameterArgumentBindings(AST.parametersOf(declaration), AST.argumentsOf(invocation))
+}
+
+/** resolveParameterArgumentBindings shares binding without extracting storage or effect metadata. */
+export function resolveParameterArgumentBindings(
+  parameters: readonly AST.ParameterDeclaration[],
+  arguments_: readonly AST.Argument[],
+  metadata: {
+    parameterName?(parameter: AST.ParameterDeclaration): string
+    parameterType?(parameter: AST.ParameterDeclaration): TaoType
+    parameterOmissible?(parameter: AST.ParameterDeclaration): boolean
+  } = {},
+): ArgumentBindingResult {
   const resolution = resolveBindings<AST.Argument, AST.ParameterDeclaration>({
-    candidates: AST.argumentsOf(invocation),
-    targets: AST.parametersOf(declaration),
+    candidates: arguments_,
+    targets: parameters,
     candidateLabel: argument => argument.label,
-    targetName: parameter => Type.parameterName(parameter),
+    targetName: metadata.parameterName ?? Type.parameterName,
     candidateType: argument => Type.ofArgument(argument),
-    targetType: parameter => Type.ofParameter(parameter),
+    targetType: metadata.parameterType ?? Type.ofParameter,
     namedTypeAccepts: (actual, expected) => Type.isAssignable(actual, expected),
     duplicateTargetTypesOnlyWithCandidates: true,
     afterNamedBinding: ({ remainingTargets }) => {
       // Optional parameters are explicit-only for type-based view/action binding. This keeps a
       // defaulted text/number/etc. parameter from competing with an unnamed required parameter.
       for (const parameter of [...remainingTargets]) {
-        if (parameter.defaultValue !== undefined) {
+        if (metadata.parameterOmissible?.(parameter) ?? (parameter.defaultValue !== undefined)) {
           remainingTargets.delete(parameter)
         }
       }
