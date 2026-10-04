@@ -523,14 +523,18 @@ compiler copies the named sidecar beside its generated module and imports the ex
 declaration, or case-set declaration. The initial root TypeScript configuration extends `.tao/typescript/tsconfig.json`, whose
 authored/generated overlay resolves unchanged relative imports such as
 `import type { Drawer } from './Drawer.tao'` in handwritten sidecars. The module
-exports Tao-derived contract types and checks each sidecar's named export with `satisfies`.
+exports Tao-derived contract types and checks each sidecar's named export with erased TypeScript
+constraints. Sidecar imports in this companion are type-only: loading it does not initialize native
+implementations. Signature, accepted argument count, and return compatibility remain separate checks,
+and their diagnostics map back to the Tao declaration.
 Configuration declarations also export their `<Declaration>Config` type there. Generated output is ignored by Git;
 authors edit the Tao declaration and handwritten sidecar, and may import its generated types if
 useful. Compiled Tao modules and their
 configuration declaration companions export the same contract types for copied sidecars. `tao check`
 also runs TypeScript over the generated modules and their sidecars, reporting a missing export or a
-parameter or result mismatch as an error. The check includes the callable arity, so a function with
-too few or too many parameters cannot silently satisfy a call boundary. Tao fills defaulted foreign
+parameter or result mismatch as an error. The check includes callable arity, so a function that cannot
+accept the declared argument count cannot silently satisfy a call boundary; compatible optional or
+rest parameters remain valid. Tao fills defaulted foreign
 action and view parameters before invoking the sidecar, so its TypeScript signature receives every
 declared parameter. Action-valued foreign arguments retain an invokable runtime action value.
 
