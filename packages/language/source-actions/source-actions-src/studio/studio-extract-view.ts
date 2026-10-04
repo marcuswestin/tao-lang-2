@@ -30,7 +30,7 @@ import { ensureUiNamesImported } from './studio-use-imports'
 /** SiblingSelection is a run of adjacent child renders in one block, in source order. */
 type SiblingSelection = Readonly<{
   block: AST.Block
-  /** The selected source from the first render's line to the last render's end, dedented to column zero. */
+  /** The selected source including the first prefix cluster, dedented to column zero. */
   body: string
   end: number
   indent: string
@@ -40,6 +40,8 @@ type SiblingSelection = Readonly<{
    * `Col() { Text("A") }` block does.
    */
   leading: string
+  /** The first render's CST offset relative to the dedented body, after its prefix cluster. */
+  renderOffset: number
   renders: readonly AST.ViewRender[]
   start: number
 }>
@@ -104,10 +106,10 @@ export async function extractView(
   }
   const root = selection.renders.length === 1 ? undefined : selectionRootContainer(selection.block)
   const body = root === undefined
-    ? selection.body
-    : `${root}() {\n${indentSnippet(selection.body, '   ')}\n}`
+    ? `${selection.body.slice(0, selection.renderOffset)}render ${selection.body.slice(selection.renderOffset)}`
+    : `render ${root}() {\n${indentSnippet(selection.body, '   ')}\n}`
   const declaration = `view ${name}(${parameters.map(parameter => parameter.declaration).join(', ')}) {\n${
-    indentSnippet(`render ${body}`, '   ')
+    indentSnippet(body, '   ')
   }\n}`
   const call = `${name}(${parameterNames.map(parameterName => `${parameterName}: ${parameterName}`).join(', ')})`
   const extracted = applySourceEdits(source, [
@@ -241,7 +243,11 @@ function requireSiblingSelection(document: AST.Document, renderIds: unknown, ope
     if (statement === undefined) {
       Errors.throwUserInput(`Can only ${operation} elements inside a container, not a view's root render.`)
     }
-    if (AST.attachedTag(statement) !== undefined) {
+    const tags = [
+      ...AST.renderPrefixCluster(statement),
+      ...AST.streamAllContents(statement),
+    ].filter(AST.isTagStatement)
+    if (tags.some(tag => tag.tag.startsWith('#studio_rect_'))) {
       Errors.throwUserInput(`Unsnap the sketch first; Studio cannot ${operation} a snapped sketch element.`)
     }
     return statement
@@ -261,13 +267,15 @@ function requireSiblingSelection(document: AST.Document, renderIds: unknown, ope
   const first = renders[0]!.$cstNode!
   const last = renders.at(-1)!.$cstNode!
   const indent = lineIndentAt(source, first.offset)
-  // Mirrors wrap-render: a render that follows other text on its line is edited from its own offset.
-  const beginsLine = source.lastIndexOf('\n', first.offset - 1) + 1 + indent.length === first.offset
-  const start = beginsLine ? first.offset - indent.length : first.offset
-  const body = source.slice(start, last.end).split('\n')
-    .map(line => line.startsWith(indent) ? line.slice(indent.length) : line.trimStart())
-    .join('\n')
-  return { block, body, end: last.end, indent, leading: beginsLine ? indent : '', renders, start }
+  const start = slices[indexes[0]!]!.start
+  const beginsLine = source.lastIndexOf('\n', start - 1) + 1 === start
+  const dedent = (text: string): string =>
+    text.split('\n')
+      .map(line => line.startsWith(indent) ? line.slice(indent.length) : line.trimStart())
+      .join('\n')
+  const body = dedent(source.slice(start, last.end))
+  const renderOffset = dedent(source.slice(start, first.offset)).length
+  return { block, body, end: last.end, indent, leading: beginsLine ? indent : '', renderOffset, renders, start }
 }
 
 type ExtractedParameter = Readonly<{ declaration: string; name: string; typeDeclaration?: AST.TypeDefinition }>
@@ -286,7 +294,8 @@ function selectionParameters(selection: SiblingSelection, owner: AST.ViewDeclara
   const names = new Map<AST.Node, string>([...visible].map(([name, value]) => [value, name]))
   const read = new Map<string, ExtractedValue>()
   for (const render of selection.renders) {
-    for (const node of [render, ...AST.streamAllContents(render)]) {
+    const roots = [...AST.renderPrefixCluster(render), render]
+    for (const node of roots.flatMap(root => [root, ...AST.streamAllContents(root)])) {
       for (const reference of AST.streamReferences(node)) {
         const target = 'ref' in reference.reference ? reference.reference.ref : undefined
         const name = target === undefined ? undefined : names.get(target)

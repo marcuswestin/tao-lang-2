@@ -11,7 +11,7 @@ export type SourceEdit = {
   start: number
 }
 
-/** BlockStatementSlice is one block statement with the source lines it owns, tag statements grouped in. */
+/** BlockStatementSlice is one block statement with the source lines it owns, render prefixes grouped in. */
 export type BlockStatementSlice = {
   end: number
   source: string
@@ -49,27 +49,30 @@ export function blockStatementSlices(source: string, block: AST.Block): BlockSta
       statement,
     }
   })
-  const grouped: BlockStatementSlice[] = []
-  for (let index = 0; index < slices.length; index += 1) {
-    const slice = slices[index]!
-    const next = slices[index + 1]
-    if (
-      AST.isTagStatement(slice.statement)
-      && next !== undefined
-      && (AST.isRender(next.statement) || AST.isForStatement(next.statement))
-    ) {
-      grouped.push({
-        end: next.end,
-        source: source.slice(slice.start, next.end),
-        start: slice.start,
-        statement: next.statement,
-      })
-      index += 1
-    } else {
-      grouped.push(slice)
+  const slicesByStatement = new Map(slices.map(slice => [slice.statement, slice]))
+  const consumed = new Set<AST.Statement>()
+  const grouped = new Map<AST.Statement, BlockStatementSlice>()
+  for (const slice of slices) {
+    if (!AST.isRender(slice.statement) && !AST.isForStatement(slice.statement)) {
+      continue
     }
+    const prefixes = AST.renderPrefixCluster(slice.statement)
+    const firstPrefix = prefixes[0]
+    if (firstPrefix === undefined) {
+      continue
+    }
+    const first = slicesByStatement.get(firstPrefix)!
+    for (const prefix of prefixes) {
+      consumed.add(prefix)
+    }
+    grouped.set(slice.statement, {
+      end: slice.end,
+      source: source.slice(first.start, slice.end),
+      start: first.start,
+      statement: slice.statement,
+    })
   }
-  return grouped
+  return slices.filter(slice => !consumed.has(slice.statement)).map(slice => grouped.get(slice.statement) ?? slice)
 }
 
 /** A contiguous comment block immediately before a statement documents that statement, not its predecessor. */
