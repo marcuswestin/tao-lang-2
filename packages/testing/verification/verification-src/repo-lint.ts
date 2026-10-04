@@ -1119,19 +1119,14 @@ export async function repoLintIssues(
   issues.push(...instructionBudgetIssues(await readInstructionFiles(repoRoot)))
   issues.push(...await readDeveloperEnvironmentLedgerIssues(repoRoot))
 
-  // Test apps and starters each document every folder in their README, one `## <Name>` entry per app.
+  // Inventory authored Tao sources, since removed apps can leave ignored generated directories.
   for (const collection of ['Apps/Test Apps', 'Apps/Starters']) {
     const collectionPath = FS.resolvePath(collection, repoRoot)
     if (!(await FS.isDirectory(collectionPath))) {
       continue
     }
     const readmePath = FS.resolvePath('README.md', collectionPath)
-    const appNames: string[] = []
-    for (const name of await FS.listDir(collectionPath)) {
-      if (!name.startsWith('.') && await FS.isDirectory(FS.resolvePath(name, collectionPath))) {
-        appNames.push(name)
-      }
-    }
+    const appNames = await readTaoAppNames(repoRoot, collection)
     const missingEntries = missingTestAppReadmeEntries(appNames, await FS.readText(readmePath))
     issues.push(...missingEntries.map(name => `${readmePath} needs a \`## ${name}\` entry.`))
   }
@@ -1176,6 +1171,38 @@ async function readInstructionFiles(repoRoot: string): Promise<SourceFile[]> {
 }
 
 const EXECUTABLE_EXTENSIONS = ['.cjs', '.js', '.jsx', '.mjs', '.ts', '.tsx']
+
+async function readTaoAppNames(repoRoot: string, collection: string): Promise<string[]> {
+  const inventory = await CLI.run('git', {
+    args: ['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', collection],
+    cwd: repoRoot,
+  })
+  const paths: string[] = []
+  if (inventory.exitCode === 0) {
+    paths.push(...inventory.stdout.split('\0'))
+  } else {
+    for await (
+      const path of FS.walk(FS.resolvePath(collection, repoRoot), {
+        extensions: ['.tao'],
+        excludeDirectory: name => name === 'node_modules' || name.startsWith('_gen_'),
+      })
+    ) {
+      paths.push(FS.relativePath(repoRoot, path))
+    }
+  }
+  const names = new Set<string>()
+  for (const path of paths) {
+    const segments = FS.slashPath(path).slice(collection.length + 1).split('/')
+    if (
+      path.endsWith('.tao') && segments.length > 1
+      && !segments.some(segment => segment.startsWith('.') || segment === 'node_modules' || segment.startsWith('_gen_'))
+      && await FS.isFile(FS.resolvePath(path, repoRoot))
+    ) {
+      names.add(segments[0]!)
+    }
+  }
+  return [...names].sort()
+}
 
 async function readExecutableFiles(repoRoot: string): Promise<SourceFile[]> {
   const tracked = await CLI.run('git', {
