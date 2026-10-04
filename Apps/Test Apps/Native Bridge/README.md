@@ -58,7 +58,6 @@ component and constant generation are supported. All 11 generated Clipboard oper
 ```text
 Native Bridge/
   App.tao, Project.tao, Design.tao
-  Native Bridge.test.tao    # no native effects
   .host-tests/Clipboard.test.tao       # explicit iOS host journey
   Haptics/
     Haptics.tao
@@ -95,11 +94,11 @@ For the next supported API, add `<Surface>/<Surface>.tao` beside `<Surface>/Gene
 bindings, and add a home-screen button. Keep platform-specific controls labeled. Android can use the
 same app; future source/target adapters belong in `packages/apps/native-bindings`, not in this demo.
 
-The Tao journey checks navigation and initial UI without calling native operations. The
-`native-bridge-demo.jest-test.tsx` suite compiles this maintained app and operates its controls with
+The `native-bridge-demo.jest-test.tsx` suite compiles this maintained app, opens each surface without
+requesting native effects, and operates its controls with
 native substitutes. It checks edited and submitted clipboard text, HTML options, availability,
-image previews and absent results, URLs, listener controls/events and cleanup on Back, every
-Haptics control, and vibration/cancellation. A pending clipboard write must finish before its
+image previews and absent results, URLs, listener controls/events and cleanup on Back, representative
+Haptics controls, and vibration/cancellation. A pending clipboard write must finish before its
 completion status appears. The substitutes leave the real clipboard and device hardware untouched.
 
 Separate generated-binding tests exercise the native contracts. The opt-in iOS host journey compiles

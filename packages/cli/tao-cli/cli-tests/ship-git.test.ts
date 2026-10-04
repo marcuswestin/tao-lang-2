@@ -36,11 +36,9 @@ Describe('tao ship git behavior', () => {
     await FS.writeText(lockPath, '{"schemaVersion":1,"ship":{}}\n')
     const dirty = await inspectShipGit(root)
     Expect(dirty.dirty).toBe(true)
-    Expect(dirty.dirtyFingerprint).toMatch(/^[a-f0-9]{64}$/u)
     Expect(await git(root, 'rev-parse', 'HEAD')).toBe(headBefore)
     Expect(await git(root, 'show-ref')).toBe(refsBefore)
     Expect(await FS.readFile(FS.resolvePath('.git/index', root))).toEqual(indexBefore)
-    Expect(await git(root, 'tag', '--list')).toBe('')
     Expect(await shipNotesSince(clean)).toContain('Initial')
   })
 

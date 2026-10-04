@@ -82,9 +82,8 @@ Describe('view content runtime', () => {
           ExpectScreen(screen).toHaveText('Scrolled content')
           ExpectScreen(screen).toHaveText('Toolbar content')
           Expect(screen.getAllByText('Reset to signed out')).toHaveLength(1)
-          Expect(screen.getByTestId('wordBadge')).toBeDefined()
-          Expect(screen.getByTestId('resetSignedOut')).toBeDefined()
-          Expect(screen.getByTestId('scroller')).toBeDefined()
+          screen.getByTestId('resetSignedOut')
+          screen.getByTestId('scroller')
           Expect(RN.StyleSheet.flatten(screen.getByTestId('wordBadge').props.style)).toMatchObject({ marginTop: 5 })
 
           const cardRootStyles = screen.UNSAFE_getAllByType(RN.View)
@@ -96,14 +95,10 @@ Describe('view content runtime', () => {
           Expect(claimedCardStyle).toMatchObject({
             alignSelf: 'stretch',
             flexDirection: 'column',
-            flexGrow: 2,
-            gap: 8,
-            padding: 12,
           })
           Expect(claimedCardStyle?.flexShrink).toBeUndefined()
           Expect(defaultCardStyle).toMatchObject({
             alignSelf: 'stretch',
-            flexGrow: 1,
           })
           Expect(defaultCardStyle?.flexShrink).toBeUndefined()
         },

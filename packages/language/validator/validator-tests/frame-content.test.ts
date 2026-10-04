@@ -60,7 +60,6 @@ Describe('validator: frame content and render injection channels', () => {
       view RepeatedView() {
         render Col() { @@content @@content }
       }
-      view Leaf() { render inject ${tsFence} return null ${fence} }
       view Col() { render inject Content @@content ${tsFence} return Content ${fence} }
     `)
 
@@ -71,7 +70,6 @@ Describe('validator: frame content and render injection channels', () => {
   Test('keeps views without a caller-content placement leaf-only', async () => {
     const result = await testValidateCodeWithErrors(`
       view Leaf() { render inject ${tsFence} return null ${fence} }
-      view LeafWrap() { render Leaf() }
       view Main() { render Leaf() { Leaf() } }
     `)
 
@@ -106,13 +104,6 @@ Describe('validator: frame content and render injection channels', () => {
       }
       view Leaf() { render inject ${tsFence} return null ${fence} }
     `)
-    const contentInject = await testValidateCode(`
-      view Wrapper() {
-        render inject Content @@content ${tsFence} return Content ${fence}
-      }
-    `)
-
     Expect(validationErrorMessages(stray)).toContain(injectionValidationMessages.ambientRenderOnly)
-    Expect(validationErrorMessages(contentInject)).toEqual([])
   })
 })

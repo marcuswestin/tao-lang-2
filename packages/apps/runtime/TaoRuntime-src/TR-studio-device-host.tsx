@@ -293,7 +293,7 @@ export function shouldAcknowledgeCell(
  * of `'background'`; reacting to it directly would pause and resume the connection for interruptions
  * that were never really backgrounding.
  */
-export function studioDeviceAppStateAction(nextAppState: string, paused: boolean): 'none' | 'pause' | 'resume' {
+function studioDeviceAppStateAction(nextAppState: string, paused: boolean): 'none' | 'pause' | 'resume' {
   if (nextAppState === 'background') {
     return paused ? 'none' : 'pause'
   }

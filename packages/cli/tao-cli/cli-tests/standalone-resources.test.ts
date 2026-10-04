@@ -71,6 +71,7 @@ Describe('standalone resources', () => {
   })
 
   // A shell completion and the command it completes are enough to start two first runs at once.
+  // REMOVAL CANDIDATE: Replace the 32-start stress fixture only with a controlled losing publisher that preserves rename-race coverage.
   Test('lets concurrent first runs race to one complete tree', async () => {
     await withRoot(async root => {
       const directory = FS.resolvePath('resources', root)

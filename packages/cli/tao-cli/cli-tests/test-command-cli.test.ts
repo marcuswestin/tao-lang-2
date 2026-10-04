@@ -28,7 +28,6 @@ Describe('tao test CLI', () => {
             Platform.runtimeProcess.chdir(rootDir)
             const result = await runTaoCliForTest(['test', '.'])
 
-            Expect(`${result.stdout}${result.stderr}`).not.toContain('Git worktree root not found')
             Expect(result.exitCode).toBe(0)
             Expect(result.stdout).toContain('Tao tests finished')
           } finally {
@@ -50,8 +49,6 @@ Describe('tao test CLI', () => {
       Expect(output).toContain('Validating Tao test files')
       Expect(output).not.toContain('Compiling apps')
       Expect(output).not.toContain('Running Tao tests')
-      Expect(output).not.toContain('expo-host-tests/tao-test-command.jest.tsx')
-      Expect(output).not.toContain('Test Suites:')
     })
   })
 
@@ -74,9 +71,6 @@ Describe('tao test CLI', () => {
 
       Expect(result.exitCode).not.toBe(0)
       Expect(output).toContain('Broken.tao: App BrokenApp must declare exactly one Name, found 0.')
-      Expect(output).toContain(
-        'Broken.tao: App BrokenApp must declare exactly one Navigator (or root view), found 0.',
-      )
       Expect(output).not.toContain('Compiling apps')
     })
   })

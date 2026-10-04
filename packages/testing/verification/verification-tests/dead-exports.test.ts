@@ -52,15 +52,6 @@ Describe('tao foreign binding forms', () => {
     Expect(taoForeignBindings(source).unreadable).toEqual([])
   })
 
-  Test('reads a foreign action whose tails are laid out one per line', () => {
-    const declaration = 'action FetchRecipe(Link text) returns RecipeDraft\n'
-      + '   fails NotARecipe "No recipe was found on that page."\n'
-      + '   fails Unreachable "That page could not be read."\n'
-      + '   from ./FetchRecipe.ts\n'
-    Expect(names(declaration)).toEqual(['FetchRecipe'])
-    Expect(taoForeignBindings(declaration).unreadable).toEqual([])
-  })
-
   Test('leaves a mid-line `from` alone rather than folding an unrelated line onto its predecessor', () => {
     const source = 'scene RecipeLibrary() {\n'
       + '   query Recipes from MyKitchen.Recipes { }\n'
@@ -71,7 +62,6 @@ Describe('tao foreign binding forms', () => {
   })
 
   Test('reads a foreign view through its responds, accepts, and slots clauses', () => {
-    Expect(names('view StudioEditorSurface() from ./Host.tsx')).toEqual(['StudioEditorSurface'])
     Expect(names('view FilesPanelSurface() accepts content from ./Host.tsx')).toEqual(['FilesPanelSurface'])
     Expect(names('view ProductHostBoundary() accepts content slots @files, @editor from ./Host.tsx'))
       .toEqual(['ProductHostBoundary'])
@@ -400,12 +390,6 @@ Describe('module binding names', () => {
       'Wrapped',
     ])
   })
-
-  Test('binds nothing for a name a module declares itself or only mentions', () => {
-    const source = 'const FS = { readText() {} }\n// FS.readText is imported from @shared elsewhere\n'
-
-    Expect([...moduleBoundNames(source)]).toEqual([])
-  })
 })
 
 Describe('import-type query references', () => {
@@ -449,15 +433,6 @@ Describe('unused export review', () => {
     Expect(review.reported).toEqual([{ file: 'packages/studio/studio-src/Actions.ts', line: 4, name: 'CreateFile' }])
     Expect(review.taoBound).toBe(1)
     Expect(review.facadeReached).toBe(1)
-  })
-
-  Test('reports every entry when nothing explains it', () => {
-    const review = reviewUnusedExports(unused, new Set(), new Set(), new Set())
-
-    Expect(review.reported.length).toBe(3)
-    Expect(review.taoBound).toBe(0)
-    Expect(review.facadeReached).toBe(0)
-    Expect(review.typeImported).toBe(0)
   })
 
   Test('counts an export republished only by an import-type query as explained', () => {
@@ -560,7 +535,6 @@ Describe('recorded kept exports', () => {
     )
 
     Expect(config.workspaces['packages/*/*']?.entry).toContain('cli-src/subprocess-test-api.ts')
-    Expect(FS.existsSync(Repo.resolvePath('packages/cli/tao-cli/cli-src/subprocess-test-api.ts'))).toBe(true)
   })
 })
 

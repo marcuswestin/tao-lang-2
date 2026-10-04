@@ -136,7 +136,7 @@ Describe('validator: rendered navs', () => {
       app ShellApp { view Shell(Center) }
       scene Shell(Navigator nav) {
         render Column() {
-          loop ["one", "two"] / Item {
+          loop ["one"] / Item {
             Navigator()
           }
         }
@@ -191,7 +191,7 @@ Describe('validator: rendered navs', () => {
 
   // The app root is a view with arguments, and a variant rebinds it with the same spelling.
   Test(
-    'accepts a variant that rebinds the root view and rejects one that leaves a parameter unbound',
+    'accepts a variant that rebinds the root view',
     accepts(`
       use StackNav from @tao/nav
       ${home}

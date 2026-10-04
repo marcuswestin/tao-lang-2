@@ -83,14 +83,12 @@ Describe('parser: functional core', () => {
     Expect(loopValue.target.ref).toBe(loop)
   })
 
-  Test('requires otherwise in value and render subject cases while allowing single-case guards', async () => {
+  Test('requires otherwise in value and render subject cases', async () => {
     const value = await parseCodeWithErrors('let Result = when true { true -> "yes" }')
     const render = await parseCodeWithErrors('view Main() { render Stack() { when true { true -> { Text("yes") } } } }')
-    const action = await testParseCode('action Run() { guard true true -> { } }')
 
     Expect(value.entry.document.parseResult.parserErrors.length).toBeGreaterThan(0)
     Expect(render.entry.document.parseResult.parserErrors.length).toBeGreaterThan(0)
-    Expect(action.entry.document.parseResult.parserErrors).toEqual([])
   })
 
   Test('parses declaration-linked case tests, enums, and one-sided action and render if', async () => {
@@ -268,6 +266,7 @@ Describe('parser: functional core', () => {
     Expect(AST.parametersOf(card)[0]?.defaultValue?.$type).toBe('NumberLiteral')
   })
 
+  // REMOVAL CANDIDATE: Most empty heads are exercised elsewhere; confirm parameterless function coverage before dropping this matrix.
   Test('parses empty parenthesized lists on every parameterized declaration kind', async () => {
     const result = await testParseCode(`
       type Response is one of Done

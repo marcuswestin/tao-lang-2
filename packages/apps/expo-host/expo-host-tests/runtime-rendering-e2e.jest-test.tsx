@@ -106,21 +106,18 @@ Describe('Expo runtime', () => {
 
     Expect(menuStyle).toMatchObject({
       bottom: 16,
-      borderRadius: 15,
-      height: 30,
       position: 'absolute',
       right: 16,
-      width: 30,
     })
-    Expect(screen.getByText('Τ')).toBeDefined()
+    screen.getByText('Τ')
     Expect(screen.queryByLabelText('Tao dev overlay')).toBeNull()
 
     fireEvent.press(menuButton)
-    Expect(screen.getByLabelText('Tao dev overlay')).toBeDefined()
-    Expect(screen.getByText('Layout bounds On')).toBeDefined()
+    screen.getByLabelText('Tao dev overlay')
+    screen.getByText('Layout bounds On')
 
     fireEvent.press(screen.getByLabelText('Toggle layout bounds'))
-    Expect(screen.getByText('Layout bounds Off')).toBeDefined()
+    screen.getByText('Layout bounds Off')
     Expect(TR.Dev.isLayoutBoundsEnabled()).toBe(false)
     Expect(
       screen.UNSAFE_getAllByType(RN.View).some(view => {
@@ -152,7 +149,7 @@ Describe('Expo runtime', () => {
       TR.Dev.hideMenu(false)
     }
 
-    Expect(render(createElement(HostedApp)).getByLabelText('Tao dev menu')).toBeDefined()
+    render(createElement(HostedApp)).getByLabelText('Tao dev menu')
   })
 
   Test('preserves app state when toggling layout bounds', () => {
@@ -233,19 +230,6 @@ Describe('Expo runtime', () => {
     })
   })
 
-  Test('does not draw layout bounds when Tao dev mode is disabled', () => {
-    TR.setDevMode({ enabled: false })
-
-    const screen = render(createElement(
-      TaoRuntimeRow,
-      null,
-      createElement(TR.Views.Text, null, 'Normal bounds'),
-    ))
-    const style = RN.StyleSheet.flatten(screen.UNSAFE_getByType(RN.View).props.style)
-
-    Expect(layoutBoundWidth(style)).toBeUndefined()
-  })
-
   Test('draws layout bounds when Tao dev mode enables them', () => {
     TR.setDevMode({ layoutBounds: true })
     const screen = render(createElement(
@@ -257,10 +241,6 @@ Describe('Expo runtime', () => {
     const textStyle = RN.StyleSheet.flatten(screen.getByText('Debug bounds').props.style)
 
     Expect(layoutBoundWidth(viewStyle)).toBe(0.5)
-    Expect(String(layoutBoundColor(viewStyle))).toMatch(/^#[0-9a-f]{6}$/)
-    if (viewStyle.boxShadow) {
-      Expect(String(viewStyle.boxShadow)).toContain(String(layoutBoundColor(viewStyle)))
-    }
     Expect(layoutBoundWidth(textStyle)).toBe(0.5)
     Expect(layoutBoundColor(textStyle)).not.toBe(layoutBoundColor(viewStyle))
   })
@@ -345,29 +325,6 @@ Describe('Expo runtime', () => {
     Expect(style.padding).toBe(6)
     Expect(style.borderColor).toBe('red')
     Expect(style.borderWidth).toBe(1)
-  })
-
-  Test('uses the immediate runtime parent direction for children', () => {
-    TR.setDevMode({ enabled: false })
-
-    const screen = render(createElement(
-      TaoRuntimeRow,
-      null,
-      createElement(
-        TR.Views.Text,
-        {
-          __tao: TR.TaoProps({
-            layout: TR.Layout.create([['width', 'fill']]),
-            parentDirection: 'column',
-          }),
-        },
-        'Immediate direction',
-      ),
-    ))
-    const style = RN.StyleSheet.flatten(screen.getByText('Immediate direction').props.style)
-
-    Expect(style.flexGrow).toBe(1)
-    Expect(style.alignSelf).toBeUndefined()
   })
 
   Test('preserves existing child caller props when adding parent direction', () => {

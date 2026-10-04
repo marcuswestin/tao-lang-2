@@ -1,10 +1,17 @@
 import { StudioDeviceTrust } from '@runtime/TR-studio-device-trust'
-import { CLI, FS, Platform, Repo, Time } from '@shared'
-import { Deferred, Describe, Expect, mkTestDir, Test, until } from '@shared/test'
+import { CLI, Errors, FS, Platform, Repo, Time } from '@shared'
+import { Deferred, Describe, Expect, mkTestDir, Test, testOverrideSlot, until } from '@shared/test'
 import {
   StudioDeviceTrustStore,
   StudioDeviceTrustStoreTesting,
 } from '../studio-src/device/StudioDeviceTrustStore'
+
+const timeoutSlot = testOverrideSlot({
+  read: () => globalThis.setTimeout,
+  write: value => {
+    globalThis.setTimeout = value
+  },
+})
 
 Describe('Studio device trust store', () => {
   Test('creates a persistent identity once and reloads it with its devices', async () => {
@@ -19,7 +26,6 @@ Describe('Studio device trust store', () => {
 
       const device = StudioDeviceTrust.generateIdentity()
       await store.trust(record(device.publicKey, 'example-phone'))
-      Expect(store.isTrusted(device.publicKey)).toBe(true)
       Expect(store.trusted()).toEqual([{
         device: { model: 'iPhone17,1', name: 'example-phone', os: 'iOS 26' },
         devicePublicKey: device.publicKey,
@@ -308,6 +314,7 @@ Describe('Studio device trust store', () => {
     await withRoot(async root => {
       const readyPath = FS.resolvePath('legacy-ready', root)
       const releasePath = FS.resolvePath('legacy-release', root)
+      const acknowledgedPath = FS.resolvePath('legacy-acknowledged', root)
       const sharedPath = Repo.resolvePath('packages/shared/shared-src/shared.ts')
       const script = `
         import { FS, Platform, Time } from ${JSON.stringify(sharedPath)}
@@ -323,23 +330,47 @@ Describe('Studio device trust store', () => {
           await Time.sleep(10)
         }
         await FS.remove(lockPath)
+        // Stay alive until the new owner has finished observing the released lock.
+        while (!await FS.exists(${JSON.stringify(acknowledgedPath)})) {
+          await Time.sleep(10)
+        }
       `
       const legacy = CLI.run('bun', { args: ['-e', script], stdio: 'pipe' })
+      const waiting = Deferred<void>()
+      const resume = Deferred<void>()
+      let opening: Promise<StudioDeviceTrustStore> | undefined
+      let restoreTimeout: (() => void) | undefined
       try {
         await until(async () => await FS.exists(readyPath), { description: 'the legacy lock owner' })
-        let opened = false
-        const opening = StudioDeviceTrustStore.open(root).then(store => {
-          opened = true
-          return store
-        })
-        await Time.sleep(100)
-        Expect(opened).toBe(false)
+        const originalTimeout = globalThis.setTimeout
+        let firstPoll = true
+        restoreTimeout = timeoutSlot.install(
+          ((callback: () => void, delay = 0) => {
+            if (firstPoll) {
+              firstPoll = false
+              waiting.resolve()
+              void resume.promise.then(callback)
+              return 0 as unknown as ReturnType<typeof setTimeout>
+            }
+            return originalTimeout(callback, delay)
+          }) as unknown as typeof setTimeout,
+        )
+        opening = StudioDeviceTrustStore.open(root)
+        await Promise.race([
+          waiting.promise,
+          opening.then(() => Errors.throwUnexpected('Opened device trust while the legacy owner still held its lock.')),
+        ])
         await FS.writeText(releasePath, 'release')
+        resume.resolve()
         await opening
-        Expect(opened).toBe(true)
+        await FS.writeText(acknowledgedPath, 'opened')
         Expect((await legacy).exitCode).toBe(0)
       } finally {
+        restoreTimeout?.()
+        resume.resolve()
         await FS.writeText(releasePath, 'release').catch(() => {})
+        await FS.writeText(acknowledgedPath, 'cleanup').catch(() => {})
+        await opening?.catch(() => {})
         await legacy
       }
     })

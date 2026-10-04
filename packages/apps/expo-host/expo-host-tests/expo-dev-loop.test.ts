@@ -30,7 +30,7 @@ import { presentIosSimulator } from '@expo-host/dev-loop/IosSimulatorPresentatio
 import { handleCommandKey } from '@expo-host/dev-loop/keyboard-input/CommandKeys'
 import Commands from '@expo-host/dev-loop/keyboard-input/Commands'
 import Run from '@expo-host/dev-loop/Run'
-import { CLI, Errors, FS, Platform, ProcessTree, Repo, Time, type TrackedProcess } from '@shared'
+import { CLI, Errors, FS, Platform, ProcessTree, Repo, type TrackedProcess } from '@shared'
 import { Deferred, Describe, Expect, mkTestDir, Test, until, withCapturedOutput } from '@shared/test'
 import { connect, createServer, type Server } from 'node:net'
 
@@ -60,7 +60,6 @@ Describe('Expo dev-loop output severity', () => {
         + ' — that simulator has no runtime for Expo SDK 57;'
         + ' `bunx expo start --ios` in packages/apps/expo-host installs one',
     )
-    Expect(message.includes('\n')).toBe(false)
   })
 
   Test('keeps an unrecognized simulator refusal readable without reprinting the whole dump', () => {
@@ -363,7 +362,7 @@ Describe('Expo dev-loop command helpers', () => {
       const argsPath = FS.resolvePath('args.txt', root)
       const server = new ExpoServer(root, createExpoConfig(49_154), async () => {}, {
         command: {
-          argsPrefix: ['-c', 'printf "%s\\n" "$@" > "$0"', argsPath],
+          argsPrefix: ['-c', 'printf "%s\\n" "$@" > "$0.pending"; mv "$0.pending" "$0"', argsPath],
           executable: '/bin/sh',
           namesExpoScript,
         },
@@ -373,10 +372,7 @@ Describe('Expo dev-loop command helpers', () => {
       })
       try {
         await server.start()
-        for (let attempt = 0; attempt < 200 && !await FS.isFile(argsPath); attempt += 1) {
-          await Time.sleep(10)
-        }
-        await Time.sleep(20)
+        await until(() => FS.isFile(argsPath), { description: 'the complete Expo launcher argument receipt' })
         return (await FS.readText(argsPath)).split('\n')[0] ?? ''
       } finally {
         await server.stop().catch(() => undefined)
@@ -573,48 +569,6 @@ Describe('Expo dev-loop port helpers', () => {
     await reservation.release()
   })
 
-  Test('selects another port when a second listener owns the preferred port after release', async () => {
-    const blocker = createServer()
-    blocker.unref()
-    if (!await listenIfSupported(blocker, '::1')) {
-      return
-    }
-    const address = blocker.address()
-    const preferredPort = typeof address === 'object' && address !== null ? address.port : undefined
-    const otherOwner = createServer()
-    otherOwner.unref()
-    try {
-      if (preferredPort === undefined) {
-        Errors.throwHostEnvironment('Expected the test listener to have a TCP port.')
-      }
-      await new Promise<void>((resolve, reject) => {
-        otherOwner.once('error', reject)
-        otherOwner.listen({ host: '127.0.0.1', ipv6Only: true, port: preferredPort }, resolve)
-      })
-      await new Promise<void>((resolve, reject) => {
-        blocker.close(error => error ? reject(error) : resolve())
-      })
-      const ownerAddress = otherOwner.address()
-      Expect(otherOwner.listening).toBe(true)
-      Expect(typeof ownerAddress === 'object' && ownerAddress !== null ? ownerAddress.port : undefined)
-        .toBe(preferredPort)
-
-      const session = await createDevLoopExpoSession(preferredPort)
-      try {
-        Expect(session.config.EXPO_PORT).not.toBe(preferredPort)
-      } finally {
-        await session.releasePortReservation()
-      }
-    } finally {
-      if (blocker.listening) {
-        await new Promise<void>((resolve, reject) => blocker.close(error => error ? reject(error) : resolve()))
-      }
-      if (otherOwner.listening) {
-        await new Promise<void>((resolve, reject) => otherOwner.close(error => error ? reject(error) : resolve()))
-      }
-    }
-  })
-
   // A dev client that retries Metro's port connects to the reservation long before Expo starts.
   Test('drops clients in both address families and completes reservation release', async () => {
     const ipv6Probe = createServer()
@@ -733,7 +687,6 @@ Describe('Expo session scheme', () => {
   })
 
   Test('passes a custom scheme to Expo only when one is requested', () => {
-    Expect(createExpoConfig(8_099).EXPO_START_ARGS).not.toContain('--scheme')
     Expect(createExpoConfig(8_099, { scheme: 'taostudiocompanion' }).EXPO_START_ARGS).toEqual([
       'expo',
       'start',

@@ -20,11 +20,4 @@ Describe('Tao journey names', () => {
       'Tao test command HNReader.test.tao hn reader > adds a story',
     )
   })
-
-  // Jest identifies a case by its ancestor titles and its own title joined with a single space. A
-  // `full` that stopped agreeing with `segments` would let this command report a selection the
-  // runner does not make.
-  Test('join the runner name path exactly as the runner does', () => {
-    Expect(TestCaseName.full(file, suite, check)).toBe(TestCaseName.segments(file, suite, check).join(' '))
-  })
 })

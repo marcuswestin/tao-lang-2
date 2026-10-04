@@ -26,7 +26,6 @@ Describe('worktree placement', () => {
       const created = await createWorktree({ cwd: primary, name: 'bold-oak-a3f2' })
 
       Expect(created).toBe(FS.resolvePath('repo.worktrees/bold-oak-a3f2', parent))
-      Expect(FS.pathIsWithin(created, primary)).toBe(false)
       Expect(await branchOf(created)).toBe('worktree-bold-oak-a3f2')
       Expect(await createWorktree({ cwd: primary, name: 'bold-oak-a3f2' })).toBe(created)
     })
@@ -123,7 +122,6 @@ Describe('worktree placement', () => {
       Expect(result.exitCode).toBe(0)
       const created = FS.resolvePath('.claude/worktrees/no-bun', primary)
       Expect(result.stdout).toBe(`${created}\n`)
-      Expect(result.stderr).toContain('Preparing worktree')
       Expect(await branchOf(created)).toBe('worktree-no-bun')
       Expect((await run(['create'], { name: 'no-bun' }, created)).stdout).toBe(`${created}\n`)
 

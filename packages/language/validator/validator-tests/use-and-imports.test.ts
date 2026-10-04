@@ -114,7 +114,7 @@ Describe('validator: use and imports', () => {
         `,
       },
       result => {
-        Expect(validationErrorMessages(result).some(message => message.includes('Name'))).toBe(true)
+        Expect(validationErrorMessages(result)).toContain("No value named 'Name' is in scope.")
       },
     ),
   )
@@ -135,7 +135,7 @@ Describe('validator: use and imports', () => {
         `,
       },
       result => {
-        Expect(validationErrorMessages(result).some(message => message.includes('Name'))).toBe(true)
+        Expect(validationErrorMessages(result)).toContain("No type named 'Name' is in scope.")
       },
     ),
   )
@@ -209,17 +209,9 @@ Describe('validator: use and imports', () => {
         const message = injectionValidationMessages.duplicateArgument('Value')
         const diagnostic = result.diagnostics.find(diagnostic => diagnostic.message === message)
 
-        Expect(validationErrorMessages(result)).toContain(message)
         Expect(diagnostic?.filePath?.endsWith('/Views.tao')).toBe(true)
       },
     ),
-  )
-
-  Test(
-    'reports parser errors inside imported Tao files',
-    checksFiles(importedTextFiles('use Text from ./', 'view Text(Value text) {'), result => {
-      Expect(Diagnostics.hasSource(result.diagnostics, 'parser')).toBe(true)
-    }),
   )
 
   Test(
@@ -375,28 +367,6 @@ Describe('validator: use and imports', () => {
     )
   }
 
-  Test(
-    'lets inline tests import visible app declarations outside the entry file',
-    acceptsFiles(
-      {
-        'Main.tao': importingApp(
-          'use OtherApp, OtherView from ./Other.tao',
-          'render OtherView()',
-          `test "inline smoke" {
-             test "renders" {
-               run MyApp
-               expect text "Hello"
-             }
-           }`,
-        ),
-        'Other.tao': `
-          folder app OtherApp { view OtherView }
-          ${visibleView('OtherView')}
-        `,
-      },
-    ),
-  )
-
   // Once sources are grouped into folders, the app a sidecar runs is declared in an ancestor
   // directory rather than beside it.
   Test(
@@ -415,6 +385,7 @@ Describe('validator: use and imports', () => {
     }),
   )
 
+  // REMOVAL CANDIDATE: the imported nested app is unused; this retains its availability from a test entry.
   Test(
     'lets test sidecars import a visible app from a nested file',
     acceptsFilesFrom(

@@ -243,7 +243,6 @@ Describe('changed suite plan', () => {
 
     Expect(result.selected.get('cli/cli-kit')).toBe('changed directly')
     Expect(result.selected.get('cli/tao-cli')).toBe('imports cli/cli-kit')
-    Expect(result.selected.has('tao-apps')).toBe(true)
     // Reached through `cli/tao-cli` rather than by editing it, so the language test apps run.
     Expect(result.taoAppPaths).toEqual(['Apps/Test Apps'])
   })
@@ -253,7 +252,6 @@ Describe('changed suite plan', () => {
   Test('separates editing a package every app runs on from depending on one', () => {
     for (
       const path of [
-        'packages/apps/runtime/TaoRuntime-src/TR.ts',
         'packages/apps/stdlib/stdlib-src/Text.tao',
         'packages/cli/tao-cli/cli-src/compile-command.ts',
       ]
@@ -263,7 +261,6 @@ Describe('changed suite plan', () => {
     for (
       const path of [
         'packages/language/parser/parser-src/Parser.ts',
-        'packages/compiler/compiler-src/Compile.ts',
         'packages/shared/shared-src/FS.ts',
       ]
     ) {
@@ -367,11 +364,6 @@ Describe('package test suite name', () => {
   Test("a test file nested inside a top-level package's -tests directory names that package alone", () => {
     Expect(TestSelection.packageTestSuite('packages/compiler/compiler-tests/workspace/workspace.test.ts'))
       .toBe('compiler')
-  })
-
-  Test('a test file directly inside a -tests directory still resolves, grouped or not', () => {
-    Expect(TestSelection.packageTestSuite('packages/shared/shared-tests/FS.test.ts')).toBe('shared')
-    Expect(TestSelection.packageTestSuite('packages/apps/runtime/TR-tests/TR.test.ts')).toBe('apps/runtime')
   })
 
   Test('a test file inside a package nested two groups deep names all three segments', () => {

@@ -101,7 +101,7 @@ Describe('granular sync over the snapshot bridge', () => {
     Expect(rows(latest(b.snapshots)).Note).toEqual([{ Id: 'Note-1~aaaaaaaa', Pinned: false, Title: 'Offline' }])
   })
 
-  Test('hides a child until its parent arrives and keeps a deleted row deleted under a later edit', async () => {
+  Test('keeps a deleted parent and child deleted under a later offline edit', async () => {
     const world = createWorld()
     const a = await world.replica('aaaaaaaa')
     const b = await world.replica('bbbbbbbb', { online: false })
@@ -358,6 +358,7 @@ Describe('granular sync over the snapshot bridge', () => {
     }])
   })
 
+  // REMOVAL CANDIDATE: Mixed write-status recovery also queues a later commit; deleting this loses its explicit transport-admission assertion.
   Test('continues with later pending commits when one transport push is rejected', async () => {
     const attempts: string[] = []
     let refused: string | undefined

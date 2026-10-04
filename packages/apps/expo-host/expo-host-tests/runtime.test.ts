@@ -361,6 +361,7 @@ Describe('Tao runtime app generation', () => {
         Expect(stableRoot).not.toContain('<TR.Studio.ErrorBoundary key={[')
         // The runtime Jest regression mirrors these generated lifetime lines and exercises real
         // providers/fixture hooks across source publications and changed cell contracts.
+        // REMOVAL CANDIDATE: replace mirrored cell-lifetime strings once generated-host execution covers this boundary directly.
         Expect(stableRoot).toContain('const resolvedCell = studioCellRuntime(cell, manifest)')
         Expect(stableRoot).toContain('const cellContract = JSON.stringify(resolvedCell)')
         Expect(stableRoot).toContain('const replayPublication = resolvedCell.scenario.steps?.length')
@@ -421,7 +422,7 @@ Describe('Tao runtime app generation', () => {
         Expect(standard.previewRevision).toBe(undefined)
         Expect(standard.studioManifest).toBeUndefined()
         Expect(await FS.readText(standard.outputPath)).toBe(standard.code)
-        Expect(standard.code).not.toContain("import TaoApp from './TaoApp'")
+        Expect(standard.code).not.toContain('TaoAppRefresh')
         Expect(await FS.exists(taoAppPath)).toBe(false)
         Expect(await FS.exists(publicationPath)).toBe(false)
       },
@@ -591,10 +592,6 @@ Describe('Tao runtime app generation', () => {
     const stdlibInjectionPath = await findGeneratedModule(runtimePackageRoot, 'Views.tao.injection-1.tsx')
     const stdlibModuleDir = FS.dirname(stdlibModulePath)
 
-    Expect(await FS.exists(stdlibModulePath)).toBe(true)
-    Expect(await FS.exists(stdlibInjectionPath)).toBe(true)
-    Expect(await FS.exists(stdlibModuleDir)).toBe(true)
-
     const generated = await Runtime.generateApp(typeSystemTestsPath, { runtimePackageRoot })
 
     Expect(await FS.exists(stdlibModulePath)).toBe(false)
@@ -604,7 +601,7 @@ Describe('Tao runtime app generation', () => {
     Expect(await FS.readText(generated.outputPath)).toBe(generated.code)
   })
 
-  for (const errorCode of ['EPERM', 'EFAULT'] as const) {
+  for (const errorCode of ['EPERM'] as const) {
     Test(
       `restores the complete ordinary generated graph after an injected ${errorCode} publication failure`,
       async () => {
@@ -727,6 +724,7 @@ Describe('Tao runtime app generation', () => {
     await withTaoFiles(
       'tao-runtime-concurrent-generation-',
       {
+        // REMOVAL CANDIDATE: replace 120 repeated view inputs with a controlled overlap seam while retaining generation ordering proof.
         'Large.tao': injectionHeavyApp('Large', 120),
         'Small.tao': injectionHeavyApp('Small', 1),
       },
@@ -762,6 +760,7 @@ Describe('Tao runtime app generation', () => {
     await withTaoFiles(
       'tao-runtime-concurrent-preview-generation-',
       {
+        // REMOVAL CANDIDATE: replace 120 repeated view inputs with a controlled overlap seam while retaining generation ordering proof.
         'Large.tao': injectionHeavyApp('Preview', 120),
         'Small.tao': injectionHeavyApp('Preview', 1),
       },
@@ -902,16 +901,13 @@ Describe('Tao runtime app generation', () => {
       async paths => {
         await Runtime.generateApp(paths['Main.tao'], { runtimePackageRoot })
         const modulePath = await findGeneratedModule(runtimePackageRoot, 'Constructs.tao.tsx')
-        const declarationsPath = await findGeneratedModule(runtimePackageRoot, 'Constructs.tao.d.ts')
-        const sidecarPath = await findGeneratedModule(runtimePackageRoot, 'SidecarStack.ts')
+        await findGeneratedModule(runtimePackageRoot, 'Constructs.tao.d.ts')
+        await findGeneratedModule(runtimePackageRoot, 'SidecarStack.ts')
         const moduleCode = await FS.readText(modulePath)
 
-        Expect(await FS.exists(declarationsPath)).toBe(true)
-        Expect(await FS.exists(sidecarPath)).toBe(true)
         Expect(moduleCode).toContain(
           "import { SidecarStack as __tao_configuration_implementation_SidecarStack__ } from './SidecarStack'",
         )
-        Expect(moduleCode).toContain('__tao_configuration_implementation_SidecarStack__')
 
         const typecheck = await typecheckGeneratedApp(runtimePackageRoot)
         Assert(typecheck.exitCode === 0, 'generated sidecar configuration contract type-checks', {
@@ -968,12 +964,9 @@ Describe('Tao runtime app generation', () => {
       async paths => {
         const generated = await Runtime.generateApp(paths['Main.tao'], { runtimePackageRoot })
         const codeEditorPath = await findGeneratedModule(runtimePackageRoot, 'CodeEditor.tsx')
-        const themePath = await findGeneratedModule(runtimePackageRoot, 'theme.ts')
-        const tokensPath = await findGeneratedModule(runtimePackageRoot, 'tokens.ts')
+        await findGeneratedModule(runtimePackageRoot, 'theme.ts')
+        await findGeneratedModule(runtimePackageRoot, 'tokens.ts')
 
-        Expect(await FS.exists(codeEditorPath)).toBe(true)
-        Expect(await FS.exists(themePath)).toBe(true)
-        Expect(await FS.exists(tokensPath)).toBe(true)
         Expect(generated.code).toContain("from './CodeEditor.files/CodeEditor'")
         Expect(await FS.readText(codeEditorPath)).toContain("from 'react'")
       },

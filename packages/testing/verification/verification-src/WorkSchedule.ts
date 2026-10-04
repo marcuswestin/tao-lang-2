@@ -84,7 +84,7 @@ function longestChain(states: readonly WorkState[]): readonly string[] {
     }
     visiting.add(name)
     const state = byName.get(name)
-    const best = (state?.node.needs ?? [])
+    const best = [...new Set([...(state?.node.needs ?? []), ...(state?.node.after ?? [])])]
       .filter(need => byName.has(need))
       .map(chainTo)
       .toSorted((left, right) => chainDuration(right, states) - chainDuration(left, states))[0] ?? []

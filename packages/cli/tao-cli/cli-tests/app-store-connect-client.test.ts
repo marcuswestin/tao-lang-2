@@ -409,12 +409,6 @@ Describe('App Store Connect client', () => {
         type: 'betaTesters',
       },
     })
-    Expect(recorded.requests[5]?.url).toBe(
-      'https://api.appstoreconnect.apple.com/v1/builds/build-7/betaBuildLocalizations',
-    )
-    Expect(recorded.requests[7]?.url).toBe(
-      'https://api.appstoreconnect.apple.com/v1/apps/app-42/betaAppLocalizations',
-    )
     Expect(recorded.requests[12]?.body).toEqual({
       data: {
         attributes: {

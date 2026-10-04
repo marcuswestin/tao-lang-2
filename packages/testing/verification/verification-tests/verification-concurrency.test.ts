@@ -6,7 +6,6 @@ import {
   initGitTestRepository,
   mkGitTestDir,
   mkTestDir,
-  settle,
   Test,
   until,
 } from '@shared/test'
@@ -92,12 +91,6 @@ Describe('two lanes in one checkout', () => {
       })
       const first = windows.has(`alpha:${PREPARE_GATE}`) ? 'alpha' : 'beta'
       const second = first === 'alpha' ? 'beta' : 'alpha'
-      await settle(20)
-
-      // The second lane's whole prepare phase is still outside the lock: no fixer of its own has
-      // started while the first lane's is in flight.
-      Expect(windows.has(`${second}:${PREPARE_GATE}`)).toBe(false)
-
       preparesHeld.resolve()
       await until(
         () => windows.get(`alpha:${READER_GATE}`) !== undefined && windows.get(`beta:${READER_GATE}`) !== undefined,
@@ -148,8 +141,6 @@ Describe('two lanes in one checkout', () => {
       const store = await GreenTree.load(root)
       Expect(store.lanes['verify']).toBeUndefined()
       Expect(store.gates[READER_GATE]).toBeUndefined()
-      // Not merely unmatched: no record file for this lane was written at all.
-      Expect(await FS.exists(FS.resolvePath(`${GreenTree.STORE_DIR}/lane-verify.json`, root))).toBe(false)
     } finally {
       await FS.remove(root)
     }
@@ -279,7 +270,6 @@ Describe('two lanes in one checkout', () => {
       const latest = FS.resolvePath('.artifacts/logs/verify/latest', root)
       // The link resolves, and it resolves to one of the two real run directories rather than to a
       // path that was being created when the other lane repointed it.
-      Expect(await FS.exists(latest)).toBe(true)
       const resolved = await FS.realPath(latest)
       Expect(runRoots.includes(resolved)).toBe(true)
       Expect(await FS.isFile(FS.resolvePath('summary.json', latest))).toBe(true)

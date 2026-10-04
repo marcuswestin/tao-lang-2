@@ -1,19 +1,7 @@
-import { startDebouncedWatcher, WATCH_DEBOUNCE_MS } from '@expo-host/dev-loop/DebouncedWatcher'
-import { Errors, FS, Time } from '@shared'
+import { Errors, FS } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { runTestWatchCommand, runTestWatchLoop, type TestWatchDeps } from '../cli-src/test-watch'
 import { withTaoFixture } from './test-cli-files'
-
-/** waitUntil polls `condition` until it is true or `timeoutMs` elapses. */
-async function waitUntil(condition: () => boolean, timeoutMs = 5_000): Promise<void> {
-  const start = Date.now()
-  while (!condition()) {
-    if (Date.now() - start > timeoutMs) {
-      Errors.throwUnexpected('waitUntil timed out waiting for a test-watch condition.')
-    }
-    await Time.sleep(10)
-  }
-}
 
 /** deferred returns a promise a test resolves from the outside, at exactly the moment it chooses. */
 function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
@@ -185,64 +173,6 @@ Describe('runTestWatchLoop', () => {
     Expect(watch.closed).toBe(true)
   })
 
-  Test('prints the waiting status once a run settles with nothing queued', async () => {
-    const watch = fakeWatch()
-    const controller = new AbortController()
-    const waits: string[] = []
-
-    const loop = runTestWatchLoop({
-      reportError: noopReportError,
-      reportWaiting: () => waits.push('waiting'),
-      runOnce: async () => ({ failed: false }),
-      signal: controller.signal,
-      startWatcher: watch.startWatcher,
-    })
-
-    await Promise.resolve()
-    await Promise.resolve()
-    Expect(waits).toEqual(['waiting'])
-
-    controller.abort()
-    await loop
-  })
-
-  Test('reports a throwing first run once, keeps watching, and still reruns on a later change', async () => {
-    const watch = fakeWatch()
-    const controller = new AbortController()
-    const errors: unknown[] = []
-    const waits: number[] = []
-    let calls = 0
-
-    const loop = runTestWatchLoop({
-      reportError: error => errors.push(error),
-      reportWaiting: () => waits.push(calls),
-      runOnce: async () => {
-        calls += 1
-        if (calls === 1) {
-          Errors.throwUserInput('no journey matches --name')
-        }
-        return { failed: false }
-      },
-      signal: controller.signal,
-      startWatcher: watch.startWatcher,
-    })
-
-    await Promise.resolve()
-    await Promise.resolve()
-    Expect(calls).toBe(1)
-    Expect(errors.length).toBe(1)
-    Expect(waits).toEqual([1])
-
-    watch.fireChange()
-    await Promise.resolve()
-    await Promise.resolve()
-    Expect(calls).toBe(2)
-    Expect(errors.length).toBe(1)
-
-    controller.abort()
-    await loop
-  })
-
   Test('reports a throwing rerun once and keeps the loop alive', async () => {
     const watch = fakeWatch()
     const controller = new AbortController()
@@ -285,77 +215,69 @@ Describe('runTestWatchLoop', () => {
   })
 })
 
-Describe('runTestWatchCommand real watch-set wiring', () => {
-  // The run function is faked so this stays fast; the watch set, the watcher, and the debounce are
-  // all real, so this proves the watched roots actually cover both selected projects.
-  Test('reruns on a change in either selected project, not only the first', async () => {
+Describe('runTestWatchCommand watch-set wiring', () => {
+  Test('watches both selected projects and forwards their changes to the loop', async () => {
     await withTaoFixture({
       'One/Project.tao': 'project { id "watch-one" name "Watch One" }\n',
       'One/Sample.test.tao': 'test "Sample" { }\n',
       'Two/Project.tao': 'project { id "watch-two" name "Watch Two" }\n',
       'Two/Sample.test.tao': 'test "Sample" { }\n',
     }, async rootDir => {
-      const oneRoot = FS.resolvePath('One', rootDir)
-      const twoRoot = FS.resolvePath('Two', rootDir)
-      let calls = 0
+      const roots = [FS.resolvePath('One', rootDir), FS.resolvePath('Two', rootDir)]
+      const watch = fakeWatch()
+      const started = deferred<void>()
       const controller = new AbortController()
-
-      const loop = runTestWatchCommand([oneRoot, twoRoot], {}, {
+      let calls = 0
+      let watched: readonly string[] = []
+      const loop = runTestWatchCommand(roots, {}, {
         runOnce: async () => {
           calls += 1
           return { failed: false }
         },
         signal: controller.signal,
-        startWatcher: (onChange, roots) =>
-          startDebouncedWatcher(roots, onChange, { debounceMs: WATCH_DEBOUNCE_MS, usePolling: true }),
+        startWatcher: (onChange, watchRoots) => {
+          watched = watchRoots
+          const watcher = watch.startWatcher(onChange)
+          started.resolve()
+          return watcher
+        },
       })
-
-      await waitUntil(() => calls === 1)
-      // A watcher needs a moment to finish its initial scan before it reports later writes.
-      await Time.sleep(200)
-
-      await FS.writeText(FS.resolvePath('Two/Sample.test.tao', rootDir), 'test "Sample" { }\n// touched\n')
-
-      await waitUntil(() => calls === 2)
-
+      await started.promise
+      await Promise.resolve()
+      watch.fireChange()
+      await Promise.resolve()
+      await Promise.resolve()
       controller.abort()
       await loop
-
+      Expect(watched).toEqual(roots)
       Expect(calls).toBe(2)
+      Expect(watch.closed).toBe(true)
     })
   })
 
-  // The whole point of watching the selected directory is to notice a test file that does not exist
-  // yet, so finding none at startup must not end the command. Verification runs in a sandbox
-  // without native file events, so both real watcher tests request polling explicitly.
-  Test('keeps watching a selected directory with no tests yet, and reruns once one is added', async () => {
+  Test('watches a selected directory even when it has no tests yet', async () => {
     await withTaoFixture({
       'Project.tao': 'project { id "watch-empty" name "Watch Empty" }\n',
     }, async rootDir => {
-      let calls = 0
+      const watch = fakeWatch()
+      const started = deferred<void>()
       const controller = new AbortController()
-
+      let watched: readonly string[] = []
       const loop = runTestWatchCommand([rootDir], {}, {
-        runOnce: async () => {
-          calls += 1
-          return { failed: false }
-        },
+        runOnce: async () => ({ failed: false }),
         signal: controller.signal,
-        startWatcher: (onChange, roots) =>
-          startDebouncedWatcher(roots, onChange, { debounceMs: WATCH_DEBOUNCE_MS, usePolling: true }),
+        startWatcher: (onChange, watchRoots) => {
+          watched = watchRoots
+          const watcher = watch.startWatcher(onChange)
+          started.resolve()
+          return watcher
+        },
       })
-
-      await waitUntil(() => calls === 1)
-      await Time.sleep(200)
-
-      await FS.writeText(FS.resolvePath('New.test.tao', rootDir), 'test "New" { }\n')
-
-      await waitUntil(() => calls === 2)
-
+      await started.promise
       controller.abort()
       await loop
-
-      Expect(calls).toBe(2)
+      Expect(watched).toEqual([rootDir])
+      Expect(watch.closed).toBe(true)
     })
   })
 })

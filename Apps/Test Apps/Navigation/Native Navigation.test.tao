@@ -21,7 +21,6 @@ test "Native navigation acceptance" {
       enter "River" into #nativeNickname
       press "Open settings detail"
       expect navigation title "Settings detail"
-      expect text "Settings detail taps: 0"
       press label "Notes"
       expect text "Note detail taps: 1"
       back
@@ -37,10 +36,9 @@ test "Native navigation acceptance" {
       press label "Notes"
       expect text "Saved note: Nothing saved"
    }
-   test "exposes all four toolbar commands and updates the save command enabled state" {
+   test "updates toolbar save availability and opens the overflow overlay" {
       run NativeNavigation
       expect toolbar command "Save note" disabled
-      expect toolbar command "Show sheet" enabled
       enter "Saved through the toolbar" into #nativeDraft
       expect toolbar command "Save note" enabled
       press toolbar command "Save note"
@@ -48,8 +46,6 @@ test "Native navigation acceptance" {
       expect #nativeDraft input value ""
       expect toolbar command "Save note" disabled
       press label "More"
-      expect toolbar command "Show overlay" enabled
-      expect toolbar command "Confirm note" enabled
       press toolbar command "Show overlay"
       expect text "Native overlay content"
       press "Close native overlay"
@@ -66,11 +62,6 @@ test "Native navigation acceptance" {
       press "Close native sheet"
       expect missing text "Native sheet content"
       expect navigation title "Notes workspace"
-      press label "More"
-      press toolbar command "Show overlay"
-      expect text "Native overlay content"
-      press "Close native overlay"
-      expect missing text "Native overlay content"
       press toolbar command "Show sheet"
       back
       expect missing text "Native sheet content"

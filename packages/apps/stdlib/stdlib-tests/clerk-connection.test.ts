@@ -94,15 +94,14 @@ function fixture(storage = new Map<string, string>()) {
 Describe('Clerk auth connection', () => {
   Test('reports the Clerk user as the principal and issues its session token as an IdentityToken proof', async () => {
     const f = fixture()
+    f.tokens.issue = async userId => clerkToken(userId, { exp: 1_234 })
     try {
       Expect(await f.signIn()).toEqual({
         outcome: { status: 'completed' },
         session: { state: 'SignedIn', principal: principal() },
       })
       const proof = await f.proof()
-      Expect(proof).toMatchObject({ kind: 'IdentityToken', ...principal() })
-      Expect(proof.kind === 'IdentityToken' && proof.token.split('.')).toHaveLength(3)
-      Expect(proof.kind === 'IdentityToken' && proof.expiresAt! > Date.now()).toBe(true)
+      Expect(proof).toMatchObject({ kind: 'IdentityToken', ...principal(), expiresAt: 1_234_000 })
       await Expect(f.connection.proof({ kind: 'Session', signal: signal() })).rejects.toThrow(
         'Clerk issues IdentityToken sign-in proofs, not Session.',
       )

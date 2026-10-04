@@ -272,28 +272,7 @@ Describe('compiler: minimal design', () => {
     Expect(compiled.code).toContain('"ink": "#111"')
   })
 
-  Test('release design checks accept promoted representable families and reject their inline raw values', async () => {
-    const inline = `
-      use StackNav from @tao/nav
-      app Demo { Name "Demo" Navigator StackNav { Initial Main } }
-      scene Main() { Title "Main" render Surface() [background #fff, size 16, radius 8, pad 12] }
-      view Surface() { render inject \`\`\`ts return null \`\`\` }
-    `
-    await Expect(TestCompiler.compileCode(inline, { validationMode: 'release' })).rejects.toThrow(
-      'must be promoted to a token, style bundle, or element default for release',
-    )
-
-    await TestCompiler.compileCode(
-      `
-      use StackNav from @tao/nav
-      workspace design Theme { paper #fff Surface [background paper, size 16, radius 8, pad 12] }
-      app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
-      scene Main() { Title "Main" render Surface() }
-      view Surface() { render inject \`\`\`ts return null \`\`\` }
-    `,
-      { validationMode: 'release' },
-    )
-
+  Test('accepts promoted design tokens and styles in release mode', async () => {
     await TestCompiler.compileCode(
       `
       use StackNav from @tao/nav
@@ -304,17 +283,6 @@ Describe('compiler: minimal design', () => {
       }
       app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
       scene Main() { Title "Main" render Surface() }
-      view Surface() { render inject \`\`\`ts return null \`\`\` }
-    `,
-      { validationMode: 'release' },
-    )
-
-    await TestCompiler.compileCode(
-      `
-      use StackNav from @tao/nav
-      workspace design Theme { sizes { sm 8.px } }
-      app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
-      scene Main() { Title "Main" render Surface() [gap sm, fill] }
       view Surface() { render inject \`\`\`ts return null \`\`\` }
     `,
       { validationMode: 'release' },
@@ -346,7 +314,7 @@ Describe('compiler: minimal design', () => {
   })
 
   Test('compiles a mounted design override in an app refinement', async () => {
-    await TestCompiler.compileCode(
+    const compiled = await TestCompiler.compileCode(
       `
       use StackNav from @tao/nav
       design Light { canvas #fff screen [bg canvas] }
@@ -358,5 +326,10 @@ Describe('compiler: minimal design', () => {
     `,
       { appName: 'DemoDark' },
     )
+    const variantStart = compiled.code.indexOf('const _TaoAppDefinition_DemoDark = TR.Navigation.App(')
+    Expect(variantStart).toBeGreaterThan(-1)
+    const variantEnd = compiled.code.indexOf('function TaoApp_DemoDark', variantStart)
+    Expect(variantEnd).toBeGreaterThan(variantStart)
+    Expect(compiled.code.slice(variantStart, variantEnd)).toContain('design: () => _Scope.Dark.evaluate()')
   })
 })

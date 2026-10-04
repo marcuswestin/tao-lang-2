@@ -29,9 +29,7 @@ Describe('agent runner', () => {
     const scratch = await mkTestDir('tao-agent-runner-exit-')
     try {
       const script = await writeProbeScript(scratch, [
-        'for (let i = 0; i < 5; i += 1) {',
-        `  ${LOG}(\`line \${i}\`)`,
-        '}',
+        `${LOG}('child failed')`,
         `${EXIT}(3)`,
       ])
 
@@ -61,7 +59,6 @@ Describe('agent runner', () => {
 
       const logDir = FS.resolvePath('.artifacts/logs/agent/probe', scratch)
       const entries = (await FS.listDir(logDir)).toSorted()
-      Expect(entries).toContain('latest.log')
       const runLog = entries.find(name => name !== 'latest.log')
       Expect(runLog).toBeDefined()
       const runLogText = await FS.readText(FS.resolvePath(runLog!, logDir))

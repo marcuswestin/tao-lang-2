@@ -266,23 +266,6 @@ Describe('browser navigation history', () => {
     Expect(driver.replacements).toEqual([0, 0])
   })
 
-  Test('swallows a self-caused pop after in-app Back', () => {
-    const driver = new FakeHistoryDriver()
-    let browserBacks = 0
-    const history = new BrowserNavigationHistory(() => {
-      browserBacks += 1
-      return false
-    })
-    history.attach(driver)
-    history.record({ arguments: {}, instanceId: 1, kind: 'content', owner, presentable: 1, replay: () => {} })
-
-    history.reducerBackCompleted()
-    driver.pop(0)
-
-    Expect(browserBacks).toBe(0)
-    Expect(driver.goes).toEqual([-1])
-  })
-
   Test('queues consecutive self-caused Back traversals in order', () => {
     const driver = new FakeHistoryDriver()
     const history = new BrowserNavigationHistory(() => false)

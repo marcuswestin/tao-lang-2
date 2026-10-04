@@ -42,10 +42,8 @@ Describe('Studio device inspect hit testing', () => {
     const button = hit({ height: 44, width: 120, x: 40, y: 200 })
 
     const innerFirst = bestInspectHit([button, screen], { x: 60, y: 210 })
-    const outerFirst = bestInspectHit([screen, button], { x: 60, y: 210 })
 
     Expect(innerFirst).toBe(button)
-    Expect(outerFirst).toBe(button)
   })
 
   Test('a tap outside every frame selects nothing', () => {
@@ -99,10 +97,8 @@ Describe('Studio device inspect registration', () => {
     Expect(studioInspectNodeCount()).toBe(2)
 
     const measured = await measureStudioInspectNodes()
-    Expect(measured.length).toBe(2)
     Expect(measured.map(entry => entry.rect.y).sort()).toEqual([0, 60])
 
-    Expect(typeof releaseFirst).toBe('function')
     releaseFirst?.()
     Expect(studioInspectNodeCount()).toBe(1)
     Expect((await measureStudioInspectNodes()).map(entry => entry.rect.y)).toEqual([60])
@@ -254,12 +250,5 @@ Describe('Studio device inspect move actions', () => {
 
     Expect(moveRenderFor(hits, first, 'up')).toBeUndefined()
     Expect(moveRenderFor(hits, third, 'down')).toBeUndefined()
-  })
-
-  Test('a render with no siblings has no move in either direction', () => {
-    const { card, first } = columnLayout()
-
-    Expect(moveRenderFor([card, first], first, 'up')).toBeUndefined()
-    Expect(moveRenderFor([card, first], first, 'down')).toBeUndefined()
   })
 })

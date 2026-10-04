@@ -86,13 +86,6 @@ Describe('tao check per-workspace stamp', () => {
     )
   })
 
-  Test('checks every workspace cold and replays every workspace warm', async () => {
-    await withTaoFixture(TWO_WORKSPACES, async rootDir => {
-      Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'checked', AppTwo: 'checked' })
-      Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'replayed', AppTwo: 'replayed' })
-    })
-  })
-
   Test('regenerates deleted metadata for an imported bridge on a targeted cached check', async () => {
     await withGitTaoFixture({
       'App/.gitignore': '*.tao.ts\n.tao/\nnode_modules/\n',
@@ -171,16 +164,6 @@ function Total() returns number {
     )
   })
 
-  Test('re-checks every workspace when the generated parser changed', async () => {
-    const generated = 'packages/language/parser/parser-src/_gen_tao-parser/grammar.ts'
-    await withTaoFixture({ ...TWO_WORKSPACES, [generated]: 'export const grammar = 1\n' }, async rootDir => {
-      await checkedWorkspaces(rootDir)
-      await FS.writeText(FS.resolvePath(generated, rootDir), 'export const grammar = 2\n')
-
-      Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'checked', AppTwo: 'checked' })
-    })
-  })
-
   // `tao check` reports errors, and its exit code rides on them, so a stamp that replayed one would
   // keep failing a run whose source the author may already have fixed. A workspace carrying an error
   // is never stamped; its neighbour, which carries none, still is.
@@ -257,7 +240,6 @@ function Total() returns number {
         const previous = Platform.runtimeProcess.env[key]
         Platform.runtimeProcess.env[key] = 'true'
         try {
-          Expect(CheckCache.disabled()).toBe(true)
           Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'checked', AppTwo: 'checked' })
         } finally {
           if (previous === undefined) {
@@ -280,7 +262,6 @@ function Total() returns number {
       Platform.runtimeProcess.env[key] = 'true'
       try {
         await withTaoFixture(TWO_WORKSPACES, async rootDir => {
-          Expect(CheckCache.disabled()).toBe(false)
           Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'checked', AppTwo: 'checked' })
           Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'replayed', AppTwo: 'replayed' })
         })

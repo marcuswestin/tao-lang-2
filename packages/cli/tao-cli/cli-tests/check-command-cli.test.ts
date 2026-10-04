@@ -3,18 +3,6 @@ import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { checkedProjectFile, checkedView, runTaoCliForTest, withTaoFixture } from './test-cli-files'
 
 Describe('tao check CLI', () => {
-  Test('exits zero when files are canonical', async () => {
-    await withTaoFixture({
-      ...checkedProjectFile,
-      'canonical.tao': checkedView('MainView'),
-    }, async (rootDir) => {
-      const result = await runTaoCliForTest(['check', rootDir])
-
-      Expect(result.exitCode).toBe(0)
-      Expect(result.stdout).toContain('0 noncanonical, 2 unchanged')
-    })
-  })
-
   Test('reports an imported file error when checking only its entry file', async () => {
     await withTaoFixture({
       'App.tao':

@@ -89,7 +89,7 @@ Describe('entity generation schema compiler', () => {
     Expect(explicit.schema.properties?.['PrivateNotes']).toBeUndefined()
   })
 
-  Test('derives inverse relation arrays while direct relations remain single objects', () => {
+  Test('derives inverse relation arrays', () => {
     const workspace = entity([
       field('Documents', {
         kind: 'relation',
@@ -106,12 +106,6 @@ Describe('entity generation schema compiler', () => {
       field('Title', { kind: 'scalar', scalar: 'text' }),
     ], 'Document')
     const declarations = [workspace, document]
-
-    const direct = compileGenerationSchema(document, {
-      declarations,
-      relations: ['Workspace'],
-    })
-    Expect(direct.schema.properties?.['Workspace']?.type).toBe('object')
 
     const inverse = compileGenerationSchema(workspace, {
       declarations,

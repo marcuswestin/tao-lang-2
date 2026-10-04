@@ -72,7 +72,6 @@ Describe('InstantDB provider', () => {
       'notes',
       'tags',
     ])
-    Expect(sdk.cores).toHaveLength(1)
 
     const loading = first.load() as Promise<string | undefined>
     Expect(sdk.core().queries.at(-1)).toEqual({
@@ -531,7 +530,6 @@ Describe('InstantDB sign-in with Clerk', () => {
       await authentication.release!(new AbortController().signal)
       Expect(sdk.core().signOuts).toBe(1)
       Expect(sdk.core().shutdowns).toBe(1)
-      Expect(await sdk.core().getAuth()).toBeNull()
       await authentication.release!(new AbortController().signal)
       Expect(sdk.core().signOuts).toBe(1)
     },

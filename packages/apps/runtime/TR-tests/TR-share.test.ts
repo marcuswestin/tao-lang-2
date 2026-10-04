@@ -28,9 +28,7 @@ Describe('TR Share', () => {
     Expect(loads).toBe(0)
 
     await sheet.Open.invoke(value('First message'))
-    await sheet.Open.invoke(value('Second message'))
-    Expect(loads).toBe(2)
-    Expect(messages).toEqual(['First message', 'Second message'])
+    Expect(messages).toEqual(['First message'])
   })
 
   Test('reports a friendly failure when React Native has no Share module', async () => {

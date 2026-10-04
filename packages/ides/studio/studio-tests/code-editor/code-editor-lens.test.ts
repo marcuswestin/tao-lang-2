@@ -166,7 +166,6 @@ Describe('code editor syntax lens', () => {
       doc.slice(hero.from, hero.to),
     ])
     const run = replaced(state).find(item => item.block)
-    Expect(run).toBeDefined()
     Expect(run?.widget).toBe(true)
     Expect(state.doc.lineAt(run!.from).text).toBe('      Col() [hero] {')
     Expect(state.doc.lineAt(run!.to).number).toBe(state.doc.lineAt(run!.from).number + 3)
@@ -245,14 +244,7 @@ Describe('code editor syntax lens', () => {
     const composing = lensState(['structure'])
     const edited = composing.update({ changes: { from: 0, insert: '// top\n' } }).state
 
-    Expect(hiddenTexts(edited)).toEqual([
-      'state Open = true',
-      'gap',
-      'title',
-      '// note',
-      '-> { set Open = false }',
-      'hero',
-    ])
+    Expect(hiddenTexts(edited)).toEqual(hiddenTexts(composing))
     Expect(CodeEditorLens.spans(edited)[1]?.from).toBe(layoutGap.body!.from + 7)
   })
 

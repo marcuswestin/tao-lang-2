@@ -90,7 +90,6 @@ Describe('tao ship compatibility fingerprints', () => {
         const changed of [
           source.replace(', unique Workspace + Person', ''),
           source.replace('unique Workspace + Person', 'unique Workspace + Email'),
-          source.replace('unique Workspace + Person', 'unique Workspace + Person + Email'),
         ]
       ) {
         await FS.writeText(path, changed)

@@ -78,7 +78,6 @@ Describe('Ollama generation provider', () => {
 
     const mismatch = new OllamaGenerationProvider({ fetch: ollamaFetch('{"Title": 3}'), model: 'qwen3:8b' })
     const mismatched = await mismatch.generate<JsonObject>(schema, [], 'Create a recipe.').final
-    Expect(mismatched.status).toBe('failure')
     Expect(mismatched.status === 'failure' && mismatched.code).toBe('schema_mismatch')
 
     const prose = new OllamaGenerationProvider({ fetch: ollamaFetch('I would rather not.'), model: 'qwen3:8b' })

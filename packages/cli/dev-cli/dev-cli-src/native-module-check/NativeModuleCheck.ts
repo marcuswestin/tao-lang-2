@@ -349,8 +349,6 @@ export const NativeModuleCheck = {
   run,
   testing: {
     discoverPodspecs,
-    podTargetName,
-    podsProjectTargets,
     prepareHost,
     requiredPodTargets,
     runCommand,

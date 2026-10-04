@@ -40,7 +40,6 @@ Describe('Tao skill snippets', () => {
         if (result.exitCode !== 0) {
           Errors.throwUnexpected(`Tao skill example failed tao check:\n${result.stdout}${result.stderr}`)
         }
-        Expect(result.exitCode).toBe(0)
       } finally {
         await FS.remove(root)
       }
