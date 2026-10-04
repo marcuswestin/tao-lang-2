@@ -2,7 +2,7 @@ import { Describe, Expect, Test } from '@shared/test'
 import { withCompiledTestPlan } from './test-compile'
 
 const app = `
-  app WordFlower { view MainView }
+  app WordFlower { id "com.tao.test.wordflower" version "1.0.0" name "WordFlower"  view MainView }
   view MainView() { render inject \`\`\`ts return null \`\`\` }
 `
 

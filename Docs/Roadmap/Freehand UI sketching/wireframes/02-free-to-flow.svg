@@ -23,7 +23,7 @@
   </g>
   <rect x="40" y="176" width="360" height="126" rx="6" fill="#f7f7f7" stroke="#bbb"/>
   <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="8" fill="#222">
-    <text x="50" y="196">.tao-project/studio/sketches.jsonc</text>
+    <text x="50" y="196">.tao/studio/sketches.jsonc</text>
     <text x="50" y="212">{ x: 12,  y: 12, width: 52,  height: 52, kind: "Placeholder" }</text>
     <text x="50" y="228">{ x: 78,  y: 16, width: 180, height: 14, kind: "Text" }</text>
     <text x="50" y="244">{ x: 78,  y: 40, width: 120, height: 12, kind: "Text" }</text>

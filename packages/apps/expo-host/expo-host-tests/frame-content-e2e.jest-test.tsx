@@ -72,7 +72,7 @@ Describe('view content runtime', () => {
           }
         }
 
-        app FrameContentApp { view Main }
+        app FrameContentApp { id "framecontentapp" version "1.0.0" name "FrameContentApp" view Main }
       `,
         screen => {
           ExpectScreen(screen).toHaveText('3 words')

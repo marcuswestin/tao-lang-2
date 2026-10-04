@@ -183,6 +183,7 @@ Describe('Tao Studio scenario runtime', () => {
     const subject = (arguments_: TR.NavigationArguments): TR.AppDefinition => ({
       auxiliaries: () => ({}),
       design: () => design,
+      id: 'focused-occurrence-app',
       name: 'Focused occurrence app',
       navigator: () =>
         TR.Navigation.Configure(
@@ -190,6 +191,7 @@ Describe('Tao Studio scenario runtime', () => {
           { Initial: TR.Navigation.BindView(focused, arguments_) },
         ),
       restoration: { exclusions: [], mode: 'fresh', variant: 'Focused occurrence app' },
+      version: '1.0.0',
     })
     const screen = render(createElement(
       RN.View,
@@ -241,10 +243,12 @@ Describe('Tao Studio scenario runtime', () => {
     const definition = (): TR.AppDefinition => ({
       auxiliaries: () => ({}),
       design: () => design,
+      id: 'scheme-app',
       name: 'Scheme app',
       navigator: () =>
         TR.Navigation.Configure(TR.Navigation.Declaration('Scheme slot', TR.NavKind.Slot()), { Initial: focused }),
       restoration: { exclusions: [], mode: 'fresh', variant: 'Scheme app' },
+      version: '1.0.0',
     })
     const environment = { platform: 'web', system: 'light' } as const
     const tree = (appearance: TR.Scheme) =>
@@ -274,7 +278,7 @@ Describe('Tao Studio scenario runtime', () => {
     const runtimePackageRoot = await createScenarioRuntimeRoot('tao-studio-scenario-runtime-')
     await withTaoFiles('tao-studio-scenario-source-', {
       'Data.tao': `
-        workspace data Workspaces / Workspace {
+        project data Workspaces / Workspace {
           Name text
         }
       `,
@@ -285,8 +289,7 @@ Describe('Tao Studio scenario runtime', () => {
         use Workspace from ./Data.tao
         use WorkspaceRow from ./Workspaces.tao
 
-        app Preview {
-          Name "Preview"
+        app Preview { id "preview" version "1.0.0" name "Preview"
           Navigator StackNav { Initial Main }
           Datasource Memory { }
         }
@@ -312,7 +315,7 @@ Describe('Tao Studio scenario runtime', () => {
         use Workspace from ./Data.tao
         use Col, FormButton, Text from @tao/ui
 
-        workspace view WorkspaceRow(Workspace) {
+        project view WorkspaceRow(Workspace) {
           render Col() {
             Text(Workspace.Name)
             #openWorkspace
@@ -419,7 +422,7 @@ Describe('Tao Studio scenario runtime', () => {
       'Main.tao': `
         use Button, Col, Text from @tao/ui
 
-        app Preview { view Main }
+        app Preview { id "preview" version "1.0.0" name "Preview" view Main }
         view Main() { render Text("Main") }
         view SavedToast(Revert action()) {
           render Col() {

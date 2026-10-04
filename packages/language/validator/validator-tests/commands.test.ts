@@ -377,7 +377,7 @@ Describe('validator: commands as configured values', () => {
       `
         ${leaf}
         action Run() { }
-        app Demo {
+        app Demo { id "demo" version "1.0.0" name "Demo"
           command Stray() {
             Title "Stray"
             do Run()

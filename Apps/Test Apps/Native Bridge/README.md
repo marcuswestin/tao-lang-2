@@ -9,7 +9,7 @@ Clipboard scenes. More native surfaces should join this app as they become suppo
 From the repository root, in your regular terminal:
 
 ```sh
-./tao dev "Apps/Test Apps/Native Bridge" --app NativeBridge --device roPhone
+./tao run "Apps/Test Apps/Native Bridge" --app NativeBridge --device roPhone
 ```
 
 Unlock roPhone, trust this Mac, and keep both on the same network. The command opens the installed
@@ -25,7 +25,7 @@ If Tao Companion is not installed, install it once:
 
 `--device` accepts a phone name or ID; `--ios` opens a simulator. A simulator cannot prove physical
 haptic feedback. Native operations happen only after pressing a control. This demo declares no
-scenarios, and ordinary `tao dev` applies no scenario preparation or replay.
+scenarios, and ordinary `tao run` applies no scenario preparation or replay.
 
 For the Studio editor and device inspector, the separate workflow remains:
 
@@ -57,7 +57,8 @@ component and constant generation are supported. All 11 generated Clipboard oper
 
 ```text
 Native Bridge/
-  App.tao, Project.tao, Design.tao
+  App.tao, Design.tao
+  .tao/.gitkeep, tsconfig.json
   Native Bridge.test.tao    # no native effects
   .host-tests/Clipboard.test.tao       # explicit iOS host journey
   Haptics/

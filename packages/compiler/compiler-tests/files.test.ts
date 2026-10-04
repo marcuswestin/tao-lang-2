@@ -34,7 +34,7 @@ function providerSidecar(exportName: string): string {
 Describe('compiler: files and packages', () => {
   Test('compiles source strings into a generated app file', async () => {
     const compiled = await Compiler.compileCode(`
-      app MyApp { view MainView }
+      app MyApp { id "com.tao.test.myapp" version "1.0.0" name "MyApp"  view MainView }
       view MainView() {
         render Text("Hello")
       }
@@ -58,17 +58,17 @@ Describe('compiler: files and packages', () => {
       {
         'Main.tao': `
           use CustomStack, SnapshotStore from @custom
-          workspace type LocalStack is CustomStack with { Initial is Home }
+          project type LocalStack is CustomStack with { Initial is Home }
           let LocalNav = LocalStack { }
           let MainNav = CustomStack { Initial Home }
-          app Demo {
-            Name "Demo"
+          app Demo { id "com.tao.test.demo" version "1.0.0"
+            name "Demo"
             Navigator CustomStack
             Datasource SnapshotStore { StorageKey "demo" }
           }
           view Home() { render inject ${tsFence} return null ${fence} }
         `,
-        'Packages/@custom/Constructs.tao': `
+        '@custom/Constructs.tao': `
           public type CustomStack is nav with {
             Initial view
             nav TestNavImpl from ./TestNavImpl.ts
@@ -81,18 +81,18 @@ Describe('compiler: files and packages', () => {
           }
           view PackageHome() { render inject ${tsFence} return null ${fence} }
         `,
-        'Packages/@custom/TestNavImpl.ts': navSidecar('TestNavImpl'),
-        'Packages/@custom/TestProviderImpl.ts': providerSidecar('TestProviderImpl'),
+        '@custom/TestNavImpl.ts': navSidecar('TestNavImpl'),
+        '@custom/TestProviderImpl.ts': providerSidecar('TestProviderImpl'),
       },
       async (compiled, files) => {
-        const packageCode = compiled['Packages/@custom/Constructs.tao'].code
+        const packageCode = compiled['@custom/Constructs.tao'].code
         const appCode = compiled['Main.tao'].code
         const appInjections = files.filter(file =>
           file.sourcePath === compiled['Main.tao'].sourcePath
           && file.relativePath.includes('.injection-')
         )
         const packageInjections = files.filter(file =>
-          file.sourcePath === compiled['Packages/@custom/Constructs.tao'].sourcePath
+          file.sourcePath === compiled['@custom/Constructs.tao'].sourcePath
           && file.relativePath.includes('.injection-')
         )
 
@@ -101,7 +101,7 @@ Describe('compiler: files and packages', () => {
         // `LocalStack` inherits the same implementation file, so the app plans its copy first and
         // the package imports that one copy rather than emitting a second of its own.
         Expect(packageCode).toContain(
-          "import { TestNavImpl as __tao_configuration_implementation_CustomStack__ } from '../../../TestNavImpl'",
+          "import { TestNavImpl as __tao_configuration_implementation_CustomStack__ } from '../../TestNavImpl'",
         )
         Expect(files.filter(file => file.relativePath.endsWith('TestNavImpl.ts'))).toHaveLength(1)
         Expect(packageCode).toContain('_Scope.__tao_type_SnapshotStore = TR.Data.Declaration(')
@@ -143,20 +143,20 @@ Describe('compiler: files and packages', () => {
       {
         'Main.tao': `
           use ChainStack from @chain
-          app Demo { Name "Demo" Navigator ChainStack { Initial Home } }
+          app Demo { id "com.tao.test.demo" version "1.0.0"  name "Demo" Navigator ChainStack { Initial Home } }
           scene Home() { Title "Home" render Empty() }
           view Empty() { render inject ${tsFence} return null ${fence} }
         `,
-        'Packages/@chain/Navigation.tao': `
+        '@chain/Navigation.tao': `
           use package @tao/nav as navs
           public type AlternateStack = navs.StackNav
           public type ChainStack = navs.StackNav
         `,
       },
       async (compiled, files) => {
-        const chain = compiled['Packages/@chain/Navigation.tao'].code
+        const chain = compiled['@chain/Navigation.tao'].code
         const chainTypes = files.find(file =>
-          file.sourcePath === compiled['Packages/@chain/Navigation.tao'].sourcePath
+          file.sourcePath === compiled['@chain/Navigation.tao'].sourcePath
           && file.relativePath.endsWith('.d.ts')
         )?.code ?? ''
         const root = files.find(file =>
@@ -212,11 +212,11 @@ Describe('compiler: files and packages', () => {
     await withTaoFiles(
       'tao-compiler-configuration-sidecar-',
       {
-        'Project.tao': `project { id "compiler-sidecars" name "Compiler sidecars" }`,
+        'Package.tao': `package { version "1.0.0" license AGPL-3.0-only }`,
         'Main.tao': `
           use SidecarStack, SidecarStore from ./Constructs.tao
-          app Demo {
-            Name "Demo"
+          app Demo { id "com.tao.test.demo" version "1.0.0"
+            name "Demo"
             Navigator SidecarStack { Initial Home }
             Datasource SidecarStore { StorageKey "demo" }
           }
@@ -324,14 +324,14 @@ Describe('compiler: files and packages', () => {
       'Main.tao',
       {
         'Main.tao': `
-        app MultiFile { view MainView }
+        app MultiFile { id "com.tao.test.multifile" version "1.0.0" name "MultiFile"  view MainView }
         use Text from ./
         view MainView() {
           render Text("Hello from imports")
         }
       `,
         'Views.tao': `
-        workspace view Text(Value text) {
+        project view Text(Value text) {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
@@ -351,7 +351,7 @@ Describe('compiler: files and packages', () => {
       {
         'Main.tao': `
         use DocumentLabel from ./Labels.tao
-        app MultiFile { view MainView }
+        app MultiFile { id "com.tao.test.multifile" version "1.0.0" name "MultiFile"  view MainView }
         view MainView() {
           render Text(DocumentLabel("Draft"))
         }
@@ -362,7 +362,7 @@ Describe('compiler: files and packages', () => {
         }
       `,
         'Labels.tao': `
-        workspace function DocumentLabel(Title text) returns text {
+        project function DocumentLabel(Title text) returns text {
           return "Document: { Title }"
         }
       `,
@@ -383,15 +383,15 @@ Describe('compiler: files and packages', () => {
       {
         'Main.tao': `
           use ResetNav from ./Support.tao
-          app Root {
-            Name "Root"
+          app Root { id "com.tao.test.root" version "1.0.0"
+            name "Root"
             Navigator ResetNav
           }
         `,
         'Support.tao': `
           use StackNav from @tao/nav
           use Root from ./
-          workspace nav ResetNav = StackNav { Initial Home }
+          project nav ResetNav = StackNav { Initial Home }
           scene Home() {
             Title "Home"
             action Reset() { replace ResetNav in Root }
@@ -418,16 +418,16 @@ Describe('compiler: files and packages', () => {
     await withTaoFiles(
       'tao-compiler-sidecar-',
       {
-        'Project.tao': `project { id "compiler-sidecar-test" name "Compiler sidecar test" }`,
+        'Package.tao': `package { version "1.0.0" license AGPL-3.0-only }`,
         'Main.tao': `
-        app MyApp { view MainView }
+        app MyApp { id "com.tao.test.myapp" version "1.0.0" name "MyApp"  view MainView }
         use Text from ./
         view MainView() {
           render Text("Hello")
         }
       `,
         'Views.tao': `
-        workspace view Text(Value text) {
+        project view Text(Value text) {
           render inject Value ${tsFence}
             return <RN.Text>{Value}</RN.Text>
           ${fence}
@@ -454,9 +454,9 @@ Describe('compiler: files and packages', () => {
 
   Test('reports an unresolved nested sidecar import as a located compiler diagnostic', async () => {
     await withTaoFiles('tao-compiler-sidecar-diagnostic-', {
-      'Project.tao': 'project { id "sidecar-diagnostic" name "Sidecar diagnostic" }',
+      'Package.tao': 'package { version "1.0.0" license AGPL-3.0-only }',
       'Main.tao': `
-        app SidecarDiagnostic { view Main }
+        app SidecarDiagnostic { id "com.tao.test.sidecardiagnostic" version "1.0.0" name "SidecarDiagnostic"  view Main }
         view Main() {
           action Publish() from ./Api.ts
           render Empty()
@@ -496,11 +496,11 @@ Describe('compiler: files and packages', () => {
       'Main.tao',
       {
         'Main.tao': `
-        app IndexedPackage { view MainView }
+        app IndexedPackage { id "com.tao.test.indexedpackage" version "1.0.0" name "IndexedPackage"  view MainView }
         use MainView from @bar/views
       `,
-        'lib/nested/@bar/views/Main.tao': `
-        workspace view MainView() {
+        '@bar/views/Main.tao': `
+        project view MainView() {
           render Text("Package import")
         }
         view Text(Value text) {
@@ -512,8 +512,8 @@ Describe('compiler: files and packages', () => {
       },
       compiled => {
         Expect(compiled['Main.tao'].relativePath).toBe('App.tsx')
-        Expect(compiled['lib/nested/@bar/views/Main.tao'].relativePath).toBe(
-          'modules/lib/nested/@bar/views/Main.tao.tsx',
+        Expect(compiled['@bar/views/Main.tao'].relativePath).toBe(
+          'modules/@bar/views/Main.tao.tsx',
         )
       },
     )
@@ -524,15 +524,15 @@ Describe('compiler: files and packages', () => {
       'Main.tao',
       {
         'Main.tao': `
-        app BarePackageUse { view MainView }
+        app BarePackageUse { id "com.tao.test.barepackageuse" version "1.0.0" name "BarePackageUse"  view MainView }
         use MainView from @foo/forms
       `,
-        'feature/@foo/Title.tao': `
+        '@foo/Title.tao': `
         package let PackageTitle = "Package alias"
       `,
-        'feature/@foo/forms/Main.tao': `
+        '@foo/forms/Main.tao': `
         use PackageTitle
-        workspace view MainView() {
+        project view MainView() {
           render Text(PackageTitle)
         }
         view Text(Value text) {
@@ -544,10 +544,10 @@ Describe('compiler: files and packages', () => {
       },
       compiled => {
         Expect(compiled['Main.tao'].relativePath).toBe('App.tsx')
-        Expect(compiled['feature/@foo/forms/Main.tao'].relativePath).toBe(
-          'modules/feature/@foo/forms/Main.tao.tsx',
+        Expect(compiled['@foo/forms/Main.tao'].relativePath).toBe(
+          'modules/@foo/forms/Main.tao.tsx',
         )
-        Expect(compiled['feature/@foo/Title.tao'].relativePath).toBe('modules/feature/@foo/Title.tao.tsx')
+        Expect(compiled['@foo/Title.tao'].relativePath).toBe('modules/@foo/Title.tao.tsx')
       },
     )
   })
@@ -557,7 +557,7 @@ Describe('compiler: files and packages', () => {
       'Main.tao',
       {
         'Main.tao': `
-        app TypeImportApp { view MainView }
+        app TypeImportApp { id "com.tao.test.typeimportapp" version "1.0.0" name "TypeImportApp"  view MainView }
         use Name from ./Types.tao
         let Name = Name "Ada"
         view MainView() {
@@ -570,7 +570,7 @@ Describe('compiler: files and packages', () => {
         }
       `,
         'Types.tao': `
-        workspace type Name is text
+        project type Name is text
       `,
       },
       compiled => {
@@ -587,15 +587,15 @@ Describe('compiler: files and packages', () => {
         'Main.tao': `
           use PaneWidth from ./Types.tao
           use StackNav from @tao/nav
-          app Workspace {
-            Name "Workspace"
+          app Workspace { id "com.tao.test.workspace" version "1.0.0"
+            name "Workspace"
             state Width is PaneWidth = PaneWidth 320 (persist)
             Navigator StackNav { Initial Pane }
           }
           scene Pane() { Title "Pane" render Empty() }
           view Empty() { render inject \`\`\`ts return null \`\`\` }
         `,
-        'Types.tao': 'workspace type PaneWidth is number',
+        'Types.tao': 'project type PaneWidth is number',
       },
       compiled => {
         Expect(compiled['Main.tao'].code).toContain('{ kind: "primitive", name: "number" }')
@@ -608,7 +608,7 @@ Describe('compiler: files and packages', () => {
       'Main.tao',
       {
         'Main.tao': `
-        app CircularApp { view MainView }
+        app CircularApp { id "com.tao.test.circularapp" version "1.0.0" name "CircularApp"  view MainView }
         use AView from ./
         view MainView() {
           render AView()
@@ -616,14 +616,14 @@ Describe('compiler: files and packages', () => {
       `,
         'A.tao': `
         use BView from ./
-        workspace let SharedTitle = "Cycle"
-        workspace view AView() {
+        project let SharedTitle = "Cycle"
+        project view AView() {
           render BView()
         }
       `,
         'B.tao': `
         use SharedTitle from ./
-        workspace view BView() {
+        project view BView() {
           render Leaf(SharedTitle)
         }
         view Leaf(Value text) {
@@ -643,7 +643,7 @@ Describe('compiler: files and packages', () => {
 
   Test('keeps generated module output paths unique for same-named external files', async () => {
     const sharedViewSource = (name: string) => `
-      workspace view ${name}(Value text) {
+      project view ${name}(Value text) {
         render inject Value ${tsFence}
           return null
         ${fence}
@@ -653,7 +653,7 @@ Describe('compiler: files and packages', () => {
       'app/Main.tao',
       {
         'app/Main.tao': `
-        app CollisionApp { view MainView }
+        app CollisionApp { id "com.tao.test.collisionapp" version "1.0.0" name "CollisionApp"  view MainView }
         use AText from ../liba
         use BText from ../libb
         view MainView() {
@@ -696,12 +696,12 @@ Describe('compiler: files and packages', () => {
     await withTaoFiles(
       'tao-compiler-sidecar-collisions-',
       {
-        'Project.tao': `project { id "compiler-collision-test" name "Compiler collision test" }`,
+        'Package.tao': `package { version "1.0.0" license AGPL-3.0-only }`,
         'app/Main.tao': `
           use AStack from ../liba
           use BStack from ../libb
-          app CollisionApp {
-            Name "Collision"
+          app CollisionApp { id "com.tao.test.collisionapp" version "1.0.0"
+            name "Collision"
             Navigator AStack { Initial Home }
           }
           view Home() { render inject ${tsFence} return null ${fence} }
@@ -728,7 +728,12 @@ Describe('compiler: files and packages', () => {
         'libb/Implementation.ts': `
           import TR from '@runtime/TR'
           import type { BStackConfig } from './Views.tao'
+          import type { AStackConfig } from '../liba/Views.tao'
+          const ordinaryPath = '../liba/Views.tao'
+          type OtherStack = AStackConfig
           export function Implementation(): TR.NavKind<'stack', BStackConfig> {
+            void ordinaryPath
+            void (null as unknown as OtherStack)
             return TR.NavKind.Stack()
           }
         `,
@@ -744,6 +749,11 @@ Describe('compiler: files and packages', () => {
         Expect(relativePaths).toContain('modules/external/Views.tao-2.files/Views.tao.tsx')
         Expect(relativePaths).toContain('modules/external/Views.tao-2.files/Views.tao.d.ts')
         Expect(relativePaths).toContain('modules/external/Views.tao-2.files/Implementation.ts')
+        const movedSidecar = compiled.files.find(file =>
+          file.relativePath === 'modules/external/Views.tao-2.files/Implementation.ts'
+        )
+        Expect(movedSidecar?.code).toContain("const ordinaryPath = '../liba/Views.tao'")
+        Expect(movedSidecar?.code).toContain("import type { AStackConfig } from '../Views.tao'")
       },
     )
   })
@@ -752,15 +762,15 @@ Describe('compiler: files and packages', () => {
     await withTaoFiles(
       'tao-compiler-shared-sidecar-',
       {
-        'Project.tao': `project { id "compiler-shared-sidecar" name "Compiler shared sidecar" }`,
+        'Package.tao': `package { version "1.0.0" license AGPL-3.0-only }`,
         'Main.tao': `
           use PanelSurface from @panel
-          app SharedApp { Name "Shared" view Home }
+          app SharedApp { id "com.tao.test.sharedapp" version "1.0.0"  name "Shared" view Home }
           view Home() { render HostSurface() }
           view HostSurface() from ./host/Host.tsx
         `,
-        'packages/@panel/Panel.tao': `
-          public view PanelSurface() from ../../host/Host.tsx
+        '@panel/Panel.tao': `
+          public view PanelSurface() from ../host/Host.tsx
         `,
         'host/Host.tsx': `
           import React from 'react'
@@ -806,8 +816,8 @@ Describe('compiler: files and packages', () => {
 
   Test('requires explicit multi-app selection and emits a named registry', async () => {
     const source = `
-      app First { view MainView }
-      app Second { view MainView }
+      app First { id "com.tao.test.first" version "1.0.0" name "First"  view MainView }
+      app Second { id "com.tao.test.second" version "1.0.0" name "Second"  view MainView }
       view MainView() { render inject ${tsFence} return null ${fence} }
     `
     await Expect(TestCompiler.compileCode(source)).rejects.toThrow('multiple apps without a selection')
@@ -824,12 +834,12 @@ Describe('compiler: files and packages', () => {
     await withTaoFiles(
       'tao-compiler-imported-app-',
       {
-        'Project.tao': 'project { id "imported-app" name "Imported app" }',
+        'Package.tao': 'package { version "1.0.0" license AGPL-3.0-only }',
         'Main.tao': `
           use NestedApp from ./nested/App.tao
         `,
         'nested/App.tao': `
-          workspace app NestedApp { view MainView }
+          project app NestedApp { id "com.tao.test.nestedapp" version "1.0.0" name "NestedApp"  view MainView }
           view MainView() { render inject ${tsFence} return null ${fence} }
         `,
       },
@@ -850,14 +860,14 @@ Describe('compiler: files and packages', () => {
     await withTaoFiles(
       'tao-compiler-package-app-',
       {
-        'Project.tao': 'project { id "package-app" name "Package app" }',
+        'Package.tao': 'package { version "1.0.0" license AGPL-3.0-only }',
         'Main.tao': `
           use PackageApp from @feature
-          app Preview = PackageApp with { Name "Preview" }
+          app Preview = PackageApp with { id "com.tao.test.preview"  name "Preview" }
         `,
-        'packages/@feature/App.tao': `
+        '@feature/App.tao': `
           use StackNav from @tao/nav
-          public app PackageApp { Name "Package" Navigator StackNav { Initial Home } }
+          public app PackageApp { id "com.tao.test.packageapp" version "1.0.0"  name "Package" Navigator StackNav { Initial Home } }
           view Home() { render inject ${tsFence} return null ${fence} }
         `,
       },
@@ -867,7 +877,10 @@ Describe('compiler: files and packages', () => {
 
         Expect(compiled.appNames).toEqual(['Preview', 'PackageApp'])
         Expect(entry?.code).toContain('declaration: _Scope.PackageApp.declaration')
-        Expect(entry?.code).toContain('navigator: () => _Scope.PackageApp.definition.navigator()')
+        Expect(entry?.code).toContain(
+          'const _TaoBaseBinding = _TaoAppModuleScope_Preview.PackageApp.definition.bindApp!(_TaoAppId)',
+        )
+        Expect(entry?.code).toContain('navigator: () => _TaoBaseBinding.navigator()')
         Expect(entry?.code).not.toContain('_Scope.StackNav')
         Expect(entry?.code).not.toContain('_Scope.Home')
       },
@@ -878,20 +891,20 @@ Describe('compiler: files and packages', () => {
     await withTaoFiles(
       'tao-compiler-alternating-app-inheritance-',
       {
-        'Project.tao': 'project { id "alternating-app" name "Alternating app" }',
+        'Package.tao': 'package { version "1.0.0" license AGPL-3.0-only }',
         'Main.tao': `
           use MiddleApp from ./Middle.tao
-          workspace app RootApp { view RootHome }
-          app FinalApp = MiddleApp
+          project app RootApp { id "com.tao.test.rootapp" version "1.0.0" name "RootApp"  view RootHome }
+          app FinalApp = MiddleApp with { id "com.tao.test.finalapp" }
           view RootHome() { render inject ${tsFence} return null ${fence} }
         `,
         'Middle.tao': `
           use RootApp from ./Main.tao
           use StackNav from @tao/nav
-          workspace app MiddleApp = RootApp with {
+          project app MiddleApp = RootApp with { id "com.tao.test.middleapp"
             Navigator StackNav { Initial MiddleHome }
           }
-          app SameModuleFinal = MiddleApp
+          app SameModuleFinal = MiddleApp with { id "com.tao.test.samemodulefinal" }
           view MiddleHome() { render inject ${tsFence} return null ${fence} }
         `,
       },
@@ -902,11 +915,11 @@ Describe('compiler: files and packages', () => {
         const sameModuleEntry = sameModule.files.find(file => file.relativePath === 'App.tsx')
 
         Expect(entry?.code).toContain('declaration: _Scope.MiddleApp.declaration')
-        Expect(entry?.code).toContain('navigator: () => _Scope.MiddleApp.definition.navigator()')
+        Expect(entry?.code).toContain('navigator: () => _TaoBaseBinding.navigator()')
         Expect(entry?.code).not.toContain('_Scope.StackNav')
         Expect(entry?.code).not.toContain('_Scope.MiddleHome')
         Expect(sameModuleEntry?.code).toContain('declaration: _Scope.MiddleApp.declaration')
-        Expect(sameModuleEntry?.code).toContain('navigator: () => _Scope.MiddleApp.definition.navigator()')
+        Expect(sameModuleEntry?.code).toContain('navigator: () => _TaoBaseBinding.navigator()')
         Expect(sameModuleEntry?.code).not.toContain('_Scope.RootHome')
       },
     )
@@ -914,7 +927,7 @@ Describe('compiler: files and packages', () => {
 
   Test('strips test declarations from generated app code', async () => {
     const compiled = await TestCompiler.compileCode(`
-      app MyApp { view MainView }
+      app MyApp { id "com.tao.test.myapp" version "1.0.0" name "MyApp"  view MainView }
       view MainView() {
         render Text("Hello")
       }
@@ -948,7 +961,7 @@ async function withCompiledFiles<
   testFunction: (compiled: CompiledFiles<Files>, files: readonly CompiledFile[]) => Promise<void> | void,
 ): Promise<void> {
   await withTaoFiles('tao-compiler-', {
-    'Project.tao': `project { id "compiler-files-test" name "Compiler files test" }`,
+    'Package.tao': `package { version "1.0.0" license AGPL-3.0-only }`,
     ...files,
   }, async paths => {
     const result = await Workspace.compile(paths[entryFile])

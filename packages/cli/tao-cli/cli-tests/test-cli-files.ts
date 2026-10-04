@@ -65,12 +65,10 @@ export const packageAwareCliPathCases: readonly PackageAwareCliPathCase[] = [
 ]
 
 /**
- * checkedProjectFile gives a fixture the project identity `tao check` now requires of any file it
- * validates. Tests whose subject is not project identity include it so its diagnostic does not
- * crowd out theirs.
+ * checkedProjectFile marks the nearest project root for fixtures whose subject is elsewhere.
  */
 export const checkedProjectFile = {
-  'Project.tao': 'project {\n   id "tao-cli-test"\n   name "Tao CLI test"\n}\n',
+  '.tao/.gitkeep': '',
 } as const
 
 /** checkedView is a canonical view that validates cleanly, for tests whose subject is elsewhere. */

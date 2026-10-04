@@ -30,7 +30,8 @@
     "tao-source-actions": "workspace:*",
     "tao-studio-tooling": "workspace:*",
     "tao-update-server": "workspace:*",
-    "tao-compiler": "workspace:*"
+    "tao-compiler": "workspace:*",
+    "tao-project-tooling": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "^19.2.18"

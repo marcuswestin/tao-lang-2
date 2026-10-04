@@ -32,6 +32,10 @@ const sessionAcceptor: TR.DataPairing = { accepts: [{ kind: 'Session' }], suppor
 function runtimeApp(
   variant: string,
   options: {
+    appId?: string
+    appVersion?: string
+    displayName?: string
+    declarationName?: string
     datasources?: () => readonly TaoAppDatasourceBinding[]
     exclusions?: readonly ('menus' | 'sheets' | 'toasts')[]
     mode?: 'automatic' | 'fresh'
@@ -41,10 +45,15 @@ function runtimeApp(
   const detail = TR.Navigation.View({ identity: identity('view', 'Detail'), name: 'Detail', render: () => null })
   const stack = TR.Navigation.Declaration('Stack', TR.NavKind.Stack(), identity('nav', 'Stack'))
   const app = TR.Navigation.App({
+    id: options.appId ?? 'tao-restoration-test',
+    version: options.appVersion ?? '1.0.0',
     auxiliaries: () => ({}),
     ...(options.datasources ? { datasources: options.datasources } : {}),
-    declaration: TR.Navigation.AppDeclaration('RestoreApp', identity('app', 'RestoreApp')),
-    name: 'RestoreApp',
+    declaration: TR.Navigation.AppDeclaration(
+      options.declarationName ?? 'RestoreApp',
+      identity('app', options.declarationName ?? 'RestoreApp'),
+    ),
+    name: options.displayName ?? 'RestoreApp',
     navigator: () => TR.Navigation.Configure(stack, { Initial: home }),
     restoration: {
       exclusions: options.exclusions ?? [],
@@ -65,6 +74,8 @@ Describe('navigation restoration', () => {
     })
     const stack = TR.Navigation.Declaration('ScopedStack', TR.NavKind.Stack(), identity('nav', 'ScopedStack'))
     const declared = TR.Navigation.App({
+      id: 'tao-scoped-callbacks',
+      version: '1.0.0',
       name: 'ScopedCallbacks',
       navigator: scope => {
         scopes.push(scope)
@@ -432,20 +443,48 @@ Describe('navigation restoration', () => {
     }
   })
 
-  Test('keys snapshots by app variant so preview and production bindings remain isolated', async () => {
+  Test('keeps navigation state across app version and display-name changes by effective app ID', async () => {
     const values = new Map<string, string>()
     const restoreStorage = setNavigationRestorationStorageForTests(memoryKeyValueStorage(values))
     try {
-      const production = runtimeApp('production')
+      const production = runtimeApp('production', { appId: 'same-app', appVersion: '1.0.0' })
       const detachProduction = await production.app.attachRestoration()
       production.app.present(production.app.navigator, production.detail, {})
       await drainMicrotasks()
       detachProduction()
 
-      const preview = runtimeApp('preview')
-      const detachPreview = await preview.app.attachRestoration()
-      Expect((preview.app.navigator as RuntimeStackNav).depth).toBe(1)
-      detachPreview()
+      const renamed = runtimeApp('renamed', {
+        appId: 'same-app',
+        appVersion: '2.0.0-beta.1',
+        declarationName: 'RenamedApp',
+        displayName: 'New Display Name',
+      })
+      const detachRenamed = await renamed.app.attachRestoration()
+      Expect((renamed.app.navigator as RuntimeStackNav).depth).toBe(2)
+      detachRenamed()
+      Expect([...values.keys()]).toEqual(['tao-navigation:same-app:none'])
+
+      const separate = runtimeApp('production', { appId: 'other-app' })
+      const detachSeparate = await separate.app.attachRestoration()
+      Expect((separate.app.navigator as RuntimeStackNav).depth).toBe(1)
+      detachSeparate()
+    } finally {
+      restoreStorage()
+    }
+  })
+
+  Test('leaves the former declaration-keyed store untouched during the app-ID key transition', async () => {
+    const oldKey = `tao-navigation:${encodeURIComponent(identity('app', 'RestoreApp').canonical)}:production:none`
+    const values = new Map([[oldKey, '{"formatVersion":1,"schemaVersion":1,"payload":null}']])
+    const restoreStorage = setNavigationRestorationStorageForTests(memoryKeyValueStorage(values))
+    try {
+      const current = runtimeApp('production', { appId: 'migrated-app' })
+      const detach = await current.app.attachRestoration()
+      current.app.present(current.app.navigator, current.detail, {})
+      await drainMicrotasks()
+      Expect(values.get(oldKey)).toBe('{"formatVersion":1,"schemaVersion":1,"payload":null}')
+      Expect(values.has('tao-navigation:migrated-app:none')).toBe(true)
+      detach()
     } finally {
       restoreStorage()
     }
@@ -582,6 +621,8 @@ Describe('navigation restoration', () => {
       const stack = TR.Navigation.Declaration('EntityStack', TR.NavKind.Stack(), identity('nav', 'EntityStack'))
       const createApp = () =>
         TR.Navigation.App({
+          id: 'tao-entity-restoration',
+          version: '1.0.0',
           auxiliaries: () => ({}),
           declaration: TR.Navigation.AppDeclaration('EntityApp', identity('app', 'EntityApp')),
           name: 'EntityApp',

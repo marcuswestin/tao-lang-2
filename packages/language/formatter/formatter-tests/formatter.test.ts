@@ -303,14 +303,14 @@ Describe('Tao formatter top-level statements', () => {
     formats(
       `
         let Greeting = "Hello"
-        workspace
+        project
         let Count = 3
         let Trailing = 4
       `,
       `
         let Greeting = "Hello"
 
-        workspace
+        project
         let Count = 3
         let Trailing = 4
       `,
@@ -945,20 +945,31 @@ Describe('Tao formatter project metadata', () => {
   )
 
   Test(
-    'formats project metadata blocks',
+    'formats package publication blocks',
     formats(
-      `project{id "package-access" name "Package Access" version  "1.2.3" app   PackageAccess remote   none license   MIT}\napp PackageAccess {}`,
+      `package{name "Package Access" version  "1.2.3" license   MIT}\napp PackageAccess {}`,
       `
-        project {
-           id "package-access"
+        package {
            name "Package Access"
            version "1.2.3"
-           app PackageAccess
-           remote none
            license MIT
         }
 
         app PackageAccess { }
+      `,
+    ),
+  )
+
+  Test(
+    'formats publication requirements and module aliases',
+    formats(
+      `package{version 1.0.0 requires ../Library version ^1.0.0{@ui as @widgets}}`,
+      `
+        package {
+           version 1.0.0
+           requires ../Library version ^1.0.0 {
+              @ui as @widgets
+        }  }
       `,
     ),
   )

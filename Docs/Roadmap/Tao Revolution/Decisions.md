@@ -50,14 +50,15 @@ use Recipe as SharedRecipe from ../Sharing
 
 - **Five visibility modifiers, narrowest first**, and a declaration carries the narrowest that works:
   `file` (the default) keeps it to its source file; `folder` reaches the rest of its folder with no
-  `use` line; `package` reaches the rest of its package; `workspace` reaches any file in the
-  workspace but never a consumer of a published workspace; `public` reaches those consumers.
+  `use` line; `package` reaches the rest of its module; `project` reaches any file under the same `.tao`
+  root but never an external consumer; `public` reaches consumers only through included modules of a
+  selected publication. Opening multiple projects in an editor grants no additional visibility.
   _(Amended 2026-09-25: this read "two modifiers and no others" while §8 and the implementation
   carried five; the five stand.)_
 
 ```swift
 file function Slugify(Title text) returns text { … }   // only this file may call it
-public data Households / Household { … }               // consumers of the published workspace may reference it
+public data Households / Household { … }               // consumers of an including publication may reference it
 ```
 
 - **Each app has the same file decomposition**, so the security story is reviewable on one page:
@@ -1862,38 +1863,27 @@ link JoinLink(Code secret) "/join/{Code}" -> {
   configured datasource bindings receive distinct snapshot keys. Providers own opaque entity-token
   production and resolution; the snapshot also fixes provider, schema, and entity identity and
   restores a live availability-tracked handle.
-- **Project identity is explicit and stable.** Clones, moves, and organizational transfers retain a
-  checked-in project ID. `tao project id <new> --replace` is the explicit independent-fork operation
-  and severs persisted-state compatibility. Duplicate IDs are rejected when distinct dependencies
-  meet locally and at publish time. Public alias chains flatten to the target's canonical identity
-  while retaining one-hop lexical navigation; cycles are invalid, and a wrapper creates new identity.
-- **Release metadata is source-owned.** `project` carries a numeric three-component SemVer as
-  `version "<major>.<minor>.<patch>"` and may name `app <AppName>`. An explicit CLI
-  `--app` selection wins over that clause; without either, tooling presents the available apps.
-  `app` inside the project block is the same keyword as an app declaration.
+- **App identity and release metadata are source-owned.** Each runnable app has lowercase `id`,
+  `version`, and `name`. Effective ID/version pairs are unique within its `.tao` project; variants
+  inherit these fields and may override them. Tao-managed app state is scoped by effective app ID
+  across release versions. Explicit datasource configuration independently controls backend sharing.
+  The old project metadata declaration and project-ID command are retired. A portable source-origin
+  token for persisted declaration identities remains an implementation decision under review;
+  absolute checkout paths cannot satisfy cross-build restoration.
 
 ---
 
 ## 11. App composition and providers
 
-- **`project { id, name, version, app, targets, languages, license }` declares the product envelope**:
-
-```swift
-project {
-   id "skillet"
-   name "Skillet"
-   version "1.0.0"
-   app Skillet
-   targets phone, tablet, laptop
-   languages "en-US", "es"
-}
-```
-
-- **`app Name { … }` is the one composition root** selecting design, providers, permissions,
-  language, and its root view:
+- **`app Name { … }` is a runnable composition root** selecting identity, version, display name,
+  dependencies, design, providers, permissions, language, and its root view. Project roots are
+  discovered from `.tao/`; publication metadata belongs to root-level `package` declarations.
 
 ```swift
 app Skillet {
+   id "skillet"
+   version "1.0.0"
+   name "Skillet"
    Design SkilletDesign
    Datasource Kitchen
    Notifications Alerts
@@ -1901,7 +1891,7 @@ app Skillet {
 }
 ```
 
-- **App variants are keywordized bindings**: `app SkilletPreview = Skillet with { Datasource Memory }`.
+- **App variants are keywordized bindings**: `app SkilletPreview = Skillet with { id "skillet-preview" Datasource Memory }`.
   A variant swaps providers for previews, on-device builds, and tests without forking any product
   declaration. An app that mounts several stores binds the set — `Datasource { Kitchen, OnDevice }` —
   and `Kitchen with { … }` inside that set adjusts one member app-locally (amended into §6).
@@ -2512,7 +2502,7 @@ action FetchRecipe returns { Foo: 1, Bar: ["123", "abc"] }
   Double-Length, Accented, or Right-to-Left _pseudolanguages_ as scheme diagnostics — review modes,
   never shipped languages — so Tao mirrors that: `locale pseudolocale` on a scenario, paired with
   `direction rightToLeft` so mirrored layout is reviewed in the same pass, and never an entry in
-  `project { languages }`:
+  an app’s authored language configuration:
 
 ```swift
 scenarios SharedRecipe "localization" {
@@ -2691,3 +2681,25 @@ Nothing. Every contested item is resolved. Follow-on work lives in the repositor
 the drag-and-drop example app, which will stress-test gesture ownership, drop targets,
 cross-container moves, and drop-as-authorized-write against the decisions above, and may send
 refinements back through the tranche process.
+
+## Project and publication amendment — 2026-10-02
+
+The project/module/package contract in [Tao Projects, Modules, and Packages](../../Spec/Tao%20Packages.md)
+supersedes older project metadata and workspace-visibility wording in this document. `.tao/` marks a
+project root, named `@<name>` directories are modules, and root-only `package` blocks are publications
+with optional name, version, license, dependencies, and `includes`. There is at most one unnamed
+publication per project; named publications may overlap. Consumers access public Tao declarations
+from selected included modules, while reachable implementation helpers remain private.
+
+Runnable apps own lowercase effective `id`, `version`, and `name` plus dependencies. `with` inherits
+and may override them; ID/version pairs are unique per project and app ID owns managed persistent
+state across versions. Local `requires` selects one project/publication/version range and requested
+module aliases. Explicit `requires ts npm:...` declares npm dependencies. Remote publication and
+workspace-wide visibility remain deferred.
+
+Generated TypeScript lives in `.tao-ts`, authored sidecars retain relative Tao type imports, and root
+`tsconfig.json` extends `.tao/typescript/tsconfig.json`. Native `node_modules` stays at the root; the
+extension may hide both tooling entries while preserving Explorer overrides. The shared saved-file
+watcher powers `tao run`, `tao watch`, the language server, and hosts. See the
+[implementation plan](../Plan%20-%20Tao%20projects%20modules%20and%20packages.md) for migration and
+acceptance boundaries.

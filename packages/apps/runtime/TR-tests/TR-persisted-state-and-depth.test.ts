@@ -9,6 +9,7 @@ function identity(name: string): TR.DeclarationIdentity {
 }
 
 const numberType = { kind: 'primitive', name: 'number' } as const
+const testAppId = 'com.tao.test.persisted'
 
 function memoryStorage(initial: Record<string, string> = {}): ReturnType<typeof memoryKeyValueStorage> {
   return memoryKeyValueStorage(new Map(Object.entries(initial)))
@@ -36,7 +37,7 @@ Describe('persisted app state and recursive view depth', () => {
     const storage = memoryStorage()
     const restore = TR.Persisted.setStorageForTests(storage)
     try {
-      const state = TR.PersistedState(() => TR.Value(280), identity('Loaded'), 'SidebarWidth', numberType)
+      const state = TR.PersistedState(() => TR.Value(280), identity('Loaded'), 'SidebarWidth', numberType, testAppId)
       storage.values.set(state.key, JSON.stringify({ formatVersion: 1, type: numberType, value: 360 }))
       Expect(state.evaluate().jsValue).toBe(280)
       await state.load()
@@ -61,7 +62,7 @@ Describe('persisted app state and recursive view depth', () => {
     }
     const restore = TR.Persisted.setStorageForTests(storage)
     try {
-      const state = TR.PersistedState(() => TR.Value(280), identity('WriteWins'), 'SidebarWidth', numberType)
+      const state = TR.PersistedState(() => TR.Value(280), identity('WriteWins'), 'SidebarWidth', numberType, testAppId)
       const loading = state.load()
       state.set(TR.Value(420))
       resolveLoad?.(JSON.stringify({ formatVersion: 1, type: numberType, value: 360 }))
@@ -80,7 +81,7 @@ Describe('persisted app state and recursive view depth', () => {
     }
     const restore = TR.Persisted.setStorageForTests(storage)
     try {
-      const state = TR.PersistedState(() => TR.Value(280), identity('Ordered'), 'SidebarWidth', numberType)
+      const state = TR.PersistedState(() => TR.Value(280), identity('Ordered'), 'SidebarWidth', numberType, testAppId)
       await state.load()
       state.set(TR.Value(300))
       state.set(TR.Value(420))
@@ -104,12 +105,18 @@ Describe('persisted app state and recursive view depth', () => {
     const warn = console.warn
     console.warn = () => {}
     try {
-      const corrupt = TR.PersistedState(() => TR.Value(280), identity('Corrupt'), 'SidebarWidth', numberType)
+      const corrupt = TR.PersistedState(() => TR.Value(280), identity('Corrupt'), 'SidebarWidth', numberType, testAppId)
       storage.values.set(corrupt.key, '{bad json')
       await corrupt.load()
       Expect(corrupt.evaluate().jsValue).toBe(280)
 
-      const mistyped = TR.PersistedState(() => TR.Value(320), identity('Mistyped'), 'SidebarWidth', numberType)
+      const mistyped = TR.PersistedState(
+        () => TR.Value(320),
+        identity('Mistyped'),
+        'SidebarWidth',
+        numberType,
+        testAppId,
+      )
       storage.values.set(mistyped.key, JSON.stringify({ formatVersion: 1, type: numberType, value: 'wide' }))
       await mistyped.load()
       Expect(mistyped.evaluate().jsValue).toBe(320)
@@ -134,6 +141,7 @@ Describe('persisted app state and recursive view depth', () => {
         identity('ExtraField'),
         'Pane',
         itemType,
+        testAppId,
       )
       storage.values.set(
         state.key,
@@ -162,7 +170,7 @@ Describe('persisted app state and recursive view depth', () => {
     } as const
     try {
       const Status = TR.Enum(declaration, enumType.cases)
-      const state = TR.PersistedState(() => Status['Draft']!, identity('EnumOwner'), 'Status', enumType)
+      const state = TR.PersistedState(() => Status['Draft']!, identity('EnumOwner'), 'Status', enumType, testAppId)
       await state.load()
       state.set(Status['Published']!)
       await Promise.resolve()
@@ -179,6 +187,7 @@ Describe('persisted app state and recursive view depth', () => {
         identity('EnumOwner'),
         'Status',
         enumType,
+        testAppId,
       )
       await restoredState.load()
       Expect(restoredState.evaluate().jsValue).toBe(RecompiledStatus['Published']!.evaluate().jsValue)
@@ -201,7 +210,7 @@ Describe('persisted app state and recursive view depth', () => {
     const warn = console.warn
     console.warn = () => {}
     try {
-      const state = TR.PersistedState(() => Status['Draft']!, identity('SafeEnumOwner'), 'Status', enumType)
+      const state = TR.PersistedState(() => Status['Draft']!, identity('SafeEnumOwner'), 'Status', enumType, testAppId)
       storage.values.set(
         state.key,
         JSON.stringify({
@@ -225,7 +234,13 @@ Describe('persisted app state and recursive view depth', () => {
     const device = memoryStorage()
     const restoreDevice = TR.Persisted.setStorageForTests(device)
     try {
-      const state = TR.PersistedState(() => TR.Value(280), identity('CheckBoundary'), 'SidebarWidth', numberType)
+      const state = TR.PersistedState(
+        () => TR.Value(280),
+        identity('CheckBoundary'),
+        'SidebarWidth',
+        numberType,
+        testAppId,
+      )
       device.values.set(state.key, envelope(360))
       await state.load()
       Expect(state.evaluate().jsValue).toBe(360)
@@ -255,7 +270,7 @@ Describe('persisted app state and recursive view depth', () => {
     const restoreDevice = TR.Persisted.setStorageForTests(device)
     let restoreSeeded: (() => void) | undefined
     try {
-      const state = TR.PersistedState(() => TR.Value(280), identity('LoadMemo'), 'SidebarWidth', numberType)
+      const state = TR.PersistedState(() => TR.Value(280), identity('LoadMemo'), 'SidebarWidth', numberType, testAppId)
       device.values.set(state.key, envelope(360))
       await state.load()
       Expect(state.evaluate().jsValue).toBe(360)
@@ -278,7 +293,13 @@ Describe('persisted app state and recursive view depth', () => {
     const device = memoryStorage()
     const restoreDevice = TR.Persisted.setStorageForTests(device)
     try {
-      const state = TR.PersistedState(() => TR.Value(280), identity('DeviceHandback'), 'SidebarWidth', numberType)
+      const state = TR.PersistedState(
+        () => TR.Value(280),
+        identity('DeviceHandback'),
+        'SidebarWidth',
+        numberType,
+        testAppId,
+      )
       device.values.set(state.key, envelope(360))
 
       TR.Persisted.beginTest()
@@ -302,7 +323,13 @@ Describe('persisted app state and recursive view depth', () => {
     const values = new Map<string, string>()
     const restoreDevice = TR.Persisted.setStorageForTests(unhurriedStorage(values))
     try {
-      const state = TR.PersistedState(() => TR.Value(280), identity('LaunchHydration'), 'SidebarWidth', numberType)
+      const state = TR.PersistedState(
+        () => TR.Value(280),
+        identity('LaunchHydration'),
+        'SidebarWidth',
+        numberType,
+        testAppId,
+      )
       await state.load()
       state.set(TR.Value(360))
 
@@ -325,7 +352,13 @@ Describe('persisted app state and recursive view depth', () => {
     const device = memoryStorage()
     const restoreDevice = TR.Persisted.setStorageForTests(device)
     try {
-      const state = TR.PersistedState(() => TR.Value(280), identity('LaunchKeepsDevice'), 'SidebarWidth', numberType)
+      const state = TR.PersistedState(
+        () => TR.Value(280),
+        identity('LaunchKeepsDevice'),
+        'SidebarWidth',
+        numberType,
+        testAppId,
+      )
       device.values.set(state.key, envelope(360))
 
       // Nothing mounted this state, so it never loaded and has nothing of its own to write. The

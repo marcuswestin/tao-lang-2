@@ -18,21 +18,21 @@ Describe('Expo runtime', () => {
       {
         'Main.tao': `
           use MiddleApp from ./Middle.tao
-          app FinalApp = MiddleApp with { Name "Final app" }
+          app FinalApp = MiddleApp with { id "finalapp" name "Final app" }
         `,
         'Middle.tao': `
           use Memory from @tao/data/providers/memory
           use PackageApp from @feature
-          workspace app MiddleApp = PackageApp with {
-            Name "Middle app"
+          project app MiddleApp = PackageApp with {
+            id "middleapp"
+            name "Middle app"
             Datasource Memory { }
           }
         `,
         'packages/@feature/App.tao': `
           use Text from @tao/ui
           data Records / Record { Label text }
-          public app PackageApp {
-            Name "Package app"
+          public app PackageApp { id "packageapp" version "1.0.0" name "Package app"
             state LaunchCount is number = 0 (persist)
             view PackageHome
           }
@@ -54,17 +54,17 @@ Describe('Expo runtime', () => {
       {
         'Main.tao': `
           use MiddleApp from ./Middle.tao
-          app PatchedApp = MiddleApp with { Datasource with { StorageKey "patched" } }
+          app PatchedApp = MiddleApp with { id "patchedapp" Datasource with { StorageKey "patched" } }
         `,
         'Middle.tao': `
           use Memory from @tao/data/providers/memory
           use PackageApp from @feature
-          workspace app MiddleApp = PackageApp with { Datasource Memory { } }
+          project app MiddleApp = PackageApp with { id "middleapp" Datasource Memory { } }
         `,
         'packages/@feature/App.tao': `
           use Text from @tao/ui
           data Records / Record { Label text }
-          public app PackageApp { Name "Package app" view PackageHome }
+          public app PackageApp { id "packageapp" version "1.0.0" name "Package app" view PackageHome }
           view PackageHome() {
             query Records = Records with { }
             render Text("Patched app { Records.Count }")
@@ -107,7 +107,7 @@ Describe('Expo runtime', () => {
   Test('passes action values through render inject arguments', async () => {
     await testCompileApp(
       `
-        app InjectedActionApp {
+        app InjectedActionApp { id "injectedactionapp" version "1.0.0" name "InjectedActionApp"
           view MainView
         }
 
@@ -156,7 +156,7 @@ Describe('Expo runtime', () => {
   Test('applies typed defaults for functions, views, and actions', async () => {
     await testCompileApp(
       `
-        app DefaultsApp {
+        app DefaultsApp { id "defaultsapp" version "1.0.0" name "DefaultsApp"
           view MainView
         }
 
@@ -223,12 +223,11 @@ Describe('Expo runtime', () => {
       `
         use StackNav from @tao/nav
 
-        app DefaultsNavigationApp {
-          Name "Defaults"
+        app DefaultsNavigationApp { id "defaultsnavigationapp" version "1.0.0" name "Defaults"
           Navigator StackNav { Initial Home }
         }
 
-        workspace scene Home(Title text default "Welcome home") {
+        project scene Home(Title text default "Welcome home") {
           Title Title
           render Text(Title)
         }
@@ -249,7 +248,7 @@ Describe('Expo runtime', () => {
   Test('invokes action parameters in declaration order after type-based binding', async () => {
     await testCompileApp(
       `
-        app ReorderedActionApp {
+        app ReorderedActionApp { id "reorderedactionapp" version "1.0.0" name "ReorderedActionApp"
           view MainView
         }
 
@@ -303,7 +302,7 @@ Describe('Expo runtime', () => {
       'Main.tao',
       {
         'Main.tao': `
-          app ImportedActionApp {
+          app ImportedActionApp { id "importedactionapp" version "1.0.0" name "ImportedActionApp"
             view MainView
           }
 
@@ -320,7 +319,7 @@ Describe('Expo runtime', () => {
           }
         `,
         'Actions.tao': `
-          workspace action Save() { }
+          project action Save() { }
         `,
       },
       screen => {
@@ -332,7 +331,7 @@ Describe('Expo runtime', () => {
   Test('emits item constructor fields in declaration order after type-based binding', async () => {
     await testCompileApp(
       `
-        app ItemOrderApp {
+        app ItemOrderApp { id "itemorderapp" version "1.0.0" name "ItemOrderApp"
           view MainView
         }
 
@@ -371,6 +370,9 @@ Describe('Expo runtime', () => {
         }
 
         let Product = ReusableApp {
+          id "reusableapp"
+          version "1.0.0"
+          name "Reusable optional values"
           Navigator StackNav { Initial Home }
         }
 
@@ -414,7 +416,7 @@ Describe('Expo runtime', () => {
   Test('rerenders state-backed item member access after state updates', async () => {
     await testCompileApp(
       `
-        app StatefulItemMemberApp {
+        app StatefulItemMemberApp { id "statefulitemmemberapp" version "1.0.0" name "StatefulItemMemberApp"
           view MainView
         }
 
@@ -468,7 +470,7 @@ Describe('Expo runtime', () => {
   Test('runs actions whose parameters shadow generated runtime names', async () => {
     await testCompileApp(
       `
-        app ShadowedActionParameterApp {
+        app ShadowedActionParameterApp { id "shadowedactionparameterapp" version "1.0.0" name "ShadowedActionParameterApp"
           view MainView
         }
 
@@ -522,7 +524,7 @@ Describe('Expo runtime', () => {
       'Main.tao',
       {
         'Main.tao': `
-          app CircularAliasApp {
+          app CircularAliasApp { id "circularaliasapp" version "1.0.0" name "CircularAliasApp"
               view MainView
           }
 
@@ -535,9 +537,9 @@ Describe('Expo runtime', () => {
         'A.tao': `
           use BView from ./
 
-          workspace let SharedTitle = "Circular alias"
+          project let SharedTitle = "Circular alias"
 
-          workspace view AView() {
+          project view AView() {
               render BView()
           }
         `,
@@ -546,7 +548,7 @@ Describe('Expo runtime', () => {
 
           let ImportedTitle = SharedTitle
 
-          workspace view BView() {
+          project view BView() {
               render Text(ImportedTitle)
           }
 
@@ -566,7 +568,7 @@ Describe('Expo runtime', () => {
   Test('renders alias references to earlier aliases', async () => {
     await testCompileApp(
       `
-        app OrderedAlias {
+        app OrderedAlias { id "orderedalias" version "1.0.0" name "OrderedAlias"
             view MainView
         }
 
@@ -592,7 +594,7 @@ Describe('Expo runtime', () => {
   Test('renders block-local aliases that shadow file-level aliases', async () => {
     await testCompileApp(
       `
-        app ScopedAlias {
+        app ScopedAlias { id "scopedalias" version "1.0.0" name "ScopedAlias"
             view MainView
         }
 

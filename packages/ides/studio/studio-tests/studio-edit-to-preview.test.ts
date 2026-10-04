@@ -22,7 +22,7 @@ const SENTINEL_AFTER = 'After typed'
 /** Two scenario groups, so group reconciliation has something to reconcile. */
 const projectSource = (sentinel: string) => `
   use Text from @tao/ui
-  app Garden { view Main }
+  app Garden { id "garden" version "1.0.0" name "Garden" view Main }
   view Main() { render Text("${sentinel}") }
   scene Card(Title text) { render Text(Title) }
   fixture Empty { }

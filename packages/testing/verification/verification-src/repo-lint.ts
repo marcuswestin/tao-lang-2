@@ -63,9 +63,9 @@ function wordFlowerAbsorbedParityIssues(directory: WordFlowerDirectory): string[
 }
 
 function isWordFlowerParityFile(file: SourceFile): boolean {
-  return file.path !== '.tao-project/lock.jsonc'
-    && !file.path.split('/').some(segment => segment === '.tao' || segment === 'node_modules')
-    && !file.path.endsWith('.tao.ts')
+  return !file.path.split('/').some(segment =>
+    segment === '.tao' || segment === '.tao-ts' || segment === 'node_modules'
+  )
 }
 
 function currentWordFlowerPath(path: string): string {
@@ -487,21 +487,21 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:359',
   'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:376',
   'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:20',
-  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:198',
-  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:516',
-  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:544',
-  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:551',
-  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:627',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:207',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:961',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:966',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:971',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:996',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1235',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1256',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1443',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1487',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1513',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:195',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:513',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:541',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:548',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:624',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:203',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:957',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:962',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:967',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:992',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1231',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1252',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1439',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1483',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1509',
   'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:306',
   'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:328',
   'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:1083',

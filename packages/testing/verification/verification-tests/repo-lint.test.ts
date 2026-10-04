@@ -289,7 +289,7 @@ _bench-check:
       await FS.writeText(FS.resolvePath('Justfile', root), healthyJustfile)
       await FS.writeText(FS.resolvePath(DEV_ENTRY_PATH, root), importFrom('@shared'))
       await FS.writeText(FS.resolvePath('Apps/WordFlower/1 - Current/.tao/dev/runtime/App.tsx', root), 'generated\n')
-      await FS.writeText(FS.resolvePath('Apps/WordFlower/1 - Current/@ui/Shell.tao.ts', root), 'generated\n')
+      await FS.writeText(FS.resolvePath('Apps/WordFlower/1 - Current/.tao-ts/@ui/Shell.tao.ts', root), 'generated\n')
       await FS.symlink(
         FS.resolvePath('Apps/WordFlower/1 - Current/.tao/dev/runtime', root),
         FS.resolvePath('Apps/WordFlower/1 - Current/.tao/dev/node_modules', root),
@@ -357,10 +357,10 @@ _bench-check:
     Expect(wordFlowerDirectoryIssues(directory(
       [
         file('WordFlower.tao', absorbed),
-        file('.tao-project/lock.jsonc', '{ "ship": true }'),
+        file('.tao/lock.jsonc', '{ "ship": true }'),
         file('.tao/sessions/owner.json', '{ "owner": "studio" }'),
         file('.tao/sessions/session.json', '{ "status": "active" }'),
-        file('@ui/View.tao.ts', 'generated bridge metadata'),
+        file('.tao-ts/@ui/View.tao.ts', 'generated bridge metadata'),
       ],
       [file('WordFlower.tao-next', absorbed)],
     ))).toEqual([])

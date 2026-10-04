@@ -5,7 +5,7 @@ function StudioFolderIsExpanded(CollapsedFolders list of text, FolderPath text) 
    return StudioFolderIsExpanded(CollapsedFolders, FolderPath) from ../../../packages/ides/studio/studio-src/StudioFolderExpansion.ts
 }
 
-workspace
+project
 function StudioToggleFolder(CollapsedFolders list of text, FolderPath text) returns list of text {
    return StudioToggleFolder(CollapsedFolders, FolderPath) from ../../../packages/ides/studio/studio-src/StudioFolderExpansion.ts
 }

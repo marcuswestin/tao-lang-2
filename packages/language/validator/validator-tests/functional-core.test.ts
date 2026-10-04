@@ -359,7 +359,7 @@ Describe('validator: functional core', () => {
         `,
         'Other.tao': `
           guard default { missing -> { Other() } }
-          workspace view Other() { render inject \`\`\`ts\nreturn null\n\`\`\` }
+          project view Other() { render inject \`\`\`ts\nreturn null\n\`\`\` }
         `,
       },
       FunctionalCoreValidator.messages.guardDefaultDuplicate,

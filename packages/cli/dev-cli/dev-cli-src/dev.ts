@@ -780,7 +780,7 @@ await runWithCommands(commands => {
   commands
     .command('instant-review')
     .description(
-      'Push Auth Review to the stored Instant Cloud app, then run it in tao dev from a disposable copy.',
+      'Push Auth Review to the stored Instant Cloud app, then run it in tao run from a disposable copy.',
     )
     .option('--device <name-or-id>', 'Open this physical device after Metro starts.')
     .option('--ios', 'Open an iOS simulator after Metro starts.')
@@ -1014,7 +1014,7 @@ await runWithCommands(commands => {
   commands
     .command('companion-host-build')
     .description(
-      'Build the Tao Companion as a prebuilt host into .artifacts/hosts, which tao dev installs on an emulator or simulator in place of Expo Go.',
+      'Build the Tao Companion as a prebuilt host into .artifacts/hosts, which tao run installs on an emulator or simulator in place of Expo Go.',
     )
     .option('--platform <platform>', 'android, or ios-simulator for an iOS Simulator host.', 'android')
     .option('--abi <abis>', 'Comma-separated Android ABIs to build; arm64-v8a,x86_64 by default.')
@@ -1042,7 +1042,7 @@ await runWithCommands(commands => {
   commands
     .command('companion-host-publish')
     .description(
-      'Publish every host built for the Tao Companion as it stands to its GitHub release, where tao dev downloads it.',
+      'Publish every host built for the Tao Companion as it stands to its GitHub release, where tao run downloads it.',
     )
     .action(async () => {
       try {
@@ -1144,6 +1144,16 @@ await runWithCommands(commands => {
         } else {
           Errors.throwUserInput('Expected release target studio or ide-extension.')
         }
+      })
+    })
+
+  commands
+    .command('ide-extension-acceptance')
+    .description('Verify the installed extension in an isolated VS Code window; does not publish.')
+    .action(async () => {
+      await runReleaseAction(async () => {
+        const { InstalledEditorAcceptance } = await import('./release/InstalledEditorAcceptance')
+        await InstalledEditorAcceptance.run()
       })
     })
 

@@ -290,9 +290,9 @@ Describe('runTestWatchCommand real watch-set wiring', () => {
   // all real, so this proves the watched roots actually cover both selected projects.
   Test('reruns on a change in either selected project, not only the first', async () => {
     await withTaoFixture({
-      'One/Project.tao': 'project { id "watch-one" name "Watch One" }\n',
+      'One/.tao/.gitkeep': '',
       'One/Sample.test.tao': 'test "Sample" { }\n',
-      'Two/Project.tao': 'project { id "watch-two" name "Watch Two" }\n',
+      'Two/.tao/.gitkeep': '',
       'Two/Sample.test.tao': 'test "Sample" { }\n',
     }, async rootDir => {
       const oneRoot = FS.resolvePath('One', rootDir)
@@ -330,7 +330,7 @@ Describe('runTestWatchCommand real watch-set wiring', () => {
   // without native file events, so both real watcher tests request polling explicitly.
   Test('keeps watching a selected directory with no tests yet, and reruns once one is added', async () => {
     await withTaoFixture({
-      'Project.tao': 'project { id "watch-empty" name "Watch Empty" }\n',
+      '.tao/.gitkeep': '',
     }, async rootDir => {
       let calls = 0
       const controller = new AbortController()

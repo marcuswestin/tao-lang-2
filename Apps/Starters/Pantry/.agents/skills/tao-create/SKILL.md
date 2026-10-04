@@ -33,7 +33,7 @@ design in `Design.tao`, fixtures in `Scenarios.tao`, and journeys in `<App>.test
    `Initial`; for several, add a stack plus a keyed `SelectionNav` item.
 5. Add representative rows to a `fixture` and add app and row `scenarios` in `Scenarios.tao`.
 6. Add a journey that creates a row, selects it, edits it, returns, and observes the changed label.
-7. Run `tao fix`, `tao check`, `tao test`, then `tao dev`.
+7. Run `tao fix`, `tao check`, `tao test`, then `tao run`.
 
 This is a compact feature file using the existing `Ingredients` entity:
 

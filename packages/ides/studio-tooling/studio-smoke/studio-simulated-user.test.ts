@@ -15,7 +15,7 @@ import { exerciseStudioFeed } from './studio-feed-journey'
 const scrollingTail = Array.from({ length: 80 }, (_, index) => `// scroll proof ${index + 1}`).join('\n')
 
 const initialSource = `use Stack, Text from @tao/ui
-app Smoke { view MainView }
+app Smoke { id "smoke" version "1.0.0" name "Smoke" view MainView }
 view MainView() {
   render Stack() {
     Text("First")
@@ -88,11 +88,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
     previewRuntimeRoot = await Repo.mkScratchDir('tao-studio-simulated-runtime-')
     const sourcePath = FS.resolvePath('Smoke.tao', projectRoot)
     await FS.writeText(sourcePath, initialSource)
-    // The real compile lane refuses a project without checked-in identity.
-    await FS.writeText(
-      FS.resolvePath('Project.tao', projectRoot),
-      'project { id "tao-studio-simulated-user-smoke" name "Simulated user smoke" }\n',
-    )
+    await FS.mkdir(FS.resolvePath('.tao', projectRoot))
     preview = startPreviewServer(smokePort('TAO_STUDIO_SMOKE_PREVIEW_PORT', 42_001))
     // The scenario canvas and inspector only exist once a preview manifest is published, and only
     // the real compile lane publishes one. A stubbed compile leaves `previewManifest()` undefined,
@@ -319,7 +315,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       // reveal the one region involved and leave every other fold alone, and neither changes the
       // file: an edit beside a folded region is cancelled in favour of showing it, and a caret that
       // lands on its edge opens it rather than sitting in text the person cannot see.
-      const revealedHead = 'app Smoke { view MainView }'
+      const revealedHead = 'app Smoke { id "smoke" version "1.0.0" name "Smoke" view MainView }'
       await browser.click('[data-testid="studio-lens-preset-outline"]')
       await browser.waitFor(`document.querySelector('.cm-line:has(.cm-lens-glyph)') instanceof HTMLElement`)
       const outlineFolds = await foldedRegions(browser)
@@ -459,7 +455,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       await waitForCompileAfter(browser, compileRevision)
 
       const generatedSketchPath = FS.resolvePath('@/studio/View1.tao', projectRoot)
-      const sketchCatalogPath = FS.resolvePath('.tao-project/studio/sketches.jsonc', projectRoot)
+      const sketchCatalogPath = FS.resolvePath('.tao/studio/sketches.jsonc', projectRoot)
       // A 360-pixel board needs a canvas column wider than the Design preset leaves at 1440; a
       // designer's display gives the sketch room, and the pointer gesture below is checked against it.
       await browser.setViewport(1_920, 1_080)

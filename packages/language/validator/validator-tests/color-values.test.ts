@@ -38,8 +38,8 @@ Describe('validator: color values', () => {
       use StackNav from @tao/nav
       ${themeDesign('Light')}
       ${themeDesign('Dark')}
-      app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Light }
-      app DemoDark = Demo with { Name "Demo Dark" Design Dark }
+      app Demo { id "demo" version "1.0.0" name "Demo" Navigator StackNav { Initial Main } Design Light }
+      app DemoDark = Demo with { id "demodark" name "Demo Dark" Design Dark }
       scene Main() { Title "Main" render Badge("Final", Tint: accent) }
       ${colorViews}
     `)
@@ -52,8 +52,8 @@ Describe('validator: color values', () => {
       use StackNav from @tao/nav
       ${themeDesign('Light')}
       ${themeDesign('Dark', 'glow #ffcc00')}
-      app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Light }
-      app DemoDark = Demo with { Name "Demo Dark" Design Dark }
+      app Demo { id "demo" version "1.0.0" name "Demo" Navigator StackNav { Initial Main } Design Light }
+      app DemoDark = Demo with { id "demodark" name "Demo Dark" Design Dark }
       scene Main() { Title "Main" render Badge("Final", Tint: glow) }
       view Glowing(Tint color default glow) { render Surface() [background Tint] }
       ${colorViews}
@@ -71,8 +71,8 @@ Describe('validator: color values', () => {
     const result = await Validator.validateCode(`
       use StackNav from @tao/nav
       ${themeDesign('Dark', 'glow #ffcc00')}
-      app Demo { Name "Demo" Navigator StackNav { Initial Main } }
-      app DemoDark = Demo with { Name "Demo Dark" Design Dark }
+      app Demo { id "demo" version "1.0.0" name "Demo" Navigator StackNav { Initial Main } }
+      app DemoDark = Demo with { id "demodark" name "Demo Dark" Design Dark }
       scene Main() { Title "Main" render Swatch(Tint: glow) }
       view Swatch(Tint color default glow) { render Surface() [background Tint] }
       view Surface() {
@@ -92,19 +92,21 @@ Describe('validator: color values', () => {
       `rejects a shade one mounting design lacks whichever app is declared first (${order.join(', ')})`,
       async () => {
         const apps = {
-          First: 'app First { Name "First" Navigator StackNav { Initial Main } Design Plain }',
-          Second: 'app Second { Name "Second" Navigator StackNav { Initial Main } Design Rich }',
+          First:
+            'app First { id "first" version "1.0.0" name "First" Navigator StackNav { Initial Main } Design Plain }',
+          Second:
+            'app Second { id "second" version "1.0.0" name "Second" Navigator StackNav { Initial Main } Design Rich }',
         }
         const result = await Validator.validateCode(`
         use StackNav from @tao/nav
-        workspace design Plain {
+        project design Plain {
           colors {
             accent #2f6b4f
             inkMuted #6b7280
           }
           styles { dot [width 8] }
         }
-        workspace design Rich {
+        project design Rich {
           colors {
             accent #2f6b4f { 20 #cfe3d8 }
             inkMuted #6b7280
@@ -217,7 +219,7 @@ Describe('validator: color values', () => {
 
 function themeDesign(name: string, extraColors = ''): string {
   return `
-    workspace design ${name} {
+    project design ${name} {
       colors {
         ${extraColors}
         accent #2f6b4f { 20 #cfe3d8 }
@@ -246,7 +248,7 @@ function colorApp(views: string): string {
   return `
     use StackNav from @tao/nav
     ${themeDesign('Theme')}
-    app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
+    app Demo { id "demo" version "1.0.0" name "Demo" Navigator StackNav { Initial Main } Design Theme }
     scene Main() { Title "Main" render Badge("Main") }
     ${colorViews}
     ${views}

@@ -1,3 +1,4 @@
+import { ProjectTooling, type ProjectToolingResult } from '@project-tooling'
 import { CLI, Errors, Repo, Text } from '@shared'
 import Runtime from '../runtime'
 import { RuntimeToolchainPaths } from '../runtime-toolchain-paths'
@@ -40,6 +41,7 @@ type CompileAppOptions = {
   reason: string
   shouldRunParserGen: boolean
   runtimeRoot: string
+  toolingResult?: ProjectToolingResult
 }
 
 /** runTests runs repository tests in line-output mode for the Expo dev-loop dashboard. */
@@ -77,6 +79,17 @@ async function compileAppWithoutCommandLock(options: CompileAppOptions): Promise
   try {
     if (shouldRunParserGen) {
       await runJust(['_parser-gen'])
+    }
+    const tooling = options.toolingResult ?? await ProjectTooling.refresh(appPath, {
+      hostModulesRoot: RuntimeToolchainPaths.dependencyRoot(),
+    })
+    if (tooling.status !== 'fresh') {
+      DevLoopOutput.recordFailure(
+        'compile',
+        tooling.diagnostics.map(diagnostic => diagnostic.message).join('\n')
+          || 'Project tooling is stale; keeping the last working app.',
+      )
+      return false
     }
     await Runtime.generateApp(appPath, { appName, runtimePackageRoot: runtimeRoot })
     DevLoopOutput.logDevLoop('compile', 'compiled')

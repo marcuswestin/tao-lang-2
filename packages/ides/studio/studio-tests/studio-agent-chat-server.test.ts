@@ -12,7 +12,9 @@ import type { StudioProjectSession } from '../studio-src/StudioProjectSession'
 
 const PATH = 'App.tao'
 const SOURCE = `app Reader {
-   Name "Reader"
+   id "reader"
+   version "1.0.0"
+   name "Reader"
 }
 
 view Greeting() {

@@ -3,7 +3,7 @@ import { TaoFileIcon } from '@shared/core'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { LSPWorkspace } from 'tao-compiler/workspace'
 import { TaoFormatter } from 'tao-formatter'
-import { AST, codeProjectRoot, Langium } from 'tao-parser'
+import { AST, Langium } from 'tao-parser'
 import { TaoCodeActionProvider } from 'tao-source-actions/langium-code-actions'
 import { publishIdeExtensionOutputs } from '../esbuild.config'
 import { workspaceServerPlan, workspaceServerRoots } from '../ide-extension-src/extension/workspace-server-roots'
@@ -116,6 +116,8 @@ Describe('Tao IDE extension smoke', () => {
       'Tao: Organize Source',
       'Tao: Remove Unused Imports',
       'Tao: Move Renders Last',
+      'Tao: Show Tooling',
+      'Tao: Open TypeScript Config',
     ])
     Expect(packageJson.contributes.grammars[0]?.embeddedLanguages).toEqual({
       'meta.embedded.block.ts.tao': 'typescriptreact',
@@ -125,7 +127,7 @@ Describe('Tao IDE extension smoke', () => {
   Test('reports structural and type diagnostics through Langium services', async () => {
     const diagnostics = await validateWithLanguageServerServices(`
       let Greeting = "Hello"
-      app Demo {
+      app Demo { id "demo-structure" version "1.0.0" name "Demo structure"
         render Greeting()
       }
       view Counter(Count number) {
@@ -148,7 +150,7 @@ Describe('Tao IDE extension smoke', () => {
 
   Test('reports binding declaration-order diagnostics through Langium services', async () => {
     const diagnostics = await validateWithLanguageServerServices(`
-      app Demo {
+      app Demo { id "demo-order" version "1.0.0" name "Demo order"
         view MainView
       }
       let First = Second
@@ -205,7 +207,7 @@ Describe('Tao IDE extension smoke', () => {
 
   Test('serves the organize use statements source action through the language server', async () => {
     const fixture = await buildCodeActionFixture(
-      'app MyApp { view MainView }\nuse Text from @tao/ui\nview MainView() { render Text("hi") }\n',
+      'app MyApp { id "source-actions" version "1.0.0" name "Source actions" view MainView }\nuse Text from @tao/ui\nview MainView() { render Text("hi") }\n',
     )
     try {
       const { provider, document } = fixture
@@ -219,7 +221,7 @@ Describe('Tao IDE extension smoke', () => {
       Expect(organize && 'kind' in organize ? organize.kind : undefined).toBe('source.organizeImports')
       const edits = organize && 'edit' in organize ? organize.edit?.changes?.[document.textDocument.uri] : undefined
       Expect(edits?.[0]?.newText).toBe(
-        'use Text from @tao/ui\n\napp MyApp {\n   view MainView\n}\n\nview MainView() {\n   render Text("hi")\n}\n',
+        'use Text from @tao/ui\n\napp MyApp {\n   id "source-actions"\n   version "1.0.0"\n   name "Source actions"\n   view MainView\n}\n\nview MainView() {\n   render Text("hi")\n}\n',
       )
     } finally {
       await fixture.cleanup()
@@ -253,11 +255,11 @@ Describe('Tao IDE extension smoke', () => {
 
   Test('reports duplicate visible declarations through Langium services', async () => {
     const diagnostics = await validateFilesWithLanguageServerServices({
-      [`${codeProjectRoot}/First.tao`]: `
-        workspace let Shared = "First"
+      'First.tao': `
+        project let Shared = "First"
       `,
-      [`${codeProjectRoot}/Second.tao`]: `
-        package let Shared = "Second"
+      'Second.tao': `
+        project let Shared = "Second"
       `,
     })
 
@@ -266,14 +268,14 @@ Describe('Tao IDE extension smoke', () => {
     ).toBe(true)
   })
 
-  Test('resolves on-disk package imports through Langium services', async () => {
+  Test('resolves same-project imports through Langium services', async () => {
     const diagnostics = await validateOnDiskFileWithLanguageServerServices('Main.tao', {
       'Main.tao': `
-        use MainView from @bar/views
-        app PackageApp { view MainView }
+        use MainView from ./views
+        app PackageApp { id "package-app" version "1.0.0" name "Package app" view MainView }
       `,
-      'packages/@bar/views/Main.tao': `
-        workspace view MainView() {
+      'views/Main.tao': `
+        project view MainView() {
           render inject \`\`\`ts
             return null
           \`\`\`
@@ -304,6 +306,7 @@ async function buildCodeActionFixture(source: string): Promise<{
   cleanup: () => Promise<void>
 }> {
   const rootDir = await mkTestDir('tao-ide-actions-')
+  await FS.writeText(FS.resolvePath('.tao/.gitkeep', rootDir), '')
   const workspace = await LSPWorkspace.open(rootDir, Langium.NodeFileSystem, {
     lspCodeActionProvider: () => new TaoCodeActionProvider(),
   })
@@ -326,6 +329,7 @@ async function buildFormatterFixture(source: string): Promise<{
   cleanup: () => Promise<void>
 }> {
   const rootDir = await mkTestDir('tao-ide-format-')
+  await FS.writeText(FS.resolvePath('.tao/.gitkeep', rootDir), '')
   const workspace = await LSPWorkspace.open(rootDir, Langium.NodeFileSystem, {
     lspFormatter: () => new TaoFormatter(),
   })
@@ -375,6 +379,7 @@ function diagnosticMessageText(message: string | { value: string }): string {
 async function validateWithLanguageServerServices(source: string): Promise<string[]> {
   const rootDir = await mkTestDir('tao-ide-lsp-')
   try {
+    await FS.writeText(FS.resolvePath('.tao/.gitkeep', rootDir), '')
     const workspace = await LSPWorkspace.open(rootDir)
     const services = workspace.services
     const uri = Langium.URI.file(FS.resolvePath('ide-smoke.tao', rootDir))
@@ -395,12 +400,11 @@ async function validateWithLanguageServerServices(source: string): Promise<strin
 async function validateFilesWithLanguageServerServices(sources: Record<string, string>): Promise<string[]> {
   const rootDir = await mkTestDir('tao-ide-lsp-')
   try {
+    await FS.writeText(FS.resolvePath('.tao/.gitkeep', rootDir), '')
     const workspace = await LSPWorkspace.open(rootDir)
     const services = workspace.services
     const documents = Object.entries(sources).map(([path, source]) => {
-      const workspacePath = path.startsWith(`${codeProjectRoot}/`)
-        ? FS.resolvePath(path.slice(codeProjectRoot.length + 1), rootDir)
-        : FS.resolvePath(path, rootDir)
+      const workspacePath = FS.resolvePath(path, rootDir)
       const document = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(
         source,
         Langium.URI.file(workspacePath),
@@ -428,6 +432,7 @@ async function validateOnDiskFileWithLanguageServerServices(
 ): Promise<string[]> {
   const rootDir = await mkTestDir('tao-ide-lsp-')
   try {
+    await FS.writeText(FS.resolvePath('.tao/.gitkeep', rootDir), '')
     for (const [path, source] of Object.entries(sources)) {
       await FS.writeText(FS.resolvePath(path, rootDir), source)
     }

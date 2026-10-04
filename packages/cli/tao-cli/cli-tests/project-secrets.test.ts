@@ -15,10 +15,7 @@ import {
 
 async function fixture(): Promise<string> {
   const root = await mkTestDir('project-secrets')
-  await FS.writeText(
-    FS.resolvePath('Project.tao', root),
-    'project {\n   id "secret-test"\n   name "Secret test"\n   version "0.1.0"\n}\n',
-  )
+  await FS.writeText(FS.resolvePath('.tao/.gitkeep', root), '')
   return root
 }
 

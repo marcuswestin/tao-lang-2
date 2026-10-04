@@ -28,10 +28,10 @@ import { InteractionValidator } from './validators/interaction-validator'
 import { InvocationsValidator } from './validators/invocations-validator'
 import { LayoutValidator } from './validators/layout-validator'
 import { navigationValidationChecks } from './validators/navigation-validator'
+import { packageValidationChecks, validatePackageFile } from './validators/package-validator'
 import { pairingValidationChecks, validateAppPairing } from './validators/pairing-validator'
 import { PhrasesValidator } from './validators/phrases-validator'
 import { preludeValidationChecks, validatePreludeFile } from './validators/prelude-validator'
-import { projectValidationChecks, validateProjectFile } from './validators/project-validator'
 import { ReactiveParametersValidator } from './validators/ReactiveParametersValidator'
 import { ResponsesValidator } from './validators/responses-validator'
 import {
@@ -51,7 +51,7 @@ import { ViewsValidator } from './validators/views-validator'
 
 const nodeValidationChecks = NodeValidation.compile(
   [
-    projectValidationChecks,
+    packageValidationChecks,
     ViewsValidator.checks,
     ActionsValidator.checks,
     EffectOutcomesValidator.checks,
@@ -97,7 +97,7 @@ const typeInferenceChecks = NodeValidation.compile(
 
 function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): readonly AST.Node[] {
   AppValidator.validate(file, ctx)
-  validateProjectFile(file, ctx)
+  validatePackageFile(file, ctx)
   AliasesValidator.validateFile(file, ctx)
   validateDataFile(file, ctx)
   validateDatasourceMembership(file, ctx)

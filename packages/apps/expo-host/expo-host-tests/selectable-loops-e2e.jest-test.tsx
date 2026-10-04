@@ -10,7 +10,7 @@ Describe('selectable loop runtime', () => {
       `
         use Col, Text from @tao/ui
 
-        app SelectableLoopApp { view Main }
+        app SelectableLoopApp { id "selectableloopapp" version "1.0.0" name "SelectableLoopApp" view Main }
         view Main() {
           state Selected = "Nothing selected"
           state SelectionCount = 0

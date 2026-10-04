@@ -10,17 +10,10 @@ async function verifyReleaseBundle(): Promise<void> {
     const sourceRoot = FS.resolvePath('source', runRoot)
     const sourcePath = FS.resolvePath('BundleProof.tao', sourceRoot)
     await copyHost(hostRoot)
+    await FS.writeText(FS.resolvePath('.tao/.gitignore', sourceRoot), '*\n')
     await FS.writeText(
       sourcePath,
-      `project {
-         id "bundle-proof"
-         name "Tao Bundle Proof"
-         version "1.0.0"
-         app BundleProof
-         remote none
-         license MIT
-       }
-       app BundleProof { view Main }
+      `app BundleProof { id "bundle-proof" version "1.0.0" name "Tao Bundle Proof" view Main }
        view Main() { render inject \`\`\`ts return null \`\`\` }
       `,
     )

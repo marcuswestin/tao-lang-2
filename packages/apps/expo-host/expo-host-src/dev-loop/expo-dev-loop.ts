@@ -1,9 +1,9 @@
+import { ProjectTooling, type ProjectToolingWatch } from '@project-tooling'
 import { Errors, FS, HCI, Platform, Repo } from '@shared'
 import { DesktopHost } from '../desktop-host'
 import { RuntimeToolchainPaths } from '../runtime-toolchain-paths'
 import { devDataAppKey, devDataEnvironment } from './dev-data/DevDataBootstrap'
 import { DevDataServer } from './dev-data/DevDataServer'
-import { DevFileWatcher } from './DevFileWatcher'
 import { DevLoopOutput, type DevLoopReporter, lineDevLoopReporter, setDevLoopReporter } from './DevLoopOutput'
 import { DevRuntime } from './DevRuntime'
 import { PREFERRED_EXPO_PORT } from './expo-runner/expo-config'
@@ -16,9 +16,10 @@ import Run from './Run'
 
 /** DevAppSelection identifies the exact app declaration selected by the Tao CLI. */
 export type DevAppSelection = {
+  appId: string
   appName: string
   appPath: string
-  /** The project the app belongs to; with the app name it keys the app's dev data. */
+  /** The project the app belongs to; with the app ID it keys the app's dev data. */
   projectRoot: string
 }
 
@@ -40,7 +41,7 @@ export async function createDevLoopExpoSession(
  * runDevLoop runs one selected app until the Tao CLI should exit, restart, or select again.
  *
  * `reporter` is the output sink every dev-loop command reports lines, failures, and prompts
- * through; the caller that renders owns it. `tao dev` passes the Ink dashboard, so it is mounted
+ * through; the caller that renders owns it. `tao run` passes the Ink dashboard, so it is mounted
  * only while a loop is running. A caller that injects none gets the plain line-writer default.
  */
 export async function runDevLoop(
@@ -72,7 +73,7 @@ async function runDevLoopWithActiveReporter(
   const runtime = await DevRuntime.prepare(selection.projectRoot)
   // The dev data server starts first: its port and the app's key go into Expo's environment, where
   // the checked-in `app.config.js` writes them into the manifest every development build reads.
-  const devDataApp = devDataAppKey(selection.projectRoot, appName)
+  const devDataApp = devDataAppKey(selection.appId)
   const devData = await DevDataServer.start({
     log: line => DevLoopOutput.logDevLoop('data', line),
     rootDir: FS.resolvePath('data', stateRoot),
@@ -94,7 +95,7 @@ async function runDevLoopWithActiveReporter(
   })
   const output = DevLoopOutput.start()
   let keyInput: HCI.RawKeySession | undefined
-  let watcher: DevFileWatcher | undefined
+  let watcher: ProjectToolingWatch | undefined
   let desktop: ReturnType<typeof DesktopHost.runDev> | undefined
   let finished = false
   let cleanupStarted = false
@@ -125,7 +126,7 @@ async function runDevLoopWithActiveReporter(
   }
 
   const stopServices = async () => {
-    await watcher?.close()
+    await watcher?.dispose()
     watcher = undefined
     const desktopProcess = desktop
     if (desktopProcess !== undefined) {
@@ -219,6 +220,25 @@ async function runDevLoopWithActiveReporter(
       keyInput = undefined
       DevLoopOutput.logDevLoop('dev', 'No interactive TTY found; dev loop is running until the process is stopped.')
     }
+    let watcherReady = false
+    watcher = await ProjectTooling.watch(selection.projectRoot, {
+      hostModulesRoot: RuntimeToolchainPaths.dependencyRoot(),
+      onError: error => DevLoopOutput.recordFailure('compile', Errors.formatForLog(error)),
+      onResult: result => {
+        if (!watcherReady || shouldStop()) {
+          return
+        }
+        void Run.compileApp({
+          repoRoot,
+          appPath,
+          appName,
+          reason: 'file change',
+          shouldRunParserGen: false,
+          runtimeRoot: runtime.root,
+          toolingResult: result,
+        })
+      },
+    })
     const initialCompileSucceeded = await Run.compileApp({
       repoRoot,
       appPath,
@@ -226,23 +246,15 @@ async function runDevLoopWithActiveReporter(
       reason: 'initial compile',
       shouldRunParserGen: false,
       runtimeRoot: runtime.root,
+      toolingResult: watcher.lastResult,
     })
+    watcherReady = true
     if (shouldStop()) {
       return await done
     }
     if (!initialCompileSucceeded) {
       return { kind: 'exit', exitCode: 1 }
     }
-    watcher = new DevFileWatcher(selection.projectRoot, shouldRunParserGen => {
-      void Run.compileApp({
-        repoRoot,
-        appPath,
-        appName,
-        reason: 'file change',
-        shouldRunParserGen,
-        runtimeRoot: runtime.root,
-      })
-    })
     await expoServer.start()
     if (shouldStop()) {
       return await done

@@ -14,21 +14,16 @@ Describe('directory-rooted Tao workspace pipeline', () => {
       'tao-workspace-package-',
       {
         'Main.tao': `
-          project {
-            id "workspace-package-test"
-            name "Workspace Package Test"
-            remote none
-            license MIT
-          }
-          app PackageAccess { view MainView }
+          package { version "1.0.0" license AGPL-3.0-only }
+          app PackageAccess { id "com.tao.test.packageaccess" version "1.0.0" name "PackageAccess"  view MainView }
           use MainView from @cards/screens
         `,
-        'Packages/@cards/Title.tao': `
+        '@cards/Title.tao': `
           package let Title = "Package title"
         `,
-        'Packages/@cards/screens/Main.tao': `
+        '@cards/screens/Main.tao': `
           use Title
-          workspace scene MainView() {
+          project scene MainView() {
             render Text(Title)
           }
           view Text(Value text) {
@@ -44,14 +39,14 @@ Describe('directory-rooted Tao workspace pipeline', () => {
         const validation = await workspace.validate(paths['Main.tao']!)
         const compiled = await workspace.compile(paths['Main.tao']!)
 
-        Expect(parseResult.files.map(file => file.ast.$type)).toHaveLength(6)
+        Expect(parseResult.files.map(file => file.ast.$type)).toHaveLength(5)
         Expect(parseResult.files.some(file => file.path.endsWith('/@tao/Prelude.tao'))).toBe(true)
         Expect(parseResult.files.some(file => file.path.endsWith('/@tao/auth/Auth.tao'))).toBe(true)
         Expect(errorMessages(validation)).toEqual([])
         Expect([...new Set(compiled.files.map(file => file.sourcePath))].sort()).toEqual([
           paths['Main.tao']!,
-          paths['Packages/@cards/Title.tao']!,
-          paths['Packages/@cards/screens/Main.tao']!,
+          paths['@cards/Title.tao']!,
+          paths['@cards/screens/Main.tao']!,
           Repo.resolvePath('packages/apps/stdlib/@tao/Prelude.tao'),
           Repo.resolvePath('packages/apps/stdlib/@tao/auth/Auth.tao'),
           Repo.resolvePath('packages/apps/stdlib/@tao/auth/Auth.ts'),
@@ -71,18 +66,18 @@ Describe('directory-rooted Tao workspace pipeline', () => {
           use GeneratedView from @/studio
           use NestedView from @/studio/nested
 
-          app GeneratedApp { view MainView }
+          app GeneratedApp { id "com.tao.test.generatedapp" version "1.0.0" name "GeneratedApp"  view MainView }
           view MainView() { render GeneratedView() }
         `,
-        'Data.tao': 'workspace let SharedTitle = "Generated title"',
-        '@/Root.tao': `workspace view RootView() { render inject ${tsFence} return null ${fence} }`,
+        'Data.tao': 'project let SharedTitle = "Generated title"',
+        '@/Root.tao': `project view RootView() { render inject ${tsFence} return null ${fence} }`,
         '@/studio/View.tao': `
           use SharedTitle from ../../Data
           use Text from @tao/ui
           public view GeneratedView() { render Text(SharedTitle) }
         `,
         '@/studio/nested/Nested.tao': `
-          workspace view NestedView() { render inject ${tsFence} return null ${fence} }
+          project view NestedView() { render inject ${tsFence} return null ${fence} }
         `,
       },
       async (paths, rootDir) => {
@@ -116,7 +111,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
         '@/studio/Views.tao': `
           view Hidden() { }
           package view PackageOnly() { }
-          workspace view WorkspaceVisible() { }
+          project view WorkspaceVisible() { }
           public view Published() { }
         `,
       },
@@ -149,8 +144,8 @@ Describe('directory-rooted Tao workspace pipeline', () => {
           use Duplicate from @/studio
           view MainView() { render Duplicate() }
         `,
-        '@/studio/First.tao': 'workspace view Duplicate() { }',
-        '@/studio/Second.tao': 'workspace view Duplicate() { }',
+        '@/studio/First.tao': 'project view Duplicate() { }',
+        '@/studio/Second.tao': 'project view Duplicate() { }',
       },
       async (paths, rootDir) => {
         const validation = await (await Workspace.open(rootDir)).validate(paths['Main.tao']!)
@@ -167,18 +162,18 @@ Describe('directory-rooted Tao workspace pipeline', () => {
       'tao-workspace-duplicate-package-',
       {
         'Main.tao': `
-          app DuplicatePackageApp { view MainView }
+          app DuplicatePackageApp { id "com.tao.test.duplicatepackageapp" version "1.0.0" name "DuplicatePackageApp"  view MainView }
           use MainView from @bar
         `,
         'one/@bar/Main.tao': `
-          workspace view MainView() {
+          project view MainView() {
             render inject ${tsFence}
               return null
             ${fence}
           }
         `,
         'two/@bar/Main.tao': `
-          workspace view MainView() {
+          project view MainView() {
             render inject ${tsFence}
               return null
             ${fence}
@@ -241,11 +236,11 @@ Describe('directory-rooted Tao workspace pipeline', () => {
       'tao-workspace-multiple-entries-',
       {
         'First.tao': `
-          app First { view FirstView }
+          app First { id "com.tao.test.first" version "1.0.0" name "First"  view FirstView }
           view FirstView() { render inject ${tsFence} return null ${fence} }
         `,
         'Second.tao': `
-          app Second { view SecondView }
+          app Second { id "com.tao.test.second" version "1.0.0" name "Second"  view SecondView }
           view SecondView() { render inject ${tsFence} return null ${fence} }
         `,
       },
@@ -269,13 +264,8 @@ Describe('directory-rooted Tao workspace pipeline', () => {
       'tao-workspace-generated-entry-identity-',
       {
         'Main.tao': `
-          project {
-            id "generated-entry-identity"
-            name "Generated Entry Identity"
-            remote none
-            license MIT
-          }
-          app Sketching { view MainView }
+          package { version "1.0.0" license AGPL-3.0-only }
+          app Sketching { id "com.tao.test.sketching" version "1.0.0" name "Sketching"  view MainView }
           view MainView() { render inject ${tsFence} return null ${fence} }
         `,
         // Drawn in Studio and not imported by the app. Project metadata is still visible, because
@@ -307,8 +297,8 @@ Describe('directory-rooted Tao workspace pipeline', () => {
       'tao-workspace-batch-design-',
       {
         'Main.tao': `
-          project { id "batch-design" name "Batch design" remote none }
-          app Shell { view PanelView Design ShellDesign }
+          package { version "1.0.0" license AGPL-3.0-only }
+          app Shell { id "com.tao.test.shell" version "1.0.0" name "Shell"  view PanelView Design ShellDesign }
           use PanelView from @ui
           design ShellDesign { styles { panel [gap 4] } }
         `,
@@ -336,7 +326,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
       'tao-workspace-batch-regions-',
       {
         'Main.tao': `
-          project { id "batch-regions" name "Batch regions" remote none }
+          package { version "1.0.0" license AGPL-3.0-only }
           use BarView from @ui
           use Col from @tao/ui
           use StackNav from @tao/nav
@@ -349,8 +339,8 @@ Describe('directory-rooted Tao workspace pipeline', () => {
                 BarView()
              }
           }
-          app Shell {
-             Name "Shell"
+          app Shell { id "com.tao.test.shell" version "1.0.0"
+             name "Shell"
              Design ShellDesign
              view ShellView(ShellNav)
           }
@@ -378,7 +368,8 @@ Describe('directory-rooted Tao workspace pipeline', () => {
       'tao-workspace-lsp-sketches-',
       {
         'Main.tao': 'view MainView() { }\n',
-        'Apps/WordFlower/.tao-archive/Future.tao': 'project app FutureMVP {',
+        'Apps/WordFlower/.tao-archive/Future.tao':
+          'project app FutureMVP { id "com.tao.test.futuremvp" version "1.0.0" name "FutureMVP" ',
         'Apps/WordFlower/1 - Current/Valid.tao': 'view ValidCurrentMVP() { }\n',
         'Roadmap/Feature/Syntax Sketches/Valid.tao': 'view ValidSyntaxSketch() { }\n',
       },
@@ -390,7 +381,6 @@ Describe('directory-rooted Tao workspace pipeline', () => {
         Expect(loadedPaths.filter(path => path.startsWith(rootDir))).toEqual([
           FS.resolvePath('Apps/WordFlower/1 - Current/Valid.tao', rootDir),
           FS.resolvePath('Main.tao', rootDir),
-          FS.resolvePath('Project.tao', rootDir),
           FS.resolvePath('Roadmap/Feature/Syntax Sketches/Valid.tao', rootDir),
         ])
       },
@@ -401,26 +391,28 @@ Describe('directory-rooted Tao workspace pipeline', () => {
     await withTaoFiles(
       'tao-workspace-lsp-project-packages-',
       {
+        'First/.tao/.gitkeep': '',
+        'Second/.tao/.gitkeep': '',
         'First/Main.tao': `
           use Label from @data
           use Text from @tao/ui
-          project { id "first" name "First" }
-          app FirstApp { view FirstView }
+          package { version "1.0.0" license AGPL-3.0-only }
+          app FirstApp { id "com.tao.test.firstapp" version "1.0.0" name "FirstApp"  view FirstView }
           action Run() { }
           command FirstCommand() { Title "First" Key "g" do Run() }
           view FirstView() { render Text(Label) }
         `,
-        'First/@data/Data.tao': 'workspace let Label = "First label"',
+        'First/@data/Data.tao': 'project let Label = "First label"',
         'Second/Main.tao': `
           use Label from @data
           use Text from @tao/ui
-          project { id "second" name "Second" }
-          app SecondApp { view SecondView }
+          package { version "1.0.0" license AGPL-3.0-only }
+          app SecondApp { id "com.tao.test.secondapp" version "1.0.0" name "SecondApp"  view SecondView }
           action Run() { }
           command SecondCommand() { Title "Second" Key "g" do Run() }
           view SecondView() { render Text(Label) }
         `,
-        'Second/@data/Data.tao': 'workspace let Label = "Second label"',
+        'Second/@data/Data.tao': 'project let Label = "Second label"',
       },
       async (paths, rootDir) => {
         const workspace = await LSPWorkspace.open(rootDir)
@@ -457,10 +449,11 @@ Describe('directory-rooted Tao workspace pipeline', () => {
     await withTaoFiles(
       'tao-workspace-lsp-contained-stdlib-',
       {
+        'App/.tao/.gitkeep': '',
         'App/Main.tao': `
-          project { id "app" name "App" }
+          package { version "1.0.0" license AGPL-3.0-only }
           use StdLabel from @tao/ui
-          workspace let Selected = StdLabel
+          project let Selected = StdLabel
         `,
         'stdlib/@tao/ui/Labels.tao': 'public let StdLabel = "Stdlib"',
       },
@@ -493,9 +486,9 @@ Describe('directory-rooted Tao workspace pipeline', () => {
     await withTaoFiles(
       'tao-workspace-lsp-containing-project-',
       {
-        'App/Main.tao': 'project { id "inline" name "Inline" }',
-        'App/@data/Data.tao': 'workspace let Label = "Local"',
-        'App/screens/View.tao': 'use Label from @data\nworkspace let Selected = Label',
+        'App/Main.tao': 'package { version "1.0.0" license AGPL-3.0-only }',
+        'App/@data/Data.tao': 'project let Label = "Local"',
+        'App/screens/View.tao': 'use Label from @data\nproject let Selected = Label',
       },
       async (paths, rootDir) => {
         const projectRoot = FS.resolvePath('App', rootDir)
@@ -572,7 +565,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
       'tao-workspace-lsp-parity-',
       {
         'Main.tao': `
-          app Demo { view MainView }
+          app Demo { id "com.tao.test.demo" version "1.0.0" name "Demo"  view MainView }
           view MainView() {
             state Count = 0
             let Greeting = "Hello"
@@ -651,7 +644,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
       {
         'Main.test.tao':
           'test "Suite" {\n   test "out of order" {\n      expect text "Hello"\n      run MyApp\n   }\n}\n'
-          + 'app MyApp { view MainView }\nview MainView() { }\n',
+          + 'app MyApp { id "com.tao.test.myapp" version "1.0.0" name "MyApp"  view MainView }\nview MainView() { }\n',
       },
       async (paths, rootDir) => {
         const workspace = await Workspace.open(rootDir)
@@ -672,7 +665,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
       'tao-workspace-root-',
       {
         'Main.tao': `
-          app RootApp { view MainView }
+          app RootApp { id "com.tao.test.rootapp" version "1.0.0" name "RootApp"  view MainView }
           view MainView() { }
         `,
       },

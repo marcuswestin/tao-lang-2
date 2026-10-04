@@ -8,21 +8,20 @@ reproduces these folders or fails that starter's test — `creation-starter-note
 `creation-starter-pantry.test.ts` — with the first differing file.
 
 Every starter follows the canonical layout from `Docs/Roadmap/Tao Revolution/Decisions.md` §1,
-restricted to what the toolchain runs today: `App.tao` (project and app), `Data.tao` (entities),
+restricted to what the toolchain runs today: `App.tao` (app identity and configuration), `Data.tao` (entities),
 `Chrome.tao` (shared navigation), `Design.tao` (always written), one folder per feature with its list
 and detail scenes, `Scenarios.tao` (fixtures and Studio scenarios), `<App>.test.tao` (behavior
-tests), `tsconfig.json` (sidecar TypeScript resolves `@tao/*` from the CLI-bundled runtime),
-the committed empty generated-package scaffold `@/.gitkeep`, and copied Tao skills plus
-`AGENTS.md` (which Codex reads directly), the `CLAUDE.md` that points Claude Code at it, and
-`.tao-project/skills.version`. Access, Rules, and Words join as
+tests), `tsconfig.json` (extending the generated `.tao/typescript/tsconfig.json`),
+the tracked project marker `.tao/.gitkeep`, the generated-Tao scaffold `@/.gitkeep`, and copied Tao
+skills plus `AGENTS.md`, harness guidance, and `.tao/skills.version`. Access, Rules, and Words join as
 their tranches land.
 
 To change a starter, change the lowering, reference plan, or
 `packages/ai/tao-skills/skills/` source, then regenerate:
 
 ```bash
-TAO_UPDATE_STARTERS=1 bun test "$PWD/packages/cli/tao-cli/cli-tests/creation-starter-notebook.test.ts" \
-  "$PWD/packages/cli/tao-cli/cli-tests/creation-starter-pantry.test.ts"
+TAO_UPDATE_STARTERS=1 ./agent test-file packages/cli/tao-cli/cli-tests/creation-starter-notebook.test.ts
+TAO_UPDATE_STARTERS=1 ./agent test-file packages/cli/tao-cli/cli-tests/creation-starter-pantry.test.ts
 ```
 
 Do not edit the generated files by hand; the next test run would rewrite them. Add a `## <Name>`

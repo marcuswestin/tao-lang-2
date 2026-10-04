@@ -132,8 +132,10 @@ Describe('navigation accessibility', () => {
     ))
     const app = TR.Navigation.App({
       auxiliaries: () => ({}),
+      id: 'accessible-selection-app',
       name: 'Accessible selection app',
       navigator: () => selection,
+      version: '1.0.0',
     })
     const screen = render(createElement(TR.Navigation.AppHost, { app }))
 
@@ -249,8 +251,10 @@ Describe('navigation accessibility', () => {
       const selection = toggleSelection(stack)
       const app = TR.Navigation.App({
         auxiliaries: () => ({}),
+        id: 'toggle-modal-app',
         name: 'Toggle modal app',
         navigator: () => selection,
+        version: '1.0.0',
       })
       const screen = render(createElement(TR.Navigation.AppHost, { app }))
 
@@ -296,8 +300,10 @@ Describe('navigation accessibility', () => {
       const selection = toggleSelection(stack)
       const app = TR.Navigation.App({
         auxiliaries: () => ({}),
+        id: 'toggle-focus-app',
         name: 'Toggle focus app',
         navigator: () => selection,
+        version: '1.0.0',
       })
       const screen = render(createElement(TR.Navigation.AppHost, { app }))
       rendered = screen

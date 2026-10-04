@@ -7,7 +7,7 @@ import { withTaoFixture } from './test-cli-files'
 
 const taoApp = (name: string) => `
   use Text from @tao/ui
-  app ${name} { view Main }
+  app ${name} { id "test-watch-app" version "1.0.0" name "${name}" view Main }
   view Main() { render Text("${name}") }
 `
 
@@ -65,7 +65,7 @@ Describe('tao test --watch (real compile)', () => {
   // child stubbed inert, and proves the loop reruns on a real file change and stops on abort.
   Test('reruns once after an edited fixture file compiles again, then stops on abort', async () => {
     await withTaoFixture({
-      'Project.tao': 'project { id "watch-cli-test" name "Watch CLI test" }',
+      '.tao/.gitkeep': '',
       'App.tao': taoApp('WatchApp'),
       'App.test.tao': taoTest('WatchApp'),
       'jest-stub.mjs': '',

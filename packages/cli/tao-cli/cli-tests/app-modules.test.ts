@@ -1,37 +1,10 @@
+import { ProjectTooling } from '@project-tooling'
 import { Assert, CLI, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import ts from 'typescript'
 import { PROJECT_TSCONFIG, TaoAppModules } from '../cli-src/app-modules'
 
-const PINNED_PROJECT_TSCONFIG = `{
-  "compilerOptions": {
-    "allowImportingTsExtensions": true,
-    "jsx": "react-jsx",
-    "lib": [
-      "DOM",
-      "ES2023"
-    ],
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "noEmit": true,
-    "paths": {
-      "@tao/*": [
-        "./node_modules/@tao/*"
-      ],
-      "@tao/runtime": [
-        "./node_modules/@tao/runtime/TaoRuntime-src/TR.ts"
-      ]
-    },
-    "skipLibCheck": true,
-    "strict": true,
-    "target": "ES2022"
-  },
-  "include": [
-    "**/*.ts",
-    "**/*.tsx"
-  ]
-}
-`
+const PINNED_PROJECT_TSCONFIG = '{ "extends": "./.tao/typescript/tsconfig.json" }\n'
 
 Describe('Tao app TypeScript modules', () => {
   Test('bundles @tao/runtime as a live link to the runtime package', async () => {
@@ -75,13 +48,16 @@ Describe('Tao app TypeScript modules', () => {
     }
   })
 
-  Test('writes the pinned project tsconfig that maps @tao/* through node_modules', () => {
+  Test('writes the pinned project tsconfig that extends managed TypeScript settings', () => {
     Expect(PROJECT_TSCONFIG).toBe(PINNED_PROJECT_TSCONFIG)
   })
 
-  Test('typechecks in-repo app sidecars that import @tao/runtime', async () => {
+  Test('typechecks in-repo app sidecars against their generated Tao contracts', async () => {
+    const projectRoot = Repo.resolvePath('Apps/Test Apps/Native Bridge')
+    const refreshed = await ProjectTooling.refresh(projectRoot, { runtimeRoot: TaoAppModules.runtimeRoot() })
+    Expect(refreshed.diagnostics.filter(diagnostic => diagnostic.severity === 'error')).toEqual([])
     const result = await CLI.run(Repo.resolvePath('node_modules/.bin/tsc'), {
-      args: ['--project', Repo.resolvePath('Apps/tsconfig.json')],
+      args: ['--project', FS.resolvePath('tsconfig.json', projectRoot)],
     })
     Assert(result.exitCode === 0, 'in-repo app sidecars that import @tao/runtime type-check', {
       stderr: result.stderr,

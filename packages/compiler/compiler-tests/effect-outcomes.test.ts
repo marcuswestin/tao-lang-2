@@ -4,7 +4,7 @@ import { TestCompiler as Compiler } from './test-compile'
 Describe('compiler: effect outcomes', () => {
   Test('lets handled responses and cancellations interrupt their suspended ask', async () => {
     const compiled = await Compiler.compileCode(`
-      app OutcomeApp { view Main }
+      app OutcomeApp { id "com.tao.test.outcomeapp" version "1.0.0" name "OutcomeApp"  view Main }
       type Answer is one of Confirmed
       view Main() { render Dialogue() }
       view Dialogue() responds Answer {
@@ -24,7 +24,7 @@ Describe('compiler: effect outcomes', () => {
 
   Test('lowers when do to the contained runtime with the verb effective contract', async () => {
     const compiled = await Compiler.compileCode(`
-      app OutcomeApp { view Main }
+      app OutcomeApp { id "com.tao.test.outcomeapp" version "1.0.0" name "OutcomeApp"  view Main }
       type ExportFailure is one of Offline, TooLarge
       type SaveFailure is one of Full
       action Save() { fail Full "The disk is full." }
@@ -61,7 +61,7 @@ Describe('compiler: effect outcomes', () => {
   })
   Test('marks a dynamic verb contract unknown rather than empty', async () => {
     const compiled = await Compiler.compileCode(`
-      app OutcomeApp { view Main }
+      app OutcomeApp { id "com.tao.test.outcomeapp" version "1.0.0" name "OutcomeApp"  view Main }
       view Main() {
         state Failure = ""
         action Run(Callback action()) {

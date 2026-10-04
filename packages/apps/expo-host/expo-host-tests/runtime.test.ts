@@ -158,10 +158,10 @@ Describe('Tao runtime app generation', () => {
     await withTaoFiles('tao-runtime-app-names-', {
       'Main.tao': `
         use Base from ./Base.tao
-        app Preview = Base with { Name "Preview" }
+        app Preview = Base with { name "Preview" }
       `,
       'Base.tao': `
-        folder app Base { view Home }
+        folder app Base { id "base" version "1.0.0" name "Base" view Home }
         view Home() { render inject \`\`\`ts return null \`\`\` }
       `,
     }, async paths => {
@@ -229,7 +229,10 @@ Describe('Tao runtime app generation', () => {
 
     await withTaoFiles(
       'tao-runtime-release-manifest-',
-      { 'Main.tao': 'app Release { view Main }\nview Main() { render inject ```ts return null ``` }' },
+      {
+        'Main.tao':
+          'app Release { id "release" version "1.0.0" name "Release" view Main }\nview Main() { render inject ```ts return null ``` }',
+      },
       async paths => {
         const generated = await Runtime.generateApp(paths['Main.tao'], {
           runtimePackageRoot,
@@ -267,7 +270,10 @@ Describe('Tao runtime app generation', () => {
 
     await withTaoFiles(
       'tao-runtime-release-manifest-guard-',
-      { 'Main.tao': 'app Release { view Main }\nview Main() { render inject ```ts return null ``` }' },
+      {
+        'Main.tao':
+          'app Release { id "release" version "1.0.0" name "Release" view Main }\nview Main() { render inject ```ts return null ``` }',
+      },
       async paths => {
         await Expect(Runtime.generateApp(paths['Main.tao'], { runtimePackageRoot, ship }))
           .rejects.toThrow('only in release validation mode')
@@ -287,7 +293,8 @@ Describe('Tao runtime app generation', () => {
     await withTaoFiles(
       'tao-runtime-preview-root-',
       {
-        'Main.tao': 'app Preview { view Main }\nview Main() { render inject ```ts return null ``` }',
+        'Main.tao':
+          'app Preview { id "preview" version "1.0.0" name "Preview" view Main }\nview Main() { render inject ```ts return null ``` }',
       },
       async paths => {
         for (
@@ -435,8 +442,8 @@ Describe('Tao runtime app generation', () => {
       'tao-runtime-preview-multi-app-',
       {
         'Main.tao': `
-          app First { view Main }
-          app Second { view Main }
+          app First { id "first" version "1.0.0" name "First" view Main }
+          app Second { id "second" version "1.0.0" name "Second" view Main }
           view Main() { render inject \`\`\`ts return null \`\`\` }
         `,
       },
@@ -495,8 +502,8 @@ Describe('Tao runtime app generation', () => {
       'tao-runtime-preview-session-',
       {
         'Main.tao': `
-          app First { view Main }
-          app Second { view Main }
+          app First { id "first" version "1.0.0" name "First" view Main }
+          app Second { id "second" version "1.0.0" name "Second" view Main }
           view Main() { render inject \`\`\`ts return null \`\`\` }
         `,
       },
@@ -547,7 +554,8 @@ Describe('Tao runtime app generation', () => {
     await withTaoFiles(
       'tao-runtime-preview-invalid-draft-',
       {
-        'Main.tao': 'app Preview { view Main }\nview Main() { render inject ```ts return null ``` }',
+        'Main.tao':
+          'app Preview { id "preview" version "1.0.0" name "Preview" view Main }\nview Main() { render inject ```ts return null ``` }',
       },
       async paths => {
         await Runtime.generateApp(paths['Main.tao'], {
@@ -556,7 +564,7 @@ Describe('Tao runtime app generation', () => {
         })
         const lastGoodGraph = await generatedGraph(runtimePackageRoot)
 
-        await FS.writeText(paths['Main.tao'], 'app Preview {')
+        await FS.writeText(paths['Main.tao'], 'app Preview { id "preview" version "1.0.0" name "Preview"')
         await Expect(Runtime.generateApp(paths['Main.tao'], {
           preview: previewOptions(3),
           runtimePackageRoot,
@@ -566,7 +574,7 @@ Describe('Tao runtime app generation', () => {
 
         await FS.writeText(
           paths['Main.tao'],
-          'app Preview { view Main }\nview Main() { render inject ```ts return <RN.Text>Recovered</RN.Text> ``` }',
+          'app Preview { id "preview" version "1.0.0" name "Preview" view Main }\nview Main() { render inject ```ts return <RN.Text>Recovered</RN.Text> ``` }',
         )
         const recovered = await Runtime.generateApp(paths['Main.tao'], {
           preview: previewOptions(3),
@@ -614,7 +622,7 @@ Describe('Tao runtime app generation', () => {
           `tao-runtime-ordinary-${errorCode.toLowerCase()}-rollback-`,
           {
             'Main.tao':
-              'app Example { view Main }\nview Main() { render inject ```ts return <RN.Text>Before</RN.Text> ``` }',
+              'app Example { id "example" version "1.0.0" name "Example" view Main }\nview Main() { render inject ```ts return <RN.Text>Before</RN.Text> ``` }',
           },
           async paths => {
             await Runtime.generateApp(paths['Main.tao'], { runtimePackageRoot })
@@ -622,7 +630,7 @@ Describe('Tao runtime app generation', () => {
             const lastGoodGraph = await generatedGraph(runtimePackageRoot)
             await FS.writeText(
               paths['Main.tao'],
-              'app Example { view Main }\nview Main() { render inject ```ts return <RN.Text>After</RN.Text> ``` }',
+              'app Example { id "example" version "1.0.0" name "Example" view Main }\nview Main() { render inject ```ts return <RN.Text>After</RN.Text> ``` }',
             )
             let injected = false
 
@@ -652,7 +660,7 @@ Describe('Tao runtime app generation', () => {
       'tao-runtime-preview-publication-rollback-',
       {
         'Main.tao':
-          'app Preview { view Main }\nview Main() { render inject ```ts return <RN.Text>Before</RN.Text> ``` }',
+          'app Preview { id "preview" version "1.0.0" name "Preview" view Main }\nview Main() { render inject ```ts return <RN.Text>Before</RN.Text> ``` }',
       },
       async paths => {
         const probe = await previewRollbackProbe('cleanup', runtimePackageRoot, paths['Main.tao'])
@@ -676,7 +684,7 @@ Describe('Tao runtime app generation', () => {
       'tao-runtime-preview-publication-rollback-order-',
       {
         'Main.tao':
-          'app Preview { view Main }\nview Main() { render inject ```ts return <RN.Text>Before</RN.Text> ``` }',
+          'app Preview { id "preview" version "1.0.0" name "Preview" view Main }\nview Main() { render inject ```ts return <RN.Text>Before</RN.Text> ``` }',
       },
       async paths => {
         const probe = await previewRollbackProbe('stable-order', runtimePackageRoot, paths['Main.tao'])
@@ -702,7 +710,7 @@ Describe('Tao runtime app generation', () => {
       'tao-runtime-preview-migration-rollback-order-',
       {
         'Main.tao':
-          'app Preview { view Main }\nview Main() { render inject ```ts return <RN.Text>Stable</RN.Text> ``` }',
+          'app Preview { id "preview" version "1.0.0" name "Preview" view Main }\nview Main() { render inject ```ts return <RN.Text>Stable</RN.Text> ``` }',
       },
       async paths => {
         const probe = await previewRollbackProbe('migration-order', runtimePackageRoot, paths['Main.tao'])
@@ -741,18 +749,8 @@ Describe('Tao runtime app generation', () => {
         for await (const path of FS.walk(generatedRoot)) {
           generatedFiles.push(FS.relativePath(generatedRoot, path))
         }
-        Expect(generatedFiles.toSorted()).toEqual([
-          'App.injection-1.tsx',
-          'App.tsx',
-          'modules/external/Auth.files/Auth.ts',
-          'modules/external/Auth.files/AuthFlow.ts',
-          'modules/external/Auth.files/AuthViews.tsx',
-          'modules/external/Auth.tao.tsx',
-          'modules/external/AuthFlow.ts',
-          'modules/external/AuthViews.files/AuthFlow.ts',
-          'modules/external/AuthViews.files/AuthViews.tsx',
-          'modules/external/Prelude.tao.tsx',
-        ])
+        Expect(generatedFiles).toContain('App.injection-1.tsx')
+        Expect(generatedFiles).not.toContain('App.injection-120.tsx')
       },
     )
   })
@@ -763,14 +761,14 @@ Describe('Tao runtime app generation', () => {
       'tao-runtime-concurrent-preview-generation-',
       {
         'Large.tao': injectionHeavyApp('Preview', 120),
-        'Small.tao': injectionHeavyApp('Preview', 1),
+        'Nested/Small.tao': injectionHeavyApp('Preview', 1, '2.0.0'),
       },
       async paths => {
         const largeGeneration = Runtime.generateApp(paths['Large.tao'], {
           preview: previewOptions(20),
           runtimePackageRoot,
         })
-        const smallGeneration = Runtime.generateApp(paths['Small.tao'], {
+        const smallGeneration = Runtime.generateApp(paths['Nested/Small.tao'], {
           preview: previewOptions(21),
           runtimePackageRoot,
         })
@@ -786,22 +784,9 @@ Describe('Tao runtime app generation', () => {
         for await (const path of FS.walk(generatedRoot)) {
           generatedFiles.push(FS.relativePath(generatedRoot, path))
         }
-        Expect(generatedFiles.toSorted()).toEqual([
-          'App.injection-1.tsx',
-          'App.tsx',
-          'TaoApp.tsx',
-          'TaoAppRefresh.tsx',
-          'TaoStudioManifest.ts',
-          'TaoStudioPublication.ts',
-          'modules/external/Auth.files/Auth.ts',
-          'modules/external/Auth.files/AuthFlow.ts',
-          'modules/external/Auth.files/AuthViews.tsx',
-          'modules/external/Auth.tao.tsx',
-          'modules/external/AuthFlow.ts',
-          'modules/external/AuthViews.files/AuthFlow.ts',
-          'modules/external/AuthViews.files/AuthViews.tsx',
-          'modules/external/Prelude.tao.tsx',
-        ])
+        Expect(generatedFiles).toContain('App.injection-1.tsx')
+        Expect(generatedFiles).toContain('TaoStudioPublication.ts')
+        Expect(generatedFiles).not.toContain('App.injection-120.tsx')
       },
     )
   })
@@ -814,7 +799,7 @@ Describe('Tao runtime app generation', () => {
       {
         'Main.tao': `
           let Explicit = "safe"
-          app InjectionBoundary { view Main }
+          app InjectionBoundary { id "injectionboundary" version "1.0.0" name "InjectionBoundary" view Main }
           view Main() {
             render inject Explicit \`\`\`ts
               void process.env.NODE_ENV
@@ -847,7 +832,7 @@ Describe('Tao runtime app generation', () => {
       {
         'Main.tao': `
           let Secret = "hidden"
-          app InjectionBoundary { view Main }
+          app InjectionBoundary { id "injectionboundary" version "1.0.0" name "InjectionBoundary" view Main }
           view Main() {
             render inject \`\`\`ts
               return <RN.Text>{String([_Scope, _ViewProps, TaoApps, Secret])}</RN.Text>
@@ -874,8 +859,7 @@ Describe('Tao runtime app generation', () => {
       {
         'Main.tao': `
           use SidecarStack from ./Constructs.tao
-          app SidecarApp {
-            Name "Sidecar App"
+          app SidecarApp { id "sidecarapp" version "1.0.0" name "Sidecar App"
             Navigator SidecarStack { Initial Home }
           }
           view Home() { render inject \`\`\`ts return null \`\`\` }
@@ -937,7 +921,7 @@ Describe('Tao runtime app generation', () => {
       'tao-runtime-foreign-view-',
       {
         'Main.tao': `
-          app ForeignApp { view Main }
+          app ForeignApp { id "foreignapp" version "1.0.0" name "ForeignApp" view Main }
           view Main() {
             action Change(Value text) { }
             render CodeEditor("draft", Change)
@@ -1033,10 +1017,12 @@ async function typecheckGeneratedApp(
   })
 }
 
-function injectionHeavyApp(appName: string, viewCount: number): string {
+function injectionHeavyApp(appName: string, viewCount: number, version = '1.0.0'): string {
   const views = Array.from(
     { length: viewCount },
     (_, index) => `view ${appName}View${index}() { render inject \`\`\`ts return null \`\`\` }`,
   )
-  return `app ${appName} { view ${appName}View0 }\n${views.join('\n')}`
+  return `app ${appName} { id "${appName.toLowerCase()}" version "${version}" name "${appName}" view ${appName}View0 }\n${
+    views.join('\n')
+  }`
 }

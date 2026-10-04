@@ -28,7 +28,9 @@ function notesApp(auth: string | undefined, datasource: string, data = '', name 
     data Accounts / Account { DisplayName text }
     ${data}
     app ${name} {
-      Name "Notes"
+      id "${name.toLowerCase()}"
+      version "1.0.0"
+      name "Notes"
       Navigator StackNav { Initial Main }
       ${auth ? `Auth ${auth}` : ''}
       Datasource ${datasource}
@@ -249,7 +251,7 @@ Describe('validator: app provider pairing', () => {
     async () => {
       const result = await testValidateCodeWithErrors(`
         ${notesApp(undefined, 'Memory { }', 'data Notes / Note { A text, B text, unique A + B }')}
-        app NotesSync = Notes with { Datasource ${instantDB} }
+        app NotesSync = Notes with { id "notessync" Datasource ${instantDB} }
       `)
       const errors = validationErrorMessages(result)
       Expect(errors).toContain(
@@ -313,7 +315,7 @@ Describe('validator: app provider pairing', () => {
     async () => {
       const result = await testValidateCodeWithErrors(`
         ${notesApp('TestAuth { }', 'Memory { }', 'access Account { Account can read }')}
-        app NotesOpen = Notes with { Auth none }
+        app NotesOpen = Notes with { id "notesopen" Auth none }
       `)
       Expect(validationErrorMessages(result)).toContain(messages.accessWithoutAuth('NotesOpen', 'Account'))
       Expect(validationErrorMessages(result)).not.toContain(messages.accessWithoutAuth('Notes', 'Account'))
@@ -328,9 +330,9 @@ Describe('validator: app provider pairing', () => {
         use InstantDB from @tao/data/providers/instantdb
         use StackNav from @tao/nav
         ${stubView('Main')}
-        app NotesApp { Name "Notes" Navigator StackNav { Initial Main } Datasource ${instantDB} }
+        app NotesApp { id "notesapp" version "1.0.0" name "Notes" Navigator StackNav { Initial Main } Datasource ${instantDB} }
       `,
-      'Schema.tao': 'workspace data Notes / Note { A text, B text, unique A + B }',
+      'Schema.tao': 'project data Notes / Note { A text, B text, unique A + B }',
     }, result => {
       const message = messages.unsupportedCapability(
         'NotesApp',

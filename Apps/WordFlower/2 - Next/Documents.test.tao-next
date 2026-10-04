@@ -5,7 +5,8 @@ use StarterWorkspace, WordFlower from ./
 // WordFlower's InstantDB variants need a running InstantDB server. CloudKit supplies the per-row
 // write recovery that this sync journey exercises, while the test world replaces its host transport.
 app WordFlowerSyncTest = WordFlower with {
-   Name "WordFlower Sync Test"
+   id "wordflower-sync-test"
+   name "WordFlower Sync Test"
    Datasource CloudKit { }
 }
 

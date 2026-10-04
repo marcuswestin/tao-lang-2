@@ -8,7 +8,7 @@ Describe('Expo runtime', () => {
   Test('forwards content layout through wrapper views', async () => {
     await testCompileApp(
       `
-        app WrapperLayout {
+        app WrapperLayout { id "wrapperlayout" version "1.0.0" name "WrapperLayout"
             view MainView
         }
 
@@ -40,7 +40,7 @@ Describe('Expo runtime', () => {
   Test('does not forward caller layout into nested render statements', async () => {
     await testCompileApp(
       `
-        app NestedRenderLayout {
+        app NestedRenderLayout { id "nestedrenderlayout" version "1.0.0" name "NestedRenderLayout"
             view MainView
         }
 
@@ -74,7 +74,7 @@ Describe('Expo runtime', () => {
   Test("lets caller layout override a header default but never a wrapper root's own layout", async () => {
     await testCompileApp(
       `
-        app WrapperLayoutOverride {
+        app WrapperLayoutOverride { id "wrapperlayoutoverride" version "1.0.0" name "WrapperLayoutOverride"
             view MainView
         }
 
@@ -123,7 +123,7 @@ Describe('Expo runtime', () => {
   Test('overlays compiled layout clauses over stdlib layout defaults', async () => {
     await testCompileApp(
       `
-        app ExplicitRowLayout {
+        app ExplicitRowLayout { id "explicitrowlayout" version "1.0.0" name "ExplicitRowLayout"
             view MainView
         }
 
@@ -158,7 +158,7 @@ Describe('Expo runtime', () => {
     async () => {
       await testCompileApp(
         `
-        app LayerInsets {
+        app LayerInsets { id "layerinsets" version "1.0.0" name "LayerInsets"
             view MainView
         }
 
@@ -212,7 +212,7 @@ Describe('Expo runtime', () => {
   Test('applies axis-relative fill through wrapper view root layout clauses', async () => {
     await testCompileApp(
       `
-        app WrapperLayoutFill {
+        app WrapperLayoutFill { id "wrapperlayoutfill" version "1.0.0" name "WrapperLayoutFill"
             view MainView
         }
 
@@ -250,7 +250,7 @@ Describe('Expo runtime', () => {
   Test('does not apply stdlib layout identity to local stdlib-named views', async () => {
     await testCompileApp(
       `
-        app LocalRowIdentity {
+        app LocalRowIdentity { id "localrowidentity" version "1.0.0" name "LocalRowIdentity"
             view MainView
         }
 

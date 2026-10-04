@@ -142,7 +142,7 @@ Describe('Expo runtime', () => {
   Test('provides a runtime parent direction to app root content', async () => {
     await testCompileApp(
       `
-        app RootDirectionApp {
+        app RootDirectionApp { id "rootdirectionapp" version "1.0.0" name "RootDirectionApp"
             view MainView
         }
 
@@ -164,7 +164,7 @@ Describe('Expo runtime', () => {
   Test('provides default Tao props to app root injected views', async () => {
     await testCompileApp(
       `
-        app RootInjectedLayoutDirectionApp {
+        app RootInjectedLayoutDirectionApp { id "rootinjectedlayoutdirectionapp" version "1.0.0" name "RootInjectedLayoutDirectionApp"
             view MainView
         }
 

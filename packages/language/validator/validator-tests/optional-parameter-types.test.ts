@@ -66,7 +66,7 @@ Describe('validator: optional parameter types', () => {
       `accepts nullable view arguments and defaults for ${declaration}`,
       accepts(`
       ${prelude}
-      app Example { view Main }
+      app Example { id "example" version "1.0.0" name "Example" view Main }
       view Main() { render Accept() }
       view Explicit() { render Accept(Value: none) }
       view Concrete() { render Accept(Value: "ready") }
@@ -79,7 +79,7 @@ Describe('validator: optional parameter types', () => {
       rejects(
         `
       ${prelude}
-      app Example { view Main }
+      app Example { id "example" version "1.0.0" name "Example" view Main }
       view Main() { render Accept() }
       ${stubView('Accept', declaration)}
     `,

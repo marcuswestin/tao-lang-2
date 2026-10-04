@@ -16,8 +16,7 @@ const PATH = 'App.tao'
 
 const SOURCE = `use Col, Text from @tao/ui
 
-app Reader {
-   Name "Reader"
+app Reader { id "reader" version "1.0.0" name "Reader"
 }
 
 data Stories / Story {
@@ -40,7 +39,13 @@ function snapshot(source = SOURCE): SemanticSnapshot {
   }
   const nodes = new Map<string, SnapshotNode>()
   const add = (node: SnapshotNode) => nodes.set(node.id, node)
-  add({ id: 'app:Reader', kind: 'app', name: 'Reader', path: PATH, ...span('app Reader {\n   Name "Reader"\n}') })
+  add({
+    id: 'app:Reader',
+    kind: 'app',
+    name: 'Reader',
+    path: PATH,
+    ...span('app Reader { id "reader" version "1.0.0" name "Reader"\n}'),
+  })
   add({
     detail: { fields: [{ name: 'Title', type: 'text' }, { name: 'Score', type: 'number' }], singular: 'Story' },
     id: 'entity:Stories',
@@ -137,7 +142,7 @@ Describe('Agent feature lowering', () => {
       'App.tao': `
         use Stories from @data
         use Home from @ui
-        app Reader { view Home }
+        app Reader { id "reader" version "1.0.0" name "Reader" view Home }
         fixture Preview { }
       `,
       'packages/@data/Data.tao': `
@@ -201,7 +206,7 @@ Describe('Agent feature lowering', () => {
     await withTaoFiles('feature-local-fixture-', {
       'App.tao': `
         use Col, Text from @tao/ui
-        app Reader { view Home }
+        app Reader { id "reader" version "1.0.0" name "Reader" view Home }
         data Stories / Story {
           Title text,
           Score number

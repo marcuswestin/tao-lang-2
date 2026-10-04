@@ -113,25 +113,6 @@ function createCommands(): Command {
       }
     })
 
-  commands
-    .command('project')
-    .description('Manage checked-in Tao project metadata.')
-    .command('id')
-    .argument('<id>', 'Opaque project id to persist.')
-    .argument('[path]', 'Project .tao file or directory to search.', '.')
-    .option('--replace', 'Replace an existing id when making an independent project.')
-    .description('Add or deliberately replace a project id.')
-    .action(async (id: string, path: string, options: { replace?: boolean }) => {
-      try {
-        const { setProjectId } = await import('./project-command')
-        const projectPath = await setProjectId(id, path, options)
-        HCI.writeSuccess(`Project id '${id}' in ${FS.displayPath(projectPath)}\n`)
-      } catch (error) {
-        HCI.writeErrorLine(Errors.formatForUser(error))
-        Platform.runtimeProcess.exit(1)
-      }
-    })
-
   const secrets = commands
     .command('secrets')
     .description('Manage age-encrypted secrets committed in a Tao project.')
@@ -224,7 +205,7 @@ function createCommands(): Command {
     )
 
   commands
-    .command('dev')
+    .command('run')
     .argument('[path]', 'Tao file or directory whose runnable apps should be discovered.', '.')
     .option('--app <name>', 'Select a uniquely named app without prompting.')
     .option(
@@ -235,7 +216,7 @@ function createCommands(): Command {
     .option('--android', 'Open Android after Metro starts.')
     .option('--web', 'Open the web app after Metro starts.')
     .option('--desktop', 'Open the Tao desktop app after Metro starts.')
-    .description('Start Metro for a Tao app without opening a target unless requested.')
+    .description('Refresh and watch a Tao project, then start Metro for a selected app.')
     .action(
       async (
         path: string,
@@ -256,6 +237,42 @@ function createCommands(): Command {
         }
       },
     )
+
+  commands
+    .command('watch')
+    .argument('[path]', 'Tao file or directory in the project to watch.', '.')
+    .description('Refresh and watch a Tao project without starting a runtime.')
+    .action(async (path: string) => {
+      try {
+        const { runTaoWatch } = await import('./watch-command')
+        Platform.runtimeProcess.setExitCode(await runTaoWatch(path))
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.setExitCode(1)
+      }
+    })
+
+  commands
+    .command('install')
+    .argument('[path]', 'Tao file or directory in the project to install.', '.')
+    .option('--app <name>', 'Install dependencies of one app.')
+    .option('--publication <name>', 'Install dependencies of one named publication.')
+    .option('--default-publication', 'Install dependencies of the unnamed publication.')
+    .description('Resolve local Tao requirements and install npm aliases for all apps and publications.')
+    .action(async (path: string, options: { app?: string; publication?: string; defaultPublication?: boolean }) => {
+      try {
+        HCI.writeLine('Loading dependency installer...')
+        const { runTaoInstall } = await import('./install-command')
+        await runTaoInstall(path, {
+          appName: options.app,
+          publicationName: options.publication,
+          defaultPublication: options.defaultPublication,
+        })
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.setExitCode(1)
+      }
+    })
 
   commands
     .command('build')

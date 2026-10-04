@@ -9,8 +9,7 @@ import {
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
 
 const initialSource = `use Text from @tao/ui
-app AgentBrowser {
-   Name "Agent Browser"
+app AgentBrowser { id "agentbrowser" version "1.0.0" name "Agent Browser"
    view MainView
 }
 
@@ -105,10 +104,7 @@ Test('Studio agent streams, serializes turns, and refuses stale undo in Chrome',
   let manager: StudioSessionManager | undefined
   try {
     await FS.writeText(sourcePath, initialSource)
-    await FS.writeText(
-      FS.resolvePath('Project.tao', projectRoot),
-      'project { id "tao-studio-agent-browser" name "Studio agent browser" }\n',
-    )
+    await FS.mkdir(FS.resolvePath('.tao', projectRoot))
     preview = await openStudioPreviewSession({
       entryPath: sourcePath,
       previewRuntimeRoot: FS.resolvePath(`agent-runtime-${Platform.runtimeProcess.pid}`, artifactParent),

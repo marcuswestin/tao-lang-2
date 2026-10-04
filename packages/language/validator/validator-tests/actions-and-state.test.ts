@@ -30,7 +30,7 @@ Describe('validator: actions and state', () => {
     rejects(
       app(
         'let Draft = "draft"\nrender Editor(Draft)',
-        `workspace ${textView}\nview Editor(Value text) { action Save() { set Value = "saved" } render Text(Value) }`,
+        `project ${textView}\nview Editor(Value text) { action Save() { set Value = "saved" } render Text(Value) }`,
       ),
       reactiveParameterMessages.readonlyArgument('Value'),
     ),
@@ -41,7 +41,7 @@ Describe('validator: actions and state', () => {
     accepts(
       app(
         'state Draft = "draft"\nrender Editor(Draft)',
-        `workspace ${textView}\nview Editor(Value text) { action Save() { set Value = "saved" } render Text(Value) }`,
+        `project ${textView}\nview Editor(Value text) { action Save() { set Value = "saved" } render Text(Value) }`,
       ),
     ),
   )
@@ -51,7 +51,7 @@ Describe('validator: actions and state', () => {
     accepts(
       app(
         'render Parent("draft")',
-        `workspace ${textView}
+        `project ${textView}
          view Parent(Value text) { action OpenEditor() { present Editor(Value) } render Text(Value) }
          view Editor(Value text) { action Save() { set Value = "saved" } render Text(Value) }`,
       ),
@@ -63,7 +63,7 @@ Describe('validator: actions and state', () => {
     accepts(
       app(
         'render Editor("draft")',
-        `workspace ${textView}\nview Editor(Value text) { action Save() { set Value = "saved" } render Text(Value) }`,
+        `project ${textView}\nview Editor(Value text) { action Save() { set Value = "saved" } render Text(Value) }`,
       ),
     ),
   )
@@ -72,7 +72,7 @@ Describe('validator: actions and state', () => {
     'allows a literal default for an inferred-writable view parameter',
     accepts(app(
       'render Editor()',
-      `workspace ${textView}\nview Editor(Value text default "draft") { action Save() { set Value += "!" } render Text(Value) }`,
+      `project ${textView}\nview Editor(Value text default "draft") { action Save() { set Value += "!" } render Text(Value) }`,
     )),
   )
 
@@ -116,7 +116,7 @@ Describe('validator: actions and state', () => {
     rejects(
       app(
         'let Draft = "draft"\nrender Editor(Draft)',
-        `workspace ${textView}
+        `project ${textView}
          view Editor(Value text) {
            action Edit(Local text default Value) { set Local += "!" }
            render Text(Value)
@@ -131,7 +131,7 @@ Describe('validator: actions and state', () => {
     rejects(
       app(
         'render Editor(1)',
-        `workspace ${textView}\nview Editor(Value number) { action Save() { set Value = "wrong" } render Text("ready") }`,
+        `project ${textView}\nview Editor(Value number) { action Save() { set Value = "wrong" } render Text("ready") }`,
       ),
       StateValidator.messages.mutableSetTypeMismatch('Value', 'Editor.Value', 'text'),
     ),
@@ -141,7 +141,7 @@ Describe('validator: actions and state', () => {
     'allows mutation of a field on a writable item parameter',
     accepts(app(
       'state Draft = Note { Title "old" }\nrender Editor(Draft)',
-      `workspace ${textView}
+      `project ${textView}
        type Note is { Title text }
        view Editor(Value Note) { action Save() { set Value.Title = "new" } render Text(Value.Title) }`,
     )),
@@ -151,7 +151,7 @@ Describe('validator: actions and state', () => {
     'terminates writable inference through recursive forwarding',
     accepts(app(
       'state Draft = "draft"\nrender First(Draft)',
-      `workspace ${textView}
+      `project ${textView}
       view First(Value text) { action Save() { set Value = "saved" } render Second(Value) }
       view Second(Value text) { render First(Value) }
     `,
@@ -164,7 +164,7 @@ Describe('validator: actions and state', () => {
       app(
         'state Draft = "draft"\nrender Wrapper(Draft)',
         `
-        workspace ${textView}
+        project ${textView}
         view Editor(Value text) { action Save() { set Value = "saved" } render Text(Value) }
         view Wrapper(copy Value text) { render Editor(Value) }
       `,
@@ -177,7 +177,7 @@ Describe('validator: actions and state', () => {
     accepts(app(
       'let Draft = "draft"\nrender Editor(Draft)',
       `
-      workspace ${stubView('TextInput', 'mutable Value text, Change action(text), Submit action()')}
+      project ${stubView('TextInput', 'mutable Value text, Change action(text), Submit action()')}
       view Editor(Value text) {
         action SetTitle(Next text) { }
         action Save() { }
@@ -243,7 +243,7 @@ Describe('validator: actions and state', () => {
     rejects(
       app(
         'let Draft = "draft"\nrender Editor(Draft)',
-        `workspace ${textView}
+        `project ${textView}
          view Editor(Value text) {
            action Mutate(Value text) { set Value = "saved" }
            let Alias = Mutate

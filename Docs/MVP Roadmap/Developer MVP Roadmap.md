@@ -132,6 +132,11 @@ do we say it?
   promise: expect breaking changes, and `tao fix` migrates what it can. Feedback should shape the
   remaining tranches.
 
+- **Follow-up requested 2026-10-01:** define the compatibility promise before MVP release. The
+  [source compatibility plan](<Plan - Tao source compatibility.md>) recommends isolated versioned
+  parsing and conversion into the current compiler, with the support window and migration UX still
+  to decide. The current repository-wide rewrite does not need pre-MVP compatibility adapters.
+
 ### R4 — What we claim about platforms
 
 Parts of the toolchain are macOS-only (`sips` in the create brief, the Apple helper, Xcode). Android
@@ -181,7 +186,7 @@ that host the companion app itself, and does one host serve several Tao versions
   releases and an explicit compatibility check against the Tao bundle. One host is not built for
   every Tao version. The first public-release companion is an invitation beta (`R12`).
 - **Decided 2026-09-23:** prebuilt hosts are published as release assets on the public repository's
-  GitHub Releases, beside the CLI's (`R11`), and `tao dev` downloads them without authentication.
+  GitHub Releases, beside the CLI's (`R11`), and `tao run` downloads them without authentication.
   Until the repository is public, hosts reach a machine by being built in its checkout.
 
 ### R8 — Where builds run, and where signing happens

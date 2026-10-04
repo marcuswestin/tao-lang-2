@@ -40,7 +40,7 @@ export async function exerciseHnreaderFeed(): Promise<void> {
     await driver.waitFor(`document.querySelector('[data-tao-studio-sketch-workspace]') instanceof HTMLElement`)
     await driver.click(rectangleTool)
     await driver.dragBy('[data-tao-studio-sketch-workspace]', { x: 360, y: 110 }, { steps: 12 })
-    const catalogPath = FS.resolvePath('.tao-project/studio/sketches.jsonc', projectRoot)
+    const catalogPath = FS.resolvePath('.tao/studio/sketches.jsonc', projectRoot)
     const viewPath = FS.resolvePath('@/studio/View1.tao', projectRoot)
     const fixturePath = FS.resolvePath('@/studio/Sketches.tao', projectRoot)
     await until(async () => await FS.isFile(catalogPath) && await FS.isFile(viewPath))
@@ -244,7 +244,7 @@ export async function exerciseHnreaderFeed(): Promise<void> {
             rootChildren: document.getElementById('tao-studio-root')?.childElementCount,
           })`,
         ).catch(Errors.messageOf),
-        catalog: await FS.readJson(FS.resolvePath('.tao-project/studio/sketches.jsonc', projectRoot)).catch(
+        catalog: await FS.readJson(FS.resolvePath('.tao/studio/sketches.jsonc', projectRoot)).catch(
           Errors.messageOf,
         ),
         error: Errors.messageOf(error),

@@ -27,7 +27,7 @@ Describe('validator: typed values', () => {
     await withValidationParse(
       `
         type Profile is { Name text, Subtitle text? }
-        app TypedValues { view Main }
+        app TypedValues { id "typedvalues" version "1.0.0" name "TypedValues" view Main }
         view Main() {
           let Basic is Profile = Profile { Name: "Ada" }
           let MaybeSubtitle = Basic.Subtitle
@@ -70,7 +70,7 @@ Describe('validator: typed values', () => {
         type Counts is list of number
         let Counts = Counts [1, 2]
         function Consume(Values list of text) returns text { return "unused" }
-        app TypedLists { view Main }
+        app TypedLists { id "typedlists" version "1.0.0" name "TypedLists" view Main }
         view Main() {
           let Broken = Consume(Values: Counts)
           render Empty()

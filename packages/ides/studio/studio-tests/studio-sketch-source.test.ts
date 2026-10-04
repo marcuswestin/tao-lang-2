@@ -32,9 +32,8 @@ scenarios View1 "sketch" {
     '@/studio/View1.tao': source,
     'App.tao': `
       use View1 from @/studio
-      app Music { view View1 }
+      app Music { id "music" version "1.0.0" name "Music" view View1 }
     `,
-    'Project.tao': `project { id "music" name "Music" app Music }`,
   }, async paths => {
     const parsed = await Workspace.parse(paths['App.tao'])
     const compiled = await Workspace.compile(paths['App.tao'], { studio: true })

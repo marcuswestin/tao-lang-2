@@ -8,7 +8,7 @@ import { TestCompiler as Compiler } from './test-compile'
 const source = `
 use StackNav from @tao/nav
 use Col, FormButton, ScrollView, Text from @tao/ui
-app WatchHello { Name "Rep Counter" Navigator StackNav { Initial Workout } }
+app WatchHello { id "com.tao.test.watchhello" version "1.0.0"  name "Rep Counter" Navigator StackNav { Initial Workout } }
 scene Workout() {
   Title "One set"
   let Goal = 12
@@ -162,7 +162,8 @@ print(values.map { TaoValues.text($0) }.joined(separator: "|"))
   })
 
   Test('ignores unsupported content in an unselected app and preserves busy button behavior', async () => {
-    const extra = '\napp Other { view OtherView }\nview OtherView() { render inject ```ts return null ``` }'
+    const extra =
+      '\napp Other { id "com.tao.test.other" version "1.0.0" name "Other" view OtherView }\nview OtherView() { render inject ```ts return null ``` }'
     const result = await Compiler.compileCode(
       source.replace('Disabled: Reps >= Goal', 'Disabled: Reps >= Goal, Submitting: Reps == 1') + extra,
       { target: 'watchos', appName: 'WatchHello' },

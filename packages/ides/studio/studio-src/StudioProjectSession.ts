@@ -226,6 +226,7 @@ export class StudioProjectSession {
   private constructor(
     readonly projectRoot: string,
     readonly entryPath: string,
+    readonly appId: string,
     readonly appName: string,
     readonly apps: readonly StudioAppVariant[],
     workspace: Workspace,
@@ -284,6 +285,7 @@ export class StudioProjectSession {
     session = new StudioProjectSession(
       projectRoot,
       selection.entryPath,
+      selection.appId,
       selection.appName,
       selection.apps,
       workspace,

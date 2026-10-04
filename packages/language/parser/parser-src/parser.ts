@@ -22,7 +22,15 @@ const codeSourceUri = Langium.URI.file(`${codeProjectRoot}/source.tao`)
 export { AST, Langium, URI }
 export { TaoReferences } from './tao-references'
 export type URI = Langium.URI
-export type { PackageResolver } from './package-resolver'
+export type {
+  ModuleOrigin,
+  PackageResolver,
+  ProjectAppRequirements,
+  ProjectGraph,
+  ProjectModuleBinding,
+  ProjectPublication,
+  ProjectRequirement,
+} from './package-resolver'
 
 /** ParserServices declares the Langium services used by the parser stage. */
 export type ParserServices = {
@@ -633,7 +641,11 @@ async function loadReachableDocuments(
   const intrinsicDocuments = await Promise.all(
     (await context.packages.intrinsicFilePaths()).map(path => documentFromFilePath(context, path, loaded)),
   )
-  const queue: AST.Document[] = [entryDocument, ...intrinsicDocuments]
+  const rootDocuments = await Promise.all(
+    (await context.packages.projectRootFilePaths(entryDocument.uri.path))
+      .map(path => documentFromFilePath(context, path, loaded)),
+  )
+  const queue: AST.Document[] = [entryDocument, ...intrinsicDocuments, ...rootDocuments]
 
   while (queue.length > 0) {
     const document = queue.shift()!
@@ -675,6 +687,13 @@ async function loadReferencedDocuments(
       fromFilePath: document.uri.path,
     })
     for (const candidatePath of candidatePaths) {
+      if (!loadedDocuments.has(candidatePath)) {
+        referencedDocuments.push(await documentFromFilePath(context, candidatePath, loaded))
+      }
+    }
+  }
+  for (const requirement of AST.streamAllContents(ast).filter(AST.isPackageRequires)) {
+    for (const candidatePath of await context.packages.requirementFilePaths(requirement, document.uri.path)) {
       if (!loadedDocuments.has(candidatePath)) {
         referencedDocuments.push(await documentFromFilePath(context, candidatePath, loaded))
       }

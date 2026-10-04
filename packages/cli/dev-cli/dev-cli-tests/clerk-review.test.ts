@@ -1,7 +1,9 @@
-import { Errors, FS } from '@shared'
+import { Errors, FS, ProjectIdentity } from '@shared'
 import { Deferred, Expect, mkTestDir, Test } from '@shared/test'
 import type { StudioDevOptions } from '@studio-tooling/StudioDev'
 import { runClerkReview } from '../dev-cli-src/clerk/ClerkReviewCommand'
+
+const PROJECT_ID = '5930dd57-d1d6-4ee8-8f2b-ecc0226af9dd'
 
 async function fixture() {
   const root = await mkTestDir('clerk-review-')
@@ -10,6 +12,7 @@ async function fixture() {
   const handlers = new Map<string, () => void>()
   let gatewayOptions: Parameters<NonNullable<Parameters<typeof runClerkReview>[1]>['gateway']>[0] | undefined
   let source = ''
+  let projectIdentity: string | undefined
   let studioOptions: StudioDevOptions | undefined
   const environment: NonNullable<Parameters<typeof runClerkReview>[1]> = {
     secrets: async () => ({
@@ -46,6 +49,7 @@ async function fixture() {
       Expect(options.projectRoot).toBe(root)
       Expect(options.json).toBe(true)
       source = await FS.readText(options.entryPath!)
+      projectIdentity = ProjectIdentity.read(options.projectRoot!)
       return 0
     },
     write: message => {
@@ -66,6 +70,7 @@ async function fixture() {
     environment,
     options: () => gatewayOptions,
     source: () => source,
+    projectIdentity: () => projectIdentity,
     studioOptions: () => studioOptions,
   }
 }
@@ -101,6 +106,7 @@ Test('phone review uses a private ephemeral gateway and removes its source after
   Expect(f.source()).not.toContain('pk_test_REPLACE_WITH_YOUR_KEY')
   Expect(f.source()).not.toContain('private-instant-token')
   Expect(f.source()).not.toContain('sk_test_never_forward')
+  Expect(f.projectIdentity()).toBe(PROJECT_ID)
   Expect(f.output.join('\n')).not.toContain('private-instant-token')
   Expect(f.output.join('\n')).not.toContain('sk_test_never_forward')
   Expect(await FS.exists(f.root)).toBe(false)

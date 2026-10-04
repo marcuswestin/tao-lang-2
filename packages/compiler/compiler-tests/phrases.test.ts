@@ -4,7 +4,7 @@ import { TestCompiler as Compiler } from './test-compile'
 Describe('compiler: phrases', () => {
   Test('compiles a single-form phrase, a parameterless phrase, and a plural phrase', async () => {
     const compiled = await Compiler.compileCode(`
-      app PhrasesApp { view Main }
+      app PhrasesApp { id "com.tao.test.phrasesapp" version "1.0.0" name "PhrasesApp"  view Main }
       phrase WeekTitle(Day text) = "Week of { Day }"
       phrase DocumentGone = "That document is gone."
       phrase ItemCount(Count number) = one "{ Count } item" / other "{ Count } items"

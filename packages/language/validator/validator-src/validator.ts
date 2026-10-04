@@ -4,7 +4,7 @@ import { type Diagnostic, Diagnostics, FS } from '@shared'
 import { registerTaoValidationChecks } from './langium-validation'
 import { Validate } from './Validate'
 import { Validation, type ValidationRunContext } from './validation'
-import { validateProjectWorkspace } from './validators/project-validator'
+import { validatePackageWorkspace } from './validators/package-validator'
 
 /** ValidationResult declares validated Tao source and diagnostics. */
 export type ValidationResult = Pick<ParseResult, 'entry' | 'files'> & {
@@ -116,7 +116,7 @@ async function validateParseResult(
     workspaceFiles: context.workspaceFiles,
     ...(context.projectFiles === undefined ? {} : { projectFiles: context.projectFiles }),
   })
-  validateProjectWorkspace(ctx)
+  validatePackageWorkspace(ctx)
   for (const file of context.workspaceFiles) {
     const nodes = Validate.TaoFile(file, ctx)
     Validate.Types(file, nodes, ctx)

@@ -542,7 +542,7 @@ async function fixture(
 ): Promise<void> {
   await withTaoFiles('tao-feed-session-', {
     'Main.tao':
-      'use Playlist from ./Data\nuse Placeholder from @tao/ui\napp Preview { view Main }\nview Main() { render Placeholder("Main") }',
+      'use Playlist from ./Data\nuse Placeholder from @tao/ui\napp Preview { id "tao-studio-feed-preview" version "1.0.0" name "Preview" view Main }\nview Main() { render Placeholder("Main") }',
     'Data.tao':
       'public data Playlists / Playlist { Title text, Tracks (owned) }\npublic data Tracks / Track { Name text, Playlist }',
     '@/studio/View1.tao': originalView,

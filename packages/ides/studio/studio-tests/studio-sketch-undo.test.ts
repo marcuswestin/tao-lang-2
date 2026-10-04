@@ -94,7 +94,7 @@ function geometry(sketch: StudioSketch | undefined) {
 }
 
 Test('⌘Z walks Draw edits back one gesture at a time through the shared undo stack', async () => {
-  await withTaoFiles('tao-studio-sketch-undo-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
+  await withTaoFiles('tao-studio-sketch-undo-', {}, async (_paths, root) => {
     catalog = new StudioSketchCatalog(root)
     const created = await catalog.apply({
       action: { height: 76, id: 'sketch-row', kind: 'create-sketch', project: 'music', rects: [cover], width: 360 },

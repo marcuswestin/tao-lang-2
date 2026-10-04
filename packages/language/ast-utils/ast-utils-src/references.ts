@@ -6,9 +6,16 @@ import { Type } from './Type'
  * `runtimeOnly` leaves out the auth provider types named by `accepts { Kind from Auth }`: pairing
  * compares that type by name, so naming it needs no runtime import of its module.
  */
-export function referencedNames(file: AST.TaoFile, options: { runtimeOnly?: boolean } = {}): Set<string> {
+export function referencedNames(
+  file: AST.TaoFile,
+  options: { runtimeOnly?: boolean; statements?: readonly AST.Statement[] } = {},
+): Set<string> {
   const names = new Set<string>()
-  for (const node of AST.streamAllContents(file)) {
+  for (
+    const node of (options.statements ?? file.statements).flatMap(
+      statement => [statement, ...AST.streamAllContents(statement)],
+    )
+  ) {
     if (AST.isUseStatement(node)) {
       continue
     }

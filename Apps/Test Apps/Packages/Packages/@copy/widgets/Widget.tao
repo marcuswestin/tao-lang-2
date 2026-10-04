@@ -1,4 +1,4 @@
-workspace
+project
 view ProjectWidget() {
    render Text("Project view works")
 }

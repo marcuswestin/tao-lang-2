@@ -39,7 +39,7 @@ Describe('validator: fixtures and scenarios', () => {
           return null
         ${fence}
       }
-      app Skillet { view Main }
+      app Skillet { id "skillet" version "1.0.0" name "Skillet" view Main }
       fixture HomeKitchen {
         account Sam { Name: "Sam", Email: "sam@example.com" }
         Home = create Household { Name: "Garden Kitchen" } through StartKitchen(Sam)
@@ -64,7 +64,7 @@ Describe('validator: fixtures and scenarios', () => {
     'accepts a group without a header subject when its entry declares one',
     accepts(`
       view Main() { render inject ${tsFence} return null ${fence} }
-      app Preview { view Main }
+      app Preview { id "preview" version "1.0.0" name "Preview" view Main }
       fixture Empty { }
       scenarios "single display" {
         fixture Empty
@@ -214,7 +214,7 @@ Describe('validator: fixtures and scenarios', () => {
             return null
           ${fence}
         }
-        app HNReader { view Main }
+        app HNReader { id "hnreader" version "1.0.0" name "HNReader" view Main }
         scenarios "invalid states" {
           fixture HNStories
           device phone

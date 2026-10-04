@@ -76,6 +76,14 @@
       {
         "command": "tao.moveRendersLast",
         "title": "Tao: Move Renders Last"
+      },
+      {
+        "command": "tao.showTooling",
+        "title": "Tao: Show Tooling"
+      },
+      {
+        "command": "tao.openTypeScriptConfig",
+        "title": "Tao: Open TypeScript Config"
       }
     ],
     "menus": {
@@ -95,6 +103,12 @@
         {
           "command": "tao.moveRendersLast",
           "when": "editorLangId == tao"
+        },
+        {
+          "command": "tao.showTooling"
+        },
+        {
+          "command": "tao.openTypeScriptConfig"
         }
       ]
     }
@@ -105,7 +119,8 @@
     "tao-shared": "workspace:*",
     "tao-compiler": "workspace:*",
     "tao-source-actions": "workspace:*",
-    "vscode-languageclient": "~10.1.1"
+    "vscode-languageclient": "~10.1.1",
+    "tao-project-tooling": "workspace:*"
   },
   "devDependencies": {
     "@types/vscode": "^1.104.0",

@@ -1,14 +1,7 @@
-# Tao Project and Packages
+# Tao Projects, Modules, and Packages
 
-Status: partially implemented design draft. The current implementation supports local
-`project { id "..." name "..." version "..." app AppName remote none license ... }` metadata,
-`tao create` and project-ID migration, `file`/`package`/`workspace`/`public`
-declaration visibility, `use ... from ...` imports for relative Tao source paths and `@tao/...`
-stdlib paths, bare same-package `use Foo`, local `@package[/subfolder]` imports, the reserved root
-`@[/subfolder]` generated package, and public self-hosted `nav` and `datasource` declarations. Import renaming,
-`requires` resolution, external workspace installation, remotes, other CLI package commands, and package
-publishing remain future work. `.tao-project/lock.jsonc` is already the single Tao-written envelope for
-shipping; its `installs` concern is reserved for the future package resolver rather than a second lockfile.
+Status: source implementation written. Release validation and acceptance are tracked in
+[the execution plan](../Roadmap/Plan%20-%20Tao%20projects%20modules%20and%20packages.md).
 
 The implemented package surface includes `@tao/text`, `@tao/time`, `@tao/linking`, and the curated
 `@tao/device/{haptic,clipboard,share}` capabilities, and requires parentheses on every view, action,
@@ -54,18 +47,18 @@ compiler-known names are involved.
   The description may name web pages and local image files; Tao reads the pages to text and the
   images to a color palette before any model is involved.
 - The command writes the canonical layout of `Docs/Roadmap/Tao Revolution/Decisions.md` §1, as far
-  as the toolchain runs it today: `App.tao` (project and app), `Data.tao`, `Chrome.tao`,
+  as the toolchain runs it today: `App.tao` (app metadata and configuration), `Data.tao`, `Chrome.tao`,
   `Design.tao`, one folder per feature with a list and a detail scene, `Scenarios.tao`,
-  `<App>.test.tao`, `tsconfig.json` (sidecar TypeScript resolves `@tao/*` from the CLI-bundled
-  runtime), and the committed empty generated-package scaffold `@/.gitkeep`. The result is
+  `<App>.test.tao`, `tsconfig.json` (extending the generated `.tao/typescript/tsconfig.json`), a tracked
+  `.tao/project.json` project identity, and the committed generated-Tao scaffold `@/.gitkeep`. The result is
   formatted, validated, and its behavior tests are run before the command reports success;
   `--skip-tests` skips only the test run.
-- The project `id` is also the directory name. `--id <id>` chooses it; otherwise it is suggested
+- The initial app `id` is also the directory name. `--id <id>` chooses it; otherwise it is suggested
   from the display name and confirmed at the prompt. An id is lowercase letters, digits, and
   hyphens.
 - A model may shape the plan — the app's name, entities, fields, colors, and sample rows — but never
   writes Tao: Tao validates the plan and decides every placement. Lanes are tried in order and the
-  first one the person accepts is used: an installed Claude Code or Codex CLI, a listening Ollama,
+  first one the person accepts is used: an installed agent harness, a listening Ollama,
   then Apple's on-device model. `--ai <lane>` picks one, `--ai none` writes the plain starter, and
   `--yes` accepts the first lane, the suggested id, and the plan without asking. Without a terminal
   to ask, no lane is used unless `--yes` or `--ai` chooses one.
@@ -83,15 +76,6 @@ use Local from @tao/data/providers/local
 use StackNav from @tao/nav
 use Col, FormButton, Text from @tao/ui
 
-project {
-   id "chat"
-   name "Chat"
-   version "0.1.0"
-   app ChatApp
-   remote none
-   license MIT
-}
-
 data Messages / Message {
    Text text
    CreatedAt time (default now)
@@ -99,7 +83,9 @@ data Messages / Message {
 }
 
 app ChatApp {
-   Name "Chat"
+   id "chat"
+   version "0.1.0"
+   name "Chat"
    Navigator ChatStack
    Datasource Local {
       StorageKey "ChatData"
@@ -133,28 +119,27 @@ scene ThreadUi(Message) {
 }
 ```
 
-The project `id` is an opaque, immutable value chosen by the developer and checked into the project
-declaration. `tao create` writes it as the new directory's name, from `--id` or the confirmed
-suggestion. For an existing directory,
-`tao project id <id> [path]` creates `Project.tao`; when metadata already exists it adds the missing
-ID, and repeating the same value preserves it. The ID travels with clones and published artifacts
-and does not change when the project moves, gains a remote, or advances to another commit. A fork
-that becomes an independent Tao project runs `tao project id <new-id> [path] --replace`, which
-explicitly severs persisted-state compatibility. Required dependencies retain their own project IDs;
-lockfile revisions and consumer installation names select code but do not alter declaration
-identity. Two distinct dependency roots claiming the same ID are a hard resolution error. Ordinary
-checking, compiling, formatting, and launching never invent or modify identity as a side effect.
+A project is the nearest ancestor containing a `.tao/` directory. A tracked `.tao/project.json`
+contains an automatically generated project ID, retained across clones and build snapshots. The ID
+keeps persisted declaration origins independent of physical checkout paths. No special Tao filename or `project` declaration is
+required. Root Tao files may contain ordinary declarations, apps, and publications. Nested projects
+are isolated; discovery excludes generated and installed trees.
 
-A project is the self-contained ownership and dependency unit. It may expose several public package
-surfaces through checked-in `@folder` names. A consuming app project installs the library project and
-imports only its public declarations from those package surfaces. The defining project supplies the
-canonical identity of each declaration; consumers read that identity and never recompute it.
+Every runnable app has effective lowercase `id`, `version`, and `name`. `with` inherits these fields,
+configuration, and dependencies and may override them. Effective ID/version pairs must be unique
+within the defining project, and versions accept full SemVer including prereleases. The effective app
+ID identifies Tao-managed persistent state across release versions. Explicit datasource configuration
+independently controls backend sharing. Older state stores remain untouched during the identity-key
+transition; they are not deleted or automatically merged.
 
-Package names are local to their defining project. Two independent projects may both declare
-`@data`, and each project's files resolve `use ... from @data` only against its own folder. Package
-lookup never climbs above the owning project root or enters a nested project. When external package
-installation lands, dependency declarations inside `project { ... }` will explicitly select which
-package surfaces from another project enter the consumer's namespace.
+An app's runnable identity and dependencies do not publish an importable module API. Publishing code
+requires a separate `package` declaration and its explicit module inclusion and visibility rules.
+
+A module is a named `@<name>` folder and its subfolders. Names are local to their project; lookup
+never enters a nested project or climbs beyond the owning root. Registered dependency aliases and
+local module names must be unambiguous. Module names are import addresses, while a `package`
+declaration describes a publication. The `package` visibility modifier retains its narrower,
+same-module meaning.
 
 The top-level data declaration supplies singular and plural names. Each explicit import exposes
 only the name listed:
@@ -178,16 +163,14 @@ view values; bare `@tao/nav` selects the native kit, so `StackNav` owns the corr
 transition and reads a directly presented scene's reactive `Title` and optional `Toolbar`; a plain
 view receives Back-only chrome.
 
-## Using packages and publishing projects
+## Modules and declaration visibility
 
-Packages can make code available to other packages, and even other workspaces.
+### Creating a Tao module
 
-### Creating a Tao `@package`
-
-- You create a package by naming a folder `@<package name>` and writing `.tao` files in it
+- You create a module by naming a folder `@<module name>` and writing `.tao` files in it
   - Declarations under `@<package>` are referenced via `use Foo from @<package>`
   - A declaration is referenced by its folder name, _not_ its file's name
-  - A workspace root folder cannot be a `@package`
+  - The project root is not itself a named module
 
 ### Generated project package
 
@@ -211,7 +194,7 @@ ownership and any generator-private rectangle markers, then rewrites its `@/stud
 
 ### Making packages available to other files
 
-- You make a declaration available to other files by declaring its visibility: `file`, `package`, `workspace`, or `public`.
+- You make a declaration available to other files by declaring its visibility: `file`, `folder`, `package`, `project`, or `public`.
 
   - `file` is the default and is normally omitted.
     - `view Foo() { ... }` is equivalent to `file view Foo() { ... }` and cannot be used outside its file.
@@ -224,23 +207,23 @@ ownership and any generator-private rectangle markers, then rewrites its `@/stud
       - `use Foo from ./<sub-folder>` from a parent folder (that's in the same package)
       - `use Foo from ../<parent-folder>` from a child folder (that's in the same package)
 
-  - To make declarations visible to files in the same workspace you use `workspace` visibility:
-    - If `workspace view Bar() { ... }` is declared in `@foo/filename.tao`:
-      - then `use Bar from @foo` can be used from any file in the same workspace
+  - To make declarations visible to files in the same project you use `project` visibility:
+    - If `project view Bar() { ... }` is declared in `@foo/filename.tao`:
+      - then `use Bar from @foo` can be used from any file in the same project
     - If `Bar` is declared in `@foo/bar/utils.tao`
       - then `use Bar from @foo/bar` can be used from any file
-    - A `workspace` declaration remains inaccessible to consumers even when the workspace is published.
+    - A `project` declaration remains inaccessible to consumers even when the project publishes a package.
 
-  - To make declarations visible to consumers of a published workspace you use `public`:
-    - If workspace `<workspace id>` has package `@animals` with `public view Cat() { ... }`
-      - then a workspace with `requires <workspace id> @animals`
-      - can `use Cat from @animals`
-    - `public` is a visibility rule. `tao publish` is the CLI operation that distributes the workspace and its public API.
+  - `public` declarations in modules listed by a selected publication are its consumer API.
+    Root declarations and excluded modules are never direct publication entrypoints, even when
+    marked `public`. Included code may call reachable private helpers under the defining project's
+    visibility rules. Those helpers and their TypeScript implementations remain private to consumers.
+    A corresponding public Tao declaration is required for every exported sidecar-backed entrypoint.
 
   - A folder is not allowed to make two declarations with the same name visible
     - If `@<package>/file.tao` has `package view Foo() { ... }`, then:
       - `@<package>/file2.tao` with `package view Foo() { ... }` is not ok
-      - `@<package>/file2.tao` with `workspace view Foo() { ... }` is not ok
+      - `@<package>/file2.tao` with `project view Foo() { ... }` is not ok
       - `@<package>/file2.tao` with `public view Foo() { ... }` is not ok
       - `@<package>/subfolder/file3.tao` with `<visibility> view Foo() { ... }` _is_ ok
 
@@ -263,7 +246,7 @@ ownership and any generator-private rectangle markers, then rewrites its `@/stud
       - `use Foo from ../<sibling folder>`
       - `use Bar from ../<sibling folder>/<nephew folder>`
 
-- Cross-package references are referenced by `@<package>`, from anywhere in the workspace
+- Cross-package references are referenced by `@<package>`, from anywhere in the project
   - Cross-package references _do not_ use relative paths
   - `use Cat from @cat` is ok
   - `use Mat from ./@mat` not ok
@@ -354,7 +337,9 @@ configuration or any presentation call. Native and basic forms of a nav family p
 configuration and host-slot read/require sets. See `Tao Presentation and Navigation.md`.
 
 The compiler copies the named implementation file and follows its transitive relative static imports,
-dynamic imports, and re-exports across TypeScript, TSX, JavaScript, JSX, and JSON files. It preserves
+literal dynamic imports, module-loading `require` calls, and re-exports across TypeScript, TSX,
+JavaScript, JSX, and JSON files. Computed module paths produce a source diagnostic; interpolation-free
+template literals count as literal paths. Local functions named `require` are ordinary code. It preserves
 the relative graph under generated output and rewrites sibling `.tao` type imports to their emitted
 declarations. Installed-package imports such as `@tao/runtime` remain external and are resolved by the
 CLI-bundled `@tao/*` modules.
@@ -390,100 +375,110 @@ again. Two generated modules may therefore declare the same spelling without ove
 cross-wiring each other. Configuration, mounted navigation targets, and provider selection retain
 the declaration object across module boundaries and import traversal order.
 
-## Using external Tao Projects and packages
+## Publications and dependencies
 
-- To import another tao project and its packages you list them in `project { ... }` with `requires ...`:
+Package declarations occur only in root-level Tao files. Each has a version, license, dependencies,
+and `includes` listing named modules. An optional `name` distinguishes named publications. A project
+has at most one unnamed/default publication and any number of uniquely named publications. Included
+modules may overlap; publication membership does not confer directory ownership or depend on source
+order. Root helpers may be used privately by included modules but cannot be published directly.
 
-  ```tao
-  project {
-     id "example.my-app"
-     requires <tao project repo> @foo @bar // e.g:
-     requires tao:<std package> @ui
-     requires github:<author>/<repo> @baz --version 1.0.1 // declare what version to use
-     requires git+https://<domain>/<path-to>/<repo> @mat --ref <branch/commit/tag> // use a specific git ref
-  }
-  ```
+```tao
+package {
+   version 1.0.0
+   license MIT
+   includes @ui @icons
+}
 
-- To install all required projects and packages you use the tao CLI `tao install`
-  - `tao install` honors existing lockfile pins, and only resolves requires not yet in the lockfile
-  - `tao update [<project id>]` re-resolves version ranges and branch refs, and updates the lockfile pins
-  - You can also add required project and packages using the CLI:
-  - `tao require <tao repo> @<package1>, @<package2> --as @<local-package-name>`
-    - Now `project { ... }` has `requires <tao repo> @<package1>, @<package2> as @<local-package-name>`
+package {
+   name "Widget Package Foo"
+   version 2.0.0
+   license MIT
+   includes @icons
+}
+```
 
-- You reference external packages the same way as internal packages:
-  ```tao
-  use <declaration> from @<package> // use a declaration
-  use <decl1>, <decl2> from @<package> // use two declarations
-  use <declaration> as <local-name> from @<package> // import under a local name
-  // e.g:
-  use Foo from @foo // now `Foo` from `@foo` is available inside this file
-  use Bar, Bar2 from @bar // `Bar` and `Bar2` are now both available in this file
-  use Baz as BarBar from @bar // `Baz` is available as `BarBar` inside this file
-  ```
+Apps and publications each declare their own dependencies. A Tao requirement selects one project,
+one publication, and one version range, then binds requested included modules to local import names:
 
-## Publishing a Tao Project for others to use
+```tao
+app Example {
+   id "example"
+   version "1.0.0"
+   name "Example"
+   requires ../widget-library version ^1.0.0 {
+      @ui as @widgets
+      @icons as @widget-icons
+   }
+   requires "Widget Package Foo" from ../widget-library version ^2.0.0 {
+      @icons as @extra-icons
+   }
+   requires ts npm:date-fns version 4.1.0 as date-fns-v4
+   view Main()
+}
+```
 
-- You publish a project and its packages using `tao publish`
-  - The project repo must be clean to publish it
-  - `tao publish` bumps the project version, commits it, creates a git version tag, and pushes everything
-  - `tao publish` fetches the remote's version tags first, and refuses to publish a version that isn't greater than the highest published version
-- Shipping an app to the stores is a different motion with its own verb, `tao ship`, implemented as
-  a filesystem-only transaction; `tao publish` distributes the project and its public API only
-  - You install a published app to your device with `tao install --app <tao project>`
+Local project paths are relative to the declaring project root. Omitted publication name selects
+only its unnamed/default package, never a sole named package. Every requested module must be listed
+by the selected publication. Aliases preserve module subpaths and originating declaration identity;
+selected versions remain distinct in dependency provenance. A publication's private transitive
+requirements do not grant the consumer ambient access to those modules.
 
-## The `.tao-project` folder
+Consumer Tao imports use registered aliases, for example `use Button from @widgets`. TypeScript
+sidecars use native npm resolution, for example `import { format } from 'date-fns-v4'`. Installation
+supports npm's native aliases, package exports, and subpaths. `tao install` defaults to all apps and
+publications; explicit selection preserves unrelated installations. Remote Tao fetching, publishing,
+and Companion URL installation remain deferred.
 
-- The root project folder contains `.tao-project/`, with installed projects, lockfiles, and more
-  - `.tao-project/installs/...`
-  - `.tao-project/lock.jsonc` — the project's only Tao-written lock, sectioned per concern; package
-    resolution will own `installs` and the implemented shipping path owns `ship`. Each writer atomically
-    merges fresh state so the concerns do not overwrite one another.
-  - `.tao-project/cache/...`
+Checks and runtime publication validate each selected installed alias against its declared package
+name and version range, and against its exact pin when recorded in the shared Tao lock. A compatible
+package installed under the wrong alias identity cannot substitute for the declared dependency.
 
-## Dependency version locks (planned)
+## Tooling files and TypeScript
 
-- Tao will install required sub-projects in `.tao-project/installs/...`
-  - And track the required packages and resolved versions in the `installs` section of
-    `.tao-project/lock.jsonc`
-  - `installs` is a flat resolved graph for all dependencies
-    - `requires` entries declare what a project requested: `version` (a semver range) or `ref` (a git branch/commit/tag), never both
-    - Every resolved project is pinned to an immutable `resolvedCommit`; `resolvedVersion` is also recorded when resolved from a semver range
-    - A root build resolves only one version of each project, so each project id appears exactly once in `projects`
-    - If two incompatible version ranges are required inside one project, `tao install` errors with a diagnostic showing the conflicting requesters and their requested versions/refs
-  ```jsonc
-  {
-    "schemaVersion": 1,
-    "installs": {
-      "lockfileVersion": 1,
-      "requires": { // the root project's requires
-        "tao:std": { "version": "0.0.1" },
-        "github:marcuswestin/tao-gaz": { "version": "^1.0.1" },
-        "git+https://example.com/foo/tao-bar": { "ref": "main" },
-      },
-      "projects": { // flat map of all resolved projects, any depth
-        "tao:std": {
-          "projectId": "<immutable tao project id>",
-          "resolvedVersion": "0.0.1",
-          "resolvedCommit": "<commit sha>",
-        },
-        "github:marcuswestin/tao-gaz": {
-          "projectId": "<immutable tao project id>",
-          "resolvedVersion": "1.0.3",
-          "resolvedCommit": "<commit sha>",
-          "requires": { // this project's requires; resolutions are top-level
-            "tao:std": { "version": "^0.0.1" },
-          },
-        },
-        "git+https://example.com/foo/tao-bar": {
-          "projectId": "<immutable tao project id>",
-          "resolvedCommit": "<commit sha>", // no resolvedVersion for ref requires
-        },
-      },
-    },
-    "ship": { "apps": {} }, // independent concern, preserved by installs writes
-  }
-  ```
+```text
+project/
+  .tao/
+    project.json              tracked stable project identity
+    lock.jsonc                shared Tao lock: installs, ship, toolchain concerns
+    typescript/tsconfig.json  generated TypeScript base
+    install/                  managed installation metadata
+  .tao-ts/                    generated TypeScript contracts and checks
+  node_modules/               native installed dependencies
+  tsconfig.json               developer configuration
+  App.tao
+  @ui/
+    Drawer.tao
+    Drawer.ts                 handwritten implementation
+```
 
-- Packages may export configured navigation, data, design, asset, permission, localization, and other capability values. The app imports and selects only properties supported by its typed app surface. The current primitive app contract requires `Name` and the internal `Navigator nav`; authored `view Root(args)` is sugar that fills `Navigator` with a synthesized SlotNav, while direct `Navigator` remains legal for navigation-root and legacy/test apps. `Datasource` is optional, and keyed auxiliary nav entries exist only for genuine app-specific hosts such as windows. Every nav hosts its own overlays, and toasts are app-level transient presentation, so neither is modeled as an auxiliary. See `Tao Presentation and Navigation.md`.
-- A general app-capability bundle and ambient `app.*` access model are not part of the current contract. Their ownership and lookup semantics remain deferred under `LANG-003` in `Docs/Roadmap/Deferred Tao language decisions.md`.
+The initial root configuration contains only `{"extends":"./.tao/typescript/tsconfig.json"}`.
+Developer overrides are preserved; incompatible overrides are diagnosed. The checker and editor
+use the same native TypeScript configuration for strictness, source selection, and import resolution.
+Required overlay and implementation-check options cannot be disabled.
+Generated contracts mirror
+source paths, for example `.tao-ts/@ui/Drawer.tao.ts`, and contain implementation parameter, return,
+and arity checks. A handwritten `Drawer.ts` retains
+`import type { Drawer } from './Drawer.tao'`; the authored/generated overlay resolves the contract.
+Generated imports are relative to their actual location. Dependency snapshots have isolated origin
+paths so equally named files from different projects cannot resolve to one another.
+
+The extension hides root `tsconfig.json` and `node_modules` through folder-scoped Explorer settings,
+preserves intentional overrides, and provides commands to show tooling files and open configuration.
+Generated origins record relative Tao source paths and exact declaration line/column for navigation.
+
+One saved-file refresh/watch service supports `tao run`, `tao watch`, the language server, and hosts.
+It refreshes initially, debounces changes for 250 ms, queues changes during active work, serializes
+writers per project, and writes changed content only. It observes external file changes and local
+Tao dependencies and the actual transitive TypeScript configuration inputs, including external
+`extends` files, while excluding generated/install trees. Invalid Tao leaves last-good contracts
+explicitly stale, reports current errors, and cannot replay a successful check. Recovery publishes
+fresh contracts. Deletion prunes identified generated outputs only. `tao run` launches the app;
+`tao watch` refreshes without launching a runtime. There is no public `tao dev` compatibility alias.
+
+Project checking also covers sidecars when no runnable app is declared. Private local sidecars may
+reach unmarked host directories; their exact relative source files and ownership-marker paths are
+watched. Marker changes invalidate ownership even when no source bytes change, and symbolic links
+cannot conceal another marked project. Builds copy only the reached external files. Checks with
+external sidecar inputs are not cached; ordinary project caches include nested marker existence.
+Consumed publication implementations remain confined to their defining project.

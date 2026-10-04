@@ -12,60 +12,58 @@ import { runTaoDev } from '../cli-src/dev-command'
 
 const viewSource = 'view MainView() { render inject ```ts return null ``` }'
 
-Describe('Tao dev app discovery and selection', () => {
+Describe('Tao run app discovery and selection', () => {
   Test('discovers every runnable app recursively and groups it by project', async () => {
     const root = await mkTestDir('tao-dev-discovery-', { location: 'host' })
     try {
+      await FS.writeText(FS.resolvePath('WordFlower/Current/.tao/.gitkeep', root), '')
+      await FS.writeText(FS.resolvePath('Test Apps/Data MVP/.tao/.gitkeep', root), '')
       await FS.writeText(
         FS.resolvePath('WordFlower/Current/WordFlower.tao', root),
-        `project { name "WordFlower" remote none license MIT }
-         app WordFlower { view MainView }
-         app WordFlowerDemo { view MainView }
+        `app WordFlower { id "wordflower" version "1.0.0" name "WordFlower" view MainView }
+         app WordFlowerDemo { id "wordflower-demo" version "1.0.0" name "WordFlower Demo" view MainView }
          ${viewSource}`,
       )
       await FS.writeText(
         FS.resolvePath('Test Apps/Data MVP/Data MVP.tao', root),
-        `app DataMVP { view MainView }
+        `app DataMVP { id "data-mvp" version "1.0.0" name "Data MVP" view MainView }
          ${viewSource}`,
       )
       await FS.writeText(
         FS.resolvePath('Test Apps/Data MVP/Data MVP.test.tao', root),
-        `app TestOnly { view MainView }
+        `app TestOnly { id "test-only" version "1.0.0" name "Test Only" view MainView }
          test "ignored" { }
          ${viewSource}`,
       )
 
       const projects = await discoverTaoDevProjects(root)
 
-      Expect(projects.map(project => project.name)).toEqual(['Data MVP', 'WordFlower'])
-      Expect(projects[0]?.apps.map(app => app.appName)).toEqual(['DataMVP'])
-      Expect(projects[1]?.apps.map(app => app.appName)).toEqual(['WordFlower', 'WordFlowerDemo'])
-      Expect(projects[1]?.root).toBe(await FS.realPath(FS.resolvePath('WordFlower/Current', root)))
+      Expect(projects.map(project => project.name)).toEqual(['Current', 'Data MVP'])
+      Expect(projects[0]?.apps.map(app => app.appName)).toEqual(['WordFlower', 'WordFlowerDemo'])
+      Expect(projects[1]?.apps.map(app => app.appName)).toEqual(['DataMVP'])
+      Expect(projects[0]?.root).toBe(await FS.realPath(FS.resolvePath('WordFlower/Current', root)))
     } finally {
       await FS.remove(root)
     }
   })
 
-  Test('groups nested and package app declarations under ancestor project metadata', async () => {
+  Test('groups nested and module app declarations under the nearest marker', async () => {
     const root = await mkTestDir('tao-dev-split-project-', { location: 'host' })
     try {
-      await FS.writeText(
-        FS.resolvePath('Project.tao', root),
-        'project { id "split" name "Split project" }',
-      )
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', root), '')
       await FS.writeText(
         FS.resolvePath('features/Reader.tao', root),
-        `workspace app Reader { view MainView } ${viewSource}`,
+        `app Reader { id "reader" version "1.0.0" name "Reader" view MainView } ${viewSource}`,
       )
       await FS.writeText(
         FS.resolvePath('packages/@preview/App.tao', root),
-        `public app Preview { view MainView } ${viewSource}`,
+        `public app Preview { id "preview" version "1.0.0" name "Preview" view MainView } ${viewSource}`,
       )
 
       const projects = await discoverTaoDevProjects(root)
 
       Expect(projects).toHaveLength(1)
-      Expect(projects[0]?.name).toBe('Split project')
+      Expect(projects[0]?.name).toBe(FS.basename(root))
       // Discovery canonicalizes the project root so a symlinked path cannot become a second app
       // authority, and the host temporary directory is itself reached through one.
       Expect(projects[0]?.root).toBe(await FS.realPath(root))
@@ -179,11 +177,11 @@ Describe('Tao dev app discovery and selection', () => {
     try {
       await FS.writeText(
         FS.resolvePath('Project/Apps.tao', root),
-        `project { name "Switch Project" remote none license MIT }
-         app First { view MainView }
-         app Second { view MainView }
+        `app First { id "first" version "1.0.0" name "First" view MainView }
+         app Second { id "second" version "1.0.0" name "Second" view MainView }
          ${viewSource}`,
       )
+      await FS.writeText(FS.resolvePath('Project/.tao/.gitkeep', root), '')
       const input = terminalStream()
       const output = terminalStream()
       let written = ''
@@ -211,7 +209,7 @@ Describe('Tao dev app discovery and selection', () => {
       Expect(devices).toEqual(['roPhone', 'roPhone'])
       // Quitting closes the dashboard's alternate screen, which restores the stale selector;
       // the exit line is what tells the user the CLI actually finished.
-      Expect(stripAnsi(written)).toContain('Exited Tao dev.')
+      Expect(stripAnsi(written)).toContain('Exited Tao run.')
     } finally {
       await FS.remove(root)
     }
@@ -220,6 +218,7 @@ Describe('Tao dev app discovery and selection', () => {
 
 function projectFixture(appCount: number): TaoDevProject[] {
   const apps = Array.from({ length: appCount }, (_, index) => ({
+    appId: `app-${index + 1}`,
     appName: `App ${index + 1}`,
     appPath: `/repo/Project ${index < 5 ? 1 : 2}/Apps.tao`,
     projectName: `Project ${index < 5 ? 1 : 2}`,

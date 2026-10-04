@@ -1,5 +1,7 @@
+import { ASTUtils } from '@ast-utils'
 import type { Workspace } from '@compiler/workspace'
 import { AST } from '@parser'
+import { findProjectRoot } from '@project-tooling'
 import { Assert, Errors, FS } from '@shared'
 import type { StudioAppVariant } from '../StudioProtocol'
 
@@ -9,6 +11,7 @@ export type StudioAppDiscoveryRequest = {
 }
 
 export type StudioAppSelection = {
+  appId: string
   appName: string
   apps: readonly StudioAppVariant[]
   /** The selected app's entry file, absolute. */
@@ -19,13 +22,14 @@ export type StudioAppSelection = {
 export async function requireStudioProjectRoot(input: string): Promise<string> {
   const resolved = FS.resolvePath(input)
   Assert.input(await FS.isDirectory(resolved), `Studio project folder does not exist: ${resolved}`)
-  return await FS.realPath(resolved)
+  const root = await findProjectRoot(resolved)
+  Assert.input(root !== undefined, `Studio project folder has no .tao marker: ${resolved}`)
+  return root
 }
 
 /**
  * discoverStudioApp inventories every app declared across the project's Tao files and picks the one
- * the session opens as: the requested app or entry when the command line named one, else the project's
- * named app, else the only app there is.
+ * the session opens as: the requested app or entry when the command line named one, else the only app.
  */
 export async function discoverStudioApp(
   projectRoot: string,
@@ -33,14 +37,15 @@ export async function discoverStudioApp(
   candidatePaths: readonly string[],
   request: StudioAppDiscoveryRequest,
 ): Promise<StudioAppSelection> {
-  const { apps, defaultAppName } = await discoverAppVariants(projectRoot, workspace, candidatePaths)
+  const apps = await discoverAppVariants(projectRoot, workspace, candidatePaths)
   const requestedEntryPath = request.entryPath === undefined
     ? undefined
     : FS.relativePath(projectRoot, await resolveEntryPath(projectRoot, request.entryPath))
-  const selection = resolveAppSelection(projectRoot, apps, request.appName, requestedEntryPath, defaultAppName)
+  const selection = resolveAppSelection(projectRoot, apps, request.appName, requestedEntryPath)
   return {
+    appId: selection.appId,
     appName: selection.appName,
-    apps,
+    apps: apps.map(({ appName, entryPath }) => ({ appName, entryPath })),
     entryPath: FS.resolvePath(selection.entryPath, projectRoot),
   }
 }
@@ -49,47 +54,30 @@ async function discoverAppVariants(
   projectRoot: string,
   workspace: Workspace,
   candidatePaths: readonly string[],
-): Promise<{ apps: StudioAppVariant[]; defaultAppName?: string }> {
-  const apps: StudioAppVariant[] = []
-  let defaultAppName: string | undefined
+): Promise<Array<StudioAppVariant & { appId: string }>> {
+  const apps: Array<StudioAppVariant & { appId: string }> = []
   for (const entryPath of candidatePaths) {
     const parsed = await workspace.parse(entryPath)
-    for (const project of parsed.entry.ast.statements.filter(AST.isProjectDeclaration)) {
-      defaultAppName ??= AST.blockStatementOf(project, { filter: AST.isProjectDefaultApp })[0]?.app.$refText
-    }
     for (const declaration of AST.appValueDeclarationsInFile(parsed.entry.ast)) {
-      apps.push({ appName: declaration.name, entryPath: FS.relativePath(projectRoot, entryPath) })
+      const id = ASTUtils.effectiveAppConfiguration(declaration).get('id')?.value
+      Assert.input(id !== undefined && AST.isStringLiteral(id), `Studio app ${declaration.name} needs an id.`)
+      apps.push({ appId: id.value, appName: declaration.name, entryPath: FS.relativePath(projectRoot, entryPath) })
     }
   }
-  return {
-    apps: apps.toSorted((left, right) =>
-      left.appName.localeCompare(right.appName) || left.entryPath.localeCompare(right.entryPath)
-    ),
-    ...(defaultAppName === undefined ? {} : { defaultAppName }),
-  }
+  return apps.toSorted((left, right) =>
+    left.appName.localeCompare(right.appName) || left.entryPath.localeCompare(right.entryPath)
+  )
 }
 
-/**
- * Which app a project opens as, when the command line did not say.
- *
- * A project that declares `app Name` has already answered this question for its own tooling —
- * `tao ship` reads it — so Studio reads it too rather than refusing every multi-app project until
- * someone repeats the answer as `--app`. An explicit request still wins, and a project without an
- * `app` clause still has to be told which of several apps to open.
- */
+/** Which app a project opens as, when the command line did not say. */
 function resolveAppSelection(
   projectRoot: string,
-  apps: readonly StudioAppVariant[],
+  apps: readonly (StudioAppVariant & { appId: string })[],
   requestedAppName: string | undefined,
   requestedEntryPath: string | undefined,
-  defaultAppName?: string,
-): StudioAppVariant {
-  const selected = requestedAppName
-    ?? (requestedEntryPath === undefined && apps.filter(app => app.appName === defaultAppName).length === 1
-      ? defaultAppName
-      : undefined)
+): StudioAppVariant & { appId: string } {
   const matching = apps.filter(app =>
-    (selected === undefined || app.appName === selected)
+    (requestedAppName === undefined || app.appName === requestedAppName)
     && (requestedEntryPath === undefined || app.entryPath === requestedEntryPath)
   )
   if (matching.length === 0) {

@@ -20,7 +20,7 @@ comparison, design lockfiles, and AI-assisted design iteration.
 An app selects a design through its `Design` property:
 
 ```tao
-workspace design WordFlowerDesign {
+project design WordFlowerDesign {
    colors {
       paper #f6f7f3
       ink #121826
@@ -33,7 +33,9 @@ workspace design WordFlowerDesign {
 }
 
 app WordFlower {
-   Name "WordFlower"
+   id "wordflower"
+   version "0.1.0"
+   name "WordFlower"
    Navigator HomeStack
    Design WordFlowerDesign
 }

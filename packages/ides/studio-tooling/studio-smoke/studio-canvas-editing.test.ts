@@ -5,7 +5,7 @@ import { startStudioSmokeLaunch } from '../studio-tooling-src/StudioSmokeLaunch'
 
 const source = `use Text from @tao/ui
 
-app CanvasEditing { view MainView }
+app CanvasEditing { id "canvasediting" version "1.0.0" name "CanvasEditing" view MainView }
 
 view MainView() { render Text("Canvas editing") }
 
@@ -30,15 +30,12 @@ Test(
   'Studio physically double-clicks free Text, saves Enter once, and cancels Escape without persistence',
   async () => {
     const projectRoot = await mkTestDir('tao-studio-canvas-editing-')
-    const catalogPath = FS.resolvePath('.tao-project/studio/sketches.jsonc', projectRoot)
+    const catalogPath = FS.resolvePath('.tao/studio/sketches.jsonc', projectRoot)
     let browser: StudioCdp | undefined
     let studio: Awaited<ReturnType<typeof startStudioSmokeLaunch>> | undefined
     try {
       await FS.writeText(FS.resolvePath('CanvasEditing.tao', projectRoot), source)
-      await FS.writeText(
-        FS.resolvePath('Project.tao', projectRoot),
-        'project { id "studio-canvas-editing" name "Canvas editing" }\n',
-      )
+      await FS.mkdir(FS.resolvePath('.tao', projectRoot))
       studio = await startStudioSmokeLaunch({ appName: 'CanvasEditing', projectRoot, repositoryRoot: Repo.getRoot() })
       browser = await StudioCdp.launchChrome({ artifactRoot: studio.readiness.artifactRoot })
       await browser.setViewport(1_920, 1_080)

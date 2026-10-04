@@ -1,13 +1,10 @@
 use SlotNav, StackNav from @tao/nav/basic
 use Col, FormButton, Text from @tao/ui
 
-project {
-   id "wordflower-foundation-harness"
-   name "WordFlower Foundation Harness"
-}
-
 app WordFlowerNavHarness {
-   Name "WordFlower Navigation Harness"
+   id "wordflower-nav-harness"
+   version "1.0.0"
+   name "WordFlower Navigation Harness"
    Navigator HarnessNavigator
    // An app without data omits `Datasource` entirely
 }
@@ -16,12 +13,16 @@ app WordFlowerNavHarness {
 // the same mounted behavior: primitive head versus inferred `let`, and canonical construction versus
 // explicit `with`. The checks below run all four, so every spelling must compile and work.
 app WordFlowerStackByNav {
-   Name "WordFlower Declaration Head"
+   id "wordflower-stack-by-nav"
+   version "1.0.0"
+   name "WordFlower Declaration Head"
    Navigator StackByNav
 }
 
 app WordFlowerStackByNavWith = app with {
-   Name "WordFlower Declaration Head With"
+   id "wordflower-stack-by-nav-with"
+   version "1.0.0"
+   name "WordFlower Declaration Head With"
    Navigator StackByNavWith
 }
 
@@ -37,32 +38,36 @@ type HarnessStack is StackNav with {
    Initial is HarnessHome
 }
 
-workspace
+project
 nav StackByNav = HarnessStack { }
 
-workspace
+project
 nav StackByNavWith = HarnessStack with { }
 
-workspace
+project
 let StackByLet = HarnessStack { }
 
-workspace
+project
 let StackByLetWith = HarnessStack with { }
 
-workspace
+project
 nav HarnessNavigator = SlotNav {
    Initial StackByNav
 }
 
 folder
 let WordFlowerStackByLet = app {
-   Name "WordFlower Declaration Let"
+   id "wordflower-stack-by-let"
+   version "1.0.0"
+   name "WordFlower Declaration Let"
    Navigator StackByLet
 }
 
 folder
 let WordFlowerStackByLetWith = app with {
-   Name "WordFlower Declaration Let With"
+   id "wordflower-stack-by-let-with"
+   version "1.0.0"
+   name "WordFlower Declaration Let With"
    Navigator StackByLetWith
 }
 

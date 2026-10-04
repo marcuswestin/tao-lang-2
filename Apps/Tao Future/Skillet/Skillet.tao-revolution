@@ -1,18 +1,12 @@
 // Skillet — plan the week, cook the meal, shop the list, together.
 //
-// This file holds the project, the capabilities, the navigation, and the app. Everything else in the
+// This file holds the package, the capabilities, the navigation, and the app. Everything else in the
 // folder is visible here without imports: a folder is the vocabulary boundary, and the Tao Prelude
 // (`Col`, `Text`, `Cloud`, `SelectionNav`, `now`, `Place` …) is ambient.
 
-project {
-   id "skillet"
-   name "Skillet"
-   version "1.0.0"
-   DefaultApp Skillet
+package {
+   version 1.0.0
    license MIT
-
-   targets phone, tablet, laptop
-   languages "en-US", "es", "es-MX" // the first is the source language; Words.tao-revolution translates
 }
 
 // -- Capabilities ---------------------------------------------------------------------------------------
@@ -75,7 +69,11 @@ nav SkilletNavigator = SelectionNav {
 // -- App ------------------------------------------------------------------------------------------------
 
 app Skillet {
-   Name "Skillet"
+   id "skillet"
+   version "1.0.0"
+   name "Skillet"
+   targets phone, tablet, laptop
+   languages "en-US", "es", "es-MX"
    Design SkilletDesign
    Datasource Kitchen
    Files Photos
@@ -127,7 +125,8 @@ app Skillet {
 // The same app on the device store, for `just dev-on-device` and for tests that never reach an
 // account. A variant leaves Skillet unchanged: links and targets still name `Skillet`.
 app SkilletOnDevice = Skillet with {
-   Name "Skillet (on device)"
+   id "skillet-on-device"
+   name "Skillet (on device)"
    Datasource OnDevice
    Notifications simulated
    Places simulated
@@ -135,7 +134,8 @@ app SkilletOnDevice = Skillet with {
 
 // A preview: an in-memory store, a signed-in demo account, nothing restored.
 app SkilletPreview = Skillet with {
-   Name "Skillet Preview"
+   id "skillet-preview"
+   name "Skillet Preview"
    Datasource Memory
    Seed HomeKitchen // the test fixture, so the preview has a kitchen to show
    Accounts simulated (signed in as "Mira")

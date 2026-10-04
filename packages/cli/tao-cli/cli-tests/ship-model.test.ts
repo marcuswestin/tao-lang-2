@@ -3,6 +3,7 @@ import {
   bumpShipVersion,
   decideShipVersion,
   deriveShipIdentity,
+  nativeMarketingVersion,
   nextBuildNumber,
   parseShipVersion,
   shipInputHash,
@@ -10,11 +11,12 @@ import {
 } from '../cli-src/ship-model'
 
 Describe('tao ship pure derivation', () => {
-  Test("accepts only Apple's numeric SemVer core", () => {
+  Test('keeps full Tao SemVer and adapts its numeric core for native packaging', () => {
     Expect(parseShipVersion('1.2.3')).toBe('1.2.3')
     Expect(parseShipVersion('01.2.3')).toBeUndefined()
     Expect(parseShipVersion('1.2')).toBeUndefined()
-    Expect(parseShipVersion('1.2.3-beta.1')).toBeUndefined()
+    Expect(parseShipVersion('1.2.3-beta.1+build.7')).toBe('1.2.3-beta.1+build.7')
+    Expect(nativeMarketingVersion('1.2.3-beta.1+build.7')).toBe('1.2.3')
   })
 
   Test('applies every version policy branch', () => {
@@ -27,16 +29,15 @@ Describe('tao ship pure derivation', () => {
     Expect(bumpShipVersion('1.2.3', 'major')).toBe('2.0.0')
   })
 
-  Test('derives stable primary and variant identities by table', () => {
-    const common = { namespace: 'app.tao', primaryAppName: 'WordFlower', projectId: 'wordflower' }
-    Expect(deriveShipIdentity({ ...common, appName: 'WordFlower' })).toEqual({
+  Test('derives native identity from the selected app id', () => {
+    const common = { namespace: 'app.tao' }
+    Expect(deriveShipIdentity({ ...common, appId: 'wordflower' })).toEqual({
       bundleIdentifier: 'app.tao.wordflower',
       channel: 'wordflower',
     })
-    Expect(deriveShipIdentity({ ...common, appName: 'WordFlowerInstantDB' })).toEqual({
-      bundleIdentifier: 'app.tao.wordflower.wordflowerinstantdb',
-      channel: 'wordflower-wordflowerinstantdb',
-      variant: 'wordflowerinstantdb',
+    Expect(deriveShipIdentity({ ...common, appId: 'wordflower-instantdb' })).toEqual({
+      bundleIdentifier: 'app.tao.wordflower-instantdb',
+      channel: 'wordflower-instantdb',
     })
   })
 

@@ -1,11 +1,13 @@
 import { type DevAppSelection, type DevLoopOutcome, runDevLoop } from '@expo-host/dev-loop/expo-dev-loop'
 import type { DevStartupTarget } from '@expo-host/dev-loop/expo-runner/run-targets'
+import { ProjectTooling, type ProjectToolingWatch } from '@project-tooling'
 import { Errors, FS, HCI, ProjectDevSession, Switch } from '@shared'
 import type { Readable, Writable } from 'node:stream'
 import { TaoAppModules } from './app-modules'
 import { discoverTaoDevProjects, type TaoDevApp } from './dev-app-discovery'
 import { selectTaoDevApp, type TaoDevSelectionResult } from './dev-app-selection'
 import { createInkDevLoopReporter } from './dev/dev-loop-tui'
+import * as DiagnosticReport from './diagnostic-report'
 
 /** TaoDevCommandOptions supplies explicit selection, terminal state, and a focused loop seam. */
 type TaoDevCommandOptions = {
@@ -24,7 +26,7 @@ export async function runTaoDev(
   options: TaoDevCommandOptions = {},
 ): Promise<number> {
   const target = FS.resolvePath(targetPath)
-  // `runDevLoop` renders through whichever reporter it is given; the dashboard is `tao dev`'s to
+  // `runDevLoop` renders through whichever reporter it is given; the dashboard is `tao run`'s to
   // own, so this is the one place that wires the Ink implementation in.
   const runLoop = options.runLoop
     ?? ((selection, device) => runDevLoop(selection, createInkDevLoopReporter(), options.startupTargets, device))
@@ -34,11 +36,26 @@ export async function runTaoDev(
   }
   let currentApp = current.app
   let lease: Awaited<ReturnType<typeof ProjectDevSession.acquire>> | undefined
+  let toolingWatch: ProjectToolingWatch | undefined
   try {
     while (true) {
       if (lease === undefined) {
         lease = await ProjectDevSession.acquire(currentApp.projectRoot, 'cli')
         await TaoAppModules.ensureProject(currentApp.projectRoot)
+        toolingWatch = await ProjectTooling.watch(currentApp.projectRoot, {
+          runtimeRoot: TaoAppModules.runtimeRoot(),
+          onResult: result => {
+            if (result.status === 'stale') {
+              for (const diagnostic of result.diagnostics) {
+                HCI.writeErrorLine(DiagnosticReport.renderDiagnostic(diagnostic))
+              }
+            }
+          },
+          onError: error => HCI.writeErrorLine(Errors.formatForUser(error)),
+        })
+        if (toolingWatch.lastResult.status !== 'fresh') {
+          return exitTaoDev(1, options)
+        }
       }
       const previousProject = currentApp.projectRoot
       const outcome = await runLoop(currentApp, options.device)
@@ -61,11 +78,14 @@ export async function runTaoDev(
         return exitTaoDev(exitCode, options)
       }
       if (currentApp.projectRoot !== previousProject) {
+        await toolingWatch?.dispose()
+        toolingWatch = undefined
         await lease.release()
         lease = undefined
       }
     }
   } finally {
+    await toolingWatch?.dispose()
     await lease?.release()
   }
 }
@@ -73,7 +93,7 @@ export async function runTaoDev(
 /** exitTaoDev announces the exit; closing the dev-loop dashboard restores the primary screen, which
  * still shows the stale app selector, so a silent exit reads as returning to app selection. */
 function exitTaoDev(exitCode: number, options: TaoDevCommandOptions): number {
-  HCI.writeLine('Exited Tao dev.', options)
+  HCI.writeLine('Exited Tao run.', options)
   return exitCode
 }
 

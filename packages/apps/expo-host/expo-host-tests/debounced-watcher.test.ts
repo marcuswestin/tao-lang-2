@@ -31,7 +31,7 @@ Describe('createEventDebouncer', () => {
     ])
   })
 
-  // Pins `tao dev`'s original behavior: an event that arrives while `shouldDrop` is true never
+  // Pins `tao run`'s original behavior: an event that arrives while `shouldDrop` is true never
   // schedules a change, and it cancels whatever change an earlier event had already scheduled.
   Test('drops a scheduled change when a later event arrives while shouldDrop is true', async () => {
     let changeCount = 0

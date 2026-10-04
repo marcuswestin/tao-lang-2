@@ -674,7 +674,7 @@ Describe('Studio sketch session protocol', () => {
         sketchId: 'sketch-1',
         sourceVersion: initial.sourceVersion,
       })
-      const catalogPath = FS.resolvePath('.tao-project/studio/sketches.jsonc', root)
+      const catalogPath = FS.resolvePath('.tao/studio/sketches.jsonc', root)
       const onDisk = await FS.readText(catalogPath)
       const generatedPath = FS.resolvePath('@/studio/View1.tao', root)
       const before = snapped.catalog.sketches[0]!.snapped[0]!.target
@@ -1223,7 +1223,7 @@ Describe('Studio sketch session protocol', () => {
       // The app starts using the drawn view; without its file the project no longer compiles.
       await FS.writeText(
         FS.resolvePath('Garden.tao', root),
-        'app Garden { view Main }\nview Main() { render View1() }\n',
+        'app Garden { id "garden" version "1.0.0" name "Garden" view Main }\nview Main() { render View1() }\n',
       )
       fail = true
 
@@ -1243,7 +1243,10 @@ Describe('Studio sketch session protocol', () => {
 
       // Once the use is gone the same removal goes through.
       fail = false
-      await FS.writeText(FS.resolvePath('Garden.tao', root), 'app Garden { view Main }\nview Main() { }\n')
+      await FS.writeText(
+        FS.resolvePath('Garden.tao', root),
+        'app Garden { id "garden" version "1.0.0" name "Garden" view Main }\nview Main() { }\n',
+      )
       const removed = await session.applySketchAction({
         action: { id: 'sketch-1', kind: 'delete-sketch' },
         expectedRevision: created.catalog.revision,
@@ -1319,7 +1322,7 @@ Describe('Studio sketch session protocol', () => {
 Describe('Studio sketch badge', () => {
   const rowFiles = {
     'Garden.tao':
-      'app Garden { view Main }\nview Main() { }\nfolder\nview StoryRow(Title text) { render Text(Title) }\n',
+      'app Garden { id "garden" version "1.0.0" name "Garden" view Main }\nview Main() { }\nfolder\nview StoryRow(Title text) { render Text(Title) }\n',
     'Rows.tao': 'scenarios StoryRow "rows" {\n  device phone\n  scenario "long" {\n    render (Title: "Hi")\n  }\n}\n',
   }
 
@@ -1916,7 +1919,7 @@ async function withSketchSession(
 ): Promise<void> {
   const { files, ...sessionOptions } = options
   await withTaoFiles('tao-studio-sketch-session-', {
-    'Garden.tao': 'app Garden { view Main }\nview Main() { }\n',
+    'Garden.tao': 'app Garden { id "garden" version "1.0.0" name "Garden" view Main }\nview Main() { }\n',
     ...files,
   }, async (paths, root) => {
     const compiles: unknown[] = []

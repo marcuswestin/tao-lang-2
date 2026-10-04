@@ -102,7 +102,7 @@
     "land", "finalize", "merge-main", "merge-recover", "landed", "capabilities", "open-pr", "fix-agent-config",
     "test-host", "studio-smoke", "studio-proof-real-app", "admission-experiment",
     "native-module-check", "reclaim --execute",
-    "prepare-release studio", "prepare-release ide-extension",
+    "prepare-release studio", "prepare-release ide-extension", "ide-extension-acceptance",
     "app-dev", "test-watch", "standalone-cli-acceptance", "studio", "studio-native", "studio-ps", "studio-stop",
     "docker-desktop start",
     "watchman start", "watchman status", "watchman stop",

@@ -30,6 +30,11 @@ export function rememberVisibleWorkspaceFiles(files: readonly AST.TaoFile[]): vo
   }
 }
 
+/** workspaceFilesFor returns the parsed documents built alongside one Tao file. */
+export function workspaceFilesFor(file: AST.TaoFile): readonly AST.TaoFile[] {
+  return visibleWorkspaceFiles.get(file) ?? [file]
+}
+
 /** declarationNamespace classifies declarations by the reference contexts that can resolve them. */
 export function declarationNamespace(declaration: AST.Declaration): DeclarationNamespace {
   return AST.isPrimitiveDeclaration(declaration)
@@ -182,7 +187,7 @@ type ArgumentListOwner =
 type BlockStatementFor<OwnerT extends AST.BlockStatementOwner> = OwnerT extends
   AST.ActionDeclaration | AST.ActionExpression ? AST.ActionStatement
   : OwnerT extends AST.AppDeclaration ? AST.AppStatement | AST.Statement
-  : OwnerT extends AST.ProjectDeclaration ? AST.ProjectStatement
+  : OwnerT extends AST.PackageDeclaration ? AST.PackageStatement
   : AST.Statement
 type BlockStatementPredicate<InputT extends AST.OwnedBlockStatement, OutputT extends InputT> = (
   statement: InputT,

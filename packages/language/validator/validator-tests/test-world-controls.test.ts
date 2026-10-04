@@ -65,7 +65,7 @@ Describe('validator: test world controls', () => {
       datasource NotesStore = Memory { Data { Notes } }
       datasource TasksStore = Memory { Data { Tasks } }
       scene Main() { Title "Main" render inject ${tsFence} return null ${fence} }
-      app NotesApp { Name "Notes" Navigator StackNav { Initial Main } Datasource { NotesStore } }
+      app NotesApp { id "notesapp" version "1.0.0" name "Notes" Navigator StackNav { Initial Main } Datasource { NotesStore } }
       test "Notes" { test "wrong store" {
         run NotesApp
         datasource fails after create Task "never fires"

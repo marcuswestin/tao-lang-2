@@ -1,7 +1,7 @@
 import { Assert, CLI, Errors, FS, Json, Platform, Switch, Time } from '@shared'
 
 export const studioSketchCatalogFormatVersion = 1 as const
-export const studioSketchCatalogRelativePath = '.tao-project/studio/sketches.jsonc'
+export const studioSketchCatalogRelativePath = '.tao/studio/sketches.jsonc'
 
 type StudioSketchFieldBinding = Readonly<{
   parameter: string
@@ -930,7 +930,7 @@ function portableTargetPath(path: string, projectRoot: string): string {
   if (FS.pathIsWithin(path, projectRoot)) {
     return FS.relativePath(projectRoot, path)
   }
-  for (const marker of ['/@/', '/.tao-project/']) {
+  for (const marker of ['/@/', '/.tao/']) {
     const index = path.lastIndexOf(marker)
     if (index >= 0) {
       return path.slice(index + 1)

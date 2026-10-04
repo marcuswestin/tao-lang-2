@@ -1,10 +1,12 @@
+import { ASTUtils, Packages } from '@ast-utils'
 import { Workspace } from '@compiler/workspace'
 import { AST } from '@parser'
-import { FS } from '@shared'
+import { Errors, FS } from '@shared'
 import { findTaoFiles } from './tao-files'
 
 /** TaoDevApp identifies one runnable app declaration and its project grouping. */
 export type TaoDevApp = {
+  appId: string
   appName: string
   appPath: string
   projectName: string
@@ -26,7 +28,7 @@ export async function discoverTaoDevProjects(targetPath: string): Promise<TaoDev
 
   for (const appFile of discovered) {
     for (const app of appFile) {
-      const projectKey = `${app.projectRoot}\u0000${app.projectName}`
+      const projectKey = app.projectRoot
       const project = projects.get(projectKey) ?? {
         apps: [],
         name: app.projectName,
@@ -37,27 +39,28 @@ export async function discoverTaoDevProjects(targetPath: string): Promise<TaoDev
     }
   }
 
-  return [...projects.values()]
+  return [...projects.values()].toSorted((left, right) => left.name.localeCompare(right.name))
 }
 
 async function discoverAppsInFile(appPath: string): Promise<TaoDevApp[]> {
   const parsed = await Workspace.parse(appPath)
-  const appNames = AST.appValueDeclarationsInFile(parsed.entry.ast).map(statement => statement.name)
-  if (appNames.length === 0) {
+  const declarations = AST.appValueDeclarationsInFile(parsed.entry.ast)
+  if (declarations.length === 0) {
     return []
   }
 
-  const projectFile = parsed.files
-    .flatMap(file => file.ast.statements.filter(AST.isProjectDeclaration).map(project => ({ file, project })))
-    .filter(candidate => FS.pathIsWithin(appPath, FS.dirname(candidate.file.path)))
-    .toSorted((left, right) => right.file.path.length - left.file.path.length)[0]
-  const project = projectFile?.project
-  const declaredName = project?.block.statements.find(AST.isProjectName)?.value
-  // Studio resolves a project root through realpath before deriving the Dev datasource identity.
-  // Do the same here so launching through a symlink does not create a second app authority.
-  const projectRoot = await FS.realPath(
-    projectFile ? FS.dirname(projectFile.file.path) : FS.dirname(appPath),
-  )
-  const projectName = declaredName ?? FS.basename(projectRoot)
-  return appNames.map(appName => ({ appName, appPath, projectName, projectRoot }))
+  const containingRoot = await Packages.containingProjectRoot(FS.dirname(appPath))
+  if (containingRoot === undefined) {
+    return []
+  }
+  // Resolve the project root through realpath so a symlink does not create a second app authority.
+  const projectRoot = await FS.realPath(containingRoot)
+  const projectName = FS.basename(projectRoot)
+  return declarations.map(declaration => {
+    const id = ASTUtils.effectiveAppConfiguration(declaration).get('id')?.value
+    if (id === undefined || !AST.isStringLiteral(id)) {
+      Errors.throwUserInput(`App '${declaration.name}' in ${appPath} requires a literal id before running.`)
+    }
+    return { appId: id.value, appName: declaration.name, appPath, projectName, projectRoot }
+  })
 }

@@ -511,6 +511,8 @@ Describe('TR.TaoProps', () => {
     const home = TR.Navigation.View({ name: 'Ambient home', render: () => null })
     const navigation = configuredStack('Ambient stack', home)
     const app = TR.Navigation.App({
+      id: 'ambient-app',
+      version: '1.0.0',
       name: 'Ambient app',
       navigator: () => navigation,
       auxiliaries: () => ({}),

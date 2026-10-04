@@ -144,6 +144,7 @@ Describe('app compilation staleness stamp', () => {
     const root = await repository()
     const tao = compiler()
     try {
+      await FS.writeText(FS.resolvePath('Apps/Example/.tao/.gitkeep', root), '')
       await run(root, tao.compile)
       await FS.writeText(FS.resolvePath('Apps/Example/.tao/dev/runtime/App.tsx', root), 'generated dev app\n')
       await FS.symlink(
@@ -200,13 +201,31 @@ Describe('app compilation staleness stamp', () => {
     }
   })
 
-  Test('recompiles when a Project.tao appears above the app, changing project identity', async () => {
+  Test('recompiles when a .tao root appears above the app, changing its source boundary', async () => {
     const root = await repository()
     const tao = compiler()
     try {
       await run(root, tao.compile)
-      await FS.writeText(FS.resolvePath('Apps/Project.tao', root), 'project Apps\n')
+      await FS.writeText(FS.resolvePath('Apps/.tao/.gitkeep', root), '')
 
+      Expect(await run(root, tao.compile)).toBe(0)
+      Expect(tao.calls.length).toBe(2)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('recompiles when a tracked project identity changes', async () => {
+    const root = await repository()
+    const tao = compiler()
+    try {
+      const identity = FS.resolvePath('Apps/Example/.tao/project.json', root)
+      await FS.writeJson(identity, { id: '550e8400-e29b-41d4-a716-446655440000' })
+      await run(root, tao.compile)
+      await FS.writeJson(identity, { id: '550e8400-e29b-41d4-a716-446655440001' })
+
+      Expect(await run(root, tao.compile)).toBe(0)
+      Expect(tao.calls.length).toBe(2)
       Expect(await run(root, tao.compile)).toBe(0)
       Expect(tao.calls.length).toBe(2)
     } finally {
@@ -269,6 +288,31 @@ Describe('app compilation staleness stamp', () => {
       Expect(await run(root, tao.compile)).toBe(0)
       Expect(tao.calls.length).toBe(2)
       Expect(await FS.readText(generated)).toBe('compiled 2\n')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('retains a private dependency directory link in the output stamp and repairs a deleted link', async () => {
+    const root = await repository()
+    const tao = compiler()
+    const installed = FS.resolvePath('.tao/install/origins/library/node_modules', root)
+    const link = FS.resolvePath(`${OUTPUT_ROOT}/modules/dependencies/library/node_modules`, root)
+    const compile: CompileAppOptions['compile'] = async (appPath, appName, repositoryRoot) => {
+      const code = await tao.compile(appPath, appName, repositoryRoot)
+      await FS.replaceSymlink(installed, link)
+      return code
+    }
+    try {
+      await FS.writeJson(FS.resolvePath('util/package.json', installed), { name: 'util', version: '1.0.0' })
+      Expect(await run(root, compile)).toBe(0)
+      Expect(await run(root, compile)).toBe(0)
+      Expect(tao.calls.length).toBe(1)
+
+      await FS.remove(link)
+      Expect(await run(root, compile)).toBe(0)
+      Expect(tao.calls.length).toBe(2)
+      Expect(await FS.isSymbolicLink(link)).toBe(true)
     } finally {
       await FS.remove(root)
     }

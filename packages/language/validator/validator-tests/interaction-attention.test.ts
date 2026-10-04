@@ -130,7 +130,7 @@ Describe('validator: interaction attention', () => {
     rejects(
       `
         ${leaf}
-        app Demo { view Home }
+        app Demo { id "demo" version "1.0.0" name "Demo" view Home }
         view Home() { render Leaf() [opacity 80 when focusd] }
         test "Interaction" {
           test "spelling" {

@@ -9,7 +9,7 @@ registerRuntimeE2ELifecycle()
 const panesApp = `
   use Col, Panes, Text from @tao/ui
 
-  app AdaptiveDeviceApp { view MainView }
+  app AdaptiveDeviceApp { id "adaptivedeviceapp" version "1.0.0" name "AdaptiveDeviceApp" view MainView }
   view MainView() {
     render Panes() [gap 16] {
       #primaryPane
@@ -71,8 +71,8 @@ Describe('Expo runtime `on <device>` and `with <fixture>` test clauses', () => {
         'Main.tao': `
           use Col, Text from @tao/ui
           use Memory from @tao/data/providers/memory
-          workspace data Workspaces / Workspace { Name text }
-          app WordFlowerFixtureApp { view MainView Datasource Memory { } }
+          project data Workspaces / Workspace { Name text }
+          app WordFlowerFixtureApp { id "wordflowerfixtureapp" version "1.0.0" name "WordFlowerFixtureApp" view MainView Datasource Memory { } }
           view MainView() {
             query Workspaces = Workspaces with { }
             render Col() {

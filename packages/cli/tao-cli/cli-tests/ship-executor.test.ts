@@ -106,10 +106,13 @@ Describe('tao ship TestFlight distribution', () => {
       },
       version: 0,
     })
-    const uploads: Array<{ contentType: string; fileExtension?: string; key: string }> = []
+    const uploads: Array<{ applicationId: string; contentType: string; fileExtension?: string; key: string }> = []
     const client = {
-      uploadAsset: async (input: { contentType: string; fileExtension?: string; key: string }) => {
+      uploadAsset: async (
+        input: { applicationId: string; contentType: string; fileExtension?: string; key: string },
+      ) => {
         uploads.push({
+          applicationId: input.applicationId,
           contentType: input.contentType,
           fileExtension: input.fileExtension,
           key: input.key,
@@ -124,9 +127,9 @@ Describe('tao ship TestFlight distribution', () => {
       },
     } as unknown as TaoUpdateClient
     const prepared = {
+      app: { id: 'notes' },
       buildNumber: '42',
       channel: 'stable',
-      project: { id: 'notes' },
       version: '1.2.3',
     } as unknown as Parameters<typeof ShipExecutorTesting.publicationFromExport>[1]
 
@@ -139,9 +142,10 @@ Describe('tao ship TestFlight distribution', () => {
     )
 
     Expect(uploads).toEqual([
-      { contentType: 'application/javascript', fileExtension: '.hbc', key: 'bundle' },
-      { contentType: 'image/png', fileExtension: '.png', key: 'image-hash' },
+      { applicationId: 'notes', contentType: 'application/javascript', fileExtension: '.hbc', key: 'bundle' },
+      { applicationId: 'notes', contentType: 'image/png', fileExtension: '.png', key: 'image-hash' },
     ])
+    Expect(publication.applicationId).toBe('notes')
     Expect(publication.runtimeVersion).toBe('native-runtime-1')
     Expect(publication.metadata).toEqual({ buildNumber: '42', platform: 'ios', version: '1.2.3' })
   })
@@ -200,12 +204,12 @@ Describe('tao ship filesystem-only execution', () => {
       await git(root, 'config', 'user.email', 'test@example.com')
       await git(root, 'config', 'user.name', 'Tao Test')
       const sourcePath = FS.resolvePath('App.tao', root)
-      const lockPath = FS.resolvePath('.tao-project/lock.jsonc', root)
-      await FS.writeText(sourcePath, 'project { id "notes" name "Notes" version "1.2.2" app Notes }\n')
+      const lockPath = FS.resolvePath('.tao/lock.jsonc', root)
+      await FS.writeText(sourcePath, 'app Notes { id "notes" version "1.2.2" name "Notes" view Main }\n')
       await git(root, 'add', '.')
       await git(root, 'commit', '-qm', 'Previous release')
       const previousCommit = await git(root, 'rev-parse', 'HEAD')
-      await FS.writeText(sourcePath, `${await FS.readText(sourcePath)}app Notes { view Main }\nview Main() { }\n`)
+      await FS.writeText(sourcePath, `${await FS.readText(sourcePath)}view Main() { }\n`)
       await git(root, 'add', '.')
       await git(root, 'commit', '-qm', 'New release notes')
       const currentCommit = await git(root, 'rev-parse', 'HEAD')
@@ -238,6 +242,8 @@ Describe('tao ship filesystem-only execution', () => {
       const prepared = {
         actions: [],
         app: {
+          id: 'notes',
+          version: '1.2.2',
           displayName: 'Notes',
           hasLocalDatasourceEndpoint: false,
           isVariant: false,
@@ -255,13 +261,9 @@ Describe('tao ship filesystem-only execution', () => {
         lock,
         project: {
           apps: [],
-          defaultApp: 'Notes',
-          id: 'notes',
           name: 'Notes',
           primaryAppName: 'Notes',
-          projectSourcePath: sourcePath,
           root,
-          version: '1.2.2',
         },
         reuseBuild: true,
         version: '1.2.3',

@@ -207,9 +207,9 @@ late-event disposal remains established by the mocked runtime suite. Cross-app p
 scenarios remain pending, and physical haptic feel is explicitly excluded from this pre-landing scope.
 
 The app has no scenario and opens as an ordinary app. Physical iPhone launch can use
-`./tao dev "Apps/Test Apps/Native Bridge" --app NativeBridge --device roPhone`, or Studio's Device
+`./tao run "Apps/Test Apps/Native Bridge" --app NativeBridge --device roPhone`, or Studio's Device
 panel after `./dev studio "Apps/Test Apps/Native Bridge" --app NativeBridge`.
-`tao dev --ios` selects a simulator.
+`tao run --ios` selects a simulator.
 
 ## Community project assessment
 

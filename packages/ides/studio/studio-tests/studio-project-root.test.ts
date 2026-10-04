@@ -5,9 +5,9 @@ import {
   resolveStudioProjectRoot,
 } from '../studio-src/StudioProjectRoot'
 
-Test('Studio project root selection keeps a folder that directly owns one project declaration', async () => {
+Test('Studio project root selection keeps a folder with a .tao marker', async () => {
   await withProjectFolders({
-    'Project.tao': 'project { id "root" name "Root" }',
+    '.tao/.gitignore': '*',
     'Sources/View.tao': 'view Main() { }',
   }, async root => {
     const resolution = await resolveStudioProjectRoot(root)
@@ -22,7 +22,8 @@ Test('Studio project root selection keeps a folder that directly owns one projec
 
 Test('Studio project root selection resolves a family folder to its sole nested project', async () => {
   await withProjectFolders({
-    '1 - Current/WordFlower.tao': 'project { id "word-flower" name "WordFlower" }',
+    '1 - Current/.tao/.gitignore': '*',
+    '1 - Current/WordFlower.tao': 'view WordFlower() { }',
     '1 - Current/@nav/Navigation.tao': 'type Navigation { }',
     '2 - Next/@nav/Navigation.tao-next': 'type Navigation { }',
     'README.md': 'Project family',
@@ -39,10 +40,23 @@ Test('Studio project root selection resolves a family folder to its sole nested 
   })
 })
 
-Test('Studio project root selection ignores a test sidecar project beside the app', async () => {
+Test('Studio project root selection uses the nearest marker above a source folder', async () => {
   await withProjectFolders({
-    'WordFlower.tao': 'project { id "word-flower" name "WordFlower" }',
-    'Harness.test.tao': 'project { id "harness" name "Harness" }',
+    '.tao/.gitignore': '*',
+    'Sources/View.tao': 'view Main() { }',
+  }, async root => {
+    const sourceFolder = FS.resolvePath('Sources', root)
+    const resolution = await resolveStudioProjectRoot(sourceFolder)
+    Expect(resolution.projectRoot).toBe(await FS.realPath(root))
+    Expect(resolution.selectedDescendant).toBe(false)
+  })
+})
+
+Test('Studio project root selection ignores Tao files beside the marker', async () => {
+  await withProjectFolders({
+    '.tao/.gitignore': '*',
+    'WordFlower.tao': 'view WordFlower() { }',
+    'Harness.test.tao': 'view Harness() { }',
   }, async root => {
     const canonicalRoot = await FS.realPath(root)
 
@@ -58,7 +72,7 @@ Test('Studio project root selection ignores a test sidecar project beside the ap
 Test('Studio project root selection reports no candidate and asks for one project root', async () => {
   await withProjectFolders({
     'Notes.tao': 'view Notes() { }',
-    'Nested/TwoProjects.tao': 'project { name "One" }\nproject { name "Two" }',
+    'Nested/TwoProjects.tao': 'view One() { }\nview Two() { }',
   }, async root => {
     await Expect(resolveStudioProjectRoot(root)).rejects.toThrow(
       `Candidates:\n  (none)\nPass one project root to ./dev studio.`,
@@ -68,8 +82,10 @@ Test('Studio project root selection reports no candidate and asks for one projec
 
 Test('Studio project root selection lists multiple candidates and asks for one project root', async () => {
   await withProjectFolders({
-    'Alpha/Project.tao': 'project { id "alpha" name "Alpha" }',
-    'Beta/App.tao': 'project { id "beta" name "Beta" }',
+    'Alpha/.tao/.gitignore': '*',
+    'Beta/.tao/.gitignore': '*',
+    'Alpha/App.tao': 'view Alpha() { }',
+    'Beta/App.tao': 'view Beta() { }',
   }, async root => {
     const alpha = await FS.realPath(FS.resolvePath('Alpha', root))
     const beta = await FS.realPath(FS.resolvePath('Beta', root))

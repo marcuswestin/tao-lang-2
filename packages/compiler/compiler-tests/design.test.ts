@@ -6,7 +6,7 @@ Describe('compiler: minimal design', () => {
   Test('gates only inline design explorations in release validation mode', async () => {
     const source = `
       use StackNav from @tao/nav
-      app Demo { Name "Demo" Navigator StackNav { Initial Main } }
+      app Demo { id "com.tao.test.demo" version "1.0.0"  name "Demo" Navigator StackNav { Initial Main } }
       scene Main() { Title "Main" render Surface() [size 14, fg #fff] }
       view Surface() { render inject \`\`\`ts return null \`\`\` }
     `
@@ -21,7 +21,7 @@ Describe('compiler: minimal design', () => {
     const ordinaryWarning = await TestCompiler.compileCode(
       `
       use SlotNav, StackNav from @tao/nav
-      app Demo { Name "Demo" Navigator StackNav { Initial Main } }
+      app Demo { id "com.tao.test.demo" version "1.0.0"  name "Demo" Navigator StackNav { Initial Main } }
       scene Main() { Title "Main" render Surface() }
       view Surface() { render inject \`\`\`ts return null \`\`\` }
     `,
@@ -34,7 +34,7 @@ Describe('compiler: minimal design', () => {
     const compiled = await TestCompiler.compileCode(`
       use StackNav from @tao/nav
       use Text from @tao/ui
-      app Demo { Name "Demo" Navigator StackNav { Initial Main } }
+      app Demo { id "com.tao.test.demo" version "1.0.0"  name "Demo" Navigator StackNav { Initial Main } }
       scene Main() { Title "Main" render Text("Hello") }
     `)
 
@@ -43,7 +43,7 @@ Describe('compiler: minimal design', () => {
 
   Test('wraps a declaration header clause into DeclarationTaoProps for its root render', async () => {
     const compiled = await TestCompiler.compileCode(`
-      app Demo { view Card }
+      app Demo { id "com.tao.test.demo" version "1.0.0" name "Demo"  view Card }
       view Card() [pad 12, bg none] {
         render Surface()
       }
@@ -59,7 +59,7 @@ Describe('compiler: minimal design', () => {
 
   Test('emits no declaration wrapper for a view without a header clause', async () => {
     const compiled = await TestCompiler.compileCode(`
-      app Demo { view Card }
+      app Demo { id "com.tao.test.demo" version "1.0.0" name "Demo"  view Card }
       view Card() {
         render Surface()
       }
@@ -71,7 +71,7 @@ Describe('compiler: minimal design', () => {
 
   Test("routes a declaration header into an inject-rooted view's @@layout/@@tag ambients", async () => {
     const compiled = await TestCompiler.compileCode(`
-      app Demo { view Card }
+      app Demo { id "com.tao.test.demo" version "1.0.0" name "Demo"  view Card }
       view Card() [pad 12, bg none] {
         render inject Content @@content, Layout @@layout, Tag @@tag \`\`\`ts
           return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
@@ -92,7 +92,7 @@ Describe('compiler: minimal design', () => {
     'does not emit an unconsumed declaration wrapper for a headered inject-rooted view with no ambient',
     async () => {
       const compiled = await TestCompiler.compileCode(`
-      app Demo { view Card }
+      app Demo { id "com.tao.test.demo" version "1.0.0" name "Demo"  view Card }
       view Card() [pad 12] {
         render inject \`\`\`ts return null \`\`\`
       }
@@ -105,7 +105,7 @@ Describe('compiler: minimal design', () => {
   Test("carries a declaration header's source path in a studio build", async () => {
     const compiled = await TestCompiler.compileCode(
       `
-        app Demo { view Card }
+        app Demo { id "com.tao.test.demo" version "1.0.0" name "Demo"  view Card }
         view Card() [pad 12] {
           render Surface()
         }
@@ -125,7 +125,7 @@ Describe('compiler: minimal design', () => {
     const compiled = await TestCompiler.compileCode(`
       use StackNav from @tao/nav
 
-      workspace design Theme {
+      project design Theme {
         paper #f6f7f3
         ink #121826
         screen [fill, content top stretch, pad 16, bg paper]
@@ -133,8 +133,8 @@ Describe('compiler: minimal design', () => {
         compact [gap 8, gap 12]
       }
 
-      app Demo {
-        Name "Demo"
+      app Demo { id "com.tao.test.demo" version "1.0.0"
+        name "Demo"
         Navigator StackNav { Initial Main }
         Design Theme
       }
@@ -165,13 +165,13 @@ Describe('compiler: minimal design', () => {
   Test('lowers decided background and ink terms through the compatible runtime ABI', async () => {
     const compiled = await TestCompiler.compileCode(`
       use StackNav from @tao/nav
-      workspace design Theme {
+      project design Theme {
         canvas #fff
         ink #111
         card [background canvas, ink ink, border ink, radius 12, pad 16, gap 8]
         body [size 16, weight 600, line 22]
       }
-      app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
+      app Demo { id "com.tao.test.demo" version "1.0.0"  name "Demo" Navigator StackNav { Initial Main } Design Theme }
       scene Main() { Title "Main" render Surface() [card, body] }
       view Surface() { render inject \`\`\`ts return null \`\`\` }
     `)
@@ -186,12 +186,12 @@ Describe('compiler: minimal design', () => {
   Test('preserves exact Scheme conditions while lowering their visual source heads', async () => {
     const compiled = await TestCompiler.compileCode(`
       use StackNav from @tao/nav
-      workspace design Theme {
+      project design Theme {
         canvas #fff
         canvasDark #111
         Surface [background canvas, background canvasDark when Scheme is Dark]
       }
-      app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
+      app Demo { id "com.tao.test.demo" version "1.0.0"  name "Demo" Navigator StackNav { Initial Main } Design Theme }
       scene Main() { Title "Main" render Surface() }
       view Surface() { render inject \`\`\`ts return null \`\`\` }
     `)
@@ -205,7 +205,7 @@ Describe('compiler: minimal design', () => {
     const compiled = await TestCompiler.compileCode(
       `
       use StackNav from @tao/nav
-      workspace design Theme {
+      project design Theme {
         colors {
           cream #fff
           ember #d9622b { 20 #f4d7c8 }
@@ -219,7 +219,7 @@ Describe('compiler: minimal design', () => {
           Text [ink canvas]
         }
       }
-      app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
+      app Demo { id "com.tao.test.demo" version "1.0.0"  name "Demo" Navigator StackNav { Initial Main } Design Theme }
       scene Main() { Title "Main" render Surface() [card, title] }
       view Surface() { render inject \`\`\`ts return null \`\`\` }
     `,
@@ -239,7 +239,7 @@ Describe('compiler: minimal design', () => {
   Test('lowers a color value to its design name and a clause value read to the live value', async () => {
     const compiled = await TestCompiler.compileCode(`
       use StackNav from @tao/nav
-      workspace design Theme {
+      project design Theme {
         colors {
           accent #2f6b4f { 20 #cfe3d8 }
           ink #111
@@ -247,7 +247,7 @@ Describe('compiler: minimal design', () => {
           schemeInk when Scheme is Dark inkDark / not ink
         }
       }
-      app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
+      app Demo { id "com.tao.test.demo" version "1.0.0"  name "Demo" Navigator StackNav { Initial Main } Design Theme }
       scene Main() { Title "Main" render Badge(Tint: accent.20) }
       view Badge(Tint color default schemeInk) { render Surface() [background Tint when pressed] }
       view Surface() { render inject \`\`\`ts return null \`\`\` }
@@ -263,8 +263,8 @@ Describe('compiler: minimal design', () => {
   Test('does not rewrite a bare design member name as a visual alias', async () => {
     const compiled = await TestCompiler.compileCode(`
       use StackNav from @tao/nav
-      workspace design Theme { ink #111 }
-      app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
+      project design Theme { ink #111 }
+      app Demo { id "com.tao.test.demo" version "1.0.0"  name "Demo" Navigator StackNav { Initial Main } Design Theme }
       scene Main() { Title "Main" render Surface() }
       view Surface() { render inject \`\`\`ts return null \`\`\` }
     `)
@@ -275,7 +275,7 @@ Describe('compiler: minimal design', () => {
   Test('release design checks accept promoted representable families and reject their inline raw values', async () => {
     const inline = `
       use StackNav from @tao/nav
-      app Demo { Name "Demo" Navigator StackNav { Initial Main } }
+      app Demo { id "com.tao.test.demo" version "1.0.0"  name "Demo" Navigator StackNav { Initial Main } }
       scene Main() { Title "Main" render Surface() [background #fff, size 16, radius 8, pad 12] }
       view Surface() { render inject \`\`\`ts return null \`\`\` }
     `
@@ -286,8 +286,8 @@ Describe('compiler: minimal design', () => {
     await TestCompiler.compileCode(
       `
       use StackNav from @tao/nav
-      workspace design Theme { paper #fff Surface [background paper, size 16, radius 8, pad 12] }
-      app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
+      project design Theme { paper #fff Surface [background paper, size 16, radius 8, pad 12] }
+      app Demo { id "com.tao.test.demo" version "1.0.0"  name "Demo" Navigator StackNav { Initial Main } Design Theme }
       scene Main() { Title "Main" render Surface() }
       view Surface() { render inject \`\`\`ts return null \`\`\` }
     `,
@@ -297,12 +297,12 @@ Describe('compiler: minimal design', () => {
     await TestCompiler.compileCode(
       `
       use StackNav from @tao/nav
-      workspace design Theme {
+      project design Theme {
         colors { paper #fff }
         sizes { surfaceSize 16.px, surfaceRadius 8.px, surfacePad 12.px }
         styles { Surface [background paper, size surfaceSize, radius surfaceRadius, pad surfacePad] }
       }
-      app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
+      app Demo { id "com.tao.test.demo" version "1.0.0"  name "Demo" Navigator StackNav { Initial Main } Design Theme }
       scene Main() { Title "Main" render Surface() }
       view Surface() { render inject \`\`\`ts return null \`\`\` }
     `,
@@ -312,8 +312,8 @@ Describe('compiler: minimal design', () => {
     await TestCompiler.compileCode(
       `
       use StackNav from @tao/nav
-      workspace design Theme { sizes { sm 8.px } }
-      app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
+      project design Theme { sizes { sm 8.px } }
+      app Demo { id "com.tao.test.demo" version "1.0.0"  name "Demo" Navigator StackNav { Initial Main } Design Theme }
       scene Main() { Title "Main" render Surface() [gap sm, fill] }
       view Surface() { render inject \`\`\`ts return null \`\`\` }
     `,
@@ -326,7 +326,7 @@ Describe('compiler: minimal design', () => {
       'Main.tao': `
         use StackNav from @tao/nav
         use Theme from ./Theme
-        app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
+        app Demo { id "com.tao.test.demo" version "1.0.0"  name "Demo" Navigator StackNav { Initial Main } Design Theme }
         scene Main() { Title "Main" render Surface() [panel] }
         view Surface() { render inject \`\`\`ts return null \`\`\` }
       `,
@@ -353,8 +353,8 @@ Describe('compiler: minimal design', () => {
       design Dark { canvas #111 screen [bg canvas] }
       scene Main() { Title "Main" render Surface() [screen] }
       view Surface() { render inject \`\`\`ts return null \`\`\` }
-      app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Light }
-      app DemoDark = Demo with { Name "Demo Dark" Design Dark }
+      app Demo { id "com.tao.test.demo" version "1.0.0"  name "Demo" Navigator StackNav { Initial Main } Design Light }
+      app DemoDark = Demo with { id "com.tao.test.demodark"  name "Demo Dark" Design Dark }
     `,
       { appName: 'DemoDark' },
     )

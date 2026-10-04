@@ -112,6 +112,8 @@ Describe('TR.Views explicit visual props', () => {
       },
     })
     const app = TR.Navigation.App({
+      id: 'styled',
+      version: '1.0.0',
       name: 'Styled',
       auxiliaries: () => ({}),
       design: () => {
@@ -836,6 +838,8 @@ Describe('TR navigation selection tabs', () => {
       },
     ))
     const app = TR.Navigation.App({
+      id: 'styled-tabs-app',
+      version: '1.0.0',
       name: 'Styled tabs app',
       auxiliaries: () => ({}),
       design: () => design,
@@ -922,12 +926,14 @@ function styledApp(name: string, surface: string): ReturnType<typeof TR.Navigati
     bundles: { panel: TR.Design.Spec([['bg', 'surface']]) },
   })
   return TR.Navigation.App({
+    id: name.toLowerCase().replaceAll(' ', '-'),
     name,
     auxiliaries: () => ({}),
     design: () => design,
     navigator: () => {
       throw new UnexpectedBehaviorError('design resolution must not mount navigation')
     },
+    version: '1.0.0',
   })
 }
 
@@ -938,11 +944,13 @@ function styledElementApp(
 ): ReturnType<typeof TR.Navigation.App> {
   const design = TR.Design.Declaration({ bundles, name, tokens })
   return TR.Navigation.App({
+    id: name.toLowerCase().replaceAll(' ', '-'),
     name,
     auxiliaries: () => ({}),
     design: () => design,
     navigator: () => {
       throw new UnexpectedBehaviorError('design resolution must not mount navigation')
     },
+    version: '1.0.0',
   })
 }

@@ -1,19 +1,13 @@
 // Wayfare — plan days and stops together on a laptop, carry the same live plan on a phone, keep working
 // when the network disappears.
 //
-// This file holds the project, the capabilities, the navigation, the app, and settings.
+// This file holds the package, the capabilities, the navigation, the app, and settings.
 
 use SignOut from @tao/auth
 
-project {
-   id "wayfare"
-   name "Wayfare"
-   version "1.0.0"
-   DefaultApp Wayfare
+package {
+   version 1.0.0
    license MIT
-
-   targets phone, tablet, laptop
-   languages "en-US", "es"
 }
 
 // -- Capabilities ---------------------------------------------------------------------------------------
@@ -71,7 +65,11 @@ nav WayfareNavigator = SelectionNav {
 // -- App ------------------------------------------------------------------------------------------------
 
 app Wayfare {
-   Name "Wayfare"
+   id "wayfare"
+   version "1.0.0"
+   name "Wayfare"
+   targets phone, tablet, laptop
+   languages "en-US", "es"
    Design WayfareDesign
    Datasource Caravan
    Files TripFiles
@@ -111,14 +109,16 @@ app Wayfare {
 }
 
 app WayfareOnDevice = Wayfare with {
-   Name "Wayfare (on device)"
+   id "wayfare-on-device"
+   name "Wayfare (on device)"
    Datasource OnDevice
    Notifications simulated
    Places simulated
 }
 
 app WayfarePreview = Wayfare with {
-   Name "Wayfare Preview"
+   id "wayfare-preview"
+   name "Wayfare Preview"
    Datasource Memory
    Seed KyotoPlan
    Accounts simulated (signed in as "Alex")

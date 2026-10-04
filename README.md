@@ -11,21 +11,16 @@ The current version is a fully functional preview. Production ready in 2027.
 
 ## What a Tao app looks like
 
-One file declares the project, the app, its navigation, and its screens:
+One file declares the app, its navigation, and its screens:
 
 ```tao
 use StackNav from @tao/nav
 use Col, Text from @tao/ui
 
-project {
-   id "reading-list"
-   name "ReadingList"
-   remote none
-   license MIT
-}
-
 app ReadingList {
-   Name "Reading List"
+   id "reading-list"
+   version "0.1.0"
+   name "Reading List"
    Navigator LibraryStack
 }
 
@@ -97,7 +92,7 @@ those remain under direnv's own control. Then:
 | Command      | What it does                                                                          |
 | ------------ | ------------------------------------------------------------------------------------- |
 | `tao create` | Creates a new project from a one-line description                                     |
-| `tao dev`    | Runs the app on the web, an iOS simulator, Android, or the desktop, reloading on save |
+| `tao run`    | Runs the app on the web, an iOS simulator, Android, or the desktop, reloading on save |
 | `tao check`  | Reports syntax and validation errors, and canonical form                              |
 | `tao fix`    | Applies every automatic source fix: formatting and organized `use`s                   |
 | `tao test`   | Runs the behavior tests declared in `.tao` files                                      |

@@ -25,7 +25,7 @@ async function canvasTranslation(browser: StudioCdp): Promise<{ x: number; y: nu
 
 const fastRefreshSource = `use Button, Col, Number, Text from @tao/ui
 
-app RefreshSmoke { view MainView }
+app RefreshSmoke { id "refreshsmoke" version "1.0.0" name "RefreshSmoke" view MainView }
 
 view MainView() {
    state Count = 0
@@ -119,10 +119,7 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
   let studio: Awaited<ReturnType<typeof startStudioSmokeLaunch>> | undefined
   try {
     await FS.writeText(sourcePath, fastRefreshSource)
-    await FS.writeText(
-      FS.resolvePath('Project.tao', projectRoot),
-      'project { id "tao-studio-fast-refresh-smoke" name "Fast refresh smoke" }\n',
-    )
+    await FS.mkdir(FS.resolvePath('.tao', projectRoot))
     studio = await startStudioSmokeLaunch({
       appName: 'RefreshSmoke',
       projectRoot,

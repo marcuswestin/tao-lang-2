@@ -9,14 +9,10 @@ use Reference from @tao/data/providers/reference
 use StackNav from @tao/nav
 use Col, FormButton, Row, ScrollView, Text, TextInput, TextMultiline from @tao/ui
 
-project {
-   id "auth-review"
-   name "Auth Review"
-   version "0.1.0"
-}
-
 app AuthReview {
-   Name "Auth Review"
+   id "auth-review"
+   version "0.1.0"
+   name "Auth Review"
    Auth TestAuth { }
    action Leave() {
       do SignOut()
@@ -27,6 +23,7 @@ app AuthReview {
 }  }
 
 app AuthReviewLocal = AuthReview with {
+   id "auth-review-auth-review-local"
    Auth LocalAuth {
       Endpoint "http://127.0.0.1:4738"
       Resource "auth-review"
@@ -41,12 +38,14 @@ app AuthReviewLocal = AuthReview with {
 
 // Configure a Clerk development instance and a trusted gateway before running this variant.
 app AuthReviewClerk = AuthReviewLocal with {
+   id "auth-review-auth-review-clerk"
    Auth Clerk {
       PublishableKey "pk_test_REPLACE_WITH_YOUR_KEY"
 }  }
 
 // Replace the App ID with your Instant Cloud app's and push its schema and rules before running.
 app AuthReviewInstant = AuthReview with {
+   id "auth-review-auth-review-instant"
    Auth InstantAuth {
       AppId "REPLACE_WITH_INSTANT_APP_ID"
    }
@@ -57,6 +56,7 @@ app AuthReviewInstant = AuthReview with {
 // Register the Clerk instance with the Instant app as a Clerk client named "clerk", and add the
 // email and email_verified claims to Clerk's session token, before running this variant.
 app AuthReviewInstantClerk = AuthReviewInstant with {
+   id "auth-review-auth-review-instant-clerk"
    Auth Clerk {
       PublishableKey "pk_test_REPLACE_WITH_YOUR_KEY"
    }

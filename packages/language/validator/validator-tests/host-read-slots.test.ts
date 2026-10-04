@@ -59,7 +59,7 @@ Describe('validator: host-read slots and commands', () => {
       `
         ${leaf}
         action Save() { }
-        app Demo {
+        app Demo { id "demo" version "1.0.0" name "Demo"
           command SaveCommand() {
             Title "Save"
             do Save()
@@ -109,7 +109,7 @@ Describe('validator: host-read slots and commands', () => {
       `
         ${leaf}
         let ExpectedTitle = "Home"
-        app Demo { view Leaf }
+        app Demo { id "demo" version "1.0.0" name "Demo" view Leaf }
         test Demo "chrome" {
           run Demo
           expect navigation title ExpectedTitle
@@ -312,8 +312,7 @@ Describe('validator: host-read slots and commands', () => {
       `
         use StackNav from @tao/nav
         ${leaf}
-        app Demo {
-          Name "Demo"
+        app Demo { id "demo" version "1.0.0" name "Demo"
           Navigator StackNav { Initial Home }
           @detail StackNav { Initial AuxiliaryRoot }
         }
@@ -345,8 +344,7 @@ Describe('validator: host-read slots and commands', () => {
       accepts(`
         use StackNav from @tao/nav
         ${leaf}
-        app Demo {
-          Name "Demo"
+        app Demo { id "demo" version "1.0.0" name "Demo"
           Navigator StackNav { Initial Home }
           @detail StackNav { Initial AuxiliaryRoot }
         }
@@ -423,8 +421,7 @@ function strictAuxiliaryPresentation(detailTitle: string): string {
   return `
     use StackNav from @tao/nav
     ${leaf}
-    app Demo {
-      Name "Demo"
+    app Demo { id "demo" version "1.0.0" name "Demo"
       Navigator StackNav { Initial Home }
       @detail StackNav { Initial AuxiliaryRoot }
     }

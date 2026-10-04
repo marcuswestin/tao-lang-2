@@ -45,8 +45,7 @@ Describe('Expo runtime: nested window-owning navigators', () => {
 
           let InnerStack = StackNav { Initial InnerHome }
 
-          app NestedSlotApp {
-            Name "Nested Slot"
+          app NestedSlotApp { id "nestedslotapp" version "1.0.0" name "Nested Slot"
             Navigator SlotNav { Initial InnerStack }
           }
 
@@ -85,8 +84,7 @@ Describe('Expo runtime: nested window-owning navigators', () => {
             Title "Inner Stack"
           }
 
-          app NestedStackApp {
-            Name "Nested Stack"
+          app NestedStackApp { id "nestedstackapp" version "1.0.0" name "Nested Stack"
             Navigator StackNav { Initial InnerStack }
           }
 
@@ -120,8 +118,7 @@ Describe('Expo runtime: nested window-owning navigators', () => {
           use SlotNav, StackNav from @tao/nav
           use Text from @tao/ui
 
-          app AuxiliaryApp {
-            Name "Auxiliary"
+          app AuxiliaryApp { id "auxiliaryapp" version "1.0.0" name "Auxiliary"
             Navigator StackNav { Initial Home }
             @window SlotNav { Initial AuxiliaryScreen }
           }
@@ -167,8 +164,7 @@ Describe('Expo runtime: nested window-owning navigators', () => {
           use SplitNav from @tao/nav
           use Text from @tao/ui
 
-          app PlainSplitApp {
-            Name "Plain Split"
+          app PlainSplitApp { id "plainsplitapp" version "1.0.0" name "Plain Split"
             Navigator SplitNav {
               @sidebar {
                 Content Sidebar
@@ -244,8 +240,7 @@ Describe('Expo runtime: nested window-owning navigators', () => {
             }
           }
 
-          app NestedSplitApp {
-            Name "Nested Split"
+          app NestedSplitApp { id "nestedsplitapp" version "1.0.0" name "Nested Split"
             Navigator SplitNav {
               @sidebar {
                 Content Sidebar
@@ -301,8 +296,7 @@ Describe('Expo runtime: nested window-owning navigators', () => {
 
           nav MainStack = StackNav { Initial MainHome }
 
-          app SplitPaneApp {
-            Name "Split Pane"
+          app SplitPaneApp { id "splitpaneapp" version "1.0.0" name "Split Pane"
             Navigator SplitNav {
               @sidebar {
                 Content Sidebar
@@ -370,8 +364,7 @@ Describe('Expo runtime: nested window-owning navigators', () => {
 
           nav Inner = StackNav { Initial InnerHome }
 
-          app InlineNavApp {
-            Name "Inline Nav"
+          app InlineNavApp { id "inlinenavapp" version "1.0.0" name "Inline Nav"
             view Shell
           }
 
@@ -432,8 +425,7 @@ Describe('Expo runtime: nested window-owning navigators', () => {
             @home { Label "Home" Content ItemStack }
           }
 
-          app ToggleNestedApp {
-            Name "Toggle Nested"
+          app ToggleNestedApp { id "togglenestedapp" version "1.0.0" name "Toggle Nested"
             Navigator MainSelection
           }
 

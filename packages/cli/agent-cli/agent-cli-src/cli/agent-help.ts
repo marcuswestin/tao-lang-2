@@ -101,6 +101,7 @@ Examples:
   ./agent verify-full-sandbox
   ./agent unsandboxed prepare-release studio --repo OWNER/REPO --version 0.0.1
   ./agent unsandboxed prepare-release ide-extension
+  ./agent unsandboxed ide-extension-acceptance
   ./agent unsandboxed capabilities
   ./agent unsandboxed setup-ios --xcode-version 27.1 --runtime-version 27.1
   ./agent unsandboxed setup-visionos Apps/VisionHello --xcode-version 27.0

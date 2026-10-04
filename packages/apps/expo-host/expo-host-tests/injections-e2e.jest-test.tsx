@@ -13,7 +13,7 @@ Describe('Tao injection runtime', () => {
   Test('renders inject arguments as direct TS values', async () => {
     await testCompileApp(
       `
-        app InjectArgs {
+        app InjectArgs { id "injectargs" version "1.0.0" name "InjectArgs"
             view MainView
         }
 

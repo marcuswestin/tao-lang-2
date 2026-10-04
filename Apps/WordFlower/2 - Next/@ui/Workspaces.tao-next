@@ -11,7 +11,7 @@ type PromptMinutes is number
 
 type PromptTags is list of text
 
-workspace
+project
 nav WorkspaceNav = SlotNav {
    Initial WorkspaceChooser
 }
@@ -31,7 +31,7 @@ type WorkspaceInput is Workspace { Name }
 
 // The workspace area. Every renderable declaration is a `view`; whether one composes inline in a
 // render tree or enters the presentation tree is decided at each use site, never on the head.
-workspace
+project
 scene WorkspaceList() {
    Title "WordFlower"
    state Input = WorkspaceInput {
@@ -218,7 +218,7 @@ scene WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named
                   FinishedRow(Document)
 }  }  }  }  }  }
 
-workspace
+project
 view WorkspaceChooser() {
    query Workspaces = Workspaces with { }
    render Col() [screen, readableWidth, centeredLayout, gapWide] {
@@ -300,7 +300,7 @@ view NoWorkspacesYet() {
 // One row of the workspace library. Presenting is legal in any view body, so the row opens its own
 // workspace instead of receiving an `Open action()` from the screen that lists it. The card look is
 // the row's public default, declared in the header so a list may override it.
-workspace
+project
 view WorkspaceRow(Workspace) [card] {
    render Col() {
       Text(Workspace.Name) [sectionTitle]

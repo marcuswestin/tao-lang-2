@@ -98,7 +98,7 @@ Describe('generated native Haptics bindings', () => {
       'App.tao': `
         use ImpactAsync, NotificationAsync, SelectionAsync, PerformAndroidHapticsAsync from ./Bindings.tao
         use ImpactFeedbackStyle, NotificationFeedbackType, AndroidHaptics from ./Bindings.tao
-        app HapticsProof { view Main }
+        app HapticsProof { id "hapticsproof" version "1.0.0" name "HapticsProof" view Main }
         view Main() {
           ${cases.map(([name, call]) => `action Run${name}() { do ${call} }`).join('\n')}
           render Stack() {
@@ -139,7 +139,7 @@ Describe('generated native Haptics bindings', () => {
         'App.tao': `
         use NotificationAsync, SelectionAsync from ./Bindings.tao
         use NotificationFeedbackType from ./Bindings.tao
-        app HapticsCompletionProof { view Main }
+        app HapticsCompletionProof { id "hapticscompletionproof" version "1.0.0" name "HapticsCompletionProof" view Main }
         view Main() {
           action Run() { do SelectionAsync() do NotificationAsync(Type: Success) }
           render NativeButton("Run", Run)

@@ -1,5 +1,0 @@
-project {
-   id "clockwork"
-   name "Clockwork"
-   version "0.1.0"
-}

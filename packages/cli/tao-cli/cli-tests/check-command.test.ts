@@ -14,6 +14,7 @@ import {
 Describe('tao check', () => {
   Test('reports canonical files as unchanged without writing', async () => {
     await withTaoFixture({
+      ...checkedProjectFile,
       'canonical.tao': 'view MainView() { }\n',
     }, async (rootDir) => {
       const results = await runCheck(rootDir)
@@ -50,7 +51,6 @@ Describe('tao check', () => {
           '@/studio/View1.tao': 'unchanged',
           'App.tao': 'unchanged',
           'Placeholder.test.tao': 'unchanged',
-          'Project.tao': 'unchanged',
         })
       })
     },
@@ -58,7 +58,7 @@ Describe('tao check', () => {
 
   Test('validates nested Tao projects with their own generated-root ownership', async () => {
     await withTaoFixture({
-      'Nested/Project.tao': 'project {\n   id "nested-check"\n   name "Nested check"\n}\n',
+      'Nested/.tao/.gitkeep': '',
       'Nested/@/studio/View1.tao':
         'use Placeholder from @tao/ui\n\npublic\nview View1() {\n   render Placeholder("Generated")\n}\n',
       'Nested/Authored.tao': 'use Placeholder from @tao/ui\n\nview Main() {\n   render Placeholder("Authored")\n}\n',
@@ -76,6 +76,7 @@ Describe('tao check', () => {
 
   Test('reports drift without writing', async () => {
     await withTaoFixture({
+      ...checkedProjectFile,
       'drift.tao': 'view   MainView() { }',
     }, async (rootDir) => {
       const path = FS.resolvePath('drift.tao', rootDir)
@@ -88,6 +89,7 @@ Describe('tao check', () => {
 
   Test('reports syntax errors without writing', async () => {
     await withTaoFixture({
+      ...checkedProjectFile,
       'broken.tao': 'view Broken() {',
     }, async (rootDir) => {
       const path = FS.resolvePath('broken.tao', rootDir)
@@ -102,6 +104,7 @@ Describe('tao check', () => {
   // text, which named neither the position nor what the parser had been looking for.
   Test('reports a syntax error as a positioned parser diagnostic, not as an assertion message', async () => {
     await withTaoFixture({
+      ...checkedProjectFile,
       'broken.tao': 'view Broken() {\n   render Text(\n}\n',
     }, async rootDir => {
       const results = await runCheck(rootDir)
@@ -123,6 +126,7 @@ Describe('tao check', () => {
   // a lexer error, then a parser error whose alternatives are too many to list.
   Test('states lexer and parser syntax errors in Tao words', async () => {
     await withTaoFixture({
+      ...checkedProjectFile,
       'stray-brace.tao': 'view Main() {\n}\n}\n',
       'view-member.tao': 'view Broken() {\n   Text is "hi"\n}\n',
     }, async rootDir => {
@@ -143,6 +147,7 @@ Describe('tao check', () => {
   // reader actually has to go.
   Test('reports each separate syntax mistake once, not the cascade behind it', async () => {
     await withTaoFixture({
+      ...checkedProjectFile,
       'broken.tao': 'view One() {\n   Text is "hi"\n}\n\nview Two {\n}\n',
     }, async rootDir => {
       const results = await runCheck(rootDir)
@@ -161,6 +166,7 @@ Describe('tao check', () => {
   // and let the formatter's own assertion through behind it.
   Test('positions an error at the end of the file under the last thing the author wrote', async () => {
     await withTaoFixture({
+      ...checkedProjectFile,
       'no-newline.tao': 'view Broken() {',
       'trailing-newline.tao': 'view Broken() {\n',
     }, async rootDir => {
@@ -183,6 +189,7 @@ Describe('tao check', () => {
   // would report the consequence and hide the character that caused it.
   Test('leads a line with its lexer error even when a parser error precedes it', async () => {
     await withTaoFixture({
+      ...checkedProjectFile,
       'broken.tao': 'view Main() {\n   let x = §\n}\n',
     }, async rootDir => {
       const results = await runCheck(rootDir)
@@ -198,6 +205,7 @@ Describe('tao check', () => {
   // counted instead of printed.
   Test('holds back a badly broken file past the first three lines, and says how many', async () => {
     await withTaoFixture({
+      ...checkedProjectFile,
       'broken.tao': 'view Main( {\n   render Text "a"\n   render Text("b"\n   Text is 1\nview Two {\n}\n',
     }, async rootDir => {
       const results = await runCheck(rootDir)
@@ -213,6 +221,7 @@ Describe('tao check', () => {
   // to produce no output at all, because only warnings reached the command.
   Test('reports an unresolved render target as a positioned error', async () => {
     await withTaoFixture({
+      ...checkedProjectFile,
       'App.tao': 'view Main() {\n   render NoSuchView()\n}\n',
     }, async rootDir => {
       const [result] = await runCheck(rootDir)
@@ -228,6 +237,7 @@ Describe('tao check', () => {
 
   Test('reports errors and warnings on the same file together', async () => {
     await withTaoFixture({
+      ...checkedProjectFile,
       'App.tao':
         'use Placeholder from @tao/ui\n\nview Main() {\n   render Placeholder("Main")\n}\n\nview Other() {\n   render NoSuchView()\n}\n',
     }, async rootDir => {
@@ -241,6 +251,7 @@ Describe('tao check', () => {
 
   Test('walks non-git fixture directories without applying loose gitignore files', async () => {
     await withTaoFixture({
+      ...checkedProjectFile,
       '.gitignore': 'node_modules\n.artifacts\n.custom-hidden\nAndroid\nIOS\nPods\npods\n',
       'canonical.tao': 'view MainView() { }\n',
       'node_modules/pkg/ignored.tao': 'view   Ignored() { }',
@@ -259,8 +270,9 @@ Describe('tao check', () => {
 
   Test('skips hidden future-source directories without reserving user directory names', async () => {
     await withTaoFixture({
+      ...checkedProjectFile,
       'canonical.tao': 'view MainView() { }\n',
-      'Apps/WordFlower/.tao-archive/Future.tao': 'project app FutureMVP {',
+      'Apps/WordFlower/.tao-archive/Future.tao': 'app FutureMVP {',
       'Apps/WordFlower/1 - Current/Valid.tao': 'view ValidCurrentMVP() { }\n',
       'Roadmap/Feature/Syntax Sketches/Valid.tao': 'view ValidSyntaxSketch() { }\n',
     }, async (rootDir) => {
@@ -287,7 +299,11 @@ Describe('tao check', () => {
 
   for (const pathCase of packageAwareCliPathCases) {
     Test(`uses package-aware workspace roots for ${pathCase.name}`, async () => {
-      await withTaoFixture(packageAwareCliFixture, async rootDir => {
+      await withTaoFixture({
+        'Packages/.tao/.gitkeep': '',
+        'Packages/Package.tao': 'package { name "Cards" version 1.0.0 includes @cards }\n',
+        ...packageAwareCliFixture,
+      }, async rootDir => {
         const target = pathCase.resolve(rootDir)
         const results = await runCheck(target.path, { cwd: target.cwd })
         const sourcePath = FS.resolvePath(packageAwareCliMainPath, rootDir)

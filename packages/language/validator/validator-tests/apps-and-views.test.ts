@@ -21,8 +21,7 @@ Describe('validator: apps and views', () => {
   Test('accepts a bound configured root with app-owned persisted state and update action', async () => {
     const result = await testValidateCode(`
       use StackNav from @tao/nav
-      app Workspace {
-        Name "Workspace"
+      app Workspace { id "workspace" version "1.0.0" name "Workspace"
         state Expanded is list of text = [] (persist)
         action ChangeExpanded(Value list of text) { set Expanded = Value }
         Navigator StackNav {
@@ -41,8 +40,7 @@ Describe('validator: apps and views', () => {
   Test('validates configured root view arguments with ordinary invocation rules', async () => {
     const result = await testValidateCodeWithErrors(`
       use StackNav from @tao/nav
-      app Workspace {
-        Name "Workspace"
+      app Workspace { id "workspace" version "1.0.0" name "Workspace"
         Navigator StackNav { Initial Root() }
       }
       scene Root(Value text) { Title "Root" render Empty() }
@@ -56,15 +54,14 @@ Describe('validator: apps and views', () => {
   Test(
     'allows direct recursive view references without new syntax',
     accepts(`
-    app RecursiveApp { view Recursive }
+    app RecursiveApp { id "recursiveapp" version "1.0.0" name "RecursiveApp" view Recursive }
     view Recursive() { render Recursive() }
   `),
   )
   Test('accepts an app persisted number state as a SplitNav Width binding', async () => {
     const result = await testValidateCode(`
       use SplitNav from @tao/nav
-      app Workspace {
-        Name "Workspace"
+      app Workspace { id "workspace" version "1.0.0" name "Workspace"
         state PaneWidth is number = 320 (persist)
         Navigator SplitNav {
           @pane { Content Pane Width PaneWidth Resizable true }
@@ -80,8 +77,7 @@ Describe('validator: apps and views', () => {
     const result = await testValidateCode(`
       use StackNav from @tao/nav
       type Theme is one of Light, Dark
-      app Workspace {
-        Name "Workspace"
+      app Workspace { id "workspace" version "1.0.0" name "Workspace"
         state CurrentTheme is Theme = Light (persist)
         Navigator StackNav { Initial Main }
       }
@@ -94,8 +90,7 @@ Describe('validator: apps and views', () => {
   Test('requires app state to be typed and persisted', async () => {
     const result = await testValidateCodeWithErrors(`
       use StackNav from @tao/nav
-      app Workspace {
-        Name "Workspace"
+      app Workspace { id "workspace" version "1.0.0" name "Workspace"
         state PaneWidth = 320
         Navigator StackNav { Initial Pane }
       }
@@ -111,8 +106,7 @@ Describe('validator: apps and views', () => {
   Test('rejects persisted state whose declared runtime shape cannot be encoded', async () => {
     const result = await testValidateCodeWithErrors(`
       use StackNav from @tao/nav
-      app Workspace {
-        Name "Workspace"
+      app Workspace { id "workspace" version "1.0.0" name "Workspace"
         state OnSave is action() = action { } (persist)
         Navigator StackNav { Initial Pane }
       }
@@ -127,7 +121,7 @@ Describe('validator: apps and views', () => {
   Test('rejects self-referential persisted items without recursing forever', async () => {
     const result = await testValidateCodeWithErrors(`
       type Person is { Friend Person }
-      app Cyclic {
+      app Cyclic { id "cyclic" version "1.0.0" name "Cyclic"
         state Current is Person = "invalid" (persist)
         view Main
       }
@@ -143,7 +137,7 @@ Describe('validator: apps and views', () => {
   Test('rejects persisted item aliases whose runtime shape is unresolved', async () => {
     const result = await testValidateCodeWithErrors(`
       type Bag is item
-      app Shapeless {
+      app Shapeless { id "shapeless" version "1.0.0" name "Shapeless"
         state Current is Bag = "invalid" (persist)
         view Main
       }
@@ -162,22 +156,21 @@ Describe('validator: apps and views', () => {
       'Main.tao': `
         use PaneWidth from ./Types.tao
         use StackNav from @tao/nav
-        app Workspace {
-          Name "Workspace"
+        app Workspace { id "workspace" version "1.0.0" name "Workspace"
           state Width is PaneWidth = PaneWidth 320 (persist)
           Navigator StackNav { Initial Pane }
         }
         scene Pane() { Title "Pane" render Empty() }
         ${stubView('Empty')}
       `,
-      'Types.tao': 'workspace type PaneWidth is number',
+      'Types.tao': 'project type PaneWidth is number',
     }),
   )
   Test(
     'rejects unsupported top-level statements',
     rejects(
       `
-      app MyApp { view MainView }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
       render MainView()
       view MainView() { }
     `,
@@ -189,7 +182,7 @@ Describe('validator: apps and views', () => {
     'rejects file-level state declarations',
     rejects(
       `
-      app MyApp { view MainView }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
       state Count = 0
       view MainView() { }
     `,
@@ -199,11 +192,11 @@ Describe('validator: apps and views', () => {
 
   Test('requires exactly one root view in app blocks', async () => {
     const missing = await testValidateCodeWithErrors(`
-      app MyApp { }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" }
       view MainView() { }
     `)
     const duplicate = await testValidateCodeWithErrors(`
-      app MyApp {
+      app MyApp { id "myapp" version "1.0.0" name "MyApp"
         view MainView
         view OtherView
       }
@@ -218,7 +211,7 @@ Describe('validator: apps and views', () => {
   Test(
     'accepts a root view as the Navigator and Name sugar of one ordinary app',
     accepts(`
-      app MyApp { view MainView }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
       ${stubView('MainView')}
     `),
   )
@@ -227,8 +220,7 @@ Describe('validator: apps and views', () => {
     'accepts a root view beside the app configuration it does not supply',
     accepts(`
       design Theme { canvas #fff }
-      app MyApp {
-        Name "Root View App"
+      app MyApp { id "myapp" version "1.0.0" name "Root View App"
         Design Theme
         view MainView
         Restore fresh
@@ -242,8 +234,7 @@ Describe('validator: apps and views', () => {
     rejects(
       `
       use StackNav from @tao/nav
-      app MyApp {
-        Name "Ambiguous"
+      app MyApp { id "myapp" version "1.0.0" name "Ambiguous"
         Navigator StackNav { Initial MainView }
         view MainView
       }
@@ -257,16 +248,15 @@ Describe('validator: apps and views', () => {
   Test('rejects unknown, duplicated, and mistyped supplied app slots', async () => {
     const result = await testValidateCodeWithErrors(`
       use StackNav from @tao/nav
-      app MyApp {
-        Name "Demo"
-        Name "Demo again"
+      app MyApp { id "myapp" version "1.0.0" name "Demo"
+        name "Demo again"
         Navigator "not a nav"
         Theme "unknown slot"
       }
       ${stubView('MainView')}
     `)
 
-    Expect(validationErrorMessages(result)).toContain(AppValidator.messages.propertyDuplicate('MyApp', 'Name'))
+    Expect(validationErrorMessages(result)).toContain(AppValidator.messages.propertyDuplicate('MyApp', 'name'))
     Expect(validationErrorMessages(result)).toContain(AppValidator.messages.variantProperty('MyApp', 'Theme'))
     Expect(validationErrorMessages(result)).toContain(
       AppValidator.messages.propertyType('MyApp', 'Navigator', 'Navigator', 'text'),
@@ -287,12 +277,11 @@ Describe('validator: apps and views', () => {
     Expect(validationErrorMessages(
       await testValidateCode(`
       use StackNav from @tao/nav
-      app Base {
-        Name "Base"
+      app Base { id "base" version "1.0.0" name "Base"
         Navigator StackNav { Initial MainView }
         Restore automatic { Exclude sheets, menus, toasts }
       }
-      app Fresh = Base with { Restore fresh }
+      app Fresh = Base with { id "fresh" Restore fresh }
       scene MainView() { Title "Main" render Empty() }
       ${stubView('Empty')}
     `),
@@ -301,8 +290,7 @@ Describe('validator: apps and views', () => {
     const invalid = validationErrorMessages(
       await testValidateCodeWithErrors(`
       use StackNav from @tao/nav
-      app Invalid {
-        Name "Invalid"
+      app Invalid { id "invalid" version "1.0.0" name "Invalid"
         Navigator StackNav { Initial MainView }
         Restore fresh { Exclude overlays, sheets, sheets }
       }
@@ -318,11 +306,10 @@ Describe('validator: apps and views', () => {
   Test('attaches app variant patch diagnostics to the offending entry, not the file start', async () => {
     const result = await testValidateCodeWithErrors(`
       use StackNav from @tao/nav
-      app Base {
-        Name "Base"
+      app Base { id "base" version "1.0.0" name "Base"
         Navigator StackNav { Initial MainView }
       }
-      app Variant = Base with {
+      app Variant = Base with { id "variant"
         Theme "unknown slot"
       }
       ${stubView('MainView')}
@@ -340,7 +327,7 @@ Describe('validator: apps and views', () => {
   Test(
     'accepts a root view bound to its arguments',
     accepts(`
-      app MyApp { view MainView("Bound") }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView("Bound") }
       view MainView(Label text) {
         render Text(Label)
       }
@@ -352,7 +339,7 @@ Describe('validator: apps and views', () => {
     'rejects a root view whose parameters are left unbound',
     rejects(
       `
-      app MyApp { view MainView }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
       view MainView(Label text) {
         render Text(Label)
       }
@@ -366,7 +353,7 @@ Describe('validator: apps and views', () => {
     'rejects non-root-view statements in app blocks',
     rejects(
       `
-      app MyApp {
+      app MyApp { id "myapp" version "1.0.0" name "MyApp"
         let Greeting = "Hello"
         view MainView
       }
@@ -380,7 +367,7 @@ Describe('validator: apps and views', () => {
     'rejects unsupported view body statements',
     rejects(
       `
-      app MyApp { view MainView }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
       view MainView() {
         view Nested() { }
       }
@@ -393,7 +380,7 @@ Describe('validator: apps and views', () => {
     'accepts state, query, and action declarations in a content-accepting view body',
     accepts(`
       data Workspaces / Workspace { Name text }
-      app MyApp { view MainView }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
       view MainView() {
         render Stack() {
           Text("hi")
@@ -414,7 +401,7 @@ Describe('validator: apps and views', () => {
 
   Test('rejects state and action declarations in render child blocks', async () => {
     const renderBlockResult = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
       ${stubView('Text', 'Value text')}
       view MainView() {
         render Text("hi") {
@@ -430,7 +417,7 @@ Describe('validator: apps and views', () => {
     'rejects bare child invocations directly in view bodies',
     rejects(
       `
-      app MyApp { view MainView }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
       view MainView() {
         Text("Hello")
       }
@@ -442,7 +429,7 @@ Describe('validator: apps and views', () => {
 
   Test('rejects duplicate view parameters', async () => {
     const result = await testValidateCodeWithErrors(`
-      app MyApp { view Text }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view Text }
       view Text(Value text, Value number) { }
     `)
 
@@ -452,7 +439,7 @@ Describe('validator: apps and views', () => {
 
   Test('rejects generated view prop names as parameter names', async () => {
     const result = await testValidateCodeWithErrors(`
-      app MyApp { view ChildrenView }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view ChildrenView }
       view ChildrenView(children text) {
         render inject ${tsFence}
           return null
@@ -483,13 +470,13 @@ Describe('validator: apps and views', () => {
 
   Test('requires exactly one render statement in view bodies', async () => {
     const missing = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
       view MainView() {
         let Greeting = "Hello"
       }
     `)
     const extra = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
       view MainView() {
         render Text("Hello")
         render Text("Again")
@@ -505,7 +492,7 @@ Describe('validator: apps and views', () => {
     'requires render to be the last view body statement',
     rejects(
       `
-      app MyApp { view MainView }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
       view MainView() {
         render Text("Hello")
         let Greeting = "Again"
@@ -518,7 +505,7 @@ Describe('validator: apps and views', () => {
 
   Test('rejects render inject mixed with view body statements', async () => {
     const withRender = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
       view MainView() {
         render inject ${tsFence}
           return null
@@ -527,7 +514,7 @@ Describe('validator: apps and views', () => {
       }
     `)
     const withAlias = await testValidateCodeWithErrors(`
-      app MyApp { view MainView }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
       view MainView() {
         let Greeting = "Hello"
         render inject ${tsFence}
@@ -544,7 +531,7 @@ Describe('validator: apps and views', () => {
     'rejects render inject inside render child blocks',
     rejects(
       `
-      app MyApp { view MainView }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
       view MainView() {
         render Container(){
           render inject ${tsFence}
@@ -562,7 +549,7 @@ Describe('validator: apps and views', () => {
     'requires render block aliases before child view invocations',
     rejects(
       `
-      app MyApp { view MainView }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
       ${stubContainer('Stack')}
       ${stubView('Text', 'Value text')}
       view MainView() {
@@ -581,7 +568,7 @@ Describe('validator: apps and views', () => {
     'rejects duplicate aliases in the same render child block',
     rejects(
       `
-      app MyApp { view MainView }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
       ${stubContainer('Stack')}
       ${stubView('Text', 'Value text')}
       view MainView() {
@@ -600,7 +587,7 @@ Describe('validator: apps and views', () => {
     'rejects duplicate aliases in nested child invocation blocks',
     rejects(
       `
-      app MyApp { view MainView }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
       ${stubContainer('Stack')}
       ${stubView('Text', 'Value text')}
       view MainView() {
@@ -621,7 +608,7 @@ Describe('validator: apps and views', () => {
     'rejects nested child invocation aliases that shadow visible declarations',
     rejects(
       `
-      app MyApp { view MainView }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
       ${stubContainer('Stack')}
       ${stubView('Text', 'Value text')}
       view MainView() {
@@ -640,7 +627,7 @@ Describe('validator: apps and views', () => {
     'rejects duplicate tags in the same lexical block',
     rejects(
       `
-      app TagApp { view Main }
+      app TagApp { id "tagapp" version "1.0.0" name "TagApp" view Main }
       view Main() {
         render Col() {
           #same

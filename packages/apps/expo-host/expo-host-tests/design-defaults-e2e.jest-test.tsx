@@ -12,13 +12,12 @@ Describe('Expo runtime: declaration style defaults', () => {
       `
         use Col, Text from @tao/ui
 
-        workspace design Theme {
+        project design Theme {
           paper #fff
           ink #111
         }
 
-        app DefaultsApp {
-          Name "Defaults"
+        app DefaultsApp { id "defaultsapp" version "1.0.0" name "Defaults"
           Design Theme
           view Screen
         }

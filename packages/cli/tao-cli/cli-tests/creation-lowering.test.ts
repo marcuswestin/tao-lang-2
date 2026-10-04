@@ -66,6 +66,8 @@ Describe('tao create lowering', () => {
     try {
       const generated = FS.resolvePath('field-notes', root)
       await writeCreationFiles(generated, lowerCreationPlan(plan))
+      const gitignore = await FS.readText(FS.resolvePath('.gitignore', generated))
+      Expect(gitignore).toContain('!/.tao/skills.version\n')
       await runFix(generated, { cwd: root })
       const workspace = await Workspace.open(generated)
       const problems: string[] = []

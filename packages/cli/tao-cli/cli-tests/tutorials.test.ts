@@ -63,10 +63,11 @@ Describe('Docs tutorials', () => {
     const root = await mkTestDir('tao-tutorial-steps-')
     try {
       // Declarations in one folder are visible to each other, and every step declares ReadingList,
-      // so each step gets its own folder. The parent is still one fix run and one workspace.
+      // so each step gets its own marked project. The parent groups one batch fix run.
       const written = replayTutorial(blocks)
         .map((step, index) => ({ ...step, file: FS.resolvePath(`step-${index + 1}/ReadingList.tao`, root) }))
       for (const step of written) {
+        await FS.writeText(FS.resolvePath('.tao/.gitkeep', FS.dirname(step.file)), '')
         await FS.writeText(step.file, step.source)
       }
 
@@ -107,6 +108,7 @@ Describe('Docs tutorials', () => {
     const root = await mkTestDir('tao-tutorial-app-')
     try {
       const directory = FS.resolvePath('reading-list', root)
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', directory), '')
       await FS.writeText(FS.resolvePath('ReadingList.tao', directory), finishedFile(blocks))
 
       const run = await withTaoHome(root, () => runTaoCliForTest(['test', directory]))

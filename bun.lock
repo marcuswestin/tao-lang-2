@@ -70,6 +70,7 @@
         "tao-compiler": "workspace:*",
         "tao-icloud": "workspace:*",
         "tao-instantdb": "workspace:*",
+        "tao-project-tooling": "workspace:*",
         "tao-runtime": "workspace:*",
         "tao-shared": "workspace:*",
       },
@@ -78,6 +79,28 @@
         "@types/react": "~19.2.0",
         "@types/react-dom": "~19.2.0",
         "tao-native-bindings": "workspace:*",
+      },
+    },
+    "packages/apps/native-bindings": {
+      "name": "tao-native-bindings",
+      "dependencies": {
+        "tao-shared": "workspace:*",
+      },
+    },
+    "packages/apps/providers/icloud": {
+      "name": "tao-icloud",
+      "version": "1.0.0",
+      "dependencies": {
+        "expo": "~57.0.23",
+        "tao-shared": "workspace:*",
+      },
+    },
+    "packages/apps/providers/instantdb": {
+      "name": "tao-instantdb",
+      "version": "1.0.0",
+      "dependencies": {
+        "@instantdb/react-native": "1.0.22",
+        "tao-shared": "workspace:*",
       },
     },
     "packages/apps/runtime": {
@@ -201,6 +224,7 @@
         "tao-instantdb": "workspace:*",
         "tao-native-bindings": "workspace:*",
         "tao-parser": "workspace:*",
+        "tao-project-tooling": "workspace:*",
         "tao-shared": "workspace:*",
         "tao-skills": "workspace:*",
         "tao-source-actions": "workspace:*",
@@ -219,6 +243,7 @@
         "tao-parser": "workspace:*",
         "tao-shared": "workspace:*",
         "tao-validator": "workspace:*",
+        "typescript": "5.9.3",
       },
     },
     "packages/ides/ide-extension": {
@@ -228,6 +253,7 @@
         "tao-compiler": "workspace:*",
         "tao-formatter": "workspace:*",
         "tao-parser": "workspace:*",
+        "tao-project-tooling": "workspace:*",
         "tao-shared": "workspace:*",
         "tao-source-actions": "workspace:*",
         "vscode-languageclient": "~10.1.1",
@@ -266,6 +292,7 @@
         "tao-formatter": "workspace:*",
         "tao-generation": "workspace:*",
         "tao-parser": "workspace:*",
+        "tao-project-tooling": "workspace:*",
         "tao-shared": "workspace:*",
         "tao-source-actions": "workspace:*",
       },
@@ -353,6 +380,17 @@
         "langium-cli": "^4.3.0",
       },
     },
+    "packages/language/project-tooling": {
+      "name": "tao-project-tooling",
+      "dependencies": {
+        "chokidar": "^5.0.0",
+        "tao-ast-utils": "workspace:*",
+        "tao-compiler": "workspace:*",
+        "tao-parser": "workspace:*",
+        "tao-shared": "workspace:*",
+        "typescript": "5.9.3",
+      },
+    },
     "packages/language/source-actions": {
       "name": "tao-source-actions",
       "dependencies": {
@@ -368,28 +406,6 @@
       "dependencies": {
         "tao-ast-utils": "workspace:*",
         "tao-parser": "workspace:*",
-        "tao-shared": "workspace:*",
-      },
-    },
-    "packages/apps/native-bindings": {
-      "name": "tao-native-bindings",
-      "dependencies": {
-        "tao-shared": "workspace:*",
-      },
-    },
-    "packages/apps/providers/icloud": {
-      "name": "tao-icloud",
-      "version": "1.0.0",
-      "dependencies": {
-        "expo": "~57.0.23",
-        "tao-shared": "workspace:*",
-      },
-    },
-    "packages/apps/providers/instantdb": {
-      "name": "tao-instantdb",
-      "version": "1.0.0",
-      "dependencies": {
-        "@instantdb/react-native": "1.0.22",
         "tao-shared": "workspace:*",
       },
     },
@@ -3112,6 +3128,8 @@
     "tao-parser": ["tao-parser@workspace:packages/language/parser"],
 
     "tao-playwright-driver": ["tao-playwright-driver@workspace:packages/testing/playwright-driver"],
+
+    "tao-project-tooling": ["tao-project-tooling@workspace:packages/language/project-tooling"],
 
     "tao-runtime": ["tao-runtime@workspace:packages/apps/runtime"],
 

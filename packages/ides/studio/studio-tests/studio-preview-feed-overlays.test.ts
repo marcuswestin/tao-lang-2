@@ -5,7 +5,8 @@ import { openStudioPreviewSession } from '../studio-src/StudioPreviewSession'
 
 Test('Studio preview freezes Feed source and hashes before awaiting project files', async () => {
   await withTaoFiles('tao-studio-feed-preview-', {
-    'Main.tao': 'app Preview { view Main } view Main() { render inject ```ts return null ``` }',
+    'Main.tao':
+      'app Preview { id "preview" version "1.0.0" name "Preview" view Main } view Main() { render inject ```ts return null ``` }',
     '@/studio/Row.tao': 'public view OriginalRow() { render inject ```ts return null ``` }',
   }, async (paths, root) => {
     const row = paths['@/studio/Row.tao']!

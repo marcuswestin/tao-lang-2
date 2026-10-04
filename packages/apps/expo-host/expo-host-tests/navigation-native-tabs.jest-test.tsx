@@ -73,7 +73,13 @@ Describe('native tab reconciliation', () => {
         Initial: TR.Value('@home'),
       },
     ))
-    const app = TR.Navigation.App({ name: 'Covered tabs app', auxiliaries: () => ({}), navigator: () => selection })
+    const app = TR.Navigation.App({
+      id: 'covered-tabs-app',
+      version: '1.0.0',
+      name: 'Covered tabs app',
+      auxiliaries: () => ({}),
+      navigator: () => selection,
+    })
     const screen = render(createElement(TR.Navigation.AppHost, { app }))
     try {
       Expect(screen.UNSAFE_getByProps({ screenKey: 'settings' }).props.preventNativeSelection).toBe(false)
@@ -119,7 +125,13 @@ Describe('native tab reconciliation', () => {
         Initial: TR.Value('@home'),
       },
     ))
-    const app = TR.Navigation.App({ name: 'Asking tabs app', auxiliaries: () => ({}), navigator: () => selection })
+    const app = TR.Navigation.App({
+      id: 'asking-tabs-app',
+      version: '1.0.0',
+      name: 'Asking tabs app',
+      auxiliaries: () => ({}),
+      navigator: () => selection,
+    })
     const screen = render(createElement(TR.Navigation.AppHost, { app }))
     let answer!: Promise<{ evaluate(): { jsValue: unknown } }>
     try {

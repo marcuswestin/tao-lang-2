@@ -432,9 +432,11 @@ Describe('Studio device synthetic app lifecycle', () => {
     const app = createStudioSubjectApp(
       () => ({
         auxiliaries: () => ({}),
+        id: 'synthetic-subject',
         name: 'Synthetic Subject',
         navigator: () => TR.Navigation.Configure(slot, { Initial: home }),
         restoration: { exclusions: [], mode: 'fresh', variant: 'studio-subject' },
+        version: '1.0.0',
       }),
       {},
     )

@@ -114,10 +114,9 @@ Describe('Expo runtime', () => {
           use SlotNav, StackNav from @tao/nav
           use Home from ./Screen.tao
 
-          workspace nav NestedStack = StackNav { Initial Home }
+          project nav NestedStack = StackNav { Initial Home }
 
-          app StableTargetApp {
-            Name "Stable target"
+          app StableTargetApp { id "stabletargetapp" version "1.0.0" name "Stable target"
             Navigator SlotNav { Initial NestedStack }
           }
         `,
@@ -125,7 +124,7 @@ Describe('Expo runtime', () => {
           use Col, FormButton, Text from @tao/ui
           use NestedStack from ./
 
-          workspace scene Home() {
+          project scene Home() {
             Title "Home"
             action Open() { present Detail() in NestedStack }
             render Col() {
@@ -183,6 +182,8 @@ Describe('Expo runtime', () => {
         const stack = configuredStack('HardwareBackTest', home)
         const window = configuredSlot('HardwareBackWindow', windowRoot)
         const app = TR.Navigation.App({
+          id: 'hardware-back-app',
+          version: '1.0.0',
           name: 'Hardware Back App',
           navigator: () => stack,
           auxiliaries: () => ({ window }),
@@ -267,6 +268,8 @@ Describe('Expo runtime', () => {
       })
       const stack = configuredStack('BrowserHistoryTest', home)
       const app = TR.Navigation.App({
+        id: 'browser-history-app',
+        version: '1.0.0',
         name: 'Browser History App',
         navigator: () => stack,
         auxiliaries: () => ({}),
@@ -324,7 +327,13 @@ Describe('Expo runtime', () => {
     const detail = TR.Navigation.View({ name: 'Detail', render: () => createElement(RN.Text, null, 'Detail') })
     const notice = TR.Navigation.View({ name: 'Notice', render: () => createElement(RN.Text, null, 'Notice') })
     const stack = configuredBasicStack('Covered stack', home)
-    const app = TR.Navigation.App({ name: 'Covered stack app', navigator: () => stack, auxiliaries: () => ({}) })
+    const app = TR.Navigation.App({
+      id: 'covered-stack-app',
+      version: '1.0.0',
+      name: 'Covered stack app',
+      navigator: () => stack,
+      auxiliaries: () => ({}),
+    })
     const screen = render(createElement(TR.Navigation.AppHost, { app }))
 
     act(() => stack.present(detail, {}))
@@ -435,6 +444,8 @@ Describe('Expo runtime', () => {
       const stack = configuredBasicStack('Web stack', home)
       const window = configuredSlot('Web auxiliary', windowRoot)
       const app = TR.Navigation.App({
+        id: 'web-app',
+        version: '1.0.0',
         name: 'Web app',
         navigator: () => stack,
         auxiliaries: () => ({ window }),
@@ -468,6 +479,8 @@ Describe('Expo runtime', () => {
       })
       const otherStack = configuredBasicStack('Other web stack', otherHome)
       const otherApp = TR.Navigation.App({
+        id: 'other-web-app',
+        version: '1.0.0',
         name: 'Other web app',
         navigator: () => otherStack,
         auxiliaries: () => ({}),
@@ -525,6 +538,8 @@ Describe('Expo runtime', () => {
     })
     const stack = configuredStack('OverlayHostStack', home)
     const app = TR.Navigation.App({
+      id: 'overlay-host-app',
+      version: '1.0.0',
       name: 'Overlay Host App',
       navigator: () => stack,
       auxiliaries: () => ({}),
@@ -571,6 +586,8 @@ Describe('Expo runtime', () => {
     const sheet = TR.Navigation.View({ name: 'Sheet', render: () => createElement(RN.Text, null, 'Sheet') })
     const stack = configuredStack('Sheet dismissal stack', home)
     const app = TR.Navigation.App({
+      id: 'sheet-dismissal-app',
+      version: '1.0.0',
       name: 'Sheet dismissal app',
       navigator: () => stack,
       auxiliaries: () => ({}),
@@ -623,7 +640,13 @@ Describe('Expo runtime', () => {
   Test('blocks covered sheet swipes and stale native callbacks until a fresh uncovered dismissal', async () => {
     const view = (name: string) => TR.Navigation.View({ name, render: () => createElement(RN.Text, null, name) })
     const stack = configuredStack('Protected sheet stack', view('Sheet home'))
-    const app = TR.Navigation.App({ name: 'Protected sheet app', navigator: () => stack, auxiliaries: () => ({}) })
+    const app = TR.Navigation.App({
+      id: 'protected-sheet-app',
+      version: '1.0.0',
+      name: 'Protected sheet app',
+      navigator: () => stack,
+      auxiliaries: () => ({}),
+    })
     const screen = render(createElement(TR.Navigation.AppHost, { app }))
     const dismiss = jest.spyOn(app, 'dismiss')
     await act(async () =>
@@ -681,7 +704,13 @@ Describe('Expo runtime', () => {
     try {
       const view = (name: string) => TR.Navigation.View({ name, render: () => createElement(RN.Text, null, name) })
       const stack = configuredBasicStack('Android modal stack', view('Android home'))
-      const app = TR.Navigation.App({ name: 'Android modal app', navigator: () => stack, auxiliaries: () => ({}) })
+      const app = TR.Navigation.App({
+        id: 'android-modal-app',
+        version: '1.0.0',
+        name: 'Android modal app',
+        navigator: () => stack,
+        auxiliaries: () => ({}),
+      })
       const screen = render(createElement(TR.Navigation.AppHost, { app }))
       const dismiss = jest.spyOn(app, 'dismiss')
       await act(async () =>
@@ -722,6 +751,8 @@ Describe('Expo runtime', () => {
     })
     const stack = configuredStack('Accessible ask stack', home)
     const app = TR.Navigation.App({
+      id: 'accessible-ask-app',
+      version: '1.0.0',
       name: 'Accessible ask app',
       navigator: () => stack,
       auxiliaries: () => ({}),
@@ -798,6 +829,8 @@ Describe('Expo runtime', () => {
       const sheet = TR.Navigation.View({ name: 'Sheet', render: () => createElement(RN.Text, null, 'Sheet') })
       const stack = configuredStack('Inline accessible sheet stack', home)
       const app = TR.Navigation.App({
+        id: 'inline-accessible-sheet-app',
+        version: '1.0.0',
         name: 'Inline accessible sheet app',
         navigator: () => stack,
         auxiliaries: () => ({}),
@@ -851,6 +884,8 @@ Describe('Expo runtime', () => {
     })
     const stack = configuredStack('AskHostStack', home)
     const app = TR.Navigation.App({
+      id: 'ask-host-app',
+      version: '1.0.0',
       name: 'Ask Host App',
       navigator: () => stack,
       auxiliaries: () => ({}),
@@ -897,7 +932,13 @@ Describe('Expo runtime', () => {
       const other = toast('Other notice', 'Other notice')
       const zero = toast('Zero notice', 'Zero notice')
       const stack = configuredStack('Toast host', home)
-      const app = TR.Navigation.App({ name: 'Toast App', navigator: () => stack, auxiliaries: () => ({}) })
+      const app = TR.Navigation.App({
+        id: 'toast-app',
+        version: '1.0.0',
+        name: 'Toast App',
+        navigator: () => stack,
+        auxiliaries: () => ({}),
+      })
       const screen = render(createElement(TR.Navigation.AppHost, { app }))
       const taoProps: TR.TaoProps = { app }
 
@@ -976,6 +1017,8 @@ Describe('Expo runtime', () => {
     })
     const slot = configuredSlot('OverlayHostSlot', home)
     const app = TR.Navigation.App({
+      id: 'slot-overlay-host-app',
+      version: '1.0.0',
       name: 'Slot Overlay Host App',
       navigator: () => slot,
       auxiliaries: () => ({}),
@@ -1064,6 +1107,8 @@ Describe('Expo runtime', () => {
     })
     const stack = configuredStack('Nested context stack', home)
     const app = TR.Navigation.App({
+      id: 'nested-context-app',
+      version: '1.0.0',
       name: 'Nested context app',
       navigator: () => stack,
       auxiliaries: () => ({}),
@@ -1088,8 +1133,7 @@ Describe('Expo runtime', () => {
         use StackNav from @tao/nav
         use Button, Col, Text from @tao/ui
 
-        app NestedAmbientApp {
-          Name "Nested ambient context"
+        app NestedAmbientApp { id "nestedambientapp" version "1.0.0" name "Nested ambient context"
           Navigator StackNav { Initial Home }
         }
 
@@ -1183,6 +1227,8 @@ Describe('Expo runtime', () => {
       const detail = TR.Navigation.View({ name: 'Detail', render: () => createElement(RN.Text, null, 'Detail') })
       stack = configuredStack('RuntimeNavigationHostTest', home)
       const app = TR.Navigation.App({
+        id: 'runtime-navigation-host-app',
+        version: '1.0.0',
         name: 'Runtime Navigation Host App',
         navigator: () => stack,
         auxiliaries: () => ({}),
@@ -1232,6 +1278,8 @@ Describe('Expo runtime', () => {
       name: 'Runtime Selection',
     })
     const app = TR.Navigation.App({
+      id: 'runtime-selection-app',
+      version: '1.0.0',
       name: 'Runtime Selection App',
       navigator: () => selection,
       auxiliaries: () => ({}),
@@ -1261,13 +1309,12 @@ Describe('Expo runtime', () => {
       use SlotNav, StackNav from @tao/nav
       use Col, FormButton, Text from @tao/ui
 
-      app SharedGeneratedApp {
-        Name "${label}"
+      app SharedGeneratedApp { id "sharedgeneratedapp" version "1.0.0" name "${label}"
         Navigator StackNav { Initial Home }
         @window SlotNav { Initial WindowRoot }
       }
 
-      workspace scene Home() {
+      project scene Home() {
         Title "${label} home"
         action Open() {
           present Notice() in SharedGeneratedApp@window
@@ -1278,25 +1325,23 @@ Describe('Expo runtime', () => {
         }
       }
 
-      workspace view Notice() {
+      project view Notice() {
         render Text("${label} notice")
       }
 
-      workspace view WindowRoot() {
+      project view WindowRoot() {
         render Text("${label} window")
       }
     `
 
     await withTaoFiles('tao-runtime-first-app-identity-', {
       'App.tao': appSource('First'),
-      'Project.tao': 'project { id "runtime-first" name "Runtime first" }',
     }, async firstPaths => {
       const first = await compileAndRenderApp(firstPaths['App.tao']!)
       await withTaoFiles(
         'tao-runtime-second-app-identity-',
         {
           'App.tao': appSource('Second'),
-          'Project.tao': 'project { id "runtime-second" name "Runtime second" }',
         },
         async secondPaths => {
           let generatedRoot: string | undefined
@@ -1344,8 +1389,7 @@ Describe('Expo runtime', () => {
         use StackNav from @tao/nav
         use Col, FormButton, Text from @tao/ui
 
-        app ToastApp {
-          Name "Toast App"
+        app ToastApp { id "toastapp" version "1.0.0" name "Toast App"
           Navigator StackNav { Initial Home }
         }
 
@@ -1432,7 +1476,13 @@ Describe('Expo runtime', () => {
         render: (_arguments, _taoProps, host) => createElement(Chrome, { host }),
       })
       const stack = configuredBasicStack('Basic chrome', home)
-      const app = TR.Navigation.App({ name: 'Basic chrome app', navigator: () => stack, auxiliaries: () => ({}) })
+      const app = TR.Navigation.App({
+        id: 'basic-chrome-app',
+        version: '1.0.0',
+        name: 'Basic chrome app',
+        navigator: () => stack,
+        auxiliaries: () => ({}),
+      })
       const screen = render(createElement(TR.Navigation.AppHost, { app }))
 
       Expect(screen.getByTestId(navigationTitleTestId).props.children).toBe('Document')
@@ -1885,7 +1935,13 @@ Describe('Expo runtime', () => {
       const detail = view('Gesture detail')
       const notice = view('Gesture notice')
       const stack = configuredStack('Gesture stack', home) as RuntimeStackNav
-      const app = TR.Navigation.App({ name: 'Gesture app', navigator: () => stack, auxiliaries: () => ({}) })
+      const app = TR.Navigation.App({
+        id: 'gesture-app',
+        version: '1.0.0',
+        name: 'Gesture app',
+        navigator: () => stack,
+        auxiliaries: () => ({}),
+      })
       render(createElement(TR.Navigation.AppHost, { app }))
       act(() => {
         stack.present(detail, {})
@@ -1966,6 +2022,8 @@ Describe('Expo runtime', () => {
         name: 'Selected native navigation',
       })
       const app = TR.Navigation.App({
+        id: 'selected-native-app',
+        version: '1.0.0',
         name: 'Selected native app',
         navigator: () => selection,
         auxiliaries: () => ({}),
@@ -2011,7 +2069,13 @@ Describe('Expo runtime', () => {
         },
         name: 'Titled selection',
       })
-      const app = TR.Navigation.App({ name: 'Titled app', navigator: () => selection, auxiliaries: () => ({}) })
+      const app = TR.Navigation.App({
+        id: 'titled-app',
+        version: '1.0.0',
+        name: 'Titled app',
+        navigator: () => selection,
+        auxiliaries: () => ({}),
+      })
       const screen = render(createElement(TR.Navigation.AppHost, { app }))
 
       Expect(screen.getAllByTestId(navigationTitleTestId)).toHaveLength(1)
@@ -2057,7 +2121,13 @@ Describe('Expo runtime', () => {
       Toolbar: [navigationCommand({ invoke: () => invoked += 1, label: 'Refresh' })],
     })
     const outer = configuredBasicStack('Outer', nested)
-    const app = TR.Navigation.App({ name: 'Nested nav app', navigator: () => outer, auxiliaries: () => ({}) })
+    const app = TR.Navigation.App({
+      id: 'nested-nav-app',
+      version: '1.0.0',
+      name: 'Nested nav app',
+      navigator: () => outer,
+      auxiliaries: () => ({}),
+    })
     const screen = render(createElement(TR.Navigation.AppHost, { app }))
 
     ExpectScreen(screen).toHaveText('Nested navigation')
@@ -2094,6 +2164,8 @@ Describe('Expo runtime', () => {
     const stack = configuredBasicStack('Focused stack', home)
     const window = configuredSlot('Focused window', windowRoot)
     const app = TR.Navigation.App({
+      id: 'focus-app',
+      version: '1.0.0',
       name: 'Focus app',
       navigator: () => stack,
       auxiliaries: () => ({ window }),
@@ -2146,6 +2218,8 @@ Describe('Expo runtime', () => {
     })
     const window = configuredSlot('Selection window', windowRoot)
     const app = TR.Navigation.App({
+      id: 'selection-focus-app',
+      version: '1.0.0',
       name: 'Selection focus app',
       navigator: () => selection,
       auxiliaries: () => ({ window }),
@@ -2182,8 +2256,7 @@ Describe('Expo runtime', () => {
            do Reload()
         }
 
-        app NestedSlotApp {
-          Name "Nested slot"
+        app NestedSlotApp { id "nestedslotapp" version "1.0.0" name "Nested slot"
           Navigator StackNav { Initial Nested }
         }
 

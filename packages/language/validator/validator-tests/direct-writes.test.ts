@@ -4,7 +4,7 @@ import { accepts, rejects, stubView } from './test-validate'
 
 const source = (body: string) => `
   data Items / Item { Title text, Pinned yes / no, Optional yes / no? }
-  app Demo { view Empty }
+  app Demo { id "demo" version "1.0.0" name "Demo" view Empty }
   view Main(Item) { action Flip() { ${body} } render Empty() }
   ${stubView('Empty')}
 `

@@ -27,6 +27,7 @@ const expected = [
   'reclaim --execute',
   'prepare-release studio',
   'prepare-release ide-extension',
+  'ide-extension-acceptance',
   'app-dev',
   'test-watch',
   'standalone-cli-acceptance',
@@ -149,7 +150,7 @@ Describe('agent host command permissions', () => {
     Expect(() => agentHostCommands({ agentHostCommands: ['land', 'land'] })).toThrow()
     Expect(() => agentHostCommands({ agentHostCommands: ['land', 42] })).toThrow()
     Expect(() => agentHostCommands({ agentHostCommands: ['xcrun simctl list devices'] })).toThrow()
-    Expect(() => agentHostCommands({ agentHostCommands: ['./tao dev'] })).toThrow()
+    Expect(() => agentHostCommands({ agentHostCommands: ['./tao run'] })).toThrow()
     Expect(() => agentHostCommands({ agentHostCommands: ['xcrun  simctl'] })).toThrow()
     Expect(() => agentHostCommands({ agentHostCommands: ['xcrun *'] })).toThrow()
   })

@@ -11,7 +11,7 @@ Describe('Expo runtime minimal design', () => {
         use StackNav from @tao/nav
         use Col, Text from @tao/ui
 
-        workspace design Light {
+        project design Light {
           surface #fff
           outline #abcd
           ink #121826cc
@@ -19,15 +19,15 @@ Describe('Expo runtime minimal design', () => {
           title [size 16, fg ink]
         }
 
-        workspace design Dark {
+        project design Dark {
           surface #000000
           ink #f6f7f3
           screen [fill, pad 16, bg surface]
           title [size 16, fg ink]
         }
 
-        app LightApp { Name "Light" Navigator StackNav { Initial LightHome } Design Light }
-        app DarkApp { Name "Dark" Navigator StackNav { Initial DarkHome } Design Dark }
+        app LightApp { id "lightapp" version "1.0.0" name "Light" Navigator StackNav { Initial LightHome } Design Light }
+        app DarkApp { id "darkapp" version "1.0.0" name "Dark" Navigator StackNav { Initial DarkHome } Design Dark }
 
         scene LightHome() {
           Title "Light"

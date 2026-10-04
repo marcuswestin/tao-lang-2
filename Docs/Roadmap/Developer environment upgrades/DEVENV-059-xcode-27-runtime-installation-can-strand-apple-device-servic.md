@@ -16,7 +16,7 @@
   sandbox denial. Reverify the real simulator journey after the host services recover.
 - **Dependencies:** The host restart remains a manual recovery step; the implementation landed in
   `6722026d`.
-- **Acceptance:** On macOS/Xcode 27, `tao dev` can present Device Hub and open HNReader on an iOS 27
+- **Acceptance:** On macOS/Xcode 27, `tao run` can present Device Hub and open HNReader on an iOS 27
   simulator; `./agent doctor` names a stuck Apple service and its recovery when discovery fails.
   On 2026-09-20 `./agent capabilities` completed and classified CoreSimulator as unavailable with
   restart-and-open-Device-Hub guidance, but the service remained invalid, so the real HNReader launch

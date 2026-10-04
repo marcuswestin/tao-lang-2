@@ -25,7 +25,7 @@ Test(
         'Main.tao': `
         use Playlists, Playlist from ./Data
         use Col, Text from @tao/ui
-        app Demo { view Main }
+        app Demo { id "demo" version "1.0.0" name "Demo" view Main }
         view Main() {
           query Playlists = Playlists
           render Col() {

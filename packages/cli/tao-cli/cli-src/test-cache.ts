@@ -31,8 +31,8 @@ import { verdictPackageFiles } from './toolchain-packages'
  *   traversal above. A grammar regenerated into it changes what compiles.
  * - The authored sources: every visible file under each path the command was given and under each
  *   test file's owning project root — which is what carries the `@` package directories and the
- *   TypeScript sidecars beside them — plus every `Project.tao` above them, because an ancestor
- *   project file is an intrinsic of the parse. Generated trees are excluded: they are this run's
+ *   TypeScript sidecars beside them — plus each owning `.tao` marker, root configuration, and lock.
+ *   Generated trees are excluded: they are this run's
  *   output, not its input.
  *
  * Anything that cannot be read, and any checkout whose toolchain cannot be located at all, yields
@@ -52,8 +52,9 @@ const CATEGORY = 'tao-test-command'
  * the *shape* of what a published run root holds: version 2 added the generated Jest entrypoints a
  * run is now started through, and a version 1 root carries none of them. Version 3 folds the
  * declared stdlib into the key, which version 2 answered for by refusing to produce a key at all.
+ * Version 4 refuses reuse when authored Tao declares dependencies outside the hashed source roots.
  */
-const VERSION = '3'
+const VERSION = '4'
 
 /**
  * SOURCE_EXCLUDED_DIRECTORIES are the directories Tao source discovery never descends. Reusing that
@@ -104,6 +105,13 @@ async function fingerprint(request: FingerprintRequest): Promise<string | undefi
     return undefined
   }
   try {
+    if (!await cacheableRootConfigs(request.testPaths)) {
+      return undefined
+    }
+    const sources = await sourceIdentity(request)
+    if (sources === undefined) {
+      return undefined
+    }
     return FS.contentIdentity([
       `version\n${VERSION}`,
       `runtime-root\n${FS.resolvePath(request.runtimeRoot)}`,
@@ -112,11 +120,35 @@ async function fingerprint(request: FingerprintRequest): Promise<string | undefi
       `toolchain\n${await toolchainIdentity(toolchainRoot)}`,
       `stdlib\n${await TaoStdlib.declaredRootIdentity(toolchainRoot)}`,
       `parser\n${await generatedParserIdentity(toolchainRoot)}`,
-      `sources\n${await sourceIdentity(request)}`,
+      `sources\n${sources}`,
     ])
   } catch {
     return undefined
   }
+}
+
+/** The normal generated root config has no external extends; custom chains need service input tracking. */
+async function cacheableRootConfigs(testPaths: readonly string[]): Promise<boolean> {
+  const roots = new Set(await Promise.all(testPaths.map(path => inPlace.workspaceRootForPath(path))))
+  for (const root of roots) {
+    const configPath = FS.resolvePath('tsconfig.json', root)
+    if (!await FS.isFile(configPath)) {
+      continue
+    }
+    const config = await FS.readJson<unknown>(configPath)
+    if (config === null || typeof config !== 'object' || Array.isArray(config)) {
+      return false
+    }
+    const entries = Object.entries(config)
+    const [entry] = entries
+    if (
+      entries.length !== 1 || entry?.[0] !== 'extends'
+      || entry[1] !== './.tao/typescript/tsconfig.json'
+    ) {
+      return false
+    }
+  }
+  return true
 }
 
 /** profileIdentity resolves the pinned devenv profile, which is what fixes bun, node, and dprint. */
@@ -163,12 +195,13 @@ async function generatedParserIdentity(toolchainRoot: string): Promise<string> {
  * Hashing the whole visible directory is what makes the answer independent of which kinds of file
  * the compiler happens to read today.
  */
-async function sourceIdentity(request: FingerprintRequest): Promise<string> {
+async function sourceIdentity(request: FingerprintRequest): Promise<string | undefined> {
   const searchRoots = new Set<string>()
   for (const root of request.roots) {
     searchRoots.add(FS.resolvePath(root))
   }
   const sources = new Set<string>()
+  const markers = new Set<string>()
   for (const testPath of request.testPaths) {
     // The named file goes in whatever the walk below finds. It is the one file this run is
     // certainly about, and `minimalRoots` drops it as a search root as soon as its project root
@@ -180,8 +213,12 @@ async function sourceIdentity(request: FingerprintRequest): Promise<string> {
     }
     const projectRoot = await inPlace.workspaceRootForPath(testPath)
     searchRoots.add(projectRoot)
-    for (const path of await ancestorProjectFiles(projectRoot)) {
-      sources.add(path)
+    markers.add(projectRoot)
+    for (const name of ['tsconfig.json', '.tao/lock.jsonc', '.tao/project.json']) {
+      const path = FS.resolvePath(name, projectRoot)
+      if (await FS.isFile(path)) {
+        sources.add(path)
+      }
     }
   }
   const runtimeRoot = FS.resolvePath(request.runtimeRoot)
@@ -192,7 +229,19 @@ async function sourceIdentity(request: FingerprintRequest): Promise<string> {
       }
     }
   }
-  return await identityOf('/', [...sources])
+  // A project requirement can publish source from a sibling outside every hashed root. Until the
+  // selected dependency closure is part of this key, recompiling is the only honest answer.
+  for (const path of sources) {
+    if (path.endsWith('.tao') && /\brequires\b/.test(await FS.readText(path))) {
+      return undefined
+    }
+  }
+  return FS.contentIdentity([
+    await identityOf('/', [...sources]),
+    ...await Promise.all(
+      [...markers].toSorted().map(async root => `${root}:${await FS.isDirectory(FS.resolvePath('.tao', root))}`),
+    ),
+  ])
 }
 
 /**
@@ -241,27 +290,6 @@ function isAuthored(relativePath: string, path: string, runtimeRoot: string): bo
 function minimalRoots(roots: ReadonlySet<string>): readonly string[] {
   const sorted = [...roots].toSorted()
   return sorted.filter(root => !sorted.some(other => other !== root && FS.pathIsWithin(root, other)))
-}
-
-/**
- * ancestorProjectFiles collects the `Project.tao` files at and above a project root. The package
- * resolver treats the nearest one above a project as an intrinsic of every parse below it, so a
- * project file outside every searched root still decides what compiles.
- */
-async function ancestorProjectFiles(projectRoot: string): Promise<readonly string[]> {
-  const found: string[] = []
-  let current = FS.resolvePath(projectRoot)
-  while (true) {
-    const candidate = FS.resolvePath('Project.tao', current)
-    if (await FS.isFile(candidate)) {
-      found.push(candidate)
-    }
-    const parent = FS.dirname(current)
-    if (parent === current) {
-      return found
-    }
-    current = parent
-  }
 }
 
 /** identityOf labels each file by its path below `root`, so a file that moves changes the identity. */

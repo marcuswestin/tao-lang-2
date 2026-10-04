@@ -51,7 +51,7 @@ Describe('validator: package namespaces and view aliases', () => {
         use package @widgets
         use package @widgets as w
 
-        app Aliases { view Main }
+        app Aliases { id "aliases" version "1.0.0" name "Aliases" view Main }
         view Main() {
            render Published("one")
         }
@@ -73,7 +73,7 @@ Describe('validator: package namespaces and view aliases', () => {
           use package @widgets
           use package @widgets
 
-          app Aliases { view Main }
+          app Aliases { id "aliases" version "1.0.0" name "Aliases" view Main }
           view Main() {
              render Mine("x")
           }
@@ -92,7 +92,7 @@ Describe('validator: package namespaces and view aliases', () => {
         'Main.tao': `
           use package @nowhere
 
-          app Aliases { view Main }
+          app Aliases { id "aliases" version "1.0.0" name "Aliases" view Main }
           view Main() {
              render Mine("x")
           }
@@ -110,7 +110,7 @@ Describe('validator: package namespaces and view aliases', () => {
         'Main.tao': `
           use package @widgets
 
-          app Aliases { view Main }
+          app Aliases { id "aliases" version "1.0.0" name "Aliases" view Main }
           view Main() {
              render Mine("x")
           }
@@ -129,7 +129,7 @@ Describe('validator: package namespaces and view aliases', () => {
         'Main.tao': `
           use package @middle
 
-          app Aliases { view Main }
+          app Aliases { id "aliases" version "1.0.0" name "Aliases" view Main }
           view Main() {
             render Published()
           }
@@ -201,7 +201,7 @@ Describe('validator: package namespaces and view aliases', () => {
         'Main.tao': `
           use package @widgets
 
-          app Aliases { view Main }
+          app Aliases { id "aliases" version "1.0.0" name "Aliases" view Main }
           view Main() {
              render Mine(1)
           }

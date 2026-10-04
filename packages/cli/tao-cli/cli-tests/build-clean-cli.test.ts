@@ -60,9 +60,10 @@ Describe('Tao local build and clean CLI', () => {
   Test('retains fresh static web artifacts and refuses non-interactive cleanup', async () => {
     const root = await mkTestDir('tao-build-clean-')
     try {
-      for (const name of ['Clockwork.tao', 'Clockwork.ts', 'Project.tao']) {
+      for (const name of ['Clockwork.tao', 'Clockwork.ts']) {
         await FS.copyFile(FS.resolvePath(name, fixtureRoot), FS.resolvePath(name, root))
       }
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', root), '')
 
       const first = await runTao(['build', '--web', FS.resolvePath('Clockwork.tao', root)])
       Expect(first).toMatchObject({ exitCode: 0 })

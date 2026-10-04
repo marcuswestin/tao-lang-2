@@ -13,7 +13,7 @@ Test(
         {
           'Garden.tao': `
           use Text from @tao/ui
-          app Garden { view Main }
+          app Garden { id "tao-studio-garden" version "1.0.0" name "Garden"  view Main }
           view Main() { render Text("Before") }
           scenarios Main "states" {
             device phone
@@ -70,7 +70,7 @@ Test(
             ])
 
             const invalid = await preview.session.syncDraft({
-              content: 'app Garden {',
+              content: 'app Garden { id "tao-studio-garden" version "1.0.0" name "Garden" ',
               path: file.path,
               sourceVersion: file.sourceVersion,
               writeId: 'invalid-draft',
@@ -90,6 +90,17 @@ Test(
             Expect(valid.compile?.compileRevision).toBe(2)
             Expect(secondPublication).toContain('"compileRevision":2')
             Expect(secondPublication).toContain(valid.file.sourceVersion)
+
+            await FS.writeText(paths['Garden.tao'], 'app Garden { id "garden" version "1.0.0" name "Garden"')
+            const stale = await preview.session.noteWatchChanges([{ path: paths['Garden.tao'] }])
+            Expect(stale.compile?.status).toBe('error')
+            Expect(await FS.readText(FS.resolvePath('TaoStudioPublication.ts', generatedRoot))).toBe(secondPublication)
+
+            await FS.writeText(paths['Garden.tao'], file.content.replace('Before', 'Recovered'))
+            const recovered = await preview.session.noteWatchChanges([{ path: paths['Garden.tao'] }])
+            Expect(recovered.compile?.status).toBe('compiled')
+            Expect(await FS.readText(FS.resolvePath('TaoStudioPublication.ts', generatedRoot)))
+              .toContain('"compileRevision":4')
           } finally {
             await preview.close()
           }
@@ -109,7 +120,7 @@ Test('Studio preview session publishes a generated sketch scenario after creatio
       {
         'Garden.tao': `
           use Text from @tao/ui
-          app Garden { view Main }
+          app Garden { id "tao-studio-garden" version "1.0.0" name "Garden"  view Main }
           view Main() { render Text("Garden") }
           scenarios Main "states" {
             device phone
@@ -173,12 +184,12 @@ Test(
         {
           'Garden.tao': `
           use Imported from ./Imported.tao
-          app Garden { view Main }
+          app Garden { id "tao-studio-garden" version "1.0.0" name "Garden"  view Main }
           view Main() { render Imported() }
         `,
           'Imported.tao': `
           use Text from @tao/ui
-          workspace view Imported() { render Text("Imported") }
+          project view Imported() { render Text("Imported") }
           fixture Empty { }
           scenarios Imported "imported" {
             fixture Empty
@@ -224,8 +235,8 @@ Test('Studio preview session preserves compiler entity parameter and fixture acc
       {
         'Music.tao': `
           data Accounts / Account { DisplayName text }
-          workspace data Playlists / Playlist { Title text }
-          app Music { view Main }
+          project data Playlists / Playlist { Title text }
+          app Music { id "tao-studio-music" version "1.0.0" name "Music"  view Main }
           view Main() { render Native() }
           view PlaylistRow(Playlist) { render Native() }
           view Native() { render inject \`\`\`ts return null \`\`\` }
@@ -286,8 +297,8 @@ Test('Studio preview session scopes app scenarios to the selected variant and ke
       {
         'Garden.tao': `
           use Text from @tao/ui
-          app Garden { view Main }
-          app GardenDark { view Main }
+          app Garden { id "tao-studio-garden" version "1.0.0" name "Garden"  view Main }
+          app GardenDark { id "tao-studio-gardendark" version "1.0.0" name "GardenDark"  view Main }
           view Main() { render Text("Garden") }
           fixture Empty { }
           scenarios Garden "garden app" {
@@ -340,7 +351,7 @@ Test('Studio preview session rejects app destinations instead of silently runnin
       {
         'Garden.tao': `
           use Text from @tao/ui
-          app Garden { view Main }
+          app Garden { id "tao-studio-garden" version "1.0.0" name "Garden"  view Main }
           view Main() { render Text("Garden") }
           fixture Empty { }
           scenarios Garden "destinations" {
@@ -379,7 +390,7 @@ Test('Studio file watching acknowledges its own write once and compiles later ex
       {
         'Garden.tao': `
           use Text from @tao/ui
-          app Garden { view Main }
+          app Garden { id "tao-studio-garden" version "1.0.0" name "Garden"  view Main }
           view Main() { render Text("Before") }
         `,
       },
@@ -430,7 +441,7 @@ Test('Studio file watcher reconciles files created between the initial scan and 
       {
         'Garden.tao': `
           use Text from @tao/ui
-          app Garden { view Main }
+          app Garden { id "tao-studio-garden" version "1.0.0" name "Garden"  view Main }
           view Main() { render Text("Garden") }
         `,
       },

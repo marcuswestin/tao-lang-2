@@ -1,6 +1,16 @@
-import { AST, type PackageResolver, Parser } from '@parser'
-import { FS, Repo, TaoFiles } from '@shared'
+import {
+  AST,
+  type PackageResolver,
+  type ProjectAppRequirements,
+  type ProjectGraph,
+  type ProjectModuleBinding,
+  type ProjectPublication,
+  type ProjectRequirement,
+} from '@parser'
+import { FS, Platform, Repo, TaoFiles } from '@shared'
 import { Stdlib } from '@stdlib'
+import { datasourceCollectionNames } from './data-stores'
+import { Type } from './Type'
 
 /** Packages exposes Tao package discovery, import resolution, and visibility helpers. */
 export namespace Packages {
@@ -13,8 +23,8 @@ export namespace Packages {
   /** Index maps `@package` names to all matching package folder paths. */
   export type Index = {
     projectRoot: string
-    projectRoots: readonly string[]
-    packages: ReadonlyMap<string, readonly string[]>
+    projectRoots: string[]
+    packages: Map<string, string[]>
   }
 
   /** Context declares shared lookup state for Tao imports. */
@@ -28,6 +38,11 @@ export namespace Packages {
      * paths remain shared across every reference resolved within one build.
      */
     physicalPaths: Map<string, string>
+    requirementAliases: Map<string, {
+      requirement: AST.PackageRequires
+      targetProjectRoot: string
+      sourceModuleRoot: string
+    }>
   }
 
   /** ContextOptions configures package roots shared by one parser or workspace lifetime. */
@@ -41,6 +56,7 @@ export namespace Packages {
     | 'same-directory'
     | 'same-package'
     | 'same-project-package'
+    | 'external-publication'
     | 'stdlib'
     | 'invalid'
 
@@ -66,6 +82,7 @@ export namespace Packages {
     excludedProjectRoots?: readonly string[]
     /** Existing candidates must remain physically inside this root after symlink resolution. */
     physicalBoundaryRoot?: string
+    requirement?: AST.PackageRequires
   }
 
   /** ResolveRequest declares one import resolution request. */
@@ -92,15 +109,71 @@ export namespace Packages {
       },
       async intrinsicFilePaths() {
         const prelude = FS.resolvePath('@tao/Prelude.tao', context.stdlibRoot)
-        const stdlibProject = FS.resolvePath('Project.tao', context.stdlibRoot)
-        const project = await ancestorProjectFile(context.index.projectRoot)
         return await Promise.all(
-          [project, stdlibProject, prelude].map(async path => path && await FS.isFile(path) ? path : undefined),
+          [prelude].map(async path => path && await FS.isFile(path) ? path : undefined),
         )
           .then(paths => paths.filter((path): path is string => path !== undefined))
       },
+      async projectRootFilePaths(fromFilePath) {
+        // Each parser load rebuilds requirement bindings from current source, including removals.
+        context.requirementAliases.clear()
+        const root = await containingProjectRoot(FS.dirname(fromFilePath))
+        if (!root) {
+          return []
+        }
+        return (await FS.listDir(root)).filter(isImportableTaoSourceName)
+          .map(name => FS.resolvePath(name, root))
+      },
+      async requirementFilePaths(requirement, fromFilePath) {
+        if (!requirement.locator) {
+          return []
+        }
+        const sourceRoot = await containingProjectRoot(FS.dirname(fromFilePath))
+        if (!sourceRoot) {
+          return []
+        }
+        const targetRoot = FS.resolvePath(requirement.locator, sourceRoot)
+        if (!await FS.isDirectory(FS.resolvePath('.tao', targetRoot))) {
+          return []
+        }
+        if (!context.index.projectRoots.includes(targetRoot)) {
+          context.index.projectRoots.push(targetRoot)
+        }
+        for (const name of await FS.listDir(targetRoot)) {
+          if (!name.startsWith('@') || name === '@') {
+            continue
+          }
+          const moduleRoot = FS.resolvePath(name, targetRoot)
+          if (await FS.isDirectory(moduleRoot)) {
+            const indexed = context.index.packages.get(name) ?? []
+            if (!indexed.includes(moduleRoot)) {
+              context.index.packages.set(name, [...indexed, moduleRoot])
+            }
+          }
+        }
+        for (const binding of requirement.bindings?.bindings ?? []) {
+          const localName = binding.alias ?? binding.module
+          const key = `${sourceRoot}#${localName}`
+          context.requirementAliases.set(key, {
+            requirement,
+            targetProjectRoot: targetRoot,
+            sourceModuleRoot: FS.resolvePath(binding.module, targetRoot),
+          })
+        }
+        const sweep = createProjectRootSweep()
+        const files = await Repo.filesUnder(targetRoot, {
+          excludeDirectoryNames: TaoFiles.discoveryExcludeDirectoryNames,
+          extensions: ['.tao'],
+        })
+        const owners = await Promise.all(files.map(path => containingProjectRoot(FS.dirname(path), sweep)))
+        return files.filter((path, index) => owners[index] === targetRoot && isImportableTaoSourcePath(path))
+      },
       collectTargetDeclarations(useStatement, request) {
         const resolution = resolveUse(context, useStatement, request.fromFilePath)
+        const selectedPublication = resolution.requirement
+          ? createProjectGraph(context, request, false).requirements
+            .find(entry => entry.declaration === resolution.requirement)?.selectedPublication
+          : undefined
         const workspaceFilePaths = new Set(request.workspaceFiles.map(workspaceFilePath))
         const targetFiles = request.workspaceFiles.filter(file =>
           targetMatches(context, resolution, {
@@ -112,6 +185,10 @@ export namespace Packages {
           file.statements
             .filter(AST.isDeclaration)
             .filter(declaration => declarationIsImportableFromUse(declaration, resolution))
+            .filter(declaration =>
+              resolution.relation !== 'external-publication'
+              || selectedPublication?.publicDeclarations.includes(declaration) === true
+            )
         )
       },
       async candidateFilePaths(useStatement, request) {
@@ -130,43 +207,322 @@ export namespace Packages {
           return !isTestSourcePath(path) && projectRootForPath(context.index, path) === projectRoot
         })
       },
+      projectGraph(request) {
+        return createProjectGraph(context, request)
+      },
     }
     return resolver
   }
 
-  async function ancestorProjectFile(root: string): Promise<string | undefined> {
-    let current = root
-    let previous = ''
-    while (current !== previous) {
-      const declared = await projectDeclarationFile(current)
-      if (declared !== undefined) {
-        return declared
+  /** createProjectGraph keeps publication API selection separate from private source reachability. */
+  function createProjectGraph(
+    context: Context,
+    request: { fromFilePath: string; workspaceFiles: readonly AST.TaoFile[] },
+    includeReachability: boolean = true,
+  ): ProjectGraph {
+    const projectRoot = projectRootForPath(context.index, request.fromFilePath)
+      ?? FS.dirname(request.fromFilePath)
+    // A validation result may expose only its requested entries even though the parser built and
+    // linked their dependencies. Recover that same build's documents from each entry's AST.
+    const allFiles = [...new Set(request.workspaceFiles.flatMap(AST.workspaceFilesFor))]
+      .filter(file => {
+        const path = workspaceFilePath(file)
+        return !isTestSourcePath(path) || path === request.fromFilePath
+      })
+    if (includeReachability) {
+      // A fresh resolver has not run requirementFilePaths, so index the roots of the linked
+      // documents before assigning files to publications. Checking each ancestor also preserves
+      // isolation when a required project contains a nested project marker.
+      for (const file of allFiles) {
+        let directory = FS.dirname(workspaceFilePath(file))
+        while (true) {
+          const marker = FS.resolvePath('.tao', directory)
+          if (FS.existsSync(marker)) {
+            try {
+              FS.listDirSync(marker)
+              if (!context.index.projectRoots.includes(directory)) {
+                context.index.projectRoots.push(directory)
+              }
+              break
+            } catch {
+              // A file named .tao is not a project marker.
+            }
+          }
+          const parent = FS.dirname(directory)
+          if (parent === directory || FS.existsSync(FS.resolvePath('.git', directory))) {
+            break
+          }
+          directory = parent
+        }
       }
-      if (await FS.exists(FS.resolvePath('.git', current))) {
-        return undefined
+      for (const file of allFiles) {
+        const filePath = workspaceFilePath(file)
+        const owner = projectRootForPath(context.index, filePath)
+        if (!owner) {
+          continue
+        }
+        let directory = owner
+        for (const segment of FS.dirname(FS.relativePath(owner, filePath)).split('/')) {
+          directory = FS.resolvePath(segment, directory)
+          if (!segment.startsWith('@') || segment === '@') {
+            continue
+          }
+          const paths = context.index.packages.get(segment) ?? []
+          if (!paths.includes(directory)) {
+            context.index.packages.set(segment, [...paths, directory])
+          }
+        }
       }
-      previous = current
-      current = FS.dirname(current)
+    }
+    const projectFiles = allFiles.filter(file =>
+      projectRootForPath(context.index, workspaceFilePath(file)) === projectRoot
+    )
+    const publicationFiles = allFiles.filter(file => !isTestSourcePath(workspaceFilePath(file)))
+    const publicationDeclarations = publicationFiles.flatMap(file => file.statements.filter(AST.isPackageDeclaration))
+    const publicationRequirements = new Map<AST.PackageDeclaration, ProjectRequirement[]>()
+    const publications = publicationDeclarations.map(declaration => {
+      const owned: ProjectRequirement[] = []
+      publicationRequirements.set(declaration, owned)
+      return publicationGraph(context.index, declaration, publicationFiles, owned, includeReachability)
+    })
+    const byDeclaration = new Map<AST.PackageRequires, ProjectRequirement>()
+    for (const file of allFiles) {
+      const sourceRoot = projectRootForPath(context.index, workspaceFilePath(file))
+        ?? FS.dirname(workspaceFilePath(file))
+      for (const declaration of AST.streamAllContents(file).filter(AST.isPackageRequires)) {
+        byDeclaration.set(declaration, requirementGraph(declaration, sourceRoot, publications))
+      }
+    }
+    for (const publication of publications) {
+      publicationRequirements.get(publication.declaration)?.push(
+        ...publication.declaration.block.statements.filter(AST.isPackageRequires)
+          .flatMap(declaration => byDeclaration.get(declaration) ?? []),
+      )
+    }
+    const requirements = projectFiles.flatMap(file =>
+      AST.streamAllContents(file).filter(AST.isPackageRequires)
+        .flatMap(declaration => byDeclaration.get(declaration) ?? [])
+    )
+    const appRequirements: ProjectAppRequirements[] = includeReachability
+      ? projectFiles.flatMap(file =>
+        AST.appValueDeclarationsInFile(file).map(app => {
+          const sourceDeclarations = reachableProjectDeclarations([app], allFiles, projectRoot, context.index)
+          return {
+            app,
+            requirements: effectiveAppRequirementDeclarations(app)
+              .flatMap(declaration => byDeclaration.get(declaration) ?? []),
+            sourceDeclarations,
+            sourceFiles: [
+              ...new Set(
+                sourceDeclarations.map(declaration => AST.getDocument(declaration).parseResult.value).filter(
+                  AST.isTaoFile,
+                ),
+              ),
+            ],
+          }
+        })
+      )
+      : []
+    return { projectRoot, projectFiles, publications, requirements, appRequirements }
+  }
+
+  /** A variant inherits its base app's requirements and adds requirements in its own patch. */
+  function effectiveAppRequirementDeclarations(
+    app: AST.AppValueDeclaration,
+    seen: Set<AST.AppValueDeclaration> = new Set(),
+  ): readonly AST.PackageRequires[] {
+    if (seen.has(app)) {
+      return []
+    }
+    seen.add(app)
+    if (AST.isAppDeclaration(app) && app.block) {
+      return app.block.statements.filter(AST.isPackageRequires)
+    }
+    const expression = app.value
+    if (!expression) {
+      return []
+    }
+    if (
+      AST.isPrimitiveConfigurationConstructor(expression)
+      || AST.isInferredConfigurationConstructor(expression)
+      || AST.isConfigurationConstructor(expression)
+    ) {
+      return expression.block?.entries.flatMap(entry => entry.requirement ?? []) ?? []
+    }
+    if (AST.isRefinementExpression(expression) || AST.isValueReference(expression)) {
+      const base = expression.target.ref
+      const inherited = base && AST.isAppValueDeclaration(base)
+        ? effectiveAppRequirementDeclarations(base, seen)
+        : []
+      const added = AST.isRefinementExpression(expression)
+        ? expression.patchBlock.entries.flatMap(entry => entry.requirement ?? [])
+        : []
+      return [...new Set([...inherited, ...added])]
+    }
+    return []
+  }
+
+  function publicationGraph(
+    index: Index,
+    declaration: AST.PackageDeclaration,
+    allFiles: readonly AST.TaoFile[],
+    requirements: readonly ProjectRequirement[],
+    includeReachability: boolean,
+  ): ProjectPublication {
+    const projectRoot = FS.dirname(AST.getDocument(declaration).uri.path)
+    const name = declaration.block.statements.find(AST.isPackageName)?.value
+    const version = declaration.block.statements.find(AST.isPackageVersion)?.value
+    const includedModuleRoots = declaration.block.statements.filter(AST.isPackageIncludes)
+      .flatMap(includes => includes.modules.map(module => FS.resolvePath(module, projectRoot)))
+    const includedFiles = allFiles.filter(file =>
+      projectRootForPath(index, workspaceFilePath(file)) === projectRoot
+      && includedModuleRoots.includes(containingPath(workspaceFilePath(file), index)?.path ?? '')
+    )
+    const publicDeclarations = includedFiles.flatMap(file =>
+      file.statements.filter(AST.isDeclaration).filter(statement => visibilityOf(statement) === 'public')
+    )
+    const sourceDeclarations = includeReachability
+      ? reachableProjectDeclarations(publicDeclarations, allFiles, projectRoot, index)
+      : publicDeclarations
+    return {
+      declaration,
+      name,
+      version,
+      includedModuleRoots,
+      publicDeclarations,
+      requirements,
+      sourceDeclarations,
+      sourceFiles: [
+        ...new Set(sourceDeclarations.map(entry => AST.getDocument(entry).parseResult.value).filter(AST.isTaoFile)),
+      ],
+    }
+  }
+
+  /** Reachability stays at declaration granularity so another app in the same file owns no edges. */
+  export function reachableProjectDeclarations(
+    seeds: readonly AST.Node[],
+    allFiles: readonly AST.TaoFile[],
+    projectRoot: string,
+    index: Index,
+  ): readonly AST.Declaration[] {
+    const eligible = new Set(
+      allFiles
+        .filter(file => projectRootForPath(index, workspaceFilePath(file)) === projectRoot)
+        .map(workspaceFilePath),
+    )
+    const reached = new Set<AST.Declaration>()
+    const queue = seeds.flatMap(seed => topLevelDeclaration(seed) ?? [])
+    while (queue.length > 0) {
+      const declaration = queue.shift()!
+      if (reached.has(declaration) || !eligible.has(AST.getDocument(declaration).uri.path)) {
+        continue
+      }
+      reached.add(declaration)
+      for (const node of [declaration, ...AST.streamAllContents(declaration)]) {
+        // Queries and relations select entities by name, outside Langium cross-references.
+        // Datasource Data membership is likewise a structural name list.
+        if (AST.isEntityQueryDeclaration(node)) {
+          const entity = Type.queryEntity(node)
+          if (entity) {
+            queue.push(entity)
+          }
+        } else if (AST.isEntityDataField(node)) {
+          const entity = Type.dataFieldRelationEntity(node)
+          if (entity) {
+            queue.push(entity)
+          }
+        }
+        for (const reference of AST.streamReferences(node)) {
+          const target = 'ref' in reference.reference ? reference.reference.ref : undefined
+          const local = target && topLevelDeclaration(target)
+          if (local && !reached.has(local)) {
+            queue.push(local)
+          }
+        }
+      }
+      if (AST.isDatasourceDeclaration(declaration)) {
+        const names = datasourceCollectionNames(declaration) ?? []
+        for (const entity of AST.visibleFileDeclarations(declaration, AST.isEntityDataDeclaration)) {
+          if (names.includes(entity.name)) {
+            queue.push(entity)
+          }
+        }
+      }
+    }
+    return [...reached]
+  }
+
+  function topLevelDeclaration(node: AST.Node): AST.Declaration | undefined {
+    let current: AST.Node | undefined = node
+    while (current && !AST.isTaoFile(current)) {
+      if (AST.isDeclaration(current) && AST.isTaoFile(current.$container)) {
+        return current
+      }
+      current = current.$container
     }
     return undefined
   }
 
-  /** projectDeclarationFile returns the `.tao` file in `directory` that declares project metadata. */
-  async function projectDeclarationFile(directory: string): Promise<string | undefined> {
-    const named = FS.resolvePath('Project.tao', directory)
-    if (await FS.isFile(named) && await fileDeclaresProject(named)) {
-      return named
-    }
-    for (const name of (await FS.listDir(directory).catch(() => [])).toSorted()) {
-      const path = FS.resolvePath(name, directory)
-      if (path === named || FS.extname(path) !== '.tao' || !await FS.isFile(path)) {
-        continue
+  function requirementGraph(
+    declaration: AST.PackageRequires,
+    sourceRoot: string,
+    publications: readonly ProjectPublication[],
+  ): ProjectRequirement {
+    const targetProjectRoot = declaration.locator ? FS.resolvePath(declaration.locator, sourceRoot) : undefined
+    const targetPublications = targetProjectRoot === undefined
+      ? []
+      : publications.filter(publication =>
+        FS.dirname(AST.getDocument(publication.declaration).uri.path) === targetProjectRoot
+      )
+    const selectedPublication = targetPublications.find(publication =>
+      publication.name === declaration.name
+      && publication.version !== undefined
+      && versionMatches(publication.version, declaration.version)
+    )
+    const bindings: ProjectModuleBinding[] = []
+    const seenBindings = new Set<string>()
+    if (selectedPublication && targetProjectRoot) {
+      for (const binding of declaration.bindings?.bindings ?? []) {
+        const sourceModuleRoot = FS.resolvePath(binding.module, targetProjectRoot)
+        if (!selectedPublication.includedModuleRoots.includes(sourceModuleRoot)) {
+          continue
+        }
+        const localName = binding.alias ?? binding.module
+        const bindingKey = `${localName}#${sourceModuleRoot}`
+        if (seenBindings.has(bindingKey)) {
+          continue
+        }
+        seenBindings.add(bindingKey)
+        bindings.push({
+          localName,
+          origin: {
+            projectRoot: targetProjectRoot,
+            packageName: selectedPublication.name,
+            packageVersion: selectedPublication.version,
+            modulePath: sourceModuleRoot,
+          },
+          sourceRoot: sourceModuleRoot,
+          requirement: declaration,
+        })
       }
-      if (await fileDeclaresProject(path)) {
-        return path
-      }
     }
-    return undefined
+    return {
+      declaration,
+      sourceRoot,
+      targetProjectRoot,
+      requestedName: declaration.name,
+      versionRange: declaration.version,
+      selectedPublication,
+      bindings,
+    }
+  }
+
+  function versionMatches(version: string, range: string): boolean {
+    try {
+      return Platform.semverSatisfies(version, range)
+    } catch {
+      return false
+    }
   }
 
   /** createContext creates shared package lookup state for one project root. */
@@ -177,6 +533,7 @@ export namespace Packages {
       sourcePaths: options.sourcePaths === undefined ? undefined : new Set(options.sourcePaths),
       stdlibRoot: FS.resolvePath(options.stdlibRoot ?? Stdlib.rootPath),
       physicalPaths: new Map(),
+      requirementAliases: new Map(),
     }
   }
 
@@ -218,18 +575,27 @@ export namespace Packages {
         if (FS.basename(path) === '@') {
           continue
         }
-        if (containsTaoSource(listing, scannedPath)) {
+        const owningRoot = projectRoots
+          .filter(root => FS.pathIsWithin(path, root))
+          .toSorted((left, right) => right.length - left.length)[0]
+        const excluded = owningRoot
+          && FS.relativePath(owningRoot, path).split('/').some(segment =>
+            segment.startsWith('_gen_tao-') || segment.startsWith('.tao-')
+            || TaoFiles.discoveryExcludeDirectoryNames.some(excluded => excluded === segment)
+          )
+        if (owningRoot && path !== owningRoot && !excluded && containsTaoSource(listing, scannedPath)) {
           record(path)
         }
       }
     }
     for (const sourcePath of sourcePaths) {
-      let directory = FS.dirname(sourcePath)
-      while (directory !== resolvedRoot && FS.pathIsWithin(directory, resolvedRoot)) {
-        if (FS.basename(directory).startsWith('@')) {
-          record(directory)
-        }
-        directory = FS.dirname(directory)
+      const projectRoot = projectRoots
+        .filter(root => FS.pathIsWithin(sourcePath, root))
+        .toSorted((left, right) => right.length - left.length)[0] ?? resolvedRoot
+      const relative = FS.relativePath(projectRoot, sourcePath)
+      const moduleName = relative.split('/')[0]
+      if (moduleName?.startsWith('@') && moduleName.length > 1) {
+        record(FS.resolvePath(moduleName, projectRoot))
       }
     }
     for (const paths of packages.values()) {
@@ -245,11 +611,7 @@ export namespace Packages {
   /**
    * ProjectRootSweep memoizes the directories one sweep has already asked about.
    *
-   * Deciding whether a directory declares a project means reading and parsing every `.tao` file in
-   * it, and the walk from a file to its project root passes through the same ancestors as the walk
-   * from its neighbour — `Apps/` is asked about once per file beneath it. A sweep is scoped to one
-   * pass on purpose: a cached answer is only safe while nothing is adding or removing a project
-   * declaration underneath it, which a long-lived language server cannot assume.
+   * The marker lookup is scoped to one sweep so a long-lived language server can see a new .tao/.
    */
   export type ProjectRootSweep = {
     readonly declarations: Map<string, Promise<boolean>>
@@ -267,13 +629,12 @@ export namespace Packages {
   }
 
   /**
-   * containingProjectRoot finds the nearest ancestor directory that directly declares a project.
+   * containingProjectRoot finds the nearest ancestor containing a direct .tao/ marker.
    * Pass a `sweep` when resolving many paths at once so they share the memo.
    *
    * The climb never treats the OS temp directory itself as a project root and stops there, the same
-   * way it stops at `.git`. A stray project-declaring `.tao` file left directly in the temp directory
-   * by an unrelated process would otherwise make every fixture beneath it, however deeply nested,
-   * resolve its workspace root to the whole temp directory — see `temporaryClimbBoundary`.
+   * way it stops at `.git`. A stray marker left directly in the temp directory by an unrelated
+   * process would otherwise make every fixture beneath it resolve to that directory.
    */
   export async function containingProjectRoot(
     start: string,
@@ -314,9 +675,8 @@ export namespace Packages {
   }
 
   /**
-   * declaresProject answers from the sweep's memo, storing the pending promise rather than its
-   * result so that concurrent walkers asking about one ancestor wait on a single read of it instead
-   * of each starting their own.
+   * declaresProject answers from the sweep's memo, storing the pending promise so concurrent
+   * walkers asking about one ancestor wait on a single directory lookup.
    */
   async function declaresProject(sweep: ProjectRootSweep, directory: string): Promise<boolean> {
     const asked = sweep.declarations.get(directory)
@@ -329,31 +689,12 @@ export namespace Packages {
   }
 
   async function directoryDeclaresProject(directory: string): Promise<boolean> {
-    for (const name of await FS.listDir(directory).catch(() => [])) {
-      const path = FS.resolvePath(name, directory)
-      if (FS.extname(path) !== '.tao' || !await FS.isFile(path)) {
-        continue
-      }
-      if (await fileDeclaresProject(path)) {
-        return true
-      }
-    }
-    return false
-  }
-
-  /**
-   * fileDeclaresProject reads one file and asks its syntax alone. Whether a file declares a project
-   * needs no import resolved and no reference linked, so a syntax parse on the shared context is
-   * enough; a parser context of its own per question built a Langium container per question.
-   */
-  async function fileDeclaresProject(path: string): Promise<boolean> {
-    const source = await FS.readText(path)
-    return source.includes('project')
-      && Parser.parseSyntax(source).ast.statements.some(AST.isProjectDeclaration)
+    return await FS.isDirectory(FS.resolvePath('.tao', directory))
   }
 
   async function discoverProjectRoots(root: string, scanRoot: string, listing: Repo.Listing): Promise<string[]> {
     const roots = new Set<string>()
+    const sweep = createProjectRootSweep()
     for (
       const scannedPath of listing.files({
         excludeDirectoryNames: TaoFiles.discoveryExcludeDirectoryNames,
@@ -361,8 +702,12 @@ export namespace Packages {
       })
     ) {
       const path = FS.resolvePath(FS.relativePath(scanRoot, scannedPath), root)
-      if (await fileDeclaresProject(path)) {
-        roots.add(FS.dirname(path))
+      if (!isImportableTaoSourcePath(path)) {
+        continue
+      }
+      const discovered = await containingProjectRoot(FS.dirname(path), sweep)
+      if (discovered && FS.pathIsWithin(discovered, root)) {
+        roots.add(discovered)
       }
     }
     return [...roots].sort()
@@ -454,6 +799,25 @@ export namespace Packages {
     if (sourceProjectRoot === undefined) {
       return invalidResolution(importPath, 'project-boundary', { packageName })
     }
+    const required = context.requirementAliases.get(`${sourceProjectRoot}#${packageName}`)
+    if (required) {
+      const subpath = importPath === packageName ? '' : importPath.slice(packageName.length + 1)
+      const targetPath = subpath
+        ? FS.resolvePath(subpath, required.sourceModuleRoot)
+        : required.sourceModuleRoot
+      if (!FS.pathIsWithin(targetPath, required.sourceModuleRoot)) {
+        return invalidResolution(importPath, 'package-path-escape', { packageName })
+      }
+      return {
+        importPath,
+        relation: 'external-publication',
+        targetPath,
+        candidateMode: 'direct',
+        packageName,
+        physicalBoundaryRoot: required.sourceModuleRoot,
+        requirement: required.requirement,
+      }
+    }
     const packagePaths = (context.index.packages.get(packageName) ?? [])
       .filter(path => projectRootForPath(context.index, path) === sourceProjectRoot)
     if (packagePaths.length === 0) {
@@ -521,6 +885,15 @@ export namespace Packages {
           targetPath,
           candidateMode: 'direct',
           packageName: sourcePackage.name,
+          physicalBoundaryRoot: sourceProjectRoot,
+        }
+      }
+      if (sourcePackage && !targetPackage && FS.pathIsWithin(targetPath, sourceProjectRoot)) {
+        return {
+          importPath,
+          relation: 'same-project-package',
+          targetPath,
+          candidateMode: 'direct',
           physicalBoundaryRoot: sourceProjectRoot,
         }
       }
@@ -768,7 +1141,7 @@ export namespace Packages {
     // Scope construction must not resolve an alias initializer: doing so can re-enter the linker
     // while the imported file's constructor and patch scopes are still being built. Primitive-head
     // app declarations carry their app family syntactically; inferred aliases use ordinary Tao
-    // visibility (for example `workspace let App = app { ... }`).
+    // visibility (for example `project let App = app { ... }`).
     if (AST.isAppDeclaration(declaration)) {
       // An unmarked app keeps its historical directory reach, so sibling scenario and test sidecars
       // still find it without an import. An explicit marker is read literally -- `file app Name` has
@@ -802,6 +1175,10 @@ export namespace Packages {
 
   function isImportableTaoSourcePath(filePath: string): boolean {
     return FS.extname(filePath) === '.tao' && !isTestSourcePath(filePath)
+      && !filePath.split('/').some(segment =>
+        segment.startsWith('_gen_tao-') || segment === '.tao-ts'
+        || TaoFiles.discoveryExcludeDirectoryNames.some(excluded => excluded === segment)
+      )
   }
 
   function recursiveTargetMatches(resolution: Resolution, filePath: string): boolean {
@@ -879,10 +1256,13 @@ export namespace Packages {
       // as `same-directory` rather than `same-package`.
       return resolution.relation === 'same-package' || resolution.relation === 'same-directory'
     }
-    if (visibility === 'workspace') {
+    if (visibility === 'project') {
       return resolution.relation === 'same-directory'
         || resolution.relation === 'same-package'
         || resolution.relation === 'same-project-package'
+    }
+    if (resolution.relation === 'external-publication') {
+      return visibility === 'public'
     }
     return true
   }

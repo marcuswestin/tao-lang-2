@@ -1,8 +1,6 @@
-import { Packages } from '@ast-utils'
 import { type AST, Langium, Parser, type ParseResult } from '@parser'
 import { Assert, type Diagnostic, Diagnostics, FS } from '@shared'
 import Validator, { type ValidationResult } from '@validator'
-import { BridgeMetadata } from '../bridge-metadata'
 import Compiler, { type CompileOptions, type CompileResult } from '../compiler'
 import { createWorkspaceServices, type WorkspaceServices } from './langium-services'
 import { createProjectContext, type ProjectContext } from './workspace-utils'
@@ -176,18 +174,12 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
   /** compile compiles an entry Tao file and all reachable Tao documents. */
   async compile(entryFile: string, options: CompileOptions = {}): Promise<CompileResult> {
     const validationResult = await this.validate(entryFile)
-    if (options.target !== 'watchos' && !Diagnostics.hasError(validationResult.diagnostics)) {
-      await this.writeBridgeMetadata(validationResult.files)
-    }
     return Compiler.compileValidated(validationResult, this.compilerContext(), options)
   }
 
   /** compileFiles compiles the union of several entry graphs while keeping the first as the app entry. */
   async compileFiles(entryFiles: readonly string[], options: CompileOptions = {}): Promise<CompileResult> {
     const validationResult = await this.validateFiles(entryFiles)
-    if (options.target !== 'watchos' && !Diagnostics.hasError(validationResult.diagnostics)) {
-      await this.writeBridgeMetadata(validationResult.files)
-    }
     return Compiler.compileValidated(validationResult, this.compilerContext(), options)
   }
 
@@ -212,14 +204,6 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
 
   private compilerContext(): Compiler.Context {
     return Compiler.createContext(this.project.packagesContext, this.project.root)
-  }
-
-  private async writeBridgeMetadata(files: readonly ParseResult['entry'][]): Promise<void> {
-    if (Object.keys(this.project.services.sourceOverrides ?? {}).length > 0) {
-      return
-    }
-    const projectRoot = await Packages.containingProjectRoot(this.project.root) ?? this.project.root
-    await BridgeMetadata.write(files.filter(file => FS.pathIsWithin(file.path, projectRoot)))
   }
 
   private resolveEntryFile(entryFile: string): string {

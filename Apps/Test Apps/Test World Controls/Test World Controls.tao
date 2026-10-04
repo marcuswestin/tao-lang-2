@@ -4,14 +4,10 @@ use ICloud from @tao/data/providers/icloud
 use StackNav from @tao/nav
 use Col, FormButton, Text, TextInput from @tao/ui
 
-project {
-   id "test-world-controls"
-   name "Test World Controls"
-   version "0.1.0"
-}
-
 app TestWorldApp {
-   Name "Test World"
+   id "test-world-controls"
+   version "0.1.0"
+   name "Test World"
    Navigator StackNav {
       Initial Main
    }
@@ -19,7 +15,9 @@ app TestWorldApp {
 }
 
 app TestWorldICloudApp {
-   Name "Test World iCloud"
+   id "test-world-controls-test-world-icloud-app"
+   version "0.1.0"
+   name "Test World iCloud"
    Navigator StackNav {
       Initial Main
    }
@@ -27,7 +25,9 @@ app TestWorldICloudApp {
 }
 
 app TestWorldDevApp {
-   Name "Test World Dev"
+   id "test-world-controls-test-world-dev-app"
+   version "0.1.0"
+   name "Test World Dev"
    Navigator StackNav {
       Initial Main
    }

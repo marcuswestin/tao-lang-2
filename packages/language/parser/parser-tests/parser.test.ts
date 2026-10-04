@@ -9,7 +9,7 @@ Describe('parser: core language syntax', () => {
       file app Private { }
       folder app Sibling { }
       package app PackageApp { }
-      workspace app WorkspaceApp { }
+      project app WorkspaceApp { }
       public app PublicApp { }
     `)
 
@@ -18,7 +18,7 @@ Describe('parser: core language syntax', () => {
       'file',
       'folder',
       'package',
-      'workspace',
+      'project',
       'public',
     ])
   })

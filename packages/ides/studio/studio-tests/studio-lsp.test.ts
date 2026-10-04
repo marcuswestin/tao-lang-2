@@ -8,7 +8,7 @@ Test('Studio LSP transports initialize and formatting over raw WebSocket frames'
     {
       'Garden.tao': `
         use Text from @tao/ui
-        app Garden { view MainView }
+        app Garden { id "garden" version "1.0.0" name "Garden" view MainView }
         view MainView() { render Text("Hello") }
       `,
     },
@@ -56,7 +56,7 @@ Test('Studio LSP transports initialize and formatting over raw WebSocket frames'
           params: {
             textDocument: {
               languageId: 'tao',
-              text: 'app Garden { view MainView }\nview MainView() { }\n',
+              text: 'app Garden { id "garden" version "1.0.0" name "Garden" view MainView }\nview MainView() { }\n',
               uri,
               version: 0,
             },

@@ -181,9 +181,9 @@ export async function runClerkReview(
       source.replaceAll('pk_test_REPLACE_WITH_YOUR_KEY', publishableKey)
         .replaceAll('http://127.0.0.1:4738', gateway.url),
     )
-    await FS.writeText(
-      FS.resolvePath('Project.tao', projectRoot),
-      'project { id "tao-clerk-phone-review" name "Clerk phone review" }\n',
+    await FS.copyFile(
+      Repo.resolvePath('Apps/Test Apps/Auth Review/.tao/project.json'),
+      FS.resolvePath('.tao/project.json', projectRoot),
     )
     environment.write(`Clerk phone review gateway: ${gateway.url}`)
     environment.write(

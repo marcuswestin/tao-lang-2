@@ -4,7 +4,7 @@ import { TestCompiler as Compiler } from './test-compile'
 Describe('compiler: async actions', () => {
   Test('launches an isolated action block without awaiting the following statement', async () => {
     const compiled = await Compiler.compileCode(`
-      app AsyncApp { view Main }
+      app AsyncApp { id "com.tao.test.asyncapp" version "1.0.0" name "AsyncApp"  view Main }
       view Main() {
         state Ready = false
         action Launch() {

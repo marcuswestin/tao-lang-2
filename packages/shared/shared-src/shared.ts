@@ -19,6 +19,7 @@ import * as Platform from './Platform'
 import { ProcessListeners } from './ProcessListeners'
 import { ProcessTree } from './ProcessTree'
 import { ProjectDevSession } from './ProjectDevSession'
+import * as ProjectIdentity from './ProjectIdentity'
 import * as Repo from './Repo'
 import * as SecretsFile from './SecretsFile'
 import { TaoFiles } from './TaoFiles'
@@ -54,6 +55,7 @@ export {
   ProcessListeners,
   ProcessTree,
   ProjectDevSession,
+  ProjectIdentity,
   Repo,
   SecretsFile,
   Switch,
