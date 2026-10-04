@@ -31,10 +31,13 @@ retain that marker after the harness has given the process host access.
 Pause and ask the Developer for the exact needed intervention; do not retry with alternate commands or skip
 the host gates. Unlocked, it then settles what might need an author: this is a clean `feat/*` or
 `dev/*` branch checked out only here, no worktree has `main`, the archive ref is free, and
-`.artifacts/merge/<branch>.msg` exists and validates. On the first call it drafts a missing message
-and refuses, having taken no lock; read and edit the draft, then rerun `./agent unsandboxed land`. A small
-review record ties that edit to this HEAD. A new commit makes the record stale and requires review
-again; an already-written message for an older HEAD is handled the same way. Do not run `finalize`
+`.artifacts/merge/<branch>.msg` exists and validates. A message saved after the branch's newest
+commit of its own is reviewed for this HEAD, so write it once the last commit is made and the first
+call proceeds. Otherwise the first call drafts a missing message and refuses, having taken no lock;
+read and edit the draft, then rerun `./agent unsandboxed land`. A small review record ties that edit
+to this HEAD. Merges of `main` never make a confirmed message stale — including the merge commit that
+resolves a landing's conflicted integration — but a new commit of the branch's own does: refresh the
+message after it, and the save after that commit confirms it. Do not run `finalize`
 merely to prepare this authorized landing: it could integrate and
 verify outside the lock, then lose that proof to another landing.
 
@@ -58,7 +61,9 @@ about to commit.` A red barrier costs ~30s and releases the lock immediately.
 
 **A conflict while integrating `main` ends the lock and hands the worktree back**, durable claim
 included. Resolve it here, unlocked, with the machine free for everyone else; commit the merge with
-`git commit --no-edit`; run `./agent unsandboxed land` again. It re-integrates whatever `main` has become by then.
+`git commit --no-edit`; run `./agent unsandboxed land` again, without touching the merge message —
+that merge brought only `main`, so the message stays confirmed. It re-integrates whatever `main` has
+become by then.
 
 It touches no checkout but the invoking one: it builds the squash commit with `git commit-tree` from
 the verified feature tree and moves `refs/heads/main` with `git update-ref` and an expected old

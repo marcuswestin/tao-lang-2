@@ -355,8 +355,7 @@ function dependencyInstallationCheck(facts: DoctorFacts): DoctorCheck {
     return {
       detail: `the installed dependency graph is unhealthy or differs from bun.lock: ${facts.dependencyHealthError}`,
       name: 'dependencies',
-      remediation:
-        "Repair with: ./agent setup; if a protected package path is denied, start 'just session-unsandboxed' and run './agent setup' there.",
+      remediation: 'Repair with: ./agent setup; if a protected package path is denied, run ./agent unsandboxed setup.',
       status: 'fail',
     }
   }

@@ -1,0 +1,12 @@
+use LibraryApp from ./Main
+
+// 1. First executable journey; transition/failure scenarios join each slice.
+test "Syntax2 Library" {
+   test "renders the header and an available empty collection" {
+      run LibraryApp
+      expect text "Ada Lovelace"
+      expect text "No books."
+      press "Group"
+      expect text "No books."
+   }
+}

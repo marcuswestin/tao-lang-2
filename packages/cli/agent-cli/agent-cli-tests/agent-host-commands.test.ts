@@ -13,6 +13,7 @@ import { HOST_COMMAND_TARGETS, hostCommandTarget } from '../agent-cli-src/agent-
 const expected = [
   'notify-developer',
   'stop',
+  'setup',
   'land',
   'finalize',
   'merge-main',
@@ -90,6 +91,7 @@ const expected = [
   'processes list',
   'processes started',
   'start-branch',
+  'take-branch',
   'storage sync',
   'storage qa',
   'storage push',
@@ -162,6 +164,7 @@ Describe('agent host command permissions', () => {
       fixedArgs: ['simctl', 'launch'],
     })
     Expect(hostCommandTarget(['start-branch'])).toEqual({ command: './dev', fixedArgs: ['start-branch'] })
+    Expect(hostCommandTarget(['take-branch'])).toEqual({ command: './dev', fixedArgs: ['take-branch'] })
     Expect(hostCommandTarget(['setup-ios'])).toEqual({ command: './dev', fixedArgs: ['setup-ios'] })
     Expect(hostCommandTarget(['setup-visionos'])).toEqual({ command: './dev', fixedArgs: ['setup-visionos'] })
     Expect(hostCommandTarget(['setup-watchos'])).toEqual({ command: './dev', fixedArgs: ['setup-watchos'] })
