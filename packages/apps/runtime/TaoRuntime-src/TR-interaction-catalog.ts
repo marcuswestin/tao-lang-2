@@ -374,15 +374,15 @@ export class CommandCatalog {
     if (entitySlot && target?.live?.runtimeValue) {
       command = command.with({ [entitySlot.name]: target.live.runtimeValue })
     }
-    const snapshot = command.read()
-    const key = snapshot.key ?? entry.static.key
+    const snapshot = directlyReadable(command, entry.slots) ? command.read() : undefined
+    const key = snapshot?.key ?? entry.static.key
     return {
-      enabled: snapshot.enabled,
+      enabled: snapshot?.enabled ?? true,
       command,
       identity: entry.identity,
       ...(key === undefined ? {} : { key }),
-      label: snapshot.label || staticLabel(entry),
-      invoke: snapshot.invoke,
+      label: snapshot?.label || staticLabel(entry),
+      invoke: snapshot?.invoke ?? (() => undefined),
       slots: entry.slots,
       source,
     }
