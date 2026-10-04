@@ -919,7 +919,9 @@ Describe('agent worktree profile bootstrap', () => {
     const fullVerify = await justCommands('verify-full')
     const sandbox = await justCommands('verify-full-sandbox')
 
-    Expect(verify).toContain('--skipped "studio-smoke=slow lane; run ./agent studio-smoke or ./agent verify-full"')
+    Expect(verify).toContain(
+      '--skipped "studio-smoke=slow lane; run ./agent unsandboxed studio-smoke or ./agent unsandboxed verify-full"',
+    )
     for (const commands of [verify, fullVerify, sandbox]) {
       Expect(commands).not.toContain('_tao-check=')
       Expect(commands).not.toContain('_dprint-check=')

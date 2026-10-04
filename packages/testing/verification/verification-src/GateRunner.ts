@@ -205,7 +205,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   const runnableGates = options.gates.filter(name => !skipsUnsandboxed(name) && !skipsMacOS(name))
   const hostSkips = options.gates.flatMap(name =>
     skipsUnsandboxed(name)
-      ? [`${name}=requires unsandboxed host capabilities; run ./agent verify-full outside the sandbox`]
+      ? [`${name}=requires unsandboxed host capabilities; run ./agent unsandboxed verify-full`]
       : skipsMacOS(name)
       ? [`${name}=requires macOS; not run on ${hostPlatform}`]
       : []

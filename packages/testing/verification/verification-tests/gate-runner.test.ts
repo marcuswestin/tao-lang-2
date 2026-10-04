@@ -379,7 +379,7 @@ Describe('repository gate runner', () => {
     Expect(summary.gates.filter(gate => gate.status === 'skipped').map(gate => gate.name)).toEqual(hostOnly)
     Expect(
       summary.gates.filter(gate => gate.status === 'skipped').every(gate =>
-        gate.reason?.includes('requires unsandboxed host capabilities')
+        gate.reason === 'requires unsandboxed host capabilities; run ./agent unsandboxed verify-full'
       ),
     ).toBe(true)
   })

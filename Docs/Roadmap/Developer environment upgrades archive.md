@@ -85,6 +85,7 @@ hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 - [DEVENV-DOCTOR-TEST-OBSERVES-CONCURRENT-ARTIFACT-CREATION — Doctor test observes concurrent artifact creation](<Developer environment upgrades/Archive/DEVENV-DOCTOR-TEST-OBSERVES-CONCURRENT-ARTIFACT-CREATION.md>) — Resolved
 - [DEVENV-EMULATOR-EXIT-LOG-CAN-REPORT-PRIOR-LAUNCH — Emulator exit can report a prior launch's failure](<Developer environment upgrades/Archive/DEVENV-EMULATOR-EXIT-LOG-CAN-REPORT-PRIOR-LAUNCH.md>) — Resolved
 - [DEVENV-FIXED-SHORT-TIMEOUTS-LOSE-TO-CONTENTION — A fixed short `timeoutMs` around real work loses to contention](<Developer environment upgrades/Archive/DEVENV-FIXED-SHORT-TIMEOUTS-LOSE-TO-CONTENTION.md>) — Resolved
+- [DEVENV-FULL-HOST-VERIFICATION-LACKS-A-NAMED-OPERATION — Full host verification lacks a named operation](<Developer environment upgrades/Archive/DEVENV-FULL-HOST-VERIFICATION-LACKS-A-NAMED-OPERATION.md>) — Resolved
 - [DEVENV-FULL-TEST-LEDGER-USES-MONOTONIC-TIME — Full-test ledger uses monotonic time](<Developer environment upgrades/Archive/DEVENV-FULL-TEST-LEDGER-USES-MONOTONIC-TIME.md>) — Resolved
 - [DEVENV-GATE-SCRATCH-CLEANUP-DENIED-IN-MANAGED-WORKTREE — Gate scratch cleanup denied in managed worktree](<Developer environment upgrades/Archive/DEVENV-GATE-SCRATCH-CLEANUP-DENIED-IN-MANAGED-WORKTREE.md>) — Resolved
 - [DEVENV-GUEST-AGENT-AUDIT-PRIVACY — Guest agent audit privacy](<Developer environment upgrades/Archive/DEVENV-GUEST-AGENT-AUDIT-PRIVACY.md>) — Resolved

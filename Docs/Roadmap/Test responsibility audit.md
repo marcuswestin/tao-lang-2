@@ -569,9 +569,9 @@ The complete run's core nodes used 448ms parser, 747ms validator, and 353ms form
 combined process time under load); sandbox core nodes used 4.184s combined. These successful runs
 avoided no admissions, whereas the controlled failure fixture prevented its app admission.
 
-Full native host acceptance remains outstanding: the listed host operations cover browser smoke
-files, but omit standalone `verify-full`, native smoke, and native canary. This observed command gap
-is recorded in the developer-environment ledger; permission reach is unchanged.
+At this stage, full native host acceptance was outstanding: the listed host operations covered
+browser smoke files but omitted `verify-full`, native smoke, and native canary. The follow-up below
+records the later host acceptance and approved command registration.
 
 All seven reachable host browser files passed (12 tests): launch and ownership cleanup, real-app
 compile/edit/undo and live Metro refresh, simulated-user edits, keyboard navigation, dialog teardown,
@@ -610,4 +610,18 @@ prerequisite, the TUI may briefly say its dependent is waiting for local capacit
 still waits for classification and cleanup; execution and evidence are unaffected.
 
 Recommend a separate [recurring repository pass](<Recurring repository pass.md>) for unrelated
-cross-cutting concerns; this pass changes neither dependency pins nor permission reach nor model routing.
+cross-cutting concerns; the audit does not change dependency pins or model routing.
+
+### Approved host verification follow-up
+
+On 2026-10-03, complete host verification passed after integrating current main, including the
+browser, native smoke/canary, and bundle lanes. Its report is
+`.artifacts/logs/verify-full/2026-10-03T22-02-59-095Z-1841-cb5b3000/summary.json`.
+An earlier native canary failed its preview iframe readiness deadline while Metro was still
+bundling under heavy load; the remaining native probes and cleanup passed, and subsequent full
+runs passed unchanged. These parallel lane timings establish no performance comparison.
+
+On 2026-10-04, the Developer authorized `./agent unsandboxed verify-full` as a named host operation.
+The canonical permission list, generated harness rules, command help, and host-skip recovery text
+now expose that operation. Its existing scheduling, leases, cleanup, and evidence rules remain in
+force. Standalone native smoke and canary operations remain outside the named list.
