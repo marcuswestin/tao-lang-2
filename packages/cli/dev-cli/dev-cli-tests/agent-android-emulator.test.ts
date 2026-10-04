@@ -477,12 +477,15 @@ Test('leases stay fenced until the authoritative child close completes, even aft
 
 Test('owned emulator shutdown escalates through TERM and KILL and joins concurrent release', async () => {
   const f = fixture()
+  // budget-ok: this case proves escalation and ownership release, not scheduler-dependent close delivery.
+  f.operations.shutdownTimeoutMs = 1_000
   const reservation = await reserveAndroidEmulator(f.operations)
   f.setShutdown({ graceful: false, terminate: false })
   await Promise.all([reservation.release(), reservation.release()])
   Expect(f.stopped).toEqual([reservation.serial])
   Expect(f.signals).toEqual(['SIGTERM', 'SIGKILL'])
   Expect([...f.held]).toEqual([])
+  Expect(f.retained).toEqual([])
 })
 
 Test('failed startup and boot timeout use the same bounded shutdown and release only after close', async () => {

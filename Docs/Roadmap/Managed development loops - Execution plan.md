@@ -23,6 +23,16 @@ source-test fixtures. Named wrapper entry3, strict target-fault fixtures26, reta
 and synthetic native port leases6 now pass after fixture-only repairs; negative ownership and
 visibility guards remain. Repeat full verification before claiming readiness.
 
+The second readiness run stopped on an unused fixture import; removing it restores integrated
+typecheck (`17-15-42-025Z-52586`). That run also exposed a scheduler-sensitive source fixture:
+the Android TERM/KILL case observed authoritative close through a 10ms budget and correctly retained
+its fences when the deadline expired under contention. Its test-local budget is now 1000ms, with
+the same exact ADB/signals/concurrent-release assertions plus an explicit no-retention assertion.
+The corrected emulator suite passes34 (`17-18-02-071Z-66761-8630f000`); production cleanup policy
+is unchanged. The isolated complete HNReader browser retry passes3/0, including cleanup
+(`17-17-10-034Z-61246`). Full verification must cover the final committed tree before readiness
+is claimed. Landing and special acceptance remain held.
+
 The Developer requested a pause at a good stopping point to preserve effort and tokens for other
 work, and explicitly deferred all remaining managed-loop and isolated native acceptance until
 post-MVP. The subsequent instruction authorizes committing the completed implementation in chunks

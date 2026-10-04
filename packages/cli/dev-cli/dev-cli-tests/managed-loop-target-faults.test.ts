@@ -1,6 +1,6 @@
 import { MachineResources } from '@host-control'
 import { CLI, Errors, FS, Platform, ProcessTree, Repo, type TrackedProcess } from '@shared'
-import { Deferred, Expect, mkTestDir, Test } from '@shared/test'
+import { Deferred, Expect, Test } from '@shared/test'
 import {
   type ManagedLoopTargetFaultCase,
   type ManagedLoopTargetFaultSourceOperations,
