@@ -103,6 +103,29 @@ Describe('checked quantity values', () => {
     Expect(quantityPayloadJSValue(undefined)).toBeUndefined()
   })
 
+  Test('exposes canonical native numbers through value copies, readonly views, aliases and cells', () => {
+    for (const canonical of [120, 0, -0]) {
+      const value = Duration.inUnit(Duration.fromJSValue(canonical), 'Minutes')
+      const copied = TR.Copy(value)
+      const readonly = TR.Readonly<typeof value.jsValue>(copied)
+      const cell = TR.Cell(value)
+      const alias = TR.Alias(() => cell.evaluate())
+      // This assignment also proves the public conditional native output type is number.
+      const native: number = readonly.getJSValue()
+      Expect(Object.is(native, canonical)).toBe(true)
+      Expect(Object.is(value.getJSValue(), canonical)).toBe(true)
+      Expect(Object.is(copied.getJSValue(), canonical)).toBe(true)
+      Expect(Object.is(cell.getJSValue(), canonical)).toBe(true)
+      Expect(Object.is(alias.getJSValue(), canonical)).toBe(true)
+      Expect(isQuantityPayload(readonly.jsValue)).toBe(true)
+      Expect(readonly.jsValue).toBe(value.jsValue)
+      Expect(Duration.read(readonly).unit).toBe('Minutes')
+      cell.set(Duration.fromUnit(3, 'Hours'))
+      Expect(alias.getJSValue()).toBe(10800)
+      Expect(Duration.read(alias).unit).toBe('Hours')
+    }
+  })
+
   Test('keeps Ratio signed and unbounded while an authored Duration contract selects its result view', () => {
     Expect(Ratio.read(Ratio.fromUnit(150, 'Percent'))).toEqual({ canonical: 1.5, unit: 'Percent' })
     Expect(Ratio.read(Ratio.fromUnit(-250, 'Permille'))).toEqual({ canonical: -0.25, unit: 'Permille' })
