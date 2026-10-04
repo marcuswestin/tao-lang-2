@@ -39,6 +39,7 @@ export const JUST_COMMANDS = [
   'merge-main',
   'model-audit',
   'native-module-check',
+  'notify-developer',
   // Pushes the branch, opens or reuses its pull request, and stays attached to stream the checks a
   // newly opened one starts —
   // the one command both the Developer and an agent run to get GitHub's own CI signal without a
@@ -54,6 +55,7 @@ export const JUST_COMMANDS = [
   'setup-clerk',
   'shell-setup',
   'simplify-audit',
+  'stop',
   // The browser and native UI lanes are final validation like any other gate, and AGENTS.md
   // requires them before a branch that touches Studio is called ready. They stayed reachable only
   // as `just` recipes, which left the one instruction an agent follows split across two spellings.
