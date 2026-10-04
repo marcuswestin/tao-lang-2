@@ -114,6 +114,31 @@ Describe('run history', () => {
     })
   })
 
+  Test("a test runner's failed-test line beats an assertion diff that quotes the word error", () => {
+    const output = [
+      'error: expect(received).toEqual(expected)',
+      '+     "severity": "error",',
+      '(fail) Tao app TypeScript modules > typechecks in-repo app sidecars [12731.39ms]',
+    ].join('\n')
+
+    const record = RunHistory.runRecord({
+      elapsedMs: 1,
+      firstFailure: { name: 'cli/tao-cli#3', output },
+      gates: [{ name: 'cli/tao-cli#3', status: 'failed' }],
+      interrupted: false,
+      lane: 'verify-changed',
+      landing: false,
+      logRoot: '/a',
+      repositoryRoot: '/a',
+      startedAtMs: 0,
+      status: 'failed',
+    })
+
+    Expect(record.failure?.line).toBe(
+      '(fail) Tao app TypeScript modules > typechecks in-repo app sidecars [12731.39ms]',
+    )
+  })
+
   Test('a landing is recorded with its outcome', async () => {
     const registryRoot = await mkTestDir('tao-run-history-')
     await RunHistory.recordLanding({

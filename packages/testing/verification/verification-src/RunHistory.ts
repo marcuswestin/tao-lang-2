@@ -220,10 +220,18 @@ function unknownOverlap(loadAverageAtStart: number): OverlapReport {
   return { known: false, lanes: [], loadAverageAtStart: Math.round(loadAverageAtStart * 10) / 10, solo: false }
 }
 
+/**
+ * The lines that say why a gate failed, most specific first: a test runner's failed-test line, a
+ * compiler diagnostic, then any line that opens with an error. A bare mention of "error" is not on
+ * the list, because an assertion diff quotes it on nearly every line.
+ */
+const FAILURE_LINE_PATTERNS: readonly RegExp[] = [/^\(fail\)/, /error TS\d+/, /^error\b/i, /^(FAIL|✗)\s/]
+
 /** firstLine picks the line of a failure's output a reader would act on, trimmed to one line. */
 function firstLine(output: string): string {
   const lines = output.split('\n').map(line => line.trim()).filter(line => line.length > 0)
-  const line = lines.find(candidate => /error|fail|expected|refus/i.test(candidate)) ?? lines[0] ?? ''
+  const line = FAILURE_LINE_PATTERNS.map(pattern => lines.find(candidate => pattern.test(candidate)))
+    .find(candidate => candidate !== undefined) ?? lines[0] ?? ''
   return line.length > MAX_FAILURE_LINE ? `${line.slice(0, MAX_FAILURE_LINE - 1)}…` : line
 }
 
