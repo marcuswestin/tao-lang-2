@@ -24,6 +24,7 @@ if (helperFailure === undefined) {
 
 function fixture(options: {
   unreadable?: boolean
+  zombie?: boolean
   returnedPid?: number
   group?: number
   probe?: 'live' | 'EPERM' | 'EIO' | 'ESRCH' | 'uncoded' | 'undefined'
@@ -37,6 +38,7 @@ function fixture(options: {
     options.probe === 'uncoded' ? {} : { code: options.probe, errno: options.probeErrno },
   )
   let closes = 0
+  let expectedArg = 0
   const symbols = {
     proc_listpids: (_kind: number, group: number, pids: Int32Array) => {
       Expect(group).toBe(700)
@@ -56,10 +58,11 @@ function fixture(options: {
       children[0] = 701
       return 1
     },
-    proc_pidinfo: (pid: number, kind: number, _arg: number, bytes: Uint8Array) => {
+    proc_pidinfo: (pid: number, kind: number, arg: number, bytes: Uint8Array) => {
       Expect(pid).toBe(701)
       Expect(kind).toBe(3)
-      if (options.unreadable === true) {
+      Expect(arg).toBe(expectedArg)
+      if (options.unreadable === true || options.zombie === true && arg === 0) {
         return 0
       }
       const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
@@ -71,8 +74,9 @@ function fixture(options: {
     },
   }
   return {
-    inspect: (kind: Kind, fail = Errors.throwHostEnvironment) =>
-      execute(
+    inspect: (kind: Kind, fail = Errors.throwHostEnvironment) => {
+      expectedArg = kind === 'identities' ? 0 : 1
+      return execute(
         name => {
           Expect(name).toBe('bun:ffi')
           return {
@@ -93,7 +97,8 @@ function fixture(options: {
             throw failure
           },
         },
-      ),
+      )
+    },
     probes,
     failure,
     closes: () => closes,
@@ -101,6 +106,13 @@ function fixture(options: {
 }
 
 for (const kind of ['group', 'descendants'] as const) {
+  Test(`Darwin ${kind} retains a zombie's exact kernel identity until reaping`, () => {
+    const host = fixture({ zombie: true, probe: 'live' })
+    Expect(host.inspect(kind)).toEqual([{ pid: 701, group: 700, startedAt: '123:456', command: '' }])
+    Expect(host.probes).toEqual([])
+    Expect(host.closes()).toBe(1)
+  })
+
   Test(`Darwin ${kind} preserves an enumerated kernel identity without probing`, () => {
     const host = fixture()
     const result = host.inspect(kind)
@@ -148,6 +160,13 @@ for (const kind of ['group', 'descendants'] as const) {
 Test('Darwin group inspection refuses a member that moved to another group during inspection', () => {
   const host = fixture({ group: 800 })
   Expect(() => host.inspect('group')).toThrow('changed process group during inspection')
+  Expect(host.probes).toEqual([])
+  Expect(host.closes()).toBe(1)
+})
+
+Test('Darwin direct identity queries retain process-exit semantics for zombies', () => {
+  const host = fixture({ zombie: true, probe: 'live' })
+  Expect(host.inspect('identities')).toEqual([])
   Expect(host.probes).toEqual([])
   Expect(host.closes()).toBe(1)
 })

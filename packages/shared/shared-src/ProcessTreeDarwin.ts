@@ -50,7 +50,8 @@ try {
   };
   const identity = (pid, unreadable) => {
     const bytes = new Uint8Array(136);
-    const returnedBytes = library.symbols.proc_pidinfo(pid, 3, 0, ptr(bytes), bytes.byteLength);
+    // Enumerations include zombies; direct queries retain their process-exit semantics.
+    const returnedBytes = library.symbols.proc_pidinfo(pid, 3, unreadable ? 1 : 0, ptr(bytes), bytes.byteLength);
     const details = { routine: 'proc_pidinfo', pid, returnedBytes, expectedBytes: bytes.byteLength };
     if (returnedBytes < bytes.byteLength) {
       return unreadable && unreadable(pid, { ...details, failureKind: 'identity-unreadable' });
