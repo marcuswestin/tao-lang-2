@@ -8,10 +8,6 @@ import { createWorkspaceLspServices } from '../../compiler-src/workspace/langium
 const tsFence = '```ts'
 const fence = '```'
 
-// These tests live apart from `workspace.test.ts` on purpose. The compiler suite runs under Bun's
-// `--concurrent`, which starts every test in a file at once on one thread, and that file holds a test
-// with a two-second wall-clock budget. Four more tests sharing its window were enough to push it past
-// the budget on a loaded machine.
 Describe('what a workspace reference may resolve to', () => {
   // These three references once fell through to Langium's default scope, which offers every
   // top-level declaration of every loaded document. Each test loads the declaration it must not find,

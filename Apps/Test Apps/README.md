@@ -236,7 +236,7 @@ collection transforms beyond the shipped list members and iteration.
 
 Exercise bracketed layout clauses and the default app-shell baseline.
 
-**Belongs here:** layout clauses on render sites, including `content`, `claim`, `gap`, `pad`, `margin`, numeric, `fill`, and maximum `width`, numeric and `fill` `height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and `centered`; a declaration's header clause as its public layout default, a caller replacing it (`pad 0`) or clearing it (`pad none`), and a root's private clause staying put; adaptive `Panes` and viewport-owning `ScrollView`; app-root content rendered inside the safe default shell; text asserted by the layout smoke path.
+**Belongs here:** layout clauses on render sites, including `content`, `claim`, `gap`, `pad`, `margin`, numeric, `fill`, and maximum `width`, numeric and `fill` `height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and `centered`; a declaration's header clause as its public layout default, a caller replacing it (`pad 0`) or clearing it (`pad none`), and a root's private clause staying put; adaptive `Panes` and viewport-owning `ScrollView`; app-root content rendered inside the safe default shell. Mounted app-shell tests compile this entry and assert its rendered layout and shell properties.
 
 **Does not belong here:** visual style clauses; `@@content`, named render slots, or render elision; state, actions, forms, data, navigation, or richer scrolling behavior.
 
@@ -309,9 +309,9 @@ Each surface keeps generated bindings in its own `Generated/` directory; authore
 it. The entry's README owns launch and regeneration commands and the extension pattern.
 
 **Belongs here:** device controls for all generated Haptics enum values, React Native vibration and
-cancellation, and Clipboard text/HTML, image, URL, and subscription operations. Navigation journeys
-check that each screen is reachable and can be left without starting native effects. A maintained-app
-runtime suite exercises Clipboard input, controls, previews and listener cleanup, all Haptics controls,
+cancellation, and Clipboard text/HTML, image, URL, and subscription operations. The maintained-app
+runtime suite checks that each surface opens without starting native effects, then exercises Clipboard
+input, controls, previews and listener cleanup, representative Haptics controls,
 and vibration/cancellation with native substitutes. An explicit `.host-tests/Clipboard.test.tao` journey uses
 the real module in an isolated iOS Simulator build for formats, availability, and listener controls.
 Package tests also cover generated contracts. Cross-app paste permissions remain pending; physical

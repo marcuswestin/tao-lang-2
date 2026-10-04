@@ -5,21 +5,6 @@ import {
   resolveStudioProjectRoot,
 } from '../studio-src/StudioProjectRoot'
 
-Test('Studio project root selection keeps a folder with a .tao marker', async () => {
-  await withProjectFolders({
-    '.tao/.gitignore': '*',
-    'Sources/View.tao': 'view Main() { }',
-  }, async root => {
-    const resolution = await resolveStudioProjectRoot(root)
-
-    Expect(resolution).toEqual({
-      inputRoot: await FS.realPath(root),
-      projectRoot: await FS.realPath(root),
-      selectedDescendant: false,
-    })
-  })
-})
-
 Test('Studio project root selection resolves a family folder to its sole nested project', async () => {
   await withProjectFolders({
     '1 - Current/.tao/.gitignore': '*',

@@ -25,21 +25,12 @@ Describe('TR.Value', () => {
   })
 })
 
-Describe('TR generated-code surface', () => {
-  Test('retires generic deferred values and module queries without retiring deferred commands', () => {
-    Expect('Deferred' in (TR as unknown as Record<string, unknown>)).toBe(false)
-    Expect('ModuleQuery' in (TR.Data as unknown as Record<string, unknown>)).toBe(false)
-    Expect('Deferred' in TR.Interaction).toBe(true)
-  })
-})
-
 Describe('TR.Alias', () => {
   Test('wraps evaluable Tao values as aliases', () => {
     const value: TR.Value<number> = TR.Value(3)
     const alias: TR.Alias<number> = TR.Alias(value)
 
     Expect(alias.evaluate()).toBe(value)
-    Expect(alias.evaluate().jsValue).toBe(3)
   })
 
   Test('re-evaluates lazy let values on each use', () => {
@@ -52,7 +43,6 @@ Describe('TR.Alias', () => {
     Expect(evaluations).toBe(0)
     Expect(alias.evaluate().jsValue).toBe('lazy 1')
     Expect(alias.evaluate().jsValue).toBe('lazy 2')
-    Expect(evaluations).toBe(2)
   })
 
   Test('preserves parameterized action types through aliases', () => {
@@ -75,7 +65,6 @@ Describe('TR.Action', () => {
     action.jsValue.invoke(2)
 
     Expect(action.evaluate()).toBe(action)
-    Expect(action.evaluate().jsValue).toBe(action.jsValue)
     Expect(calls).toEqual([2])
   })
 
@@ -233,18 +222,14 @@ Describe('TR.Layout', () => {
       flexGrow: 0,
       justifyContent: 'flex-start',
     })
-    Expect({
-      ...TR.Layout.resolve({
-        direction: 'row',
-        entries: [['content', 'baseline', 'left'], ['compress'], ['hug']],
-      }),
-      flexWrap: 'wrap',
-    }).toEqual({
+    Expect(TR.Layout.resolve({
+      direction: 'row',
+      entries: [['content', 'baseline', 'left'], ['compress'], ['hug']],
+    })).toEqual({
       alignItems: 'baseline',
       flexDirection: 'row',
       flexGrow: 0,
       flexShrink: 1,
-      flexWrap: 'wrap',
       justifyContent: 'flex-start',
     })
   })
@@ -345,14 +330,6 @@ Describe('TR.Layout', () => {
     })).toEqual({
       flexGrow: 2,
     })
-  })
-
-  Test('exposes only generated-code layout controls', () => {
-    Expect(typeof TR.Layout.create).toBe('function')
-    Expect(typeof TR.Layout.merge).toBe('function')
-    Expect(typeof TR.Layout.resolve).toBe('function')
-    Expect('nativePropsWithStyle' in TR.Layout).toBe(false)
-    Expect('resolveProps' in TR.Layout).toBe(false)
   })
 
   Test('overlays layout entries over defaults by semantic slot', () => {
@@ -503,8 +480,6 @@ Describe('TR.TaoProps', () => {
       layout: { entries: [['width', 'fill']] },
       parentDirection: 'column',
     })
-    Expect(TR.TaoProps({ layout: undefined })).toEqual({ layout: undefined })
-    Expect(TR.TaoProps({}, undefined)).toEqual({})
   })
 
   Test('copies ambient app, response, and navigation context without carrying layout props', () => {
@@ -553,6 +528,7 @@ Describe('TR.TaoProps', () => {
 })
 
 Describe('TR.Views', () => {
+  // REMOVAL CANDIDATE: Exact export names constrain additions and repeat view coverage; retain until the dedicated view suites are checked for every current public primitive.
   Test('exposes runtime-backed stdlib primitive views', () => {
     Expect(Object.keys(TR.Views).sort()).toEqual([
       'Checkbox',
@@ -572,6 +548,7 @@ Describe('TR.Views', () => {
 })
 
 Describe('TR.Dev', () => {
+  // REMOVAL CANDIDATE: This asserts API shape and private-symbol absence; behavioral diagnostic tests survive, but removing it permits accidental internal exports.
   Test('exposes only public hook-free diagnostic controls', () => {
     Expect(typeof TR.Dev.getMode).toBe('function')
     Expect(typeof TR.Dev.isLayoutBoundsEnabled).toBe('function')

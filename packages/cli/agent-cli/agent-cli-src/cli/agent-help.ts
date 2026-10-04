@@ -98,6 +98,7 @@ Examples:
   ./agent test-retry
   ./agent verify-changed
   ./agent verify
+  ./agent unsandboxed verify-full
   ./agent verify-full-sandbox
   ./agent unsandboxed prepare-release studio --repo OWNER/REPO --version 0.0.1
   ./agent unsandboxed prepare-release ide-extension
@@ -148,12 +149,18 @@ test runs the suites the branch diff reaches, which can be green while a suite t
 never ran; a name pattern filters those same suites rather than widening back out to all of them.
 test-all runs every suite, and takes an optional name pattern of its own.
 
+Broad checks, verification, bare test/test-changed, and unfiltered test-all stop admitting new work
+after a definite failure. Running work drains and cleans up before the lane releases its leases.
+Explicit file/directory/name targets and test-retry collect failures in that scope; a repository-root
+target remains broad. Individual checkers retain their diagnostics. Filtered or aborted runs are
+never complete coverage: diagnose the failed scope, fix it, then repeat broad verification.
+
 Each verification scope is its own command rather than a flag: verify-changed runs the gates plus
 the test suites the branch diff reaches (iterate with it); verify runs every suite (the gate before
-a reviewed commit or a merge); verify-full adds the browser, native, and bundle lanes, two of which
-take a machine-wide lease on the window server for as long as they run; verify-full-sandbox runs
-that same membership in a managed shell without
-claiming its host-only lanes passed. A lane whose tree is already recorded green prints that run's
+a reviewed commit or a merge); ./agent unsandboxed verify-full adds the browser, native, and bundle
+lanes, two of which take a machine-wide lease on the window server for as long as they run;
+verify-full-sandbox runs that same membership in a managed shell without claiming its host-only
+lanes passed. A lane whose tree is already recorded green prints that run's
 evidence and stops; --no-cache runs it anyway.
 
 Repository workflow commands capture the child's output rather than inheriting the terminal, write

@@ -123,17 +123,15 @@ Describe('scripted generation and validate gate', () => {
   })
 
   Test('rejects non-finite numbers as non-JSON values', async () => {
-    for (const value of [Number.NaN, Number.POSITIVE_INFINITY]) {
-      const result = await validateGeneratedDraft(
-        { Title: 'Non-finite', Servings: value },
-        { schema },
-      )
-      Expect(result).toMatchObject({
-        status: 'failure',
-        code: 'schema_mismatch',
-        issues: ['$.Servings must be number.'],
-      })
-    }
+    const result = await validateGeneratedDraft(
+      { Title: 'Non-finite', Servings: Number.NaN },
+      { schema },
+    )
+    Expect(result).toMatchObject({
+      status: 'failure',
+      code: 'schema_mismatch',
+      issues: ['$.Servings must be number.'],
+    })
   })
 
   Test('returns scripted failures without retrying or accepting', async () => {

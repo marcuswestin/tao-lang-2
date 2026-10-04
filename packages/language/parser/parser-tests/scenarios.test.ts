@@ -131,13 +131,13 @@ Describe('parser: fixtures and scenarios', () => {
     const result = await testParseCode(`
       view hover() { }
       view down() { }
-      view up() { }
     `)
 
     Expect(result.entry.ast.statements.filter(AST.isViewDeclaration).map(view => view.name))
-      .toEqual(['hover', 'down', 'up'])
+      .toEqual(['hover', 'down'])
   })
 
+  // REMOVAL CANDIDATE: Generic implicit renders are covered by core parser tests; this adds only the view-body position.
   Test('keeps ordinary identifier-headed view statements distinct from interaction words', async () => {
     const result = await testParseCode(`
       view Card(Title text) { }
@@ -225,11 +225,10 @@ Describe('parser: fixtures and scenarios', () => {
   })
 
   Test(
-    'does not invent clock, latency, fixture inheritance, or arbitrary state-capture syntax',
+    'rejects unsupported network-latency scenario syntax',
     rejectsParser(`
       scenarios "unsupported" {
         scenario "clock" {
-          clock "2026-08-30T09:00:00Z"
           network latency 350 ms
         }
       }

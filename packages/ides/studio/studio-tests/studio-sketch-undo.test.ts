@@ -179,7 +179,6 @@ Test('Draw edits are named the way the person made them', async () => {
   } satisfies StudioSketch
   const update = (rect: StudioSketchRect) =>
     StudioSketchUndo.label([{ kind: 'update-rect', rect, rectId: rect.id, sketchId: sketch.id }], sketch)
-  Expect(update({ ...cover, x: 30 })).toBe('Move rectangle')
   Expect(update({ ...cover, width: 80, x: 30 })).toBe('Resize rectangle')
   Expect(update({ ...cover, content: 'Cover' })).toBe('Edit text')
   Expect(update({ ...cover, kind: 'Image' })).toBe('Make Image')

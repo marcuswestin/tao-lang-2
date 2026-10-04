@@ -1,5 +1,5 @@
 import { CLI, Errors, FS, Repo, Time } from '@shared'
-import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
+import { Describe, Expect, mkTestDir, Test, until, withCapturedOutput } from '@shared/test'
 import {
   acceptedDiagnosticReasons,
   type ParserGenerateOutcome,
@@ -112,21 +112,6 @@ Describe('parser generate staleness stamp', () => {
       Expect(await FS.readText(sentinel)).toBe('must survive\n')
     } finally {
       await FS.remove(externalRoot)
-      await FS.remove(root)
-    }
-  })
-
-  Test('generates once and skips while the grammar and the generated files are unchanged', async () => {
-    const root = await repository()
-    const langium = generator()
-    try {
-      Expect(await runParserGenerate({ generate: langium.generate, repositoryRoot: root })).toBe(0)
-      Expect(await runParserGenerate({ generate: langium.generate, repositoryRoot: root })).toBe(0)
-      Expect(await runParserGenerate({ generate: langium.generate, repositoryRoot: root })).toBe(0)
-
-      Expect(langium.calls.length).toBe(1)
-      Expect(await FS.isFile(FS.resolvePath('.artifacts/parser-generate-stamp.json', root))).toBe(true)
-    } finally {
       await FS.remove(root)
     }
   })
@@ -246,11 +231,32 @@ Describe('parser generate staleness stamp', () => {
   Test('serializes independent generators and rechecks staleness after acquiring the lock', async () => {
     const root = await repository()
     const releasePath = FS.resolvePath('release-first', root)
+    const blockedPath = FS.resolvePath('blocked-second', root)
     const modulePath = Repo.resolvePath('packages/testing/verification/verification-src/ParserGenerate.ts')
     const sharedPath = Repo.resolvePath('packages/shared/shared-src/shared.ts')
     const worker = (id: string, hold: boolean) => `
-      import { Errors, FS, Platform, Time } from ${JSON.stringify(sharedPath)}
-      import { runParserGenerate } from ${JSON.stringify(modulePath)}
+      import * as shared from ${JSON.stringify(sharedPath)}
+      const { Errors, FS, Platform, Time } = shared
+      ${
+      hold ? '' : `
+      const { MockModule } = await import(${
+        JSON.stringify(Repo.resolvePath('packages/shared/shared-src/testing/Test-Bun.ts'))
+      })
+      MockModule('@shared', () => ({ ...shared, FS: { ...FS,
+        withFileMutationLock: (target, boundary, work, options) => FS.withFileMutationLock(target, boundary, work, {
+          ...options,
+          inspectProcessIdentity: async pid => {
+            if (pid !== Platform.runtimeProcess.pid) {
+              await FS.writeText(${JSON.stringify(blockedPath)}, '')
+            }
+            // The first worker stays alive until the parent releases this fixture.
+            return { evidence: 'unknown' }
+          },
+        }),
+      }}))
+      `
+    }
+      const { runParserGenerate } = await import(${JSON.stringify(modulePath)})
       const root = Platform.runtimeProcess.env['TAO_PARSER_GENERATE_ROOT']
       if (!root) Errors.throwUnexpected('Missing parser generation root.')
       const result = await runParserGenerate({
@@ -283,7 +289,16 @@ Describe('parser generate staleness stamp', () => {
         }),
       ).toBe(true)
       second = run('second', false)
-      await Time.sleep(100)
+      let secondCompleted = false
+      void second.then(() => {
+        secondCompleted = true
+      }, () => {
+        secondCompleted = true
+      })
+      await until(async () => await FS.exists(blockedPath) || secondCompleted, {
+        description: 'second generator waiting on the live owner',
+      })
+      Expect(await FS.exists(blockedPath)).toBe(true)
       Expect(await FS.exists(FS.resolvePath('entered-second', root))).toBe(false)
       await FS.writeText(releasePath, '')
       const results = await Promise.all([first, second])

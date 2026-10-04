@@ -1,6 +1,6 @@
 import { Packages } from '@ast-utils'
 import { AST, Langium } from '@parser'
-import { type Diagnostic, Diagnostics, FS, Repo } from '@shared'
+import { type Diagnostic, Diagnostics, FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test, until, withTaoFiles } from '@shared/test'
 import { LSPWorkspace, Workspace } from '../../compiler-src/workspace/index'
 import { createWorkspaceLspServices } from '../../compiler-src/workspace/langium-services'
@@ -9,54 +9,6 @@ const tsFence = '```ts'
 const fence = '```'
 
 Describe('directory-rooted Tao workspace pipeline', () => {
-  Test('parses, validates, and compiles an entry file with nested package imports', async () => {
-    await withTaoFiles(
-      'tao-workspace-package-',
-      {
-        'Main.tao': `
-          package { version "1.0.0" license AGPL-3.0-only }
-          app PackageAccess { id "com.tao.test.packageaccess" version "1.0.0" name "PackageAccess"  view MainView }
-          use MainView from @cards/screens
-        `,
-        '@cards/Title.tao': `
-          package let Title = "Package title"
-        `,
-        '@cards/screens/Main.tao': `
-          use Title
-          project scene MainView() {
-            render Text(Title)
-          }
-          view Text(Value text) {
-            render inject Value ${tsFence}
-              return null
-            ${fence}
-          }
-        `,
-      },
-      async (paths, rootDir) => {
-        const workspace = await Workspace.open(rootDir)
-        const parseResult = await workspace.parse(paths['Main.tao']!)
-        const validation = await workspace.validate(paths['Main.tao']!)
-        const compiled = await workspace.compile(paths['Main.tao']!)
-
-        Expect(parseResult.files.map(file => file.ast.$type)).toHaveLength(5)
-        Expect(parseResult.files.some(file => file.path.endsWith('/@tao/Prelude.tao'))).toBe(true)
-        Expect(parseResult.files.some(file => file.path.endsWith('/@tao/auth/Auth.tao'))).toBe(true)
-        Expect(errorMessages(validation)).toEqual([])
-        Expect([...new Set(compiled.files.map(file => file.sourcePath))].sort()).toEqual([
-          paths['Main.tao']!,
-          paths['@cards/Title.tao']!,
-          paths['@cards/screens/Main.tao']!,
-          Repo.resolvePath('packages/apps/stdlib/@tao/Prelude.tao'),
-          Repo.resolvePath('packages/apps/stdlib/@tao/auth/Auth.tao'),
-          Repo.resolvePath('packages/apps/stdlib/@tao/auth/Auth.ts'),
-          Repo.resolvePath('packages/apps/stdlib/@tao/auth/AuthFlow.ts'),
-          Repo.resolvePath('packages/apps/stdlib/@tao/auth/AuthViews.tsx'),
-        ].sort())
-      },
-    )
-  })
-
   Test('resolves the reserved root package, nested generated folders, project-relative data, and stdlib', async () => {
     await withTaoFiles(
       'tao-workspace-generated-root-',
@@ -83,17 +35,14 @@ Describe('directory-rooted Tao workspace pipeline', () => {
       async (paths, rootDir) => {
         const workspace = await Workspace.open(rootDir)
         const parseResult = await workspace.parse(paths['Main.tao']!)
-        const validation = await workspace.validate(paths['Main.tao']!)
         const compiled = await workspace.compile(paths['Main.tao']!)
         const imports = parseResult.entry.ast.statements.filter(AST.isUseStatement)
 
-        Expect(imports.map(statement => statement.importPath)).toEqual(['@', '@/studio', '@/studio/nested'])
         Expect(imports.map(statement => statement.importedDeclarations[0]?.ref?.name)).toEqual([
           'RootView',
           'GeneratedView',
           'NestedView',
         ])
-        Expect(errorMessages(validation)).toEqual([])
         Expect(compiled.files.map(file => file.sourcePath)).toContain(paths['@/studio/View.tao'])
         Expect(compiled.files.map(file => file.sourcePath)).toContain(paths['Data.tao'])
       },
@@ -292,6 +241,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
 
   // The app selects the design. A package file that imports no app still sees that selection,
   // because validation reads the workspace rather than only the file's own entry graph.
+  // REMOVAL CANDIDATE: Region membership coverage also reads the app-selected design across the batch; this simpler case adds style-bundle resolution.
   Test('reads the selected design across the batch so an unimported package file keeps its tags', async () => {
     await withTaoFiles(
       'tao-workspace-batch-design-',

@@ -262,7 +262,7 @@ view Main() { render inject \`\`\`ts return null \`\`\` }
       const project = await discoverShipProject(paths['App.tao']!)
       const reader = project.apps.find(app => app.name === 'Reader')!
 
-      // The Dev store is the second binding, and it still refuses to ship.
+      // The Dev binding still refuses to ship alongside the Apple store.
       Expect(reader.usesDevDatasource).toBe(true)
       // The Apple entitlement comes from the other binding.
       Expect(reader.icloud).toEqual({

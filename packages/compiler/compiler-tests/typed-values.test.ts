@@ -6,13 +6,12 @@ Describe('compiler: typed values', () => {
     const compiled = await Compiler.compileCode(promptTagsApp())
     const code = compiled.files[0]?.code ?? ''
 
-    Expect(compiled.appNames).toEqual(['TypedTags'])
     Expect(code).toContain('TR.Value("daily").jsValue')
     Expect(code).toContain('["PromptTags"]: _Scope.StarterTags.evaluate().jsValue')
     Expect(code.match(/TR\.Call\(_Scope\.Join, _Scope\.Tags\.evaluate\(\), TR\.Value\(", "\)\)/g)).toHaveLength(2)
   })
 
-  Test('wraps bridged results and omits absent item fields?', async () => {
+  Test('wraps bridged results and omits absent optional item fields', async () => {
     const compiled = await Compiler.compileCode(`
       type Profile is { Name text, Subtitle text? }
       function Join(Values list of text, Separator text) returns text {

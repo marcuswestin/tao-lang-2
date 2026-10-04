@@ -83,7 +83,6 @@ Describe('reactive writable values', () => {
     const nested = TR.Copy(TR.Value({ Details: { Status: Status['Published']!.evaluate().jsValue } }))
 
     Expect(TR.IsCase(direct, Status['Published']!).evaluate().jsValue).toBe(true)
-    Expect(TR.IsCase(TR.Member(nested, ['Details', 'Status']), Status['Published']!).evaluate().jsValue).toBe(true)
     Expect(nested.evaluate().jsValue.Details.Status).toBe(Status['Published']!.evaluate().jsValue)
   })
 

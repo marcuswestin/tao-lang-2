@@ -103,7 +103,7 @@ function groupsOf(manifest: StudioPreviewManifestV2): string[] {
 }
 
 Describe('Studio edit-to-preview synchronization', () => {
-  Test('one save compiles once and carries the new source into the published manifest', async () => {
+  Test('one save carries the new source into a newer published manifest', async () => {
     await withCompiledSession(async harness => {
       const before = harness.manifest()
       Expect(JSON.stringify(before.scenarios)).toContain(SENTINEL_BEFORE)
@@ -172,7 +172,6 @@ Describe('Studio scenario startup reconciliation', () => {
     await withCompiledSession(async harness => {
       const manifest = harness.manifest()
 
-      Expect(manifest.fixtures.map(fixture => fixture.plan)).toEqual([{ accounts: [], creates: [] }])
       // Both groups are authored in Garden.tao; a manifest missing one is a canvas missing a row.
       Expect(groupsOf(manifest)).toEqual(['application', 'cards'])
       // Every scenario reaches the canvas: a scenario with no cell is a scenario nobody sees.
@@ -184,7 +183,6 @@ Describe('Studio scenario startup reconciliation', () => {
       const subjects = manifest.scenarios.map(scenario =>
         manifest.subjects.find(subject => subject.subjectId === scenario.subjectId)
       )
-      Expect(subjects.every(subject => subject !== undefined)).toBe(true)
       Expect(subjects.map(subject => subject?.kind)).toEqual(['view', 'view'])
     })
   })
@@ -202,10 +200,10 @@ Describe('Studio scenario startup reconciliation', () => {
     await record()
 
     Expect(observed[0]).toEqual(observed[1]!)
-    Expect(observed[0]?.groups).toEqual(['application', 'cards'])
     Expect(observed[0]?.scenarioIds).toEqual(['#scenario:application:home', '#scenario:cards:lead'])
   })
 
+  // REMOVAL CANDIDATE: Save-to-preview already preserves cells; removing this loses explicit group/scenario identity proof after adding an unrelated view.
   Test('groups survive a rebuild after an edit that touches no scenario', async () => {
     await withCompiledSession(async harness => {
       const before = harness.manifest()

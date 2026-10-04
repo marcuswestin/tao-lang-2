@@ -107,9 +107,7 @@ Test('the Clerk variant pushes and runs AuthReviewInstantClerk with the stored p
     ['run', '--app', 'AuthReviewInstantClerk', '--device', 'roPhone'],
   ])
   Expect(f.runs[1]!.source).toContain(`PublishableKey "${PUBLISHABLE_KEY}"`)
-  Expect(f.runs[1]!.source).not.toContain('REPLACE_WITH')
   Expect(f.output.join('\n')).toContain('AuthReviewInstantClerk against Instant app 3f2a9c1e…')
-  Expect(await FS.exists(f.root)).toBe(false)
 })
 
 Test('the InstantAuth variant leaves the Clerk placeholder alone and needs no Clerk key', async () => {

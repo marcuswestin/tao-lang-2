@@ -502,7 +502,6 @@ Describe('Expo runtime', () => {
       act(() => TR.Navigation.PresentIn(undefined, stack, thirdDetail, {}))
       Expect(pushes).toHaveLength(pushesAfterResume + 1)
 
-      Expect(popListeners.size).toBe(1)
       screen.unmount()
       screen = undefined
       Expect(popListeners.size).toBe(0)
@@ -1487,7 +1486,6 @@ Describe('Expo runtime', () => {
 
       Expect(screen.getByTestId(navigationTitleTestId).props.children).toBe('Document')
       Expect(screen.getByTestId(navigationCommandIconTestId('checkmark')).props.children).toBe('FontAwesome:check')
-      Expect(screen.getByLabelText('First').props.accessibilityLabel).toBe('First')
       Expect(screen.getByLabelText('Second').props.accessibilityState).toEqual({ disabled: true })
       Expect(screen.queryByLabelText('Third')).toBeNull()
       await fireEventAsync.press(screen.getByLabelText('More'))
@@ -1539,7 +1537,6 @@ Describe('Expo runtime', () => {
 
       const safariIcon = screen.getByTestId(navigationCommandIconTestId('safari'))
       Expect(safariIcon.props.children).toBe('FontAwesome:safari')
-      Expect(screen.getByLabelText('First').props.accessibilityLabel).toBe('First')
       Expect(screen.queryByLabelText('Third')).toBeNull()
       await fireEventAsync.press(screen.getByLabelText('More'))
       Expect(screen.getAllByRole('menuitem').map(item => item.props.accessibilityLabel)).toEqual([
@@ -1623,7 +1620,7 @@ Describe('Expo runtime', () => {
       })
       Expect(screen.queryByText('First')).toBeNull()
       Expect(screen.queryByText('More')).toBeNull()
-      Expect(screen.getByText('Fallback')).toBeDefined()
+      screen.getByText('Fallback')
       Expect(RN.StyleSheet.flatten(screen.getByLabelText('First').props.style)).toMatchObject({
         minHeight: 48,
         minWidth: 48,
@@ -1989,7 +1986,6 @@ Describe('Expo runtime', () => {
       act(() => stack.present(detail, {}))
       Expect(stack.depth).toBe(2)
       const androidTop = top()
-      Expect(typeof androidTop['onHeaderBackButtonClicked']).toBe('function')
       act(() => androidTop['onHeaderBackButtonClicked']())
       Expect(stack.depth).toBe(1)
       act(() => androidTop['onDismissed']({ nativeEvent: { dismissCount: 1 } }))
@@ -2078,11 +2074,9 @@ Describe('Expo runtime', () => {
       })
       const screen = render(createElement(TR.Navigation.AppHost, { app }))
 
-      Expect(screen.getAllByTestId(navigationTitleTestId)).toHaveLength(1)
       Expect(screen.getByTestId(navigationTitleTestId).props.children).toBe('Home title')
       Expect((globalThis as unknown as { document: { title: string } }).document.title).toBe('Home title')
       await fireEventAsync.press(screen.getByText('Settings'))
-      Expect(screen.getAllByTestId(navigationTitleTestId)).toHaveLength(1)
       Expect(screen.getByTestId(navigationTitleTestId).props.children).toBe('Settings title')
       Expect((globalThis as unknown as { document: { title: string } }).document.title).toBe('Settings title')
       screen.unmount()
@@ -2172,7 +2166,7 @@ Describe('Expo runtime', () => {
     })
     const screen = render(createElement(TR.Navigation.AppHost, { app }))
 
-    Expect(screen.getByTestId(navigationTitleTestId)).toBeDefined()
+    screen.getByTestId(navigationTitleTestId)
     await fireEventAsync.press(screen.getByLabelText('Save'))
     Expect(invoked).toBe(1)
     await act(async () => TR.Navigation.PresentOverlay(undefined, window, notice, {}))
@@ -2182,7 +2176,7 @@ Describe('Expo runtime', () => {
     await fireEventAsync.press(screen.getByLabelText('Save'))
     Expect(invoked).toBe(1)
     await act(async () => app.back())
-    Expect(screen.getByTestId(navigationTitleTestId)).toBeDefined()
+    screen.getByTestId(navigationTitleTestId)
   })
 
   Test('preserves auxiliary defocus through the active SelectionNav item', async () => {

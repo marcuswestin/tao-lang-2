@@ -49,23 +49,6 @@ Describe('Tao Studio scenario runtime', () => {
     )
   })
 
-  Test('shows a render failure inside the preview canvas', () => {
-    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {})
-    function BrokenPreview(): never {
-      return Errors.throwUnexpected('WorkspaceRow could not render.')
-    }
-    try {
-      const screen = render(
-        createElement(TR.Studio.ErrorBoundary, null, createElement(BrokenPreview)),
-      )
-
-      Expect(screen.getByText('Tao Studio preview error')).toBeDefined()
-      Expect(screen.getByText('WorkspaceRow could not render.')).toBeDefined()
-    } finally {
-      consoleError.mockRestore()
-    }
-  })
-
   Test('mounts the real WordFlower focused-view scenario', async () => {
     const runtimePackageRoot = await createScenarioRuntimeRoot('tao-wordflower-runtime-')
     const generationScript = `
@@ -130,21 +113,21 @@ Describe('Tao Studio scenario runtime', () => {
       ),
     )
 
-    await waitFor(() => Expect(screen.getByText('Novel')).toBeDefined())
+    await waitFor(() => screen.getByText('Novel'))
     fireEvent.press(screen.getByTestId('openWorkspace'))
-    await waitFor(() => Expect(screen.getByTestId('workspaceTitle')).toBeDefined())
-    Expect(screen.getByText('WORKSPACE DETAILS')).toBeDefined()
+    await waitFor(() => screen.getByTestId('workspaceTitle'))
+    screen.getByText('WORKSPACE DETAILS')
     act(() => Expect(TR.Navigation.Back()).toBe(true))
     await waitFor(() => Expect(screen.queryByText('WORKSPACE DETAILS')).toBeNull())
-    Expect(screen.getByTestId('openWorkspace')).toBeDefined()
-    Expect(screen.getByTestId('deleteWorkspace')).toBeDefined()
+    screen.getByTestId('openWorkspace')
+    screen.getByTestId('deleteWorkspace')
 
     // Presenting is legal in any view body, and this row does it. Mounted bare, `present` found no
     // navigation above it and the cell died on the first tap with 'no enclosing or explicit
     // navigation target' — on the phone, where a person is tapping rather than reading a stack.
     fireEvent.press(screen.getByTestId('openWorkspace'))
-    await waitFor(() => Expect(screen.getByText('WORKSPACE DETAILS')).toBeDefined())
-    Expect(screen.getByTestId('saveWorkspace')).toBeDefined()
+    await waitFor(() => screen.getByText('WORKSPACE DETAILS'))
+    screen.getByTestId('saveWorkspace')
   })
 
   Test('keeps focused occurrences in isolated app-owned lanes with their app design', () => {
@@ -206,13 +189,13 @@ Describe('Tao Studio scenario runtime', () => {
       }),
     ))
 
-    Expect(screen.getByText('Left app design')).toBeDefined()
-    Expect(screen.getByText('Right app design')).toBeDefined()
+    screen.getByText('Left app design')
+    screen.getByText('Right app design')
     fireEvent.press(screen.getByLabelText('Open Left'))
-    Expect(screen.getByText('Left detail')).toBeDefined()
+    screen.getByText('Left detail')
     Expect(screen.queryByText('Right detail')).toBeNull()
     fireEvent.press(screen.getByLabelText('Open Right'))
-    Expect(screen.getByText('Right detail')).toBeDefined()
+    screen.getByText('Right detail')
   })
 
   Test("resolves a focused view's design in the scheme the app shell stamps", () => {
@@ -397,9 +380,8 @@ Describe('Tao Studio scenario runtime', () => {
         ),
       )
 
-      await waitFor(() => Expect(screen.getByText('Novel')).toBeDefined())
+      await waitFor(() => screen.getByText('Novel'))
       const button = screen.getByTestId('openWorkspace')
-      Expect(button.props['testID']).toBe('openWorkspace')
       let selectableRoot = button.parent
       while (selectableRoot !== null && selectableRoot.props['dataSet'] === undefined) {
         selectableRoot = selectableRoot.parent
@@ -514,7 +496,7 @@ Describe('Tao Studio scenario runtime', () => {
           ),
         )
 
-        await waitFor(() => Expect(screen.getByText('Saved')).toBeDefined())
+        await waitFor(() => screen.getByText('Saved'))
         const revert = screen.getByTestId('revertSave')
         fireEvent(revert, 'pressIn')
         fireEvent(revert, 'pressOut')

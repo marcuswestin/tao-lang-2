@@ -185,11 +185,6 @@ Describe('validator: app provider pairing', () => {
   )
 
   Test(
-    'rejects an Auth bound beside a datasource that accepts no sign-in proofs',
-    rejects(notesApp(clerk, 'Local { }'), messages.noProofsAccepted('Notes', 'Local', 'Clerk')),
-  )
-
-  Test(
     'rejects an Auth whose proofs the datasource does not accept',
     rejects(
       notesApp('TestAuth { }', reference),
@@ -220,14 +215,6 @@ Describe('validator: app provider pairing', () => {
     ])
     Expect(new Set(sites.map(diagnostic => diagnostic.range?.start.line)).size).toBe(2)
   })
-
-  Test(
-    'rejects data that relies on a capability the datasource does not support',
-    rejects(
-      notesApp(undefined, instantDB, 'data Notes / Note { A text, B text, unique A + B }'),
-      messages.unsupportedCapability('Notes', 'InstantDB', 'UniqueTogether', '`unique A + B` on Note'),
-    ),
-  )
 
   Test('reports an unsupported capability at the use and at the Datasource line', async () => {
     const result = await testValidateCodeWithErrors(

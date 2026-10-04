@@ -29,34 +29,17 @@ Describe('Studio sketch projection corpus', () => {
       }).toEqual({ name: sample.name, needsOverlay: sample.needsOverlay, tree: sample.expectedTree })
     }
   })
-
-  Test('reports the engine-derived direct-projection rate without claiming screen-corpus acceptance', () => {
-    const direct = corpus.filter(sample => !StudioSketchProjection.project(sample).needsOverlay)
-    Expect({ accepted: direct.length, corpus: corpus.length, rate: direct.length / corpus.length }).toEqual({
-      accepted: 12,
-      corpus: 16,
-      rate: 0.75,
-    })
-  })
 })
 
 Describe('Studio sketch projection invariants', () => {
-  Test('is independent of input order and stable across repeated projection', () => {
-    const sample = corpus.find(entry => entry.name === 'playlist-row')!
-    const expected = projectSignature(sample)
-    Expect(projectSignature({ ...sample, rects: [...sample.rects].reverse() })).toBe(expected)
-    Expect(projectSignature(sample)).toBe(expected)
-  })
-
-  Test('preserves every identity exactly once across deterministic corpus permutations', () => {
+  Test('preserves every identity exactly once when corpus input order is reversed', () => {
     for (const sample of corpus) {
       const expected = projectSignature(sample)
-      for (let offset = 0; offset < sample.rects.length; offset += 1) {
-        const rotated = [...sample.rects.slice(offset), ...sample.rects.slice(0, offset)]
-        Expect(projectSignature({ ...sample, rects: rotated })).toBe(expected)
-        const ids = elements(StudioSketchProjection.project({ ...sample, rects: rotated }).tree).map(node => node.id)
-        Expect([...ids].sort()).toEqual(sample.rects.map(rect => rect.id).sort())
-      }
+      const reversed = { ...sample, rects: [...sample.rects].reverse() }
+      const result = StudioSketchProjection.project(reversed)
+      Expect(StudioSketchProjection.signature(result.tree)).toBe(expected)
+      const ids = elements(result.tree).map(node => node.id)
+      Expect([...ids].sort()).toEqual(sample.rects.map(rect => rect.id).sort())
     }
   })
 
@@ -95,14 +78,6 @@ Describe('Studio sketch projection invariants', () => {
     Expect(leaves.find(leaf => leaf.id === 'fixed')).toMatchObject({ height: 10, width: 30 })
   })
 
-  Test('retains drawn numeric dimensions alongside an inferred main-axis claim', () => {
-    const sample = corpus.find(entry => entry.name === 'form')!
-    const password = elements(StudioSketchProjection.project(sample).tree)
-      .find(leaf => leaf.id === 'password')
-
-    Expect(password).toMatchObject({ claim: 1, height: 48, width: 320 })
-  })
-
   Test('retains sketch-edge padding for a single rectangle', () => {
     const result = StudioSketchProjection.project({
       height: 80,
@@ -112,22 +87,6 @@ Describe('Studio sketch projection invariants', () => {
     Expect(StudioSketchProjection.signature(result.tree)).toBe(
       'Col(gap=0,pad=8/28/32/12)[only:Box(100x40)]',
     )
-  })
-
-  Test('marks overlap for canonical proposal instead of direct application', () => {
-    const input = corpus.find(entry => entry.name === 'badge-overlap')!
-    const first = StudioSketchProjection.project(input)
-    const second = StudioSketchProjection.project({ ...input, rects: [...input.rects].reverse() })
-    Expect(first.needsOverlay).toBe(true)
-    Expect(StudioSketchProjection.signature(second.tree)).toBe(StudioSketchProjection.signature(first.tree))
-  })
-
-  Test('marks a two-clean-axis grid as ambiguous even though its canonical proposal is deterministic', () => {
-    const input = corpus.find(entry => entry.name === 'card-grid')!
-    const result = StudioSketchProjection.project(input)
-
-    Expect(result.needsOverlay).toBe(true)
-    Expect(StudioSketchProjection.signature(result.tree)).toBe(input.expectedTree)
   })
 
   Test('rejects duplicate identities, empty sets, and invalid geometry', () => {

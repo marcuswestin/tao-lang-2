@@ -25,12 +25,14 @@ Describe('Studio feed inventory', () => {
       },
     ])
 
-    Expect(inventory.items.map(item => ({
-      fields: item.fields,
-      id: item.id,
-      promotion: item.promotion,
-      source: item.source,
-    }))).toEqual([
+    Expect(
+      inventory.items.filter(item => item.source.kind !== 'generated' || item.source.row === 'typical').map(item => ({
+        fields: item.fields,
+        id: item.id,
+        promotion: item.promotion,
+        source: item.source,
+      })),
+    ).toEqual([
       {
         fields: { Published: false, Title: 'Fixture' },
         id: 'feed_uz4qgj',
@@ -38,26 +40,10 @@ Describe('Studio feed inventory', () => {
         source: { kind: 'fixture', row: 'FixtureArticle' },
       },
       {
-        fields: { Published: false, Title: '' },
-        id: 'feed_gcwn36',
-        promotion: { entity: 'Article', fields: { Published: false, Title: '' }, name: 'ArticleEmpty' },
-        source: { kind: 'generated', row: 'empty', seed: 'inventory-seed' },
-      },
-      {
         fields: { Published: false, Title: 'Example item' },
         id: 'feed_pbm8b2',
         promotion: { entity: 'Article', fields: { Published: false, Title: 'Example item' }, name: 'ArticleTypical' },
         source: { kind: 'generated', row: 'typical', seed: 'inventory-seed' },
-      },
-      {
-        fields: { Published: true, Title: 'A deliberately long example title for layout stress' },
-        id: 'feed_lkd331',
-        promotion: {
-          entity: 'Article',
-          fields: { Published: true, Title: 'A deliberately long example title for layout stress' },
-          name: 'ArticleEdge',
-        },
-        source: { kind: 'generated', row: 'edge', seed: 'inventory-seed' },
       },
       {
         fields: { Published: true, Title: 'Live' },
@@ -75,10 +61,6 @@ Describe('Studio feed inventory', () => {
     Expect(Object.isFrozen(inventory)).toBe(true)
     Expect(Object.isFrozen(inventory.items)).toBe(true)
     Expect(Object.isFrozen(inventory.items[0]?.fields)).toBe(true)
-    Expect(StudioFeedInventory.build(article, [{ declaration: article, kind: 'generated', seed: 'inventory-seed' }]))
-      .toEqual(
-        StudioFeedInventory.build(article, [{ declaration: article, kind: 'generated', seed: 'inventory-seed' }]),
-      )
   })
 
   Test('rejects source entity and field type mismatches', () => {

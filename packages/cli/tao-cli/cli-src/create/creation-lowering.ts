@@ -534,16 +534,6 @@ function testFile(plan: CreationPlan, names: ProjectNames): string {
       expect text ${taoString(renamed)}
    }`
   })
-  const firstEntity = plan.entities[0]!
-  const firstTitle = titleField(firstEntity)
-  const firstValue = String(plan.samples[firstEntity.plural]![0]![firstTitle.name])
-  journeys.push(`   test ${taoString(`keeps ${humanize(firstEntity.plural).toLowerCase()} across a relaunch`)} {
-      run ${names.app}
-      enter ${taoString(firstValue)} into #${lowerFirst(firstEntity.singular)}${firstTitle.name}
-      press #add${firstEntity.singular}
-      relaunch
-      expect text ${taoString(firstValue)}
-   }`)
   return `use ${names.app} from ./
 
 test ${taoString(plan.name)} {

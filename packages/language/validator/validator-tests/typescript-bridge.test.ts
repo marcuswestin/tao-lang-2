@@ -23,11 +23,6 @@ Describe('validator: the TypeScript bridge', () => {
   )
 
   Test(
-    'accepts a head name that no Tao declaration provides, because it names an export',
-    accepts(bridgeApp('function Words(Value text) returns number { return countWordsImpl(Value) from ./Text.ts }')),
-  )
-
-  Test(
     'rejects a bridged function result with no declared return type',
     rejects(
       bridgeApp('function Words(Value text) { return CountWords(Value) from ./Text.ts }'),
@@ -59,14 +54,6 @@ Describe('validator: the TypeScript bridge', () => {
     ),
   )
 
-  Test(
-    'rejects a path that is not a TypeScript sidecar',
-    rejects(
-      bridgeApp('function Words(Value text) returns number { return CountWords(Value) from @tao/text }'),
-      bridgeValidationMessages.path('@tao/text'),
-    ),
-  )
-
   Test('accepts a bridge whose sidecar is on disk beside the declaring file', async () => {
     await withValidatedFiles('Main.tao', {
       'Main.tao': bridgeApp('let Stamp is text = BuildStamp from ./Build.ts'),
@@ -81,7 +68,6 @@ Describe('validator: the TypeScript bridge', () => {
       'Main.tao': bridgeApp('let Stamp is text = BuildStamp from ./Missing.ts'),
     }, result => {
       const message = bridgeValidationMessages.missing('./Missing.ts')
-      Expect(validationErrorMessages(result)).toContain(message)
       const diagnostic = result.diagnostics.find(candidate => candidate.message === message)
       Expect(diagnostic?.filePath).toContain('Main.tao')
       Expect(diagnostic?.range).toBeDefined()

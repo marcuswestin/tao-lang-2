@@ -373,7 +373,7 @@ Describe('Expo runtime: presentation surfaces', () => {
             fireEvent.press(screen.getByText('Open sheet'))
           })
           ExpectScreen(screen).toHaveText('Draft')
-          Expect(screen.UNSAFE_getByType(RN.Modal)).toBeDefined()
+          screen.UNSAFE_getByType(RN.Modal)
 
           const card = screen.UNSAFE_getAllByType(RN.View).find(view => {
             const style = RN.StyleSheet.flatten(view.props.style) ?? {}
@@ -512,7 +512,6 @@ Describe('Expo runtime: presentation surfaces', () => {
         })
         // The overlay tops the presenter's stack, but it was presented while the sheet showed, so
         // the sheet hosts it: the Modal stays visible and the overlay draws inside its window.
-        ExpectScreen(screen).toHaveText('Cover body')
         Expect(screen.UNSAFE_getByType(RN.Modal).props.visible).toBe(true)
         Expect(hasAncestorOfType(screen.getByText('Cover body'), RN.Modal)).toBe(true)
         ExpectScreen(screen).toHaveText('Open cover')

@@ -52,6 +52,16 @@
   after 1,406.8s (exit 130), not accepted as green; log
   `.artifacts/logs/agent/test-retry/2026-09-27T00-27-44-080Z-61621.log`. No uncontended control was
   established, and nothing about that interruption settles the cause of the original failures.
+- **2026-10-03 fixture correction:** `feat/test-responsibility` gate
+  `2026-10-03T21-20-31-033Z-50300-27118856` reported four overlapping lanes and peak load 122.2
+  on 18 CPUs. One malformed-handshake row expected `unknown-session` but received `timeout`;
+  all 27 cases passed unchanged in a scoped run (`2026-10-03T21-24-53-960Z-86549-a86e1794`).
+  The fixture applied a 60 ms deadline to input diagnostics as well as its deliberate silent
+  connection. The diagnostics now use the normal deadline and the silent probe keeps the short
+  deadline in a separate sequential fixture. The amended file passes all 27 cases
+  (`2026-10-03T21-26-15-490Z-94546-500736ab`), retaining every assertion and the existing cleanup.
+  This corrects a test-owned deadline race; it does not establish a scheduling improvement or
+  meet this entry's admission benchmark acceptance.
 - **Workaround:** Verify when the machine is quiet, or read the `contention` block in
   `summary.json` before treating a slow lane as a regression.
 - **2026-09-26 recurrence:** An iOS development checkout's `verify-changed` recorded three

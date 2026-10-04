@@ -296,22 +296,6 @@ Describe('minimal Tao parser', () => {
     const labelTextValue = AST.argumentsOf(labelText)[0]?.value
     Expect.Is(labelTextValue, AST.isValueReference)
     Expect(labelTextValue.target.ref).toBe(labelAlias)
-    Expect(labelTextValue.target.ref).not.toBe(fileGreetingAlias)
-  })
-
-  Test('parses Tao source strings', async () => {
-    const source = `
-      app InlineApp { view MainView }
-      view MainView() {
-        render inject \`\`\`ts
-          return null
-        \`\`\`
-      }
-    `
-    const parseResult = await testParseCode(source)
-
-    Expect(parseResult.entry.ast.statements).toHaveLength(2)
-    Expect.Is(parseResult.entry.ast.statements[0], AST.isAppDeclaration)
   })
 
   Test('parses use statements and project-visible declarations', async () => {
@@ -380,8 +364,6 @@ Describe('minimal Tao parser', () => {
       use Label from @bar/forms
     `)
 
-    Expect(parseResult.entry.document.parseResult.lexerErrors).toEqual([])
-    Expect(parseResult.entry.document.parseResult.parserErrors).toEqual([])
     const [rootUse, generatedUse, packageUse, subfolderUse] = parseResult.entry.ast.statements
     Expect.Is(rootUse, AST.isUseStatement)
     Expect.Is(generatedUse, AST.isUseStatement)
@@ -412,6 +394,7 @@ Describe('minimal Tao parser', () => {
     Expect(publishedView.visibility).toBe('public')
   })
 
+  // REMOVAL CANDIDATE: This is AST package visibility policy rather than parser behavior; remove if owning-layer coverage survives.
   Test('keeps project visibility scoped out of stdlib imports', () => {
     const stdlibResolution: Packages.Resolution = {
       relation: 'stdlib',

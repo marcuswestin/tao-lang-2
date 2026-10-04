@@ -145,8 +145,6 @@ Describe('Studio agent chat authoring', () => {
   Test('this mode has no tool that changes app code', () => {
     const names = Object.keys(tools([]))
 
-    Expect(names.includes('proposeEdit')).toBe(false)
-    Expect(names.includes('proposeFlag')).toBe(false)
     Expect(names.sort()).toEqual(['listTestFiles', 'proposeScenario', 'proposeTest', 'requestCodeChanges'])
   })
 
@@ -222,6 +220,7 @@ Describe('Studio agent chat authoring', () => {
     Expect(String(result['refused']).includes('takes no entity parameter')).toBe(true)
   })
 
+  // REMOVAL CANDIDATE: The nonlast-suite case exercises the same insertion; removing this loses explicit existing-check and target-path proof.
   Test('a check is added to the suite the app already has', async () => {
     const staged: Staged[] = []
 
@@ -317,7 +316,6 @@ Describe('Studio agent chat coverage', () => {
     // Two suites, one check each.
     Expect(checks.map(check => `${check.suite}/${check.name}`))
       .toEqual(['reader/shows a story', 'later suite/something else'])
-    Expect(checks[0]?.suite).toBe('reader')
     // `run Reader` names the app without quoting it, so only the asserted text is a literal.
     Expect(checks[0]?.literals).toEqual(['Nothing yet'])
   })

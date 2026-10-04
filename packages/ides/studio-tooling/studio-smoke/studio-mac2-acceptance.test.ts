@@ -104,6 +104,7 @@ Test('Studio Mac2 acceptance observes the launched native application and preser
       kind: 'executeScript',
       script: 'macos: queryAppState',
     })
+    // REMOVAL CANDIDATE: Protocol-type sanity only; removal loses this weak response check, which does not prove the application is running.
     Expect(typeof appState).toBe('number')
     await FS.writeJson(FS.resolvePath('appium-mac2/app-state.json', artifactRoot), { appState, version: 1 })
     const screenshot = await session.captureScreenshot('studio-native-window')

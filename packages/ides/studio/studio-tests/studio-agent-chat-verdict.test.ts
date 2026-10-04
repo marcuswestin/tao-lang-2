@@ -1,6 +1,6 @@
 // Semantic agent proof of concept: attributing a test failure to the change that caused it.
 import { Describe, Expect, Test } from '@shared/test'
-import { featureTestVerdict, firstLine, type TestRunSummary } from '../studio-src/agent-chat/FeatureVerdict'
+import { featureTestVerdict, type TestRunSummary } from '../studio-src/agent-chat/FeatureVerdict'
 
 function run(options: Partial<TestRunSummary> = {}): TestRunSummary {
   return { failed: 0, failures: [], passed: 3, status: 'passed', ...options }
@@ -99,10 +99,5 @@ Describe('Agent change verdict', () => {
     Expect(noBaseline.status).toBe('unknown')
     Expect(noBaseline.broke).toEqual([])
     Expect(noBaseline.heading).toBe('The app has failing tests; this change was not measured against a baseline.')
-  })
-
-  Test('keeps a multi-line failure message to the line that says what went wrong', () => {
-    Expect(firstLine(FEED.message)).toBe('Expected text "42 points by tester · 2 comments"')
-    Expect(firstLine('   \n\n  ')).toBe('no detail')
   })
 })

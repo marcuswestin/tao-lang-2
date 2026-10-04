@@ -91,6 +91,8 @@ export type WorkNode = {
   label?: string
   /** Names of nodes that must pass before this node starts. Unknown names are ignored. */
   needs?: readonly string[]
+  /** Ordering prerequisites that must settle, including classification, but need not pass. */
+  after?: readonly string[]
   /** Hand-pinned start-order override. Default 0; measured durations refine within a priority. */
   priority?: number
   /** Named exclusive resources (e.g. `gui`); nodes sharing one never run concurrently. */
@@ -396,6 +398,9 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
     const dependency = (state.node.needs ?? [])
       .map(need => states.find(candidate => candidate.name === need))
       .find(candidate => candidate !== undefined && candidate.status !== 'passed')
+      ?? (state.node.after ?? [])
+        .map(name => states.find(candidate => candidate.name === name))
+        .find(candidate => candidate !== undefined && !isSettled(candidate, running))
     if (dependency !== undefined) {
       return { detail: dependency.name, kind: 'dependency' }
     }
@@ -427,7 +432,7 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
         settled += 1
         continue
       }
-      if (!isReady(state, states) || !resourcesAvailable(state, heldResources)) {
+      if (!isReady(state, states, running) || !resourcesAvailable(state, heldResources)) {
         index += 1
         continue
       }
@@ -757,10 +762,17 @@ function failedDependencyName(state: WorkState, states: readonly WorkState[]): s
   return undefined
 }
 
-function isReady(state: WorkState, states: readonly WorkState[]): boolean {
+function isSettled(state: WorkState, running: ReadonlyMap<WorkState, unknown>): boolean {
+  return state.status !== 'pending' && state.status !== 'running' && !running.has(state)
+}
+
+function isReady(state: WorkState, states: readonly WorkState[], running: ReadonlyMap<WorkState, unknown>): boolean {
   return (state.node.needs ?? []).every(need => {
     const dependency = states.find(candidate => candidate.name === need)
     return dependency === undefined || dependency.status === 'passed'
+  }) && (state.node.after ?? []).every(name => {
+    const dependency = states.find(candidate => candidate.name === name)
+    return dependency === undefined || isSettled(dependency, running)
   })
 }
 
@@ -797,7 +809,7 @@ function criticalPathRanks(
   const dependents = new Map<string, string[]>()
   const known = new Set(states.map(state => state.name))
   for (const state of states) {
-    for (const need of state.node.needs ?? []) {
+    for (const need of new Set([...(state.node.needs ?? []), ...(state.node.after ?? [])])) {
       if (known.has(need)) {
         dependents.set(need, [...dependents.get(need) ?? [], state.name])
       }

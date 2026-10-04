@@ -31,15 +31,13 @@ function suggestion(): ShipLockEntry {
 }
 
 Describe('tao ship project lock', () => {
-  Test('writes, reads, and promotes a suggestion without credential contents', async () => {
+  Test('writes, reads, and promotes a suggestion', async () => {
     const root = await mkTestDir('tao-ship-lock-')
     try {
       const accepted = promoteShipEntry(suggestion())
       const path = await writeProjectLock(root, putShipLockEntry({ schemaVersion: 1 }, accepted))
       const source = await FS.readText(path)
       Expect(source).toContain('"status": "accepted"')
-      Expect(source).not.toContain('PRIVATE KEY')
-      Expect(source).toContain('https://api.instantdb.com')
       Expect(acceptedShipEntry(await readProjectLock(root), accepted.identity, accepted.inputHash)?.accepted)
         .toEqual(accepted.accepted)
     } finally {

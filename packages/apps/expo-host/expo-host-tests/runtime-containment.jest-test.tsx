@@ -50,10 +50,10 @@ describe('runtime failure containment and Studio capture', () => {
       </>,
     )
 
-    await waitFor(() => expect(screen.getByLabelText('item error')).toBeTruthy())
-    expect(screen.getByText('first')).toBeTruthy()
-    expect(screen.getByText('third')).toBeTruthy()
-    expect(screen.getByText('Broken row')).toBeTruthy()
+    await waitFor(() => screen.getByLabelText('item error'))
+    screen.getByText('first')
+    screen.getByText('third')
+    screen.getByText('Broken row')
   })
 
   test('publishes a diagnostic capture to Studio and stops a deterministic retry loop', async () => {
@@ -70,7 +70,7 @@ describe('runtime failure containment and Studio capture', () => {
       </TaoErrorBoundary>,
     )
 
-    await waitFor(() => expect(screen.getByLabelText('app error')).toBeTruthy())
+    await waitFor(() => screen.getByLabelText('app error'))
     await waitFor(() => expect(posted.some(entry => entry.message.type === 'preview-runtime-failure')).toBe(true))
     const report = posted.find(entry => entry.message.type === 'preview-runtime-failure')!
     expect(report.targetOrigin).toBe(config.parentOrigin)
@@ -90,7 +90,7 @@ describe('runtime failure containment and Studio capture', () => {
     })
 
     fireEvent.press(screen.getByLabelText('Try again'))
-    await waitFor(() => expect(screen.getByLabelText('App error retry stopper')).toBeTruthy())
+    await waitFor(() => screen.getByLabelText('App error retry stopper'))
     expect(screen.queryByLabelText('Try again')).toBeNull()
     cleanup()
   })
@@ -119,10 +119,10 @@ describe('runtime failure containment and Studio capture', () => {
       </TaoErrorBoundary>,
     )
 
-    await waitFor(() => expect(screen.getByLabelText('Restart app')).toBeTruthy())
+    await waitFor(() => screen.getByLabelText('Restart app'))
     shouldFail = false
     fireEvent.press(screen.getByLabelText('Restart app'))
-    await waitFor(() => expect(screen.getByText('Recovered app')).toBeTruthy())
+    await waitFor(() => screen.getByText('Recovered app'))
     expect(resets).toBe(1)
   })
 
@@ -156,13 +156,13 @@ describe('runtime failure containment and Studio capture', () => {
       </TaoErrorBoundary>,
     )
 
-    await waitFor(() => expect(screen.getByLabelText('Reset app data')).toBeTruthy())
+    await waitFor(() => screen.getByLabelText('Reset app data'))
     fireEvent.press(screen.getByLabelText('Reset app data'))
     expect(resets).toBe(0)
-    expect(screen.getByLabelText('Confirm reset app data')).toBeTruthy()
+    screen.getByLabelText('Confirm reset app data')
     shouldFail = false
     fireEvent.press(screen.getByLabelText('Confirm reset app data'))
-    await waitFor(() => expect(screen.getByText('Reset recovered')).toBeTruthy())
+    await waitFor(() => screen.getByText('Reset recovered'))
     expect(resets).toBe(1)
     expect(TR.Capture.recoveryBackup()).toBeDefined()
   })
@@ -218,10 +218,11 @@ describe('runtime failure containment and Studio capture', () => {
       cursor = cursor.child
     }
     expect(cursor).toBe('[truncated]')
-    const inner = captured.child.child.child.child.child.child.child.child
-    expect(JSON.stringify(captured)).not.toContain('private')
-    expect(JSON.stringify(captured).length).toBeLessThan(12_000)
-    expect(inner).toBeDefined()
+    expect(captureArguments(cyclic)).toEqual({
+      self: null,
+      text: `${'x'.repeat(4_096)}…`,
+      values: [...Array.from({ length: 100 }, (_, index) => index), '[truncated]'],
+    })
   })
 
   test('renders exactly 256 generated Tao view frames and contains frame 257', async () => {
@@ -249,11 +250,11 @@ describe('runtime failure containment and Studio capture', () => {
       `,
       ['WithinLimit', 'BeyondLimit'],
       async screens => {
-        expect(screens['WithinLimit']!.getByText('Reached frame 256')).toBeTruthy()
+        screens['WithinLimit']!.getByText('Reached frame 256')
         await waitFor(() =>
-          expect(screens['BeyondLimit']!.getByText(
+          screens['BeyondLimit']!.getByText(
             "View 'Frame' exceeded Tao's maximum render depth of 256.",
-          )).toBeTruthy()
+          )
         )
       },
     )

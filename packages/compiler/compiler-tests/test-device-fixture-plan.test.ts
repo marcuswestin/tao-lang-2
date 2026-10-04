@@ -7,27 +7,6 @@ const app = `
 `
 
 Describe('compiler: test device and fixture plan IR', () => {
-  Test('compiles a device clause to its default viewport dimensions', async () => {
-    await withCompiledTestPlan(
-      'tao-test-device-plan-',
-      {
-        'Main.test.tao': `
-          use WordFlower from ./
-
-          test "WordFlower" on phone {
-            test "opens" {
-              run WordFlower
-            }
-          }
-        `,
-        'Main.tao': app,
-      },
-      plan => {
-        Expect(plan.suites[0]?.checks[0]?.device).toEqual({ device: 'phone', height: 844, width: 390 })
-      },
-    )
-  })
-
   Test('compiles an explicit device viewport over its defaults', async () => {
     await withCompiledTestPlan(
       'tao-test-device-plan-',

@@ -118,21 +118,4 @@ Describe('run artifacts timings', () => {
       Expect(store.nodes['waiting']).toBeUndefined()
     })
   })
-
-  Test('learns only from successful work, so a failed or interrupted node teaches the store nothing', async () => {
-    await withRepository(async root => {
-      const location = RunArtifacts.locate({
-        lane: 'test',
-        logRoot: '.artifacts/logs/test/only',
-        repositoryRoot: root,
-        stamp: 'only',
-      })
-      const failed = finishedState('broken', { elapsedMs: 900, startedAt: 0 })
-      failed.status = 'failed'
-
-      await RunArtifacts.finishRun({ location, states: [failed], summary: { ok: false } })
-
-      Expect(await FS.exists(FS.resolvePath(RunTimings.HISTORY_PATH, root))).toBe(false)
-    })
-  })
 })

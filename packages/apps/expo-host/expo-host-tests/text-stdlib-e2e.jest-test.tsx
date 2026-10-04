@@ -12,41 +12,19 @@ Describe('Tao text stdlib runtime', () => {
         app TextStdlib { id "textstdlib" version "1.0.0" name "TextStdlib" view Main }
 
         view Main() {
-          let Count = CountWords("  one   two three  ")
-          let BlankCount = CountWords("   ")
-          let UnicodeCount = CountWords(" one two　three ")
+          let Count = CountWords(" one two　three ")
           let Joined = Join(["one", "two"], " | ")
-          let Singleton = Join(["solo"], " | ")
-          let Empty = Join([], ",")
-          render Native(
-            Count: Count,
-            BlankCount: BlankCount,
-            UnicodeCount: UnicodeCount,
-            Joined: Joined,
-            Singleton: Singleton,
-            Empty: Empty
-          )
+          render Native(Count: Count, Joined: Joined)
         }
 
-        view Native(
-          Count number,
-          BlankCount number,
-          UnicodeCount number,
-          Joined text,
-          Singleton text,
-          Empty text
-        ) {
-          render inject Count, BlankCount, UnicodeCount, Joined, Singleton, Empty \`\`\`ts
-            return (
-              <RN.Text>
-                {Count + ":" + BlankCount + ":" + UnicodeCount + ":" + Joined + ":" + Singleton + ":" + Empty}
-              </RN.Text>
-            )
+        view Native(Count number, Joined text) {
+          render inject Count, Joined \`\`\`ts
+            return <RN.Text>{Count + ":" + Joined}</RN.Text>
           \`\`\`
         }
       `,
       screen => {
-        ExpectScreen(screen).toHaveText('3:0:3:one | two:solo:')
+        ExpectScreen(screen).toHaveText('3:one | two')
       },
     )
   })

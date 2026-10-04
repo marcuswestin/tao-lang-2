@@ -7,11 +7,6 @@ import { PROJECT_TSCONFIG, TaoAppModules } from '../cli-src/app-modules'
 const PINNED_PROJECT_TSCONFIG = '{ "extends": "./.tao/typescript/tsconfig.json" }\n'
 
 Describe('Tao app TypeScript modules', () => {
-  Test('bundles @tao/runtime as a live link to the runtime package', async () => {
-    Expect(await FS.realPath(TaoAppModules.runtimeRoot())).toBe(Repo.resolvePath('packages/apps/runtime'))
-    Expect(await FS.isFile(FS.resolvePath('TaoRuntime-src/TR.ts', TaoAppModules.runtimeRoot()))).toBe(true)
-  })
-
   Test('packages a real runtime into a relocated CLI artifact, and says so when it carries none', async () => {
     const root = await mkTestDir('tao-cli-relocated-')
     try {
@@ -28,7 +23,6 @@ Describe('Tao app TypeScript modules', () => {
       Expect(await FS.readText(FS.resolvePath('TaoRuntime-src/TR.ts', carried))).toBe(
         await FS.readText(FS.resolvePath('TaoRuntime-src/TR.ts', runtimeSource)),
       )
-      Expect(await FS.isFile(FS.resolvePath('TaoRuntime-src/TR-data.ts', carried))).toBe(true)
       Expect(await FS.readText(FS.resolvePath('swiftui/TaoValues.swift', carried))).toBe(
         await FS.readText(FS.resolvePath('swiftui/TaoValues.swift', runtimeSource)),
       )
@@ -99,7 +93,6 @@ Describe('Tao app TypeScript modules', () => {
       await TaoAppModules.ensureProject(created)
       const linkedRuntime = FS.resolvePath('node_modules/@tao/runtime', created)
       Expect(await FS.realPath(linkedRuntime)).toBe(Repo.resolvePath('packages/apps/runtime'))
-      Expect(await FS.isFile(FS.resolvePath('TaoRuntime-src/TR.ts', linkedRuntime))).toBe(true)
 
       const untouched = FS.resolvePath('bare', root)
       await FS.writeText(FS.resolvePath('App.tao', untouched), 'app Bare { view Main }\n')

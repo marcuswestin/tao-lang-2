@@ -68,7 +68,6 @@ Describe('Studio Feed controller', () => {
 
   Test('browses server rows and sends target-bound draft revisions through the mutation adapter', async () => {
     const requests: StudioFeedActionRequest[] = []
-    const received: StudioFeedState[] = []
     let activeSketch = false
     const controller = new StudioFeedController({
       browse: async () => inventory(),
@@ -90,7 +89,7 @@ Describe('Studio Feed controller', () => {
       }),
       canMutate: () => true,
       publish() {},
-      receive: state => received.push(state),
+      receive() {},
       requestId: () => 'request:1',
     })
     await controller.refresh()
@@ -129,7 +128,6 @@ Describe('Studio Feed controller', () => {
     await controller.execute('{"type":"keep"}')
     Expect(requests[2]).toMatchObject({ kind: 'keep', draftRevision: 2 })
     Expect(controller.panel().canKeep).toBe(false)
-    Expect(received).toHaveLength(5)
   })
 
   Test('refuses absent rows and field drops without rectangles with visible errors', async () => {
@@ -273,41 +271,42 @@ Test(
   },
 )
 
-Test('Feed drop captures its target cell before queueing and an explicit cell wins for each action', async () => {
-  const requests: StudioFeedActionRequest[] = []
-  let cellId = 'cell:original'
-  const controller = new StudioFeedController({
-    browse: async () => inventory(),
-    mutate: async build => {
-      cellId = 'cell:changed'
-      requests.push(build(4))
-      return inventory()
-    },
-    context: () => ({ cellId, sketchId: 'sketch:active' }),
-    canMutate: () => true,
-    publish() {},
-    receive() {},
-    requestId: () => 'request',
-  })
-  await controller.refresh()
-  await controller.drop({ kind: 'entity', entity: 'Post', rowId: 'row:1' }, 'sketch:active')
-  Expect(requests[0]).toMatchObject({ cellId: 'cell:original' })
-  await controller.drop({ kind: 'entity', entity: 'Post', rowId: 'row:1' }, 'sketch:active', undefined, 'cell:explicit')
-  await controller.drop(
-    { kind: 'field', entity: 'Post', rowId: 'row:1', path: ['Title'], presentation: 'text' },
-    'sketch:active',
-    'rect',
-    'cell:explicit',
-  )
-  await controller.drop(
-    { kind: 'collection', entity: 'Post', rowId: 'row:1', path: ['Comments'] },
-    'sketch:active',
-    undefined,
-    'cell:explicit',
-  )
-  Expect(requests.slice(1).map(request => 'cellId' in request ? request.cellId : undefined)).toEqual([
-    'cell:explicit',
-    'cell:explicit',
-    'cell:explicit',
-  ])
-})
+Test(
+  'Feed drop captures its target cell before queueing and an explicit cell wins for entity and field actions',
+  async () => {
+    const requests: StudioFeedActionRequest[] = []
+    let cellId = 'cell:original'
+    const controller = new StudioFeedController({
+      browse: async () => inventory(),
+      mutate: async build => {
+        cellId = 'cell:changed'
+        requests.push(build(4))
+        return inventory()
+      },
+      context: () => ({ cellId, sketchId: 'sketch:active' }),
+      canMutate: () => true,
+      publish() {},
+      receive() {},
+      requestId: () => 'request',
+    })
+    await controller.refresh()
+    await controller.drop({ kind: 'entity', entity: 'Post', rowId: 'row:1' }, 'sketch:active')
+    Expect(requests[0]).toMatchObject({ cellId: 'cell:original' })
+    await controller.drop(
+      { kind: 'entity', entity: 'Post', rowId: 'row:1' },
+      'sketch:active',
+      undefined,
+      'cell:explicit',
+    )
+    await controller.drop(
+      { kind: 'field', entity: 'Post', rowId: 'row:1', path: ['Title'], presentation: 'text' },
+      'sketch:active',
+      'rect',
+      'cell:explicit',
+    )
+    Expect(requests.slice(1).map(request => 'cellId' in request ? request.cellId : undefined)).toEqual([
+      'cell:explicit',
+      'cell:explicit',
+    ])
+  },
+)

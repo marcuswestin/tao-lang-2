@@ -39,10 +39,11 @@ export const CountWords: CountWordsContract = (value) => value.length
 
   Test('fails actionably without a selection in a noninteractive process', async () => {
     await withTaoFiles('tao-compile-selection-', { '.tao/.gitkeep': '', 'Apps.tao': source }, async paths => {
-      await Expect(runCompile(paths['Apps.tao']!, { interactive: false })).rejects.toThrow(
+      const result = runCompile(paths['Apps.tao']!, { interactive: false })
+      await Expect(result).rejects.toThrow(
         'Multiple apps are declared',
       )
-      await Expect(runCompile(paths['Apps.tao']!, { interactive: false })).rejects.toThrow('--app First')
+      await Expect(result).rejects.toThrow('--app First')
     })
   })
 

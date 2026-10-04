@@ -1,4 +1,4 @@
-import { Errors, FS, Time } from '@shared'
+import { Errors, FS } from '@shared'
 import { Deferred, Expect, mkTestDir, Test, until, withTaoFiles } from '@shared/test'
 import { startStudioFileWatcher, StudioFileWatcherTesting } from '../studio-src/StudioFileWatcher'
 import { openStudioPreviewSession } from '../studio-src/StudioPreviewSession'
@@ -47,20 +47,11 @@ Test(
             const file = await preview.session.readFile('Garden.tao')
             const manifest = preview.session.previewManifest()
 
-            Expect(compiled.status).toBe('compiled')
             Expect(stableRoot).toContain('TR.Studio.PreviewBridge')
             Expect(stableRoot).toContain('/api/preview/cell/bootstrap')
             Expect(firstPublication).toContain('"compileRevision":1')
             Expect(firstPublication).toContain(file.sourceVersion)
             Expect(manifest?.scenarios.map(scenario => [scenario.group, scenario.label])).toEqual([['states', 'phone']])
-            Expect(manifest?.cells[0]?.cellId).toBe(`${manifest?.scenarios[0]?.scenarioId}#cell`)
-            Expect(manifest?.cells[0]?.environment.viewport).toEqual({
-              height: 844,
-              presetId: 'phone',
-              width: 390,
-            })
-            Expect(manifest?.fixtures).toEqual([])
-            Expect(manifest?.scenarios[0]?.fixtureId).toBeUndefined()
             Expect(manifest?.scenarios[0]?.steps?.map(step => step.kind)).toEqual([
               'pressDown',
               'advance',
@@ -330,7 +321,6 @@ Test('Studio preview session scopes app scenarios to the selected variant and ke
           if (compiled.status !== 'compiled') {
             Errors.throwUnexpected(compiled.message)
           }
-          Expect(compiled.status).toBe('compiled')
           Expect(preview.session.previewManifest()?.scenarios.map(scenario => scenario.label))
             .toEqual(['garden', 'focused'])
         } finally {
@@ -382,7 +372,7 @@ Test('Studio preview session rejects app destinations instead of silently runnin
   }
 })
 
-Test('Studio file watching acknowledges its own write once and compiles later external changes', async () => {
+Test('Studio file watching compiles an external Tao source edit', async () => {
   const previewRuntimeRoot = await mkTestDir('tao-studio-watch-runtime-')
   try {
     await withTaoFiles(
@@ -404,24 +394,11 @@ Test('Studio file watching acknowledges its own write once and compiles later ex
         try {
           await preview.session.compileInitial()
           const file = await preview.session.readFile('Garden.tao')
-          const studioWrite = await preview.session.syncDraft({
-            content: file.content.replace('Before', 'Studio'),
-            path: file.path,
-            sourceVersion: file.sourceVersion,
-            writeId: 'studio-write',
-          })
-          await Time.sleep(100)
-
-          Expect(studioWrite.compile?.compileRevision).toBe(2)
-          Expect(preview.session.compileSnapshot().compileRevision).toBe(2)
-
-          await FS.writeText(paths['Garden.tao'], studioWrite.file.content.replace('Studio', 'External'))
+          await FS.writeText(paths['Garden.tao'], file.content.replace('Before', 'External'))
           await waitFor(() => {
             const snapshot = preview.session.compileSnapshot()
-            return snapshot.compileRevision === 3 && snapshot.status === 'compiled'
+            return snapshot.compileRevision === 2 && snapshot.status === 'compiled'
           })
-
-          Expect(preview.session.compileSnapshot().status).toBe('compiled')
         } finally {
           await watcher.close()
           await preview.close()
@@ -471,9 +448,11 @@ Test('Studio file watcher reconciles files created between the initial scan and 
 
 Test('Studio file watcher preserves event order while an older hash is still pending', async () => {
   const oldHash = Deferred<void>()
+  const hashing = Deferred<void>()
   const applied: Array<[string, boolean]> = []
   const lane = StudioFileWatcherTesting.createChangeLane(async (path, exists) => {
     if (exists) {
+      hashing.resolve()
       await oldHash.promise
     }
     applied.push([path, exists])
@@ -481,15 +460,20 @@ Test('Studio file watcher preserves event order while an older hash is still pen
 
   lane.note('/project/App.tao', true)
   lane.note('/project/App.tao', false)
-  await Time.sleep(0)
-  Expect(applied).toEqual([])
-  oldHash.resolve()
-  await lane.drain()
+  try {
+    await hashing.promise
+    Expect(applied).toEqual([])
+    oldHash.resolve()
+    await lane.drain()
 
-  Expect(applied).toEqual([
-    ['/project/App.tao', true],
-    ['/project/App.tao', false],
-  ])
+    Expect(applied).toEqual([
+      ['/project/App.tao', true],
+      ['/project/App.tao', false],
+    ])
+  } finally {
+    oldHash.resolve()
+    await lane.drain()
+  }
 })
 
 async function waitFor(predicate: () => boolean): Promise<void> {

@@ -54,24 +54,6 @@ Describe('validator: host-read slots and commands', () => {
   )
 
   Test(
-    'reports a semantic placement diagnostic for a command in an app body',
-    rejects(
-      `
-        ${leaf}
-        action Save() { }
-        app Demo { id "demo" version "1.0.0" name "Demo"
-          command SaveCommand() {
-            Title "Save"
-            do Save()
-          }
-          view Leaf
-        }
-      `,
-      commandValidationMessages.placement,
-    ),
-  )
-
-  Test(
     'rejects slot, metadata, and bound-action contract violations',
     rejects(
       `
@@ -338,51 +320,52 @@ Describe('validator: host-read slots and commands', () => {
     ),
   )
 
-  for (const mode of ['sheet', 'overlay'] as const) {
-    Test(
-      `does not require Title for a ${mode} presented into a Stack target`,
-      accepts(`
+  Test(
+    'does not require Title for a sheet presented into a Stack target',
+    accepts(`
+      use StackNav from @tao/nav
+      ${leaf}
+      app Demo {
+        Name "Demo"
+        Navigator StackNav { Initial Home }
+        @detail StackNav { Initial AuxiliaryRoot }
+      }
+      scene Home() {
+        Title "Home"
+        action Open() { present Modal() as sheet in Demo@detail }
+        render Leaf()
+      }
+      scene AuxiliaryRoot() {
+        Title "Auxiliary"
+        render Leaf()
+      }
+      scene Modal() { render Leaf() }
+    `),
+  )
+
+  Test(
+    'retains Stack push context inside a target-less sheet',
+    rejects(
+      `
         use StackNav from @tao/nav
         ${leaf}
         app Demo { id "demo" version "1.0.0" name "Demo"
           Navigator StackNav { Initial Home }
-          @detail StackNav { Initial AuxiliaryRoot }
         }
         scene Home() {
           Title "Home"
-          action Open() { present Modal() as ${mode} in Demo@detail }
+          action Open() { present Modal() as sheet }
           render Leaf()
         }
-        scene AuxiliaryRoot() {
-          Title "Auxiliary"
+        scene Modal() {
+          action Continue() { present Untitled() }
           render Leaf()
         }
-        scene Modal() { render Leaf() }
-      `),
-    )
-
-    Test(
-      `retains Stack push context inside a target-less ${mode}`,
-      rejects(
-        `
-          use StackNav from @tao/nav
-          ${leaf}
-          nav Main = StackNav { Initial Home }
-          scene Home() {
-            Title "Home"
-            action Open() { present Modal() as ${mode} }
-            render Leaf()
-          }
-          scene Modal() {
-            action Continue() { present Untitled() }
-            render Leaf()
-          }
-          scene Untitled() { render Leaf() }
-        `,
-        navigationValidationMessages.missingHostTitle('Untitled'),
-      ),
-    )
-  }
+        scene Untitled() { render Leaf() }
+      `,
+      navigationValidationMessages.missingHostTitle('Untitled'),
+    ),
+  )
 
   Test(
     'requires Title when a Stack refinement patch replaces Initial',

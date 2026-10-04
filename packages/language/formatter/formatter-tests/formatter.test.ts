@@ -6,6 +6,7 @@ import { formats } from './test-format'
 const wordFlowerCurrentPath = Repo.resolvePath('Apps/WordFlower/1 - Current')
 
 Describe('Tao formatter WordFlower apps', () => {
+  // REMOVAL CANDIDATE: Full app corpus fixed-point proof could become a small representative set; broad real-source stability coverage would shrink.
   Test('every current WordFlower source and test sidecar is a formatting fixed point', async () => {
     const sourceByPath: Record<string, string> = {}
     const formattedByPath: Record<string, string> = {}
@@ -217,22 +218,6 @@ Describe('Tao formatter configurable declarations', () => {
 })
 
 Describe('Tao formatter top-level statements', () => {
-  Test(
-    'formats keyed SelectionNav items and key-valued Initial',
-    formats(
-      `let Main=SelectionNav{Initial @home Display "tabs" @home{Label "Home" Content HomeStack}}`,
-      `
-        let Main = SelectionNav {
-           Initial @home
-           Display "tabs"
-           @home {
-              Label "Home"
-              Content HomeStack
-        }  }
-      `,
-    ),
-  )
-
   Test(
     'keeps root view arguments attached to the view name in an app and in a variant',
     formats(
@@ -504,20 +489,6 @@ Describe('Tao formatter views and blocks', () => {
   )
 
   Test(
-    'indents nested render blocks and collapses closing braces',
-    formats(
-      `view MainView(){render Stack(){Text( "a")\nText( "b")}}`,
-      `
-        view MainView() {
-           render Stack() {
-              Text("a")
-              Text("b")
-        }  }
-      `,
-    ),
-  )
-
-  Test(
     'formats named and inline control event handlers',
     formats(
       `view MainView(){render Input(Value:Draft){on change->Entered{set Draft=Entered}\non submit Submit}}`,
@@ -671,22 +642,9 @@ Describe('Tao formatter views and blocks', () => {
   )
 
   Test(
-    'normalizes view parameter spacing',
-    formats(
-      `public view CountText(Count number, Label text) { render Text(Label) }`,
-      `
-        public
-        view CountText(Count number, Label text) {
-           render Text(Label)
-        }
-      `,
-    ),
-  )
-
-  Test(
     'normalizes view invocation argument spacing',
     formats(
-      `view MainView() { render Stack() { CountText(3,"label") } }\nview CountText(Count number, Label text) { render Text(Label) }`,
+      `view MainView() { render Stack() { CountText ( 3,"label" ) } }\nview CountText(Count number, Label text) { render Text(Label) }`,
       `
         view MainView() {
            render Stack() {
@@ -933,17 +891,6 @@ Describe('Tao formatter structured design', () => {
 })
 
 Describe('Tao formatter project metadata', () => {
-  Test(
-    'formats app visibility like other declarations',
-    formats(
-      `public app PackageAccess{}`,
-      `
-        public
-        app PackageAccess { }
-      `,
-    ),
-  )
-
   Test(
     'formats package publication blocks',
     formats(

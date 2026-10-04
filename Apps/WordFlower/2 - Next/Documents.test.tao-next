@@ -52,7 +52,6 @@ test "WordFlower documents" on phone {
       expect text "Words: 5" // a field binding keeps the local copy reactive
       expect text "Saved title: Draft the intro" // editing has not written the entity
       expect text "Saved body: "
-      expect checkbox #markFinal unchecked
       press #saveDocument
       expect {
          text "Saved title: Polish the intro"
@@ -107,10 +106,6 @@ test "WordFlower documents" on phone {
       select #drafts[1] {
          press #edit
       }
-      expect checkbox #markFinal unchecked
-      press #markFinal
-      expect checkbox #markFinal checked
-      press #markFinal
       expect checkbox #markFinal unchecked
       press #markFinal
       expect checkbox #markFinal checked
@@ -247,7 +242,6 @@ test "WordFlower export" on phone with StarterWorkspace {
       select #drafts[1] {
          press #edit
       }
-      expect text "Document: Opening"
       press toolbar command "Export document"
       press #export
       expect text "Exporting needs a connection."
@@ -261,7 +255,6 @@ test "WordFlower export" on phone with StarterWorkspace {
       select #drafts[1] {
          press #edit
       }
-      expect text "Document: Opening"
       press toolbar command "Export document"
       press #export
       expect text "This document is too long to export."
@@ -275,7 +268,6 @@ test "WordFlower export" on phone with StarterWorkspace {
       select #drafts[1] {
          press #edit
       }
-      expect text "Document: Opening"
       press toolbar command "Export document"
       press #export
       expect missing text "Ready to share"

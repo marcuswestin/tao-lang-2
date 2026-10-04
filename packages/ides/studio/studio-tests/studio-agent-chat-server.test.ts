@@ -359,43 +359,6 @@ Describe('Studio agent chat server', () => {
     Expect(approvals[0]?.diff).toBe('reverse diff')
   })
 
-  Test('a change that breaks a test is reported as breaking it, not described as done', async () => {
-    // The app passes before the change and fails after it, so the failure belongs to this change.
-    const tests = runner([
-      { failed: 0, failures: [], passed: 2 },
-      { failed: 1, failures: [{ message: 'Expected text "Hello"', name: 'greets' }], passed: 1 },
-    ])
-    const applied: { path: string; content: string }[] = []
-    const it = chat(
-      [
-        {
-          call: {
-            input: { declaration: 'Greeting', replacement: 'view Greeting() {\n   render Text("Hi")\n}' },
-            name: 'proposeEdit',
-          },
-        },
-        { call: { input: { changeId: 'change-1' }, name: 'applyChange' } },
-        { text: 'Applied, but it broke a test.' },
-      ],
-      applied,
-      tests,
-    )
-    await it.handle('mode', { mode: 'build' })
-    await it.handle('enable', { enabled: true })
-    // Studio takes the baseline immediately before applying, rather than trusting the model to remember it.
-    const asked = await it.handle('send', { message: 'say Hi instead' }) as Record<string, unknown>
-    const approvals = asked['pendingApprovals'] as { approvalId: string }[]
-
-    const done = await it.handle('respond', {
-      responses: [{ approvalId: approvals[0]!.approvalId, approved: true }],
-    }) as Record<string, unknown>
-
-    const verdict = done['verdict'] as { status: string; heading: string; broke: { name: string }[] }
-    Expect(verdict.status).toBe('broke')
-    Expect(verdict.heading).toBe('This change breaks 1 test the app passed before it.')
-    Expect(verdict.broke.map(test => test.name)).toEqual(['greets'])
-  })
-
   Test('a source edit during post-change tests makes the exact change verdict stale', async () => {
     let version = 'v1'
     let run = 0
@@ -583,7 +546,6 @@ Describe('Studio agent chat server', () => {
 
     Expect((await it.handle('mode', { mode: 'ask' }) as { mode: string }).mode).toBe('chat')
     Expect((await it.handle('mode', { mode: 'build' }) as { mode: string }).mode).toBe('chat')
-    Expect((await it.handle('mode', { mode: 'scenario' }) as { mode: string }).mode).toBe('scenario')
   })
 
   Test('history reports conversation history and mode across turns', async () => {

@@ -191,13 +191,12 @@ Describe('persisted app state and recursive view depth', () => {
       )
       await restoredState.load()
       Expect(restoredState.evaluate().jsValue).toBe(RecompiledStatus['Published']!.evaluate().jsValue)
-      Expect(TR.IsCase(restoredState, RecompiledStatus['Published']!).evaluate().jsValue).toBe(true)
     } finally {
       restore()
     }
   })
 
-  Test('keeps the enum default when persisted case identity is stale or unknown', async () => {
+  Test('keeps the enum default when the persisted case name is unknown', async () => {
     const storage = memoryStorage()
     const restore = TR.Persisted.setStorageForTests(storage)
     const declaration = identity('SafeStatus')

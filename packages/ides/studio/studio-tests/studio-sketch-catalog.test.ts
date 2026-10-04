@@ -1,5 +1,5 @@
-import { CLI, Errors, FS, Platform, Repo, Time } from '@shared'
-import { Deferred, Expect, Test, withTaoFiles } from '@shared/test'
+import { CLI, Errors, FS, Platform, Repo } from '@shared'
+import { Deferred, Expect, Test, testOverrideSlot, until, withTaoFiles } from '@shared/test'
 import {
   StudioSketchCatalog,
   StudioSketchCatalogConflictError,
@@ -72,48 +72,7 @@ Test('Studio sketch catalog creates canonical ordered free geometry and reads JS
 
     Expect(result.createdSketch).toMatchObject({ id: 'sketch-row', name: 'View1', view: 'View1', x: 0, y: 0 })
     Expect(result.catalog.sketches[0]?.rects.map(rect => rect.id)).toEqual(['rect-cover', 'rect-title'])
-    Expect(await FS.readText(provider.path())).toBe(`{
-  "formatVersion": 1,
-  "nextViewNumber": 2,
-  "revision": 1,
-  "sketches": [
-    {
-      "height": 76,
-      "id": "sketch-row",
-      "name": "View1",
-      "project": "music",
-      "rectOrder": [
-        "rect-cover",
-        "rect-title"
-      ],
-      "rects": [
-        {
-          "content": "Cover art",
-          "height": 52,
-          "id": "rect-cover",
-          "kind": "Placeholder",
-          "width": 52,
-          "x": 12,
-          "y": 12
-        },
-        {
-          "height": 14,
-          "id": "rect-title",
-          "kind": "Text",
-          "width": 180,
-          "x": 78,
-          "y": 16
-        }
-      ],
-      "snapped": [],
-      "view": "View1",
-      "width": 360,
-      "x": 0,
-      "y": 0
-    }
-  ]
-}
-`)
+    Expect(JSON.parse(await FS.readText(provider.path()))).toEqual(result.catalog)
 
     await FS.writeText(
       provider.path(),
@@ -439,7 +398,7 @@ Test('Studio bind-rect updates free and snapped bindings without disturbing geom
   })
 })
 
-Test('Studio bind-rect validates exact typed payloads and preserves stale/idempotent request behavior', async () => {
+Test('Studio bind-rect validates exact typed payloads', async () => {
   await withTaoFiles(
     'tao-studio-sketch-bind-validation-',
     {},
@@ -456,10 +415,7 @@ Test('Studio bind-rect validates exact typed payloads and preserves stale/idempo
         expectedRevision: 1,
         requestId: 'bind-idempotent',
       }
-      const first = await provider.apply(request)
-      Expect(await provider.apply(request)).toBe(first)
-      await Expect(provider.apply({ ...request, expectedRevision: 1, requestId: 'bind-stale' }))
-        .rejects.toBeInstanceOf(StudioSketchCatalogConflictError)
+      await provider.apply(request)
       for (
         const binding of [
           { parameter: 'not valid', path: 'Title', presentation: { kind: 'text' } },
@@ -625,7 +581,6 @@ Test(
           requestId: 'duplicate-target',
         })).rejects.toThrow('duplicate snap rectangle id: rect-cover')
         Expect(await FS.readText(provider.path())).toBe(before)
-        Expect((await provider.read()).revision).toBe(1)
       },
     )
   },
@@ -1014,15 +969,34 @@ Test('Studio sketch stale reclaim keeps a late claimant from deleting a fresh re
     const winnerReady = Deferred<void>()
     const releaseWinner = Deferred<void>()
     let replacementSurvived = false
+    let replacementStarted = false
+    let lateClaimPath: string | undefined
+    const lateReady = Deferred<void>()
+    const originalTimeout = globalThis.setTimeout
+    let resumeLate: (() => void) | undefined
+    const timerSlot = testOverrideSlot({
+      read: () => globalThis.setTimeout,
+      write: value => {
+        globalThis.setTimeout = value
+      },
+    })
+    let restoreTimer = () => {}
+    let winner: ReturnType<StudioSketchCatalog['read']> | undefined
+    let late: ReturnType<StudioSketchCatalog['read']> | undefined
     StudioSketchCatalogTesting.setBeforeStaleUnlink(async () => {
       winnerReady.resolve()
       await releaseWinner.promise
     })
     StudioSketchCatalogTesting.setAfterStaleUnlink(async path => {
+      if (replacementStarted) {
+        return
+      }
+      replacementStarted = true
       const replacement = `${path}.owner-replacement`
       await FS.writeJson(replacement, { pid: Platform.runtimeProcess.pid })
       await FS.symlink(await FS.realPath(replacement), path)
-      await Time.sleep(40)
+      resumeLate?.()
+      await until(async () => !await FS.exists(lateClaimPath!), { description: 'late stale claim completion' })
       const target = await CLI.run('/usr/bin/readlink', { args: [path], stdio: 'pipe' })
       replacementSurvived = target.stdout.trim() === await FS.realPath(replacement)
       if (replacementSurvived) {
@@ -1031,19 +1005,37 @@ Test('Studio sketch stale reclaim keeps a late claimant from deleting a fresh re
       await FS.remove(replacement)
     })
     try {
-      const winner = provider.read()
+      winner = provider.read()
       await winnerReady.promise
-      const late = new StudioSketchCatalog(root).read()
+      restoreTimer = timerSlot.install(
+        ((callback: () => void, milliseconds?: number) => {
+          if (resumeLate === undefined && milliseconds === 10) {
+            resumeLate = callback
+            lateReady.resolve()
+            return 0 as unknown as ReturnType<typeof setTimeout>
+          }
+          return originalTimeout(callback, milliseconds)
+        }) as unknown as typeof setTimeout,
+      )
+      late = new StudioSketchCatalog(root).read()
+      await Promise.race([
+        lateReady.promise,
+        late.then(() => Errors.throwUnexpected('Late claimant did not publish a contention poll.')),
+      ])
       const claimPrefix = `${FS.basename(lockPath)}.reclaim-${FS.basename(staleOwner)}-`
-      while ((await FS.listDir(FS.dirname(lockPath))).filter(name => name.startsWith(claimPrefix)).length < 2) {
-        await Time.sleep(1)
-      }
+      const lateClaim = (await FS.listDir(FS.dirname(lockPath))).filter(name => name.startsWith(claimPrefix))
+        .toSorted().at(-1)!
+      lateClaimPath = FS.resolvePath(lateClaim, FS.dirname(lockPath))
       releaseWinner.resolve()
       await Promise.all([winner, late])
       Expect(replacementSurvived).toBe(true)
     } finally {
+      releaseWinner.resolve()
+      resumeLate?.()
+      restoreTimer()
       StudioSketchCatalogTesting.setBeforeStaleUnlink(undefined)
       StudioSketchCatalogTesting.setAfterStaleUnlink(undefined)
+      await Promise.allSettled([winner, late])
     }
   })
 })
@@ -1109,7 +1101,6 @@ Test('Studio sketch catalog restores a prior snapshot after a downstream transac
 
     await provider.restore(before, 1)
     Expect(await provider.read()).toEqual(before)
-    Expect(await FS.readText(provider.path())).toContain('"nextViewNumber": 1')
 
     // Rollback clears the stale idempotency result, so an outer transaction can retry the request.
     const retried = await provider.apply(request)

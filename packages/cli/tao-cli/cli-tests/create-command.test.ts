@@ -4,7 +4,6 @@ import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { PassThrough } from 'node:stream'
 import { type CreateCommandOptions, type CreationPrompts, runCreate } from '../cli-src/create/create-command'
 import type { CreationLane } from '../cli-src/create/creation-lanes'
-import { lowerCreationPlan } from '../cli-src/create/creation-lowering'
 import { runTaoCliForTest } from './test-cli-files'
 
 const wholePlan: JsonObject = {
@@ -324,7 +323,6 @@ Describe('tao create command', () => {
         runTests: false,
       })
       Expect(result.plan.palette).toEqual(palette)
-      Expect(lowerCreationPlan(result.plan)['Design.tao']).toContain('canvasLight #fdf6e3')
       Expect(captured()).toContain(`Read colors from ${FS.displayPath(image)}.`)
     })
   })
@@ -391,9 +389,8 @@ Describe('tao create command', () => {
     })
   })
 
-  Test('refuses an existing directory and a malformed --id', async () => {
+  Test('refuses a malformed --id and empty description', async () => {
     await withRoot(async (root, output) => {
-      await FS.mkdir(FS.resolvePath('taken', root))
       const options: CreateCommandOptions = {
         ai: 'none',
         cwd: root,
@@ -402,7 +399,6 @@ Describe('tao create command', () => {
         runTests: false,
         yes: true,
       }
-      await Expect(runCreate('Taken', { ...options, id: 'taken' })).rejects.toThrow('already exists')
       await Expect(runCreate('Bad', { ...options, id: 'Bad Id' })).rejects.toThrow(
         'lowercase letters, digits, and hyphens',
       )

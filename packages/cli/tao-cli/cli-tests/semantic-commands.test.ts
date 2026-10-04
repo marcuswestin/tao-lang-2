@@ -53,7 +53,6 @@ Describe('tao semantic commands', () => {
         Expect(facts.exitCode).toBe(0)
         Expect(Object.keys(factsJson).sort()).toEqual(['app', 'diagnostics', 'facts', 'format', 'version'])
         Expect(factsJson).toMatchObject({ app: 'Demo', diagnostics: [], format: 'tao-semantic-facts-v1', version: 1 })
-        Expect(factsJson.facts.length).toBeGreaterThan(0)
         Expect(factsJson.facts).toContainEqual(Expect['objectContaining']({
           kind: 'action-never-invoked',
           subject: 'Home.Unused',
@@ -142,10 +141,6 @@ Describe('tao semantic commands', () => {
         subject: 'Home.Unused',
       }))
       Expect(coverage.coverage.checks).toEqual(['shows welcome'])
-      Expect(coverage.coverage.shows).toEqual([
-        { by: 'exact', checks: ['shows welcome'], text: 'Welcome' },
-        { by: 'none', checks: [], text: 'Activate' },
-      ])
     })
   })
 })

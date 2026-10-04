@@ -23,7 +23,7 @@ Describe('validator: optional parameter types', () => {
       accepts(`
       ${prelude}
       action Accept(${declaration} default none) { }
-      action Run() { do Accept() do Accept(Value: none) do Accept(Value: "ready") }
+      action Run() { do Accept() }
     `),
     )
 
@@ -38,55 +38,51 @@ Describe('validator: optional parameter types', () => {
         ActionsValidator.messages.missingArgument('Accept', 'Value'),
       ),
     )
-
-    Test(
-      `accepts nullable function parameters and defaults for ${declaration}`,
-      accepts(`
-      ${prelude}
-      function Accept(${declaration} default none) returns boolean { return true }
-      let Empty = Accept()
-      let Explicit = Accept(Value: none)
-      let Concrete = Accept(Value: "ready")
-    `),
-    )
-
-    Test(
-      `still requires a nullable function argument for ${declaration}`,
-      rejects(
-        `
-      ${prelude}
-      function Accept(${declaration}) returns boolean { return true }
-      let Empty = Accept()
-    `,
-        FunctionsValidator.messages.functionMissingArgument('Accept', 'Value'),
-      ),
-    )
-
-    Test(
-      `accepts nullable view arguments and defaults for ${declaration}`,
-      accepts(`
-      ${prelude}
-      app Example { id "example" version "1.0.0" name "Example" view Main }
-      view Main() { render Accept() }
-      view Explicit() { render Accept(Value: none) }
-      view Concrete() { render Accept(Value: "ready") }
-      ${stubView('Accept', `${declaration} default none`)}
-    `),
-    )
-
-    Test(
-      `still requires a nullable view argument for ${declaration}`,
-      rejects(
-        `
-      ${prelude}
-      app Example { id "example" version "1.0.0" name "Example" view Main }
-      view Main() { render Accept() }
-      ${stubView('Accept', declaration)}
-    `,
-        InvocationsValidator.messages.missingArgument('Accept', 'Value'),
-      ),
-    )
   }
+
+  Test(
+    'accepts nullable function parameters and defaults',
+    accepts(`
+    function Accept(Value text? default none) returns boolean { return true }
+    let Empty = Accept()
+    let Explicit = Accept(Value: none)
+    let Concrete = Accept(Value: "ready")
+  `),
+  )
+
+  Test(
+    'still requires a nullable function argument',
+    rejects(
+      `
+    function Accept(Value text?) returns boolean { return true }
+    let Empty = Accept()
+  `,
+      FunctionsValidator.messages.functionMissingArgument('Accept', 'Value'),
+    ),
+  )
+
+  Test(
+    'accepts nullable view arguments and defaults',
+    accepts(`
+    app Example { id "example" version "1.0.0" name "Example" view Main }
+    view Main() { render Accept() }
+    view Explicit() { render Accept(Value: none) }
+    view Concrete() { render Accept(Value: "ready") }
+    ${stubView('Accept', 'Value text? default none')}
+  `),
+  )
+
+  Test(
+    'still requires a nullable view argument',
+    rejects(
+      `
+    app Example { id "example" version "1.0.0" name "Example" view Main }
+    view Main() { render Accept() }
+    ${stubView('Accept', 'Value text?')}
+  `,
+      InvocationsValidator.messages.missingArgument('Accept', 'Value'),
+    ),
+  )
 
   Test(
     'rejects none for a required nonnullable parameter',

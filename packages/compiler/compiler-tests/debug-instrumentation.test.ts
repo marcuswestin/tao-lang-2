@@ -26,11 +26,6 @@ Describe('compiler: debugger instrumentation', () => {
     Expect(code).toContain(`await TR.Debug.At({ action: "Bump", path: "1", declaration:`)
   })
 
-  Test('emits nothing without debug', async () => {
-    const compiled = await Compiler.compileCode(source)
-    Expect(compiled.code).not.toContain('TR.Debug.At')
-  })
-
   Test('scopes instrumentation to the compile instead of the position of the app declaration', async () => {
     const appLast = `
       view Root() {

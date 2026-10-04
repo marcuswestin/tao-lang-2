@@ -161,7 +161,6 @@ Describe('dev data server', () => {
       Expect(await second.load()).toBeUndefined()
       const raced = await Promise.allSettled([first.save('{"writer":1}'), second.save('{"writer":2}')])
       Expect(raced.filter(result => result.status === 'fulfilled')).toHaveLength(1)
-      Expect(raced.filter(result => result.status === 'rejected')).toHaveLength(1)
       Expect(String((raced.find(result => result.status === 'rejected') as PromiseRejectedResult).reason))
         .toContain('changed concurrently')
 
@@ -227,7 +226,6 @@ Describe('dev data server', () => {
 
       const raced = await Promise.allSettled([parent.save('{"process":"parent"}'), remote.save('{"process":"child"}')])
       Expect(raced.filter(result => result.status === 'fulfilled')).toHaveLength(1)
-      Expect(raced.filter(result => result.status === 'rejected')).toHaveLength(1)
 
       const observed = collect(parent)
       await remote.reset?.()
@@ -390,6 +388,8 @@ Describe('dev data server', () => {
       .rejects.toThrow('needs a running Tao dev server, but the Expo manifest carries no bootstrap')
   })
 
+  // Bun 1.3.13 dial/forced-stop regression: archived DEVENV-054 records the reproduction.
+  // REMOVAL CANDIDATE: drop repeated cycles once supported runners fix the dial bug and ordinary concurrent server cases stay green.
   ServerTest('repeatedly releases each in-process WebSocket before stopping its owned server', async () => {
     for (let iteration = 0; iteration < 8; iteration += 1) {
       const server = await DevDataServer.start({ rootDir: await mkTestDir('tao-dev-data-ownership-') })

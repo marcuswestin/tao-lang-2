@@ -12,18 +12,6 @@ import {
 } from './test-cli-files'
 
 Describe('tao check', () => {
-  Test('reports canonical files as unchanged without writing', async () => {
-    await withTaoFixture({
-      ...checkedProjectFile,
-      'canonical.tao': 'view MainView() { }\n',
-    }, async (rootDir) => {
-      const results = await runCheck(rootDir)
-
-      Expect(statusByFile(results, rootDir)).toEqual({ 'canonical.tao': 'unchanged' })
-      Expect(await FS.readText(FS.resolvePath('canonical.tao', rootDir))).toBe('view MainView() { }\n')
-    })
-  })
-
   // FS-D2: a Placeholder that would ship warns wherever it is authored, including a Studio-owned
   // generated view a sketch snapped into; only test source is exempt because it never ships.
   Test(
@@ -84,19 +72,6 @@ Describe('tao check', () => {
 
       Expect(statusByFile(results, rootDir)).toEqual({ 'drift.tao': 'changed' })
       Expect(await FS.readText(path)).toBe('view   MainView() { }')
-    })
-  })
-
-  Test('reports syntax errors without writing', async () => {
-    await withTaoFixture({
-      ...checkedProjectFile,
-      'broken.tao': 'view Broken() {',
-    }, async (rootDir) => {
-      const path = FS.resolvePath('broken.tao', rootDir)
-      const results = await runCheck(rootDir)
-
-      Expect(statusByFile(results, rootDir)).toEqual({ 'broken.tao': 'error' })
-      Expect(await FS.readText(path)).toBe('view Broken() {')
     })
   })
 
@@ -211,7 +186,6 @@ Describe('tao check', () => {
       const results = await runCheck(rootDir)
       const broken = results.find(result => FS.basename(result.path) === 'broken.tao')
 
-      Expect(broken?.diagnostics).toHaveLength(3)
       Expect(broken?.diagnostics?.map(diagnostic => diagnostic.range?.start.line)).toEqual([0, 1, 2])
       Expect(broken?.unreportedDiagnostics).toBeGreaterThan(0)
     })

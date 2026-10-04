@@ -45,7 +45,6 @@ Describe('navigation accessibility', () => {
       }))
 
       const surfaces = screen.getAllByTestId('liquid-glass-surface')
-      Expect(surfaces).toHaveLength(3)
       Expect(surfaces.map(surface => surface.props.glassEffectStyle)).toEqual(['regular', 'regular', 'regular'])
       Expect(surfaces.every(surface => surface.props.isInteractive === true)).toBe(true)
     } finally {
@@ -139,7 +138,7 @@ Describe('navigation accessibility', () => {
     })
     const screen = render(createElement(TR.Navigation.AppHost, { app }))
 
-    Expect(screen.UNSAFE_getByProps({ accessibilityRole: 'tablist' })).toBeDefined()
+    screen.UNSAFE_getByProps({ accessibilityRole: 'tablist' })
     const tabs = screen.getAllByRole('tab')
     Expect(tabs[0]?.props.accessibilityState).toMatchObject({ disabled: false, selected: true })
     Expect(tabs[1]?.props.accessibilityState).toMatchObject({ disabled: false, selected: false })
@@ -161,7 +160,6 @@ Describe('navigation accessibility', () => {
       }))
       const command = interactionOutline.liveNodes().find(node => node.label() === 'Focus command')
 
-      Expect(command?.live?.focus).toBeDefined()
       act(() => command?.live?.focus?.())
       Expect(focusEvents).toHaveLength(1)
       Expect(focusEvents[0]?.eventType).toBe('focus')
@@ -258,13 +256,13 @@ Describe('navigation accessibility', () => {
       })
       const screen = render(createElement(TR.Navigation.AppHost, { app }))
 
-      Expect(screen.getByLabelText('More')).toBeDefined()
+      screen.getByLabelText('More')
       act(() => stack.presentOverlay(notice, {}))
       Expect(screen.queryByLabelText('More')).toBeNull()
-      Expect(screen.getByText('Toggle notice content')).toBeDefined()
+      screen.getByText('Toggle notice content')
 
       act(() => stack.back())
-      Expect(screen.getByLabelText('More')).toBeDefined()
+      screen.getByLabelText('More')
     } finally {
       restoreRuntime.mockRestore()
     }

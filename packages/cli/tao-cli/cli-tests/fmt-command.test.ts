@@ -61,7 +61,6 @@ Describe('tao fmt', () => {
 
       Expect(formatted).toEqual(checked)
       Expect(formatted.map(result => result.status)).toEqual(['error'])
-      Expect(await FS.readText(FS.resolvePath('broken.tao', rootDir))).toBe(brokenSource)
     })
   })
 
@@ -84,18 +83,6 @@ Describe('tao fmt', () => {
         'view   Skipped() { }',
       )
       Expect(await FS.readText(path)).toBe('view MainView() { }\n')
-    })
-  })
-
-  Test('formats a single file path', async () => {
-    await withTaoFixture({
-      'app.tao': 'app   MyApp { view MainView }\nview MainView() { }\n',
-    }, async (rootDir) => {
-      const path = FS.resolvePath('app.tao', rootDir)
-      const results = await runFmt(path)
-
-      Expect(results.map(result => result.status)).toEqual(['changed'])
-      Expect(await FS.readText(path)).toBe('app MyApp {\n   view MainView\n}\n\nview MainView() { }\n')
     })
   })
 

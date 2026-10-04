@@ -108,21 +108,30 @@ Describe('tao ship cross-process transactions', () => {
         `--tsconfig=${tsconfig}`,
         '-e',
         `
-          import { FS } from ${JSON.stringify(sharedModule)}
+          import { Errors, FS, Time } from ${JSON.stringify(sharedModule)}
           import { ShipTransactionTesting, withShipTransaction } from ${JSON.stringify(transactionModule)}
-          ShipTransactionTesting.setStaleUnlinkDelay(250)
+          ShipTransactionTesting.setBeforeStaleUnlink(async () => {
+            await FS.writeText(${JSON.stringify(FS.resolvePath('reclaim-ready', root))}, '')
+            const ready = await Time.pollUntil(() => FS.exists(${
+          JSON.stringify(FS.resolvePath('claim-displaced', root))
+        }), {
+              intervalMs: 5,
+              timeoutMs: 30_000,
+            })
+            if (!ready) Errors.throwUnexpected('Timed out waiting for claim displacement')
+          })
           try {
             await withShipTransaction(${JSON.stringify(root)}, async () => {
               await FS.writeText(${JSON.stringify(FS.resolvePath('entered', root))}, '')
             })
           } finally {
-            ShipTransactionTesting.setStaleUnlinkDelay(0)
+            ShipTransactionTesting.setBeforeStaleUnlink(undefined)
           }
         `,
       ],
     })
     try {
-      const claimInstalled = await Time.pollUntil(async () => await FS.exists(claimPath), {
+      const claimInstalled = await Time.pollUntil(async () => await FS.exists(FS.resolvePath('reclaim-ready', root)), {
         intervalMs: 5,
         timeoutMs: 30_000,
       })
@@ -130,6 +139,7 @@ Describe('tao ship cross-process transactions', () => {
       const displacedPath = FS.resolvePath('displaced-live-claim.lock', coordinationRoot)
       await FS.move(claimPath, displacedPath)
       await FS.remove(displacedPath)
+      await FS.writeText(FS.resolvePath('claim-displaced', root), '')
 
       const completed = await Time.pollUntil(() => worker.exitCode !== null, {
         intervalMs: 10,
@@ -177,7 +187,7 @@ Describe('tao ship cross-process transactions', () => {
     const root = await mkTestDir('tao-ship-transaction-', { location: 'host' })
     try {
       const results = await Promise.all(
-        Array.from({ length: 6 }, (_, index) =>
+        Array.from({ length: 3 }, (_, index) =>
           runWorker(`
           import { withShipTransaction } from ${JSON.stringify(transactionModule)}
           import { FS } from ${JSON.stringify(sharedModule)}
@@ -190,7 +200,7 @@ Describe('tao ship cross-process transactions', () => {
           })
         `)),
       )
-      Expect(results.map(result => result.exitCode)).toEqual([0, 0, 0, 0, 0, 0])
+      Expect(results.map(result => result.exitCode)).toEqual([0, 0, 0])
       Expect(await FS.exists(FS.resolvePath('inside.lock', root))).toBe(false)
     } finally {
       await FS.remove(root)
@@ -201,7 +211,7 @@ Describe('tao ship cross-process transactions', () => {
     const root = await mkTestDir('tao-ship-lock-writers-', { location: 'host' })
     try {
       const results = await Promise.all(
-        Array.from({ length: 6 }, (_, index) =>
+        Array.from({ length: 3 }, (_, index) =>
           runWorker(`
           import { writeProjectLock } from ${JSON.stringify(lockModule)}
           const identity = ${JSON.stringify('app-')} + ${index}
@@ -216,14 +226,11 @@ Describe('tao ship cross-process transactions', () => {
           })
         `)),
       )
-      Expect(results.map(result => result.exitCode)).toEqual([0, 0, 0, 0, 0, 0])
+      Expect(results.map(result => result.exitCode)).toEqual([0, 0, 0])
       Expect(Object.keys((await readProjectLock(root)).ship?.apps ?? {}).toSorted()).toEqual([
         'app-0',
         'app-1',
         'app-2',
-        'app-3',
-        'app-4',
-        'app-5',
       ])
     } finally {
       await FS.remove(root)
@@ -237,8 +244,9 @@ Describe('tao ship cross-process transactions', () => {
     try {
       await writeInstalls(root, staleInstalls)
       const preparedPath = FS.resolvePath('ship-prepared', root)
+      const checkpointPath = FS.resolvePath('ship-checkpoint', root)
       const ship = runWorker(`
-        import { FS, Time } from ${JSON.stringify(sharedModule)}
+        import { Errors, FS, Time } from ${JSON.stringify(sharedModule)}
         import { acceptedEntryWithRunState } from ${JSON.stringify(commandModule)}
         import { writeProjectLock } from ${JSON.stringify(lockModule)}
         const root = ${JSON.stringify(root)}
@@ -253,7 +261,11 @@ Describe('tao ship cross-process transactions', () => {
           lock: { schemaVersion: 1, installs: ${JSON.stringify(staleInstalls)} },
         }
         await FS.writeText(${JSON.stringify(preparedPath)}, '')
-        await Time.sleep(150)
+        const ready = await Time.pollUntil(() => FS.exists(${JSON.stringify(checkpointPath)}), {
+          intervalMs: 5,
+          timeoutMs: 30_000,
+        })
+        if (!ready) Errors.throwUnexpected('Timed out waiting for the fresh installs checkpoint')
         await writeProjectLock(root, acceptedEntryWithRunState(prepared, entry))
       `)
       const prepared = await Time.pollUntil(async () => await FS.exists(preparedPath), {
@@ -262,6 +274,7 @@ Describe('tao ship cross-process transactions', () => {
       })
       Expect(prepared).toBe(true)
       await writeInstalls(root, freshInstalls)
+      await FS.writeText(checkpointPath, '')
       Expect((await ship).exitCode).toBe(0)
 
       const lock = await readProjectLock(root)

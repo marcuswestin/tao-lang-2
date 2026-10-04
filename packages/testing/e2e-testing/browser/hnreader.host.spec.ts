@@ -3,6 +3,7 @@ import type { Page } from '@playwright/test'
 import { Errors, Platform } from '@shared'
 
 test.describe('HNReader real host', () => {
+  // REMOVAL CANDIDATE: The authored browser journey may cover this flow; removal also needs the fault-signature contract to stop requiring both proofs.
   test('opens a story, returns through browser-visible navigation, and keeps reading history after reload', async ({ page }) => {
     const { runId, seed } = configuredHost()
     await page.goto('/')

@@ -214,7 +214,10 @@ Describe('tao instantdb push', () => {
         },
       })
       Expect(lookedUp).toEqual([`INSTANT_APP_ADMIN_TOKEN:${FS.dirname(appPath)}`])
-      Expect(instant.requests.every(request => request.authorization === 'Bearer project-token')).toBe(true)
+      Expect(instant.requests.map(request => request.authorization)).toEqual([
+        'Bearer project-token',
+        'Bearer project-token',
+      ])
       Expect(terminal.text()).not.toContain('project-token')
     })
   })

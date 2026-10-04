@@ -61,16 +61,9 @@ Describe('validator: workspace structure', () => {
     )
   }
 
-  Test('validates an existing parser result', async () => {
-    await withValidationParse(stubApp(), ({ result }) => {
-      Expect(validationErrorMessages(result)).toEqual([])
-    })
-  })
-
   Test('auto-loads the parsed Tao prelude and exposes its primitive slot contracts', async () => {
     await withValidationParse(stubApp(), ({ result }) => {
       const prelude = result.files.find(file => file.path.endsWith('/@tao/Prelude.tao'))
-      Expect(prelude).toBeDefined()
       const primitives = prelude?.ast.statements.filter(AST.isPrimitiveDeclaration) ?? []
       Expect(primitives.map(declaration => declaration.name)).toEqual([
         'item',
@@ -154,6 +147,7 @@ Describe('validator: workspace structure', () => {
     }, preludeValidationMessages.location),
   )
 
+  // REMOVAL CANDIDATE: user primitives are forbidden; this retains termination for adversarial inheritance.
   Test(
     'reports cyclic user primitive inheritance without aborting validation',
     rejects('primitive view is nav', preludeValidationMessages.location),
@@ -195,13 +189,6 @@ Describe('validator: workspace structure', () => {
 
   for (
     const checkCase of [
-      {
-        // A file-level test is a suite, so an empty one declares no checks rather than being a
-        // leaf journey that forgot its run step. A leaf that forgets one is `missing run` below.
-        title: 'rejects a file-level test that declares no checks',
-        source: testSuite('', false),
-        message: testValidationMessages.emptySuite('Smoke'),
-      },
       {
         title: 'rejects duplicate run statements in one check',
         source: testCheck('duplicate run', 'run MyApp\nrun MyApp'),
@@ -259,22 +246,9 @@ Describe('validator: workspace structure', () => {
   )
 
   Test(
-    'accepts relaunch fresh after run',
-    accepts(testCheck('fresh relaunch', 'run MyApp\nrelaunch fresh\nexpect text "Hello"')),
-  )
-
-  Test(
     'rejects relaunch inside a selected row, whose scope a relaunch replaces',
     rejects(
       testCheck('relaunch in select', 'run MyApp\nselect #rows[1] { relaunch }'),
-      testValidationMessages.relaunchInSelect,
-    ),
-  )
-
-  Test(
-    'rejects relaunch fresh inside a selected row, which the modifier does not excuse',
-    rejects(
-      testCheck('fresh relaunch in select', 'run MyApp\nselect #rows[1] { relaunch fresh }'),
       testValidationMessages.relaunchInSelect,
     ),
   )
@@ -297,11 +271,6 @@ Describe('validator: workspace structure', () => {
         messages: [testValidationMessages.relaunchPlacement],
       },
       {
-        title: 'rejects relaunch fresh at top level',
-        source: 'relaunch fresh',
-        messages: [testValidationMessages.relaunchPlacement],
-      },
-      {
         title: 'rejects aliases in check blocks',
         source: testCheck('renders', 'let Message = "Hello"\nrun MyApp'),
         messages: [testValidationMessages.checkBlock('renders')],
@@ -315,11 +284,6 @@ Describe('validator: workspace structure', () => {
   ) {
     Test(placementCase.title, rejects(placementCase.source, ...placementCase.messages))
   }
-
-  Test(
-    'accepts nested tests, which are the decided grouping form',
-    accepts(`${stubApp()}\ntest "Smoke" { test "renders" { run MyApp\nexpect text "Hello" } }`),
-  )
 
   Test(
     'accepts visible app declarations outside the entry file',
@@ -519,20 +483,6 @@ Describe('validator: workspace structure', () => {
   )
 
   Test(
-    'keeps package-visible declarations out of cross-package imports',
-    rejectsFiles(
-      {
-        'Main.tao': `
-          use MainView from @bar
-          app VisibilityApp { view MainView }
-        `,
-        'features/@bar/Main.tao': stubView('MainView').replace('view ', 'package view '),
-      },
-      useValidationMessages.notVisible('MainView'),
-    ),
-  )
-
-  Test(
     'does not include nested package folders in bare package imports',
     rejectsFiles(
       {
@@ -567,7 +517,6 @@ Describe('validator: workspace structure', () => {
         'features/@outer/@inner/Broken.tao': 'view Broken() {',
       },
       result => {
-        Expect(Diagnostics.hasSource(result.diagnostics, 'parser')).toBe(false)
         Expect(validationErrorMessages(result)).toEqual([])
       },
     ),

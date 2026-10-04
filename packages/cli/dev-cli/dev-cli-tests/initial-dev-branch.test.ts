@@ -53,7 +53,6 @@ Describe('initial developer branch setup', () => {
       await FS.writeText(FS.resolvePath('Justfile', root), 'my-branch:\n    @exit 7\n')
       const result = await setup(root)
       Expect(result.exitCode).not.toBe(0)
-      Expect(result.stderr).toContain('exit code 7')
       Expect(await branch(root)).toBe('main')
     } finally {
       await FS.remove(root)

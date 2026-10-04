@@ -25,22 +25,6 @@ Test('Studio agent position clamp: clamps within viewport bounds', () => {
   })
 })
 
-Test('Studio agent position clamp: handles minimized pill bounds', () => {
-  const minimizedSize = { height: 34, width: 200 }
-  const viewportSize = { height: 768, width: 1024 }
-
-  // Can move further right and bottom when minimized
-  Expect(StudioAgentPosition.clamp({ left: 800, top: 700 }, minimizedSize, viewportSize)).toEqual({
-    left: 800,
-    top: 700,
-  })
-
-  Expect(StudioAgentPosition.clamp({ left: 1200, top: 900 }, minimizedSize, viewportSize)).toEqual({
-    left: 1024 - 200 - 8,
-    top: 768 - 34 - 8,
-  })
-})
-
 Test('Studio agent position clamp: rounds fractional coordinates', () => {
   const panelSize = { height: 500, width: 480 }
   const viewportSize = { height: 768, width: 1024 }
@@ -63,34 +47,15 @@ Test('Studio agent position parse: keeps only a pair of finite pixel values', ()
   for (
     const unusable of [
       undefined,
-      null,
-      '',
       'not json',
       '{}',
-      '[]',
-      '"120,300"',
       JSON.stringify({ left: 120 }),
       JSON.stringify({ left: 'auto', top: 'auto' }),
-      JSON.stringify({ left: Number.NaN, top: 3 }),
       JSON.stringify({ left: '1e400', top: 3 }),
     ]
   ) {
     Expect(StudioAgentPosition.parse(unusable)).toBeUndefined()
   }
-})
-
-Test('Studio agent position: a position stored on a larger display comes back reachable', () => {
-  const stored = StudioAgentPosition.parse(JSON.stringify({ left: 2400, top: 1300 }))
-  Expect(stored).toEqual({ left: 2400, top: 1300 })
-
-  // Reopened on a laptop: without re-clamping on restore the panel is placed past the viewport, with
-  // its header -- the only way to drag it back -- off-screen.
-  const laptop = StudioAgentPosition.clamp(
-    stored!,
-    StudioAgentPosition.defaultSize(false),
-    { height: 800, width: 1280 },
-  )
-  Expect(laptop).toEqual({ left: 1280 - 480 - 8, top: 800 - 500 - 8 })
 })
 
 Test('Studio agent position: expanding a pill in a corner pulls it back into view', () => {

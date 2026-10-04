@@ -92,7 +92,7 @@ export function studioLayoutOwnsCanvasGestures(preset: string | undefined): bool
   return preset === 'design'
 }
 
-export const StudioPaneMinimums: Record<PaneName, number> = { bottom: 96, left: 180, preview: 280, right: 320 }
+const StudioPaneMinimums: Record<PaneName, number> = { bottom: 96, left: 180, preview: 280, right: 320 }
 
 /** The narrowest the flexible middle column of each preset may get while a side pane is dragged wider. */
 const studioMiddleFloor: Readonly<Record<string, number>> = { design: 240, draw: 320 }

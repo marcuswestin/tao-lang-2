@@ -80,7 +80,6 @@ Test('device flag forwards the exact selection and suppresses the Mac browser', 
   Expect(await runClerkReview({ device: 'roPhone', browser: true }, f.environment)).toBe(0)
   Expect(f.studioOptions()?.device).toBe('roPhone')
   Expect(f.studioOptions()?.browser).toBe(false)
-  Expect(await FS.exists(f.root)).toBe(false)
 })
 
 Test('manual review preserves the browser option without a device selection', async () => {

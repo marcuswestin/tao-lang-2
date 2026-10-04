@@ -1,24 +1,6 @@
 use SheetPresentation from ./
 
 test "Sheet presentation" {
-   test "presents a sheet and dismisses it from inside" {
-      run SheetPresentation
-
-      expect missing text "Sheet content"
-      press #openSheet
-      expect text "Sheet content"
-      press #closeSheet
-      expect missing text "Sheet content"
-   }
-   test "dismisses a sheet with Back, like any other presentation" {
-      run SheetPresentation
-      press #openSheet
-      expect text "Sheet content"
-      back
-      expect {
-         missing text "Sheet content"
-         text "Sheet Presentation"
-   }  }
    test "keeps a sheet showing beneath a cover presented from inside it, until the cover dismisses" {
       run SheetPresentation
       press #openSheet

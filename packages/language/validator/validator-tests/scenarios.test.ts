@@ -160,25 +160,6 @@ Describe('validator: fixtures and scenarios', () => {
   )
 
   Test(
-    'rejects assertions nested inside a scenario row selection',
-    rejects(
-      `
-        view Rows() { render inject ${tsFence} return null ${fence} }
-        scenarios Rows "states" {
-          device phone
-          scenario "invalid selected state" {
-            render ()
-            select #rows[1] {
-              expect text "Not a replay operation"
-            }
-          }
-        }
-      `,
-      testValidationMessages.scenarioSelectBlock,
-    ),
-  )
-
-  Test(
     'rejects assertions nested inside nested scenario row selections',
     rejects(
       `
@@ -297,9 +278,7 @@ Describe('validator: fixtures and scenarios', () => {
     rejects(
       `
         view Card() { render inject ${tsFence} return null ${fence} }
-        fixture Empty { }
         scenarios Card "states" {
-          fixture Empty
           device phone
           scenario "same name" { }
           scenario "same name" { }

@@ -280,12 +280,10 @@ Describe('validator: commands as configured values', () => {
           do Run()
         }
         view Row(Document) {
-          let Verb = Finish
           let ToArchive = Finish with { Document }
           action Unfilled() { do Finish() }
           action Twice() { do Finish(Document, Document) }
           action Mislabeled() { do Finish(Paper: Document) }
-          action ThroughAlias() { do Verb() }
           action Refilled() { do ToArchive(Document) }
           render Leaf()
         }

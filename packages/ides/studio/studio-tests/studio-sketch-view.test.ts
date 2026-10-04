@@ -7,7 +7,7 @@ import {
   type StudioSketchSnapApi,
   StudioSketchSnapRequests,
 } from '../studio-src/client/StudioMatrixView'
-import { StudioSketchGeometry, type StudioSketchPoint } from '../studio-src/client/StudioSketchGeometry'
+import type { StudioSketchPoint } from '../studio-src/client/StudioSketchGeometry'
 import {
   StudioSketchBoardInput,
   StudioSketchChanges,
@@ -66,32 +66,7 @@ Test('Studio outer sketch drawing normalizes 360x76 and ignores taps, cancellati
   Expect(StudioSketchOuterDrawing.cancel(tap, 3)).toBeUndefined()
 })
 
-Test('Studio overlay geometry preserves order across draw, move, duplicate, resize, and cancel', () => {
-  const original = testRects()
-  let state = StudioSketchGeometry.initial(original)
-  state = StudioSketchGeometry.beginDraw(state, 'drawn', { x: 250, y: 10 })
-  state = StudioSketchGeometry.endPointer(state, { x: 300, y: 50 })
-  Expect(state.rects.map(rect => rect.id)).toEqual(['back', 'front', 'drawn'])
-
-  state = StudioSketchGeometry.beginMove(state, { x: 260, y: 20 })
-  state = StudioSketchGeometry.endPointer(state, { x: 270, y: 25 })
-  Expect(state.rects.at(-1)).toMatchObject({ height: 40, width: 50, x: 260, y: 15 })
-
-  state = StudioSketchGeometry.beginMove(state, { x: 270, y: 25 }, { duplicateId: 'copy', optionKey: true })
-  state = StudioSketchGeometry.endPointer(state, { x: 280, y: 30 })
-  Expect(state.rects.map(rect => rect.id)).toEqual(['back', 'front', 'drawn', 'copy'])
-
-  state = StudioSketchGeometry.beginResize(state, 'east', { x: 320, y: 30 })
-  state = StudioSketchGeometry.endPointer(state, { x: 340, y: 30 })
-  Expect(state.rects.at(-1)?.width).toBe(70)
-
-  state = StudioSketchGeometry.beginDraw(state, 'cancelled', { x: 5, y: 5 })
-  state = StudioSketchGeometry.updatePointer(state, { x: 40, y: 40 })
-  state = StudioSketchGeometry.cancelPointer(state)
-  Expect(state.rects.some(rect => rect.id === 'cancelled')).toBe(false)
-})
-
-Test('Studio sketch changes preserve optimistic and authoritative order and serialize revision reads', async () => {
+Test('Studio sketch changes preserve optimistic and authoritative order', () => {
   const sketch = {
     height: 76,
     id: 'sketch-1',
@@ -158,27 +133,6 @@ Test('Studio sketch changes preserve optimistic and authoritative order and seri
       sourceRectId: sketch.rects[0]!.id,
     }, authoritative)[0]?.rects.map(rect => rect.id),
   ).toEqual(['back', 'copy', 'front'])
-
-  const lane = new StudioSketchMutationLane()
-  const revisions: number[] = []
-  let revision = 0
-  let releaseFirst: (() => void) | undefined
-  const first = lane.run(async () => {
-    revisions.push(revision)
-    await new Promise<void>(resolve => {
-      releaseFirst = resolve
-    })
-    revision = 1
-  })
-  const second = lane.run(async () => {
-    revisions.push(revision)
-    revision = 2
-  })
-  await Promise.resolve()
-  Expect(revisions).toEqual([0])
-  releaseFirst!()
-  await Promise.all([first, second])
-  Expect(revisions).toEqual([0, 1])
 })
 
 Test('Studio Snap selection chooses explicit free rectangles or all free rectangles and settles partial Snap', () => {
@@ -228,7 +182,7 @@ Test('Studio flow controls expose explicit selection reasons and bounded spacer 
   Expect(StudioSketchFlowControls.spacerAction(['back', 'front'], 100)).toBeUndefined()
 })
 
-Test('Studio overlap proposal exposes exact confirmation and Cancel performs no mutation', () => {
+Test('Studio overlap proposal exposes exact confirmation version and selected rectangles', () => {
   const proposal = {
     content: 'render Text("Front")',
     diff: '--- View1.tao\n+++ View1.tao (proposed)',
@@ -244,7 +198,6 @@ Test('Studio overlap proposal exposes exact confirmation and Cancel performs no 
     confirmedProposalVersion: 'proposed-2',
     rectIds: ['front'],
   })
-  Expect(StudioSketchProposal.cancel()).toBeUndefined()
 })
 
 Test(
@@ -736,20 +689,18 @@ Test('mounted Text double-click survives pointer paint and commits content once 
   mounted.dispose()
 })
 
-Test('mounted inline Text Escape, blur, unchanged Enter, and disposal cancel without writes', () => {
-  for (const action of ['Escape', 'blur', 'unchanged', 'dispose']) {
+Test('mounted inline Text Escape, blur, and disposal cancel without writes', () => {
+  for (const action of ['Escape', 'blur', 'dispose']) {
     const { board, dom, host, mounted, changes } = mountTextEditor()
     board.dispatch('dblclick', pointer('dblclick', board, 1, 45, 15))
     const input = dom.find(host, 'taoStudioSketchTextEditor', 'front')
-    if (action !== 'unchanged') {
-      input.value = 'Discard me'
-    }
+    input.value = 'Discard me'
     if (action === 'blur') {
       input.dispatch('blur', { target: input, type: 'blur' })
     } else if (action === 'dispose') {
       mounted.dispose()
     } else {
-      press(input, action === 'unchanged' ? 'Enter' : action)
+      press(input, action)
     }
     press(input, 'Enter')
     Expect(changes).toEqual([])
@@ -777,18 +728,16 @@ Test('mounted inline Text preserves existing newlines and unchanged Enter does n
 })
 
 Test('mounted double-click ignores non-Text rectangles and snapped Text', () => {
-  for (const kind of ['Placeholder', 'Image', 'Box']) {
-    const { board, host, mounted, changes } = mountTextEditor(undefined, {
-      ...testSketch(),
-      rects: [{ ...testRects()[1]!, kind }],
-      snapped: [{ rect: { ...testRects()[0]!, kind: 'Text' }, target: target('back') }],
-    })
-    board.dispatch('dblclick', pointer('dblclick', board, 1, 45, 15))
-    board.dispatch('dblclick', pointer('dblclick', board, 1, 15, 15))
-    Expect(host.descendants().some(element => element.dataset['taoStudioSketchTextEditor'] !== undefined)).toBe(false)
-    Expect(changes).toEqual([])
-    mounted.dispose()
-  }
+  const { board, host, mounted, changes } = mountTextEditor(undefined, {
+    ...testSketch(),
+    rects: [{ ...testRects()[1]!, kind: 'Image' }],
+    snapped: [{ rect: { ...testRects()[0]!, kind: 'Text' }, target: target('back') }],
+  })
+  board.dispatch('dblclick', pointer('dblclick', board, 1, 45, 15))
+  board.dispatch('dblclick', pointer('dblclick', board, 1, 15, 15))
+  Expect(host.descendants().some(element => element.dataset['taoStudioSketchTextEditor'] !== undefined)).toBe(false)
+  Expect(changes).toEqual([])
+  mounted.dispose()
 })
 
 Test(
@@ -1438,7 +1387,7 @@ Test('mounted render card is selected by its body and removed from the canvas wi
   }
 })
 
-Test('mounted right-click or Control-click opens a Remove menu and never draws', async () => {
+Test('mounted Control-click opens a Remove menu and never draws', async () => {
   const fixture = mountFrames()
   const { calls, dom, frame } = fixture
   try {

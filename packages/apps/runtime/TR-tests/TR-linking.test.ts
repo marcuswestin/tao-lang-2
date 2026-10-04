@@ -39,11 +39,9 @@ Describe('TR Linking', () => {
   Test('opens a URL with React Native Linking outside tests', async () => {
     const restore = setNodeEnv('development')
     const opened: string[] = []
-    let loads = 0
     try {
       await openUrl('https://example.com/story', {
         required<ModuleT>(capability: string, moduleName: 'react-native'): ModuleT {
-          loads += 1
           Expect([capability, moduleName]).toEqual(['Linking', 'react-native'])
           return {
             Linking: {
@@ -58,7 +56,6 @@ Describe('TR Linking', () => {
       restore()
     }
 
-    Expect(loads).toBe(1)
     Expect(opened).toEqual(['https://example.com/story'])
   })
 

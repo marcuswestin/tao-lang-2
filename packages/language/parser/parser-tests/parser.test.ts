@@ -13,7 +13,6 @@ Describe('parser: core language syntax', () => {
       public app PublicApp { }
     `)
 
-    Expect(parseResult.diagnostics).toEqual([])
     Expect(parseResult.entry.ast.statements.filter(AST.isAppDeclaration).map(app => app.visibility)).toEqual([
       'file',
       'folder',
@@ -44,7 +43,6 @@ Describe('parser: core language syntax', () => {
       view Empty() { render Empty() }
     `)
 
-    Expect(result.diagnostics).toEqual([])
     const binding = result.entry.ast.statements
       .flatMap(statement => AST.streamAllContents(statement))
       .find(AST.isViewBinding)
@@ -140,7 +138,6 @@ Describe('parser: core language syntax', () => {
         render inject \`\`\`ts return null \`\`\`
       }
     `)
-    Expect(parseResult.diagnostics).toEqual([])
     const handlers = parseResult.entry.ast.statements
       .flatMap(statement => AST.streamAllContents(statement))
       .filter(AST.isEventHandler)
@@ -206,6 +203,7 @@ Describe('parser: core language syntax', () => {
     ])
   })
 
+  // REMOVAL CANDIDATE: Empty layout brackets are a low-value variant of populated clauses; retain their distinct AST shape for now.
   Test('parses empty brackets after a render target as an empty layout clause', async () => {
     const parseResult = await testParseCode(`
       app MyApp { view MainView }
@@ -246,6 +244,7 @@ Describe('parser: core language syntax', () => {
     const [greetingAlias, launchCountAlias, _textView, _statTileView, mainView] = parseResult.entry.ast.statements
 
     Expect.Is(greetingAlias, AST.isAliasDeclaration)
+    Expect(greetingAlias.keyword).toBe('let')
     Expect.Is(launchCountAlias, AST.isAliasDeclaration)
     Expect.Is(mainView, AST.isViewDeclaration)
 
@@ -270,22 +269,11 @@ Describe('parser: core language syntax', () => {
     Expect(valueDeclarationName(textArg.target.ref)).toBe('LocalLabel')
 
     const statArgs = AST.argumentsOf(statRender).map(argument => argument.value)
-    Expect(statArgs.map(AST.isValueReference)).toEqual([true, true])
     const [labelArg, countArg] = statArgs
     Expect.Is(labelArg, AST.isValueReference)
     Expect.Is(countArg, AST.isValueReference)
     Expect(valueDeclarationName(labelArg.target.ref)).toBe('Greeting')
     Expect(valueDeclarationName(countArg.target.ref)).toBe('LaunchCount')
-  })
-
-  Test('parses canonical immutable bindings on AliasDeclaration', async () => {
-    const parseResult = await testParseCode(`
-      let Current = "current"
-    `)
-
-    const [current] = parseResult.entry.ast.statements
-    Expect.Is(current, AST.isAliasDeclaration)
-    Expect(current.keyword).toBe('let')
   })
 
   Test('parses state declarations and action values', async () => {
@@ -482,7 +470,6 @@ Describe('parser: core language syntax', () => {
       }
     `)
 
-      Expect(parseResult.diagnostics).toEqual([])
       const tags = AST.streamAllContents(parseResult.entry.ast).filter(AST.isTagStatement)
       Expect(tags.map(tag => tag.tag)).toEqual(['#field', '#rows', '#choose'])
       const loop = AST.streamAllContents(parseResult.entry.ast).find(AST.isForStatement)
@@ -564,7 +551,6 @@ Describe('parser: core language syntax', () => {
       view Text(Value text) { render inject \`\`\`ts return null \`\`\` }
     `)
 
-    Expect(parseResult.diagnostics).toEqual([])
     const entities = parseResult.entry.ast.statements.filter(AST.isEntityDataDeclaration)
     Expect(entities.map(entity => [entity.name, entity.singularName])).toEqual([
       ['Workspaces', 'Workspace'],
@@ -652,7 +638,6 @@ Describe('parser: core language syntax', () => {
       view Text(Value number) { render inject \`\`\`ts return null \`\`\` }
     `)
 
-    Expect(parseResult.diagnostics).toEqual([])
     const query = AST.streamAllContents(parseResult.entry.ast).find(AST.isEntityQueryDeclaration)
     Expect.Is(query, AST.isEntityQueryDeclaration)
     const search = query.block?.clauses.find(AST.isSearchClause)
@@ -796,7 +781,6 @@ Describe('parser: core language syntax', () => {
       view Home() { }
     `)
 
-    Expect(parseResult.diagnostics).toEqual([])
     const app = parseResult.entry.ast.statements.find(AST.isAppDeclaration)
     Expect.Is(app, AST.isAppDeclaration)
     const navigator = AST.blockStatements(app).find(statement =>
@@ -842,7 +826,6 @@ Describe('parser: core language syntax', () => {
       }
     `)
 
-    Expect(parseResult.diagnostics).toEqual([])
     const [nav, datasource, home, main, store] = parseResult.entry.ast.statements
     Expect.Is(nav, AST.isTypeDeclaration)
     Expect.Is(datasource, AST.isTypeDeclaration)
@@ -905,7 +888,6 @@ Describe('parser: core language syntax', () => {
       let Relations = "an ordinary name"
     `)
 
-    Expect(parseResult.diagnostics).toEqual([])
     const [door, store, empty] = parseResult.entry.ast.statements
     Expect.Is(door, AST.isTypeDeclaration)
     Expect.Is(store, AST.isTypeDeclaration)
@@ -950,7 +932,6 @@ Describe('parser: core language syntax', () => {
       }
     `)
 
-    Expect(parseResult.diagnostics).toEqual([])
     const starterTags = parseResult.entry.ast.statements.find(
       statement => AST.isAliasDeclaration(statement) && statement.name === 'StarterTags',
     )

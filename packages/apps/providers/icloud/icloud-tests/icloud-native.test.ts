@@ -133,7 +133,7 @@ Describe('tao-icloud CloudKit zones', () => {
   })
 
   Test('subscribes before replaying the durable inbox and distinguishes structural state identities', async () => {
-    const native = fakeCloudKitModule({ replayBatch: 'durable-batch' })
+    const native = fakeCloudKitModule({ replayBatch: 'durable-batch', startBatch: 'early-batch' })
     const zone = cloudKitZonesOver(native.module)('a.b', 'c')
     const batches: string[] = []
     zone.subscribe({
@@ -149,56 +149,13 @@ Describe('tao-icloud CloudKit zones', () => {
     await Promise.resolve()
     await Promise.resolve()
 
-    Expect(batches).toEqual(['fetched'])
+    Expect(batches).toEqual(['fetched', 'fetched'])
     Expect(native.order).toEqual(['listener', 'start', 'replay'])
-    Expect(native.acknowledged).toEqual([[native.started[0]!.sessionId, 'durable-batch']])
+    Expect(native.acknowledged).toEqual([
+      [native.started[0]!.sessionId, 'early-batch'],
+      [native.started[0]!.sessionId, 'durable-batch'],
+    ])
     Expect(cloudKitStateFileName('a.b', 'c')).not.toBe(cloudKitStateFileName('a', 'b.c'))
-  })
-
-  Test('replays and derives non-aliasing state identities in independent processes', async () => {
-    const modulePath = Repo.resolvePath('packages/apps/providers/icloud/icloud-src/cloudkit-native.ts')
-    const sharedPath = Repo.resolvePath('packages/shared/shared-src/shared.ts')
-    const run = async (container: string, zoneName: string) => {
-      const script = `
-        import { cloudKitStateFileName, cloudKitZonesOver } from ${JSON.stringify(modulePath)}
-        import { HCI } from ${JSON.stringify(sharedPath)}
-        let listener = () => {}
-        let sessionId = ''
-        const batches = []
-        const native = {
-          acknowledgeFetched: async () => {},
-          addListener: (_name, next) => { listener = next; return { remove() {} } },
-          fetchChanges: async () => {},
-          replayInbox: async id => listener({ batchId: 'durable', kind: 'fetched', sessionId: id }),
-          sendChanges: async () => {},
-          start: async id => {
-            sessionId = id
-            listener({ batchId: 'early', kind: 'fetched', sessionId: id })
-          },
-          stop: async () => {},
-        }
-        const zone = cloudKitZonesOver(native)(${JSON.stringify(container)}, ${JSON.stringify(zoneName)})
-        zone.subscribe({
-          accountChanged() {}, failed() {}, sent() {}, zoneReset() {},
-          fetched(_modifications, _deletions, acknowledge) { batches.push('fetched'); void acknowledge() },
-        })
-        await Promise.resolve()
-        await Promise.resolve()
-        HCI.writeLine(JSON.stringify({ batches, sessionId, state: cloudKitStateFileName(${JSON.stringify(container)}, ${
-        JSON.stringify(zoneName)
-      }) }))
-      `
-      const result = await CLI.run('bun', { args: ['-e', script], stdio: 'pipe' })
-      Expect(result.exitCode).toBe(0)
-      return JSON.parse(result.stdout) as { batches: string[]; sessionId: string; state: string }
-    }
-
-    const [left, right] = await Promise.all([run('a.b', 'c'), run('a', 'b.c')])
-    Expect(left.batches).toEqual(['fetched', 'fetched'])
-    Expect(right.batches).toEqual(['fetched', 'fetched'])
-    // Process-local session ids may repeat; the durable state identities must not.
-    Expect(left.sessionId).toBe(right.sessionId)
-    Expect(left.state).not.toBe(right.state)
   })
 })
 
@@ -270,7 +227,7 @@ Describe('tao-icloud config plugin', () => {
   })
 })
 
-function fakeCloudKitModule(options: { replayBatch?: string; sendFailure?: string } = {}): {
+function fakeCloudKitModule(options: { replayBatch?: string; sendFailure?: string; startBatch?: string } = {}): {
   acknowledged: unknown[][]
   emit(event: CloudKitEvent): void
   fetches: string[]
@@ -321,6 +278,11 @@ function fakeCloudKitModule(options: { replayBatch?: string; sendFailure?: strin
     start: async (sessionId, container, zoneName, stateFileName) => {
       state.order.push('start')
       state.started.push({ container, sessionId, stateFileName, zoneName })
+      if (options.startBatch !== undefined) {
+        for (const listener of listeners) {
+          listener({ batchId: options.startBatch, kind: 'fetched', sessionId })
+        }
+      }
     },
     stop: async sessionId => {
       state.stopped.push(sessionId)

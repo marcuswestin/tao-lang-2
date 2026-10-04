@@ -1,6 +1,6 @@
 import { type Diagnostic, FS } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
-import { diagnosticLocation, renderDiagnostic, severityWord } from '../cli-src/diagnostic-report'
+import { renderDiagnostic, severityWord } from '../cli-src/diagnostic-report'
 
 const source = 'view Main() {\n   render NoSuchView()\n}\n'
 
@@ -52,10 +52,6 @@ Describe('tao CLI diagnostic rendering', () => {
     Expect(severityWord(diagnostic({ severity: 'warning' }))).toBe('warning')
     Expect(severityWord(diagnostic({ severity: 'information' }))).toBe('info')
     Expect(severityWord(diagnostic({ severity: 'hint' }))).toBe('hint')
-  })
-
-  Test('reports a one-based line and column, because that is what an editor shows', () => {
-    Expect(diagnosticLocation(diagnostic())).toBe('App.tao:2:11')
   })
 
   Test('renders the headline alone when the diagnostic has no range', () => {

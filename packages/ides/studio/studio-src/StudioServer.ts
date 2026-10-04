@@ -1178,7 +1178,6 @@ export const StudioServerTesting = {
   requestAllowed,
   serverOrigin,
   studioClientHtml,
-  studioSessionRoute: StudioSessionPath.route,
 } as const
 
 function studioClientHtml(options: StudioServerOptions): string {

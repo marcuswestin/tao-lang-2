@@ -166,7 +166,6 @@ export const StudioNative = {
   testing: {
     acquireNativeHostLease,
     acquireNativeHostLeases,
-    installedHutchExecutablePath,
     installStudioServicePayload,
     createNativeInterruption,
     discoverStudioServicePackageRoots,

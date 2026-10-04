@@ -12,7 +12,7 @@ Describe('ManagedNode', () => {
 
       Expect(binary).toBe(FS.resolvePath('bin/node', installRoot))
       Expect((await CLI.mustRun(binary, { args: ['--version'] })).stdout.trim()).toBe('v24.0.0-stand-in')
-      Expect(downloads).toHaveLength(1)
+      Expect(downloads).toEqual([install.manifest.url])
     })
   })
 

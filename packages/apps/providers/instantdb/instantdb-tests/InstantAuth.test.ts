@@ -201,7 +201,6 @@ Describe('InstantAuth provider', () => {
     // Only the configured endpoints appear in the proof.
     const bare = connect(sdk, { AppId: nextAppId() })
     sdk.user = alice
-    Expect((await bare.proof({ kind: 'Session', signal: live() })).kind === 'Session').toBe(true)
     Expect(Object.keys((await bare.proof({ kind: 'Session', signal: live() }) as { value: object }).value)).toEqual([
       'appId',
       'refreshToken',

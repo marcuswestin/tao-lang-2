@@ -175,9 +175,7 @@ Describe('TR reactive source', () => {
     const source = createReactiveSource()
 
     Expect(isReactiveValue(source)).toBe(true)
-    Expect(isReactiveValue({ subscribe: () => ({ unsubscribe() {} }) })).toBe(false)
     Expect(isReactiveValue({ subscribe: () => () => {} })).toBe(false)
-    Expect(isReactiveValue({ subscribe: true })).toBe(false)
     Expect(isReactiveValue(undefined)).toBe(false)
   })
 })

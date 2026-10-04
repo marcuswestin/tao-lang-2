@@ -50,7 +50,8 @@ scenarios MainView "states" {
 }
 `
 
-Test('Studio compiles, visually edits, and undoes the real HNReader app', async () => {
+// REMOVAL CANDIDATE: Repeats session insertion/undo/publication with real HNReader inputs; dropping it trades this app/compiler integration.
+Test('Studio compiles, applies insertion and undo, and publishes the real HNReader app', async () => {
   const artifactRoot = Platform.runtimeProcess.env['TAO_STUDIO_SMOKE_ARTIFACT_ROOT']
     ?? FS.resolvePath('.artifacts/tests/studio-smoke/real-app', Repo.getRoot())
   const projectRoot = await mkTestDir('tao-studio-hnreader-')
@@ -93,7 +94,6 @@ Test('Studio compiles, visually edits, and undoes the real HNReader app', async 
     const stableRoot = await FS.readText(FS.resolvePath('App.tsx', generatedRoot))
     const publication = await FS.readText(FS.resolvePath('TaoStudioPublication.ts', generatedRoot))
 
-    Expect(initialCompile.status).toBe('compiled')
     Expect(initialCompile.compileRevision).toBe(1)
     Expect(applied.compile.compileRevision).toBe(2)
     Expect(applied.content).toContain('Text("New text")')
@@ -524,6 +524,7 @@ async function setInteractionMode(browser: StudioCdp, mode: 'edit' | 'run'): Pro
  * only while the count still reads 0, and give each press time to render before looking again, so a
  * press that did land is never repeated.
  */
+// REMOVAL CANDIDATE: Retried physical press uses a fixed render pause; simplifying it needs host evidence that one acknowledged press preserves the state proof.
 async function pressIncrementOnce(browser: StudioCdp, previewUrl: string): Promise<void> {
   const counted =
     `[...document.querySelectorAll('[data-tao-studio]')].some(element => element.textContent?.trim() === '1')`

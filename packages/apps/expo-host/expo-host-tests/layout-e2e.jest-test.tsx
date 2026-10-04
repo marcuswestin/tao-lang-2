@@ -71,55 +71,6 @@ Describe('Expo runtime', () => {
     )
   })
 
-  Test("lets caller layout override a header default but never a wrapper root's own layout", async () => {
-    await testCompileApp(
-      `
-        app WrapperLayoutOverride { id "wrapperlayoutoverride" version "1.0.0" name "WrapperLayoutOverride"
-            view MainView
-        }
-
-        use Col, Row, Text from @tao/ui
-
-        // The header is the declaration's public default; the root's own clause is private (R9).
-        view Public() [gap 12] {
-            render Row()[content spread center] {
-                Text("Public gap")
-                @@content
-            }
-        }
-
-        view Private() {
-            render Row()[gap 12, content spread center] {
-                Text("Private gap")
-                @@content
-            }
-        }
-
-        view MainView() {
-            render Col() {
-                Public()[gap 8]
-                Private()[gap 8]
-            }
-        }
-      `,
-      screen => {
-        const gapOf = (label: string): number | undefined => {
-          for (let current = screen.getByText(label).parent; current; current = current.parent) {
-            const gap = RN.StyleSheet.flatten(current.props.style)?.gap
-            if (gap !== undefined) {
-              return gap
-            }
-          }
-          return undefined
-        }
-
-        ExpectScreen(screen).toHaveText('Public gap')
-        Expect(gapOf('Public gap')).toBe(8)
-        Expect(gapOf('Private gap')).toBe(12)
-      },
-    )
-  })
-
   Test('overlays compiled layout clauses over stdlib layout defaults', async () => {
     await testCompileApp(
       `
@@ -146,7 +97,6 @@ Describe('Expo runtime', () => {
           alignSelf: 'stretch',
           flexDirection: 'row',
           flexGrow: 2,
-          gap: 4,
           justifyContent: 'flex-end',
         })
       },

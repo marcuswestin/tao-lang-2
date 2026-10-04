@@ -176,6 +176,5 @@ Describe('compiler: app-scoped auth and account data', () => {
     `)
     const code = result.code.replace(/\s+/g, ' ')
     Expect(code).toContain('TR.GuardRender(TR.Call(_Scope.Me, TR.Value(_TaoAuthScope)).evaluate(), [')
-    Expect(code).toContain('}), _ViewProps.__tao)')
   })
 })

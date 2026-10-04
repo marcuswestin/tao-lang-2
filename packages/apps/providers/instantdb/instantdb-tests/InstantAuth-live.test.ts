@@ -48,7 +48,6 @@ Describe('InstantAuth against local InstantDB (requires TAO_INSTANT_LIVE_API_URL
       Expect(signedIn.outcome).toEqual({ status: 'completed' })
       const principal = signedIn.session?.principal
       Expect(principal).toMatchObject({ email: 'alice@example.test', issuer: `instantdb:${app.id}` })
-      Expect(principal?.subject).toMatch(/^[0-9a-f-]{36}$/)
       Expect(await connection.restore(live())).toEqual(signedIn.session)
 
       const proof = await connection.proof({ kind: 'Session', signal: live() })

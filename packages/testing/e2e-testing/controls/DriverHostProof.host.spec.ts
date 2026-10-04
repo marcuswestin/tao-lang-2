@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { runPlaywrightHostDriverProof } from '../DriverHostProof'
 import type { DriverHostTestingRequest, HostTestingContext } from '../HostTestingRequest'
 
-test('runs the five browser-driver proofs through the dedicated driver project', async () => {
+test('runs browser-driver proofs through the dedicated driver project', async () => {
   const calls: unknown[][] = []
   await runPlaywrightHostDriverProof(request(), context(), {
     recordedCommand: async (...args) => {

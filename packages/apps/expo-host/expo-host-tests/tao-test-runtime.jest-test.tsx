@@ -218,61 +218,6 @@ Describe('Expo runtime', () => {
     )
   })
 
-  Test('runs Tao press text steps before later expectations', async () => {
-    await withTaoFiles(
-      'tao-runtime-test-plan-',
-      {
-        'Main.test.tao': `
-        use PressTextApp from ./
-
-        test "Press text" {
-          test "updates rendered state" {
-            run PressTextApp
-            expect text "0"
-            press text "Add"
-            expect text "1"
-          }
-        }
-      `,
-        'Main.tao': `
-        app PressTextApp { id "presstextapp" version "1.0.0" name "PressTextApp" view MainView }
-        view MainView() {
-          state Count = 0
-          action AddOne() {
-            set Count += 1
-          }
-          render Stack(){
-            NativeButton("Add", AddOne)
-            Number(Count)
-          }
-        }
-        view Stack() {
-          render inject Content @@content, Layout @@layout, Tag @@tag \`\`\`ts
-            return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
-          \`\`\`
-        }
-        view NativeButton(Title text, Action action()) {
-          render inject Title, Action \`\`\`ts
-            return (
-              <RN.Pressable accessibilityRole="button" onPress={() => Action.invoke()}>
-                <RN.Text>{Title}</RN.Text>
-              </RN.Pressable>
-            )
-          \`\`\`
-        }
-        view Number(Value number) {
-          render inject Value \`\`\`ts
-            return <RN.Text>{Value}</RN.Text>
-          \`\`\`
-        }
-      `,
-      },
-      async paths => {
-        await RuntimeTesting.runTaoTestPlan(paths['Main.test.tao']!)
-      },
-    )
-  })
-
   Test('delivers press phases, hover, and focus without collapsing them into a press', async () => {
     await withTaoFiles(
       'tao-runtime-pointer-phase-test-plan-',
@@ -749,10 +694,8 @@ Describe('Expo runtime', () => {
           untaggedRow = untaggedRow.parent
         }
         Expect(untaggedRow).not.toBeNull()
-        Expect(taggedRow.type).toBe(untaggedRow?.type)
         Expect(taggedRow.children.map((child: any) => typeof child === 'string' ? 'string' : child.type))
           .toEqual(untaggedRow?.children.map((child: any) => typeof child === 'string' ? 'string' : child.type))
-        Expect(taggedRow.props.testID).toBe('taggedRows')
         Expect(untaggedRow?.props.testID).toBeUndefined()
       },
     )

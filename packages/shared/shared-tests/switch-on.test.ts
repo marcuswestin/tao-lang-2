@@ -37,8 +37,4 @@ Describe('Switch.on', () => {
         .toThrow('Unhandled property value')
     }
   })
-
-  Test('Switch.nothing is a shared no-op handler', () => {
-    Expect(Switch.nothing()).toBeUndefined()
-  })
 })

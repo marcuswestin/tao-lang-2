@@ -57,7 +57,6 @@ Describe('compiler: provider pairing metadata', () => {
       `,
     }, async paths => {
       const result = await Workspace.compile(paths['Main.tao'])
-      Expect(result.validation.diagnostics.filter(diagnostic => diagnostic.severity === 'error')).toEqual([])
       const reference = result.files.find(file =>
         file.sourcePath.endsWith('/providers/reference/Reference.tao') && file.relativePath.endsWith('.tsx')
       )?.code.replace(/\s+/g, ' ') ?? ''

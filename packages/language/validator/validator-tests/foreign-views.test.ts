@@ -1,6 +1,6 @@
 import { Describe, Expect, Test } from '@shared/test'
 import { ViewsValidator } from '../validator-src/validators/views-validator'
-import { accepts, rejects, stubView, validationErrorMessages, withValidatedFiles } from './test-validate'
+import { accepts, rejects, stubView, withValidatedFiles } from './test-validate'
 
 Describe('validator: foreign views', () => {
   Test(
@@ -20,7 +20,7 @@ Describe('validator: foreign views', () => {
   )
 
   Test(
-    'rejects non-relative or non-TypeScript foreign implementations',
+    'rejects a package path for a foreign implementation',
     rejects(
       `
         app ForeignApp { id "foreignapp" version "1.0.0" name "ForeignApp" view Foreign }
@@ -46,9 +46,6 @@ Describe('validator: foreign views', () => {
       'Main.tao':
         'app Missing { id "missing" version "1.0.0" name "Missing" view Foreign } view Foreign() from ./Missing.tsx',
     }, result => {
-      Expect(validationErrorMessages(result)).toContain(
-        ViewsValidator.messages.foreignViewMissing('./Missing.tsx'),
-      )
       const diagnostic = result.diagnostics.find(candidate =>
         candidate.message === ViewsValidator.messages.foreignViewMissing('./Missing.tsx')
       )

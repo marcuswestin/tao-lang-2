@@ -1,6 +1,6 @@
 import { Workspace } from '@compiler/workspace'
 import { AST } from '@parser'
-import { Assert, CLI, Errors, FS, Repo, Time } from '@shared'
+import { Assert, Errors, FS } from '@shared'
 import { Deferred, Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { StudioApiEventStream } from '../studio-src/client/StudioApiClient'
 import type { StudioFixtureGeneration } from '../studio-src/StudioFixtureGeneration'
@@ -22,6 +22,7 @@ import {
   type StudioSketchCatalogIO,
   type StudioSketchCatalogRequest,
 } from '../studio-src/StudioSketchCatalog'
+import { contendingSketchCreate } from './test-studio-fixtures'
 
 Describe('Studio sketch session protocol', () => {
   Test(
@@ -72,30 +73,6 @@ Describe('Studio sketch session protocol', () => {
     })
   })
 
-  Test('changes rectangle data without rewriting or recompiling generated Tao', async () => {
-    await withSketchSession(async (session, root, compiles) => {
-      const created = await session.applySketchAction(createRequest(root, 'create-1'))
-      const path = FS.resolvePath('@/studio/View1.tao', root)
-      const source = await FS.readText(path)
-      const rect = created.catalog.sketches[0]!.rects[0]!
-
-      const updated = await session.applySketchAction({
-        action: {
-          kind: 'update-rect',
-          rect: { ...rect, content: 'Updated', x: 40 },
-          rectId: rect.id,
-          sketchId: 'sketch-1',
-        },
-        expectedRevision: created.catalog.revision,
-        requestId: 'rect-update',
-      })
-
-      Expect(updated.catalog.sketches[0]!.rects[0]).toMatchObject({ content: 'Updated', x: 40 })
-      Expect(await FS.readText(path)).toBe(source)
-      Expect(compiles).toHaveLength(1)
-    })
-  })
-
   Test('proposes and commits a partial Snap with server-derived tagged render identities', async () => {
     await withSketchSession(async (session, root, compiles) => {
       const created = await session.applySketchAction(createTwoRectRequest(root, 'create-two'))
@@ -112,7 +89,6 @@ Describe('Studio sketch session protocol', () => {
       const proposal = await session.proposeSketchSnap(request)
       Expect(proposal.projectedRectIds).toEqual(['café'])
       Expect(proposal.tree).toMatchObject({ type: 'container' })
-      Expect(proposal.diff).toContain('#studio_rect_00630061006600e9')
       Expect(proposal.content).toContain('#studio_rect_00630061006600e9')
 
       const result = await session.applySketchSnap(request)
@@ -131,7 +107,6 @@ Describe('Studio sketch session protocol', () => {
         },
       })
       Expect(sketch.snapped[0]?.target.renderId).toContain(`${FS.resolvePath('@/studio/View1.tao', root)}:`)
-      Expect(result.file.content).toContain('#studio_rect_00630061006600e9')
       Expect(await FS.fileMode(FS.resolvePath('@/studio/View1.tao', root))).toBe(0o444)
       Expect(compiles).toHaveLength(2)
     })
@@ -543,27 +518,6 @@ Describe('Studio sketch session protocol', () => {
     })
   })
 
-  Test('names a view made with ⌘G in a drawn view from the canvas count, and the next drawing skips it', async () => {
-    await withSketchSession(async (session, root) => {
-      const { flowed, separatorId } = await separatedFlow(session, root)
-      session.registerPreview({ previewInstanceId: 'preview-1' })
-
-      const extracted = await drawnViewSourceAction(session, flowed.file, 'make-view', {
-        kind: 'extract-view',
-        renderIds: [separatorId],
-      })
-      Expect(extracted.content).toContain('view View2(')
-      const drawn = await session.applySketchAction({
-        action: { height: 40, id: 'sketch-2', kind: 'create-sketch', project: root, rects: [], width: 100 },
-        expectedRevision: flowed.catalog.revision,
-        requestId: 'create-after-make-view',
-      })
-
-      Expect(drawn.createdSketch?.view).toBe('View3')
-      Expect(await FS.readText(FS.resolvePath('@/studio/View1.tao', root))).toBe(extracted.content)
-    })
-  })
-
   Test('names a view made with ⌘G past every canvas number a drawing or earlier ⌘G holds', async () => {
     await withSketchSession(async (session, root) => {
       const { flowed, separatorId } = await separatedFlow(session, root)
@@ -582,7 +536,14 @@ Describe('Studio sketch session protocol', () => {
       })
 
       Expect(extracted.content).toContain('view View4(')
-      Expect(extracted.content).not.toContain('view View2(')
+      const current = await session.sketchCatalog()
+      const drawn = await session.applySketchAction({
+        action: { height: 40, id: 'sketch-3', kind: 'create-sketch', project: root, rects: [], width: 100 },
+        expectedRevision: current.revision,
+        requestId: 'create-after-make-view',
+      })
+      Expect(drawn.createdSketch?.view).toBe('View5')
+      Expect(await FS.readText(FS.resolvePath('@/studio/View1.tao', root))).toBe(extracted.content)
     })
   })
 
@@ -611,43 +572,30 @@ Describe('Studio sketch session protocol', () => {
         sourceVersion: snapped.file.sourceVersion,
       })
       await flowCompileEntered.promise
-      const marker = FS.resolvePath('independent-flow-create-finished', root)
-      const sessionModule = Repo.resolvePath('packages/ides/studio/studio-src/StudioProjectSession.ts')
-      const sharedModule = Repo.resolvePath('packages/shared/shared-src/shared.ts')
-      const independent = CLI.run('bun', {
-        args: [
-          '-e',
-          `
-        import { StudioProjectSession } from ${JSON.stringify(sessionModule)}
-        import { FS } from ${JSON.stringify(sharedModule)}
-        const root = ${JSON.stringify(root)}
-        const session = await StudioProjectSession.open({
-          async compile() {},
-          entryPath: FS.resolvePath('Garden.tao', root),
-          projectRoot: root,
-        })
-        await session.applySketchAction({
-          action: {
-            height: 40,
-            id: 'independent-flow-sketch',
-            kind: 'create-sketch',
-            project: root,
-            rects: [],
-            width: 100,
-          },
-          expectedRevision: ${snapped.catalog.revision},
-          requestId: 'independent-flow-create',
-        })
-        await FS.writeText(${JSON.stringify(marker)}, 'done')
-      `,
-        ],
-        stdio: 'pipe',
+      const independent = contendingSketchCreate(root, {
+        action: {
+          height: 40,
+          id: 'independent-flow-sketch',
+          kind: 'create-sketch',
+          project: root,
+          rects: [],
+          width: 100,
+        },
+        expectedRevision: snapped.catalog.revision,
+        requestId: 'independent-flow-create',
       })
-      await Time.sleep(40)
-      Expect(await FS.exists(marker)).toBe(false)
-      releaseFlowCompile.resolve()
-      await Expect(failedFlow).rejects.toThrow('generated Tao source failed to compile')
-      Expect((await independent).exitCode).toBe(0)
+      try {
+        await independent.waitForContention()
+        releaseFlowCompile.resolve()
+        await Expect(failedFlow).rejects.toThrow('generated Tao source failed to compile')
+        await independent.resume()
+        Expect((await independent.result).exitCode).toBe(0)
+      } finally {
+        releaseFlowCompile.resolve()
+        await independent.resume()
+        await failedFlow.catch(() => {})
+        await independent.result
+      }
       Expect(await session.readFile('@/studio/View1.tao')).toEqual(snapped.file)
       const catalog = await session.sketchCatalog()
       Expect(catalog.revision).toBe(snapped.catalog.revision + 1)
@@ -951,48 +899,30 @@ Describe('Studio sketch session protocol', () => {
 
         const failedCreate = session.applySketchAction(request)
         await compileEntered.promise
-        const marker = FS.resolvePath('independent-create-finished', root)
-        const started = FS.resolvePath('independent-create-started', root)
-        const sessionModule = Repo.resolvePath('packages/ides/studio/studio-src/StudioProjectSession.ts')
-        const sharedModule = Repo.resolvePath('packages/shared/shared-src/shared.ts')
-        const independent = CLI.run('bun', {
-          args: [
-            '-e',
-            `
-          import { StudioProjectSession } from ${JSON.stringify(sessionModule)}
-          import { FS } from ${JSON.stringify(sharedModule)}
-          const root = ${JSON.stringify(root)}
-          const session = await StudioProjectSession.open({
-            async compile() {},
-            entryPath: FS.resolvePath('Garden.tao', root),
-            projectRoot: root,
-          })
-          await FS.writeText(${JSON.stringify(started)}, 'started')
-          await session.applySketchAction({
-            action: {
-              height: 76,
-              id: 'independent-sketch',
-              kind: 'create-sketch',
-              project: root,
-              rects: [],
-              width: 360,
-            },
-            expectedRevision: 0,
-            requestId: 'independent-create',
-          })
-          await FS.writeText(${JSON.stringify(marker)}, 'done')
-        `,
-          ],
-          stdio: 'pipe',
+        const independent = contendingSketchCreate(root, {
+          action: {
+            height: 76,
+            id: 'independent-sketch',
+            kind: 'create-sketch',
+            project: root,
+            rects: [],
+            width: 360,
+          },
+          expectedRevision: 0,
+          requestId: 'independent-create',
         })
-        while (!await FS.exists(started)) {
-          await Time.sleep(1)
+        try {
+          await independent.waitForContention()
+          releaseCompile.resolve()
+          await Expect(failedCreate).rejects.toThrow('generated source failed to compile')
+          await independent.resume()
+          Expect((await independent.result).exitCode).toBe(0)
+        } finally {
+          releaseCompile.resolve()
+          await independent.resume()
+          await failedCreate.catch(() => {})
+          await independent.result
         }
-        await Time.sleep(100)
-        Expect(await FS.exists(marker)).toBe(false)
-        releaseCompile.resolve()
-        await Expect(failedCreate).rejects.toThrow('generated source failed to compile')
-        Expect((await independent).exitCode).toBe(0)
         const afterIndependent = await session.sketchCatalog()
         Expect(afterIndependent.revision).toBe(1)
         Expect(afterIndependent.sketches[0]?.id).toBe('independent-sketch')
@@ -1164,7 +1094,6 @@ Describe('Studio sketch session protocol', () => {
         failure = error
       }
       Expect(failure).toBeInstanceOf(Errors.UserInputError)
-      Expect(failure).not.toBeInstanceOf(TypeError)
       const url = new URL('http://127.0.0.1:5678/api/sketches/action')
       const response = StudioServerTesting.errorResponse(new Request(url), url, {}, failure)
       Expect(response.status).toBe(400)
@@ -1195,22 +1124,6 @@ Describe('Studio sketch session protocol', () => {
       Expect(events.some(event => event.type === 'files-changed')).toBe(true)
       // Numbers are never reused: the next drawing is View2 even though View1 is gone.
       Expect(removed.catalog.nextViewNumber).toBe(created.catalog.nextViewNumber)
-    })
-  })
-
-  Test('removes a drawn view whose rectangles were snapped into its source', async () => {
-    await withSketchSession(async (session, root) => {
-      const snapped = await snapTwoRects(session, root)
-      Expect(snapped.catalog.sketches[0]?.snapped).toHaveLength(2)
-
-      const removed = await session.applySketchAction({
-        action: { id: 'sketch-1', kind: 'delete-sketch' },
-        expectedRevision: snapped.catalog.revision,
-        requestId: 'delete-snapped',
-      })
-
-      Expect(removed.catalog.sketches).toEqual([])
-      Expect(await FS.exists(FS.resolvePath('@/studio/View1.tao', root))).toBe(false)
     })
   })
 

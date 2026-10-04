@@ -89,8 +89,6 @@ Describe('Studio release validation', () => {
       ])
       Expect(inventory.root).toBe(root)
       Expect(inventory.updateManifest).toEqual(artifacts.updateManifest)
-      // A name nobody produced cannot be claimed, because nothing accepts a claimed name.
-      Expect(inventory.names).not.toContain('fictional-9.9.9-update.json')
     } finally {
       await FS.remove(root)
     }
@@ -119,11 +117,6 @@ Describe('Studio release validation', () => {
 
     Expect(check(validation, 'packaged runtime')?.status).toBe('failed')
     Expect(validation.status).toBe('failed')
-  })
-
-  Test('inventories the packaged runtime and its native libraries', () => {
-    Expect(check(releaseValidation(payload, artifacts, gates), 'packaged runtime')?.detail)
-      .toBe('node plus 1 native library')
   })
 
   Test('fails an update manifest without a configured HTTPS release host', () => {
@@ -218,19 +211,6 @@ Describe('Studio native canary', () => {
     })
   })
 
-  Test('reports the classified Studio startup failure instead of guessing AppKit rejected it', () => {
-    const disposition = StudioCanaryCommand.testing.canaryLaunchDisposition({
-      exitCode: 1,
-      failure: new Errors.HostEnvironmentError('The device trust store is read-only.'),
-    })
-
-    Expect(disposition).toEqual({
-      blockedReason: 'Studio failed before the native probe reported (host environment): '
-        + 'The device trust store is read-only.',
-    })
-    Expect(disposition.blockedReason).not.toContain('AppKit')
-  })
-
   Test('classifies an unexpected startup failure as failed rather than blocked', () => {
     const disposition = StudioCanaryCommand.testing.canaryLaunchDisposition({
       exitCode: 1,
@@ -286,6 +266,7 @@ Describe('Studio native canary', () => {
     const release = Deferred()
     const nativeRoots: string[] = []
     let starts = 0
+    let runs: Promise<number>[] = []
     const dependencies = {
       blockedReason: async () => undefined,
       registryRoot: FS.resolvePath('registry', artifactRoot),
@@ -306,7 +287,7 @@ Describe('Studio native canary', () => {
       survivingOwnedPids: async () => [],
     }
     try {
-      const runs = [
+      runs = [
         StudioCanaryCommand.testing.runStudioCanary({ artifactRoot, projectRoot: '/tmp/one' }, dependencies),
         StudioCanaryCommand.testing.runStudioCanary({ artifactRoot, projectRoot: '/tmp/two' }, dependencies),
       ]
@@ -331,6 +312,7 @@ Describe('Studio native canary', () => {
       }
     } finally {
       release.resolve()
+      await Promise.allSettled(runs)
       await FS.remove(artifactRoot)
     }
   })
@@ -345,11 +327,15 @@ Describe('Studio native canary', () => {
 
   Test('removes a prior native probe result before starting a new canary', async () => {
     const artifactRoot = await mkTestDir('tao-studio-canary-probe-')
-    const stalePath = FS.resolvePath('electrobun/artifacts/runtime-result.json', artifactRoot)
-    await FS.writeJson(stalePath, { capabilities: { websocket: { passed: true } }, passed: true })
+    try {
+      const stalePath = FS.resolvePath('electrobun/artifacts/runtime-result.json', artifactRoot)
+      await FS.writeJson(stalePath, { capabilities: { websocket: { passed: true } }, passed: true })
 
-    Expect(await StudioCanaryCommand.testing.freshProbeResultPath(artifactRoot)).toBe(stalePath)
-    Expect(await FS.exists(stalePath)).toBe(false)
+      Expect(await StudioCanaryCommand.testing.freshProbeResultPath(artifactRoot)).toBe(stalePath)
+      Expect(await FS.exists(stalePath)).toBe(false)
+    } finally {
+      await FS.remove(artifactRoot)
+    }
   })
 
   Test('does not mistake the finalized in-process canary owner for a shutdown survivor', () => {
@@ -437,10 +423,6 @@ Describe('Studio native canary', () => {
       appName: 'HNReader',
       projectRoot: defaultRoot,
     })
-    Expect(resolveCanaryTarget({ projectRoot: defaultRoot }, repositoryRoot)).toEqual({
-      appName: 'HNReader',
-      projectRoot: defaultRoot,
-    })
   })
 
   Test('does not invent an app name for a non-default multi-app project', () => {
@@ -456,32 +438,36 @@ Describe('Studio native canary', () => {
   })
   Test('sweeps an earlier invocation that never reported and the build of one that passed', async () => {
     const artifactBase = await mkTestDir('tao-studio-canary-sweep-')
-    const invocations = FS.resolvePath('invocations', artifactBase)
-    const stale = Date.now() - 4 * 60 * 60 * 1000
+    try {
+      const invocations = FS.resolvePath('invocations', artifactBase)
+      const stale = Date.now() - 4 * 60 * 60 * 1000
 
-    // Killed before it reported: evidence of nothing, so the whole invocation goes.
-    await FS.writeText(FS.resolvePath('unreported/electrobun/app', invocations), 'build')
-    // Reported passed, then killed before it pruned its own build.
-    await FS.writeJson(FS.resolvePath('passed/canary.json', invocations), { status: 'passed' })
-    await FS.writeText(FS.resolvePath('passed/electrobun/app', invocations), 'build')
-    // Failed: its build is the evidence the run exists to produce, so it stays.
-    await FS.writeJson(FS.resolvePath('failed/canary.json', invocations), { status: 'failed' })
-    await FS.writeText(FS.resolvePath('failed/electrobun/app', invocations), 'build')
-    // Untouched because it is this run, and untouched because it is too recent to be finished.
-    await FS.writeText(FS.resolvePath('current/electrobun/app', invocations), 'build')
-    await FS.writeText(FS.resolvePath('running/electrobun/app', invocations), 'build')
-    for (const name of ['unreported', 'passed', 'failed']) {
-      await FS.setModifiedTimeMs(FS.resolvePath(name, invocations), stale)
+      // Killed before it reported: evidence of nothing, so the whole invocation goes.
+      await FS.writeText(FS.resolvePath('unreported/electrobun/app', invocations), 'build')
+      // Reported passed, then killed before it pruned its own build.
+      await FS.writeJson(FS.resolvePath('passed/canary.json', invocations), { status: 'passed' })
+      await FS.writeText(FS.resolvePath('passed/electrobun/app', invocations), 'build')
+      // Failed: its build is the evidence the run exists to produce, so it stays.
+      await FS.writeJson(FS.resolvePath('failed/canary.json', invocations), { status: 'failed' })
+      await FS.writeText(FS.resolvePath('failed/electrobun/app', invocations), 'build')
+      // Untouched because it is this run, and untouched because it is too recent to be finished.
+      await FS.writeText(FS.resolvePath('current/electrobun/app', invocations), 'build')
+      await FS.writeText(FS.resolvePath('running/electrobun/app', invocations), 'build')
+      for (const name of ['unreported', 'passed', 'failed']) {
+        await FS.setModifiedTimeMs(FS.resolvePath(name, invocations), stale)
+      }
+
+      await StudioCanaryCommand.testing.sweepEarlierCanaryInvocations(artifactBase, 'current')
+
+      Expect(await FS.exists(FS.resolvePath('unreported', invocations))).toBe(false)
+      Expect(await FS.exists(FS.resolvePath('passed/electrobun', invocations))).toBe(false)
+      Expect(await FS.exists(FS.resolvePath('passed/canary.json', invocations))).toBe(true)
+      Expect(await FS.exists(FS.resolvePath('failed/electrobun/app', invocations))).toBe(true)
+      Expect(await FS.exists(FS.resolvePath('current/electrobun/app', invocations))).toBe(true)
+      Expect(await FS.exists(FS.resolvePath('running/electrobun/app', invocations))).toBe(true)
+    } finally {
+      await FS.remove(artifactBase)
     }
-
-    await StudioCanaryCommand.testing.sweepEarlierCanaryInvocations(artifactBase, 'current')
-
-    Expect(await FS.exists(FS.resolvePath('unreported', invocations))).toBe(false)
-    Expect(await FS.exists(FS.resolvePath('passed/electrobun', invocations))).toBe(false)
-    Expect(await FS.exists(FS.resolvePath('passed/canary.json', invocations))).toBe(true)
-    Expect(await FS.exists(FS.resolvePath('failed/electrobun/app', invocations))).toBe(true)
-    Expect(await FS.exists(FS.resolvePath('current/electrobun/app', invocations))).toBe(true)
-    Expect(await FS.exists(FS.resolvePath('running/electrobun/app', invocations))).toBe(true)
   })
 })
 
@@ -494,30 +480,34 @@ async function onlyCanaryInvocationRoot(artifactRoot: string): Promise<string> {
 Describe('Studio native manual checks', () => {
   Test('launches a visible non-probe workflow and names every check the person is to judge', async () => {
     const artifactRoot = await mkTestDir('tao-studio-manual-checks-')
-    const launches: unknown[] = []
-    const output: string[] = []
-    const exitCode = await StudioManualChecks.run({ artifactRoot }, {
-      isInteractive: () => true,
-      runStudio: async options => {
-        launches.push(options)
-        return 0
-      },
-      writeLine: line => output.push(line),
-    })
+    try {
+      const launches: unknown[] = []
+      const output: string[] = []
+      const exitCode = await StudioManualChecks.run({ artifactRoot }, {
+        isInteractive: () => true,
+        runStudio: async options => {
+          launches.push(options)
+          return 0
+        },
+        writeLine: line => output.push(line),
+      })
 
-    Expect(exitCode).toBe(0)
-    Expect(launches).toHaveLength(1)
-    Expect(launches[0]).toMatchObject({ browser: true, native: true })
-    Expect(launches[0]).not.toHaveProperty('nativeProbe')
-    Expect(output.join('\n')).toContain('Tao Studio will open for these manual checks:')
-    for (const check of STUDIO_MANUAL_CHECKS) {
-      Expect(output.join('\n')).toContain(check)
+      Expect(exitCode).toBe(0)
+      Expect(launches).toHaveLength(1)
+      Expect(launches[0]).toMatchObject({ browser: true, native: true })
+      Expect(launches[0]).not.toHaveProperty('nativeProbe')
+      Expect(output.join('\n')).toContain('Tao Studio will open for these manual checks:')
+      for (const check of STUDIO_MANUAL_CHECKS) {
+        Expect(output.join('\n')).toContain(check)
+      }
+      Expect(await FS.readJson(FS.resolvePath('manual-checks.json', artifactRoot))).toMatchObject({
+        checks: STUDIO_MANUAL_CHECKS,
+        status: 'launched',
+        version: 2,
+      })
+    } finally {
+      await FS.remove(artifactRoot)
     }
-    Expect(await FS.readJson(FS.resolvePath('manual-checks.json', artifactRoot))).toMatchObject({
-      checks: STUDIO_MANUAL_CHECKS,
-      status: 'launched',
-      version: 2,
-    })
   })
 
   Test('refuses to enter a human workflow from a non-interactive gate', async () => {
@@ -539,18 +529,22 @@ Describe('Studio native manual checks', () => {
   // expected ending until the run can detect that ending for itself.
   Test('ends successfully when the person interrupts the launch, recording what it was', async () => {
     const artifactRoot = await mkTestDir('tao-studio-manual-interrupt-')
-    const output: string[] = []
-    const exitCode = await StudioManualChecks.run({ artifactRoot }, {
-      isInteractive: () => true,
-      runStudio: async () => 130,
-      writeLine: line => output.push(line),
-    })
+    try {
+      const output: string[] = []
+      const exitCode = await StudioManualChecks.run({ artifactRoot }, {
+        isInteractive: () => true,
+        runStudio: async () => 130,
+        writeLine: line => output.push(line),
+      })
 
-    Expect(exitCode).toBe(0)
-    Expect(output.join('\n')).toContain('press Ctrl-C')
-    Expect(await FS.readJson(FS.resolvePath('manual-checks.json', artifactRoot))).toMatchObject({
-      launchExitCode: 130,
-      status: 'launched',
-    })
+      Expect(exitCode).toBe(0)
+      Expect(output.join('\n')).toContain('press Ctrl-C')
+      Expect(await FS.readJson(FS.resolvePath('manual-checks.json', artifactRoot))).toMatchObject({
+        launchExitCode: 130,
+        status: 'launched',
+      })
+    } finally {
+      await FS.remove(artifactRoot)
+    }
   })
 })

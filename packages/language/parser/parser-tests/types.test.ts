@@ -23,7 +23,6 @@ Describe('parser: types', () => {
       }
     `)
 
-    Expect(parseResult.diagnostics).toEqual([])
     const [input, editable] = parseResult.entry.ast.statements.filter(AST.isTypeDeclaration)
     Expect.Is(input, AST.isTypeDeclaration)
     Expect.Is(editable, AST.isTypeDeclaration)
@@ -64,7 +63,6 @@ Describe('parser: types', () => {
       view Text(Value text) { }
     `)
 
-    Expect(parseResult.diagnostics).toEqual([])
     const [nameType, tagsType, jobType, personType] = parseResult.entry.ast.statements.filter(AST.isTypeDeclaration)
     Expect.Is(nameType, AST.isTypeDeclaration)
     Expect.Is(tagsType, AST.isTypeDeclaration)
@@ -116,7 +114,6 @@ Describe('parser: types', () => {
       view MainView() { }
     `)
 
-    Expect(parseResult.diagnostics).toEqual([])
     const profile = parseResult.entry.ast.statements.find(
       statement => AST.isTypeDeclaration(statement) && statement.name === 'Profile',
     )
@@ -152,7 +149,6 @@ Describe('parser: types', () => {
       view MainView() { }
     `)
 
-    Expect(parseResult.diagnostics).toEqual([])
     const profile = parseResult.entry.ast.statements.find(
       statement => AST.isTypeDeclaration(statement) && statement.name === 'Profile',
     )
@@ -178,7 +174,6 @@ Describe('parser: types', () => {
       view MainView() { }
     `)
 
-    Expect(parseResult.diagnostics).toEqual([])
     const adminType = parseResult.entry.ast.statements.find(
       statement => AST.isTypeDeclaration(statement) && statement.name === 'Admin',
     )

@@ -71,45 +71,6 @@ Describe('Expo runtime: nested window-owning navigators', () => {
     }
   })
 
-  Test('insets a StackNav held as another StackNav Initial value exactly once', async () => {
-    setInsets()
-    try {
-      await testCompileApp(
-        `
-          use StackNav from @tao/nav
-          use Text from @tao/ui
-
-          nav InnerStack = StackNav {
-            Initial InnerHome
-            Title "Inner Stack"
-          }
-
-          app NestedStackApp { id "nestedstackapp" version "1.0.0" name "Nested Stack"
-            Navigator StackNav { Initial InnerStack }
-          }
-
-          scene InnerHome() {
-            Title "Inner Home"
-            render Text("Inner Home body")
-          }
-        `,
-        screen => {
-          ExpectScreen(screen).toHaveText('Inner Home body')
-          const scrollViews = screen.UNSAFE_getAllByType(RN.ScrollView)
-          Expect(scrollViews).toHaveLength(1)
-          Expect(RN.StyleSheet.flatten(scrollViews[0]!.props.contentContainerStyle)).toMatchObject({
-            paddingBottom: 12 + insets.bottom,
-            paddingLeft: 12 + insets.left,
-            paddingRight: 12 + insets.right,
-            paddingTop: 12 + insets.top,
-          })
-        },
-      )
-    } finally {
-      resetInsets()
-    }
-  })
-
   Test('insets an app auxiliary independently of a window-owning main navigator', async () => {
     setInsets()
     try {

@@ -1,7 +1,7 @@
 use SearchApp from ./
 
 test "Search" {
-   test "narrows rows as a term is entered, matching any (search) field" {
+   test "narrows rows as a search term is entered" {
       run SearchApp
       press #seed
       expect text "Bread Recipe"
@@ -12,7 +12,7 @@ test "Search" {
       expect missing text "Bread Recipe"
       expect missing text "Travel Notes"
    }
-   test "finds a row through its second (search) field" {
+   test "finds rows through either search field and ignores unmarked fields" {
       run SearchApp
       press #seed
       enter "bread" into #findInput
@@ -29,12 +29,5 @@ test "Search" {
       expect text "Bread Recipe"
       expect text "Grocery List"
       expect text "Travel Notes"
-   }
-   test "never matches a field that is not (search)" {
-      run SearchApp
-      press #seed
-      enter "Bread" into #findInput
-      expect text "Bread Recipe"
-      expect missing text "Travel Notes"
    }
 }

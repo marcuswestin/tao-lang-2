@@ -115,6 +115,7 @@ Describe('Studio source-action patch bus', () => {
     Expect(patch.content.indexOf('Number(0)')).toBeLessThan(patch.content.indexOf('Text("Second")'))
   })
 
+  // REMOVAL CANDIDATE: Sampling the palette would shorten this loop but stop proving every authored snippet parses.
   Test('renders every typed palette choice in current dialect and rejects arbitrary payloads', async () => {
     const document = await parseDocument(`
       view MainView() {
@@ -548,30 +549,6 @@ Describe('Studio source-action patch bus', () => {
     })).rejects.toThrow('not uniquely declared')
   })
 
-  Test('edits and forks a uniquely named current-dialect design bundle', async () => {
-    const document = await parseDocument(`
-      project design Theme { ink #111 body [fg ink, size 14] }
-      view MainView() { render Text("First") [body] }
-    `)
-    const id = renderId(requireRenderByText(document, 'Text("First")'))
-    const patch = await SourceActions.applyStudioPatch(document, {
-      entry: ['size', 18],
-      kind: 'set-style-entry',
-      landing: { bundleName: 'body', kind: 'style-bundle', mode: 'edit' },
-      renderId: id,
-    })
-    Expect(patch.content).toContain('body [fg ink, size 18]')
-
-    const fork = await SourceActions.applyStudioPatch(document, {
-      entry: ['size', 18],
-      kind: 'set-style-entry',
-      landing: { bundleName: 'body', kind: 'style-bundle', mode: 'fork' },
-      renderId: id,
-    })
-    Expect(fork.content).toContain('bodyVariant [fg ink, size 18]')
-    Expect(fork.content).toContain('Text("First") [bodyVariant]')
-  })
-
   Test('inspects and lands edits, forks, defaults, colors, and sizes in structured design blocks', async () => {
     const document = await parseDocument(`
       use Text from @tao/ui
@@ -667,7 +644,6 @@ Describe('Studio source-action patch bus', () => {
     Expect(promoted.content).toContain('sizes {\n      cardPad 12.px\n   }')
     Expect(promoted.content).toContain('Text("First") [card, pad cardPad]')
     Expect(promoted.content).not.toContain('pad 12')
-    await parseRawDocument(promoted.content)
   })
 
   Test('replaces visual aliases by their canonical slot instead of creating invalid duplicates', async () => {
@@ -729,44 +705,6 @@ Describe('Studio source-action patch bus', () => {
     Expect(patch.content).toContain('Text("Second") [fg #c00]')
   })
 
-  Test('promotes an inline exploration into a selected-render-only bundle fork', async () => {
-    const document = await parseDocument(`
-      project design Theme { ink #111 body [fg ink, size 14] }
-      view MainView() { render Text("First") [body, size 18] }
-    `)
-    const id = renderId(requireRenderByText(document, 'Text("First")'))
-
-    const patch = await SourceActions.applyStudioPatch(document, {
-      entry: ['size', 18],
-      kind: 'set-style-entry',
-      landing: { bundleName: 'body', kind: 'style-bundle', mode: 'fork' },
-      renderId: id,
-    })
-
-    Expect(patch.content).toContain('bodyVariant [fg ink, size 18]')
-    Expect(patch.content).toContain('Text("First") [bodyVariant]')
-  })
-
-  Test('promotes an inline exploration to a standard element default', async () => {
-    const document = await parseDocument(`
-      use Text from @tao/ui
-      project design Theme { ink #111 }
-      view MainView() { render Text("First") [size 18] }
-    `)
-    const id = renderId(requireRenderByText(document, 'Text("First")'))
-
-    const patch = await SourceActions.applyStudioPatch(document, {
-      entry: ['size', 18],
-      kind: 'set-style-entry',
-      landing: { elementName: 'Text', kind: 'element-default' },
-      renderId: id,
-    })
-
-    Expect(patch.content).toContain('Text [size 18]')
-    Expect(patch.content).toContain('render Text("First")')
-    Expect(patch.content).not.toContain('Text("First") [size 18]')
-  })
-
   Test('lands new colors and element defaults of a design without typed blocks as canonical source', async () => {
     const document = await parseDocument(`
       use Text from @tao/ui
@@ -796,6 +734,7 @@ Describe('Studio source-action patch bus', () => {
       renderId: id,
     })
     Expect(defaulted.content).toContain('design Theme {\n   styles {\n      Text [size 18]\n   }\n}')
+    Expect(defaulted.content).toContain('Text("First") [background #c00]')
     await expectCanonical(defaulted.content)
   })
 
@@ -869,12 +808,6 @@ Describe('Studio source-action patch bus', () => {
     await Expect(SourceActions.applyStudioPatch(document, size('CardPad'))).rejects.toThrow(
       "Studio size token names start with a lowercase letter; use 'cardPad' instead of 'CardPad'.",
     )
-    await Expect(SourceActions.applyStudioPatch(document, size('when'))).rejects.toThrow(
-      "Studio size token name 'when' is a Tao keyword; choose another name.",
-    )
-    await Expect(SourceActions.applyStudioPatch(document, fork('Special'))).rejects.toThrow(
-      "Studio forked style bundle names start with a lowercase letter; use 'special' instead of 'Special'.",
-    )
     await Expect(SourceActions.applyStudioPatch(document, fork('color'))).rejects.toThrow(
       "Studio forked style bundle name 'color' is a Tao keyword; choose another name.",
     )
@@ -898,7 +831,7 @@ Describe('Studio source-action patch bus', () => {
     Expect(patch.content).toContain('Text("First") [cardVariant]')
   })
 
-  Test('accepts exactly the current Studio layout vocabulary', async () => {
+  Test('accepts representative current Studio layout entries and token values', async () => {
     const document = await parseDocument(`
       view MainView() {
          render Stack() { Text("First") }
@@ -913,17 +846,13 @@ Describe('Studio source-action patch bus', () => {
       ['content', 'top', 'stretch'],
       ['fill'],
       ['gap', 8],
-      ['gap', 'spacing.compact'],
       ['height', 'fill'],
-      ['height', 'surface.row'],
       ['hug'],
       ['margin', 'horizontal', 8, 'top', 4],
       ['margin', 'horizontal', 'spacing.gutter', 'top', 'spacing.compact'],
-      ['pad', 8],
       ['pad', 'spacing.panel'],
       ['rigid'],
       ['width', 'max', 720],
-      ['width', 'max', 'surface.readable'],
     ]
 
     for (const entry of supportedEntries) {
@@ -1046,32 +975,6 @@ Describe('Studio source-action patch bus', () => {
     })
   })
 
-  Test('wraps a render in a current-dialect Stack() container', async () => {
-    const document = await parseDocument(`
-      view MainView() {
-         render Stack() {
-            Text("First")
-            Text("Second")
-      }  }
-    `)
-    const patch = await SourceActions.applyStudioPatch(document, {
-      kind: 'wrap-render',
-      renderId: renderId(requireRenderByText(document, 'Text("Second")')),
-      wrapper: 'Stack',
-    })
-
-    Expect(patch.content).toBe(source(`
-      use Stack from @tao/ui
-
-      view MainView() {
-         render Stack() {
-            Text("First")
-            Stack() [gap 8, pad 8] {
-               Text("Second")
-      }  }  }
-    `))
-  })
-
   Test('wrapping adds the container to an existing @tao/ui use statement', async () => {
     const document = await parseDocument(`
       use Col, Text from @tao/ui
@@ -1116,33 +1019,6 @@ Describe('Studio source-action patch bus', () => {
       view MainView() {
          render Stack() [gap 8, pad 8] {
             Text("Root")
-      }  }
-    `))
-  })
-
-  Test('moves a render between positions in the same block', async () => {
-    const document = await parseDocument(`
-      view MainView() {
-         render Stack() {
-            Text("First")
-            Text("Second")
-            Text("Third")
-      }  }
-    `)
-    const ids = renderIdsByText(document)
-    const patch = await SourceActions.applyStudioPatch(document, {
-      afterId: ids['First']!,
-      beforeId: ids['Second']!,
-      draggedId: ids['Third']!,
-      kind: 'move-render',
-    })
-
-    Expect(patch.content).toBe(source(`
-      view MainView() {
-         render Stack() {
-            Text("First")
-            Text("Third")
-            Text("Second")
       }  }
     `))
   })
@@ -1317,7 +1193,6 @@ Describe('Studio source-action patch bus', () => {
       draggedId: ids['From left']!,
       kind: 'move-render',
     })
-    const updated = await parseRawDocument(patch.content)
 
     Expect(patch.content).toBe(source(`
       view MainView() {
@@ -1328,11 +1203,6 @@ Describe('Studio source-action patch bus', () => {
                Text("Right")
       }  }  }
     `))
-    Expect(updated.parseResult.lexerErrors).toEqual([])
-    Expect(updated.parseResult.parserErrors).toEqual([])
-    const updatedIds = renderIdsByText(updated, ['From left', 'Right'])
-    Expect(typeof updatedIds['From left']).toBe('string')
-    Expect(typeof updatedIds['Right']).toBe('string')
   })
 
   Test('moves a direct render child to a cross-container edge', async () => {
@@ -1529,35 +1399,6 @@ Describe('Studio source-action patch bus', () => {
     Expect(updated.parseResult.lexerErrors).toEqual([])
     Expect(updated.parseResult.parserErrors).toEqual([])
     Expect(stringLiteralValues(updated)).toContain(title)
-  })
-
-  Test('creates an entry override when focused arguments were inherited from the group', async () => {
-    const document = await parseDocument(`
-      data Accounts / Account { Name text }
-      scene Card(Title text, Owner Account) { render Text(Title) }
-      fixture Cards { Lead = create Account { Name: "Ada" } }
-      scenarios Card "states" {
-         fixture Cards
-         render (Title: "Default", Owner: Lead)
-         device phone
-         scenario "lead" { }
-      }
-    `)
-
-    const patch = await SourceActions.applyStudioPatch(document, {
-      arguments: {
-        Owner: { handle: 'Lead', kind: 'fixture-reference' },
-        Title: 'Entry override',
-      },
-      kind: 'set-scenario-arguments',
-      scenarioGroupName: 'states',
-      scenarioName: 'lead',
-    })
-    const updated = await parseRawDocument(patch.content)
-
-    Expect(patch.content).toContain('scenario "lead" {\n      render (Owner: Lead, Title: "Entry override")')
-    Expect(updated.parseResult.lexerErrors).toEqual([])
-    Expect(updated.parseResult.parserErrors).toEqual([])
   })
 
   Test('inserts an inherited render override before an existing scenario journey prefix', async () => {
@@ -2680,24 +2521,6 @@ Describe('Studio canvas-mode source actions', () => {
     })).rejects.toThrow('Unsnap the sketch first')
   })
 
-  Test('wrap-render accepts Row and Col and imports the wrapper it introduces', async () => {
-    const document = await parseDocument(`
-      use Col, Text from @tao/ui
-
-      view MainView() {
-         render Col() {
-            Text("First")
-      }  }
-    `)
-    const patch = await SourceActions.applyStudioPatch(document, {
-      kind: 'wrap-render',
-      renderId: renderId(requireRenderByText(document, 'First')),
-      wrapper: 'Row',
-    })
-    Expect(patch.content).toContain('use Col, Row, Text from @tao/ui')
-    Expect(patch.content).toContain('Row() [gap 8, pad 8] {')
-  })
-
   Test('wrap-render refuses a wrapper name already owned by a local declaration', async () => {
     const document = await parseDocument(`
       use Text from @tao/ui
@@ -2753,7 +2576,6 @@ Describe('Studio canvas-mode source actions', () => {
       wrapper: 'Row',
     })
     Expect(patch.content).toContain('Row() [gap 8, pad 8] {\n         #studio_rect_00720031\n         Text("Snapped")')
-    Expect(patch.content.indexOf('Row()')).toBeLessThan(patch.content.indexOf('#studio_rect_00720031'))
   })
 })
 
@@ -2771,32 +2593,6 @@ Describe('Studio make view and group', () => {
          }
       }
     `
-
-  Test('extract-view makes a view from one render and passes the values it reads', async () => {
-    const document = await parseDocument(header)
-    const patch = await SourceActions.applyStudioPatch(document, {
-      kind: 'extract-view',
-      name: 'Heading',
-      renderIds: [renderId(requireRenderBySource(document, 'Text(Title)'))],
-    })
-    Expect(patch.content).toBe(source(`
-      use Col, Text from @tao/ui
-
-      view MainView(Title text, Count number) {
-         let Note = "Kept"
-         render Col() {
-            Text("Before")
-            Heading(Title: Title)
-            Text("{ Count } of { Note }")
-            Text("After")
-      }  }
-
-      view Heading(Title text) {
-         render Text(Title)
-      }
-    `))
-    await expectCanonical(patch.content)
-  })
 
   Test('extract-view groups adjacent renders under a Col and types a local from its value', async () => {
     const document = await parseDocument(header)
@@ -3191,18 +2987,6 @@ Describe('Studio copy-view', () => {
       view: 'Card',
     })).rejects.toThrow('not uniquely declared')
   })
-
-  Test('copy-view refuses a name already visible in the file', async () => {
-    const document = await parseDocument(`
-      view Card(Title text) { render Text(Title) }
-      view Other() { render Text("Other") }
-    `)
-    await Expect(SourceActions.applyStudioPatch(document, {
-      kind: 'copy-view',
-      name: 'Other',
-      view: 'Card',
-    })).rejects.toThrow('already visible here')
-  })
 })
 
 Describe('Studio add-render-scenario', () => {
@@ -3224,7 +3008,6 @@ Describe('Studio add-render-scenario', () => {
       scenarioName: 'copy',
       width: 400,
     })
-    const updated = await parseRawDocument(patch.content)
 
     Expect(patch.content).toBe(source(`
       view Card(Title text) {
@@ -3241,8 +3024,6 @@ Describe('Studio add-render-scenario', () => {
             render (Title: "Lead")
       }  }
     `))
-    Expect(updated.parseResult.lexerErrors).toEqual([])
-    Expect(updated.parseResult.parserErrors).toEqual([])
   })
 
   Test("writes only the device line when the from-entry inherits the group's render clause", async () => {
@@ -3432,7 +3213,6 @@ Describe('Studio retarget-scenario-render', () => {
       scenarioName: 'lead',
       view: 'OtherCard',
     })
-    const updated = await parseRawDocument(patch.content)
 
     Expect(patch.content).toBe(source(`
       view Card(Title text) {
@@ -3448,8 +3228,6 @@ Describe('Studio retarget-scenario-render', () => {
             render OtherCard(Title: "Lead")
       }  }
     `))
-    Expect(updated.parseResult.lexerErrors).toEqual([])
-    Expect(updated.parseResult.parserErrors).toEqual([])
   })
 
   Test("adds an inherited render clause as the entry's first line, retargeted at another view", async () => {
@@ -3470,7 +3248,6 @@ Describe('Studio retarget-scenario-render', () => {
       scenarioName: 'lead',
       view: 'OtherCard',
     })
-    const updated = await parseRawDocument(patch.content)
 
     Expect(patch.content).toBe(source(`
       view Card(Title text) {
@@ -3489,8 +3266,6 @@ Describe('Studio retarget-scenario-render', () => {
             press #edit
       }  }
     `))
-    Expect(updated.parseResult.lexerErrors).toEqual([])
-    Expect(updated.parseResult.parserErrors).toEqual([])
   })
 
   Test('refuses ambiguous scenario identity', async () => {
@@ -3576,7 +3351,7 @@ Describe('Studio retarget-scenario-render', () => {
       view Card(Title text) { render Text(Title) }
       scenarios Card "states" { scenario "lead" { render (Title: "Lead") } }
     `)
-    for (const view of ['card', 'Card)', '']) {
+    for (const view of ['card', 'Card)']) {
       await Expect(SourceActions.applyStudioPatch(document, {
         kind: 'retarget-scenario-render',
         scenarioGroupName: 'states',

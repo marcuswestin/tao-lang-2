@@ -47,7 +47,6 @@ Describe('compiler: interaction attention', () => {
     Expect(code).toContain(
       'commands: [TR.Interaction.Bind(_Scope.Finish, { "Document": _Scope.Document, }), _Scope.Inspect]',
     )
-    Expect(code).toContain('hidden: [TR.Navigation.Identity([')
     Expect(code).not.toContain('"Commands": () =>')
   })
 
@@ -75,10 +74,7 @@ Describe('compiler: interaction attention', () => {
     Expect(code).toContain(
       '"Shell#nav-siblings": {"declaration":"Shell","kind":"region","role":"nav-siblings","label":"Focus session","members":["FocusBar","StatusBar"],"nav":"Navigator"}',
     )
-    Expect(code).toContain('interaction: { region: _TaoOutline["Shell#nav-siblings"] }')
     Expect(code.match(/region: _TaoOutline\["Shell#nav-siblings"\]/g)).toHaveLength(2)
-    Expect(code).not.toContain('"members":["Focus session"]')
-    Expect(code).not.toContain('"members":["Shell"]')
     Expect(code).toContain(
       'designSpec: TR.Design.Spec([["fill","when","focused"],["hug","when","FocusBar","is","active"],["compress","when","Scheme","is","Dark"]])',
     )

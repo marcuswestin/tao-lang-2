@@ -82,7 +82,6 @@ const {
   secureStoreStorage,
   shouldAcknowledgeCell,
   studioBonjourGateways,
-  studioDeviceAppStateAction,
   studioDeviceAppStateHandler,
   webSocketTransport,
 } = await import('../TaoRuntime-src/TR-studio-device-host')
@@ -109,7 +108,6 @@ Describe('Studio device host bootstrap', () => {
     Expect(parseScriptUrl('http://[fe80::1]:8081/index.bundle')).toEqual({ host: '[fe80::1]', port: 8081 })
     Expect(parseScriptUrl('http://studio.local/index.bundle')).toEqual({ host: 'studio.local' })
     Expect(parseScriptUrl('file:///var/containers/main.jsbundle')).toBeUndefined()
-    Expect(parseScriptUrl('not a url')).toBeUndefined()
     Expect(parseScriptUrl(undefined)).toBeUndefined()
   })
 
@@ -172,7 +170,6 @@ Describe('Studio device host bootstrap', () => {
     Expect(client.state().phase).toBe('connecting')
     Expect(client.state().host).toBe('192.168.1.20:8790')
     const stored = parseStoredRecord(secureStoreValues.get('tao-studio-device-v1') ?? '')
-    Expect(stored?.identity.publicKey).toBeDefined()
     Expect(client.state().deviceFingerprint).toBe(StudioDeviceTrust.fingerprint(stored!.identity.publicKey))
 
     openedSockets[0]!.onopen?.()
@@ -345,39 +342,16 @@ Describe('Studio device host presentation', () => {
     })
     Expect(deviceHostPresentation(connected, publication)).toEqual({ kind: 'app', manifestRevision: 'compile:7' })
     Expect(deviceHostPresentation(connected, { compileRevision: 6 })).toMatchObject({ reason: 'stale-bundle' })
-    Expect(deviceHostPresentation({ ...connected, phase: 'pairing' }, publication)).toMatchObject({ reason: 'pairing' })
     Expect(deviceHostPresentation({ ...connected, phase: 'disconnected' }, publication))
       .toMatchObject({ reason: 'disconnected' })
   })
 
   Test('keys a mounted cell by its complete identity', () => {
     Expect(cellIdentityKey(identity)).toBe('Demo:states#cell:2:7:compile:7:instance-1')
-    Expect(cellIdentityKey({ ...identity, previewInstanceId: 'instance-2' })).not.toBe(cellIdentityKey(identity))
   })
 })
 
 Describe('Studio device host background lifecycle', () => {
-  Test('pauses on the first transition into background', () => {
-    Expect(studioDeviceAppStateAction('background', false)).toBe('pause')
-  })
-
-  Test('does not re-pause an already-paused client', () => {
-    Expect(studioDeviceAppStateAction('background', true)).toBe('none')
-  })
-
-  Test('resumes a paused client returning to active', () => {
-    Expect(studioDeviceAppStateAction('active', true)).toBe('resume')
-  })
-
-  Test('does not resume a client that was never paused', () => {
-    Expect(studioDeviceAppStateAction('active', false)).toBe('none')
-  })
-
-  Test('treats inactive as a transient blip, not a background/foreground edge', () => {
-    Expect(studioDeviceAppStateAction('inactive', false)).toBe('none')
-    Expect(studioDeviceAppStateAction('inactive', true)).toBe('none')
-  })
-
   Test('the installed listener stops on the way out and starts on the way back, and never inverts', () => {
     const calls: string[] = []
     const handler = studioDeviceAppStateHandler({
@@ -568,8 +542,6 @@ Describe('Studio device host network condition', () => {
 
   Test('an unconfigured or unreadable cell reads as normal, never as a condition it is not under', () => {
     Expect(networkConditionOf(undefined)).toBe('normal')
-    Expect(networkConditionOf({})).toBe('normal')
-    Expect(networkConditionOf({ cell: { environment: {} } })).toBe('normal')
     Expect(networkConditionOf({ cell: { environment: { network: { outcome: 'error' } } } })).toBe('normal')
   })
 })

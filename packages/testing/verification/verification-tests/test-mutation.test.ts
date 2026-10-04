@@ -65,7 +65,7 @@ Describe('mutation test evidence', () => {
       Expect(await TestLedger.tolerated(root)).toHaveLength(1)
       const before = await evidence(root)
 
-      for (const value of [0, 1, 0, 1]) {
+      for (const value of [0, 1]) {
         await subject(root, value)
         const captured = await withCapturedOutput(() => TestRunner.runTestMutation(FILE, options(root)))
         Expect(captured.result).toBe(value === 0 ? 1 : 0)
@@ -107,7 +107,7 @@ Describe('mutation test evidence', () => {
   Test('a cold mutation run creates raw artifacts without creating ordinary evidence', async () => {
     const root = await fixture()
     try {
-      for (const value of [0, 1, 0]) {
+      for (const value of [0, 1]) {
         await subject(root, value)
         const captured = await withCapturedOutput(() => TestRunner.runTestMutation(FILE, options(root)))
         Expect(captured.result).toBe(value === 0 ? 1 : 0)

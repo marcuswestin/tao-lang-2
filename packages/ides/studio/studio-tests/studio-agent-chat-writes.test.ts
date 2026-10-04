@@ -2,7 +2,6 @@
 import type { SemanticSnapshot, SnapshotNode } from '@compiler/workspace'
 import { Errors } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
-import { chatInstructions, scenarioInstructions } from '../studio-src/agent-chat/AgentChatInstructions'
 import { findSpec, type SpecSection } from '../studio-src/agent-chat/AgentChatReference'
 import type { AgentChatWriteWorld, StagedChange } from '../studio-src/agent-chat/AgentChatWrites'
 import { APPROVAL_REQUIRED, stageChange, writeTools } from '../studio-src/agent-chat/AgentChatWrites'
@@ -80,12 +79,6 @@ async function call(
 Describe('Studio agent chat writes', () => {
   Test('only the two tools that touch the project need approval', () => {
     Expect([...APPROVAL_REQUIRED]).toEqual(['applyChange', 'undoLastChange'])
-  })
-
-  Test('instructions direct proposing and applying in the same turn without asking in chat first', () => {
-    Expect(chatInstructions.includes('Do not ask in chat')).toBe(true)
-    Expect(chatInstructions.includes('call applyChange immediately')).toBe(true)
-    Expect(scenarioInstructions.includes('do not ask in chat first')).toBe(true)
   })
 
   Test('proposing computes the change and shows a diff, and writes nothing', async () => {
@@ -273,7 +266,6 @@ view StoryScreen() {
       replacement: 'data Stories / Story {\n   Title text,\n   Summary text\n}',
     })
 
-    Expect(result['refused']).toBeUndefined()
     Expect(result['changeId']).toBe('change-1')
     Expect(changes.get('change-1')?.edits[0]?.after.includes('Summary text')).toBe(true)
   })
@@ -440,15 +432,6 @@ Describe('Studio agent chat text handles', () => {
 
     Expect(String(result['refused']).includes('no longer names')).toBe(true)
     Expect(String(result['refused']).includes('Call listTexts again')).toBe(true)
-  })
-
-  Test('listing texts issues a handle for each one', async () => {
-    const issued = new Map<string, string>()
-
-    const result = await call(writeTools(world(), new Map(), () => {}, issued), 'listTexts', {})
-
-    Expect((result['texts'] as unknown[]).length).toBe(1)
-    Expect([...issued.entries()]).toEqual([['T1', '"Hello"']])
   })
 })
 

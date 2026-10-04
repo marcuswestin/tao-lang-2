@@ -319,31 +319,6 @@ Describe('fixSource flat design catalog', () => {
       `,
     ),
   )
-
-  Test(
-    'leaves source already in the typed form unchanged',
-    alreadyFixed(`
-      use Text from @tao/ui
-
-      design AppDesign {
-         colors {
-            paper #fffdf8
-            ink #172019
-         }
-         text {
-            body [size 16, ink ink]
-         }
-         styles {
-            Text [ink ink]
-            card [pad 12, background paper, background ink when pressed, background none when focused]
-         }
-      }
-
-      view Card() [pad 12, background paper] {
-         render Text("hi") [ink ink]
-      }
-    `),
-  )
 })
 
 Describe('moveFlatCatalogIntoBlocks blank-line grouping', () => {
