@@ -100,6 +100,7 @@ change that addressed it.
 - [DEVENV-IOS-BUILDS-LACK-COCOAPODS-METADATA-ACCESS — iOS builds lack CocoaPods metadata access](<Developer environment upgrades/DEVENV-IOS-BUILDS-LACK-COCOAPODS-METADATA-ACCESS.md>) — In progress
 - [DEVENV-LANDING-TESTS-A-CODEX-CONFIG-IT-NEVER-REGENERATED — A landing tests a Codex config it never regenerated](<Developer environment upgrades/DEVENV-LANDING-TESTS-A-CODEX-CONFIG-IT-NEVER-REGENERATED.md>) — Candidate
 - [DEVENV-MACOS-STARTUP-AFTER-CACHE-CLEANUP-NEEDS-VERIFICATION — macOS startup after cache cleanup needs verification](<Developer environment upgrades/DEVENV-MACOS-STARTUP-AFTER-CACHE-CLEANUP-NEEDS-VERIFICATION.md>) — Planned
+- [DEVENV-MANAGED-COMMIT-DENIES-WORKTREE-GIT-METADATA — Managed commit denies worktree Git metadata](<Developer environment upgrades/DEVENV-MANAGED-COMMIT-DENIES-WORKTREE-GIT-METADATA.md>) — Candidate
 - [DEVENV-METRO-FAILS-TO-START-WITHIN-ITS-WAIT-UNDER-CONTENTION — Expo Metro intermittently fails to start within its wait under machine contention](<Developer environment upgrades/DEVENV-METRO-FAILS-TO-START-WITHIN-ITS-WAIT-UNDER-CONTENTION.md>) — Candidate
 - [DEVENV-METRO-STALLS-AFTER-ANDROID-DEV-STOP — iOS dev loop can stall after an Android loop stops](<Developer environment upgrades/DEVENV-METRO-STALLS-AFTER-ANDROID-DEV-STOP.md>) — Candidate
 - [DEVENV-NATIVE-SESSION-TIMESTAMPS-USE-MONOTONIC-TIME — Native session timestamps use monotonic time](<Developer environment upgrades/DEVENV-NATIVE-SESSION-TIMESTAMPS-USE-MONOTONIC-TIME.md>) — Candidate
