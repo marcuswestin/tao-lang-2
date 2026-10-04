@@ -46,8 +46,8 @@ Work is routed to a tier, spelled per harness in one table, so a model release c
 | Tier     | Claude Code `model` | Codex CLI `model` | Cursor `model`     |
 | -------- | ------------------- | ----------------- | ------------------ |
 | fast     | `haiku`             | `gpt-6-luna`      | `composer-2.5`     |
-| standard | `opus`              | `gpt-6-sol`       | `claude-opus-5-5`  |
-| deep     | `opus`              | `gpt-6-sol`       | `claude-opus-5-5`  |
+| standard | `opus`              | `gpt-6.1-sol`     | `claude-opus-5-5`  |
+| deep     | `opus`              | `gpt-6.1-sol`     | `claude-opus-5-5`  |
 | frontier | `fable`             | `gpt-6-astra`     | `claude-fable-5-1` |
 
 `repo-lint` checks profile pins against this table; Codex `[agents]` defaults come from the standard row. See [model routing](references/model-routing.md) for precedence, availability, effort syntax, and completed-task measurement.

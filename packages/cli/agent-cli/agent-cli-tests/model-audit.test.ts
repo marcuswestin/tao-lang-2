@@ -13,15 +13,15 @@ const SKILL_SOURCE = [
   '| Tier     | Claude Code `model` | Codex CLI `model` | Cursor `model`     |',
   '| -------- | ------------------- | ----------------- | ------------------ |',
   '| fast     | `haiku`             | `gpt-6-luna`      | `composer-2.5`     |',
-  '| standard | `opus`              | `gpt-6-sol`       | `claude-opus-5-5`  |',
-  '| deep     | `opus`              | `gpt-6-sol`       | `claude-opus-5-5`  |',
+  '| standard | `opus`              | `gpt-6.1-sol`     | `claude-opus-5-5`  |',
+  '| deep     | `opus`              | `gpt-6.1-sol`     | `claude-opus-5-5`  |',
   '| frontier | `fable`             | `gpt-6-astra`     | `claude-fable-5-1` |',
 ].join('\n')
 
 const NOW_MS = Date.parse('2026-09-23T12:00:00Z')
 const FRESH = '2026-09-23T08:00:00Z'
 const CHECKOUT = '/work/tao'
-const CATALOG = ['gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna']
+const CATALOG = ['gpt-6-astra', 'gpt-6.1-sol', 'gpt-6-luna']
 
 // Each line gets its own message and request id, so two lines are one response only when a test
 // reuses them on purpose.
@@ -162,7 +162,7 @@ Describe('model audit — codex column', () => {
 
   Test('reports an id superseded by a higher version of the same prefix and name', async () => {
     const report = await auditModelRouting(
-      options(await fixture({ slugs: ['gpt-7-astra', 'gpt-6-sol', 'gpt-6-luna'] })),
+      options(await fixture({ slugs: ['gpt-7-astra', 'gpt-6.1-sol', 'gpt-6-luna'] })),
     )
 
     Expect(report.findings).toEqual([
@@ -171,7 +171,7 @@ Describe('model audit — codex column', () => {
   })
 
   Test('orders a two-digit minor version after a one-digit one', async () => {
-    const paths = await fixture({ slugs: ['gpt-6-astra', 'gpt-6-sol', 'gpt-5.9-luna', 'gpt-5.10-luna'] })
+    const paths = await fixture({ slugs: ['gpt-6-astra', 'gpt-6.1-sol', 'gpt-5.9-luna', 'gpt-5.10-luna'] })
     await FS.writeText(
       FS.resolvePath('agents/skills/delegation/SKILL.md', paths.repoRoot),
       SKILL_SOURCE.replace('`gpt-6-luna`', '`gpt-5.9-luna`'),
@@ -197,7 +197,7 @@ Describe('model audit — codex column', () => {
 
     Expect(report.findings).toEqual([])
     Expect(report.notes).toEqual([
-      "codex tiers standard, deep name 'gpt-6-sol', missing from the catalog Codex 0.154.0 last fetched, which "
+      "codex tiers standard, deep name 'gpt-6.1-sol', missing from the catalog Codex 0.154.0 last fetched, which "
       + 'every Codex install on this machine rewrites with its own offer',
     ])
   })

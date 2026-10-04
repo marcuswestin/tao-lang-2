@@ -6,7 +6,7 @@ description: >-
   crosses package or pipeline boundaries.
 targets: [codexcli, claudecode, cursor]
 codexcli:
-  model: gpt-6-sol
+  model: gpt-6.1-sol
   model_reasoning_effort: xhigh
   sandbox_mode: read-only
   nickname_candidates: [Architect, Tradeoff, Coherence, Evolution, Boundary, Design]
