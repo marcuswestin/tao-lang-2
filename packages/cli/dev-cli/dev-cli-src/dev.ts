@@ -84,9 +84,43 @@ async function runReleaseAction(action: () => Promise<void>): Promise<void> {
   }
 }
 
+function parseQaReleasePhase(value: string, minimum: number): 1 | 2 | 3 | 4 | 5 {
+  const phase = Number(value)
+  if (!Number.isInteger(phase) || phase < minimum || phase > 5) {
+    Errors.throwUserInput(`Release phase must be ${minimum} through 5.`)
+  }
+  return phase as 1 | 2 | 3 | 4 | 5
+}
+
 /** Repository development CLI behind `./dev`: package tests and low-level Expo device preparation. */
 await runWithCommands(commands => {
   commands.name('dev')
+
+  commands
+    .command('qa-capture')
+    .description('Capture headless review evidence; requires a separate visual judgment.')
+    .argument('<project>')
+    .requiredOption('--app <name>')
+    .requiredOption('--output <path>')
+    .action(async (project: string, options: { app: string; output: string }) => {
+      const { runStudioReview } = await import('@studio-tooling/StudioReview')
+      const { QaCapture } = await import('./qa/QaCapture')
+      const result = await new QaCapture(Repo.getRoot(), runStudioReview).run(project, options)
+      HCI.writeLine(JSON.stringify(result, null, 2))
+    })
+
+  commands
+    .command('qa')
+    .description('Inventory, run, record, and report on-demand QA evidence.')
+    .argument('<action>', 'inventory, run, report, record, or finding')
+    .option('--phase <number>', 'Cumulative release phase 1 through 5', '1')
+    .option('--scope <scope>', 'changed or all', 'changed')
+    .option('--resume <id>', 'Resume an interrupted run without replacing its results')
+    .option('--file <path>', 'Validated observation or finding JSON')
+    .action(async (action: string, options) => {
+      const { QaRegister } = await import('./qa/QaRegister')
+      await new QaRegister(Repo.getRoot()).command(action, options)
+    })
 
   commands
     .command('shell-setup')
@@ -834,6 +868,9 @@ await runWithCommands(commands => {
       try {
         const { AgentConfigGenerator } = await import('@agent-cli/agent-config/AgentConfigGenerator')
         await AgentConfigGenerator.generate({ root: Repo.resolvePath() })
+        // Local Git metadata paths must never enter the tracked adapters or freshness render.
+        const { CodexGitPermissions } = await import('@agent-cli/agent-config/CodexGitPermissions')
+        await CodexGitPermissions.install({ root: Repo.resolvePath() })
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.exit(1)
@@ -1098,6 +1135,7 @@ await runWithCommands(commands => {
     .option('--node <path>', 'Standalone Node executable to bundle; Nix Node is relocated when needed.')
     .requiredOption('--release-base-url <url>', 'HTTPS base URL for Studio release and update artifacts.')
     .option('--version <version>', 'Studio semantic version.', '0.0.1')
+    .option('--phase <number>', 'Public release phase 3, 4, or 5.', '3')
     .action(async options => {
       try {
         const { StudioNative } = await import('@studio-tooling/StudioNative')
@@ -1110,6 +1148,7 @@ await runWithCommands(commands => {
           outputRoot: options.outputRoot,
           releaseBaseUrl: options.releaseBaseUrl,
           version: options.version,
+          releasePhase: parseQaReleasePhase(options.phase, 3) as 3 | 4 | 5,
         })
         HCI.logProcessInfo(
           'studio-native',
@@ -1129,19 +1168,24 @@ await runWithCommands(commands => {
     .argument('<target>', 'studio or ide-extension.')
     .option('--repo <owner/name>', 'Public GitHub repository for Studio release assets.')
     .option('--version <version>', 'Three-part Studio version (defaults to 0.0.1).')
-    .action(async (target: string, options: { repo?: string; version?: string }) => {
+    .option('--phase <number>', 'Public release phase; defaults to 3 for Studio and 1 for the extension.')
+    .action(async (target: string, options: { repo?: string; version?: string; phase?: string }) => {
       await runReleaseAction(async () => {
         const { ReleaseWorkflow } = await import('./release/ReleaseWorkflow')
         if (target === 'studio') {
           if (options.repo === undefined) {
             Errors.throwUserInput('Studio preparation needs --repo owner/name.')
           }
-          await ReleaseWorkflow.prepareStudio(options.repo, options.version ?? '0.0.1')
+          await ReleaseWorkflow.prepareStudio(
+            options.repo,
+            options.version ?? '0.0.1',
+            parseQaReleasePhase(options.phase ?? '3', 3) as 3 | 4 | 5,
+          )
         } else if (target === 'ide-extension') {
           if (options.repo !== undefined || options.version !== undefined) {
             Errors.throwUserInput('IDE extension preparation takes no --repo or --version.')
           }
-          await ReleaseWorkflow.prepareIde()
+          await ReleaseWorkflow.prepareIde(parseQaReleasePhase(options.phase ?? '1', 1))
         } else {
           Errors.throwUserInput('Expected release target studio or ide-extension.')
         }
@@ -1153,9 +1197,16 @@ await runWithCommands(commands => {
     .description('Build and locally validate a signed Studio release for a GitHub Releases host.')
     .requiredOption('--repo <owner/name>', 'Public GitHub repository that will hold Studio releases.')
     .option('--version <version>', 'Three-part Studio version.', '0.0.1')
-    .action(async (options: { repo: string; version: string }) => {
+    .option('--phase <number>', 'Public release phase 3, 4, or 5.', '3')
+    .action(async (options: { repo: string; version: string; phase: string }) => {
       const { ReleaseWorkflow } = await import('./release/ReleaseWorkflow')
-      await runReleaseAction(async () => await ReleaseWorkflow.prepareStudio(options.repo, options.version))
+      await runReleaseAction(async () =>
+        await ReleaseWorkflow.prepareStudio(
+          options.repo,
+          options.version,
+          parseQaReleasePhase(options.phase, 3) as 3 | 4 | 5,
+        )
+      )
     })
 
   commands
@@ -1170,9 +1221,10 @@ await runWithCommands(commands => {
   commands
     .command('release-ide-prepare')
     .description('Package the VSIX and prove it installs into an isolated VS Code profile.')
-    .action(async () => {
+    .option('--phase <number>', 'Public release phase 1 through 5.', '1')
+    .action(async (options: { phase: string }) => {
       const { ReleaseWorkflow } = await import('./release/ReleaseWorkflow')
-      await runReleaseAction(async () => await ReleaseWorkflow.prepareIde())
+      await runReleaseAction(async () => await ReleaseWorkflow.prepareIde(parseQaReleasePhase(options.phase, 1)))
     })
 
   commands

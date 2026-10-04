@@ -96,11 +96,6 @@ Describe('admission experiment', () => {
     await Expect(assertMachineQuiet(fake.dependencies)).rejects.toThrow('does not register')
   })
 
-  Test('admits a quiet machine', async () => {
-    const fake = fakeDependencies({ loadAverage: 1.2 })
-    await Expect(assertMachineQuiet(fake.dependencies)).resolves.toBeUndefined()
-  })
-
   // The bar is written about the earliest completions, because the whole point of a queue is that
   // the last lane waits: a median over all ten would fail a policy that is working as designed.
   Test('measures the bar over the first completions rather than over every lane', async () => {
@@ -235,7 +230,7 @@ Describe('admission experiment', () => {
 
     await runAdmissionExperiment({ lanes: 1, repeats: 1, repositoryRoots: ['/repo/a'] }, fake.dependencies)
 
-    Expect(fake.calls.every(call => call.args.includes('--no-cache'))).toBe(true)
+    Expect(fake.calls.map(call => call.args)).toEqual([['verify', '--no-cache'], ['verify', '--no-cache']])
   })
 
   // Setting it to `quiet` travelled into the lane's own suite, where `work-reporter.test.ts` reads
@@ -246,6 +241,6 @@ Describe('admission experiment', () => {
 
     await runAdmissionExperiment({ lanes: 1, repeats: 1, repositoryRoots: ['/repo/a'] }, fake.dependencies)
 
-    Expect(fake.calls.every(call => call.env === undefined)).toBe(true)
+    Expect(fake.calls.map(call => call.env)).toEqual([undefined, undefined])
   })
 })

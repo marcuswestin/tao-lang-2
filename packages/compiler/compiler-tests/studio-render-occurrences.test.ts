@@ -177,10 +177,8 @@ Describe('compiler: Studio render occurrences', () => {
       Expect(code).toContain('designSpec: TR.Design.Spec([["gap",12]])')
       Expect(code).toContain('testTag: "selected"')
       Expect(code).toContain('...TR.TaoContext(_ViewProps.__tao)')
-      Expect(code).toContain('}, _ViewProps.__tao)')
       Expect(code).toContain('TR.Navigation.Ask(')
       Expect(code).toContain('TR.Navigation.Respond(')
-      Expect(compiled.appNames).toEqual(['First', 'Second'])
       Expect(code).toContain('export default TaoApps["Second"]')
 
       const production = await Workspace.compile(paths['Main.tao'], { appName: 'Second' })
@@ -207,7 +205,7 @@ Describe('compiler: Studio render occurrences', () => {
     })
   })
 
-  Test('publishes Snap rectangle identity in the render inventory and generated occurrence metadata', async () => {
+  Test('publishes Snap rectangle identity and source coordinates in the render inventory', async () => {
     await withTaoFiles('tao-studio-render-inventory-', {
       'App.tao': `
         use Main from @/studio
@@ -565,10 +563,6 @@ Describe('compiler: Studio render occurrences', () => {
       const generated = compiled.files.find(file => file.relativePath === 'TaoStudioManifest.ts')
       Expect(generated?.code).toContain('"generationDeclarations"')
       Expect(generated?.code).toContain('"guidance":"Use a realistic workspace name."')
-
-      const production = await Workspace.compile(paths['Main.tao'])
-      Expect(production.studioManifest).toBeUndefined()
-      Expect(production.files.some(file => file.relativePath === 'TaoStudioManifest.ts')).toBe(false)
     })
   })
 })

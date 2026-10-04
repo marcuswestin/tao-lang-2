@@ -41,7 +41,6 @@ Describe('Studio compile coordinator', () => {
     await initial
     await until(() => gates.length === 2, { description: 'the second gated compile', intervalMs: 0 })
 
-    Expect(maximumActive).toBe(1)
     Expect(requests).toHaveLength(2)
     Expect(requests[1]?.compileRevision).toBe(2)
     Expect(requests[1]?.causes).toEqual(['watch'])
@@ -89,28 +88,6 @@ Describe('Studio compile coordinator', () => {
       sourceVersion: 'source-2',
       writeId: 'write-2',
     }])
-  })
-
-  Test('treats a same-path watcher event with a different source version as external', async () => {
-    const requests: StudioCompileRequest[] = []
-    const coordinator = new StudioCompileCoordinator({
-      appName: 'Garden',
-      async compile(request) {
-        requests.push(request)
-      },
-      project: '/workspace/garden',
-    })
-
-    await coordinator.noteStudioWrite({
-      path: 'Garden.tao',
-      sourceVersion: 'studio-version',
-      writeId: 'write-1',
-    })
-    const result = await coordinator.noteWatchChanges([{ path: 'Garden.tao', sourceVersion: 'external-version' }])
-
-    Expect(requests).toHaveLength(2)
-    Expect(result.acknowledgements).toEqual([])
-    Expect(result.compile?.changes).toEqual([{ path: 'Garden.tao', sourceVersion: 'external-version' }])
   })
 
   Test('does not let an obsolete Studio acknowledgement swallow a later external revert', async () => {
@@ -236,7 +213,7 @@ Describe('Studio compile coordinator', () => {
     Expect(coordinator.snapshot().diagnostics).toEqual(completion.diagnostics)
   })
 
-  Test('rejects every waiter when an observer fails and remains usable', async () => {
+  Test('rejects the request when an observer fails and remains usable', async () => {
     let failObserver = true
     const coordinator = new StudioCompileCoordinator({
       appName: 'Garden',

@@ -21,7 +21,9 @@ const expected = [
   'capabilities',
   'open-pr',
   'fix-agent-config',
+  'verify-full',
   'test-host',
+  'qa-capture',
   'studio-smoke',
   'studio-proof-real-app',
   'admission-experiment',
@@ -95,6 +97,9 @@ Describe('agent host command permissions', () => {
     )
     const prefixes = agentHostCommands(source)
     Expect(prefixes).toEqual(expected.map(command => command.split(' ')))
+    Expect(hostCommandKind(['verify-full', '--no-cache'], prefixes)).toBe('agent')
+    Expect(hostCommandKind(['verify-full-sandbox'], prefixes)).toBeUndefined()
+    Expect(hostCommandKind(['verify-repo'], prefixes)).toBeUndefined()
     Expect(hostCommandKind(['prepare-release', 'studio', '--version', '0.0.1'], prefixes)).toBe('named')
     Expect(hostCommandKind(['prepare-release', 'ide-extension'], prefixes)).toBe('named')
     Expect(hostCommandKind(['prepare-release', 'other'], prefixes)).toBeUndefined()
@@ -107,7 +112,7 @@ Describe('agent host command permissions', () => {
       'notify-developer',
       'stop',
       'merge-recover',
-      ...expected.slice(15),
+      ...expected.slice(expected.indexOf('reclaim --execute')),
     ])
     const rules = CodexConfigGenerator.renderRules(source)
     const settings = JSON.parse(await FS.readText(Repo.resolvePath('.claude/settings.json'))) as {

@@ -8,7 +8,7 @@ import {
   type StudioProcessTree,
 } from '@expo-host/dev-loop/StudioProcessTree'
 import type { HostController } from '@host-control'
-import { CLI, Errors, FS, HCI, Json, Platform, Repo, Text, Time } from '@shared'
+import { CLI, Errors, FS, HCI, Json, Platform, ReleaseCapabilities, ReleaseToolchain, Repo, Text, Time } from '@shared'
 import { StudioClientAssets } from '@studio'
 import {
   MachineLanes,
@@ -99,6 +99,7 @@ type StudioNativePackageOptions = {
   nodePath?: string
   outputRoot?: string
   releaseBaseUrl: string
+  releasePhase?: 3 | 4 | 5
   version?: string
 }
 
@@ -166,7 +167,6 @@ export const StudioNative = {
   testing: {
     acquireNativeHostLease,
     acquireNativeHostLeases,
-    installedHutchExecutablePath,
     installStudioServicePayload,
     createNativeInterruption,
     discoverStudioServicePackageRoots,
@@ -684,6 +684,11 @@ function nativeRuntimeCloseResult(line: string): NativeRuntimeCloseResult | unde
 }
 
 async function packageApp(options: StudioNativePackageOptions): Promise<PackagedStudioNative> {
+  if (options.version === undefined) {
+    Errors.throwUserInput('A public Studio package requires --version matching its Tao toolchain release.')
+  }
+  const profile = ReleaseCapabilities.profile(options.releasePhase ?? 3)
+  ReleaseCapabilities.require('studio', profile)
   const outputRoot = FS.resolvePath(options.outputRoot ?? '.artifacts/build/studio-native', Repo.getRoot())
   const projectRoot = FS.resolvePath('project', outputRoot)
   const serviceStageRoot = FS.resolvePath('service-stage', outputRoot)
@@ -694,11 +699,12 @@ async function packageApp(options: StudioNativePackageOptions): Promise<Packaged
   await FS.remove(serviceStageRoot)
   await FS.mkdir(serviceStageRoot)
   const serviceBundlePath = FS.resolvePath('service.js', serviceStageRoot)
-  await stageStudioPackagedServiceBundle(serviceBundlePath)
+  await stageStudioPackagedServiceBundle(serviceBundlePath, profile, options.version)
   const studioClientBundlePath = FS.resolvePath('studio.js', serviceStageRoot)
-  await stageStudioClientBundle(studioClientBundlePath)
+  await stageStudioClientBundle(studioClientBundlePath, profile)
   const testCommandBundlePath = FS.resolvePath('test-command.js', serviceStageRoot)
   const testCommandBundle = await Bun.build({
+    define: { TAO_RELEASE_PHASE: JSON.stringify(profile.phase), TAO_RELEASE_VERSION: JSON.stringify(options.version) },
     entrypoints: [Repo.resolvePath('packages/ides/studio-tooling/studio-tooling-src/StudioPackagedTestCommand.ts')],
     minify: true,
     target: 'node',
@@ -710,9 +716,18 @@ async function packageApp(options: StudioNativePackageOptions): Promise<Packaged
     )
   }
   await FS.writeText(testCommandBundlePath, await testCommandOutput.text())
+  await FS.writeJson(FS.resolvePath('release-profile.json', serviceStageRoot), {
+    version: options.version,
+    ...profile,
+    fingerprint: ReleaseCapabilities.fingerprint(profile),
+  })
   const servicePayloadRoot = FS.resolvePath('payload', serviceStageRoot)
   await materializeStudioServicePayload(servicePayloadRoot, { 'studio.js': studioClientBundlePath })
   await FS.copyFile(testCommandBundlePath, FS.resolvePath('test-command.js', servicePayloadRoot))
+  await FS.copyFile(
+    FS.resolvePath('release-profile.json', serviceStageRoot),
+    FS.resolvePath('release-profile.json', servicePayloadRoot),
+  )
   await materializeStudioNodeRuntime(
     options.nodePath ?? Repo.resolvePath('.devenv/profile/bin/node'),
     servicePayloadRoot,
@@ -739,9 +754,15 @@ async function packageApp(options: StudioNativePackageOptions): Promise<Packaged
   return { artifactPaths, artifactsRoot, channel, projectRoot }
 }
 
-async function stageStudioPackagedServiceBundle(serviceBundlePath: string): Promise<void> {
+async function stageStudioPackagedServiceBundle(
+  serviceBundlePath: string,
+  profile = ReleaseCapabilities.current(),
+  version = ReleaseToolchain.current().version,
+): Promise<void> {
   const bundle = await Bun.build({
     define: {
+      TAO_RELEASE_PHASE: JSON.stringify(profile.phase),
+      TAO_RELEASE_VERSION: JSON.stringify(version),
       __DEV__: 'false',
       'process.env.NODE_ENV': JSON.stringify('production'),
     },
@@ -913,8 +934,10 @@ async function materializeStudioServicePayload(
   }
 }
 
-async function stageStudioClientBundle(path: string): Promise<void> {
-  const source = portableStudioClientBundle(await StudioClientAssets.bundle({ validationMode: 'release' }))
+async function stageStudioClientBundle(path: string, profile = ReleaseCapabilities.current()): Promise<void> {
+  const source = portableStudioClientBundle(
+    await StudioClientAssets.bundle({ validationMode: 'release', releaseProfile: profile }),
+  )
   if (source.trim() === '') {
     Errors.throwUnexpected('Studio browser bundling produced an empty artifact.')
   }

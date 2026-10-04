@@ -246,7 +246,6 @@ Test('Studio agent streams, serializes turns, and refuses stale undo in Chrome',
     await preview?.close()
     await FS.remove(projectRoot)
   }
-  Expect(await FS.exists(projectRoot)).toBe(false)
 }, 180_000)
 
 function immediateStream(turn: ScriptedTurn, call: number): ReadableStream<StreamPart> {

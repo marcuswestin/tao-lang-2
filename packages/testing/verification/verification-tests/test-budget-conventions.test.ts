@@ -91,7 +91,7 @@ Describe('test wall-clock budget convention', () => {
     Expect(issues[0]).toContain(`${testPath}:2`)
   })
 
-  Test('flags a multi-line Promise.race racing a setTimeout against real work', () => {
+  Test('flags a multi-line Promise.race racing a sleep against real work', () => {
     const source = [
       'await Expect(Promise.race([',
       '  opening,',
@@ -101,11 +101,6 @@ Describe('test wall-clock budget convention', () => {
     const issues = testBudgetConventionIssues([{ path: testPath, source }])
     Expect(issues).toHaveLength(1)
     Expect(issues[0]).toContain(`${testPath}:1`)
-  })
-
-  Test('allows awaiting the real promise directly instead of racing it against a sleep', () => {
-    const source = 'Expect(await opened).toBe(true)'
-    Expect(testBudgetConventionIssues([{ path: testPath, source }])).toEqual([])
   })
 
   Test('allows a Promise.race marked budget-ok', () => {

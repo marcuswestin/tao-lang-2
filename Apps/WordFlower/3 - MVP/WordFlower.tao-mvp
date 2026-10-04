@@ -175,10 +175,7 @@ datasource WordFlowerStageStore = WordFlowerStore with {
 // `with` patches an existing configured value. Memory is keyless, while remote providers own their
 // provider-specific configuration below.
 // The read net: a guard site that does not name an exceptional read case sends it here.
-guard default {
-   loading -> Spinner()
-   error -> Message { Text("Could not load this: { Message }") }
-}
+
 
 app WordFlower {
    Name "WordFlower"
@@ -186,6 +183,11 @@ app WordFlower {
    view WordFlowerShell(WordFlowerNavigator)
 
    Datasource WordFlowerStore
+
+   guard {
+      loading -> Spinner()
+      error -> Context { Text("Could not load this: { Context.Message }") }
+   }
 }
 
 // `with` copies public properties into a configured variant; WordFlower and WordFlowerShell are
@@ -407,9 +409,9 @@ scene WorkspaceList() {
          Text("WordFlower") [title]
          Text(Tagline) [body]
          guard Workspaces {
-            error -> Message {
+            error -> Context {
                Text("Could not load WordFlower")
-               Text(Message)
+               Text(Context.Message)
             }
          }
          #workspaceName
@@ -694,7 +696,7 @@ view FileTree(Workspace) {
       Text(Workspace.Name)
       guard Documents {
          loading -> { Spinner() }
-         error -> Message { Text("Could not load files: { Message }") }
+         error -> Context { Text("Could not load files: { Context.Message }") }
       }
       #files
       loop Documents / Document {

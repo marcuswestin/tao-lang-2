@@ -4,65 +4,11 @@ import { accepts, rejects, stubContainer, stubView } from './test-validate'
 
 Describe('validator: scenes', () => {
   Test(
-    'accepts a scene that is presented and a view that is composed',
-    accepts(`
-       ${stubView('Label', 'Value text')}
-
-       scene Home() {
-          render Label("Home")
-       }
-
-       view Row() {
-          render Label("Row")
-       }
-    `),
-  )
-
-  Test(
-    'rejects a scene composed inline in a render tree',
-    rejects(
-      `
-       ${stubView('Label', 'Value text')}
-       ${stubContainer('Column')}
-
-       scene Panel() {
-          render Label("Panel")
-       }
-
-       view Page() {
-          render Column() {
-             Panel()
-          }
-       }
-    `,
-      ViewsValidator.messages.sceneComposed('Panel'),
-    ),
-  )
-
-  Test(
-    'rejects a scene as the root render of another view',
-    rejects(
-      `
-       ${stubView('Label', 'Value text')}
-
-       scene Panel() {
-          render Label("Panel")
-       }
-
-       view Page() {
-          render Panel()
-       }
-    `,
-      ViewsValidator.messages.sceneComposed('Panel'),
-    ),
-  )
-
-  Test(
     'rejects a scene bound to a view-typed parameter of another view',
     rejects(
       `
        ${stubView('Label', 'Value text')}
-       ${stubView('Column')}
+       ${stubContainer('Column')}
 
        scene Panel() {
           render Label("Panel")

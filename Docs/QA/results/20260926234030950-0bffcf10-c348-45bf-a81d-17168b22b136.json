@@ -1,0 +1,45 @@
+{
+  "id": "20260926234030950-0bffcf10-c348-45bf-a81d-17168b22b136",
+  "runId": "20260926233551708-ca460a27-0bbf-446d-9388-e83161a7ac84",
+  "createdAt": "2026-09-26T23:40:30.937Z",
+  "recordedAt": "2026-09-26T23:40:30.937Z",
+  "commit": "d5bdeaefd03740d976cc14da01b80688aa6fbe89",
+  "phase": 1,
+  "executionProfile": "development",
+  "provenance": {
+    "snapshotBasis": "observation-time",
+    "originalDependencies": "recorded",
+    "observedMetadataEvidence": [
+      "Docs/QA/evidence/final-pilot/tutorial.log",
+      "Docs/QA/evidence/final-pilot/tutorial.json"
+    ]
+  },
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "runtime": "bun:1.4.2"
+  },
+  "inputs": {
+    "source": "Docs/Tutorials/Your First Tao App.md",
+    "dependencySnapshot": "Docs/QA/inputs/f387790d8201945c60701db9e04992ddf96d93cbdef461eba9648e93c6b164aa.json"
+  },
+  "surfaceId": "source:tutorial-replay",
+  "dimension": "functional",
+  "outcome": "pass",
+  "reviewer": "agent",
+  "channel": "source-test",
+  "evidence": [
+    {
+      "path": "Docs/QA/evidence/final-pilot/tutorial.log",
+      "sha256": "5b8dd2bccfe2941903a72a3b120210d9d917896970d29d65054aca8927bb9551"
+    },
+    {
+      "path": "Docs/QA/evidence/final-pilot/tutorial.json",
+      "sha256": "b6ff54d8d9ecc83936a674bd6b609d8a325cb779a843739f927dae9c28388504"
+    }
+  ],
+  "notes": "Final frozen-tree tutorial suite passed: snippet assembly, canonical source, validation and final behavior journey. Installed artifacts, text clarity, visual quality and human acceptance are excluded.",
+  "sourceHash": "0cd3438d3d501c81f82956dc2e64a7f9e05ef53c7496abc1a2d63124444d84f0",
+  "rendererHash": "99bbbedc6f85b385352f81eca62987298eb506aa9ebd0a8917e33dd1c1f892f8",
+  "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
+}

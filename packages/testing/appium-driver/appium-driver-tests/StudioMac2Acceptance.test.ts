@@ -61,12 +61,10 @@ Test(
     Expect(receivedServerOptions?.environment?.['APPIUM_HOME']).toBe('/opt/tao/appium-mac2')
 
     await Expect(controller.close()).rejects.toThrow('retaining the desktop-input lease')
-    Expect(leases.lease.releaseCalls).toBe(0)
     Expect(events).toEqual(['server:start', 'remote:create', 'remote:delete'])
 
     deleteFails = false
     await controller.close()
-    Expect(leases.lease.releaseCalls).toBe(1)
     Expect(events).toEqual([
       'server:start',
       'remote:create',

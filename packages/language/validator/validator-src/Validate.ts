@@ -33,6 +33,7 @@ import { PhrasesValidator } from './validators/phrases-validator'
 import { preludeValidationChecks, validatePreludeFile } from './validators/prelude-validator'
 import { projectValidationChecks, validateProjectFile } from './validators/project-validator'
 import { ReactiveParametersValidator } from './validators/ReactiveParametersValidator'
+import { validateReleaseCapabilities } from './validators/release-capabilities-validator'
 import { ResponsesValidator } from './validators/responses-validator'
 import {
   scenarioValidationChecks,
@@ -96,6 +97,7 @@ const typeInferenceChecks = NodeValidation.compile(
 )
 
 function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): readonly AST.Node[] {
+  validateReleaseCapabilities(file, ctx)
   AppValidator.validate(file, ctx)
   validateProjectFile(file, ctx)
   AliasesValidator.validateFile(file, ctx)

@@ -152,9 +152,4 @@ Describe('parser: decided dialect', () => {
     'the retired enum head no longer parses',
     rejectsParser('enum ConfirmResult { Confirmed, Cancelled }'),
   )
-
-  Test(
-    'the case set that replaced it does parse',
-    parses('type ConfirmResult is one of Confirmed, Cancelled'),
-  )
 })

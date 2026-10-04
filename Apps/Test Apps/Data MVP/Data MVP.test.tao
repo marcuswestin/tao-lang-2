@@ -1,7 +1,7 @@
 use DataMVPApp from ./
 
 test "Data MVP" {
-   test "runs reactive related CRUD with filtering and ordering" {
+   test "runs reactive related CRUD with completion filtering" {
       run DataMVPApp
 
       expect text "No workspaces yet"
@@ -44,6 +44,7 @@ test "Data MVP" {
       expect missing text "Related task"
       expect text "No workspaces yet"
    }
+   // REMOVAL CANDIDATE: CRUD already proves the Memory write; removing this variant drops compiled network-control integration.
    test "saves Memory rows while offline" {
       run DataMVPApp
       network offline
@@ -56,6 +57,7 @@ test "Data MVP" {
       datasource fails after create Workspace "save was rejected"
       enter "Rejected" into #workspaceName
       press #addWorkspace
-      expect text "Could not save data: save was rejected"
+      expect text "Unable to load these items."
+      expect missing text "save was rejected"
    }
 }

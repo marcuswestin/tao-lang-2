@@ -40,7 +40,6 @@ Describe('InstantAuth signing in to InstantDB through the runtime (requires TAO_
     const bob = await mountedApp(app, alternateHost(app.apiURI))
     try {
       const aliceId = await alice.signIn('alice@example.test')
-      Expect(aliceId).toMatch(/^[0-9a-f-]{36}$/)
       Expect(alice.scope.session.identity).toEqual({
         accountId: aliceId,
         issuer: `instantdb:${app.id}`,

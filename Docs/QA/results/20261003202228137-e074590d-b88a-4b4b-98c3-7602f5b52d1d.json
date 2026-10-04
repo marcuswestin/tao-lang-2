@@ -1,0 +1,40 @@
+{
+  "id": "20261003202228137-e074590d-b88a-4b4b-98c3-7602f5b52d1d",
+  "runId": "20261003202104347-e23610fc-ef82-409f-a15b-e37deaeaa5db",
+  "createdAt": "2026-10-03T20:22:28.126Z",
+  "recordedAt": "2026-10-03T20:22:28.126Z",
+  "commit": "f76f0f02e9d25419414821a573202714c38cc8fb",
+  "phase": 1,
+  "executionProfile": "development",
+  "provenance": {
+    "snapshotBasis": "observation-time",
+    "originalDependencies": "recorded",
+    "observedMetadataEvidence": [
+      "README.md"
+    ]
+  },
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "runtime": "bun:1.4.2"
+  },
+  "inputs": {
+    "source": "README.md",
+    "dependencySnapshot": "Docs/QA/inputs/b8095fc15dfe442b30da9a4880853c1e3b91337dce60fe599d448783a3aca166.json"
+  },
+  "surfaceId": "doc:README.md",
+  "dimension": "text",
+  "outcome": "pass",
+  "reviewer": "agent",
+  "channel": "source",
+  "evidence": [
+    {
+      "path": "README.md",
+      "sha256": "190ec280007138d7f5825addf31620b29ee45f2a654c8181e61df6ad39098d73"
+    }
+  ],
+  "notes": "Reviewed source: checkout commands use ./agent tao and supported flags; the command table distinguishes checked-in development starters from public release capabilities, and creation from the hand-built tutorial. Public install and app licence remain unresolved. Required installed release-1 command rechecks remain pending.",
+  "sourceHash": "190ec280007138d7f5825addf31620b29ee45f2a654c8181e61df6ad39098d73",
+  "rendererHash": "not-applicable",
+  "profileHash": "b5e443edb0ccd5952dd86869fb2a97f104715bfcbd7612b7bf7e2c50df3b94c8"
+}

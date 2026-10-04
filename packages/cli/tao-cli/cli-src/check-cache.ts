@@ -1,4 +1,4 @@
-import { FS, Platform, Repo, TaoFiles, TaoStdlib } from '@shared'
+import { FS, Platform, ReleaseCapabilities, Repo, TaoFiles, TaoStdlib } from '@shared'
 import { verdictPackageFiles } from './toolchain-packages'
 
 /**
@@ -265,6 +265,7 @@ async function workspaceInputIdentity(
   workspaceRoot: string,
 ): Promise<string> {
   return FS.contentIdentity([
+    `release-profile\n${ReleaseCapabilities.fingerprint()}`,
     `version\n${String(STAMP_VERSION)}`,
     `toolchain\n${toolchain}`,
     `tree\n${await treeIdentity(workspaceRoot)}`,

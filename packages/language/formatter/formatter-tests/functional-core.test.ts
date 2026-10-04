@@ -132,7 +132,7 @@ Describe('functional core formatter', () => {
   Test(
     'formats grouped entity availability guards and their error payload',
     formats(
-      `view DocumentScreen(Document){render Stack(){guard Document{loading->{Text("Loading")}missing->{Text("Missing")}unauthorized->{Text("Unauthorized")}error->Message{Text(Message)}}DocumentEditor(Document)}}`,
+      `view DocumentScreen(Document){render Stack(){guard Document{loading->{Text("Loading")}missing->{Text("Missing")}unauthorized->{Text("Unauthorized")}error->Context{Text(Context.Message)}}DocumentEditor(Document)}}`,
       `
         view DocumentScreen(Document) {
            render Stack() {
@@ -140,7 +140,7 @@ Describe('functional core formatter', () => {
                  loading -> { Text("Loading") }
                  missing -> { Text("Missing") }
                  unauthorized -> { Text("Unauthorized") }
-                 error -> Message { Text(Message) }
+                 error -> Context { Text(Context.Message) }
               }
               DocumentEditor(Document)
         }  }
@@ -149,20 +149,14 @@ Describe('functional core formatter', () => {
   )
 
   Test(
-    'formats a bare guard and the file-level read net',
+    'formats an app read net',
     formats(
-      `guard   default{loading->Spinner()missing->{Text("Gone")}error->Message{Text(Message)}}\nview DocumentScreen(Document){render Stack(){guard   Document\nDocumentEditor(Document)}}`,
+      `app NetApp {\nview DocumentScreen\nguard{\nloading->Spinner()\n}\n}`,
       `
-        guard default {
-           loading -> Spinner()
-           missing -> { Text("Gone") }
-           error -> Message { Text(Message) }
-        }
-
-        view DocumentScreen(Document) {
-           render Stack() {
-              guard Document
-              DocumentEditor(Document)
+        app NetApp {
+           view DocumentScreen
+           guard {
+              loading -> Spinner()
         }  }
       `,
     ),

@@ -1,6 +1,7 @@
 import { AST, Langium } from '@parser'
 import { Validate } from './Validate'
 import { Validation, type ValidationRunContext } from './validation'
+import { validateEditorRelease } from './validators/release-capabilities-validator'
 
 /** LangiumValidationContextProvider supplies workspace validation state for one file. */
 export type LangiumValidationContextProvider = (file: AST.TaoFile) => ValidationRunContext
@@ -9,6 +10,7 @@ export type LangiumValidationContextProvider = (file: AST.TaoFile) => Validation
 export function registerTaoValidationChecks(
   services: Langium.LangiumDefaultCoreServices | Langium.LangiumServices,
   contextForFile: LangiumValidationContextProvider,
+  editorRelease = false,
 ): void {
   const registry = services.validation.ValidationRegistry
   const checks: Langium.ValidationChecks<AST.TaoLangAstType> = {
@@ -16,6 +18,9 @@ export function registerTaoValidationChecks(
     // same diagnostics in the same order: structural first, then inferred types.
     TaoFile: async (file, accept) => {
       const ctx = Validation.createContext(accept, contextForFile(file))
+      if (editorRelease && !await validateEditorRelease(file, ctx)) {
+        return
+      }
       const nodes = Validate.TaoFile(file, ctx)
       Validate.Types(file, nodes, ctx)
       await Validate.ForeignImplementationFiles(file, ctx)

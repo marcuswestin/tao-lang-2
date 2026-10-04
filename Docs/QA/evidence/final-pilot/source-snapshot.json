@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "id": "6b84c0c2-e58f-4341-b11b-7534369fd853",
+  "originalProject": "/Users/ro/.codex/worktrees/8a04/tao-lang-2/.artifacts/scratch/qa-reading-list",
+  "stagedProject": "/Users/ro/.codex/worktrees/8a04/tao-lang-2/.artifacts/scratch/qa-capture/6b84c0c2-e58f-4341-b11b-7534369fd853/project",
+  "output": "/Users/ro/.codex/worktrees/8a04/tao-lang-2/.artifacts/qa/pilot/reading-list-final",
+  "createdAt": "2026-09-26T23:36:15.015Z",
+  "owner": "qa-capture",
+  "cleanup": "Retained for diagnosis. Remove this owned scratch directory only after its capture processes have stopped.",
+  "status": "complete",
+  "files": [
+    {
+      "path": "ReadingList.tao",
+      "sha256": "ff1252023d9cdfb96a07e88551d129f970d69b620feee39f41ff09f582dc568c"
+    }
+  ],
+  "excluded": []
+}

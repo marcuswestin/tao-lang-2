@@ -2,20 +2,19 @@ import { Describe, Expect, Test } from '@shared/test'
 import { configurationValidationMessages } from '../validator-src/validators/configuration-validator'
 import { validationErrorMessages, withValidatedFiles } from './test-validate'
 
-const sidecarDeclaration = (path: string, exportName = 'SidecarNav') => `
+const sidecarDeclaration = (path: string) => `
   public type SidecarNav is nav with {
-    nav ${exportName} from ${path}
+    nav SidecarNav from ${path}
   }
 `
 
 async function validateSidecar(
   path: string,
   sidecarFiles: Record<string, string> = {},
-  exportName = 'SidecarNav',
 ): Promise<string[]> {
   let errors: string[] = []
   await withValidatedFiles('Main.tao', {
-    'Main.tao': sidecarDeclaration(path, exportName),
+    'Main.tao': sidecarDeclaration(path),
     ...sidecarFiles,
   }, result => {
     errors = validationErrorMessages(result)
@@ -106,7 +105,6 @@ Describe('validator: configuration implementation sidecars', () => {
     const invalidSources = [
       'const Source = "export function SidecarNav() {}"\nexport const Name = Source',
       'interface SidecarNav {}\nexport type { SidecarNav }',
-      'export type SidecarNav = () => void',
     ]
 
     for (const source of invalidSources) {

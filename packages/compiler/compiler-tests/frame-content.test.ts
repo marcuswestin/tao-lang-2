@@ -55,7 +55,6 @@ Describe('compiler: frame content and render injection channels', () => {
     `)
 
     const boundary = compiled.files.find(file => file.relativePath === 'App.injection-1.tsx')
-    Expect(boundary).toBeDefined()
     Expect(boundary?.code).toContain(
       "export default function(Content: import('react').ReactNode, Layout: ReturnType<typeof TR.VisualLayout>, Tag: string | undefined)",
     )

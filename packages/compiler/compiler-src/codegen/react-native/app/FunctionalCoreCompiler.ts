@@ -1,7 +1,7 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
-import { type CodegenOptions, type Compiled, gen, ReadNetBinding } from '../codegen-util'
+import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 import { withAuthContextFactory } from './auth-context'
 import { compileDeclarationIdentity } from './declaration-identity'
@@ -149,7 +149,7 @@ export const FunctionalCoreCompiler = {
     }
     const availability = Type.ofExpression(statement.subject).kind === 'entity'
     return gen`
-      {TR.${availability ? 'GuardRender' : 'WhenCaseRender'}(${Compile.Expression(statement.subject)}, [
+      {TR.${availability ? 'WhenReadRender' : 'WhenCaseRender'}(${Compile.Expression(statement.subject)}, [
         ${
       gen.list(
         statement.branches,
@@ -201,17 +201,16 @@ export const FunctionalCoreCompiler = {
     }
       ], () => <>
         ${Compile.RenderBlockFragments(remaining, options)}
-      </>, _ViewProps.__tao)}
+      </>, _ViewProps.__tao${readHint(statement.subject)})}
     `
   },
 
   /**
-   * GuardDefaultStatement binds the project's read net. Each handler renders at whichever guard
-   * reached the net, so it takes that guard's view props as its own and binds `error`'s message.
+   * AppGuardStatement builds a partial read net. Each handler receives the guard site's context.
    */
-  GuardDefaultStatement(statement: AST.GuardDefaultStatement, options: CodegenOptions = {}): Compiled {
+  AppGuardStatement(statement: AST.AppGuardStatement, options: CodegenOptions = {}): Compiled {
     return gen`
-      ${gen.scopeName({ name: ReadNetBinding })} = TR.ReadNet({
+      TR.ReadNet({
         ${
       gen.list(
         statement.branches,
@@ -278,9 +277,24 @@ export const FunctionalCoreCompiler = {
 } as const
 
 /** A read net handler without a block is, by the grammar, one bare render. */
-function requiredRender(branch: AST.GuardDefaultBranch): AST.ViewRender {
+function requiredRender(branch: AST.AppGuardBranch): AST.ViewRender {
   Assert.defined(branch.render, 'parsed read net handler has a block or a render')
   return branch.render
+}
+
+/** Supply only source facts the compiler can identify without evaluating a read. */
+function readHint(subject: AST.Expression): Compiled {
+  if (!AST.isValueReference(subject)) {
+    return gen.noop()
+  }
+  const target = subject.target.ref
+  const type = Type.ofExpression(subject)
+  const readKind = AST.isEntityQueryDeclaration(target) ? 'query' : type.kind === 'entity' ? 'entity' : undefined
+  return readKind
+    ? gen`, ${
+      gen.jsLiteral({ readKind, subjectType: type.kind === 'entity' ? Type.dataEntityName(type.entity) : undefined })
+    }`
+    : gen.noop()
 }
 
 function functionRuntimeParameterName(index: number): Compiled {

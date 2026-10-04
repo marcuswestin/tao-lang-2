@@ -607,7 +607,6 @@ Describe('compiler: language lowering', () => {
       const result = await Workspace.compile(paths['Main.tao']!)
       const code = result.files.find(file => file.relativePath === 'App.tsx')?.code
 
-      Expect(code).toBeDefined()
       Expect(code).toMatch(/import \{ _TaoDataCatalog \} from '[^']*Data\.tao'/u)
       Expect(code).toMatch(
         /TR\.Data\.CreateWith\(\s*TR\.Auth\.Store\(_TaoAuthScope, _Scope\._TaoDataCatalog\),\s*"Workspace",/u,
@@ -634,7 +633,6 @@ Describe('compiler: language lowering', () => {
       const result = await Workspace.compile(paths['Main.tao']!)
       const code = result.files.find(file => file.relativePath === 'App.tsx')?.code
 
-      Expect(code).toBeDefined()
       Expect(code?.match(/^import .*_TaoDataCatalog.*$/gmu)).toHaveLength(1)
       Expect(code).toMatch(/import \{ _TaoDataCatalog \} from '[^']*Data\.tao'/u)
       Expect(code).toMatch(
@@ -664,7 +662,6 @@ Describe('compiler: language lowering', () => {
       const result = await Workspace.compile(paths['Main.tao']!)
       const code = result.files.find(file => file.relativePath === 'App.tsx')?.code
 
-      Expect(code).toBeDefined()
       Expect(code).toMatch(/import \{ _TaoDataCatalog \} from '[^']*Data\.tao'/u)
       Expect(code).toContain('_Scope.Workspaces = TR.Data.Query(')
       Expect(code).toContain('TR.ForEach(_Scope.Workspaces.evaluate()')
@@ -689,7 +686,6 @@ Describe('compiler: language lowering', () => {
       const result = await Workspace.compile(paths['Main.tao']!)
       const code = result.files.find(file => file.relativePath === 'App.tsx')?.code
 
-      Expect(code).toBeDefined()
       Expect(code).toContain("import { _TaoDataCatalog } from './modules/Data.tao'")
       Expect(code).toMatch(
         /TR\.Data\.Create\(\s*TR\.Auth\.Store\(_TaoAuthScope, _Scope\._TaoDataCatalog\),\s*"Workspace",/u,
@@ -1284,9 +1280,7 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code).toContain('TR.Navigation.App({')
     Expect(compiled.code).toContain('TR.Navigation.Configure(_Scope.__tao_type_StackNav, {')
     Expect(compiled.code).toContain('TR.Navigation.Configure(_Scope.__tao_type_SlotNav, {')
-    Expect(compiled.code).toContain('TR.Navigation.Target(')
     Expect(compiled.code).toContain('TR.Navigation.PresentOverlay(')
-    Expect(compiled.code).toContain('TR.Navigation.Activate(')
     Expect(compiled.code).toContain('"workspace"')
     Expect(
       /TR\.Navigation\.Target\(\s+_ViewProps\.__tao,\s+_Scope\.NavigationApp,/.test(compiled.code),
@@ -1295,7 +1289,6 @@ Describe('compiler: language lowering', () => {
       /TR\.Navigation\.Activate\(\s+_ViewProps\.__tao,\s+_Scope\.NavigationApp,/.test(compiled.code),
     ).toBe(true)
     Expect(compiled.code).toContain('TR.Navigation.Dismiss(_ViewProps.__tao)')
-    Expect(compiled.code).toContain('TR.Navigation.Replace(')
     Expect(
       /TR\.Navigation\.Replace\(\s+_ViewProps\.__tao,\s+_Scope\.ResetNavigator\.evaluate\(\),\s+_Scope\.NavigationApp,/
         .test(compiled.code),

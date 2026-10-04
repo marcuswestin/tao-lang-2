@@ -1,0 +1,50 @@
+{
+  "id": "20260929161415911-1a3a5ee6-4e26-488f-bcba-b840c1fc1d79",
+  "runId": "20260929161318907-772bb9ea-4c23-4e35-b1e5-f9d53f1c6e6a",
+  "createdAt": "2026-09-29T16:14:15.910Z",
+  "recordedAt": "2026-09-29T16:14:15.910Z",
+  "commit": "0aa8ebcfae088acc4c8b53cb1a122b7771370e15",
+  "phase": 1,
+  "executionProfile": "development",
+  "provenance": {
+    "snapshotBasis": "observation-time",
+    "originalDependencies": "recorded",
+    "observedMetadataEvidence": [
+      "packages/ai/tao-skills/skills/tao-data/SKILL.md",
+      "packages/ai/tao-skills/skills/tao-run-and-ship/SKILL.md",
+      "Apps/Starters/Notebook/AGENTS.md"
+    ]
+  },
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "runtime": "bun:1.4.2"
+  },
+  "inputs": {
+    "source": "Docs/MVP Roadmap/Plan - Initial release QA.md",
+    "dependencySnapshot": "Docs/QA/inputs/1b8ea0038e4a1018886700293ba031b97d41de1e474b00f5bb81e7db38f253b5.json"
+  },
+  "surfaceId": "story:CLI10",
+  "dimension": "text",
+  "outcome": "fail",
+  "reviewer": "agent",
+  "channel": "public-docs",
+  "evidence": [
+    {
+      "path": "packages/ai/tao-skills/skills/tao-data/SKILL.md",
+      "sha256": "eb1c0a93a78445a5e4f3b17d6ef0cc77d20677b6d3d083f0edbe9b2b764cf5c6"
+    },
+    {
+      "path": "packages/ai/tao-skills/skills/tao-run-and-ship/SKILL.md",
+      "sha256": "3c098748753a34fc143fc97fc2c950776be84f49868c9cbcfc1ba49ebddfae7e"
+    },
+    {
+      "path": "Apps/Starters/Notebook/AGENTS.md",
+      "sha256": "c45190d2742524dd1fe23787f1a0454b4848a209af33a05af931a480a82a4c0f"
+    }
+  ],
+  "notes": "Text only: guidance copied into created projects teaches rejected syntax and later-release commands (skill findings above).",
+  "sourceHash": "0d87120cf40e2795b3b99f7cacb644829738f9f2a586d3e6f480b9fc01ae673a",
+  "rendererHash": "57869b7252c5b7865f2daa3ec40253907eb27fb81491de78ceffcb6473ca3fb4",
+  "profileHash": "c1bb9d6add2e225907faed5f0c6ca5736166bf2163ff04631811b56048eef38b"
+}

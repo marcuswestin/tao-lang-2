@@ -11,6 +11,8 @@ description: >-
 Run a host-only lane through its listed wrapper shape, such as `./agent unsandboxed studio-smoke`;
 the plain `./agent` shape stays sandboxed.
 
+- After a broad failure, let the runner finish cleanup and release its leases, diagnose the failed scope with an explicit file or name target, fix it, then repeat broad verification. An aborted or filtered run is not complete coverage. Command help owns the failure policy; keep diagnostic scope explicit instead of repeatedly paying for a broad inventory of failures.
+
 ## The machine-wide landing lock
 
 You do not claim it by hand. Ready `./agent unsandboxed land` processes queue FIFO, ahead of new broad lanes;

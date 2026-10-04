@@ -1,6 +1,6 @@
 import { FS } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
-import { discoverShipProject, selectShipApp, writeProjectVersion } from '../cli-src/ship-project'
+import { discoverShipProject, selectShipApp } from '../cli-src/ship-project'
 
 const projectSource = `
 project {
@@ -141,14 +141,6 @@ Describe('tao ship project discovery', () => {
     })
   })
 
-  Test('writes the version in canonical source', async () => {
-    await withTaoFiles('tao-ship-project-', { 'App.tao': projectSource }, async paths => {
-      const project = await discoverShipProject(paths['App.tao']!)
-      await writeProjectVersion(project, '2.0.0')
-      Expect(await FS.readText(paths['App.tao']!)).toContain('version "2.0.0"')
-    })
-  })
-
   Test('reads every provider an app mounts through its variants, declarations, and types', async () => {
     const source = `
 project { id "notes" name "Notes" version "1.0.0" }
@@ -257,7 +249,7 @@ view Main() { }
       const project = await discoverShipProject(paths['App.tao']!)
       const reader = project.apps.find(app => app.name === 'Reader')!
 
-      // The Dev store is the second binding, and it still refuses to ship.
+      // The Dev binding still refuses to ship alongside the Apple store.
       Expect(reader.usesDevDatasource).toBe(true)
       // The Apple entitlement comes from the other binding.
       Expect(reader.icloud).toEqual({

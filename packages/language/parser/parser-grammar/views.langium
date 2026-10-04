@@ -143,12 +143,16 @@ GuardRenderCaseBlock:
 GuardRenderBranch:
     case=SubjectCaseName ('->' payload=CasePayload?)? block=Block?;
 
-// The project's read net: `guard default { … }` replaces, case by case, the handling the runtime
-// supplies for the exceptional read cases every guard leaves unnamed. It is file-level and
-// anonymous; the validator owns its placement, its cases, and the one-per-project rule. A handler
-// is a render block, or one bare render when that is all it draws.
+// An app's read net replaces the runtime's exceptional read cases one case at a time.
+AppGuardStatement:
+    'guard' '{' branches+=AppGuardBranch+ '}';
+
+// Keep the old spelling parseable so the validator can give a migration diagnostic.
 GuardDefaultStatement:
     'guard' 'default' '{' branches+=GuardDefaultBranch+ '}';
+
+AppGuardBranch:
+    case=SubjectCaseName '->' (render=ViewRender | payload=CasePayload? block=Block);
 
 GuardDefaultBranch:
     case=SubjectCaseName '->' (render=ViewRender | payload=CasePayload? block=Block);

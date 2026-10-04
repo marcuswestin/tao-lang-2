@@ -15,7 +15,6 @@ function outlineApp(body: string, extra = ''): string {
     }
     data Workspaces / Workspace {
       Name text (title),
-      CreatedAt time (default now),
       Documents (owned)
     }
     app OutlineApp { view Main }
@@ -53,7 +52,6 @@ Describe('compiler: interaction outline', () => {
     `))
 
     Expect(compiled.code).toContain('const _TaoOutline = TR.Interaction.OutlineTable({')
-    Expect(compiled.code).toContain('"kind":"collection"')
     Expect(compiled.code).toContain('"entity":"Document"')
     Expect(compiled.code).toContain('"collection":"Documents"')
     Expect(compiled.code).toContain('interaction: _TaoOutline["Main#')

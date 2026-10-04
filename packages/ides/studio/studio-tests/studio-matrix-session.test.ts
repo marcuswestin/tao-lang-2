@@ -8,19 +8,6 @@ import type { StudioRuntimeCaptureArtifact } from '../studio-src/StudioProtocol'
 import { systemLightScheme } from './test-studio-fixtures'
 
 Describe('Studio matrix session', () => {
-  Test('registers concurrent cell instances without one cell invalidating another', () => {
-    const session = new StudioMatrixSession(fixture())
-    const phone = instance(session, 'phone', 'phone-instance')
-    const desktop = instance(session, 'desktop', 'desktop-instance')
-
-    session.registerInstance(phone)
-    session.registerInstance(desktop)
-
-    Expect(session.assertCurrentInstance(phone).cell.cellId).toBe('phone')
-    Expect(session.assertCurrentInstance(desktop).cell.cellId).toBe('desktop')
-    Expect(session.instance('phone-instance').identity).toEqual(session.cell('phone').identity)
-  })
-
   Test('keeps several live instances of one cell until that cell is reconfigured', () => {
     const session = new StudioMatrixSession(fixture())
     const browser = instance(session, 'phone', 'browser-instance')

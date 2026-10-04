@@ -186,6 +186,11 @@ async function expectFreshBuildForIneligibleCheckpoint(
     '.tao-project/lock.jsonc': JSON.stringify(lock),
     'App.tao': source,
   }, async paths => {
+    if (checkpoint.processingState !== undefined || checkpoint.dirty === true) {
+      await initGitTestRepository(FS.dirname(paths['App.tao']!), {
+        commit: { files: { '.tao-project/lock.jsonc': JSON.stringify(lock), 'App.tao': source } },
+      })
+    }
     const terminal = fakeTerminal()
     await runShipCommand(FS.dirname(paths['App.tao']!), {
       dryRun: true,
