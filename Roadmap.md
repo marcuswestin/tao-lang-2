@@ -68,6 +68,11 @@ calibration period that ends the "ask the Developer" clause.
 
 ## The Tao Revolution program
 
+- [ ] [Implement Syntax2 progressively](<Docs/Roadmap/Data and render contracts/Implement Syntax2.md>)
+      — future-source Library app forces the selected type/render/quantity/action contracts. Graduate
+      dependency-complete pieces from `.tao.future` to `.tao`; settle named open seams before dispatching
+      parallel implementation workstreams. This task does not change MVP priority or deferred scope.
+
 The language target is decided except for explicitly open or deferred questions recorded below and in
 active workstream ledgers (`Docs/Roadmap/Tao Revolution/Decisions.md`); the steps below are
 `Process.md`'s sequence as open work, in order. The dialect tranche is absorbed (`1 - Current` and
@@ -100,6 +105,10 @@ tests written in Tao, green in Current, for every construct introduced.
     capabilities — InstantDB, remote authorization semantics, richer data test controls, snapshots,
     SplitNav/windows, semantic design recipes, concurrency policy — are now scoped by
     `Coverage.md`'s tier column.
+- [ ] [Design the Time.Live API](Docs/Roadmap/Time.Live%20API.md)
+  - Updating time is a separate library API from fixed `Timer.Duration()` samples and `Time.Now()`
+    DateTime readings. Remaining time API design is deferred to pre-MVP
+    [A30/R21](<Docs/MVP Roadmap/Review - Dates and time APIs.md>).
 - [ ] Decide the runtime action-transaction contract
   - Deferred by the Developer on 2026-08-31. Settle whether root actions serialize, nested `do` calls join one
     transaction, state/data use private read-your-writes overlays, commits apply deltas to the latest
@@ -121,11 +130,17 @@ tests written in Tao, green in Current, for every construct introduced.
 
 ## Toward v1
 
+- [ ] Refine capability failure contracts where implementations can be proven (post-MVP)
+  - Preserve ordinary inferred/declared failure contracts first. Investigate per-instance and
+    whole-program narrowing without treating unknown external targets as closed. Scope and forcing
+    examples: [Capability failure refinement](<Docs/Roadmap/Capability failure refinement.md>).
+
 - [ ] Design the public Tao sidecar value API after MVP
   - Deferred from the package and generated-TypeScript migration. Explore explicit constructors,
     semantic value operations, conversion, and entity identity without exposing internal reactive
     wrappers. Open decisions and acceptance evidence live in
     [Tao sidecar value API](Docs/Roadmap/Tao%20sidecar%20value%20API.md).
+
 - [ ] Complete freehand UI sketching in Tao Studio
   - The implemented foundation covers scenarios, the generated root `@` package, and drawing and
     snapping free rectangles. The FS-D1–FS-D20 design and the ordered remaining data, variant,

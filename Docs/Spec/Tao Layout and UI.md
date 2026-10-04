@@ -7,9 +7,11 @@ Current implementation status: this repo has one renderable view family, with `s
 containers, private `#tag` test metadata, and bracketed clauses for `content`, `claim`, `gap`,
 `pad`, `margin`, `width`, `height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and `centered`.
 It also implements `width max`, adaptive `Panes`, and typed design values, lowercase styles,
-element defaults, conditions, and `color` view parameters. Render arguments are always parenthesized,
-and a spec remains a distinct following
-clause: `render View(args) [spec] { children }`. Tags, layout, and design style merge into an
+element defaults, conditions, and `color` view parameters. Argumentful renders use parentheses;
+zero-argument renders may omit `()`. A spec remains a distinct following
+clause: `render View(args) [spec] { children }` or `render View [spec] { children }`. Quoted entries
+render through the standard-library Text view, including interpolations and following specs.
+Tags, layout, and design style merge into an
 existing concrete native root and add no wrapper node. Compatible material beyond that first
 contract remains future direction in this document. The old repo implemented most of this layout
 contract with older spellings and a multi-kind declaration surface (`ui`, `frame`, `layout`,
@@ -232,8 +234,9 @@ view Card() {
 ### Declaration Properties, Children, And Slots
 
 Declaration properties use the owner-qualified binding rules in `Tao Type System.md`. Header
-parameters are shorthand for the same public properties. Header parameters require parentheses,
-including `()`. The longhand property block remains future work. Named render slots and
+parameters are shorthand for the same public properties. Argumentful header parameters require
+parentheses; zero-argument view headers may omit `()`. The longhand property block remains future
+work. Named render slots and
 `@@content` are implemented:
 
 ```tao

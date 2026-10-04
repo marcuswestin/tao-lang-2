@@ -184,6 +184,8 @@
       "./agent unsandboxed processes *",
       "./agent unsandboxed start-branch",
       "./agent unsandboxed start-branch *",
+      "./agent unsandboxed take-branch",
+      "./agent unsandboxed take-branch *",
       "./agent unsandboxed storage",
       "./agent unsandboxed storage *"
     ],
@@ -411,6 +413,8 @@
       "Bash(./agent unsandboxed processes *)",
       "Bash(./agent unsandboxed start-branch)",
       "Bash(./agent unsandboxed start-branch *)",
+      "Bash(./agent unsandboxed take-branch)",
+      "Bash(./agent unsandboxed take-branch *)",
       "Bash(./agent unsandboxed storage)",
       "Bash(./agent unsandboxed storage *)"
     ],

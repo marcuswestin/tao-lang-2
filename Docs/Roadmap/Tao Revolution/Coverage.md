@@ -16,6 +16,31 @@ persist completion against each occurrence. If that product feature is cut, reco
 Tier values: **MVP** (must run for v1), **Post-MVP** (Revolution; activated with the app
 expansion), **TBD** (assigned at step 4). Test status is updated as tranches land.
 
+## Syntax2 supplemental forcing target
+
+The [Syntax2 implementation program](<../Data and render contracts/Implement Syntax2.md>) records
+the 2026-10-04 decision dialogue's additional acceptance obligations. Syntax2 is a future-source
+target, not executable proof or a change to the tier/priority of the existing rows below. General
+state redesign, localized text, never/bans, remaining time APIs, comprehensive proof investigation
+and advanced whole-app failure refinement retain their explicit deferrals.
+
+| Accepted family                                          | Syntax2 forcing feature and additional acceptance                                                                                      | Implementation slice | Evidence           |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------- | ------------------ |
+| Nominal admission and callable binding                   | PersonName, Subtract, use all; private signature projections, repeated roles, ambiguous/extra arguments and unused wildcard collisions | 1                    | Future source only |
+| Structural capabilities, associated members and generics | Title/Book rendering, EarlierLabel; supplied ancestor, inherited factory identity, pure-effect counterexamples                         | 2                    | Future source only |
+| Numeric domains, units and native values                 | Duration arithmetic and Score operator; stdlib declarations, qualified units, checked backing values, scalar/domain rejection          | 3                    | Future source only |
+| Render sugar, slots, prefixes and empty text             | Shelf defaults/replacements/forwarding, bare Feedback, accessible heading; explicit empty Text node                                    | 4                    | Future source only |
+| Typed failures and control flow                          | Add recovery and app guard; fallible converter, multiple action matches, cancellation, detached ownership                              | 5                    | Future source only |
+| Joined cleanup and fixed timing samples                  | Export and notification; multiple defers, LIFO exits, primary/cleanup failures                                                         | 6                    | Future source only |
+| Data and adapter boundaries                              | Book.Return inverse write, typed draft and revision acknowledgment; conflicting writes, validation and revision races                  | 7                    | Future source only |
+| Bounded acquisition and lazy rendering                   | More/Refresh, Shelf and GroupedRows; unique stable keys, reactive rows and viewport/fetch boundaries                                   | 8                    | Future source only |
+
+Additional checks named here need their own focused fixtures or journeys during implementation;
+the compact app and its initial journey do not yet exercise every accepted case. Graduation and
+evidence are tracked by the program's coordinator, with actual tier changes decided separately.
+
+## Existing app coverage
+
 | Capability (Decisions §)                                    | Forcing app · feature                                                         | Tier     | Test status               |
 | ----------------------------------------------------------- | ----------------------------------------------------------------------------- | -------- | ------------------------- |
 | Types, typed slots, unit values (§2)                        | WordFlower · everywhere; units: focused-writing mode                          | MVP      | in Current                |

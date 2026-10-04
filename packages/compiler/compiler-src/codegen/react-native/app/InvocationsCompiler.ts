@@ -35,6 +35,7 @@ export const InvocationsCompiler = {
     Assert(invocation.eventDiagnostics.length === 0, 'validated render events have no binding diagnostics')
 
     const renderArguments = Compile.RenderArguments(invocation)
+    const viewName = AST.isQuotedRender(render) ? gen`__tao_quoted_Text$` : gen.scopeName(view)
     const taoProps = Compile.RenderTaoProps(render, options)
     const block = render.block
     const slotFills = AST.renderSlotUsesOf(block).filter(
@@ -49,18 +50,18 @@ export const InvocationsCompiler = {
       && !(AST.isRenderSlotUse(statement) && statement.render)
     )
     if (children.length === 0) {
-      return studioLensRender(render, gen`<${gen.scopeName(view)}${renderArguments}${taoProps} />`, options)
+      return studioLensRender(render, gen`<${viewName}${renderArguments}${taoProps} />`, options)
     }
     Assert.defined(block, 'render with child statements has a child block')
 
     return studioLensRender(
       render,
       gen`
-      <${gen.scopeName(view)}${renderArguments}${taoProps}>
+      <${viewName}${renderArguments}${taoProps}>
         {TR.BlockScope(_Scope, _Scope => {
           ${Compile.RenderBlockBody(block, options)}
         })}
-      </${gen.scopeName(view)}>
+      </${viewName}>
     `,
       options,
     )

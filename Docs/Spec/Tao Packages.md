@@ -4,8 +4,8 @@ Status: source implementation written. Release validation and acceptance are tra
 [the execution plan](../Roadmap/Plan%20-%20Tao%20projects%20modules%20and%20packages.md).
 
 The implemented package surface includes `@tao/text`, `@tao/time`, `@tao/linking`, and the curated
-`@tao/device/{haptic,clipboard,share}` capabilities, and requires parentheses on every view, action,
-and function declaration parameter list.
+`@tao/device/{haptic,clipboard,share}` capabilities. Zero-argument view declarations may omit `()`;
+argumentful views and every action/function declaration retain parentheses.
 
 `@tao/text` exports `CountWords(Value text)` and `Join(Values list of text, Separator text)`.
 `CountWords` trims and counts Unicode-whitespace-delimited words, returning zero for empty or
@@ -429,6 +429,11 @@ sidecars use native npm resolution, for example `import { format } from 'date-fn
 supports npm's native aliases, package exports, and subpaths. `tao install` defaults to all apps and
 publications; explicit selection preserves unrelated installations. Remote Tao fetching, publishing,
 and Companion URL installation remain deferred.
+
+Installation reports its active phases, elapsed timings, and npm invocation count. It delegates
+checking and repairing each selected npm installation to npm, including on repeated installs.
+Repeated installs preserve unchanged managed manifests and alias links. npm uses its ordinary
+cache and lock behavior; Tao does not maintain a separate installation-validity cache.
 
 Checks and runtime publication validate each selected installed alias against its declared package
 name and version range, and against its exact pin when recorded in the shared Tao lock. A compatible

@@ -36,7 +36,7 @@ ViewCommandExclusion:
 // the body sets stays private.
 ViewDeclaration:
     visibility=DeclarationVisibility? (scene?='scene' | 'view') name=ID
-    (parameterList=ParameterList ('responds' response=[TypeDeclaration:ID])? layoutClause=LayoutClause?
+    (parameterList=ParameterList? ('responds' response=[TypeDeclaration:ID])? layoutClause=LayoutClause?
         (block=ViewBlock | foreign=ForeignViewImplementation)
         | '=' aliasTarget=PackageMemberReference);
 
@@ -78,10 +78,21 @@ type RenderTarget = ViewDeclaration | NavDeclaration | ParameterDeclaration;
 
 RenderStatement:
     'render' (injection=Injection layoutClause=LayoutClause?
-        | view=[RenderTarget:ID] '(' argumentList=ArgumentList? ')' layoutClause=LayoutClause? block=Block?);
+        | (view=[RenderTarget:ID] ('(' argumentList=ArgumentList? ')')?
+           | quotation=PhraseText) layoutClause=LayoutClause? block=Block?);
 
-ViewRender:
-    view=[RenderTarget:ID] '(' argumentList=ArgumentList? ')' layoutClause=LayoutClause? block=Block?;
+// Quotation lowering supplies the ordinary view reference before consumers see this node.
+interface ViewRender {
+    view: @RenderTarget
+    argumentList?: ArgumentList
+    quotation?: Expression
+    layoutClause?: LayoutClause
+    block?: Block
+}
+
+ViewRender returns ViewRender:
+    (view=[RenderTarget:ID] ('(' argumentList=ArgumentList? ')')?
+     | quotation=PhraseText) layoutClause=LayoutClause? block=Block?;
 
 EventHandler:
     'on' event=EventName (action=ValueReference | '->' payload=CasePayload? block=ActionBlock);
@@ -152,10 +163,10 @@ GuardDefaultStatement:
     'guard' 'default' '{' branches+=GuardDefaultBranch+ '}';
 
 AppGuardBranch:
-    case=SubjectCaseName '->' (render=ViewRender | payload=CasePayload? block=Block);
+    case=SubjectCaseName '->' (payload=CasePayload? block=Block | render=ViewRender);
 
 GuardDefaultBranch:
-    case=SubjectCaseName '->' (render=ViewRender | payload=CasePayload? block=Block);
+    case=SubjectCaseName '->' (payload=CasePayload? block=Block | render=ViewRender);
 
 ForStatement:
     'loop' collection=ForCollectionExpression '/' name=ID block=Block;

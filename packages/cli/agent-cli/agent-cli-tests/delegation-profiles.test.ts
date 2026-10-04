@@ -14,8 +14,8 @@ const skillSource = [
   '| Tier | Claude Code `model` | Codex CLI `model` | Cursor `model` |',
   '| --- | --- | --- | --- |',
   '| fast | `haiku` | `gpt-6-luna` | `composer-2.5` |',
-  '| standard | `opus` | `gpt-6-sol` | `claude-opus-5-5` |',
-  '| deep | `opus` | `gpt-6-sol` | `claude-opus-5-5` |',
+  '| standard | `opus` | `gpt-6.1-sol` | `claude-opus-5-5` |',
+  '| deep | `opus` | `gpt-6.1-sol` | `claude-opus-5-5` |',
 ].join('\n')
 
 const readOnlyEverywhere = {
@@ -66,8 +66,8 @@ Describe('delegation profiles', () => {
     Expect([...tierModels(skillSource, 'claude')]).toEqual([['fast', 'haiku'], ['standard', 'opus'], ['deep', 'opus']])
     Expect([...tierModels(skillSource, 'codex')]).toEqual([
       ['fast', 'gpt-6-luna'],
-      ['standard', 'gpt-6-sol'],
-      ['deep', 'gpt-6-sol'],
+      ['standard', 'gpt-6.1-sol'],
+      ['deep', 'gpt-6.1-sol'],
     ])
     Expect([...tierModels(skillSource, 'cursor')]).toEqual([
       ['fast', 'composer-2.5'],

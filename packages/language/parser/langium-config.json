@@ -1,5 +1,6 @@
 {
   "projectName": "TaoLang",
+  "mode": "production",
   "out": "./parser-src/_gen_tao-parser",
   "languages": [{
     "id": "tao",

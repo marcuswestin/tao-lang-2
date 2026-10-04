@@ -1,0 +1,1 @@
+{ "extends": "./.tao/typescript/tsconfig.json" }
