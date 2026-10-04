@@ -8,11 +8,41 @@ import {
   packageAwareCliFixture,
   packageAwareCliMainPath,
   packageAwareCliPathCases,
+  runTaoCliForTest,
   statusByFile,
   withTaoFixture,
 } from './test-cli-files'
 
 Describe('tao fix', () => {
+  Test('migrates value commas in place through the CLI and leaves the second fix unchanged', async () => {
+    await withTaoFixture({
+      'Values.tao': 'let Item = item { First: 1 Second: 2 }\nlet Settings = nav { First 1 Second 2 }\n',
+    }, async rootDir => {
+      const path = FS.resolvePath('Values.tao', rootDir)
+      const first = await runTaoCliForTest(['fix', path])
+      Expect(first.exitCode).toBe(0)
+      Expect(first.stderr).toBe('')
+      const migrated = await FS.readText(path)
+      Expect(migrated).toBe(`${
+        Text.stripIndent(`
+        let Item = item {
+           First: 1,
+           Second: 2
+        }
+        let Settings = nav {
+           First 1,
+           Second 2
+        }
+      `)
+      }\n`)
+      const second = await runTaoCliForTest(['fix', path])
+      Expect(second.exitCode).toBe(0)
+      Expect(second.stderr).toBe('')
+      Expect(second.stdout).toContain('0 fixed, 1 unchanged')
+      Expect(await FS.readText(path)).toBe(migrated)
+    })
+  })
+
   Test('applies render moves, import organization, and formatting in place', async () => {
     await withTaoFixture({
       'app.tao': Text.stripIndent(`
