@@ -433,6 +433,8 @@ and Companion URL installation remain deferred.
 Checks and runtime publication validate each selected installed alias against its declared package
 name and version range, and against its exact pin when recorded in the shared Tao lock. A compatible
 package installed under the wrong alias identity cannot substitute for the declared dependency.
+The lock keys each install environment by its project root relative to the locking project, so a
+committed lock reads the same in every checkout and `tao install` reuses its pins anywhere.
 
 ## Tooling files and TypeScript
 
