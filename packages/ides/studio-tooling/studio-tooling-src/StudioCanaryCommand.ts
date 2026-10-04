@@ -1,17 +1,18 @@
 import { Errors, FS, HCI, Platform, Repo } from '@shared'
 import { GateCatalog } from '@verification/GateCatalog'
 import { MachineLanes } from '@verification/MachineLanes'
+import { UiVisibility } from '@verification/UiVisibility'
 import {
   canaryExitCode,
   evaluateCanary,
-  resolveCanaryTarget,
   survivingOwnedPids,
   writeCanaryReport,
 } from './StudioCanary'
-import { runStudioDev, type StudioDevOptions } from './StudioDev'
+import { runStudioDev, type StudioDevCleanupResult, type StudioDevOptions } from './StudioDev'
 import { readStudioDoctorFacts } from './StudioDoctor'
 import { readLaunches, type StudioLaunchManifest } from './StudioLaunchManifest'
 import type { StudioNativeProbeResult } from './StudioNative'
+import { StudioNativeTestRun } from './StudioNativeTestRun'
 import {
   formatReleaseValidation,
   readArtifactInventory,
@@ -29,6 +30,7 @@ type CanaryOptions = {
   artifactRoot?: string
   hutchPath?: string
   projectRoot?: string
+  showStudio?: boolean
 }
 
 type CanaryCommandDependencies = {
@@ -58,6 +60,9 @@ async function runStudioCanary(
   options: CanaryOptions = {},
   dependencies: CanaryCommandDependencies = canaryCommandDependencies,
 ): Promise<number> {
+  if (options.showStudio === true) {
+    UiVisibility.warn(UiVisibility.studioWarnings)
+  }
   const guiLease = Platform.runtimeProcess.env[GateCatalog.GUI_LEASE_HELD_ENV_KEY] === 'true'
     ? undefined
     : await MachineLanes.acquireResource({
@@ -93,50 +98,70 @@ async function runStudioCanaryWithLease(
     return canaryExitCode(report)
   }
 
-  const { appName, projectRoot } = resolveCanaryTarget(options, repositoryRoot)
-  const probePath = await freshProbeResultPath(artifactRoot)
-  let launchFailure: unknown
-  let launchId: string | undefined
-  let exitCode: number
+  const target = await StudioNativeTestRun.project(options, artifactRoot, repositoryRoot)
+  const { appName, projectRoot } = target
+  let cleanupProof: StudioDevCleanupResult | undefined
+  let survivingPids: readonly number[] | undefined
   try {
-    exitCode = await dependencies.runStudioDev(canaryStudioDevOptions({
-      appName,
-      artifactRoot,
-      hutchPath: options.hutchPath,
-      onFailure: error => {
-        launchFailure ??= error
-      },
-      onLaunch: id => {
-        launchId ??= id
-      },
-      projectRoot,
-    }))
-  } catch (error) {
-    launchFailure ??= error
-    exitCode = 1
-  }
-  const launch = launchId === undefined
-    ? undefined
-    : findCanaryLaunch(launchId, await dependencies.readLaunches(repositoryRoot))
-  // The native shell writes its probe result beside its generated Electrobun project.
-  const probe = await dependencies.readProbeResult(probePath)
-  const disposition = canaryLaunchDisposition({ exitCode, failure: launchFailure, probe })
-  const report = evaluateCanary({
-    ...disposition,
-    exitCode,
-    probe,
-    survivingPids: launch === undefined
+    const isolation = await StudioNativeTestRun.devOptions(artifactRoot)
+    const probePath = await freshProbeResultPath(artifactRoot)
+    let launchFailure: unknown
+    let launchId: string | undefined
+    let exitCode: number
+    try {
+      exitCode = await dependencies.runStudioDev({
+        ...canaryStudioDevOptions({
+          appName,
+          artifactRoot,
+          hutchPath: options.hutchPath,
+          onFailure: error => {
+            launchFailure ??= error
+          },
+          onLaunch: id => {
+            launchId ??= id
+          },
+          projectRoot,
+          showStudio: options.showStudio === true,
+        }),
+        ...isolation,
+        onCleanup: result => {
+          cleanupProof = result
+        },
+      })
+    } catch (error) {
+      launchFailure ??= error
+      exitCode = 1
+    }
+    const launch = launchId === undefined
+      ? undefined
+      : findCanaryLaunch(launchId, await dependencies.readLaunches(repositoryRoot, isolation.launchRecordsRoot))
+    // The native shell writes its probe result beside its generated Electrobun project.
+    const probe = await dependencies.readProbeResult(probePath)
+    const disposition = canaryLaunchDisposition({ exitCode, failure: launchFailure, probe })
+    survivingPids = launch === undefined
       ? []
       : canarySurvivingPids(
         launch.manifest,
-        await dependencies.survivingOwnedPids(launch.manifest.launchId, repositoryRoot),
-      ),
-  })
-  await writeCanaryReport(report, artifactRoot)
-  if (report.status === 'passed') {
-    await pruneNativeBuild(artifactRoot)
+        await dependencies.survivingOwnedPids(launch.manifest.launchId, repositoryRoot, isolation.launchRecordsRoot),
+      )
+    const cleanupVerified = cleanupProof?.resourcesStopped === true
+    const report = evaluateCanary({
+      ...disposition,
+      failureReason: disposition.failureReason ?? (!cleanupVerified && probe !== undefined
+        ? 'Studio did not confirm shutdown of its native and project processes after the probe.'
+        : undefined),
+      exitCode,
+      probe,
+      survivingPids,
+    })
+    await writeCanaryReport(report, artifactRoot)
+    if (report.status === 'passed' && cleanupVerified) {
+      await pruneNativeBuild(artifactRoot)
+    }
+    return canaryExitCode(report)
+  } finally {
+    await target.cleanup(survivingPids === undefined ? undefined : cleanupProof, survivingPids)
   }
-  return canaryExitCode(report)
 }
 
 /**
@@ -151,7 +176,11 @@ async function runStudioCanaryWithLease(
  * because a canary that has not yet written its report is indistinguishable from one that died
  * before writing it.
  */
-async function sweepEarlierCanaryInvocations(artifactBase: string, currentInvocationId: string): Promise<void> {
+async function sweepEarlierCanaryInvocations(
+  artifactBase: string,
+  currentInvocationId: string,
+  isInactive: typeof StudioNativeTestRun.isInactive = StudioNativeTestRun.isInactive,
+): Promise<void> {
   const invocationsRoot = FS.resolvePath('invocations', artifactBase)
   try {
     for (const entry of await FS.listDir(invocationsRoot)) {
@@ -159,7 +188,10 @@ async function sweepEarlierCanaryInvocations(artifactBase: string, currentInvoca
         continue
       }
       const root = FS.resolvePath(entry, invocationsRoot)
-      if (!await FS.isDirectory(root) || await modifiedWithin(root, LIVE_INVOCATION_MS)) {
+      if (
+        !await FS.isDirectory(root) || await modifiedWithin(root, LIVE_INVOCATION_MS)
+        || !await isInactive(root)
+      ) {
         continue
       }
       const report = await readCanaryReportStatus(FS.resolvePath('canary.json', root))
@@ -240,7 +272,8 @@ function canaryStudioDevOptions(options: {
   onFailure?: (error: unknown) => void
   onLaunch?: (launchId: string) => void
   projectRoot: string
-}): StudioDevOptions {
+  showStudio?: boolean
+}): StudioDevOptions & { nativeShowStudio: boolean } {
   return {
     appName: options.appName,
     // The runtime probe reports on a project window, so the canary must ask for one. `--no-browser`
@@ -251,7 +284,8 @@ function canaryStudioDevOptions(options: {
     nativeHutchPath: options.hutchPath,
     nativeHostCommand: 'studio-canary',
     nativeProbe: true,
-    nativeShowWindow: false,
+    nativeShowStudio: options.showStudio === true,
+    nativeShowWindow: options.showStudio === true,
     onFailure: options.onFailure,
     onLaunch: options.onLaunch,
     projectRoot: options.projectRoot,
@@ -293,9 +327,7 @@ async function createCanaryInvocation(
   artifactBase: string,
   invocationId = Platform.randomUUID(),
 ): Promise<{ id: string; root: string }> {
-  const root = FS.resolvePath(`invocations/${invocationId}`, artifactBase)
-  await FS.mkdir(root)
-  return { id: invocationId, root }
+  return await StudioNativeTestRun.create(artifactBase, invocationId)
 }
 
 function findCanaryLaunch<T extends { manifest: { launchId: string } }>(

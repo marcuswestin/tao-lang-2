@@ -51,7 +51,7 @@ Describe('tao ship cross-process transactions', () => {
     }
     try {
       const ownerPath = FS.resolvePath('ship-transaction-stale.json', coordinationRoot)
-      await FS.writeJson(ownerPath, { pid: Number.MAX_SAFE_INTEGER, token: 'stale' })
+      await FS.writeJson(ownerPath, { pid: await exitedChildPid(), token: 'stale' })
       await FS.symlink(FS.basename(ownerPath), FS.resolvePath('ship-transaction.lock', coordinationRoot))
 
       startContender(0)
@@ -124,7 +124,7 @@ Describe('tao ship cross-process transactions', () => {
       'ship-transaction-reclaim-ship-transaction-stale.json.lock',
       coordinationRoot,
     )
-    await FS.writeJson(staleOwnerPath, { pid: Number.MAX_SAFE_INTEGER, token: 'stale' })
+    await FS.writeJson(staleOwnerPath, { pid: await exitedChildPid(), token: 'stale' })
     await FS.symlink(FS.basename(staleOwnerPath), lockPath)
     const worker = CLI.start('bun', {
       args: [
@@ -383,6 +383,22 @@ Describe('tao ship cross-process transactions', () => {
     }
   })
 })
+
+async function exitedChildPid(): Promise<number> {
+  const exited = CLI.start(Platform.runtimeProcess.execPath, {
+    args: ['--eval', ''],
+    stdio: 'pipe',
+  })
+  const pid = exited.pid ?? 0
+  try {
+    Expect((await exited.waitForClose()).exitCode).toBe(0)
+  } finally {
+    exited.dispose()
+  }
+  Expect(pid).toBeGreaterThan(0)
+  Expect(Platform.processIsAlive(pid)).toBe(false)
+  return pid
+}
 
 async function runWorker(source: string) {
   return await CLI.run('bun', {

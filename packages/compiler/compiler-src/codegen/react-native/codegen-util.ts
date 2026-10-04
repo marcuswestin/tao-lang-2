@@ -24,6 +24,8 @@ export type CodegenOptions = {
   /** localDataCatalog is whether this project emits the companion catalog for `local only` entities. */
   localDataCatalog?: boolean
   selectedAppDatasourceConfiguration?: Readonly<Record<string, string>>
+  selectedAppFirebaseConfiguration?: Readonly<Record<string, string>>
+  selectedAppAuthConfiguration?: Readonly<Record<string, string>>
   selectedAppName?: string
   /** journeyObservations emits test-harness-only render source locators without Studio preview behavior. */
   journeyObservations?: boolean

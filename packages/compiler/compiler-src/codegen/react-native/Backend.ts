@@ -241,6 +241,8 @@ function compileReactNative(
       identityOwnerBySourcePath: dependencyOwnerBySourcePath,
       projectRoot: context.sourceRoot,
       selectedAppDatasourceConfiguration: options.appDatasourceConfiguration,
+      selectedAppFirebaseConfiguration: options.appFirebaseConfiguration,
+      selectedAppAuthConfiguration: options.appAuthConfiguration,
       selectedAppName: file.path === selectedAppPath ? selectedAppName : undefined,
       journeyObservations,
       studio,
@@ -617,6 +619,8 @@ type CompileSourceFileOptions = {
   identityOwnerBySourcePath: ReadonlyMap<string, string>
   projectRoot: string
   selectedAppDatasourceConfiguration?: Readonly<Record<string, string>>
+  selectedAppFirebaseConfiguration?: Readonly<Record<string, string>>
+  selectedAppAuthConfiguration?: Readonly<Record<string, string>>
   selectedAppName: string | undefined
   journeyObservations: boolean
   studio: boolean
@@ -638,6 +642,8 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
     identityOwnerBySourcePath,
     projectRoot,
     selectedAppDatasourceConfiguration,
+    selectedAppFirebaseConfiguration,
+    selectedAppAuthConfiguration,
     selectedAppName,
     journeyObservations,
     studio,
@@ -740,6 +746,8 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
                   scopeBindings,
                   exportedBindings,
                   selectedAppDatasourceConfiguration,
+                  selectedAppFirebaseConfiguration,
+                  selectedAppAuthConfiguration,
                   selectedAppName,
                   projectRoot,
                   studioDataCatalog: studio && dataCatalog !== undefined && (ownsDataCatalog || needsStudioDataCatalog),
@@ -848,6 +856,8 @@ function createEmissionFingerprintContext(
       identityOwnerBySourcePath: [...options.identityOwnerBySourcePath],
       projectRoot: options.projectRoot,
       selectedAppDatasourceConfiguration: options.selectedAppDatasourceConfiguration,
+      selectedAppFirebaseConfiguration: options.selectedAppFirebaseConfiguration,
+      selectedAppAuthConfiguration: options.selectedAppAuthConfiguration,
       studio: options.studio,
       studioViewIds: options.studioViews.map(item => item.id),
       journeyObservations: options.journeyObservations,

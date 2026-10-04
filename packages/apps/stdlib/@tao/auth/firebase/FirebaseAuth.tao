@@ -1,0 +1,14 @@
+use AuthProvider from @tao/auth
+
+public
+type FirebaseAuth is AuthProvider with {
+   ApiKey text
+   ProjectId text
+   AuthDomain text?
+   AppId text?
+   StorageBucket text?
+   MessagingSenderId text?
+   issues { Session }
+
+   provider FirebaseAuthProvider from ./FirebaseAuth.ts
+}

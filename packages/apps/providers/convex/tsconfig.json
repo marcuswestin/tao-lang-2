@@ -1,0 +1,12 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "include": ["convex-src/**/*", "convex-tests/**/*"],
+  "compilerOptions": {
+    "types": ["node", "bun"],
+    "composite": false,
+    "declaration": false,
+    "jsx": "react-jsx",
+    "incremental": false,
+    "noEmit": true
+  }
+}

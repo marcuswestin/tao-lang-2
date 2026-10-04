@@ -10,7 +10,7 @@ import {
 
 Describe('project TypeScript configuration', () => {
   Test('finds the nearest .tao marker, ignoring an ancestor tsconfig alone', async () => {
-    const root = await mkTestDir('tao-project-config-root-')
+    const root = await mkTestDir('tao-project-config-root-', { location: 'host' })
     try {
       const child = FS.resolvePath('nested/project/src', root)
       await FS.mkdir(child)

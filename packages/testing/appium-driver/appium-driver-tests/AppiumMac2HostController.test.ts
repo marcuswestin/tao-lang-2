@@ -1,6 +1,7 @@
 import type { HostRevision } from '@host-control'
 import { HostControlError } from '@host-control'
-import { Deferred, Describe, Expect, Test } from '@shared/test'
+import { FS } from '@shared'
+import { Deferred, Describe, Expect, mkTestDir, Test } from '@shared/test'
 import {
   createAppiumMac2HostController,
   type Mac2DesktopLease,
@@ -17,6 +18,159 @@ import type {
 const revision: HostRevision = { build: 'build-1', source: 'source-1' }
 
 Describe('Appium Mac2 host controller', () => {
+  Test(
+    'target screenshots fence lookup and capture, publish privately, and never fall back to the main display',
+    async () => {
+      const root = await mkTestDir('tao-mac2-element-capture-')
+      try {
+        for (
+          const fault of ['none', 'before-lookup', 'after-lookup', 'after-capture', 'unsupported', 'revision', 'name']
+        ) {
+          const artifactRoot = FS.resolvePath(fault, root)
+          const remote = new FakeRemoteSession()
+          let current = fault !== 'before-lookup'
+          let finds = 0
+          let captures = 0
+          let fullScreenCaptures = 0
+          let releases = 0
+          remote.screenshot = async () => {
+            fullScreenCaptures++
+            return new Uint8Array([0])
+          }
+          const element = new FakeElement(remote)
+          if (fault !== 'unsupported') {
+            Object.assign(element, {
+              screenshot: async () => {
+                captures++
+                if (fault === 'after-capture') {
+                  current = false
+                }
+                return new Uint8Array([137, 80, 78, 71])
+              },
+            })
+          }
+          remote.findAll = async () => {
+            finds++
+            if (fault === 'after-lookup') {
+              current = false
+            }
+            return [element]
+          }
+          const host = createAppiumMac2HostController({
+            capabilities: { 'appium:automationName': 'Mac2', platformName: 'mac' },
+            client: { createSession: async () => remote },
+            desktopLeases: {
+              acquire: async () => ({
+                generation: 'owned-generation',
+                assertCurrent: async () => {
+                  if (!current) {
+                    throw new HostControlError('staleLease', 'Fixture generation rotated.')
+                  }
+                },
+                release: async () => {
+                  releases++
+                },
+              }),
+            },
+            resolveTarget: _target => ({ using: 'xpath', value: '//unique-owned-fixture' }),
+            target: { appId: 'dev.tao.studio' },
+          })
+          const session = await host.openSession({ artifactRoot, mode: 'acceptance', revision, target: 'studio' })
+          if (fault === 'none') {
+            await FS.writeText(FS.resolvePath('appium-mac2/screenshots/1-fixture.png', artifactRoot), 'prior capture', {
+              mode: 0o644,
+            })
+          }
+          const capture = session.captureTargetScreenshot(fault === 'name' ? '../escape' : 'fixture', {
+            expectedRevision: fault === 'revision' ? { ...revision, source: 'stale' } : revision,
+            target: { kind: 'tag', value: 'owned' },
+          })
+          if (fault === 'none') {
+            const screenshot = await capture
+            Expect(await FS.readFile(screenshot.artifactPath)).toEqual(new Uint8Array([137, 80, 78, 71]))
+            Expect(await FS.fileMode(screenshot.artifactPath)).toBe(0o600)
+            Expect(screenshot).toMatchObject({ sessionId: 'mac2-session-1', observationRevision: 1, revision })
+          } else {
+            await Expect(capture).rejects.toThrow(
+              fault === 'unsupported'
+                ? /cannot capture/
+                : fault === 'revision'
+                ? /revision/
+                : fault === 'name'
+                ? /names/
+                : /rotated/,
+            )
+            Expect(await FS.exists(FS.resolvePath('appium-mac2/screenshots/1-fixture.png', artifactRoot))).toBe(false)
+          }
+          Expect(captures).toBe(fault === 'none' || fault === 'after-capture' ? 1 : 0)
+          Expect(finds).toBe(['before-lookup', 'revision', 'name'].includes(fault) ? 0 : 1)
+          Expect(fullScreenCaptures).toBe(0)
+          await session.close(session.descriptor().lease)
+          Expect(remote.deleteCalls).toBe(1)
+          Expect(releases).toBe(1)
+        }
+      } finally {
+        await FS.remove(root)
+      }
+    },
+  )
+
+  Test('native target capture invalidates old observations and joins before remote deletion', async () => {
+    const root = await mkTestDir('tao-mac2-element-order-')
+    const remote = new FakeRemoteSession()
+    const leases = new FakeDesktopLeases()
+    const started = Deferred()
+    const finish = Deferred()
+    const element = Object.assign(new FakeElement(remote), {
+      screenshot: async () => {
+        started.resolve()
+        await finish.promise
+        return new Uint8Array([137, 80, 78, 71])
+      },
+    })
+    remote.elementsByLocator.set('fixture', [element])
+    const host = createAppiumMac2HostController({
+      capabilities: { 'appium:automationName': 'Mac2', platformName: 'mac' },
+      client: { createSession: async () => remote },
+      desktopLeases: leases,
+      resolveTarget: _target => ({ using: 'xpath', value: 'fixture' }),
+      target: { appId: 'dev.tao.studio' },
+    })
+    try {
+      const session = await host.openSession({ artifactRoot: root, mode: 'acceptance', revision, target: 'studio' })
+      const observation = await session.observe({
+        expectedRevision: revision,
+        target: { kind: 'tag', value: 'fixture' },
+      })
+      const capture = session.captureTargetScreenshot('fixture', {
+        expectedRevision: revision,
+        target: observation.target,
+      })
+      await started.promise
+      const staleInput = session.perform({
+        kind: 'click',
+        observation,
+        expectedRevision: revision,
+        lease: session.descriptor().lease,
+      })
+      const rejectedInput = Expect(staleInput).rejects.toMatchObject({ code: 'staleObservation' })
+      const closing = session.close(session.descriptor().lease)
+      Expect(remote.deleteCalls).toBe(0)
+      Expect(leases.lease.releaseCalls).toBe(0)
+      finish.resolve()
+      Expect((await capture).observationRevision).toBe(2)
+      await rejectedInput
+      await closing
+      Expect(remote.clicked).toBe(0)
+      Expect(remote.deleteCalls).toBe(1)
+      Expect(leases.lease.releaseCalls).toBe(1)
+    } finally {
+      finish.resolve()
+      await host.close()
+      await FS.remove(root)
+    }
+  })
+
   Test(
     'fences physical desktop input, performs real UI operations, and retains ownership after an ambiguous delete',
     async () => {

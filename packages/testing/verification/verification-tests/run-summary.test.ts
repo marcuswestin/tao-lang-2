@@ -311,6 +311,66 @@ Describe('versioned run summary', () => {
       .toBe('repository')
   })
 
+  Test('classifies a colored dprint source diff by its diagnostics and preserves its evidence', () => {
+    // The two line-number columns and ANSI styling come from dprint check's actual output.
+    const output = [
+      '\u001b[m\u001b[1mfrom\u001b[0m /repo/Docs/History.md:',
+      '27 27| Historical EPERM: operation not permitted.',
+      '   30|\u001b[m-\u001b[m PermissionDenied and EACCES were recorded.',
+      "30   |\u001b[m+\u001b[m EPERM: operation not permitted, rm '/repo/.artifacts/old'",
+      "31 31| EFAULT: bad address in system call argument, rm '/repo/_gen_old'",
+      '--',
+      'Found \u001b[1m1\u001b[0m not formatted file. Run \u001b[1mdprint fmt\u001b[0m to fix.',
+      'error: Recipe `_dprint-check` failed on line 784 with exit code 20',
+    ].join('\n')
+    const summary = buildSummary({
+      elapsedMs: 1_000,
+      lane: 'check',
+      logRoot: '/repo/logs',
+      states: [finishedState({ name: '_dprint-check' }, {
+        exitCode: 20,
+        fullOutput: output,
+        logPath: '/repo/logs/dprint-check.log',
+        status: 'failed',
+      })],
+    })
+
+    Expect(summary.gates[0]?.failureKind).toBe('repository')
+    Expect(summary.gates[0]?.exitCode).toBe(20)
+    Expect(summary.gates[0]?.logPath).toBe('/repo/logs/dprint-check.log')
+    Expect(summary.firstFailure?.output).toBe(output)
+    Expect(formatGateSummary(summary)).toContain('exited 20 (repository)')
+    Expect(formatGateSummary(summary)).toContain('/repo/Docs/History.md')
+  })
+
+  Test('keeps genuine dprint permission diagnostics even alongside a formatting refusal', () => {
+    const diff = [
+      'from /repo/Docs/History.md:',
+      '1 1| Historical EPERM.',
+      '--',
+      'Found 1 not formatted file. Run dprint fmt to fix.',
+    ].join('\n')
+    for (
+      const diagnostic of [
+        'Error reading /repo/Docs/Denied.md: PermissionDenied (os error 13)',
+        "EPERM: operation not permitted, open '/repo/Docs/Denied.md'",
+        "EACCES: permission denied, open '/repo/Docs/Denied.md'",
+        "EFAULT: bad address in system call argument, rm '/repo/_gen_cache'",
+      ]
+    ) {
+      Expect(classifyFailure(diagnostic, { nodeName: '_dprint-check' })).toBe('sandbox-restriction')
+      Expect(classifyFailure(`${diff}\n${diagnostic}`, { nodeName: '_dprint-check' })).toBe('sandbox-restriction')
+    }
+  })
+
+  Test('does not filter numbered permission diagnostics from a different node or without a dprint header', () => {
+    Expect(classifyFailure('from /repo/Docs/History.md:\n1 1| EPERM: operation not permitted', {
+      nodeName: '_repo-lint',
+    })).toBe('sandbox-restriction')
+    Expect(classifyFailure('1 1| EPERM: operation not permitted', { nodeName: '_dprint-check' }))
+      .toBe('sandbox-restriction')
+  })
+
   Test('recognizes a Chrome abort before DevTools despite the Bun failure banner', () => {
     Expect(classifyFailure([
       'HostEnvironmentError: Chrome exited before exposing DevTools (exit none, signal SIGABRT)',

@@ -5,6 +5,7 @@ import { Errors, FS, HCI, Json, ProjectLocal, Repo } from '@shared'
 
 const runtimeFiles = [
   'index.ts',
+  'expo-host-src/ManagedLoopIdentityMarker.ts',
   'metro.config.cjs',
   'package.json',
 ] as const
@@ -58,9 +59,10 @@ async function create(
   }
   const root = await FS.mkTmpDir(FS.resolvePath('runtime-', artifactRoot))
   try {
-    await Promise.all(
-      runtimeFiles.map(file => FS.copyFile(FS.resolvePath(file, sourceRoot), FS.resolvePath(file, root))),
-    )
+    await Promise.all([
+      ...runtimeFiles.map(file => FS.copyFile(FS.resolvePath(file, sourceRoot), FS.resolvePath(file, root))),
+      FS.copyDirectory(FS.resolvePath('plugins', sourceRoot), FS.resolvePath('plugins', root)),
+    ])
     const appConfig = await FS.readJson<Record<string, unknown>>(FS.resolvePath('app.json', sourceRoot))
     const writeAppConfig = (bootstrap: StudioPreviewBootstrapOptions) =>
       FS.writeJson(FS.resolvePath('app.json', root), previewAppConfig(appConfig, bootstrap))

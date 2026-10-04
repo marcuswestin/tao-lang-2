@@ -128,6 +128,30 @@ Describe('project local state', () => {
     },
   )
 
+  Test('migrates main-era connection state and skills metadata without replacing current personal state', async () => {
+    const root = await mkTestDir('tao-project-connect-layout-')
+    const path = (relative: string) => FS.resolvePath(relative, root)
+    try {
+      await FS.writeText(path('.tao/skills.version'), '1.0.0\n')
+      await FS.writeText(path('.tao/connect-secrets.json'), 'legacy private key')
+      await FS.writeText(path('.tao/local/connect-secrets.json'), 'current private key')
+      await FS.writeText(path('.tao/firebase-connect/firebase.json'), 'firebase deployment')
+      await FS.writeText(path('.tao/appwrite-connect/generated.ts'), 'appwrite deployment')
+      await FS.writeText(path('.tao/connect-run/preload.ts'), 'generated preload')
+      await ProjectLocal.prepare(root)
+      await ProjectLocal.prepare(root)
+      Expect(await FS.readJson(path('.tao/store/lock.jsonc'))).toEqual({ schemaVersion: 1, skillsVersion: '1.0.0' })
+      Expect(await FS.exists(path('.tao/skills.version'))).toBe(false)
+      Expect(await FS.readText(path('.tao/local/connect-secrets.json'))).toBe('current private key')
+      Expect(await FS.readText(path('.tao/connect-secrets.json'))).toBe('legacy private key')
+      Expect(await FS.readText(path('.tao/cache/firebase-connect/firebase.json'))).toBe('firebase deployment')
+      Expect(await FS.readText(path('.tao/cache/appwrite-connect/generated.ts'))).toBe('appwrite deployment')
+      Expect(await FS.readText(path('.tao/cache/connect-run/preload.ts'))).toBe('generated preload')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('replaces whitespace-only main-era marker placeholders after preparing the new layout', async () => {
     const root = await mkTestDir('tao-project-placeholder-')
     try {

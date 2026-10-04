@@ -1,7 +1,7 @@
 import { Workspace } from '@compiler/workspace'
 import { Diagnostics, FS, Repo } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
-import { type CompileResult, EmittedModuleCache } from '../compiler-src/compiler'
+import { type CompileOptions, type CompileResult, EmittedModuleCache } from '../compiler-src/compiler'
 
 function assertSameOutput(cached: CompileResult, fresh: CompileResult): void {
   Expect(cached.files).toEqual(fresh.files)
@@ -11,6 +11,57 @@ function assertSameOutput(cached: CompileResult, fresh: CompileResult): void {
 }
 
 Describe('emitted Tao module cache', () => {
+  for (const configurationName of ['appFirebaseConfiguration', 'appAuthConfiguration'] as const) {
+    for (const change of ['changed', 'removed'] as const) {
+      Test(`invalidates ${change} ${configurationName} without source edits`, async () => {
+        await withTaoFiles('tao-emitted-firebase-configuration-', {
+          'Main.tao': `
+          use FirebaseAuth from @tao/auth/firebase
+          use Firebase from @tao/data/providers/firebase
+          data Notes / Note { Title text }
+          app Preview {
+            id "com.tao.cache.firebase" version "1.0.0" name "Preview"
+            Auth FirebaseAuth { ApiKey "source-auth-key" ProjectId "source-project" }
+            Datasource Firebase { ApiKey "source-data-key" ProjectId "source-project" }
+            view Main
+          }
+          view Main() { render inject \`\`\`ts return null \`\`\` }
+        `,
+        }, async (paths, root) => {
+          const cache = new EmittedModuleCache()
+          const entries = [paths['Main.tao']!]
+          const compile = async (options: CompileOptions, cached: boolean) =>
+            await (await Workspace.open(root)).compileFiles(entries, {
+              appName: 'Preview',
+              studio: true,
+              ...options,
+              ...(cached ? { emittedModuleCache: cache } : {}),
+            })
+          const initialOptions = { [configurationName]: { ApiKey: 'override-first' } }
+          const initial = await compile(initialOptions, true)
+          Expect(initial.code).toContain('"ApiKey": TR.Value("override-first")')
+          const unchanged = await compile(initialOptions, true)
+          Expect(unchanged.emittedModuleCache?.files.find(file => file.sourcePath === paths['Main.tao'])?.hit)
+            .toBe(true)
+          assertSameOutput(unchanged, await compile(initialOptions, false))
+
+          const currentOptions = change === 'changed' ? { [configurationName]: { ApiKey: 'override-second' } } : {}
+          const current = await compile(currentOptions, true)
+          assertSameOutput(current, await compile(currentOptions, false))
+          Expect(current.code).not.toContain('override-first')
+          if (change === 'changed') {
+            Expect(current.code).toContain('"ApiKey": TR.Value("override-second")')
+          } else {
+            Expect(current.code).toContain('"ApiKey": TR.Value("source-auth-key")')
+            Expect(current.code).toContain('"ApiKey": TR.Value("source-data-key")')
+          }
+          Expect(current.emittedModuleCache?.files.find(file => file.sourcePath === paths['Main.tao'])?.hit)
+            .toBe(false)
+        })
+      })
+    }
+  }
+
   Test('retains an unchanged Studio consumer design cohort until its own source changes', async () => {
     await withTaoFiles('tao-emitted-design-epochs-', {
       'Main.tao': `

@@ -1,0 +1,17 @@
+// The data catalog. Every entity the app stores is declared here, so what a row contains is
+// readable on one page.
+package
+data Accounts / Account {
+   DisplayName text,
+}
+
+// One thing the app keeps track of.
+package
+data Items / Item {
+   Title text (title),
+   Notes text (default ""),
+   Done yes / no,
+   CreatedAt time (default now),
+
+   order by CreatedAt,
+}

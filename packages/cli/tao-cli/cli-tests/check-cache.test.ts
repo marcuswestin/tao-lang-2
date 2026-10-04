@@ -44,7 +44,7 @@ async function checkedWorkspaces(
 
 Describe('tao check per-workspace stamp', () => {
   Test('checks a no-project temp file without entering an unreadable sibling', async () => {
-    const rootDir = await mkTestDir('tao-check-unreadable-sibling-')
+    const rootDir = await mkTestDir('tao-check-unreadable-sibling-', { location: 'host' })
     const deniedRoot = FS.resolvePath('denied', rootDir)
     try {
       const appPath = FS.resolvePath('fixture/App.tao', rootDir)

@@ -99,7 +99,7 @@ export async function updateStarterFiles(generated: string, checkedIn: string): 
       wanted.add('.tao/store/project.json')
     }
     for (const relativePath of targets) {
-      if (!wanted.has(relativePath)) {
+      if (!wanted.has(relativePath) && !relativePath.startsWith('.tao/')) {
         await FS.removeFileWithinBoundary(FS.resolvePath(relativePath, checkedIn), boundary)
       }
     }

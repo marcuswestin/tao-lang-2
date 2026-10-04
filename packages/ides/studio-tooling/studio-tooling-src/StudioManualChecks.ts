@@ -1,6 +1,7 @@
 import { Errors, FS, HCI, Repo } from '@shared'
-import { resolveCanaryTarget } from './StudioCanary'
-import { runStudioDev, type StudioDevOptions } from './StudioDev'
+import { UiVisibility } from '@verification/UiVisibility'
+import { runStudioDev, type StudioDevCleanupResult, type StudioDevOptions } from './StudioDev'
+import { StudioNativeTestRun } from './StudioNativeTestRun'
 
 /** Human-owned native behaviours intentionally excluded from test, verify, and canary. */
 export const STUDIO_MANUAL_CHECKS = [
@@ -12,11 +13,14 @@ export const STUDIO_MANUAL_CHECKS = [
 type StudioManualCheckReport = {
   checks: readonly string[]
   launchExitCode: number
+  openProjectRoot: string
+  projectRoot: string
   status: 'launched'
   version: 2
 }
 
 type StudioManualCheckOptions = {
+  showStudio?: boolean
   appName?: string
   artifactRoot?: string
   hutchPath?: string
@@ -25,6 +29,7 @@ type StudioManualCheckOptions = {
 
 type StudioManualCheckDependencies = {
   isInteractive: () => boolean
+  project?: typeof StudioNativeTestRun.project
   runStudio: (options: StudioDevOptions) => Promise<number>
   writeLine: (message: string) => void
 }
@@ -40,46 +45,77 @@ async function run(
   options: StudioManualCheckOptions = {},
   dependencies: StudioManualCheckDependencies = systemDependencies,
 ): Promise<number> {
+  UiVisibility.requireStudio(options.showStudio)
+  UiVisibility.warn(UiVisibility.studioWarnings)
   if (!dependencies.isInteractive()) {
     Errors.throwUserInput('Studio manual checks require an interactive terminal and desktop session.')
   }
   const repositoryRoot = Repo.getRoot()
-  const artifactRoot = FS.resolvePath(
+  const artifactBase = FS.resolvePath(
     options.artifactRoot ?? '.artifacts/tests/studio-manual-checks',
     repositoryRoot,
   )
-  await FS.mkdir(artifactRoot)
-  const { appName, projectRoot } = resolveCanaryTarget(options, repositoryRoot)
-  dependencies.writeLine('Tao Studio will open for these manual checks:')
-  for (const [index, instruction] of STUDIO_MANUAL_CHECKS.entries()) {
-    dependencies.writeLine(`${index + 1}. ${instruction}`)
-  }
-  dependencies.writeLine(
-    'Complete them in order. Closing the last window leaves the dev server running, so press Ctrl-C'
-      + ' when you are done; that is how this workflow ends, and it is not a failure.',
-  )
+  const { root: artifactRoot } = await StudioNativeTestRun.create(artifactBase)
+  const project = dependencies.project ?? StudioNativeTestRun.project
+  const targets: Awaited<ReturnType<typeof project>>[] = []
+  // Until launch is attempted, this invocation has started no native or project resources.
+  let cleanupProof: StudioDevCleanupResult | undefined = { resourcesStopped: true }
+  try {
+    const target = await project(options, artifactRoot, repositoryRoot)
+    targets.push(target)
+    const openProject = await project({}, FS.resolvePath('open-project', artifactRoot), repositoryRoot)
+    targets.push(openProject)
+    const { appName, projectRoot } = target
+    const isolatedOptions = await StudioNativeTestRun.devOptions(artifactRoot)
+    dependencies.writeLine('Tao Studio will open for these manual checks:')
+    dependencies.writeLine(`Initial project: ${projectRoot}`)
+    dependencies.writeLine(`For File > Open Project…, choose this disposable project: ${openProject.projectRoot}`)
+    for (const [index, instruction] of STUDIO_MANUAL_CHECKS.entries()) {
+      dependencies.writeLine(`${index + 1}. ${instruction}`)
+    }
+    dependencies.writeLine(
+      'Complete them in order. Closing the last window leaves the dev server running, so press Ctrl-C'
+        + ' when you are done; that is how this workflow ends, and it is not a failure.',
+    )
 
-  const launchExitCode = await dependencies.runStudio({
-    appName,
-    browser: true,
-    native: true,
-    nativeArtifactRoot: FS.resolvePath('electrobun', artifactRoot),
-    nativeHutchPath: options.hutchPath,
-    projectRoot,
-  })
-  const report: StudioManualCheckReport = {
-    checks: STUDIO_MANUAL_CHECKS,
-    launchExitCode,
-    status: 'launched',
-    version: 2,
+    cleanupProof = undefined
+    const launchExitCode = await dependencies.runStudio({
+      ...isolatedOptions,
+      appName,
+      browser: true,
+      native: true,
+      nativeHostCommand: 'studio-manual-checks',
+      nativeShowStudio: options.showStudio === true,
+      nativeShowWindow: true,
+      nativeHutchPath: options.hutchPath,
+      onCleanup: result => {
+        cleanupProof = result
+      },
+      projectRoot,
+    })
+    const report: StudioManualCheckReport = {
+      checks: STUDIO_MANUAL_CHECKS,
+      launchExitCode,
+      openProjectRoot: openProject.projectRoot,
+      projectRoot,
+      status: 'launched',
+      version: 2,
+    }
+    const reportPath = FS.resolvePath('manual-checks.json', artifactRoot)
+    await FS.writeJson(reportPath, report)
+    dependencies.writeLine(
+      `\nStudio closed. The verdict on the checks above is yours; this run records only that it ran.`,
+    )
+    dependencies.writeLine(`Report: ${FS.displayPath(reportPath)}`)
+    return 0
+  } finally {
+    const cleanups = await Promise.allSettled(targets.map(target => target.cleanup(cleanupProof)))
+    for (const cleanup of cleanups) {
+      if (cleanup.status === 'rejected') {
+        throw cleanup.reason
+      }
+    }
   }
-  const reportPath = FS.resolvePath('manual-checks.json', artifactRoot)
-  await FS.writeJson(reportPath, report)
-  dependencies.writeLine(
-    `\nStudio closed. The verdict on the checks above is yours; this run records only that it ran.`,
-  )
-  dependencies.writeLine(`Report: ${FS.displayPath(reportPath)}`)
-  return 0
 }
 
 export const StudioManualChecks = { run } as const

@@ -1,6 +1,8 @@
 ---
 name: tao-data
-description: Model Tao entities, relations, queries, writes, fixtures, datasources, and typed TypeScript adapters.
+description: >-
+  Model Tao app data and storage boundaries. Use when defining entities or relations, building
+  queries and writes, preparing data fixtures, configuring datasources, or adding typed TypeScript adapters.
 ---
 
 # Tao Data

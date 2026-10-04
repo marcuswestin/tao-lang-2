@@ -7,6 +7,24 @@ here they wait on.
 Each entry states the question, what it blocks, the options as they stand, and a marked
 recommendation. A recommendation is a starting position for the decision, never the decision.
 
+## Deferred developer automation
+
+Decided 2026-10-04: defer the remaining managed development-loop and isolated native acceptance
+work until after MVP to preserve effort for release work. Land the completed implementation with
+source verification; incomplete host and human acceptance stays explicitly open. The
+[execution handoff](<../Roadmap/Managed development loops - Execution plan.md>) owns the remaining
+cases, evidence limits, retained resources and safe resume order. This does not defer the separate
+physical-device acceptance below.
+
+Confirmed 2026-10-04 after implementation landed as `20bbeff06b95`: ownership-proved cleanup of
+retained test resources is authorized now, with uncertain receipts kept quarantined. No further
+managed-loop/native acceptance or unified-controller implementation belongs in the current thread.
+Run ordinary installed CLI, marketplace-extension and browser-tutorial acceptance separately before
+release 1. Physical Vision Pro remains pre-MVP. Genuine simulator interaction is required before
+release 2 and installed native Studio interaction/windows before release 3; deferring this special
+automation matrix does not waive those public-surface gates. Android and the persistent UI
+controller remain post-MVP. A separate recurring repository review is recommended before publication.
+
 ## Pre-MVP device acceptance
 
 - [ ] **Run the first Tao app on a physical Vision Pro.** Decided 2026-09-27: defer headset

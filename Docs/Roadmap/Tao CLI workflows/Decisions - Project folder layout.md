@@ -47,6 +47,9 @@ Where Tao keeps a project's state on disk, and what a project commits. Decided 2
    `.tao/typescript/` to `cache/typescript/`, `.tao/install/` to `cache/install/`, and
    `.tao/ts-gen-lock` to `cache/locks/ts-gen-lock`. The sibling `.tao-ts/` generated contract tree
    stays outside `.tao/`.
+   Incoming hosted-provider state follows the same rule: `.tao/connect-secrets.json` moves to
+   `local/connect-secrets.json`; `firebase-connect/`, `appwrite-connect/`, and `connect-run/` move
+   into `cache/`. Main-era `.tao/skills.version` folds into the shared lock's `skillsVersion` field.
 10. **`skillsVersion` becomes a field of `store/lock.jsonc`.** `installTaoSkills`
     (`packages/ai/tao-skills/skills-src/tao-skills.ts:74`) writes it beside the skill files it
     installs into the project (`.agents/skills/`, `.claude/skills/`, `AGENTS.md`, `CLAUDE.md`), so a
@@ -272,6 +275,11 @@ and identity rather than the retired `Project.tao` declaration. The integrated p
 desktop proof also builds and executes its command successfully after promoting the proof app's
 inline spacing to a release-safe design bundle. Focused results alone do not establish readiness
 to land; the task checkpoint owns exact-tree verification and finalization outcomes.
+
+Integration with main `883ea9ee8` also adapts its hosted-provider writers, checked-in Hosted Firebase
+metadata and installed guidance to the decided layout. Managed-loop and native source-projection
+cleanup guards inspect `local/sessions/owner.json`, preserving a live owner before deleting a fixture.
+The development loop prepares its desktop shell in `cache/dev/desktop-host/`.
 
 Historical starting point:
 

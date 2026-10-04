@@ -1,0 +1,16 @@
+use FirebaseAuth from @tao/auth/firebase
+
+public
+type Firebase is datasource with {
+   StorageKey text?
+   ApiKey text
+   ProjectId text
+   AuthDomain text?
+   AppId text?
+   StorageBucket text?
+   MessagingSenderId text?
+   accepts { Session from FirebaseAuth }
+   supports { }
+
+   provider FirebaseProvider from ./Firebase.ts
+}

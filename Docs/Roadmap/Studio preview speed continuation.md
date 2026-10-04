@@ -265,16 +265,28 @@ its timings are excluded from improvement claims.
 The selected correction retains one native TypeScript program for a watched project only while
 its effective configuration, root files, and every recorded filesystem input still match current
 bytes and resolution probes. Tao validation, generated publication, configuration parsing, and
-diagnostic mapping remain fresh. External sidecar checks stay uncached. Workspace object reuse
+diagnostic mapping remain fresh. Root and extended configuration text, effective compiler options,
+root files, and every observed filesystem value take part in the reuse audit. External sidecar checks stay uncached. Workspace object reuse
 was rejected for this correction: it would save only the measured 1.5ms and would retain a package
-index whose requirement additions have no invalidation API. Final parity tests and measurements
-of the TypeScript correction remain pending. The first corrected three-save probe records a cold
+index whose requirement additions have no invalidation API. The first corrected three-save probe records a cold
 native program and eight unchanged-program reuses: audits take 12–20ms and diagnostic retrieval
 0.3–0.5ms, while Tao validation and duplicate watcher refreshes remain. This was under load 7.6–13.2
 on 18 CPUs; its short end-to-end sample is not the final 32-save comparison. Watch-session lifecycle
 and existing refresh behavior pass 21 focused tests; the checker suite passes eight, including
 ordered cold-diagnostic parity after source, generated contract, package-resolution, config, and
-mapping changes. Final independent cache review, source/type gates, and integrated repeats remain.
+mapping changes. Independent cache review found an omitted raw-configuration identity: a
+semantically neutral extended-config edit failed the new regression before correction. The corrected
+cache passed review and complete `verify-changed` before commit `b0f544a19` (43 passed gates, no
+failures, one explicit skip). Final integrated measurements remain pending.
+
+Main `883ea9ee8` adds managed-loop publication identities, native ownership isolation, and
+Firebase-first project creation. Integration retains those behaviors while adapting incoming
+connection files and Hosted Firebase metadata to the decided project layout. Cleanup guards now
+check `local/sessions/owner.json`; the desktop development loop uses `cache/dev/desktop-host/`.
+The merged Firebase and auth configuration overrides also participate in the emitted-module
+fingerprint. Four independent changed/removed-configuration regressions failed before correction,
+preventing unchanged Tao sources from retaining a previous backend's generated configuration.
+Exact merged-source acceptance and final readiness outcomes belong to the task checkpoint.
 
 ### Refresh indicator diagnostic, 2026-10-04 — closed
 

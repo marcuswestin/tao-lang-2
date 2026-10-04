@@ -1,5 +1,5 @@
 import Workspace from '@compiler/workspace'
-import { FS } from '@shared'
+import { FS, ProjectIdentity } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { lowerCreationPlan, writeCreationFiles } from '../cli-src/create/creation-lowering'
 import { type CreationPlan, validateCreationPlan } from '../cli-src/create/creation-plan'
@@ -95,6 +95,7 @@ Describe('tao create lowering', () => {
       await writeCreationFiles(generated, files)
       Expect((await FS.listDir(FS.resolvePath('.tao', generated))).toSorted())
         .toEqual(['.gitignore', 'cache', 'local', 'store'])
+      await ProjectIdentity.ensure(generated)
       await runFix(generated, { cwd: root })
       const workspace = await Workspace.open(generated)
       const problems: string[] = []

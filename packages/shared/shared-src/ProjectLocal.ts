@@ -168,6 +168,15 @@ async function migrateOldTao(folder: string, project: string): Promise<void> {
   await moveIfFree(FS.resolvePath('typescript', folder), cacheResolve('typescript', project), project)
   await moveIfFree(FS.resolvePath('ts-gen-lock', folder), cacheResolve('locks/ts-gen-lock', project), project)
   await moveIfFree(FS.resolvePath('install', folder), cacheResolve('install', project), project)
+  await foldSkillsVersion(folder, project)
+  await moveIfFree(
+    FS.resolvePath('connect-secrets.json', folder),
+    localResolve('connect-secrets.json', project),
+    project,
+  )
+  for (const name of ['firebase-connect', 'appwrite-connect', 'connect-run'] as const) {
+    await moveIfFree(FS.resolvePath(name, folder), cacheResolve(name, project), project)
+  }
   for (
     const [from, to] of [
       ['sessions', 'sessions'],

@@ -1033,6 +1033,69 @@ Describe('TR.Interaction attention', () => {
     Expect(invoked).toEqual(['Archive'])
   })
 
+  Test('opens the palette beside an unfilled command and waits for its required value', () => {
+    const outline = new InteractionOutline()
+    const catalog = new CommandCatalog()
+    const attention = new InteractionAttention(outline, catalog)
+    const invoked: string[] = []
+    let titleReads = 0
+    const copy = TR.Interaction.Command({
+      action: fills => TR.Action(() => invoked.push(`Copy ${fills['Value']!.evaluate().jsValue}`)),
+      members: {
+        Title: fills => {
+          titleReads += 1
+          return TR.Value(`Copy ${fills['Value']!.evaluate().jsValue}`)
+        },
+      },
+      name: 'Copy',
+      slots: ['Value'],
+    })
+    const open = TR.Interaction.Command({
+      action: () => TR.Action(() => invoked.push('Open')),
+      members: { Key: () => TR.Value('primary+o'), Title: () => TR.Value('Open') },
+      name: 'Open',
+    })
+    catalog.register({
+      commands: [
+        {
+          command: () => copy,
+          identity: 'Copy',
+          name: 'Copy',
+          scope: { kind: 'module' },
+          slots: [{ entity: false, name: 'Value', required: true, scalarType: 'text', type: 'Text' }],
+          static: { key: 'primary+c', title: 'Copy' },
+        },
+        {
+          command: () => open,
+          identity: 'Open',
+          name: 'Open',
+          scope: { kind: 'module' },
+          slots: [],
+          static: { title: 'Open' },
+        },
+      ],
+      module: 'Commands',
+    })
+    register(outline, region('main', { primary: true }))
+    attention.revalidateOutline()
+
+    Expect(attention.pressKey('primary+k')).toBe(true)
+    Expect(attention.read().mode).toBe('palette')
+    Expect(attention.read().palette.map(entry => entry.label)).toEqual(['Copy', 'Open'])
+    Expect(titleReads).toBe(0)
+
+    attention.pressKey('Escape')
+    Expect(attention.pressKey('primary+o')).toBe(true)
+    Expect(invoked).toEqual(['Open'])
+    Expect(attention.pressKey('primary+c')).toBe(true)
+    Expect(attention.read().mode).toBe('verb-pending')
+    Expect(attention.read().verbPending?.slot).toBe('Value')
+    Expect(titleReads).toBe(0)
+    Expect(attention.providePendingValue(TR.Value('draft'))).toBe(true)
+    Expect(invoked).toEqual(['Open', 'Copy draft'])
+    Expect(titleReads).toBeGreaterThan(0)
+  })
+
   Test('keeps a mounted shell-sibling command available while navigation owns the focused region', () => {
     const outline = new InteractionOutline()
     const catalog = new CommandCatalog()

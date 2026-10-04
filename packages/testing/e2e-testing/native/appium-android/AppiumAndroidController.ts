@@ -19,6 +19,7 @@ import {
   MachineResources,
 } from '@host-control'
 import { Errors, FS, Repo, Switch, Time } from '@shared'
+import type { ManagedMobileGrant } from '../ManagedMobileGrant'
 
 export type AppiumAndroidBuild = Readonly<{
   apkPath: string
@@ -62,6 +63,8 @@ export type AppiumAndroidWebDriverSession = Readonly<{
   ) => Promise<readonly AppiumAndroidElement[]>
   id: string
   pressKey: (key: string) => Promise<void>
+  /** Invoked only after UUID publication and mounted managed-runtime proof. */
+  prepareManagedRuntime?: () => Promise<void>
   screenshot: () => Promise<Uint8Array>
   scroll: (input: Readonly<{ deltaX: number; deltaY: number; element?: AppiumAndroidElement }>) => Promise<void>
   terminateApp: (appId: string) => Promise<void>
@@ -92,7 +95,7 @@ export type AppiumAndroidAllocation = Readonly<{
 
 export type AppiumAndroidSessionReceipt = Readonly<{
   allocation: AppiumAndroidAllocation
-  artifact: AppiumAndroidBuild
+  artifact?: AppiumAndroidBuild
   build: string
   lifecycle: 'failed' | 'open' | 'opening' | 'closed'
   sessionId?: string
@@ -133,6 +136,26 @@ export function createAppiumAndroidController(options: AppiumAndroidControllerOp
   return new AppiumAndroidController(options)
 }
 
+export function createManagedAppiumAndroidController(
+  options: Omit<AppiumAndroidControllerOptions, 'build' | 'preheldTargetLease' | 'publishRevision'> & {
+    grant: ManagedMobileGrant
+    beforeDriverDeletion?: () => Promise<void>
+  },
+): HostController {
+  if (
+    options.grant.identity.target.platform !== 'android'
+    || options.target.serial !== options.grant.identity.target.id
+    || options.target.appId !== options.grant.identity.runtime.appId
+  ) {
+    Errors.throwUserInput('Managed Android attachment must use the granted emulator and dispatched runtime.')
+  }
+  return new AppiumAndroidController(
+    { ...options, preheldTargetLease: options.grant.lease },
+    options.grant,
+    options.beforeDriverDeletion,
+  )
+}
+
 /** appiumAndroidCapabilities is deliberately public so the exact UiAutomator2 contract stays reviewable. */
 export function appiumAndroidCapabilities(
   target: AppiumAndroidTarget,
@@ -155,7 +178,9 @@ export function appiumAndroidCapabilities(
 }
 
 class AppiumAndroidController implements HostController {
-  readonly #build: AppiumAndroidBuild
+  readonly #build?: AppiumAndroidBuild
+  readonly #managed?: ManagedMobileGrant
+  readonly #beforeDriverDeletion?: () => Promise<void>
   readonly #client: AppiumAndroidClient
   readonly #leases: AppiumAndroidLeaseManager
   readonly #publishRevision?: AppiumAndroidRevisionPublisher
@@ -164,8 +189,14 @@ class AppiumAndroidController implements HostController {
   readonly #sessions = new Set<AppiumAndroidSession>()
   readonly #target: AppiumAndroidTarget
 
-  constructor(options: AppiumAndroidControllerOptions) {
-    this.#build = frozenBuild(options.build)
+  constructor(
+    options: Omit<AppiumAndroidControllerOptions, 'build'> & { build?: AppiumAndroidBuild },
+    managed?: ManagedMobileGrant,
+    beforeDriverDeletion?: () => Promise<void>,
+  ) {
+    this.#managed = managed
+    this.#beforeDriverDeletion = beforeDriverDeletion
+    this.#build = options.build === undefined ? undefined : frozenBuild(options.build)
     this.#client = options.client
     this.#leases = options.leases ?? machineLeases()
     this.#preheldTargetLease = options.preheldTargetLease
@@ -186,13 +217,19 @@ class AppiumAndroidController implements HostController {
       target: string
     }>,
   ): Promise<HostSession> {
-    assertIsolatedBuild(options.artifactRoot, this.#target, this.#build)
+    if (this.#managed === undefined) {
+      if (this.#build === undefined) {
+        Errors.throwUnexpected('Expected an isolated Android build.')
+      }
+      assertIsolatedBuild(options.artifactRoot, this.#target, this.#build)
+    }
     const revision = frozenRevision(options.revision)
     const targetLease = this.#preheldTargetLease ?? await this.#leases.acquire(androidTargetLeaseName(this.#target))
     this.#preheldTargetLease = undefined
     let allocation: { leases: readonly AppiumAndroidLease[]; value: AppiumAndroidAllocation } | undefined
     let receiptPath: string | undefined
     let session: AppiumAndroidWebDriverSession | undefined
+    let creationAttempted = false
     try {
       allocation = await this.#allocate()
       receiptPath = FS.resolvePath(
@@ -213,15 +250,41 @@ class AppiumAndroidController implements HostController {
         )
       }
       await writeReceipt('opening')
-      session = await this.#client.createSession(appiumAndroidCapabilities(this.#target, this.#build, allocation.value))
+      await this.#managed?.assertOwnerCurrent()
+      creationAttempted = true
+      session = await this.#client.createSession(
+        this.#managed === undefined
+          ? appiumAndroidCapabilities(this.#target, this.#build!, allocation.value)
+          : {
+            'appium:automationName': 'UiAutomator2',
+            'appium:deviceName': this.#target.serial,
+            'appium:udid': this.#target.serial,
+            'appium:appPackage': this.#target.appId,
+            'appium:noReset': true,
+            'appium:fullReset': false,
+            'appium:autoLaunch': false,
+            'appium:forceAppLaunch': false,
+            'appium:shouldTerminateApp': false,
+            'appium:dontStopAppOnReset': true,
+            'appium:mjpegServerPort': allocation.value.mjpegServerPort,
+            'appium:systemPort': allocation.value.systemPort,
+            platformName: 'Android',
+          },
+      )
+      await this.#managed?.assertCurrent()
       await writeReceipt('open')
+      if (this.#managed !== undefined) {
+        await session.prepareManagedRuntime?.()
+      }
       let hostSession: AppiumAndroidSession
       hostSession = new AppiumAndroidSession({
         allocation: allocation.value,
         allocationLeases: allocation.leases,
         artifactRoot: options.artifactRoot,
         descriptor: {
-          capabilities: sessionCapabilities(),
+          capabilities: sessionCapabilities().filter(capability =>
+            this.#managed === undefined || capability !== 'relaunchApplication'
+          ),
           driver: 'appium-uiautomator2',
           id: session.id,
           lease: { generation: targetLease.generation, name: androidTargetLeaseName(this.#target) },
@@ -237,11 +300,22 @@ class AppiumAndroidController implements HostController {
         session,
         target: this.#target,
         targetLease,
+        managed: this.#managed,
+        beforeDriverDeletion: this.#beforeDriverDeletion,
         build: this.#build,
       })
       this.#sessions.add(hostSession)
       return hostSession
     } catch (error) {
+      if (this.#managed !== undefined && creationAttempted && session === undefined) {
+        Errors.throwHostEnvironment(
+          'Managed Android driver creation ended without a session identity; its target and port fences remain retained.',
+          {
+            cause: error,
+            details: { retainsTargetLease: true },
+          },
+        )
+      }
       if (allocation !== undefined && receiptPath !== undefined) {
         await this.#receipts.write(
           receiptPath,
@@ -257,6 +331,7 @@ class AppiumAndroidController implements HostController {
       }
       if (session !== undefined) {
         try {
+          await this.#managed?.assertCleanupCurrent()
           await session.deleteSession()
         } catch (cleanupError) {
           Errors.throwHostEnvironment(
@@ -297,10 +372,12 @@ class AppiumAndroidController implements HostController {
 }
 
 class AppiumAndroidSession implements HostSession {
+  readonly #managed?: ManagedMobileGrant
+  readonly #beforeDriverDeletion?: () => Promise<void>
   readonly #allocation: AppiumAndroidAllocation
   readonly #allocationLeases: readonly AppiumAndroidLease[]
   readonly #artifactRoot: string
-  readonly #build: AppiumAndroidBuild
+  readonly #build?: AppiumAndroidBuild
   #closed = false
   #closedReceiptPersisted = false
   #closePromise: Promise<void> | undefined
@@ -324,7 +401,7 @@ class AppiumAndroidSession implements HostSession {
       allocation: AppiumAndroidAllocation
       allocationLeases: readonly AppiumAndroidLease[]
       artifactRoot: string
-      build: AppiumAndroidBuild
+      build?: AppiumAndroidBuild
       descriptor: HostSessionDescriptor
       onClosed: () => void
       publishRevision?: AppiumAndroidRevisionPublisher
@@ -333,9 +410,13 @@ class AppiumAndroidSession implements HostSession {
       session: AppiumAndroidWebDriverSession
       target: AppiumAndroidTarget
       targetLease: AppiumAndroidLease
+      managed?: ManagedMobileGrant
+      beforeDriverDeletion?: () => Promise<void>
     }>,
   ) {
     this.#allocation = options.allocation
+    this.#managed = options.managed
+    this.#beforeDriverDeletion = options.beforeDriverDeletion
     this.#allocationLeases = options.allocationLeases
     this.#artifactRoot = options.artifactRoot
     this.#build = options.build
@@ -435,6 +516,9 @@ class AppiumAndroidSession implements HostSession {
         refreshDocument: async () =>
           unsupported('refreshDocument', 'Appium/UiAutomator2 has no document-refresh operation.'),
         relaunchApplication: async () => {
+          if (this.#managed !== undefined) {
+            return unsupported('relaunchApplication', 'Managed attachment cannot relaunch its borrowed runtime.')
+          }
           await this.#session.terminateApp(this.#target.appId)
           await this.#session.activateApp(this.#target.appId)
         },
@@ -460,6 +544,9 @@ class AppiumAndroidSession implements HostSession {
   async publishRevision(request: HostPublishRevisionRequest): Promise<void> {
     await this.#serialize(async () => {
       await this.#assertLease(request.lease)
+      if (this.#managed !== undefined) {
+        return unsupported('refreshDocument', 'Managed attachment cannot publish a runtime revision.')
+      }
       if (!sameRevision(request.expectedCurrentRevision, this.#revision)) {
         return staleRevision(this.#revision, request.expectedCurrentRevision)
       }
@@ -486,7 +573,11 @@ class AppiumAndroidSession implements HostSession {
   async #assertCloseLease(lease: HostLeaseIdentity): Promise<void> {
     assertHostLease(this.#descriptor.lease, lease)
     if (!this.#closed && !this.#closedReceiptPersisted) {
-      await this.#targetLease.assertCurrent(lease.generation)
+      if (this.#managed === undefined) {
+        await this.#targetLease.assertCurrent(lease.generation)
+      } else {
+        await this.#managed.assertCleanupCurrent()
+      }
     }
   }
 
@@ -513,6 +604,7 @@ class AppiumAndroidSession implements HostSession {
 
   async #closeResources(): Promise<void> {
     if (!this.#sessionDeleted) {
+      await this.#beforeDriverDeletion?.()
       await this.#session.deleteSession()
       this.#sessionDeleted = true
     }
@@ -701,7 +793,7 @@ function receipt(
   input: Readonly<
     {
       allocation: AppiumAndroidAllocation
-      build: AppiumAndroidBuild
+      build?: AppiumAndroidBuild
       lifecycle: AppiumAndroidSessionReceipt['lifecycle']
       revision: HostRevision
       session?: AppiumAndroidWebDriverSession
@@ -711,7 +803,7 @@ function receipt(
 ): AppiumAndroidSessionReceipt {
   return {
     allocation: input.allocation,
-    artifact: input.build,
+    ...(input.build === undefined ? {} : { artifact: input.build }),
     build: input.revision.build,
     lifecycle: input.lifecycle,
     ...(input.session === undefined ? {} : { sessionId: input.session.id }),

@@ -1,7 +1,9 @@
 ---
 name: storage-archive
 description: >-
-  Capture Tao UI screenshots into the `storage` archive submodule, publish them, and point this repository at them. Use when the Developer asks to take, review, archive, push, or land QA screenshots, run `storage sync`, `storage qa`, `storage push`, or `storage pin`, bump or fix the storage submodule pointer, or clean up after screenshot captures.
+  Capture and publish Tao QA screenshots through the storage archive. Use when asked to capture,
+  review, archive, publish, or land QA screenshots; run storage sync, qa, push, or pin; fix the
+  storage submodule pointer; or clean up screenshot captures.
 ---
 
 # Storage Archive

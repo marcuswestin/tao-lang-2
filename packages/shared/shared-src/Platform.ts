@@ -63,16 +63,23 @@ export function lowerProcessPriority(): void {
 }
 
 /** processIsAlive reports whether a process id still exists, without signalling it. */
-export function processIsAlive(pid: number): boolean {
+export function processIsAlive(pid: number, probe: (pid: number) => boolean = pid => process.kill(pid, 0)): boolean {
   if (!Number.isInteger(pid) || pid <= 0) {
     return false
   }
   try {
-    process.kill(pid, 0)
+    probe(pid)
     return true
   } catch (error) {
     // EPERM means the process exists and belongs to somebody else; only ESRCH means it is gone.
-    return (error as NodeJS.ErrnoException).code === 'EPERM'
+    const code = (error as NodeJS.ErrnoException | null | undefined)?.code
+    if (code === 'EPERM') {
+      return true
+    }
+    if (code === 'ESRCH') {
+      return false
+    }
+    throwHostEnvironment('Could not determine whether the process is alive.', { cause: error, details: { pid, code } })
   }
 }
 

@@ -143,6 +143,7 @@ export type StudioLaunchRecord = {
 type OpenLaunchOptions = {
   appName?: string
   artifactRoot: string
+  launchRecordsRoot?: string
   mode: StudioLaunchMode
   now?: () => string
   ownerPid?: number
@@ -154,7 +155,8 @@ type OpenLaunchOptions = {
 export async function openLaunchRecord(options: OpenLaunchOptions): Promise<StudioLaunchRecord> {
   const repositoryRoot = options.repositoryRoot ?? Repo.getRoot()
   const launchId = createLaunchId(options.mode)
-  const path = FS.resolvePath(`${launchId}.json`, await prepareLaunchDirectory(repositoryRoot))
+  const directory = options.launchRecordsRoot ?? await prepareLaunchDirectory(repositoryRoot)
+  const path = FS.resolvePath(`${launchId}.json`, directory)
   let manifest: StudioLaunchManifest = {
     appName: options.appName,
     artifactRoot: options.artifactRoot,
@@ -187,7 +189,7 @@ export async function openLaunchRecord(options: OpenLaunchOptions): Promise<Stud
   }
 
   await write({})
-  await pruneFinalizedLaunches(repositoryRoot, launchId)
+  await pruneFinalizedLaunches(repositoryRoot, launchId, directory)
   return {
     finalize: async update => await write({ state: 'stopped', ...update }),
     launchId,
@@ -202,10 +204,14 @@ export async function openLaunchRecord(options: OpenLaunchOptions): Promise<Stud
  * to read. Removing them as a new launch opens keeps the listing about launches that matter,
  * without ever touching one that is still starting, ready, or stopping.
  */
-async function pruneFinalizedLaunches(repositoryRoot: string, exceptLaunchId: string): Promise<void> {
-  for (const stored of await readLaunches(repositoryRoot)) {
+async function pruneFinalizedLaunches(
+  repositoryRoot: string,
+  exceptLaunchId: string,
+  directory: string,
+): Promise<void> {
+  for (const stored of await readLaunches(repositoryRoot, directory)) {
     if (stored.manifest.launchId !== exceptLaunchId && stored.manifest.state === 'stopped') {
-      await removeLaunch(stored).catch(() => false)
+      await FS.remove(stored.path).catch(() => {})
     }
   }
 }
@@ -222,8 +228,11 @@ export async function writeManifestAtomically(path: string, manifest: StudioLaun
 }
 
 /** readLaunches reads every manifest a repository has published, newest launch first. */
-export async function readLaunches(repositoryRoot = Repo.getRoot()): Promise<StoredLaunch[]> {
-  const directory = await prepareLaunchDirectory(repositoryRoot)
+export async function readLaunches(
+  repositoryRoot = Repo.getRoot(),
+  launchRecordsRoot?: string,
+): Promise<StoredLaunch[]> {
+  const directory = launchRecordsRoot ?? await prepareLaunchDirectory(repositoryRoot)
   if (!await FS.isDirectory(directory)) {
     return []
   }

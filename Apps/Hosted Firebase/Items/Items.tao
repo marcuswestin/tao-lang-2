@@ -1,0 +1,128 @@
+use Checkbox, Col, ScrollView, Spinner, Text, TextInput, TextMultiline from @tao/ui
+use FormButton from @tao/ui/basic
+use Item, Items from ..
+
+// The items feature: the list a person lands on, one row of it, and the detail of one item.
+package
+view ItemList() {
+   state NewTitle = ""
+   query Items = Items with { }
+   action AddItem() {
+      check NewTitle is not empty
+      create Item {
+         Title: NewTitle
+      }
+      set NewTitle = ""
+   }
+   command NewItem() {
+      Title "Add item"
+      Icon "plus"
+      Enabled NewTitle is not empty
+      do AddItem()
+   }
+   render ScrollView() [screen] {
+      Col() [column] {
+         Col() [panel] {
+            Text("NEW ITEM") [eyebrow]
+
+            #itemTitle
+            TextInput(Value: NewTitle, Label: "Title", Placeholder: "New item title") {
+               on submit AddItem
+            }
+
+            #addItem
+            FormButton("Add item", Disabled: NewTitle is empty) {
+               on press AddItem
+         }  }
+         guard Items {
+            loading -> { Spinner() }
+            error -> Context {
+               Text("Items could not be loaded") [sectionTitle]
+               TextMultiline(Context.Message) [body]
+         }  }
+         guard Items empty -> { Col() [panel] {
+            Text("No items yet") [sectionTitle]
+            TextMultiline("Add the first one above.") [body]
+         } }
+
+         #items
+         loop Items / Item {
+            ItemRow(Item)
+            on select -> { present ItemDetail(Item) }
+}  }  }  }
+
+// One item in the list.
+package
+view ItemRow(Item) {
+   render Col() [card] {
+      if Item.Done is Done {
+         Text("DONE") [eyebrow]
+      }
+      Text(Item.Title) [sectionTitle]
+      Text(Item.Notes) [caption]
+
+      #openItem
+      FormButton("Open") [buttonSecondary] {
+         on press -> { present ItemDetail(Item) }
+}  }  }
+
+// One item: edit its fields or delete it.
+package
+scene ItemDetail(Item) {
+   Title Item.Title
+   state TitleDraft = Item.Title
+   state NotesDraft = Item.Notes
+   action SaveItem() {
+      check TitleDraft is not empty
+      update Item {
+         Title: TitleDraft
+         Notes: NotesDraft
+   }  }
+   action SetDone(Value boolean) {
+      update Item {
+         Done: Value
+   }  }
+   action DeleteItem() {
+      delete Item
+      dismiss
+   }
+   command SaveItemCommand() {
+      Title "Save item"
+      Icon "checkmark"
+      Enabled TitleDraft is not empty
+      do SaveItem()
+   }
+   Toolbar { SaveItemCommand }
+   render ScrollView() [screen] {
+      Col() [column, panel] {
+         Text("ITEM") [eyebrow]
+         guard Item {
+            loading -> { Spinner() }
+            missing -> { TextMultiline("This item no longer exists.") [body] }
+            error -> Context { TextMultiline("The item could not be loaded: { Context.Message }") [body] }
+         }
+
+         #itemTitleDraft
+         TextInput(Value: TitleDraft, Label: "Title", Placeholder: "Title") {
+            on submit SaveItem
+         }
+
+         #itemNotesDraft
+         TextInput(Value: NotesDraft, Label: "Notes", Placeholder: "Notes") {
+            on submit SaveItem
+         }
+
+         #itemDone
+         Checkbox(Value: Item.Done is Done, Label: "Done") {
+            on change SetDone
+         }
+
+         #saveItem
+         FormButton("Save item", Disabled: TitleDraft is empty) {
+            on press SaveItem
+         }
+
+         #deleteItem
+         FormButton("Delete item") [buttonDanger] {
+            on press DeleteItem
+}  }  }  }

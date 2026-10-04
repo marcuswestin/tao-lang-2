@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "Hosted CRUD Spike",
+    "slug": "tao-hosted-crud-spike",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "ios": {
+      "bundleIdentifier": "dev.tao.hostedcrudspike"
+    },
+    "android": {
+      "package": "dev.tao.hostedcrudspike"
+    },
+    "experiments": {
+      "tsconfigPaths": true
+    }
+  }
+}

@@ -1,0 +1,27 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId}/notes/{noteId} {
+      function signedInAsOwner() {
+        return request.auth != null && request.auth.uid == userId;
+      }
+
+      function validReplicaNote() {
+        let data = request.resource.data;
+        return data.keys().hasAll(['text', 'done', 'updatedAt', '_deleted', 'serverTimestamp'])
+          && data.keys().hasOnly(['text', 'done', 'updatedAt', '_deleted', 'serverTimestamp'])
+          && data.text is string
+          && data.done is bool
+          && data.updatedAt is number
+          && data._deleted is bool
+          && data.serverTimestamp == request.time;
+      }
+
+      allow get, list: if signedInAsOwner();
+      allow create: if signedInAsOwner() && validReplicaNote() && request.resource.data._deleted == false;
+      allow update: if signedInAsOwner() && validReplicaNote();
+      // Replication needs tombstones so other devices can observe deletion.
+      allow delete: if false;
+    }
+  }
+}

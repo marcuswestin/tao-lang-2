@@ -15,6 +15,8 @@ type TaoFileCompileOptions = {
   exportedBindings?: ReadonlyArray<{ exported: string; binding: string }>
   projectRoot?: string
   selectedAppDatasourceConfiguration?: Readonly<Record<string, string>>
+  selectedAppFirebaseConfiguration?: Readonly<Record<string, string>>
+  selectedAppAuthConfiguration?: Readonly<Record<string, string>>
   selectedAppName?: string
   studioDataCatalog?: boolean
   studio?: boolean

@@ -57,4 +57,56 @@ Describe('summary failures', () => {
       await FS.remove(root)
     }
   })
+
+  Test('reads structured warnings with the named summary while ignoring malformed warnings', async () => {
+    const root = await mkTestDir('tao-summary-warnings-')
+    try {
+      const path = FS.resolvePath('summary.json', root)
+      await FS.writeJson(path, { failures: [], warnings: ['This command opens a visible window.'] })
+      const options = { output: 'WARNING: untrusted prose\nSummary: summary.json', repositoryRoot: root }
+      Expect((await readSummaryFailures(options))?.warnings).toEqual(['This command opens a visible window.'])
+
+      await FS.writeJson(path, { failures: [], warnings: ['partly valid', { message: 'malformed' }] })
+      Expect((await readSummaryFailures(options))?.warnings).toEqual([])
+
+      await FS.writeJson(path, { failures: [] })
+      Expect((await readSummaryFailures(options))?.warnings).toEqual([])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('retains warnings when a versioned gate summary omits unclassified failures', async () => {
+    const root = await mkTestDir('tao-summary-gate-warnings-')
+    try {
+      const path = FS.resolvePath('summary.json', root)
+      const options = { output: 'Summary: summary.json', repositoryRoot: root }
+      for (const status of ['passed', 'failed']) {
+        await FS.writeJson(path, {
+          gates: [],
+          status,
+          version: 2,
+          warnings: ['A nested selected check may take focus.'],
+        })
+        const result = await readSummaryFailures(options)
+        Expect(result?.failures).toEqual([])
+        Expect(result?.warnings).toEqual(['A nested selected check may take focus.'])
+      }
+
+      for (
+        const shape of [
+          {},
+          { gates: [], status: 'passed', version: 1 },
+          { status: 'passed', version: 2 },
+          { gates: [], status: 'unknown', version: 2 },
+          { failures: null, gates: [], status: 'passed', version: 2 },
+        ]
+      ) {
+        await FS.writeJson(path, { ...shape, warnings: ['Unverified warning.'] })
+        Expect(await readSummaryFailures(options)).toBeUndefined()
+      }
+    } finally {
+      await FS.remove(root)
+    }
+  })
 })

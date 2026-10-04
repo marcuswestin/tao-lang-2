@@ -74,3 +74,5 @@ export {
 }
 
 export { ReleaseToolchain } from './ReleaseToolchain'
+
+export { type FirebaseConnection, readFirebaseConnections } from './FirebaseConnections'
