@@ -83,13 +83,15 @@ Read the [candidate roadmap](<Hosted data provider candidates.md>), the
    - Then run `./agent unsandboxed finalize`. **Do not land without the Developer's explicit
      authorization.**
 
-### Decisions waiting on the Developer
+### Developer decisions
 
-1. Whether to land this branch once the evidence and gates are done.
+1. Landing this source slice was authorized on 2026-10-04. New-app device and server acceptance
+   remain separate gates.
 2. Whether the dev loop should get the same run screen. It is an unchecked A22 item, together with
    a test that starts real Metro and checks the event and URL shapes so that an Expo upgrade fails
    loudly.
-3. The provider-dependency install policy described under "Later" below.
+3. The existing all-provider repository installation policy was approved for this slice;
+   selective provider installation is deferred.
 4. The Developer is adding a rule-break reporting bullet to `AGENTS.md` by hand; agents are blocked
    from editing it.
 
@@ -289,7 +291,8 @@ The Developer approved the existing all-provider installation policy for the Fir
 and ignored project-local public connection settings at `.tao/local/connections.json`. Selective
 provider installation is deferred. The named Firebase/RxDB/SQLite/hash/persistence dependency pins
 and workspace wiring are approved; this does not authorize later version changes.
-Sharing the run screen with the dev loop and landing remain pending decisions. Landing still requires explicit authorization for the slice.
+Sharing the run screen with the dev loop remains pending. The Developer authorized landing the
+source slice on 2026-10-04.
 
 Repository integration also reproduced the known ignored orphan-directory lint issue. The
 obsolete task-generated Effect Outcomes contract and bridge-check config were removed after
@@ -387,3 +390,18 @@ copies that directory, with a regression assertion for the configured plugin. Th
 suite and an isolated real headless Studio launch pass. The repair is recorded in the
 [developer-environment archive](<Developer environment upgrades archive.md>). The full landing
 workflow must establish the final host gates before publishing.
+
+A later landing integrated main 20bbeff06 (managed development loops and native acceptance
+ownership). The additive merge resolutions preserve Firebase configuration injection alongside
+managed publication identity, source revision checks, and release guards, and retain both shared
+file-URL helpers. Their focused runtime, shared, and Studio tests pass after frozen setup. The
+seam review also found that build snapshots excluded local Firebase connection settings; those
+settings now pass through the strict public-settings reader into the snapshot and source digest.
+The synthetic compile-only build regression reproduces the old failure and passes after the fix,
+including changed settings, key reordering, and exclusion of unrelated local data. This source
+proof does not establish installed standalone packaging or hosted/device acceptance.
+
+Integrated changed verification also exposed a main-native diagnostic fixture whose socket
+address exceeded the Unix socket path limit under this worktree. Its nonexistent socket address
+now uses a short unique path without creating external files or changing native registration
+behavior. All 55 focused fixture tests pass; the original diagnostic assertions remain intact.

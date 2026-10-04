@@ -1,7 +1,9 @@
 ---
 name: old-repo-porting
 description: >-
-  Port, compare, or recover Tao behavior from the previous repository at ~/code/tao-lang while avoiding its stale conventions and copied implementation cruft.
+  Compare, port, or recover Tao behavior from the previous repository. Use when consulting
+  ~/code/tao-lang for proven semantics or edge cases, while checking the current architecture and
+  conventions before reusing its behavior.
 ---
 
 # Old Repo Porting

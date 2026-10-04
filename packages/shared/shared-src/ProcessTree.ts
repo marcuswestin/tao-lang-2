@@ -46,9 +46,9 @@ const EXIT_POLL_MS = 25
 
 const linuxProcesses = createLinuxProcessInspector()
 
-function requireProcessInspectionPlatform(): void {
-  if (Platform.hostPlatform !== 'darwin' && Platform.hostPlatform !== 'linux') {
-    Errors.throwHostEnvironment(`Process inspection is not implemented on ${Platform.hostPlatform}.`)
+function requireProcessInspectionPlatform(platform = Platform.hostPlatform): void {
+  if (platform !== 'darwin' && platform !== 'linux') {
+    Errors.throwHostEnvironment(`Process inspection is not implemented on ${platform}.`)
   }
 }
 
@@ -80,6 +80,17 @@ function processGroupOf(pid: number): number | undefined {
     return linuxProcesses.identity(pid)?.group
   }
   return inspectDarwinProcesses('identities', [pid])[0]?.group
+}
+
+/** Exact kernel identities include orphaned members whose old parent no longer exists. */
+function processGroupMembers(group: number): TrackedProcess[] {
+  requireProcessInspectionPlatform()
+  if (!Number.isSafeInteger(group) || group < 1 || group > 2_147_483_647) {
+    Errors.throwUnexpected('Expected a valid process group for process inspection.')
+  }
+  return Platform.hostPlatform === 'linux'
+    ? linuxProcesses.table().filter(entry => entry.group === group).map(({ group: _group, ...entry }) => entry)
+    : inspectDarwinProcesses('group', [group]).map(({ group: _group, ...entry }) => entry)
 }
 
 /** processTable reads procfs on Linux and the fixed process listing on Darwin. */
@@ -217,12 +228,19 @@ async function waitForProcessGroupExit(pid: number | undefined): Promise<void> {
   }
 }
 
-function processGroupIsAlive(pid: number): boolean {
-  requireProcessInspectionPlatform()
-  if (Platform.hostPlatform === 'linux') {
-    return linuxProcesses.groupIsAlive(pid)
+function processGroupIsAlive(
+  pid: number,
+  probe: typeof Platform.signalProcess = Platform.signalProcess,
+  seams: { platform?: typeof Platform.hostPlatform; linuxGroupIsAlive?: (group: number) => boolean } = {},
+): boolean {
+  const platform = seams.platform ?? Platform.hostPlatform
+  requireProcessInspectionPlatform(platform)
+  if (platform === 'linux') {
+    // kill(0) also succeeds for unreaped zombie groups, which no longer hold our pipes.
+    // The proc table filters exited members and refuses unreadable or malformed identities.
+    return (seams.linuxGroupIsAlive ?? linuxProcesses.groupIsAlive)(pid)
   }
-  return Platform.spawnSync('/bin/kill', { args: ['-0', '--', `-${pid}`], stdio: 'ignore' }).status === 0
+  return probe(-pid, 0)
 }
 
 /**
@@ -258,6 +276,7 @@ export const ProcessTree = {
   identities: currentProcessIdentities,
   isGroupAlive: processGroupIsAlive,
   processGroupOf,
+  groupMembers: processGroupMembers,
   processTable,
   sameProcess,
   signalGroup: signalProcessGroup,

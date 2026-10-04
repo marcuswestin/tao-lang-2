@@ -1,6 +1,8 @@
 ---
 name: tao-layout
-description: Build Tao render trees and use the implemented layout, text, scrolling, wrapping, and adaptive pane behavior.
+description: >-
+  Build Tao UI layout. Use when arranging or sizing views, choosing containers, fixing text clipping
+  or wrapping, adding scrolling, or adapting panes to available space.
 ---
 
 # Tao Layout

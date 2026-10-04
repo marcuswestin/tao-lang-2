@@ -1,4 +1,4 @@
-import { FS, Platform } from '@shared'
+import { CLI, FS, Platform } from '@shared'
 import { Deferred, Describe, Expect, mkTestDir, settle, Test, testOverrideSlot, until } from '@shared/test'
 import { type AgentRenderer, type AgentReply, startDesktopAgentHost } from '../expo-host-src/desktop-agent-host'
 
@@ -97,7 +97,19 @@ Describe('packaged desktop agent host', () => {
   })
 
   HostTest('replaces a dead owner and reuses its persistent origin after shutdown', async fixture => {
-    await FS.writeJson(fixture.sessionPath, { pid: Number.MAX_SAFE_INTEGER, instanceId: 'dead-instance' })
+    const exited = CLI.start(Platform.runtimeProcess.execPath, {
+      args: ['--eval', ''],
+      stdio: 'pipe',
+    })
+    const ownerPid = exited.pid ?? 0
+    try {
+      Expect((await exited.waitForClose()).exitCode).toBe(0)
+    } finally {
+      exited.dispose()
+    }
+    Expect(ownerPid).toBeGreaterThan(0)
+    Expect(Platform.processIsAlive(ownerPid)).toBe(false)
+    await FS.writeJson(fixture.sessionPath, { pid: ownerPid, instanceId: 'dead-instance' })
     const first = await fixture.start()
     const firstSession = await fixture.session()
     Expect(firstSession.instanceId).not.toBe('dead-instance')

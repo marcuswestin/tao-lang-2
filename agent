@@ -43,6 +43,7 @@ AGENT_CLI_PACKAGE_DIR="$SCRIPT_DIR/packages/cli/agent-cli"
 DEV_CLI_PACKAGE_DIR="$SCRIPT_DIR/packages/cli/dev-cli"
 CLI_KIT_PACKAGE_DIR="$SCRIPT_DIR/packages/cli/cli-kit"
 SHARED_PACKAGE_DIR="$SCRIPT_DIR/packages/shared"
+VERIFICATION_PACKAGE_DIR="$SCRIPT_DIR/packages/testing/verification"
 BUILD_DIR="$SCRIPT_DIR/.artifacts/build/agent-dev"
 AGENT_TEMP_DIR="$SCRIPT_DIR/.artifacts/tmp"
 BUILD_OUTPUT="$BUILD_DIR/agent-dev.js"
@@ -86,11 +87,13 @@ function needs_build() {
     "$AGENT_CLI_PACKAGE_DIR"/agent-cli-src/**/*.ts(N) \
     "$CLI_KIT_PACKAGE_DIR"/cli-kit-src/**/*.ts(N) \
     "$SHARED_PACKAGE_DIR"/shared-src/**/*.ts(N) \
+    "$VERIFICATION_PACKAGE_DIR"/verification-src/**/*.ts(N) \
     "$SCRIPT_DIR"/package.json \
     "$SCRIPT_DIR"/bun.lock \
     "$AGENT_CLI_PACKAGE_DIR"/package.json \
     "$CLI_KIT_PACKAGE_DIR"/package.json \
-    "$SHARED_PACKAGE_DIR"/package.json
+    "$SHARED_PACKAGE_DIR"/package.json \
+    "$VERIFICATION_PACKAGE_DIR"/package.json
   do
     [[ "$source_path" -nt "$BUILD_STAMP" ]] && return 0
   done

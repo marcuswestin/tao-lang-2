@@ -7,6 +7,15 @@ here they wait on.
 Each entry states the question, what it blocks, the options as they stand, and a marked
 recommendation. A recommendation is a starting position for the decision, never the decision.
 
+## Deferred developer automation
+
+Decided 2026-10-04: defer the remaining managed development-loop and isolated native acceptance
+work until after MVP to preserve effort for release work. Land the completed implementation with
+source verification; incomplete host and human acceptance stays explicitly open. The
+[execution handoff](<../Roadmap/Managed development loops - Execution plan.md>) owns the remaining
+cases, evidence limits, retained resources and safe resume order. This does not defer the separate
+physical-device acceptance below.
+
 ## Pre-MVP device acceptance
 
 - [ ] **Run the first Tao app on a physical Vision Pro.** Decided 2026-09-27: defer headset

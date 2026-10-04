@@ -13,6 +13,7 @@ import {
   HCI,
   Platform,
   ProjectIdentity,
+  readFirebaseConnections,
   ReleaseCapabilities,
   Repo,
 } from '@shared'
@@ -50,6 +51,7 @@ type BuildOptions = {
 const targets = ['web', 'desktop', 'ios', 'android', 'visionos', 'watchos'] as const
 const runtimeFiles = [
   'index.ts',
+  'expo-host-src/ManagedLoopIdentityMarker.ts',
   'app.json',
   'app.config.js',
   'app-config.cjs',
@@ -557,6 +559,7 @@ async function installTreeIdentity(root: string): Promise<string> {
 
 async function snapshotProject(projectRoot: string, snapshotRoot: string): Promise<string> {
   const realRoot = await FS.realPath(projectRoot)
+  const firebase = await firebaseConnectionSnapshot(projectRoot)
   const sources: string[] = []
   for await (
     const source of FS.walk(projectRoot, {
@@ -591,6 +594,10 @@ async function snapshotProject(projectRoot: string, snapshotRoot: string): Promi
     digests.push(`.tao/lock.jsonc:${Platform.sha256Hex(lock)}`)
     await FS.writeFile(FS.resolvePath('.tao/lock.jsonc', snapshotRoot), lock)
   }
+  if (firebase !== undefined) {
+    digests.push(`.tao/local/connections.json:${Platform.sha256Hex(firebase)}`)
+    await FS.writeText(FS.resolvePath('.tao/local/connections.json', snapshotRoot), firebase)
+  }
   const after: string[] = []
   for await (
     const source of FS.walk(projectRoot, {
@@ -615,7 +622,17 @@ async function snapshotProject(projectRoot: string, snapshotRoot: string): Promi
   if (Platform.sha256Hex(await FS.readFile(identityPath)) !== Platform.sha256Hex(identity)) {
     Errors.throwUserInput('Project identity changed while creating the build snapshot; retry the build.')
   }
+  if (await firebaseConnectionSnapshot(projectRoot) !== firebase) {
+    Errors.throwUserInput('Firebase settings changed while creating the build snapshot; retry the build.')
+  }
   return Platform.sha256Hex(digests.join('\n'))
+}
+
+async function firebaseConnectionSnapshot(projectRoot: string): Promise<string | undefined> {
+  const firebase = await readFirebaseConnections(projectRoot)
+  return firebase === undefined ? undefined : JSON.stringify({
+    firebase: Object.fromEntries(Object.entries(firebase).toSorted(([left], [right]) => left.localeCompare(right))),
+  })
 }
 
 async function exportWeb(

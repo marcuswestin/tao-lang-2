@@ -23,6 +23,8 @@ export class ExpoServer {
   private recentOutputLength = 0
   private unexpectedExit?: (message: string) => void
   private stopping = false
+  private startPromise?: Promise<void>
+  private stopPromise?: Promise<void>
 
   constructor(
     private readonly runtimeRoot: string,
@@ -35,13 +37,31 @@ export class ExpoServer {
     this.unexpectedExit = listener
   }
 
-  async start(): Promise<void> {
+  start(): Promise<void> {
+    if (this.stopping) {
+      return Promise.resolve()
+    }
+    this.startPromise ??= this.startOnce()
+    return this.startPromise
+  }
+
+  private async startOnce(): Promise<void> {
     await this.releasePortReservation()
+    if (this.stopping) {
+      return
+    }
     const logPath = this.options.logRoot === undefined
       ? Repo.resolvePath(this.config.EXPO_LOG_PATH)
       : FS.resolvePath(FS.basename(this.config.EXPO_LOG_PATH), this.options.logRoot)
     await FS.mkdir(FS.dirname(logPath))
+    if (this.stopping) {
+      return
+    }
     this.logFile = await FS.openAppend(logPath)
+    if (this.stopping) {
+      await this.closeLogFile()
+      return
+    }
     const launcher = this.options.command ?? { executable: 'bunx' }
     const startArgs = launcher.namesExpoScript === true && this.config.EXPO_START_ARGS[0] === 'expo'
       ? this.config.EXPO_START_ARGS.slice(1)
@@ -78,7 +98,14 @@ export class ExpoServer {
     DevLoopOutput.logDevLoop('dev', `Expo log: ${logPath}`)
   }
 
-  async stop(): Promise<void> {
+  stop(): Promise<void> {
+    this.stopping = true
+    this.stopPromise ??= this.stopOnce()
+    return this.stopPromise
+  }
+
+  private async stopOnce(): Promise<void> {
+    await this.startPromise?.catch(() => {})
     await this.releasePortReservation()
     const child = this.child
     if (!child) {

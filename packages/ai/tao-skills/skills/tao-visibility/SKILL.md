@@ -1,6 +1,8 @@
 ---
 name: tao-visibility
-description: Resolve Tao names across files, feature folders, project packages, generated source, and standard packages.
+description: >-
+  Resolve Tao names and imports. Use when a declaration is unavailable, choosing file/folder/package
+  visibility, importing across features or packages, or tracing generated and standard-package names.
 ---
 
 # Tao Visibility

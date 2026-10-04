@@ -296,6 +296,7 @@ export const FinalizeCommand = {
 
 /** LandOptions is what `./dev land` accepts; every flag only removes work. */
 export type LandOptions = {
+  showStudio?: boolean
   /** Report the readiness of this branch and the plan, and change nothing. */
   dryRun?: boolean
   /** Must resolve exactly to this branch's canonical `.artifacts/merge/<branch>.msg`. */
@@ -369,6 +370,7 @@ export const LandCommand = {
     }
 
     const merge = await MergeWithMainCommand.run({
+      showStudio: options.showStudio,
       dryRun: options.dryRun === true,
       messageFile,
       repositoryRoot: root,

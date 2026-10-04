@@ -1,6 +1,8 @@
 ---
 name: tao-skills
-description: Use the Tao CLI to create, edit, style, lay out, test, run, or ship a Tao app.
+description: >-
+  Choose Tao CLI workflows and the relevant app-authoring skills. Use when creating, editing,
+  testing, running, or shipping a Tao app and the task spans domains or needs a starting workflow.
 ---
 
 # Tao Skills

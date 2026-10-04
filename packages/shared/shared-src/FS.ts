@@ -9,7 +9,7 @@ import {
 import * as nodeFs from 'node:fs/promises'
 import * as nodeOs from 'node:os'
 import * as nodePath from 'node:path'
-import { fileURLToPath as nodeFileURLToPath } from 'node:url'
+import { fileURLToPath as nodeFileURLToPath, pathToFileURL } from 'node:url'
 import { messageOf, throwUnexpected, UnexpectedBehaviorError } from './core/Errors'
 import * as Json from './core/Json'
 import { sleep } from './core/Time'
@@ -46,6 +46,11 @@ export function resolvePath(inputPath: string, cwd?: string): string {
 /** fileUrlToPath converts an import-resolved local module URL to a filesystem path. */
 export function fileUrlToPath(url: string): string {
   return nodeFileURLToPath(url)
+}
+
+/** fileUrl converts a filesystem path into an escaped file URL for local module imports. */
+export function fileUrl(inputPath: string): string {
+  return pathToFileURL(inputPath).href
 }
 
 /**
@@ -325,6 +330,15 @@ export async function writeText(inputPath: string, content: string, options: Wri
 export async function writeFile(inputPath: string, content: string | Uint8Array): Promise<void> {
   await mkdir(dirname(inputPath))
   await nodeFs.writeFile(inputPath, content)
+}
+
+/** writeExclusiveFile creates a new file without creating parents or replacing an existing entry. */
+export async function writeExclusiveFile(
+  inputPath: string,
+  content: string | Uint8Array,
+  options: WriteOptions = {},
+): Promise<void> {
+  await nodeFs.writeFile(inputPath, content, { flag: 'wx', mode: options.mode })
 }
 
 /** writeJson writes formatted JSON, creating parent directories. */

@@ -72,7 +72,8 @@ export function createAndroid(
     },
     listPhysicalDevices,
     openExpoGoOnSerial: (serial: string, url: string = config.EXPO_GO_URL) => openExpoGoOnSerial(serial, url),
-    openRuntime: (expoGoUrl: string = config.EXPO_GO_URL) => openRuntime(config, metro, runtimes, expoGoUrl),
+    openRuntime: (expoGoUrl: string = config.EXPO_GO_URL, shouldStop?: () => boolean) =>
+      openRuntime(config, metro, runtimes, expoGoUrl, shouldStop),
     openRuntimeOnSerial: (serial: string, expoGoUrl: string, metroHost: string) =>
       openRuntimeOnSerial(config, runtimes, serial, expoGoUrl, metroHost),
     prepareAvailableRuntime: () => prepareAvailableRuntime(config, compatibility, prepare),
@@ -85,6 +86,11 @@ export function createAndroid(
 export const Android = createAndroid(ExpoConfig, ExpoMetro)
 
 async function ensureEmulator(): Promise<void> {
+  if (Platform.runtimeProcess.env['TAO_AGENT_ANDROID_QUIET'] === '1') {
+    const serial = await requireBootedEmulator()
+    DevLoopOutput.logDevLoop('dev', `Using reserved Android emulator ${serial}.`)
+    return
+  }
   await requireCommand(
     'emulator',
     'Android emulator CLI not found. Enter ./enter-tao-dev-env to expose the pinned Android SDK.',
@@ -311,10 +317,19 @@ async function openRuntime(
   metro: ExpoMetroSession,
   runtimes: ReadonlyMap<string, AndroidRuntime>,
   expoGoUrl: string,
-): Promise<AndroidRuntime> {
-  await metro.waitForMetro()
+  shouldStop: () => boolean = () => false,
+): Promise<AndroidRuntime | undefined> {
+  if (!await metro.waitForMetro(shouldStop) || shouldStop()) {
+    return undefined
+  }
   const serial = await requireBootedEmulator()
+  if (shouldStop()) {
+    return undefined
+  }
   await reverseMetroPort(config, serial)
+  if (shouldStop()) {
+    return undefined
+  }
   return await openRuntimeOnSerial(config, runtimes, serial, expoGoUrl, '127.0.0.1')
 }
 
@@ -435,6 +450,13 @@ async function listAdbDevices(): Promise<string[]> {
 }
 
 async function findRunningEmulator(): Promise<string | undefined> {
+  if (Platform.runtimeProcess.env['TAO_AGENT_ANDROID_QUIET'] === '1') {
+    const assigned = Platform.runtimeProcess.env['TAO_AGENT_ANDROID_SERIAL']
+    if (!assigned) {
+      return undefined
+    }
+    return (await listAdbDevices()).includes(assigned) ? assigned : undefined
+  }
   return (await listAdbDevices()).find(serial => serial.startsWith('emulator-'))
 }
 
@@ -515,7 +537,9 @@ async function requireBootedEmulator(): Promise<string> {
   const serial = await findRunningEmulator()
   if (!serial || !await isEmulatorBooted(serial)) {
     Errors.throwUserInput(
-      'No booted Android emulator found. Start one with `just android` or `./dev android-emulator`.',
+      Platform.runtimeProcess.env['TAO_AGENT_ANDROID_QUIET'] === '1'
+        ? 'No reserved Android emulator is booted. Restart app-dev with --android or request --emulator <serial>.'
+        : 'No booted Android emulator found. Start one with `just android` or `./dev android-emulator`.',
     )
   }
   return serial

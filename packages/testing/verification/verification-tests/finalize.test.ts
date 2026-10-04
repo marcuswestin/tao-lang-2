@@ -1126,7 +1126,7 @@ Describe('landing preparation', () => {
     // would be spending everyone else's turn on something only its author can finish.
     const fake = fakeDependencies()
 
-    await Expect(LandCommand.run({ repositoryRoot: '/repo' }, fake.dependencies))
+    await Expect(LandCommand.run({ showStudio: true, repositoryRoot: '/repo' }, fake.dependencies))
       .rejects.toThrow('is not ready to land, and the landing lock was not taken')
     Expect(fake.calls.some(call => call.command === 'just')).toBe(false)
     Expect(fake.calls.some(call => call.args[0] === 'update-ref')).toBe(false)
@@ -1137,11 +1137,12 @@ Describe('landing preparation', () => {
     const outside = '/private/tmp/host-owned.msg'
     fake.files.set(outside, 'Keep this host file.\n')
 
-    await Expect(LandCommand.run({
-      messageFile: outside,
-      redraft: true,
-      repositoryRoot: '/repo',
-    }, fake.dependencies)).rejects.toThrow('only accepts its canonical merge message')
+    await Expect(
+      LandCommand.run(
+        { showStudio: true, messageFile: outside, redraft: true, repositoryRoot: '/repo' },
+        fake.dependencies,
+      ),
+    ).rejects.toThrow('only accepts its canonical merge message')
 
     Expect(fake.files.get(outside)).toBe('Keep this host file.\n')
     Expect(fake.calls.some(call => call.command === 'just')).toBe(false)
@@ -1150,7 +1151,7 @@ Describe('landing preparation', () => {
   Test('rejects symlinked and physically escaped canonical landing messages before preparation', async () => {
     const symlinked = fakeDependencies()
     symlinked.dependencies.isSymbolicLink = async path => path === '/repo/.artifacts/merge'
-    await Expect(LandCommand.run({ repositoryRoot: '/repo' }, symlinked.dependencies))
+    await Expect(LandCommand.run({ showStudio: true, repositoryRoot: '/repo' }, symlinked.dependencies))
       .rejects.toThrow('crosses a symbolic link')
     Expect(symlinked.calls.some(call => call.args[0] === 'fetch')).toBe(false)
 
@@ -1158,7 +1159,7 @@ Describe('landing preparation', () => {
     const messagePath = '/repo/.artifacts/merge/feat/example.msg'
     escaped.files.set(messagePath, 'Land it\n\n- Do the thing.\n')
     escaped.dependencies.realPath = async path => path === messagePath ? '/private/tmp/escaped.msg' : path
-    await Expect(LandCommand.run({ repositoryRoot: '/repo' }, escaped.dependencies))
+    await Expect(LandCommand.run({ showStudio: true, repositoryRoot: '/repo' }, escaped.dependencies))
       .rejects.toThrow('resolves outside the repository')
     Expect(escaped.calls.some(call => call.args[0] === 'fetch')).toBe(false)
   })
@@ -1166,11 +1167,12 @@ Describe('landing preparation', () => {
   Test('rejects the two noninteractive verification skips before inspecting the repository', async () => {
     const fake = fakeDependencies()
 
-    await Expect(LandCommand.run({
-      repositoryRoot: '/repo',
-      skipVerify: true,
-      skipVerifyFull: true,
-    }, fake.dependencies)).rejects.toThrow('cannot combine --skip-verify-full with --skip-verify')
+    await Expect(
+      LandCommand.run(
+        { showStudio: true, repositoryRoot: '/repo', skipVerify: true, skipVerifyFull: true },
+        fake.dependencies,
+      ),
+    ).rejects.toThrow('cannot combine --skip-verify-full with --skip-verify')
 
     Expect(fake.calls).toEqual([])
   })
