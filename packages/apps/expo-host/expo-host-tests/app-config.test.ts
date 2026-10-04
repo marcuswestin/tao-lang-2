@@ -95,8 +95,11 @@ Describe('Expo ship host configuration', () => {
     Expect(configured.name).toBe('Tao Runtime')
 
     Expect(createExpoAppConfig(fallbackConfig, projectRoot, { TAO_DEV_DATA_PORT: '4321' })).toBe(fallbackConfig)
-    Expect(createExpoAppConfig(fallbackConfig, projectRoot, { TAO_DEV_DATA_APP: 'Notes', TAO_DEV_DATA_PORT: 'x' }))
-      .toBe(fallbackConfig)
+    Expect(createExpoAppConfig(fallbackConfig, projectRoot, {
+      TAO_DEV_DATA_APP: 'Notes',
+      TAO_DEV_DATA_CAPABILITY: 'test_capability_0123456789abcdef0123456789abcdef',
+      TAO_DEV_DATA_PORT: 'x',
+    })).toBe(fallbackConfig)
   })
 
   Test('derives the iOS release and update configuration from ship.json', async () => {
@@ -177,7 +180,6 @@ Describe('Expo ship host configuration', () => {
     const config = createExpoAppConfig(fallbackConfig, projectRoot)
 
     Expect(config.ios?.config).toEqual({})
-    Expect(config.ios?.config?.usesNonExemptEncryption).toBeUndefined()
     Expect(Object.hasOwn(config.ios?.config ?? {}, 'usesNonExemptEncryption')).toBe(false)
   })
 

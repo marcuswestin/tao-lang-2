@@ -120,11 +120,11 @@ inside an app while remaining isolated from other cells.
 
 When the selected app has no applicable scenarios, Studio launches the ordinary app in both the
 browser preview and the paired native device. It applies no scenario fixtures, environment overrides,
-preparation or replay steps. Local `tao dev` also launches the ordinary app; scenario declarations
+preparation or replay steps. Local `tao run` also launches the ordinary app; scenario declarations
 remain metadata there. Removing the last scenario during a Studio session returns the device to the
 ordinary app once the matching bundle is loaded.
 
-For direct physical-device development without Studio, `tao dev --device <name-or-id>` opens the
+For direct physical-device development without Studio, `tao run --device <name-or-id>` opens the
 ordinary app in the installed Tao Companion. It shares the device-launch contract with Studio,
 but starts no Studio gateway or scenario host. Stop Studio's session first if it owns that project.
 

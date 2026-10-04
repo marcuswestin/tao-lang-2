@@ -11,19 +11,13 @@ import {
 import { runShipCommand } from '../cli-src/ship-command'
 import { shipInputHash } from '../cli-src/ship-model'
 
-const source = `project {
-  id "notes"
-  name "Notes"
-  version "1.2.3"
-  app Notes
-}
-app Notes { view Main }
-view Main() { }
+const source = `app Notes { id "notes" version "1.2.3" name "Notes" view Main }
+view Main() { render inject \`\`\`ts return null \`\`\` }
 `
 
 Describe('tao ship command', () => {
   Test('runs discovery, preflight, version policy, and action list without a key or network in dry-run', async () => {
-    await withTaoFiles('tao-ship-command-', { 'App.tao': source }, async paths => {
+    await withTaoFiles('tao-ship-command-', { '.tao/.gitkeep': '', 'App.tao': source }, async paths => {
       const terminal = fakeTerminal()
       const result = await runShipCommand(FS.dirname(paths['App.tao']!), {
         dryRun: true,
@@ -38,9 +32,13 @@ Describe('tao ship command', () => {
     })
   })
 
-  Test('requires an explicit app when neither --app nor project metadata selects one', async () => {
+  Test('requires an explicit app when the project contains more than one', async () => {
     await withTaoFiles('tao-ship-command-', {
-      'App.tao': source.replace('  app Notes\n', '').replace('app Notes', 'app Other'),
+      '.tao/.gitkeep': '',
+      'App.tao': source.replace(
+        'view Main() { render inject ```ts return null ``` }',
+        'app Other { id "other" version "1.2.3" name "Other" view Main }\nview Main() { render inject ```ts return null ``` }',
+      ),
     }, async paths => {
       await Expect(runShipCommand(paths['App.tao']!, { dryRun: true, interactive: false })).rejects.toThrow(
         'does not name an app',
@@ -51,8 +49,8 @@ Describe('tao ship command', () => {
   Test('resumes an uploaded build after a post-upload beta failure', async () => {
     const inputHash = shipInputHash({
       appName: 'Notes',
-      defaultApp: 'Notes',
-      projectId: 'notes',
+      appId: 'notes',
+      appVersion: '1.2.3',
       releaseDatasourceConfiguration: undefined,
     })
     const lock = {
@@ -113,7 +111,7 @@ Describe('tao ship command', () => {
   })
 
   Test('prompts for accepted identifiers interactively before crossing the gate', async () => {
-    await withTaoFiles('tao-ship-command-', { 'App.tao': source }, async paths => {
+    await withTaoFiles('tao-ship-command-', { '.tao/.gitkeep': '', 'App.tao': source }, async paths => {
       const terminal = fakeTerminal('KEY123\nissuer-id\n\n\n\n')
       let executed = false
       const result = await runShipCommand(FS.dirname(paths['App.tao']!), {
@@ -151,8 +149,8 @@ async function expectFreshBuildForIneligibleCheckpoint(
 ): Promise<void> {
   const inputHash = shipInputHash({
     appName: 'Notes',
-    defaultApp: 'Notes',
-    projectId: 'notes',
+    appId: 'notes',
+    appVersion: '1.2.3',
     releaseDatasourceConfiguration: undefined,
   })
   const lock = {
@@ -186,6 +184,11 @@ async function expectFreshBuildForIneligibleCheckpoint(
     '.tao/store/lock.jsonc': JSON.stringify(lock),
     'App.tao': source,
   }, async paths => {
+    if (checkpoint.processingState !== undefined || checkpoint.dirty === true) {
+      await initGitTestRepository(FS.dirname(paths['App.tao']!), {
+        commit: { files: { '.tao/store/lock.jsonc': JSON.stringify(lock), 'App.tao': source } },
+      })
+    }
     const terminal = fakeTerminal()
     await runShipCommand(FS.dirname(paths['App.tao']!), {
       dryRun: true,

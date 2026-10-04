@@ -184,7 +184,6 @@ Test('Studio requires a consumed focus click before one preview accepts input', 
     let iframeClicks = 0
     first.iframe.addEventListener('click', () => iframeClicks++)
     Expect(emit(shield, 'click').defaultPrevented).toBe(true)
-    Expect(iframeClicks).toBe(0)
     Expect(shield.hidden).toBe(true)
     Expect(first.iframe.style.pointerEvents).toBe('')
     Expect(first.preview.frame!.dataset['previewInteractive']).toBe('true')

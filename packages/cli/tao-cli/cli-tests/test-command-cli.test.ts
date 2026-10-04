@@ -15,12 +15,14 @@ Describe('tao test CLI', () => {
 
   Test('runs tests from a working directory outside any Git worktree', async () => {
     await withTaoFixture({
-      'Project.tao': 'project { id "outside-worktree-test" name "Outside worktree test" }',
+      '.tao/.gitkeep': '',
       'App.tao': taoApp('Solo'),
       'App.test.tao': taoTest('Solo'),
       // Keep the runtime runner inert: this test owns the repository-root fallback, not Jest.
       'jest-stub.mjs': '',
     }, async rootDir => {
+      const identityPath = FS.resolvePath('.tao/store/project.json', rootDir)
+      await FS.remove(identityPath)
       const previousCwd = Platform.runtimeProcess.cwd()
       await withRuntimeRoot(FS.resolvePath('runtime-root', rootDir), async () => {
         await withJestStub(rootDir, async () => {
@@ -28,9 +30,9 @@ Describe('tao test CLI', () => {
             Platform.runtimeProcess.chdir(rootDir)
             const result = await runTaoCliForTest(['test', '.'])
 
-            Expect(`${result.stdout}${result.stderr}`).not.toContain('Git worktree root not found')
             Expect(result.exitCode).toBe(0)
             Expect(result.stdout).toContain('Tao tests finished')
+            Expect(await FS.isFile(identityPath)).toBe(true)
           } finally {
             Platform.runtimeProcess.chdir(previousCwd)
           }
@@ -40,7 +42,10 @@ Describe('tao test CLI', () => {
   })
 
   Test('rejects empty Tao test suites', async () => {
-    await withTaoFixture({ 'Empty.test.tao': 'test "Empty" { }\n' }, async (rootDir) => {
+    await withTaoFixture({
+      '.tao/.gitkeep': '',
+      'Empty.test.tao': 'test "Empty" { }\n',
+    }, async (rootDir) => {
       const result = await runTaoCliForTest(['test', rootDir])
       const output = `${result.stdout}${result.stderr}`
 
@@ -50,14 +55,12 @@ Describe('tao test CLI', () => {
       Expect(output).toContain('Validating Tao test files')
       Expect(output).not.toContain('Compiling apps')
       Expect(output).not.toContain('Running Tao tests')
-      Expect(output).not.toContain('expo-host-tests/tao-test-command.jest.tsx')
-      Expect(output).not.toContain('Test Suites:')
     })
   })
 
   Test('reports preflight validation errors at their source file path', async () => {
     await withTaoFixture({
-      'Project.tao': 'project { id "preflight-validation-test" name "Preflight validation test" }',
+      '.tao/.gitkeep': '',
       'Broken.tao': 'app BrokenApp { }\n',
       'Main.test.tao': `
         use BrokenApp from ./
@@ -73,17 +76,14 @@ Describe('tao test CLI', () => {
       const output = `${result.stdout}${result.stderr}`
 
       Expect(result.exitCode).not.toBe(0)
-      Expect(output).toContain('Broken.tao: App BrokenApp must declare exactly one Name, found 0.')
-      Expect(output).toContain(
-        'Broken.tao: App BrokenApp must declare exactly one Navigator (or root view), found 0.',
-      )
+      Expect(output).toContain('Broken.tao: App BrokenApp needs an effective name text value.')
       Expect(output).not.toContain('Compiling apps')
     })
   })
 
   Test('stops every compiler worker after testing separate source directories', async () => {
     await withTaoFixture({
-      'Project.tao': 'project { id "worker-lifecycle-test" name "Worker lifecycle test" }',
+      '.tao/.gitkeep': '',
       'One/App.tao': taoApp('One'),
       'One/App.test.tao': taoTest('One'),
       'Two/App.tao': taoApp('Two'),

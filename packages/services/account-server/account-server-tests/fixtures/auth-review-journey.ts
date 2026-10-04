@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, Repo } from '@shared'
+import { CLI, Errors, FS, ProjectLocal, Repo } from '@shared'
 import { Expect } from '@shared/test'
 import type { AccountProtocol } from 'tao-shared/auth'
 
@@ -10,6 +10,13 @@ export async function runAuthReviewJourney(
 ): Promise<AccountProtocol.Snapshot> {
   const project = FS.resolvePath('project', root)
   await FS.mkdir(project)
+  await ProjectLocal.prepare(project)
+  const identityPath = ProjectLocal.storeResolve('project.json', project)
+  await FS.withFileMutationLock(identityPath, project, async () => {
+    const staged = ProjectLocal.stagingPath(identityPath, project)
+    await FS.copyFile(Repo.resolvePath('Apps/Test Apps/Auth Review/.tao/store/project.json'), staged)
+    await FS.move(staged, identityPath)
+  }, { lockDirectory: ProjectLocal.cacheResolve('locks', project) })
   await FS.writeText(
     FS.resolvePath('Auth Review.tao', project),
     source.replaceAll('http://127.0.0.1:4738', server.url),

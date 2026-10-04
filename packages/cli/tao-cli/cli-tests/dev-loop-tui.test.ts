@@ -12,13 +12,6 @@ Describe('Dev-loop TUI dashboard layout', () => {
     ])
   })
 
-  Test('wraps output by terminal width without splitting Unicode graphemes', () => {
-    Expect(OutputText.wrapLine('123456789😀界', 10)).toEqual([
-      '123456789',
-      '😀界',
-    ])
-  })
-
   Test('uses a two-by-two grid when four skinny columns would clip', () => {
     const layout = devLoopDashboardLayout({ columns: 120, rows: 28 }, 4, 2)
     Expect(layout.columnsPerRow).toBe(2)
@@ -50,9 +43,8 @@ Describe('Dev-loop TUI mount', () => {
       const handle = reporter.start()
       Expect(handle).toBeDefined()
       reporter.logDevLoop('dev', 'mount proof')
-      await new Promise(resolve => setTimeout(resolve, 300))
       await handle?.stop()
-      Expect(terminal.outputText().length).toBeGreaterThan(0)
+      Expect(terminal.outputText()).toContain('mount proof')
     } finally {
       Platform.runtimeProcess.stdout = originalStdout
     }

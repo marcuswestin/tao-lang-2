@@ -1,0 +1,33 @@
+use SearchApp from ./
+
+test "Search" {
+   test "narrows rows as a search term is entered" {
+      run SearchApp
+      press #seed
+      expect text "Bread Recipe"
+      expect text "Grocery List"
+      expect text "Travel Notes"
+      enter "Gro" into #findInput
+      expect text "Grocery List"
+      expect missing text "Bread Recipe"
+      expect missing text "Travel Notes"
+   }
+   test "finds rows through either search field and ignores unmarked fields" {
+      run SearchApp
+      press #seed
+      enter "bread" into #findInput
+      expect text "Bread Recipe"
+      expect text "Grocery List"
+      expect missing text "Travel Notes"
+   }
+   test "restores all rows when the term is cleared" {
+      run SearchApp
+      press #seed
+      enter "Gro" into #findInput
+      expect missing text "Bread Recipe"
+      enter "" into #findInput
+      expect text "Bread Recipe"
+      expect text "Grocery List"
+      expect text "Travel Notes"
+   }
+}

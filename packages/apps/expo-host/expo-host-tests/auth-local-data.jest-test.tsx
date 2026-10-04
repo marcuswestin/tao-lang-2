@@ -26,12 +26,12 @@ Describe('compiled authenticated local-only app', () => {
       await FS.remove(path(key))
     })
     const files = {
-      'Project.tao': 'project { id "auth-local-persistence-test" name "Auth local persistence" }',
+      '.tao/store/project.json': '{"id":"9f77de33-02da-4bfd-a527-35496b04dd1b"}',
       'App.tao': `
         use TestAuth from @tao/auth/testing
         use Col, FormButton, Text from @tao/ui
         data Drafts / Draft { Body text, local only }
-        app DraftsApp { Auth TestAuth { State "SignedIn" AccountId "alice" } view Main }
+        app DraftsApp { id "draftsapp" version "1.0.0" name "DraftsApp" Auth TestAuth { State "SignedIn" AccountId "alice" } view Main }
         view Main() {
           query Drafts = Drafts with { }
           action Add() { create Draft { Body: "Persisted local draft" } }
@@ -55,8 +55,23 @@ Describe('compiled authenticated local-only app', () => {
           ExpectScreen(screen).toHaveText('Persisted local draft')
           const localKeys = [...savedKeys].filter(key => key.startsWith('tao-data:'))
           Expect(localKeys).toHaveLength(1)
-          Expect(localKeys[0]).toContain('tao.auth.local')
-          Expect(localKeys[0]).toContain('auth-local-persistence-test')
+          Expect(JSON.parse(localKeys[0]!.slice('tao-data:'.length))).toEqual([
+            'tao.auth.local',
+            1,
+            JSON.stringify([
+              'tao.declaration',
+              1,
+              '9f77de33-02da-4bfd-a527-35496b04dd1b',
+              '@workspace',
+              'App',
+              'app',
+              'DraftsApp',
+            ]),
+            'LocalData',
+            'tao:test',
+            'alice',
+            'alice',
+          ])
           const snapshot = JSON.parse(await FS.readText(path(localKeys[0]!)))
           Expect(snapshot.rows.Draft).toMatchObject([{ Body: 'Persisted local draft' }])
         } finally {

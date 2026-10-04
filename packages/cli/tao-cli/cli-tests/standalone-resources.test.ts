@@ -50,8 +50,8 @@ Describe('standalone resources', () => {
     await withRoot(async root => {
       const directory = FS.resolvePath('resources', root)
       const stamp = FS.resolvePath('.tao-resources', directory)
-      await StandaloneResources.unpack(await payload({ 'stdlib/Project.tao': 'old\n' }), directory)
-      const replacement = await payload({ 'stdlib/Project.tao': 'new\n' })
+      await StandaloneResources.unpack(await payload({ 'stdlib/Package.tao': 'old\n' }), directory)
+      const replacement = await payload({ 'stdlib/Package.tao': 'new\n' })
 
       let settled = false
       const replacing = StandaloneResources.unpack(replacement, directory).finally(() => {
@@ -64,13 +64,14 @@ Describe('standalone resources', () => {
       }
       await replacing
 
-      Expect(await FS.readText(FS.resolvePath('stdlib/Project.tao', directory))).toBe('new\n')
+      Expect(await FS.readText(FS.resolvePath('stdlib/Package.tao', directory))).toBe('new\n')
       Expect(observed.length).toBeGreaterThan(0)
       Expect(observed.filter(present => !present)).toEqual([])
     })
   })
 
   // A shell completion and the command it completes are enough to start two first runs at once.
+  // REMOVAL CANDIDATE: Replace the 32-start stress fixture only with a controlled losing publisher that preserves rename-race coverage.
   Test('lets concurrent first runs race to one complete tree', async () => {
     await withRoot(async root => {
       const directory = FS.resolvePath('resources', root)
@@ -93,7 +94,7 @@ Describe('standalone resources', () => {
       await FS.writeText(blocker, '')
       const directory = FS.resolvePath('resources', blocker)
 
-      await Expect(StandaloneResources.unpack(await payload({ 'stdlib/Project.tao': '' }), directory))
+      await Expect(StandaloneResources.unpack(await payload({ 'stdlib/Package.tao': '' }), directory))
         .rejects.toThrow(`Tao could not unpack its resources into ${directory}`)
     })
   })

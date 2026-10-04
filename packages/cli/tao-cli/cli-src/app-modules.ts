@@ -12,35 +12,7 @@ const CLI_PACKAGE_ROOT = TaoResources.declaredRoot() ?? FS.resolvePath('..', imp
  * PROJECT_TSCONFIG is the TypeScript project `tao create` writes. Sidecar files resolve `@tao/*`
  * through a `node_modules/@tao` link that `ensureProject` points at the runtime this CLI ships.
  */
-export const PROJECT_TSCONFIG = `{
-  "compilerOptions": {
-    "allowImportingTsExtensions": true,
-    "jsx": "react-jsx",
-    "lib": [
-      "DOM",
-      "ES2023"
-    ],
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "noEmit": true,
-    "paths": {
-      "@tao/*": [
-        "./node_modules/@tao/*"
-      ],
-      "@tao/runtime": [
-        "./node_modules/@tao/runtime/TaoRuntime-src/TR.ts"
-      ]
-    },
-    "skipLibCheck": true,
-    "strict": true,
-    "target": "ES2022"
-  },
-  "include": [
-    "**/*.ts",
-    "**/*.tsx"
-  ]
-}
-`
+export const PROJECT_TSCONFIG = '{ "extends": "./.tao/cache/typescript/tsconfig.json" }\n'
 
 /**
  * TaoAppModules locates the `@tao/*` TypeScript packages the CLI hands to a project and links them in.

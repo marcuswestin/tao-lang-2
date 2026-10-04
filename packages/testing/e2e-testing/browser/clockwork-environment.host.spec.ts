@@ -27,6 +27,7 @@ type HostControl = Readonly<{
 
 type HostTestGlobal = typeof globalThis & { __TAO_HOST_TEST_CONTROL__: HostControl }
 
+// REMOVAL CANDIDATE: Fresh browser-realm seed progression largely repeats clockwork.host.spec.ts; dropping this loses a separate realm-initialization check.
 test('Clockwork gives fresh same-seed browser realms the same visible random progression', async ({ browser }) => {
   const first = await openClockwork(browser)
   const second = await openClockwork(browser)
@@ -49,6 +50,7 @@ test('Clockwork gives fresh same-seed browser realms the same visible random pro
   }
 })
 
+// REMOVAL CANDIDATE: Browser-realm clock isolation adds little beyond owned same-process session isolation; dropping it loses the compiled browser seam.
 test('Clockwork does not advance a concurrent browser realm', async ({ browser }) => {
   const advanced = await openClockwork(browser)
   const untouched = await openClockwork(browser)

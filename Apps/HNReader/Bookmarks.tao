@@ -29,7 +29,7 @@ view BookmarkRow(Bookmark) {
       guard Bookmark.Story {
          loading -> { Text("Loading story…") [notice] }
          missing -> { Text("This story is not in the feed right now.") [notice] }
-         error -> Message { Text(Message) [notice] }
+         error -> Context { Text(Context.Message) [notice] }
       }
       TextMultiline(Bookmark.Story.Title) [storyTitle]
       Text("{ Bookmark.Story.Score } points by { Bookmark.Story.Author }") [meta]

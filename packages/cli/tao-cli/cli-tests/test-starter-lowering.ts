@@ -1,5 +1,5 @@
 import Workspace from '@compiler/workspace'
-import { Errors, FS, Platform, ProjectLocal, Repo } from '@shared'
+import { Errors, FS, Platform, ProjectIdentity, ProjectLocal, Repo } from '@shared'
 import { Expect, mkTestDir } from '@shared/test'
 import { installTaoSkills } from 'tao-skills'
 import { lowerCreationPlan, writeCreationFiles } from '../cli-src/create/creation-lowering'
@@ -42,6 +42,7 @@ export async function expectStarterReproducedFromItsPlan(directory: string): Pro
   try {
     const generated = FS.resolvePath(starter.directory, root)
     await writeCreationFiles(generated, lowerCreationPlan(starter.plan, { description: starter.description }))
+    await ProjectIdentity.ensure(generated)
     await installTaoSkills(generated)
     await runFix(generated, { cwd: root })
 
@@ -57,6 +58,12 @@ export async function expectStarterReproducedFromItsPlan(directory: string): Pro
     }
     Expect(await projectFilesUnder(generated)).toEqual(await projectFilesUnder(checkedIn))
     for (const relativePath of await projectFilesUnder(generated)) {
+      if (relativePath === '.tao/store/project.json') {
+        const identity = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u
+        Expect(ProjectIdentity.read(generated)).toMatch(identity)
+        Expect(ProjectIdentity.read(checkedIn)).toMatch(identity)
+        continue
+      }
       Expect(await FS.readText(FS.resolvePath(relativePath, generated))).toBe(
         await FS.readText(FS.resolvePath(relativePath, checkedIn)),
       )
@@ -74,7 +81,11 @@ export async function updateStarterFiles(generated: string, checkedIn: string): 
   await FS.withFileMutationLock(checkedIn, boundary, async () => {
     const sources = await checkedProjectFiles(generated, boundary, false)
     const targets = await checkedProjectFiles(checkedIn, boundary, true)
+    const preserveIdentity = ProjectIdentity.read(checkedIn) !== undefined
     for (const relativePath of sources) {
+      if (preserveIdentity && relativePath === '.tao/store/project.json') {
+        continue
+      }
       const source = FS.resolvePath(relativePath, generated)
       const target = FS.resolvePath(relativePath, checkedIn)
       await FS.mkdirWithinBoundary(FS.dirname(target), boundary)
@@ -84,6 +95,9 @@ export async function updateStarterFiles(generated: string, checkedIn: string): 
       await FS.copyFile(source, target)
     }
     const wanted = new Set(sources)
+    if (preserveIdentity) {
+      wanted.add('.tao/store/project.json')
+    }
     for (const relativePath of targets) {
       if (!wanted.has(relativePath)) {
         await FS.removeFileWithinBoundary(FS.resolvePath(relativePath, checkedIn), boundary)

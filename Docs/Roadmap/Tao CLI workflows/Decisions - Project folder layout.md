@@ -42,8 +42,12 @@ Where Tao keeps a project's state on disk, and what a project commits. Decided 2
    entry of the older layout to where it now lives, and leaves anything it does not recognize.
    Older entries: `.tao/sessions/`, `.tao/builds/`, `.tao/dev/` (with `dev/data/`),
    `.tao/bridge-check.tsconfig.json`, `.tao/browser-acceptance/`, `.tao-project/`, and
-   `secrets/secrets.jsonc`.
-10. **`skills.version` becomes a field of `store/lock.jsonc`.** `installTaoSkills`
+   `secrets/secrets.jsonc`. The newer project-tooling paths arriving from `main` also move:
+   `.tao/project.json` to `store/project.json`, `.tao/lock.jsonc` to `store/lock.jsonc`,
+   `.tao/typescript/` to `cache/typescript/`, `.tao/install/` to `cache/install/`, and
+   `.tao/ts-gen-lock` to `cache/locks/ts-gen-lock`. The sibling `.tao-ts/` generated contract tree
+   stays outside `.tao/`.
+10. **`skillsVersion` becomes a field of `store/lock.jsonc`.** `installTaoSkills`
     (`packages/ai/tao-skills/skills-src/tao-skills.ts:74`) writes it beside the skill files it
     installs into the project (`.agents/skills/`, `.claude/skills/`, `AGENTS.md`, `CLAUDE.md`), so a
     later Tao can tell whether those committed files are stale. It is per project because those
@@ -69,7 +73,8 @@ Every kind of entry, shown three times where a project can hold several.
 └── .tao/
     ├── .gitignore                   local/ and cache/
     ├── store/                       committed
-    │   ├── lock.jsonc               toolchain pin and skills version (from .tao-project/)
+    │   ├── project.json             stable project identity (from .tao/project.json)
+    │   ├── lock.jsonc               toolchain pin, skillsVersion, installs, ship
     │   ├── secrets.jsonc            from secrets/
     │   └── studio/
     │       └── sketches.jsonc       from .tao-project/studio/
@@ -101,6 +106,9 @@ Every kind of entry, shown three times where a project can hold several.
     │   └── studio/
     │       └── session.json         active previews, focused preview, editor tabs, canvas viewport
     └── cache/                       ignored, regenerable
+        ├── install/                 managed package installations
+        ├── typescript/
+        │   └── tsconfig.json        generated base for authored tsconfig.json
         ├── bridge-check/
         │   └── tsconfig.json
         ├── dev/
@@ -131,8 +139,12 @@ Every kind of entry, shown three times where a project can hold several.
         │   └── ship/HNReader-42.log
         ├── browser-acceptance/
         ├── locks/                   project lock, secret store, project version rewrite
+        │   └── ts-gen-lock         TypeScript generation lock
         └── tmp/                     their staging files
 ```
+
+The sibling `.tao-ts/` tree contains generated TypeScript contracts and checks. The authored
+`tsconfig.json` extends `./.tao/cache/typescript/tsconfig.json`.
 
 Home folder, for state not tied to one project:
 
@@ -208,11 +220,18 @@ The successor `feat/studio-preview-speed`, based exactly on `8ecf581e7`, impleme
 `store/`, `local/`, and `cache/` paths, their two-rule ignore file, created-project ignore defaults,
 and recognized one-time migrations. Committed lock/secrets/sketch writes stage and lock under cache;
 skills version shares the project lock transaction. Dev data drops the redundant project hash on
-disk, retained builds remain local, and agent-only desktop sources live in `agents/`. Home Studio
+disk. A local registry preserves snapshots across app renames and isolates duplicate or sanitized
+names with a stable app-ID suffix only when needed; an unknown rename destination remains
+untouched. Retained builds remain local, and agent-only desktop sources live in `agents/`. Home Studio
 launches, recents, trust, and logs and literal app-id agent state have recognized legacy migrations.
 Unknown entries, symlinks, and destination file conflicts remain untouched; recognized directories
 merge without dropping either side. Browser project focus/tabs and the prior viewport file import
 into `.tao/local/studio/session.json` alongside per-app activated previews.
+The repository tooling's encrypted store remains `secrets/secrets.jsonc`, separate from Tao app
+project stores. Its temporary and lock files use `.artifacts/cache/secrets/`. Applying the app
+layout to this tool store created an unintended repository-root project marker, rejecting Studio's
+host-side bindings and changing project discovery for scratch fixtures; integration corrected that
+scope error without changing the `.tao/` project-marker contract or encrypted contents.
 Before moving legacy files or rewriting ignore rules, preparation refuses an unrecognized custom
 rule in `.tao/.gitignore` and asks its owner to move that rule to the root ignore file. This preserves
 private-file coverage; comments, blank lines, the old `*`, and the decided two rules are recognized.
@@ -244,8 +263,10 @@ The clean command checks linked ancestors before removing generated output. An o
 Metro fixture exposed a missing TypeScript dependency link: checkout runtimes now link their parent
 to the hoisted checkout dependencies, with the installed-host fallback retained. Focused regressions
 cover these paths, and the corrected real-app smoke `preview-pointer-shield-20261004` passes all four
-journeys. Finalization and verification against the integrated main tree remain pending; the newer
-project-tooling helpers must adopt these decided store/cache paths during that integration.
+journeys. Incoming project identity, shared lock, managed installs, TypeScript base, and
+generation-lock writers must adopt the decided store/cache locations during integration with `main`.
+Source reconciliation is underway; integrated validation and finalization remain pending. This state
+does not establish readiness to land.
 
 Historical starting point:
 

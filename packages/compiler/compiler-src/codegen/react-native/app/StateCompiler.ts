@@ -16,6 +16,7 @@ export const StateCompiler = {
         ${compileDeclarationIdentity(app)},
         ${gen.jsLiteral(state.name)},
         ${compilePersistedType(Type.ofReference(state.type!))},
+        _TaoAppId,
       )`
     }
     return gen`${gen.scopeName(state)} = TR.State(() => ${Compile.Expression(state.value)})`

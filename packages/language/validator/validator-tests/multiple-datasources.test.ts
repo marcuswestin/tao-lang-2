@@ -21,12 +21,11 @@ const twoStores = `
   datasource Feed = Memory { Data { Stories, Comments } }
   datasource StubFeed = Memory { Data { Stories, Comments } }
   datasource Personal = Local { StorageKey "personal" Data { Bookmarks } }
-  app Reader {
-    Name "Reader"
+  app Reader { id "reader" version "1.0.0" name "Reader"
     Navigator StackNav { Initial Main }
     Datasource { Feed, Personal with { StorageKey "personal-prod" } }
   }
-  app ReaderStub = Reader with { Datasource { StubFeed, Personal with { StorageKey "personal-stub" } } }
+  app ReaderStub = Reader with { id "readerstub" Datasource { StubFeed, Personal with { StorageKey "personal-stub" } } }
 `
 
 Describe('validator: multiple datasources', () => {
@@ -41,8 +40,7 @@ Describe('validator: multiple datasources', () => {
       'Main.tao': `
         use StackNav from @tao/nav
         ${stubView('Main')}
-        app Reader {
-          Name "Reader"
+        app Reader { id "reader" version "1.0.0" name "Reader"
           Navigator StackNav { Initial Main }
           Datasource { Feed, Personal with { StorageKey "prod" } }
         }
@@ -66,7 +64,7 @@ Describe('validator: multiple datasources', () => {
       data Bookmarks / Bookmark { Kept Story (reference) }
       datasource Feed = Memory { Data { Stories, Comments } }
       datasource Personal = Local { StorageKey "personal" Data { Bookmarks } }
-      app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource { Feed, Personal } }
+      app Reader { id "reader" version "1.0.0" name "Reader" Navigator StackNav { Initial Main } Datasource { Feed, Personal } }
     `),
   )
 
@@ -78,7 +76,7 @@ Describe('validator: multiple datasources', () => {
         data Bookmarks / Bookmark { Story }
         datasource Feed = Memory { Data { Stories, Comments } }
         datasource Personal = Local { StorageKey "personal" Data { Bookmarks } }
-        app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource { Feed, Personal } }
+        app Reader { id "reader" version "1.0.0" name "Reader" Navigator StackNav { Initial Main } Datasource { Feed, Personal } }
       `,
       datasourceMembershipMessages.crossDatasourceRelation('Bookmark', 'Story', 'Story'),
     ),
@@ -93,7 +91,7 @@ Describe('validator: multiple datasources', () => {
         data Pins / Pin { Note (reference, owned) }
         datasource Feed = Memory { Data { Notes } }
         datasource Personal = Local { StorageKey "personal" Data { Pins } }
-        app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource { Feed, Personal } }
+        app Reader { id "reader" version "1.0.0" name "Reader" Navigator StackNav { Initial Main } Datasource { Feed, Personal } }
       `,
       dataValidationMessages.referenceUnique('Note', 'Note'),
       dataValidationMessages.referenceOwned('Note'),
@@ -106,7 +104,7 @@ Describe('validator: multiple datasources', () => {
       `
         ${prelude}
         data Bookmarks / Bookmark { Story Stories (reference) }
-        app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource Memory { } }
+        app Reader { id "reader" version "1.0.0" name "Reader" Navigator StackNav { Initial Main } Datasource Memory { } }
       `,
       dataValidationMessages.referenceTarget('Story', 'Stories'),
     ),
@@ -119,7 +117,7 @@ Describe('validator: multiple datasources', () => {
         ${prelude}
         datasource Feed = Memory { Data { Stories, Comments } }
         datasource Half = Memory { Data { Stories } }
-        app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource Feed }
+        app Reader { id "reader" version "1.0.0" name "Reader" Navigator StackNav { Initial Main } Datasource Feed }
       `,
       datasourceMembershipMessages.overlappingMembership('Feed', 'Half', 'Stories'),
     ),
@@ -131,7 +129,7 @@ Describe('validator: multiple datasources', () => {
       `
         ${prelude}
         datasource Empty = Memory { Data { } }
-        app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource Empty }
+        app Reader { id "reader" version "1.0.0" name "Reader" Navigator StackNav { Initial Main } Datasource Empty }
       `,
       datasourceMembershipMessages.emptyMembership('Empty'),
     ),
@@ -144,7 +142,7 @@ Describe('validator: multiple datasources', () => {
         ${prelude}
         datasource Feed = Memory { Data { Stories, Comments } }
         datasource StubFeed = Memory { Data { Stories, Comments } }
-        app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource { Feed, StubFeed } }
+        app Reader { id "reader" version "1.0.0" name "Reader" Navigator StackNav { Initial Main } Datasource { Feed, StubFeed } }
       `,
       datasourceMembershipMessages.alternativesBound('Reader', 'Feed', 'StubFeed'),
     ),
@@ -157,7 +155,7 @@ Describe('validator: multiple datasources', () => {
         ${prelude}
         data Bookmarks / Bookmark { Note text }
         datasource Feed = Memory { Data { Stories, Comments } }
-        app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource { Feed } }
+        app Reader { id "reader" version "1.0.0" name "Reader" Navigator StackNav { Initial Main } Datasource { Feed } }
       `,
       datasourceMembershipMessages.unstoredCollection('Reader', 'Bookmarks'),
     ),
@@ -170,7 +168,7 @@ Describe('validator: multiple datasources', () => {
         ${prelude}
         datasource Everything = Memory { }
         datasource Also = Local { StorageKey "also" }
-        app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource { Everything, Also } }
+        app Reader { id "reader" version "1.0.0" name "Reader" Navigator StackNav { Initial Main } Datasource { Everything, Also } }
       `,
       datasourceMembershipMessages.duplicateCatchAll('Reader', 'Everything', 'Also'),
     ),
@@ -183,7 +181,7 @@ Describe('validator: multiple datasources', () => {
         ${prelude}
         data Sessions / Session { Label text,  local only }
         datasource Feed = Memory { Data { Stories, Sessions, Ghosts } }
-        app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource Feed }
+        app Reader { id "reader" version "1.0.0" name "Reader" Navigator StackNav { Initial Main } Datasource Feed }
       `,
       datasourceMembershipMessages.localOnlyMembership('Feed', 'Sessions'),
       "No data entity or value named 'Ghosts' is in scope.",
@@ -196,7 +194,7 @@ Describe('validator: multiple datasources', () => {
       `
         ${prelude}
         datasource Feed = Memory { Data { Main } }
-        app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource Feed }
+        app Reader { id "reader" version "1.0.0" name "Reader" Navigator StackNav { Initial Main } Datasource Feed }
       `,
       configuredValueValidationMessages.referenceEntry('Data', 'data collections'),
     ),
@@ -208,7 +206,7 @@ Describe('validator: multiple datasources', () => {
       `
         ${prelude}
         datasource Feed = Memory { }
-        app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource { Feed, Main } }
+        app Reader { id "reader" version "1.0.0" name "Reader" Navigator StackNav { Initial Main } Datasource { Feed, Main } }
       `,
       configuredValueValidationMessages.referenceEntry('Datasource', 'datasources'),
     ),
@@ -223,7 +221,7 @@ Describe('validator: multiple datasources', () => {
         datasource Feed = Memory { Data { Stories, Comments } }
         datasource Offline = Memory { }
         datasource Personal = Local { StorageKey "personal" Data { Bookmarks } }
-        app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource { Offline, Personal } }
+        app Reader { id "reader" version "1.0.0" name "Reader" Navigator StackNav { Initial Main } Datasource { Offline, Personal } }
       `,
       datasourceMembershipMessages.unboundStore('Reader', ['Stories', 'Comments'], ['Feed']),
     ),
@@ -235,7 +233,7 @@ Describe('validator: multiple datasources', () => {
       `
         ${prelude}
         datasource Feed = Memory { Data { Stories } }
-        app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource Memory { } }
+        app Reader { id "reader" version "1.0.0" name "Reader" Navigator StackNav { Initial Main } Datasource Memory { } }
       `,
       datasourceMembershipMessages.unboundStore('Reader', ['Stories'], ['Feed']),
     ),
@@ -249,7 +247,7 @@ Describe('validator: multiple datasources', () => {
         datasource Feed = Local { StorageKey "feed" Data { Stories, Comments } }
         datasource Preview = Feed with { StorageKey "preview" }
         datasource Restated = Feed with { Data { Stories } }
-        app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource { Feed, Preview } }
+        app Reader { id "reader" version "1.0.0" name "Reader" Navigator StackNav { Initial Main } Datasource { Feed, Preview } }
       `,
       datasourceMembershipMessages.alternativesBound('Reader', 'Feed', 'Preview'),
       datasourceMembershipMessages.derivedMembership('Restated', 'Feed'),
@@ -263,7 +261,7 @@ Describe('validator: multiple datasources', () => {
         ${prelude}
         datasource Feed = Memory { Data { Stories, Comments } }
         let Alias = Feed
-        app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource { Alias } }
+        app Reader { id "reader" version "1.0.0" name "Reader" Navigator StackNav { Initial Main } Datasource { Alias } }
       `,
       configuredValueValidationMessages.datasourceDeclarationRequired('Datasource', 'Alias'),
     ),
@@ -276,7 +274,7 @@ Describe('validator: multiple datasources', () => {
         ${prelude}
         data Boards / Board { Title text (unique), Notes }
         data Notes / Note { Board (reference), Text text }
-        app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource Memory { } }
+        app Reader { id "reader" version "1.0.0" name "Reader" Navigator StackNav { Initial Main } Datasource Memory { } }
       `,
       dataValidationMessages.inverseOfReference('Board.Notes', 'Note', 'Board'),
     ),
@@ -290,7 +288,7 @@ Describe('validator: multiple datasources', () => {
         type Name is text
         type Person is { Name }
         let Bad = Person { Stories }
-        app Reader { Name "Reader" Navigator StackNav { Initial Main } }
+        app Reader { id "reader" version "1.0.0" name "Reader" Navigator StackNav { Initial Main } }
       `,
       configuredItemValidationMessages.listedNotValue('Stories'),
     ),
@@ -308,7 +306,7 @@ Describe('validator: multiple datasources', () => {
           ${stubView('Main')}
           datasource Feed = Memory { Data { Stories } }
           datasource Personal = Local { StorageKey "personal" Data { Bookmarks } }
-          app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource { Feed, Personal } }
+          app Reader { id "reader" version "1.0.0" name "Reader" Navigator StackNav { Initial Main } Datasource { Feed, Personal } }
         `,
         'Data.tao': `
           public data Stories / Story { HnId number (unique), Title text }
@@ -330,7 +328,7 @@ Describe('validator: multiple datasources', () => {
         ${stubView('Main')}
         datasource Feed = Memory { Data { Stories } }
         datasource Personal = Local { StorageKey "personal" Data { Bookmarks } }
-        app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource { Feed, Personal } }
+        app Reader { id "reader" version "1.0.0" name "Reader" Navigator StackNav { Initial Main } Datasource { Feed, Personal } }
       `,
       'Data.tao': `
         public data Stories / Story { HnId number (unique), Title text }
@@ -346,8 +344,7 @@ Describe('validator: multiple datasources', () => {
         ${prelude}
         datasource Feed = Memory { Data { Stories, Comments } }
         datasource Personal = Local { StorageKey "personal" }
-        app Reader {
-          Name "Reader"
+        app Reader { id "reader" version "1.0.0" name "Reader"
           Navigator StackNav { Initial Main }
           Datasource {
             Feed with { Data { Stories } },
@@ -367,12 +364,11 @@ Describe('validator: multiple datasources', () => {
         ${prelude}
         datasource Feed = Memory { Data { Stories, Comments } }
         datasource Personal = Local { StorageKey "personal" }
-        app Reader {
-          Name "Reader"
+        app Reader { id "reader" version "1.0.0" name "Reader"
           Navigator StackNav { Initial Main }
           Datasource { Feed, Personal }
         }
-        app Ambiguous = Reader with { Datasource with { StorageKey "prod" } }
+        app Ambiguous = Reader with { id "ambiguous" Datasource with { StorageKey "prod" } }
       `,
       datasourceMembershipMessages.ambiguousBindingPatch('Ambiguous'),
     ),
@@ -387,8 +383,7 @@ Describe('validator: multiple datasources', () => {
         command Ready() { Title "Ready" do Run() }
         nav Main2 = StackNav { Initial Main Toolbar { Ready with { Title "Go" } } }
         datasource Feed = Memory { }
-        app Reader {
-          Name "Reader"
+        app Reader { id "reader" version "1.0.0" name "Reader"
           Navigator StackNav { Initial Main }
           Datasource { Feed, Ghost with { StorageKey "x" } }
         }

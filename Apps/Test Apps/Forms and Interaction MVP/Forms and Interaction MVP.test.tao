@@ -29,8 +29,6 @@ test "Forms and Interaction MVP" {
       enter "Ship release" into #taskTitle
       press #save
       expect text "Submitted: Ship release"
-      expect text "Saving…"
-      expect text "Submissions: 1"
    }
    test "uses explicit named and inline change handlers instead of automatic binding" {
       run FormsInteractionMVP

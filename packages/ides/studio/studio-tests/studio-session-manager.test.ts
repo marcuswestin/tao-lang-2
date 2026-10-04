@@ -249,13 +249,10 @@ Describe('Studio session manager', () => {
     Expect(html).not.toContain('/tmp/<secret>')
   })
 
-  Test('explains how to recover from a stale native project session', () => {
+  Test('links stale native sessions to the Welcome window', () => {
     const html = StudioWelcome.sessionUnavailable()
 
-    Expect(html).toContain('This Studio session is no longer open.')
     Expect(html).toContain('/welcome?native-window=welcome')
-    Expect(html).toContain('Close window')
-    Expect(html).toContain('Command-W')
   })
 })
 

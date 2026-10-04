@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, Platform, TaoHome, Time } from '@shared'
+import { CLI, Errors, FS, Platform, ReleaseCapabilities, TaoHome, Time } from '@shared'
 
 type AgentMetadata = { protocolVersion: 1; appId: string; appName: string; buildId: string }
 type AgentSession = AgentMetadata & {
@@ -22,6 +22,7 @@ export async function runAppAgentCommand(
   bundlePath: string,
   invocation?: { commandId: string; args: unknown },
 ): Promise<AgentResult> {
+  ReleaseCapabilities.require('app-commands')
   try {
     const bundle = FS.resolvePath(bundlePath)
     const metadataPath = FS.resolvePath('Contents/Resources/app/tao-agent.json', bundle)

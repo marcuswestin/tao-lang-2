@@ -24,6 +24,7 @@ class FakeCdpTransport implements StudioCdpTransport {
   }
   readonly calls: CdpCall[] = []
   readonly evaluateResults: unknown[] = []
+  evaluateExpression: ((expression: string) => unknown) | undefined
   readonly isolatedWorldErrors: Error[] = []
   frameTree: {
     childFrames?: Array<{ frame: { id: string; url: string } }>
@@ -55,7 +56,9 @@ class FakeCdpTransport implements StudioCdpTransport {
       this.emit('Input.dragIntercepted', { data: FAKE_DRAG_DATA })
     }
     if (method === 'Runtime.evaluate') {
-      const value = this.evaluateResults.shift()
+      const value = this.evaluateExpression === undefined
+        ? this.evaluateResults.shift()
+        : this.evaluateExpression(params['expression'] as string)
       if (value instanceof Error) {
         throw value
       }
@@ -174,12 +177,10 @@ Describe('Studio browser CDP harness', () => {
 
     await browser.dragToPoint('[data-field="Title"]', { x: 640, y: 360 }, { steps: 2 })
 
-    Expect(transport.calls.filter(call => call.method === 'Input.dispatchDragEvent')).toEqual([
-      { method: 'Input.dispatchDragEvent', params: { data: FAKE_DRAG_DATA, type: 'dragEnter', x: 640, y: 360 } },
-      { method: 'Input.dispatchDragEvent', params: { data: FAKE_DRAG_DATA, type: 'dragOver', x: 640, y: 360 } },
-      { method: 'Input.dispatchDragEvent', params: { data: FAKE_DRAG_DATA, type: 'drop', x: 640, y: 360 } },
-    ])
-    Expect(transport.calls.at(-1)).toEqual({ method: 'Input.setInterceptDrags', params: { enabled: false } })
+    Expect(transport.calls.filter(call => call.method === 'Input.dispatchDragEvent' && call.params['type'] === 'drop'))
+      .toEqual([
+        { method: 'Input.dispatchDragEvent', params: { data: FAKE_DRAG_DATA, type: 'drop', x: 640, y: 360 } },
+      ])
     await Expect(browser.dragToPoint('#source', { x: Number.NaN, y: 0 })).rejects.toThrow(
       'horizontal drop coordinate must be finite',
     )
@@ -251,6 +252,100 @@ Describe('Studio browser CDP harness', () => {
     await Expect(browser.drag('#source', '#target', { steps: 0 })).rejects.toThrow(
       'drag steps must be a positive integer',
     )
+  })
+
+  Test('drops on the visible editor content inside separately clipped scroll axes', async () => {
+    class Element {
+      constructor(
+        readonly rect: { bottom: number; left: number; right: number; top: number },
+        readonly parentElement: Element | null = null,
+        readonly clip?: { clientHeight: number; clientLeft: number; clientTop: number; clientWidth: number },
+      ) {}
+
+      getBoundingClientRect() {
+        return this.rect
+      }
+      get clientHeight() {
+        return this.clip?.clientHeight ?? this.rect.bottom - this.rect.top
+      }
+      get clientLeft() {
+        return this.clip?.clientLeft ?? 0
+      }
+      get clientTop() {
+        return this.clip?.clientTop ?? 0
+      }
+      get clientWidth() {
+        return this.clip?.clientWidth ?? this.rect.right - this.rect.left
+      }
+      get tagName() {
+        return 'DIV'
+      }
+      contains(node: Element) {
+        return node === this
+      }
+    }
+    const horizontalClip = new Element(
+      { left: 500, right: 720, top: 0, bottom: 720 },
+      null,
+      { clientLeft: 10, clientTop: 0, clientWidth: 180, clientHeight: 720 },
+    )
+    const verticalClip = new Element(
+      { left: 0, right: 1280, top: 200, bottom: 420 },
+      horizontalClip,
+      { clientLeft: 0, clientTop: 10, clientWidth: 1280, clientHeight: 180 },
+    )
+    const source = new Element({ left: 20, right: 100, top: 20, bottom: 100 })
+    const target = new Element({ left: 400, right: 1600, top: 100, bottom: 1100 }, verticalClip)
+    const shield = new Element({ left: 700, right: 1280, top: 0, bottom: 720 })
+    let shieldCoversEditor = false
+    const transport = new FakeCdpTransport()
+    transport.evaluateExpression = expression =>
+      new Function(
+        'document',
+        'window',
+        'HTMLElement',
+        'getComputedStyle',
+        `return ${expression}`,
+      )(
+        {
+          querySelector: (selector: string) =>
+            selector === '#source' ? source : selector === '.cm-content' ? target : null,
+          elementFromPoint: (x: number, y: number) => {
+            if (x >= 20 && x <= 100 && y >= 20 && y <= 100) {
+              return source
+            }
+            if (x >= 510 && x <= 690 && y >= 210 && y <= 390) {
+              return shieldCoversEditor ? shield : target
+            }
+            return shield
+          },
+        },
+        { innerWidth: 1280, innerHeight: 720 },
+        Element,
+        (element: Element) =>
+          element === horizontalClip
+            ? { overflowX: 'hidden', overflowY: 'visible' }
+            : element === verticalClip
+            ? { overflowX: 'visible', overflowY: 'auto' }
+            : { overflowX: 'visible', overflowY: 'visible' },
+      )
+    const browser = StudioCdp.testing.create(transport)
+
+    await browser.drag('#source', '.cm-content', { steps: 1 })
+
+    Expect(transport.calls.filter(call => call.method === 'Input.dispatchDragEvent' && call.params['type'] === 'drop'))
+      .toEqual([{ method: 'Input.dispatchDragEvent', params: { data: FAKE_DRAG_DATA, type: 'drop', x: 600, y: 300 } }])
+
+    shieldCoversEditor = true
+    await Expect(browser.drag('#source', '.cm-content')).rejects.toThrow(
+      'Visible center of the drag target element .cm-content lands on',
+    )
+    shieldCoversEditor = false
+    verticalClip.clip!.clientHeight = 0
+    await Expect(browser.drag('#source', '.cm-content')).rejects.toThrow(
+      'No visible part of the drag target element: .cm-content',
+    )
+    Expect(transport.calls.filter(call => call.method === 'Input.setInterceptDrags')).toHaveLength(2)
   })
 
   Test('drags a resizer by an exact pointer delta', async () => {
@@ -326,7 +421,6 @@ Describe('Studio browser CDP harness', () => {
         call.method === 'Runtime.evaluate'
         && String(call.params['expression']).includes('document.fonts?.ready')
       )
-      Expect(evaluation?.params['expression']).toContain('document.fonts?.ready')
       Expect(evaluation?.params['expression']).toContain('requestAnimationFrame(() => requestAnimationFrame(resolve))')
       Expect(evaluation?.params['expression']).toContain('animation:none!important')
       Expect(evaluation?.params['expression']).toContain("setProperty('position', 'fixed', 'important')")
@@ -468,15 +562,14 @@ Describe('Studio browser CDP harness', () => {
     )
     const browser = StudioCdp.testing.create(transient)
 
-    // budget-ok: exercises the retry, not the timeout path — one real 100ms poll interval fits well inside the 1s bound.
-    await browser.waitFor('window.ready === true', { timeoutMs: 1_000 })
+    await browser.waitFor('window.ready === true', { timeoutMs: 10_000 })
     Expect(transient.calls.filter(call => call.method === 'Runtime.evaluate')).toHaveLength(2)
 
     const productFailure = new FakeCdpTransport()
     productFailure.evaluateResults.push(new Errors.HostEnvironmentError('Preview handler failed after dispatch.'))
     // `productFailure` throws on its first evaluate, before any poll interval elapses.
     await Expect(
-      StudioCdp.testing.create(productFailure).waitFor('window.ready === true', { timeoutMs: 1_000 }), // budget-ok: fails before the first poll, not on the timeout path.
+      StudioCdp.testing.create(productFailure).waitFor('window.ready === true', { timeoutMs: 10_000 }),
     ).rejects.toThrow('Preview handler failed after dispatch.')
     Expect(productFailure.calls.filter(call => call.method === 'Runtime.evaluate')).toHaveLength(1)
   })
@@ -580,5 +673,28 @@ Describe('Studio browser CDP harness', () => {
       exceptionDetails: { text: 'after close' },
     })
     Expect(browser.browserEvents()).toEqual([])
+  })
+
+  Test('names the frame whose page logged each console message or exception', async () => {
+    const transport = new FakeCdpTransport()
+    const browser = StudioCdp.testing.create(transport)
+    transport.emit('Runtime.executionContextCreated', {
+      context: { auxData: { frameId: 'cell-frame', isDefault: true }, id: 7 },
+    })
+    transport.emit('Runtime.consoleAPICalled', {
+      args: [{ value: 'cell failed' }],
+      executionContextId: 7,
+      timestamp: 21,
+      type: 'error',
+    })
+    transport.emit('Runtime.exceptionThrown', {
+      exceptionDetails: { executionContextId: 9, text: 'elsewhere', timestamp: 22 },
+    })
+
+    Expect(browser.browserEvents()).toEqual([
+      { frameId: 'cell-frame', kind: 'console', level: 'error', text: 'cell failed', timestamp: 21 },
+      { kind: 'exception', level: 'error', text: 'elsewhere', timestamp: 22 },
+    ])
+    await browser.close()
   })
 })

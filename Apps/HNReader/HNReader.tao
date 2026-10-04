@@ -1,9 +1,5 @@
-project {
-   id "hnreader"
-   name "HNReader"
-   version "0.1.0"
-   app HNReader
-   remote none
+package {
+   version 0.1.0
    license MIT
 }
 
@@ -13,7 +9,9 @@ project {
 // edit leaves the datasource declarations alone.
 folder
 app HNReader {
-   Name "HNReader"
+   id "hnreader"
+   version "0.1.0"
+   name "HNReader"
    Navigator HNNavigator
    // The shipped reader keeps its bookmarks under their own key. The patch derives this app's copy
    // where it is bound; the declaration stays as it is.
@@ -30,7 +28,8 @@ app HNReader {
 // The stub variant swaps the feed while keeping bookmarks and reading history, so journeys exercise
 // the real fill machinery and persistent local history deterministically, with no network.
 app HNReaderStub = HNReader with {
-   Name "HNReader Stub"
+   id "hnreader-stub"
+   name "HNReader Stub"
    Datasource {
       StubNews,
       Personal,

@@ -11,8 +11,15 @@ app feature and Tao test proves each capability).
 The public MVP release has its own two lists: `Docs/MVP Roadmap/Agent MVP Roadmap.md` for the work
 agents can execute without a new decision, and `Docs/MVP Roadmap/Developer MVP Roadmap.md` for the
 judgments that are the Developer's. Both point back into this file and into `Docs/Roadmap/` for context.
+[The staged release plan](<Docs/MVP Roadmap/Plan - Staged public releases.md>) owns five cumulative
+public releases and supersedes older all-at-once launch scope. [The QA register](Docs/QA/README.md)
+tracks on-demand coverage and evidence; later roadmap work is not automatically a release-1 blocker.
 
 ## Tao tooling performance
+
+- [ ] Implement [projects, modules, publications, and generated TypeScript](Docs/Roadmap/Plan%20-%20Tao%20projects%20modules%20and%20packages.md).
+  - Replace project declarations with marker roots, introduce app/package dependencies, relocate
+    contracts, and share the CLI/editor/host watch service through six integration slices.
 
 - [ ] Make the `tao` commands interactive-grade.
   - An uncached `tao check` of WordFlower takes 20-27s against 14ms of actual parsing; the causes are
@@ -114,6 +121,11 @@ tests written in Tao, green in Current, for every construct introduced.
 
 ## Toward v1
 
+- [ ] Design the public Tao sidecar value API after MVP
+  - Deferred from the package and generated-TypeScript migration. Explore explicit constructors,
+    semantic value operations, conversion, and entity identity without exposing internal reactive
+    wrappers. Open decisions and acceptance evidence live in
+    [Tao sidecar value API](Docs/Roadmap/Tao%20sidecar%20value%20API.md).
 - [ ] Complete freehand UI sketching in Tao Studio
   - The implemented foundation covers scenarios, the generated root `@` package, and drawing and
     snapping free rectangles. The FS-D1–FS-D20 design and the ordered remaining data, variant,
@@ -181,7 +193,7 @@ tests written in Tao, green in Current, for every construct introduced.
 - [x] Implement `tao ship`
   - The command is a filesystem-only transaction: it may inspect Git for exact provenance but never
     stages, commits, tags, or pushes. It updates source-owned version metadata and the `ship` concern
-    in the project's single `.tao-project/lock.jsonc` atomically, preserving the caller's index and
+    in the project's single `.tao/lock.jsonc` atomically, preserving the caller's index and
     refs. Local Xcode/App Store Connect and TestFlight (`--beta`) flows are implemented, as are
     compatible Expo-protocol updates and rollback over Tao's update service. Compatibility combines
     native runtime identity with canonical semantic schema identity and is checked against every

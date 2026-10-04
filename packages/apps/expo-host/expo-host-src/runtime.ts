@@ -1,7 +1,9 @@
 import type { CompileResult, EmittedModuleCache } from '@compiler/compiler'
 import { Workspace } from '@compiler/workspace'
 import { AST } from '@parser'
+import { findProjectRoot } from '@project-tooling'
 import { Assert, FS } from '@shared'
+import { withGeneratedModuleLinks } from './generated-module-links'
 import { expoUpdateArtifacts, proveReleaseBundle } from './release-bundle-proof'
 import { RuntimeToolchainPaths } from './runtime-toolchain-paths'
 export { DesktopHost } from './desktop-host'
@@ -42,6 +44,8 @@ export type GenerateAppOptions = {
   appName?: string
   cwd?: string
   datasourceConfiguration?: Readonly<Record<string, string>>
+  /** Installed dependency target root for generated module links; defaults to the source project. */
+  moduleLinkRoot?: string
   preview?: GeneratePreviewOptions
   /** A Studio session may reuse its isolated parser services across preview revisions. */
   previewWorkspace?: Workspace
@@ -161,12 +165,16 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
     const generatedFiles = opts.ship === undefined
       ? compiledFiles
       : [...compiledFiles, { relativePath: 'ship.json', code: `${JSON.stringify(opts.ship, null, 2)}\n` }]
-    await writeGeneratedFiles(
-      generatedAppRoot,
-      generatedFiles,
-      preview === undefined ? undefined : studioPublicationPath,
-      opts.publicationHooks,
-    )
+    const requesterRoot = await findProjectRoot(sourcePath)
+    Assert.input(requesterRoot !== undefined, `No Tao project marker (.tao directory) was found for ${sourcePath}.`)
+    await withGeneratedModuleLinks(generatedAppRoot, requesterRoot, compiled.dependencyEnvironments, async () => {
+      await writeGeneratedFiles(
+        generatedAppRoot,
+        generatedFiles,
+        preview === undefined ? undefined : studioPublicationPath,
+        opts.publicationHooks,
+      )
+    }, opts.moduleLinkRoot ?? requesterRoot)
     if (preview === undefined) {
       previewPublications.delete(generatedAppRoot)
     } else {
@@ -408,6 +416,9 @@ async function readStaleGeneratedFiles(
   }
   const staleFiles: RemovedGeneratedFile[] = []
   for await (const path of FS.walk(outputRoot)) {
+    if (await FS.isSymbolicLink(path)) {
+      continue
+    }
     const relativePath = FS.relativePath(outputRoot, path)
     const legacy = legacyPreviewPaths.some(root => relativePath === root || relativePath.startsWith(`${root}/`))
     if (!expectedPaths.has(relativePath) && !legacy) {

@@ -1,0 +1,24 @@
+{
+  "extends": [
+    "./.tao/cache/typescript/tsconfig.json",
+    "../../packages/ides/studio/tsconfig.json"
+  ],
+  "compilerOptions": {
+    "rootDir": "../..",
+    "composite": false,
+    "incremental": false,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": [
+    "**/*",
+    ".tao-ts/**/*",
+    ".tao-ts/.dependencies/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    ".tao",
+    ".git",
+    ".artifacts"
+  ]
+}

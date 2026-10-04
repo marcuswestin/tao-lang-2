@@ -93,6 +93,78 @@ Describe('project local state', () => {
     }
   })
 
+  Test(
+    'moves main-era project identity, generated tooling, and install state without replacing conflicts',
+    async () => {
+      const project = await mkTestDir('tao-project-main-layout-')
+      const path = (relative: string) => FS.resolvePath(relative, project)
+      try {
+        await FS.writeText(path('.tao/project.json'), '{"id":"old-project"}\n')
+        await FS.writeText(path('.tao/lock.jsonc'), '{"schemaVersion":1,"toolchainVersion":"old"}\n')
+        await FS.writeText(path('.tao/store/lock.jsonc'), '{"schemaVersion":1,"skillsVersion":"current"}\n')
+        await FS.writeText(path('.tao/typescript/tsconfig.json'), 'old generated config')
+        await FS.writeText(path('.tao/typescript/outputs.json'), 'old generated manifest')
+        await FS.writeText(path('.tao/cache/typescript/tsconfig.json'), 'current generated config')
+        await FS.writeText(path('.tao/install/origins/one/node_modules/pkg/index.js'), 'installed')
+        await FS.writeText(path('tsconfig.json'), '{ "extends": "./.tao/typescript/tsconfig.json" }\n')
+
+        await ProjectLocal.prepare(project)
+        await ProjectLocal.prepare(project)
+
+        Expect(await FS.readText(path('.tao/store/project.json'))).toBe('{"id":"old-project"}\n')
+        Expect(await FS.readText(path('.tao/store/lock.jsonc')))
+          .toBe('{"schemaVersion":1,"skillsVersion":"current"}\n')
+        Expect(await FS.readText(path('.tao/lock.jsonc')))
+          .toBe('{"schemaVersion":1,"toolchainVersion":"old"}\n')
+        Expect(await FS.readText(path('.tao/cache/typescript/tsconfig.json'))).toBe('current generated config')
+        Expect(await FS.readText(path('.tao/typescript/tsconfig.json'))).toBe('old generated config')
+        Expect(await FS.readText(path('.tao/cache/typescript/outputs.json'))).toBe('old generated manifest')
+        Expect(await FS.readText(path('.tao/cache/install/origins/one/node_modules/pkg/index.js'))).toBe('installed')
+        Expect(await FS.readText(path('tsconfig.json')))
+          .toBe('{ "extends": "./.tao/cache/typescript/tsconfig.json" }\n')
+      } finally {
+        await FS.remove(project)
+      }
+    },
+  )
+
+  Test('replaces whitespace-only main-era marker placeholders after preparing the new layout', async () => {
+    const root = await mkTestDir('tao-project-placeholder-')
+    try {
+      const empty = FS.resolvePath('Empty', root)
+      const newline = FS.resolvePath('Newline', root)
+      const authored = FS.resolvePath('Authored', root)
+      const linked = FS.resolvePath('Linked', root)
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', empty), '')
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', newline), '\n')
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', authored), 'keep this content')
+      await FS.writeText(FS.resolvePath('placeholder-target', linked), '\n')
+      await FS.symlink(FS.resolvePath('placeholder-target', linked), FS.resolvePath('.tao/.gitkeep', linked))
+      await Promise.all([
+        ProjectLocal.prepare(empty),
+        ProjectLocal.prepare(newline),
+        ProjectLocal.prepare(authored),
+        ProjectLocal.prepare(linked),
+      ])
+      Expect(await FS.exists(FS.resolvePath('.tao/.gitkeep', empty))).toBe(false)
+      Expect(await FS.exists(FS.resolvePath('.tao/.gitkeep', newline))).toBe(false)
+      Expect(await FS.readText(FS.resolvePath('.tao/.gitignore', empty))).toBe('local/\ncache/\n')
+      Expect(await FS.isDirectory(FS.resolvePath('.tao/store', empty))).toBe(true)
+      Expect(await FS.readText(FS.resolvePath('.tao/.gitkeep', authored))).toBe('keep this content')
+      Expect(await FS.isSymbolicLink(FS.resolvePath('.tao/.gitkeep', linked))).toBe(true)
+      Expect(await FS.readText(FS.resolvePath('placeholder-target', linked))).toBe('\n')
+      await ProjectLocal.prepare(empty)
+      Expect((await FS.listDir(FS.resolvePath('.tao', empty))).toSorted()).toEqual([
+        '.gitignore',
+        'cache',
+        'local',
+        'store',
+      ])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('folds a lone skills version and moves WIP cache entries', async () => {
     const project = await mkTestDir('tao-project-wip-migration-')
     const inProject = (relative: string) => FS.resolvePath(relative, project)

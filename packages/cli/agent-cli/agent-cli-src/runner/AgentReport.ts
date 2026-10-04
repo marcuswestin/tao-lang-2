@@ -37,7 +37,7 @@ export function startLine(command: string, logPath: string): string {
 }
 
 /** verdictLine states a run's outcome in one line: pass or fail, its exit code, and how long it took. */
-export function verdictLine(outcome: Pick<AgentRunOutcome, 'command' | 'durationMs' | 'exitCode'>): string {
+function verdictLine(outcome: Pick<AgentRunOutcome, 'command' | 'durationMs' | 'exitCode'>): string {
   const status = outcome.exitCode === 0 ? 'passed' : 'failed'
   return `${outcome.command}: ${status} (exit ${outcome.exitCode}) in ${OutputText.formatElapsed(outcome.durationMs)}`
 }

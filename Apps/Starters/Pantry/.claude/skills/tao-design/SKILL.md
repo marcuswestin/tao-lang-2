@@ -5,7 +5,7 @@ description: Define and apply Tao's implemented color tokens and reusable layout
 
 # Tao Design
 
-The implemented design surface has hexadecimal color tokens, in a `colors { }` block, and named
+The release-1 design surface has hexadecimal color tokens, in a `colors { }` block, and named
 clause bundles, in a `styles { }` block. An app selects one design with `Design Name`; render sites
 apply its bundle names inside the same `[]` list as direct layout clauses.
 
@@ -51,7 +51,7 @@ An entry may end in one condition: `when pressed`, `when focused`, `when hovered
 `when Scheme is Light|Dark`. A conditioned entry applies only while its condition holds.
 
 To restyle without changing layout, edit color token values and visual entries in `Design.tao`.
-Keep `fill`, `content`, sizing, spacing, and view structure unchanged. Element defaults such as
+Keep `fill`, `content`, sizing, spacing, and view structure unchanged. Release 3 adds element defaults such as
 `Text`, `TextInput`, `FormButton`, `Checkbox`, and navigation host names are Capitalized entries in
 `styles { }` that those standard views apply automatically. A clause list never names one — not at a
 render site and not inside another style — so a default that needs another's clauses restates them,
@@ -59,11 +59,11 @@ and a state such as the active tab is a condition on the same default:
 `NavigationTab [pad 10, ink inkMuted, background accentSoft when selected]`. Colors, sizes, text
 styles, and screens are always lowercase; a Capitalized one is an error.
 
-When a view tints something inside itself, which a caller's clauses cannot reach, give it a `color`
+Release 3 also adds design color parameters. When a view tints something inside itself, which a caller's clauses cannot reach, give it a `color`
 parameter: `view StatusBadge(Label text, Tint color default inkMuted)`, whose body writes
 `Box() [dot, background Tint]`, called as `StatusBadge("Final", Tint: accent)`. A lowercase word in a
 clause list is a design name and a Capitalized word reads a value, so `background Tint` uses the
-parameter. A `color` value is only ever a design color name (including a shade such as
+parameter. A `color` value is only ever a design color name (including a release-3 shade such as
 `accent.20`) or another `color` parameter — never text, a number, or data — and `color` is only a
 view parameter's type, not state.
 

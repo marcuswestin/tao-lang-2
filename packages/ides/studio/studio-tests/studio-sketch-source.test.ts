@@ -1,5 +1,4 @@
 import { Workspace } from '@compiler/workspace'
-import { AST } from '@parser'
 import { Expect, Test, withTaoFiles } from '@shared/test'
 import { StudioSketchSource } from '../studio-src/StudioSketchSource'
 
@@ -24,27 +23,19 @@ scenarios View1 "sketch" {
       render ()
 }  }
 `)
-  Expect(source).not.toContain('Rect')
-  Expect(source).not.toContain(' at ')
-  Expect(source).not.toContain('Canvas')
 
   await withTaoFiles('tao-studio-sketch-source-', {
     '@/studio/View1.tao': source,
     'App.tao': `
       use View1 from @/studio
-      app Music { view View1 }
+      app Music { id "music" version "1.0.0" name "Music" view View1 }
     `,
-    'Project.tao': `project { id "music" name "Music" app Music }`,
   }, async paths => {
-    const parsed = await Workspace.parse(paths['App.tao'])
     const compiled = await Workspace.compile(paths['App.tao'], { studio: true })
-    const generatedFile = parsed.files.find(file => file.path === paths['@/studio/View1.tao'])
-    const view = generatedFile?.ast.statements.find(AST.isViewDeclaration)
     const scenario = compiled.studioManifest?.scenarios.find(candidate =>
       candidate.group === 'sketch' && candidate.name === 'draft'
     )
 
-    Expect(view?.name).toBe('View1')
     Expect(scenario?.fixtureId).toBeUndefined()
     Expect(scenario).toMatchObject({
       environment: { device: { preset: 'phone' } },

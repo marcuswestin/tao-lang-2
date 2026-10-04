@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, HCI, Platform, Repo, TaoStdlib } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, ProjectLocal, Repo, TaoStdlib } from '@shared'
 
 /**
  * `just test`, `just test-file`, `just test-changed`, `just test-retry`, and both verify lanes all
@@ -31,7 +31,7 @@ const STAMP_PATH = '.artifacts/compile-app-stamp.json'
  * stale, never as an error. Raise this whenever the set of inputs or the way they are hashed
  * changes, or a stamp written under the old scheme is honoured against inputs it never covered.
  */
-const STAMP_VERSION = 4
+const STAMP_VERSION = 7
 
 /** Where `./tao compile` writes the generated app, relative to the repository root. */
 export const WORD_FLOWER_OUTPUT_ROOT = 'Apps/WordFlower/1 - Current/.tao/cache/_gen_tao-app'
@@ -61,6 +61,7 @@ export const COMPILE_SOURCE_ROOTS: readonly string[] = [
   'packages/apps/stdlib',
   'packages/cli/tao-cli/cli-src',
   'packages/language/validator/validator-src',
+  'packages/language/project-tooling/project-tooling-src',
 ]
 
 /**
@@ -80,10 +81,11 @@ export const COMPILE_INPUT_FILES: readonly string[] = [
   'packages/apps/stdlib/package.json',
   'packages/cli/tao-cli/package.json',
   'packages/language/validator/package.json',
+  'packages/language/project-tooling/package.json',
 ]
 
 /** Installed dependencies, Git state, and generated Tao dev output cannot change source compilation. */
-const EXCLUDED_INPUT_DIRECTORIES = new Set(['node_modules', '.git', '.tao'])
+const EXCLUDED_INPUT_DIRECTORIES = new Set(['node_modules', '.git', '.tao', '.tao-ts'])
 
 /**
  * TypeScript's incremental build state is rewritten by every typecheck without any source changing.
@@ -220,7 +222,7 @@ async function runTaoCompile(
 
 /**
  * compileAppInputHash hashes everything the compile reads: the app's own project tree, the project
- * identity its ancestors declare, every declared repository source root, and every declared input
+ * root markers in its ancestors, every declared repository source root, and every declared input
  * file. Content is hashed rather than modification times, so a checkout, a worktree copy, or a
  * reverted edit does not force a rebuild.
  */
@@ -246,14 +248,17 @@ async function compileAppInputHash(
 
 /**
  * ancestorProjectEntries covers the one input that is not a file the app owns or a repository source
- * root: `Packages` walks from the app directory up through its ancestors looking for the `Project.tao`
- * that declares project identity, so a `Project.tao` appearing above the app changes what compiles.
+ * root: `Packages` walks from the app directory through ancestors looking for a `.tao` directory.
+ * A root marker appearing above the app changes its source and visibility boundary.
  */
 async function ancestorProjectEntries(repositoryRoot: string, appRoot: string): Promise<string[]> {
   const entries: string[] = []
-  let current = FS.dirname(appRoot)
+  let current = appRoot
   while (FS.pathIsWithin(current, repositoryRoot)) {
-    entries.push(await fileEntry(repositoryRoot, FS.resolvePath('Project.tao', current)))
+    const marker = FS.resolvePath('.tao', current)
+    entries.push(`${FS.relativePath(repositoryRoot, marker)}\n${await FS.isDirectory(marker) ? 'project' : ABSENT}`)
+    entries.push(await fileEntry(repositoryRoot, ProjectLocal.storeResolve('lock.jsonc', current)))
+    entries.push(await fileEntry(repositoryRoot, ProjectLocal.storeResolve('project.json', current)))
     const parent = FS.dirname(current)
     if (parent === current) {
       break
@@ -273,7 +278,10 @@ async function treeEntry(repositoryRoot: string, root: string): Promise<string> 
   for (const path of await inputFilePaths(root)) {
     lines.push(`${FS.relativePath(root, path)}\n${Platform.sha256Hex(await FS.readFile(path))}`)
   }
-  return `${relativeRoot}\n${Platform.sha256Hex(lines.join('\n'))}`
+  return `${relativeRoot}\n${Platform.sha256Hex(lines.join('\n'))}\n${await fileEntry(
+    repositoryRoot,
+    ProjectLocal.storeResolve('project.json', root),
+  )}`
 }
 
 /** fileEntry is the identity of one declared file, which may legitimately not exist. */
@@ -294,7 +302,10 @@ async function inputFilePaths(root: string): Promise<string[]> {
       includeHidden: true,
     })
   ) {
-    if (!path.endsWith(EXCLUDED_INPUT_SUFFIX) && !path.endsWith('.tao.ts')) {
+    if (
+      !EXCLUDED_INPUT_DIRECTORIES.has(FS.basename(path)) && !path.endsWith(EXCLUDED_INPUT_SUFFIX)
+      && !path.endsWith('.tao.ts')
+    ) {
       paths.push(path)
     }
   }
@@ -320,7 +331,8 @@ async function compileAppIsUpToDate(
     return false
   }
   for (const generated of stamp.outputs) {
-    if (!await FS.isFile(FS.resolvePath(generated, repositoryRoot))) {
+    const path = FS.resolvePath(generated, repositoryRoot)
+    if (!await FS.isFile(path) && !await FS.isSymbolicLink(path)) {
       return false
     }
   }
@@ -331,7 +343,11 @@ async function compileAppIsUpToDate(
 export async function compileAppOutputHash(outputRoot: string): Promise<string> {
   const entries: string[] = []
   for (const path of await generatedFilePaths(outputRoot)) {
-    entries.push(`${FS.relativePath(outputRoot, path)}\n${Platform.sha256Hex(await FS.readFile(path))}`)
+    const metadata = await FS.entryMetadata(path)
+    const content = metadata.kind === 'symlink'
+      ? `symlink\n${metadata.linkTarget}`
+      : Platform.sha256Hex(await FS.readFile(path))
+    entries.push(`${FS.relativePath(outputRoot, path)}\n${content}`)
   }
   return Platform.sha256Hex(entries.join('\n'))
 }
@@ -342,7 +358,12 @@ async function generatedFilePaths(outputRoot: string): Promise<string[]> {
     return []
   }
   const paths: string[] = []
-  for await (const path of FS.walk(outputRoot, { includeHidden: true })) {
+  for await (
+    const path of FS.walk(outputRoot, {
+      excludeDirectory: name => name === 'node_modules',
+      includeHidden: true,
+    })
+  ) {
     paths.push(path)
   }
   return paths.sort()

@@ -188,11 +188,18 @@ pending/error state and Studio status on failure. This aligns the harness with t
 The corrected helper passes `activation-deadline-design-final-20261004`, all three cases and
 124 assertions, with warm paint medians 174/180/241ms and no iframe reloads or browser errors.
 
-Finalization must reconcile the newer main project-tooling migration with the decided folder
-layout and retained cache/design changes. Shared identity and lock state belong in `store/`, and
-generated configuration and locks belong in `cache/`. The new tooling refresh and output planner
-must be retained alongside preview reuse. Dependency and lockfile integration still waits for the
-Developer's approval; this branch is not reported ready to land before integration and verification.
+Integration with main `854427134` retains its tooling refresh and output planner alongside preview
+reuse. Shared identity and lock state belong in `store/`; generated configuration and transient
+locks belong in `cache/`. Selected declarations contribute per-file cache signatures, so a
+variable-length edit does not invalidate unrelated modules through shared source offsets.
+Generated app publication supplies an owned host dependency link when there is no local npm
+environment, preserving declared dependency precedence after the move into project cache.
+Release checks stop at the nearest project marker and leave unpinned boundaries untouched rather
+than inheriting a containing project's pin or migrating home state.
+The Developer approved this integration, including dependencies and the lockfile, and authorized
+future incoming branch merges. Direct dependency changes still require approval. Fresh integrated
+Metro measurements, repository verification, and finalization remain required before proposing
+landing.
 
 ### Refresh indicator diagnostic, 2026-10-04 — closed
 

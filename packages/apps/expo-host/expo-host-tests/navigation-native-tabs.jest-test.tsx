@@ -5,7 +5,6 @@ import { overrideNavigationCommandIconForTest } from '@runtime/TR-navigation-com
 import {
   captureNativeNavigationDiagnostics,
   disableNativeNavigationSurfaces,
-  type NativeNavigationModule,
   type NativeTabsHostProps,
   type NativeTabsScreenProps,
   overrideNativeNavigationModuleForTest,
@@ -22,14 +21,6 @@ import { registerRuntimeE2ELifecycle } from './test-compile-app'
 registerRuntimeE2ELifecycle()
 
 Describe('native tab reconciliation', () => {
-  Test('the locked package exports the host and screen adapter used at runtime', () => {
-    const screens = jest.requireActual<typeof import('react-native-screens')>('react-native-screens')
-    const nativeModule: NativeNavigationModule = screens
-    Expect(typeof nativeModule.Tabs!.Host).toBe('function')
-    Expect(typeof screens.Tabs.Screen).toBe('function')
-    Expect(typeof nativeModule.ScreenStackHeaderCenterView).toBe('function')
-  })
-
   Test('blocks native and late selection while covered and acknowledges prevented requests', () => {
     const fixture = tabsFixture()
     try {
@@ -73,7 +64,13 @@ Describe('native tab reconciliation', () => {
         Initial: TR.Value('@home'),
       },
     ))
-    const app = TR.Navigation.App({ name: 'Covered tabs app', auxiliaries: () => ({}), navigator: () => selection })
+    const app = TR.Navigation.App({
+      id: 'covered-tabs-app',
+      version: '1.0.0',
+      name: 'Covered tabs app',
+      auxiliaries: () => ({}),
+      navigator: () => selection,
+    })
     const screen = render(createElement(TR.Navigation.AppHost, { app }))
     try {
       Expect(screen.UNSAFE_getByProps({ screenKey: 'settings' }).props.preventNativeSelection).toBe(false)
@@ -119,14 +116,20 @@ Describe('native tab reconciliation', () => {
         Initial: TR.Value('@home'),
       },
     ))
-    const app = TR.Navigation.App({ name: 'Asking tabs app', auxiliaries: () => ({}), navigator: () => selection })
+    const app = TR.Navigation.App({
+      id: 'asking-tabs-app',
+      version: '1.0.0',
+      name: 'Asking tabs app',
+      auxiliaries: () => ({}),
+      navigator: () => selection,
+    })
     const screen = render(createElement(TR.Navigation.AppHost, { app }))
     let answer!: Promise<{ evaluate(): { jsValue: unknown } }>
     try {
       act(() => {
         answer = TR.Navigation.Ask({ app, navigation: stack }, question, {})
       })
-      Expect(screen.getByText('Home tab question')).toBeDefined()
+      screen.getByText('Home tab question')
       Expect(fixture.host().tabBarHidden).toBe(true)
       act(() => {
         selection.activate('settings')
@@ -134,11 +137,11 @@ Describe('native tab reconciliation', () => {
       Expect(fixture.host().navStateRequest.selectedScreenKey).toBe('settings')
       Expect(fixture.host().tabBarHidden).toBe(false)
       Expect(screen.queryByText('Home tab question')).toBeNull()
-      Expect(screen.getByText('Settings page')).toBeDefined()
+      screen.getByText('Settings page')
       act(() => {
         selection.activate('home')
       })
-      Expect(screen.getByText('Home tab question')).toBeDefined()
+      screen.getByText('Home tab question')
       Expect(askMounts).toEqual(['home ask'])
       Expect(askUnmounts).toEqual([])
       act(() => {
@@ -221,7 +224,7 @@ Describe('native tab reconciliation', () => {
       const screen = render(selection.render() as React.ReactElement)
       try {
         Expect(screen.getAllByRole('tab')).toHaveLength(6)
-        Expect(screen.getByText('Destination 5')).toBeDefined()
+        screen.getByText('Destination 5')
         Expect(captureNativeNavigationDiagnostics().some(event => event.reason === 'too-many-tabs')).toBe(true)
         Expect(selection.ownsWindowSurface()).toBe(false)
       } finally {
@@ -285,7 +288,6 @@ Describe('native tab reconciliation', () => {
       Expect(activate).toHaveBeenCalledTimes(1)
       Expect(activate.mock.calls[0]?.[0]).toEqual(expect.stringContaining('navigation:selection:settings'))
       Expect(fixture.host().navStateRequest).toEqual({ selectedScreenKey: 'settings', baseProvenance: 4 })
-      Expect(fixture.host().ios?.tabBarControllerMode).toBe('automatic')
     } finally {
       activate.mockRestore()
       fixture.dispose()

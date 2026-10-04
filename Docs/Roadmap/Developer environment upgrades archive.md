@@ -75,6 +75,8 @@ hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 - [DEVENV-ACCOUNT-SERVICE-READINESS-JSON-RACE — Account service readiness JSON race](<Developer environment upgrades/Archive/DEVENV-ACCOUNT-SERVICE-READINESS-JSON-RACE.md>) — Resolved
 - [DEVENV-ACCOUNT-TEST-READS-PARTIAL-READINESS-JSON — Account test reads partial readiness JSON](<Developer environment upgrades/Archive/DEVENV-ACCOUNT-TEST-READS-PARTIAL-READINESS-JSON.md>) — Resolved
 - [DEVENV-AGENT-CONFIG-RECOVERY-COLD-DPRINT-PLUGIN-DOWNLOAD — Agent-config recovery can download dprint plugins](<Developer environment upgrades/Archive/DEVENV-AGENT-CONFIG-RECOVERY-COLD-DPRINT-PLUGIN-DOWNLOAD.md>) — Resolved
+- [DEVENV-APP-LINT-COUNTS-IGNORED-ORPHAN-DIRECTORIES — App lint counts ignored orphan directories](<Developer environment upgrades/Archive/DEVENV-APP-LINT-COUNTS-IGNORED-ORPHAN-DIRECTORIES.md>) — Resolved
+- [DEVENV-APP-SIDECAR-TYPECHECK-ASSUMES-GENERATED-METADATA — App sidecar typecheck assumes generated metadata](<Developer environment upgrades/Archive/DEVENV-APP-SIDECAR-TYPECHECK-ASSUMES-GENERATED-METADATA.md>) — Resolved
 - [DEVENV-COLD-VM-CHROME-STARTUP — Cold VM Chrome startup](<Developer environment upgrades/Archive/DEVENV-COLD-VM-CHROME-STARTUP.md>) — Resolved
 - [DEVENV-COMPANION-INSTALL-SKIPS-NATIVE-CONFIGURATION — Companion install skips native configuration](<Developer environment upgrades/Archive/DEVENV-COMPANION-INSTALL-SKIPS-NATIVE-CONFIGURATION.md>) — Resolved
 - [DEVENV-COMPILED-TEST-STORE-RENAME-DENIED-IN-MANAGED-SHELLS — Compiled test store rename is denied in managed shells](<Developer environment upgrades/Archive/DEVENV-COMPILED-TEST-STORE-RENAME-DENIED-IN-MANAGED-SHELLS.md>) — Resolved
@@ -84,9 +86,12 @@ hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 - [DEVENV-DOCTOR-TEST-OBSERVES-CONCURRENT-ARTIFACT-CREATION — Doctor test observes concurrent artifact creation](<Developer environment upgrades/Archive/DEVENV-DOCTOR-TEST-OBSERVES-CONCURRENT-ARTIFACT-CREATION.md>) — Resolved
 - [DEVENV-EMULATOR-EXIT-LOG-CAN-REPORT-PRIOR-LAUNCH — Emulator exit can report a prior launch's failure](<Developer environment upgrades/Archive/DEVENV-EMULATOR-EXIT-LOG-CAN-REPORT-PRIOR-LAUNCH.md>) — Resolved
 - [DEVENV-FIXED-SHORT-TIMEOUTS-LOSE-TO-CONTENTION — A fixed short `timeoutMs` around real work loses to contention](<Developer environment upgrades/Archive/DEVENV-FIXED-SHORT-TIMEOUTS-LOSE-TO-CONTENTION.md>) — Resolved
+- [DEVENV-FULL-HOST-VERIFICATION-LACKS-A-NAMED-OPERATION — Full host verification lacks a named operation](<Developer environment upgrades/Archive/DEVENV-FULL-HOST-VERIFICATION-LACKS-A-NAMED-OPERATION.md>) — Resolved
+- [DEVENV-FULL-TEST-LEDGER-USES-MONOTONIC-TIME — Full-test ledger uses monotonic time](<Developer environment upgrades/Archive/DEVENV-FULL-TEST-LEDGER-USES-MONOTONIC-TIME.md>) — Resolved
 - [DEVENV-GATE-SCRATCH-CLEANUP-DENIED-IN-MANAGED-WORKTREE — Gate scratch cleanup denied in managed worktree](<Developer environment upgrades/Archive/DEVENV-GATE-SCRATCH-CLEANUP-DENIED-IN-MANAGED-WORKTREE.md>) — Resolved
 - [DEVENV-GUEST-AGENT-AUDIT-PRIVACY — Guest agent audit privacy](<Developer environment upgrades/Archive/DEVENV-GUEST-AGENT-AUDIT-PRIVACY.md>) — Resolved
 - [DEVENV-HOST-TEST-ARTIFACTS-ACCUMULATE-WITHOUT-BOUND — Host-test artifacts accumulate without bound](<Developer environment upgrades/Archive/DEVENV-HOST-TEST-ARTIFACTS-ACCUMULATE-WITHOUT-BOUND.md>) — Resolved
+- [DEVENV-IDLE-RESET-FIXTURE-ASSUMES-SLEEP-CADENCE — Idle-reset fixture assumes sleep cadence](<Developer environment upgrades/Archive/DEVENV-IDLE-RESET-FIXTURE-ASSUMES-SLEEP-CADENCE.md>) — Resolved
 - [DEVENV-JEST-CACHE-IDENTITIES-AND-DIRECT-RUNS-GROW-WITHOUT-BOUND — Jest cache identities and direct runs grow without bound](<Developer environment upgrades/Archive/DEVENV-JEST-CACHE-IDENTITIES-AND-DIRECT-RUNS-GROW-WITHOUT-BOUND.md>) — Resolved
 - [DEVENV-JEST-TRANSFORM-CACHE-GROWS-WITHOUT-BOUND — Jest's transform cache grows without bound](<Developer environment upgrades/Archive/DEVENV-JEST-TRANSFORM-CACHE-GROWS-WITHOUT-BOUND.md>) — Resolved
 - [DEVENV-LANDING-PREFLIGHT-MISSES-HUTCH-LAUNCHER — Landing preflight misses the native Hutch launcher](<Developer environment upgrades/Archive/DEVENV-LANDING-PREFLIGHT-MISSES-HUTCH-LAUNCHER.md>) — Resolved
@@ -100,6 +105,7 @@ hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 - [DEVENV-PORT-REACQUISITION-ASSERTION-FAILS-INTERMITTENTLY — Port reacquisition assertion fails intermittently](<Developer environment upgrades/Archive/DEVENV-PORT-REACQUISITION-ASSERTION-FAILS-INTERMITTENTLY.md>) — Resolved
 - [DEVENV-PORT-REUSE-ASSERTION-FAILS-DURING-CONCURRENT-VERIFICATION — Port reuse assertion fails during concurrent verification](<Developer environment upgrades/Archive/DEVENV-PORT-REUSE-ASSERTION-FAILS-DURING-CONCURRENT-VERIFICATION.md>) — Resolved
 - [DEVENV-RESERVED-PORT-CLIENT-CLOSE-TIMES-OUT — Reserved port client close can time out during broad tests](<Developer environment upgrades/Archive/DEVENV-RESERVED-PORT-CLIENT-CLOSE-TIMES-OUT.md>) — Resolved
+- [DEVENV-REVIEWED-COMMITS-BLOCKED-BY-GIT-METADATA-DENIAL — Reviewed commits blocked by Git metadata denial](<Developer environment upgrades/Archive/DEVENV-REVIEWED-COMMITS-BLOCKED-BY-GIT-METADATA-DENIAL.md>) — Resolved
 - [DEVENV-SANDBOXED-TAO-CHECK-CRASHES-ON-A-DENIED-TMPDIR-SIBLING — Sandboxed `tao check` crashes on a denied `$TMPDIR` sibling](<Developer environment upgrades/Archive/DEVENV-SANDBOXED-TAO-CHECK-CRASHES-ON-A-DENIED-TMPDIR-SIBLING.md>) — Resolved
 - [DEVENV-STANDALONE-RUNTIME-SHIMS-ESCAPE-OWNED-STORAGE — Standalone runtime shims escape owned storage](<Developer environment upgrades/Archive/DEVENV-STANDALONE-RUNTIME-SHIMS-ESCAPE-OWNED-STORAGE.md>) — Resolved
 - [DEVENV-STARTER-UPDATE-TRAVERSES-INSTALLED-DEPENDENCIES — Starter update traverses installed dependencies](<Developer environment upgrades/Archive/DEVENV-STARTER-UPDATE-TRAVERSES-INSTALLED-DEPENDENCIES.md>) — Resolved
@@ -112,4 +118,5 @@ hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 - [DEVENV-THE-ANDROID-EMULATOR-CANNOT-START-IN-THE-SANDBOX — The Android emulator cannot start in the sandbox](<Developer environment upgrades/Archive/DEVENV-THE-ANDROID-EMULATOR-CANNOT-START-IN-THE-SANDBOX.md>) — Resolved
 - [DEVENV-TIMED-OUT-RUNTIME-FIXTURES-MOUNT-LATE — Timed-out runtime fixture preparation can mount in a later test](<Developer environment upgrades/Archive/DEVENV-TIMED-OUT-RUNTIME-FIXTURES-MOUNT-LATE.md>) — Resolved
 - [DEVENV-VM-ACCEPTANCE-RECEIPT-REMAINS-NONTERMINAL — VM acceptance receipt remains nonterminal](<Developer environment upgrades/Archive/DEVENV-VM-ACCEPTANCE-RECEIPT-REMAINS-NONTERMINAL.md>) — Resolved
+- [DEVENV-WATCHMAN-COOKIES-INVALIDATE-VERIFICATION-EVIDENCE — Watchman cookies invalidate verification evidence](<Developer environment upgrades/Archive/DEVENV-WATCHMAN-COOKIES-INVALIDATE-VERIFICATION-EVIDENCE.md>) — Resolved
 - [DEVENV-WORKFLOW-REPORTS-INCLUDE-CONCURRENT-TEST-FAILURES — Workflow reports include concurrent test failures](<Developer environment upgrades/Archive/DEVENV-WORKFLOW-REPORTS-INCLUDE-CONCURRENT-TEST-FAILURES.md>) — Resolved

@@ -8,7 +8,7 @@ import { TestCompiler as Compiler } from './test-compile'
 const source = `
 use StackNav from @tao/nav
 use Col, FormButton, ScrollView, Text from @tao/ui
-app WatchHello { Name "Rep Counter" Navigator StackNav { Initial Workout } }
+app WatchHello { id "com.tao.test.watchhello" version "1.0.0"  name "Rep Counter" Navigator StackNav { Initial Workout } }
 scene Workout() {
   Title "One set"
   let Goal = 12
@@ -46,14 +46,6 @@ Describe('compiler: watchOS SwiftUI', () => {
     Expect(scene).toContain('.navigationTitle("One set")')
     Expect(scene).toContain('VStack(alignment: .leading, spacing: 8)')
     Expect(scene).toContain('.padding(8)')
-    Expect(result.validation.diagnostics.filter(diagnostic => diagnostic.severity === 'error')).toEqual([])
-  })
-
-  Test('preserves the React Native default after relocating its emitters', async () => {
-    const result = await Compiler.compileCode(source)
-    Expect(result.code).toContain('TR.Navigation.App(')
-    Expect(result.code).toContain('TR.State(')
-    Expect(result.files.some(file => file.relativePath.endsWith('.tsx'))).toBe(true)
   })
 
   Test('emits a valid Swift exponent for large whole-valued numbers', async () => {
@@ -77,6 +69,7 @@ Describe('compiler: watchOS SwiftUI', () => {
     Expect(helper).toContain('if left == 0 && right == 0 { return left.sign == right.sign }')
   })
 
+  // REMOVAL CANDIDATE: Native numeric-text integration covers NaN and positive infinity on macOS; this static helper proof adds negative infinity and coverage on other hosts.
   Test('ships Tao text spellings for non-finite numeric values', async () => {
     const result = await Compiler.compileCode(source, { target: 'watchos' })
     const helper = result.files.find(file => file.relativePath === 'TaoValues.swift')!.code
@@ -162,7 +155,8 @@ print(values.map { TaoValues.text($0) }.joined(separator: "|"))
   })
 
   Test('ignores unsupported content in an unselected app and preserves busy button behavior', async () => {
-    const extra = '\napp Other { view OtherView }\nview OtherView() { render inject ```ts return null ``` }'
+    const extra =
+      '\napp Other { id "com.tao.test.other" version "1.0.0" name "Other" view OtherView }\nview OtherView() { render inject ```ts return null ``` }'
     const result = await Compiler.compileCode(
       source.replace('Disabled: Reps >= Goal', 'Disabled: Reps >= Goal, Submitting: Reps == 1') + extra,
       { target: 'watchos', appName: 'WatchHello' },

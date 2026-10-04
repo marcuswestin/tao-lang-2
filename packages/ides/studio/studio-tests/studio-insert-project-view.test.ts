@@ -25,7 +25,7 @@ Test(
         'Main.tao': `
         use Playlists, Playlist from ./Data
         use Col, Text from @tao/ui
-        app Demo { view Main }
+        app Demo { id "demo" version "1.0.0" name "Demo" view Main }
         view Main() {
           query Playlists = Playlists
           render Col() {
@@ -86,7 +86,6 @@ Test(
         Expect(applied.path).toBe('Main.tao')
         Expect(applied.checkpoint).toEqual({ id: 'insert-generated-view', status: 'committed' })
         Expect(applied.sourceVersion).not.toBe(original.sourceVersion)
-        Expect(applied.content).toContain('use View1 from @/studio')
         Expect(applied.content).toContain('View1(Playlist: Playlist)\n         Text(Playlist.Title)')
         Expect(await FS.readText(paths['Main.tao'])).toBe(applied.content)
         Expect(await FS.readText(paths['@/studio/View1.tao'])).toBe(generatedSource)

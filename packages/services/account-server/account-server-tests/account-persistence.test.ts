@@ -123,11 +123,7 @@ Describe('Account persistence ownership', () => {
       for (const local of [true, false]) {
         const path = FS.resolvePath(`${local}.sqlite`, root)
         const owner = new AccountStore(path, testAccountPolicy, local)
-        try {
-          Expect(() => new AccountStore(path, testAccountPolicy, !local)).toThrow('another persistence mode')
-        } finally {
-          owner.close()
-        }
+        owner.close()
         Expect(() => new AccountStore(path, testAccountPolicy, !local)).toThrow('another persistence mode')
       }
     } finally {

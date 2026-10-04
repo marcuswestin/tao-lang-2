@@ -68,6 +68,9 @@
       "@ast-utils": [
         "./language/ast-utils/ast-utils-src/ast-utils.ts"
       ],
+      "@project-tooling": [
+        "./language/project-tooling/project-tooling-src/project-tooling.ts"
+      ],
       "@validator": [
         "./language/validator/validator-src/validator.ts"
       ],

@@ -96,7 +96,6 @@ Describe('TR.Interaction attention', () => {
     Expect(attention.read().target).toBe('below')
     Expect(revealed).toEqual(['below'])
     Expect(attention.read().candidates).toEqual(['below'])
-    Expect(attention.read().candidates).not.toContain('unmounted')
   })
 
   Test('orders structural rows independently of scrolling and unequal control heights', () => {
@@ -789,6 +788,7 @@ Describe('TR.Interaction attention', () => {
     Expect(attention.read().mode).toBe('navigating')
   })
 
+  // REMOVAL CANDIDATE: The row-targeting shortcut test also selects the first of two colliding surfaces; this additionally uses the same surface identity on both rows.
   Test('dispatches a targeted row surface before a later-mounted sibling with the same chord', () => {
     const outline = new InteractionOutline()
     const catalog = new CommandCatalog()

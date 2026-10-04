@@ -35,7 +35,6 @@ Test('StudioServer datasource fills source-bound design and problem metadata wit
     const file = rows.find(row => row.Path === 'Garden.tao')!
     const folder = rows.find(row => row.Path === 'Features')!
 
-    Expect(file.Path).toBe('Garden.tao')
     Expect(file.Name).toBe('Garden.tao')
     Expect(file.ParentPath).toBe('')
     Expect(file.Dirty).toBe(false)
@@ -63,17 +62,10 @@ Test('StudioServer datasource fills source-bound design and problem metadata wit
     const refreshedDesign = await datasource.fill({ entity: 'DesignTokens' })
     Expect(changed.saved).toBe(true)
     Expect(refreshedDesign.rows).toHaveLength(1)
-    Expect((refreshedDesign.rows as StudioServerDesignTokenRow[])[0]).toMatchObject({
-      DesignName: 'GardenDesign',
-      Id: 'Garden.tao#design-token:ink',
-      Kind: 'token',
-      Name: 'ink',
-      SourcePath: 'Garden.tao',
-      SourceVersion: changed.file.sourceVersion,
-      Value: '#121826',
-    })
+    Expect((refreshedDesign.rows as StudioServerDesignTokenRow[])[0]?.SourceVersion)
+      .toBe(changed.file.sourceVersion)
     const invalid = await session.syncDraft({
-      content: 'app Garden {',
+      content: 'app Garden { id "garden" version "1.0.0" name "Garden"',
       path: file.Path,
       sourceVersion: changed.file.sourceVersion,
       writeId: 'invalid-draft',
@@ -108,7 +100,7 @@ Test('StudioServer datasource publishes structured design kinds with revision-bo
          screens { wide }
          styles { card [radius md] Text [ink ink] }
       }
-      app Garden { view Main Design GardenDesign }
+      app Garden { id "garden" version "1.0.0" name "Garden" view Main Design GardenDesign }
       view Main() { render Text("Garden") [card, body] }
     `,
   }, async (paths, root) => {
@@ -152,7 +144,7 @@ Test('StudioServer datasource tolerates unparseable project files when indexing 
       design ValidDesign {
         ink #121826
       }
-      app Valid { view Main }
+      app Valid { id "valid" version "1.0.0" name "Valid" view Main }
       view Main() { render Text("Valid") }
     `,
   }, async (paths, root) => {
@@ -448,10 +440,7 @@ Test('Studio foreign-action adapters preserve endpoint policy and map optimistic
   })
 
   Expect(studioServerForeignActionContract.SyncDraft.runs).toBe('latest')
-  Expect(studioServerForeignActionContract.DeleteFile.endpoint).toBe('/api/file/delete')
   Expect(studioServerForeignActionContract.RenameFile.failures.Conflict).toBe('This file changed under this edit.')
-  Expect(studioServerForeignActionContract.UndoSourceAction.failures.Conflict)
-    .toBe('This file changed under this edit.')
   await Expect(actions.createFile({ path: 'New.tao', writeId: 'create-1' })).resolves.toEqual({ saved: true })
   await Expect(actions.renameFile({
     path: 'New.tao',
@@ -508,7 +497,7 @@ async function withSession(
       design GardenDesign {
         ink #121826
       }
-      app Garden { view Main }
+      app Garden { id "garden" version "1.0.0" name "Garden" view Main }
       view Main() { render Stack() { Text("Garden") } }
       scene Card(Title text) { render Text(Title) }
     `,

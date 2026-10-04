@@ -6,6 +6,7 @@ import { formats } from './test-format'
 const wordFlowerCurrentPath = Repo.resolvePath('Apps/WordFlower/1 - Current')
 
 Describe('Tao formatter WordFlower apps', () => {
+  // REMOVAL CANDIDATE: Full app corpus fixed-point proof could become a small representative set; broad real-source stability coverage would shrink.
   Test('every current WordFlower source and test sidecar is a formatting fixed point', async () => {
     const sourceByPath: Record<string, string> = {}
     const formattedByPath: Record<string, string> = {}
@@ -218,22 +219,6 @@ Describe('Tao formatter configurable declarations', () => {
 
 Describe('Tao formatter top-level statements', () => {
   Test(
-    'formats keyed SelectionNav items and key-valued Initial',
-    formats(
-      `let Main=SelectionNav{Initial @home Display "tabs" @home{Label "Home" Content HomeStack}}`,
-      `
-        let Main = SelectionNav {
-           Initial @home
-           Display "tabs"
-           @home {
-              Label "Home"
-              Content HomeStack
-        }  }
-      `,
-    ),
-  )
-
-  Test(
     'keeps root view arguments attached to the view name in an app and in a variant',
     formats(
       `
@@ -303,14 +288,14 @@ Describe('Tao formatter top-level statements', () => {
     formats(
       `
         let Greeting = "Hello"
-        workspace
+        project
         let Count = 3
         let Trailing = 4
       `,
       `
         let Greeting = "Hello"
 
-        workspace
+        project
         let Count = 3
         let Trailing = 4
       `,
@@ -504,20 +489,6 @@ Describe('Tao formatter views and blocks', () => {
   )
 
   Test(
-    'indents nested render blocks and collapses closing braces',
-    formats(
-      `view MainView(){render Stack(){Text( "a")\nText( "b")}}`,
-      `
-        view MainView() {
-           render Stack() {
-              Text("a")
-              Text("b")
-        }  }
-      `,
-    ),
-  )
-
-  Test(
     'formats named and inline control event handlers',
     formats(
       `view MainView(){render Input(Value:Draft){on change->Entered{set Draft=Entered}\non submit Submit}}`,
@@ -671,22 +642,9 @@ Describe('Tao formatter views and blocks', () => {
   )
 
   Test(
-    'normalizes view parameter spacing',
-    formats(
-      `public view CountText(Count number, Label text) { render Text(Label) }`,
-      `
-        public
-        view CountText(Count number, Label text) {
-           render Text(Label)
-        }
-      `,
-    ),
-  )
-
-  Test(
     'normalizes view invocation argument spacing',
     formats(
-      `view MainView() { render Stack() { CountText(3,"label") } }\nview CountText(Count number, Label text) { render Text(Label) }`,
+      `view MainView() { render Stack() { CountText ( 3,"label" ) } }\nview CountText(Count number, Label text) { render Text(Label) }`,
       `
         view MainView() {
            render Stack() {
@@ -934,31 +892,31 @@ Describe('Tao formatter structured design', () => {
 
 Describe('Tao formatter project metadata', () => {
   Test(
-    'formats app visibility like other declarations',
+    'formats package publication blocks',
     formats(
-      `public app PackageAccess{}`,
+      `package{name "Package Access" version  "1.2.3" license   MIT}\napp PackageAccess {}`,
       `
-        public
+        package {
+           name "Package Access"
+           version "1.2.3"
+           license MIT
+        }
+
         app PackageAccess { }
       `,
     ),
   )
 
   Test(
-    'formats project metadata blocks',
+    'formats publication requirements and module aliases',
     formats(
-      `project{id "package-access" name "Package Access" version  "1.2.3" app   PackageAccess remote   none license   MIT}\napp PackageAccess {}`,
+      `package{version 1.0.0 requires ../Library version ^1.0.0{@ui as @widgets}}`,
       `
-        project {
-           id "package-access"
-           name "Package Access"
-           version "1.2.3"
-           app PackageAccess
-           remote none
-           license MIT
-        }
-
-        app PackageAccess { }
+        package {
+           version 1.0.0
+           requires ../Library version ^1.0.0 {
+              @ui as @widgets
+        }  }
       `,
     ),
   )

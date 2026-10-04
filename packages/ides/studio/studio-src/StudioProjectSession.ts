@@ -1,6 +1,6 @@
 import { loadSemanticSnapshot, type SemanticSnapshot, Workspace } from '@compiler/workspace'
 import { AST, Langium, type ParseResult } from '@parser'
-import { Assert, Diagnostics, Errors, FS, Json } from '@shared'
+import { Assert, Diagnostics, Errors, FS, Json, ReleaseToolchain } from '@shared'
 import SourceActions, {
   type StudioRenderInspection,
   StudioSourceOccurrenceConflictError,
@@ -226,6 +226,7 @@ export class StudioProjectSession {
   private constructor(
     readonly projectRoot: string,
     readonly entryPath: string,
+    readonly appId: string,
     readonly appName: string,
     readonly apps: readonly StudioAppVariant[],
     workspace: Workspace,
@@ -270,6 +271,7 @@ export class StudioProjectSession {
 
   static async open(options: StudioProjectSessionOptions): Promise<StudioProjectSession> {
     const projectRoot = await requireStudioProjectRoot(options.projectRoot)
+    await ReleaseToolchain.requireMatchingProjectRelease(projectRoot, 'Studio')
     await new StudioGeneratedSources(projectRoot).repair()
     const workspace = await Workspace.open(projectRoot)
     // The listing reports compile diagnostics per file, and the coordinator that owns them is built by the
@@ -284,6 +286,7 @@ export class StudioProjectSession {
     session = new StudioProjectSession(
       projectRoot,
       selection.entryPath,
+      selection.appId,
       selection.appName,
       selection.apps,
       workspace,

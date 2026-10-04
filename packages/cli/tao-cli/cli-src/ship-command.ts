@@ -1,4 +1,4 @@
-import { Errors, FS, HCI } from '@shared'
+import { Errors, FS, HCI, ReleaseCapabilities } from '@shared'
 import type { Readable, Writable } from 'node:stream'
 import { planShipActions } from './ship-actions'
 import { inspectShipGit, type ShipGitState, shipSourceMatchesBuild } from './ship-git'
@@ -76,6 +76,13 @@ export async function runShipCommand(
   options: ShipCommandOptions = {},
   dependencies: ShipCommandDependencies = {},
 ): Promise<'cancelled' | 'dry-run' | 'shipped'> {
+  ReleaseCapabilities.require('ship')
+  if (options.update || options.rollback) {
+    ReleaseCapabilities.require('ota')
+  }
+  if (options.betaRecipients === undefined && !options.update) {
+    ReleaseCapabilities.require('external-distribution')
+  }
   validateOptions(options)
   const project = await discoverShipProject(targetPath)
   return await withShipTransaction(project.root, async () => {
@@ -112,27 +119,24 @@ async function prepareShip(
   dependencies: ShipCommandDependencies = {},
 ): Promise<PreparedShip> {
   const app = await resolveApp(project, options)
-  const primaryAppName = project.primaryAppName
   const hashInput = {
     appName: app.name,
-    defaultApp: project.defaultApp,
-    projectId: project.id,
+    appId: app.id,
+    appVersion: app.version,
     releaseDatasourceConfiguration: app.releaseDatasourceConfiguration,
   }
   const inputHash = shipInputHash(hashInput)
   const lock = await readProjectLock(project.root)
-  const entry = await resolveEntry(project, app, lock, inputHash, primaryAppName, options)
+  const entry = await resolveEntry(app, lock, inputHash, options)
   const accepted = entry.accepted
   const identity = deriveShipIdentity({
-    appName: app.name,
+    appId: app.id,
     namespace: accepted?.namespace ?? DEFAULT_SHIP_NAMESPACE,
-    primaryAppName,
-    projectId: project.id,
   })
   const lockPath = FS.resolvePath(SHIP_LOCK_RELATIVE_PATH, project.root)
   const git = await inspectShipGit(project.root, { excludePaths: [lockPath] })
-  const consumed = entry.lastBuild?.version === project.version && entry.lastBuild.submittedForReview === true
-  const versionDecision = decideShipVersion(project.version, { consumed, forcedBump: options.bump })
+  const consumed = entry.lastBuild?.version === app.version && entry.lastBuild.submittedForReview === true
+  const versionDecision = decideShipVersion(app.version, { consumed, forcedBump: options.bump })
   const buildSourceMatches = entry.lastBuild === undefined
     ? false
     : shipSourceMatchesBuild(git, {
@@ -164,7 +168,7 @@ async function prepareShip(
     appName: app.name,
     betaRecipients: options.betaRecipients,
     buildNumber,
-    bump: versionDecision.bumped ? { from: project.version, to: versionDecision.version } : undefined,
+    bump: versionDecision.bumped ? { from: app.version, to: versionDecision.version } : undefined,
     noWait: options.noWait === true,
     notes: options.notes,
     reuseBuild,
@@ -223,14 +227,12 @@ async function resolveApp(project: ShipProject, options: ShipCommandOptions): Pr
 }
 
 async function resolveEntry(
-  project: ShipProject,
   app: ShipProjectApp,
   lock: TaoProjectLock,
   inputHash: string,
-  primaryAppName: string,
   options: ShipCommandOptions,
 ): Promise<ShipLockEntry> {
-  const identity = `${project.id}/${app.name}`
+  const identity = `${app.id}/${app.name}`
   const accepted = acceptedShipEntry(lock, identity, inputHash)
   if (accepted) {
     return accepted
@@ -265,7 +267,7 @@ async function resolveEntry(
     message: 'Owned reverse-DNS bundle namespace',
     output: options.output,
   })
-  const derived = deriveShipIdentity({ appName: app.name, namespace, primaryAppName, projectId: project.id })
+  const derived = deriveShipIdentity({ appId: app.id, namespace })
   const confirmed = await HCI.askConfirm({
     defaultValue: true,
     input: options.input,

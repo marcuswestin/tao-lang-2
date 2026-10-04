@@ -1,4 +1,4 @@
-import { FS, HCI, Repo } from '@shared'
+import { FS, HCI, ProjectIdentity, Repo } from '@shared'
 import { Expect, mkTestDir, Test } from '@shared/test'
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
 import { startStudioSmokeLaunch } from '../studio-tooling-src/StudioSmokeLaunch'
@@ -7,7 +7,7 @@ import { activateSmokePreviews } from '../studio-tooling-src/StudioSmokePreviews
 const cellCount = 6
 const source = `use Text from @tao/ui
 
-app LoadingSmoke { view MainView }
+app LoadingSmoke { id "tao-studio-loading" version "1.0.0" name "Loading smoke" view MainView }
 view MainView() { render Text("LoadProbe") }
 fixture Empty { }
 scenarios MainView "loading" {
@@ -69,10 +69,8 @@ Test('Studio restores and paints all six activated previews on browser reopen', 
   let browser: StudioCdp | undefined
   let studio: Awaited<ReturnType<typeof startStudioSmokeLaunch>> | undefined
   try {
-    await FS.writeText(
-      FS.resolvePath('Project.tao', projectRoot),
-      'project { id "tao-studio-loading" name "Loading measurement" }\n',
-    )
+    await FS.mkdir(FS.resolvePath('.tao', projectRoot))
+    await ProjectIdentity.ensure(projectRoot)
     await FS.writeText(FS.resolvePath('LoadingSmoke.tao', projectRoot), source)
     studio = await startStudioSmokeLaunch({ appName: 'LoadingSmoke', projectRoot })
     const open = async (): Promise<StudioCdp> => {

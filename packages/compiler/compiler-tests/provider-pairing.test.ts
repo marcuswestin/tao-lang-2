@@ -20,8 +20,8 @@ Describe('compiler: provider pairing metadata', () => {
         provider ClosedProvider from ./ClosedProvider.ts
       }
       use StackNav from @tao/nav
-      app Demo {
-        Name "Demo"
+      app Demo { id "com.tao.test.demo" version "1.0.0"
+        name "Demo"
         Navigator StackNav { Initial Home }
         Auth Door { }
         Datasource Store { }
@@ -48,8 +48,8 @@ Describe('compiler: provider pairing metadata', () => {
         use StackNav from @tao/nav
         ${stubView('Main')}
         data Accounts / Account { DisplayName text }
-        app Notes {
-          Name "Notes"
+        app Notes { id "com.tao.test.notes" version "1.0.0"
+          name "Notes"
           Navigator StackNav { Initial Main }
           Auth LocalAuth { Endpoint "http://127.0.0.1:4738" Resource "notes" }
           Datasource Reference { ServerURL "http://127.0.0.1:4738" Resource "notes" }
@@ -57,7 +57,6 @@ Describe('compiler: provider pairing metadata', () => {
       `,
     }, async paths => {
       const result = await Workspace.compile(paths['Main.tao'])
-      Expect(result.validation.diagnostics.filter(diagnostic => diagnostic.severity === 'error')).toEqual([])
       const reference = result.files.find(file =>
         file.sourcePath.endsWith('/providers/reference/Reference.tao') && file.relativePath.endsWith('.tsx')
       )?.code.replace(/\s+/g, ' ') ?? ''

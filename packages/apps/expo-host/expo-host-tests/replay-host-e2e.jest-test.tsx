@@ -35,25 +35,25 @@ describe('resetting a mounted Studio preview error boundary', () => {
     const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {})
     try {
       const screen = render(preview('revision-1', false))
-      expect(screen.getByText('healthy preview')).toBeTruthy()
+      screen.getByText('healthy preview')
       expect({ mounts, unmounts }).toEqual({ mounts: 1, unmounts: 0 })
 
       screen.rerender(preview('revision-2', false))
-      expect(screen.getByText('healthy preview')).toBeTruthy()
+      screen.getByText('healthy preview')
       expect({ mounts, unmounts }).toEqual({ mounts: 1, unmounts: 0 })
 
       screen.rerender(preview('revision-2', true))
-      expect(screen.getByText('Tao Studio preview error')).toBeTruthy()
-      expect(screen.getByText('The preview failed to render.')).toBeTruthy()
+      screen.getByText('Tao Studio preview error')
+      screen.getByText('The preview failed to render.')
       expect({ mounts, unmounts }).toEqual({ mounts: 1, unmounts: 1 })
 
       screen.rerender(preview('revision-2', false))
-      expect(screen.getByText('Tao Studio preview error')).toBeTruthy()
+      screen.getByText('Tao Studio preview error')
       expect(screen.queryByText('healthy preview')).toBeNull()
       expect({ mounts, unmounts }).toEqual({ mounts: 1, unmounts: 1 })
 
       screen.rerender(preview('revision-3', false))
-      expect(screen.getByText('healthy preview')).toBeTruthy()
+      screen.getByText('healthy preview')
       expect({ mounts, unmounts }).toEqual({ mounts: 2, unmounts: 1 })
     } finally {
       consoleError.mockRestore()
@@ -123,7 +123,7 @@ describe('replaying a capture into a mounted preview', () => {
 
     // Identity changed six times; the content never did, so there was only ever one state to put back.
     expect(restored).toEqual([{ note: 'captured' }])
-    expect(screen.getByText('restored cell')).toBeTruthy()
+    screen.getByText('restored cell')
   })
 
   test('restores again when the artifact actually carries different state', async () => {

@@ -19,7 +19,7 @@ Describe('compiler: language lowering', () => {
     const compiled = await Compiler.compileCode(`
       data Documents / Document { Title text, Body text, Owner text, CreatedAt time }
       type DocumentInput is Document { Title, Body }
-      app EditorApp { view Main }
+      app EditorApp { id "com.tao.test.editorapp" version "1.0.0" name "EditorApp"  view Main }
       view Main() { render Empty() }
       view Editor(Document) {
         state Input = copy Document as DocumentInput
@@ -39,7 +39,7 @@ Describe('compiler: language lowering', () => {
       data Documents / Document { Title text (required "Name this document"), Body text }
       type DocumentInput is Document { Title, Body }
       type BodyInput is Document { Body }
-      app EditorApp { view Main }
+      app EditorApp { id "com.tao.test.editorapp" version "1.0.0" name "EditorApp"  view Main }
       view Main() {
         state Input = DocumentInput { Title: "", Body: "" }
         state Body = BodyInput { Body: "" }
@@ -59,28 +59,25 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code).toContain('TR.Data.CreateWith(')
   })
 
-  Test('preserves release project metadata in generated source provenance', async () => {
+  Test('lowers effective app identity independently of package publication', async () => {
     const compiled = await Compiler.compileCode(`
-      project {
-        id "release-metadata"
-        name "Release metadata"
-        version "1.2.3"
-        app ReleaseApp
-      }
-      app ReleaseApp { view Home }
+      package { version "1.0.0" license AGPL-3.0-only }
+      app ReleaseApp { id "com.tao.test.releaseapp" version "1.0.0" name "ReleaseApp"  view Home }
       ${stubView('Home')}
     `)
 
-    Expect(compiled.code).toContain(
-      '// project { id "release-metadata" name "Release metadata" version "1.2.3" app ReleaseApp }',
-    )
+    Expect(compiled.appId).toBe('com.tao.test.releaseapp')
+    Expect(compiled.appVersion).toBe('1.0.0')
+    Expect(compiled.displayName).toBe('ReleaseApp')
+    Expect(compiled.code).toContain('id: "com.tao.test.releaseapp"')
+    Expect(compiled.code).toContain('version: "1.0.0"')
   })
 
   Test('lowers app-owned actions and live bound-view arguments into configured navigation', async () => {
     const compiled = await Compiler.compileCode(`
       use StackNav from @tao/nav
-      app BoundApp {
-        Name "Bound"
+      app BoundApp { id "com.tao.test.boundapp" version "1.0.0"
+        name "Bound"
         state Expanded is list of text = [] (persist)
         action ChangeExpanded(Value list of text) { set Expanded = Value }
         Navigator StackNav {
@@ -109,7 +106,7 @@ Describe('compiler: language lowering', () => {
       const compiled = await Compiler.compileCode(`
       use StackNav from @tao/nav
       use Button, Col, Text from @tao/ui
-      app Actions { Name "Actions" Navigator StackNav { Initial Main } }
+      app Actions { id "com.tao.test.actions" version "1.0.0"  name "Actions" Navigator StackNav { Initial Main } }
       type Answer is one of Confirmed
       scene Main() {
         Title "Main"
@@ -146,8 +143,8 @@ Describe('compiler: language lowering', () => {
   Test('lowers app persisted state as a writable SplitNav width binding', async () => {
     const compiled = await Compiler.compileCode(`
       use SplitNav from @tao/nav
-      app Workspace {
-        Name "Workspace"
+      app Workspace { id "com.tao.test.workspace" version "1.0.0"
+        name "Workspace"
         state PaneWidth is number = 320 (persist)
         Navigator SplitNav { @pane { Content Pane Width PaneWidth Resizable true } }
       }
@@ -163,8 +160,8 @@ Describe('compiler: language lowering', () => {
     const compiled = await Compiler.compileCode(`
       use StackNav from @tao/nav
       type Theme is one of Light, Dark
-      app Workspace {
-        Name "Workspace"
+      app Workspace { id "com.tao.test.workspace" version "1.0.0"
+        name "Workspace"
         state CurrentTheme is Theme = Light (persist)
         Navigator StackNav { Initial Main }
       }
@@ -181,7 +178,7 @@ Describe('compiler: language lowering', () => {
 
   Test('guards every generated recursive view frame at runtime', async () => {
     const compiled = await Compiler.compileCode(`
-      app RecursiveApp { view Recursive }
+      app RecursiveApp { id "com.tao.test.recursiveapp" version "1.0.0" name "RecursiveApp"  view Recursive }
       view Recursive() { render Recursive() }
     `)
     Expect(compiled.code).toContain('TR.AssertViewDepth(_ViewProps.__tao, "Recursive")')
@@ -189,7 +186,7 @@ Describe('compiler: language lowering', () => {
 
     const studio = await Compiler.compileCode(
       `
-      app RecursiveApp { view Recursive }
+      app RecursiveApp { id "com.tao.test.recursiveapp" version "1.0.0" name "RecursiveApp"  view Recursive }
       view Recursive() { render Recursive() }
     `,
       { studio: true },
@@ -200,7 +197,7 @@ Describe('compiler: language lowering', () => {
 
   Test('propagates view depth through nested render statements without inheriting layout props', async () => {
     const compiled = await Compiler.compileCode(`
-      app RecursiveApp { view Recursive }
+      app RecursiveApp { id "com.tao.test.recursiveapp" version "1.0.0" name "RecursiveApp"  view Recursive }
       view Recursive() {
         render Frame() { if true { render Recursive() } }
       }
@@ -219,8 +216,8 @@ Describe('compiler: language lowering', () => {
         supports { }
         provider TestProviderImpl from ./TestProviderImpl.ts
       }
-      app Demo {
-        Name "Demo"
+      app Demo { id "com.tao.test.demo" version "1.0.0"
+        name "Demo"
         Navigator { Initial Home }
         Datasource { StorageKey "demo" }
       }
@@ -255,9 +252,11 @@ Describe('compiler: language lowering', () => {
     const compiled = await Compiler.compileCode(`
       use StackNav from @tao/nav
       public type ReusableApp is app with {
-        Name text is "Reusable"
+        name text is "Reusable"
       }
       let Product = ReusableApp {
+        id "com.tao.test.product"
+        version "1.0.0"
         Navigator StackNav { Initial Home }
       }
       scene Home() { Title "Home" render Empty() }
@@ -266,7 +265,7 @@ Describe('compiler: language lowering', () => {
 
     Expect(compiled.appNames).toEqual(['Product'])
     Expect(compiled.code).toContain('declaration: TR.Navigation.AppDeclaration("Product", TR.Navigation.Identity(')
-    Expect(compiled.code).toContain('name: TR.Value("Reusable").evaluate().jsValue as string')
+    Expect(compiled.code).toContain('name: () => TR.Value("Reusable").evaluate().jsValue as string')
     Expect(compiled.code).toContain('TR.Navigation.Configure(_Scope.__tao_type_StackNav, {')
     Expect(compiled.code).toContain('<TR.Navigation.AppHost')
     Expect(compiled.code).not.toContain('__tao_type_ReusableApp')
@@ -287,12 +286,12 @@ Describe('compiler: language lowering', () => {
     const compiled = await Compiler.compileCode(
       `
       use StackNav from @tao/nav
-      app Base {
-        Name "Base"
+      app Base { id "com.tao.test.base" version "1.0.0-beta.2"
+        name "Base"
         Navigator StackNav { Initial Home }
         Restore automatic { Exclude sheets, menus }
       }
-      app Preview = Base with { Restore fresh }
+      app Preview = Base with { id "com.tao.test.preview"  Restore fresh }
       scene Home() { Title "Home" render Empty() }
       view Empty() { render inject ${tsFence} return null ${fence} }
     `,
@@ -303,6 +302,9 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code).toContain('mode: "automatic"')
     Expect(compiled.code).toContain('mode: "fresh"')
     Expect(compiled.code).toContain('variant: "Preview"')
+    Expect(compiled.appId).toBe('com.tao.test.preview')
+    Expect(compiled.appVersion).toBe('1.0.0-beta.2')
+    Expect(compiled.displayName).toBe('Base')
   })
 
   Test('compiles derived item slots, inferred bare values, and generic immutable patches', async () => {
@@ -349,8 +351,8 @@ Describe('compiler: language lowering', () => {
         Document,
         order by Ordering
       }
-      app Notes {
-        Name "Notes"
+      app Notes { id "com.tao.test.notes" version "1.0.0"
+        name "Notes"
         Navigator StackNav { Initial Main }
         Datasource Local { StorageKey "WordFlowerData" }
       }
@@ -410,8 +412,8 @@ Describe('compiler: language lowering', () => {
         Body text (default "", search),
         Owner text (default "")
       }
-      app Notes {
-        Name "Notes"
+      app Notes { id "com.tao.test.notes" version "1.0.0"
+        name "Notes"
         Navigator StackNav { Initial Main }
         Datasource Memory { }
       }
@@ -447,8 +449,8 @@ Describe('compiler: language lowering', () => {
         StorageKey "personal"
         Data { Bookmarks }
       }
-      app Reader {
-        Name "Reader"
+      app Reader { id "com.tao.test.reader" version "1.0.0"
+        name "Reader"
         Navigator StackNav { Initial Main }
         Datasource { Feed, Personal with { StorageKey "personal-prod" } }
       }
@@ -486,11 +488,10 @@ Describe('compiler: language lowering', () => {
     // without touching the declaration itself.
     Expect(compiled.code).toContain('TR.Data.UseAppDatasources(_TaoAppDefinition_Reader.definition)')
     // Only the named datasource is patched; the other keeps the declaration's own configuration.
-    Expect(compiled.code).toContain(
-      'store: _Scope._TaoDataCatalog_Stories,\n            source: _Scope.Feed.evaluate(),',
-    )
-    Expect(compiled.code).toContain(
-      'store: _Scope._TaoDataCatalog_Bookmarks,\n            source: TR.Data.Patch(_Scope.Personal.evaluate(), {',
+    const compact = compiled.code.replace(/\s+/g, ' ')
+    Expect(compact).toContain('store: _Scope._TaoDataCatalog_Stories, source: _Scope.Feed.evaluate(),')
+    Expect(compact).toContain(
+      'store: _Scope._TaoDataCatalog_Bookmarks, source: TR.Data.Patch(_Scope.Personal.evaluate(), {',
     )
     Expect(compiled.code).toContain('"StorageKey": TR.Value("personal-prod")')
     // Membership is structural: it partitions the catalog and never crosses the provider boundary.
@@ -546,8 +547,8 @@ Describe('compiler: language lowering', () => {
       data B_C / Four { Value text }
       datasource First = Memory { Data { A_B, C } }
       datasource Second = Memory { Data { A, B_C } }
-      app Distinct {
-        Name "Distinct"
+      app Distinct { id "com.tao.test.distinct" version "1.0.0"
+        name "Distinct"
         Navigator StackNav { Initial Main }
         Datasource { First, Second }
       }
@@ -564,8 +565,8 @@ Describe('compiler: language lowering', () => {
     await withTaoFiles('tao-folder-datasource-', {
       'Main.tao': `
         use StackNav from @tao/nav
-        app Reader {
-          Name "Reader"
+        app Reader { id "com.tao.test.reader" version "1.0.0"
+          name "Reader"
           Navigator StackNav { Initial Main }
           Datasource { Feed, Personal with { StorageKey "prod" } }
         }
@@ -594,7 +595,7 @@ Describe('compiler: language lowering', () => {
       'Main.tao': `
         use Workspace from @bar
         type WorkspaceInput is Workspace { Name }
-        app Notes { view Main }
+        app Notes { id "com.tao.test.notes" version "1.0.0" name "Notes"  view Main }
         view Main() {
           state Input = WorkspaceInput { Name: "Home" }
           action Add() { create Workspace with Input }
@@ -602,12 +603,11 @@ Describe('compiler: language lowering', () => {
         }
         ${stubView('Empty')}
       `,
-      'packages/@bar/Data.tao': 'public data Workspaces / Workspace { Name text }',
+      '@bar/Data.tao': 'public data Workspaces / Workspace { Name text }',
     }, async paths => {
       const result = await Workspace.compile(paths['Main.tao']!)
       const code = result.files.find(file => file.relativePath === 'App.tsx')?.code
 
-      Expect(code).toBeDefined()
       Expect(code).toMatch(/import \{ _TaoDataCatalog \} from '[^']*Data\.tao'/u)
       Expect(code).toMatch(
         /TR\.Data\.CreateWith\(\s*TR\.Auth\.Store\(_TaoAuthScope, _Scope\._TaoDataCatalog\),\s*"Workspace",/u,
@@ -621,7 +621,7 @@ Describe('compiler: language lowering', () => {
     await withTaoFiles('tao-dual-data-import-', {
       'Main.tao': `
         use Workspaces, Workspace from @bar
-        app Notes { view Main }
+        app Notes { id "com.tao.test.notes" version "1.0.0" name "Notes"  view Main }
         view Main() {
           query Workspaces = Workspaces with { }
           action Add() { create Workspace { Name: "Home" } }
@@ -629,12 +629,11 @@ Describe('compiler: language lowering', () => {
         }
         ${stubView('Empty')}
       `,
-      'packages/@bar/Data.tao': 'public data Workspaces / Workspace { Name text }',
+      '@bar/Data.tao': 'public data Workspaces / Workspace { Name text }',
     }, async paths => {
       const result = await Workspace.compile(paths['Main.tao']!)
       const code = result.files.find(file => file.relativePath === 'App.tsx')?.code
 
-      Expect(code).toBeDefined()
       Expect(code?.match(/^import .*_TaoDataCatalog.*$/gmu)).toHaveLength(1)
       Expect(code).toMatch(/import \{ _TaoDataCatalog \} from '[^']*Data\.tao'/u)
       Expect(code).toMatch(
@@ -642,7 +641,7 @@ Describe('compiler: language lowering', () => {
       )
       Expect(code).toContain('_Scope.Workspaces = TR.Data.Query(')
       Expect(code?.match(/TR\.Use\(_Scope, '_TaoDataCatalog'/gu)).toHaveLength(1)
-      const dataCode = result.files.find(file => file.sourcePath === paths['packages/@bar/Data.tao'])?.code
+      const dataCode = result.files.find(file => file.sourcePath === paths['@bar/Data.tao'])?.code
       Expect(dataCode).toContain('export const _TaoDataCatalog = _Scope._TaoDataCatalog')
       Expect(dataCode).not.toContain('export const Workspaces')
     })
@@ -653,18 +652,17 @@ Describe('compiler: language lowering', () => {
       'Main.tao': `
         use Workspaces from @bar
         use Col, Text from @tao/ui
-        app Notes { view Main }
+        app Notes { id "com.tao.test.notes" version "1.0.0" name "Notes"  view Main }
         view Main() {
           query Workspaces = Workspaces with { }
           render Col() { loop Workspaces / Workspace { Text(Workspace.Name) } }
         }
       `,
-      'packages/@bar/Data.tao': 'public data Workspaces / Workspace { Name text }',
+      '@bar/Data.tao': 'public data Workspaces / Workspace { Name text }',
     }, async paths => {
       const result = await Workspace.compile(paths['Main.tao']!)
       const code = result.files.find(file => file.relativePath === 'App.tsx')?.code
 
-      Expect(code).toBeDefined()
       Expect(code).toMatch(/import \{ _TaoDataCatalog \} from '[^']*Data\.tao'/u)
       Expect(code).toContain('_Scope.Workspaces = TR.Data.Query(')
       Expect(code).toContain('TR.ForEach(_Scope.Workspaces.evaluate()')
@@ -676,7 +674,7 @@ Describe('compiler: language lowering', () => {
     await withTaoFiles('tao-folder-data-names-', {
       'Main.tao': `
         type WorkspaceInput is Workspace { Name }
-        app Notes { view Main }
+        app Notes { id "com.tao.test.notes" version "1.0.0" name "Notes"  view Main }
         view Main() {
           query Workspaces = Workspaces with { }
           action Add() { create Workspace { Name: "Home" } }
@@ -689,7 +687,6 @@ Describe('compiler: language lowering', () => {
       const result = await Workspace.compile(paths['Main.tao']!)
       const code = result.files.find(file => file.relativePath === 'App.tsx')?.code
 
-      Expect(code).toBeDefined()
       Expect(code).toContain("import { _TaoDataCatalog } from './modules/Data.tao'")
       Expect(code).toMatch(
         /TR\.Data\.Create\(\s*TR\.Auth\.Store\(_TaoAuthScope, _Scope\._TaoDataCatalog\),\s*"Workspace",/u,
@@ -705,8 +702,8 @@ Describe('compiler: language lowering', () => {
       data Stories / Story { HnId number (unique), Title text }
       data Bookmarks / Bookmark { Story Story }
       datasource Everything = Memory { }
-      app Reader {
-        Name "Reader"
+      app Reader { id "com.tao.test.reader" version "1.0.0"
+        name "Reader"
         Navigator StackNav { Initial Main }
         Datasource Everything
       }
@@ -721,7 +718,9 @@ Describe('compiler: language lowering', () => {
 
     Expect(compiled.code).toContain("_Scope._TaoDataCatalog = TR.Data.Schema({\n  name: 'Data',")
     Expect(compiled.code).not.toContain('_TaoDataCatalog_')
-    Expect(compiled.code).toContain('store: _Scope._TaoDataCatalog,\n            source: _Scope.Everything.evaluate(),')
+    Expect(compiled.code.replace(/\s+/g, ' ')).toContain(
+      'store: _Scope._TaoDataCatalog, source: _Scope.Everything.evaluate(),',
+    )
   })
 
   Test('partitions local only entities into a device-local companion catalog', async () => {
@@ -734,8 +733,8 @@ Describe('compiler: language lowering', () => {
 
         local only
       }
-      app Sessions {
-        Name "Sessions"
+      app Sessions { id "com.tao.test.sessions" version "1.0.0"
+        name "Sessions"
         Navigator StackNav { Initial Main }
         Datasource Memory { }
       }
@@ -774,7 +773,7 @@ Describe('compiler: language lowering', () => {
     )
     Expect(compiled.files.some(file => file.sourcePath.endsWith('/providers/local/Local.ts'))).toBe(true)
     // Two bindings at the app root: the authored Datasource, and the companion device-local one.
-    Expect(compiled.code).toContain('store: _Scope._TaoDataCatalog,\n            source: TR.Data.Configure(')
+    Expect(compiled.code.replace(/\s+/g, ' ')).toContain('store: _Scope._TaoDataCatalog, source: TR.Data.Configure(')
     Expect(compiled.code).toContain('TR.Data.UseAppDatasources(_TaoAppDefinition_Sessions.definition)')
     Expect(compiled.code).toContain(
       'TR.Data.UseConfigured(\n            _Scope._TaoLocalDataCatalog,\n            _Scope._TaoLocalDatasource,\n          )',
@@ -797,9 +796,9 @@ Describe('compiler: language lowering', () => {
 
   Test('imports the companion catalog into an app root that configures no datasource', async () => {
     await withTaoFiles('tao-local-only-', {
-      'Project.tao': 'project { id "local-only-test" name "Local only test" }',
+      'Package.tao': 'package { version "1.0.0" license AGPL-3.0-only }',
       'Catalog.tao': `
-        workspace
+        project
         data FocusSessions / FocusSession {
           Label text,
 
@@ -808,7 +807,7 @@ Describe('compiler: language lowering', () => {
       `,
       'Board.tao': `
         use FocusSessions from ./Catalog
-        workspace
+        project
         view Board() {
           query FocusSessions = FocusSessions with { }
           render Label("{ FocusSessions.Count }")
@@ -817,7 +816,7 @@ Describe('compiler: language lowering', () => {
       `,
       'Main.tao': `
         use Board from ./Board
-        app Sessions { view Board }
+        app Sessions { id "com.tao.test.sessions" version "1.0.0" name "Sessions"  view Board }
       `,
     }, async paths => {
       const result = await Workspace.compile(paths['Main.tao']!)
@@ -839,14 +838,14 @@ Describe('compiler: language lowering', () => {
 
   Test('imports a synced catalog into an app root that configures no datasource', async () => {
     await withTaoFiles('tao-fixture-catalog-', {
-      'Project.tao': 'project { id "fixture-catalog-test" name "Fixture catalog test" }',
+      'Package.tao': 'package { version "1.0.0" license AGPL-3.0-only }',
       'Catalog.tao': `
-        workspace
+        project
         data Notes / Note { Title text }
       `,
       'Board.tao': `
         use Notes from ./Catalog
-        workspace
+        project
         view Board() {
           query Notes = Notes with { }
           render Label("{ Notes.Count }")
@@ -855,7 +854,7 @@ Describe('compiler: language lowering', () => {
       `,
       'Main.tao': `
         use Board from ./Board
-        app Notebook { view Board }
+        app Notebook { id "com.tao.test.notebook" version "1.0.0" name "Notebook"  view Board }
       `,
     }, async paths => {
       const result = await Workspace.compile(paths['Main.tao']!)
@@ -868,26 +867,26 @@ Describe('compiler: language lowering', () => {
 
   Test("inherits, patches, or replaces a base's datasources across a module boundary", async () => {
     await withTaoFiles('tao-cross-module-datasource-', {
-      'Project.tao': 'project { id "cross-module-datasource" name "Cross-module datasource" }',
+      'Package.tao': 'package { version "1.0.0" license AGPL-3.0-only }',
       'Main.tao': `
         use Memory from @tao/data/providers/memory
         use MiddleApp from ./Middle.tao
-        app FinalApp = MiddleApp with { Name "Final app" }
-        app PatchedApp = MiddleApp with { Datasource with { ApiURI "http://localhost:9999" } }
-        app OwnApp = MiddleApp with { Datasource Memory { } }
+        app FinalApp = MiddleApp with { id "com.tao.test.finalapp"  name "Final app" }
+        app PatchedApp = MiddleApp with { id "com.tao.test.patchedapp"  Datasource with { ApiURI "http://localhost:9999" } }
+        app OwnApp = MiddleApp with { id "com.tao.test.ownapp"  Datasource Memory { } }
       `,
       'Middle.tao': `
         use InstantDB from @tao/data/providers/instantdb
         use PackageApp from @feature
-        workspace app MiddleApp = PackageApp with {
-          Name "Middle app"
+        project app MiddleApp = PackageApp with { id "com.tao.test.middleapp"
+          name "Middle app"
           Datasource InstantDB { AppId "local-app" ApiURI "http://localhost:9020" }
         }
       `,
-      'packages/@feature/App.tao': `
+      '@feature/App.tao': `
         use Text from @tao/ui
         data Records / Record { Label text }
-        public app PackageApp { Name "Package app" view PackageHome }
+        public app PackageApp { id "com.tao.test.packageapp" version "1.0.0"  name "Package app" view PackageHome }
         view PackageHome() { query Records = Records with { } render Text("{ Records.Count }") }
       `,
     }, async paths => {
@@ -896,26 +895,26 @@ Describe('compiler: language lowering', () => {
         appName: 'PatchedApp',
       })
       const code = result.files.find(file => file.relativePath === 'App.tsx')?.code ?? ''
-      const definitionOf = (name: string) => code.slice(code.indexOf(`const _TaoAppDefinition_${name} =`))
+      const bindingOf = (name: string) =>
+        code.slice(
+          code.indexOf(`function _TaoBindApp_${name}`),
+          code.indexOf(`const _TaoBoundApp_${name}`),
+        )
 
       // The base's InstantDB value is written against an import only Middle.tao has, so no variant
       // here may recompile it.
       Expect(code).not.toContain('__tao_type_InstantDB')
-      const final = definitionOf('FinalApp')
-      Expect(final.slice(0, final.indexOf('function TaoApp_FinalApp'))).toContain(
-        'datasources: () => _Scope.MiddleApp.definition.datasources(),',
-      )
+      Expect(bindingOf('FinalApp')).toContain('datasources: () => _TaoBaseBinding.datasources(),')
       // The variant's own patch, then the release override for the selected app, in that order.
-      Expect(definitionOf('PatchedApp')).toContain(
-        'datasources: () => TR.Data.PatchBindings(_Scope.MiddleApp.definition.datasources(), [[{\n'
-          + '      "ApiURI": TR.Value("http://localhost:9999"),\n'
-          + '    }, {\n'
-          + '      "ApiURI": TR.Value("https://api.instantdb.com"),\n'
-          + '      "AppId": TR.Value("hosted-app"),\n'
-          + '    }]]),',
-      )
-      Expect(definitionOf('OwnApp')).toContain(
-        'datasources: () => [{\n            store: _Scope._TaoDataCatalog,\n            source: TR.Data.Configure(_Scope.__tao_type_Memory, {',
+      const patched = bindingOf('PatchedApp').replace(/\s+/g, ' ')
+      Expect(patched).toContain('datasources: () => TR.Data.PatchBindings(_TaoBaseBinding.datasources(), [[')
+      Expect(patched).toContain('"ApiURI": TR.Value("http://localhost:9999")')
+      Expect(patched).toContain('"ApiURI": TR.Value("https://api.instantdb.com")')
+      Expect(patched.indexOf('"ApiURI": TR.Value("http://localhost:9999")'))
+        .toBeLessThan(patched.indexOf('"ApiURI": TR.Value("https://api.instantdb.com")'))
+      Expect(patched).toContain('"AppId": TR.Value("hosted-app")')
+      Expect(bindingOf('OwnApp').replace(/\s+/g, ' ')).toContain(
+        'datasources: () => [{ store: _Scope._TaoDataCatalog, source: TR.Data.Configure(_Scope.__tao_type_Memory, {',
       )
     }, { location: 'host' })
   })
@@ -925,8 +924,8 @@ Describe('compiler: language lowering', () => {
       use Memory from @tao/data/providers/memory
       use StackNav from @tao/nav
       data Notes / Note { Title text }
-      app Notebook {
-        Name "Notebook"
+      app Notebook { id "com.tao.test.notebook" version "1.0.0"
+        name "Notebook"
         Navigator StackNav { Initial Main }
         Datasource Memory { }
       }
@@ -949,8 +948,8 @@ Describe('compiler: language lowering', () => {
       use Dev from @tao/data/providers/dev
       use StackNav from @tao/nav
       data Notes / Note { Title text }
-      app Notebook {
-        Name "Notebook"
+      app Notebook { id "com.tao.test.notebook" version "1.0.0"
+        name "Notebook"
         Navigator StackNav { Initial Main }
         Datasource Dev { }
       }
@@ -964,9 +963,7 @@ Describe('compiler: language lowering', () => {
 
     // The app binds the stdlib declaration's own identity with an all-defaulted configuration.
     Expect(compiled.code).toContain("import { __tao_type_Dev } from './modules/external/Dev.tao'")
-    Expect(compiled.code).toContain(
-      'TR.Data.Configure(_Scope.__tao_type_Dev, {\n                ...{\n                  },',
-    )
+    Expect(compiled.code.replace(/\s+/g, ' ')).toContain('TR.Data.Configure(_Scope.__tao_type_Dev, { ...{ },')
     Expect(compiled.files.some(file => file.sourcePath.endsWith('/providers/dev/Dev.tao'))).toBe(true)
     Expect(compiled.files.some(file => file.sourcePath.endsWith('/providers/dev/Dev.ts'))).toBe(true)
   })
@@ -978,13 +975,13 @@ Describe('compiler: language lowering', () => {
         use Local from @tao/data/providers/local
         use StackNav from @tao/nav
         data Notes / Note { Title text }
-        app LocalNotes {
-          Name "Local Notes"
+        app LocalNotes { id "com.tao.test.localnotes" version "1.0.0"
+          name "Local Notes"
           Navigator StackNav { Initial Main }
           Datasource Local { StorageKey "Notes" }
         }
-        app SyncedNotes = LocalNotes with {
-          Name "Synced Notes"
+        app SyncedNotes = LocalNotes with { id "com.tao.test.syncednotes"
+          name "Synced Notes"
           Datasource InstantDB { AppId "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f" }
         }
         scene Main() {
@@ -1009,13 +1006,13 @@ Describe('compiler: language lowering', () => {
         use Local from @tao/data/providers/local
         use StackNav from @tao/nav
         data Notes / Note { Title text }
-        app LocalNotes {
-          Name "Local Notes"
+        app LocalNotes { id "com.tao.test.localnotes" version "1.0.0"
+          name "Local Notes"
           Navigator StackNav { Initial Main }
           Datasource Local { StorageKey "Notes" }
         }
-        app CloudNotes = LocalNotes with {
-          Name "Cloud Notes"
+        app CloudNotes = LocalNotes with { id "com.tao.test.cloudnotes"
+          name "Cloud Notes"
           Datasource ICloud { Container "iCloud.lang.tao.notes" }
         }
         scene Main() {
@@ -1040,15 +1037,15 @@ Describe('compiler: language lowering', () => {
         use InstantDB from @tao/data/providers/instantdb
         use StackNav from @tao/nav
         data Notes / Note { Title text }
-        app LocalNotes {
-          Name "Local Notes"
+        app LocalNotes { id "com.tao.test.localnotes" version "1.0.0"
+          name "Local Notes"
           Navigator StackNav { Initial Main }
           Datasource InstantDB {
             AppId "local-app"
             ApiURI "http://localhost:9020"
           }
         }
-        app HostedNotes = LocalNotes with { Name "Hosted Notes" }
+        app HostedNotes = LocalNotes with { id "com.tao.test.hostednotes"  name "Hosted Notes" }
         scene Main() { Title "Notes" render Text("Ready") }
         view Text(Value text) { render inject ${tsFence} return null ${fence} }
       `,
@@ -1083,7 +1080,7 @@ Describe('compiler: language lowering', () => {
         data Pins / Pin { Label text }
         datasource Shared = InstantDB { AppId "local-app" ApiURI "http://localhost:9020" Data { Notes } }
         datasource Mine = CloudKit { Data { Pins } }
-        app Notes2 { Name "Notes" Navigator StackNav { Initial Main } Datasource { Shared, Mine } }
+        app Notes2 { id "com.tao.test.notes2" version "1.0.0"  name "Notes" Navigator StackNav { Initial Main } Datasource { Shared, Mine } }
         scene Main() { Title "Notes" render Text("Ready") }
         view Text(Value text) { render inject ${tsFence} return null ${fence} }
       `,
@@ -1106,8 +1103,8 @@ Describe('compiler: language lowering', () => {
       datasource Feed = Memory { Data { Stories } }
       datasource StubFeed = Feed with { }
       datasource Personal = Memory { Data { Bookmarks } }
-      app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource { Feed, Personal } }
-      app ReaderStub = Reader with { Datasource { StubFeed, Personal } }
+      app Reader { id "com.tao.test.reader" version "1.0.0"  name "Reader" Navigator StackNav { Initial Main } Datasource { Feed, Personal } }
+      app ReaderStub = Reader with { id "com.tao.test.readerstub"  Datasource { StubFeed, Personal } }
       scene Main() { Title "Reader" render Text("Ready") }
       view Text(Value text) { render inject ${tsFence} return null ${fence} }
     `,
@@ -1115,11 +1112,12 @@ Describe('compiler: language lowering', () => {
     )
 
     // A derived stub is an alternative for its base's store, and keeps a storage key of its own.
-    Expect(compiled.code).toContain(
-      'store: _Scope._TaoDataCatalog_Stories,\n            source: _Scope.StubFeed.evaluate(),\n            storageName: "StubFeed",',
+    const compact = compiled.code.replace(/\s+/g, ' ')
+    Expect(compact).toContain(
+      'store: _Scope._TaoDataCatalog_Stories, source: _Scope.StubFeed.evaluate(), storageName: "StubFeed",',
     )
-    Expect(compiled.code).toContain(
-      'store: _Scope._TaoDataCatalog_Stories,\n            source: _Scope.Feed.evaluate(),\n            storageName: "Feed",',
+    Expect(compact).toContain(
+      'store: _Scope._TaoDataCatalog_Stories, source: _Scope.Feed.evaluate(), storageName: "Feed",',
     )
     Expect(compiled.code).toContain('TR.Data.UseAppDatasources(_TaoAppDefinition_ReaderStub.definition)')
   })
@@ -1133,7 +1131,7 @@ Describe('compiler: language lowering', () => {
       data Bookmarks / Bookmark { Story (reference) }
       datasource Feed = Memory { Data { Stories } }
       datasource Personal = Memory { Data { Bookmarks } }
-      app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource { Feed, Personal } }
+      app Reader { id "com.tao.test.reader" version "1.0.0"  name "Reader" Navigator StackNav { Initial Main } Datasource { Feed, Personal } }
       scene Main() { Title "Reader" render Text("Ready") }
       view Text(Value text) { render inject ${tsFence} return null ${fence} }
     `,
@@ -1152,7 +1150,7 @@ Describe('compiler: language lowering', () => {
       use StackNav from @tao/nav
       data Notes / Note { Title text }
       datasource Store = LaterSource { }
-      app Notes2 { Name "Notes" Navigator StackNav { Initial Main } Datasource Store }
+      app Notes2 { id "com.tao.test.notes2" version "1.0.0"  name "Notes" Navigator StackNav { Initial Main } Datasource Store }
       type LaterSource is Memory with { }
       scene Main() { Title "Notes" render Text("Ready") }
       view Text(Value text) { render inject ${tsFence} return null ${fence} }
@@ -1166,7 +1164,7 @@ Describe('compiler: language lowering', () => {
   Test('lowers render and loop tags through Tao props without adding a row wrapper', async () => {
     const compiled = await Compiler.compileCode(`
       use Col, Text from @tao/ui
-      app TaggedApp { view Main }
+      app TaggedApp { id "com.tao.test.taggedapp" version "1.0.0" name "TaggedApp"  view Main }
       view Main() {
         render Col() {
           #title
@@ -1209,7 +1207,7 @@ Describe('compiler: language lowering', () => {
   Test('lowers named and literal injection arguments to typed parameters and compiled values', async () => {
     const compiled = await Compiler.compileCode(`
       let UserName = "the Developer"
-      app InjectionApp { view Native }
+      app InjectionApp { id "com.tao.test.injectionapp" version "1.0.0" name "InjectionApp"  view Native }
       view Native() {
         render inject Name UserName, Count 3, Greeting "Hello" ${tsFence}
           return null
@@ -1231,8 +1229,8 @@ Describe('compiler: language lowering', () => {
       use Memory from @tao/data/providers/memory
       use StackNav from @tao/nav
       data Rows / __proto__ { __proto__ text }
-      app SafeApp {
-        Name "Safe"
+      app SafeApp { id "com.tao.test.safeapp" version "1.0.0"
+        name "Safe"
         Navigator StackNav { Initial MainView }
         Datasource Memory { }
       }
@@ -1253,8 +1251,8 @@ Describe('compiler: language lowering', () => {
       `
       use SelectionNav, SlotNav, StackNav from @tao/nav
       let ResetNavigator = StackNav { Initial Home }
-      app NavigationApp {
-        Name "Navigation"
+      app NavigationApp { id "com.tao.test.navigationapp" version "1.0.0"
+        name "Navigation"
         Navigator SelectionNav {
           Initial @workspace
           Display "tabs"
@@ -1262,7 +1260,7 @@ Describe('compiler: language lowering', () => {
         }
         @window SlotNav { Initial Detail }
       }
-      let NavigationVariant = NavigationApp with { Name "Navigation Variant" }
+      let NavigationVariant = NavigationApp with { id "com.tao.test.navigationvariant" name "Navigation Variant" }
       scene Home() {
         Title "Home"
         action Open() { present Detail() in NavigationApp@window }
@@ -1284,9 +1282,7 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code).toContain('TR.Navigation.App({')
     Expect(compiled.code).toContain('TR.Navigation.Configure(_Scope.__tao_type_StackNav, {')
     Expect(compiled.code).toContain('TR.Navigation.Configure(_Scope.__tao_type_SlotNav, {')
-    Expect(compiled.code).toContain('TR.Navigation.Target(')
     Expect(compiled.code).toContain('TR.Navigation.PresentOverlay(')
-    Expect(compiled.code).toContain('TR.Navigation.Activate(')
     Expect(compiled.code).toContain('"workspace"')
     Expect(
       /TR\.Navigation\.Target\(\s+_ViewProps\.__tao,\s+_Scope\.NavigationApp,/.test(compiled.code),
@@ -1295,7 +1291,6 @@ Describe('compiler: language lowering', () => {
       /TR\.Navigation\.Activate\(\s+_ViewProps\.__tao,\s+_Scope\.NavigationApp,/.test(compiled.code),
     ).toBe(true)
     Expect(compiled.code).toContain('TR.Navigation.Dismiss(_ViewProps.__tao)')
-    Expect(compiled.code).toContain('TR.Navigation.Replace(')
     Expect(
       /TR\.Navigation\.Replace\(\s+_ViewProps\.__tao,\s+_Scope\.ResetNavigator\.evaluate\(\),\s+_Scope\.NavigationApp,/
         .test(compiled.code),
@@ -1311,7 +1306,7 @@ Describe('compiler: language lowering', () => {
   Test('compiles responds-view asks and responses through an async-compatible action chain', async () => {
     const compiled = await Compiler.compileCode(`
       type ConfirmResult is one of Confirmed
-      app DialogueApp { view Editor }
+      app DialogueApp { id "com.tao.test.dialogueapp" version "1.0.0" name "DialogueApp"  view Editor }
       view Editor() {
         action Close() {
           let Result = ask ConfirmClose("Draft")
@@ -1340,7 +1335,7 @@ Describe('compiler: language lowering', () => {
   Test('compiles keyed toast presentation against inherited app context', async () => {
     const compiled = await Compiler.compileCode(`
       use StackNav from @tao/nav
-      app ToastApp { Name "Toast" Navigator StackNav { Initial Home } }
+      app ToastApp { id "com.tao.test.toastapp" version "1.0.0"  name "Toast" Navigator StackNav { Initial Home } }
       scene Home() { Title "Home" render Editor() }
       view Editor() {
         action Save() { present Saved() as toast (Key: "document-saved", Duration: 3.s) }
@@ -1368,7 +1363,7 @@ Describe('compiler: language lowering', () => {
         @home { Label "Home" Content HomeStack }
         @settings { Label "Settings" Content SettingsStack }
       }
-      app SelectionApp { Name "Selection" Navigator MainNavigation }
+      app SelectionApp { id "com.tao.test.selectionapp" version "1.0.0"  name "Selection" Navigator MainNavigation }
       scene Home() {
         Title "Home"
         action Activate() { present SelectionApp@settings }
@@ -1395,7 +1390,7 @@ Describe('compiler: language lowering', () => {
         Display "tabs"
         @home { Label "Home" Content Home }
       }
-      app SelectionApp { Name "Selection" Navigator MainNavigation }
+      app SelectionApp { id "com.tao.test.selectionapp" version "1.0.0"  name "Selection" Navigator MainNavigation }
       view Home() { render Empty() }
       view Empty() { render inject ${tsFence} return null ${fence} }
     `)
@@ -1416,7 +1411,7 @@ Describe('compiler: language lowering', () => {
       let MainNav = MainNavBase with {
         @other { Label "Other" Content Other }
       }
-      app SelectionApp { Name "Selection" Navigator MainNav }
+      app SelectionApp { id "com.tao.test.selectionapp" version "1.0.0"  name "Selection" Navigator MainNav }
       view Home() { render Empty() }
       view Other() { render Empty() }
       view Empty() { render inject ${tsFence} return null ${fence} }
@@ -1430,12 +1425,12 @@ Describe('compiler: language lowering', () => {
 
   Test('compiles a root-view app through the one app definition path', async () => {
     const compiled = await Compiler.compileCode(`
-      app MyApp { view MainView }
+      app MyApp { id "com.tao.test.myapp" version "1.0.0" name "MyApp"  view MainView }
       ${stubView('MainView')}
     `)
 
-    Expect(compiled.code).toContain('const _TaoAppDefinition_MyApp = TR.Navigation.App({')
-    Expect(compiled.code).toContain('name: "MyApp"')
+    Expect(compiled.code).toContain('const _TaoAppDefinition_MyApp = ((_Scope: any) => TR.Navigation.App({')
+    Expect(compiled.code).toContain('name: () => TR.Value("MyApp").evaluate().jsValue as string')
     Expect(compiled.code.replace(/\s+/g, ' ')).toContain(
       'TR.Navigation.Declaration( "MainView", TR.NavKind.Slot(), TR.Navigation.Identity(',
     )
@@ -1452,22 +1447,22 @@ Describe('compiler: language lowering', () => {
    */
   Test('gives the synthesized root-view navigator an identity distinct from the app and the view', async () => {
     const compiled = await Compiler.compileCode(`
-      app MyApp { view MainView }
+      app MyApp { id "com.tao.test.myapp" version "1.0.0" name "MyApp"  view MainView }
       ${stubView('MainView')}
     `)
     const normalized = compiled.code.replace(/\s+/g, ' ')
 
     Expect(normalized).toContain(
       'TR.Navigation.Declaration( "MainView", TR.NavKind.Slot(), TR.Navigation.Identity('
-        + '["tao.declaration",1,"tao-compiler-test","@workspace","source","app-root-view-nav","MyApp"]), )',
+        + '["tao.declaration",1,"ephemeral:source","@workspace","source","app-root-view-nav","MyApp"]), )',
     )
     Expect(normalized).toContain(
       'TR.Navigation.AppDeclaration("MyApp", TR.Navigation.Identity('
-        + '["tao.declaration",1,"tao-compiler-test","@workspace","source","app","MyApp"]))',
+        + '["tao.declaration",1,"ephemeral:source","@workspace","source","app","MyApp"]))',
     )
     Expect(normalized).toContain(
       '"Initial": TR.Navigation.ViewReference(TR.Navigation.Identity('
-        + '["tao.declaration",1,"tao-compiler-test","@workspace","source","view","MainView"]))',
+        + '["tao.declaration",1,"ephemeral:source","@workspace","source","view","MainView"]))',
     )
   })
 
@@ -1475,15 +1470,15 @@ Describe('compiler: language lowering', () => {
   // is. Deriving it from the mounted view would move a person's stored position on a rename.
   Test('keeps the synthesized navigator identity when the root view it mounts changes', async () => {
     const mainView = await Compiler.compileCode(`
-      app MyApp { view MainView }
+      app MyApp { id "com.tao.test.myapp" version "1.0.0" name "MyApp"  view MainView }
       ${stubView('MainView')}
     `)
     const otherView = await Compiler.compileCode(`
-      app MyApp { view OtherView }
+      app MyApp { id "com.tao.test.myapp" version "1.0.0" name "MyApp"  view OtherView }
       ${stubView('OtherView')}
     `)
     const navigatorIdentity =
-      '["tao.declaration",1,"tao-compiler-test","@workspace","source","app-root-view-nav","MyApp"]'
+      '["tao.declaration",1,"ephemeral:source","@workspace","source","app-root-view-nav","MyApp"]'
 
     Expect(mainView.code).toContain(navigatorIdentity)
     Expect(otherView.code).toContain(navigatorIdentity)
@@ -1496,31 +1491,32 @@ Describe('compiler: language lowering', () => {
   Test('shares one synthesized navigator identity between a root-view app and its derivation', async () => {
     const compiled = await Compiler.compileCode(
       `
-      app BaseApp { view MainView }
-      app PreviewApp = BaseApp with { Restore fresh }
+      app BaseApp { id "com.tao.test.baseapp" version "1.0.0" name "BaseApp"  view MainView }
+      app PreviewApp = BaseApp with { id "com.tao.test.previewapp"  Restore fresh }
       ${stubView('MainView')}
     `,
       { appName: 'PreviewApp' },
     )
     const navigatorIdentity =
-      '["tao.declaration",1,"tao-compiler-test","@workspace","source","app-root-view-nav","BaseApp"]'
+      '["tao.declaration",1,"ephemeral:source","@workspace","source","app-root-view-nav","BaseApp"]'
 
-    Expect(compiled.code.split(navigatorIdentity).length - 1).toBe(2)
+    Expect(compiled.code.split(navigatorIdentity).length - 1).toBe(1)
+    Expect(compiled.code).toContain('navigator: () => _TaoBaseBinding.navigator()')
     Expect(compiled.code).toContain('variant: "BaseApp"')
     Expect(compiled.code).toContain('variant: "PreviewApp"')
   })
 
   Test('compiles a root-view app that also supplies its own app configuration', async () => {
     const compiled = await Compiler.compileCode(`
-      app MyApp {
-        Name "Root View App"
+      app MyApp { id "com.tao.test.myapp" version "1.0.0"
+        name "Root View App"
         view MainView
         Restore fresh
       }
       ${stubView('MainView')}
     `)
 
-    Expect(compiled.code).toContain('name: TR.Value("Root View App").evaluate().jsValue as string')
+    Expect(compiled.code).toContain('name: () => TR.Value("Root View App").evaluate().jsValue as string')
     Expect(compiled.code.replace(/\s+/g, ' ')).toContain(
       'TR.Navigation.Declaration( "MainView", TR.NavKind.Slot(), TR.Navigation.Identity(',
     )
@@ -1529,7 +1525,7 @@ Describe('compiler: language lowering', () => {
 
   Test('compiles typed dynamic action arguments in source order', async () => {
     const compiled = await Compiler.compileCode(`
-      app MyApp { view MainView }
+      app MyApp { id "com.tao.test.myapp" version "1.0.0" name "MyApp"  view MainView }
       view MainView() {
         action Receive(Label text, Count number) { }
         render Wrapper(Receive)
@@ -1557,7 +1553,7 @@ Describe('compiler: language lowering', () => {
 
   Test('compiles action aliases as invokable callback values', async () => {
     const compiled = await Compiler.compileCode(`
-      app MyApp { view MainView }
+      app MyApp { id "com.tao.test.myapp" version "1.0.0" name "MyApp"  view MainView }
       view MainView() {
         let Save = action { }
         action Run() { do Save() }
@@ -1573,7 +1569,7 @@ Describe('compiler: language lowering', () => {
   Test('compiles direct reactive host slots and occurrence-bound toolbar commands', async () => {
     const compiled = await Compiler.compileCode(`
       use StackNav from @tao/nav
-      app HostApp { Name "Host" Navigator StackNav { Initial Home } }
+      app HostApp { id "com.tao.test.hostapp" version "1.0.0"  name "Host" Navigator StackNav { Initial Home } }
       scene Home() {
         state CurrentTitle = "Home"
         state CanSave = false
@@ -1618,7 +1614,7 @@ Describe('compiler: language lowering', () => {
 
   Test('compiles a module command`s slot as the value every member and its invocation read', async () => {
     const compiled = await Compiler.compileCode(`
-      app HostApp { view Home }
+      app HostApp { id "com.tao.test.hostapp" version "1.0.0" name "HostApp"  view Home }
       data Documents / Document {
         Title text,
         Final yes / Draft no
@@ -1650,7 +1646,7 @@ Describe('compiler: language lowering', () => {
 
   Test('copies a command slot before its command action mutates it', async () => {
     const compiled = await Compiler.compileCode(`
-      app HostApp { view Home }
+      app HostApp { id "com.tao.test.hostapp" version "1.0.0" name "HostApp"  view Home }
       action Change(Value text) { set Value += "!" }
       command Edit(copy Value text) {
         Title "Edit"
@@ -1672,7 +1668,7 @@ Describe('compiler: language lowering', () => {
 
   Test('resolves a command action lazily when the action is declared later in its view', async () => {
     const compiled = await Compiler.compileCode(`
-      app HostApp { view Home }
+      app HostApp { id "com.tao.test.hostapp" version "1.0.0" name "HostApp"  view Home }
       scene Home() {
         command Send() {
           Title "Send"
@@ -1697,7 +1693,7 @@ Describe('compiler: language lowering', () => {
   Test('compiles a configured nav toolbar as the same command values a scene lists', async () => {
     const compiled = await Compiler.compileCode(`
       use StackNav from @tao/nav
-      app HostApp { Name "Host" Navigator Main }
+      app HostApp { id "com.tao.test.hostapp" version "1.0.0"  name "Host" Navigator Main }
       nav Main = StackNav {
         Initial Home
         Title "Main"
@@ -1728,7 +1724,7 @@ Describe('compiler: language lowering', () => {
         Title text is none
         nav TestNavImpl from ./TestNavImpl.ts
       }
-      app HostApp { Name "Host" Navigator Main }
+      app HostApp { id "com.tao.test.hostapp" version "1.0.0"  name "Host" Navigator Main }
       let Enabled = true
       nav Main = TestNav {
         Initial Home
@@ -1752,7 +1748,7 @@ Describe('compiler: language lowering', () => {
   Test('patches configured nav host slots without discarding unpatched host values', async () => {
     const compiled = await Compiler.compileCode(`
       use StackNav from @tao/nav
-      app HostApp { Name "Host" Navigator Main }
+      app HostApp { id "com.tao.test.hostapp" version "1.0.0"  name "Host" Navigator Main }
       nav Base = StackNav {
         Initial Home
         Title "Base"
@@ -1814,7 +1810,7 @@ Describe('compiler: language lowering', () => {
         }
       `,
         'Main.tao': `
-        app MyApp { view MainView }
+        app MyApp { id "com.tao.test.myapp" version "1.0.0" name "MyApp"  view MainView }
         view MainView() {
           render inject ${tsFence}
             return null
@@ -1898,7 +1894,7 @@ Describe('compiler: language lowering', () => {
         }
       `,
           'Main.tao': `
-        app MyApp { view MainView }
+        app MyApp { id "com.tao.test.myapp" version "1.0.0" name "MyApp"  view MainView }
         view MainView() { render inject ${tsFence} return null ${fence} }
       `,
         },

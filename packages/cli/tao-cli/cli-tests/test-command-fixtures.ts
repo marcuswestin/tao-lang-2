@@ -3,7 +3,7 @@ import { FS, Platform, Text } from '@shared'
 
 export const taoApp = (name: string) => `
   use Text from @tao/ui
-  app ${name} { view Main }
+  app ${name} { id "${name.toLowerCase()}" version "1.0.0" name "${name}" view Main }
   view Main() { render Text("${name}") }
 `
 
@@ -55,7 +55,7 @@ export function outputText(result: { stderr: string; stdout: string }): string {
 }
 
 export const reportFixture = {
-  'Project.tao': 'project { id "test-output-report-test" name "Test output report test" }',
+  '.tao/.gitkeep': '',
   'App.tao': taoApp('Reported'),
   'App.test.tao': taoTest('Reported'),
 } as const
@@ -77,13 +77,13 @@ export async function writeStaleRunRoot(runtimeRoot: string, ageHours: number): 
 }
 
 export const lifecycleFixture = {
-  'Project.tao': 'project { id "run-root-lifecycle-test" name "Run root lifecycle test" }',
+  '.tao/.gitkeep': '',
   'App.tao': taoApp('Lifecycle'),
   'App.test.tao': taoTest('Lifecycle'),
 } as const
 
 export const reuseFixture = {
-  'Project.tao': 'project { id "compiled-output-reuse-test" name "Compiled output reuse test" }',
+  '.tao/.gitkeep': '',
   'App.tao': taoApp('Reused'),
   'App.test.tao': taoTest('Reused'),
 } as const
@@ -117,7 +117,7 @@ function taoTestJourneys(name: string, count: number): string {
  * entrypoints need to be worth their two module registries.
  */
 export const splittableFixture = {
-  'Project.tao': 'project { id "entrypoint-split-test" name "Entrypoint split test" }',
+  '.tao/.gitkeep': '',
   'One/App.tao': taoApp('SplitOne'),
   'One/App.test.tao': taoTestJourneys('SplitOne', RuntimeTesting.TestHarnessFiles.JOURNEYS_PER_SHARD),
   'Two/App.tao': taoApp('SplitTwo'),

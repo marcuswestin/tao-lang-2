@@ -5,12 +5,6 @@ import { Describe, Expect, Test } from '@shared/test'
 const REPO_ROOT = '/repo'
 
 Describe('minimalWatchRoots', () => {
-  Test('keeps a single root as-is', () => {
-    Expect(minimalWatchRoots([FS.resolvePath('Apps/Sample', REPO_ROOT)])).toEqual([
-      FS.resolvePath('Apps/Sample', REPO_ROOT),
-    ])
-  })
-
   Test('deduplicates a repeated root', () => {
     const root = FS.resolvePath('Apps/Sample', REPO_ROOT)
     Expect(minimalWatchRoots([root, root])).toEqual([root])

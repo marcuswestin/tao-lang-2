@@ -1,6 +1,10 @@
 .DS_Store
+# Watchman creates disposable query-synchronization files in watched roots.
+.watchman-cookie-*
 node_modules/
 *.tsbuildinfo
+.tao-ts/
+# Ignore sidecars left by the previous generated-contract layout.
 *.tao.ts
 
 .devenv/
@@ -35,7 +39,7 @@ packages/apps/expo-host/android/
 packages/ides/studio-companion-app/ios/
 packages/ides/studio-companion-app/android/
 
-# Decrypted secrets, written by `just secrets`. Project encrypted originals live in .tao/store/secrets.jsonc.
+# Decrypted repository-tool secrets, written by `just secrets`; encrypted originals live in secrets/.
 .env.secrets
 # Local overrides kept by hand. Nothing generates this, so nothing can overwrite it.
 .env.local

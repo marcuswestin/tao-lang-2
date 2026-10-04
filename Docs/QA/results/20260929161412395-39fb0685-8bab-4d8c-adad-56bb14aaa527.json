@@ -1,0 +1,40 @@
+{
+  "id": "20260929161412395-39fb0685-8bab-4d8c-adad-56bb14aaa527",
+  "runId": "20260929161318907-772bb9ea-4c23-4e35-b1e5-f9d53f1c6e6a",
+  "createdAt": "2026-09-29T16:14:12.394Z",
+  "recordedAt": "2026-09-29T16:14:12.394Z",
+  "commit": "0aa8ebcfae088acc4c8b53cb1a122b7771370e15",
+  "phase": 1,
+  "executionProfile": "development",
+  "provenance": {
+    "snapshotBasis": "observation-time",
+    "originalDependencies": "recorded",
+    "observedMetadataEvidence": [
+      "packages/ai/tao-skills/skills/tao-design/SKILL.md"
+    ]
+  },
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "runtime": "bun:1.4.2"
+  },
+  "inputs": {
+    "source": "packages/ai/tao-skills/skills/tao-design/SKILL.md",
+    "dependencySnapshot": "Docs/QA/inputs/1b8ea0038e4a1018886700293ba031b97d41de1e474b00f5bb81e7db38f253b5.json"
+  },
+  "surfaceId": "doc:packages/ai/tao-skills/skills/tao-design/SKILL.md",
+  "dimension": "text",
+  "outcome": "fail",
+  "reviewer": "agent",
+  "channel": "source",
+  "evidence": [
+    {
+      "path": "packages/ai/tao-skills/skills/tao-design/SKILL.md",
+      "sha256": "67e8fd329e3f19a6f0df3cdfbef058ebbde4709ff5344736865cec60abf50a9b"
+    }
+  ],
+  "notes": "QA-SKILL-DESIGN-ADVANCED.",
+  "sourceHash": "67e8fd329e3f19a6f0df3cdfbef058ebbde4709ff5344736865cec60abf50a9b",
+  "rendererHash": "not-applicable",
+  "profileHash": "c1bb9d6add2e225907faed5f0c6ca5736166bf2163ff04631811b56048eef38b"
+}

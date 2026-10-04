@@ -1,6 +1,6 @@
 import { DevDataServer } from '@expo-host/dev-loop/dev-data/DevDataServer'
 import { detectLanIPv4 } from '@expo-host/dev-loop/expo-runner/lan-host'
-import { Errors, FS, HCI, TaoHome } from '@shared'
+import { Errors, FS, HCI, ReleaseCapabilities, TaoHome } from '@shared'
 import {
   startStudioSessionServer,
   StudioCanvasViewportStore,
@@ -27,7 +27,7 @@ export type StudioPackagedServiceOptions = {
 export type StartedStudioPackagedService = {
   /** Exposed for packaged-service readiness and lifecycle verification. */
   devDataPort: number
-  deviceGatewayPort: number
+  deviceGatewayPort?: number
   stop(): Promise<void>
   url: string
 }
@@ -58,6 +58,7 @@ export async function startStudioPackagedService(
   options: StudioPackagedServiceOptions,
   dependencies: StudioPackagedServiceDependencies = {},
 ): Promise<StartedStudioPackagedService> {
+  ReleaseCapabilities.require('studio')
   let stopping = false
   let stopPromise: Promise<void> | undefined
   StudioClientAssets.usePrebuiltBundle(await FS.readText(options.studioClientBundlePath))
@@ -75,29 +76,31 @@ export async function startStudioPackagedService(
   let trustStore: StudioDeviceTrustStore | undefined
   let deviceGateway: StudioDeviceGateway | undefined
   try {
-    trustStore = await (dependencies.openTrustStore ?? StudioDeviceTrustStore.open)(
-      FS.resolvePath('device-trust', userStateRoot),
-    )
-    deviceGateway = await (dependencies.startDeviceGateway ?? StudioDeviceGateway.start)({
-      hosts: async () => [await detectLanIPv4()].filter(host => host !== 'localhost'),
-      log: line => HCI.logProcessInfo('studio-device', line),
-      sessions: {
-        get: sessionId => {
-          const resource = manager?.get(sessionId)
-          return resource === undefined
-            ? undefined
-            : { previewUrl: resource.previewUrl, session: resource.session, sessionId }
-        },
-        list: () =>
-          (manager?.list().current ?? []).flatMap(item => {
-            const resource = manager?.get(item.sessionId)
+    if (ReleaseCapabilities.allows('companion')) {
+      trustStore = await (dependencies.openTrustStore ?? StudioDeviceTrustStore.open)(
+        FS.resolvePath('device-trust', userStateRoot),
+      )
+      deviceGateway = await (dependencies.startDeviceGateway ?? StudioDeviceGateway.start)({
+        hosts: async () => [await detectLanIPv4()].filter(host => host !== 'localhost'),
+        log: line => HCI.logProcessInfo('studio-device', line),
+        sessions: {
+          get: sessionId => {
+            const resource = manager?.get(sessionId)
             return resource === undefined
-              ? []
-              : [{ previewUrl: resource.previewUrl, session: resource.session, sessionId: item.sessionId }]
-          }),
-      },
-      trustStore,
-    })
+              ? undefined
+              : { previewUrl: resource.previewUrl, session: resource.session, sessionId }
+          },
+          list: () =>
+            (manager?.list().current ?? []).flatMap(item => {
+              const resource = manager?.get(item.sessionId)
+              return resource === undefined
+                ? []
+                : [{ previewUrl: resource.previewUrl, session: resource.session, sessionId: item.sessionId }]
+            }),
+        },
+        trustStore,
+      })
+    }
   } catch (error) {
     return await rollbackPackagedStart(error, [() => trustStore?.flush(), () => devDataServer.stop()])
   }
@@ -111,7 +114,7 @@ export async function startStudioPackagedService(
       async openProject(request) {
         return await openStudioProjectResource(request, {
           devDataAuthority: devDataServer,
-          deviceGatewayPort: deviceGateway.port,
+          deviceGatewayPort: deviceGateway?.port,
           entryPath: request.entryPath,
           expoCommand: packagedExpoCommand(options),
           isStopping: () => stopping,
@@ -137,8 +140,8 @@ export async function startStudioPackagedService(
     })
   } catch (error) {
     return await rollbackPackagedStart(error, [
-      () => deviceGateway.stop(),
-      () => trustStore.flush(),
+      () => deviceGateway?.stop(),
+      () => trustStore?.flush(),
       () => devDataServer.stop(),
     ])
   }
@@ -153,22 +156,22 @@ export async function startStudioPackagedService(
     })
   } catch (error) {
     return await rollbackPackagedStart(error, [
-      () => deviceGateway.stop(),
-      () => trustStore.flush(),
+      () => deviceGateway?.stop(),
+      () => trustStore?.flush(),
       () => devDataServer.stop(),
     ])
   }
   return {
     devDataPort: devDataServer.port,
-    deviceGatewayPort: deviceGateway.port,
+    deviceGatewayPort: deviceGateway?.port,
     stop() {
       stopPromise ??= (async () => {
         stopping = true
         await cleanupPackagedService([
           () => server.stop(),
           () => manager.closeAll(),
-          () => deviceGateway.stop(),
-          () => trustStore.flush(),
+          () => deviceGateway?.stop(),
+          () => trustStore?.flush(),
           () => devDataServer.stop(),
           () => recentProjects.flush(),
           () => canvasViewportStore.flush(),

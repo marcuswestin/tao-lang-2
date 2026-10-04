@@ -16,7 +16,9 @@ import { Describe, Expect, Test } from '@shared/test'
 const PATH = 'App.tao'
 
 const SOURCE = `app Reader {
-   Name "Reader"
+   id "reader"
+   version "1.0.0"
+   name "Reader"
 }
 
 data Stories / Story {
@@ -292,7 +294,7 @@ Describe('Studio agent chat facts', () => {
     Expect(outlines[0]?.path).toBe(PATH)
     Expect(outlines[0]?.declarations.map(entry => entry.name)).toEqual(['Reader', 'Stories', 'StoryRow', 'MarkSeen'])
     Expect(outlines[0]?.declarations[0]).toEqual({ kind: 'app', line: 1, name: 'Reader' })
-    Expect(outlines[0]?.declarations[2]?.line).toBe(10)
+    Expect(outlines[0]?.declarations[2]?.line).toBe(12)
   })
 
   Test('returns one declaration by name, so the model never asks for a path', () => {
@@ -301,7 +303,7 @@ Describe('Studio agent chat facts', () => {
     const source = declarationSource(FILES, view)
 
     Expect(source?.path).toBe(PATH)
-    Expect(source?.line).toBe(10)
+    Expect(source?.line).toBe(12)
     Expect(source?.source).toBe('view StoryRow(Story) {')
   })
 

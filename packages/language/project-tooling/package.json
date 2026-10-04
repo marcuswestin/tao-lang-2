@@ -1,0 +1,16 @@
+{
+  "name": "tao-project-tooling",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "type": "module",
+  "module": "project-tooling-src/project-tooling.ts",
+  "exports": { ".": "./project-tooling-src/project-tooling.ts" },
+  "dependencies": {
+    "chokidar": "^5.0.0",
+    "typescript": "5.9.3",
+    "tao-ast-utils": "workspace:*",
+    "tao-compiler": "workspace:*",
+    "tao-parser": "workspace:*",
+    "tao-shared": "workspace:*"
+  }
+}

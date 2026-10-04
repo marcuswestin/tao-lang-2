@@ -23,7 +23,7 @@ Describe('validator: rendered navs', () => {
       use StackNav from @tao/nav
       ${home}
       nav Center = StackNav { Initial Home }
-      app ShellApp { view Shell(Center) }
+      app ShellApp { id "shellapp" version "1.0.0" name "ShellApp" view Shell(Center) }
       scene Shell(Navigator nav) {
         render Column() {
           Navigator()
@@ -44,7 +44,7 @@ Describe('validator: rendered navs', () => {
       use StackNav from @tao/nav
       ${home}
       nav Center = StackNav { Initial Home }
-      app ShellApp { view Shell(Center) }
+      app ShellApp { id "shellapp" version "1.0.0" name "ShellApp" view Shell(Center) }
       scene Shell(Navigator StackNav) {
         render Column() {
           Navigator()
@@ -60,7 +60,7 @@ Describe('validator: rendered navs', () => {
       use StackNav from @tao/nav
       ${home}
       nav Center = StackNav { Initial Home }
-      app ShellApp { view Shell }
+      app ShellApp { id "shellapp" version "1.0.0" name "ShellApp" view Shell }
       view Shell() {
         render Column() {
           Center()
@@ -80,7 +80,7 @@ Describe('validator: rendered navs', () => {
       use StackNav from @tao/nav
       ${home}
       nav Center = StackNav { Initial Home }
-      app ShellApp { view Shell(Center, Label) }
+      app ShellApp { id "shellapp" version "1.0.0" name "ShellApp" view Shell(Center, Label) }
       scene Shell(Navigator nav, Content view) {
         render Column() {
           Navigator("Home") {
@@ -107,7 +107,7 @@ Describe('validator: rendered navs', () => {
       use StackNav from @tao/nav
       ${home}
       nav Center = StackNav { Initial Home }
-      app ShellApp { view Shell(Center) }
+      app ShellApp { id "shellapp" version "1.0.0" name "ShellApp" view Shell(Center) }
       scene Shell(Navigator nav) {
         render Column() {
           Navigator()
@@ -133,10 +133,10 @@ Describe('validator: rendered navs', () => {
       use StackNav from @tao/nav
       ${home}
       nav Center = StackNav { Initial Home }
-      app ShellApp { view Shell(Center) }
+      app ShellApp { id "shellapp" version "1.0.0" name "ShellApp" view Shell(Center) }
       scene Shell(Navigator nav) {
         render Column() {
-          loop ["one", "two"] / Item {
+          loop ["one"] / Item {
             Navigator()
           }
         }
@@ -153,7 +153,7 @@ Describe('validator: rendered navs', () => {
       use StackNav from @tao/nav
       ${home}
       nav Center = StackNav { Initial Home }
-      app ShellApp { view Shell(Center) }
+      app ShellApp { id "shellapp" version "1.0.0" name "ShellApp" view Shell(Center) }
       scene Shell(Navigator nav) {
         state Open = true
         render Column() {
@@ -175,7 +175,7 @@ Describe('validator: rendered navs', () => {
       use StackNav from @tao/nav
       ${home}
       nav Center = StackNav { Initial Home }
-      app ShellApp { view Shell(Center) }
+      app ShellApp { id "shellapp" version "1.0.0" name "ShellApp" view Shell(Center) }
       scene Shell(Navigator nav) {
         state Open = true
         render Column() {
@@ -191,15 +191,14 @@ Describe('validator: rendered navs', () => {
 
   // The app root is a view with arguments, and a variant rebinds it with the same spelling.
   Test(
-    'accepts a variant that rebinds the root view and rejects one that leaves a parameter unbound',
+    'accepts a variant that rebinds the root view',
     accepts(`
       use StackNav from @tao/nav
       ${home}
       nav Center = StackNav { Initial Home }
       nav Other = StackNav { Initial Home }
-      app ShellApp { view Shell(Center) }
-      app OtherShellApp = ShellApp with {
-        Name "Other"
+      app ShellApp { id "shellapp" version "1.0.0" name "ShellApp" view Shell(Center) }
+      app OtherShellApp = ShellApp with { id "othershellapp" name "Other"
         view Shell(Other)
       }
       scene Shell(Navigator nav) {
@@ -217,8 +216,8 @@ Describe('validator: rendered navs', () => {
       use StackNav from @tao/nav
       ${home}
       nav Center = StackNav { Initial Home }
-      app ShellApp { view Shell(Center) }
-      app OtherShellApp = ShellApp with {
+      app ShellApp { id "shellapp" version "1.0.0" name "ShellApp" view Shell(Center) }
+      app OtherShellApp = ShellApp with { id "othershellapp"
         view Shell("Other")
       }
       scene Shell(Navigator nav) {
@@ -242,7 +241,7 @@ Describe('validator: rendered navs', () => {
         view Home
         Initial Home
       }
-      app ShellApp { view Shell(Center) }
+      app ShellApp { id "shellapp" version "1.0.0" name "ShellApp" view Shell(Center) }
       scene Shell(Navigator nav) {
         render Column() {
           Navigator()

@@ -14,8 +14,12 @@ export const ViewsCompiler = {
   ViewDeclaration,
 
   /** ViewRegistrations registers every view before app configuration evaluates restorable positions. */
-  ViewRegistrations(taoFile: AST.TaoFile, options: CodegenOptions = {}): Compiled {
-    return gen.list(taoFile.statements.filter(AST.isViewDeclaration), view => {
+  ViewRegistrations(
+    taoFile: AST.TaoFile,
+    options: CodegenOptions = {},
+    statements: readonly AST.Statement[] = taoFile.statements,
+  ): Compiled {
+    return gen.list(statements.filter(AST.isViewDeclaration), view => {
       const canonical = canonicalDeclaration(view)
       const cst = canonical.$cstNode
       Assert.defined(cst, 'registered view has source coordinates')

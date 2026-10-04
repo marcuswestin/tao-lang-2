@@ -63,8 +63,9 @@ function wordFlowerAbsorbedParityIssues(directory: WordFlowerDirectory): string[
 }
 
 function isWordFlowerParityFile(file: SourceFile): boolean {
-  return !file.path.split('/').some(segment => segment === '.tao' || segment === 'node_modules')
-    && !file.path.endsWith('.tao.ts')
+  return !file.path.split('/').some(segment =>
+    segment === '.tao' || segment === '.tao-ts' || segment === 'node_modules'
+  ) && !file.path.endsWith('.tao.ts')
 }
 
 function currentWordFlowerPath(path: string): string {
@@ -441,17 +442,50 @@ const RAW_THROW_DETAIL = 'throws a raw `Error`; use `Assert(...)` for invariants
  * of its file permission to add more unclassified errors.
  */
 const RAW_ERROR_ALLOWLIST = [
-  // Emitted browser and Electrobun bodies, where no Tao module loads.
-  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:236',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:311',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:321',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:358',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:369',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:410',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:601',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:633',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:801',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:968',
+  'packages/apps/expo-host/expo-host-tests/studio-device-host-e2e.jest-test.tsx:344',
+  'packages/apps/expo-host/plugins/with-ios-fmt-compat.cjs:14',
+  'packages/apps/providers/icloud/plugins/with-tao-icloud.cjs:32',
+  'packages/apps/runtime/TR-tests/TR-async.test.ts:43',
+  'packages/apps/runtime/TR-tests/TR-async.test.ts:57',
+  'packages/apps/runtime/TR-tests/TR-error-containment.test.ts:40',
+  'packages/apps/runtime/TR-tests/TR-error-containment.test.ts:46',
+  'packages/apps/runtime/TR-tests/TR-error-containment.test.ts:67',
+  'packages/apps/runtime/TR-tests/TR-error-containment.test.ts:69',
+  'packages/apps/runtime/TR-tests/TR-studio-device-client.test.ts:486',
+  'packages/apps/runtime/TR-tests/TR-studio-device-client.test.ts:507',
+  'packages/apps/runtime/TR-tests/TR-studio-device-client.test.ts:508',
+  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:306',
+  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:328',
+  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:1093',
+  'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:40',
+  'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:80',
+  'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:103',
+  'packages/cli/agent-cli/agent-cli-tests/claude-profiles-generation.test.ts:87',
+  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:239',
+  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:351',
+  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:359',
+  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:376',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:204',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:965',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:970',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:975',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1000',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1239',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1260',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1448',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1492',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1518',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:238',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:313',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:323',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:360',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:381',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:387',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:431',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:622',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:654',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:822',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:989',
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobun.ts:102',
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:208',
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:211',
@@ -480,49 +514,13 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:884',
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:905',
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:908',
-  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:238',
-  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:350',
-  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:358',
-  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:375',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:207',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:974',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:979',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:984',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1009',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1248',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1269',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1456',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1500',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1526',
-  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:306',
-  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:328',
-  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:1101',
+  'packages/ides/studio-tooling/studio-tooling-tests/studio-companion-device.test.ts:595',
   'packages/ides/studio/studio-src/StudioWelcome.ts:83',
-  'packages/ides/studio/studio-tests/studio-client.test.ts:712',
-  'packages/ides/studio/studio-tests/studio-client.test.ts:3926',
-  // Expo config plugins execute as standalone CommonJS host scripts.
-  'packages/apps/providers/icloud/plugins/with-tao-icloud.cjs:32',
-  'packages/apps/expo-host/plugins/with-ios-fmt-compat.cjs:14',
-  // The shared leaf builds the Web-standard cancellation error itself.
+  'packages/ides/studio/studio-tests/studio-client.test.ts:722',
+  'packages/ides/studio/studio-tests/studio-client.test.ts:3873',
+  'packages/ides/studio/studio-tests/studio-server-datasource.test.ts:196',
   'packages/shared/shared-src/core/Errors.ts:160',
-  // Tests hand raw unknown failures to production boundaries to prove their classification.
-  'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:40',
-  'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:80',
-  'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:103',
-  'packages/cli/agent-cli/agent-cli-tests/claude-profiles-generation.test.ts:87',
-  'packages/ides/studio-tooling/studio-tooling-tests/studio-companion-device.test.ts:614',
-  'packages/apps/expo-host/expo-host-tests/studio-device-host-e2e.jest-test.tsx:344',
-  'packages/apps/runtime/TR-tests/TR-async.test.ts:43',
-  'packages/apps/runtime/TR-tests/TR-async.test.ts:57',
-  'packages/apps/runtime/TR-tests/TR-error-containment.test.ts:40',
-  'packages/apps/runtime/TR-tests/TR-error-containment.test.ts:46',
-  'packages/apps/runtime/TR-tests/TR-error-containment.test.ts:67',
-  'packages/apps/runtime/TR-tests/TR-error-containment.test.ts:69',
-  'packages/apps/runtime/TR-tests/TR-studio-device-client.test.ts:489',
-  'packages/apps/runtime/TR-tests/TR-studio-device-client.test.ts:510',
-  'packages/apps/runtime/TR-tests/TR-studio-device-client.test.ts:511',
-  'packages/shared/shared-tests/test-helpers.test.ts:45',
-  'packages/ides/studio/studio-tests/studio-server-datasource.test.ts:204',
+  'packages/shared/shared-tests/test-helpers.test.ts:44',
 ]
 
 const RAW_ERROR_DETAIL = 'constructs a raw `Error`; where an error object must exist rather than be thrown,'
@@ -589,7 +587,7 @@ const NODE_IMPORT_ALLOWLIST = [
   'packages/apps/expo-host/plugins/with-ios-fmt-compat.cjs:1',
   'packages/apps/expo-host/plugins/with-ios-fmt-compat.cjs:2',
   // A test proves the packaged CommonJS entry can resolve its generated dependency.
-  'packages/apps/providers/icloud/icloud-tests/icloud-native.test.ts:210',
+  'packages/apps/providers/icloud/icloud-tests/icloud-native.test.ts:167',
 ]
 
 const CONSOLE_CALL_ALLOWLIST = [
@@ -620,7 +618,6 @@ const PROCESS_ACCESS_ALLOWLIST = [
   'packages/ides/studio-tooling/studio-tooling-tests/studio-electrobun.test.ts',
   'packages/ides/studio-tooling/studio-tooling-tests/studio-port-lease.test.ts',
   'packages/testing/verification/verification-tests/test-ledger.test.ts',
-  'packages/apps/expo-host/expo-host-tests/injections-e2e.jest-test.tsx',
   'packages/apps/expo-host/expo-host-tests/runtime.test.ts',
   // Generated child-process fixtures run without the repository's Platform module.
   'packages/cli/tao-cli/cli-tests/test-command-budget-cli.test.ts',
@@ -1112,19 +1109,14 @@ export async function repoLintIssues(
   issues.push(...instructionBudgetIssues(await readInstructionFiles(repoRoot)))
   issues.push(...await readDeveloperEnvironmentLedgerIssues(repoRoot))
 
-  // Test apps and starters each document every folder in their README, one `## <Name>` entry per app.
+  // Inventory authored Tao sources, since removed apps can leave ignored generated directories.
   for (const collection of ['Apps/Test Apps', 'Apps/Starters']) {
     const collectionPath = FS.resolvePath(collection, repoRoot)
     if (!(await FS.isDirectory(collectionPath))) {
       continue
     }
     const readmePath = FS.resolvePath('README.md', collectionPath)
-    const appNames: string[] = []
-    for (const name of await FS.listDir(collectionPath)) {
-      if (!name.startsWith('.') && await FS.isDirectory(FS.resolvePath(name, collectionPath))) {
-        appNames.push(name)
-      }
-    }
+    const appNames = await readTaoAppNames(repoRoot, collection)
     const missingEntries = missingTestAppReadmeEntries(appNames, await FS.readText(readmePath))
     issues.push(...missingEntries.map(name => `${readmePath} needs a \`## ${name}\` entry.`))
   }
@@ -1169,6 +1161,38 @@ async function readInstructionFiles(repoRoot: string): Promise<SourceFile[]> {
 }
 
 const EXECUTABLE_EXTENSIONS = ['.cjs', '.js', '.jsx', '.mjs', '.ts', '.tsx']
+
+async function readTaoAppNames(repoRoot: string, collection: string): Promise<string[]> {
+  const inventory = await CLI.run('git', {
+    args: ['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', collection],
+    cwd: repoRoot,
+  })
+  const paths: string[] = []
+  if (inventory.exitCode === 0) {
+    paths.push(...inventory.stdout.split('\0'))
+  } else {
+    for await (
+      const path of FS.walk(FS.resolvePath(collection, repoRoot), {
+        extensions: ['.tao'],
+        excludeDirectory: name => name === 'node_modules' || name.startsWith('_gen_'),
+      })
+    ) {
+      paths.push(FS.relativePath(repoRoot, path))
+    }
+  }
+  const names = new Set<string>()
+  for (const path of paths) {
+    const segments = FS.slashPath(path).slice(collection.length + 1).split('/')
+    if (
+      path.endsWith('.tao') && segments.length > 1
+      && !segments.some(segment => segment.startsWith('.') || segment === 'node_modules' || segment.startsWith('_gen_'))
+      && await FS.isFile(FS.resolvePath(path, repoRoot))
+    ) {
+      names.add(segments[0]!)
+    }
+  }
+  return [...names].sort()
+}
 
 async function readExecutableFiles(repoRoot: string): Promise<SourceFile[]> {
   const tracked = await CLI.run('git', {

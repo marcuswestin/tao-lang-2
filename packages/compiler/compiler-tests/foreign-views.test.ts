@@ -4,7 +4,7 @@ import { TestCompiler as Compiler } from './test-compile'
 Describe('compiler: foreign views', () => {
   Test('adapts a named TSX export to Tao parameters and visual ambient props', async () => {
     const compiled = await Compiler.compileCode(`
-      app ForeignApp { view Main }
+      app ForeignApp { id "com.tao.test.foreignapp" version "1.0.0" name "ForeignApp"  view Main }
       view Main() {
         action Change(Value text) { }
         render CodeEditor("draft", Change) {

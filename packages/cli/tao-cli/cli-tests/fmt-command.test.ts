@@ -1,7 +1,7 @@
 import { FS } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { runCheck, runFmt } from '../cli-src/source-commands'
-import { statusByFile, withTaoFixture } from './test-cli-files'
+import { checkedProjectFile, statusByFile, withTaoFixture } from './test-cli-files'
 
 /** brokenSource is source whose first syntax error sits mid-line, where it carries a position. */
 const brokenSource = 'view Broken() {\n   let ? = 1\n}\n'
@@ -53,6 +53,7 @@ Describe('tao fmt', () => {
   // ran either must be told the same thing about it.
   Test('reports the same syntax error `tao check` reports', async () => {
     await withTaoFixture({
+      ...checkedProjectFile,
       'broken.tao': brokenSource,
     }, async (rootDir) => {
       const formatted = await runFmt(rootDir)
@@ -60,7 +61,6 @@ Describe('tao fmt', () => {
 
       Expect(formatted).toEqual(checked)
       Expect(formatted.map(result => result.status)).toEqual(['error'])
-      Expect(await FS.readText(FS.resolvePath('broken.tao', rootDir))).toBe(brokenSource)
     })
   })
 
@@ -86,22 +86,10 @@ Describe('tao fmt', () => {
     })
   })
 
-  Test('formats a single file path', async () => {
-    await withTaoFixture({
-      'app.tao': 'app   MyApp { view MainView }\nview MainView() { }\n',
-    }, async (rootDir) => {
-      const path = FS.resolvePath('app.tao', rootDir)
-      const results = await runFmt(path)
-
-      Expect(results.map(result => result.status)).toEqual(['changed'])
-      Expect(await FS.readText(path)).toBe('app MyApp {\n   view MainView\n}\n\nview MainView() { }\n')
-    })
-  })
-
   Test('checks an explicitly named generated file without rewriting it', async () => {
     const generated = 'view   Generated() { }'
     await withTaoFixture({
-      'Project.tao': 'project { id "generated-fmt" name "Generated fmt" }\n',
+      '.tao/.gitkeep': '',
       '@/studio/Generated.tao': generated,
     }, async rootDir => {
       const path = FS.resolvePath('@/studio/Generated.tao', rootDir)
@@ -119,7 +107,7 @@ Describe('tao fmt', () => {
   Test('protects generated roots owned by nested Tao projects during repository-wide formatting', async () => {
     const generated = 'view   Generated() { }'
     await withTaoFixture({
-      'Nested/Project.tao': 'project {\n   id "nested-fmt"\n   name "Nested fmt"\n}\n',
+      'Nested/.tao/.gitkeep': '',
       'Nested/@/studio/Generated.tao': generated,
       'Nested/Authored.tao': 'view   Authored() { }',
     }, async rootDir => {
@@ -128,7 +116,6 @@ Describe('tao fmt', () => {
       Expect(statusByFile(results, rootDir)).toEqual({
         'Nested/@/studio/Generated.tao': 'error',
         'Nested/Authored.tao': 'changed',
-        'Nested/Project.tao': 'unchanged',
       })
       Expect(await FS.readText(FS.resolvePath('Nested/@/studio/Generated.tao', rootDir))).toBe(generated)
       Expect(await FS.readText(FS.resolvePath('Nested/Authored.tao', rootDir))).toBe('view Authored() { }\n')
@@ -138,7 +125,7 @@ Describe('tao fmt', () => {
   Test('formats an undeclared nested @ directory instead of treating it as the project-root package', async () => {
     const generated = 'view   Generated() { }'
     await withTaoFixture({
-      'Project.tao': 'project {\n   id "outer-fmt"\n   name "Outer fmt"\n}\n',
+      '.tao/.gitkeep': '',
       'Apps/Created/@/studio/Generated.tao': generated,
       'Apps/Created/Authored.tao': 'view   Authored() { }',
     }, async rootDir => {
@@ -147,7 +134,6 @@ Describe('tao fmt', () => {
       Expect(statusByFile(results, rootDir)).toEqual({
         'Apps/Created/@/studio/Generated.tao': 'changed',
         'Apps/Created/Authored.tao': 'changed',
-        'Project.tao': 'unchanged',
       })
       Expect(await FS.readText(FS.resolvePath('Apps/Created/@/studio/Generated.tao', rootDir))).toBe(
         'view Generated() { }\n',

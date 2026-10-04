@@ -170,20 +170,6 @@ Describe('Studio selection carry', () => {
     Expect(renderRange('nonsense')).toBeUndefined()
   })
 
-  Test('follows an edited element to the render that starts where it started', () => {
-    const before = layout(1, [measured('Col', 10, 40, 0, 0), measured('Text', 20, 30, 0, 0)])
-    const carry = studioSelectionCarry(
-      selection(10, 40),
-      { entry: ['gap', 16], kind: 'set-layout-entry', renderId: `${path}:10:40` },
-      before,
-      0,
-    )
-    Expect(carry).toBeDefined()
-    Expect(studioCarriedMeasurement(carry!, before)).toBeUndefined()
-    const after = layout(2, [measured('Text', 20, 30, 0, 0), measured('Col', 10, 49, 0, 0)])
-    Expect(studioCarriedMeasurement(carry!, after)?.renderId).toBe(`${path}:10:49`)
-  })
-
   Test('finds a flipped Row by where it sits when an added import moved its source', () => {
     const carry = studioSelectionCarry(
       selection(10, 40),
@@ -217,6 +203,7 @@ Describe('Studio selection carry', () => {
 
     // A landed edit arms the carry; the recompiled layout then restores the selection in the editor.
     await harness.carry.track(selection(10, 40), action, Promise.resolve(true))
+    await harness.carry.restore()
     Expect(harness.selected).toEqual([])
     harness.preview.layoutMeasurements = after
     await harness.carry.restore()

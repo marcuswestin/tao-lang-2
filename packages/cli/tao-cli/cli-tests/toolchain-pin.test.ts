@@ -25,8 +25,8 @@ Describe('toolchain pin', () => {
       const inside = FS.resolvePath('Items/Detail', project)
       await FS.mkdir(inside)
 
-      Expect(await ToolchainPin.requestedVersion(['dev'], {}, inside))
-        .toEqual({ args: ['dev'], source: 'project', version: '0.4.0' })
+      Expect(await ToolchainPin.requestedVersion(['run'], {}, inside))
+        .toEqual({ args: ['run'], source: 'project', version: '0.4.0' })
     })
   })
 
@@ -52,7 +52,7 @@ Describe('toolchain pin', () => {
       const nested = FS.resolvePath('experiments/sketch', project)
       await FS.writeText(FS.resolvePath('.tao/store/lock.jsonc', nested), '{ "schemaVersion": 1 }\n')
 
-      Expect(await ToolchainPin.requestedVersion(['dev'], {}, nested)).toBeUndefined()
+      Expect(await ToolchainPin.requestedVersion(['run'], {}, nested)).toBeUndefined()
     })
   })
 

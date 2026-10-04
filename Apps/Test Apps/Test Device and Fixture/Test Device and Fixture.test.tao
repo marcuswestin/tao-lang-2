@@ -15,13 +15,7 @@ fixture StarterWorkspace {
 // device itself is proven at the harness level, where the runner exposes the rendered style: see
 // `packages/apps/expo-host/expo-host-tests/test-device-fixture-e2e.jest-test.tsx`.
 test "WordFlower full target" on phone with StarterWorkspace {
-   test "opens the starter workspace" {
-      run WordFlower
-
-      expect text "Home"
-      expect text "Focused"
-   }
-   test "a nested test inherits the fixture" {
+   test "inherits the suite fixture on a phone" {
       run WordFlower
 
       expect text "Home"

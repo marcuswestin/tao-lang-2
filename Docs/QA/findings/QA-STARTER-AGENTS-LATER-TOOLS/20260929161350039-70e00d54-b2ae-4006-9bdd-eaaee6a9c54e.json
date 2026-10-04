@@ -1,0 +1,44 @@
+{
+  "id": "QA-STARTER-AGENTS-LATER-TOOLS",
+  "status": "open",
+  "phase": 1,
+  "surfaceId": "doc:Apps/Starters/Notebook/AGENTS.md",
+  "dimension": "text",
+  "channel": "source",
+  "severity": "major",
+  "title": "Starter agent guide makes tao review part of the edit loop",
+  "observed": "Every created project tells its agent to \"Use `tao review` when visual scenarios changed\", calls Scenarios.tao \"Studio scenarios\", and mentions preparing TestFlight or App Store delivery; review and Studio are release 3 and ship release 5.",
+  "impact": "The default agent loop in every release-1 project invokes a command the CLI does not offer.",
+  "location": "Apps/Starters/Notebook/AGENTS.md:13, 27, 53 (identical in Apps/Starters/Pantry/AGENTS.md)",
+  "affectedPhases": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "expected": "The starter guide describes the loop available in the installed release.",
+  "recheck": "Follow the guide in a project created by a release-1 CLI.",
+  "evidence": [
+    "Apps/Starters/Notebook/AGENTS.md",
+    "Apps/Starters/Pantry/AGENTS.md"
+  ],
+  "evidenceHashes": [
+    {
+      "path": "Apps/Starters/Notebook/AGENTS.md",
+      "sha256": "c45190d2742524dd1fe23787f1a0454b4848a209af33a05af931a480a82a4c0f"
+    },
+    {
+      "path": "Apps/Starters/Pantry/AGENTS.md",
+      "sha256": "c45190d2742524dd1fe23787f1a0454b4848a209af33a05af931a480a82a4c0f"
+    }
+  ],
+  "createdAt": "2026-09-29T16:13:50.039Z",
+  "updatedAt": "2026-09-29T16:13:50.039Z",
+  "confidence": "confirmed",
+  "requiredReviewer": "agent",
+  "relatedStories": [
+    "CLI10",
+    "CLI2"
+  ]
+}

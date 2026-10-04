@@ -60,9 +60,10 @@ Describe('Tao local build and clean CLI', () => {
   Test('retains fresh static web artifacts and refuses non-interactive cleanup', async () => {
     const root = await mkTestDir('tao-build-clean-')
     try {
-      for (const name of ['Clockwork.tao', 'Clockwork.ts', 'Project.tao']) {
+      for (const name of ['Clockwork.tao', 'Clockwork.ts']) {
         await FS.copyFile(FS.resolvePath(name, fixtureRoot), FS.resolvePath(name, root))
       }
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', root), '')
 
       const first = await runTao(['build', '--web', FS.resolvePath('Clockwork.tao', root)])
       Expect(first).toMatchObject({ exitCode: 0 })
@@ -76,7 +77,6 @@ Describe('Tao local build and clean CLI', () => {
       Expect(firstRecord.sourceDigest).toMatch(/^[a-f0-9]{64}$/)
       Expect(firstRecord.targets).toEqual(['web'])
       Expect(firstRecord.results.web?.status).toBe('succeeded')
-      Expect(await FS.isFile(FS.resolvePath('web/site/index.html', firstRoot))).toBe(true)
       Expect(await FS.readText(FS.resolvePath('web/site/index.html', firstRoot))).toContain('/_expo/static/js/web/')
       Expect(await FS.fileMode(FS.resolvePath('web/run', firstRoot)) & 0o111).toBeGreaterThan(0)
       Expect(await FS.readText(FS.resolvePath('.tao/.gitignore', root))).toContain('local/')

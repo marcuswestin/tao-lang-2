@@ -9,7 +9,7 @@ Clipboard scenes. More native surfaces should join this app as they become suppo
 From the repository root, in your regular terminal:
 
 ```sh
-./tao dev "Apps/Test Apps/Native Bridge" --app NativeBridge --device roPhone
+./tao run "Apps/Test Apps/Native Bridge" --app NativeBridge --device roPhone
 ```
 
 Unlock roPhone, trust this Mac, and keep both on the same network. The command opens the installed
@@ -25,7 +25,7 @@ If Tao Companion is not installed, install it once:
 
 `--device` accepts a phone name or ID; `--ios` opens a simulator. A simulator cannot prove physical
 haptic feedback. Native operations happen only after pressing a control. This demo declares no
-scenarios, and ordinary `tao dev` applies no scenario preparation or replay.
+scenarios, and ordinary `tao run` applies no scenario preparation or replay.
 
 For the Studio editor and device inspector, the separate workflow remains:
 
@@ -57,8 +57,8 @@ component and constant generation are supported. All 11 generated Clipboard oper
 
 ```text
 Native Bridge/
-  App.tao, Project.tao, Design.tao
-  Native Bridge.test.tao    # no native effects
+  App.tao, Design.tao
+  .tao/.gitkeep, tsconfig.json
   .host-tests/Clipboard.test.tao       # explicit iOS host journey
   Haptics/
     Haptics.tao
@@ -85,7 +85,7 @@ are committed; regenerate from the installed host declarations with:
 
 The last two commands apply the repository's canonical Tao and TypeScript/JSON formatting; they are
 part of the repeatable generation pipeline. `_fix-dprint` is the repository-wide formatter. No
-handwritten binding changes are needed. Compiler-produced `Bindings.tao.ts` metadata is ignored.
+handwritten binding changes are needed. Compiler-produced contracts under `.tao-ts/` are ignored.
 
 The UI is authored separately. `ClipboardImagePreview.tao` contains a small injected renderer for a
 nullable image record, because direct nullable-record field inspection is not yet supported in Tao.
@@ -95,11 +95,11 @@ For the next supported API, add `<Surface>/<Surface>.tao` beside `<Surface>/Gene
 bindings, and add a home-screen button. Keep platform-specific controls labeled. Android can use the
 same app; future source/target adapters belong in `packages/apps/native-bindings`, not in this demo.
 
-The Tao journey checks navigation and initial UI without calling native operations. The
-`native-bridge-demo.jest-test.tsx` suite compiles this maintained app and operates its controls with
+The `native-bridge-demo.jest-test.tsx` suite compiles this maintained app, opens each surface without
+requesting native effects, and operates its controls with
 native substitutes. It checks edited and submitted clipboard text, HTML options, availability,
-image previews and absent results, URLs, listener controls/events and cleanup on Back, every
-Haptics control, and vibration/cancellation. A pending clipboard write must finish before its
+image previews and absent results, URLs, listener controls/events and cleanup on Back, representative
+Haptics controls, and vibration/cancellation. A pending clipboard write must finish before its
 completion status appears. The substitutes leave the real clipboard and device hardware untouched.
 
 Separate generated-binding tests exercise the native contracts. The opt-in iOS host journey compiles

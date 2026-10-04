@@ -2,7 +2,7 @@ use CardTitle, ChildFolderTitle, SiblingFileTitle, SiblingFolderTitle
 use ProjectNotice from @copy
 use ProjectWidget from @copy/widgets
 
-workspace
+public
 scene MainView() {
    Title "Package Access"
    render Stack() {

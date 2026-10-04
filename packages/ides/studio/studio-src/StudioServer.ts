@@ -1,5 +1,5 @@
 import { type GenerationProvider, UnavailableGenerationProvider } from '@generation'
-import { Assert, CLI, Errors, Json, Repo, Switch } from '@shared'
+import { Assert, CLI, Errors, Json, ReleaseCapabilities, Repo, Switch } from '@shared'
 import type { AgentChatProvider } from './agent-chat/AgentChatProvider'
 import { AgentChat, streamTurn } from './agent-chat/AgentChatServer'
 import type { StudioDeviceGateway } from './device/StudioDeviceGateway'
@@ -194,6 +194,7 @@ export async function startStudioSessionServer(
   manager: StudioSessionManager,
   options: StudioServerOptions = {},
 ): Promise<StartedStudioServer> {
+  ReleaseCapabilities.require('studio')
   if (options.compileOnStart !== false) {
     await Promise.all(
       manager.list().current.map(async item => await manager.require(item.sessionId).session.compileInitial()),
@@ -513,6 +514,9 @@ async function handleDeviceRequest(
 ): Promise<Response | undefined> {
   if (!pathname.startsWith(deviceRoutePrefix)) {
     return undefined
+  }
+  if (!ReleaseCapabilities.allows('companion')) {
+    return renderReply(request, url, options, jsonReply({ error: ReleaseCapabilities.diagnostic('companion') }, 403))
   }
   const render = (reply: StudioReply): Response => renderReply(request, url, options, reply)
   const gateway = options.deviceGateway
@@ -901,6 +905,7 @@ async function handleRequest(
 }
 
 async function shipBeta(session: StudioProjectSession, ship: StudioBetaShip): Promise<void> {
+  ReleaseCapabilities.require('ship')
   const key = `${session.projectRoot}\n${session.appName}`
   if (runningBetaShips.has(key)) {
     Errors.throwUserInput(`A beta ship is already running for ${session.appName}.`)
@@ -1213,7 +1218,6 @@ export const StudioServerTesting = {
   requestAllowed,
   serverOrigin,
   studioClientHtml,
-  studioSessionRoute: StudioSessionPath.route,
 } as const
 
 function studioClientHtml(options: StudioServerOptions): string {

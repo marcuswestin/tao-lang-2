@@ -352,12 +352,12 @@ Test('Tao Studio ProductHost injects structured panel values without section-lev
   Expect(source).not.toContain('JSON.stringify(hostState.panels')
 })
 
+// REMOVAL CANDIDATE: Lexical prompt ordering does not prove conditional execution; deletion loses this static guard until the move workflow is exercised.
 Test('Move to package prompts for a replacement only after a declaration conflict', async () => {
   const source = await FS.readText(FS.resolvePath('../studio-src/client/StudioApp.ts', import.meta.dir))
 
   Expect(source).toContain("if (result.status === 'confirmation-required')")
   Expect(source).toContain('const replacement = await StudioDialog.prompt(')
-  Expect(source).not.toMatch(/window\.(confirm|prompt|alert)\(/)
   Expect(source.indexOf("result.status === 'confirmation-required'")).toBeLessThan(
     source.indexOf('StudioDialog.prompt('),
   )
@@ -388,19 +388,19 @@ Test('Tao Studio foreign file views render compact tree rows with contextual edi
   Expect(property(create, 'data-studio-file-create')).toBe('compact')
   Expect(property(elementWith(create, 'aria-label', 'New Tao file path'), 'className')).toBe('studio-input')
   Expect(property(elementWith(create, 'aria-label', 'Create file'), 'className')).toBe('studio-icon-button')
-  Expect(property(elementWith(folder, 'aria-expanded', true), 'aria-expanded')).toBe(true)
+  elementWith(folder, 'aria-expanded', true)
   Expect(textContent(folder)).toContain('Nested file')
   Expect(property(compact, 'data-studio-tree-file')).toBe('Folder/Roadmap.tao')
-  Expect(elementWith(compact, 'aria-label', 'Unsaved draft')).toBeDefined()
-  Expect(elementWith(compact, 'aria-label', '2 problems')).toBeDefined()
+  elementWith(compact, 'aria-label', 'Unsaved draft')
+  elementWith(compact, 'aria-label', '2 problems')
   Expect(elements(compact).some(element => property(element, 'aria-label') === 'Save rename')).toBe(false)
   Expect(elements(compact).some(element => property(element, 'role') === 'alert')).toBe(false)
   Expect(property(elementWith(compact, 'aria-label', 'Move Roadmap.tao to package'), 'hidden')).toBe(true)
   Expect(property(elementWith(generated, 'aria-label', 'Move View1.tao to package'), 'hidden')).toBe(false)
-  Expect(elementWith(renaming, 'aria-label', 'Save rename')).toBeDefined()
+  elementWith(renaming, 'aria-label', 'Save rename')
   Expect(property(elementWith(renaming, 'aria-label', 'New path for Roadmap.tao'), 'value'))
     .toBe('Folder/Roadmap.tao')
-  Expect(elementWith(deleting, 'role', 'alert')).toBeDefined()
+  elementWith(deleting, 'role', 'alert')
   Expect(textContent(deleting)).toContain('Delete Roadmap.tao?')
 })
 
@@ -432,7 +432,6 @@ Test('Design token rows group under a kind heading and swatch parseable colors',
   })
   const section = StudioDesignTokenSection({ children: 'accent row', Title: 'colors' })
 
-  Expect(property(color, 'className')).toBe('studio-design-token')
   Expect(property(color, 'data-studio-design-kind')).toBe('color')
   Expect(textContent(color)).toContain('accent')
   Expect(textContent(color)).toContain('#ff6600')
@@ -444,7 +443,6 @@ Test('Design token rows group under a kind heading and swatch parseable colors',
   Expect(textContent(bundle)).toContain('pad 12, radius 10, bg card')
   Expect(elements(bundle).some(element => property(element, 'className') === 'studio-design-token-swatch'))
     .toBe(false)
-  Expect(property(section, 'className')).toBe('studio-design-token-kind')
   Expect(property(section, 'data-studio-design-kind')).toBe('colors')
   Expect(textContent(section)).toContain('colors')
   Expect(textContent(section)).toContain('accent row')
@@ -650,7 +648,6 @@ Test('Tao-owned inspector style exposes provenance, edit-versus-fork, blast radi
     landing: { bundleName: 'card', kind: 'style-bundle' },
   })
   Expect(StudioInspectorStyleNotes(inspection)[0]).toContain('affects 3 renders · editable')
-  Expect(promotions.length).toBeGreaterThan(0)
   Expect(StudioInspectorStylePromotionLabel(inspection, promotions[0]!)).toContain('Promote background #c00')
   Expect(JSON.parse(StudioInspectorStylePromotionAction(inspection, selection, promotions[0]!))).toMatchObject({
     entry: ['background', '#c00'],

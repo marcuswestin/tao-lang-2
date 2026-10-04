@@ -14,7 +14,6 @@ type ReclaimClaim = {
 
 const ACQUIRE_POLL_MS = 25
 const ACQUIRE_TIMEOUT_MS = 30 * 60_000
-let staleUnlinkDelayForTestingMs = 0
 let beforeStaleUnlinkForTesting: ((linkPath: string) => Promise<void>) | undefined
 
 /** withShipTransaction serializes complete ship runs for one Git repository across independent processes. */
@@ -124,9 +123,6 @@ async function reclaimStaleOwner(
   ) {
     return
   }
-  if (staleUnlinkDelayForTestingMs > 0) {
-    await Time.sleep(staleUnlinkDelayForTestingMs)
-  }
   await beforeStaleUnlinkForTesting?.(linkPath)
   // The fixed claim symlink is the cross-process election: while its owner is alive no later
   // contender can become another winner. Recheck both it and the observed lock target at the
@@ -226,8 +222,5 @@ function errorCode(error: unknown): string | undefined {
 export const ShipTransactionTesting = {
   setBeforeStaleUnlink(hook: ((linkPath: string) => Promise<void>) | undefined): void {
     beforeStaleUnlinkForTesting = hook
-  },
-  setStaleUnlinkDelay(ms: number): void {
-    staleUnlinkDelayForTestingMs = ms
   },
 }

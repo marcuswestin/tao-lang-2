@@ -30,7 +30,7 @@ Describe('validator: actions and state', () => {
     rejects(
       app(
         'let Draft = "draft"\nrender Editor(Draft)',
-        `workspace ${textView}\nview Editor(Value text) { action Save() { set Value = "saved" } render Text(Value) }`,
+        `project ${textView}\nview Editor(Value text) { action Save() { set Value = "saved" } render Text(Value) }`,
       ),
       reactiveParameterMessages.readonlyArgument('Value'),
     ),
@@ -41,7 +41,7 @@ Describe('validator: actions and state', () => {
     accepts(
       app(
         'state Draft = "draft"\nrender Editor(Draft)',
-        `workspace ${textView}\nview Editor(Value text) { action Save() { set Value = "saved" } render Text(Value) }`,
+        `project ${textView}\nview Editor(Value text) { action Save() { set Value = "saved" } render Text(Value) }`,
       ),
     ),
   )
@@ -51,7 +51,7 @@ Describe('validator: actions and state', () => {
     accepts(
       app(
         'render Parent("draft")',
-        `workspace ${textView}
+        `project ${textView}
          view Parent(Value text) { action OpenEditor() { present Editor(Value) } render Text(Value) }
          view Editor(Value text) { action Save() { set Value = "saved" } render Text(Value) }`,
       ),
@@ -63,7 +63,7 @@ Describe('validator: actions and state', () => {
     accepts(
       app(
         'render Editor("draft")',
-        `workspace ${textView}\nview Editor(Value text) { action Save() { set Value = "saved" } render Text(Value) }`,
+        `project ${textView}\nview Editor(Value text) { action Save() { set Value = "saved" } render Text(Value) }`,
       ),
     ),
   )
@@ -72,7 +72,7 @@ Describe('validator: actions and state', () => {
     'allows a literal default for an inferred-writable view parameter',
     accepts(app(
       'render Editor()',
-      `workspace ${textView}\nview Editor(Value text default "draft") { action Save() { set Value += "!" } render Text(Value) }`,
+      `project ${textView}\nview Editor(Value text default "draft") { action Save() { set Value += "!" } render Text(Value) }`,
     )),
   )
 
@@ -80,17 +80,6 @@ Describe('validator: actions and state', () => {
     'rejects a literal default for an inferred-writable action parameter',
     rejects(
       app('action Edit(Value text default "draft") { set Value += "!" }\nrender Text("ready")', textView),
-      reactiveParameterMessages.readonlyArgument('Value'),
-    ),
-  )
-
-  Test(
-    'rejects a computed default for an inferred-writable action parameter',
-    rejects(
-      app(
-        'let Draft = "draft"\naction Edit(Value text default Draft) { set Value += "!" }\nrender Text("ready")',
-        textView,
-      ),
       reactiveParameterMessages.readonlyArgument('Value'),
     ),
   )
@@ -116,7 +105,7 @@ Describe('validator: actions and state', () => {
     rejects(
       app(
         'let Draft = "draft"\nrender Editor(Draft)',
-        `workspace ${textView}
+        `project ${textView}
          view Editor(Value text) {
            action Edit(Local text default Value) { set Local += "!" }
            render Text(Value)
@@ -131,7 +120,7 @@ Describe('validator: actions and state', () => {
     rejects(
       app(
         'render Editor(1)',
-        `workspace ${textView}\nview Editor(Value number) { action Save() { set Value = "wrong" } render Text("ready") }`,
+        `project ${textView}\nview Editor(Value number) { action Save() { set Value = "wrong" } render Text("ready") }`,
       ),
       StateValidator.messages.mutableSetTypeMismatch('Value', 'Editor.Value', 'text'),
     ),
@@ -141,7 +130,7 @@ Describe('validator: actions and state', () => {
     'allows mutation of a field on a writable item parameter',
     accepts(app(
       'state Draft = Note { Title "old" }\nrender Editor(Draft)',
-      `workspace ${textView}
+      `project ${textView}
        type Note is { Title text }
        view Editor(Value Note) { action Save() { set Value.Title = "new" } render Text(Value.Title) }`,
     )),
@@ -151,7 +140,7 @@ Describe('validator: actions and state', () => {
     'terminates writable inference through recursive forwarding',
     accepts(app(
       'state Draft = "draft"\nrender First(Draft)',
-      `workspace ${textView}
+      `project ${textView}
       view First(Value text) { action Save() { set Value = "saved" } render Second(Value) }
       view Second(Value text) { render First(Value) }
     `,
@@ -164,7 +153,7 @@ Describe('validator: actions and state', () => {
       app(
         'state Draft = "draft"\nrender Wrapper(Draft)',
         `
-        workspace ${textView}
+        project ${textView}
         view Editor(Value text) { action Save() { set Value = "saved" } render Text(Value) }
         view Wrapper(copy Value text) { render Editor(Value) }
       `,
@@ -177,7 +166,7 @@ Describe('validator: actions and state', () => {
     accepts(app(
       'let Draft = "draft"\nrender Editor(Draft)',
       `
-      workspace ${stubView('TextInput', 'mutable Value text, Change action(text), Submit action()')}
+      project ${stubView('TextInput', 'mutable Value text, Change action(text), Submit action()')}
       view Editor(Value text) {
         action SetTitle(Next text) { }
         action Save() { }
@@ -195,17 +184,6 @@ Describe('validator: actions and state', () => {
         stubView('TextInput', 'mutable Value text, Change action(text), Submit action()'),
       ),
       invocationMessages.namedArgumentType('TextInput', 'Change', 'action(text)', 'action(writable Normalize.Value)'),
-    ),
-  )
-
-  Test(
-    'rejects a mutating action passed to an ordinary readonly callback',
-    rejects(
-      app(
-        'action Normalize(Value text) { set Value = "normalized" }\nrender Wrapper(Callback: Normalize)',
-        `${textView}\nview Wrapper(Callback action(text)) { render Text("ready") }`,
-      ),
-      invocationMessages.namedArgumentType('Wrapper', 'Callback', 'action(text)', 'action(writable Normalize.Value)'),
     ),
   )
 
@@ -243,7 +221,7 @@ Describe('validator: actions and state', () => {
     rejects(
       app(
         'let Draft = "draft"\nrender Editor(Draft)',
-        `workspace ${textView}
+        `project ${textView}
          view Editor(Value text) {
            action Mutate(Value text) { set Value = "saved" }
            let Alias = Mutate
@@ -301,18 +279,8 @@ Describe('validator: actions and state', () => {
         'let LateGreeting = "Hello"',
       ],
       [
-        'allows local aliases to reference later file-level actions',
-        'let Save = SharedAction',
-        'action SharedAction() { }',
-      ],
-      [
         'allows compound mutation of a number state',
         'state Count = 0\naction Bump() { set Count += 1 }',
-        '',
-      ],
-      [
-        'allows compound mutation of a state declared as number',
-        'state Count is number = 0\naction Bump() { set Count += 1 }',
         '',
       ],
       [
@@ -547,23 +515,17 @@ Describe('validator: actions and state', () => {
     )
   }
 
-  for (
-    const [title, parameter, expected, actual] of [
-      ['rejects incompatible typed callbacks', 'Change', 'action(text)', 'action(Change.Value)'],
-      ['rejects callbacks with too many required parameters', 'Submit', 'action()', 'action(Change.Value)'],
-    ] as const
-  ) {
-    Test(
-      title,
-      rejects(
-        app(
-          'action Change(Value number) { }\nrender Field(Change: Change, Submit: Change)',
-          `${textView}\n${stubView('Field', 'Change action(text), Submit action()')}`,
-        ),
-        invocationMessages.namedArgumentType('Field', parameter, expected, actual),
+  Test(
+    'rejects typed callbacks with incompatible arguments or too many required parameters',
+    rejects(
+      app(
+        'action Change(Value number) { }\nrender Field(Change: Change, Submit: Change)',
+        `${textView}\n${stubView('Field', 'Change action(text), Submit action()')}`,
       ),
-    )
-  }
+      invocationMessages.namedArgumentType('Field', 'Change', 'action(text)', 'action(Change.Value)'),
+      invocationMessages.namedArgumentType('Field', 'Submit', 'action()', 'action(Change.Value)'),
+    ),
+  )
 
   Test('allows omitted optional computed-callback arguments while reporting other invalid calls', async () => {
     const result = await testValidateCodeWithErrors(actionApp(

@@ -1,5 +1,5 @@
 /** Isolate irreversible priority changes and CLI module replacements from the test runner. */
-import { CLI, Errors, FS, HCI, Platform } from '@shared'
+import { Errors, FS, HCI, Platform } from '@shared'
 import { MockModule } from '@shared/test'
 import type { RunGatesOptions } from '@verification/GateRunner'
 import * as GateRunner from '@verification/GateRunner'
@@ -44,10 +44,6 @@ if (lane === 'child') {
     ...originalGateRunner,
     async runGates(options: RunGatesOptions): Promise<GateSummary> {
       const atGate = Platform.processPriority()
-      const child = await CLI.mustRun(Platform.runtimeProcess.execPath, {
-        args: [FS.resolvePath('verification-priority.ts', import.meta.dir), 'child'],
-        processPolicy: 'test',
-      })
       const gate = WorkGraph.createState({
         name: 'priority-probe',
         run: {
@@ -64,7 +60,6 @@ if (lane === 'child') {
         JSON.stringify({
           before,
           atGate,
-          child: Number(child.stdout.trim()),
           gateChild: Number(gate.fullOutput.trim()),
           gateStatus: gate.status,
           repeated: Platform.processPriority(),

@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "include": [
+    "project-tooling-src/**/*",
+    "project-tooling-tests/**/*"
+  ],
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "composite": false,
+    "declaration": false,
+    "incremental": false,
+    "noEmit": true,
+    "types": [
+      "bun",
+      "node"
+    ]
+  }
+}

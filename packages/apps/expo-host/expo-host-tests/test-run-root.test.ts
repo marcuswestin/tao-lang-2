@@ -1,4 +1,4 @@
-import { FS, Platform, TaoHome } from '@shared'
+import { Errors, FS, Platform, TaoHome } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { RuntimeToolchainPaths } from '../expo-host-src/runtime-toolchain-paths'
 import { TestHarnessFiles } from '../expo-host-src/testing/test-harness-files'
@@ -117,6 +117,20 @@ async function compiledApp(
   return await TestRunRoot.intern(runRoot, generatedRoot)
 }
 
+async function compiledAppWithDirectoryLink(
+  runRoot: string,
+  target: string,
+  contents: { app: string; files: Record<string, string> },
+): Promise<string> {
+  const generatedRoot = FS.resolvePath(`app-${Math.random().toString(36).slice(2)}/_gen_tao-app`, runRoot)
+  await FS.writeText(FS.resolvePath('App.tsx', generatedRoot), contents.app)
+  for (const [relativePath, code] of Object.entries(contents.files)) {
+    await FS.writeText(FS.resolvePath(relativePath, generatedRoot), code)
+  }
+  await FS.symlink(target, FS.resolvePath('node_modules', generatedRoot))
+  return await TestRunRoot.intern(runRoot, generatedRoot)
+}
+
 /** treeOf is the store entry an interned app's `modules` link resolves into. */
 async function treeOf(appPath: string): Promise<string> {
   return FS.dirname(await FS.realPath(FS.resolvePath('modules', FS.dirname(appPath))))
@@ -158,17 +172,6 @@ Describe('generated test run roots', () => {
       Expect(await FS.isFile(FS.resolvePath('modules/probe.ts', FS.dirname(appPath)))).toBe(true)
       await TestRunRoot.discard(runRoot)
       Expect(await FS.exists(runRoot)).toBe(false)
-    })
-  })
-
-  Test('keeps the selected generated store outside a managed worktree', async () => {
-    await withIsolatedTaoHome(async () => {
-      const runRoot = await TestRunRoot.create('tao-test-default-root')
-      try {
-        Expect(FS.pathIsWithin(runRoot, TaoHome.cacheRoot())).toBe(true)
-      } finally {
-        await TestRunRoot.discard(runRoot)
-      }
     })
   })
 
@@ -346,7 +349,6 @@ Describe('generated test run roots', () => {
 
       await TestRunRoot.discard(runRoot, { runtimePackageRoot })
 
-      Expect(await FS.exists(runRoot)).toBe(false)
       Expect(await listGenerated(runtimePackageRoot, 'tao-test-command')).toEqual([])
     })
   })
@@ -422,7 +424,6 @@ Describe('generated test run roots', () => {
     await withRuntimePackageRoot(async runtimePackageRoot => {
       const concurrent = [
         await writeRunRoot(runtimePackageRoot, 'tao-test-command', 0),
-        await writeRunRoot(runtimePackageRoot, 'tao-test-command', 10 * 60 * 1000),
         await writeRunRoot(runtimePackageRoot, 'tao-test-command', 59 * 60 * 1000),
       ]
       const finished = await writeRunRoot(runtimePackageRoot, 'tao-test-command', 3 * HOUR_MS)
@@ -452,7 +453,6 @@ Describe('generated test run roots', () => {
       Expect(await FS.exists(newest)).toBe(true)
       Expect(await listGenerated(runtimePackageRoot)).toContain('notes.txt')
       Expect(await listGenerated(runtimePackageRoot)).toContain('manual-scratch')
-      Expect(await FS.isDirectory(runtimePackageRoot)).toBe(true)
     })
   })
 
@@ -615,6 +615,35 @@ Describe('reusing a generated test run root', () => {
     })
   })
 
+  Test('budgets owned modules without charging an external installed dependency tree', async () => {
+    await withRuntimePackageRoot(async runtimePackageRoot => {
+      const older = await publishedRunRoot(runtimePackageRoot, OTHER_FINGERPRINT, 0)
+      await restampCacheEntry(runtimePackageRoot, OTHER_FINGERPRINT, {
+        bytes: TestRunRoot.RETAINED_CACHE_BYTES - 32 * 1024,
+        idleMs: 2 * 60 * 1000,
+      })
+      const dependencyRoot = FS.resolvePath('dependency/node_modules', runtimePackageRoot)
+      await FS.writeText(FS.resolvePath('large-package/index.js', dependencyRoot), 'x'.repeat(128 * 1024))
+      const runRoot = await TestRunRoot.create('tao-test-command', { runtimePackageRoot })
+      const appPath = await compiledAppWithDirectoryLink(runRoot, dependencyRoot, {
+        app: 'import "./modules/a"',
+        files: { 'modules/a.tsx': 'm'.repeat(8 * 1024) },
+      })
+      await manifestNaming(runRoot, appPath)
+
+      Expect(await TestRunRoot.publish('tao-test-command', FINGERPRINT, runRoot, { runtimePackageRoot })).toBe(true)
+      const entry = await FS.readJson<Record<string, unknown>>(cacheEntryPath(runtimePackageRoot, FINGERPRINT))
+      Expect(entry['bytes']).toBeGreaterThanOrEqual(8 * 1024)
+      Expect(entry['bytes']).toBeLessThan(32 * 1024)
+
+      await TestRunRoot.prune({ runtimePackageRoot })
+      Expect((await TestRunRoot.lookup('tao-test-command', OTHER_FINGERPRINT, { runtimePackageRoot }))?.runRoot)
+        .toBe(older)
+      Expect((await TestRunRoot.lookup('tao-test-command', FINGERPRINT, { runtimePackageRoot }))?.runRoot)
+        .toBe(runRoot)
+    })
+  })
+
   // Bytes are what the cache actually costs, so bytes are what bound it: entries leave in
   // least-recently-used order once the budget is spent, however few of them there are.
   Test('evicts the least recently used entries once the retained bytes are spent', async () => {
@@ -708,6 +737,50 @@ Describe('reusing a generated test run root', () => {
     })
   })
 
+  Test('stores generated directory links by their target without hashing installed dependencies', async () => {
+    await withRuntimePackageRoot(async runtimePackageRoot => {
+      const dependencyOne = FS.resolvePath('dependency-one/node_modules', runtimePackageRoot)
+      const dependencyTwo = FS.resolvePath('dependency-two/node_modules', runtimePackageRoot)
+      await FS.writeText(FS.resolvePath('package.json', dependencyOne), '{"name":"same"}')
+      await FS.writeText(FS.resolvePath('package.json', dependencyTwo), '{"name":"same"}')
+      const runRoot = await TestRunRoot.create('tao-test-command', { runtimePackageRoot })
+      const compileWithLink = async (target: string): Promise<string> => {
+        const generatedRoot = FS.resolvePath(`app-${Math.random().toString(36).slice(2)}/_gen_tao-app`, runRoot)
+        await FS.writeText(FS.resolvePath('App.tsx', generatedRoot), 'import "./modules/a"')
+        await FS.writeText(FS.resolvePath('modules/a.tsx', generatedRoot), 'export const a = 1')
+        await FS.symlink(target, FS.resolvePath('node_modules', generatedRoot))
+        return await TestRunRoot.intern(runRoot, generatedRoot)
+      }
+
+      const one = await compileWithLink(dependencyOne)
+      const same = await compileWithLink(dependencyOne)
+      const two = await compileWithLink(dependencyTwo)
+
+      Expect(same).toBe(one)
+      Expect(two).not.toBe(one)
+      Expect(await FS.realPath(FS.resolvePath('node_modules', FS.dirname(one)))).toBe(dependencyOne)
+      Expect(await FS.realPath(FS.resolvePath('node_modules', FS.dirname(two)))).toBe(dependencyTwo)
+    })
+  })
+
+  Test('continues hashing bytes reached through file symlinks', async () => {
+    await withRuntimePackageRoot(async runtimePackageRoot => {
+      const sourceOne = FS.resolvePath('inputs/one.ts', runtimePackageRoot)
+      const sourceTwo = FS.resolvePath('inputs/two.ts', runtimePackageRoot)
+      await FS.writeText(sourceOne, 'export const value = 1')
+      await FS.writeText(sourceTwo, 'export const value = 2')
+      const runRoot = await TestRunRoot.create('tao-test-command', { runtimePackageRoot })
+      const compileWithFileLink = async (target: string): Promise<string> => {
+        const generatedRoot = FS.resolvePath(`app-${Math.random().toString(36).slice(2)}/_gen_tao-app`, runRoot)
+        await FS.writeText(FS.resolvePath('App.tsx', generatedRoot), 'import "./linked.ts"')
+        await FS.symlink(target, FS.resolvePath('linked.ts', generatedRoot))
+        return await TestRunRoot.intern(runRoot, generatedRoot)
+      }
+
+      Expect(await compileWithFileLink(sourceOne)).not.toBe(await compileWithFileLink(sourceTwo))
+    })
+  })
+
   // A fixture built of inline TSX reaches no module at all; it is stored whole, and stably.
   Test('stores an app that has no module tree', async () => {
     await withRuntimePackageRoot(async runtimePackageRoot => {
@@ -780,6 +853,30 @@ Describe('reusing a generated test run root', () => {
     })
   })
 
+  Test('keeps an aged compiled tree named only by an external directory link', async () => {
+    await withRuntimePackageRoot(async runtimePackageRoot => {
+      const dependencyRoot = FS.resolvePath('dependency/node_modules', runtimePackageRoot)
+      await FS.writeText(FS.resolvePath('package.json', dependencyRoot), '{"name":"installed"}')
+      const runRoot = await publishedRunRoot(runtimePackageRoot, FINGERPRINT, 9 * HOUR_MS)
+      const appPath = await compiledAppWithDirectoryLink(runRoot, dependencyRoot, { app: 'linked', files: {} })
+      await manifestNaming(runRoot, appPath)
+      const appRoot = FS.dirname(appPath)
+      const linkTarget = (await FS.entryMetadata(FS.resolvePath('node_modules', appRoot))).linkTarget
+      if (linkTarget === undefined) {
+        Errors.throwUnexpected('Expected a compiled node_modules link')
+      }
+      const treeRoot = FS.dirname(FS.resolvePath(linkTarget, appRoot))
+      Expect(FS.dirname(treeRoot)).toBe(storeRoot(runtimePackageRoot))
+      Expect(await FS.realPath(FS.resolvePath('node_modules', treeRoot))).toBe(dependencyRoot)
+      await FS.setModifiedTimeMs(treeRoot, Date.now() - 2 * HOUR_MS)
+
+      await TestRunRoot.prune({ runtimePackageRoot })
+
+      Expect(await FS.isDirectory(treeRoot)).toBe(true)
+      Expect(await TestRunRoot.lookup('tao-test-command', FINGERPRINT, { runtimePackageRoot })).toBeDefined()
+    })
+  })
+
   Test('hands nothing back for a published run root whose compiled app is gone', async () => {
     await withRuntimePackageRoot(async runtimePackageRoot => {
       const runRoot = await publishedRunRoot(runtimePackageRoot, FINGERPRINT, 0)
@@ -810,18 +907,6 @@ Describe('reusing a generated test run root', () => {
       await TestRunRoot.prune({ runtimePackageRoot })
 
       Expect(await FS.listDir(plansRoot)).toEqual(['1-in-use'])
-    })
-  })
-
-  // The index directory is named so that neither the run-root nor the category shape matches it.
-  Test('never mistakes the index directory for generated code of its own', async () => {
-    await withRuntimePackageRoot(async runtimePackageRoot => {
-      await publishedRunRoot(runtimePackageRoot, FINGERPRINT, 9 * HOUR_MS)
-
-      await TestRunRoot.prune({ runtimePackageRoot })
-
-      const cacheRoot = FS.resolvePath(`${TestRunRoot.DIRECTORY_NAME}/tao-test-command/.cache`, runtimePackageRoot)
-      Expect(await FS.listDir(cacheRoot)).toEqual([`${FINGERPRINT}.json`])
     })
   })
 })

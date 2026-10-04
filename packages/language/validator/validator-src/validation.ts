@@ -1,10 +1,11 @@
 import type { Packages } from '@ast-utils'
 import type { AST, Langium } from '@parser'
-import type { Diagnostic } from '@shared'
+import type { Diagnostic, ReleaseProfile } from '@shared'
 import { validatorDiagnostic } from './diagnostics'
 
 /** ValidationRunContext declares shared validation invocation state. */
 export interface ValidationRunContext {
+  readonly releaseProfile?: ReleaseProfile
   readonly packagesContext: Packages.Context
   readonly entryFilePath: string
   readonly workspaceFiles: readonly AST.TaoFile[]

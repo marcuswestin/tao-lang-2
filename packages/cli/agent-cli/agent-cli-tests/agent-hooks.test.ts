@@ -246,35 +246,6 @@ Describe('agent hooks', () => {
     Expect(commit.stderr).toBe('')
   })
 
-  Test('leaves the squash commit a landing builds alone', async () => {
-    // `merge-with-main` lands through `git commit-tree`, which is plumbing and runs no hook. A
-    // hook that fired there would sit between a verified branch and `main`.
-    const root = await mkGitTestDir('tao-plumbing-')
-    const repository = await initRepository(root, 'repo')
-    await addHookSupport(repository)
-    await installGitHooks(repository)
-    await FS.writeText(FS.resolvePath('f.txt', repository), 'two')
-    await git(repository, ['add', '-A'])
-    const tree = (await git(repository, ['write-tree'])).stdout.trim()
-    const parent = (await git(repository, ['rev-parse', 'HEAD'])).stdout.trim()
-
-    const built = await git(repository, [
-      '-c',
-      'user.email=t@t',
-      '-c',
-      'user.name=T',
-      'commit-tree',
-      tree,
-      '-p',
-      parent,
-      '-m',
-      'Landing 🤖 on main',
-    ])
-
-    Expect(built.exitCode).toBe(0)
-    Expect(built.stderr).toBe('')
-  })
-
   Test('installs into the directory every worktree shares, and leaves a foreign hook there', async () => {
     const root = await mkGitTestDir('tao-hook-install-')
     const repository = await initRepository(root, 'repo')

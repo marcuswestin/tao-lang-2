@@ -377,7 +377,9 @@ use Local from @tao/data/providers/local
 use Memory from @tao/data/providers/memory
 
 app WordFlower {
-   Name "WordFlower"
+   id "wordflower"
+   version "0.1.0"
+   name "WordFlower"
    Navigator WordFlowerNavigator
    Datasource Local {
       StorageKey "WordFlowerData"
@@ -385,6 +387,7 @@ app WordFlower {
 }
 
 let WordFlowerDemo = WordFlower with {
+   id "wordflower-demo"
    Datasource Memory { }
 }
 
@@ -392,7 +395,8 @@ datasource PreviewStore = Local {
    StorageKey "WordFlowerPreviewData"
 }
 
-workspace let WordFlowerPreview = WordFlower with {
+project let WordFlowerPreview = WordFlower with {
+   id "wordflower-preview"
    Datasource with {
       StorageKey "WordFlowerPreviewData"
    }
@@ -652,7 +656,7 @@ modelled, and an account switch stops sync until the app relaunches.
 ## The Dev datasource
 
 `Dev` is the development-only datasource. It holds nothing on the device: the Tao dev server —
-`tao dev` or Studio — stores each app's snapshots on the development machine and syncs them live
+`tao run` or Studio — stores each app's snapshots on the development machine and syncs them live
 to every device, browser tab, and simulator running that app's development build, so two phones
 and a browser tab editing the same app see one set of rows.
 
@@ -671,7 +675,7 @@ by the dev server:
 
 - **Storage is per app.** The dev server keys every stream by the app it is running — the app
   name plus a digest of its project root — and by storage key, so several apps developing side by
-  side never see each other's rows. `tao dev` and Studio derive the same key for the same app.
+  side never see each other's rows. `tao run` and Studio derive the same key for the same app.
 - **Storage survives the dev server.** Snapshots live as one file per app and storage key under
   `.artifacts/user/dev-data/`, written whole through a rename; the next dev server serves them
   again.
@@ -898,13 +902,14 @@ guard Document {
    loading -> { Text("Loading document…") }
    missing -> { Text("Document { Document.Id } no longer exists.") }
    unauthorized -> { Text("You no longer have access to this document.") }
-   error -> Message { Text("Could not load document: { Message }") }
+   error -> Context { Text(Context.Message) }
 }
 
 Text(Document.Title)
 ```
 
-`loading`, `missing`, `unauthorized`, and `error -> Message` are the exceptional entity cases. If
+`loading`, `missing`, `unauthorized`, and `error` are the exceptional entity cases; each exceptional
+render-guard handler may bind a `ReadContext`. If
 none applies, the entity is available and execution or rendering falls through to the statements
 after the guard. A matched action guard skips the rest of its action block; a matched render guard
 renders its branch instead of the rest of its enclosing render block. A deleted handle becomes
@@ -923,27 +928,62 @@ guard Document
 DocumentEditor(Document)
 ```
 
-The runtime always supplies the net: an activity indicator for `loading`, "This is gone" for
-`missing`, "You don't have access to this" for `unauthorized`, and the message for `error`, in the
-app's `Spinner` and `Text` element defaults. A file-level `guard default` replaces only the cases
-it names, for every app in the project:
+Guard payloads infer `ReadContext`. A reusable view can name the same public type with
+`use ReadContext from @tao/data` and take `Context ReadContext` as a parameter.
+
+The runtime always supplies the net, using the app's `Spinner` and `Text` element defaults.
+Loading uses labeled activity; missing says the item could not be found rather than asserting that
+it was deleted; unauthorized uses generic access copy unless a cause is known; errors use safe
+runtime-authored copy. Raw provider diagnostics are not display context.
+
+An app may replace named cases with one `guard` block:
 
 ```tao
-guard default {
-   loading -> Spinner()
-   missing -> { Text("This is gone") }
-   error -> Message { Text(Message) }
+app Notebook {
+   guard {
+      loading -> Context {
+         Spinner()
+         Text(Context.Message)
+      }
+      missing -> Context { Text(Context.Message) }
+      error -> Context { Text(Context.Message) }
+   }
+}
+
+app NotebookVariant = Notebook with {
+   guard { missing -> Context { Text("This note could not be found") } }
 }
 ```
 
-Its cases are `loading`, `missing`, `unauthorized`, and `error -> Message`; a handler is a render
-block or one bare render. A project declares at most one; the compiler loads it from any file an
-app's files reach, including a sibling in the same folder. It renders at the guard that reached it,
-with that guard's design and navigation context. The net covers query subjects too, for their
-`loading` and `error`. Content cases — `empty`, `refreshing`, `stale`, `true`, and `false` — never
-reach the net; emptiness is content, not failure. A bare guard over a subject with no exceptional
-cases (text, a list, a yes/no value) is an error. Action guards are unchanged: an unnamed case still
-falls through.
+Its four cases are `loading`, `missing`, `unauthorized`, and `error`. A handler is a render block
+or one bare render; each may bind a `ReadContext`. An app declares at most one net. A variant
+replaces only named cases and inherits the rest from its base, transitively through variant
+chains. File-level `guard default` is retired. Resolution is a named site handler, then the app's
+handler, then the runtime fallback. The handler renders where the guard stands with that site's
+design and navigation context.
+
+Exceptional local read guard handlers receive the same context:
+
+```tao
+guard Document {
+   error -> Context { Text(Context.Message) }
+}
+```
+
+`Context.Message` is safe display copy. `State` names the exceptional state and `ReadKind` names
+the known read kind or `unknown`. Optional `SubjectLabel` and `SubjectType` describe the subject
+without requiring a read of its unavailable fields. Optional `LoadingPhase`, `ElapsedSeconds`,
+`ProgressCompleted`, `ProgressTotal`, `MissingReason`, `UnauthorizedReason`, `Recovery`,
+`ErrorCategory`, `Retryable`, and `Retry` carry only known facts. Unknown or unimplemented fields
+are `none`; progress, classification and recovery producers that remain unavailable are tracked in
+[Read context producers](<../Roadmap/Tao Revolution/Follow-ups - Read context producers.md>).
+A recovery or retry control is rendered only when its action actually exists.
+
+The net covers query subjects for `loading` and `error`. Content cases — `empty`, `refreshing`,
+`stale`, `true`, and `false` — never reach the net; cached refreshes remain content. A bare guard
+over a subject with no exceptional cases (text, a list, a yes/no value) is an error. Ordinary value
+cases and effect-outcome payloads retain their existing meanings. Action guards still fall through
+on an unnamed case.
 
 ## Deterministic provider-state tests
 

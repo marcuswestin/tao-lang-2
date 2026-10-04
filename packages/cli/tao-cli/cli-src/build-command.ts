@@ -1,9 +1,27 @@
-import { Workspace } from '@compiler/workspace'
+import { Packages } from '@ast-utils'
+import { CompilerDependencies, type DependencyEnvironment } from '@compiler'
+import { BridgeMetadata } from '@compiler/bridge-metadata'
+import { discoverProjectTaoFiles, Workspace } from '@compiler/workspace'
 import Runtime, { HostDependencies, RuntimeToolchainPaths } from '@expo-host'
-import { Assert, CLI, Errors, FS, HCI, Platform, ProjectLocal, Repo } from '@shared'
+import { ProjectTooling } from '@project-tooling'
+import {
+  Assert,
+  CLI,
+  Diagnostics,
+  Errors,
+  FS,
+  HCI,
+  Platform,
+  ProjectIdentity,
+  ProjectLocal,
+  ReleaseCapabilities,
+  Repo,
+} from '@shared'
 import { AgentClientBuild } from './agent-client-build'
+import { TaoAppModules } from './app-modules'
 import { buildDesktopApp } from './desktop-build'
 import { chooseTaoApp } from './dev-app-selection'
+import { ManagedInstallEnvironment } from './managed-install-environment'
 import { exportVisionOSProject } from './visionos-project'
 import { exportWatchOSProject } from './watchos-project'
 
@@ -16,6 +34,7 @@ export type BuildRecord = {
   projectRoot: string
   results: Partial<Record<BuildTarget, { artifact: string; status: 'succeeded' } | { error: string; status: 'failed' }>>
   schemaVersion: 1
+  releaseProfile: string
   sourceDigest?: string
   targets: BuildTarget[]
   toolchainVersion: string
@@ -38,17 +57,28 @@ const runtimeFiles = [
   'metro.config.cjs',
   'package.json',
 ] as const
-const excludedSourceDirectories = new Set(['.git', '.tao', '.artifacts', '.expo', 'node_modules'])
+const excludedSourceDirectories = new Set(['.git', '.tao', '.tao-ts', '.artifacts', '.expo', 'node_modules'])
 
 /** Build each requested target from the same immutable source snapshot, retaining every result. */
 export async function runTaoBuild(path: string, options: BuildOptions): Promise<number> {
+  if (options.agents) {
+    ReleaseCapabilities.require('app-commands')
+  }
   const selectedTargets = await chooseTargets(
     options.agents && options.targets.length === 0 ? ['desktop'] : options.targets,
   )
+  for (const target of selectedTargets) {
+    ReleaseCapabilities.require(ReleaseCapabilities.targetCapability(target))
+  }
   if (options.agents && (options.compileOnly || selectedTargets.some(target => target !== 'desktop'))) {
     Errors.throwUserInput('--agents requires a packaged desktop build.')
   }
   const app = await chooseTaoApp(path, options.appName, 'Build')
+  await TaoAppModules.ensureProject(app.projectRoot)
+  const refreshed = await ProjectTooling.refresh(app.projectRoot, { runtimeRoot: TaoAppModules.runtimeRoot() })
+  if (refreshed.status !== 'fresh') {
+    Errors.throwUserInput(refreshed.diagnostics.map(diagnostic => diagnostic.message).join('\n'))
+  }
   const buildsRoot = options.output
     ? FS.resolvePath(options.output)
     : ProjectLocal.localResolve('builds', app.projectRoot)
@@ -62,7 +92,15 @@ export async function runTaoBuild(path: string, options: BuildOptions): Promise<
   const artifactRoot = FS.resolvePath(id, buildsRoot)
   // Git-aware package discovery intentionally includes explicitly requested scratch projects.
   const workRoot = await Repo.mkScratchDirOrHost('tao-build-')
-  const snapshotRoot = FS.resolvePath('source', workRoot)
+  const dependencyEnvironments = await selectedDependencyEnvironments(app.projectRoot, app.appName)
+  const roots = [...new Set(dependencyEnvironments.map(environment => FS.resolvePath(environment.projectRoot)))]
+  await Promise.all(roots.map(root => ProjectIdentity.ensure(root)))
+  const externalSidecars = [...new Set(refreshed.externalSidecarInputPaths.map(path => FS.resolvePath(path)))]
+    .toSorted()
+  const commonRoot = commonProjectAncestor([...roots, ...externalSidecars.map(path => FS.dirname(path))])
+  const snapshotBase = FS.resolvePath('source', workRoot)
+  const snapshotRootFor = (root: string) => FS.resolvePath(FS.relativePath(commonRoot, root), snapshotBase)
+  const snapshotRoot = snapshotRootFor(app.projectRoot)
   const snapshotApp = FS.resolvePath(FS.relativePath(app.projectRoot, app.appPath), snapshotRoot)
   const record: BuildRecord = {
     appName: app.appName,
@@ -72,6 +110,7 @@ export async function runTaoBuild(path: string, options: BuildOptions): Promise<
     projectRoot: app.projectRoot,
     results: {},
     schemaVersion: 1,
+    releaseProfile: ReleaseCapabilities.fingerprint(),
     targets: [...selectedTargets],
     toolchainVersion:
       (await FS.readJson<{ version: string }>(FS.resolvePath('package.json', RuntimeToolchainPaths.packageRoot)))
@@ -83,8 +122,38 @@ export async function runTaoBuild(path: string, options: BuildOptions): Promise<
   const progress = new BuildProgress(selectedTargets, id)
   try {
     progress.start()
-    record.sourceDigest = await snapshotProject(app.projectRoot, snapshotRoot)
+    const sourceDigests = await Promise.all(
+      roots.toSorted().map(async root =>
+        `${FS.relativePath(commonRoot, root)}:${await snapshotProject(root, snapshotRootFor(root))}`
+      ),
+    )
+    const externalDigests = await snapshotExternalSidecars(externalSidecars, commonRoot, snapshotBase)
+    for (const root of roots) {
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', snapshotRootFor(root)), '')
+    }
+    const installedDigests = await snapshotInstalledEnvironments(
+      app.projectRoot,
+      snapshotRoot,
+      dependencyEnvironments,
+      snapshotRootFor,
+    )
+    record.sourceDigest = Platform.sha256Hex([...sourceDigests, ...externalDigests, ...installedDigests].join('\n'))
+    await TaoAppModules.ensureProject(snapshotRoot)
+    const snapshotRefresh = await ProjectTooling.refresh(snapshotRoot, { runtimeRoot: TaoAppModules.runtimeRoot() })
+    if (snapshotRefresh.status !== 'fresh') {
+      Errors.throwUserInput(snapshotRefresh.diagnostics.map(diagnostic => diagnostic.message).join('\n'))
+    }
     await FS.mkdir(artifactRoot)
+    const retainedModulesRoot = FS.resolvePath('dependencies', artifactRoot)
+    if (options.compileOnly) {
+      await retainCompiledEnvironments(
+        app.projectRoot,
+        snapshotRoot,
+        dependencyEnvironments,
+        snapshotRootFor,
+        retainedModulesRoot,
+      )
+    }
     await FS.writeJson(FS.resolvePath('build.json', artifactRoot), record)
     progress.snapshotComplete()
     record.results = await executeBuildTargets(selectedTargets, async target => {
@@ -111,6 +180,7 @@ export async function runTaoBuild(path: string, options: BuildOptions): Promise<
         const generated = await Runtime.generateApp(snapshotApp, {
           appName: app.appName,
           runtimePackageRoot: compileRoot,
+          moduleLinkRoot: retainedModulesRoot,
         })
         return FS.dirname(generated.outputPath)
       }
@@ -149,6 +219,9 @@ export async function runTaoBuild(path: string, options: BuildOptions): Promise<
         const partial = options.compileOnly === true ? `compiled/${target}` : target
         await FS.remove(FS.resolvePath(partial, artifactRoot))
       }
+    }
+    if (options.compileOnly && selectedTargets.every(target => record.results[target]?.status === 'failed')) {
+      await FS.remove(retainedModulesRoot)
     }
     await FS.writeJson(FS.resolvePath('build.json', artifactRoot), record)
   } finally {
@@ -260,6 +333,9 @@ async function chooseTargets(requested: readonly BuildTarget[]): Promise<BuildTa
   if (requested.length > 0) {
     return targets.filter(target => requested.includes(target))
   }
+  if (ReleaseCapabilities.current().phase !== 'development') {
+    return ['web']
+  }
   if (!HCI.isInteractive()) {
     Errors.throwUserInput(
       'Choose build targets with --web, --desktop, --ios, --android, --visionos, and/or --watchos in a non-interactive terminal.',
@@ -282,6 +358,193 @@ function parseTargetSelection(value: string): BuildTarget[] | undefined {
     return undefined
   }
   return targets.filter((_, index) => parts.includes(String(index + 1)))
+}
+
+/** Select the same physical dependency closure compilation will use for this app. */
+async function selectedDependencyEnvironments(
+  projectRoot: string,
+  appName: string,
+): Promise<readonly DependencyEnvironment[]> {
+  const discovered = await discoverProjectTaoFiles(projectRoot)
+  const owners = await Promise.all(discovered.map(path => Packages.containingProjectRoot(FS.dirname(path))))
+  const sourcePaths = discovered.filter((_, index) => owners[index] === projectRoot)
+  if (sourcePaths.length === 0) {
+    Errors.throwUserInput(`No Tao source was found in ${projectRoot}.`)
+  }
+  const workspace = await Workspace.open(projectRoot)
+  const validation = await workspace.validateFiles(sourcePaths)
+  if (Diagnostics.hasError(validation.diagnostics)) {
+    Errors.throwUserInput(Diagnostics.errors(validation.diagnostics).map(diagnostic => diagnostic.message).join('\n'))
+  }
+  const context = await Packages.createContext(projectRoot)
+  const graph = Packages.createResolver(context).projectGraph({
+    fromFilePath: sourcePaths[0]!,
+    workspaceFiles: validation.files.map(file => file.ast),
+  })
+  const app = graph.appRequirements.find(entry => entry.app.name === appName)?.app
+  if (app === undefined) {
+    Errors.throwUserInput(`No app named '${appName}' was found in ${projectRoot}.`)
+  }
+  return CompilerDependencies.collect(graph, { kind: 'app', app })
+}
+
+/** Preserve every relative Tao locator by placing selected roots below their common ancestor. */
+function commonProjectAncestor(roots: readonly string[]): string {
+  let common = FS.resolvePath(roots[0]!)
+  while (roots.some(root => !FS.pathIsWithin(root, common))) {
+    const parent = FS.dirname(common)
+    Assert.input(parent !== common, 'Selected Tao projects have no common filesystem ancestor.')
+    common = parent
+  }
+  return common
+}
+
+/** Preserve relative imports while copying only the reached files outside selected project trees. */
+async function snapshotExternalSidecars(
+  paths: readonly string[],
+  commonRoot: string,
+  snapshotBase: string,
+): Promise<string[]> {
+  const copied: { path: string; digest: string }[] = []
+  for (const path of paths) {
+    if (await FS.isSymbolicLink(path)) {
+      Errors.throwUserInput(`Build source contains a symlink; copy it into the project first: ${FS.displayPath(path)}`)
+    }
+    if (!await FS.isFile(path)) {
+      continue
+    }
+    const content = await FS.readFile(path)
+    const digest = Platform.sha256Hex(content)
+    const relativePath = FS.relativePath(commonRoot, path)
+    await FS.writeFile(FS.resolvePath(relativePath, snapshotBase), content)
+    copied.push({ path, digest })
+  }
+  for (const path of paths) {
+    const original = copied.find(entry => entry.path === path)
+    if (await FS.isSymbolicLink(path) || await FS.isFile(path) !== (original !== undefined)) {
+      Errors.throwUserInput('External sidecar files changed while creating the build snapshot; retry the build.')
+    }
+    if (original !== undefined && Platform.sha256Hex(await FS.readFile(path)) !== original.digest) {
+      Errors.throwUserInput('External sidecar files changed while creating the build snapshot; retry the build.')
+    }
+  }
+  return copied.map(({ path, digest }) => `${FS.relativePath(commonRoot, path)}:${digest}`)
+}
+
+/** Copy only selected, Tao-managed npm packages into the snapshot's recomputed namespaces. */
+async function snapshotInstalledEnvironments(
+  originalRoot: string,
+  snapshotRoot: string,
+  environments: readonly DependencyEnvironment[],
+  snapshotRootFor: (root: string) => string,
+): Promise<string[]> {
+  const digests: string[] = []
+  for (const environment of environments) {
+    if (environment.npm.length === 0) {
+      continue
+    }
+    const origin = FS.resolvePath(environment.projectRoot)
+    const snapshotOrigin = snapshotRootFor(origin)
+    const snapshotNamespace = BridgeMetadata.dependencyNamespace(snapshotOrigin)
+    const originalModules = ManagedInstallEnvironment.modulesRoot(originalRoot, origin, environment.namespace)
+    const snapshotModules = ManagedInstallEnvironment.modulesRoot(snapshotRoot, snapshotOrigin, snapshotNamespace)
+    for (const requirement of environment.npm) {
+      const sourcePackageRoot = ManagedInstallEnvironment.packageRoot(
+        originalRoot,
+        environment.namespace,
+        requirement.alias,
+      )
+      const sourcePackage = FS.resolvePath(`node_modules/${requirement.alias}`, sourcePackageRoot)
+      const sourceAlias = FS.resolvePath(requirement.alias, originalModules)
+      const resolvedAlias = await FS.realPath(sourceAlias).catch(() => undefined)
+      if (
+        !await FS.isDirectory(sourcePackage)
+        || resolvedAlias !== await FS.realPath(sourcePackage).catch(() => undefined)
+      ) {
+        Errors.throwUserInput(`Build dependency '${requirement.alias}' is not Tao-managed; run tao install first.`)
+      }
+      const snapshotPackageRoot = ManagedInstallEnvironment.packageRoot(
+        snapshotRoot,
+        snapshotNamespace,
+        requirement.alias,
+      )
+      const sourceModules = FS.resolvePath('node_modules', sourcePackageRoot)
+      const snapshotModulesForAlias = FS.resolvePath('node_modules', snapshotPackageRoot)
+      const before = await installTreeIdentity(sourceModules)
+      await FS.copyDirectory(sourceModules, snapshotModulesForAlias)
+      if (
+        await installTreeIdentity(sourceModules) !== before
+        || await installTreeIdentity(snapshotModulesForAlias) !== before
+      ) {
+        Errors.throwUserInput(
+          `Build dependency '${requirement.alias}' changed while creating the snapshot; retry the build.`,
+        )
+      }
+      digests.push(`${FS.relativePath(originalRoot, origin)}:${requirement.alias}:${before}`)
+      await FS.replaceSymlink(
+        FS.resolvePath(`node_modules/${requirement.alias}`, snapshotPackageRoot),
+        FS.resolvePath(requirement.alias, snapshotModules),
+      )
+    }
+    if (origin !== originalRoot) {
+      await FS.replaceSymlink(
+        snapshotModules,
+        ManagedInstallEnvironment.generatedModulesLink(snapshotRoot, snapshotNamespace),
+      )
+    }
+  }
+  return digests
+}
+
+/** Compile-only output outlives the scratch source; retain its managed packages beside the artifact. */
+async function retainCompiledEnvironments(
+  originalRoot: string,
+  snapshotRoot: string,
+  environments: readonly DependencyEnvironment[],
+  snapshotRootFor: (root: string) => string,
+  retainedRoot: string,
+): Promise<void> {
+  for (const environment of environments) {
+    const snapshotOrigin = snapshotRootFor(FS.resolvePath(environment.projectRoot))
+    const namespace = BridgeMetadata.dependencyNamespace(snapshotOrigin)
+    const retainedModules = ManagedInstallEnvironment.modulesRoot(
+      retainedRoot,
+      FS.resolvePath(environment.projectRoot) === FS.resolvePath(originalRoot) ? retainedRoot : snapshotOrigin,
+      namespace,
+    )
+    for (const requirement of environment.npm) {
+      const snapshotPackageRoot = ManagedInstallEnvironment.packageRoot(snapshotRoot, namespace, requirement.alias)
+      const sourceModules = FS.resolvePath('node_modules', snapshotPackageRoot)
+      const retainedPackageRoot = ManagedInstallEnvironment.packageRoot(retainedRoot, namespace, requirement.alias)
+      const retainedPackageModules = FS.resolvePath('node_modules', retainedPackageRoot)
+      const before = await installTreeIdentity(sourceModules)
+      await FS.copyDirectory(sourceModules, retainedPackageModules)
+      if (await installTreeIdentity(retainedPackageModules) !== before) {
+        Errors.throwUserInput(`Build dependency '${requirement.alias}' changed while retaining compiled output.`)
+      }
+      await FS.replaceSymlink(
+        FS.resolvePath(`node_modules/${requirement.alias}`, retainedPackageRoot),
+        FS.resolvePath(requirement.alias, retainedModules),
+      )
+    }
+  }
+}
+
+async function installTreeIdentity(root: string): Promise<string> {
+  const entries: string[] = []
+  for await (const path of FS.walk(root, { includeHidden: true })) {
+    const relative = FS.relativePath(root, path)
+    if (await FS.isSymbolicLink(path)) {
+      const target = await FS.realPath(path).catch(() => undefined)
+      if (target === undefined || !FS.pathIsWithin(target, root)) {
+        Errors.throwUserInput(`Installed npm dependency contains a link outside its environment: ${path}`)
+      }
+      entries.push(`${relative}:link:${(await FS.entryMetadata(path)).linkTarget}`)
+    } else {
+      entries.push(`${relative}:file:${Platform.sha256Hex(await FS.readFile(path))}`)
+    }
+  }
+  return Platform.sha256Hex(entries.toSorted().join('\n'))
 }
 
 async function snapshotProject(projectRoot: string, snapshotRoot: string): Promise<string> {
@@ -310,6 +573,16 @@ async function snapshotProject(projectRoot: string, snapshotRoot: string): Promi
     digests.push(`${FS.relativePath(projectRoot, source)}:${Platform.sha256Hex(content)}`)
     await FS.writeFile(FS.resolvePath(FS.relativePath(projectRoot, source), snapshotRoot), content)
   }
+  const lockPath = FS.resolvePath('.tao/store/lock.jsonc', projectRoot)
+  const identityPath = FS.resolvePath('.tao/store/project.json', projectRoot)
+  const identity = await FS.readFile(identityPath)
+  digests.push(`.tao/store/project.json:${Platform.sha256Hex(identity)}`)
+  await FS.writeFile(FS.resolvePath('.tao/store/project.json', snapshotRoot), identity)
+  const lock = await FS.isFile(lockPath) ? await FS.readFile(lockPath) : undefined
+  if (lock !== undefined) {
+    digests.push(`.tao/store/lock.jsonc:${Platform.sha256Hex(lock)}`)
+    await FS.writeFile(FS.resolvePath('.tao/store/lock.jsonc', snapshotRoot), lock)
+  }
   const after: string[] = []
   for await (
     const source of FS.walk(projectRoot, {
@@ -327,6 +600,12 @@ async function snapshotProject(projectRoot: string, snapshotRoot: string): Promi
     if (current !== digests[index]) {
       Errors.throwUserInput('Project files changed while creating the build snapshot; retry the build.')
     }
+  }
+  if (lock !== undefined && Platform.sha256Hex(await FS.readFile(lockPath)) !== Platform.sha256Hex(lock)) {
+    Errors.throwUserInput('Project lock changed while creating the build snapshot; retry the build.')
+  }
+  if (Platform.sha256Hex(await FS.readFile(identityPath)) !== Platform.sha256Hex(identity)) {
+    Errors.throwUserInput('Project identity changed while creating the build snapshot; retry the build.')
   }
   return Platform.sha256Hex(digests.join('\n'))
 }

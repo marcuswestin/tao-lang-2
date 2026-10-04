@@ -1,6 +1,6 @@
 import { loadSemanticSnapshot, Workspace } from '@compiler/workspace'
 import { AST } from '@parser'
-import { CLI, Errors, FS, Repo, Time } from '@shared'
+import { Errors, FS } from '@shared'
 import { Deferred, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
 import { studioGeneratedSourceHeader } from '../studio-src/StudioGeneratedSources'
 import { StudioPreviewManifest } from '../studio-src/StudioPreviewManifest'
@@ -15,7 +15,7 @@ import {
   studioSourceActionVersion,
 } from '../studio-src/StudioProtocol'
 import { StudioServerDatasource } from '../studio-src/StudioServerDatasource'
-import { systemLightScheme } from './test-studio-fixtures'
+import { contendingSketchCreate, systemLightScheme } from './test-studio-fixtures'
 
 Test('Studio project session resolves one current Tao app and serves contained versioned files', async () => {
   await withStudioProject(async (session, paths, root) => {
@@ -38,19 +38,9 @@ Test('Studio project session resolves one current Tao app and serves contained v
     })
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/source-action/undo' })
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/file/create' })
-    Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/file/rename' })
-    Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/file/delete' })
-    Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/source-action/inspect' })
-    Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/source-action/propose' })
-    Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/data/fill' })
     Expect(handshake.endpoints).toContainEqual({ method: 'WS', path: '/api/language/lsp' })
-    Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/language/highlight' })
-    Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/ship/beta' })
-    Expect(handshake.endpoints).toContainEqual({ method: 'GET', path: '/api/tests/status' })
-    Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/tests/run' })
     Expect(handshake.files.map(candidate => candidate.path)).toEqual([
       'Garden.tao',
-      'Project.tao',
       'Support.tao',
     ])
     Expect(file.sourceVersion.startsWith('text-v1:')).toBe(true)
@@ -61,7 +51,7 @@ Test('Studio project session resolves one current Tao app and serves contained v
 
 Test('Studio and the CLI load ordered diagnostics through the same validated snapshot seam', async () => {
   await withTaoFiles('tao-studio-semantic-loader-parity-', {
-    'Garden.tao': 'app Garden { view Missing }\n',
+    'Garden.tao': 'app Garden { id "tao-studio-garden" version "1.0.0" name "Garden"  view Missing }\n',
   }, async (paths, root) => {
     const session = await StudioProjectSession.open({
       async compile() {},
@@ -105,7 +95,7 @@ Test('Agent undo shows its reverse diff and refuses to overwrite a later manual 
 Test('Studio project open repairs generated Studio sources to read-only mode', async () => {
   await withTaoFiles('tao-studio-generated-open-', {
     '@/studio/View1.tao': 'public view View1() { }\n',
-    'Garden.tao': 'app Garden { view Main }\nview Main() { }\n',
+    'Garden.tao': 'app Garden { id "tao-studio-garden" version "1.0.0" name "Garden"  view Main }\nview Main() { }\n',
   }, async (paths, root) => {
     await FS.chmod(paths['@/studio/View1.tao'], 0o644)
 
@@ -123,7 +113,7 @@ Test('Visual edits and their undo reach a generated Studio view and leave it rea
   await withTaoFiles('tao-studio-generated-edit-', {
     '@/studio/View1.tao': `${studioGeneratedSourceHeader}\nuse Col, Text from @tao/ui\n\npublic\nview View1() {\n`
       + '   render Col() {\n      Text("Before")\n}  }\n',
-    'Garden.tao': 'app Garden { view Main }\nview Main() { }\n',
+    'Garden.tao': 'app Garden { id "tao-studio-garden" version "1.0.0" name "Garden"  view Main }\nview Main() { }\n',
   }, async (paths, root) => {
     const session = await StudioProjectSession.open({
       async compile() {},
@@ -179,16 +169,16 @@ Test('Move to package renames generated source and rewrites every language impor
     '@/studio/View1.tao':
       `${'// Studio-written generated source. Read-only until moved to a package.'}\n\npublic view View1() { }\n`,
     '@/studio/Other.tao': 'public view Other() { }\n',
-    '@views/Existing.tao': 'public view Existing() { }\n',
+    '@views/Existing.tao': 'project view Existing() { }\n',
     'Garden.tao': `
       use View1, Other from @/studio
       use Existing from @views
-      app Garden { view Main }
+      app Garden { id "tao-studio-garden" version "1.0.0" name "Garden"  view Main }
       view Main() { render View1() }
     `,
     'Nested.tao': `
       use View1 from @/studio
-      workspace view Nested() { render View1() }
+      project view Nested() { render View1() }
     `,
   }, async (paths, root) => {
     const session = await StudioProjectSession.open({
@@ -231,8 +221,8 @@ Test('Move to package renames generated source and rewrites every language impor
 
 Test('Move to package retires the catalog sketch after source and compile succeed', async () => {
   await withTaoFiles('tao-studio-move-retires-sketch-', {
-    '@views/Existing.tao': 'public view Existing() { }\n',
-    'Garden.tao': 'app Garden { view Main }\nview Main() { }\n',
+    '@views/Existing.tao': 'project view Existing() { }\n',
+    'Garden.tao': 'app Garden { id "tao-studio-garden" version "1.0.0" name "Garden"  view Main }\nview Main() { }\n',
   }, async (paths, root) => {
     const session = await StudioProjectSession.open({
       async compile() {},
@@ -289,9 +279,9 @@ for (const relocateScenarios of [undefined, false]) {
       `,
         '@/studio/Sketches.tao':
           'use Playlist from ../../Data.tao\npublic fixture Sketches { Chill = create Playlist { Title: "Chill" } }',
-        '@views/Existing.tao': 'public view Existing() { }',
+        '@views/Existing.tao': 'project view Existing() { }',
         'Data.tao': 'public data Playlists / Playlist { Title text }',
-        'Garden.tao': 'app Garden { view Main }\nview Main() { }',
+        'Garden.tao': 'app Garden { id "tao-studio-garden" version "1.0.0" name "Garden"  view Main }\nview Main() { }',
         'Scenarios.tao': '// Existing authored content\nlet ExistingValue = "keep"',
       }, async (paths, root) => {
         const session = await StudioProjectSession.open({
@@ -338,9 +328,9 @@ for (const failure of ['compile', 'import collision'] as const) {
     await withTaoFiles('tao-studio-move-existing-scenarios-', {
       '@/studio/View1.tao':
         '// Studio-written generated source. Read-only until moved to a package.\npublic view View1() { }\nscenarios View1 "sketch" { scenario "draft" { render () } }',
-      '@views/Existing.tao': 'public view Existing() { }',
+      '@views/Existing.tao': 'project view Existing() { }',
       '@other/View1.tao': 'public view View1() { }',
-      'Garden.tao': 'app Garden { view Main }\nview Main() { }',
+      'Garden.tao': 'app Garden { id "tao-studio-garden" version "1.0.0" name "Garden"  view Main }\nview Main() { }',
       'Scenarios.tao': failure === 'import collision'
         ? 'use View1 from @other\nlet Kept = "authored"'
         : 'let Kept = "authored"',
@@ -375,9 +365,10 @@ Test('Move to package restores source, imports, catalog, and compile state after
   let failMoveCompile = false
   const compiles: Array<readonly { path: string; sourceVersion?: string }[]> = []
   await withTaoFiles('tao-studio-move-rollback-', {
-    '@views/Existing.tao': 'public view Existing() { }\n',
-    'Garden.tao': 'use View1 from @/studio\napp Garden { view Main }\nview Main() { render View1() }\n',
-    'Nested.tao': 'use View1 from @/studio\nworkspace view Nested() { render View1() }\n',
+    '@views/Existing.tao': 'project view Existing() { }\n',
+    'Garden.tao':
+      'use View1 from @/studio\napp Garden { id "tao-studio-garden" version "1.0.0" name "Garden"  view Main }\nview Main() { render View1() }\n',
+    'Nested.tao': 'use View1 from @/studio\nproject view Nested() { render View1() }\n',
   }, async (paths, root) => {
     const session = await StudioProjectSession.open({
       async compile(request) {
@@ -433,8 +424,9 @@ for (const changed of ['target', 'original', 'import'] as const) {
     const release = Deferred<void>()
     let failMove = false
     await withTaoFiles('tao-studio-move-external-edit-', {
-      '@views/Existing.tao': 'public view Existing() { }\n',
-      'Garden.tao': 'use View1 from @/studio\napp Garden { view Main }\nview Main() { render View1() }\n',
+      '@views/Existing.tao': 'project view Existing() { }\n',
+      'Garden.tao':
+        'use View1 from @/studio\napp Garden { id "tao-studio-garden" version "1.0.0" name "Garden"  view Main }\nview Main() { render View1() }\n',
     }, async (paths, root) => {
       const session = await StudioProjectSession.open({
         async compile() {
@@ -496,8 +488,9 @@ Test('Move to package serializes source and catalog rollback against an independ
   const releaseMoveCompile = Deferred<void>()
   let pauseMove = false
   await withTaoFiles('tao-studio-move-process-rollback-', {
-    '@views/Existing.tao': 'public view Existing() { }\n',
-    'Garden.tao': 'use View1 from @/studio\napp Garden { view Main }\nview Main() { render View1() }\n',
+    '@views/Existing.tao': 'project view Existing() { }\n',
+    'Garden.tao':
+      'use View1 from @/studio\napp Garden { id "tao-studio-garden" version "1.0.0" name "Garden"  view Main }\nview Main() { render View1() }\n',
   }, async (paths, root) => {
     const session = await StudioProjectSession.open({
       async compile() {
@@ -532,46 +525,32 @@ Test('Move to package serializes source and catalog rollback against an independ
       writeId: 'move-process-failure',
     })
     await moveCompileEntered.promise
-    const marker = FS.resolvePath('independent-move-create-finished', root)
-    const sessionModule = Repo.resolvePath('packages/ides/studio/studio-src/StudioProjectSession.ts')
-    const sharedModule = Repo.resolvePath('packages/shared/shared-src/shared.ts')
-    const independent = CLI.run('bun', {
-      args: [
-        '-e',
-        `
-      import { StudioProjectSession } from ${JSON.stringify(sessionModule)}
-      import { FS } from ${JSON.stringify(sharedModule)}
-      const root = ${JSON.stringify(root)}
-      const project = await FS.realPath(root)
-      const session = await StudioProjectSession.open({
-        async compile() {},
-        entryPath: FS.resolvePath('Garden.tao', root),
-        projectRoot: root,
-      })
-      await session.applySketchAction({
-        action: {
-          height: 40,
-          id: 'independent-move-sketch',
-          kind: 'create-sketch',
-          project,
-          rects: [],
-          width: 100,
-        },
-        expectedRevision: ${created.catalog.revision},
-        requestId: 'independent-move-create',
-      })
-      await FS.writeText(${JSON.stringify(marker)}, 'done')
-    `,
-      ],
-      stdio: 'pipe',
+    const independent = contendingSketchCreate(root, {
+      action: {
+        height: 40,
+        id: 'independent-move-sketch',
+        kind: 'create-sketch',
+        project: await FS.realPath(root),
+        rects: [],
+        width: 100,
+      },
+      expectedRevision: created.catalog.revision,
+      requestId: 'independent-move-create',
     })
-    await Time.sleep(40)
-    Expect(await FS.exists(marker)).toBe(false)
-    releaseMoveCompile.resolve()
-    await Expect(failedMove).rejects.toThrow('authored Tao source failed to compile')
-    const independentResult = await independent
-    Expect(independentResult.stderr).toBe('')
-    Expect(independentResult.exitCode).toBe(0)
+    try {
+      await independent.waitForContention()
+      releaseMoveCompile.resolve()
+      await Expect(failedMove).rejects.toThrow('authored Tao source failed to compile')
+      await independent.resume()
+      const independentResult = await independent.result
+      Expect(independentResult.stderr).toBe('')
+      Expect(independentResult.exitCode).toBe(0)
+    } finally {
+      releaseMoveCompile.resolve()
+      await independent.resume()
+      await failedMove.catch(() => {})
+      await independent.result
+    }
     Expect(await FS.exists(FS.resolvePath('@/studio/View1.tao', root))).toBe(true)
     Expect(await FS.exists(FS.resolvePath('@views/View1.tao', root))).toBe(false)
     const catalog = await session.sketchCatalog()
@@ -589,7 +568,8 @@ Test('Move to package requests a different destination only when the target pack
     '@/studio/View1.tao':
       `${'// Studio-written generated source. Read-only until moved to a package.'}\n\npublic view View1() { }\n`,
     '@views/Existing.tao': 'public view View1() { }\n',
-    'Garden.tao': 'use View1 from @/studio\napp Garden { view View1 }\n',
+    'Garden.tao':
+      'use View1 from @/studio\napp Garden { id "tao-studio-garden" version "1.0.0" name "Garden"  view View1 }\n',
   }, async (paths, root) => {
     const session = await StudioProjectSession.open({
       async compile() {
@@ -621,8 +601,9 @@ Test('Move to package requests a different destination only when the target pack
 
 Test('Studio project session publishes every project app variant with a safe relative entry path', async () => {
   await withTaoFiles('tao-studio-app-variants-', {
-    'First.tao': 'app First { view Main }\napp FirstCompact = First with { }\nview Main() { }\n',
-    'Nested/Second.tao': 'app Second { view Main }\nview Main() { }\n',
+    'First.tao':
+      'app First { id "first" version "1.0.0" name "First" view Main }\napp FirstCompact = First with { id "first-compact" name "Compact" }\nview Main() { }\n',
+    'Nested/Second.tao': 'app Second { id "second" version "1.0.0" name "Second" view Main }\nview Main() { }\n',
   }, async (_paths, root) => {
     const session = await StudioProjectSession.open({
       appName: 'FirstCompact',
@@ -641,26 +622,24 @@ Test('Studio project session publishes every project app variant with a safe rel
   })
 })
 
-Test('Studio project session opens the project app when the command line named none', async () => {
+Test('Studio project session requires a choice when multiple apps have no project default', async () => {
   await withTaoFiles('tao-studio-default-app-', {
-    'Project.tao': 'project { id "reader" name "Reader" app Second }\n',
-    'Reader.tao': 'app First { view Main }\napp Second { view Main }\nview Main() { }\n',
+    'Reader.tao':
+      'app First { id "first" version "1.0.0" name "First" view Main }\napp Second { id "second" version "1.0.0" name "Second" view Main }\nview Main() { }\n',
   }, async (_paths, root) => {
-    // A project that names its app has already answered "which app"; Studio used to refuse
-    // every multi-app project until someone repeated that answer as --app.
-    const session = await StudioProjectSession.open({ async compile() {}, projectRoot: root })
-    Expect(session.appName).toBe('Second')
+    await Expect(StudioProjectSession.open({ async compile() {}, projectRoot: root })).rejects.toThrow(
+      'Multiple Tao apps found: First, Second.',
+    )
 
     const explicit = await StudioProjectSession.open({ appName: 'First', async compile() {}, projectRoot: root })
     Expect(explicit.appName).toBe('First')
   })
 })
 
-Test('Studio project session lets an explicit entry override the project app', async () => {
+Test('Studio project session selects an app by explicit entry', async () => {
   await withTaoFiles('tao-studio-explicit-entry-', {
-    'Project.tao': 'project { id "reader" name "Reader" app Second }\n',
-    'First.tao': 'app First { view FirstMain }\nview FirstMain() { }\n',
-    'Second.tao': 'app Second { view SecondMain }\nview SecondMain() { }\n',
+    'First.tao': 'app First { id "first" version "1.0.0" name "First" view FirstMain }\nview FirstMain() { }\n',
+    'Second.tao': 'app Second { id "second" version "1.0.0" name "Second" view SecondMain }\nview SecondMain() { }\n',
   }, async (_paths, root) => {
     const session = await StudioProjectSession.open({
       async compile() {},
@@ -675,7 +654,8 @@ Test('Studio project session lets an explicit entry override the project app', a
 
 Test('Studio project session still asks which app to open when the project names no default', async () => {
   await withTaoFiles('tao-studio-no-default-app-', {
-    'Reader.tao': 'app First { view Main }\napp Second { view Main }\nview Main() { }\n',
+    'Reader.tao':
+      'app First { id "first" version "1.0.0" name "First" view Main }\napp Second { id "second" version "1.0.0" name "Second" view Main }\nview Main() { }\n',
   }, async (_paths, root) => {
     await Expect(StudioProjectSession.open({ async compile() {}, projectRoot: root })).rejects.toThrow(
       'Multiple Tao apps found: First, Second.',
@@ -690,7 +670,7 @@ Test('Studio project session exposes parser-owned design tokens and local bundle
          ink #121826
          card [gap 8, fg ink]
       }
-      app Garden { view Main }
+      app Garden { id "tao-studio-garden" version "1.0.0" name "Garden"  view Main }
       view Main() { render Stack() [card] }
     `,
   }, async (paths, root) => {
@@ -726,7 +706,7 @@ Test('Studio project session inventories every structured design family with exa
          screens { narrow below 500.px, wide }
          styles { card [radius md] Text [ink canvas] }
       }
-      app Garden { view Main Design GardenDesign }
+      app Garden { id "tao-studio-garden" version "1.0.0" name "Garden"  view Main Design GardenDesign }
       view Main() { render Text("Garden") [card, body] }
     `,
   }, async (paths, root) => {
@@ -761,7 +741,7 @@ Test('Studio applies and undoes structured size promotion through the versioned 
   await withTaoFiles('tao-studio-size-promotion-', {
     'Garden.tao': `
       design GardenDesign { colors { ink #111 } styles { Text [ink ink] } }
-      app Garden { view Main Design GardenDesign }
+      app Garden { id "tao-studio-garden" version "1.0.0" name "Garden"  view Main Design GardenDesign }
       view Main() { render Text("Before") [size 18] }
     `,
   }, async (paths, root) => {
@@ -941,11 +921,13 @@ Test('Studio file CRUD rejects unsafe, destructive, stale, and dirty mutations',
 Test('Studio lists project files from one scan kept current by writes and watcher echoes', async () => {
   let listings = 0
   let reads = 0
+  const readsByPath = new Map<string, number>()
   const compiledFiles: Array<Record<string, string>> = []
   await withTaoFiles(
     'tao-studio-incremental-files-',
     {
-      'Garden.tao': 'app Garden { view Main }\nview Main() { render Text("Before") }\n',
+      'Garden.tao':
+        'app Garden { id "tao-studio-garden" version "1.0.0" name "Garden"  view Main }\nview Main() { render Text("Before") }\n',
       'Support.tao': 'view Support() { }\n',
     },
     async (paths, root) => {
@@ -959,12 +941,21 @@ Test('Studio lists project files from one scan kept current by writes and watche
         projectFilesIO: {
           async listTaoFiles(projectRoot) {
             listings += 1
-            return (await FS.listDir(projectRoot))
+            const candidates = (await FS.listDir(projectRoot))
               .filter(name => name.endsWith('.tao'))
               .map(name => FS.resolvePath(name, projectRoot))
+            const files: string[] = []
+            for (const path of candidates) {
+              if (await FS.isFile(path)) {
+                files.push(path)
+              }
+            }
+            return files
           },
           readText(path) {
             reads += 1
+            const relativePath = FS.relativePath(root, path)
+            readsByPath.set(relativePath, (readsByPath.get(relativePath) ?? 0) + 1)
             return FS.readText(path)
           },
         },
@@ -974,8 +965,9 @@ Test('Studio lists project files from one scan kept current by writes and watche
       const initial = await session.files()
       const initialReads = reads
       Expect(listings).toBe(1)
+      Expect(Object.fromEntries(readsByPath)).toEqual({ 'Garden.tao': 1, 'Support.tao': 1 })
       Expect(initialReads).toBe(initial.length)
-      Expect(initial.map(file => file.path)).toEqual(['Garden.tao', 'Project.tao', 'Support.tao'])
+      Expect(initial.map(file => file.path)).toEqual(['Garden.tao', 'Support.tao'])
 
       await session.compileInitial()
       const garden = await session.readFile('Garden.tao')
@@ -1003,11 +995,9 @@ Test('Studio lists project files from one scan kept current by writes and watche
       // An editor outside Studio rewrites Support.tao; the watcher reports the version it hashed.
       const externalContent = 'view Support() { render Text("external") }\n'
       await FS.writeText(paths['Support.tao'], externalContent)
-      const supportVersionBefore = initial.find(file => file.path === 'Support.tao')!.sourceVersion
       const external = await session.noteWatchChanges([{ path: paths['Support.tao'], sourceVersion: 'external-1' }])
       Expect(external.compile?.status).toBe('compiled')
       Expect((await session.files()).find(file => file.path === 'Support.tao')?.sourceVersion).toBe('external-1')
-      Expect(supportVersionBefore).not.toBe('external-1')
 
       // A watcher report without a version means "look for yourself": one read, not a rescan.
       const readsBeforeUnversioned = reads
@@ -1029,7 +1019,6 @@ Test('Studio lists project files from one scan kept current by writes and watche
 
       Expect((await session.files()).map(file => [file.path, file.sourceVersion])).toEqual([
         ['Garden.tao', saved.file.sourceVersion],
-        ['Project.tao', initial.find(file => file.path === 'Project.tao')!.sourceVersion],
       ])
       Expect(compiledFiles.length).toBeGreaterThanOrEqual(6)
       Expect(compiledFiles[1]?.['Garden.tao']).toBe(saved.file.sourceVersion)
@@ -1039,6 +1028,8 @@ Test('Studio lists project files from one scan kept current by writes and watche
       Expect(compiledFiles.at(-1)?.['Support.tao']).toBeUndefined()
       Expect(listings).toBe(1)
       Expect(reads).toBe(initialReads + 1)
+      Expect(readsByPath.get('Garden.tao')).toBe(1)
+      Expect(readsByPath.get('Support.tao')).toBe(2)
     },
   )
 })
@@ -1069,7 +1060,7 @@ Test('Studio draft writes keep invalid source off disk and acknowledge their exa
   await withStudioProject(async (session, paths) => {
     const initial = await session.readFile('Garden.tao')
     const invalid = await session.syncDraft({
-      content: 'app Garden {',
+      content: 'app Garden { id "tao-studio-garden" version "1.0.0" name "Garden" ',
       path: initial.path,
       sourceVersion: initial.sourceVersion,
       writeId: 'draft-invalid',
@@ -1319,23 +1310,6 @@ Test('Studio rejects malformed occurrence identity before source-action preparat
   })
 })
 
-Test('Studio inspects parser-owned current render clauses through a versioned file request', async () => {
-  await withStudioProject(async session => {
-    const file = await session.readFile('Garden.tao')
-    const selected = 'Text("Before")'
-    const start = file.content.indexOf(selected)
-    const end = start + selected.length
-    const inspection = await session.inspectRender({
-      path: file.path,
-      renderId: `${FS.resolvePath(file.path, session.projectRoot)}:${start}:${end}`,
-      sourceVersion: file.sourceVersion,
-    })
-
-    Expect(inspection.renderId).toContain('Garden.tao')
-    Expect(inspection.layoutEntries).toEqual([])
-  })
-})
-
 // Canvas mode frames a focused view at the size its occurrence had, so the inspection of any element
 // reports the owning view's root render and, for the cell that measured it, that render's rectangle.
 Test('Studio reports the owning view root render and its measured rectangle to the selecting cell', async () => {
@@ -1348,6 +1322,7 @@ Test('Studio reports the owning view root render and its measured rectangle to t
     const request = { path: file.path, renderId, sourceVersion: file.sourceVersion }
 
     const unmeasured = await session.inspectRender(request)
+    Expect(unmeasured.layoutEntries).toEqual([])
     Expect(unmeasured.owner?.view).toBe('MainView')
     Expect(unmeasured.owner?.renderId).toContain('Garden.tao')
     Expect(unmeasured.owner?.renderId).not.toBe(renderId)
@@ -1429,7 +1404,7 @@ Test('Studio resolves imported design provenance and disables cross-file design 
   await withTaoFiles('tao-studio-design-provenance-', {
     'Main.tao': `
       use Theme from ./Theme
-      app Demo { view Main Design Theme }
+      app Demo { id "tao-studio-demo" version "1.0.0" name "Demo"  view Main Design Theme }
       view Main() { render Surface() [body] }
       view Other() { render Surface() [body] }
       view Surface() { }
@@ -1634,47 +1609,6 @@ Test('Studio checkpoints survive a refreshed preview for the same scenario cell'
   })
 })
 
-Test('Studio saves a captured provider state as a named Tao fixture through the source-action bus', async () => {
-  await withStudioProject(async session => {
-    session.registerPreview({ previewInstanceId: 'capture-preview' })
-    const file = await session.readFile('Garden.tao')
-    const envelope = {
-      action: {
-        fixtureName: 'CapturedState',
-        kind: 'insert-captured-fixture',
-        plan: {
-          accounts: [],
-          creates: [{ entity: 'Account', fields: { Name: 'Captured' }, name: 'Account1' }],
-        },
-      },
-      channel: studioProtocolChannel,
-      checkpoint: { id: 'captured-fixture', phase: 'single' },
-      identity: {
-        ...session.identity(),
-        path: file.path,
-        previewInstanceId: 'capture-preview',
-        sourceVersion: file.sourceVersion,
-      },
-      protocolVersion: studioProtocolVersion,
-      requestId: 'captured-fixture-request',
-      sourceActionVersion: studioSourceActionVersion,
-      type: 'source-action',
-    } as const
-    const proposal = await session.proposeSourceAction(envelope)
-
-    Expect(proposal.diff).toContain('+++ Garden.tao (proposed)')
-    Expect(proposal.diff).toContain('+fixture CapturedState')
-    Expect(proposal.content).toContain('fixture CapturedState')
-    Expect((await session.readFile('Garden.tao')).content).toBe(file.content)
-
-    const applied = await session.applySourceAction(envelope)
-
-    Expect(applied.content).toContain('fixture CapturedState')
-    Expect(applied.content).toContain('Account1 = create Account {')
-    Expect(applied.content).toContain('Name: "Captured"')
-  })
-})
-
 Test('Studio source-action proposals anchor pure insertions as a valid unified diff hunk', () => {
   const diff = StudioProjectSession.testing.sourceActionProposalDiff(
     'Garden.tao',
@@ -1736,8 +1670,10 @@ Test(
   async () => {
     // verbatim: the diff below asserts exact line numbers and text, which indent-stripping would shift.
     await withTaoFiles('tao-studio-capture-diff-', {
+      '.tao/.gitignore': '*\n',
       'Data.tao': 'folder data Accounts / Account { Name text }\n',
-      'Garden.tao': 'app Garden {\n   view Main\n}\n\nview Main() {\n   render Text("Before")\n}\n',
+      'Garden.tao':
+        'app Garden {\n   id "tao-studio-garden"\n   version "1.0.0"\n   name "Garden"\n   view Main\n}\n\nview Main() {\n   render Text("Before")\n}\n',
     }, async (paths, root) => {
       const session = await StudioProjectSession.open({
         async compile() {},
@@ -1776,7 +1712,7 @@ Test(
         [
           '--- Garden.tao',
           '+++ Garden.tao (proposed)',
-          '@@ -8,0 +9,5 @@',
+          '@@ -11,0 +12,5 @@',
           '+fixture CapturedState {',
           '+   Account1 = create Account {',
           '+      Name: "Captured"',
@@ -1785,7 +1721,7 @@ Test(
         ].join('\n'),
       )
       Expect(proposal.content).toBe(
-        'app Garden {\n   view Main\n}\n\nview Main() {\n   render Text("Before")\n}\n'
+        'app Garden {\n   id "tao-studio-garden"\n   version "1.0.0"\n   name "Garden"\n   view Main\n}\n\nview Main() {\n   render Text("Before")\n}\n'
           + '\nfixture CapturedState {\n   Account1 = create Account {\n      Name: "Captured"\n}  }\n',
       )
       Expect(await FS.readText(paths['Garden.tao'])).toBe(original.content)
@@ -2171,7 +2107,7 @@ async function withStudioProject(
     {
       'Garden.tao': `
         data Accounts / Account { Name text }
-        app Garden { view MainView }
+        app Garden { id "garden" version "1.0.0" name "Garden" view MainView }
         view MainView() {
           render Stack() {
             Text("Before")

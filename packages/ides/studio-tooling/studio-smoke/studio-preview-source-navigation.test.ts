@@ -1,4 +1,4 @@
-import { FS, Platform, Repo } from '@shared'
+import { FS, Platform, ProjectIdentity, Repo } from '@shared'
 import { Expect, mkTestDir, runCleanups, Test } from '@shared/test'
 import {
   openStudioPreviewSession,
@@ -13,7 +13,7 @@ import { activateSmokePreviews } from '../studio-tooling-src/StudioSmokePreviews
 
 const selectedText = 'Text("Selected source")'
 const source = `use Stack, Text from @tao/ui
-app Smoke { view MainView }
+app Smoke { id "tao-studio-source-navigation" version "1.0.0" name "Source navigation smoke" view MainView }
 ${Array.from({ length: 80 }, (_, index) => `// navigation padding ${index}`).join('\n')}
 view MainView() {
   render Stack() {
@@ -50,10 +50,8 @@ Test('one preview press reveals newly opened source after its language connectio
     previewRuntimeRoot = await Repo.mkScratchDir('tao-studio-source-navigation-runtime-')
     const sourcePath = FS.resolvePath('Smoke.tao', projectRoot)
     await FS.writeText(sourcePath, source)
-    await FS.writeText(
-      FS.resolvePath('Project.tao', projectRoot),
-      'project { id "tao-studio-source-navigation" name "Source navigation smoke" }\n',
-    )
+    await FS.mkdir(FS.resolvePath('.tao', projectRoot))
+    await ProjectIdentity.ensure(projectRoot)
     preview = startPreview()
     previewSession = await openStudioPreviewSession({ entryPath: sourcePath, previewRuntimeRoot, projectRoot })
     previewSession.session.setCanvasViewportStore(

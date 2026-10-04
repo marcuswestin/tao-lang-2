@@ -2,7 +2,9 @@ use StackNav from @tao/nav/basic
 use Col, FormButton, Text from @tao/ui
 
 app BasicNavigation {
-   Name "Basic Navigation"
+   id "navigation-basic-navigation"
+   version "0.1.0"
+   name "Basic Navigation"
    Navigator StackNav {
       Initial BasicHome
 }  }

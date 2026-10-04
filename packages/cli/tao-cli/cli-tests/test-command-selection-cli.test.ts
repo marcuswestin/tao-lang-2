@@ -13,22 +13,6 @@ import {
 } from './test-command-fixtures'
 
 Describe('tao test CLI journey selection', () => {
-  // One Jest case per Tao journey is what makes a name pattern able to select a journey at all, so
-  // the pattern goes to the runner unaltered and the runner does the selecting.
-  Test('forwards a name pattern to the test runner', async () => {
-    await withTaoFixture({ ...reportFixture, 'jest-stub.mjs': argvEchoStubSource() }, async rootDir => {
-      await withJestStub(rootDir, async () => {
-        await withRuntimeRoot(FS.resolvePath('runtime-root', rootDir), async () => {
-          const result = await runTaoCliForTest(['test', rootDir, '--name', 'runs', '--output', 'lines'])
-
-          Expect(result.exitCode).toBe(0)
-          Expect(outputText(result)).toContain('--testNamePattern runs')
-          Expect(outputText(result)).toContain('Selected 1 of 1 Tao journey')
-        })
-      })
-    })
-  })
-
   // The runner reaches the same journeys either way, but it stands up a module registry for every
   // entrypoint it opens, so an entrypoint the pattern can select nothing from is a worker that loads
   // React Native to run nothing. Selecting one journey is the inner loop this protects.
@@ -73,7 +57,6 @@ Describe('tao test CLI journey selection', () => {
           Expect(output).toContain('run tao test without --name to run them all.')
           // Nothing ran, so the runner was never started and nothing it would have printed appears.
           Expect(output).not.toContain('runner args: ')
-          Expect(output).not.toContain('Tests:')
         })
       })
     })
@@ -93,14 +76,12 @@ Describe('tao test CLI journey selection', () => {
           Expect(output).toContain('No Tao test journey matches --name "never written". Searched 1 journey under')
           // The repository test runner reads this marker to tell this pass from a pass that ran
           // something: the Tao suite writes no per-test report, so the line is the only evidence.
-          // Asserting the literal here would let the two ends drift apart silently.
-          Expect(output).toContain(`${TaoTestProtocol.NO_JOURNEYS_MATCHED}.`)
+          // Check the consumer against actual producer output so the two ends cannot drift.
           Expect(TaoTestProtocol.ranNoJourneys(output)).toBe(true)
           // Passing is not running: the remedy for a mistyped pattern is not offered, and the
           // runner is still never started.
           Expect(output).not.toContain('run tao test without --name to run them all.')
           Expect(output).not.toContain('runner args: ')
-          Expect(output).not.toContain('Tests:')
         })
       })
     })

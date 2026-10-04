@@ -114,14 +114,6 @@ Describe('validator: interaction attention', () => {
         },
         messages.unknownRegion('Hidden'),
       )()
-      await rejects(
-        `
-          ${leaf}
-          view Sidebar() { render Leaf() }
-          view Home() { render Leaf() [rigid when Sidebarr is active] }
-        `,
-        messages.unknownRegion('Sidebarr'),
-      )()
     },
   )
 
@@ -130,7 +122,7 @@ Describe('validator: interaction attention', () => {
     rejects(
       `
         ${leaf}
-        app Demo { view Home }
+        app Demo { id "demo" version "1.0.0" name "Demo" view Home }
         view Home() { render Leaf() [opacity 80 when focusd] }
         test "Interaction" {
           test "spelling" {

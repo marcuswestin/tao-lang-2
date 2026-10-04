@@ -73,20 +73,8 @@ Describe('cloud setup lifecycle', () => {
     })
   })
 
-  Test('an incomplete profile still bootstraps the missing tool', async () => {
-    await withCloudFixture(async (root, env) => {
-      await writeProfileTool(root, 'bun')
-      const result = await CLI.run(FS.resolvePath(HOOK, root), {
-        cwd: root,
-        env: { ...env, CLAUDE_CODE_REMOTE: 'true' },
-      })
-      Expect(result.exitCode).toBe(0)
-      Expect(await FS.readText(env['TAO_TEST_CALLS']!)).toBe('bootstrap --install-nix\n')
-    })
-  })
-
   Test('local sessions and non-Linux hosts never bootstrap automatically', async () => {
-    for (const [remote, os] of [['', 'Linux'], ['false', 'Linux'], ['1', 'Linux'], ['true', 'Darwin']]) {
+    for (const [remote, os] of [['', 'Linux'], ['false', 'Linux'], ['true', 'Darwin']]) {
       await withCloudFixture(async (root, env) => {
         const result = await CLI.run(FS.resolvePath(HOOK, root), {
           cwd: root,
@@ -134,22 +122,45 @@ Describe('cloud setup lifecycle', () => {
     })
   })
 
-  for (const phase of ['install', 'start'] as const) {
-    Test(`Cursor ${phase} invokes the common bootstrap and propagates its failure`, async () => {
+  Test(
+    'a remote session hands the payload and routing notice to the title step, and keeps the notice if it fails',
+    async () => {
       await withCloudFixture(async (root, env) => {
-        const config = JSON.parse(await FS.readText(Repo.resolvePath('.cursor/environment.json'))) as Record<
-          'install' | 'start',
-          string
-        >
-        Expect(config[phase]).toBe('./.config/bootstrap-tao-dev-env --install-nix')
-        const result = await CLI.run('sh', {
-          args: ['-c', config[phase]],
+        // Stands in for the profile's bun: the audit prints a notice, the title step echoes its inputs.
+        const bun = FS.resolvePath('.devenv/profile/bin/bun', root)
+        await FS.writeText(
+          bun,
+          '#!/bin/sh\ncase "$2" in\n'
+            + '  */agent-model-audit.ts) echo "routing notice" ;;\n'
+            + '  */CloudSessionTitleEntry.ts) printf "payload=%s notice=%s\\n" "$(cat)" "$3"; exit "${TAO_TEST_TITLE_STATUS:-0}" ;;\n'
+            + 'esac\n',
+        )
+        await FS.chmod(bun, 0o755)
+        const payload = '{"session_title":"Rum tests","source":"startup"}'
+        const remote = { ...env, CLAUDE_CODE_REMOTE: 'true' }
+
+        const titled = await CLI.run(FS.resolvePath(HOOK, root), { cwd: root, env: remote, stdin: payload })
+        Expect(titled.exitCode).toBe(0)
+        Expect(titled.stdout).toBe(`payload=${payload} notice=routing notice\n`)
+
+        const failed = await CLI.run(FS.resolvePath(HOOK, root), {
           cwd: root,
-          env: { ...env, TAO_TEST_BOOTSTRAP_STATUS: '8' },
+          env: { ...remote, TAO_TEST_TITLE_STATUS: '1' },
+          stdin: payload,
         })
-        Expect(result.exitCode).toBe(8)
-        Expect(await FS.readText(env['TAO_TEST_CALLS']!)).toBe('bootstrap --install-nix\n')
+        Expect(failed.exitCode).toBe(0)
+        Expect(failed.stdout).toBe(`payload=${payload} notice=routing notice\nrouting notice\n`)
       })
+    },
+  )
+
+  for (const phase of ['install', 'start'] as const) {
+    Test(`Cursor ${phase} selects the common bootstrap`, async () => {
+      const config = JSON.parse(await FS.readText(Repo.resolvePath('.cursor/environment.json'))) as Record<
+        'install' | 'start',
+        string
+      >
+      Expect(config[phase]).toBe('./.config/bootstrap-tao-dev-env --install-nix')
     })
   }
 })

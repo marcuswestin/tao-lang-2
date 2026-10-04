@@ -5,6 +5,7 @@ import * as Text from '../core/Text'
 import * as FS from '../FS'
 import { logProcessError } from '../HCI'
 import * as Platform from '../Platform'
+import * as ProjectIdentity from '../ProjectIdentity'
 import * as Repo from '../Repo'
 import { runCleanups } from './TestCleanup'
 import { testOverrideSlot } from './TestOverride'
@@ -83,7 +84,6 @@ export const Test = ((...args: any[]) => {
   }
   return getTestRuntime().test(...args)
 }) as TestRunnerFunction
-let temporaryProjectSequence = 0
 const temporaryDirectories = new Set<string>()
 const keptOnFailure = new Set<string>()
 const temporaryDirectoryScope = Platform.createAsyncContext<Set<string>>()
@@ -189,7 +189,7 @@ export async function initGitTestRepository(path: string, options: GitTestReposi
 /** GIT_TEST_IDENTITY commits as a fixed author, whatever the host's Git configuration says. */
 const GIT_TEST_IDENTITY = ['-c', 'user.name=Tao Test', '-c', 'user.email=tao@example.test']
 
-/** WithTaoFilesOptions: `verbatim` writes sources as given, with no indent stripping and no synthesized project. */
+/** WithTaoFilesOptions: `verbatim` writes sources as given without stripping indentation or adding a root marker. */
 export type WithTaoFilesOptions = {
   location?: 'host' | 'worktree'
   verbatim?: boolean
@@ -206,12 +206,9 @@ export async function withTaoFiles<const Files extends Record<string, string>>(
   const paths = {} as { [Path in keyof Files]: string }
 
   try {
-    if (!options.verbatim && !Object.values(files).some(source => /\bproject\s*\{/u.test(source))) {
-      const projectId = `tao-temporary-test-project-${++temporaryProjectSequence}`
-      await FS.writeText(
-        FS.resolvePath('Project.tao', rootDir),
-        `project { id "${projectId}" name "Temporary test project" }`,
-      )
+    if (!options.verbatim) {
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', rootDir), '')
+      await ProjectIdentity.ensure(rootDir)
     }
     for (const relativePath of Object.keys(files) as Array<keyof Files & string>) {
       const source = files[relativePath]
@@ -219,6 +216,13 @@ export async function withTaoFiles<const Files extends Record<string, string>>(
       const path = FS.resolvePath(relativePath, rootDir)
       await FS.writeText(path, options.verbatim ? source : Text.stripIndent(source))
       paths[relativePath] = path
+    }
+    if (!options.verbatim) {
+      for (const relativePath of Object.keys(files)) {
+        if (relativePath.endsWith('/.tao/.gitkeep')) {
+          await ProjectIdentity.ensure(FS.dirname(FS.dirname(FS.resolvePath(relativePath, rootDir))))
+        }
+      }
     }
 
     await testFunction(paths, rootDir)

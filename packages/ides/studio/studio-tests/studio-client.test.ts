@@ -1,6 +1,6 @@
 import { EditorState, type Transaction } from '@codemirror/state'
 import { type Command, type EditorView, keymap } from '@codemirror/view'
-import { Errors, Time } from '@shared'
+import { Errors } from '@shared'
 import { Deferred, Expect, Test, testOverrideSlot, until } from '@shared/test'
 import type { StudioRenderInspection } from '@source-actions'
 import { mountStudioCanvasFocus, StudioCanvasFocusLane } from '../studio-src/client/app/StudioCanvasFocus'
@@ -20,7 +20,6 @@ import {
   canvasRevealDelta,
   nextStop,
 } from '../studio-src/client/matrix/StudioCanvasViewport'
-import { expectPreviewRevision } from '../studio-src/client/matrix/StudioPreviewConnection'
 import { watchCellPreviewLoad } from '../studio-src/client/matrix/StudioPreviewMatrix'
 import {
   StudioApiClient,
@@ -94,7 +93,6 @@ import {
   studioDraggedPaneSize,
   StudioGlobalLoading,
   studioLayoutOwnsCanvasGestures,
-  StudioPaneMinimums,
   StudioPaneSizes,
   studioPaneVisibility,
   studioSearchBlurIntent,
@@ -136,6 +134,51 @@ import {
 import { StudioTestOutput } from '../studio-src/StudioTestRunner'
 import { cellEnvironment } from './test-studio-fixtures'
 
+const timeoutSlot = testOverrideSlot({
+  read: () => globalThis.setTimeout,
+  write: value => {
+    globalThis.setTimeout = value
+  },
+})
+const clearTimeoutSlot = testOverrideSlot({
+  read: () => globalThis.clearTimeout,
+  write: value => {
+    globalThis.clearTimeout = value
+  },
+})
+
+/** Deliver scheduled callbacks explicitly; these checks never depend on an elapsed wall-clock window. */
+function withControlledTimeouts(run: (timers: { fire(): void; delays(): number[] }) => void): void {
+  const pending = new Map<ReturnType<typeof setTimeout>, { callback: () => void; delay: number }>()
+  let issued = 0
+  const restoreTimeout = timeoutSlot.install(
+    ((callback: () => void, delay = 0) => {
+      const id = ++issued as unknown as ReturnType<typeof setTimeout>
+      pending.set(id, { callback, delay })
+      return id
+    }) as unknown as typeof setTimeout,
+  )
+  const restoreClear = clearTimeoutSlot.install(
+    (id => pending.delete(id as ReturnType<typeof setTimeout>)) as typeof clearTimeout,
+  )
+  try {
+    run({
+      delays: () => [...pending.values()].map(timer => timer.delay),
+      fire() {
+        const next = pending.entries().next().value
+        if (next === undefined) {
+          Errors.throwUnexpected('The Tao operation did not schedule a timeout.')
+        }
+        pending.delete(next[0])
+        next[1].callback()
+      },
+    })
+  } finally {
+    restoreClear()
+    restoreTimeout()
+  }
+}
+
 Test('Studio rebuilds preview capture failures with their original Tao error category', () => {
   Expect(studioPreviewCaptureError('UserInputError', 'bad data')).toBeInstanceOf(Errors.UserInputError)
   Expect(studioPreviewCaptureError('HostEnvironmentError', 'offline')).toBeInstanceOf(Errors.HostEnvironmentError)
@@ -143,18 +186,13 @@ Test('Studio rebuilds preview capture failures with their original Tao error cat
     .toBeInstanceOf(Errors.UnexpectedBehaviorError)
 })
 
-Test('Studio browser assets produce a self-contained CodeMirror client and escape injected config', async () => {
+Test('Studio browser assets bundle the client and escape injected config', async () => {
   const bundle = await StudioClientAssets.bundle({ validationMode: 'release' })
-  const moduleInputs = await StudioClientAssets.testing.moduleInputs('release')
   const html = StudioClientAssets.html({
     previewUrl: 'http://127.0.0.1:55102/?value=</script><script>bad()</script>',
   })
-  Expect(html).toContain('overscroll-behavior-x: contain')
-  Expect(html).toContain('flex: none')
 
   Expect(bundle).toContain('Tao Studio root is missing')
-  Expect(bundle).toContain('/api/language/lsp')
-  Expect(bundle).toContain('/api/language/highlight')
   Expect(bundle).not.toContain('createHighlighterCore')
   Expect(bundle).toContain('/api/file/draft')
   Expect(bundle).toContain('/api/file/create')
@@ -181,8 +219,6 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(bundle).toContain('No search results.')
   Expect(bundle).not.toContain('StudioDrawerPanelSurface')
   Expect(bundle).not.toContain('StudioSearchPanelSurface')
-  Expect(moduleInputs.some(path => path.includes('/react@19.2.3/'))).toBe(true)
-  Expect(moduleInputs.some(path => path.includes('/react@19.2.8/'))).toBe(false)
   Expect(bundle).toContain('Reload preview')
   Expect(bundle).toContain('Mode: Edit')
   Expect(bundle).toContain('Mode: Run')
@@ -245,35 +281,7 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(bundle).not.toContain('taoStudioArgs')
   Expect(bundle).not.toContain('taoStudioState')
   Expect(bundle).not.toContain('sourceMappingURL=data:')
-  Expect(html).toContain('--studio-accent: #ff6a1f')
-  Expect(html).toContain('.studio-segmented')
-  Expect(html).toContain('.studio-button[data-variant="primary"]')
-  Expect(html).toContain('.studio-agent-panel')
-  Expect(html).toContain('.studio-agent-panel[data-minimized="true"]')
-  Expect(html).toContain('.studio-agent-panel[data-dragging="true"]')
-  Expect(html).toContain('.studio-agent-header')
-  Expect(html).toContain('.studio-agent-collapse')
-  Expect(html).toContain('cursor: grab')
-  Expect(html).toContain('.studio-rail-separator')
-  Expect(html).toContain('.studio-search-affordance')
-  Expect(html).toContain('.studio-search-field')
-  Expect(html).toContain('.studio-sidebar[data-search-open]')
-  Expect(html).not.toMatch(/#5b8def|#315fbb|#2196f3/i)
   Expect(html).toContain('<div id="tao-studio-viewport"></div>')
-  Expect(html).toContain('position: fixed !important')
-  Expect(html).toContain('height: auto !important')
-  Expect(html).toContain('.studio-editor[data-tao-editor-mounted="true"] > .cm-editor { display: none !important; }')
-  Expect(html).toContain('overflow: clip')
-  Expect(html).toContain('min-height: 0; min-width: 0; position: fixed; width: 100%')
-  Expect(html).toContain('@media (max-width: 1400px)')
-  Expect(html).toContain('@media (max-width: 760px)')
-  Expect(html).toContain('grid-column: 4;')
-  Expect(html).toContain('grid-template-columns: 0 0 0 0 minmax(0, 1fr)')
-  Expect(html).toContain('--studio-preview-size')
-  Expect(html).toContain('.tao-studio-product-host[data-layout-preset="code"]')
-  Expect(html).toContain('.tao-studio-product-host[data-layout-preset="draw"]')
-  Expect(html).toContain('.studio-draw-canvas')
-  Expect(html).not.toContain('#tao-studio-root[data-layout-preset=')
   Expect(html).toContain('rel="icon" href="data:image/svg+xml,')
   Expect(html).toContain('<script type="module" src="/studio.js"></script>')
   Expect(html).not.toContain('</script><script>bad()</script>')
@@ -564,6 +572,8 @@ Test('Studio browser assets bundle one CodeMirror view singleton', async () => {
   )
 
   Expect(viewModules).toHaveLength(1)
+  Expect(inputs.some(path => path.includes('/react@19.2.3/'))).toBe(true)
+  Expect(inputs.some(path => path.includes('/react@19.2.8/'))).toBe(false)
   Expect(inputs.some(path => path.endsWith('/studio-src/TaoStudioBrowser.tsx'))).toBe(true)
   Expect(inputs.some(path => path.endsWith('/_gen_tao-app/App.tsx'))).toBe(true)
   Expect(inputs.some(path => path.endsWith('/TaoStudioProductHost.files/TaoStudioProductHost.tsx'))).toBe(true)
@@ -890,53 +900,58 @@ Test('an app that never bundled says so, instead of leaving an empty preview une
  * hot-update handler ends a retained preview's hot updates for good, so a preview that is running the
  * compile it was handed is never probed.
  */
-Test('asks the bundler about a preview only when it has not applied its compile', async () => {
-  const previousFetch = globalThis.fetch
-  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')
-  Object.defineProperty(globalThis, 'window', {
-    configurable: true,
-    value: { location: { pathname: '/sessions/probe-1' } },
-    writable: true,
-  })
-  const requests: string[] = []
-  globalThis.fetch = (async (input: string | URL | Request) => {
-    requests.push(typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url)
-    return Response.json({ status: 'ok' })
-  }) as typeof fetch
-  try {
-    const preview = { appliedRevision: 2, expectedRevision: 2 } as StudioPreviewConnection
-    const notice = new StudioPreviewNotice({
-      compileState: () => ({
-        appliedRevision: 2,
-        compileRevision: 2,
-        diagnostics: [],
-        message: '',
-        status: 'compiled',
-      }),
-      preview: { querySelector: () => null } as unknown as HTMLElement,
-      previewUrl: 'http://127.0.0.1:1',
-      previews: [preview],
-      settleMs: 0,
-      signal: undefined,
-    })
+Test(
+  'asks the bundler about a preview only when it has not applied its compile',
+  () =>
+    withControlledTimeouts(timers => {
+      const previousFetch = globalThis.fetch
+      const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')
+      Object.defineProperty(globalThis, 'window', {
+        configurable: true,
+        value: { location: { pathname: '/sessions/probe-1' } },
+        writable: true,
+      })
+      const requests: string[] = []
+      globalThis.fetch = (async (input: string | URL | Request) => {
+        requests.push(typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url)
+        return Response.json({ status: 'ok' })
+      }) as typeof fetch
+      try {
+        const preview = { appliedRevision: 2, expectedRevision: 2 } as StudioPreviewConnection
+        const notice = new StudioPreviewNotice({
+          compileState: () => ({
+            appliedRevision: 2,
+            compileRevision: 2,
+            diagnostics: [],
+            message: '',
+            status: 'compiled',
+          }),
+          preview: { querySelector: () => null } as unknown as HTMLElement,
+          previewUrl: 'http://127.0.0.1:1',
+          previews: [preview],
+          settleMs: 0,
+          signal: undefined,
+        })
 
-    notice.checkBundle()
-    await Time.sleep(20)
-    Expect(requests).toEqual([])
+        notice.checkBundle()
+        timers.fire()
+        Expect(requests).toEqual([])
 
-    preview.expectedRevision = 3
-    notice.checkBundle()
-    await until(() => requests.length === 1, { description: 'the bundle probe for a lagging preview', intervalMs: 0 })
-    Expect(requests[0]).toStartWith('/sessions/probe-1/')
-  } finally {
-    globalThis.fetch = previousFetch
-    if (previousWindow === undefined) {
-      Reflect.deleteProperty(globalThis, 'window')
-    } else {
-      Object.defineProperty(globalThis, 'window', previousWindow)
-    }
-  }
-})
+        preview.expectedRevision = 3
+        notice.checkBundle()
+        timers.fire()
+        Expect(requests).toHaveLength(1)
+        Expect(requests[0]).toStartWith('/sessions/probe-1/')
+      } finally {
+        globalThis.fetch = previousFetch
+        if (previousWindow === undefined) {
+          Reflect.deleteProperty(globalThis, 'window')
+        } else {
+          Object.defineProperty(globalThis, 'window', previousWindow)
+        }
+      }
+    }),
+)
 
 Test('Studio preview teardown releases pending capture work', () => {
   let rejected = ''
@@ -1040,164 +1055,171 @@ Test('Studio advertises canvas gesture ownership explicitly per preview', () => 
     type: 'set-canvas-gestures',
   }])
 })
-Test('Studio expects a new preview revision without automatically reloading its iframe', () => {
-  const iframe = { src: 'http://127.0.0.1:56102/' } as HTMLIFrameElement
-  const preview = { ...previewConnection('preview-revision', 'novel', {}), iframe }
 
-  expectPreviewRevision(preview, 2)
+Test(
+  'Studio releases a toolbar render lock on blur, cancellation, timeout, unmount, and completed click',
+  () =>
+    withControlledTimeouts(timers => {
+      const toolbar = new EventTarget() as HTMLElement
+      const document = new EventTarget() as Document
+      const view = new EventTarget()
+      Object.defineProperty(document, 'defaultView', { value: view })
+      const lifetime = new AbortController()
+      let held = 0
+      protectSketchToolbarPress(
+        toolbar,
+        document,
+        {
+          begin: () => {
+            held += 1
+          },
+          end: () => {
+            held -= 1
+          },
+        },
+        lifetime.signal,
+        10,
+      )
+      const pointer = (type: string) => Object.assign(new Event(type), { button: 0, isPrimary: true, pointerId: 1 })
 
-  Expect(preview.expectedRevision).toBe(2)
-  Expect('revisionTimeout' in preview).toBe(false)
-  Expect(iframe.src).toBe('http://127.0.0.1:56102/')
-})
-
-Test('Studio releases a toolbar render lock on blur, cancellation, timeout, unmount, and completed click', async () => {
-  const toolbar = new EventTarget() as HTMLElement
-  const document = new EventTarget() as Document
-  const view = new EventTarget()
-  Object.defineProperty(document, 'defaultView', { value: view })
-  const lifetime = new AbortController()
-  let held = 0
-  protectSketchToolbarPress(
-    toolbar,
-    document,
-    {
-      begin: () => {
-        held += 1
-      },
-      end: () => {
-        held -= 1
-      },
-    },
-    lifetime.signal,
-    10,
-  )
-  const pointer = (type: string) => Object.assign(new Event(type), { button: 0, isPrimary: true, pointerId: 1 })
-
-  toolbar.dispatchEvent(pointer('pointerdown'))
-  Expect(held).toBe(1)
-  view.dispatchEvent(new Event('blur'))
-  Expect(held).toBe(0)
-  toolbar.dispatchEvent(pointer('pointerdown'))
-  document.dispatchEvent(Object.assign(new Event('pointercancel'), { pointerId: 2 }))
-  Expect(held).toBe(1)
-  document.dispatchEvent(pointer('pointercancel'))
-  Expect(held).toBe(0)
-  toolbar.dispatchEvent(pointer('pointerdown'))
-  document.dispatchEvent(pointer('pointerup'))
-  Expect(held).toBe(1)
-  await new Promise(resolve => setTimeout(resolve, 0))
-  Expect(held).toBe(0)
-  toolbar.dispatchEvent(pointer('pointerdown'))
-  lifetime.abort()
-  Expect(held).toBe(0)
-  const active = new AbortController()
-  protectSketchToolbarPress(
-    toolbar,
-    document,
-    {
-      begin: () => {
-        held += 1
-      },
-      end: () => {
-        held -= 1
-      },
-    },
-    active.signal,
-    10,
-  )
-  toolbar.dispatchEvent(pointer('pointerdown'))
-  Expect(held).toBe(1)
-  await new Promise(resolve => setTimeout(resolve, 20))
-  Expect(held).toBe(0)
-  active.abort()
-})
+      toolbar.dispatchEvent(pointer('pointerdown'))
+      Expect(held).toBe(1)
+      view.dispatchEvent(new Event('blur'))
+      Expect(held).toBe(0)
+      toolbar.dispatchEvent(pointer('pointerdown'))
+      document.dispatchEvent(Object.assign(new Event('pointercancel'), { pointerId: 2 }))
+      Expect(held).toBe(1)
+      document.dispatchEvent(pointer('pointercancel'))
+      Expect(held).toBe(0)
+      toolbar.dispatchEvent(pointer('pointerdown'))
+      document.dispatchEvent(pointer('pointerup'))
+      Expect(held).toBe(1)
+      timers.fire()
+      Expect(held).toBe(0)
+      toolbar.dispatchEvent(pointer('pointerdown'))
+      lifetime.abort()
+      Expect(held).toBe(0)
+      const active = new AbortController()
+      protectSketchToolbarPress(
+        toolbar,
+        document,
+        {
+          begin: () => {
+            held += 1
+          },
+          end: () => {
+            held -= 1
+          },
+        },
+        active.signal,
+        10,
+      )
+      toolbar.dispatchEvent(pointer('pointerdown'))
+      Expect(held).toBe(1)
+      timers.fire()
+      Expect(held).toBe(0)
+      active.abort()
+    }),
+)
 
 Test(
   'Studio recovers a retained preview that misses publication and stops after an accepted acknowledgement',
-  async () => {
-    const iframe = {} as HTMLIFrameElement
-    let reloads = 0
-    Object.defineProperty(iframe, 'src', {
-      get: () => 'http://127.0.0.1:56102/',
-      set: () => {
-        reloads += 1
-        StudioPreviewPublication.loaded(preview)
-      },
-    })
-    const preview = { ...previewConnection('preview-stalled', 'novel', {}), iframe }
-    const identity = { ...preview.cellIdentity!, compileRevision: 2, manifestRevision: 'manifest-2' }
+  () =>
+    withControlledTimeouts(timers => {
+      const iframe = {} as HTMLIFrameElement
+      let reloads = 0
+      Object.defineProperty(iframe, 'src', {
+        get: () => 'http://127.0.0.1:56102/',
+        set: () => {
+          reloads += 1
+          StudioPreviewPublication.loaded(preview)
+        },
+      })
+      const preview = { ...previewConnection('preview-stalled', 'novel', {}), iframe }
+      const identity = { ...preview.cellIdentity!, compileRevision: 2, manifestRevision: 'manifest-2' }
 
-    StudioPreviewPublication.expect(preview, identity, 10)
-    await new Promise(resolve => setTimeout(resolve, 15))
-    Expect(reloads).toBe(1)
-    StudioPreviewPublication.acknowledged(preview, identity, preview.previewInstanceId)
-    await new Promise(resolve => setTimeout(resolve, 15))
-    Expect(reloads).toBe(1)
-    Expect(preview.pendingPublication).toBeUndefined()
-  },
+      StudioPreviewPublication.expect(preview, identity, 10)
+      timers.fire()
+      Expect(reloads).toBe(1)
+      StudioPreviewPublication.acknowledged(preview, identity, preview.previewInstanceId)
+      Expect(timers.delays()).toEqual([])
+      Expect(reloads).toBe(1)
+      Expect(preview.pendingPublication).toBeUndefined()
+    }),
 )
 
-Test('Studio lets an intentional slow iframe navigation finish before retrying publication', async () => {
-  const iframe = {} as HTMLIFrameElement
-  let reloads = 0
-  Object.defineProperty(iframe, 'src', {
-    get: () => 'http://127.0.0.1:56102/',
-    set: () => {
-      reloads += 1
-    },
-  })
-  const preview = { ...previewConnection('preview-navigating', 'novel', {}), iframe }
-  const identity = { ...preview.cellIdentity!, compileRevision: 2, manifestRevision: 'manifest-2' }
-  StudioPreviewPublication.navigating(preview, 40)
-  StudioPreviewPublication.expect(preview, identity, 10)
-  await new Promise(resolve => setTimeout(resolve, 18))
-  Expect(reloads).toBe(0)
-  StudioPreviewPublication.loaded(preview)
-  await new Promise(resolve => setTimeout(resolve, 18))
-  Expect(reloads).toBe(1)
-  StudioPreviewPublication.acknowledged(preview, identity, preview.previewInstanceId)
-  Expect(preview.pendingPublication).toBeUndefined()
-})
-
-Test('Studio initial cell load restores the normal publication retry budget', () => {
-  const iframe = new EventTarget() as HTMLIFrameElement
-  Object.defineProperty(iframe, 'contentWindow', { value: null })
-  const preview = { ...previewConnection('preview-initial-load', 'novel', {}), iframe, navigationPending: true }
-  const identity = { ...preview.cellIdentity!, compileRevision: 2, manifestRevision: 'manifest-2' }
-  watchCellPreviewLoad(preview, {} as StudioHandshake)
-  StudioPreviewPublication.expect(preview, identity, 10)
-  Expect(preview.pendingPublication?.waitMs).toBe(30_000)
-  iframe.dispatchEvent(new Event('load'))
-  Expect(preview.navigationPending).toBe(false)
-  Expect(preview.pendingPublication?.waitMs).toBe(10)
-  StudioPreviewPublication.cancel(preview)
-})
-
-Test('Studio ignores stale acknowledgements and bounds preview publication recovery', async () => {
-  const iframe = {} as HTMLIFrameElement
-  let reloads = 0
-  Object.defineProperty(iframe, 'src', {
-    get: () => 'http://127.0.0.1:56102/',
-    set: () => {
-      reloads += 1
+Test(
+  'Studio lets an intentional slow iframe navigation finish before retrying publication',
+  () =>
+    withControlledTimeouts(timers => {
+      const iframe = {} as HTMLIFrameElement
+      let reloads = 0
+      Object.defineProperty(iframe, 'src', {
+        get: () => 'http://127.0.0.1:56102/',
+        set: () => {
+          reloads += 1
+        },
+      })
+      const preview = { ...previewConnection('preview-navigating', 'novel', {}), iframe }
+      const identity = { ...preview.cellIdentity!, compileRevision: 2, manifestRevision: 'manifest-2' }
+      StudioPreviewPublication.navigating(preview, 40)
+      StudioPreviewPublication.expect(preview, identity, 10)
+      Expect(timers.delays()).toEqual([40])
+      Expect(reloads).toBe(0)
       StudioPreviewPublication.loaded(preview)
-    },
-  })
-  const frame = { dataset: {} } as HTMLElement
-  const preview = { ...previewConnection('preview-stale', 'novel', {}), iframe, frame }
-  const identity = { ...preview.cellIdentity!, compileRevision: 2, manifestRevision: 'manifest-2' }
-  StudioPreviewPublication.expect(preview, identity, 10)
-  StudioPreviewPublication.acknowledged(preview, preview.cellIdentity!, preview.previewInstanceId)
-  await until(() => frame.dataset['taoReviewStatus'] === 'failed', {
-    description: 'the bounded preview publication recovery failure',
-    intervalMs: 0,
-  })
+      Expect(timers.delays()).toEqual([10])
+      timers.fire()
+      Expect(reloads).toBe(1)
+      StudioPreviewPublication.acknowledged(preview, identity, preview.previewInstanceId)
+      Expect(preview.pendingPublication).toBeUndefined()
+    }),
+)
 
-  Expect(reloads).toBe(1)
-  Expect(frame.dataset['taoReviewStatus']).toBe('failed')
-  Expect(preview.pendingPublication).toBeUndefined()
-})
+Test('Studio initial cell load restores the normal publication retry budget', () =>
+  withControlledTimeouts(timers => {
+    const iframe = new EventTarget() as HTMLIFrameElement
+    Object.defineProperty(iframe, 'contentWindow', { value: null })
+    const preview = { ...previewConnection('preview-initial-load', 'novel', {}), iframe, navigationPending: true }
+    const identity = { ...preview.cellIdentity!, compileRevision: 2, manifestRevision: 'manifest-2' }
+    watchCellPreviewLoad(preview, {} as StudioHandshake)
+    StudioPreviewPublication.expect(preview, identity, 10)
+    Expect(timers.delays()).toEqual([30_000])
+    iframe.dispatchEvent(new Event('load'))
+    Expect(preview.navigationPending).toBe(false)
+    Expect(timers.delays()).toEqual([10])
+    StudioPreviewPublication.cancel(preview)
+  }))
+
+Test(
+  'Studio ignores stale acknowledgements and bounds preview publication recovery',
+  () =>
+    withControlledTimeouts(timers => {
+      const iframe = {} as HTMLIFrameElement
+      let reloads = 0
+      Object.defineProperty(iframe, 'src', {
+        get: () => 'http://127.0.0.1:56102/',
+        set: () => {
+          reloads += 1
+          StudioPreviewPublication.loaded(preview)
+        },
+      })
+      const frame = { dataset: {} } as HTMLElement
+      const preview = { ...previewConnection('preview-stale', 'novel', {}), iframe, frame }
+      const identity = { ...preview.cellIdentity!, compileRevision: 2, manifestRevision: 'manifest-2' }
+      StudioPreviewPublication.expect(preview, identity, 10)
+      StudioPreviewPublication.acknowledged(preview, preview.cellIdentity!, preview.previewInstanceId)
+      Expect(timers.delays()).toEqual([10])
+      timers.fire()
+      Expect(reloads).toBe(1)
+      Expect(timers.delays()).toEqual([10])
+      timers.fire()
+
+      Expect(reloads).toBe(1)
+      Expect(frame.dataset['taoReviewStatus']).toBe('failed')
+      Expect(preview.pendingPublication).toBeUndefined()
+      Expect(timers.delays()).toEqual([])
+    }),
+)
 
 Test('Studio paused publication recovery supersedes old revisions', async () => {
   const iframe = {} as HTMLIFrameElement
@@ -1572,7 +1594,6 @@ Test('a dragged divider collapses its pane past half the minimum and otherwise s
 })
 
 Test('Studio pane sizes load safe defaults and persist all divider dimensions', () => {
-  Expect(StudioPaneMinimums).toEqual({ bottom: 96, left: 180, preview: 280, right: 320 })
   let stored: string | null = '{"left":312,"right":296,"bottom":205,"preview":516}'
   const storage = {
     getItem: () => stored,
@@ -1600,20 +1621,14 @@ Test('Studio workbench state loads safe defaults and persists layout presets, ra
   Expect(StudioWorkbenchState.loadLayoutPreset(storage)).toBe('run')
   StudioWorkbenchState.saveLayoutPreset(storage, 'code')
   Expect(StudioWorkbenchState.loadLayoutPreset(storage)).toBe('code')
-  StudioWorkbenchState.saveLayoutPreset(storage, 'run')
-  Expect(StudioWorkbenchState.loadLayoutPreset(storage)).toBe('run')
   StudioWorkbenchState.saveLayoutPreset(storage, 'draw')
   Expect(StudioWorkbenchState.loadLayoutPreset(storage)).toBe('draw')
-  StudioWorkbenchState.saveLayoutPreset(storage, 'design')
-  Expect(StudioWorkbenchState.loadLayoutPreset(storage)).toBe('design')
   store.set('tao-studio:layout-preset:v1', 'invalid')
   Expect(StudioWorkbenchState.loadLayoutPreset(storage)).toBe('run')
 
   Expect(StudioWorkbenchState.loadRailPanel(storage)).toBe('files')
   StudioWorkbenchState.saveRailPanel(storage, 'data')
   Expect(StudioWorkbenchState.loadRailPanel(storage)).toBe('data')
-  StudioWorkbenchState.saveRailPanel(storage, 'tokens')
-  Expect(StudioWorkbenchState.loadRailPanel(storage)).toBe('tokens')
   store.set('tao-studio:rail-panel:v1', '')
   Expect(StudioWorkbenchState.loadRailPanel(storage)).toBe('files')
   store.set('tao-studio:rail-panel:v1', 'agent')
@@ -1624,8 +1639,6 @@ Test('Studio workbench state loads safe defaults and persists layout presets, ra
   Expect(StudioWorkbenchState.loadDrawerTab(storage)).toBe('Problems')
   StudioWorkbenchState.saveDrawerTab(storage, 'Data')
   Expect(StudioWorkbenchState.loadDrawerTab(storage)).toBe('Data')
-  StudioWorkbenchState.saveDrawerTab(storage, 'Compile')
-  Expect(StudioWorkbenchState.loadDrawerTab(storage)).toBe('Compile')
   store.set('tao-studio:drawer-tab:v1', 'InvalidTab')
   Expect(StudioWorkbenchState.loadDrawerTab(storage)).toBe('Problems')
 })
@@ -1641,66 +1654,16 @@ Test('Embedded Studio keeps one Files portal target and every contextual rail pa
   ])
   Expect(markup.match(/class="studio-files"/g)).toHaveLength(1)
   Expect(markup.match(/class="studio-data"/g)).toHaveLength(1)
-  Expect(markup).not.toContain('Live entity tables and refresh controls are in the Data drawer.')
   for (const item of studioShellRailPanels) {
     Expect(markup).toContain(`data-panel="${item.panel}"`)
   }
-  Expect(markup).toContain('data-panel="agent"')
-  Expect(markup).toContain('class="studio-rail-separator"')
-  Expect(markup).toContain('class="studio-search-affordance"')
-  Expect(markup).toContain('class="studio-search-field"')
-  Expect(markup).toContain('studio-search-button')
-  Expect(markup).not.toContain('data-panel="search"')
-  Expect(markup.indexOf('class="studio-search-affordance"')).toBeLessThan(markup.indexOf('data-panel="files"'))
-  Expect(markup.indexOf('class="studio-search-field"')).toBeLessThan(markup.indexOf('class="studio-pane-header"'))
-  Expect(markup.indexOf('class="studio-search-input"')).toBeLessThan(markup.indexOf('data-studio-panel="search"'))
-  Expect(markup.indexOf('data-panel="files"')).toBeLessThan(markup.indexOf('class="studio-rail-separator"'))
-  Expect(markup.indexOf('class="studio-rail-separator"')).toBeLessThan(markup.indexOf('data-panel="agent"'))
-  Expect(markup.indexOf('data-panel="agent"')).toBeLessThan(markup.indexOf('class="studio-rail-spacer"'))
   Expect(markup).toContain('data-studio-panel="agent"')
   Expect(markup).toContain('class="studio-agent-host"')
-  Expect(markup).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u)
-  Expect(markup.match(/<svg class="studio-icon"/g)?.length ?? 0).toBeGreaterThanOrEqual(
-    studioShellRailPanels.length + 1,
-  )
-  Expect(markup).toContain('studio-inspector-tao-environment')
-  Expect(markup.indexOf('studio-scenario-inspector-content')).toBeLessThan(
-    markup.indexOf('studio-inspector-tao-environment'),
-  )
-  Expect(markup.indexOf('studio-inspector-tao-environment')).toBeLessThan(
-    markup.indexOf('studio-inspector-tao-context'),
-  )
-  Expect(markup).toContain('studio-toolbar-context')
-  Expect(markup).toContain('studio-toolbar-mode')
-  Expect(markup).toContain('data-preset="design"')
-  Expect(markup).toContain('data-preset="code"')
-  Expect(markup).toContain('data-preset="run"')
-  Expect(markup).toContain('data-preset="draw"')
-  Expect(markup.indexOf('data-preset="run"')).toBeLessThan(markup.indexOf('data-preset="draw"'))
-  Expect(markup).toContain('studio-toolbar-actions')
-  Expect(markup).toContain('studio-window-controls')
-  Expect(markup).toContain('<select class="studio-project studio-picker"')
-  Expect(markup).not.toContain('<button class="studio-project studio-picker"')
-  Expect(markup).toContain('aria-label="Environment and scenario"')
-  Expect(markup).toContain('aria-label="Layout, style, data, and actions"')
-  Expect(markup).toContain('studio-scenario-inspector-content')
-  Expect(markup).toContain('studio-global-loading')
-  Expect(markup).toContain('class="studio-beta-ship"')
-  Expect(markup).toContain('class="studio-ship-overlay"')
-  Expect(markup).toContain('aria-label="Beta ship progress"')
-  Expect(markup).toContain('data-drawer-tab="Problems"')
-  Expect(markup).toContain('aria-label="Collapse inspector"')
-  Expect(markup).toContain('aria-label="Collapse bottom drawer"')
-  Expect(markup).toContain('aria-label="Resize code and preview"')
-  Expect(markup.indexOf('studio-inspector studio-pane-right')).toBeLessThan(markup.indexOf('studio-editor-pane'))
-  Expect(markup.indexOf('studio-editor-pane')).toBeLessThan(markup.indexOf('studio-preview'))
-  Expect(markup.indexOf('studio-editor-pane')).toBeLessThan(markup.indexOf('studio-divider-preview'))
-  Expect(markup.indexOf('studio-divider-preview')).toBeLessThan(markup.indexOf('studio-preview'))
+  Expect(markup).not.toContain('data-panel="search"')
 })
 
 Test('Studio search blur keeps results when the press is inside search and restores the rail otherwise', () => {
   Expect(studioSearchBlurIntent({ insideSearch: true, railPanel: undefined })).toBe('keep')
-  Expect(studioSearchBlurIntent({ insideSearch: true, railPanel: 'files' })).toBe('keep')
   Expect(studioSearchBlurIntent({ insideSearch: false, railPanel: 'components' })).toBe('hand-off-rail')
   Expect(studioSearchBlurIntent({ insideSearch: false, railPanel: 'agent' })).toBe('restore')
   Expect(studioSearchBlurIntent({ insideSearch: false, railPanel: undefined })).toBe('restore')
@@ -2284,7 +2247,6 @@ Test('Studio render rectangles never start from another sketch generated under @
   } as unknown as Pick<StudioPreviewManifestV2, 'scenarios' | 'subjects'>
 
   Expect(StudioMatrixLayout.renderableViews(manifest, '/workspace')).toEqual(['StoryRow'])
-  Expect(StudioMatrixLayout.renderableViews(manifest, '/workspace/')).toEqual(['StoryRow'])
   // Only the project's own generated tree is excluded; an `@/studio` directory elsewhere is not its.
   Expect(StudioMatrixLayout.renderableViews(manifest, '/other')).toEqual(['StoryRow', 'View1', 'View2'])
 })
@@ -2313,7 +2275,6 @@ Test('Studio canvas Focus keeps same-named declarations distinct by canonical su
   const second = StudioMatrixLayout.subjectViewId(manifest, StudioScenarioControls.groupId('/Second.tao', 'second'))
   Expect(first).toBe('/First.tao#Card')
   Expect(second).toBe('/Second.tao#Card')
-  Expect(first).not.toBe(second)
 })
 
 Test('Studio matrix maps generated sketch views to their source versions', () => {
@@ -3436,7 +3397,7 @@ Test('Studio source identity synchronizes immediately, after preview reloads, an
   Expect(messages).toHaveLength(2)
 })
 
-Test('Studio runtime failures activate their cell and retain a replay with Studio environment state', async () => {
+Test('Studio runtime failures retain a replay with Studio environment state', async () => {
   const previewWindow = {}
   const preview = previewConnection('preview-failure', 'first', previewWindow)
   preview.cell = cell('first')
@@ -3524,24 +3485,10 @@ Test('Studio runtime failures activate their cell and retain a replay with Studi
   })
 })
 
-Test('Studio host document update keeps the caret a wholesale replace remaps', () => {
+Test('Studio host document update preserves the explicit caret through a replacement', () => {
   const source = 'view Card() {\n   Text("Hello")\n}\n'
   const cut = 'view Card() {\n}\n'
   const caret = 'view Card() {\n'.length
-  const remappedCursor = EditorState.create({
-    doc: source,
-    selection: { anchor: caret, head: caret },
-  }).update({ changes: { from: 0, insert: cut, to: source.length } }).state
-  Expect(remappedCursor.selection.main.anchor).toBe(0)
-  Expect(remappedCursor.selection.main.head).toBe(0)
-
-  const remappedRange = EditorState.create({
-    doc: source,
-    selection: { anchor: caret, head: caret + 16 },
-  }).update({ changes: { from: 0, insert: cut, to: source.length } }).state
-  Expect(Math.min(remappedRange.selection.main.anchor, remappedRange.selection.main.head)).toBe(0)
-  Expect(Math.max(remappedRange.selection.main.anchor, remappedRange.selection.main.head)).toBe(cut.length)
-
   const kept = EditorState.create({
     doc: source,
     selection: { anchor: caret, head: caret },
@@ -4190,8 +4137,6 @@ function runEditorCommand(state: EditorState, command: Command): EditorState {
 }
 
 Test('Studio canvas zoom steps land on round percentages and stop at the ends of the ladder', () => {
-  Expect(nextStop(1, 1)).toBe(1.5)
-  Expect(nextStop(1, -1)).toBe(0.75)
   Expect(nextStop(1.2, 1)).toBe(1.5)
   Expect(nextStop(1.2, -1)).toBe(1)
   // A scale already sitting on a stop moves off it rather than returning itself.

@@ -46,7 +46,8 @@
     "tao-instantdb": "workspace:*",
     "tao-runtime": "workspace:*",
     "tao-shared": "workspace:*",
-    "tao-compiler": "workspace:*"
+    "tao-compiler": "workspace:*",
+    "tao-project-tooling": "workspace:*"
   },
   "devDependencies": {
     "tao-native-bindings": "workspace:*",

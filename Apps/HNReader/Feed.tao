@@ -23,9 +23,9 @@ scene FrontPage() {
          loading -> { Col() [stateBox] {
             Spinner()
          } }
-         error -> Message { Col() [stateBox, gap 6] {
+         error -> Context { Col() [stateBox, gap 6] {
             Text("Couldn't reach Hacker News") [problemTitle]
-            Text(Message) [meta]
+            Text(Context.Message) [meta]
          } }
       }
       if TopStories is refreshing {

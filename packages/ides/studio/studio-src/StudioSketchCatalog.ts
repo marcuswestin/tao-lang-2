@@ -935,7 +935,7 @@ function portableTargetPath(path: string, projectRoot: string): string {
   if (FS.pathIsWithin(path, projectRoot)) {
     return FS.relativePath(projectRoot, path)
   }
-  for (const marker of ['/@/', '/.tao-project/', '/.tao/store/']) {
+  for (const marker of ['/@/', '/.tao-project/', '/.tao/']) {
     const index = path.lastIndexOf(marker)
     if (index >= 0) {
       return path.slice(index + 1)

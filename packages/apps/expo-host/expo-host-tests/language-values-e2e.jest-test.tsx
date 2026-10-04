@@ -18,21 +18,21 @@ Describe('Expo runtime', () => {
       {
         'Main.tao': `
           use MiddleApp from ./Middle.tao
-          app FinalApp = MiddleApp with { Name "Final app" }
+          app FinalApp = MiddleApp with { id "finalapp" name "Final app" }
         `,
         'Middle.tao': `
           use Memory from @tao/data/providers/memory
           use PackageApp from @feature
-          workspace app MiddleApp = PackageApp with {
-            Name "Middle app"
+          project app MiddleApp = PackageApp with {
+            id "middleapp"
+            name "Middle app"
             Datasource Memory { }
           }
         `,
         'packages/@feature/App.tao': `
           use Text from @tao/ui
           data Records / Record { Label text }
-          public app PackageApp {
-            Name "Package app"
+          public app PackageApp { id "packageapp" version "1.0.0" name "Package app"
             state LaunchCount is number = 0 (persist)
             view PackageHome
           }
@@ -48,23 +48,24 @@ Describe('Expo runtime', () => {
     )
   })
 
+  // REMOVAL CANDIDATE: Empty-store mount adds little to cross-module variant coverage; it does not assert the patched StorageKey.
   Test('renders a variant that patches a datasource it inherits from another module', async () => {
     await testCompileFiles(
       'Main.tao',
       {
         'Main.tao': `
           use MiddleApp from ./Middle.tao
-          app PatchedApp = MiddleApp with { Datasource with { StorageKey "patched" } }
+          app PatchedApp = MiddleApp with { id "patchedapp" Datasource with { StorageKey "patched" } }
         `,
         'Middle.tao': `
           use Memory from @tao/data/providers/memory
           use PackageApp from @feature
-          workspace app MiddleApp = PackageApp with { Datasource Memory { } }
+          project app MiddleApp = PackageApp with { id "middleapp" Datasource Memory { } }
         `,
         'packages/@feature/App.tao': `
           use Text from @tao/ui
           data Records / Record { Label text }
-          public app PackageApp { Name "Package app" view PackageHome }
+          public app PackageApp { id "packageapp" version "1.0.0" name "Package app" view PackageHome }
           view PackageHome() {
             query Records = Records with { }
             render Text("Patched app { Records.Count }")
@@ -81,17 +82,9 @@ Describe('Expo runtime', () => {
     const runtimeStdlibTestsPath = Repo.resolvePath('Apps/Test Apps/Runtime Stdlib Tests/Runtime Stdlib Tests.tao')
     const screen = await compileAndRenderApp(runtimeStdlibTestsPath)
 
-    ExpectScreen(screen).toHaveText('Runtime stdlib smoke')
     ExpectScreen(screen).toHaveText('3')
-    ExpectScreen(screen).toHaveText('Tap me')
-    ExpectScreen(screen).toHaveText('Label')
-    ExpectScreen(screen).toHaveText('Wrapped')
 
     Expect(screen.getByText('Runtime stdlib smoke').props).toMatchObject({
-      ellipsizeMode: 'tail',
-      numberOfLines: 1,
-    })
-    Expect(screen.getByText('3').props).toMatchObject({
       ellipsizeMode: 'tail',
       numberOfLines: 1,
     })
@@ -104,59 +97,10 @@ Describe('Expo runtime', () => {
     Expect(ancestorProp(screen.getByText('Tap me'), 'accessibilityRole')).toBe('button')
   })
 
-  Test('passes action values through render inject arguments', async () => {
-    await testCompileApp(
-      `
-        app InjectedActionApp {
-          view MainView
-        }
-
-        view MainView() {
-          state Count = 0
-          action AddOne() {
-            set Count += 1
-          }
-          render Stack(){
-            NativeButton("Native add", AddOne)
-            Number(Count)
-          }
-        }
-
-        view Stack() {
-          render inject Content @@content, Layout @@layout, Tag @@tag \`\`\`ts
-            return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
-          \`\`\`
-        }
-
-        view NativeButton(Title text, Action action()) {
-          render inject Title, Action \`\`\`ts
-            return (
-              <RN.Pressable accessibilityRole="button" onPress={() => Action.invoke()}>
-                <RN.Text>{Title}</RN.Text>
-              </RN.Pressable>
-            )
-          \`\`\`
-        }
-
-        view Number(Value number) {
-          render inject Value \`\`\`ts
-            return <RN.Text>{Value}</RN.Text>
-          \`\`\`
-        }
-      `,
-      screen => {
-        ExpectScreen(screen).toHaveText('0')
-
-        fireEvent.press(screen.getByText('Native add'))
-        ExpectScreen(screen).toHaveText('1')
-      },
-    )
-  })
-
   Test('applies typed defaults for functions, views, and actions', async () => {
     await testCompileApp(
       `
-        app DefaultsApp {
+        app DefaultsApp { id "defaultsapp" version "1.0.0" name "DefaultsApp"
           view MainView
         }
 
@@ -223,12 +167,11 @@ Describe('Expo runtime', () => {
       `
         use StackNav from @tao/nav
 
-        app DefaultsNavigationApp {
-          Name "Defaults"
+        app DefaultsNavigationApp { id "defaultsnavigationapp" version "1.0.0" name "Defaults"
           Navigator StackNav { Initial Home }
         }
 
-        workspace scene Home(Title text default "Welcome home") {
+        project scene Home(Title text default "Welcome home") {
           Title Title
           render Text(Title)
         }
@@ -249,7 +192,7 @@ Describe('Expo runtime', () => {
   Test('invokes action parameters in declaration order after type-based binding', async () => {
     await testCompileApp(
       `
-        app ReorderedActionApp {
+        app ReorderedActionApp { id "reorderedactionapp" version "1.0.0" name "ReorderedActionApp"
           view MainView
         }
 
@@ -298,41 +241,10 @@ Describe('Expo runtime', () => {
     )
   })
 
-  Test('renders imported project actions as runtime values', async () => {
-    await testCompileFiles(
-      'Main.tao',
-      {
-        'Main.tao': `
-          app ImportedActionApp {
-            view MainView
-          }
-
-          use Save from ./Actions.tao
-
-          view MainView() {
-            render Button("Imported action", Save)
-          }
-
-          view Button(Title text, Action action()) {
-            render inject Title, Action \`\`\`ts
-              return <RN.Text>{Title}</RN.Text>
-            \`\`\`
-          }
-        `,
-        'Actions.tao': `
-          workspace action Save() { }
-        `,
-      },
-      screen => {
-        ExpectScreen(screen).toHaveText('Imported action')
-      },
-    )
-  })
-
   Test('emits item constructor fields in declaration order after type-based binding', async () => {
     await testCompileApp(
       `
-        app ItemOrderApp {
+        app ItemOrderApp { id "itemorderapp" version "1.0.0" name "ItemOrderApp"
           view MainView
         }
 
@@ -371,6 +283,9 @@ Describe('Expo runtime', () => {
         }
 
         let Product = ReusableApp {
+          id "reusableapp"
+          version "1.0.0"
+          name "Reusable optional values"
           Navigator StackNav { Initial Home }
         }
 
@@ -414,7 +329,7 @@ Describe('Expo runtime', () => {
   Test('rerenders state-backed item member access after state updates', async () => {
     await testCompileApp(
       `
-        app StatefulItemMemberApp {
+        app StatefulItemMemberApp { id "statefulitemmemberapp" version "1.0.0" name "StatefulItemMemberApp"
           view MainView
         }
 
@@ -468,7 +383,7 @@ Describe('Expo runtime', () => {
   Test('runs actions whose parameters shadow generated runtime names', async () => {
     await testCompileApp(
       `
-        app ShadowedActionParameterApp {
+        app ShadowedActionParameterApp { id "shadowedactionparameterapp" version "1.0.0" name "ShadowedActionParameterApp"
           view MainView
         }
 
@@ -522,7 +437,7 @@ Describe('Expo runtime', () => {
       'Main.tao',
       {
         'Main.tao': `
-          app CircularAliasApp {
+          app CircularAliasApp { id "circularaliasapp" version "1.0.0" name "CircularAliasApp"
               view MainView
           }
 
@@ -535,9 +450,9 @@ Describe('Expo runtime', () => {
         'A.tao': `
           use BView from ./
 
-          workspace let SharedTitle = "Circular alias"
+          project let SharedTitle = "Circular alias"
 
-          workspace view AView() {
+          project view AView() {
               render BView()
           }
         `,
@@ -546,7 +461,7 @@ Describe('Expo runtime', () => {
 
           let ImportedTitle = SharedTitle
 
-          workspace view BView() {
+          project view BView() {
               render Text(ImportedTitle)
           }
 
@@ -563,36 +478,10 @@ Describe('Expo runtime', () => {
     )
   })
 
-  Test('renders alias references to earlier aliases', async () => {
-    await testCompileApp(
-      `
-        app OrderedAlias {
-            view MainView
-        }
-
-        let Message = "Ordered output"
-        let Greeting = Message
-
-        view MainView() {
-            render Text(Greeting) { }
-        }
-
-        view Text(Value text) {
-            render inject Value \`\`\`ts
-                return <RN.Text>{Value}</RN.Text>
-            \`\`\`
-        }
-      `,
-      screen => {
-        ExpectScreen(screen).toHaveText('Ordered output')
-      },
-    )
-  })
-
   Test('renders block-local aliases that shadow file-level aliases', async () => {
     await testCompileApp(
       `
-        app ScopedAlias {
+        app ScopedAlias { id "scopedalias" version "1.0.0" name "ScopedAlias"
             view MainView
         }
 

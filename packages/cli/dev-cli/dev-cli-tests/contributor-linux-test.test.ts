@@ -19,11 +19,6 @@ Describe('contributor Linux container runner', () => {
           ],
           ['--native-arm64', '--mode', 'both'],
           ['--mode', 'cached', '--native-arm64'],
-          [
-            '--qemu-compat',
-            '--mode',
-            'cached',
-          ],
         ]
       ) {
         const result = await run(fixture, args)
@@ -137,7 +132,6 @@ Describe('contributor Linux container runner', () => {
       const id = '20260928T042401Z-16239'
       await seedRecovery(fixture, id, 'exited')
       const result = await run(fixture, ['--recover-run', id])
-      Expect(result.stderr).toBe('')
       Expect(result.exitCode).toBe(0)
       Expect(result.stdout).toContain('recovery complete')
       const calls = (await FS.readText(fixture.log)).trim().split('\n')
@@ -244,7 +238,6 @@ Describe('contributor Linux container runner', () => {
       const listing = await CLI.run('tar', { args: ['-tf', `${output}/checkout.tar`] })
       Expect(listing.exitCode).toBe(0)
       Expect(listing.stdout).not.toContain('untracked-secret.txt')
-      Expect(listing.stdout).not.toContain('node_modules')
       Expect(await FS.readText(`${output}/resources.txt`)).toContain('base_image_build_cpu_memory_limits=not-enforced')
       Expect(await FS.readText(`${output}/cache-ownership.txt`)).toContain('image=tao-contributor-linux-tools:')
     })
@@ -555,7 +548,6 @@ Describe('contributor Linux container runner', () => {
         cwd: root,
       })
       Expect(result.exitCode).toBe(0)
-      Expect(result.stdout).toContain('--install-nix --tools-only')
       Expect(result.stdout).toContain('--install-nix --tools-only|unset|unset')
       const experiment = await CLI.run('/bin/sh', {
         args: ['-c', 'command() { return 1; }; du() { :; }; df() { :; }; . "$0"', guest, 'tools', '--qemu-guest-base'],

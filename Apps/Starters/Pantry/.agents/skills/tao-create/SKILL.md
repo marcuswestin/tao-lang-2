@@ -5,12 +5,14 @@ description: Create a Tao project from a description or add a starter-shaped fea
 
 # Tao Create
 
-Run `tao create "<description>"`. The command chooses or confirms a lowercase project id, writes a
-formatted project, checks it, and runs its behavior tests. Use `--ai none` for the deterministic
-plain starter, `--id <id>` to choose the directory, `--yes` for noninteractive acceptance, and
+Run `tao create "<description>"` in release 1. The command chooses or confirms a lowercase
+project id, writes a formatted project, checks it, and runs its behavior tests. AI-assisted creation
+is deferred; a development checkout can use `--ai none` to force the plain starter. Use `--id <id>`
+to choose the directory, `--yes` for noninteractive acceptance, and
 `--skip-tests` only when you will run `tao test` yourself.
 
-The generated project also includes Tao skills under `.agents/skills/`.
+The generated project also includes Tao skills under `.agents/skills/`. It is a multi-file starter;
+the single-file reading-list tutorial is a separate entry path.
 
 ## Starter shapes
 
@@ -32,8 +34,9 @@ design in `Design.tao`, fixtures in `Scenarios.tao`, and journeys in `<App>.test
 4. In `Chrome.tao`, `use` the list scene from `./<Feature>`. For one feature, make it the stack's
    `Initial`; for several, add a stack plus a keyed `SelectionNav` item.
 5. Add representative rows to a `fixture` and add app and row `scenarios` in `Scenarios.tao`.
+   Scenario syntax is in release 1; interactive Studio review arrives in release 3.
 6. Add a journey that creates a row, selects it, edits it, returns, and observes the changed label.
-7. Run `tao fix`, `tao check`, `tao test`, then `tao dev`.
+7. Run `tao fix <path>`, `tao check <path>`, `tao test <path>`, then `tao run <path> --web`.
 
 This is a compact feature file using the existing `Ingredients` entity:
 

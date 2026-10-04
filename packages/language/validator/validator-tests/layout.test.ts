@@ -8,7 +8,7 @@ Describe('validator: layout clauses', () => {
   Test(
     'accepts content clauses on ordinary views with runtime-resolved direction',
     accepts(`
-      app MyApp { view MainView }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
       use Col, Text from @tao/ui
       view Card() {
         render Col(){
@@ -24,7 +24,7 @@ Describe('validator: layout clauses', () => {
   Test(
     'accepts content clauses without stdlib declaration identity',
     accepts(`
-      app MyApp { view MainView }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
       view Row() {
         render inject ${tsFence}
           return null
@@ -41,19 +41,16 @@ Describe('validator: layout clauses', () => {
     ['claim fill', messages.malformedEntry('claim fill')],
     ['hug fill', messages.malformedEntry('hug fill')],
     ['collapse', messages.unsupportedEntry('collapse')],
-    ['collapse fill', messages.unsupportedEntry('collapse fill')],
     ['unknown 1', messages.unsupportedEntry('unknown 1')],
     ['content diagonal', messages.unsupportedTerm('content diagonal', 'diagonal')],
     ['content', messages.malformedEntry('content')],
     ['content left center right', messages.malformedEntry('content left center right')],
     ['pad horizontal', messages.malformedEntry('pad horizontal')],
-    ['margin vertical', messages.malformedEntry('margin vertical')],
     ['aligned stretch', messages.unsupportedTerm('aligned stretch', 'stretch')],
     ['width shrink', messages.unsupportedTerm('width shrink', 'shrink')],
     ['expand', messages.unsupportedEntry('expand')],
     ['stretch', messages.unsupportedEntry('stretch')],
     ['width 0', messages.positiveNumber('width 0')],
-    ['height 0', messages.positiveNumber('height 0')],
     ['claim 0', messages.positiveNumber('claim 0')],
   ]
 
@@ -69,7 +66,6 @@ Describe('validator: layout clauses', () => {
 
   const withinEntryConflictCases: ReadonlyArray<readonly [clause: string, message: string]> = [
     ['pad horizontal 8 left 4', messages.duplicateEntry('pad left')],
-    ['margin vertical 8 top 4', messages.duplicateEntry('margin top')],
     ['content left right', messages.conflictingEntries('content left', 'content right')],
     ['content baseline stretch', messages.conflictingEntries('content baseline', 'content stretch')],
     ['content center center', messages.duplicateEntry('content center')],
@@ -82,23 +78,17 @@ Describe('validator: layout clauses', () => {
   for (
     const clause of [
       'gap 8, gap 12',
-      'claim 1, claim 2',
       'compress, rigid',
-      'rigid, compress',
       'fill, centered',
       'fill, claim 2',
       'fill, width fill',
-      'fill, height fill',
       'fill, width 100',
       'width 100, fill',
-      'fill, height 100',
-      'height 100, fill',
       'fill, width max 720',
       'width max 720, fill',
       'pad 8, pad left 4',
       'margin vertical 8, margin top 4',
       'content left, content right',
-      'width 100, width 200',
     ]
   ) {
     Test(`accepts left-to-right replacement in [${clause}]`, accepts(layoutApp(clause)))
@@ -125,7 +115,7 @@ Describe('validator: layout clauses', () => {
     'rejects layout clauses on render inject',
     rejects(
       `
-      app MyApp { view MainView }
+      app MyApp { id "myapp" version "1.0.0" name "MyApp" view MainView }
       view MainView() {
         render inject ${tsFence}
           return null

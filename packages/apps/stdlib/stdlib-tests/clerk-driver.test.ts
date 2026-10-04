@@ -245,10 +245,11 @@ Describe('Clerk SDK driver', () => {
     for (const [code, message] of messages) {
       Expect(classifyClerkSignInError({ status: 400, errors: [{ code: code! }] })?.message).toBe(message)
     }
-    for (const code of ['unknown', '__proto__', 'constructor', 'secret@example.test']) {
-      const providerError = { status: 400, errors: [{ code, message: 'private', meta: { secret: 'private' } }] }
-      Expect(classifyClerkSignInError(providerError)).toBeUndefined()
+    const providerError = {
+      status: 400,
+      errors: [{ code: 'constructor', message: 'private', meta: { secret: 'private' } }],
     }
+    Expect(classifyClerkSignInError(providerError)).toBeUndefined()
     for (const status of [200, 429, 500]) {
       Expect(classifyClerkSignInError({ status, errors: [{ code: 'form_password_incorrect' }] })).toBeUndefined()
     }

@@ -78,20 +78,23 @@ Describe('canonical navigation identity', () => {
       'view',
       'Home',
     ])
-    const first = TR.Navigation.View({ identity, name: 'Home', render: () => 'first' })
+    TR.Navigation.View({ identity, name: 'Home', render: () => 'first' })
     const firstApp = TR.Navigation.App({
       auxiliaries: () => ({}),
+      id: 'first-identity-app',
       name: 'First',
       navigator: () => configuredStack('First', TR.Navigation.ViewReference(identity)),
+      version: '1.0.0',
     })
-    const second = TR.Navigation.View({ identity, name: 'Home', render: () => 'second' })
+    TR.Navigation.View({ identity, name: 'Home', render: () => 'second' })
     const secondApp = TR.Navigation.App({
       auxiliaries: () => ({}),
+      id: 'second-identity-app',
       name: 'Second',
       navigator: () => configuredStack('Second', TR.Navigation.ViewReference(identity)),
+      version: '1.0.0',
     })
 
-    Expect(second).not.toBe(first)
     Expect(renderContained(firstApp.resolvePresentable(identity.canonical).render({}))).toBe('first')
     Expect(renderContained(secondApp.resolvePresentable(identity.canonical).render({}))).toBe('second')
   })
@@ -116,8 +119,10 @@ Describe('canonical navigation identity', () => {
     const firstDeclaration = TR.Navigation.Declaration('First bound stack', TR.NavKind.Stack())
     const firstApp = TR.Navigation.App({
       auxiliaries: () => ({}),
+      id: 'first-bound-app',
       name: 'First bound',
       navigator: () => TR.Navigation.Configure(firstDeclaration, { Initial: bound }),
+      version: '1.0.0',
     })
     let secondValue = 'two'
     const secondRoot = TR.Navigation.View({
@@ -128,11 +133,13 @@ Describe('canonical navigation identity', () => {
     const secondDeclaration = TR.Navigation.Declaration('Second bound stack', TR.NavKind.Stack())
     const secondApp = TR.Navigation.App({
       auxiliaries: () => ({}),
+      id: 'second-bound-app',
       name: 'Second bound',
       navigator: () =>
         TR.Navigation.Configure(secondDeclaration, {
           Initial: TR.Navigation.BindView(secondRoot, { Value: TR.Alias(() => TR.Value(secondValue)) }),
         }),
+      version: '1.0.0',
     })
 
     const firstLocalized = firstApp.navigator.descriptor.config['initial'] as TR.Presentable

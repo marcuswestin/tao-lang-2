@@ -90,7 +90,6 @@ if (args[2] === '--lifecycle') {
         cwd: Repo.getRoot(),
       })
       const standalone = await FS.readText(script)
-      Expect(standalone.startsWith('#!/usr/bin/env node\n')).toBe(true)
       await FS.writeJson(FS.resolvePath('package.json', installRoot), {
         name: 'runtime-launcher-fixture',
         scripts: { postinstall: 'node lifecycle.js --lifecycle' },

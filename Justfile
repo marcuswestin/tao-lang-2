@@ -103,7 +103,7 @@ auth-review-server *ARGS:
 clerk-review *ARGS: _parser-gen
     ./dev clerk-review {{ ARGS }}
 
-# Push Auth Review to your Instant Cloud app and run it in tao dev; requires its stored App ID and admin token
+# Push Auth Review to your Instant Cloud app and run it in tao run; requires its stored App ID and admin token
 [group('Run')]
 instant-review *ARGS: _parser-gen
     ./dev instant-review {{ ARGS }}
@@ -128,7 +128,7 @@ studio-companion-install device="":
 studio-companion-simulator simulator="":
     ./dev studio-companion-install --simulator "{{ simulator }}"
 
-# Build the Tao Companion as a prebuilt host (--platform ios-simulator for the simulator); tao dev opens apps in it
+# Build the Tao Companion as a prebuilt host (--platform ios-simulator for the simulator); tao run opens apps in it
 [group('Run')]
 companion-host-build *ARGS:
     ./dev companion-host-build {{ ARGS }}
@@ -148,7 +148,7 @@ setup-visionos *ARGS:
 setup-watchos *ARGS:
     ./dev setup-watchos {{ ARGS }}
 
-# Publish the built Companion hosts to their GitHub release, where tao dev downloads them; needs gh
+# Publish the built Companion hosts to their GitHub release, where tao run downloads them; needs gh
 [group('Run')]
 companion-host-publish:
     ./dev companion-host-publish
@@ -184,6 +184,16 @@ studio-host-control-smoke run_id="local":
 [group('Host proofs')]
 studio-mac2-acceptance run_id="local":
     ./dev studio-smoke --native --run-id "{{ run_id }}" packages/ides/studio-tooling/studio-smoke/studio-mac2-acceptance.test.ts
+
+# Capture a bounded headless QA review; capture alone is not a visual judgment
+[group('Host proofs')]
+qa-capture *ARGS: _parser-gen
+    ./dev qa-capture {{ ARGS }}
+
+# Inventory, run bounded checks, record observations, and report on-demand QA
+[group('Report')]
+qa *ARGS:
+    ./dev qa {{ ARGS }}
 
 # Prove Studio compile/edit/undo against the real HNReader app
 [group('Host proofs')]
@@ -252,14 +262,19 @@ standalone-cli-build: _parser-gen
 
 # Build the files one standalone Tao release publishes, and print the command that publishes them
 [group('Ship')]
-standalone-cli-release version: _parser-gen
-    "{{ BUN }}" run packages/cli/tao-cli/cli-src/standalone-build.ts --release "{{ version }}"
+standalone-cli-release version="0.4.0" phase="1": _parser-gen
+    "{{ BUN }}" run packages/cli/tao-cli/cli-src/standalone-build.ts --release "{{ version }}" --phase "{{ phase }}"
 
 # Build a release, install it through curl | sh into a throwaway HOME, and prove create, check, compile, and build --compile-only work with no Bun or Node on PATH
 [group('Ship')]
 standalone-cli-acceptance: _parser-gen
-    "{{ BUN }}" run packages/cli/tao-cli/cli-src/standalone-build.ts --release 0.0.0
+    "{{ BUN }}" run packages/cli/tao-cli/cli-src/standalone-build.ts --release 0.0.0 --phase 1
     "{{ BUN }}" run packages/cli/tao-cli/cli-src/standalone-acceptance.ts .artifacts/release/v0.0.0
+
+# Install the VSIX in an isolated VS Code window and verify activation, diagnostics, hover, and navigation
+[group('Host proofs')]
+ide-extension-acceptance:
+    ./dev ide-extension-acceptance
 
 # Test a release in a disposable macOS VM; --base or --prepare-base vanilla|xcode selects a pinned image
 [group('Ship')]
@@ -288,7 +303,7 @@ standalone-cli-vm-setup:
 [group('Dev')]
 [positional-arguments]
 dev app_path="Apps" APP="":
-    ./tao dev "$1" {{ if APP == "" { "" } else { "--app \"$2\"" } }}
+    ./tao run "$1" {{ if APP == "" { "" } else { "--app \"$2\"" } }}
 
 # `just test` is the fast default, so it runs the suites this branch's diff reaches rather than all
 # of them. Selection is a heuristic over the diff: a run can be green while a suite the change broke
@@ -303,22 +318,22 @@ dev app_path="Apps" APP="":
 # A name pattern narrows the same default scope rather than replacing it: `just test "<name>"` is the
 # changed suites filtered to that name, not every suite filtered to it. Scope and filter compose, so
 # the fast default stays fast and only `test-all` widens it.
-# Run the suites this branch's diff reaches; a wider change can still break a suite it never ran, so `test-all` before a merge. One optional target is a test path or a test name
+# Run changed suites, fail fast; explicit file/name targets collect failures. Selection can miss a regression, so `test-all` before a merge
 [group('Dev')]
 test target="": _compile-word-flower-app
     if [ {{ quote(target) }} = '' ]; then ./dev test-changed; elif [ -e {{ quote(target) }} ]; then printf 'Running tests in %s\n' {{ quote(target) }}; ./dev test-file {{ quote(target) }}; else printf 'Filtering the changed suites to tests matching "%s"\n' {{ quote(target) }}; ./dev test-changed --name {{ quote(target) }}; fi
 
-# Run every test suite, whatever this branch changed; the scope `verify` runs. One optional test-name pattern filters them
+# Run every test suite, fail fast; an explicit test-name pattern collects failures in that filtered scope
 [group('Dev')]
 test-all pattern="": _compile-word-flower-app
     ./dev test{{ if pattern == "" { "" } else { " " + quote(pattern) } }}
 
-# Run tests selected by changes since a ref; defaults to this branch's main merge base
+# Run implicitly selected changed suites, fail fast; defaults to this branch's main merge base
 [group('Dev')]
 test-changed ref="": _compile-word-flower-app
     ./dev test-changed {{ if ref == "" { "" } else { "\"" + ref + "\"" } }}
 
-# Run one package Bun or runtime Jest test file, or every test file under a directory
+# Collect failures in one test file/directory; a repository-root target remains fail fast
 [group('Dev')]
 test-file path: _compile-word-flower-app
     ./dev test-file "{{ path }}"
@@ -328,7 +343,7 @@ test-file path: _compile-word-flower-app
 test-mutation path: _compile-word-flower-app
     ./dev test-mutation {{ quote(path) }}
 
-# Re-run files that are not green since this checkout's latest complete test run
+# Collect failures in files not green since this checkout's latest complete test run
 [group('Dev')]
 test-retry: _compile-word-flower-app
     ./dev test-retry
@@ -444,6 +459,11 @@ fmt: _parser-gen
     ./tao fmt
     just --fmt
 
+# Format one file or dprint glob without changing unrelated concurrent work
+[group('Dev')]
+fmt-file path:
+    dprint fmt --incremental=false {{ quote(path) }}
+
 # Each harness write-protects its own agent configuration — skills, hooks, settings — against shell
 # commands, while allowing the harness's own edit tools, so that a change to an agent's instructions
 # reaches a diff somebody reads. A sandboxed `_fix-dprint` therefore fails outright on an unformatted
@@ -469,7 +489,7 @@ fix: _parser-gen
     ./tao fix
     just --fmt
 
-# Check all code without changing it or running tests: Tao and dprint canonical source, lint, types. --no-cache ignores a recorded green tree
+# Check all code, fail fast between checks: canonical source, lint, types. --no-cache ignores a recorded green tree
 [arg('no_cache', long='no-cache', value='true')]
 [group('Dev')]
 check no_cache='false':
@@ -477,7 +497,7 @@ check no_cache='false':
 
 # Build a VSIX without installing it, for VS Code packager compatibility checks
 [group('Dev')]
-ide-extension-package: _ide-extension-package
+ide-extension-package release_version="development" phase="development": (_ide-extension-package release_version phase)
 
 # Run the repository lint on its own
 [group('Dev')]
@@ -551,6 +571,17 @@ delegation-report *ARGS:
 model-audit *ARGS:
     ./dev model-audit {{ ARGS }}
 
+# Post a contextual macOS notification and run at most one machine-wide sound/flash loop; just stop ends it
+[group('Sessions')]
+[positional-arguments]
+notify-developer *ARGS:
+    "{{ BUN }}" run packages/cli/agent-cli/agent-cli-src/cli/agent-notify-developer.ts "$@"
+
+# Stop the developer attention sound and screen flashes from any worktree
+[group('Sessions')]
+stop:
+    "{{ BUN }}" run packages/cli/agent-cli/agent-cli-src/cli/agent-notify-developer.ts --stop
+
 # Measure what a simplification pass targets: size, dispatch chains, allowlists, instructions, docs
 [group('Report')]
 simplify-audit *ARGS:
@@ -616,18 +647,18 @@ clean-all: clean-scratch
 # Full verification lanes lower their CLI process to below-normal scheduling priority before
 # launching gates; children inherit it. This leaves job counts and admission unchanged.
 # A host or sandbox refusal prints a warning and verification continues at inherited priority.
-# Verify everything: fix, check, and every test suite. --no-cache ignores a recorded green tree
+# Verify everything, fail fast between checks: fix, check, all tests. --no-cache ignores a recorded green tree
 [arg('complete', long='complete', value='true')]
 [arg('no_cache', long='no-cache', value='true')]
 [group('Dev')]
 verify complete='false' no_cache='false': _deps
-    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check dead-exports --lane verify --json .artifacts/logs/verify/summary.json --skipped "studio-smoke=slow lane; run ./agent studio-smoke or ./agent verify-full" --green-tree verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
+    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check dead-exports --lane verify --json .artifacts/logs/verify/summary.json --skipped "studio-smoke=slow lane; run ./agent unsandboxed studio-smoke or ./agent unsandboxed verify-full" --green-tree verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
 
-# Verify narrowed to the suites the branch diff reaches: the iteration gate, never merge evidence. --no-cache ignores a recorded green tree
+# Verify changed suites, fail fast: the iteration gate, never merge evidence. --no-cache ignores a recorded green tree
 [arg('no_cache', long='no-cache', value='true')]
 [group('Dev')]
 verify-changed no_cache='false': _deps
-    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test-changed _runtime-pack-check dead-exports --lane verify-changed --json .artifacts/logs/verify-changed/summary.json --skipped "studio-smoke=slow lane; run ./agent studio-smoke or ./agent verify-full" --green-tree verify-changed verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
+    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test-changed _runtime-pack-check dead-exports --lane verify-changed --json .artifacts/logs/verify-changed/summary.json --skipped "studio-smoke=slow lane; run ./agent unsandboxed studio-smoke or ./agent unsandboxed verify-full" --green-tree verify-changed verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
 
 # This lane no longer refuses to start beside another one. The gates that genuinely cannot share a
 # host — the native shell and the canary, which contend on the window server — declare `gui` in the
@@ -735,9 +766,9 @@ _compile-word-flower-app: _parser-gen
 _ide-extension-build: _parser-gen
     cd packages/ides/ide-extension && "{{ BUN }}" esbuild.config.ts
 
-_ide-extension-package: _parser-gen
+_ide-extension-package release_version="development" phase="development": _parser-gen
     mkdir -p .artifacts/build
-    cd packages/ides/ide-extension && "{{ BUN }}" esbuild.config.ts --minify
+    cd packages/ides/ide-extension && "{{ BUN }}" esbuild.config.ts --minify {{ if release_version == "development" { "" } else { "--release " + quote(release_version) + " --phase " + quote(phase) } }}
     cd packages/ides/ide-extension && "{{ BUNX }}" @vscode/vsce package --no-dependencies --out "{{ IDE_EXTENSION_VSIX }}" 1> /dev/null
 
 _tao-check: _parser-gen

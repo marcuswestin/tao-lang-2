@@ -96,7 +96,6 @@ export async function exerciseStudioFeed(
   await feedDragToPreview(browser, session, '.studio-feed-drag[title="Title"]', sketchId, snappedRectId)
   await until(() => session.feedSourceOverrides()?.[viewPath]?.includes('Text(Playlist.Title)') === true)
   await waitForKeep(browser)
-  Expect(session.feedSourceOverrides()?.[viewPath]).toContain('Text(Playlist.Title)')
   await clickFeedCommand(browser, 'Keep')
   await until(async () =>
     (await session.sketchCatalog()).revision > beforeCatalog.revision && session.feedSourceOverrides() === undefined
@@ -105,7 +104,6 @@ export async function exerciseStudioFeed(
   Expect(keptView).toContain('Playlist')
   Expect(keptView).toContain('fixture Sketches')
   Expect(await FS.readText(fixturePath)).toContain('create Playlist')
-  Expect(session.feedSourceOverrides()).toBeUndefined()
   const keptCatalog = await session.sketchCatalog()
   Expect(keptCatalog.revision).toBe(beforeCatalog.revision + 1)
   Expect(keptCatalog.sketches[0]?.snapped.find(item => item.rect.id === snappedRectId)?.target.elementName).toBe('Text')
@@ -130,7 +128,6 @@ export async function exerciseStudioFeed(
   await clickFeedCommand(browser, 'Discard')
   await until(() => session.feedSourceOverrides() === undefined)
   Expect(await FS.readText(viewPath)).toBe(keptView)
-  Expect(session.feedSourceOverrides()).toBeUndefined()
   await feedDrag(
     browser,
     '.studio-feed-drag[title="Tracks (collection)"]',

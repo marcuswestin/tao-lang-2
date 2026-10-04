@@ -21,6 +21,7 @@ export const JUST_COMMANDS = [
   // policy excludes. An agent has to be able to reach it by the name the failure prints.
   'fix-agent-config',
   'fmt',
+  'fmt-file',
   'ide-extension-package',
   'land',
   // The landing lock is the turn-taking primitive every broad lane and the landing itself go
@@ -39,12 +40,15 @@ export const JUST_COMMANDS = [
   'merge-main',
   'model-audit',
   'native-module-check',
+  'notify-developer',
   // Pushes the branch, opens or reuses its pull request, and stays attached to stream the checks a
   // newly opened one starts —
   // the one command both the Developer and an agent run to get GitHub's own CI signal without a
   // second spelling.
   'open-pr',
   'parser-gen',
+  'qa',
+  'qa-capture',
   'reclaim',
   // One report rather than two: flakes and slowest read the same ledger and are consulted together.
   'report-test-stats',
@@ -52,6 +56,8 @@ export const JUST_COMMANDS = [
   'setup-clerk',
   'shell-setup',
   'simplify-audit',
+  'standalone-cli-build',
+  'stop',
   // The browser and native UI lanes are final validation like any other gate, and AGENTS.md
   // requires them before a branch that touches Studio is called ready. They stayed reachable only
   // as `just` recipes, which left the one instruction an agent follows split across two spellings.

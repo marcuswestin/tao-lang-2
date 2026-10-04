@@ -1,4 +1,4 @@
-import { Assert, Errors, FS, HCI, Platform, ProjectLocal, Repo, Time } from '@shared'
+import { Assert, Errors, FS, HCI, Platform, ProjectIdentity, ProjectLocal, Repo, Time } from '@shared'
 import { Expect, mkTestDir, Test } from '@shared/test'
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
 import { startStudioSmokeLaunch } from '../studio-tooling-src/StudioSmokeLaunch'
@@ -20,7 +20,7 @@ const EDITS_PER_MODE = 8
 const latencySource = (label: string) =>
   `use Col, Text from @tao/ui
 
-app LatencySmoke { view MainView }
+app LatencySmoke { id "tao-studio-latency" version "1.0.0" name "Latency" view MainView }
 
 view MainView() {
    render Col() {
@@ -130,10 +130,8 @@ const latencyProjects: readonly LatencyProject[] = [
     initialText: 'Edit0x',
     name: 'one-file app',
     async setup(projectRoot) {
-      await FS.writeText(
-        FS.resolvePath('Project.tao', projectRoot),
-        'project { id "tao-studio-latency" name "Latency" }\n',
-      )
+      await FS.mkdir(FS.resolvePath('.tao', projectRoot))
+      await ProjectIdentity.ensure(projectRoot)
       const sourcePath = FS.resolvePath('LatencySmoke.tao', projectRoot)
       await FS.writeText(sourcePath, latencySource('Edit0x'))
       return sourcePath
@@ -147,6 +145,8 @@ const latencyProjects: readonly LatencyProject[] = [
     initialText: 'Edit0x',
     name: 'HNReader',
     async setup(projectRoot) {
+      await FS.mkdir(FS.resolvePath('.tao', projectRoot))
+      await ProjectIdentity.ensure(projectRoot)
       for (const name of await FS.listDir(hnreaderRoot)) {
         if (/\.(tao|ts)$/.test(name) && await FS.isFile(FS.resolvePath(name, hnreaderRoot))) {
           await FS.copyFile(FS.resolvePath(name, hnreaderRoot), FS.resolvePath(name, projectRoot))

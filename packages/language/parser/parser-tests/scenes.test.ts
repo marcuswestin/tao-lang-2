@@ -25,14 +25,14 @@ Describe('parser: scenes', () => {
     const parsed = await testParseSyntax(`
        type Answer is one of Confirmed
 
-       workspace
+       project
        scene Editor(Title text) responds Answer {
           render Text(Title)
        }
     `)
     const scene = parsed.entry.ast.statements.filter(AST.isViewDeclaration)[0]
     Expect(scene?.scene).toBe(true)
-    Expect(scene?.visibility).toBe('workspace')
+    Expect(scene?.visibility).toBe('project')
     Expect(scene?.response?.$refText).toBe('Answer')
     Expect(scene?.parameterList?.parameters.length).toBe(1)
   })

@@ -190,6 +190,7 @@ Describe('Playwright host control', () => {
         })
         const replaced = await observeTag(session, 'replaceable')
         Expect(replaced.text).toBe('Original')
+        // REMOVAL CANDIDATE: Replace the fixture timer with an acknowledged transition when real-host validation is available; retain stale-element coverage.
         await Time.sleep(850)
         await expectHostFailure(
           session.perform({
@@ -209,6 +210,7 @@ Describe('Playwright host control', () => {
             target: { kind: 'tag', value: 'repeated' },
           })).text,
         ).toBe('First occurrence')
+        // REMOVAL CANDIDATE: Explicit occurrence one repeats the default-first assertion; retaining it also protects explicit occurrence encoding.
         Expect(
           (await session.observe({
             expectedRevision: firstRevision,

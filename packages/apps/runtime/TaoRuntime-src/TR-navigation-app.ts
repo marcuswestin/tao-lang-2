@@ -197,7 +197,7 @@ export class RuntimeAppDefinition implements Subscription {
 
   readonly designSnapshot = (): number => DesignControls.revision(this.design)
 
-  /** readNet is the project's `guard default`, resolved after generated module initialization. */
+  /** readNet is the app's guard, resolved after generated module initialization. */
   get readNet(): TaoReadNet | undefined {
     return this.readNetValue ??= this.definition.readNet?.()
   }

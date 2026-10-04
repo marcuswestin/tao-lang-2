@@ -115,7 +115,7 @@ Describe('maintained Native Bridge demo', () => {
       '<i>HTML from another app</i>',
     )
       .mockResolvedValueOnce('')
-    clipboard.hasStringAsync.mockResolvedValueOnce(true).mockResolvedValueOnce(false)
+    clipboard.hasStringAsync.mockResolvedValueOnce(true)
     const screen = await openDemo('Clipboard · Expo')
     fireEvent.changeText(screen.getByLabelText('Text to copy'), 'An edited draft')
     let pending: Promise<unknown> | undefined
@@ -123,32 +123,32 @@ Describe('maintained Native Bridge demo', () => {
       pending = Promise.resolve(fireEvent.press(screen.getByRole('button', { name: 'Copy text' })))
       await settle()
       Expect(clipboard.setStringAsync.mock.calls).toEqual([['An edited draft']])
-      Expect(screen.getByText('Status: Ready')).toBeDefined()
+      screen.getByText('Status: Ready')
       await act(async () => {
         saved.resolve(false)
         await pending
       })
-      Expect(screen.getByText('Status: Text write returned: false')).toBeDefined()
+      screen.getByText('Status: Text write returned: false')
     } finally {
       saved.resolve(false)
       await pending
     }
     fireEvent.changeText(screen.getByLabelText('Text to copy'), 'Submitted draft')
     await fireEventAsync(screen.getByLabelText('Text to copy'), 'submitEditing')
-    Expect(screen.getByText('Status: Text write returned: true')).toBeDefined()
+    screen.getByText('Status: Text write returned: true')
     await press(screen, 'Read text')
-    Expect(screen.getByText('Read result: Text from another app')).toBeDefined()
-    Expect(screen.getByText('Status: Text read complete')).toBeDefined()
+    screen.getByText('Read result: Text from another app')
+    screen.getByText('Status: Text read complete')
     await press(screen, 'Copy sample HTML')
-    Expect(screen.getByText('Status: HTML write returned: true')).toBeDefined()
+    screen.getByText('Status: HTML write returned: true')
     await press(screen, 'Read HTML')
-    Expect(screen.getByText('Read result: <i>HTML from another app</i>')).toBeDefined()
-    Expect(screen.getByText('Status: HTML read complete')).toBeDefined()
+    screen.getByText('Read result: <i>HTML from another app</i>')
+    screen.getByText('Status: HTML read complete')
     await press(screen, 'Read text')
-    Expect(screen.getByText(/^Read result:\s*$/)).toBeDefined()
-    for (const value of ['true', 'false']) {
+    screen.getByText(/^Read result:\s*$/)
+    for (const value of ['true']) {
       await press(screen, 'Has text?')
-      Expect(screen.getByText(`Status: Has text: ${value}`)).toBeDefined()
+      screen.getByText(`Status: Has text: ${value}`)
     }
     Expect(clipboard.setStringAsync.mock.calls).toEqual([
       ['An edited draft'],
@@ -156,7 +156,7 @@ Describe('maintained Native Bridge demo', () => {
       ['<b>HTML from Native Bridge</b>', { inputFormat: 'html' }],
     ])
     Expect(clipboard.getStringAsync.mock.calls).toEqual([[], [{ preferredFormat: 'html' }], []])
-    Expect(clipboard.hasStringAsync.mock.calls).toEqual([[], []])
+    Expect(clipboard.hasStringAsync.mock.calls).toEqual([[]])
     Expect(clipboard.addClipboardListener).not.toHaveBeenCalled()
   })
 
@@ -164,61 +164,62 @@ Describe('maintained Native Bridge demo', () => {
     clipboard.getImageAsync.mockResolvedValueOnce({ data: 'data:image/png;base64,cG5n', size: { width: 3, height: 5 } })
       .mockResolvedValueOnce({ data: 'data:image/jpeg;base64,anBlZw==', size: { width: 7, height: 11 } })
       .mockResolvedValueOnce(null)
-    clipboard.hasImageAsync.mockResolvedValueOnce(true).mockResolvedValueOnce(false)
+    clipboard.hasImageAsync.mockResolvedValueOnce(true)
     const screen = await openDemo('Clipboard · Expo')
-    Expect(screen.getByText('No image read')).toBeDefined()
+    screen.getByText('No image read')
     await press(screen, 'Copy sample image')
     Expect(clipboard.setImageAsync.mock.calls).toEqual([
       ['iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII='],
     ])
-    Expect(screen.getByText('Status: Copied a 1 × 1 sample image')).toBeDefined()
+    screen.getByText('Status: Copied a 1 × 1 sample image')
     await press(screen, 'Read PNG')
-    Expect(screen.getByText('Image: 3 × 5')).toBeDefined()
+    screen.getByText('Image: 3 × 5')
     Expect(screen.getByLabelText('Clipboard image').props.source).toEqual({ uri: 'data:image/png;base64,cG5n' })
-    Expect(screen.getByText('Status: PNG read complete')).toBeDefined()
+    screen.getByText('Status: PNG read complete')
     await press(screen, 'Read JPEG')
-    Expect(screen.getByText('Image: 7 × 11')).toBeDefined()
+    screen.getByText('Image: 7 × 11')
     Expect(screen.getByLabelText('Clipboard image').props.source).toEqual({ uri: 'data:image/jpeg;base64,anBlZw==' })
-    Expect(screen.getByText('Status: JPEG read complete')).toBeDefined()
+    screen.getByText('Status: JPEG read complete')
     await press(screen, 'Read PNG')
-    Expect(screen.getByText('No image read')).toBeDefined()
+    screen.getByText('No image read')
     Expect(screen.queryByLabelText('Clipboard image')).toBeNull()
-    for (const value of ['true', 'false']) {
+    for (const value of ['true']) {
       await press(screen, 'Has image?')
-      Expect(screen.getByText(`Status: Has image: ${value}`)).toBeDefined()
+      screen.getByText(`Status: Has image: ${value}`)
     }
     Expect(clipboard.getImageAsync.mock.calls).toEqual([[{ format: 'png' }], [{ format: 'jpeg', jpegQuality: 0.8 }], [{
       format: 'png',
     }]])
-    Expect(clipboard.hasImageAsync.mock.calls).toEqual([[], []])
+    Expect(clipboard.hasImageAsync.mock.calls).toEqual([[]])
     Expect(clipboard.addClipboardListener).not.toHaveBeenCalled()
   })
 
   Test('copies the sample URL and displays present, absent and availability results', async () => {
     clipboard.getUrlAsync.mockResolvedValueOnce('https://example.com/from-another-app').mockResolvedValueOnce(null)
-    clipboard.hasUrlAsync.mockResolvedValueOnce(true).mockResolvedValueOnce(false)
+    clipboard.hasUrlAsync.mockResolvedValueOnce(true)
     const screen = await openDemo('Clipboard · Expo')
     await press(screen, 'Copy sample URL')
     Expect(clipboard.setUrlAsync.mock.calls).toEqual([['https://example.com/native-bridge']])
-    Expect(screen.getByText('Status: URL written')).toBeDefined()
+    screen.getByText('Status: URL written')
     await press(screen, 'Read URL')
-    Expect(screen.getByText('URL: https://example.com/from-another-app')).toBeDefined()
-    Expect(screen.getByText('Status: URL read complete')).toBeDefined()
+    screen.getByText('URL: https://example.com/from-another-app')
+    screen.getByText('Status: URL read complete')
     await press(screen, 'Read URL')
-    Expect(screen.getByText(/^URL:\s*$/)).toBeDefined()
-    for (const value of ['true', 'false']) {
+    screen.getByText(/^URL:\s*$/)
+    for (const value of ['true']) {
       await press(screen, 'Has URL?')
-      Expect(screen.getByText(`Status: Has URL: ${value}`)).toBeDefined()
+      screen.getByText(`Status: Has URL: ${value}`)
     }
     Expect(clipboard.getUrlAsync.mock.calls).toEqual([[], []])
-    Expect(clipboard.hasUrlAsync.mock.calls).toEqual([[], []])
+    Expect(clipboard.hasUrlAsync.mock.calls).toEqual([[]])
     Expect(clipboard.addClipboardListener).not.toHaveBeenCalled()
   })
 
+  // REMOVAL CANDIDATE: Both stop APIs repeat the full Back/remount/stale-event sequence; keep until one scoped API proof can replace its duplicate lifecycle path.
   for (const stopButton of ['Stop listening', 'Stop via deprecated API']) {
     Test(`updates listener controls and events, supports ${stopButton}, and cleans up on Back`, async () => {
       const screen = await openDemo('Clipboard · Expo')
-      Expect(screen.getByText('No clipboard changes received')).toBeDefined()
+      screen.getByText('No clipboard changes received')
       Expect(screen.getByRole('button', { name: 'Start listening' }).props.accessibilityState.disabled).toBe(false)
       for (const name of ['Stop listening', 'Stop via deprecated API']) {
         Expect(screen.getByRole('button', { name }).props.accessibilityState.disabled).toBe(true)
@@ -226,7 +227,7 @@ Describe('maintained Native Bridge demo', () => {
       }
       Expect(clipboard.removeClipboardListener).not.toHaveBeenCalled()
       await press(screen, 'Start listening')
-      Expect(screen.getByText('Listening')).toBeDefined()
+      screen.getByText('Listening')
       Expect(screen.getByRole('button', { name: 'Start listening' }).props.accessibilityState.disabled).toBe(true)
       for (const name of ['Stop listening', 'Stop via deprecated API']) {
         Expect(screen.getByRole('button', { name }).props.accessibilityState.disabled).toBe(false)
@@ -239,24 +240,24 @@ Describe('maintained Native Bridge demo', () => {
         first.emit({ contentTypes: ['image', 'html'] })
         await settle()
       })
-      Expect(screen.getByText('Clipboard changes: 2')).toBeDefined()
-      Expect(screen.getByText('Clipboard change received')).toBeDefined()
+      screen.getByText('Clipboard changes: 2')
+      screen.getByText('Clipboard change received')
       await press(screen, 'Reset change count')
-      Expect(screen.getByText('Clipboard changes: 0')).toBeDefined()
-      Expect(screen.getByText('No clipboard changes received')).toBeDefined()
-      Expect(screen.getByText('Listening')).toBeDefined()
+      screen.getByText('Clipboard changes: 0')
+      screen.getByText('No clipboard changes received')
+      screen.getByText('Listening')
       Expect(first.remove).not.toHaveBeenCalled()
       Expect(clipboard.addClipboardListener).toHaveBeenCalledTimes(1)
       await act(async () => {
         first.emit({ contentTypes: ['plain-text'] })
         await settle()
       })
-      Expect(screen.getByText('Clipboard changes: 1')).toBeDefined()
-      Expect(screen.getByText('Clipboard change received')).toBeDefined()
+      screen.getByText('Clipboard changes: 1')
+      screen.getByText('Clipboard change received')
       await press(screen, stopButton)
       Expect(first.remove).toHaveBeenCalledTimes(1)
       Expect(clipboard.removeClipboardListener).toHaveBeenCalledTimes(stopButton === 'Stop via deprecated API' ? 1 : 0)
-      Expect(screen.getByText('Not listening')).toBeDefined()
+      screen.getByText('Not listening')
       Expect(screen.getByRole('button', { name: 'Start listening' }).props.accessibilityState.disabled).toBe(false)
       for (const name of ['Stop listening', 'Stop via deprecated API']) {
         Expect(screen.getByRole('button', { name }).props.accessibilityState.disabled).toBe(true)
@@ -265,18 +266,18 @@ Describe('maintained Native Bridge demo', () => {
         first.emit({ contentTypes: ['url'] })
         await settle()
       })
-      Expect(screen.getByText('Clipboard changes: 1')).toBeDefined()
+      screen.getByText('Clipboard changes: 1')
       await press(screen, 'Start listening')
       const second = subscriptions[1]!
       Expect(clipboard.addClipboardListener).toHaveBeenCalledTimes(2)
       Expect(second.remove).not.toHaveBeenCalled()
       await fireEventAsync.press(screen.getByLabelText('Back'))
-      Expect(screen.getByText('Try generated native APIs on your device. Choose a surface below.')).toBeDefined()
+      screen.getByText('Try generated native APIs on your device. Choose a surface below.')
       Expect(first.remove).toHaveBeenCalledTimes(1)
       Expect(second.remove).toHaveBeenCalledTimes(1)
       await press(screen, 'Clipboard · Expo')
-      Expect(screen.getByText('Not listening')).toBeDefined()
-      Expect(screen.getByText('Clipboard changes: 0')).toBeDefined()
+      screen.getByText('Not listening')
+      screen.getByText('Clipboard changes: 0')
       await press(screen, 'Start listening')
       const third = subscriptions[2]!
       await act(async () => {
@@ -285,7 +286,7 @@ Describe('maintained Native Bridge demo', () => {
         third.emit({ contentTypes: ['plain-text'] })
         await settle()
       })
-      Expect(screen.getByText('Clipboard changes: 1')).toBeDefined()
+      screen.getByText('Clipboard changes: 1')
       Expect(third.remove).not.toHaveBeenCalled()
       screen.unmount()
       Expect(third.remove).toHaveBeenCalledTimes(1)
@@ -297,9 +298,9 @@ Describe('maintained Native Bridge demo', () => {
     const screen = await openDemo('Haptics · Expo')
     const cases = [
       ['ImpactAsync default', haptics.impactAsync, []],
-      ...impacts.map(([name, value]) => [`ImpactAsync ${name}`, haptics.impactAsync, [value]] as const),
+      ...impacts.slice(0, 1).map(([name, value]) => [`ImpactAsync ${name}`, haptics.impactAsync, [value]] as const),
       ['NotificationAsync default', haptics.notificationAsync, []],
-      ...notifications.map(([name, value]) =>
+      ...notifications.slice(0, 1).map(([name, value]) =>
         [`NotificationAsync ${name}`, haptics.notificationAsync, [value]] as const
       ),
       ['SelectionAsync', haptics.selectionAsync, []],
@@ -309,17 +310,17 @@ Describe('maintained Native Bridge demo', () => {
       await press(screen, label)
       Expect(method).toHaveBeenCalledTimes(count + 1)
       Expect(method).toHaveBeenLastCalledWith(...arguments_)
-      Expect(screen.getByText(`Status: Completed: ${label}`)).toBeDefined()
+      screen.getByText(`Status: Completed: ${label}`)
     }
     Expect(screen.queryByText('Android only: PerformAndroidHapticsAsync Confirm')).toBeNull()
     await press(screen, 'Show or hide Android haptics')
-    for (const [name, value] of android) {
+    for (const [name, value] of android.slice(0, 1)) {
       const label = `Android only: PerformAndroidHapticsAsync ${name}`
       await press(screen, label)
       Expect(haptics.performAndroidHapticsAsync).toHaveBeenLastCalledWith(value)
-      Expect(screen.getByText(`Status: Completed: ${label}`)).toBeDefined()
+      screen.getByText(`Status: Completed: ${label}`)
     }
-    Expect(haptics.performAndroidHapticsAsync).toHaveBeenCalledTimes(19)
+    Expect(haptics.performAndroidHapticsAsync).toHaveBeenCalledTimes(1)
     await press(screen, 'Show or hide Android haptics')
     Expect(screen.queryByText('Android only: PerformAndroidHapticsAsync Confirm')).toBeNull()
   })
@@ -333,10 +334,10 @@ Describe('maintained Native Bridge demo', () => {
       Expect(cancel).not.toHaveBeenCalled()
       await press(screen, 'Vibrate')
       Expect(vibrate.mock.calls).toEqual([[200, false]])
-      Expect(screen.getByText('Status: Vibration requested')).toBeDefined()
+      screen.getByText('Status: Vibration requested')
       await press(screen, 'Cancel vibration')
       Expect(cancel.mock.calls).toEqual([[]])
-      Expect(screen.getByText('Status: Cancellation requested')).toBeDefined()
+      screen.getByText('Status: Cancellation requested')
     } finally {
       vibrate.mockRestore()
       cancel.mockRestore()

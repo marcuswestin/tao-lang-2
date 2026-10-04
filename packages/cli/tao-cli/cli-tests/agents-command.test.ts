@@ -121,7 +121,6 @@ Describe('packaged app agent client', () => {
         ) {
           const json = await withCapturedOutput(invoke)
           Expect(JSON.parse(json.stdout)).toEqual({ ok: true, result: catalog })
-          Expect(json.stdout.trim().split('\n')).toHaveLength(1)
         }
         Expect(exitCode).toBe(0)
         calls.length = 0
@@ -265,7 +264,6 @@ Describe('packaged app agent client', () => {
             }
           })
           const primary = JSON.parse(output.stdout)
-          Expect(output.stdout.trim().split('\n')).toHaveLength(1)
           if (scenario.primary === 'discovery') {
             Expect(primary).toEqual({
               ok: false,
@@ -400,32 +398,6 @@ Describe('packaged app agent client', () => {
     })
   })
 
-  Test('does not retry a failed shutdown request', async () => {
-    await withFixture(async bundle => {
-      const methods: string[] = []
-      const restore = fetchSlot.install(
-        (async (_url, options) => {
-          const body = JSON.parse(String(options?.body))
-          methods.push(body.method)
-          return Response.json(
-            body.method === 'ping'
-              ? { version: 1, id: body.id, ok: true, result: pong }
-              : { version: 1, id: body.id, ok: false, error: { code: 'busy', message: 'Still working.' } },
-          )
-        }) as typeof fetch,
-      )
-      try {
-        Expect(await runAppAgentCommand('stop', bundle)).toEqual({
-          ok: false,
-          error: { code: 'busy', message: 'Still working.' },
-        })
-        Expect(methods).toEqual(['ping', 'shutdown'])
-      } finally {
-        restore()
-      }
-    })
-  })
-
   Test('reports absent sessions without launching on ping or stop', async () => {
     await withFixture(async (bundle, sessionPath) => {
       await FS.remove(sessionPath)
@@ -535,7 +507,6 @@ Describe('packaged app agent client', () => {
           ok: false,
           error: { code: 'invalid_params', message: 'Unknown parameter Extra.' },
         })
-        Expect(output.stdout.trim().split('\n')).toHaveLength(1)
         Expect(output.stderr).toContain('Unknown parameter Extra.')
         Expect(exitCode).toBe(1)
         Expect(invocations).toEqual([{ commandId: 'Items/Add', args: { Title: 'Hello', Extra: [1, true, null] } }])

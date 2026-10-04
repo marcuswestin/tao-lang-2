@@ -10,6 +10,7 @@ export type DeclarationIdentityProject = {
 
 type DeclarationIdentityContext = {
   projects: readonly DeclarationIdentityProject[]
+  ownerBySourcePath: ReadonlyMap<string, string>
 }
 
 let activeContext: DeclarationIdentityContext | undefined
@@ -17,10 +18,11 @@ let activeContext: DeclarationIdentityContext | undefined
 /** withDeclarationIdentityContext scopes owner metadata to one synchronous generated module pass. */
 export function withDeclarationIdentityContext<ResultT>(
   projects: readonly DeclarationIdentityProject[],
+  ownerBySourcePath: ReadonlyMap<string, string>,
   compile: () => ResultT,
 ): ResultT {
   Assert(activeContext === undefined, 'declaration identity compilation is not nested')
-  activeContext = { projects }
+  activeContext = { projects, ownerBySourcePath }
   try {
     return compile()
   } finally {
@@ -47,9 +49,7 @@ export function compileDeclarationIdentity(
   const context = activeContext
   Assert.defined(context, 'declaration identity context is active')
   const filePath = AST.getDocument(canonical).uri.path
-  const project = context.projects
-    .filter(candidate => FS.pathIsWithin(filePath, candidate.root))
-    .toSorted((left, right) => right.root.length - left.root.length)[0]
+  const project = projectForFile(context, filePath)
   Assert.defined(project, 'declaration belongs to a project with checked-in identity', { filePath })
   const { modulePath, packageId } = ownerRelativeLocation(project.root, filePath)
   return gen`TR.Navigation.Identity(${
@@ -70,12 +70,20 @@ export function declarationModuleName(declaration: AST.Declaration): string {
   const context = activeContext
   Assert.defined(context, 'declaration identity context is active')
   const filePath = AST.getDocument(canonicalDeclaration(declaration)).uri.path
-  const project = context.projects
-    .filter(candidate => FS.pathIsWithin(filePath, candidate.root))
-    .toSorted((left, right) => right.root.length - left.root.length)[0]
+  const project = projectForFile(context, filePath)
   Assert.defined(project, 'declaration belongs to a project with checked-in identity', { filePath })
   const { modulePath, packageId } = ownerRelativeLocation(project.root, filePath)
   return `${packageId}/${modulePath}`
+}
+
+function projectForFile(context: DeclarationIdentityContext, filePath: string): DeclarationIdentityProject | undefined {
+  const semanticRoot = context.ownerBySourcePath.get(filePath)
+  if (semanticRoot !== undefined) {
+    return context.projects.find(candidate => candidate.root === semanticRoot)
+  }
+  return context.projects
+    .filter(candidate => FS.pathIsWithin(filePath, candidate.root))
+    .toSorted((left, right) => right.root.length - left.root.length)[0]
 }
 
 /** canonicalDeclaration follows lexical view aliases and app variants to their authored owner. */

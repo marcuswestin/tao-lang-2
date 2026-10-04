@@ -1,12 +1,12 @@
 import { Describe, Expect, Test } from '@shared/test'
 import { ViewsValidator } from '../validator-src/validators/views-validator'
-import { accepts, rejects, stubView, validationErrorMessages, withValidatedFiles } from './test-validate'
+import { accepts, rejects, stubView, withValidatedFiles } from './test-validate'
 
 Describe('validator: foreign views', () => {
   Test(
     'accepts foreign views without a Tao render body and exposes declared content and slots',
     accepts(`
-      app ForeignApp { view Main }
+      app ForeignApp { id "foreignapp" version "1.0.0" name "ForeignApp" view Main }
       view Main() {
         action Change(Value text) { }
         render Foreign("draft", Change) {
@@ -20,10 +20,10 @@ Describe('validator: foreign views', () => {
   )
 
   Test(
-    'rejects non-relative or non-TypeScript foreign implementations',
+    'rejects a package path for a foreign implementation',
     rejects(
       `
-        app ForeignApp { view Foreign }
+        app ForeignApp { id "foreignapp" version "1.0.0" name "ForeignApp" view Foreign }
         view Foreign() from @tao/native
       `,
       ViewsValidator.messages.foreignViewPath,
@@ -34,7 +34,7 @@ Describe('validator: foreign views', () => {
     'rejects an empty accepts clause',
     rejects(
       `
-        app ForeignApp { view Foreign }
+        app ForeignApp { id "foreignapp" version "1.0.0" name "ForeignApp" view Foreign }
         view Foreign() accepts from ./Foreign.tsx
       `,
       ViewsValidator.messages.foreignViewAccepts,
@@ -43,11 +43,9 @@ Describe('validator: foreign views', () => {
 
   Test('reports a missing foreign view sidecar at its Tao declaration', async () => {
     await withValidatedFiles('Main.tao', {
-      'Main.tao': 'app Missing { view Foreign } view Foreign() from ./Missing.tsx',
+      'Main.tao':
+        'app Missing { id "missing" version "1.0.0" name "Missing" view Foreign } view Foreign() from ./Missing.tsx',
     }, result => {
-      Expect(validationErrorMessages(result)).toContain(
-        ViewsValidator.messages.foreignViewMissing('./Missing.tsx'),
-      )
       const diagnostic = result.diagnostics.find(candidate =>
         candidate.message === ViewsValidator.messages.foreignViewMissing('./Missing.tsx')
       )

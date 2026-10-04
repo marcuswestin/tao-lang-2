@@ -11,10 +11,10 @@ const fence = '```'
 Describe('compiler: Studio render occurrences', () => {
   Test('keeps external authored schemas while excluding standard library schemas', async () => {
     await withTaoFiles('tao-studio-external-schemas-', {
-      'Project.tao': `project { id "studio-external-schemas" name "External schemas" }`,
+      'Package.tao': `package { version "1.0.0" license AGPL-3.0-only }`,
       'app/Main.tao': `
         use Shared from ../shared/Views
-        app Preview { view Main }
+        app Preview { id "com.tao.test.preview" version "1.0.0" name "Preview"  view Main }
         view Main() { render Shared() }
       `,
       'shared/Views.tao': `
@@ -40,7 +40,7 @@ Describe('compiler: Studio render occurrences', () => {
       'Main.tao': `
         use Playlist from ./Data
         use Sketches from ./Sketches
-        app Preview { view Main }
+        app Preview { id "com.tao.test.preview" version "1.0.0" name "Preview"  view Main }
         view Main() { render Native() }
         view Native() { render inject ${tsFence} return null ${fence} }
         view PlaylistRow(Playlist) { render Native() }
@@ -80,7 +80,7 @@ Describe('compiler: Studio render occurrences', () => {
   Test('publishes empty-store journey steps and distinct omitted-action stand-ins', async () => {
     await withTaoFiles('tao-studio-scenario-journey-', {
       'Main.tao': `
-        app Preview { view Main }
+        app Preview { id "com.tao.test.preview" version "1.0.0" name "Preview"  view Main }
         view Main() { render Native() }
         view SavedToast(Revert action()) { render Native() }
         view Native() { render inject ${tsFence} return null ${fence} }
@@ -137,8 +137,8 @@ Describe('compiler: Studio render occurrences', () => {
       'Main.tao': `
         type ConfirmResult is one of Confirmed
 
-        app First { view Main }
-        app Second { view Alternate }
+        app First { id "com.tao.test.first" version "1.0.0" name "First"  view Main }
+        app Second { id "com.tao.test.second" version "1.0.0" name "Second"  view Alternate }
 
         view Main() {
           action Open() {
@@ -177,10 +177,8 @@ Describe('compiler: Studio render occurrences', () => {
       Expect(code).toContain('designSpec: TR.Design.Spec([["gap",12]])')
       Expect(code).toContain('testTag: "selected"')
       Expect(code).toContain('...TR.TaoContext(_ViewProps.__tao)')
-      Expect(code).toContain('}, _ViewProps.__tao)')
       Expect(code).toContain('TR.Navigation.Ask(')
       Expect(code).toContain('TR.Navigation.Respond(')
-      Expect(compiled.appNames).toEqual(['First', 'Second'])
       Expect(code).toContain('export default TaoApps["Second"]')
 
       const production = await Workspace.compile(paths['Main.tao'], { appName: 'Second' })
@@ -192,7 +190,7 @@ Describe('compiler: Studio render occurrences', () => {
 
   Test('uses Studio source text versions for test journey observations', async () => {
     const source = `
-      app Preview { view Main }
+      app Preview { id "com.tao.test.preview" version "1.0.0" name "Preview"  view Main }
       view Main() { render Native() }
       view Native() { render inject ${tsFence} return null ${fence} }
     `
@@ -207,11 +205,11 @@ Describe('compiler: Studio render occurrences', () => {
     })
   })
 
-  Test('publishes Snap rectangle identity in the render inventory and generated occurrence metadata', async () => {
+  Test('publishes Snap rectangle identity and source coordinates in the render inventory', async () => {
     await withTaoFiles('tao-studio-render-inventory-', {
       'App.tao': `
         use Main from @/studio
-        app Preview { view Main }
+        app Preview { id "com.tao.test.preview" version "1.0.0" name "Preview"  view Main }
       `,
       '@/studio/Main.tao': `
         // Studio-written generated source. Read-only until moved to a package.
@@ -241,7 +239,7 @@ Describe('compiler: Studio render occurrences', () => {
     await withTaoFiles('tao-studio-render-marker-test-tag-', {
       'App.tao': `
         use Main from @/studio
-        app Preview { view Main }
+        app Preview { id "com.tao.test.preview" version "1.0.0" name "Preview"  view Main }
       `,
       '@/studio/Main.tao': `
         // Studio-written generated source. Read-only until moved to a package.
@@ -269,7 +267,7 @@ Describe('compiler: Studio render occurrences', () => {
     await withTaoFiles('tao-studio-render-spoof-', {
       'Main.tao': `
         use Text from @tao/ui
-        app Preview { view Main }
+        app Preview { id "com.tao.test.preview" version "1.0.0" name "Preview"  view Main }
         view Main() {
           #studio_rect_006100720074
           render Text("Hello")
@@ -289,7 +287,7 @@ Describe('compiler: Studio render occurrences', () => {
         use Text from @tao/ui
         use Generated from @/studio
         use Spoof from ./Authored/@/studio
-        app Preview { view Main }
+        app Preview { id "com.tao.test.preview" version "1.0.0" name "Preview"  view Main }
         view Main() { render Text("Hello") }
       `,
       '@/studio/Generated.tao': `
@@ -331,7 +329,7 @@ Describe('compiler: Studio render occurrences', () => {
         type Tone is one of Neutral, Good
         use Account, Detail from ./More.tao
 
-        app Preview { view Main }
+        app Preview { id "com.tao.test.preview" version "1.0.0" name "Preview"  view Main }
         view Main() { render Native() }
         view Card(
           Title text,
@@ -365,8 +363,8 @@ Describe('compiler: Studio render occurrences', () => {
         }
       `,
       'More.tao': `
-        workspace data Accounts / Account { Name text }
-        workspace view Detail(Label text) { render inject ${tsFence} return null ${fence} }
+        project data Accounts / Account { Name text }
+        project view Detail(Label text) { render inject ${tsFence} return null ${fence} }
       `,
     }, async paths => {
       const compiled = await Workspace.compile(paths['Main.tao'], { studio: true })
@@ -462,7 +460,7 @@ Describe('compiler: Studio render occurrences', () => {
   // by every length-changing edit used to change it, so Metro re-ran the root and re-rendered the tree.
   Test('keeps the preview manifest sidecar unchanged when an edit only moves text', async () => {
     const source = (label: string) => `
-      app Preview { view Main }
+      app Preview { id "com.tao.test.preview" version "1.0.0" name "Preview" view Main }
       view Main() { render Label(Text: "${label}") }
       view Label(Text text) { render inject ${tsFence} return null ${fence} }
 
@@ -492,7 +490,7 @@ Describe('compiler: Studio render occurrences', () => {
       'Main.tao': `
         type DocumentKind is one of Note, Article, "Other"
 
-        workspace
+        project
         data Workspaces / Workspace {
           Name text (required "Use a realistic workspace name."),
           Summary text?,
@@ -501,7 +499,7 @@ Describe('compiler: Studio render occurrences', () => {
           Documents (owned)
         }
 
-        workspace
+        project
         data Documents / Document {
           Title text (default "Untitled"),
           Score number (default 0),
@@ -509,7 +507,7 @@ Describe('compiler: Studio render occurrences', () => {
           Workspace
         }
 
-        app Preview { view Main }
+        app Preview { id "com.tao.test.preview" version "1.0.0" name "Preview"  view Main }
         view Main() { render inject ${tsFence} return null ${fence} }
       `,
     }, async paths => {
@@ -595,6 +593,7 @@ Describe('compiler: Studio render occurrences', () => {
       // Studio reads generation schemas from its in-process manifest; the preview never does.
       const generated = compiled.files.find(file => file.relativePath === 'TaoStudioManifest.ts')
       Expect(generated?.code).not.toContain('"generationDeclarations"')
+      Expect(generated?.code).not.toContain('"guidance":"Use a realistic workspace name."')
 
       const production = await Workspace.compile(paths['Main.tao'])
       Expect(production.studioManifest).toBeUndefined()

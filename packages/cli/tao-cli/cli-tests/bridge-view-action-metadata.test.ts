@@ -21,12 +21,12 @@ action ExportDocument(Document) from ./Export.ts
       const errors = results.flatMap(result => result.diagnostics ?? [])
         .filter(diagnostic => diagnostic.severity === 'error')
       Expect(errors).toEqual([])
-      Expect(await FS.readText(FS.resolvePath('Main.tao.ts', root))).toContain('"Title": string')
+      Expect(await FS.readText(FS.resolvePath('.tao-ts/Main.tao.ts', root))).toContain('"Title": string')
       await FS.writeText(FS.resolvePath('Export.ts', root), 'export const ExportDocument = () => 1\n')
       const wrong = await runCheck(root)
       Expect(
         wrong.flatMap(result => result.diagnostics ?? []).some(diagnostic =>
-          diagnostic.message.includes('TypeScript bridge:')
+          diagnostic.message.startsWith('TypeScript:')
         ),
       ).toBe(true)
     })
@@ -42,7 +42,7 @@ action ExportDocument(Document) from ./Export.ts
       const errors = results.flatMap(result => result.diagnostics ?? [])
         .filter(diagnostic => diagnostic.severity === 'error')
       Expect(errors).toEqual([])
-      const metadata = await FS.readText(FS.resolvePath('Main.tao.ts', root))
+      const metadata = await FS.readText(FS.resolvePath('.tao-ts/Main.tao.ts', root))
       Expect(metadata).toContain('export type Save = (arg0: string, arg1: string) => void | Promise<void>')
       Expect(metadata).toContain('unknown as 2 satisfies Parameters<typeof Sidecar.Save>')
     })
@@ -61,7 +61,7 @@ action ExportDocument(Document) from ./Export.ts
       const good = await runCheck(root)
       Expect(good.flatMap(result => result.diagnostics ?? []).filter(diagnostic => diagnostic.severity === 'error'))
         .toEqual([])
-      const metadata = await FS.readText(FS.resolvePath('Main.tao.ts', root))
+      const metadata = await FS.readText(FS.resolvePath('.tao-ts/Main.tao.ts', root))
       Expect(metadata).toContain('"Value": { value: string; change: (next: string) => void | Promise<void> }')
       Expect(metadata).toContain('"Label": string')
       Expect(metadata).toContain('=> ReturnType<typeof TR.VisualNativeRoot>')
@@ -69,7 +69,7 @@ action ExportDocument(Document) from ./Export.ts
       const wrong = await runCheck(root)
       Expect(
         wrong.flatMap(result => result.diagnostics ?? []).some(diagnostic =>
-          diagnostic.message.includes('TypeScript bridge:')
+          diagnostic.message.startsWith('TypeScript:')
         ),
       ).toBe(true)
     })

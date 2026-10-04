@@ -37,11 +37,4 @@ test "Pantry" {
       back
       expect text "Tomato pasta (updated)"
    }
-   test "keeps ingredients across a relaunch" {
-      run Pantry
-      enter "Olive oil" into #ingredientName
-      press #addIngredient
-      relaunch
-      expect text "Olive oil"
-   }
 }

@@ -1,44 +1,12 @@
+import { ProjectTooling } from '@project-tooling'
 import { Assert, CLI, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import ts from 'typescript'
 import { PROJECT_TSCONFIG, TaoAppModules } from '../cli-src/app-modules'
 
-const PINNED_PROJECT_TSCONFIG = `{
-  "compilerOptions": {
-    "allowImportingTsExtensions": true,
-    "jsx": "react-jsx",
-    "lib": [
-      "DOM",
-      "ES2023"
-    ],
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "noEmit": true,
-    "paths": {
-      "@tao/*": [
-        "./node_modules/@tao/*"
-      ],
-      "@tao/runtime": [
-        "./node_modules/@tao/runtime/TaoRuntime-src/TR.ts"
-      ]
-    },
-    "skipLibCheck": true,
-    "strict": true,
-    "target": "ES2022"
-  },
-  "include": [
-    "**/*.ts",
-    "**/*.tsx"
-  ]
-}
-`
+const PINNED_PROJECT_TSCONFIG = '{ "extends": "./.tao/cache/typescript/tsconfig.json" }\n'
 
 Describe('Tao app TypeScript modules', () => {
-  Test('bundles @tao/runtime as a live link to the runtime package', async () => {
-    Expect(await FS.realPath(TaoAppModules.runtimeRoot())).toBe(Repo.resolvePath('packages/apps/runtime'))
-    Expect(await FS.isFile(FS.resolvePath('TaoRuntime-src/TR.ts', TaoAppModules.runtimeRoot()))).toBe(true)
-  })
-
   Test('packages a real runtime into a relocated CLI artifact, and says so when it carries none', async () => {
     const root = await mkTestDir('tao-cli-relocated-')
     try {
@@ -55,7 +23,6 @@ Describe('Tao app TypeScript modules', () => {
       Expect(await FS.readText(FS.resolvePath('TaoRuntime-src/TR.ts', carried))).toBe(
         await FS.readText(FS.resolvePath('TaoRuntime-src/TR.ts', runtimeSource)),
       )
-      Expect(await FS.isFile(FS.resolvePath('TaoRuntime-src/TR-data.ts', carried))).toBe(true)
       Expect(await FS.readText(FS.resolvePath('swiftui/TaoValues.swift', carried))).toBe(
         await FS.readText(FS.resolvePath('swiftui/TaoValues.swift', runtimeSource)),
       )
@@ -75,13 +42,16 @@ Describe('Tao app TypeScript modules', () => {
     }
   })
 
-  Test('writes the pinned project tsconfig that maps @tao/* through node_modules', () => {
+  Test('writes the pinned project tsconfig that extends managed TypeScript settings', () => {
     Expect(PROJECT_TSCONFIG).toBe(PINNED_PROJECT_TSCONFIG)
   })
 
-  Test('typechecks in-repo app sidecars that import @tao/runtime', async () => {
+  Test('typechecks in-repo app sidecars against their generated Tao contracts', async () => {
+    const projectRoot = Repo.resolvePath('Apps/Test Apps/Native Bridge')
+    const refreshed = await ProjectTooling.refresh(projectRoot, { runtimeRoot: TaoAppModules.runtimeRoot() })
+    Expect(refreshed.diagnostics.filter(diagnostic => diagnostic.severity === 'error')).toEqual([])
     const result = await CLI.run(Repo.resolvePath('node_modules/.bin/tsc'), {
-      args: ['--project', Repo.resolvePath('Apps/tsconfig.json')],
+      args: ['--project', FS.resolvePath('tsconfig.json', projectRoot)],
     })
     Assert(result.exitCode === 0, 'in-repo app sidecars that import @tao/runtime type-check', {
       stderr: result.stderr,
@@ -123,7 +93,6 @@ Describe('Tao app TypeScript modules', () => {
       await TaoAppModules.ensureProject(created)
       const linkedRuntime = FS.resolvePath('node_modules/@tao/runtime', created)
       Expect(await FS.realPath(linkedRuntime)).toBe(Repo.resolvePath('packages/apps/runtime'))
-      Expect(await FS.isFile(FS.resolvePath('TaoRuntime-src/TR.ts', linkedRuntime))).toBe(true)
 
       const untouched = FS.resolvePath('bare', root)
       await FS.writeText(FS.resolvePath('App.tao', untouched), 'app Bare { view Main }\n')

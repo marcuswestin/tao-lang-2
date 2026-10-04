@@ -2,7 +2,9 @@ use StackNav from @tao/nav
 use Button, Col, Number, Text from @tao/ui
 
 app StateActionMVP {
-   Name "State Action MVP"
+   id "language-core-state-action-mvp"
+   version "0.1.0"
+   name "State Action MVP"
    Navigator StackNav {
       Initial CounterView
 }  }

@@ -12,7 +12,10 @@ export const DevDataProtocol = {
   probePath: '/data/probe',
 } as const
 
-/** The environment `tao dev` hands Expo so the checked-in `app.config.js` can write the manifest fact. */
+/** The directory the dev data server persists every app's development snapshots under. */
+export const DEV_DATA_ROOT_PATH = '.artifacts/user/dev-data'
+
+/** The environment `tao run` hands Expo so the checked-in `app.config.js` can write the manifest fact. */
 const DevDataEnvironment = {
   app: 'TAO_DEV_DATA_APP',
   capability: 'TAO_DEV_DATA_CAPABILITY',
@@ -27,12 +30,14 @@ export type DevDataManifest = {
 }
 
 /**
- * devDataAppKey routes one app through a server shared by multiple projects. The project digest
- * keeps same-named apps apart there; it is not part of their per-project storage directory.
+ * devDataAppKey names one app's local storage by its effective app ID. The digest keeps distinct
+ * IDs separate even when filesystem-safe names collide. Moves, releases, and display-name edits
+ * retain the same key in both `tao run` and Studio.
  */
-export function devDataAppKey(projectRoot: string, appName: string): string {
-  const digest = Platform.sha256Hex(projectRoot).slice(0, 8)
-  return `${devDataSafeAppName(appName)}-${digest}`
+export function devDataAppKey(appId: string): string {
+  const digest = Platform.sha256Hex(appId).slice(0, 8)
+  const name = appId.replace(/[^A-Za-z0-9._-]/g, '_').replace(/^[^A-Za-z0-9]+/, '').slice(0, 118)
+  return `${name === '' ? 'app' : name}-${digest}`
 }
 
 /** A readable, path-safe directory for one app inside a project's own dev-data folder. */

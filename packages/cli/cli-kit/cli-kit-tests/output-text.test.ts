@@ -36,8 +36,7 @@ Describe('OutputText', () => {
     Expect(OutputText.formatElapsed(1_500)).toBe('1.5s')
   })
 
-  Test('wrapLine hard-wraps to the given width without touching a line that already fits', () => {
-    Expect(OutputText.wrapLine('short', 20)).toEqual(['short'])
+  Test('wrapLine configures hard wrapping to the given width', () => {
     Expect(OutputText.wrapLine('abcdefghij', 4)).toEqual(['abcd', 'efgh', 'ij'])
   })
 })

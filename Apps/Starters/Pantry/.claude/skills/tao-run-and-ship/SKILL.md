@@ -1,48 +1,36 @@
 ---
 name: tao-run-and-ship
-description: Run Tao apps through Expo, use Studio and visual review, and ship through TestFlight or App Store Connect.
+description: Run Tao apps in the browser; understand later Simulator, Studio, Companion, and TestFlight release phases.
 ---
 
 # Tao Run and Ship
 
-## Run locally
+## Release 1: run in a browser
 
-Run `tao dev [path]`. Tao discovers runnable apps, selects the only app or prompts when several are
-present, compiles it, starts Metro on port 8081 or another available port, and watches source. Bare
-`tao dev` opens no target; pass `--ios`, `--android`, `--web`, or `--desktop` to open the selected
-targets. Use `--app <Name>` for an unambiguous noninteractive selection. Install Expo Go or the
-appropriate development client on a target before opening its Metro link.
+Run `tao run [path] --web`. Tao discovers runnable apps, selects the only app or prompts when
+several are present, compiles it, starts Metro, and watches source. Use `--app <Name>` for an
+unambiguous selection. Bare `tao run` starts the server without opening a target. Use
+`tao watch [path]` to refresh saved-file contracts without starting a runtime. Fix Tao diagnostics
+with `tao fix <path>` and `tao check <path>`.
 
-The interactive dashboard reports compile, Metro, device, and runtime output. Fix the first Tao
-diagnostic with `tao fix`/`tao check`; restart only when the dashboard says the host needs it.
+In a repository checkout, use `./agent tao` in place of the installed `tao` command. The signed
+standalone CLI and marketplace extension require their own release acceptance before publication;
+a development-checkout run does not establish that acceptance.
 
-Studio is Tao's visual project editor and scenario matrix. Its cells come from `fixture` and
-`scenarios` declarations, can focus an app or view, and use the same compiler/runtime behavior as the
-app. Use `tao review [path]` to run every authored scenario and write a portable web-rendered review;
-use `--app`, `--output`, or `--against <review.json>` when needed.
+## Later phases
 
-## Project metadata
+- Release 2 adds `tao run [path] --ios` and HTTP data through typed adapters. Simulator use needs
+  a compatible published host and real Simulator interaction before it is a release claim.
+- Release 3 adds native Studio and interactive scenario review. Scenario declarations are already
+  part of release 1; `tao review` in the standalone binary remains deferred.
+- Release 4 adds invitation Companion and private same-person CloudKit sync. Acceptance needs a
+  distributed physical-device install and actual two-device synchronization.
+- Release 5 adds `tao ship` for a developer's app through TestFlight, after signing, processing,
+  invitation, tester install, and relaunch. The planned public modes are `--internal` and `--beta`;
+  the current development command still has older options and does not define the public invocation.
 
-Shipping requires one `project` block with an opaque `id`, display `name`, numeric SemVer `version`,
-and a complete app. `app Name` selects the ordinary default; otherwise pass `--app Name`.
-`remote none` is currently the only implemented project-remote behavior.
-
-## Ship
-
-Start with `tao ship --dry-run`. It discovers the project, checks Git and host prerequisites, prints
-the exact plan, and makes no release changes. A real ship requires macOS, Xcode 15 or later, Apple
-signing, App Store Connect credentials, a clean Git tree unless `--ignore-git` is deliberate, and a
-release-capable datasource configuration.
-
-- `tao ship --beta` uploads for TestFlight; `--beta email@example.com,...` adds recipients.
-- Without `--beta`, shipping creates or reuses the App Store version, attaches the processed build,
-  and submits it for review.
-- `--patch`, `--minor`, or `--major` forces one version bump; `--yes` accepts the printed plan.
-- `--notes <text>` sets TestFlight notes; `--no-wait` returns after upload.
-- `--update` publishes a compatible over-the-air bundle; `--rollback` republishes the prior bundle.
-
-The command records accepted store/build state under `.tao/store/` and may commit a version bump or
-tag a release. Review the dry run and Git state before authorizing it.
-
-Publishing a Tao project for other Tao projects to import is unavailable. Do not use proposed
-`tao publish`, `tao install`, `tao require`, `requires`, or dependency-lock workflows.
+Android, desktop app builds, App Store submission, and over-the-air `--update`/`--rollback` remain
+deferred beyond release 5. Publishing a Tao project for other projects to import is unavailable;
+do not use proposed `tao publish`, `tao install`, `tao require`, `requires`, or dependency-lock
+workflows. Check the current release capability before suggesting a development-only command as a
+public entry point.

@@ -33,12 +33,11 @@ export function MemoryProvider(): TR.DataProvider {
       const results = await runCheck(root)
       Expect(results.flatMap(result => result.diagnostics ?? []).filter(diagnostic => diagnostic.severity === 'error'))
         .toEqual([])
-      Expect(await FS.isFile(FS.resolvePath('.tao/cache/bridge-check/tsconfig.json', root))).toBe(true)
-      Expect(await FS.readText(FS.resolvePath('Derived.tao.ts', root)))
+      Expect(await FS.readText(FS.resolvePath('.tao-ts/Derived.tao.ts', root)))
         .toContain('export type ExtendedConfig =')
-      await FS.remove(FS.resolvePath('Derived.tao.ts', root))
+      await FS.remove(FS.resolvePath('.tao-ts/Derived.tao.ts', root))
       await runCheck(root)
-      Expect(await FS.isFile(FS.resolvePath('Derived.tao.ts', root))).toBe(true)
+      Expect(await FS.isFile(FS.resolvePath('.tao-ts/Derived.tao.ts', root))).toBe(true)
     })
   })
 
@@ -47,9 +46,8 @@ export function MemoryProvider(): TR.DataProvider {
       ...checkedProjectFile,
       'Main.tao': functionSource,
       'tsconfig.json': JSON.stringify({
+        extends: './.tao/cache/typescript/tsconfig.json',
         compilerOptions: {
-          baseUrl: '.',
-          paths: { '@local/*': ['./Local/*'] },
           typeRoots: ['./node_modules/@types'],
           types: ['project'],
         },
@@ -57,7 +55,7 @@ export function MemoryProvider(): TR.DataProvider {
       'node_modules/@types/project/index.d.ts': 'declare const BUILD_LABEL: string\n',
       'Local/Suffix.ts': 'export const suffix = "!"\n',
       'Words.ts': `import type { TextProps } from 'react-native'
-import { suffix } from '@local/Suffix'
+import { suffix } from './Local/Suffix'
 export function CountWords(value: string): number {
    const props: TextProps = { children: value }
    return String(props.children).length + suffix.length + BUILD_LABEL.length
@@ -67,7 +65,10 @@ export function CountWords(value: string): number {
       const results = await runCheck(root)
       Expect(results.flatMap(result => result.diagnostics ?? []).filter(diagnostic => diagnostic.severity === 'error'))
         .toEqual([])
-      Expect(await FS.isSymbolicLink(FS.resolvePath('node_modules/react-native', root))).toBe(true)
+      const base = await FS.readJson<{ compilerOptions: { paths: Record<string, string[]> } }>(
+        FS.resolvePath('.tao/cache/typescript/tsconfig.json', root),
+      )
+      Expect(base.compilerOptions.paths['react-native']?.[0]).toContain('react-native')
     })
   })
 

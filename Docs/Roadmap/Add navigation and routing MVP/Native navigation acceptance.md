@@ -36,8 +36,10 @@ acceptance or invalidate its completed evidence.
 
 The Navigation project's `NativeNavigation` fixture has three independent stacks, reactive toolbar
 commands, sheet, overlay, asked confirmation, editable content, scrolling and restoration journeys.
-The pinned exports are loaded in the Expo test environment, and structural runtime ports are checked
-against the real package's types without importing mobile ambient globals into server consumers.
+Structural runtime ports are checked against the package's types without importing mobile ambient
+globals into server consumers. Adapter fixtures prove Tao reconciliation and configuration; real
+host receipts require mounted native surfaces. The test-responsibility pass removed the direct
+installed-export smoke, so fixtures alone do not establish the installed runtime export shape.
 
 Focused regressions cover event ordering, rejected requests, repeated selection, stale callbacks,
 multi-pop/dismissal idempotence, overlay/ask prevention, per-tab lifetime, bitmap loading races and

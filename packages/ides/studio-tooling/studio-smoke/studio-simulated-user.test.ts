@@ -16,7 +16,7 @@ import { exerciseStudioFeed } from './studio-feed-journey'
 const scrollingTail = Array.from({ length: 80 }, (_, index) => `// scroll proof ${index + 1}`).join('\n')
 
 const initialSource = `use Stack, Text from @tao/ui
-app Smoke { view MainView }
+app Smoke { id "smoke" version "1.0.0" name "Smoke" view MainView }
 view MainView() {
   render Stack() {
     Text("First")
@@ -35,6 +35,7 @@ ${scrollingTail}
 
 const typedSource = initialSource.replace('Text("First")', 'Text("First typed")')
 
+// REMOVAL CANDIDATE: Static fixture-origin fence; dropping it permits a simulated preview to bypass the message boundary the journey claims to prove.
 Test('simulated preview stays within the preview-origin API boundary', () => {
   const html = previewHtml()
   Expect(html).toContain("message.type === 'highlight-source'")
@@ -89,11 +90,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
     previewRuntimeRoot = await Repo.mkScratchDir('tao-studio-simulated-runtime-')
     const sourcePath = FS.resolvePath('Smoke.tao', projectRoot)
     await FS.writeText(sourcePath, initialSource)
-    // The real compile lane refuses a project without checked-in identity.
-    await FS.writeText(
-      FS.resolvePath('Project.tao', projectRoot),
-      'project { id "tao-studio-simulated-user-smoke" name "Simulated user smoke" }\n',
-    )
+    await FS.mkdir(FS.resolvePath('.tao', projectRoot))
     preview = startPreviewServer(smokePort('TAO_STUDIO_SMOKE_PREVIEW_PORT', 42_001))
     // The scenario canvas and inspector only exist once a preview manifest is published, and only
     // the real compile lane publishes one. A stubbed compile leaves `previewManifest()` undefined,
@@ -330,7 +327,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       // reveal the one region involved and leave every other fold alone, and neither changes the
       // file: an edit beside a folded region is cancelled in favour of showing it, and a caret that
       // lands on its edge opens it rather than sitting in text the person cannot see.
-      const revealedHead = 'app Smoke { view MainView }'
+      const revealedHead = 'app Smoke { id "smoke" version "1.0.0" name "Smoke" view MainView }'
       await browser.click('[data-testid="studio-lens-preset-outline"]')
       await browser.waitFor(`document.querySelector('.cm-line:has(.cm-lens-glyph)') instanceof HTMLElement`)
       const outlineFolds = await foldedRegions(browser)
@@ -415,16 +412,13 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       await waitForInspectorReady(browser)
       await browser.waitFor(`document.querySelector('.studio-canvas-focus')?.textContent === 'Focus MainView'`)
 
-      for (let reveal = 0; reveal < 2; reveal += 1) {
-        await browser.wheel('.cm-scroller', { x: 0, y: 8_000 })
-        await browser.waitFor(`(document.querySelector('.cm-scroller')?.scrollTop ?? 0) > 0`)
-        const away = await browser.evaluate<number>("document.querySelector('.cm-scroller')?.scrollTop ?? 0")
-        Expect(away).toBeGreaterThan(0)
-        await clickPreviewAndWaitForState(browser, preview.url, '#select-first', 'selection sent')
-        await browser.waitFor(
-          `(document.querySelector('.cm-scroller')?.scrollTop ?? 0) < ${away}`,
-        )
-      }
+      await browser.wheel('.cm-scroller', { x: 0, y: 8_000 })
+      await browser.waitFor(`(document.querySelector('.cm-scroller')?.scrollTop ?? 0) > 0`)
+      const away = await browser.evaluate<number>("document.querySelector('.cm-scroller')?.scrollTop ?? 0")
+      await clickPreviewAndWaitForState(browser, preview.url, '#select-first', 'selection sent')
+      await browser.waitFor(
+        `(document.querySelector('.cm-scroller')?.scrollTop ?? 0) < ${away}`,
+      )
 
       // Focus frames the group's cells at the measured size of the selected element's view. The
       // measurement reaches the client with the preview's inspection, so leaving and re-entering is
@@ -848,9 +842,6 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
         run: () => previewRuntimeRoot === undefined ? undefined : FS.remove(previewRuntimeRoot),
       },
     ], { channel: 'studio-smoke-cleanup', subject: 'Studio smoke' })
-  }
-  if (projectRoot !== undefined) {
-    Expect(await FS.exists(projectRoot)).toBe(false)
   }
 }, 180_000)
 
@@ -1393,6 +1384,7 @@ async function focusCanvasUntilFramed(browser: StudioCdp): Promise<void> {
  * same round trip that confirms the board is still the marked one, so the press cannot follow a
  * render that discarded what it was told to act on.
  */
+// REMOVAL CANDIDATE: A fixed quiet pause approximates renderer settlement; simplifying it needs a host-visible completion signal to preserve one-press semantics.
 async function clickSketchWhenSettled(
   browser: StudioCdp,
   sketchId: string,

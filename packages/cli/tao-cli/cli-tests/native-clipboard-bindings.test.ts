@@ -49,7 +49,7 @@ action Exercise() {
       const results = await runCheck(root)
       Expect(results.flatMap(result => result.diagnostics ?? []).filter(diagnostic => diagnostic.severity === 'error'))
         .toEqual([])
-      const metadata = await FS.readText(FS.resolvePath('Bindings.tao.ts', root))
+      const metadata = await FS.readText(FS.resolvePath('.tao-ts/Bindings.tao.ts', root))
       Expect(metadata).toContain('Promise<string>')
       Expect(metadata).toContain('"Width": number; "Height": number')
       Expect(metadata).toContain('"Remove"')

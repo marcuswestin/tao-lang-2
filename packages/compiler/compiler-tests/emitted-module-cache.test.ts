@@ -13,12 +13,11 @@ function assertSameOutput(cached: CompileResult, fresh: CompileResult): void {
 Describe('emitted Tao module cache', () => {
   Test('retains an unchanged Studio consumer design cohort until its own source changes', async () => {
     await withTaoFiles('tao-emitted-design-epochs-', {
-      'Project.tao': 'project { id "emit-design-epochs" name "Design epochs" remote none }',
       'Main.tao': `
         use StackNav from @tao/nav
         use Text from @tao/ui
         use Theme from ./Theme
-        app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
+        app Demo { id "com.tao.cache.design" version "1.0.0" name "Demo" Navigator StackNav { Initial Main } Design Theme }
         scene Main() { Title "Main" render Text("first") }
       `,
       'Theme.tao': 'public design Theme { paper #fff panel [bg paper] }',
@@ -105,8 +104,8 @@ scenarios LatencyProbe "latency" { device phone scenario "probe" { render () } }
 
   Test('reuses a validated source snapshot and misses only the changed view and its Studio root', async () => {
     await withTaoFiles('tao-emitted-module-cache-', {
-      'Project.tao': 'project { id "emit-cache" name "Emit cache" remote none }',
-      'Main.tao': 'use First from ./First\napp Preview { view Main } view Main() { render First() }',
+      'Main.tao':
+        'use First from ./First\napp Preview { id "com.tao.cache.preview" version "1.0.0" name "Preview" view Main } view Main() { render First() }',
       'First.tao': 'public view First() { render inject ```ts return null ``` }',
       'Second.tao': 'public view Second() { render inject ```ts return null ``` }',
     }, async (paths, root) => {
@@ -149,13 +148,19 @@ scenarios LatencyProbe "latency" { device phone scenario "probe" { render () } }
       )
 
       const extraPath = FS.resolvePath('Third.tao', root)
-      const withExtra = { ...override, [extraPath]: 'public view Third() { render inject ```ts return null ``` }' }
+      const withExtra = {
+        ...override,
+        [paths['Main.tao']!]:
+          'use Third from ./Third\napp Preview { id "com.tao.cache.preview" version "1.0.0" name "Preview" view Main } view Main() { render Third() }',
+        [extraPath]: 'public view Third() { render inject ```ts return null ``` }',
+      }
       const extraEntries = [...entries, extraPath]
       const extra = await (await Workspace.open(root, { sourceOverrides: withExtra })).compileFiles(extraEntries, {
         studio: true,
         emittedModuleCache: cache,
       })
       Expect(extra.emittedModuleCache?.misses).toBeGreaterThan(0)
+      Expect(extra.emittedModuleCache?.files.find(file => file.sourcePath === extraPath)?.hit).toBe(false)
       assertSameOutput(
         extra,
         await (await Workspace.open(root, { sourceOverrides: withExtra })).compileFiles(
@@ -168,17 +173,16 @@ scenarios LatencyProbe "latency" { device phone scenario "probe" { render () } }
 
   Test('invalidates imported, folder-visible, package, and data dependencies', async () => {
     await withTaoFiles('tao-emitted-module-dependencies-', {
-      'Project.tao': 'project { id "emit-dependencies" name "Emit dependencies" remote none }',
       'Main.tao':
-        'use PackageValue from @feature\napp Preview { view Main } view Main() { render Text(PackageValue + Shared) } view Text(Value text) { render inject Value ```ts return null ``` }',
+        'use PackageValue from @feature\napp Preview { id "com.tao.cache.dependencies" version "1.0.0" name "Preview" view Main } view Main() { render Text(PackageValue + Shared) } view Text(Value text) { render inject Value ```ts return null ``` }',
       'Sibling.tao': 'folder let Shared = "sibling"',
-      'Packages/@feature/Value.tao': 'public let PackageValue = "package"',
+      '@feature/Value.tao': 'public let PackageValue = "package"',
       'Data.tao': 'public data Notes / Note { Title text }',
     }, async (paths, root) => {
       const entries = [
         paths['Main.tao']!,
         paths['Sibling.tao']!,
-        paths['Packages/@feature/Value.tao']!,
+        paths['@feature/Value.tao']!,
         paths['Data.tao']!,
       ]
       const cache = new EmittedModuleCache()
@@ -187,7 +191,7 @@ scenarios LatencyProbe "latency" { device phone scenario "probe" { render () } }
       await compile({})
       const changedSources = [
         [paths['Sibling.tao']!, 'folder let Shared = "new sibling"'],
-        [paths['Packages/@feature/Value.tao']!, 'public let PackageValue = "new package"'],
+        [paths['@feature/Value.tao']!, 'public let PackageValue = "new package"'],
         [paths['Data.tao']!, 'public data Notes / Note { Title text, Body text }'],
       ] as const
       for (const [path, source] of changedSources) {
@@ -201,8 +205,8 @@ scenarios LatencyProbe "latency" { device phone scenario "probe" { render () } }
 
   Test('re-copies changed TypeScript sidecars and validates before cache lookup', async () => {
     await withTaoFiles('tao-emitted-module-sidecar-', {
-      'Project.tao': 'project { id "emit-sidecar" name "Emit sidecar" remote none }',
-      'Main.tao': 'use Foreign from ./Foreign\napp Preview { view Main } view Main() { render Foreign() }',
+      'Main.tao':
+        'use Foreign from ./Foreign\napp Preview { id "com.tao.cache.sidecar" version "1.0.0" name "Preview" view Main } view Main() { render Foreign() }',
       'Foreign.tao': 'public view Foreign() from ./Foreign.ts',
       'Foreign.ts': 'export function Foreign() { return "first" }',
     }, async (paths, root) => {

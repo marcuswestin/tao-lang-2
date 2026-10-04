@@ -1,4 +1,4 @@
-import { AfterEach, Describe, Expect, Test, until, withCapturedOutput } from '@shared/test'
+import { AfterEach, Describe, Expect, Test, testOverrideSlot, until, withCapturedOutput } from '@shared/test'
 import { CLI, Platform, ProcessTree, Time, type TrackedProcess } from '../shared-src/shared'
 
 /**
@@ -8,6 +8,81 @@ import { CLI, Platform, ProcessTree, Time, type TrackedProcess } from '../shared
  * supervision would put the machine back in the state it exists to prevent.
  */
 const abandoned: number[] = []
+type SetTimeoutCall = (...args: Parameters<typeof globalThis.setTimeout>) => ReturnType<typeof globalThis.setTimeout>
+type ClearTimeoutCall = (handle: ReturnType<typeof globalThis.setTimeout> | number | undefined) => void
+
+const setTimeoutSlot = testOverrideSlot<SetTimeoutCall>({
+  read: () => globalThis.setTimeout,
+  write: value => {
+    globalThis.setTimeout = value as typeof globalThis.setTimeout
+  },
+})
+const clearTimeoutSlot = testOverrideSlot<ClearTimeoutCall>({
+  read: () => globalThis.clearTimeout,
+  write: value => {
+    globalThis.clearTimeout = value as typeof globalThis.clearTimeout
+  },
+})
+
+type VirtualTimeout = {
+  callback: () => void
+  cancelled: boolean
+  dueAt: number
+  fired: boolean
+}
+
+/** virtualIdleTimers replaces only one requested delay; all unrelated runner timers stay real. */
+function virtualIdleTimers(idleOutputMs: number): {
+  advanceTo: (now: number) => void
+  clearTimeout: ClearTimeoutCall
+  setTimeout: SetTimeoutCall
+} {
+  const originalSetTimeout = globalThis.setTimeout
+  const originalClearTimeout = globalThis.clearTimeout
+  const timeouts = new Map<ReturnType<typeof setTimeout>, VirtualTimeout>()
+  let now = 0
+  let nextId = 0
+  const setTimeoutForTest: SetTimeoutCall = (...args) => {
+    const [handler, timeout, ...callbackArgs] = args
+    if (timeout !== idleOutputMs || typeof handler !== 'function') {
+      return originalSetTimeout(...args)
+    }
+    const handle = { id: nextId++ } as unknown as ReturnType<typeof setTimeout>
+    timeouts.set(handle, {
+      callback: () => Reflect.apply(handler, undefined, callbackArgs),
+      cancelled: false,
+      dueAt: now + timeout,
+      fired: false,
+    })
+    return handle
+  }
+  const clearTimeoutForTest: ClearTimeoutCall = handle => {
+    const timeout = timeouts.get(handle as ReturnType<typeof setTimeout>)
+    if (timeout) {
+      timeout.cancelled = true
+    } else {
+      originalClearTimeout(handle as ReturnType<typeof setTimeout> | number | undefined)
+    }
+  }
+  return {
+    advanceTo(target) {
+      Expect(target).toBeGreaterThanOrEqual(now)
+      now = target
+      while (true) {
+        const next = [...timeouts.values()]
+          .filter(timeout => !timeout.cancelled && !timeout.fired && timeout.dueAt <= now)
+          .sort((left, right) => left.dueAt - right.dueAt)[0]
+        if (!next) {
+          return
+        }
+        next.fired = true
+        next.callback()
+      }
+    },
+    clearTimeout: clearTimeoutForTest,
+    setTimeout: setTimeoutForTest,
+  }
+}
 
 AfterEach(() => {
   for (const pid of abandoned.splice(0)) {
@@ -145,18 +220,60 @@ Describe('CLI process policy', () => {
     await waitForGone(bounded.grandchild, 'the idle grandchild to be gone')
   })
 
-  Test('output restarts the idle bound, so a child that keeps printing runs to completion', async () => {
-    const result = await CLI.run('/bin/sh', {
-      args: ['-c', 'for tick in 1 2 3 4 5 6; do echo tick; sleep 0.15; done'],
-      idleOutputMs: 500,
-      processPolicy: 'test',
-      stdio: 'pipe',
-    })
+  Test('output restarts the idle bound while the real child continues printing', async () => {
+    const idleOutputMs = 8_731
+    const timers = virtualIdleTimers(idleOutputMs)
+    const restoreSetTimeout = setTimeoutSlot.install(timers.setTimeout)
+    const restoreClearTimeout = clearTimeoutSlot.install(timers.clearTimeout)
+    let output = ''
+    let command: CLI.StartedCommand | undefined
+    let waitedForClose = false
+    try {
+      command = CLI.start('/bin/sh', {
+        args: ['-c', 'while IFS= read -r tick; do printf "%s\\n" "$tick"; done'],
+        idleOutputMs,
+        onOutput: (_stream, chunk) => {
+          output += chunk.toString('utf8')
+        },
+        processPolicy: 'test',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
 
-    Expect(result.exitCode).toBe(0)
-    Expect(result.signal).toBe(null)
-    Expect(result.stdout.trim().split('\n')).toHaveLength(6)
-    Expect(result.stderr).toBe('')
+      timers.advanceTo(idleOutputMs - 1)
+      command.writeStdin('tick one\n')
+      await until(() => output.includes('tick one\n'), { description: 'the child to print its first tick' })
+      timers.advanceTo(idleOutputMs + 1)
+      Expect(output).not.toContain('timed out with no output')
+
+      command.writeStdin('tick two\n')
+      await until(() => output.includes('tick two\n'), { description: 'the child to print its second tick' })
+      timers.advanceTo(idleOutputMs * 2)
+      Expect(output).not.toContain('timed out with no output')
+
+      command.endStdin()
+      const close = await command.waitForClose()
+      waitedForClose = true
+      Expect(close.exitCode).toBe(0)
+      Expect(close.signal).toBe(null)
+      Expect(output).toBe('tick one\ntick two\n')
+    } finally {
+      try {
+        if (command && !waitedForClose) {
+          command.kill('SIGKILL')
+          await command.waitForClose()
+        }
+      } finally {
+        try {
+          await command?.closeOutput()
+        } finally {
+          try {
+            restoreClearTimeout()
+          } finally {
+            restoreSetTimeout()
+          }
+        }
+      }
+    }
   })
 
   Test('run surfaces the bound it hit through its CommandResult', async () => {

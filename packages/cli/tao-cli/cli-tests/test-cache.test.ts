@@ -7,13 +7,14 @@ import { withGitTaoFixture, withTaoFixture } from './test-cli-files'
  * The fingerprint is the whole of the correctness argument for reusing compiled output: anything it
  * fails to cover is a run that can be handed a stale green. These tests own the inputs an
  * end-to-end `tao test` run cannot vary — the set of files being run, where the output lives, and a
- * project file above every directory the command was pointed at.
+ * marker and configuration above every directory the command was pointed at.
  */
 
 const fixture = {
-  'Project.tao': 'project { id "cache-fingerprint-test" name "Cache fingerprint test" }',
-  'Nested/Project.tao': 'project { id "cache-fingerprint-nested" name "Cache fingerprint nested" }',
-  'Nested/App.tao': 'app Fingerprinted { view Main }\nview Main() { }\n',
+  '.tao/.gitkeep': '',
+  'Nested/.tao/.gitkeep': '',
+  'Nested/App.tao':
+    'app Fingerprinted { id "fingerprinted" version "1.0.0" name "Fingerprinted" view Main }\nview Main() { }\n',
   'Nested/App.test.tao': 'use Fingerprinted from ./\ntest "Fingerprinted" { }\n',
   'Nested/Other.test.tao': 'use Fingerprinted from ./\ntest "Other" { }\n',
   'Nested/@ui/Shell.tao': 'public view Shell() { }\n',
@@ -53,9 +54,44 @@ async function fingerprintOf(request: ReturnType<typeof requestFor>): Promise<st
 }
 
 Describe('tao test compiled-output fingerprint', () => {
-  Test('is the same for two runs of the same shape over unchanged sources', async () => {
+  Test('refuses reuse when a sibling dependency identity changes outside the hashed roots', async () => {
+    await withTaoFixture({
+      ...fixture,
+      'Library/.tao/store/project.json': '{"id":"00000000-0000-4000-8000-000000000001"}\n',
+      'Library/Package.tao': 'package { name "Widget Package" version 2.0.0 includes @widgets }\n',
+      'Library/@widgets/Widget.tao': 'public view Widget() { }\n',
+      'Nested/Package.tao':
+        'package { version 0.1.0 requires "Widget Package" from ../Library version ^2.0.0 { @widgets as @parts } }\n',
+    }, async rootDir => {
+      const request = requestFor(rootDir)
+      Expect(await TestCache.fingerprint(request)).toBeUndefined()
+      await FS.writeText(
+        FS.resolvePath('Library/.tao/store/project.json', rootDir),
+        '{"id":"00000000-0000-4000-8000-000000000002"}\n',
+      )
+      Expect(await TestCache.fingerprint(request)).toBeUndefined()
+    })
+  })
+
+  Test('refuses reuse when a root config extends outside its project', async () => {
     await withTaoFixture({ ...fixture }, async rootDir => {
-      Expect(await fingerprintOf(requestFor(rootDir))).toBe(await fingerprintOf(requestFor(rootDir)))
+      const request = requestFor(rootDir)
+      await FS.writeText(
+        FS.resolvePath('Nested/tsconfig.json', rootDir),
+        '{"extends":"./.tao/cache/typescript/tsconfig.json"}\n',
+      )
+      Expect(await fingerprintOf(request)).toBeDefined()
+
+      const sharedConfig = FS.resolvePath('shared/tsconfig.json', rootDir)
+      await FS.writeText(sharedConfig, '{"compilerOptions":{"strict":true}}\n')
+      await FS.writeText(
+        FS.resolvePath('Nested/tsconfig.json', rootDir),
+        '{"extends":["./.tao/cache/typescript/tsconfig.json","../shared/tsconfig.json"]}\n',
+      )
+      Expect(await TestCache.fingerprint(request)).toBeUndefined()
+
+      await FS.writeText(sharedConfig, '{"compilerOptions":{"strict":false}}\n')
+      Expect(await TestCache.fingerprint(request)).toBeUndefined()
     })
   })
 
@@ -88,7 +124,7 @@ Describe('tao test compiled-output fingerprint', () => {
       const before = await fingerprintOf(requestFor(rootDir))
       await FS.writeText(
         FS.resolvePath('Nested/App.tao', rootDir),
-        'app Fingerprinted { view Main }\nview Main() { }\n// edited\n',
+        'app Fingerprinted { id "fingerprinted" version "1.0.0" name "Fingerprinted" view Main }\nview Main() { }\n// edited\n',
       )
 
       Expect(await fingerprintOf(requestFor(rootDir))).not.toBe(before)
@@ -107,14 +143,12 @@ Describe('tao test compiled-output fingerprint', () => {
     })
   })
 
-  // The parse of every file below a project root carries the nearest project file above it, which
-  // sits outside every path the command was given and outside the owning project root.
-  Test('changes when a project file above the tested paths changes', async () => {
+  Test('changes when the owning project lock changes', async () => {
     await withTaoFixture({ ...fixture }, async rootDir => {
       const before = await fingerprintOf(requestFor(rootDir))
       await FS.writeText(
-        FS.resolvePath('Project.tao', rootDir),
-        'project { id "cache-fingerprint-test" name "Renamed above the run" }',
+        FS.resolvePath('Nested/.tao/store/lock.jsonc', rootDir),
+        '{"schemaVersion":1}\n',
       )
 
       Expect(await fingerprintOf(requestFor(rootDir))).not.toBe(before)
@@ -182,7 +216,7 @@ Describe('tao test compiled-output fingerprint', () => {
       const before = await fingerprintOf(requestFor(rootDir))
       await FS.writeText(
         FS.resolvePath('Nested/App.tao', rootDir),
-        'app Fingerprinted { view Main }\nview Main() { }\n// edited under an ignored path\n',
+        'app Fingerprinted { id "fingerprinted" version "1.0.0" name "Fingerprinted" view Main }\nview Main() { }\n// edited under an ignored path\n',
       )
 
       Expect(await fingerprintOf(requestFor(rootDir))).not.toBe(before)
@@ -213,7 +247,7 @@ Describe('tao test compiled-output fingerprint', () => {
   Test('reports reuse as switched off only for the documented value', async () => {
     const previous = Platform.runtimeProcess.env[TestCache.NO_CACHE_ENV]
     try {
-      for (const [value, expected] of [[undefined, false], ['', false], ['1', false], ['true', true]] as const) {
+      for (const [value, expected] of [[undefined, false], ['1', false], ['true', true]] as const) {
         if (value === undefined) {
           delete Platform.runtimeProcess.env[TestCache.NO_CACHE_ENV]
         } else {

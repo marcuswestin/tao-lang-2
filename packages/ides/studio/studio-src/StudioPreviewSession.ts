@@ -1,6 +1,7 @@
 import { EmittedModuleCache } from '@compiler/compiler'
 import { Workspace } from '@compiler/workspace'
 import Runtime from '@expo-host'
+import { ProjectTooling, type ProjectToolingWatch } from '@project-tooling'
 import { Assert, Errors, FS, HCI, Switch } from '@shared'
 import SourceActions from '@source-actions'
 import type {
@@ -32,10 +33,20 @@ export async function openStudioPreviewSession(
   let previewWorkspaceFiles: string | undefined
   const emittedModuleCache = new EmittedModuleCache()
   const sourceChanges = new Map<string, { version: string; epoch: number }>()
+  let toolingWatch: ProjectToolingWatch | undefined
   session = await StudioProjectSession.open({
     ...options,
     async compile(request) {
       Assert.defined(session, 'the Tao Studio project session to exist before its first compile')
+      const tooling = await ProjectTooling.refresh(request.project, {
+        hostModulesRoot: FS.resolvePath('node_modules', options.previewRuntimeRoot),
+      })
+      if (tooling.status !== 'fresh') {
+        Errors.throwUserInput(
+          tooling.diagnostics.map(diagnostic => diagnostic.message).join('\n')
+            || 'Project tooling is stale; keeping the last working preview.',
+        )
+      }
       const feedSources = session.feedSourceOverrides()
       const sourceOverrides = feedSources === undefined ? undefined : Object.freeze({ ...feedSources })
       const files = await session.files()
@@ -99,8 +110,23 @@ export async function openStudioPreviewSession(
       return { message: `Compiled ${request.appName} preview revision ${request.compileRevision}.` }
     },
   })
+  let watchReady = false
+  toolingWatch = await ProjectTooling.watch(session.projectRoot, {
+    hostModulesRoot: FS.resolvePath('node_modules', options.previewRuntimeRoot),
+    onError: error => HCI.logProcessError('studio-project-tooling', Errors.formatForLog(error)),
+    onResult: result => {
+      if (!watchReady || result.status !== 'fresh' || result.changedOutputPaths.length === 0) {
+        return
+      }
+      void session?.compileInitial().catch(error =>
+        HCI.logProcessError('studio-project-tooling', Errors.formatForLog(error))
+      )
+    },
+  })
+  watchReady = true
   return {
     async close() {
+      await toolingWatch?.dispose()
       await Runtime.resetStudioPreviewSession({ runtimePackageRoot: options.previewRuntimeRoot })
     },
     session,

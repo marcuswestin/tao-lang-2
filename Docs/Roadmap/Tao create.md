@@ -54,5 +54,5 @@ records why it is built the way it is and what comes next.
   so a shipped CLI needs a prebuilt, signed helper.
 - Studio's "New project" and the companion app's "Fork into my Studio" over the same plan and
   lowering, so creation has one implementation wherever it starts.
-- Landing in the loop: an `--open` that hands the new project to `tao dev` or Studio, and the
+- Landing in the loop: an `--open` that hands the new project to `tao run` or Studio, and the
   companion QR once that app exists.

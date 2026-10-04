@@ -7,7 +7,7 @@ import { acceptedEntryWithRunState, preparedKeyPath } from './ship-command'
 import { dataSchemaFingerprint, runtimeFingerprint } from './ship-fingerprints'
 import { inspectShipGit, shipNotesSince } from './ship-git'
 import { SHIP_LOCK_RELATIVE_PATH, type ShipLockEntry, writeProjectLock } from './ship-lock'
-import { nextBuildNumber } from './ship-model'
+import { nativeMarketingVersion, nextBuildNumber } from './ship-model'
 import { planShipPipeline, runShipPipeline, type ShipCommandRunner } from './ship-pipeline'
 import { planShipProgress, shipCommandFailure, ShipProgress } from './ship-progress'
 import { writeProjectVersion } from './ship-project'
@@ -113,7 +113,7 @@ async function executePreparedShipRun(
   }
 
   if (prepared.versionBumped) {
-    await writeProjectVersion(prepared.project, prepared.version)
+    await writeProjectVersion(prepared.app, prepared.version)
   }
   await writeProjectLock(prepared.project.root, lock)
   activePrepared = {
@@ -338,7 +338,7 @@ async function ensureAppleProject(
       `  Name: ${prepared.app.displayName}`,
       '  Primary language: English (U.S.)',
       `  Bundle ID: ${prepared.bundleIdentifier}`,
-      `  SKU: ${prepared.project.id}-${prepared.app.name}`,
+      `  SKU: ${prepared.app.id}-${prepared.app.name}`,
       '  https://appstoreconnect.apple.com/apps',
     ].join('\n')
     HCI.writeLine(instructions, options)
@@ -462,7 +462,7 @@ async function executeUpdate(
       Errors.throwUserInput('No supported binary compatibility contracts are recorded for rollback.')
     }
     const published = await client.rollbackCompatible({
-      applicationId: prepared.project.id,
+      applicationId: prepared.app.id,
       channel: prepared.channel,
       currentUpdateId: current,
       supportedBinaries,
@@ -560,7 +560,7 @@ async function publicationFromExport(
     const bytes = await FS.readFile(descriptor.path)
     const hash = Platform.sha256Base64Url(bytes)
     return await client.uploadAsset({
-      applicationId: prepared.project.id,
+      applicationId: prepared.app.id,
       bytes,
       contentType: descriptor.contentType,
       fileExtension: descriptor.fileExtension,
@@ -571,7 +571,7 @@ async function publicationFromExport(
   const launchAsset = await upload(artifacts.launchAsset)
   const uploaded = await Promise.all(artifacts.assets.map(upload))
   return {
-    applicationId: prepared.project.id,
+    applicationId: prepared.app.id,
     assets: uploaded,
     channel: prepared.channel,
     dataSchemaFingerprint: schemaFingerprint,
@@ -625,9 +625,9 @@ function runtimeManifest(
       channel: prepared.channel,
       runtimeFingerprint: nativeFingerprint,
       runtimeVersion: nativeFingerprint,
-      url: new URL(`/v1/apps/${encodeURIComponent(prepared.project.id)}/manifest`, base).href,
+      url: new URL(`/v1/apps/${encodeURIComponent(prepared.app.id)}/manifest`, base).href,
     },
-    version: prepared.version,
+    version: nativeMarketingVersion(prepared.version),
   }
 }
 

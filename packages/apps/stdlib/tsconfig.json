@@ -6,9 +6,15 @@
     "@tao/auth/**/*.ts",
     "@tao/auth/**/*.tsx",
     "@tao/data/**/*.ts",
-    "@tao/linking/**/*.ts"
+    "@tao/linking/**/*.ts",
+    ".tao-ts/**/*",
+    ".tao-ts/.dependencies/**/*"
   ],
   "compilerOptions": {
+    "rootDirs": [".", ".tao-ts"],
+    "allowJs": true,
+    "checkJs": true,
+    "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
     "composite": false,
     "declaration": false,

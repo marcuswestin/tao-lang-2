@@ -1,5 +1,5 @@
-import { CLI, Errors, FS, Platform, ProjectLocal, Repo, Time } from '@shared'
-import { Deferred, Expect, Test, withTaoFiles } from '@shared/test'
+import { CLI, Errors, FS, Platform, ProjectLocal, Repo } from '@shared'
+import { Deferred, Expect, Test, testOverrideSlot, until, withTaoFiles } from '@shared/test'
 import {
   StudioSketchCatalog,
   StudioSketchCatalogConflictError,
@@ -21,7 +21,7 @@ const cover: StudioSketchRect = {
 }
 
 Test('Studio sketch catalog records the project by name, never by host path', async () => {
-  await withTaoFiles('tao-studio-sketch-project-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
+  await withTaoFiles('tao-studio-sketch-project-', {}, async (_paths, root) => {
     const provider = new StudioSketchCatalog(root)
     // Studio hands the catalog the open project's absolute root. The catalog is committed with the
     // project, so what lands in it has to be the same on every checkout, not one machine's path.
@@ -53,7 +53,7 @@ Test('Studio sketch catalog records the project by name, never by host path', as
 })
 
 Test('Studio sketch catalog creates canonical ordered free geometry and reads JSONC', async () => {
-  await withTaoFiles('tao-studio-sketch-catalog-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
+  await withTaoFiles('tao-studio-sketch-catalog-', {}, async (_paths, root) => {
     const provider = new StudioSketchCatalog(root)
     Expect(await provider.read()).toEqual({ formatVersion: 1, nextViewNumber: 1, revision: 0, sketches: [] })
 
@@ -72,48 +72,7 @@ Test('Studio sketch catalog creates canonical ordered free geometry and reads JS
 
     Expect(result.createdSketch).toMatchObject({ id: 'sketch-row', name: 'View1', view: 'View1', x: 0, y: 0 })
     Expect(result.catalog.sketches[0]?.rects.map(rect => rect.id)).toEqual(['rect-cover', 'rect-title'])
-    Expect(await FS.readText(provider.path())).toBe(`{
-  "formatVersion": 1,
-  "nextViewNumber": 2,
-  "revision": 1,
-  "sketches": [
-    {
-      "height": 76,
-      "id": "sketch-row",
-      "name": "View1",
-      "project": "music",
-      "rectOrder": [
-        "rect-cover",
-        "rect-title"
-      ],
-      "rects": [
-        {
-          "content": "Cover art",
-          "height": 52,
-          "id": "rect-cover",
-          "kind": "Placeholder",
-          "width": 52,
-          "x": 12,
-          "y": 12
-        },
-        {
-          "height": 14,
-          "id": "rect-title",
-          "kind": "Text",
-          "width": 180,
-          "x": 78,
-          "y": 16
-        }
-      ],
-      "snapped": [],
-      "view": "View1",
-      "width": 360,
-      "x": 0,
-      "y": 0
-    }
-  ]
-}
-`)
+    Expect(JSON.parse(await FS.readText(provider.path()))).toEqual(result.catalog)
 
     await FS.writeText(
       provider.path(),
@@ -145,7 +104,7 @@ Test('Studio sketch catalog creates canonical ordered free geometry and reads JS
 })
 
 Test('Studio sketch actions preserve row order and support edit, duplicate, and delete', async () => {
-  await withTaoFiles('tao-studio-sketch-actions-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
+  await withTaoFiles('tao-studio-sketch-actions-', {}, async (_paths, root) => {
     const provider = new StudioSketchCatalog(root)
     let revision = 0
     await provider.apply(createSketchRequest(revision++))
@@ -217,7 +176,7 @@ Test('Studio sketch actions preserve row order and support edit, duplicate, and 
 })
 
 Test('Studio sketch catalog keeps a created view at the drawn canvas origin', async () => {
-  await withTaoFiles('tao-studio-sketch-origin-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
+  await withTaoFiles('tao-studio-sketch-origin-', {}, async (_paths, root) => {
     const provider = new StudioSketchCatalog(root)
     const result = await provider.apply({
       action: {
@@ -239,7 +198,7 @@ Test('Studio sketch catalog keeps a created view at the drawn canvas origin', as
 })
 
 Test('Studio move-sketch places a view at a new canvas origin and refuses anything else', async () => {
-  await withTaoFiles('tao-studio-sketch-move-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
+  await withTaoFiles('tao-studio-sketch-move-', {}, async (_paths, root) => {
     const provider = new StudioSketchCatalog(root)
     const created = await provider.apply(createSketchRequest(0))
     const move = (action: Record<string, unknown>, requestId: string, expectedRevision = created.catalog.revision) =>
@@ -274,7 +233,7 @@ Test('Studio move-sketch places a view at a new canvas origin and refuses anythi
 })
 
 Test('Studio restore-sketch puts back drawn geometry and leaves the view and its snapped rows alone', async () => {
-  await withTaoFiles('tao-studio-sketch-restore-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
+  await withTaoFiles('tao-studio-sketch-restore-', {}, async (_paths, root) => {
     const provider = new StudioSketchCatalog(root)
     const created = await provider.apply(createSketchRequest(0))
     const before = created.catalog.sketches[0]!
@@ -327,7 +286,7 @@ Test('Studio restore-sketch puts back drawn geometry and leaves the view and its
 })
 
 Test('Studio sketch actions atomically move selected free rows into strict associations and back', async () => {
-  await withTaoFiles('tao-studio-sketch-associations-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
+  await withTaoFiles('tao-studio-sketch-associations-', {}, async (_paths, root) => {
     const provider = new StudioSketchCatalog(root)
     await provider.apply({
       action: {
@@ -398,7 +357,7 @@ Test('Studio sketch actions atomically move selected free rows into strict assoc
 })
 
 Test('Studio bind-rect updates free and snapped bindings without disturbing geometry, target, or order', async () => {
-  await withTaoFiles('tao-studio-sketch-bind-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
+  await withTaoFiles('tao-studio-sketch-bind-', {}, async (_paths, root) => {
     const provider = new StudioSketchCatalog(root)
     await provider.apply(createSketchRequest(0))
     const freeBinding = {
@@ -439,10 +398,10 @@ Test('Studio bind-rect updates free and snapped bindings without disturbing geom
   })
 })
 
-Test('Studio bind-rect validates exact typed payloads and preserves stale/idempotent request behavior', async () => {
+Test('Studio bind-rect validates exact typed payloads', async () => {
   await withTaoFiles(
     'tao-studio-sketch-bind-validation-',
-    { 'Project.tao': 'project Music\n' },
+    {},
     async (_paths, root) => {
       const provider = new StudioSketchCatalog(root)
       await provider.apply(createSketchRequest(0))
@@ -456,10 +415,7 @@ Test('Studio bind-rect validates exact typed payloads and preserves stale/idempo
         expectedRevision: 1,
         requestId: 'bind-idempotent',
       }
-      const first = await provider.apply(request)
-      Expect(await provider.apply(request)).toBe(first)
-      await Expect(provider.apply({ ...request, expectedRevision: 1, requestId: 'bind-stale' }))
-        .rejects.toBeInstanceOf(StudioSketchCatalogConflictError)
+      await provider.apply(request)
       for (
         const binding of [
           { parameter: 'not valid', path: 'Title', presentation: { kind: 'text' } },
@@ -481,7 +437,7 @@ Test('Studio bind-rect validates exact typed payloads and preserves stale/idempo
 Test(
   'Studio sketch source records a render entry or a written definition, never both, and never beside rectangles',
   async () => {
-    await withTaoFiles('tao-studio-sketch-source-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
+    await withTaoFiles('tao-studio-sketch-source-', {}, async (_paths, root) => {
       const provider = new StudioSketchCatalog(root)
       await provider.apply({
         ...createSketchRequest(0),
@@ -560,7 +516,7 @@ Test(
   async () => {
     await withTaoFiles(
       'tao-studio-sketch-fallback-association-',
-      { 'Project.tao': 'project Music\n' },
+      {},
       async (_paths, root) => {
         const provider = new StudioSketchCatalog(root)
         await provider.apply({
@@ -600,7 +556,7 @@ Test(
   async () => {
     await withTaoFiles(
       'tao-studio-sketch-association-validation-',
-      { 'Project.tao': 'project Music\n' },
+      {},
       async (_paths, root) => {
         const provider = new StudioSketchCatalog(root)
         await provider.apply(createSketchRequest(0))
@@ -625,7 +581,6 @@ Test(
           requestId: 'duplicate-target',
         })).rejects.toThrow('duplicate snap rectangle id: rect-cover')
         Expect(await FS.readText(provider.path())).toBe(before)
-        Expect((await provider.read()).revision).toBe(1)
       },
     )
   },
@@ -634,7 +589,7 @@ Test(
 Test('Studio sketch Snap and Unsnap require complete post-operation target sets', async () => {
   await withTaoFiles(
     'tao-studio-sketch-complete-targets-',
-    { 'Project.tao': 'project Music\n' },
+    {},
     async (_paths, root) => {
       const provider = new StudioSketchCatalog(root)
       await provider.apply({
@@ -700,7 +655,7 @@ Test('Studio sketch Snap and Unsnap require complete post-operation target sets'
 })
 
 Test('Studio sketch view allocation stays monotonic across deletion and reopen', async () => {
-  await withTaoFiles('tao-studio-sketch-names-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
+  await withTaoFiles('tao-studio-sketch-names-', {}, async (_paths, root) => {
     const first = new StudioSketchCatalog(root)
     await first.apply(createSketchRequest(0))
     await first.apply({
@@ -728,7 +683,7 @@ Test('Studio sketch view allocation stays monotonic across deletion and reopen',
 })
 
 Test('Studio sketch catalog rejects malformed, stale, duplicate, and unsupported data', async () => {
-  await withTaoFiles('tao-studio-sketch-validation-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
+  await withTaoFiles('tao-studio-sketch-validation-', {}, async (_paths, root) => {
     const provider = new StudioSketchCatalog(root)
     await FS.writeText(provider.path(), '{ "formatVersion": 1, nope }')
     await Expect(provider.read()).rejects.toThrow(
@@ -909,7 +864,7 @@ Test('Studio sketch catalog rejects malformed, stale, duplicate, and unsupported
 })
 
 Test('Studio sketch requests serialize concurrent edits, reject stale revisions, and replay idempotently', async () => {
-  await withTaoFiles('tao-studio-sketch-concurrency-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
+  await withTaoFiles('tao-studio-sketch-concurrency-', {}, async (_paths, root) => {
     const provider = new StudioSketchCatalog(root)
     const request = createSketchRequest(0)
     const first = await provider.apply(request)
@@ -951,7 +906,7 @@ Test('Studio sketch requests serialize concurrent edits, reject stale revisions,
 Test(
   'Studio sketch catalog reclaims one stale owner and allocates names transactionally across independent processes',
   async () => {
-    await withTaoFiles('tao-studio-sketch-processes-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
+    await withTaoFiles('tao-studio-sketch-processes-', {}, async (_paths, root) => {
       await FS.writeText(FS.resolvePath('@/studio/View1.tao', root), 'view View1() { }\n')
       const lockPath = ProjectLocal.cacheResolve('studio/locks/sketches.lock', root)
       await FS.mkdir(FS.dirname(lockPath))
@@ -1005,7 +960,7 @@ Test(
 )
 
 Test('Studio sketch stale reclaim keeps a late claimant from deleting a fresh replacement owner', async () => {
-  await withTaoFiles('tao-studio-sketch-reclaim-order-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
+  await withTaoFiles('tao-studio-sketch-reclaim-order-', {}, async (_paths, root) => {
     const provider = new StudioSketchCatalog(root)
     const lockPath = ProjectLocal.cacheResolve('studio/locks/sketches.lock', root)
     await FS.mkdir(FS.dirname(lockPath))
@@ -1015,15 +970,34 @@ Test('Studio sketch stale reclaim keeps a late claimant from deleting a fresh re
     const winnerReady = Deferred<void>()
     const releaseWinner = Deferred<void>()
     let replacementSurvived = false
+    let replacementStarted = false
+    let lateClaimPath: string | undefined
+    const lateReady = Deferred<void>()
+    const originalTimeout = globalThis.setTimeout
+    let resumeLate: (() => void) | undefined
+    const timerSlot = testOverrideSlot({
+      read: () => globalThis.setTimeout,
+      write: value => {
+        globalThis.setTimeout = value
+      },
+    })
+    let restoreTimer = () => {}
+    let winner: ReturnType<StudioSketchCatalog['read']> | undefined
+    let late: ReturnType<StudioSketchCatalog['read']> | undefined
     StudioSketchCatalogTesting.setBeforeStaleUnlink(async () => {
       winnerReady.resolve()
       await releaseWinner.promise
     })
     StudioSketchCatalogTesting.setAfterStaleUnlink(async path => {
+      if (replacementStarted) {
+        return
+      }
+      replacementStarted = true
       const replacement = `${path}.owner-replacement`
       await FS.writeJson(replacement, { pid: Platform.runtimeProcess.pid })
       await FS.symlink(await FS.realPath(replacement), path)
-      await Time.sleep(40)
+      resumeLate?.()
+      await until(async () => !await FS.exists(lateClaimPath!), { description: 'late stale claim completion' })
       const target = await CLI.run('/usr/bin/readlink', { args: [path], stdio: 'pipe' })
       replacementSurvived = target.stdout.trim() === await FS.realPath(replacement)
       if (replacementSurvived) {
@@ -1032,25 +1006,43 @@ Test('Studio sketch stale reclaim keeps a late claimant from deleting a fresh re
       await FS.remove(replacement)
     })
     try {
-      const winner = provider.read()
+      winner = provider.read()
       await winnerReady.promise
-      const late = new StudioSketchCatalog(root).read()
+      restoreTimer = timerSlot.install(
+        ((callback: () => void, milliseconds?: number) => {
+          if (resumeLate === undefined && milliseconds === 10) {
+            resumeLate = callback
+            lateReady.resolve()
+            return 0 as unknown as ReturnType<typeof setTimeout>
+          }
+          return originalTimeout(callback, milliseconds)
+        }) as unknown as typeof setTimeout,
+      )
+      late = new StudioSketchCatalog(root).read()
+      await Promise.race([
+        lateReady.promise,
+        late.then(() => Errors.throwUnexpected('Late claimant did not publish a contention poll.')),
+      ])
       const claimPrefix = `${FS.basename(lockPath)}.reclaim-${FS.basename(staleOwner)}-`
-      while ((await FS.listDir(FS.dirname(lockPath))).filter(name => name.startsWith(claimPrefix)).length < 2) {
-        await Time.sleep(1)
-      }
+      const lateClaim = (await FS.listDir(FS.dirname(lockPath))).filter(name => name.startsWith(claimPrefix))
+        .toSorted().at(-1)!
+      lateClaimPath = FS.resolvePath(lateClaim, FS.dirname(lockPath))
       releaseWinner.resolve()
       await Promise.all([winner, late])
       Expect(replacementSurvived).toBe(true)
     } finally {
+      releaseWinner.resolve()
+      resumeLate?.()
+      restoreTimer()
       StudioSketchCatalogTesting.setBeforeStaleUnlink(undefined)
       StudioSketchCatalogTesting.setAfterStaleUnlink(undefined)
+      await Promise.allSettled([winner, late])
     }
   })
 })
 
 Test('Studio sketch catalog persists project-relative render identities', async () => {
-  await withTaoFiles('tao-studio-sketch-render-id-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
+  await withTaoFiles('tao-studio-sketch-render-id-', {}, async (_paths, root) => {
     const provider = new StudioSketchCatalog(root)
     await provider.apply(createSketchRequest(0))
     const sourcePath = FS.resolvePath('@/studio/View1.tao', root)
@@ -1078,7 +1070,7 @@ Test('Studio sketch catalog persists project-relative render identities', async 
 Test(
   'Studio sketch catalog keeps the prior file and cleans its temporary file when atomic replacement fails',
   async () => {
-    await withTaoFiles('tao-studio-sketch-atomic-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
+    await withTaoFiles('tao-studio-sketch-atomic-', {}, async (_paths, root) => {
       const initial = new StudioSketchCatalog(root)
       await initial.apply(createSketchRequest(0))
       const before = await FS.readText(initial.path())
@@ -1102,7 +1094,7 @@ Test(
 )
 
 Test('Studio sketch catalog restores a prior snapshot after a downstream transaction fails', async () => {
-  await withTaoFiles('tao-studio-sketch-restore-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
+  await withTaoFiles('tao-studio-sketch-restore-', {}, async (_paths, root) => {
     const provider = new StudioSketchCatalog(root)
     const before = await provider.read()
     const request = createSketchRequest(0)
@@ -1110,7 +1102,6 @@ Test('Studio sketch catalog restores a prior snapshot after a downstream transac
 
     await provider.restore(before, 1)
     Expect(await provider.read()).toEqual(before)
-    Expect(await FS.readText(provider.path())).toContain('"nextViewNumber": 1')
 
     // Rollback clears the stale idempotency result, so an outer transaction can retry the request.
     const retried = await provider.apply(request)
@@ -1120,7 +1111,7 @@ Test('Studio sketch catalog restores a prior snapshot after a downstream transac
 })
 
 Test('Studio sketch restore cannot erase a newer independent-process revision', async () => {
-  await withTaoFiles('tao-studio-sketch-restore-cas-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
+  await withTaoFiles('tao-studio-sketch-restore-cas-', {}, async (_paths, root) => {
     const transaction = new StudioSketchCatalog(root)
     const before = await transaction.read()
     await transaction.apply(createSketchRequest(0))

@@ -37,7 +37,8 @@ type RelationDeleteBehavior = 'cascade' | 'restrict'
 
 /** TaoEntityAvailability is the provider-neutral live state of one entity handle. */
 export type TaoEntityAvailability =
-  | { status: 'available' | 'loading' | 'missing' | 'unauthorized' }
+  | { status: 'available' | 'loading' | 'missing' }
+  | { reason?: 'signed-out' | 'access-denied'; status: 'unauthorized' }
   | { message: string; status: 'error' }
 
 export type TaoDataField = {

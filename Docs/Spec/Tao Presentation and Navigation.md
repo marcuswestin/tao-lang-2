@@ -49,7 +49,9 @@ nav WordFlowerNavigator = SelectionNav {
 }
 
 app WordFlower {
-   Name "WordFlower"
+   id "wordflower"
+   version "0.1.0"
+   name "WordFlower"
    Navigator WordFlowerNavigator
    Datasource Local {
       StorageKey "WordFlowerData"
@@ -67,26 +69,26 @@ scene Settings() {
 }
 ```
 
-`Name` is display text. `Navigator Root` supplies a direct nav root; `view Root(args)` supplies a
+`name` is display text. `id` and `version` identify a runnable app; all three are required
+effectively, including through inherited app configuration. `Navigator Root` supplies a direct nav root; `view Root(args)` supplies a
 view root, mounting a value bound to its arguments in a synthesized slot navigator. A shell uses
 `view Shell(WordFlowerNavigator)` and renders that nav inside ordinary layout. `Datasource`
 configures the app's provider; Local's
 storage identity is specified in `Tao Data.md`. App auxiliaries remain valid for genuine
 app-specific hosts such as windows. Overlays and toasts never require auxiliary hosts.
 
-Every project has one checked-in opaque `id`. `tao create` writes it (from `--id` or a confirmed
-suggestion) and
-`tao project id <id> [path]` adds missing metadata; `--replace` deliberately makes a fork independent
-and severs persisted-state compatibility. A missing ID is a diagnostic, never a path-, repository-,
-lockfile-, or process-derived fallback. Two dependencies with the same project ID but different
-project roots are a resolution error.
+A project is the nearest ancestor with `.tao/`; it has no language-level identity declaration.
+Every runnable app has a checked-in effective `id`, full SemVer `version`, and display `name`.
+Effective ID/version pairs are unique within the project. Variants inherit those fields and may
+explicitly override them. Tao-managed persistent app state uses effective app ID across release
+versions; datasource configuration controls backend sharing independently.
 
-An app, view, nav, or datasource declaration has canonical owner-defined identity:
-project ID, the owning project's checked-in `@package` folder (or the reserved `@workspace` root),
-owner-relative module path, declaration kind, and declaration name. Clone location, consumer install
-name, remote, branch, and revision do not participate. A public view alias is a lexical declaration
-for navigation and diagnostics, but its canonical identity is the final target's; alias chains
-flatten, alias cycles are invalid, and a wrapper body is required to create a new authored address.
+App, view, nav, and datasource declarations retain their originating source identity across imports
+and dependency aliases. Selected publication and version are recorded separately as dependency
+provenance, because publications may overlap and do not own physical source directories. A public
+view alias retains the final target's identity; alias chains flatten, alias cycles are invalid, and
+a wrapper body creates a new authored address. This source identity is distinct from persistent
+app state identity.
 
 Configured nav descriptors retain process-local `Symbol` identity as an optimization and add a
 canonical structural descriptor for persistence. Universal auto-typed `let` remains equivalent and
@@ -105,14 +107,15 @@ shell parameter that selects a differently configured navigator:
 
 ```tao
 app WordFlowerDrawer = WordFlower with {
-   Name "WordFlower - Drawer Preview"
+   id "wordflower-drawer"
+   name "WordFlower - Drawer Preview"
    view WordFlowerShell(WordFlowerDrawerNavigator)
 }
 ```
 
 App values are ordinary visible declarations: they may live in any project or package module, and
 variants may derive across module boundaries. An unmarked direct `app` remains folder-visible for
-source compatibility; explicit `file`, `folder`, `package`, `workspace`, and `public` visibility
+source compatibility; explicit `file`, `folder`, `package`, `project`, and `public` visibility
 otherwise follows the common declaration rules. `run`, imports, and strict app identity accept any
 complete app value uniformly whether its declaration uses a primitive `app` head or inferred `let`.
 
@@ -320,12 +323,15 @@ app root is a view bound to its arguments, which is how one shell serves every c
 
 ```tao
 app WordFlower {
-   Name "WordFlower"
+   id "wordflower"
+   version "0.1.0"
+   name "WordFlower"
    view WordFlowerShell(WordFlowerNavigator)
 }
 
 app WordFlowerDrawer = WordFlower with {
-   Name "WordFlower - Drawer Preview"
+   id "wordflower-drawer"
+   name "WordFlower - Drawer Preview"
    view WordFlowerShell(WordFlowerDrawerNavigator)
 }
 

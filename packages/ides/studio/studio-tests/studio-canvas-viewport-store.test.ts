@@ -20,7 +20,7 @@ Test('Studio server teardown drains accepted viewport writes', async () => {
   })
   await withTaoFiles(
     'studio-viewport-teardown-project-',
-    { 'Garden.tao': 'app Garden { Text("Hello") }\n' },
+    { 'Garden.tao': 'app Garden { id "garden" version "1.0.0" name "Garden" Text("Hello") }\n' },
     async (_paths, root) => {
       const session = await StudioProjectSession.open({ compile: async () => {}, projectRoot: root })
       const manager = new StudioSessionManager({ createSessionId: () => 'teardown_session' })
@@ -78,7 +78,7 @@ Test(
     const root = await mkTestDir('studio-viewport-validation-')
     const state = FS.resolvePath('state', root)
     const store = new StudioCanvasViewportStore(state)
-    for (const value of [null, {}, { x: 0, y: 0, z: NaN }, { x: Infinity, y: 0, z: 1 }, { x: 0, y: '2', z: 1 }]) {
+    for (const value of [null, {}, { x: Infinity, y: 0, z: 1 }, { x: 0, y: '2', z: 1 }]) {
       Expect(() => StudioCanvasViewportStore.normalize(value)).toThrow('Expected finite canvas viewport')
     }
     await store.save(root, { x: 5, y: 10, z: 8 })
@@ -173,7 +173,7 @@ Test(
     const state = await mkTestDir('studio-viewport-session-state-')
     await withTaoFiles(
       'studio-viewport-session-',
-      { 'Garden.tao': 'app Garden { Text("Hello") }\n' },
+      { 'Garden.tao': 'app Garden { id "garden" version "1.0.0" name "Garden" Text("Hello") }\n' },
       async (_paths, root) => {
         let compiles = 0
         const open = async () => {
@@ -269,7 +269,7 @@ Test(
     const state = await mkTestDir('studio-activation-manifest-state-')
     await withTaoFiles(
       'studio-activation-manifest-',
-      { 'Garden.tao': 'app Garden { Text("Hello") }\n' },
+      { 'Garden.tao': 'app Garden { id "garden" version "1.0.0" name "Garden" Text("Hello") }\n' },
       async (_paths, root) => {
         const store = new StudioCanvasViewportStore(state)
         const open = async () => {

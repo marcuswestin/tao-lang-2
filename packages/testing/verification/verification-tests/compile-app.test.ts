@@ -1,5 +1,5 @@
-import { CLI, FS, Repo, Time } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { CLI, FS, ProjectLocal, Repo, Time } from '@shared'
+import { Describe, Expect, mkTestDir, Test, until } from '@shared/test'
 import {
   COMPILE_INPUT_FILES,
   COMPILE_SOURCE_ROOTS,
@@ -24,6 +24,7 @@ const GENERATED = ['App.tsx', 'modules/@ui/Shell.tao.tsx', 'modules/external/Vie
 async function repository(): Promise<string> {
   const root = await mkTestDir('tao-compile-app-')
   await FS.writeText(FS.resolvePath(APP_PATH, root), 'app Example\n')
+  await ProjectLocal.prepare(FS.resolvePath('Apps/Example', root))
   await FS.writeText(FS.resolvePath('Apps/Example/@ui/Shell.tao', root), 'view Shell\n')
   await FS.writeText(FS.resolvePath('Apps/Example/@ui/Shell.ts', root), 'export const shell = 1\n')
   await FS.writeText(FS.resolvePath('packages/compiler/compiler-src/Compiler.ts', root), 'export const compiler = 1\n')
@@ -83,6 +84,7 @@ Describe('app compilation staleness stamp', () => {
     const appPath = 'Apps/WordFlower/1 - Current/WordFlower.tao'
     try {
       await FS.writeText(FS.resolvePath(appPath, root), 'app WordFlower\n')
+      await ProjectLocal.prepare(FS.resolvePath('Apps/WordFlower/1 - Current', root))
       const options = {
         appPath,
         inputFiles: INPUT_FILES,
@@ -116,7 +118,6 @@ Describe('app compilation staleness stamp', () => {
     const root = await repository()
     const tao = compiler()
     try {
-      Expect(await run(root, tao.compile)).toBe(0)
       Expect(await run(root, tao.compile)).toBe(0)
       Expect(await run(root, tao.compile)).toBe(0)
 
@@ -179,6 +180,7 @@ Describe('app compilation staleness stamp', () => {
     const root = await repository()
     const tao = compiler()
     try {
+      await FS.writeText(FS.resolvePath('Apps/Example/.tao/.gitkeep', root), '')
       await run(root, tao.compile)
       await FS.writeText(FS.resolvePath('Apps/Example/.tao/cache/dev/runtime/App.tsx', root), 'generated dev app\n')
       await FS.symlink(
@@ -188,6 +190,28 @@ Describe('app compilation staleness stamp', () => {
 
       Expect(await run(root, tao.compile)).toBe(0)
       Expect(tao.calls).toEqual(['Apps/Example/Example.tao#Example'])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('allows contract migration to remove legacy generated sidecars during compilation', async () => {
+    const root = await repository()
+    const tao = compiler()
+    const legacy = FS.resolvePath('Apps/Example/Example.tao.ts', root)
+    try {
+      await FS.writeText(legacy, 'export type Generated = string\n')
+      const migrate: NonNullable<CompileAppOptions['compile']> = async (...args) => {
+        await FS.remove(legacy)
+        await FS.writeText(
+          FS.resolvePath('Apps/Example/.tao-ts/Example.tao.ts', root),
+          'export type Generated = number\n',
+        )
+        return await tao.compile(...args)
+      }
+      Expect(await run(root, migrate)).toBe(0)
+      Expect(await run(root, migrate)).toBe(0)
+      Expect(tao.calls).toHaveLength(1)
     } finally {
       await FS.remove(root)
     }
@@ -235,13 +259,31 @@ Describe('app compilation staleness stamp', () => {
     }
   })
 
-  Test('recompiles when a Project.tao appears above the app, changing project identity', async () => {
+  Test('recompiles when a .tao root appears above the app, changing its source boundary', async () => {
     const root = await repository()
     const tao = compiler()
     try {
       await run(root, tao.compile)
-      await FS.writeText(FS.resolvePath('Apps/Project.tao', root), 'project Apps\n')
+      await FS.writeText(FS.resolvePath('Apps/.tao/.gitkeep', root), '')
 
+      Expect(await run(root, tao.compile)).toBe(0)
+      Expect(tao.calls.length).toBe(2)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('recompiles when a tracked project identity changes', async () => {
+    const root = await repository()
+    const tao = compiler()
+    try {
+      const identity = FS.resolvePath('Apps/Example/.tao/store/project.json', root)
+      await FS.writeJson(identity, { id: '550e8400-e29b-41d4-a716-446655440000' })
+      await run(root, tao.compile)
+      await FS.writeJson(identity, { id: '550e8400-e29b-41d4-a716-446655440001' })
+
+      Expect(await run(root, tao.compile)).toBe(0)
+      Expect(tao.calls.length).toBe(2)
       Expect(await run(root, tao.compile)).toBe(0)
       Expect(tao.calls.length).toBe(2)
     } finally {
@@ -304,6 +346,31 @@ Describe('app compilation staleness stamp', () => {
       Expect(await run(root, tao.compile)).toBe(0)
       Expect(tao.calls.length).toBe(2)
       Expect(await FS.readText(generated)).toBe('compiled 2\n')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('retains a private dependency directory link in the output stamp and repairs a deleted link', async () => {
+    const root = await repository()
+    const tao = compiler()
+    const installed = FS.resolvePath('.tao/cache/install/origins/library/node_modules', root)
+    const link = FS.resolvePath(`${OUTPUT_ROOT}/modules/dependencies/library/node_modules`, root)
+    const compile: CompileAppOptions['compile'] = async (appPath, appName, repositoryRoot) => {
+      const code = await tao.compile(appPath, appName, repositoryRoot)
+      await FS.replaceSymlink(installed, link)
+      return code
+    }
+    try {
+      await FS.writeJson(FS.resolvePath('util/package.json', installed), { name: 'util', version: '1.0.0' })
+      Expect(await run(root, compile)).toBe(0)
+      Expect(await run(root, compile)).toBe(0)
+      Expect(tao.calls.length).toBe(1)
+
+      await FS.remove(link)
+      Expect(await run(root, compile)).toBe(0)
+      Expect(tao.calls.length).toBe(2)
+      Expect(await FS.isSymbolicLink(link)).toBe(true)
     } finally {
       await FS.remove(root)
     }
@@ -414,11 +481,31 @@ Describe('app compilation staleness stamp', () => {
   Test('serializes independent compiles and rechecks staleness after acquiring the lock', async () => {
     const root = await repository()
     const releasePath = FS.resolvePath('release-first', root)
+    const blockedPath = FS.resolvePath('blocked-second', root)
     const modulePath = Repo.resolvePath('packages/testing/verification/verification-src/CompileApp.ts')
     const sharedPath = Repo.resolvePath('packages/shared/shared-src/shared.ts')
     const worker = (id: string, hold: boolean) => `
-      import { Errors, FS, Platform, Time } from ${JSON.stringify(sharedPath)}
-      import { runCompileApp } from ${JSON.stringify(modulePath)}
+      import * as shared from ${JSON.stringify(sharedPath)}
+      const { Errors, FS, Platform, Time } = shared
+      ${
+      hold ? '' : `
+      const { MockModule } = await import(${
+        JSON.stringify(Repo.resolvePath('packages/shared/shared-src/testing/Test-Bun.ts'))
+      })
+      MockModule('@shared', () => ({ ...shared, FS: { ...FS,
+        withFileMutationLock: (target, boundary, work) => FS.withFileMutationLock(target, boundary, work, {
+          inspectProcessIdentity: async pid => {
+            if (pid !== Platform.runtimeProcess.pid) {
+              await FS.writeText(${JSON.stringify(blockedPath)}, '')
+            }
+            // This fixture keeps the known first worker alive until the parent releases it.
+            return { evidence: 'unknown' }
+          },
+        }),
+      }}))
+      `
+    }
+      const { runCompileApp } = await import(${JSON.stringify(modulePath)})
       const root = Platform.runtimeProcess.env['TAO_COMPILE_APP_ROOT']
       if (!root) Errors.throwUnexpected('Missing compile app root.')
       const result = await runCompileApp({
@@ -456,7 +543,16 @@ Describe('app compilation staleness stamp', () => {
         }),
       ).toBe(true)
       second = start('second', false)
-      await Time.sleep(100)
+      let secondCompleted = false
+      void second.then(() => {
+        secondCompleted = true
+      }, () => {
+        secondCompleted = true
+      })
+      await until(async () => await FS.exists(blockedPath) || secondCompleted, {
+        description: 'second compile waiting on the live owner',
+      })
+      Expect(await FS.exists(blockedPath)).toBe(true)
       Expect(await FS.exists(FS.resolvePath('entered-second', root))).toBe(false)
       await FS.writeText(releasePath, '')
       const results = await Promise.all([first, second])

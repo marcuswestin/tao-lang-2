@@ -1,0 +1,44 @@
+{
+  "id": "QA-SKILL-DATA-QUERY-SYNTAX",
+  "status": "fixed-awaiting-qa",
+  "phase": 1,
+  "surfaceId": "doc:packages/ai/tao-skills/skills/tao-data/SKILL.md",
+  "dimension": "text",
+  "channel": "source",
+  "severity": "major",
+  "title": "Data skill teaches query syntax the grammar rejects",
+  "observed": "The skill teaches `query Things { }` and `query Things as Name`; the grammar accepts only `query Name = Source [with { }]` (packages/language/parser/parser-grammar/data.langium:50) and no repository .tao file uses either form.",
+  "impact": "An agent in every created project writes queries that do not parse, contradicting the tutorial and starters.",
+  "location": "packages/ai/tao-skills/skills/tao-data/SKILL.md:45-47",
+  "affectedPhases": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "expected": "Skill examples parse under the shipped grammar.",
+  "recheck": "Parse each skill example with a release-1 CLI.",
+  "evidence": [
+    "packages/ai/tao-skills/skills/tao-data/SKILL.md",
+    "packages/language/parser/parser-grammar/data.langium"
+  ],
+  "evidenceHashes": [
+    {
+      "path": "packages/ai/tao-skills/skills/tao-data/SKILL.md",
+      "sha256": "eb1c0a93a78445a5e4f3b17d6ef0cc77d20677b6d3d083f0edbe9b2b764cf5c6"
+    },
+    {
+      "path": "packages/language/parser/parser-grammar/data.langium",
+      "sha256": "d6d533bfa059c6c26c30bed57a2f29e8272e8549a7012beead84e30b20a53c08"
+    }
+  ],
+  "createdAt": "2026-09-29T16:13:47.662Z",
+  "updatedAt": "2026-10-03T20:24:15.213Z",
+  "confidence": "confirmed",
+  "requiredReviewer": "agent",
+  "relatedStories": [
+    "CLI10"
+  ],
+  "notes": "Source documentation repair implemented and reviewed in the staged-release QA slice. This is source evidence only; the finding stays unresolved until its original acceptance recheck is completed: Parse each skill example with a release-1 CLI."
+}

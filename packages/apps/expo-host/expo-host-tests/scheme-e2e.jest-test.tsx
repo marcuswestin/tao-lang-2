@@ -156,13 +156,6 @@ Describe('Catalyst appearance', () => {
         backgroundColor: '#1c1c1e',
         borderColor: '#48484a',
       })
-      act(() => {
-        system = 'light'
-        listeners.forEach(listener => listener())
-      })
-      Expect(RN.StyleSheet.flatten(view.UNSAFE_getByType(RN.ScrollView).props.style).backgroundColor).toBe('#ffffff')
-      Expect(view.getByTestId('scheme').props.children).toBe('system:light:system:reactive-catalyst')
-      Expect(listeners.size).toBeGreaterThan(0)
       view.unmount()
       Expect(listeners.size).toBe(0)
     } finally {

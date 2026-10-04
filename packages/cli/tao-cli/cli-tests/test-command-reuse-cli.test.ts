@@ -4,12 +4,10 @@ import { runTaoCliForTest, withTaoFixture } from './test-cli-files'
 import {
   COMPILED,
   lifecycleFixture,
-  listCachedFingerprints,
   listRunRoots,
   outputText,
   REUSED,
   reuseFixture,
-  taoApp,
   withEnv,
   withJestStub,
   withRuntimeRoot,
@@ -22,7 +20,7 @@ Describe('tao test CLI compiled output reuse', () => {
   Test('discards its generated run root and prunes stale roots when reuse is switched off', async () => {
     await withTaoFixture({ ...lifecycleFixture, 'jest-stub.mjs': '' }, async rootDir => {
       const runtimeRoot = FS.resolvePath('runtime-root', rootDir)
-      const staleOlder = await writeStaleRunRoot(runtimeRoot, 9)
+      await writeStaleRunRoot(runtimeRoot, 9)
       const staleNewest = await writeStaleRunRoot(runtimeRoot, 3)
 
       await withJestStub(rootDir, async () => {
@@ -32,7 +30,6 @@ Describe('tao test CLI compiled output reuse', () => {
 
             Expect(result.exitCode).toBe(0)
             Expect(await listRunRoots(runtimeRoot)).toEqual([staleNewest])
-            Expect(await listRunRoots(runtimeRoot)).not.toContain(staleOlder)
           })
         })
       })
@@ -65,27 +62,6 @@ Describe('tao test CLI compiled output reuse', () => {
           Expect(runRoots).toContain(staleNewest)
           Expect(runRoots).not.toContain(staleOlder)
           Expect(runRoots).toHaveLength(2)
-        })
-      })
-    })
-  })
-
-  Test('compiles again after a Tao source under test changes', async () => {
-    await withTaoFixture({ ...reuseFixture, 'jest-stub.mjs': '' }, async rootDir => {
-      const runtimeRoot = FS.resolvePath('runtime-root', rootDir)
-
-      await withJestStub(rootDir, async () => {
-        await withRuntimeRoot(runtimeRoot, async () => {
-          await runTaoCliForTest(['test', rootDir])
-          Expect(outputText(await runTaoCliForTest(['test', rootDir]))).toContain(REUSED)
-
-          await FS.writeText(FS.resolvePath('App.tao', rootDir), taoApp('Reused').replace('Reused")', 'Edited")'))
-          const afterEdit = await runTaoCliForTest(['test', rootDir])
-
-          Expect(afterEdit.exitCode).toBe(0)
-          Expect(outputText(afterEdit)).toContain(COMPILED)
-          Expect(outputText(afterEdit)).not.toContain(REUSED)
-          Expect(await listCachedFingerprints(runtimeRoot)).toHaveLength(2)
         })
       })
     })

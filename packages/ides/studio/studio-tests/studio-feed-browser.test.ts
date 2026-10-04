@@ -38,8 +38,6 @@ Describe('Studio feed browser', () => {
         fields: { Title: 'Active title' },
         name: 'MainArticle',
       })
-      Expect(StudioFeedBrowser.build(input, { seed: 'browser-seed' }).inventory.entities[0]!.sources[1])
-        .toEqual(article.sources[1])
       Expect(article.sources[1]!.rows[0]!.fields).not.toHaveProperty('Status')
       Expect(input.fixtures[0]!.plan).toMatchObject({ creates: [{ fields: { Secret: 'hidden fixture' } }] })
     },

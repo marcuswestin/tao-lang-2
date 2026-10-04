@@ -1,4 +1,4 @@
-import { Errors, FS, HCI, Platform, Repo, Time } from '@shared'
+import { Errors, FS, HCI, Platform, ProjectIdentity, Repo, Time } from '@shared'
 import { Expect, mkTestDir, Test } from '@shared/test'
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
 import { startStudioSmokeLaunch } from '../studio-tooling-src/StudioSmokeLaunch'
@@ -18,7 +18,9 @@ ${sameFile ? theme : 'use Theme from ./Theme'}
 ${focused ? '' : 'use Counter from ./Counter'}
 
 app DesignSmoke {
-   Name "Design smoke"
+   id "tao-studio-design-refresh"
+   version "1.0.0"
+   name "Design smoke"
    Navigator StackNav { Initial Main }
    Design Theme
 }
@@ -113,10 +115,8 @@ for (
       let studio: Awaited<ReturnType<typeof startStudioSmokeLaunch>> | undefined
       const rows: Array<{ edit: number; loadAverage: number; saveAt: number; samples: unknown[]; totalMs: number }> = []
       try {
-        await FS.writeText(
-          FS.resolvePath('Project.tao', projectRoot),
-          'project { id "tao-studio-design-refresh" name "Design refresh" }\n',
-        )
+        await FS.mkdir(FS.resolvePath('.tao', projectRoot))
+        await ProjectIdentity.ensure(projectRoot)
         const writeTheme = async (color: string, size: number): Promise<void> => {
           const theme = themeSource(color, size)
           await FS.writeText(

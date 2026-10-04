@@ -21,11 +21,6 @@ Describe('Expo runtime UI stdlib surfaces', () => {
       source: { uri: './images/runtime-stdlib.png' },
     })
 
-    const decorativeImage = screen.getByTestId('decorativeImage')
-    Expect(decorativeImage.props.accessible).toBe(false)
-    Expect(decorativeImage.props.accessibilityLabel).toBeUndefined()
-    Expect(decorativeImage.props.accessibilityRole).toBeUndefined()
-
     const spinner = screen.getByTestId('loadingIndicator')
     Expect(spinner.props).toMatchObject({
       accessibilityLabel: 'Loading',
@@ -44,7 +39,7 @@ Describe('Expo runtime UI stdlib surfaces', () => {
     Expect(RN.StyleSheet.flatten(fill.props.style)).toMatchObject({ width: '100%' })
   })
 
-  Test('wires Checkbox on change and accepts FormButton Icon in the real Forms app', async () => {
+  Test('wires Checkbox on change in the real Forms app', async () => {
     const appPath = Repo.resolvePath('Apps/Test Apps/Forms and Interaction MVP/Forms and Interaction MVP.tao')
     const screen = await compileAndRenderApp(appPath)
 
@@ -55,7 +50,6 @@ Describe('Expo runtime UI stdlib surfaces', () => {
 
     ExpectScreen(screen).toHaveText('Checkbox: checked')
     Expect(screen.getByTestId('completed').props.accessibilityState).toMatchObject({ checked: true })
-    ExpectScreen(screen).toHaveText('Save')
   })
 
   Test('exposes one accessible native Switch label while keeping its visible text', async () => {

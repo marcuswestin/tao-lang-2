@@ -5,8 +5,8 @@ import { requireReactNativeRuntime } from './TR-react-native'
 import { runtimeTestOverrideSlot } from './TR-test-override'
 
 /**
- * Keep native ambient globals out of portable/server consumers of the runtime. The Expo host
- * contract tests check these narrow ports against the actual installed package's exports/types.
+ * Keep native ambient globals out of portable/server consumers of the runtime. Expo host tests
+ * check these narrow ports against package types; real host receipts require mounted native surfaces.
  */
 export type NativeNavigationModule = {
   Tabs?: { Host: React.ComponentType<NativeTabsHostProps>; Screen: React.ComponentType<NativeTabsScreenProps> }

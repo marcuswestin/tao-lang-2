@@ -1,4 +1,5 @@
 import { AST } from '@parser'
+import { Assert } from '@shared'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 import { isRuntimeConfigurableDeclaration } from './ConfigurationCompiler'
@@ -14,11 +15,13 @@ type TaoFileCompileOptions = CodegenOptions & {
   scopeBindings?: string[]
   exportedBindings?: ReadonlyArray<{ exported: string; binding: string }>
   viewRegistrations?: string
+  selectedStatements?: readonly AST.Statement[]
 }
 
 export const FilesCompiler = {
   /** TaoFile compiles a parsed Tao file into a default React component module. */
   TaoFile(taoFile: AST.TaoFile, opts: TaoFileCompileOptions = {}): Compiled {
+    const statements = opts.selectedStatements ?? taoFile.statements
     const configurationTypes = opts.configurationTypes ?? ''
     const bridgeTypes = opts.bridgeTypes ?? ''
     const importLines = opts.importLines?.join('\n') ?? ''
@@ -27,13 +30,12 @@ export const FilesCompiler = {
     const exportLines = opts.exportedBindings
       ?.map(({ exported, binding }) => `export const ${exported} = _Scope.${binding}`)
       .join('\n') ?? ''
-    const apps = AST.appValueDeclarationsInFile(taoFile)
-    const moduleCommands = taoFile.statements.filter(AST.isCommandDeclaration)
-    const dataEntities = opts.dataEntities ?? taoFile.statements.filter(AST.isEntityDataDeclaration)
-    const hasRuntimeStatements = taoFile.statements.some(statement =>
-      AST.isGuardDefaultStatement(statement)
-      || (AST.isEmittingRuntimeBinding(statement)
-        && (!AST.isTypeDeclaration(statement) || isRuntimeConfigurableDeclaration(statement)))
+    const apps = AST.appValueDeclarationsInFile(taoFile).filter(app => statements.includes(app))
+    const moduleCommands = statements.filter(AST.isCommandDeclaration)
+    const dataEntities = opts.dataEntities ?? statements.filter(AST.isEntityDataDeclaration)
+    const hasRuntimeStatements = statements.some(statement =>
+      AST.isEmittingRuntimeBinding(statement)
+      && (!AST.isTypeDeclaration(statement) || isRuntimeConfigurableDeclaration(statement))
     )
     if (!hasRuntimeStatements && !importLines && !scopeBindings && !exportLines && !bridgeTypes) {
       return gen`export {}`
@@ -82,11 +84,9 @@ export const FilesCompiler = {
         ? Compile.DataCatalog(dataEntities, opts.dataAccess)
         : gen.noop()
     }
-      ${Compile.OutlineTable(taoFile)}
+      ${Compile.OutlineTable(taoFile, statements)}
 
-      ${
-      gen.list(inDeclarationOrder(taoFile.statements), statement => Compile.Statement(statement, opts), { newLines: 2 })
-    }
+      ${gen.list(inDeclarationOrder(statements), statement => Compile.Statement(statement, opts), { newLines: 2 })}
       ${
       moduleCommands.length === 0
         ? gen.noop()
@@ -101,15 +101,45 @@ export const FilesCompiler = {
 } as const
 
 /**
- * inDeclarationOrder emits reusable nav and datasource types before everything else in the module.
- * A type compiles to a declaration built only from its imported implementation and its identity, so
- * it can go first; a value constructed from it — `datasource Feed = FeedSource { … }` — reads it
- * eagerly, so it must. Tao lets a file declare them in either order, and emitting in source order
- * turned a type written below its first use into `undefined` at runtime.
+ * inDeclarationOrder emits reusable types first, then defers a derived app until its same-file base
+ * has initialized. Other statements keep source order, including values between an app and its base:
+ * moving a base ahead of them could make its eager configuration read an uninitialized value.
  */
 function inDeclarationOrder(statements: readonly AST.Statement[]): AST.Statement[] {
-  return [
-    ...statements.filter(isRuntimeConfigurableDeclaration),
-    ...statements.filter(statement => !isRuntimeConfigurableDeclaration(statement)),
-  ]
+  const types = statements.filter(isRuntimeConfigurableDeclaration)
+  const rest = statements.filter(statement => !isRuntimeConfigurableDeclaration(statement))
+  const apps = new Set(rest.filter(AST.isAppValueDeclaration))
+  const emitted = new Set<AST.AppValueDeclaration>()
+  const waiting: AST.AppValueDeclaration[] = []
+  const ordered: AST.Statement[] = [...types]
+  const ready = (app: AST.AppValueDeclaration): boolean => {
+    const value = app.value
+    const base = value && (AST.isValueReference(value) || AST.isRefinementExpression(value))
+      ? value.target.ref
+      : undefined
+    return !base || !AST.isAppValueDeclaration(base) || !apps.has(base) || emitted.has(base)
+  }
+  const drain = (): void => {
+    let advanced = true
+    while (advanced) {
+      advanced = false
+      const index = waiting.findIndex(ready)
+      if (index >= 0) {
+        const [app] = waiting.splice(index, 1)
+        ordered.push(app!)
+        emitted.add(app!)
+        advanced = true
+      }
+    }
+  }
+  for (const statement of rest) {
+    if (!AST.isAppValueDeclaration(statement)) {
+      ordered.push(statement)
+      continue
+    }
+    waiting.push(statement)
+    drain()
+  }
+  Assert(waiting.length === 0, 'validated app derivation is acyclic')
+  return ordered
 }

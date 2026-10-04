@@ -19,9 +19,11 @@ Describe('Studio synthetic app commit lifecycle', () => {
           arguments: {},
           definition: () => ({
             auxiliaries: () => ({}),
+            id: 'strict-subject',
             name: 'Strict Subject',
             navigator: () => TR.Navigation.Configure(slot, { Initial: home }),
             restoration: { exclusions: [], mode: 'fresh' as const, variant: 'studio-subject' },
+            version: '1.0.0',
           }),
         }),
       ),

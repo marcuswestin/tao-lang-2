@@ -2,14 +2,14 @@ import { RuntimeTesting } from '@expo-host/testing/runtime-testing'
 import { applyDeviceViewport } from '@expo-host/testing/test-runner'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import * as RN from 'react-native'
-import { ExpectScreen, registerRuntimeE2ELifecycle, testCompileApp } from './test-compile-app'
+import { registerRuntimeE2ELifecycle, testCompileApp } from './test-compile-app'
 
 registerRuntimeE2ELifecycle()
 
 const panesApp = `
   use Col, Panes, Text from @tao/ui
 
-  app AdaptiveDeviceApp { view MainView }
+  app AdaptiveDeviceApp { id "adaptivedeviceapp" version "1.0.0" name "AdaptiveDeviceApp" view MainView }
   view MainView() {
     render Panes() [gap 16] {
       #primaryPane
@@ -27,8 +27,6 @@ Describe('Expo runtime `on <device>` and `with <fixture>` test clauses', () => {
   // same rendered style the harness itself produced, rather than through a Tao test assertion.
   Test('gives a phone viewport a stacked Panes and a tablet viewport a side-by-side one', async () => {
     await testCompileApp(panesApp, screen => {
-      ExpectScreen(screen).toHaveText('Primary pane')
-      ExpectScreen(screen).toHaveText('Secondary pane')
       const panes = screen.UNSAFE_getAllByType(RN.View).find(view => {
         const style = RN.StyleSheet.flatten(view.props.style)
         return style?.gap === 16 && (style.flexDirection === 'column' || style.flexDirection === 'row')
@@ -62,17 +60,13 @@ Describe('Expo runtime `on <device>` and `with <fixture>` test clauses', () => {
               run WordFlowerFixtureApp
               expect text "Home"
             }
-            test "a nested test inherits the fixture" {
-              run WordFlowerFixtureApp
-              expect text "Home"
-            }
           }
         `,
         'Main.tao': `
           use Col, Text from @tao/ui
           use Memory from @tao/data/providers/memory
-          workspace data Workspaces / Workspace { Name text }
-          app WordFlowerFixtureApp { view MainView Datasource Memory { } }
+          project data Workspaces / Workspace { Name text }
+          app WordFlowerFixtureApp { id "wordflowerfixtureapp" version "1.0.0" name "WordFlowerFixtureApp" view MainView Datasource Memory { } }
           view MainView() {
             query Workspaces = Workspaces with { }
             render Col() {

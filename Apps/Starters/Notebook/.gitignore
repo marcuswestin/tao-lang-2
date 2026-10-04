@@ -5,6 +5,11 @@
 
 # Tao generated sidecars
 *.tao.ts
+/.tao-ts/
+
+# Tao local state and cache
+/.tao/local/
+/.tao/cache/
 
 # Tooling output
 node_modules/

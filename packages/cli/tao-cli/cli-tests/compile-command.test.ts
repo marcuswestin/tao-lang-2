@@ -4,14 +4,14 @@ import { PassThrough } from 'node:stream'
 import { runCompile } from '../cli-src/compile-command'
 
 const source = `
-  app First { view MainView }
-  app Second { view MainView }
+  app First { id "com.tao.test.first" version "1.0.0" name "First" view MainView }
+  app Second { id "com.tao.test.second" version "1.0.0" name "Second" view MainView }
   view MainView() { render inject \`\`\`ts return null \`\`\` }
 `
 
 Describe('tao compile app selection', () => {
   Test('generates into the owning project cache by default', async () => {
-    await withTaoFiles('tao-compile-cache-', { 'Main.tao': source }, async paths => {
+    await withTaoFiles('tao-compile-cache-', { '.tao/.gitkeep': '', 'Main.tao': source }, async paths => {
       const sourcePath = paths['Main.tao']!
       const compiled = await runCompile(sourcePath, { appName: 'First' })
       const projectRoot = FS.dirname(sourcePath)
@@ -21,7 +21,8 @@ Describe('tao compile app selection', () => {
   })
   Test('refreshes source-adjacent bridge metadata during compilation', async () => {
     await withTaoFiles('tao-compile-bridge-', {
-      'Main.tao': `app Demo { view Main }
+      '.tao/.gitkeep': '',
+      'Main.tao': `app Demo { id "com.tao.test.demo" version "1.0.0" name "Demo" view Main }
 view Main() { render inject \`\`\`ts return null \`\`\` }
 function CountWords(Value text) returns number {
    return CountWords(Value) from ./Words.ts
@@ -32,9 +33,9 @@ export const CountWords: CountWordsContract = (value) => value.length
 `,
     }, async paths => {
       const sourcePath = paths['Main.tao']!
-      const runtimePackageRoot = FS.resolvePath('runtime', FS.dirname(sourcePath))
+      const runtimePackageRoot = FS.resolvePath('.artifacts/runtime', FS.dirname(sourcePath))
       const compiled = await runCompile(sourcePath, { runtimePackageRoot })
-      const metadataPath = `${sourcePath}.ts`
+      const metadataPath = FS.resolvePath('.tao-ts/Main.tao.ts', FS.dirname(sourcePath))
       Expect(await FS.readText(metadataPath)).toContain('Sidecar.CountWords satisfies CountWords')
       Expect(await FS.readText(compiled.outputPath)).toContain('export type CountWords = (arg0: string) => number')
       const copiedSidecar = FS.resolvePath('Words.ts', FS.dirname(compiled.outputPath))
@@ -46,16 +47,17 @@ export const CountWords: CountWordsContract = (value) => value.length
   })
 
   Test('fails actionably without a selection in a noninteractive process', async () => {
-    await withTaoFiles('tao-compile-selection-', { 'Apps.tao': source }, async paths => {
-      await Expect(runCompile(paths['Apps.tao']!, { interactive: false })).rejects.toThrow(
+    await withTaoFiles('tao-compile-selection-', { '.tao/.gitkeep': '', 'Apps.tao': source }, async paths => {
+      const result = runCompile(paths['Apps.tao']!, { interactive: false })
+      await Expect(result).rejects.toThrow(
         'Multiple apps are declared',
       )
-      await Expect(runCompile(paths['Apps.tao']!, { interactive: false })).rejects.toThrow('--app First')
+      await Expect(result).rejects.toThrow('--app First')
     })
   })
 
   Test('prompts interactively and generates the chosen default app', async () => {
-    await withTaoFiles('tao-compile-selection-', { 'Apps.tao': source }, async paths => {
+    await withTaoFiles('tao-compile-selection-', { '.tao/.gitkeep': '', 'Apps.tao': source }, async paths => {
       const input = new PassThrough() as PassThrough & { isTTY: boolean }
       const output = new PassThrough() as PassThrough & { isTTY: boolean }
       input.isTTY = true

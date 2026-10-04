@@ -1,4 +1,4 @@
-workspace
+project
 data Stories / Story {
    HnId number (unique),
    Title text,
@@ -14,7 +14,7 @@ data Stories / Story {
    order by Rank,
 }
 
-workspace
+project
 data Comments / Comment {
    Story,
    HnId number (unique),
@@ -30,7 +30,7 @@ data Comments / Comment {
 // is: the story's unique HnId is what a bookmark stores, so it names a story the feed holds without
 // the two stores needing to know about each other. A story that drops out of the feed leaves the
 // bookmark alone, reading as missing until the feed serves it again.
-workspace
+project
 data Bookmarks / Bookmark {
    Story (reference),
    Note text (default ""),
@@ -41,7 +41,7 @@ data Bookmarks / Bookmark {
 
 // One local row per story. StoryHnId is its stable reconciliation key, while Story is the
 // cross-datasource handle whose missing state remains observable.
-workspace
+project
 data ReadingEntries / ReadingEntry {
    StoryHnId number (unique),
    Story (reference),

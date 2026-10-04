@@ -2,7 +2,9 @@ use SplitNav from @tao/nav
 use Button, Col, Text from @tao/ui
 
 app ResizableSplitApp {
-   Name "Resizable Split"
+   id "navigation-resizable-split-app"
+   version "0.1.0"
+   name "Resizable Split"
    state SidebarWidth is number = 280 (persist)
    action WidenSidebar() {
       set SidebarWidth = 360

@@ -1,3 +1,4 @@
+import { ReleaseCapabilities } from '@shared/core'
 import { Assert } from '@shared/core'
 import type { StudioDrawerTab } from './StudioPanelProjection'
 
@@ -92,7 +93,7 @@ export function studioLayoutOwnsCanvasGestures(preset: string | undefined): bool
   return preset === 'design'
 }
 
-export const StudioPaneMinimums: Record<PaneName, number> = { bottom: 96, left: 180, preview: 280, right: 320 }
+const StudioPaneMinimums: Record<PaneName, number> = { bottom: 96, left: 180, preview: 280, right: 320 }
 
 /** The narrowest the flexible middle column of each preset may get while a side pane is dragged wider. */
 const studioMiddleFloor: Readonly<Record<string, number>> = { design: 240, draw: 320 }
@@ -265,14 +266,18 @@ export function studioShellMarkup(): string {
           <span class="studio-status" role="status">Connecting…</span>
           <button class="studio-canvas-focus" type="button" hidden title="Show the selected element's view on its own and edit only that view">Focus view</button>
           <button class="studio-browser" type="button" title="Open app in browser">Browser</button>
-          <button class="studio-device" type="button" aria-haspopup="dialog" aria-expanded="false" title="Physical device">${
+          <button class="studio-device" ${
+    ReleaseCapabilities.allows('companion') ? '' : 'hidden disabled'
+  } type="button" aria-haspopup="dialog" aria-expanded="false" title="Physical device">${
     studioIcon('phone', 'small')
   }Device</button>
           <button class="studio-interaction-mode" type="button">Mode: Run</button>
           <button class="studio-reload" type="button" title="Reload preview" aria-label="Reload preview">${
     studioIcon('reload')
   }</button>
-          <button class="studio-beta-ship" type="button">Beta ship</button>
+          <button class="studio-beta-ship" ${
+    ReleaseCapabilities.allows('ship') ? '' : 'hidden disabled'
+  } type="button">Beta ship</button>
         </div>
       </header>
       <section class="studio-device-popover" hidden role="dialog" aria-label="Physical device"></section>

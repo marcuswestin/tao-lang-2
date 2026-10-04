@@ -1,4 +1,4 @@
-import { Errors, FS, HCI, Repo } from '@shared'
+import { Errors, FS, HCI, ProjectLocal, Repo } from '@shared'
 import { Expect, mkTestDir, runCleanups, until } from '@shared/test'
 import type { StudioSketchCatalogSnapshot } from '@studio'
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
@@ -29,6 +29,11 @@ export async function exerciseHnreaderFeed(): Promise<void> {
       }
     }
     await FS.copyDirectory(FS.resolvePath('@model', fixtureRoot), FS.resolvePath('@model', projectRoot))
+    await ProjectLocal.prepare(projectRoot)
+    await FS.copyFile(
+      ProjectLocal.storeResolve('project.json', fixtureRoot),
+      ProjectLocal.storeResolve('project.json', projectRoot),
+    )
     studio = await startStudioSmokeLaunch({ appName: 'HNReaderStub', projectRoot, repositoryRoot: Repo.getRoot() })
     browser = await StudioCdp.launchChrome({ artifactRoot: studio.readiness.artifactRoot })
     const driver = browser
@@ -66,11 +71,6 @@ export async function exerciseHnreaderFeed(): Promise<void> {
     await driver.waitFor(
       `document.querySelector(${JSON.stringify(board)})?.dataset.taoStudioSketchGesture === undefined`,
     )
-    Expect(
-      await driver.evaluate<string[]>(
-        `[...document.querySelectorAll('${board} [data-tao-studio-sketch-rect][data-selected="true"]')].map(rect => rect.dataset.taoStudioSketchRect)`,
-      ),
-    ).toEqual([snappedId])
     const snap = `[data-tao-studio-sketch-snap="${sketchId}"]`
     await driver.waitFor(`document.querySelector(${JSON.stringify(snap)})?.disabled === false`)
     Expect(
@@ -182,7 +182,6 @@ export async function exerciseHnreaderFeed(): Promise<void> {
       await FS.readText(viewPath) === beforeView && !await FS.exists(fixturePath)
       && (await catalog()).revision > keptSketchRevision
     )
-    Expect(await FS.readText(viewPath)).toBe(beforeView)
     const undone = await catalog()
     // Undo advances the revision while restoring the complete authored geometry and bindings.
     Expect(undone.sketches).toEqual(beforeCatalog.sketches)

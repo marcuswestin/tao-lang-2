@@ -21,15 +21,19 @@ async function readRecords(path: string): Promise<StudioLifecycleRecord[]> {
 Describe('Studio readiness', () => {
   Test('waits until the advertised page answers before reporting ready', async () => {
     let attempts = 0
-    // budget-ok: `sleep` is an injected no-op, so this budget is never actually waited out.
+    let clock = 0
+    // budget-ok: The injected clock advances without host sleep.
     const ready = await waitForReadyUrl('http://127.0.0.1:42100/sessions/abc', {
       fetchUrl: async () => {
         attempts += 1
         return { ok: attempts >= 3 }
       },
       pollMs: 1,
-      sleep: async () => {},
-      timeoutMs: 100, // budget-ok: `sleep` is an injected no-op, never actually waited out.
+      now: () => clock,
+      sleep: async ms => {
+        clock += ms
+      },
+      timeoutMs: 100, // budget-ok: Injected clock; no host wait.
     })
 
     Expect(ready).toBe(true)
@@ -37,14 +41,18 @@ Describe('Studio readiness', () => {
   })
 
   Test('reports not ready rather than throwing when the page never answers', async () => {
-    // budget-ok: `sleep` is an injected no-op, so this budget is never actually waited out.
+    let clock = 0
+    // budget-ok: The injected clock advances without host sleep.
     const ready = await waitForReadyUrl('http://127.0.0.1:42100/sessions/abc', {
       fetchUrl: async () => {
         Errors.throwHostEnvironment('connection refused')
       },
       pollMs: 1,
-      sleep: async () => {},
-      timeoutMs: 5, // budget-ok: `sleep` is an injected no-op, never actually waited out.
+      now: () => clock,
+      sleep: async ms => {
+        clock += ms
+      },
+      timeoutMs: 5, // budget-ok: Injected clock; no host wait.
     })
 
     Expect(ready).toBe(false)
@@ -151,23 +159,28 @@ Describe('Studio lifecycle telemetry', () => {
 
   Test('never stops a launch because its log could not be written', async () => {
     const announced: string[] = []
-    const log = createStudioLifecycleLog({
-      announce: line => announced.push(line),
-      // Unwritable on any host: a path under a file rather than a directory.
-      artifactRoot: FS.resolvePath('not-a-directory/logs', await unwritableRoot()),
-      launchId: 'browser-1',
-    })
-    log.record({ component: 'studio-server', event: 'server-ready', port: 42100 })
+    const root = await unwritableRoot()
+    try {
+      const log = createStudioLifecycleLog({
+        announce: line => announced.push(line),
+        // Unwritable on any host: a path under a file rather than a directory.
+        artifactRoot: FS.resolvePath('not-a-directory/logs', root),
+        launchId: 'browser-1',
+      })
+      log.record({ component: 'studio-server', event: 'server-ready', port: 42100 })
 
-    await log.close()
+      await log.close()
 
-    // The record still reached the terminal, and closing resolved rather than rejecting — which
-    // is the whole property. Without an assertion this test proved nothing on a permissive host.
-    Expect(announced).toEqual(['studio-server server-ready (port 42100)'])
-    Expect(await FS.exists(log.path)).toBe(false)
+      // The record still reached the terminal, and closing resolved rather than rejecting — which
+      // is the whole property. Without an assertion this test proved nothing on a permissive host.
+      Expect(announced).toEqual(['studio-server server-ready (port 42100)'])
+      Expect(await FS.exists(log.path)).toBe(false)
+    } finally {
+      await FS.remove(root)
+    }
   })
 
-  Test('formats a record without leaking source or secrets', () => {
+  Test('formats lifecycle identity, elapsed duration and shutdown reason', () => {
     Expect(formatLifecycleRecord({
       component: 'metro',
       elapsedMs: 120,

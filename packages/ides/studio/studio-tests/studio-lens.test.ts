@@ -55,7 +55,7 @@ Describe('Studio lens vocabulary', () => {
   Test('persists the global preference and falls back to every facet on anything unreadable', () => {
     const storage = fakeStorage()
     StudioLens.save(storage, ['behavior', 'data'])
-    Expect(storage.items.get('tao-studio.lens')).toBe('{"active":["behavior","data"],"version":1}')
+    Expect(JSON.parse(storage.items.get('tao-studio.lens')!)).toEqual({ active: ['behavior', 'data'], version: 1 })
     Expect(StudioLens.load(storage)).toEqual(['behavior', 'data'])
 
     Expect(StudioLens.load(fakeStorage({ 'tao-studio.lens': 'not json' }))).toEqual(StudioLens.all())

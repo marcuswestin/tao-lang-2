@@ -1,5 +1,5 @@
 import { DesktopHost } from '@expo-host'
-import { Errors, FS } from '@shared'
+import { Errors, FS, ReleaseCapabilities } from '@shared'
 
 /** Package one frozen web export into an unsigned, locally runnable macOS app. */
 export async function buildDesktopApp(options: {
@@ -8,6 +8,7 @@ export async function buildDesktopApp(options: {
   siteRoot: string
   agents?: { buildId: string }
 }): Promise<string> {
+  ReleaseCapabilities.require('desktop')
   const hostRoot = FS.resolvePath('.host', options.outputRoot)
   try {
     const host = await DesktopHost.prepare({

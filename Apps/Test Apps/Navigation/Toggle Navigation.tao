@@ -4,14 +4,18 @@ use Button, Col, Text from @tao/ui
 // Two stacks behind one Safari-style bottom bar. Neither stack draws a header: the bar shows the
 // visible screen's title and toolbar, Back, and a control that switches to the other stack.
 app ToggleNavigation {
-   Name "Toggle Navigation"
+   id "navigation-toggle-navigation"
+   version "0.1.0"
+   name "Toggle Navigation"
    Navigator ToggleTabs
 }
 
 // An item may be a plain view rather than a stack. Nothing reads its slots, so the bar names it by
 // the item's `Label`.
 app ToggleWithView {
-   Name "Toggle Navigation - Plain View"
+   id "navigation-toggle-with-view"
+   version "0.1.0"
+   name "Toggle Navigation - Plain View"
    Navigator ViewToggle
 }
 

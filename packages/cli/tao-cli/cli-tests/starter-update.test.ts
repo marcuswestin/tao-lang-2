@@ -3,6 +3,27 @@ import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { updateStarterFiles } from './test-starter-lowering'
 
 Describe('starter updates', () => {
+  Test('keeps the checked-in project identity when regenerating starter source', async () => {
+    const root = await mkTestDir('tao-starter-identity-')
+    try {
+      const source = FS.resolvePath('source', root)
+      const target = FS.resolvePath('target', root)
+      const original = { id: '550e8400-e29b-41d4-a716-446655440000' }
+      await FS.writeJson(FS.resolvePath('.tao/store/project.json', source), {
+        id: '550e8400-e29b-41d4-a716-446655440001',
+      })
+      await FS.writeText(FS.resolvePath('App.tao', source), 'new app')
+      await FS.writeJson(FS.resolvePath('.tao/store/project.json', target), original)
+
+      await updateStarterFiles(source, target)
+
+      Expect(await FS.readJson(FS.resolvePath('.tao/store/project.json', target))).toEqual(original)
+      Expect(await FS.readText(FS.resolvePath('App.tao', target))).toBe('new app')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test(
     'preserves installed dependency links, removes stale authored files, and rejects project links before writing',
     async () => {

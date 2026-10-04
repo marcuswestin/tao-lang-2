@@ -45,8 +45,8 @@ WordFlower product behavior.
 
 ```sh
 ./tao test "Apps/HNReader"                              # journeys, no network
-./tao dev "Apps/HNReader" --app HNReader                # the real Algolia feed
-./tao dev "Apps/HNReader" --app HNReaderStub            # the canned feed
+./tao run "Apps/HNReader" --app HNReader                # the real Algolia feed
+./tao run "Apps/HNReader" --app HNReaderStub            # the canned feed
 ```
 
 `HNReader` binds `HackerNews` (the real adapter, `CacheFor 5.min`), `Personal`, and

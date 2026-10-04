@@ -9,7 +9,7 @@ const functionSource = `function CountWords(Value text) returns number {
 `
 
 Describe('TypeScript bridge metadata', () => {
-  Test('generates a typed named export check beside the Tao source', async () => {
+  Test('generates a typed named export check in the project output directory', async () => {
     await withTaoFixture({
       ...checkedProjectFile,
       'Main.tao': functionSource,
@@ -18,18 +18,18 @@ Describe('TypeScript bridge metadata', () => {
       const results = await runCheck(root)
       Expect(results.flatMap(result => result.diagnostics ?? []).filter(diagnostic => diagnostic.severity === 'error'))
         .toEqual([])
-      const metadata = await FS.readText(FS.resolvePath('Main.tao.ts', root))
+      const metadata = await FS.readText(FS.resolvePath('.tao-ts/Main.tao.ts', root))
       Expect(metadata).toContain('export type CountWords = (arg0: string) => number')
       Expect(metadata).toContain('Sidecar.CountWords satisfies CountWords')
-      await FS.remove(FS.resolvePath('Main.tao.ts', root))
+      await FS.remove(FS.resolvePath('.tao-ts/Main.tao.ts', root))
       await runCheck(root)
-      Expect(await FS.isFile(FS.resolvePath('Main.tao.ts', root))).toBe(true)
+      Expect(await FS.isFile(FS.resolvePath('.tao-ts/Main.tao.ts', root))).toBe(true)
       await FS.writeText(
         FS.resolvePath('Main.tao', root),
         'function CountWords(Value text) returns number {\n   return 1\n}\n',
       )
       await runCheck(root)
-      Expect(await FS.isFile(FS.resolvePath('Main.tao.ts', root))).toBe(false)
+      Expect(await FS.isFile(FS.resolvePath('.tao-ts/Main.tao.ts', root))).toBe(false)
     })
   })
 
@@ -46,7 +46,8 @@ Describe('TypeScript bridge metadata', () => {
         const results = await runCheck(root)
         const errors = results.flatMap(result => result.diagnostics ?? [])
           .filter(diagnostic => diagnostic.severity === 'error')
-        Expect(errors.some(diagnostic => diagnostic.message.includes('TypeScript bridge:'))).toBe(true)
+        Expect(errors.length).toBeGreaterThan(0)
+        Expect(errors.every(diagnostic => diagnostic.message.startsWith('TypeScript:'))).toBe(true)
       })
     }
   })
@@ -64,7 +65,7 @@ function Echo(Values list of Mixed) returns list of Mixed {
       const results = await runCheck(root)
       Expect(results.flatMap(result => result.diagnostics ?? []).filter(diagnostic => diagnostic.severity === 'error'))
         .toEqual([])
-      Expect(await FS.readText(FS.resolvePath('Main.tao.ts', root))).toContain('Array<string | number>')
+      Expect(await FS.readText(FS.resolvePath('.tao-ts/Main.tao.ts', root))).toContain('Array<string | number>')
     })
   })
 })
