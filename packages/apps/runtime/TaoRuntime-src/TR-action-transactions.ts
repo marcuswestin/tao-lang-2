@@ -3,6 +3,8 @@ import { type TestActionStubContext, TestActionStubs } from './TR-action-test-st
 import { RuntimeAssert } from './TR-assert'
 import { journalSettle, journalStart, type TaoDebugJournalEntry } from './TR-debug-journal'
 import {
+  actionExitOf,
+  createActionExit,
   recordActionFailureFrames,
   reportActionFailure,
   reportUnownedFailure,
@@ -58,6 +60,8 @@ export type TaoDebugPendingWrite = Readonly<{
 let launchGeneration = 0
 
 class ActionTransaction {
+  scope: ActionScope | undefined
+  readonly scopes = new WeakSet<ActionScope>()
   readonly afterCommit: Array<() => void> = []
   readonly rollbackEffects: Array<() => void> = []
   readonly detached: Array<
@@ -204,6 +208,148 @@ let rootQueue: Promise<void> = Promise.resolve()
 let queuedRoots = 0
 let externalEffectRevision = 0
 
+type ActionScope = {
+  transaction: ActionTransaction
+  parent: ActionScope | undefined
+  deferred: Array<() => unknown | PromiseLike<unknown>>
+  users: Set<Promise<void>>
+  closed: boolean
+}
+
+/** runActionScope owns the lexical cleanup of one explicitly entered action block. */
+export function runActionScope<T>(body: () => T | PromiseLike<T>): T | Promise<T> {
+  const transaction = activeTransaction
+  RuntimeAssert.defined(transaction, 'a lexical action scope inside a transaction')
+  RuntimeAssert(!transaction.settled, 'a live action transaction')
+  const parent = transaction.scope
+  RuntimeAssert(!parent?.closed, 'a live parent action scope')
+  const scope: ActionScope = { transaction, parent, deferred: [], users: new Set(), closed: false }
+  transaction.scopes.add(scope)
+  transaction.scope = scope
+  let value: T | PromiseLike<T>
+  let pending: Promise<T> | undefined
+  try {
+    value = body()
+    if (isPromiseLike(value)) {
+      pending = adoptScopePromise(value as PromiseLike<T>).then(
+        settled => finishActionScope(scope, false, undefined, settled),
+        error => finishActionScope<T>(scope, true, error, undefined),
+      )
+    }
+  } catch (error) {
+    const result = finishActionScope<T>(scope, true, error, undefined)
+    return joinScopeUser(parent, result)
+  }
+  if (pending) {
+    transaction.scope = parent
+    return joinScopeUser(parent, pending)
+  }
+  return joinScopeUser(parent, finishActionScope(scope, false, undefined, value as T))
+}
+
+/** A fresh promise assimilates foreign thenables without trusting their attachment methods. */
+function adoptScopePromise<T>(value: PromiseLike<T>): Promise<T> {
+  return new Promise<T>(resolve => resolve(value))
+}
+
+/** registerDeferredAction admits cleanup to the current live lexical frame, including its drain. */
+export function registerDeferredAction(body: () => unknown | PromiseLike<unknown>): void {
+  const transaction = activeTransaction
+  const scope = transaction?.scope
+  RuntimeAssert(transaction && !transaction.settled && scope && !scope.closed, 'a live lexical action scope')
+  RuntimeAssert(scope.transaction === transaction, 'the lexical scope owned by the current transaction')
+  scope.deferred.push(body)
+}
+
+/** runActionScopeUser joins the entire contained outcome, including its asynchronous handlers. */
+export function runActionScopeUser<T>(body: () => T): T | Promise<Awaited<T>> {
+  const scope = activeTransaction?.scope
+  return joinScopeUser(scope, body())
+}
+
+function joinScopeUser<T>(scope: ActionScope | undefined, result: T): T | Promise<Awaited<T>> {
+  if (scope && isPromiseLike(result)) {
+    RuntimeAssert(!scope.closed, 'a live action scope for joined work')
+    // Return the adopted promise too: adopting a lazy thenable twice can repeat its work.
+    const joined = adoptScopePromise(result as PromiseLike<Awaited<T>>)
+    const settled = joined.then(() => undefined, () => undefined)
+    scope.users.add(settled)
+    void settled.then(() => scope.users.delete(settled))
+    return joined
+  }
+  return result
+}
+
+function selectActionScope(scope: ActionScope): void {
+  RuntimeAssert(!scope.closed && !scope.transaction.settled, 'a live action scope continuation')
+  activeTransaction = scope.transaction
+  scope.transaction.scope = scope
+}
+
+function finishActionScope<T>(
+  scope: ActionScope,
+  failed: boolean,
+  error: unknown,
+  value: T | undefined,
+): T | Promise<T> {
+  const cleanupErrors: unknown[] = []
+  if (failed) {
+    recordActionFailureFrames(error, scope.transaction.frames)
+  }
+  const finish = (): T => {
+    selectActionScope(scope)
+    scope.closed = true
+    scope.transaction.scopes.delete(scope)
+    scope.transaction.scope = scope.parent
+    if (cleanupErrors.length > 0) {
+      throw createActionExit(failed, error, value, cleanupErrors)
+    }
+    if (failed) {
+      throw error
+    }
+    return value as T
+  }
+  const drain = (): T | Promise<T> => {
+    selectActionScope(scope)
+    if (scope.users.size > 0) {
+      const pending = Promise.all([...scope.users]).then(drain)
+      scope.transaction.scope = scope.parent
+      return pending
+    }
+    while (scope.deferred.length > 0) {
+      const callback = scope.deferred.pop()!
+      let result: unknown
+      let pending: Promise<T> | undefined
+      try {
+        result = callback()
+        if (isPromiseLike(result)) {
+          pending = adoptScopePromise(result).then(
+            drain,
+            fault => {
+              recordActionFailureFrames(fault, scope.transaction.frames)
+              cleanupErrors.push(fault)
+              return drain()
+            },
+          )
+        }
+      } catch (fault) {
+        recordActionFailureFrames(fault, scope.transaction.frames)
+        cleanupErrors.push(fault)
+      }
+      if (pending) {
+        scope.transaction.scope = scope.parent
+        return pending
+      }
+      if (scope.users.size > 0) {
+        return drain()
+      }
+      selectActionScope(scope)
+    }
+    return finish()
+  }
+  return drain()
+}
+
 /** Let an external invocation read committed state after already admitted roots settle. */
 export async function settleActionRoots(): Promise<void> {
   let pending: Promise<void>
@@ -214,18 +360,27 @@ export async function settleActionRoots(): Promise<void> {
 }
 
 /** TaoActionContinuation is the compiler-carried transaction identity for one async action root. */
-export type TaoActionContinuation = Readonly<{ transaction?: object }>
+export type TaoActionContinuation = Readonly<{ transaction?: object; scope?: object }>
 
 /** captureActionContinuation binds generated continuation segments to their invoking transaction. */
 export function captureActionContinuation(): TaoActionContinuation {
-  return { ...(activeTransaction ? { transaction: activeTransaction } : {}) }
+  return activeTransaction
+    ? { transaction: activeTransaction, ...(activeTransaction.scope ? { scope: activeTransaction.scope } : {}) }
+    : {}
 }
 
 /** resumeActionContinuation selects the transaction owned by the generated segment about to run. */
 export function resumeActionContinuation(continuation: TaoActionContinuation): void {
   const transaction = continuation.transaction as ActionTransaction | undefined
-  if (transaction && !transaction.settled) {
+  const scope = continuation.scope as ActionScope | undefined
+  RuntimeAssert(
+    !scope || transaction instanceof ActionTransaction && !transaction.settled
+        && transaction.scopes.has(scope) && scope.transaction === transaction && !scope.closed,
+    'a live owned action scope',
+  )
+  if (transaction instanceof ActionTransaction && !transaction.settled) {
     activeTransaction = transaction
+    transaction.scope = scope
   }
 }
 
@@ -290,6 +445,7 @@ export function runAction(
     return runJoinedAction(activeTransaction, name, body)
   }
   const suspendedTransaction = interrupt ? activeTransaction : undefined
+  const suspendedScope = suspendedTransaction?.scope
   const launch = launchGeneration
   const receipt = onReceipt === undefined ? undefined : (value: TaoActionReceipt) => {
     if (actionReceipts.delete(receipt!)) {
@@ -318,14 +474,14 @@ export function runAction(
             }
           },
           error => finishRootFailure(transaction, error, name, arguments_),
-        ).finally(() => finishRoot(transaction, suspendedTransaction))
+        ).finally(() => finishRoot(transaction, suspendedTransaction, suspendedScope))
       }
       finishRootSuccess(transaction)
     } catch (error) {
       finishRootFailure(transaction, error, name, arguments_)
     } finally {
       if (!pending) {
-        finishRoot(transaction, suspendedTransaction)
+        finishRoot(transaction, suspendedTransaction, suspendedScope)
       }
     }
   }
@@ -388,10 +544,15 @@ function finishRootFailure(
   )
 }
 
-function finishRoot(transaction: ActionTransaction, suspendedTransaction?: ActionTransaction): void {
+function finishRoot(
+  transaction: ActionTransaction,
+  suspendedTransaction?: ActionTransaction,
+  suspendedScope?: ActionScope,
+): void {
   transaction.settled = true
   if (activeTransaction === undefined && suspendedTransaction && !suspendedTransaction.settled) {
     activeTransaction = suspendedTransaction
+    suspendedTransaction.scope = suspendedScope
   }
   transaction.popFrame()
   settleJournal(transaction)
@@ -425,7 +586,7 @@ function settleJournal(transaction: ActionTransaction): void {
     return
   }
   const outcome = abandonedByLaunch(transaction) ? 'abandoned' : transaction.committed ? 'committed' : 'failed'
-  const failure = transaction.failure
+  const failure = actionExitOf(transaction.failure)?.primary ?? transaction.failure
   journalSettle(transaction.journal, outcome, {
     externalEffect: transaction.externalEffects,
     frames: transaction.frameTrail,
@@ -438,6 +599,7 @@ export type SuspendedTransaction = Readonly<{
   frames: readonly string[]
   pendingWrites(): readonly TaoDebugPendingWrite[]
   transaction: object
+  scope?: object
 }>
 
 /**
@@ -451,13 +613,18 @@ export function suspendActiveTransaction(): SuspendedTransaction | undefined {
     return undefined
   }
   activeTransaction = undefined
-  return { frames: transaction.frames, pendingWrites: () => transaction.pendingWrites(), transaction }
+  return {
+    frames: transaction.frames,
+    pendingWrites: () => transaction.pendingWrites(),
+    transaction,
+    ...(transaction.scope ? { scope: transaction.scope } : {}),
+  }
 }
 
 /** resumeSuspendedTransaction puts a paused root's transaction back as the active one. */
 export function resumeSuspendedTransaction(suspended: SuspendedTransaction | undefined): void {
   if (suspended) {
-    activeTransaction = suspended.transaction as ActionTransaction
+    resumeActionContinuation(suspended)
   }
 }
 
@@ -466,19 +633,23 @@ function runJoinedAction(
   name: string,
   body: () => unknown,
 ): void | Promise<void> {
+  const scope = transaction.scope
   transaction.pushFrame(name)
   let pending = false
   try {
     const result = body()
     if (isPromiseLike(result)) {
       pending = true
-      return Promise.resolve(result).then(
-        () => undefined,
-        error => {
-          recordActionFailureFrames(error, transaction.frames)
-          throw error
-        },
-      ).finally(() => transaction.popFrame())
+      return joinScopeUser(
+        scope,
+        Promise.resolve(result).then(
+          () => undefined,
+          error => {
+            recordActionFailureFrames(error, transaction.frames)
+            throw error
+          },
+        ).finally(() => transaction.popFrame()),
+      )
     }
   } catch (error) {
     recordActionFailureFrames(error, transaction.frames)

@@ -1,5 +1,12 @@
-import { isPromiseLike, skippedActionRun, takeActionSavepoint } from './TR-action-transactions'
-import { actionFailureMessage, asActionFailure, TaoActionFailure } from './TR-errors'
+import {
+  captureActionContinuation,
+  isPromiseLike,
+  resumeActionContinuation,
+  runActionScopeUser,
+  skippedActionRun,
+  takeActionSavepoint,
+} from './TR-action-transactions'
+import { actionExitOf, actionFailureMessage, asActionFailure, TaoActionFailure } from './TR-errors'
 
 /**
  * TaoEffectOutcome pairs one named outcome — `saved`, `rejected`, `error`, or a case — with its block,
@@ -34,19 +41,33 @@ export function runEffectOutcome(
   contract: TaoEffectContract,
   outcomes: readonly TaoEffectOutcome[],
 ): unknown {
+  return runActionScopeUser(() => runContainedEffectOutcome(invoke, contract, outcomes))
+}
+
+function runContainedEffectOutcome(
+  invoke: () => unknown,
+  contract: TaoEffectContract,
+  outcomes: readonly TaoEffectOutcome[],
+): unknown {
+  const continuation = captureActionContinuation()
   const restore = takeActionSavepoint()
   const failed = (error: unknown): unknown => {
+    resumeActionContinuation(continuation)
     restore()
+    const exit = actionExitOf(error)
+    const primary = exit ? exit.primary : error
     const failure = asActionFailure(error)
-    const handler = failureOutcome(failure, error instanceof TaoActionFailure, contract, outcomes)
+    const handler = failureOutcome(failure, primary instanceof TaoActionFailure, contract, outcomes)
       ?? outcomeNamed('otherwise', outcomes)
     if (!handler) {
       throw error
     }
-    return handler(actionFailureMessage(failure, contract.name))
+    return handler(actionFailureMessage(failure, contract.name, exit?.stage))
   }
-  const saved = (): unknown =>
-    (outcomeNamed(contract.success ?? 'saved', outcomes) ?? outcomeNamed('otherwise', outcomes))?.('')
+  const saved = (): unknown => {
+    resumeActionContinuation(continuation)
+    return (outcomeNamed(contract.success ?? 'saved', outcomes) ?? outcomeNamed('otherwise', outcomes))?.('')
+  }
   let result: unknown
   try {
     result = invoke()
