@@ -21,7 +21,7 @@ Describe('compiler: action results', () => {
     Expect(code).toContain('const _TaoActionOwner = TR.UseActionOwner()')
     Expect(code).toContain('name: "Paste", owner: _TaoActionOwner,')
     const contract = BridgeMetadata.collect(compiled.validation.files, '/').map(file => file.code).join('\n')
-    Expect(contract).toContain('ReturnType<typeof Sidecar.Read> satisfies string | Promise<string>')
+    Expect(contract).toContain('__TaoBridgeCheck<string | Promise<string>, ReturnType<typeof Sidecar.Read>>')
   })
   Test('preserves failure contracts through result bindings and when do', async () => {
     const compiled = await Compiler.compileCode(`
