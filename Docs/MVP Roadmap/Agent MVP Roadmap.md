@@ -582,8 +582,15 @@ Metro's own UI took over the terminal.
       resumes. Provider CLI errors are translated rather than passed through.
 - [x] Replace Expo's terminal screen in `tao connect run` with Tao's own interactive screen: a QR
       code, per-platform bundling progress, readable build errors, device logs, and Tao's own keys
-      (`r` reload, `i` iOS Simulator, `?` show the code again, `q` quit). Landed as
-      `hosted-crud-metro.ts` on 2026-09-29; checked against real Metro, not yet on a device.
+      (`r` reload, `i` iOS Simulator, `a` Android emulator, `c` Show connection,
+      `d` Device (Android/iPhone), `q` quit; `?` aliases `c`). Implemented as
+      `hosted-crud-metro.ts` on 2026-09-29; checked against real Metro. On 2026-10-04 the Developer
+      confirmed the larger repaired QR scans on iPhone; the compact replacement needs a new scan.
+- [ ] **Before MVP:** accept Android emulator launch (`a`) in `tao connect run`. The action now
+      calls Expo's Android POST endpoint; prove real launch, reload, logs, and clean stop.
+      The physical-device action (`d`) shows a QR for Expo Go on Android/iPhone; verify both
+      platforms on real devices, including the repaired QR and account requirements. The run
+      screen uses a compact Actions line rather than an initial target menu or action list.
 - [ ] **Before MVP:** a test that starts real Metro and checks the event and address shapes, so an
       Expo upgrade that moves the internals below fails loudly; and the same screen for the dev
       loop, which still relays Expo's raw lines.

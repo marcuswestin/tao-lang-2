@@ -41,31 +41,38 @@ Read the [candidate roadmap](<Hosted data provider candidates.md>), the
     `.tao/connect-run/`) wraps Metro's `MetroTerminalReporter.update` and writes events as JSON
     lines.
   - The screen shows:
-    - Expo's own Expo Go URL, from `GET /_expo/open?platform=ios` with an `Origin` header, as a QR
-      code.
+    - Expo's own Expo Go URL, from `GET /_expo/open?platform=ios` with an `Origin` header.
+      The QR appears after `d` Device is chosen; `c` shows only the address until then.
     - Per-platform bundling progress.
     - Bundling errors with file, line and column.
     - `client_log` lines.
   - Keys: `r` reloads (`/message?method=reload`); `i` opens the iOS Simulator
-    (`POST /_expo/open?platform=ios`); `?` reprints the code; `q` or Ctrl-C stops the process tree.
+    (`POST /_expo/open?platform=ios`); `a` requests the Android emulator through the same route
+    with `platform=android`; `c` reprints the connection; `d` shows device guidance and the QR;
+    `?` aliases `c`; `q` or Ctrl-C stops the process tree.
   - It takes a free port when 8081 is busy.
   - When Expo stops early, it prints Expo's output tail and writes it to `.tao/connect-run/expo.log`.
   - Verified so far: against real Metro headlessly (QR, URL, bundle event, reload, stop) and by
     focused tests.
-  - **Not yet verified on a device or in the Simulator.** The Developer's first try hit a busy port
-    8081, which led to the free-port fix; it has not been retried since.
+  - On 2026-10-04 the Developer confirmed that the larger repaired QR scans on an iPhone.
+    The smaller paired-row rendering needs a fresh scan; launch, reload, logs, and clean stop
+    on devices and simulators remain separate acceptance gates.
 - **Spike findings** behind the screen are recorded under A22. Expo's `/events` socket is broken,
   and `CI=1` disables watching. The reporter hook depends on Expo internals.
 
 ### Not done
 
 1. **Developer device checks of the new run screen** (the steps below).
-2. **Acceptance evidence for both stacks** ("Acceptance work after setup" below): two devices,
-   offline restart, account switch, and direct hostile requests. None of it has been collected yet.
-3. **A hostile-request probe script.** It authenticates as one test account and attempts
-   cross-account reads, writes, forged `ownerId`, and deletes against Firebase and Appwrite
-   directly. The Developer types the test accounts' passwords locally; never ask for them in chat,
-   and never create cloud accounts or enter passwords yourself.
+2. **Acceptance evidence** ("Acceptance work after setup" below): the Developer reports all
+   Firebase manual tests passed and accepts Firebase for continuation. Preserve that report
+   separately from direct hostile-request evidence, which remains inconclusive. Appwrite host
+   debugging is deferred until the full Firebase Tao flow works.
+3. **Run the prepared hostile-request probe script.**
+   `Apps/Hosted CRUD/scripts/hostile-probe.ts` authenticates two existing test accounts per stack
+   and attempts direct cross-account reads, writes, forged ownership, deletes, and Appwrite
+   permission changes. The Developer types passwords at hidden local prompts. The first local run reached authentication only and was inconclusive;
+   see the continuation decision below. Never ask for passwords in chat or create accounts or
+   enter passwords yourself.
 4. **The comparison write-up**: which stack is the easier first experience, plus the unmet gates.
    Put it in this document and the [candidate roadmap](<Hosted data provider candidates.md>).
 5. **Repository gates and finalize.**
@@ -112,18 +119,36 @@ Run these from the new worktree root. Tell the Developer its absolute path first
 ./tao connect run 'Apps/Hosted CRUD'
 ```
 
-1. **iPhone:** type `yes`, then scan the QR code with the camera.
+1. **iPhone:** press `d` for Device, complete any required local Expo account steps,
+   then scan the QR code with the camera.
    - a. **Verify:** `iOS bundled in …s` appears and the app opens in Expo Go.
    - b. Press `r`. **Verify:** `Reloading connected apps.` appears and the app reloads.
    - c. Add `console.log('hi')` to `src/App.tsx`. **Verify:** `app log: hi` appears.
    - d. Break the syntax. **Verify:** `Bundling failed in …:line:col` appears with a code frame.
      Undo both edits.
-   - e. Press `q`. **Verify:** `Stopped Metro.` appears.
-2. **Simulator:** rerun the command and press Return at the question. **Verify:**
+   - e. Press `q`. **Verify:** `Shutting down…` appears immediately, then `Metro stopped.`
+     appears after the process tree and pending actions finish.
+2. **Simulator:** rerun the command and press `i`. **Verify:**
    `Opened Expo Go in the iOS Simulator.` appears and the app runs there.
 
 If `connect firebase` or `connect appwrite` must be rerun, press Return to reuse the existing
 projects. Do not create new Appwrite projects; the Free plan limit is already reached.
+
+The 2026-10-04 QR report showed that the terminal theme mapped the renderer's palette black and
+white to nearly identical greys. The repaired rendering uses explicit black/white colors and a
+four-module quiet zone. The Developer confirmed that the full-cell rendering scans on an iPhone,
+but reported that it was too large. The compact version pairs two module rows per terminal cell;
+solid pairs use background-colored spaces and mixed pairs use half-block glyphs. This halves
+width and height while keeping solid areas continuous. Source tests cover the matrix and geometry;
+a fresh physical scan of the compact version remains pending. The QR is hidden until `d` Device
+is chosen; startup and Simulator/emulator actions show no QR. Android emulator launch now uses
+Expo's POST endpoint; its real-emulator acceptance remains pre-MVP work in A22. The run screen uses one compact `Actions:` line: `r` reload,
+`i` iOS Simulator, `a` Android emulator, `c` Show connection, `d` Device (Android/iPhone), `q` quit.
+The generic shared numbered-menu convention applies to other choice prompts.
+
+The development auth screen has a temporary **Fill email + password** button using sample
+validation values. It only fills inputs; the Developer performs sign-in/account creation locally.
+Remove it when validation is complete.
 
 ## Acceptance work after setup
 
@@ -151,6 +176,43 @@ projects. Do not create new Appwrite projects; the Free plan limit is already re
 
    The [pilot findings](<Hosted data provider candidates.md#pilot-findings--2026-09-28>) have
    details.
+
+## Acceptance evidence branch — 2026-10-03
+
+`feat/hosted-provider-acceptance-evidence` starts at `0575e5d80`. Setup passed in the new
+worktree. On 2026-10-04 the Developer confirmed the larger repaired QR scans on iPhone.
+Screenshots show the iOS Simulator opening, reload requests acknowledged, completed iOS builds,
+and a native startup log. These are partial run-screen observations: compact QR scanning and
+clean stop still need confirmation. The Developer then confirmed `app log: Hi` after saving
+and reloading the app; the event capture contains the message. A lingering progress line was
+caused by retaining a completed build's status; completion/failure now clears it or restores
+another active build, and late progress for completed IDs is ignored. Focused regression tests pass. The Developer reports Appwrite + Legend sign-in and notes appearing on iPhone and Simulator
+after switching screens or reloading, but incoming notes do not appear live: realtime sync fails.
+Its source repair is prepared, with device debugging now deferred. The later continuation decision
+records the Developer's Firebase manual acceptance; direct hostile-request evidence remains
+inconclusive. There is no measured setup-time comparison yet. Preserve the separate Jazz/Convex/Pylon gates above.
+
+The direct-request probe is prepared for a Developer-run check after the device steps:
+
+```sh
+bun run "Apps/Hosted CRUD/scripts/hostile-probe.ts"
+```
+
+Run it from this branch's repository root in a normal local terminal. It reads only this checkout's
+public configuration, allows the existing Firebase/Appwrite pilot projects, and never provisions
+accounts or projects. Passwords use hidden prompts. It writes redacted response observations and
+fixture cleanup status under `.artifacts/hosted-provider/`; authentication response bodies are not
+written. Transport failures, failed positive controls, and ambiguous responses are inconclusive.
+Appwrite ownership forgery and explicit permission grants are separate cases from baseline foreign
+row access. Server responses are separate from UI filtering. Firebase probe tombstones may remain
+because the pilot rules prohibit physical deletion; consult the actual cleanup report.
+
+The app's local mock-test lane and typecheck passed during preparation. Those checks prove probe
+behavior with simulated responses. The initial real server report is inconclusive, while the Developer accepts Firebase
+manual tests as enough to continue. Do not treat this as server-authorization proof or a timed
+first-experience comparison. Integration with main, final gates, commit, and finalization remain
+repository steps. Landing, the shared dev-loop screen, and selective provider-dependency installation
+remain Developer decisions.
 
 ## Later: move the winning stack into Tao and the CLI flow
 
@@ -198,3 +260,31 @@ Final completion means:
 - A clear statement of the remaining gates for Jazz, Convex, and Pylon.
 
 Do not claim provider readiness or land an unmet required gate.
+
+The Developer initially confirmed Firebase + RxDB realtime sync in the iPhone/Simulator check,
+then reported that all Firebase manual tests worked. This is Developer-reported evidence for
+continuation; the direct hostile-request gate remains separate.
+
+The Appwrite source diagnosis found only a 30-second polling subscription in Legend sync,
+with no Appwrite realtime event subscription. The repair adds the installed SDK's dedicated
+Realtime row channel to trigger refreshes and dispose with the connection. This is source work;
+repeat the iPhone/Simulator create, edit, toggle, and delete checks before closing the failed gate.
+
+### Continuation decision — 2026-10-04
+
+The Developer reports that all Firebase manual tests worked and explicitly accepts Firebase + RxDB
+as good enough to continue into the first full Tao adapter and CLI-created-app flow. This is a
+Developer-reported acceptance and sequencing decision, not a measured setup-time comparison.
+The direct-request report `hostile-probe-32b15cba-c69d-433c-9460-c472406d94b6.json` remains
+inconclusive: Firebase account A authenticated (200), B did not (400); Appwrite A/B did not (401).
+No hostile requests or fixtures were created, so server authorization is not proven by that run.
+Appwrite device debugging is deferred until the full Firebase flow works; its prepared realtime
+source repair remains unaccepted on devices. Keep Jazz/Convex/Pylon gates separate.
+
+The first Tao flow will target private account-scoped Notes with full CRUD through existing
+auth/data contracts. General authored access grants remain unsupported until separately proven;
+this does not change Tao language semantics or establish provider capability conformance.
+
+The selective provider-dependency installation policy and A21 public connection-file placement
+need Developer decisions before changing dependencies or the generated-app configuration flow.
+Sharing the run screen with the dev loop and landing remain pending decisions. Landing still requires explicit authorization for the slice.

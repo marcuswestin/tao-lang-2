@@ -9,6 +9,7 @@ type ExpoRunner = (
   args: readonly string[],
   cwd: string,
   interactive: boolean,
+  signal?: AbortSignal,
 ) => Promise<ExpoResult>
 
 type HostedCrudRunOptions = {
@@ -26,10 +27,7 @@ type HostedCrudRunOptions = {
 
 const EXPO_GO_INSTALL_URL = 'https://expo.dev/go'
 
-/**
- * Starts the Hosted CRUD pilot in Expo Go, on an iPhone once its Expo Go app is signed in to the Expo CLI
- * account, or in the iOS Simulator.
- */
+/** Starts the Hosted CRUD pilot in Expo Go; device actions are available once Metro is ready. */
 export async function runHostedCrud(path = '.', options: HostedCrudRunOptions = {}): Promise<void> {
   const project = FS.resolvePath(path)
   if (!await FS.isFile(FS.resolvePath('app.json', project))) {
@@ -41,46 +39,39 @@ export async function runHostedCrud(path = '.', options: HostedCrudRunOptions = 
       `Expo CLI is not installed for ${FS.displayPath(project)}. Install the project's dependencies first.`,
     )
   }
-  const run = options.expoRunner ?? runExpoCli
-  const out = { output: options.output }
-
-  // Since SDK 57, Expo Go on a physical iPhone opens a dev server only when Expo CLI and Expo Go are signed in
-  // to the same Expo account.
-  let account = await expoAccount(run, expo, project)
-  if (!account) {
-    HCI.writeLine('Expo Go on iPhone needs an Expo account signed in both here and in the Expo Go app.', out)
-    HCI.writeLine('Signing in to Expo CLI; create a free account at https://expo.dev/signup if you have none.', out)
-    const login = await run(expo, ['login'], project, true)
-    if (login.exitCode !== 0) {
-      Errors.throwHostEnvironment('Expo sign-in did not finish. Retry after signing in.')
-    }
-    account = await expoAccount(run, expo, project)
-    if (!account) {
-      Errors.throwHostEnvironment('Expo CLI did not retain a sign-in.')
-    }
-  }
-  HCI.writeLine(`Expo CLI is signed in as ${account}.`, out)
-  HCI.writeLine('', out)
-  HCI.writeLine('To run on your iPhone:', out)
-  HCI.writeLine(`  1. Install or open Expo Go: ${EXPO_GO_INSTALL_URL}`, out)
-  HCI.writeLine(
-    `  2. In Expo Go, open the Home tab, tap the account icon at the top right, and sign in as ${account}.`,
-    out,
-  )
-  HCI.writeLine('', out)
-  const onIPhone = await askIPhoneSignedIn(account, options)
-  await runMetroSession({
-    expo,
-    fetch: options.fetch,
-    input: options.input,
-    interactive: options.interactive,
-    metro: options.metro,
-    openSimulator: !onIPhone,
-    output: options.output,
-    pollMs: options.pollMs,
-    port: options.port,
-    project,
+  const activeExpoRuns = new Set<Promise<ExpoResult>>()
+  const run: ExpoRunner = options.expoRunner ?? ((...args) => {
+    const task = runExpoCli(...args)
+    activeExpoRuns.add(task)
+    void task.then(() => activeExpoRuns.delete(task), () => activeExpoRuns.delete(task))
+    return task
   })
+  try {
+    await runMetroSession({
+      expo,
+      fetch: options.fetch,
+      input: options.input,
+      interactive: options.interactive,
+      metro: options.metro,
+      output: options.output,
+      pollMs: options.pollMs,
+      port: options.port,
+      project,
+      deviceGuidance: async signal => {
+        const account = await expoAccount(run, expo, project, signal)
+        return [
+          `Install or open Expo Go on your device: ${EXPO_GO_INSTALL_URL}`,
+          account
+            ? `For iPhone, open Expo Go Home, tap the account icon, and sign in as ${account} (the Expo CLI account).`
+            : 'For iPhone, sign in to Expo CLI with `expo login`, then sign in to the same account in Expo Go.',
+        ]
+      },
+    })
+  } finally {
+    // The default account lookup owns a child process; let its abort teardown finish before returning.
+    await Promise.allSettled([...activeExpoRuns])
+  }
+  HCI.writeLine('Metro stopped.', { output: options.output })
 }
 
 /** hostedCrudRunCommand is the command a person types to start the pilot, spelled for where they are. */
@@ -110,21 +101,6 @@ function shellQuote(value: string): string {
   return /^[\w./-]+$/u.test(value) ? value : `'${value.replaceAll("'", `'\\''`)}'`
 }
 
-/** askIPhoneSignedIn waits until Expo Go on the iPhone is signed in, or Return chooses the iOS Simulator. */
-async function askIPhoneSignedIn(account: string, options: HostedCrudRunOptions): Promise<boolean> {
-  const terminal = { input: options.input, interactive: options.interactive, output: options.output }
-  if (!HCI.isInteractive(terminal)) {
-    return false
-  }
-  const answer = await HCI.askText({
-    ...terminal,
-    message:
-      `Type yes once Expo Go on your iPhone is signed in as ${account}, or press Return to use the iOS Simulator`,
-    validate: value => ['', 'y', 'yes'].includes(value.trim().toLowerCase()) ? undefined : 'Type yes, or press Return.',
-  })
-  return answer.trim() !== ''
-}
-
 async function findExpoBinary(project: string): Promise<string | undefined> {
   for (let directory = project;; directory = FS.dirname(directory)) {
     const candidate = FS.resolvePath('node_modules/.bin/expo', directory)
@@ -137,8 +113,13 @@ async function findExpoBinary(project: string): Promise<string | undefined> {
   }
 }
 
-async function expoAccount(run: ExpoRunner, expo: string, project: string): Promise<string | undefined> {
-  const result = await run(expo, ['whoami'], project, false)
+async function expoAccount(
+  run: ExpoRunner,
+  expo: string,
+  project: string,
+  signal: AbortSignal,
+): Promise<string | undefined> {
+  const result = await run(expo, ['whoami'], project, false, signal)
   const name = result.stdout.replaceAll(/\u001b\[[0-9;]*m/gu, '').trim().split('\n').at(-1)?.trim() ?? ''
   return result.exitCode === 0 && /^[\w.-]+$/u.test(name) ? name : undefined
 }
@@ -148,6 +129,38 @@ async function runExpoCli(
   args: readonly string[],
   cwd: string,
   interactive: boolean,
+  signal?: AbortSignal,
 ): Promise<ExpoResult> {
-  return await CLI.run(expo, { args: [...args], cwd, stdio: interactive ? 'inherit' : 'pipe' })
+  if (signal?.aborted) {
+    return { exitCode: null, stdout: '', stderr: '' }
+  }
+  let stdout = ''
+  let stderr = ''
+  const command = CLI.start(expo, {
+    args: [...args],
+    cwd,
+    stdio: interactive ? 'inherit' : 'pipe',
+    onOutput: (stream, chunk) => {
+      if (stream === 'stdout') {
+        stdout += chunk.toString('utf8')
+      } else {
+        stderr += chunk.toString('utf8')
+      }
+    },
+  })
+  const abort = () => {
+    command.kill()
+  }
+  signal?.addEventListener('abort', abort, { once: true })
+  if (signal?.aborted) {
+    abort()
+  }
+  try {
+    const { exitCode } = await command.waitForClose()
+    await command.closeOutput()
+    return { exitCode, stdout, stderr }
+  } finally {
+    signal?.removeEventListener('abort', abort)
+    command.dispose()
+  }
 }

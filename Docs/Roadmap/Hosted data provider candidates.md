@@ -215,14 +215,16 @@ not claim `Relations`, `AccessRules`, `FieldUpdates`, or `Offline` support.
 project and web app, create the default Firestore database if absent, enable Email/Password auth,
 and deploy the pilot rules. It asks before replacing existing Firestore rules. The Developer
 approved `firebase-tools` and its installation dependencies for this automation. `tao connect
-appwrite` configures an existing project from a project API key; that key cannot create projects,
-and an organization Partners key cannot configure their inner resources without another key.
+appwrite` now uses the bundled Appwrite CLI and local browser sign-in to reuse a project and
+configure its platform, auth, and TablesDB resources with a 15-minute ephemeral key it never stores.
+For this comparison, reuse `tao-hosted-crud-160214`; the Developer's Free-plan organization already
+uses both project slots. The optional manual path still takes a project API key.
 The two commands record public client settings, but neither wires an ordinary Tao data declaration
 to these providers. Firebase's web API key is public client configuration, and Firebase CLI's
-Google login stays in its local user configuration outside the project. The Appwrite project key
-is saved in an ignored, owner-only local file; it is not encrypted.
-Appwrite's installed React Native SDK Realtime path is unsuitable for this native spike, so the
-Legend adapter polls for changes. Its `ownerId` field is client-controlled; provider-enforced
+Google login stays in its local user configuration outside the project. Only the optional manual
+Appwrite path saves its setup key in an ignored, owner-only local file; it is not encrypted.
+The Appwrite spike initially polled for changes. A dedicated authenticated SDK Realtime
+subscription is now prepared, with device acceptance deferred. Its `ownerId` field is client-controlled; provider-enforced
 row permissions and direct hostile requests still need hosted proof.
 
 The free-tier Appwrite comparison uses serverless TablesDB and its typed rows. DocumentsDB requires
@@ -233,6 +235,23 @@ The decision needs a physical iPhone run against disposable projects: account cr
 two-device CRUD, queued offline create/update/delete across an app restart, reconciliation,
 cross-account cache isolation, and direct hostile backend requests. Measure project creation and
 configuration steps and time to first synced note. A green typecheck or bundle is a narrower result.
+
+### Acceptance evidence in progress — 2026-10-03
+
+The evidence branch starts at `0575e5d80`. The Developer's earlier iPhone sign-in/basic CRUD
+confirmation covers both stacks. The Developer later reported all Firebase manual tests passed
+and chose Firebase for continuation. Compact QR and shutdown acceptance remain separate
+run-screen checks; Appwrite host debugging and direct-request authorization remain unresolved. The prepared
+`Apps/Hosted CRUD/scripts/hostile-probe.ts` records direct HTTP observations, including Appwrite
+owner forgery and row permission grants, independently of UI filtering. Local mocked tests and
+typecheck passed. The first Developer-run server report was inconclusive at authentication
+and made no hostile requests; the continuation decision below records its responses.
+
+**First-experience recommendation:** continue with Firebase, as the Developer accepts its
+manual tests and live sync worked while Appwrite incoming sync failed. A measured setup-time
+comparison and direct server-authorization proof remain unmet. The Expo CLI/Expo Go same-account requirement on a
+physical iPhone is an observed cost shared by both stacks in this spike. This sequencing
+recommendation does not establish Tao capability conformance. The Jazz, Convex, and Pylon pilot gates below remain separate.
 
 ## What the evaluation decides for each candidate
 
@@ -298,3 +317,36 @@ so a later pass can revisit it.
    assumed to be a Tao sign-in proof until this is proven.
 4. Pylon–Clerk pairing is a later follow-up. Pylon's policy, session, offline and native behavior
    need Tao conformance and hosted-device evidence before landing this pilot.
+
+### Device finding — 2026-10-04
+
+The Developer reports Appwrite + Legend sign-in and notes appearing on an iPhone and the iOS
+Simulator after switching screens or reloading. Incoming notes do not appear live, so realtime
+sync is a failed gate; host debugging is deferred until the Firebase Tao flow works. This establishes neither full two-device CRUD nor
+offline restart/replay, offline account isolation, or direct-request authorization. A first-experience
+timing comparison remains unmeasured; the Jazz/Convex/Pylon gates remain separate.
+
+The Developer initially confirmed Firebase + RxDB realtime sync in the iPhone/Simulator check,
+then reported all Firebase manual tests worked. This is Developer-reported evidence for
+continuation; direct hostile-request authorization remains separate.
+
+The Appwrite source diagnosis found only a 30-second polling subscription in Legend sync,
+with no Appwrite realtime event subscription. The repair adds the installed SDK's dedicated
+Realtime row channel to trigger refreshes and dispose with the connection. This is source work;
+repeat the iPhone/Simulator create, edit, toggle, and delete checks before closing the failed gate.
+
+### Continuation decision — 2026-10-04
+
+The Developer reports that all Firebase manual tests worked and explicitly accepts Firebase + RxDB
+as good enough to continue into the first full Tao adapter and CLI-created-app flow. This is a
+Developer-reported acceptance and sequencing decision, not a measured setup-time comparison.
+The direct-request report `hostile-probe-32b15cba-c69d-433c-9460-c472406d94b6.json` remains
+inconclusive: Firebase account A authenticated (200), B did not (400); Appwrite A/B did not (401).
+No hostile requests or fixtures were created, so server authorization is not proven by that run.
+Appwrite device debugging is deferred until the full Firebase flow works; its prepared realtime
+source repair remains unaccepted on devices. Keep Jazz/Convex/Pylon gates separate.
+
+The first Tao flow targets private account-scoped Notes with full CRUD through existing
+auth/data contracts. General authored access grants and provider capability conformance remain
+separate proof obligations. Provider-dependency installation policy, A21 public connection-file
+placement, sharing the run screen with the dev loop, and landing remain Developer decisions. Landing still requires explicit authorization for the slice.

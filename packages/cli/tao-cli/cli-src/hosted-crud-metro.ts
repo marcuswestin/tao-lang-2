@@ -6,7 +6,7 @@ import {
 } from '@expo-host/dev-loop/StudioProcessTree'
 import { Errors, FS, HCI, Json, Platform, Text, Time } from '@shared'
 import type { Readable, Writable } from 'node:stream'
-import QRCode from 'qrcode'
+import { renderTerminalQr } from './hosted-crud-qr'
 import METRO_EVENTS_PRELOAD from './metro-events-preload.cjs.txt'
 
 /** MetroProcess is a running headless Expo CLI: its exit, and a stop that takes its whole process tree down. */
@@ -18,8 +18,8 @@ export type MetroStarter = (spec: { args: readonly string[]; cwd: string; env: R
 export type MetroSessionOptions = {
   expo: string
   project: string
-  /** Opens the app in the iOS Simulator as soon as Metro is ready. */
-  openSimulator: boolean
+  /** Gives physical-device setup guidance only when the person requests it. */
+  deviceGuidance?: (signal: AbortSignal) => Promise<readonly string[]>
   input?: Readable
   interactive?: boolean
   output?: Writable
@@ -41,7 +41,7 @@ type MetroEvent = {
   data?: unknown
 }
 
-type Build = { platform: string; started: number; total: number }
+type Build = { platform: string; started: number; status: string; total: number }
 
 const METRO_PORT = 8081
 const START_TIMEOUT_MS = 120_000
@@ -76,11 +76,20 @@ export async function runMetroSession(options: MetroSessionOptions): Promise<voi
     env: { TAO_METRO_EVENTS: events },
   })
   let stopping = false
+  const actions = new AbortController()
+  let stopPromise: Promise<void> | undefined
   let exitCode: number | null | undefined
   void metro.exited.then(code => (exitCode = code))
-  const stop = async () => {
-    stopping = true
-    await metro.stop()
+  const stop = (announce = false): Promise<void> => {
+    if (!stopping) {
+      stopping = true
+      actions.abort()
+      if (announce) {
+        screen.status(undefined)
+        screen.line('Shutting down… stopping Metro and its child processes.')
+      }
+    }
+    return stopPromise ??= metro.stop()
   }
 
   try {
@@ -104,45 +113,126 @@ export async function runMetroSession(options: MetroSessionOptions): Promise<voi
       Errors.throwHostEnvironment(`Expo did not report its Expo Go address (${probe.status} ${probe.text.trim()}).`)
     }
     screen.status(undefined)
-    await showConnection(url, options.openSimulator, out)
+    let deviceChosen = false
+    showConnection(url, out, screen, deviceChosen)
 
+    const showActions = () =>
+      screen.line(
+        'Actions: r reload · i iOS Simulator · a Android emulator · c Show connection · d Device (Android/iPhone) · q quit',
+      )
+    const pendingActions = new Set<Promise<void>>()
     const onKey = async (key: string) => {
+      if (stopping || actions.signal.aborted) {
+        return
+      }
       if (key === 'q' || key === HCI.RawKey.interrupt) {
-        await stop()
+        await stop(true)
       } else if (key === 'r') {
-        screen.line(await reload(fetchImpl, origin))
+        const message = await abortable(reload(fetchImpl, origin, actions.signal), actions.signal)
+        if (stopping || actions.signal.aborted) {
+          return
+        }
+        if (message !== undefined) {
+          screen.line(message)
+        }
       } else if (key === 'i') {
         screen.line('Opening Expo Go in the iOS Simulator…')
-        screen.line(await openSimulator(fetchImpl, origin))
-      } else if (key === '?') {
-        await showConnection(url, options.openSimulator, out)
+        const message = await abortable(
+          openSimulator(fetchImpl, origin, 'ios', 'iOS Simulator', actions.signal),
+          actions.signal,
+        )
+        if (stopping || actions.signal.aborted) {
+          return
+        }
+        if (message !== undefined) {
+          screen.line(message)
+        }
+      } else if (key === 'a') {
+        screen.line('Opening Expo Go in the Android emulator…')
+        const message = await abortable(
+          openSimulator(fetchImpl, origin, 'android', 'Android emulator', actions.signal),
+          actions.signal,
+        )
+        if (stopping || actions.signal.aborted) {
+          return
+        }
+        if (message !== undefined) {
+          screen.line(message)
+        }
+      } else if (key === 'd') {
+        deviceChosen = true
+        const guidance = await abortable(
+          options.deviceGuidance?.(actions.signal) ?? Promise.resolve([]),
+          actions.signal,
+        )
+        if (stopping || actions.signal.aborted) {
+          return
+        }
+        for (const line of guidance ?? []) {
+          screen.line(line)
+        }
+        showConnection(url, out, screen, deviceChosen)
+      } else if (key === 'c' || key === '?') {
+        showConnection(url, out, screen, deviceChosen)
+      }
+      if (!stopping && !actions.signal.aborted && ['r', 'i', 'a', 'd', 'c', '?'].includes(key)) {
+        showActions()
       }
     }
     const keys = HCI.isInteractive(options)
-      ? HCI.startRawKeys(key => void onKey(key), { input: options.input })
+      ? HCI.startRawKeys(key => {
+        const action = onKey(key)
+        pendingActions.add(action)
+        void action.then(() => pendingActions.delete(action), () => pendingActions.delete(action))
+      }, { input: options.input })
       : undefined
-    const stopSignal = Platform.onProcessSignal('SIGINT', () => void stop())
+    if (keys) {
+      showActions()
+    }
+    const stopSignal = Platform.onProcessSignal('SIGINT', () => void stop(true))
     try {
-      if (options.openSimulator) {
-        void onKey('i')
-      }
       await followEvents(events, screen, () => stopping || exitCode !== undefined, options.pollMs ?? 150)
     } finally {
       keys?.stop()
       stopSignal()
+      // Metro can exit without a quit key; release any pending account lookup or request.
+      actions.abort()
+      await Promise.allSettled([...pendingActions])
     }
     if (!stopping) {
       screen.status(undefined)
       throwMetroExited(metro, directory, `Expo CLI stopped with code ${exitCode}.`)
     }
     screen.status(undefined)
-    HCI.writeLine('Stopped Metro.', out)
   } finally {
-    if (!stopping) {
+    try {
       await stop()
+    } finally {
+      await FS.writeText(FS.resolvePath('expo.log', directory), metro.output())
     }
-    await FS.writeText(FS.resolvePath('expo.log', directory), metro.output())
   }
+}
+
+/** An action can be abandoned after quit even when a supplied test runner or fetch ignores AbortSignal. */
+async function abortable<T>(task: Promise<T>, signal: AbortSignal): Promise<T | undefined> {
+  if (signal.aborted) {
+    return undefined
+  }
+  let onAbort = () => {}
+  const aborted = new Promise<undefined>(resolve => {
+    onAbort = () => resolve(undefined)
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+  try {
+    return await Promise.race([task, aborted])
+  } finally {
+    signal.removeEventListener('abort', onAbort)
+  }
+}
+
+/** Bun's RequestInit and DOM AbortController describe onabort differently, but use the same native signal. */
+function requestSignal(signal: AbortSignal): RequestInit['signal'] {
+  return signal as unknown as RequestInit['signal']
 }
 
 function throwMetroExited(metro: MetroProcess, directory: string, headline: string): never {
@@ -152,18 +242,23 @@ function throwMetroExited(metro: MetroProcess, directory: string, headline: stri
   )
 }
 
-async function showConnection(url: string, simulator: boolean, out: HCI.OutputOptions): Promise<void> {
-  HCI.writeLine('', out)
-  HCI.writeLine(await QRCode.toString(url, { type: 'terminal', small: true }), out)
-  HCI.writeLine(`Expo Go address: ${HCI.bold(url)}`, out)
-  HCI.writeLine(
-    simulator
-      ? 'Opening the iOS Simulator; to use an iPhone instead, scan the code with its camera.'
-      : 'Scan the code with the iPhone camera, then open it in Expo Go.',
-    out,
-  )
-  HCI.writeLine(HCI.dim('Keys: r reload · i iOS Simulator · ? show this again · q quit'), out)
-  HCI.writeLine('', out)
+function showConnection(url: string, out: HCI.OutputOptions, screen: Screen, deviceChosen: boolean): void {
+  if (!deviceChosen) {
+    screen.line(`Expo Go address: ${HCI.bold(url)}`)
+    return
+  }
+  const output = out.output ?? Platform.runtimeProcess.stdout
+  const columns = (output as Writable & { columns?: number }).columns
+  const qr = renderTerminalQr(url, columns)
+  screen.line([
+    '',
+    qr ?? 'Terminal is too narrow for the QR code. Widen it to scan, or open the address below in Expo Go.',
+    `Expo Go address: ${HCI.bold(url)}`,
+    qr === undefined
+      ? 'Open the address in Expo Go on your device.'
+      : 'Scan in Expo Go on Android, or with the iPhone camera.',
+    '',
+  ].join('\n'))
 }
 
 /** followEvents shows each new Metro event line until `done`, reading only whole lines the preload has finished writing. */
@@ -171,8 +266,13 @@ async function followEvents(file: string, screen: Screen, done: () => boolean, p
   const builds = new Map<string, Build>()
   let consumed = 0
   while (true) {
-    const finished = done()
+    if (done()) {
+      return
+    }
     const text = await FS.readText(file)
+    if (done()) {
+      return
+    }
     const end = text.lastIndexOf('\n') + 1
     for (const line of text.slice(consumed, end).split('\n')) {
       if (line.trim() !== '') {
@@ -180,9 +280,6 @@ async function followEvents(file: string, screen: Screen, done: () => boolean, p
       }
     }
     consumed = Math.max(consumed, end)
-    if (finished) {
-      return
-    }
     await Time.sleep(pollMs)
   }
 }
@@ -200,31 +297,35 @@ function parseEvent(line: string): MetroEvent {
 function showEvent(event: MetroEvent, builds: Map<string, Build>, screen: Screen): void {
   const id = String(event.buildID ?? '')
   const build = builds.get(id)
+  const showActiveBuild = () => screen.status([...builds.values()].at(-1)?.status)
   const handlers: Record<string, () => void> = {
     bundle_build_started() {
-      builds.set(id, { platform: platformName(event.bundleDetails?.platform), started: Date.now(), total: 0 })
-      screen.status(`${platformName(event.bundleDetails?.platform)}: bundling…`)
+      const platform = platformName(event.bundleDetails?.platform)
+      builds.set(id, { platform, started: Date.now(), status: `${platform}: bundling…`, total: 0 })
+      showActiveBuild()
     },
     bundle_transform_progressed_throttled() {
       const done = Number(event.transformedFileCount)
       const total = Number(event.totalFileCount)
       if (build && Number.isFinite(done) && total > 0) {
         build.total = total
-        screen.status(`${build.platform}: bundling ${Math.floor(done / total * 100)}% (${done}/${total} files)`)
+        build.status = `${build.platform}: bundling ${Math.floor(done / total * 100)}% (${done}/${total} files)`
+        showActiveBuild()
       }
     },
     bundle_build_done() {
       if (build) {
         const seconds = ((Date.now() - build.started) / 1000).toFixed(1)
+        builds.delete(id)
+        showActiveBuild()
         screen.line(
           HCI.green(`${build.platform} bundled in ${seconds}s${build.total ? ` (${build.total} files)` : ''}`),
         )
-        builds.delete(id)
       }
     },
     bundle_build_failed() {
       builds.delete(id)
-      screen.status(undefined)
+      showActiveBuild()
     },
     bundling_error() {
       const error = event.error ?? {}
@@ -264,31 +365,38 @@ async function metroAnswers(fetchImpl: ExpoFetch, origin: string): Promise<boole
   }
 }
 
-async function reload(fetchImpl: ExpoFetch, origin: string): Promise<string> {
+async function reload(fetchImpl: ExpoFetch, origin: string, signal: AbortSignal): Promise<string> {
   try {
-    const response = await fetchImpl(`${origin}/message?method=reload`)
+    const response = await fetchImpl(`${origin}/message?method=reload`, { signal: requestSignal(signal) })
     return response.ok ? 'Reloading connected apps.' : `Reload failed: ${response.status} ${await response.text()}`
   } catch (error) {
     return `Reload failed: ${Errors.formatForUser(error)}`
   }
 }
 
-/** openSimulator asks Expo to open its app in the iOS Simulator, which also installs Expo Go there when needed. */
-async function openSimulator(fetchImpl: ExpoFetch, origin: string): Promise<string> {
+/** openSimulator asks Expo's same-device endpoint to open the app on the selected emulator or simulator. */
+async function openSimulator(
+  fetchImpl: ExpoFetch,
+  origin: string,
+  platform: 'ios' | 'android',
+  target: 'iOS Simulator' | 'Android emulator',
+  signal: AbortSignal,
+): Promise<string> {
   try {
-    const response = await fetchImpl(`${origin}/_expo/open?platform=ios`, {
+    const response = await fetchImpl(`${origin}/_expo/open?platform=${platform}`, {
       method: 'POST',
       headers: { Origin: origin },
+      signal: requestSignal(signal),
     })
     if (response.ok) {
-      return 'Opened Expo Go in the iOS Simulator.'
+      return `Opened Expo Go in the ${target}.`
     }
     const text = await response.text()
     const body = parseJson(text)
     const reason = [body?.['error'], body?.['details']].filter(part => typeof part === 'string').join(' ')
-    return `Could not open the iOS Simulator: ${reason || `${response.status} ${text}`}`
+    return `Could not open the ${target}: ${reason || `${response.status} ${text}`}`
   } catch (error) {
-    return `Could not open the iOS Simulator: ${Errors.formatForUser(error)}`
+    return `Could not open the ${target}: ${Errors.formatForUser(error)}`
   }
 }
 

@@ -19,7 +19,18 @@ From the repository root, run:
 ./tao connect run 'Apps/Hosted CRUD'
 ```
 
-`tao connect run` replaces Expo's terminal screen with its own: Expo's Expo Go address as a QR code, bundling progress and errors, app logs, and the keys `r` reload, `i` iOS Simulator, `?` show the code again, and `q` quit. Scan the code with the iPhone camera to open the app in Expo Go. The phone and development machine must be able to reach the Metro server. No Apple Developer account is needed for this path, but Expo Go on a physical iPhone opens a development server only when Expo CLI and the Expo Go app are signed in to the same free Expo account; `tao connect run` signs Expo CLI in when needed and names the account to use in Expo Go. The iOS Simulator does not need the account. Choose a provider on the first screen, then create an account and perform the same CRUD steps. Each provider keeps its own session, so switching providers needs no sign-out.
+`tao connect run` offers one compact Actions line: `r` reload, `i` iOS Simulator,
+`a` Android emulator, `c` Show connection, `d` Device (Android/iPhone), and `q` quit.
+The QR is hidden until you press `d` for Device; any required Expo account guidance appears there.
+Before that, `c` shows only the address. Afterward, it reprints the QR.
+The Android emulator action asks Expo to open the app locally; its real-emulator acceptance remains
+pre-MVP work in A22. Other CLI choice prompts use the shared numbered menu and Enter default.
+
+`tao connect run` replaces Expo's terminal screen with its own: Expo's Expo Go address as a QR code, bundling progress and errors, app logs, and the compact Actions line above (`?` remains a connection-display alias). Scan with the iPhone camera, or from inside Expo Go on Android, to open the app. The phone and development machine must be able to reach the Metro server. No Apple Developer account is needed for this path, but Expo Go on a physical iPhone opens a development server only when Expo CLI and the Expo Go app are signed in to the same free Expo account; `tao connect run` checks the Expo CLI account, gives local sign-in guidance when needed, and names the account to use in Expo Go. The iOS Simulator does not need the account. Choose a provider on the first screen, then create an account and perform the same CRUD steps. Each provider keeps its own session, so switching providers needs no sign-out.
+
+The development sign-in screen temporarily includes **Fill email + password** for validation.
+It fills sample values only and does not submit authentication. Existing accounts still use their
+locally entered credentials. Remove the helper once validation is finished.
 
 ## Comparison protocol
 
@@ -31,3 +42,23 @@ Record elapsed time and distinct setup actions from a fresh provider account to 
 4. Attempt direct SDK reads and writes as a second account. Verify the backend rejects cross-account access.
 
 Record any native module failure, partial sync, duplicate row, conflict, data leak, or setup step requiring privileged credentials. Local typechecks or simulator runs alone do not establish the iPhone, offline restart, or hostile-client results.
+
+## Direct hostile-request evidence
+
+After the device comparison steps, run this from the repository root in a normal local terminal:
+
+```sh
+bun run "Apps/Hosted CRUD/scripts/hostile-probe.ts"
+```
+
+Use two existing test accounts per provider. Enter passwords only at the hidden terminal prompts;
+never put them in chat, command arguments, or connection files. The script allows only the existing
+pilot projects, including Appwrite `tao-hosted-crud-160214`, and does not provision accounts or
+projects. It modifies only randomized probe rows, records actual HTTP responses independently of
+UI filtering, and reports cleanup status in `.artifacts/hosted-provider/`. Firebase tombstones may
+remain under the pilot's no-hard-delete rules; the report lists them.
+
+Same-owner controls must pass before foreign-row denials count. Authentication, transport, and
+ambiguous responses remain inconclusive. Appwrite forged `ownerId` and explicit permission grants
+are checked separately from ordinary foreign-row reads/writes. The script's local mock tests do
+not establish hosted isolation; retain the actual server report with the device observations.

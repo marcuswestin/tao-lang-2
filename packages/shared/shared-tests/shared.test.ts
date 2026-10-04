@@ -864,6 +864,34 @@ Describe('HCI', () => {
     Expect(choice).toBe('two')
   })
 
+  Test('puts the default choice first and redraws labeled options after an invalid answer', async () => {
+    const streams = fakeTerminal('wrong\n\n')
+    const choice = await HCI.askChoice({
+      message: 'Open the app on',
+      choices: [{ value: 'iphone', label: 'iPhone' }, { value: 'simulator', label: 'iOS Simulator' }],
+      defaultValue: 'simulator',
+      ...streams,
+    })
+
+    const output = stripAnsi(streams.outputText())
+    Expect(choice).toBe('simulator')
+    Expect(output.split('1. iOS Simulator (default)').length - 1).toBe(2)
+    Expect(output.split('2. iPhone').length - 1).toBe(2)
+    Expect(output).toContain('ctrl+c to quit')
+  })
+
+  Test('labels the tenth choice with a and accepts it followed by Enter', async () => {
+    const streams = fakeTerminal('a\n')
+    const choice = await HCI.askChoice({
+      message: 'Pick',
+      choices: Array.from({ length: 10 }, (_, index) => ({ value: `option-${index}` })),
+      ...streams,
+    })
+
+    Expect(choice).toBe('option-9')
+    Expect(stripAnsi(streams.outputText())).toContain('a. option-9')
+  })
+
   Test('renders the confirmation hint from the shared suffix in the asked question', async () => {
     const streams = fakeTerminal('\n')
 

@@ -109,4 +109,5 @@ change that addressed it.
 - [DEVENV-TAO-FIX-NEVER-REUSES-THE-CHECK-MEMO — Tao fix never reuses the check memo, so every verify lane refixes the whole repository](<Developer environment upgrades/DEVENV-TAO-FIX-NEVER-REUSES-THE-CHECK-MEMO.md>) — Candidate
 - [DEVENV-TAO-PIPELINE-DEFECTS-SET-EVERY-LANES-FLOOR — Tao pipeline defects set every lane's floor](<Developer environment upgrades/DEVENV-TAO-PIPELINE-DEFECTS-SET-EVERY-LANES-FLOOR.md>) — Candidate
 - [DEVENV-TAO-TEST-WAITS-FOREVER-ON-A-JEST-WORKER-LEFT-OPEN — `tao test` waits forever on a Jest worker left open](<Developer environment upgrades/DEVENV-TAO-TEST-WAITS-FOREVER-ON-A-JEST-WORKER-LEFT-OPEN.md>) — Candidate
+- [DEVENV-TEST-FILE-REFUSES-STANDALONE-APP-TESTS — Focused test-file refuses standalone app tests](<Developer environment upgrades/DEVENV-TEST-FILE-REFUSES-STANDALONE-APP-TESTS.md>) — Candidate
 - [DEVENV-TEST-FILE-TAKES-NO-TAO-FILE-OR-TEST-NAME — `test-file` takes no Tao test file or test name](<Developer environment upgrades/DEVENV-TEST-FILE-TAKES-NO-TAO-FILE-OR-TEST-NAME.md>) — Candidate
