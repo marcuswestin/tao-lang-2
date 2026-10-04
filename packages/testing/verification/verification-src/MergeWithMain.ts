@@ -6,6 +6,7 @@ import {
   MachineResourceBusyError,
   type MachineResourceLease,
 } from './MachineLanes'
+import { RunHistory } from './RunHistory'
 import { extractLaneReport } from './RunSummary'
 
 const SNAPSHOT_VERSION = 1
@@ -187,11 +188,25 @@ export type MergeWithMainDependencies = {
   now: () => Date
   readJson: <ValueT>(path: string) => Promise<ValueT>
   readText: (path: string) => Promise<string>
+  /**
+   * Record the finished landing in the machine-wide history while the lock is still held. Optional
+   * so an injected landing records nothing; telemetry, so it never throws.
+   */
+  recordLanding?: (landing: FinishedLanding) => Promise<void>
   remove: (path: string) => Promise<void>
   run: MergeCommandRunner
   writeJson: (path: string, value: unknown) => Promise<void>
   writeLine: (line: string, kind?: 'success') => void
   writeText: (path: string, value: string) => Promise<void>
+}
+
+/** FinishedLanding is what the landing itself knows when its transaction ends, either way. */
+export type FinishedLanding = {
+  branch: string
+  endedAt: Date
+  error?: unknown
+  repositoryRoot: string
+  startedAt: Date
 }
 
 type Worktree = {
@@ -223,6 +238,7 @@ const defaultDependencies: MergeWithMainDependencies = {
   now: () => new Date(),
   readJson: FS.readJson,
   readText: FS.readText,
+  recordLanding: async landing => await recordLanding(landing),
   remove: FS.remove,
   run: CLI.run,
   writeJson: FS.writeJson,
@@ -585,6 +601,8 @@ export const MergeWithMainCommand = {
     // that gap — not the merge, which measured 2-94s — is what held the lock for 36-44 minutes.
     const acquisition = await acquireLandingLease(dependencies, preflight)
     const lease = acquisition.lease
+    const landingStartedAt = dependencies.now()
+    let landingError: unknown
     try {
       // Queue-side merges change HEAD, and another landing may move main during the wait. Refresh
       // the preflight whenever either ref changed; an uncontended landing avoids a second remote
@@ -619,8 +637,19 @@ export const MergeWithMainCommand = {
       ]
       writeLines(dependencies, completed, 'success')
       return { lines: completed, mode: 'executed', snapshotPath: snapshot.snapshotPath }
+    } catch (error) {
+      landingError = error
+      throw error
     } finally {
       await dependencies.endPhases(preflight.featureRoot)
+      // Before the release: the phases being recorded live on the lock record the release removes.
+      await dependencies.recordLanding?.({
+        branch: preflight.branch,
+        endedAt: dependencies.now(),
+        ...(landingError === undefined ? {} : { error: landingError }),
+        repositoryRoot: preflight.featureRoot,
+        startedAt: landingStartedAt,
+      })
       await lease.release()
     }
   },
@@ -806,6 +835,33 @@ const acquireLandingLock: MergeWithMainDependencies['acquireLease'] = async opti
         )
       })
     },
+  }
+}
+
+/**
+ * Append a finished landing, its phases read off the lock record it still holds, to the history
+ * every worktree shares. A landing's own log lives in a checkout; this outlives it.
+ */
+async function recordLanding(landing: FinishedLanding): Promise<void> {
+  try {
+    const lock = await LandingLock.inspect().catch(() => undefined)
+    const ownLock = lock !== undefined && FS.resolvePath(lock.holder) === FS.resolvePath(landing.repositoryRoot)
+    const reason = landing.error === undefined
+      ? undefined
+      : (landing.error instanceof Error ? landing.error.message : String(landing.error)).split('\n')[0]?.slice(0, 300)
+    await RunHistory.recordLanding({
+      branch: landing.branch,
+      elapsedMs: landing.endedAt.getTime() - landing.startedAt.getTime(),
+      endedAt: landing.endedAt.toISOString(),
+      kind: 'landing',
+      ...(ownLock ? { phases: lock.phases } : {}),
+      ...(reason === undefined ? {} : { reason }),
+      repositoryRoot: landing.repositoryRoot,
+      startedAt: landing.startedAt.toISOString(),
+      status: landing.error === undefined ? 'passed' : 'failed',
+    })
+  } catch {
+    // A landing's outcome is the landing's; a lost history line must never replace it.
   }
 }
 

@@ -71,8 +71,13 @@ on its size.
 - Refresh the roadmap, ledger, and spec documents the work changed **before** verifying; a tracked
   edit made after a green lane changes the tree that lane proved, so the next lane runs everything
   again from nothing.
-- A lane that is slow is usually not a regression — read the `contention` block in
-  `.artifacts/logs/<lane>/latest/summary.json` first: it names how many lanes shared the machine.
+- A lane that is slow is usually not a regression — read `.artifacts/logs/<lane>/latest/summary.json`
+  first. `overlap` names every other Tao lane that ran at any moment of it (`solo: true` means none);
+  `contention.contended` also trips on load a broad lane raises by itself, so it cannot say that.
+- Every worktree's `verify-changed` and broad-lane runs, with timing, overlap, and failure reason, and
+  every landing's outcome and phases, append to the machine-wide history under
+  `~/.cache/tao/machine-lanes/history/` (`runs.jsonl`, `landings.jsonl`), which outlives reclaimed
+  worktrees. Compare timings there, not in one checkout's `.artifacts/`.
 
 ## Reporting while a lane runs
 

@@ -1,4 +1,4 @@
-import { FS, HCI, Repo, Time } from '@shared'
+import { FS, HCI, Platform, Repo, Time } from '@shared'
 import { ContentionRetry } from './ContentionRetry'
 import { FailurePolicy } from './FailurePolicy'
 import { FlakeTolerance } from './FlakeTolerance'
@@ -23,6 +23,7 @@ import {
   type MachineResourceLease,
 } from './MachineLanes'
 import { RunArtifacts } from './RunArtifacts'
+import { type OverlapReport, RunHistory } from './RunHistory'
 import { buildSummary, type GateResult, type GateSummary, skippedResult } from './RunSummary'
 import { RunTimings } from './RunTimings'
 import { TaoAppSharedRun } from './TaoAppSharedRun'
@@ -30,6 +31,7 @@ import { TestLedger } from './TestLedger'
 import { TestNodes } from './TestNodes'
 import { TestRunner } from './TestRunner'
 import { TestShards } from './TestShards'
+import { VerificationLanes } from './VerificationLanes'
 import {
   type WorkCommand,
   type WorkEvent,
@@ -136,6 +138,8 @@ export type RunGatesOptions = {
 export const TAO_TEST_NO_CACHE_ENV_KEY = 'TAO_TEST_NO_CACHE'
 
 const DEFAULT_LANE = 'verify'
+/** The lanes `RunHistory` keeps: every broad lane, and the diff-scoped per-commit gate. */
+const HISTORY_LANES: readonly string[] = [...VerificationLanes.BROAD, VerificationLanes.VERIFY_CHANGED]
 /** The two lane-list names that stand for the whole test selection rather than a recipe. */
 const TEST_GATE = '_test'
 const TEST_CHANGED_GATE = '_test-changed'
@@ -328,7 +332,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
     return guiRelease
   }
 
-  const { contention, result } = await runUnderLane(async () => {
+  const { contention, overlap, result } = await runUnderLane(async () => {
     const finishedPrepare = new Set<string>()
     const finishedGui = new Set<string>()
     const onPrepareFinished = () => {
@@ -536,6 +540,29 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
       repositoryRoot: location.repositoryRoot,
       startedAt: testRunStartedAt,
     })
+  }
+  summary.overlap = overlap
+  if (HISTORY_LANES.includes(location.lane)) {
+    // Written while a broad lane still holds the landing lock, and kept outside this worktree, so a
+    // reclaimed checkout does not take the machine's only timing record with it.
+    await RunHistory.recordRun(
+      RunHistory.runRecord({
+        contention,
+        elapsedMs: summary.elapsedMs,
+        ...(summary.firstFailure === undefined ? {} : { firstFailure: summary.firstFailure }),
+        gates: summary.gates,
+        interrupted: result.interrupted,
+        lane: location.lane,
+        landing: (Platform.runtimeProcess.env[MachineLanes.LANDING_PRIORITY_ENV_KEY] ?? '').length > 0,
+        logRoot: location.logRoot,
+        overlap,
+        repositoryRoot: location.repositoryRoot,
+        ...(schedule === undefined ? {} : { schedule }),
+        startedAtMs: startedAt,
+        status: summary.status,
+      }),
+      options.registryRoot,
+    )
   }
   await RunArtifacts.finishRun({
     cpuOnly: contention.contended,
@@ -802,15 +829,18 @@ function greenTreeSummary(
 async function runUnderLane<T>(
   work: () => Promise<T>,
   machineLane: MachineLane,
-): Promise<{ contention: ContentionReport; result: T }> {
+): Promise<{ contention: ContentionReport; overlap: OverlapReport; result: T }> {
+  let outcome: { contention: ContentionReport; result: T }
   try {
     // The report is read after the work, not beside it: its whole value is what the machine did
     // while the lane ran.
     const result = await work()
-    return { contention: machineLane.report(), result }
+    outcome = { contention: machineLane.report(), result }
   } finally {
     await machineLane.release()
   }
+  // Read after the release, which is what puts this lane's own end on record.
+  return { ...outcome, overlap: await machineLane.overlap() }
 }
 
 function injectedRunner(

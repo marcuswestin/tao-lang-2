@@ -8,6 +8,7 @@ import {
   type ResourceOptions,
 } from '@host-control'
 import { CLI, Errors, FS, Platform, Time } from '@shared'
+import { type LaneInterval, type OverlapReport, RunHistory } from './RunHistory'
 import { VerificationLanes } from './VerificationLanes'
 
 export { MachineResourceBusyError }
@@ -23,6 +24,8 @@ export type LaneRecord = {
   lane: string
   /** Per-lane ceiling. */
   maxSlots: number
+  /** The lane whose node registered this one, so overlap reports never count a run's own work. */
+  parentLaneId?: string
   pid: number
   repositoryRoot: string
   /** Slots occupied now. */
@@ -77,6 +80,11 @@ export type MachineLane = {
   /** Registration identity propagated to nested diagnostics so they can exclude their owner. */
   readonly id?: string
   acquireExclusive: (timeoutMs?: number) => Promise<MachineExclusiveLease | undefined>
+  /**
+   * Which other lanes ran at any moment of this one, read after `release` so the lane's own end is
+   * on record. `report` says how busy the machine looked; this says who else was on it.
+   */
+  overlap: () => Promise<OverlapReport>
   report: () => ContentionReport
   release: () => Promise<void>
   tryAcquire: (requestedSlots: number, allowPartial: boolean) => Promise<MachineSlotReservation | undefined>
@@ -217,10 +225,12 @@ async function acquire(options: AcquireOptions): Promise<MachineLane> {
   const id = `${Platform.runtimeProcess.pid}-${Platform.randomUUID()}`
   const path = lanePath(root, id)
   const now = new Date().toISOString()
+  const parentLaneId = Platform.runtimeProcess.env[LANE_ID_ENV_KEY]
   const record: LaneRecord & { id: string; maxSlots: number } = {
     id,
     lane: options.lane,
     maxSlots: Math.max(1, options.requestedJobs ?? cpuCount),
+    ...(parentLaneId === undefined || parentLaneId.length === 0 ? {} : { parentLaneId }),
     pid: Platform.runtimeProcess.pid,
     repositoryRoot: options.repositoryRoot,
     slots: 0,
@@ -230,6 +240,7 @@ async function acquire(options: AcquireOptions): Promise<MachineLane> {
 
   let initialCapacity = record.maxSlots
   let initialLaneCount = 1
+  let initialPeers: LaneRecord[] = []
   const landingPriorityToken = options.landingPriorityToken ?? Platform.runtimeProcess.env[LANDING_PRIORITY_ENV_KEY]
   try {
     const registration = await withRegistryLock(root, async () => {
@@ -242,10 +253,15 @@ async function acquire(options: AcquireOptions): Promise<MachineLane> {
       await atomicWriteJson(path, record)
       const queue = laneQueue([...entries.map(entry => entry.record), record])
       const own = queue.find(entry => entry.record.id === id)
-      return { capacity: own?.admitted === true ? record.maxSlots : 0, laneCount: entries.length + 1 }
+      return {
+        capacity: own?.admitted === true ? record.maxSlots : 0,
+        laneCount: entries.length + 1,
+        peers: entries.map(entry => entry.record),
+      }
     }, options.lockTimeoutMs)
     initialCapacity = registration.capacity
     initialLaneCount = registration.laneCount
+    initialPeers = registration.peers
   } catch (error) {
     if (error instanceof RegistryLockTimeoutError) {
       throw error
@@ -259,6 +275,7 @@ async function acquire(options: AcquireOptions): Promise<MachineLane> {
     id,
     initialCapacity,
     initialLaneCount,
+    initialPeers,
     loadAverage,
     lockTimeoutMs: options.lockTimeoutMs,
     path,
@@ -410,6 +427,7 @@ function registeredLane(options: {
   id: string
   initialCapacity: number
   initialLaneCount: number
+  initialPeers: readonly LaneRecord[]
   loadAverage: () => number
   lockTimeoutMs?: number
   path: string
@@ -418,8 +436,21 @@ function registeredLane(options: {
   landingPriorityToken?: string
 }): MachineLane {
   let peakLanes = options.initialLaneCount
-  let peakLoadAverage = options.loadAverage()
+  const loadAverageAtStart = options.loadAverage()
+  let peakLoadAverage = loadAverageAtStart
   let released = false
+  let endedAt: string | undefined
+  // Every other lane this one saw while sampling. The lane log covers lanes that ended normally;
+  // this covers one that crashed without logging its end.
+  const seen = new Map<string, LaneInterval>()
+  const sight = (records: readonly LaneRecord[]) => {
+    for (const record of records) {
+      if (record.id !== undefined && record.id !== options.id) {
+        seen.set(record.id, laneInterval(record))
+      }
+    }
+  }
+  sight(options.initialPeers)
   // Zero is a real answer here: a queued lane holds nothing until a lane ahead of it ends.
   let capacity = Math.max(0, options.initialCapacity)
   let admissionPollMs = ADMISSION_POLL_MS
@@ -443,6 +474,7 @@ function registeredLane(options: {
     peakLoadAverage = Math.max(peakLoadAverage, options.loadAverage())
     void activeLanes(options.root).then(lanes => {
       peakLanes = Math.max(peakLanes, lanes.length)
+      sight(lanes)
       return lanes
     }).catch(() => [])
   }, SAMPLE_INTERVAL_MS)
@@ -456,6 +488,19 @@ function registeredLane(options: {
     id: options.id,
     acquireExclusive: async (timeoutMs = EXCLUSIVE_TIMEOUT_MS) =>
       acquireExclusive(options.root, options.id, timeoutMs, options.lockTimeoutMs),
+    overlap: async () => {
+      try {
+        return await RunHistory.overlap({
+          live: released ? (await activeLanes(options.root, { prune: false })).map(laneInterval) : [],
+          loadAverageAtStart,
+          own: { endedAt: endedAt ?? new Date().toISOString(), id: options.id, startedAt: options.record.startedAt },
+          registryRoot: options.root,
+          seen: [...seen.values()],
+        })
+      } catch {
+        return RunHistory.unknownOverlap(loadAverageAtStart)
+      }
+    },
     report: () => contentionReport({ cpuCount: options.cpuCount, peakLanes, peakLoadAverage }),
     get waitReason() {
       return waitReason
@@ -477,6 +522,8 @@ function registeredLane(options: {
       }, options.lockTimeoutMs)
       released = true
       clearInterval(timer)
+      endedAt = new Date().toISOString()
+      await RunHistory.recordLaneInterval(options.root, { ...laneInterval(options.record), endedAt })
     },
     tryAcquire: async (requestedSlots, allowPartial) => {
       if (released) {
@@ -486,6 +533,7 @@ function registeredLane(options: {
         const reservation = await withRegistryLock(options.root, async () => {
           const entries = await activeLaneEntries(options.root, true)
           peakLanes = Math.max(peakLanes, entries.length)
+          sight(entries.map(entry => entry.record))
           const own = entries.find(entry => entry.record.id === options.id)
           if (own === undefined) {
             waitReason = 'this lane is no longer registered on the machine'
@@ -768,6 +816,7 @@ function unregisteredLane(capacity: number): MachineLane {
     // Work may fail open when the registry is unavailable; isolation may not, because there is no
     // truthful way to know whether another worktree is still running.
     acquireExclusive: async () => undefined,
+    overlap: async () => RunHistory.unknownOverlap(0),
     report: () => contentionReport({ cpuCount: Platform.cpuCount(), peakLanes: 1, peakLoadAverage: 0 }),
     release: async () => {},
     tryAcquire: async requestedSlots => uncoordinatedReservation(requestedSlots),
@@ -800,6 +849,8 @@ async function observingUnregisteredLane(
     capacity: width,
     ceiling: width,
     acquireExclusive: async () => undefined,
+    // A nested run is its outer lane's work; that lane owns the overlap question.
+    overlap: async () => RunHistory.unknownOverlap(peakLoadAverage),
     report: () => contentionReport({ cpuCount, peakLanes, peakLoadAverage }),
     release: async () => {
       if (!released) {
@@ -1034,6 +1085,18 @@ function normalizeLaneRecord(
 
 function errorCode(error: unknown): string | undefined {
   return error instanceof Error && 'code' in error ? String(error.code) : undefined
+}
+
+/** laneInterval is the part of a lane's registration the lane log keeps. */
+function laneInterval(record: LaneRecord): LaneInterval {
+  return {
+    id: record.id ?? `${record.pid}-${record.startedAt}`,
+    lane: record.lane,
+    ...(record.parentLaneId === undefined ? {} : { parentLaneId: record.parentLaneId }),
+    pid: record.pid,
+    repositoryRoot: record.repositoryRoot,
+    startedAt: record.startedAt,
+  }
 }
 
 function lanePath(root: string, id: string): string {
