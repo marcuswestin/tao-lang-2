@@ -1,6 +1,7 @@
 import { Langium } from './langium-exports'
 import type { PackageResolver } from './package-resolver'
 import * as AST from './parserASTExport'
+import { quotedTextImport } from './quoted-render'
 
 type BuildCacheResolver = PackageResolver & {
   clearPhysicalPathCache?: () => void
@@ -125,6 +126,19 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       return this.createPackageMemberScope(context.container)
     }
     if (context.property === 'view' && AST.isRender(context.container)) {
+      if (AST.isQuotedRender(context.container)) {
+        const workspaceFiles = Array.from(this.coreServices.shared.workspace.LangiumDocuments.all)
+          .map(document => document.parseResult.value).filter(AST.isTaoFile)
+        return this.createScopeForNodes(
+          this.packages.collectTargetDeclarations(quotedTextImport(), {
+            fromFilePath: AST.getDocument(context.container).uri.path,
+            workspaceFiles,
+          }).filter(declaration =>
+            AST.isViewDeclaration(declaration) && declaration.name === 'Text'
+            && AST.getDocument(declaration).uri.path.endsWith('/@tao/ui/Views.tao')
+          ),
+        )
+      }
       return this.createViewScope(context.container)
     }
     if (context.property === 'view' && AST.isScenarioRenderClause(container)) {

@@ -13,7 +13,7 @@ Describe('parser: diagnostics', () => {
     }),
   )
 
-  Test('requires parentheses for child renders', rejectsParser('Legacy { }'))
+  Test('rejects malformed argument lists in child renders', rejectsParser('Legacy(,) { }'))
 
   Test('reports parser errors for incomplete render statements', async () => {
     const parseResult = await parseCodeWithErrors('view Broken() { render }')
@@ -23,7 +23,7 @@ Describe('parser: diagnostics', () => {
     Expect(parserDiagnostics.every(diagnostic => diagnostic.range !== undefined)).toBe(true)
   })
 
-  Test('requires parentheses for explicit renders', rejectsParser('render Text "hello"'))
+  Test('rejects malformed argument lists in explicit renders', rejectsParser('render Text(,)'))
 
   Test(
     'requires call parentheses on a do target, for a command exactly as for an action',
@@ -196,22 +196,22 @@ Describe('parser: syntax diagnostics', () => {
 
   // Two alternatives fit inside the sentence, so the reader is told exactly what to type.
   Test('names the alternatives when only a few tokens could stand here', async () => {
-    const errors = await syntaxErrors('view Main {\n}\n')
+    const errors = await syntaxErrors('type Main {\n}\n')
 
     Expect(errors[0]).toEqual({
       kind: 'NoViableAltException',
-      message: 'Expected `(` or `=` here, but found `{`.',
+      message: 'Expected `is` or `=` here, but found `{`.',
     })
   })
 
-  // A view body accepts forty-six different opening tokens, which Chevrotain printed as seventy
-  // numbered lines. Naming the construct is the whole point of the threshold.
+  // A declaration accepts too many opening tokens to list in one sentence. Naming the construct
+  // is the whole point of the threshold.
   Test('names the construct when too many tokens could stand here to list them', async () => {
-    const errors = await syntaxErrors('view Broken() {\n  Text is "hi"\n}\n')
+    const errors = await syntaxErrors('view Broken() {\n  public "hi"\n}\n')
 
     Expect(errors[0]).toEqual({
       kind: 'NoViableAltException',
-      message: 'Expected a view member here, but found `Text`.',
+      message: 'Expected a declaration here, but found `public`.',
     })
   })
 

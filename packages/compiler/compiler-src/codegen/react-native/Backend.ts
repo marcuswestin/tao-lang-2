@@ -1080,6 +1080,13 @@ function resolveImports(
   // Only what this file actually names: importing every folder-visible sibling declaration would
   // make each file in the folder import every other one, dead bindings and cycles included.
   const referencedNames = ASTUtils.referencedNames(file, { statements })
+  for (const render of statements.flatMap(statement => AST.streamAllContents(statement)).filter(AST.isQuotedRender)) {
+    const target = render.view?.ref
+    if (AST.isViewDeclaration(target)) {
+      const path = AST.getDocument(target).uri.path
+      addImportedName(bySource, path, `${runtimeBindingName(target)} as __tao_quoted_Text$`)
+    }
+  }
   for (const candidate of sourceByPath.values()) {
     if (candidate.path === filePath || FS.dirname(candidate.path) !== currentDirectory) {
       continue
