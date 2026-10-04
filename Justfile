@@ -716,7 +716,8 @@ _shell-completion: _deps
     mv -f "$completion_file" "$cache/completion.zsh"
 
 # Tracked Tao projects keep their npm pins in .tao/lock.jsonc; their node_modules is installed here.
-_tao-project-deps: _deps
+# `tao install` loads the parser, which a fresh checkout has not generated yet.
+_tao-project-deps: _deps _parser-gen
     "{{ BUN }}" run packages/cli/dev-cli/dev-cli-src/setup/TaoProjectDependencies.ts
 
 _git-hooks:
