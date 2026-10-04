@@ -575,6 +575,9 @@ class TR {
             throw error
           }
           const providerCase = providerFailureCase(error)
+          if (!providerCase) {
+            throw error
+          }
           const declared = failures.find(failure => actionFailureCaseName(failure.case) === providerCase)
           throw new TaoActionFailure(
             providerCase || (declared ? actionFailureCaseName(declared.case) : 'Unexpected'),
