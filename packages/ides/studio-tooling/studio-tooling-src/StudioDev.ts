@@ -750,9 +750,12 @@ async function studioWatchmanEnvironment(
         'Check Watchman access to ~/Library/LaunchAgents, then retry Studio.',
       )
     }
+    const reported = output.trim() || result.error?.message
     throwWatchmanPreflightError(
       `not usable at ${executable}`,
-      `Run \`${executable} version\` to diagnose Watchman, then retry Studio.`,
+      `Run \`${executable} version\` to diagnose Watchman, then retry Studio.${
+        reported ? ` Watchman reported: ${reported.slice(0, 500)}` : ''
+      }`,
     )
   }
   // Watchman answers with an existing watch that encloses the checkout before it honors the
