@@ -430,6 +430,11 @@ supports npm's native aliases, package exports, and subpaths. `tao install` defa
 publications; explicit selection preserves unrelated installations. Remote Tao fetching, publishing,
 and Companion URL installation remain deferred.
 
+Installation reports its active phases, elapsed timings, and npm invocation count. It delegates
+checking and repairing each selected npm installation to npm, including on repeated installs.
+Repeated installs preserve unchanged managed manifests and alias links. npm uses its ordinary
+cache and lock behavior; Tao does not maintain a separate installation-validity cache.
+
 Checks and runtime publication validate each selected installed alias against its declared package
 name and version range, and against its exact pin when recorded in the shared Tao lock. A compatible
 package installed under the wrong alias identity cannot substitute for the declared dependency.
