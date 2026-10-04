@@ -284,8 +284,11 @@ function spawnBuffered(
     child.stdin = new Writable({
       write(chunk, _encoding, callback) {
         try {
-          sink.write(chunk)
-          Promise.resolve(sink.flush()).then(() => callback(), error => callback(asError(error)))
+          // A write the pipe cannot take at once returns a pending promise, which rejects with EPIPE
+          // when the child closes its stdin first; it must reach the callback, not go unhandled.
+          Promise.resolve(sink.write(chunk))
+            .then(() => sink.flush())
+            .then(() => callback(), error => callback(asError(error)))
         } catch (error) {
           callback(asError(error))
         }
@@ -448,6 +451,10 @@ export const runtimeProcess = {
   /** The current process id, for recording which process owns a resource. */
   get pid(): number {
     return process.pid
+  },
+  /** The user id on POSIX hosts, or undefined where the platform has none. */
+  get uid(): number | undefined {
+    return process.getuid?.()
   },
   exit(exitCode?: number | string | null): never {
     process.exit(exitCode)

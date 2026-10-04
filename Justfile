@@ -20,7 +20,7 @@ help:
 # The private setup recipe is what every harness reaches through `./agent setup`: Worktrunk's pre-start hook
 # (.config/wt.toml), the harness SessionStart hooks (.rulesync/hooks.jsonc), and
 # Cursor's worktree setup (.cursor/worktrees.json). Changing what setup does changes them all.
-_setup: _deps _agent-config _git-hooks _initial-dev-branch _shell-completion
+_setup: _deps _tao-project-deps _agent-config _git-hooks _initial-dev-branch _shell-completion
     ./dev shell-setup --prepare
 
 # Configure optional automatic development environments for this repository and its worktrees
@@ -767,6 +767,11 @@ _shell-completion: _deps
     trap 'rm -f "$completion_file"' EXIT
     "{{ BUN }}" run packages/cli/dev-cli/dev-cli-src/dev.ts completion zsh > "$completion_file"
     mv -f "$completion_file" "$cache/completion.zsh"
+
+# Tracked Tao projects keep their npm pins in .tao/lock.jsonc; their node_modules is installed here.
+# `tao install` loads the parser, which a fresh checkout has not generated yet.
+_tao-project-deps: _deps _parser-gen
+    "{{ BUN }}" run packages/cli/dev-cli/dev-cli-src/setup/TaoProjectDependencies.ts
 
 _git-hooks:
     ./packages/cli/agent-cli/agent-cli-src/cli/agent-git-hooks.zsh install

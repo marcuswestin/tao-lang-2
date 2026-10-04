@@ -1,4 +1,5 @@
 import type { DependencyEnvironment } from '@compiler'
+import { BridgeMetadata } from '@compiler/bridge-metadata'
 import { type Diagnostic, FS, Json, Platform, Text } from '@shared'
 import { managedDependencyModulesRoot } from './ProjectHostModules'
 
@@ -21,6 +22,67 @@ const ProjectManagedDependencyValidationMessages = {
   wrongSnapshotLink: (alias: string, projectRoot: string) =>
     `TypeScript dependency '${alias}' beside ${projectRoot}'s snapshots points to a different install.`,
 } as const
+
+/** Diagnostics a `tao install` of the requesting project would clear carry this code. */
+export const DEPENDENCY_NOT_INSTALLED = 'dependency-not-installed'
+
+/** The remedy every not-installed diagnostic ends with, naming the project to install. */
+export function installRemedy(requesterRoot: string): string {
+  const path = FS.displayPath(requesterRoot)
+  // Quoted when needed so the command pastes as is; project folders often contain spaces.
+  const argument = /^[\w./~@+-]+$/u.test(path) ? path : `'${path.replaceAll("'", `'\\''`)}'`
+  return `Run \`tao install ${argument}\` to install the project's dependencies.`
+}
+
+/**
+ * uninstalledLockedDependencies lists the npm aliases the project's lock pins whose installed
+ * package is missing or at another version. It reads only the lock and installed manifests, so a
+ * command can ask before compiling; aliases a source declares but no lock pins yet are left to the
+ * compile diagnostics.
+ */
+export async function uninstalledLockedDependencies(projectRoot: string): Promise<string[]> {
+  const lockPath = FS.resolvePath('.tao/lock.jsonc', projectRoot)
+  if (!await FS.isFile(lockPath)) {
+    return []
+  }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(Text.stripJsonc(await FS.readText(lockPath)))
+  } catch {
+    return []
+  }
+  const installs = Json.isRecord(parsed) ? parsed['installs'] : undefined
+  const environments = Json.isRecord(installs) ? installs['environments'] : undefined
+  if (!Json.isRecord(environments)) {
+    return []
+  }
+  const root = FS.resolvePath(projectRoot)
+  const missing: string[] = []
+  for (const environment of Object.values(environments)) {
+    if (!Json.isRecord(environment) || !Json.isRecord(environment['npm'])) {
+      continue
+    }
+    const origin = FS.resolvePath(
+      typeof environment['projectRoot'] === 'string' ? environment['projectRoot'] : '.',
+      root,
+    )
+    const modulesRoot = origin === root
+      ? FS.resolvePath('node_modules', root)
+      : managedDependencyModulesRoot(root, BridgeMetadata.dependencyNamespace(origin))
+    for (const [alias, pin] of Object.entries(environment['npm'])) {
+      if (!Json.isRecord(pin) || typeof pin['version'] !== 'string') {
+        continue
+      }
+      const manifest = FS.resolvePath(`${alias}/package.json`, modulesRoot)
+      if (
+        !await FS.isFile(manifest) || (await FS.readJson<{ version?: string }>(manifest)).version !== pin['version']
+      ) {
+        missing.push(alias)
+      }
+    }
+  }
+  return missing.toSorted()
+}
 
 /** Verify private aliases without falling back to requester or host node_modules. */
 export async function validateManagedDependencyEnvironments(
@@ -74,13 +136,14 @@ export async function validateManagedDependencyEnvironments(
       const managedPackage = FS.resolvePath(requirement.alias, modulesRoot)
       const manifestPath = FS.resolvePath('package.json', managedPackage)
       if (!await FS.isFile(manifestPath)) {
-        diagnostics.push(error(
+        diagnostics.push(notInstalled(
           manifestPath,
           ProjectManagedDependencyValidationMessages.missing(
             requirement.alias,
             environment.projectRoot,
             requesterOwned ? 'project' : 'private',
           ),
+          requesterRoot,
         ))
         continue
       }
@@ -97,7 +160,7 @@ export async function validateManagedDependencyEnvironments(
         ))
       }
       if (manifest.version === undefined || !Platform.semverSatisfies(manifest.version, requirement.versionRange)) {
-        diagnostics.push(error(
+        diagnostics.push(notInstalled(
           manifestPath,
           ProjectManagedDependencyValidationMessages.wrongVersion(
             requirement.alias,
@@ -105,16 +168,18 @@ export async function validateManagedDependencyEnvironments(
             requirement.versionRange,
             environment.projectRoot,
           ),
+          requesterRoot,
         ))
       }
       if (pin !== undefined && manifest.version !== pin.version) {
-        diagnostics.push(error(
+        diagnostics.push(notInstalled(
           manifestPath,
           ProjectManagedDependencyValidationMessages.wrongPinnedVersion(
             requirement.alias,
             manifest.version ?? '(missing)',
             pin.version,
           ),
+          requesterRoot,
         ))
       }
       if (!checkSnapshotLink) {
@@ -191,6 +256,10 @@ async function readInstallPins(path: string): Promise<{
     }
   }
   return { byNamespace, byProjectRoot, diagnostics: [] }
+}
+
+function notInstalled(filePath: string, message: string, requesterRoot: string): Diagnostic {
+  return { ...error(filePath, `${message} ${installRemedy(requesterRoot)}`), code: DEPENDENCY_NOT_INSTALLED }
 }
 
 function error(filePath: string, message: string): Diagnostic {

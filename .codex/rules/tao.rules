@@ -3,6 +3,7 @@
 
 prefix_rule(pattern=["./agent","unsandboxed","notify-developer"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
 prefix_rule(pattern=["./agent","unsandboxed","stop"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
+prefix_rule(pattern=["./agent","unsandboxed","setup"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
 prefix_rule(pattern=["./agent","unsandboxed","land"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
 prefix_rule(pattern=["./agent","unsandboxed","finalize"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
 prefix_rule(pattern=["./agent","unsandboxed","merge-main"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
@@ -51,4 +52,5 @@ prefix_rule(pattern=["./agent","unsandboxed","android"], decision="allow", justi
 prefix_rule(pattern=["./agent","unsandboxed","remote"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
 prefix_rule(pattern=["./agent","unsandboxed","processes"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
 prefix_rule(pattern=["./agent","unsandboxed","start-branch"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
+prefix_rule(pattern=["./agent","unsandboxed","take-branch"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
 prefix_rule(pattern=["./agent","unsandboxed","storage"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")

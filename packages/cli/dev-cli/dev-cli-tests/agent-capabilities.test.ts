@@ -1,11 +1,14 @@
 import { Errors } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, Test, withCapturedOutput } from '@shared/test'
 import {
   type CapabilityProbe,
   classifyCapability,
   readAgentCapabilities,
+  requiredToLand,
   unavailableLandingCapabilities,
 } from '../dev-cli-src/doctor/AgentCapabilities'
+import { AgentCapabilitiesCommand } from '../dev-cli-src/doctor/AgentCapabilitiesCommand'
+import { landingHostGateMessage, prepareLandingHost } from '../dev-cli-src/doctor/LandingHost'
 
 const probe = {
   args: ['-p', '42'],
@@ -212,6 +215,106 @@ Describe('agent capabilities', () => {
         status: 'unavailable',
       }])
     }
+  })
+
+  Test('starts Watchman for landing when it is the only missing capability, then probes again', async () => {
+    let watchmanRunning = false
+    let starts = 0
+    const result = await prepareLandingHost({
+      hostPlatform: 'linux',
+      read: async () =>
+        await readAgentCapabilities({
+          env: {},
+          runProbe: async candidate =>
+            candidate.command === 'watchman' && !watchmanRunning
+              ? { exitCode: 1, stderr: 'unable to talk to your watchman', stdout: '' }
+              : availableProbe(candidate),
+        }),
+      startWatchman: async () => {
+        starts += 1
+        watchmanRunning = true
+        return 0
+      },
+    })
+
+    Expect(starts).toBe(1)
+    Expect(result.startedWatchman).toBe(true)
+    Expect(result.missing).toEqual([])
+  })
+
+  Test('leaves Watchman alone when another landing capability is also missing or the start fails', async () => {
+    let starts = 0
+    const startWatchman = async () => {
+      starts += 1
+      return 1
+    }
+    const watchmanAndSimulator = await prepareLandingHost({
+      hostPlatform: 'darwin',
+      read: async () =>
+        await readAgentCapabilities({
+          env: {},
+          runProbe: async candidate =>
+            candidate.command === 'watchman' || candidate.command === 'xcrun'
+              ? { exitCode: 1, stderr: 'unavailable', stdout: '' }
+              : availableProbe(candidate),
+        }),
+      startWatchman,
+    })
+    Expect(starts).toBe(0)
+    Expect(watchmanAndSimulator.missing.map(check => check.name).sort()).toEqual([
+      'CoreSimulator service',
+      'Watchman socket',
+    ])
+
+    const failedStart = await prepareLandingHost({
+      hostPlatform: 'linux',
+      read: async () =>
+        await readAgentCapabilities({
+          env: {},
+          runProbe: async candidate =>
+            candidate.command === 'watchman'
+              ? { exitCode: 1, stderr: 'unable to talk to your watchman', stdout: '' }
+              : availableProbe(candidate),
+        }),
+      startWatchman,
+    })
+    Expect(starts).toBe(1)
+    Expect(failedStart).toMatchObject({ startedWatchman: false })
+    Expect(failedStart.missing.map(check => check.name)).toEqual(['Watchman socket'])
+  })
+
+  Test('names each blocking remedy and speaks of a sandbox only when one was detected', () => {
+    const missing = [{
+      command: 'watchman --no-spawn --no-local watch-list',
+      detail: 'unable to talk to your watchman',
+      name: 'Watchman socket',
+      remediation: 'Run ./agent unsandboxed watchman start.',
+      status: 'unavailable' as const,
+    }]
+    const unsandboxed = landingHostGateMessage(missing, false)
+    const sandboxed = landingHostGateMessage(missing, true)
+
+    Expect(unsandboxed).toContain(
+      '- Watchman socket: unable to talk to your watchman. Run ./agent unsandboxed watchman start.',
+    )
+    Expect(unsandboxed).not.toContain('inside this sandbox')
+    Expect(unsandboxed).toContain('No sandbox was detected')
+    Expect(sandboxed).toContain('do not retry the host gate inside this sandbox')
+  })
+
+  Test('tags each capability by whether landing on this platform needs it', async () => {
+    const report = await readAgentCapabilities({ env: {}, runProbe: availableProbe })
+    const lines = async (platform: string) =>
+      (await withCapturedOutput(() => AgentCapabilitiesCommand.write(report, { hostPlatform: platform })))
+        .stdout.split('\n')
+    const linux = await lines('linux')
+
+    Expect(requiredToLand('Watchman socket', 'linux')).toBe(true)
+    Expect(requiredToLand('Hutch native launcher', 'linux')).toBe(false)
+    Expect(requiredToLand('Hutch native launcher', 'darwin')).toBe(true)
+    Expect(linux).toContain('            hutch --version (not required to land on linux)')
+    Expect(await lines('darwin')).toContain('            hutch --version (required to land on darwin)')
+    Expect(linux).toContain('            watchman --no-spawn --no-local watch-list (required to land on linux)')
   })
 
   Test('accepts the pinned Hutch launcher from PATH without running installation commands', async () => {

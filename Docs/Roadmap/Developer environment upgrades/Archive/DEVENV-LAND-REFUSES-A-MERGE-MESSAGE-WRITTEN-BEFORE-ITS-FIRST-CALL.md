@@ -1,7 +1,6 @@
 # DEVENV-LAND-REFUSES-A-MERGE-MESSAGE-WRITTEN-BEFORE-ITS-FIRST-CALL — Land refuses a merge message written before its first call
 
-- **Status:** Candidate
-- **Section:** External
+- **Status:** Resolved
 - **Area:** Landing, merge messages
 - **Impact:** `verification-lanes` tells an agent to write `.artifacts/merge/<branch>.msg` when a
   branch becomes merge-ready. A message written that way always costs one refused `./agent land`:
@@ -28,3 +27,11 @@
 - **Acceptance:** Writing the message after the last commit and running `./agent unsandboxed land` once takes the
   lock, and a message older than the newest commit is still refused.
 - **Source:** 2026-09-23, landing the prebuilt-host slices for `A9`.
+- **Change made:** `feat/land-message-confirm-and-gitmodules`. A hand-written message saved after the
+  branch's newest commit of its own is reviewed for that HEAD, and a confirmed message stays confirmed
+  while only merges of `main` arrive — including the merge commit that resolves a landing's conflicted
+  integration. A message older than the newest own commit, or confirmed before a later own commit, is
+  still refused. `verification-lanes` says so. Reproduced on 2026-10-04 landing
+  `feat/tao-install-offer`: refused once for a message written after the last commit, and again after
+  committing a conflict-resolving merge of `main`.
+- **Archived:** 2026-10-04

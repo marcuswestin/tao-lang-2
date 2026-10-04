@@ -6,7 +6,7 @@ import { type ProjectGraph, type ProjectRequirement } from '@parser'
 import { CLI, Diagnostics, Errors, FS, HCI, ProjectIdentity, Time } from '@shared'
 import { ManagedInstallEnvironment } from './managed-install-environment'
 import { findTaoProjectSource } from './project-root'
-import { type InstallsLock, readProjectLock, writeProjectLock } from './ship-lock'
+import { installEnvironmentsByProjectRoot, type InstallsLock, readProjectLock, writeProjectLock } from './ship-lock'
 
 export type InstallOptions = HCI.OutputOptions & {
   appName?: string
@@ -101,7 +101,7 @@ export async function runTaoInstall(
     const previous = await progress.run('dependency lock read', 'Reading dependency lock', () => readProjectLock(root))
     const installs: InstallsLock = {
       lockfileVersion: 2,
-      environments: { ...previous.installs?.environments },
+      environments: installEnvironmentsByProjectRoot(previous.installs?.environments ?? {}),
       local: { ...previous.installs?.local },
     }
     for (const environment of environments) {
@@ -214,9 +214,10 @@ async function installEnvironment(
   progress: InstallProgress,
 ): Promise<void> {
   const namespace = environment.namespace
-  const previous = installs.environments[namespace]
+  const projectRoot = FS.relativePath(consumerRoot, environment.projectRoot) || '.'
+  const previous = installs.environments[projectRoot]
   const entry: InstallsLock['environments'][string] = {
-    projectRoot: FS.relativePath(consumerRoot, environment.projectRoot) || '.',
+    projectRoot,
     npm: { ...previous?.npm },
     publications: environment.publications.map(item => ({ ...item })),
   }
@@ -242,7 +243,7 @@ async function installEnvironment(
       progress,
     )
   }
-  installs.environments[namespace] = entry
+  installs.environments[projectRoot] = entry
   if (FS.resolvePath(environment.projectRoot) !== FS.resolvePath(consumerRoot) && environment.npm.length > 0) {
     const link = ManagedInstallEnvironment.generatedModulesLink(consumerRoot, namespace)
     await progress.run(

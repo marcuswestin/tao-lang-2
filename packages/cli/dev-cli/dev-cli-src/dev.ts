@@ -1,7 +1,13 @@
 import { runWithCommands } from '@cli-kit/RunWithCommands'
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 import { DeveloperBranchCommand, SyncMainCommand } from '@verification/DeveloperWorkflow'
-import { FinalizeCommand, LandCommand, MergeMainCommand, StartBranchCommand } from '@verification/Finalize'
+import {
+  FinalizeCommand,
+  LandCommand,
+  MergeMainCommand,
+  StartBranchCommand,
+  TakeBranchCommand,
+} from '@verification/Finalize'
 import { GateCatalog } from '@verification/GateCatalog'
 import { runGates } from '@verification/GateRunner'
 import { GreenTree } from '@verification/GreenTree'
@@ -14,9 +20,9 @@ import { VerificationLanes } from '@verification/VerificationLanes'
 import { WorkReporter } from '@verification/WorkReporter'
 import { CleanCommand } from './clean/CleanCommand'
 import { devZshCompletion } from './completion/DevCompletion'
-import { readAgentCapabilities, unavailableLandingCapabilities } from './doctor/AgentCapabilities'
 import { AgentCapabilitiesCommand } from './doctor/AgentCapabilitiesCommand'
 import { BoardCommand } from './doctor/BoardCommand'
+import { landingHostGateMessage, prepareLandingHost } from './doctor/LandingHost'
 import { MyStatusCommand } from './doctor/MyStatusCommand'
 import { ReclaimCommand } from './doctor/ReclaimCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
@@ -329,15 +335,9 @@ await runWithCommands(commands => {
           UiVisibility.warn(UiVisibility.studioWarnings)
         }
         if (options.dryRun !== true && options.skipVerifyFull !== true) {
-          const host = await readAgentCapabilities()
-          const missing = unavailableLandingCapabilities(host)
-          if (missing.length > 0) {
-            Errors.throwHostEnvironment(
-              'Landing needs a host-capable unsandboxed shell before entering the ready queue. '
-                + missing.map(check => `${check.name}: ${check.detail}. `).join('')
-                + 'Run `./agent capabilities` for details, then run `./agent land` in an approved '
-                + 'unsandboxed session. Do not retry the host gate inside this sandbox.',
-            )
+          const host = await prepareLandingHost()
+          if (host.missing.length > 0) {
+            Errors.throwHostEnvironment(landingHostGateMessage(host.missing, host.report.sandboxDetected))
           }
         }
         await LandCommand.run({
@@ -632,6 +632,20 @@ await runWithCommands(commands => {
     .action(async (name: string) => {
       try {
         await StartBranchCommand.run(name)
+        Platform.runtimeProcess.exit(0)
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
+    .command('take-branch')
+    .description('Take over a pushed feat/* branch: fetch it, switch to it with tracking, and run setup.')
+    .argument('<name>', 'Full feat/* branch name on origin.')
+    .action(async (name: string) => {
+      try {
+        await TakeBranchCommand.run(name)
         Platform.runtimeProcess.exit(0)
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))

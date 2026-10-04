@@ -1,5 +1,10 @@
 export { managedDependencyModulesRoot } from './ProjectHostModules'
-export { validateManagedDependencyEnvironments } from './ProjectManagedDependencies'
+export {
+  DEPENDENCY_NOT_INSTALLED,
+  installRemedy,
+  uninstalledLockedDependencies,
+  validateManagedDependencyEnvironments,
+} from './ProjectManagedDependencies'
 export type {
   ProjectToolingOptions,
   ProjectToolingResult,

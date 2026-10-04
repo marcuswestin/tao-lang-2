@@ -42,11 +42,12 @@ behind it.
 
 - A few npm packages ship `.idea/` and `.gitmodules`, which an agent sandbox protects inside the
   working directory and no setting exempts. A sandboxed install that must write one fails as
-  `PermissionDenied: …` or `EEXIST: failed to link package`. `./agent` distinguishes both from a
-  denied temporary directory and prints the matching recovery; `./agent doctor` reports the broken
-  install and the same remediation. Only the tempdir case is resumable. For either protected-path
-  failure, report the denied path and exact `./agent setup` retry for the Developer to run from a
-  normal terminal. Do not start `just session-unsandboxed` on your own.
+  `PermissionDenied: …`, `EEXIST: failed to link package`, or — when the package is new to Bun's
+  cache — `failed to download <package>: EPERM`. `./agent` distinguishes these from a denied
+  temporary directory and prints the matching recovery; `./agent doctor` reports the broken install
+  and the same remediation. Only the tempdir case is resumable. For a protected-path failure, run
+  `./agent unsandboxed setup`, the same entry the SessionStart hook runs on the host. Do not start
+  `just session-unsandboxed` on your own.
 - Never name a Bun install backend to work around this. `--backend=copyfile` writes every packaged
   file through its own path, making `bun install` unrunnable sandboxed rather than fixing it.
 

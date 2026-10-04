@@ -77,14 +77,24 @@ function tao_report_install_failure() {
   if [[ "$install_output" =~ 'PermissionDenied: ([a-z ]+) (.+)' ]]; then
     echo "Denied operation: ${match[1]} ${match[2]}" >&2
     echo "The host sandbox denies writes to that path itself, not to the temporary directory." >&2
-    echo "Start an unsandboxed session with 'just session-unsandboxed', then run './agent setup'." >&2
+    echo "Recover with: ./agent unsandboxed setup" >&2
     return
   fi
 
   if [[ "$install_output" == *EEXIST*"failed to link package"* ]]; then
     echo "Denied operation: replacing a package that is already linked." >&2
     echo "A sandboxed repair cannot replace a package containing protected paths." >&2
-    echo "Start an unsandboxed session with 'just session-unsandboxed', then run './agent setup'." >&2
+    echo "Recover with: ./agent unsandboxed setup" >&2
+    return
+  fi
+
+  # Bun reports a refused cache write as a failed download. Every agent sandbox refuses to write a
+  # file named like Git or editor configuration (`.gitmodules`, `.idea/`) anywhere, and a few
+  # packages ship one, so this fails identically on every sandboxed retry.
+  if [[ "$install_output" =~ 'failed to download ([^ :]+): EPERM' ]]; then
+    echo "Denied operation: writing ${match[1]} into Bun's package cache." >&2
+    echo "The package ships a file the agent sandbox protects, such as .gitmodules, so no sandboxed install can write it." >&2
+    echo "Recover with: ./agent unsandboxed setup" >&2
     return
   fi
 

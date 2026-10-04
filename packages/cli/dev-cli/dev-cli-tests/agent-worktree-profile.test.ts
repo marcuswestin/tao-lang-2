@@ -359,8 +359,25 @@ Describe('agent worktree profile bootstrap', () => {
         'Denied operation: copy file android/.idea/migrations.xml',
       )
       Expect(outcome.result.stderr).toContain(`Bun temporary directory: ${testRoot}/.artifacts/tmp/`)
-      Expect(outcome.result.stderr).toContain('./agent setup')
-      Expect(outcome.result.stderr).toContain('just session-unsandboxed')
+      Expect(outcome.result.stderr).toContain('Recover with: ./agent unsandboxed setup')
+    } finally {
+      await FS.remove(testRoot)
+    }
+  })
+
+  Test('names the package and a host recovery when the sandbox refuses a cache write', async () => {
+    const testRoot = await mkTestDir('tao-agent-install-cache-denied-')
+    try {
+      const outcome = await runAgentInstall(testRoot, [
+        'error: failed to download url-template@2.0.8: EPERM\n  https://registry.npmjs.org/url-template/-/url-template-2.0.8.tgz',
+        '',
+      ])
+
+      Expect(outcome.attempts).toBe(1)
+      Expect(outcome.result.exitCode).toBe(1)
+      Expect(outcome.result.stderr).toContain("Denied operation: writing url-template@2.0.8 into Bun's package cache.")
+      Expect(outcome.result.stderr).toContain('Recover with: ./agent unsandboxed setup')
+      Expect(outcome.result.stderr).not.toContain('just clean-scratch')
     } finally {
       await FS.remove(testRoot)
     }
