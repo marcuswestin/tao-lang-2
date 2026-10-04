@@ -319,6 +319,17 @@ equivalent paint gain. Raw stage samples, machine load, browser events, and Metr
 under `.artifacts/tests/studio-smoke/preview-latency/`. Selective design subscriptions remain deferred;
 the closed refresh-indicator investigation is not reopened.
 
+Finalization fetched main `b1dbd7a2c`, adding portable install pins, setup discovery of pinned
+project dependencies, browser discovery, and readiness-message fixes. Integration keeps skills
+version merging alongside project-root install keys, and adapts the incoming setup/offer readers
+and their fixtures to `store/lock.jsonc`. Its final exact-tree verification and acceptance outcomes
+are recorded in the task checkpoint. The latency table above remains measured at `6829f0b64`;
+later integration is not silently assigned those timings.
+The renewed real-app smoke `final-install-merge-real-app-20261004` passes all four journeys and
+80 assertions in 86.5s after this integration, including persisted reopen, drag-refresh state,
+edit/undo, and publication-off rendering. Focused setup, missing-install, portable-pin, and lock
+merge tests pass, and the semantic integration review found no actionable issues.
+
 ### Refresh indicator diagnostic, 2026-10-04 — closed
 
 The Developer closed this investigation on 2026-10-04. The following is its historical evidence;

@@ -168,7 +168,7 @@ view Main() { render inject \`\`\`ts return null \`\`\` }
       const lock = await readProjectLock(consumer)
       for (const [origin, version] of [[older, '3.6.0'], [newer, '4.1.0']] as const) {
         const namespace = BridgeMetadata.dependencyNamespace(origin)
-        const environment = lock.installs?.environments[namespace]
+        const environment = lock.installs?.environments[FS.relativePath(consumer, origin)]
         Expect(environment?.npm['util']).toEqual({ name: 'date-fns', requested: version, version })
         const modulesRoot = ManagedInstallEnvironment.modulesRoot(consumer, origin, namespace)
         Expect(await FS.realPath(FS.resolvePath('util', modulesRoot))).toBe(
@@ -180,6 +180,57 @@ view Main() { render inject \`\`\`ts return null \`\`\` }
       Expect(await FS.exists(FS.resolvePath('node_modules/util', consumer))).toBe(false)
     } finally {
       await FS.remove(directory)
+    }
+  })
+
+  Test('keys environments by project root and reuses a pin recorded under another checkout’s namespace', async () => {
+    const root = await mkTestDir('tao-install-portable-')
+    try {
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', root), '')
+      await FS.writeText(
+        FS.resolvePath('App.tao', root),
+        `app Reader {
+   id "reader"
+   version "1.0.0"
+   name "Reader"
+   requires ts npm:date-fns version ^4.0.0 as util
+   view Main
+}
+view Main() { render inject \`\`\`ts return null \`\`\` }
+`,
+      )
+      const pinned = { name: 'date-fns', requested: '^4.0.0', version: '4.1.0' }
+      await FS.writeJson(FS.resolvePath('.tao/store/lock.jsonc', root), {
+        schemaVersion: 1,
+        installs: {
+          lockfileVersion: 2,
+          local: {},
+          environments: {
+            'namespace-from-another-checkout': { projectRoot: '.', publications: [], npm: { util: pinned } },
+          },
+        },
+      })
+      const specifiers: string[] = []
+
+      await runTaoInstall(root, { appName: 'Reader' }, {
+        installNpm: async path => {
+          const manifest = await FS.readJson<{ dependencies: Record<string, string> }>(
+            FS.resolvePath('package.json', path),
+          )
+          specifiers.push(manifest.dependencies['util']!)
+          await FS.writeJson(FS.resolvePath('node_modules/util/package.json', path), {
+            name: 'date-fns',
+            version: '4.1.0',
+          })
+        },
+      })
+
+      Expect(specifiers).toEqual(['npm:date-fns@4.1.0'])
+      Expect((await readProjectLock(root)).installs?.environments).toEqual({
+        '.': { projectRoot: '.', publications: [], npm: { util: pinned } },
+      })
+    } finally {
+      await FS.remove(root)
     }
   })
 

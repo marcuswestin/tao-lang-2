@@ -33,7 +33,11 @@ async function printAgentHelp(justCommands: readonly string[]): Promise<number> 
       fallbackLine('tao [args...]', 'Run the Tao CLI inside the sandbox'),
       fallbackLine(
         'start-branch <name>',
-        'Start a feat/* branch from fetched origin/main after checking checkout writes',
+        'Start a feat/* branch from fetched origin/main after checking checkout writes, then run setup',
+      ),
+      fallbackLine(
+        'take-branch <name>',
+        'Take over a pushed feat/* branch with tracking after checking checkout writes, then run setup',
       ),
     ],
     hostOperations,

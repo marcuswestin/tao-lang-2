@@ -286,6 +286,12 @@ agent-only desktop proof repeats successfully in 8.9s with its `agents/` entry p
 temporary project fixtures were removed and their absence checked; retained proof output stays
 inside the task worktree. Exact-tree whole-project verification and finalization remain recorded
 in the task checkpoint rather than inferred from these focused acceptance runs.
+Main `b1dbd7a2c` adds portable install keys and discovery of tracked project pins during setup.
+Integration preserves those keys while making setup discovery, missing-install offers, and their
+fixtures read `store/lock.jsonc`; setup derives the project root above `.tao/store/`.
+The focused setup/offer/portable-pin and skills-lock tests pass, frozen setup succeeds, and the
+renewed `final-install-merge-real-app-20261004` real Metro run passes all four journeys and 80
+assertions. Independent semantic review found no actionable issues in the integration paths.
 
 Historical starting point:
 

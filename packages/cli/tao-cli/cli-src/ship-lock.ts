@@ -182,6 +182,8 @@ export function mergeProjectLocks(fresh: TaoProjectLock, incoming: TaoProjectLoc
   // Skills are installed by their own writer. A ship or toolchain caller may carry an older
   // snapshot, so the lock's current version wins when its other concerns are merged.
   const skillsVersion = fresh.skillsVersion ?? incoming.skillsVersion
+  const freshEnvironments = installEnvironmentsByProjectRoot(fresh.installs?.environments ?? {})
+  const incomingEnvironments = installEnvironmentsByProjectRoot(incoming.installs?.environments ?? {})
   const installs = fresh.installs === undefined && incoming.installs === undefined
     ? {}
     : {
@@ -189,25 +191,39 @@ export function mergeProjectLocks(fresh: TaoProjectLock, incoming: TaoProjectLoc
         lockfileVersion: 2 as const,
         local: { ...fresh.installs?.local, ...incoming.installs?.local },
         environments: Object.fromEntries(
-          [
-            ...new Set([
-              ...Object.keys(fresh.installs?.environments ?? {}),
-              ...Object.keys(incoming.installs?.environments ?? {}),
-            ]),
-          ].toSorted().map(namespace => {
-            const before = fresh.installs?.environments[namespace]
-            const after = incoming.installs?.environments[namespace]
-            const source = after ?? before!
-            return [namespace, {
-              projectRoot: source.projectRoot,
-              publications: source.publications,
-              npm: { ...before?.npm, ...after?.npm },
-            }]
-          }),
+          [...new Set([...Object.keys(freshEnvironments), ...Object.keys(incomingEnvironments)])].toSorted().map(
+            projectRoot => {
+              const before = freshEnvironments[projectRoot]
+              const after = incomingEnvironments[projectRoot]
+              const source = after ?? before!
+              return [projectRoot, {
+                projectRoot,
+                publications: source.publications,
+                npm: { ...before?.npm, ...after?.npm },
+              }]
+            },
+          ),
         ),
       } satisfies InstallsLock,
     }
   return { ...fresh, ...incoming, ...shipping, ...installs, ...(skillsVersion === undefined ? {} : { skillsVersion }) }
+}
+
+/**
+ * A committed lock must read the same in every checkout, so install environments are keyed by their
+ * project root relative to the lock's project, never by the machine-specific dependency namespace.
+ * Entries an older Tao wrote under a namespace fold into their project root's key, later keys winning.
+ */
+export function installEnvironmentsByProjectRoot(
+  environments: InstallsLock['environments'],
+): InstallsLock['environments'] {
+  const byProjectRoot: InstallsLock['environments'] = {}
+  for (const key of Object.keys(environments).toSorted()) {
+    const entry = environments[key]!
+    const previous = byProjectRoot[entry.projectRoot]
+    byProjectRoot[entry.projectRoot] = { ...entry, npm: { ...previous?.npm, ...entry.npm } }
+  }
+  return byProjectRoot
 }
 
 /**

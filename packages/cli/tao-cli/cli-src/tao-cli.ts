@@ -269,6 +269,7 @@ export function createCommands(): Command {
       ) => {
         try {
           // Command implementations load lazily so completion and help paths stay fast.
+          await (await import('./install-offer')).offerMissingInstalls([path])
           const { runTaoDev } = await import('./dev-command')
           const startupTargets = (['ios', 'android', 'web', 'desktop'] as const).filter(target =>
             options[target] === true
@@ -289,6 +290,7 @@ export function createCommands(): Command {
     .description('Refresh and watch a Tao project without starting a runtime.')
     .action(async (path: string) => {
       try {
+        await (await import('./install-offer')).offerMissingInstalls([path])
         const { runTaoWatch } = await import('./watch-command')
         Platform.runtimeProcess.setExitCode(await runTaoWatch(path))
       } catch (error) {
@@ -350,6 +352,7 @@ export function createCommands(): Command {
         },
       ) => {
         try {
+          await (await import('./install-offer')).offerMissingInstalls([path])
           const { runTaoBuild } = await import('./build-command')
           const targets = (['web', 'desktop', 'ios', 'android', 'visionos', 'watchos'] as const).filter(target =>
             options[target] === true
@@ -616,6 +619,7 @@ export function createCommands(): Command {
     .description('Compile a Tao app into its project .tao/cache/_gen_tao-app directory.')
     .action(async (appPath: string, options: { app?: string }) => {
       try {
+        await (await import('./install-offer')).offerMissingInstalls([appPath])
         const { runCompile } = await import('./compile-command')
         const compiled = await runCompile(appPath, { appName: options.app })
         HCI.writeSuccess(`Compiled ${compiled.sourcePath} -> ${compiled.outputPath}\n`)
@@ -689,6 +693,7 @@ export function createCommands(): Command {
       yes?: boolean
     }) => {
       try {
+        await (await import('./install-offer')).offerMissingInstalls([path])
         const { runShipCommand } = await import('./ship-command')
         await runShipCommand(path, {
           appName: options.app,
@@ -816,6 +821,9 @@ export function createCommands(): Command {
             const { finalizeSharedTaoTestRun } = await import('./test-command')
             await finalizeSharedTaoTestRun(options.sharedFinalize)
             return
+          }
+          if (options.sharedRun === undefined) {
+            await (await import('./install-offer')).offerMissingInstalls(testPaths)
           }
           const { TestOutput } = await import('./test-output')
           const testOptions = {
