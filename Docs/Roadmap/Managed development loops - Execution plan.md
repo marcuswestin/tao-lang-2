@@ -1,9 +1,22 @@
 # Managed development loops — Implementation and acceptance execution plan
 
 Prepared 2026-10-03 against `dev/ro` at `b13ddc54d`, in the shared primary checkout
-`$HOME/code/tao-lang-2`. Status: **remaining acceptance deferred until post-MVP; source committed for authorized landing**.
+`$HOME/code/tao-lang-2`. Status: **remaining acceptance deferred until post-MVP; prepare readiness and hold landing**.
 
 ## Developer stopping decision — 2026-10-04
+
+Latest instruction: **prepare fully for landing and report readiness; do not land**. The resolved
+main integration is committed as `a364e093f`, followed by subprocess entrypoint cleanup `9fcb6b9bb`
+and the real exited-process lock fixture `ccadf7da8`. No current task landing has occurred; the
+remote personal-branch archive reported by `landed` is the historical 2026-09-29 archive.
+
+The first full landing verification stopped without pushing: macOS process enumeration included
+zombies while its BSD identity query excluded them, and a lock fixture used an OS-invalid PID.
+The query repair enables zombie lookup only for enumerated group/descendant snapshots, preserving
+direct-query exit behavior, exact PID/start/group checks and refusal on uncertainty. Independent
+review is clear; Darwin28, genuine orphan-group3 and lock96 source checks pass. The separate quiet
+browser proof passes3/0 at `16-57-14-777Z-70546`, including previously failed cleanup. Full readiness
+verification must cover the final committed tree. None of this resumes deferred special acceptance.
 
 The Developer requested a pause at a good stopping point to preserve effort and tokens for other
 work, and explicitly deferred all remaining managed-loop and isolated native acceptance until

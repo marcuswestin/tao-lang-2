@@ -16,6 +16,11 @@
   preservation passes54 source cases and review. New host recovery was rejected before dispatch
   because the pause did not authorize signalling/deletion; resources remain retained. These are
   source results and an approval boundary, not fresh host acceptance.
+  Final readiness repair preserves zombie identities only in enumerated macOS group/descendant
+  snapshots; direct identity-query exit semantics and uncertainty refusal stay unchanged. Darwin28,
+  genuine orphan-group3 and real exited-owner lock96 pass; independent review is clear. The quiet
+  browser proof passes3/0 with cleanup at `16-57-14-777Z-70546`. The Developer now requires a fully
+  ready report before landing; remaining special host/human acceptance stays post-MVP.
   Fresh quiet Android lifecycle `bb7ab550` proves genuine workspace creation before
   and after reload/restart, exact runtime identity, and complete primary owned cleanup. The
   private primary AVD/project and physical pair are absent; protected peers remain unchanged.
