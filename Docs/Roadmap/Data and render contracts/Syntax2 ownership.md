@@ -72,8 +72,14 @@ their branches. The coordinator reviews and validates the combined tree before l
    both directions, omission separately from none, and full known/open failure bounds. Local slot
    binder aliases do not replace public role identity. The coordinator publishes the export hook.
    Associated capability/method/converter source remains unreleased.
-4. C's numeric/unit proposal remains read-only until its exact interfaces and ownership release
-   are recorded. No concurrent Type, grammar, dispatch or native-publication edits are authorized.
+4. C's uniform native-accessor slice owns new TR-js-value.ts, TR-reactive-values.ts,
+   TR-persisted-state.ts and the accessor/public-value-output integration in TR.ts, with focused
+   reactive, quantity, accessor and persisted-state tests. The coordinator pauses other facade edits
+   until return. getJSValue reevaluates live values and extracts quantity canonical backing; other
+   payloads retain their existing JavaScript identity. Keep minimal legacy evaluable input contracts
+   valid. Composite/resource/secret serialization and general action/presentable access are excluded.
+   C's numeric/unit grammar proposal remains read-only; Type, grammar and native publication are
+   not transferred by this accessor release.
 
 ## Binding and effects
 
