@@ -1325,7 +1325,13 @@ class RuntimeFunction {
 
   invoke(...args: TR.Evaluable[]): TR.Value<any> | TR.Function {
     const result = this.body(...args)
-    return result instanceof RuntimeFunction ? result : completeRuntimeValue(result)
+    if (
+      result instanceof RuntimeFunction || result instanceof RuntimeValue || result instanceof RuntimeReadonlyValue
+      || result instanceof RuntimeState
+    ) {
+      return result
+    }
+    return completeRuntimeValue(result)
   }
 }
 

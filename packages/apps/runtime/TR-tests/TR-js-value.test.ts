@@ -222,7 +222,106 @@ Describe('native JavaScript value accessors', () => {
     Expect(returned).toBe(scoped)
     Expect(TR.Call<string>(returned as TR.Function).getJSValue()).toBe('Scoped')
     const value = TR.Value('Complete')
-    Expect(TR.Call<string>(TR.Function(() => value))).toBe(value)
+    const completeValues = [value, TR.Readonly<string>(legacyValue('Readonly')), TR.Cell(legacyValue('Cell'))]
+    for (const complete of completeValues) {
+      const output = TR.Call<string>(TR.Function(() => complete))
+      Expect(output).toBe(complete)
+      Expect('jsValue' in output).toBe(true)
+      Expect(output.jsValue).toBe(output.getJSValue())
+      Expect(output.evaluate().getJSValue()).toBe(output.jsValue)
+    }
+  })
+
+  Test('completes function-returned legacy aliases without changing direct alias evaluation', () => {
+    let evaluations = 0
+    let payloadReads = 0
+    let current = 'Current'
+    const legacy = {
+      evaluate() {
+        evaluations += 1
+        return this
+      },
+      get jsValue() {
+        payloadReads += 1
+        return current
+      },
+    }
+    const alias = TR.Alias(legacy)
+    const output = TR.Call<string>(TR.Function(() => alias))
+    Expect([evaluations, payloadReads]).toEqual([0, 0])
+    Expect(output.jsValue).toBe('Current')
+    Expect([evaluations, payloadReads]).toEqual([1, 1])
+    const evaluated = output.evaluate()
+    Expect(typeof evaluated.getJSValue).toBe('function')
+    Expect([evaluations, payloadReads]).toEqual([2, 1])
+    Expect(evaluated.getJSValue()).toBe('Current')
+    Expect(output.getJSValue()).toBe('Current')
+    current = 'Updated'
+    Expect(output.jsValue).toBe('Updated')
+    Expect(output.getJSValue()).toBe('Updated')
+    Expect(output.evaluate().getJSValue()).toBe('Updated')
+    Expect(alias.evaluate()).toBe(legacy)
+    Expect('getJSValue' in alias.evaluate()).toBe(false)
+  })
+
+  Test('keeps quantity extraction and payload identity coherent in completed alias outputs', () => {
+    for (const canonical of [120, 0, -0]) {
+      const quantity = Duration.fromJSValue(canonical)
+      const input = legacyValue(quantity.jsValue)
+      const output = TR.Call<typeof quantity.jsValue>(TR.Function(() => TR.Alias(input)))
+      const native: number = output.getJSValue()
+      Expect(Object.is(native, canonical)).toBe(true)
+      Expect(output.jsValue).toBe(quantity.jsValue)
+      Expect(output.evaluate().jsValue).toBe(quantity.jsValue)
+      Expect(Object.is(output.evaluate().getJSValue(), canonical)).toBe(true)
+    }
+    const payload = { Nested: [TR.Value('Opaque')] }
+    const output = TR.Call<typeof payload>(TR.Function(() => TR.Alias(legacyValue(payload))))
+    Expect(output.jsValue).toBe(payload)
+    Expect(output.getJSValue()).toBe(payload)
+    Expect(output.evaluate().getJSValue()).toBe(payload)
+  })
+
+  Test('completes accessor-bearing structural inputs whose evaluated outputs are legacy values', () => {
+    let evaluations = 0
+    let discoveryReads = 0
+    let current = 'Current'
+    const legacy = {
+      evaluate() {
+        return this
+      },
+      get jsValue() {
+        return current
+      },
+    }
+    const input = {
+      get jsValue() {
+        discoveryReads += 1
+        return 'Untrusted surface'
+      },
+      getJSValue() {
+        discoveryReads += 1
+        return 'Untrusted accessor'
+      },
+      evaluate() {
+        evaluations += 1
+        return legacy
+      },
+    }
+    const output = TR.Call<string>(TR.Function(() => input))
+    Expect([evaluations, discoveryReads]).toEqual([0, 0])
+    Expect(output.jsValue).toBe('Current')
+    Expect(evaluations).toBe(1)
+    const evaluated = output.evaluate()
+    Expect(typeof evaluated.getJSValue).toBe('function')
+    Expect(evaluated.jsValue).toBe('Current')
+    Expect(evaluated.getJSValue()).toBe('Current')
+    Expect(evaluations).toBe(2)
+    current = 'Updated'
+    Expect(output.getJSValue()).toBe('Updated')
+    Expect(output.evaluate().getJSValue()).toBe('Updated')
+    Expect(evaluations).toBe(4)
+    Expect(discoveryReads).toBe(0)
   })
 
   Test('completes noncallable legacy accessor properties without invoking getters', () => {
@@ -465,11 +564,17 @@ Describe('native JavaScript value accessors', () => {
         'com.tao.test.accessor-defaults',
       )
       storage.values.set(state.key, JSON.stringify({ formatVersion: 1, type: numberType, value: 360 }))
+      const called = TR.Call<number>(TR.Function(() => state))
 
       Expect(state.getJSValue()).toBe(280)
+      Expect(called.jsValue).toBe(280)
+      Expect(called.evaluate().getJSValue()).toBe(280)
       Expect(state.defaultValue().getJSValue()).toBe(280)
       await state.load()
       Expect(state.getJSValue()).toBe(360)
+      Expect(called.jsValue).toBe(360)
+      Expect(called.getJSValue()).toBe(360)
+      Expect(called.evaluate().getJSValue()).toBe(360)
       Expect(getJSValue(state)).toBe(360)
       Expect(state.evaluate().getJSValue()).toBe(360)
       Expect(state.defaultValue().getJSValue()).toBe(280)
@@ -482,6 +587,8 @@ Describe('native JavaScript value accessors', () => {
       await state.settleWrites()
 
       Expect(state.getJSValue()).toBe(280)
+      Expect(called.jsValue).toBe(280)
+      Expect(called.evaluate().getJSValue()).toBe(280)
       Expect(state.evaluate().getJSValue()).toBe(280)
       Expect(storage.values.get(state.key)).toBe(JSON.stringify({ formatVersion: 1, type: numberType, value: 280 }))
     } finally {

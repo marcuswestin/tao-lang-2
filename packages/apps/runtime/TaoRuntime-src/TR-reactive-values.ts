@@ -219,7 +219,7 @@ class ForwardedValue<ValueT> implements TaoRuntimeValue<ValueT> {
 
   evaluate(): TaoRuntimeValue<ValueT> {
     const evaluated = this.source.evaluate()
-    const completed = hasJSValueAccessor(evaluated)
+    const completed = isKnownCompleteRuntimeValue(evaluated)
       ? evaluated as TaoRuntimeValue<ValueT>
       : new EvaluatedValue(evaluated)
     const availability = readAvailability(evaluated)
@@ -254,20 +254,18 @@ class EvaluatedValue<ValueT> implements TaoRuntimeValue<ValueT> {
 
 /** completeRuntimeValue adds output methods without eagerly reading a legacy callable result. */
 export function completeRuntimeValue<ValueT>(value: TaoEvaluable<ValueT>): TaoRuntimeValue<ValueT> {
-  return hasJSValueAccessor(value) ? value as TaoRuntimeValue<ValueT> : new ForwardedValue(value)
+  return isKnownCompleteRuntimeValue(value) ? value as TaoRuntimeValue<ValueT> : new ForwardedValue(value)
 }
 
-/** Inspect method descriptors without running a legacy object's accessor getter. */
-function hasJSValueAccessor(value: object): boolean {
-  let owner: object | null = value
-  while (owner !== null) {
-    const descriptor = Object.getOwnPropertyDescriptor(owner, 'getJSValue')
-    if (descriptor) {
-      return 'value' in descriptor && typeof descriptor.value === 'function'
-    }
-    owner = Object.getPrototypeOf(owner)
-  }
-  return false
+/** Only runtime-owned classes guarantee complete outputs from every evaluation. */
+function isKnownCompleteRuntimeValue(value: object): boolean {
+  return value instanceof Value
+    || value instanceof ReactiveCell
+    || value instanceof PathLens
+    || value instanceof MappedWritable
+    || value instanceof ForwardedValue
+    || value instanceof EvaluatedValue
+    || value instanceof ForwardedWritable
 }
 
 /** ForwardedWritable retains a legacy owner's storage while completing its produced value API. */
