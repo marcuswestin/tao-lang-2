@@ -27,14 +27,26 @@
   The managed command's public argument and canonical permission checks pass focused tests.
   Its new host prefix still needs the running task to load the regenerated permission rule before
   real background loop acceptance can begin. The old task-owned selector is absent in later inventory.
+  On 2026-10-03 the named managed status operation succeeded. Chrome receipts now expose the
+  invocation profile, DevTools endpoint and captured kernel identity; teardown rechecks that
+  identity before every signal, preserving the profile on mismatch. Focused source checks and a
+  signal-guard mutation pass. Closed Chrome acceptance uses exact endpoint/profile ownership and
+  requires parsed app-origin proof. Actual acceptance exposed an Expo LAN-origin mismatch and an
+  omitted runtime-marker helper; both are corrected with focused dispatch/materialization checks.
+  Quiet managed invocation `800dca69-0790-480b-b97d-79c4f452171c` passed actual clicks, asserted
+  workspace state, six before/after screenshots across reload/restart, and client disconnection
+  without terminating Chrome. Stop proved browser, profile, services and controller cleanup;
+  its disposable projection was removed, four primary peers and two baseline resources preserved.
+  Visible invocation `34f42a19-71cb-4b65-901b-b571b26ed4fa` passed reload/restart with preserved
+  `--show-browser` and complete owned teardown. Human focus/Space observations are unanswered;
+  neither automated pass closes focus acceptance.
 - **Workaround:** Omit `--web` and open the served URL in the in-app browser pane.
 - **Proposed change:** Use owned headless Chrome for the managed agent web runner, with `--show-browser`
   only for a requested window. Prefer the served URL in the in-app browser for interactive review,
   and explicitly attach a CDP client when checking the runner's exact Chrome session.
 - **Dependencies:** None.
-- **Acceptance:** Chrome screenshot and click acceptance is proved. Still open: observe foreground
-  focus during quiet and explicitly visible launch; verify graceful full dev-loop and profile
-  teardown; and prove complete cleanup
-  without stopping unrelated Metro processes. `app-dev --web` must never raise a desktop window
+- **Acceptance:** Managed Chrome screenshots/clicks, reload/restart, profile/full-loop cleanup and
+  unrelated Chrome/Metro preservation are proved by the current real-host cases. Still open:
+  human focus observations during quiet and explicitly visible launch. `app-dev --web` must never raise a desktop window
   unless explicitly requested with `--show-browser`.
 - **Source:** Provider pairing and InstantDB auth, `feat/provider-bridges`, 2026-09-27.
