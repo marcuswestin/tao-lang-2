@@ -627,6 +627,19 @@ class NumericContinuationParser extends Langium.LangiumParser {
 
   override alternatives(...[index, choices]: Parameters<GrammarParser['alternatives']>): void {
     const name = this.frames[this.frames.length - 1]?.name
+    if (name === 'PrimaryExpression') {
+      const alternative = this.continuationRule(name)?.definition
+      if (Langium.GrammarAST.isAlternatives(alternative)) {
+        const constructor = alternative.elements.findIndex(element =>
+          Langium.GrammarAST.isRuleCall(element) && element.rule.ref?.name === 'ConfigurationConstructor'
+        )
+        choices = choices.map((choice, position) =>
+          position === constructor
+            ? { ...choice, GATE: () => (!choice.GATE || choice.GATE()) && this.allowAppConstructorInput() }
+            : choice
+        )
+      }
+    }
     if (name === 'ViewStatement') {
       const rule = this.continuationRule(name)
       const alternative = rule?.definition
@@ -695,6 +708,30 @@ class NumericContinuationParser extends Langium.LangiumParser {
       return false
     }
     return this.startsNamedDirective(2)
+  }
+
+  /** App properties separate adjacent identifier pairs; grouping retains constructor intent. */
+  private allowAppConstructorInput(): boolean {
+    if (this.isRecording()) {
+      return true
+    }
+    const property = this.frames.findLastIndex(frame => frame.name === 'AppProperty')
+    const expression = this.frames[property + 1]
+    const nested = this.frames.slice(property + 2)
+    if (
+      property < 0 || expression?.name !== 'Expression' || expression.role !== 'value'
+      || nested.some(frame => frame.name === 'Expression')
+      || nested.filter(frame => frame.name === 'PrimaryExpression').length !== 1
+      || nested.some(frame => frame.role === 'right' || frame.role === 'operand')
+      || !isIdentifierToken(this.lookahead(1))
+    ) {
+      return true
+    }
+    let payload = 2
+    while (this.lookahead(payload).image === '.' && isIdentifierToken(this.lookahead(payload + 1))) {
+      payload += 2
+    }
+    return !isIdentifierToken(this.lookahead(payload)) || this.lookahead(payload + 1).image === '.'
   }
 
   private startsNamedDirective(start: number): boolean {

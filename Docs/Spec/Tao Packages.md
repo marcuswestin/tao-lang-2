@@ -132,6 +132,13 @@ ID identifies Tao-managed persistent state across release versions. Explicit dat
 independently controls backend sharing. Older state stores remain untouched during the identity-key
 transition; they are not deleted or automatically merged.
 
+App properties separate adjacent name/value pairs: `Datasource BookStore Design LibraryDesign`
+supplies two reference values. A direct named constructor with a bare identifier input must be
+grouped, as in `name (Caption CurrentName)`, so its input cannot become the next property name.
+Literal and member-access inputs can remain bare, such as `name Caption "Welcome"` or
+`name Caption Profile.Name`. Constructors nested in arguments, lists, or grouped expressions keep
+ordinary expression syntax.
+
 An app's runnable identity and dependencies do not publish an importable module API. Publishing code
 requires a separate `package` declaration and its explicit module inclusion and visibility rules.
 
