@@ -850,9 +850,9 @@ await runWithCommands(commands => {
   commands
     .command('open-pr')
     .description(
-      'Push this feature branch, open or reuse its pull request titled by the reviewed merge message, turn on auto-merge, then stream the checks the push starts.',
+      'Push this feat/, claude/, or codex/ branch, open or reuse its pull request titled by the reviewed merge message, turn on auto-merge, then stream the checks the push starts.',
     )
-    .option('--poll-interval-ms <ms>', 'How often to poll checks when this gh has no `--watch` flag.')
+    .option('--poll-interval-ms <ms>', 'How often to poll the checks while they run (default 60000).')
     .action(async (options: { pollIntervalMs?: string } = {}) => {
       await runExitCommand(async () =>
         (await OpenPrCommand.run({

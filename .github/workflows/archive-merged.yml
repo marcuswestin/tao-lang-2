@@ -4,7 +4,8 @@ name: Archive merged branch
 # it lands, so `./agent landed` and `reclaim` read a pull request merged on GitHub the same way. Auto-
 # merge, `merge-pr`, and the web page all merge here, and GitHub then deletes the head branch, so this
 # runs on the merge itself rather than in any one of them. `merge-pr` pushes the same ref; whichever
-# arrives second finds it already at this head and leaves it.
+# arrives second finds it already at this head and leaves it. A cloud agent session's `claude/` or
+# `codex/` branch keeps its prefix, `merged/claude/<name>`, exactly as `merge-pr` archives it.
 
 on:
   pull_request:
@@ -20,7 +21,9 @@ jobs:
     if: >-
       github.event.pull_request.merged
       && github.event.pull_request.head.repo.full_name == github.repository
-      && startsWith(github.event.pull_request.head.ref, 'feat/')
+      && (startsWith(github.event.pull_request.head.ref, 'feat/')
+        || startsWith(github.event.pull_request.head.ref, 'claude/')
+        || startsWith(github.event.pull_request.head.ref, 'codex/'))
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

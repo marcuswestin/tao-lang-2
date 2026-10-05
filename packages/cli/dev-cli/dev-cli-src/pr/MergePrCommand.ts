@@ -1,12 +1,13 @@
 import { CLI, Errors, FS, HCI, Repo } from '@shared'
 import { archiveStem } from '@verification/MergeWithMain'
+import { gitHubPulls, isMerged, mustSucceed, type PullRequest, requirePrBranch } from './GitHubPulls'
 import { PrChecksCommand, type PrChecksOptions } from './PrChecksCommand'
 import { reviewedMergeMessage } from './ReviewedMergeMessage'
 
 /*
- * `merge-pr` merges this feature branch's pull request on GitHub once hosted CI has proved it. It
- * follows every check on the pushed head to its conclusion, requires the `Verify` verdict among them,
- * then squash-merges with the reviewed merge message, pinned to the head it watched so a later push
+ * `merge-pr` merges this branch's pull request on GitHub once hosted CI has proved it. It follows
+ * every check on the pushed head to its conclusion, requires the `Verify` verdict among them, then
+ * squash-merges with the reviewed merge message, pinned to the head it watched so a later push
  * cannot slip in unproved. `open-pr` has usually turned on auto-merge, in which case GitHub may merge
  * first; a pull request already merged at the watched head is this command's success too. Afterwards it archives the head at `merged/<name>`, exactly where `land`
  * archives a feature branch, and only then deletes the remote branch, so `landed` and `reclaim` read
@@ -21,10 +22,10 @@ import { reviewedMergeMessage } from './ReviewedMergeMessage'
  * enables auto-merge; that is `open-pr`'s.
  *
  * Like `open-pr`, every `git` and `gh` call goes through the injected `run` seam so a test can script
- * every answer without a real remote.
+ * every answer without a real remote, and every GitHub read and the merge itself go through REST
+ * (`GitHubPulls`), so it works where a host's proxy refuses `gh pr`'s GraphQL.
  */
 
-const FEATURE_BRANCH_PREFIX = 'feat/'
 const REMOTE = 'origin'
 /** The workflow job whose success is the hosted verdict; the partitions report into it. */
 const VERDICT_CHECK = 'Verify'
@@ -53,16 +54,6 @@ export type MergePrOptions = {
   repositoryRoot?: string
 }
 
-type PullRequestView = {
-  baseRefName: string
-  headRefOid: string
-  isDraft: boolean
-  number: number
-  state: string
-  statusCheckRollup?: { conclusion?: string; name?: string }[]
-  url: string
-}
-
 /** MergePrCommand is the CLI wiring surface consumed by `dev.ts`. */
 export const MergePrCommand = {
   async run(
@@ -76,20 +67,24 @@ export const MergePrCommand = {
       dependencies.writeLine(line)
     }
 
-    const branch = await requireFeatureBranch(dependencies, root)
+    const branch = await requirePrBranch(dependencies.run, root, 'merge-pr')
     const status = (await git(dependencies, root, ['status', '--porcelain=v1', '--untracked-files=all'])).stdout
     if (status !== '') {
       Errors.throwUserInput(`The worktree has uncommitted changes; commit and push them first:\n${status.trimEnd()}`)
     }
     const message = await reviewedMergeMessage(dependencies, root, branch)
     const local = (await git(dependencies, root, ['rev-parse', 'HEAD'])).stdout.trim()
-    const before = await viewPullRequest(dependencies, root, branch)
-    if ((before.state !== 'OPEN' && before.state !== 'MERGED') || before.baseRefName !== 'main') {
-      Errors.throwUserInput(`#${before.number} is ${before.state.toLowerCase()} against '${before.baseRefName}'.`)
+    const github = gitHubPulls(dependencies.run, root, dependencies.writeLine)
+    const before = (await github.forBranch(branch, 'all'))[0]
+    if (before === undefined) {
+      Errors.throwUserInput(`No pull request has ${branch} as its head; open one with \`./agent unsandboxed open-pr\`.`)
     }
-    if (before.headRefOid !== local) {
+    if ((before.state !== 'open' && !isMerged(before)) || before.base.ref !== 'main') {
+      Errors.throwUserInput(`#${before.number} is ${before.state} against '${before.base.ref}'.`)
+    }
+    if (before.head.sha !== local) {
       Errors.throwUserInput(
-        `#${before.number}'s head is ${before.headRefOid.slice(0, 8)}, not this worktree's ${
+        `#${before.number}'s head is ${before.head.sha.slice(0, 8)}, not this worktree's ${
           local.slice(0, 8)
         }; push with \`./agent unsandboxed open-pr\` first.`,
       )
@@ -97,7 +92,7 @@ export const MergePrCommand = {
 
     // Already merged at this head means auto-merge got there first, behind the required Verify check.
     let after = before
-    if (before.state === 'OPEN') {
+    if (before.state === 'open') {
       const checks = await dependencies.followChecks({
         intervalMs: options.intervalMs,
         pr: before.number,
@@ -108,25 +103,25 @@ export const MergePrCommand = {
         report(`FAIL  #${before.number} is not merged: its checks did not all pass.`)
         return { exitCode: 1, lines }
       }
-      after = await viewPullRequest(dependencies, root, String(before.number))
-      const verdict = (after.statusCheckRollup ?? []).find(check => check.name === VERDICT_CHECK)
-      if (after.headRefOid !== local || verdict?.conclusion !== 'SUCCESS') {
+      after = await github.view(before.number)
+      const verdict = after.head.sha === local ? await github.checkConclusion(local, VERDICT_CHECK) : undefined
+      if (after.head.sha !== local || verdict !== 'success') {
         report(
-          after.headRefOid !== local
-            ? `FAIL  #${after.number}'s head moved to ${after.headRefOid.slice(0, 8)} while its checks ran; not merged.`
+          after.head.sha !== local
+            ? `FAIL  #${after.number}'s head moved to ${after.head.sha.slice(0, 8)} while its checks ran; not merged.`
             : `FAIL  #${after.number} has no successful ${VERDICT_CHECK} check on ${local.slice(0, 8)}; not merged.`,
         )
         return { exitCode: 1, lines }
       }
-      if (after.state !== 'MERGED') {
-        after = await mergeUnlessAutoMerged(dependencies, root, after, local, message)
+      if (!isMerged(after)) {
+        after = await mergeUnlessAutoMerged(dependencies, root, github, after, local, message)
       }
-      if (after.state !== 'MERGED') {
-        report(`FAIL  #${after.number} is ${after.state.toLowerCase()} after the merge; not archived.`)
+      if (!isMerged(after)) {
+        report(`FAIL  #${after.number} is ${after.state} after the merge; not archived.`)
         return { exitCode: 1, lines }
       }
     }
-    report(`PASS  #${after.number} merged at ${local.slice(0, 8)} after ${VERDICT_CHECK} passed: ${after.url}`)
+    report(`PASS  #${after.number} merged at ${local.slice(0, 8)} after ${VERDICT_CHECK} passed: ${after.html_url}`)
 
     const archive = archiveStem(branch)
     await git(dependencies, root, ['push', REMOTE, `${local}:refs/heads/${archive}`])
@@ -142,85 +137,34 @@ export const MergePrCommand = {
   },
 } as const
 
-async function requireFeatureBranch(dependencies: MergePrDependencies, root: string): Promise<string> {
-  const result = await dependencies.run('git', {
-    args: ['symbolic-ref', '--quiet', '--short', 'HEAD'],
-    cwd: root,
-    stdio: 'pipe',
-  })
-  const branch = result.exitCode === 0 ? result.stdout.trim() : ''
-  if (!branch.startsWith(FEATURE_BRANCH_PREFIX)) {
-    Errors.throwUserInput(`merge-pr needs a feat/<name> branch checked out, not '${branch || 'a detached HEAD'}'.`)
-  }
-  return branch
-}
-
 /**
  * Auto-merge fires within seconds of Verify passing, so this merge can lose that race; GitHub then
  * refuses it as already merged, and the pull request's state, not the refusal, is the answer. A draft
- * is marked ready first, since GitHub refuses to merge one.
+ * is marked ready first, since GitHub refuses to merge one; REST has no endpoint for that, so it is
+ * the one `gh pr` call here.
  */
 async function mergeUnlessAutoMerged(
   dependencies: MergePrDependencies,
   root: string,
-  pr: PullRequestView,
+  github: ReturnType<typeof gitHubPulls>,
+  pr: PullRequest,
   head: string,
   message: { body: string; title: string },
-): Promise<PullRequestView> {
-  if (pr.isDraft) {
-    await gh(dependencies, root, ['pr', 'ready', String(pr.number)])
+): Promise<PullRequest> {
+  if (pr.draft) {
+    mustSucceed(
+      await dependencies.run('gh', { args: ['pr', 'ready', String(pr.number)], cwd: root, stdio: 'pipe' }),
+      dependencies.writeLine,
+    )
   }
-  const merged = await dependencies.run('gh', {
-    args: [
-      'pr',
-      'merge',
-      String(pr.number),
-      '--squash',
-      '--match-head-commit',
-      head,
-      '--subject',
-      message.title,
-      '--body',
-      message.body,
-    ],
-    cwd: root,
-    stdio: 'pipe',
-  })
-  const after = await viewPullRequest(dependencies, root, String(pr.number))
-  if (after.state !== 'MERGED') {
-    mustSucceed(dependencies, merged)
+  const merged = await github.squashMerge(pr.number, { body: message.body, sha: head, title: message.title })
+  const after = await github.view(pr.number)
+  if (!isMerged(after)) {
+    mustSucceed(merged, dependencies.writeLine)
   }
   return after
 }
 
-/** The first view finds the pull request by branch; later ones by number, since a merge deletes the branch. */
-async function viewPullRequest(dependencies: MergePrDependencies, root: string, selector: string) {
-  const view = await gh(dependencies, root, [
-    'pr',
-    'view',
-    selector,
-    '--json',
-    'baseRefName,headRefOid,isDraft,number,state,statusCheckRollup,url',
-  ])
-  return JSON.parse(view.stdout) as PullRequestView
-}
-
 async function git(dependencies: MergePrDependencies, cwd: string, args: readonly string[]) {
-  return mustSucceed(dependencies, await dependencies.run('git', { args, cwd, stdio: 'pipe' }))
-}
-
-async function gh(dependencies: MergePrDependencies, cwd: string, args: readonly string[]) {
-  return mustSucceed(dependencies, await dependencies.run('gh', { args, cwd, stdio: 'pipe' }))
-}
-
-/** A failure prints what the tool said first: the thrown error names only the command line. */
-function mustSucceed(dependencies: MergePrDependencies, result: CLI.CommandResult): CLI.CommandResult {
-  if (result.exitCode !== 0 || result.error !== undefined || result.signal !== null) {
-    const said = (result.stderr || result.stdout).trim()
-    if (said !== '') {
-      dependencies.writeLine(`FAIL  ${result.command} said: ${said}`)
-    }
-    throw new Errors.CommandExecutionError(result)
-  }
-  return result
+  return mustSucceed(await dependencies.run('git', { args, cwd, stdio: 'pipe' }), dependencies.writeLine)
 }

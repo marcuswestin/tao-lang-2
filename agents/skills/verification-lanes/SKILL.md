@@ -113,6 +113,10 @@ archiving the branch at `merged/<name>`:
   `merged/<name>`, and reports the merge. GitHub deletes the branch, and the archive workflow writes the
   same `merged/<name>` for a pull request merged any other way. To change the message, edit it and run
   `open-pr` again. When a check fails, read `./agent pr-checks`, fix, commit, and run `open-pr` again.
+  Both take a `feat/<name>` branch, or the one `claude/<name>` or `codex/<name>` branch a cloud agent
+  session may push, archived at `merged/claude/<name>` or `merged/codex/<name>`. They talk to GitHub
+  over REST, so they work where a cloud host's proxy refuses `gh pr`'s GraphQL; there auto-merge
+  stays off, and `merge-pr` does the merge.
   Never run `gh pr merge` directly: the Developer's login can bypass `Verify`, and the harness refuses it.
 - **`./agent unsandboxed land`** when the change reaches a host-only lane (Studio, browser, native
   shell, simulator, canary), or when CI is unavailable: it verifies on this machine under the landing
