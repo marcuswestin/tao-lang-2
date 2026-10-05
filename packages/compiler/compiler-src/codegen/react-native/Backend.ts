@@ -8,7 +8,11 @@ import { BridgeMetadata, type QuantityCanonicalLeaf, type QuantityPublicationMod
 import { CompilerDependencies } from '../../compiler-dependencies'
 import { rewriteQuantityNativeImports } from '../../quantity-native-imports'
 import { sidecarModuleSpecifiers } from '../../sidecar-module-specifiers'
-import { inspectSidecarSourceGraph, sidecarSourceBelongsToProject } from '../../sidecar-source-graph'
+import {
+  inspectSidecarSourceGraph,
+  relativeSidecarCandidates,
+  sidecarSourceBelongsToProject,
+} from '../../sidecar-source-graph'
 import { storedDataSchemaFile, storedDataSchemas } from '../../stored-data-schema'
 import {
   compileStudioPreviewManifest,
@@ -105,6 +109,7 @@ type PlannedOutputs = {
   bySourcePath: ReadonlyMap<string, PlannedSourceOutputs>
   modulePathBySourcePath: ReadonlyMap<string, string>
   canonicalQuantities: ReadonlyMap<AST.TypeDeclaration, QuantityCanonicalLeaf>
+  sidecarPathBySourcePath: ReadonlyMap<string, string>
 }
 
 /** ReactNativeBackend owns TypeScript planning and Expo-compatible output. */
@@ -551,7 +556,7 @@ function planOutputPaths(
           allowUnmarkedOutside,
         )
         const plannedGraph = planSidecarGraphOutputs(
-          graph,
+          graph.filter(path => !sidecarPathBySourcePath.has(path)),
           sourcePath,
           companionDirectory,
           usedOutputPaths,
@@ -562,7 +567,9 @@ function planOutputPaths(
           relativePath: graphRelativePath,
           sourcePath: graphSourcePath,
         })))
-        sidecarPathBySourcePath.set(sourcePath, relativePath)
+        for (const [graphSourcePath, graphRelativePath] of plannedGraph) {
+          sidecarPathBySourcePath.set(graphSourcePath, graphRelativePath)
+        }
       }
       return { binding, exportName, sourcePath, relativePath }
     }
@@ -635,7 +642,7 @@ function planOutputPaths(
       )
     }
   }
-  return { bySourcePath, modulePathBySourcePath, canonicalQuantities }
+  return { bySourcePath, modulePathBySourcePath, canonicalQuantities, sidecarPathBySourcePath }
 }
 
 type CompileSourceFileOptions = {
@@ -988,17 +995,24 @@ function rewriteSidecarTaoImports(
     if (!specifier.value.startsWith('./') && !specifier.value.startsWith('../')) {
       continue
     }
-    if (!specifier.value.endsWith('.tao')) {
+    const planned = specifier.value.endsWith('.tao')
+      ? outputPaths.bySourcePath.get(FS.resolvePath(specifier.value, FS.dirname(sourcePath)))
+      : undefined
+    const sidecarPath = planned === undefined
+      ? relativeSidecarCandidates(sourcePath, specifier.value).find(path =>
+        outputPaths.sidecarPathBySourcePath.has(path)
+      )
+      : undefined
+    const target = planned
+      ? specifier.runtimeNamespace || specifier.valueNames.length > 0
+        ? planned.modulePath
+        : planned.declarationsPath ?? planned.modulePath
+      : sidecarPath === undefined
+      ? undefined
+      : outputPaths.sidecarPathBySourcePath.get(sidecarPath)
+    if (target === undefined) {
       continue
     }
-    const taoSourcePath = FS.resolvePath(specifier.value, FS.dirname(sourcePath))
-    const planned = outputPaths.bySourcePath.get(taoSourcePath)
-    if (!planned) {
-      continue
-    }
-    const target = specifier.runtimeNamespace || specifier.valueNames.length > 0
-      ? planned.modulePath
-      : planned.declarationsPath ?? planned.modulePath
     const quote = source[specifier.start]
     rewritten = `${rewritten.slice(0, specifier.start)}${quote}${relativeImportPath(relativePath, target)}${quote}${
       rewritten.slice(specifier.end)

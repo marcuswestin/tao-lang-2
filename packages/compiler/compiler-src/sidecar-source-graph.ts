@@ -179,7 +179,7 @@ function sidecarSourceRange(source: string, start: number, end: number): NonNull
   return { start: position(start), end: position(end) }
 }
 
-function relativeSidecarCandidates(sourcePath: string, specifier: string): readonly string[] {
+export function relativeSidecarCandidates(sourcePath: string, specifier: string): readonly string[] {
   const requested = FS.resolvePath(specifier, FS.dirname(sourcePath))
   const extension = FS.extname(requested)
   return extension === ''
