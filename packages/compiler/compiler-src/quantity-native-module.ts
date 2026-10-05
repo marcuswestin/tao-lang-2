@@ -12,7 +12,7 @@ export type QuantityNativeOwner = Readonly<{
 export type QuantityNativeModuleOptions = Readonly<{
   owners: readonly QuantityNativeOwner[]
   outputPath: string
-  runtimeRoot: string
+  runtimeRoot: string | Readonly<{ modulePrefix: string }>
   /** Names already claimed by the publication containing this leaf. */
   reservedNames?: readonly string[]
   /** All local quantity declarations, including aliases that only reserve surface names. */
@@ -269,6 +269,9 @@ function nameAllocator(names: Set<string>): (base: string) => string {
 }
 
 function runtimeImport(options: QuantityNativeModuleOptions, module: string): string {
+  if (typeof options.runtimeRoot !== 'string') {
+    return `${options.runtimeRoot.modulePrefix}/${module}`
+  }
   const path = FS.resolvePath(`TaoRuntime-src/${module}.ts`, options.runtimeRoot)
   const relative = FS.relativePath(FS.dirname(FS.resolvePath(options.outputPath)), path).replace(/\.ts$/, '')
   return relative.startsWith('./') || relative.startsWith('../') ? relative : `./${relative}`

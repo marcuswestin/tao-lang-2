@@ -9,6 +9,7 @@ import {
 import {
   type QuantityNativeLinkage,
   QuantityNativeModule,
+  type QuantityNativeModuleOptions,
   type QuantityNativeModuleOutput,
   type QuantityNativeSurface,
 } from './quantity-native-module'
@@ -226,7 +227,7 @@ function quantityRuntimeRoot(runtimeRoot?: string): string {
 function quantityModuleFor(
   file: AST.TaoFile,
   outputPath: string,
-  runtimeRoot: string,
+  runtimeRoot: QuantityNativeModuleOptions['runtimeRoot'],
   canonicalLeaves: QuantityCanonicalLeaves = new Map(),
 ): QuantityPublicationModule | undefined {
   const surface = quantitySurfaceFor(file)
@@ -310,7 +311,7 @@ function quantityModuleFor(
 function directQuantityModuleFor(
   file: AST.TaoFile,
   outputPath: string,
-  runtimeRoot: string,
+  runtimeRoot: QuantityNativeModuleOptions['runtimeRoot'],
   surface: QuantityPublicationSurface,
 ): QuantityNativeModuleOutput | undefined {
   const owners = surface.declarations.filter(row => row.declaration === row.owner).map(row => {

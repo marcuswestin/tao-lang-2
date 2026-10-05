@@ -4,8 +4,9 @@ import { Assert, Errors, FS, ProjectIdentity } from '@shared'
 import type { ValidationResult } from '@validator'
 import { appMetadata } from '../../app-metadata'
 import { authPolicy } from '../../auth-policy'
-import { BridgeMetadata } from '../../bridge-metadata'
+import { BridgeMetadata, type QuantityCanonicalLeaf, type QuantityPublicationModule } from '../../bridge-metadata'
 import { CompilerDependencies } from '../../compiler-dependencies'
+import { rewriteQuantityNativeImports } from '../../quantity-native-imports'
 import { sidecarModuleSpecifiers } from '../../sidecar-module-specifiers'
 import { inspectSidecarSourceGraph, sidecarSourceBelongsToProject } from '../../sidecar-source-graph'
 import { storedDataSchemaFile, storedDataSchemas } from '../../stored-data-schema'
@@ -34,6 +35,7 @@ import {
   type InlineInjection,
   withInlineInjectionBindings,
 } from './app/injection-plan'
+import { withQuantityFactoryBindings } from './app/NumericUnitsCompiler'
 import { RuntimeGen } from './app/RuntimeGen'
 import { LocalDataBindings } from './codegen-util'
 
@@ -83,6 +85,8 @@ type PlannedSourceOutputs = {
   declarationsPath?: string
   sidecars: PlannedSidecar[]
   sidecarCopies: PlannedSidecarCopy[]
+  quantityPath?: string
+  quantityModule?: QuantityPublicationModule
 }
 
 type PlannedInjection = {
@@ -94,6 +98,7 @@ type PlannedInjection = {
 type PlannedOutputs = {
   bySourcePath: ReadonlyMap<string, PlannedSourceOutputs>
   modulePathBySourcePath: ReadonlyMap<string, string>
+  canonicalQuantities: ReadonlyMap<AST.TypeDeclaration, QuantityCanonicalLeaf>
 }
 
 /** ReactNativeBackend owns TypeScript planning and Expo-compatible output. */
@@ -164,6 +169,32 @@ function compileReactNative(
         .map(file => file.path)
       : []),
   ])
+  // Private/type-only quantity owners still need their singleton leaf, independently of runtime selection.
+  const availableSources = new Map(validationResult.files.map(file => [file.path, file]))
+  const quantityOnlyDeclarations = new Map<string, Set<AST.TypeDeclaration>>()
+  const quantitySources = [...selectedSources]
+  for (let index = 0; index < quantitySources.length; index++) {
+    const file = availableSources.get(quantitySources[index]!)
+    if (file === undefined) {
+      continue
+    }
+    for (const owner of BridgeMetadata.quantityReferencedOwnersOf(file.ast)) {
+      const ownerPath = AST.getDocument(owner).uri.path
+      if (!selectedSources.has(ownerPath)) {
+        selectedSources.add(ownerPath)
+        quantitySources.push(ownerPath)
+        const projectRoot = Packages.projectRootForPath(context.packagesContext.index, ownerPath)
+        if (
+          projectRoot !== undefined && projectRoot !== graph.projectRoot
+          && !FS.pathIsWithin(ownerPath, context.packagesContext.stdlibRoot)
+        ) {
+          dependencyOwnerBySourcePath.set(ownerPath, projectRoot)
+          quantityOnlyDeclarations.set(ownerPath, new Set())
+        }
+      }
+      quantityOnlyDeclarations.get(ownerPath)?.add(owner)
+    }
+  }
   const sourceFiles = validationResult.files.filter(file =>
     (selectedSources.has(file.path) || FS.pathIsWithin(file.path, context.packagesContext.stdlibRoot))
     && (sidecarTaoSources.projectRootBySourcePath.has(file.path) || file.ast.statements.length === 0
@@ -181,10 +212,12 @@ function compileReactNative(
   const selectedStatements = (file: ParsedFile): readonly AST.Statement[] =>
     selectedPublications.declarationsBySourcePath.has(file.path) || accessBySourcePath.has(file.path)
       || sidecarTaoSources.projectRootBySourcePath.has(file.path)
+      || quantityOnlyDeclarations.has(file.path)
       ? file.ast.statements.filter(statement =>
         selectedPublications.declarationsBySourcePath.get(file.path)?.has(statement as AST.Declaration)
         || sidecarTaoSources.runtimeDeclarationsBySourcePath.get(file.path)?.has(statement as AST.Declaration)
         || (AST.isAccessDeclaration(statement) && accessBySourcePath.get(file.path)?.has(statement))
+        || (AST.isTypeDeclaration(statement) && quantityOnlyDeclarations.get(file.path)?.has(statement))
       )
       : file.ast.statements
   const dataCatalog = planDataCatalog(sourceFiles, entryPath, selectedStatements)
@@ -360,7 +393,11 @@ function selectedSidecarTaoSources(
             continue
           }
           projectRootBySourcePath.set(target.path, owner)
-          const seeds = CompilerDependencies.taoSidecarValueDeclarations(target.ast, edge)
+          const seeds = CompilerDependencies.taoSidecarValueDeclarations(
+            target.ast,
+            edge,
+            BridgeMetadata.quantitySurfaceFor(target.ast),
+          )
           if (seeds.length === 0) {
             continue
           }
@@ -446,6 +483,14 @@ function planOutputPaths(
     // declaration references that type. Emit its type companion without selecting its runtime
     // implementation or copying that implementation's sidecar.
     const declarations = file.ast.statements.filter(isRuntimeConfigurableDeclaration)
+    const quantitySurface = BridgeMetadata.quantitySurfaceFor(file.ast)
+    const quantityPath = quantitySurface === undefined ? undefined : reserveOutputPath(
+      outputPathInDirectory(
+        outputDirectory(modulePath),
+        `${FS.basename(modulePath, FS.extname(modulePath))}.quantities.ts`,
+      ),
+      usedOutputPaths,
+    )
     const hasErasedCaseSets = options.dependencyRootBySourcePath.has(file.path)
       && file.ast.statements.some(statement =>
         AST.isTypeDeclaration(statement) && AST.isCaseSetTypeExpression(statement.type)
@@ -454,7 +499,7 @@ function planOutputPaths(
     const companionDirectory = declarations.length === 0
       ? outputDirectory(modulePath)
       : companionOutputDirectory(file.path, modulePath, usedOutputPaths)
-    const declarationsPath = declarations.length === 0 && !hasErasedCaseSets
+    const declarationsPath = declarations.length === 0 && !hasErasedCaseSets && quantitySurface === undefined
       ? undefined
       : reserveOutputPath(
         outputPathInDirectory(companionDirectory, `${FS.basename(file.path)}.d.ts`),
@@ -553,9 +598,37 @@ function planOutputPaths(
         )]
         : []),
     ]
-    bySourcePath.set(file.path, { injections, modulePath, declarationsPath, sidecars, sidecarCopies })
+    bySourcePath.set(file.path, { injections, modulePath, declarationsPath, sidecars, sidecarCopies, quantityPath })
   }
-  return { bySourcePath, modulePathBySourcePath }
+  const canonicalQuantities = new Map<AST.TypeDeclaration, QuantityCanonicalLeaf>()
+  for (const file of sourceFiles) {
+    const planned = bySourcePath.get(file.path)!
+    const surface = BridgeMetadata.quantitySurfaceFor(file.ast)
+    if (surface === undefined || planned.quantityPath === undefined) {
+      continue
+    }
+    const linkageByOwner = new Map(
+      surface.declarations.filter(row => row.declaration === row.owner).map(row => [row.owner, row] as const),
+    )
+    const leaf: QuantityCanonicalLeaf = {
+      path: planned.quantityPath,
+      namespaceExport: surface.namespaceExport,
+      linkageByOwner,
+    }
+    linkageByOwner.forEach((_link, owner) => canonicalQuantities.set(owner, leaf))
+  }
+  for (const file of sourceFiles) {
+    const planned = bySourcePath.get(file.path)!
+    if (planned.quantityPath !== undefined) {
+      planned.quantityModule = BridgeMetadata.quantityModuleFor(
+        file.ast,
+        planned.quantityPath,
+        { modulePrefix: '@runtime' },
+        canonicalQuantities,
+      )
+    }
+  }
+  return { bySourcePath, modulePathBySourcePath, canonicalQuantities }
 }
 
 type CompileSourceFileOptions = {
@@ -630,6 +703,27 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
   }
   const planned = outputPaths.bySourcePath.get(file.path)
   Assert.defined(planned, compiledSourceOutputPathMessage, { sourcePath: file.path })
+  const factoryBindings = new Map<AST.TypeDeclaration, string>()
+  const quantityImports: string[] = []
+  for (const [owner, leaf] of outputPaths.canonicalQuantities) {
+    const link = leaf.linkageByOwner.get(owner)
+    Assert.defined(link, 'compiled canonical quantity owner has its exact linkage')
+    const binding = `__tao_quantity_factory_${factoryBindings.size + 1}__`
+    factoryBindings.set(owner, binding)
+    quantityImports.push(
+      `import { ${link.factoryExport} as ${binding} } from ${
+        JSON.stringify(relativeImportPath(planned.modulePath, leaf.path))
+      }`,
+    )
+  }
+  const emitWithQuantityTypes = <Result>(path: string, emit: () => Result): Result => {
+    const bindings = new Map([...outputPaths.canonicalQuantities].map(([owner, leaf]) => {
+      const link = leaf.linkageByOwner.get(owner)
+      Assert.defined(link, 'compiled quantity type owner has its exact linkage')
+      return [owner, `import(${JSON.stringify(relativeImportPath(path, leaf.path))}).${link.valueTypeExport}`] as const
+    }))
+    return BridgeMetadata.withQuantityTypeBindings(bindings, emit)
+  }
   const typeStatements = file.ast.statements.filter(statement => {
     if (!isRuntimeConfigurableDeclaration(statement)) {
       return false
@@ -641,6 +735,7 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
     return target !== undefined && outputPaths.modulePathBySourcePath.has(AST.getDocument(target).uri.path)
   })
   const importLines = [
+    ...quantityImports,
     ...importLinesForCompiledFile(imports, planned.modulePath, outputPaths.modulePathBySourcePath),
     ...configurationAliasImportLines(file, planned.modulePath, outputPaths, typeStatements),
     ...planned.injections.map(injection =>
@@ -670,59 +765,77 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
   const emitted = (relativePath: string, code: string): CompiledFile => ({ code, relativePath, sourcePath: file.path })
   const module = emitted(
     planned.modulePath,
-    withDataStorePlan(
-      dataCatalog?.stores,
+    withQuantityFactoryBindings(
+      factoryBindings,
       () =>
-        withDeclarationIdentityContext(identityProjects, identityOwnerBySourcePath, () =>
-          withInlineInjectionBindings(
-            new Map(planned.injections.map(injection => [injection.node, injection.binding])),
+        emitWithQuantityTypes(planned.modulePath, () =>
+          withDataStorePlan(
+            dataCatalog?.stores,
             () =>
-              withActionInstrumentation(debug, () =>
-                RuntimeGen.TaoFile(file.ast, {
-                  bridgeTypes: BridgeMetadata.typesFor(file.ast, selectedStatements),
-                  configurationTypes: planned.declarationsPath === undefined
-                    ? undefined
-                    : RuntimeGen.ConfigurationTypes(file.ast, typeStatements),
-                  dataEntities: ownsDataCatalog ? dataCatalog.entities : [],
-                  dataAccess: ownsDataCatalog ? dataCatalog.access : [],
-                  emitDataCatalog: ownsDataCatalog,
-                  importLines,
-                  localDataCatalog: usesLocalDataCatalog,
-                  journeyObservations,
-                  scopeBindings,
-                  exportedBindings,
-                  selectedAppDatasourceConfiguration,
-                  selectedAppFirebaseConfiguration,
-                  selectedAppAuthConfiguration,
-                  selectedAppName,
-                  projectRoot,
-                  studioDataCatalog: studio && dataCatalog !== undefined && (ownsDataCatalog || needsStudioDataCatalog),
-                  studio,
-                  debug,
-                  studioViews: studio && selectedAppName !== undefined ? studioViews : [],
-                  viewRegistrations: RuntimeGen.ViewRegistrations(file.ast, { studio }, selectedStatements),
-                  selectedStatements,
-                })),
+              withDeclarationIdentityContext(identityProjects, identityOwnerBySourcePath, () =>
+                withInlineInjectionBindings(
+                  new Map(planned.injections.map(injection => [injection.node, injection.binding])),
+                  () =>
+                    withActionInstrumentation(debug, () =>
+                      RuntimeGen.TaoFile(file.ast, {
+                        bridgeTypes: BridgeMetadata.typesFor(file.ast, selectedStatements),
+                        configurationTypes: planned.declarationsPath === undefined
+                          ? undefined
+                          : RuntimeGen.ConfigurationTypes(file.ast, typeStatements),
+                        dataEntities: ownsDataCatalog ? dataCatalog.entities : [],
+                        dataAccess: ownsDataCatalog ? dataCatalog.access : [],
+                        emitDataCatalog: ownsDataCatalog,
+                        importLines,
+                        localDataCatalog: usesLocalDataCatalog,
+                        journeyObservations,
+                        scopeBindings,
+                        exportedBindings,
+                        selectedAppDatasourceConfiguration,
+                        selectedAppFirebaseConfiguration,
+                        selectedAppAuthConfiguration,
+                        selectedAppName,
+                        projectRoot,
+                        studioDataCatalog: studio && dataCatalog !== undefined
+                          && (ownsDataCatalog || needsStudioDataCatalog),
+                        studio,
+                        debug,
+                        studioViews: studio && selectedAppName !== undefined ? studioViews : [],
+                        viewRegistrations: RuntimeGen.ViewRegistrations(file.ast, { studio }, selectedStatements),
+                        selectedStatements,
+                      })),
+                )),
           )),
     ),
   )
+  if (planned.quantityModule !== undefined) {
+    module.code += `\n${BridgeMetadata.quantityExportsFor(file.ast, planned.modulePath, planned.quantityModule)}\n`
+  }
   const declarationsPath = planned.declarationsPath
   const declarations = declarationsPath === undefined ? [] : [emitted(
     declarationsPath,
-    RuntimeGen.ConfigurationDeclarations(
-      file.ast,
-      configurationAliasImportLines(file, declarationsPath, outputPaths, typeStatements),
-      [
-        BridgeMetadata.typesFor(file.ast, selectedStatements),
-        identityOwnerBySourcePath.has(file.path)
-          ? BridgeMetadata.caseSetTypesFor(file.ast.statements)
-          : '',
-      ].filter(Boolean).join('\n'),
-      typeStatements,
-    ),
+    emitWithQuantityTypes(declarationsPath, () =>
+      RuntimeGen.ConfigurationDeclarations(
+        file.ast,
+        configurationAliasImportLines(file, declarationsPath, outputPaths, typeStatements),
+        [
+          BridgeMetadata.typesFor(file.ast, selectedStatements),
+          identityOwnerBySourcePath.has(file.path)
+            ? BridgeMetadata.caseSetTypesFor(file.ast.statements)
+            : '',
+        ].filter(Boolean).join('\n'),
+        typeStatements,
+      )),
   )]
+  if (planned.quantityModule !== undefined && declarations[0] !== undefined) {
+    declarations[0].code += `\n${
+      BridgeMetadata.quantityExportsFor(file.ast, declarationsPath!, planned.quantityModule)
+    }\n`
+  }
   const injections = planned.injections.map(injection =>
-    emitted(injection.relativePath, RuntimeGen.InjectionBoundary(injection.node))
+    emitted(
+      injection.relativePath,
+      emitWithQuantityTypes(injection.relativePath, () => RuntimeGen.InjectionBoundary(injection.node)),
+    )
   )
   const copiedSidecars = new Map<string, CompiledFile>()
   for (const sidecar of planned.sidecarCopies) {
@@ -744,7 +857,10 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
       ),
     })
   }
-  return [module, ...injections, ...declarations, ...copiedSidecars.values()]
+  const quantityFiles = planned.quantityModule === undefined ? [] : [
+    emitted(planned.quantityModule.path, planned.quantityModule.code),
+  ]
+  return [module, ...injections, ...declarations, ...quantityFiles, ...copiedSidecars.values()]
 }
 
 /** Keep compilation's existing user error while graph inspection stays diagnostic-only. */
@@ -821,6 +937,15 @@ function rewriteSidecarTaoImports(
   relativePath: string,
   outputPaths: PlannedOutputs,
 ): string {
+  source = rewriteQuantityNativeImports(source, sourcePath, relativePath, path => {
+    const planned = outputPaths.bySourcePath.get(path)
+    const quantity = planned?.quantityModule
+    return planned === undefined || quantity === undefined ? undefined : {
+      modulePath: planned.modulePath,
+      declarationsPath: planned.declarationsPath,
+      quantity: { path: quantity.path, ...quantity.surface },
+    }
+  })
   let rewritten = source
   for (const specifier of sidecarModuleSpecifiers(source, sourcePath).toReversed()) {
     if (!specifier.value.startsWith('./') && !specifier.value.startsWith('../')) {
