@@ -995,3 +995,12 @@ Diagnostic Tao preparation logs identify each submitted, completed or failed fil
 time including queueing; they do not claim actual worker start times. The next full parallel gate
 must establish correctness and actual scheduling results for the committed rebalance. Sequential
 batch measurements are not a qualified speed gain, and existing performance ceilings remain.
+
+The first committed parallel diagnostic-policy landing attempt was interrupted after13minutes
+after the real Metro drag smoke's local30-second compile polling budget expired. This was a
+missed watchdog override, not a captured rendering/state failure. Browser smoke polling and
+manual overall wait deadlines now honor the diagnostic policy; ordinary budgets, deliberate
+timeout fixtures, per-attempt retry cadence and performance assertions remain unchanged.
+The corrected real Metro drag journey passes independently in22seconds. Retain the interrupted
+run and compare identical test/group membership across sequential and parallel artifacts; for
+example, the split receipt group passed33.9s sequentially and399.4s in that parallel run.

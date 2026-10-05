@@ -1,4 +1,4 @@
-import { Errors, FS, Platform, Repo, Time } from '@shared'
+import { Errors, FS, Platform, Repo, Time, VerificationTimeouts } from '@shared'
 import { Expect, mkTestDir, Test } from '@shared/test'
 import {
   AgentChatProvider,
@@ -138,7 +138,7 @@ Test('Studio agent streams, serializes turns, and refuses stale undo in Chrome',
     await browser.goto(`${studio.url}/sessions/${encodeURIComponent(current.sessionId)}`)
     try {
       await browser.waitFor(`document.querySelector('.chat-cloud:not(:disabled)') instanceof HTMLInputElement`, {
-        timeoutMs: 30_000,
+        timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity,
       })
     } catch (cause) {
       const page = await browser.evaluate<string>('document.body.innerText')
@@ -308,7 +308,7 @@ async function waitForApproval(browser: StudioCdp, heading: string): Promise<voi
       && cards.at(-1)?.querySelector('.studio-agent-card-actions button[data-variant="primary"]')
         instanceof HTMLButtonElement
   })()`,
-    { timeoutMs: 30_000 },
+    { timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity },
   )
 }
 
@@ -324,7 +324,7 @@ async function waitForSource(path: string, predicate: (source: string) => boolea
   const matched = await Time.pollUntil(async () => {
     last = await FS.readText(path)
     return predicate(last)
-  }, { intervalMs: 100, timeoutMs: 30_000 })
+  }, { intervalMs: 100, timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity })
   if (!matched) {
     Errors.throwHostEnvironment(`Timed out waiting for Studio source change; last source:\n${last}`)
   }
