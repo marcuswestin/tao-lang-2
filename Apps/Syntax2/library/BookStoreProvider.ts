@@ -89,7 +89,7 @@ export function BookProvider(): TaoDataProvider {
           }
           const candidate = (value as Readonly<Record<string, unknown>>).Id
           if (typeof candidate !== 'string') {
-            TR.Errors.failInput('BookStore author filters require a text author ID.')
+            return TR.Errors.failInput('BookStore author filters require a text author ID.')
           }
           authorID = candidate
         }
@@ -98,7 +98,7 @@ export function BookProvider(): TaoDataProvider {
         }
         const maximum = descriptor.pageSize
         if (maximum === undefined || !Number.isInteger(maximum) || maximum < 1 || maximum > 40) {
-          TR.Errors.failInput('BookStore query pageSize must be an integer from 1 through 40.')
+          return TR.Errors.failInput('BookStore query pageSize must be an integer from 1 through 40.')
         }
         const identity = JSON.stringify([descriptor.entity, authorID ?? null, maximum, 'ID', 'asc'])
         return { ...(authorID === undefined ? {} : { authorID }), identity, maximum }
@@ -159,7 +159,7 @@ export function BookProvider(): TaoDataProvider {
                 TR.Errors.failHost('Book acquisition was cancelled.')
               }
               if (!result.ok) {
-                TR.Errors.failHost(result.error.message)
+                return TR.Errors.failHost(result.error.message)
               }
 
               const stored = TR.Data.NativeSnapshots.decode(ownedSnapshot, context.schema)
@@ -247,7 +247,7 @@ export function BookProvider(): TaoDataProvider {
 export function bookStoreSession(connection: TaoDataConnection): BookStoreSession {
   const session = sessions.get(connection)
   if (!session) {
-    TR.Errors.failInput('BookStore operations require a live BookStore datasource connection.')
+    return TR.Errors.failInput('BookStore operations require a live BookStore datasource connection.')
   }
   return session
 }
