@@ -386,8 +386,18 @@ export function publishCanonicalEffectSnapshot(
     }
     if (AST.isValueReference(node) || AST.isMemberAccessExpression(node)) {
       const domain = resolution.ofReferenceRoot(node)
+      const call = AST.isMemberAccessExpression(node) && AST.isMethodCallExpression(node.$container)
+          && node.$container.callee === node
+        ? calls.get(node.$container)
+        : undefined
+      const receiver = call?.kind === 'complete' && call.receiver?.kind === 'member-path'
+          && call.receiver.site === node && call.receiver.members.length === 1
+        ? call.receiver
+        : undefined
       const selectedDomain = AST.isMemberAccessExpression(node) && domain.kind === 'item' && node.members.length === 1
         ? resolution.atMemberPath(domain, node.members)
+        : domain.kind === 'item' && receiver
+        ? resolution.atMemberPath(domain, receiver.members)
         : domain
       const selection = AST.isMemberAccessExpression(node)
         ? publishNamedMethodSelection(node, calls.get(node.$container))
