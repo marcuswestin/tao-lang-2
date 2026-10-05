@@ -48,7 +48,7 @@ import {
 } from './app/injection-plan'
 import { withQuantityFactoryBindings } from './app/NumericUnitsCompiler'
 import { RuntimeGen } from './app/RuntimeGen'
-import { LocalDataBindings } from './codegen-util'
+import { LocalDataBindings, withImportedDeclarationBindings } from './codegen-util'
 
 import type { CompiledFile, CompileOptions, CompilerContext, CompileResult } from '../../compiler'
 import type { Backend } from '../Backend'
@@ -65,6 +65,7 @@ const localCatalogBindings = [LocalDataBindings.catalog, LocalDataBindings.datas
 type ResolvedImports = {
   bySource: Map<string, Set<string>>
   scopeBindings: Map<string, string>
+  declarationBindings: Map<AST.Declaration, string>
 }
 
 type DataCatalogPlan = {
@@ -810,7 +811,8 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
   const emitted = (relativePath: string, code: string): CompiledFile => ({ code, relativePath, sourcePath: file.path })
   const module = emitted(
     planned.modulePath,
-    withAssociatedWitnessBindings(witnessPlan.bindings, () =>
+    withImportedDeclarationBindings(imports.declarationBindings, () =>
+      withAssociatedWitnessBindings(witnessPlan.bindings, () =>
       withQuantityFactoryBindings(
         factoryBindings,
         () =>
@@ -852,6 +854,7 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
                   )),
             )),
       ), operatorWitnessKeys),
+    ),
   )
   if (associatedExports.size > 0) {
     module.code += `\nexport { ${[...associatedExports.values()].join(', ')} }\n`
@@ -1255,12 +1258,36 @@ function resolveImports(
 ): ResolvedImports {
   const bySource = new Map<string, Set<string>>()
   const scopeBindings = new Map<string, string>()
+  const declarationBindings = new Map<AST.Declaration, string>()
+  const referencedNames = ASTUtils.referencedNames(file, { statements })
+  const reservedBindings = new Set(referencedNames)
+  for (const node of AST.streamAllContents(file)) {
+    if ('name' in node && typeof node.name === 'string') {
+      reservedBindings.add(node.name)
+    }
+  }
+  for (const use of file.statements.filter(AST.isUseStatement)) {
+    use.importedDeclarations.forEach(specifier => reservedBindings.add(AST.importLocalName(specifier)))
+  }
+  const bindAliasedImport = (declaration: AST.Declaration, targetPath: string) => {
+    if (declarationBindings.has(declaration)) {
+      return
+    }
+    const preferred = `__tao_imported_${declarationBindings.size + 1}__`
+    let binding = preferred
+    for (let suffix = 1; reservedBindings.has(binding); suffix++) {
+      binding = `${preferred}${suffix}`
+    }
+    reservedBindings.add(binding)
+    declarationBindings.set(declaration, binding)
+    addImportedName(bySource, targetPath, `${runtimeBindingName(declaration)} as ${binding}`)
+    scopeBindings.set(binding, binding)
+  }
   // A `folder` declaration is in scope without a `use` statement, so the generated module still
   // has to import it by name from the sibling file that declares it.
   const currentDirectory = FS.dirname(filePath)
   // Only what this file actually names: importing every folder-visible sibling declaration would
   // make each file in the folder import every other one, dead bindings and cycles included.
-  const referencedNames = ASTUtils.referencedNames(file, { statements })
   for (const render of statements.flatMap(statement => AST.streamAllContents(statement)).filter(AST.isRender)) {
     const target = AST.isQuotedRender(render)
       ? render.view?.ref
@@ -1326,21 +1353,13 @@ function resolveImports(
     ? ASTUtils.referencedNames(file, { runtimeOnly: true, statements })
     : referencedNames
   for (const useStatement of file.statements.filter(AST.isUseStatement)) {
-    const declarations = AST.resolvedImportedDeclarations(useStatement)
-    const importedNames = new Set(
-      useStatement.all
-        ? declarations.map(declaration => declaration.name)
-        : useStatement.importedDeclarations.map(AST.importSourceName),
-    )
-    for (const declaration of declarations) {
+    for (const imported of AST.resolvedImportedBindings(useStatement)) {
+      const declaration = imported.declaration
       const importedName = declaration.name
-      if (!importedNames.has(importedName)) {
+      if ((useStatement.all || statements !== file.statements) && !referencedNames.has(imported.localName)) {
         continue
       }
-      if ((useStatement.all || statements !== file.statements) && !referencedNames.has(importedName)) {
-        continue
-      }
-      if (pairingIssuers.has(importedName) && !runtimeNames.has(importedName)) {
+      if (pairingIssuers.has(imported.localName) && !runtimeNames.has(imported.localName)) {
         continue
       }
       if (!declarationEmitsRuntimeBinding(declaration)) {
@@ -1354,6 +1373,10 @@ function resolveImports(
         const declarations = selectedStatementsFor(targetFile).filter(declarationEmitsRuntimeBinding)
           .filter(candidate => candidate.name === importedName)
         for (const candidate of declarations) {
+          if (imported.localName !== imported.sourceName) {
+            bindAliasedImport(candidate, targetPath)
+            continue
+          }
           const binding = runtimeBindingName(candidate)
           addImportedName(bySource, targetPath, binding)
           scopeBindings.set(binding, binding)
@@ -1361,7 +1384,7 @@ function resolveImports(
       }
     }
   }
-  return { bySource, scopeBindings }
+  return { bySource, scopeBindings, declarationBindings }
 }
 
 function relativeImportPath(fromOutputPath: string, toOutputPath: string): string {

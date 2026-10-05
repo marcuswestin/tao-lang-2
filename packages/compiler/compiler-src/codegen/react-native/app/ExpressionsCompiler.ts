@@ -811,17 +811,17 @@ function compileConfiguredItemEntry(
 function configureCall(declaration: AST.ConfigurableDeclaration, config: Compiled): Compiled | undefined {
   const primitive = AST.configurationPrimitiveOf(declaration)
   if (primitive === 'nav') {
-    const runtimeDeclaration = gen.scopeName({ name: configurationRuntimeBindingName(declaration) })
+    const runtimeDeclaration = gen.scopeName(declaration, configurationRuntimeBindingName(declaration))
     return gen`TR.Navigation.Configure(${runtimeDeclaration}, ${config})`
   }
   if (primitive === 'auth') {
-    return gen`TR.Auth.Configure(${gen.scopeName({ name: configurationRuntimeBindingName(declaration) })}, ${config})`
+    return gen`TR.Auth.Configure(${gen.scopeName(declaration, configurationRuntimeBindingName(declaration))}, ${config})`
   }
   return primitive === 'datasource' ? dataConfigureCall(declaration, config) : undefined
 }
 
 function dataConfigureCall(declaration: AST.ConfigurableDeclaration, config: Compiled): Compiled {
-  const runtimeDeclaration = gen.scopeName({ name: configurationRuntimeBindingName(declaration) })
+  const runtimeDeclaration = gen.scopeName(declaration, configurationRuntimeBindingName(declaration))
   return gen`TR.Data.Configure(${runtimeDeclaration}, ${config})`
 }
 

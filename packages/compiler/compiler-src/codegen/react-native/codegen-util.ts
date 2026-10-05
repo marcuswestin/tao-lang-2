@@ -74,13 +74,34 @@ type NamedNode = {
   name: string
 }
 
+let importedDeclarationBindings: ReadonlyMap<AST.Declaration, string> = new Map()
+
+/** withImportedDeclarationBindings preserves foreign declaration identities during synchronous module emission. */
+export function withImportedDeclarationBindings<T>(
+  bindings: ReadonlyMap<AST.Declaration, string>,
+  emit: () => T,
+): T {
+  const previous = importedDeclarationBindings
+  importedDeclarationBindings = bindings
+  try {
+    return emit()
+  } finally {
+    importedDeclarationBindings = previous
+  }
+}
+
+/** scopeBindingName selects a module-local import binding without renaming its declaration. */
+export function scopeBindingName(node: NamedNode, fallback = node.name): string {
+  return importedDeclarationBindings.get(node as AST.Declaration) ?? fallback
+}
+
 let _gen = {} as {
   tag: (staticParts: TemplateStringsArray, ...substitutions: GenValue[]) => Compiled
   template: (staticParts: TemplateStringsArray, ...substitutions: GenValue[]) => Compiled
   noop: () => Compiled
   comment: (text: string) => Compiled
   Name: (node: NamedNode) => Compiled
-  scopeName: (node: NamedNode) => Compiled
+  scopeName: (node: NamedNode, fallback?: string) => Compiled
   jsLiteral: (value: JsLiteralValue) => string
   nameLiteral: (node: NamedNode) => Compiled
   textLines: (text: string) => GenValue
@@ -117,8 +138,8 @@ _gen.Name = function genName(node: NamedNode): Compiled {
   return _gen.tag`${node.name}`
 }
 
-_gen.scopeName = function genScopeName(node: NamedNode): Compiled {
-  return _gen.tag`_Scope.${_gen.Name(node)}`
+_gen.scopeName = function genScopeName(node: NamedNode, fallback?: string): Compiled {
+  return _gen.tag`_Scope.${scopeBindingName(node, fallback)}`
 }
 
 _gen.jsLiteral = function genJsLiteral(value: JsLiteralValue): string {
