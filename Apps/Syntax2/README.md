@@ -102,7 +102,7 @@ These are deliberately narrow integration requirements, not the final A29 query-
    arithmetic with concrete Self, Duration adds signed time-domain units with canonical seconds.
    Selected: scalar is an abstract operation family, not a concrete unitless value. Generic bounded T
    preserves a concrete domain; erased independent scalar values cannot be mixed in arithmetic.
-   Selected unit form: `units { Seconds 1 (default), Milliseconds 0.001, Minutes 60, Hours 3600 }`.
+   Selected unit form: `units { seconds 1 (default), milliseconds 0.001, minutes 60, hours 3600 }`.
    Keep explicit 1; no canonical marker yet. Validate the exact declaration grammar and scalar-family
    admission with a small stdlib fixture before editing shared parser/type infrastructure.
 2. Generic Self: selected after review—allow ordinary upward admission to a type
@@ -117,7 +117,8 @@ These are deliberately narrow integration requirements, not the final A29 query-
    Selected inverse writes target the same stored field; filling both aliases in one update is
    rejected even if values agree. Book.Return now exercises the inverse write.
 
-Selected unit lookup: owner-qualified suffixes such as `2 Duration.Seconds` are available; explicitly
+Selected unit lookup: lowercase names are a grammar rule, including qualified final segments and
+unit-reading methods. Owner-qualified suffixes such as `2 Duration.seconds` are available; explicitly
 visible shorthand names may be used. Ambiguous unit names error rather than using the callee to guess.
 
 Empty text and owner-elided methods follow the new requested target. Named-state shorthand is a

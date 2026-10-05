@@ -5,7 +5,7 @@ use BookStore, InvalidInput, Occurrence, LoadedItems,
     LoadAfter, Refresh from ./library/BookIO
 use Col, Row, Button, TextField, Spinner, Spacer, LazyList from @tao/ui
 use Length, ConversionFailure from @tao/core
-use Minutes, Seconds from @tao/time
+use minutes, seconds from @tao/time
 
 // 1. Future project; activate only with a dependency-complete entry slice.
 project {
@@ -65,16 +65,16 @@ view Library {
    let Score = Score 2 + Score 3
 
    // 3.1 Canonical seconds; arithmetic retains the leftmost quantity's view.
-   let Span = 2 Minutes + 30 Seconds
+   let Span = 2 minutes + 30 seconds
    let Scaled = 2 * Span
-   let Factor = Span / 30 Seconds
-   let Offset = -2 Seconds
+   let Factor = Span / 30 seconds
+   let Offset = -2 seconds
 
    // 4. Provisional app-level bounded query contract; see README.
    query Feed = Books with { order by ID asc, paginate 40 }
    render Col {
       #heading accessible label "Library"
-      Banner(.Subtitle "{Scaled.Seconds()} / {Factor}", .Title Label)
+      Banner(.Subtitle "{Scaled.seconds()} / {Factor}", .Title Label)
       Person
       "{Subtract(Right 2, Left 5)} / {Score as TitleType} / {Offset}"
       Spacer [claim 2]
@@ -125,5 +125,5 @@ view Library {
 // Subtract(2, 5) is ambiguous: use Subtract(Right 2, Left 5).
 // PersonName(Name "Ada", .FamilyName "Lovelace") cannot narrow Name:
 // use PersonName(.GivenName "Ada", .FamilyName "Lovelace").
-// Subtract(1 Minutes, 30 Seconds) cannot discard semantics:
-// use 1 Minutes - 30 Seconds.
+// Subtract(1 minutes, 30 seconds) cannot discard semantics:
+// use 1 minutes - 30 seconds.

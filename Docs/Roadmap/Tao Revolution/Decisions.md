@@ -557,6 +557,15 @@ in one update even when their values agree. A separate opposite nominal type-pai
 from this selected field contract. These choices close the current five-question round; final
 forcing-source/integration audit remains, with no compiler/runtime implementation claimed.
 
+2026-10-05 amendment: unit names are lowercase as a grammar rule, rather than a naming convention.
+The selected table is now `units { seconds 1 (default), milliseconds 0.001, minutes 60, hours 3600 }`.
+Suffixes and generated unit-reading names follow that spelling: `2 seconds`, `-2 seconds`,
+`2 Duration.seconds`, and `Wait.minutes()`. Owner names retain their nominal spelling. This prevents
+an uppercase view such as `Text` from being consumed as a unit after a parenthesized accessibility
+label expression. Enforce the final unit segment during parsing, before name resolution; retain
+other expression boundary checks and required configuration/item commas. It does not make
+newlines significant, authorize expected-type unit guessing, or change canonical backing.
+
 ### Unit values and literals
 
 Historical examples below predate the signed quantity dialogue. For the current Syntax2 program,

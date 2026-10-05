@@ -1,6 +1,6 @@
 use Col, Row, Button, RenderKey from @tao/ui
 use Ordered, UpperCase from @tao/core
-use Time, Wait, Seconds from @tao/time
+use Time, Wait, seconds from @tao/time
 use CreateTemporaryPDF, DeleteTemporaryFile, UploadFile,
     ObservedRevision, MarkSeen, NotifyExport from ./BookIO
 
@@ -66,7 +66,7 @@ public data Books / Book {
             Button("Export") {
                on press -> do Export(Book) then {
                   done Duration -> async {
-                     do Wait(2 Seconds)
+                     do Wait(2 seconds)
                      do NotifyExport(Book, Duration)
                   }
                }
