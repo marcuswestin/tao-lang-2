@@ -1,5 +1,8 @@
 import { AST } from '@parser'
+import { type FailureContract, unionFailureContracts } from './failure-contracts'
 import { resolveActionTarget } from './invocations'
+
+export { type FailureContract, failureContractSatisfiesBound, unionFailureContracts } from './failure-contracts'
 
 /** EffectDeclaration is a verb whose failure contract a call site can read. */
 export type EffectDeclaration = AST.ActionDeclaration | AST.CommandDeclaration | AST.ActionExpression
@@ -11,22 +14,6 @@ export type EffectInvocation =
   | AST.EventHandler
   | AST.LoopSelectHandler
   | AST.CommandDoClause
-
-/** Known modeled failures and whether the complete propagated set remains unknown. */
-export type FailureContract = Readonly<{ cases: readonly string[]; open: boolean }>
-
-/** Union retains every known case in source order and never loses an open remainder. */
-export function unionFailureContracts(contracts: readonly FailureContract[]): FailureContract {
-  return {
-    cases: uniqueCases(contracts.flatMap(contract => contract.cases)),
-    open: contracts.some(contract => contract.open),
-  }
-}
-
-/** An unknown actual contract cannot satisfy a closed failure bound. */
-export function failureContractSatisfiesBound(actual: FailureContract, bound: FailureContract): boolean {
-  return bound.open || (!actual.open && actual.cases.every(failureCase => bound.cases.includes(failureCase)))
-}
 
 /** The three outcomes every `when do` may name, beside the cases its verb declares. */
 export const effectOutcomeWords = ['saved', 'rejected', 'error'] as const

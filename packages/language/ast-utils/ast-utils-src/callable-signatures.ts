@@ -1,7 +1,7 @@
 import { AST } from '@parser'
 import { Assert } from '@shared'
 import { type ArgumentBindingResult, resolveParameterArgumentBindings } from './argument-bindings'
-import { type FailureContract, failureContractSatisfiesBound } from './effect-outcomes'
+import { type FailureContract, failureContractSatisfiesBound } from './failure-contracts'
 import { parameterRequiresWritable } from './reactive-parameters'
 import { type TaoType, Type } from './Type'
 import { type BindingDiagnostic, resolveBindings } from './type-binding-matches'
