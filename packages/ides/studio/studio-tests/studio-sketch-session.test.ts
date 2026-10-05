@@ -622,7 +622,7 @@ Describe('Studio sketch session protocol', () => {
         sketchId: 'sketch-1',
         sourceVersion: initial.sourceVersion,
       })
-      const catalogPath = FS.resolvePath('.tao/studio/sketches.jsonc', root)
+      const catalogPath = FS.resolvePath('.tao/store/studio/sketches.jsonc', root)
       const onDisk = await FS.readText(catalogPath)
       const generatedPath = FS.resolvePath('@/studio/View1.tao', root)
       const before = snapped.catalog.sketches[0]!.snapped[0]!.target

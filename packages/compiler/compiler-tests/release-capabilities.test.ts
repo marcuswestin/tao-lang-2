@@ -23,7 +23,7 @@ Describe('compiler release eligibility', () => {
       await withTaoFiles('release-editor-pin-', {
         'Nested/Main.tao': 'let Label = "Hello"',
         'Nested/.tao/.gitkeep': '',
-        'Nested/.tao/lock.jsonc': '{"toolchain":{"version":"0.1.1","releaseProfile":{"phase":1}}}',
+        'Nested/.tao/store/lock.jsonc': '{"toolchain":{"version":"0.1.1","releaseProfile":{"phase":1}}}',
       }, async (paths, root) => {
         const workspace = await LSPWorkspace.open(root)
         const document = workspace.services.shared.workspace.LangiumDocuments.getDocument(

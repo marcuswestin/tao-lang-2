@@ -3,7 +3,7 @@ import { type StudioDraftFile, StudioDraftSync } from '../../StudioDraftSync'
 import { StudioTextMateLanguage } from '../../StudioTextMateLanguage'
 import { StudioApiClient, type StudioCompileState, type StudioFile } from '../StudioApiClient'
 import { StudioCodeEditor, studioHostDocumentUpdate, StudioOpenFileLifecycle } from '../StudioEditor'
-import { StudioEditorTabs } from '../StudioEditorTabs'
+import { StudioEditorTabs, type StudioEditorTabSnapshot } from '../StudioEditorTabs'
 import { showOpenFile, type StudioClientView } from '../StudioShell'
 import { showSourceActionError } from '../StudioVisualEditing'
 import { type StudioOpenDiagnostic, StudioStatusLine } from './StudioCompileEvents'
@@ -28,12 +28,14 @@ export type StudioOpenDocument = Readonly<{ content: string; saved: boolean }>
 export type StudioEditorSessionDeps = Readonly<{
   compileState: () => StudioCompileState
   identity: Readonly<{ appName: string; project: string }>
+  initialTabs?: StudioEditorTabSnapshot
+  onTabsChanged?: (snapshot: StudioEditorTabSnapshot) => void
   /** A document edit: the search panel re-runs when it has a query. */
   onDocumentChanged: () => void
   /** A code-editor save wrote `path` outside any visual edit. */
   onSaved: (path: string) => void
   openCompileDiagnostic: StudioOpenDiagnostic
-  /** Tells the active preview which source the editor now shows or selects. */
+  /** Tells the focused preview which source the editor now shows or selects. */
   postSelection: (file: StudioDraftFile, editor: EditorView) => void
   publish: () => void
   renderInspector: () => void
@@ -82,6 +84,8 @@ export class StudioEditorSession {
       availablePaths: projectFiles.map(file => file.path),
       project: deps.identity.project,
       storage: window.localStorage,
+      ...(deps.initialTabs === undefined ? {} : { initial: deps.initialTabs }),
+      onChange: deps.onTabsChanged,
     })
   }
 
@@ -151,9 +155,12 @@ export class StudioEditorSession {
           return
         }
         if (result.saved) {
+          const wrote = result.file.sourceVersion !== current.file.sourceVersion
           current.file = result.file
           current.dirty = current.editor.state.doc.toString() !== result.file.content
-          this.#deps.onSaved(path)
+          if (wrote) {
+            this.#deps.onSaved(path)
+          }
           if (this.#activePath === path) {
             this.#deps.postSelection(result.file, current.editor)
             this.#deps.publish()
@@ -175,11 +182,17 @@ export class StudioEditorSession {
         EditorView.updateListener.of(update => {
           if (update.docChanged) {
             const content = update.state.doc.toString()
-            fileTab.dirty = true
+            // Unsaved means different from the saved file, so typing an edit back out clears it and
+            // the tab can close again without a save.
+            fileTab.dirty = content !== fileTab.file.content
             fileDraftSync.update(content)
+            if (!fileTab.dirty && this.#serverDraftDirty(path)) {
+              // A refused save left a draft on the server; the text is the saved file again, so drop it.
+              void fileDraftSync.save().catch(error => showSourceActionError(view.status, error))
+            }
             this.#renderTabs()
             view.status.dataset['state'] = 'idle'
-            view.status.textContent = 'Unsaved changes — press ⌘S to save.'
+            view.status.textContent = fileTab.dirty ? 'Unsaved changes — press ⌘S to save.' : 'No unsaved changes.'
             this.#scheduleHighlight(update.view, content)
             this.#deps.onDocumentChanged()
           }
@@ -407,6 +420,13 @@ export class StudioEditorSession {
 
   /** A file changed on disk: a clean tab goes stale (and the active one reloads); a dirty one is warned. */
   applyFileEvent(file: StudioFile): void {
+    // The tab strip's dot also shows a draft the server holds, which a file event can set or clear.
+    if (this.#projectFiles.some(known => known.path === file.path && known.dirty !== file.dirty)) {
+      this.#projectFiles = this.#projectFiles.map(known =>
+        known.path === file.path ? { ...known, dirty: file.dirty } : known
+      )
+      this.#renderTabs()
+    }
     const tab = this.#tabs.get(file.path)
     if (tab === undefined || file.sourceVersion === tab.file.sourceVersion) {
       return
@@ -428,6 +448,10 @@ export class StudioEditorSession {
     for (const tab of this.#tabs.values()) {
       tab.editor.destroy()
     }
+  }
+
+  #serverDraftDirty(path: string): boolean {
+    return this.#projectFiles.some(file => file.path === path && file.dirty)
   }
 
   #isUnsaved(tab: StudioOpenEditorTab): boolean {

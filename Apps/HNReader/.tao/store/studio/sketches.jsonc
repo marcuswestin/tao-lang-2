@@ -1,0 +1,249 @@
+{
+  "formatVersion": 1,
+  "nextViewNumber": 6,
+  "revision": 73,
+  "sketches": [
+    {
+      "height": 259,
+      "id": "303fa2df-3191-4069-ac53-ba99b0dba036",
+      "name": "View1",
+      "project": "HNReader",
+      "rectOrder": [
+        "318c5486-6c59-4180-a16b-d03342c1447b",
+        "18ce23cd-78ee-40a2-a818-cf15273886f0"
+      ],
+      "rects": [
+        {
+          "height": 87.30078125,
+          "id": "318c5486-6c59-4180-a16b-d03342c1447b",
+          "kind": "Image",
+          "width": 122.2734375,
+          "x": 48.62890625,
+          "y": 32.640625
+        },
+        {
+          "height": 98.40625,
+          "id": "18ce23cd-78ee-40a2-a818-cf15273886f0",
+          "kind": "Text",
+          "width": 123.09765625,
+          "x": 227.47265625,
+          "y": 98.16796875
+        }
+      ],
+      "snapped": [],
+      "view": "View1",
+      "width": 373,
+      "x": 915,
+      "y": 53
+    },
+    {
+      "height": 167,
+      "id": "13b9f96e-f72a-444a-9eb8-a9a3a26d710b",
+      "name": "View3",
+      "project": "HNReader",
+      "rectOrder": [
+        "e0f867c6-4d16-4990-923d-6a1f515f4844",
+        "25521a09-93d8-44c2-8595-c19d76439a21",
+        "959c03a6-aec5-42a7-8d50-0137f8a3e9bd",
+        "9b295095-adb0-47c9-b460-bb9302b2c7e3",
+        "1ab06471-e3d1-4869-ab44-a2461bb8ffef"
+      ],
+      "rects": [
+        {
+          "height": 35.90234375,
+          "id": "e0f867c6-4d16-4990-923d-6a1f515f4844",
+          "kind": "Placeholder",
+          "width": 50.29296875,
+          "x": 34.765625,
+          "y": 11.546875
+        },
+        {
+          "height": 51.95703125,
+          "id": "25521a09-93d8-44c2-8595-c19d76439a21",
+          "kind": "Placeholder",
+          "width": 54.125,
+          "x": 116.11328125,
+          "y": 0
+        },
+        {
+          "height": 49.77734375,
+          "id": "959c03a6-aec5-42a7-8d50-0137f8a3e9bd",
+          "kind": "Placeholder",
+          "width": 52.73046875,
+          "x": 176.10546875,
+          "y": 4.46875
+        },
+        {
+          "height": 92.328125,
+          "id": "9b295095-adb0-47c9-b460-bb9302b2c7e3",
+          "kind": "Placeholder",
+          "width": 208.0078125,
+          "x": 16.99609375,
+          "y": 63.69140625
+        },
+        {
+          "height": 21.96484375,
+          "id": "1ab06471-e3d1-4869-ab44-a2461bb8ffef",
+          "kind": "Placeholder",
+          "width": 30.625,
+          "x": 32.98046875,
+          "y": 90.3046875
+        }
+      ],
+      "snapped": [],
+      "view": "View3",
+      "width": 247,
+      "x": 27,
+      "y": 62
+    },
+    {
+      "height": 152,
+      "id": "5c59eb82-790b-4eaa-8b6a-b8063ad3ba88",
+      "name": "View4",
+      "project": "HNReader",
+      "rectOrder": [
+        "880dc8ff-1a9c-456f-8331-0c07244bb03f",
+        "0f3a49a0-1dcb-456c-bf35-be28ef95f146"
+      ],
+      "rects": [
+        {
+          "height": 18.02734375,
+          "id": "0f3a49a0-1dcb-456c-bf35-be28ef95f146",
+          "kind": "Placeholder",
+          "width": 66.7578125,
+          "x": 19.375,
+          "y": 36.203125
+        }
+      ],
+      "snapped": [
+        {
+          "rect": {
+            "height": 79.91015625,
+            "id": "880dc8ff-1a9c-456f-8331-0c07244bb03f",
+            "kind": "Placeholder",
+            "width": 123.63671875,
+            "x": 7.92578125,
+            "y": 14.9140625
+          },
+          "target": {
+            "elementName": "Placeholder",
+            "path": "@/studio/View4.tao",
+            "renderId": "@/studio/View4.tao:372:428",
+            "sourceVersion": "text-v1:521:1d1r59800hb6aw",
+            "studioRectId": "880dc8ff-1a9c-456f-8331-0c07244bb03f",
+            "view": "View4"
+          }
+        }
+      ],
+      "view": "View4",
+      "width": 161,
+      "x": 464,
+      "y": 58
+    },
+    {
+      "height": 386,
+      "id": "48e0125f-bad2-40b3-be07-d66bc5558244",
+      "name": "View5",
+      "project": "HNReader",
+      "rectOrder": [
+        "b11675e5-5cf5-49ed-96bb-bc660db3c7d6",
+        "6b8400bc-b356-4b80-be4b-b0a1fbc1054e",
+        "a9822bcb-a96b-43ab-b2df-162ba52a9086",
+        "de00fde6-2a0f-4f6e-aa66-2ec4ca4e0418",
+        "e6689863-abd6-4154-8917-81c4fc541c8c"
+      ],
+      "rects": [
+        {
+          "height": 83.44921875,
+          "id": "a9822bcb-a96b-43ab-b2df-162ba52a9086",
+          "kind": "Placeholder",
+          "width": 317.28515625,
+          "x": 62.26171875,
+          "y": 229.9921875
+        }
+      ],
+      "snapped": [
+        {
+          "rect": {
+            "content": "Hi",
+            "height": 59.28515625,
+            "id": "b11675e5-5cf5-49ed-96bb-bc660db3c7d6",
+            "kind": "Text",
+            "width": 196.359375,
+            "x": 58.88671875,
+            "y": 45.078125
+          },
+          "target": {
+            "elementName": "Text",
+            "path": "@/studio/View5.tao",
+            "renderId": "@/studio/View5.tao:396:412",
+            "sourceVersion": "text-v1:1136:0nqbxhq1oag7ne",
+            "studioRectId": "b11675e5-5cf5-49ed-96bb-bc660db3c7d6",
+            "view": "View5"
+          }
+        },
+        {
+          "rect": {
+            "content": "There",
+            "height": 61.25390625,
+            "id": "6b8400bc-b356-4b80-be4b-b0a1fbc1054e",
+            "kind": "Text",
+            "width": 221.67578125,
+            "x": 58.5546875,
+            "y": 130.39453125
+          },
+          "target": {
+            "elementName": "Text",
+            "path": "@/studio/View5.tao",
+            "renderId": "@/studio/View5.tao:584:612",
+            "sourceVersion": "text-v1:1136:0nqbxhq1oag7ne",
+            "studioRectId": "6b8400bc-b356-4b80-be4b-b0a1fbc1054e",
+            "view": "View5"
+          }
+        },
+        {
+          "rect": {
+            "content": "Left",
+            "height": 43.5703125,
+            "id": "de00fde6-2a0f-4f6e-aa66-2ec4ca4e0418",
+            "kind": "Text",
+            "width": 113.328125,
+            "x": 78.70703125,
+            "y": 250.29296875
+          },
+          "target": {
+            "elementName": "Text",
+            "path": "@/studio/View5.tao",
+            "renderId": "@/studio/View5.tao:816:843",
+            "sourceVersion": "text-v1:1136:0nqbxhq1oag7ne",
+            "studioRectId": "de00fde6-2a0f-4f6e-aa66-2ec4ca4e0418",
+            "view": "View5"
+          }
+        },
+        {
+          "rect": {
+            "content": "Right",
+            "height": 42.46484375,
+            "id": "e6689863-abd6-4154-8917-81c4fc541c8c",
+            "kind": "Text",
+            "width": 141.75,
+            "x": 213.84765625,
+            "y": 248.27734375
+          },
+          "target": {
+            "elementName": "Text",
+            "path": "@/studio/View5.tao",
+            "renderId": "@/studio/View5.tao:1021:1040",
+            "sourceVersion": "text-v1:1136:0nqbxhq1oag7ne",
+            "studioRectId": "e6689863-abd6-4154-8917-81c4fc541c8c",
+            "view": "View5"
+          }
+        }
+      ],
+      "view": "View5",
+      "width": 464,
+      "x": 305,
+      "y": 630
+    }
+  ]
+}

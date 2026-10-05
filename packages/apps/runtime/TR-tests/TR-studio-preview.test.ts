@@ -521,6 +521,24 @@ Describe('Studio preview runtime bridge', () => {
     cleanup()
   })
 
+  Test('shows a pointer over selectable elements only while in edit mode', () => {
+    const fake = previewHost([])
+    const head: FakeOverlay[] = []
+    fake.host.document.head = { appendChild: element => head.push(element as FakeOverlay) }
+    const cleanup = mountStudioPreviewBridge(config, fake.host)
+    const cursors = () => head.filter(element => !element.removed)
+    Expect(cursors()).toHaveLength(0)
+    fake.dispatchWindow('message', interactionModeMessage('edit', fake.parent))
+    fake.dispatchWindow('message', interactionModeMessage('edit', fake.parent))
+    Expect(cursors()).toHaveLength(1)
+    Expect(cursors()[0]?.textContent).toContain('cursor: pointer')
+    fake.dispatchWindow('message', interactionModeMessage('run', fake.parent))
+    Expect(cursors()).toHaveLength(0)
+    fake.dispatchWindow('message', interactionModeMessage('edit', fake.parent))
+    cleanup()
+    Expect(cursors()).toHaveLength(0)
+  })
+
   Test('drops its selection outlines when Studio says a plain pick started a selection in another cell', () => {
     const first = renderElement('/project/Main.tao', 10, 20, { height: 20, left: 0, top: 0, width: 20 })
     const second = renderElement('/project/Main.tao', 30, 40, { height: 20, left: 30, top: 0, width: 20 })
@@ -1484,7 +1502,7 @@ Describe('Studio preview runtime bridge', () => {
         appliedRevision: 7,
         channel: 'tao-studio',
         compileRevision: 7,
-        identity: { appName: 'Demo', previewInstanceId: 'preview-1', project: '/project' },
+        identity: { appName: 'Demo', compileRevision: 7, previewInstanceId: 'preview-1', project: '/project' },
         protocolVersion: 1,
         type: 'preview-applied',
       },
@@ -1534,6 +1552,47 @@ Describe('Studio preview runtime bridge', () => {
     fake.dispatchDocument('click', { target: render })
     Expect(fake.messages.length).toBe(4)
     Expect(fake.messages.at(-1)?.message).toMatchObject({ event: { kind: 'reset' }, type: 'preview-debug' })
+  })
+
+  Test('a click on a repeated row keeps that row, not the first, through measurement and the source echo', () => {
+    const list = renderElement('/project/Main.tao', 0, 100, { height: 200, left: 0, top: 0, width: 100 })
+    const row = (top: number) => {
+      const card = renderElement('/project/Main.tao', 20, 60, { height: 50, left: 0, top, width: 100 })
+      const title = renderElement('/project/Main.tao', 30, 40, { height: 20, left: 10, top: top + 10, width: 80 }, {
+        elementName: 'Text',
+      })
+      Object.assign(card, { parentElement: list })
+      Object.assign(title, { parentElement: card })
+      return title
+    }
+    const [firstTitle, secondTitle, thirdTitle] = [row(0), row(60), row(120)]
+    const fake = previewHost([list, firstTitle!, secondTitle!, thirdTitle!])
+    fake.host.document.body = {
+      appendChild: overlay => fake.overlays.push(overlay as FakeOverlay),
+      getBoundingClientRect: () => ({ height: 200, left: 0, top: 0, width: 100 }),
+    }
+    const cleanup = mountStudioPreviewBridge(config, fake.host)
+    fake.dispatchWindow('message', interactionModeMessage('edit', fake.parent))
+    fake.dispatchDocument('click', { target: secondTitle })
+
+    const measured = fake.messages.filter(post =>
+      (post.message as { type?: string }).type === 'preview-layout-measurements'
+    )
+      .at(-1)?.message as { measurements: Array<{ renderId: string; viewportRect: { y: number } }> }
+    const titles = measured.measurements.filter(item => item.renderId === '/project/Main.tao:30:40')
+    Expect(titles).toHaveLength(1)
+    Expect(titles[0]).toMatchObject({ viewportRect: { height: 20, width: 80, x: 10, y: 70 } })
+
+    // Studio reveals the clicked title in the editor and echoes its range back as a highlight.
+    fake.dispatchWindow('message', {
+      data: highlightMessage('version-1'),
+      origin: config.parentOrigin,
+      source: fake.parent,
+    })
+    const outline = fake.overlays.find(overlay => !overlay.removed)
+    Expect(outline?.attributes['data-tao-studio-overlay']).toBe('source')
+    Expect(outline?.style).toMatchObject({ top: '70px' })
+    cleanup()
   })
 
   Test('accepts source highlights only from the configured parent and current source version', () => {
@@ -1953,3 +2012,34 @@ function dispatch(listeners: Map<string, Set<Listener>>, type: string, event: un
 function listenerCount(listeners: Map<string, Set<Listener>>): number {
   return Array.from(listeners.values()).reduce((count, group) => count + group.size, 0)
 }
+
+Test('keeps the editing bridge active without an applied-publication claim in the speed experiment', () => {
+  const fake = previewHost([])
+  const cleanup = mountStudioPreviewBridge({ ...config, publicationChecks: false }, fake.host)
+  Expect(fake.listenerCount()).not.toBe(0)
+  Expect(fake.messages.some(post => (post.message as { type?: string }).type === 'preview-applied')).toBe(false)
+  Expect(fake.messages.some(post => (post.message as { type?: string }).type === 'preview-mounted')).toBe(true)
+  Expect(fake.messages.find(post => (post.message as { type?: string }).type === 'preview-mounted'))
+    .toMatchObject({
+      message: {
+        appliedRevision: config.compileRevision,
+        compileRevision: config.compileRevision,
+        identity: { compileRevision: config.compileRevision, previewInstanceId: config.previewInstanceId },
+      },
+    })
+  cleanup()
+})
+
+Test('acknowledges the whole-app revision with its preview instance', () => {
+  const fake = previewHost([])
+  const cleanup = mountStudioPreviewBridge(config, fake.host)
+  Expect(fake.messages.find(post => (post.message as { type?: string }).type === 'preview-applied'))
+    .toMatchObject({
+      message: {
+        appliedRevision: config.compileRevision,
+        compileRevision: config.compileRevision,
+        identity: { compileRevision: config.compileRevision, previewInstanceId: config.previewInstanceId },
+      },
+    })
+  cleanup()
+})

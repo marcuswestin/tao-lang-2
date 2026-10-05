@@ -1,3 +1,4 @@
+import type { CompileResult, EmittedModuleCache } from '@compiler/compiler'
 import { Workspace } from '@compiler/workspace'
 import { AST } from '@parser'
 import { findProjectRoot } from '@project-tooling'
@@ -20,10 +21,14 @@ export {
 export { RuntimeToolchainPaths } from './runtime-toolchain-paths'
 
 export type GeneratePreviewOptions = {
+  /** Disable revision marker updates and their exact publication checks for a browser speed experiment. */
+  publicationChecks?: boolean
   sourceOverrides?: Readonly<Record<string, string>>
   project: string
   revision: number
   sourceVersions: Readonly<Record<string, string>>
+  /** Per-file last-change epochs coordinate independently refreshed design and consumer modules. */
+  sourceEpochs?: Readonly<Record<string, number>>
 }
 
 export type StudioPreviewIdentity = {
@@ -43,6 +48,10 @@ export type GenerateAppOptions = {
   /** Installed dependency target root for generated module links; defaults to the source project. */
   moduleLinkRoot?: string
   preview?: GeneratePreviewOptions
+  /** A Studio session may reuse its isolated parser services across preview revisions. */
+  previewWorkspace?: Workspace
+  /** One caller's validated Tao module reuse across its generated revisions. */
+  emittedModuleCache?: EmittedModuleCache
   /** publicationHooks exposes file-operation failure seams for transactional publication tests. */
   publicationHooks?: Pick<FS.SynchronizeDirectoryFileSetsOptions, 'beforeMove' | 'beforeRemove'>
   /** journeyObservations emits test-harness-only render source locators without enabling Studio preview behavior. */
@@ -96,6 +105,7 @@ export type GeneratedApp = {
   shipManifest?: ShipManifest
   shipManifestPath?: string
   studioManifest?: NonNullable<Awaited<ReturnType<typeof Workspace.compile>>['studioManifest']>
+  emittedModuleCache?: CompileResult['emittedModuleCache']
   managedPublication?: DevLoopMobilePublication
 }
 
@@ -139,6 +149,8 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
       appFirebaseConfiguration: firebaseConfiguration,
       appAuthConfiguration: firebaseConfiguration,
       appName: opts.appName,
+      emittedModuleCache: opts.emittedModuleCache,
+      studioSourceEpochs: opts.preview?.sourceEpochs,
       // A Studio preview carries debugger gates so a breakpoint can pause it. Nothing else does:
       // an app built for a device or a test run compiles exactly as it did before.
       debug: opts.preview !== undefined,
@@ -151,7 +163,7 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
       : await managedSourceRevision(opts.managedPublication.projectRoot)
     const compiled = opts.preview === undefined
       ? await Workspace.compile(sourcePath, compileOptions)
-      : await compileStudioPreview(sourcePath, opts.preview, compileOptions)
+      : await compileStudioPreview(sourcePath, opts.preview, compileOptions, opts.previewWorkspace)
     const preview = opts.preview === undefined
       ? undefined
       : previewPublication(compiled.appNames, opts.appName, opts.preview)
@@ -160,7 +172,12 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
     }
     const compiledFiles = preview === undefined
       ? compiled.files
-      : filesWithStablePreviewRoot(compiled.files, preview)
+      : filesWithStablePreviewRoot(
+        compiled.files,
+        preview,
+        opts.preview?.publicationChecks !== false,
+        previewPublications.get(generatedAppRoot),
+      )
     const compiledGeneratedFiles = opts.ship === undefined
       ? compiledFiles
       : [...compiledFiles, { relativePath: 'ship.json', code: `${JSON.stringify(opts.ship, null, 2)}\n` }]
@@ -200,6 +217,7 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
       sourcePath,
       outputPath: generatedAppPath,
       code: generatedAppCode ?? compiled.code,
+      ...(compiled.emittedModuleCache === undefined ? {} : { emittedModuleCache: compiled.emittedModuleCache }),
       ...(publication === undefined ? {} : { managedPublication: publication }),
       ...(opts.ship === undefined ? {} : { shipManifest: opts.ship, shipManifestPath }),
       ...(preview === undefined
@@ -242,6 +260,7 @@ async function compileStudioPreview(
   sourcePath: string,
   preview: GeneratePreviewOptions,
   options: Parameters<Workspace['compile']>[1],
+  previewWorkspace?: Workspace,
 ): Promise<Awaited<ReturnType<Workspace['compile']>>> {
   const generatedEntries = Object.keys(preview.sourceVersions)
     .filter(path => /^@\/studio\/.*\.tao$/u.test(path))
@@ -253,7 +272,10 @@ async function compileStudioPreview(
     )
     return await Workspace.compile(sourcePath, options)
   }
-  const workspace = await Workspace.open(preview.project, { sourceOverrides: preview.sourceOverrides })
+  const workspace = preview.sourceOverrides === undefined && previewWorkspace !== undefined
+    ? previewWorkspace
+    : await Workspace.open(preview.project, { sourceOverrides: preview.sourceOverrides })
+  Assert(workspace.root === FS.resolvePath(preview.project), 'preview workspace matches its project')
   return await workspace.compileFiles([sourcePath, ...generatedEntries], options)
 }
 
@@ -465,17 +487,22 @@ async function readStaleGeneratedFiles(
 function filesWithStablePreviewRoot(
   files: Array<{ relativePath: string; code: string }>,
   preview: StudioPreviewPublication,
+  publicationChecks: boolean,
+  previousPublication?: StudioPreviewPublication,
 ): Array<{ relativePath: string; code: string }> {
+  // In the experiment, keep the initial marker (including its source versions) byte-for-byte
+  // stable. The current identity and source versions travel in Studio's runtime update instead.
+  const marker = publicationChecks ? preview : previousPublication ?? preview
   const publication = {
-    appName: preview.appName,
-    compileRevision: preview.revision,
-    project: preview.project,
-    sourceVersions: preview.sourceVersions,
+    appName: marker.appName,
+    compileRevision: marker.revision,
+    project: marker.project,
+    sourceVersions: marker.sourceVersions,
   }
   return [
     {
       relativePath: 'App.tsx',
-      code: stablePreviewRootSource(),
+      code: stablePreviewRootSource(publicationChecks),
     },
     ...files.map(stablePreviewFile),
     {
@@ -521,12 +548,14 @@ function relativeModuleImport(fromOutputPath: string, toOutputPath: string): str
  * a manifest missing the scenario or fixture the accepted cell names is an invariant the publication
  * revision check upstream should already have ruled out.
  */
-function stablePreviewRootSource(): string {
+function stablePreviewRootSource(publicationChecks: boolean): string {
   return `import React from 'react'
 import TR from '@runtime/TR'
 import TaoApp from './TaoAppRefresh'
 import TaoStudioManifest from './TaoStudioManifest'
 import TaoStudioPublication from './TaoStudioPublication'
+
+const TaoStudioPublicationChecks = ${publicationChecks}
 
 // React Native aliases \`window\` to its global, so only the platform says whether this is a browser.
 const TaoStudioNativeDevice = require('react-native').Platform?.OS !== 'web'
@@ -556,10 +585,17 @@ function StudioBrowserApp() {
   // the last accepted environment until its matching runtime arrives.
   const [appliedRuntime, setAppliedRuntime] = React.useState<any>()
   const [bootstrapError, setBootstrapError] = React.useState<unknown>()
+  const [wholeAppPublication, setWholeAppPublication] = React.useState<any>()
   const wholeApp = React.useMemo(
-    () => ({ cell: undefined, manifest: TaoStudioManifest, publication: TaoStudioPublication }),
-    [TaoStudioPublication.compileRevision],
+    () => ({ cell: undefined, manifest: TaoStudioManifest, publication: wholeAppPublication ?? TaoStudioPublication }),
+    [TaoStudioPublication.compileRevision, wholeAppPublication],
   )
+  React.useEffect(() => {
+    if (TaoStudioPublicationChecks) return
+    setAppliedRuntime((previous: any) => previous === undefined || previous.manifest === TaoStudioManifest
+      ? previous
+      : { ...previous, manifest: TaoStudioManifest })
+  }, [TaoStudioManifest])
   React.useEffect(() => {
     if (TaoStudioPreviewBootstrap?.cell !== true) return
     let cancelled = false
@@ -578,6 +614,27 @@ function StudioBrowserApp() {
       if (!response.ok) TR.Errors.failHost('Tao Studio cell bootstrap was rejected (' + response.status + ').')
       const nextCell = await response.json()
       if (cancelled) return
+      if (!TaoStudioPublicationChecks) {
+        // The byte-stable marker keeps its first compile's source versions, so they travel with the
+        // bootstrap's own revision. Fast Refresh re-runs this effect after a runtime update already
+        // applied a revision, and an older response must not replace it.
+        if (!validSourceVersions(nextCell.sourceVersions)) {
+          TR.Errors.failHost('Tao Studio cell bootstrap did not carry its source versions.')
+        }
+        const next = {
+          cell: nextCell,
+          manifest: TaoStudioManifest,
+          publication: {
+            ...TaoStudioPublication,
+            compileRevision: nextCell.identity.compileRevision,
+            sourceVersions: nextCell.sourceVersions,
+          },
+        }
+        setAppliedRuntime((previous: any) =>
+          previous?.cell?.identity?.compileRevision > nextCell.identity.compileRevision ? previous : next
+        )
+        return
+      }
       const outcome = TR.Studio.Bootstrap.reconcile(nextCell, TaoStudioPublication, newerRevision => {
         const retry = TR.Studio.Bootstrap.nextPublicationReload(window.location.href, newerRevision)
         if (retry === undefined) {
@@ -623,8 +680,22 @@ function StudioBrowserApp() {
     }
   }, [TaoStudioPublication.compileRevision])
   React.useEffect(() => {
-    if (TaoStudioPreviewBootstrap?.cell !== true || typeof window === 'undefined') return
+    if (TaoStudioPreviewBootstrap === undefined || typeof window === 'undefined') return
     const receiveRuntime = (event: MessageEvent) => {
+      if (
+        !TaoStudioPublicationChecks
+        && event.origin === TaoStudioPreviewBootstrap.parentOrigin
+        && event.source === window.parent
+        && isWholeAppPublicationUpdate(event.data, TaoStudioPreviewBootstrap, TaoStudioPublication)
+      ) {
+        setWholeAppPublication({
+          ...TaoStudioPublication,
+          compileRevision: event.data.compileRevision,
+          sourceVersions: event.data.sourceVersions,
+        })
+        return
+      }
+      if (TaoStudioPreviewBootstrap.cell !== true) return
       if (
         event.origin !== TaoStudioPreviewBootstrap.parentOrigin
         || event.source !== window.parent
@@ -636,7 +707,11 @@ function StudioBrowserApp() {
       const next = {
         cell: event.data.runtime,
         manifest: TaoStudioManifest,
-        publication: TaoStudioPublication,
+        publication: TaoStudioPublicationChecks ? TaoStudioPublication : {
+          ...TaoStudioPublication,
+          compileRevision: event.data.runtime.identity.compileRevision,
+          sourceVersions: event.data.sourceVersions,
+        },
       }
       // Avoid repeating publication/bridge effects for an already applied identity. The cell's
       // provider lifetime below is separate: source-only publications preserve its runtime state.
@@ -656,6 +731,7 @@ function StudioBrowserApp() {
         ...TaoStudioPreviewBootstrap,
         ...(active.cell?.identity ?? {}),
         ...active.publication,
+        publicationChecks: TaoStudioPublicationChecks,
       },
     [active],
   )
@@ -684,6 +760,10 @@ function StudioBrowserApp() {
 }
 
 function StudioPreviewContent({ cell, config, manifest }: any) {
+  // Each compile delivers a new config, which re-renders this root. One app element for the mounted
+  // lifetime lets React skip the app below it; Fast Refresh still re-renders the views it changed, and
+  // the Lens wrappers, which read the config's publisher, still report the new source versions.
+  const [TaoAppElement] = React.useState(() => <TaoApp />)
   React.useEffect(() => {
     const environment = cell?.cell?.environment
     if (environment === undefined) return
@@ -694,7 +774,7 @@ function StudioPreviewContent({ cell, config, manifest }: any) {
     })
   }, [cell])
   if (cell === undefined) {
-    return <TR.Studio.PreviewBridge config={config}><TaoApp /></TR.Studio.PreviewBridge>
+    return <TR.Studio.PreviewBridge config={config}>{TaoAppElement}</TR.Studio.PreviewBridge>
   }
   // This resolved contract is plain wire data. A changed fixture, environment, replay, subject,
   // or explicit cell revision remounts providers and fixture owners together. Authored journey
@@ -713,10 +793,11 @@ function StudioPreviewCellContent({ cellContract, config }: any) {
   // State survives Fast Refresh; useMemo may recompute even with unchanged dependencies. The key
   // above owns replacement, so this provider contract keeps one object for its mounted lifetime.
   const [TaoStudioCell] = React.useState(() => JSON.parse(cellContract))
+  const [TaoAppElement] = React.useState(() => <TaoApp />)
   return (
     <TR.Studio.ReplayHost replay={TaoStudioCell.replay}>
       <TR.Studio.Environment.Host cell={TaoStudioCell}>
-        <TR.Studio.PreviewBridge config={config}><TaoApp /></TR.Studio.PreviewBridge>
+        <TR.Studio.PreviewBridge config={config}>{TaoAppElement}</TR.Studio.PreviewBridge>
       </TR.Studio.Environment.Host>
     </TR.Studio.ReplayHost>
   )
@@ -778,14 +859,33 @@ function isRuntimeUpdate(value: any, bootstrap: any, publication: any) {
     && value?.type === 'preview-runtime-update'
     && identity?.previewInstanceId === bootstrap.previewInstanceId
     && identity?.appName === publication.appName
-    && identity?.compileRevision === publication.compileRevision
+    && (!TaoStudioPublicationChecks || identity?.compileRevision === publication.compileRevision)
     && identity?.project === publication.project
+    && (TaoStudioPublicationChecks || validSourceVersions(value?.sourceVersions))
     && runtimeIdentity?.appName === identity.appName
     && runtimeIdentity?.cellId === identity.cellId
     && runtimeIdentity?.cellRevision === identity.cellRevision
     && runtimeIdentity?.compileRevision === identity.compileRevision
     && runtimeIdentity?.manifestRevision === identity.manifestRevision
     && runtimeIdentity?.project === identity.project
+}
+
+function isWholeAppPublicationUpdate(value: any, bootstrap: any, publication: any) {
+  return value?.channel === TaoStudioProtocolChannel
+    && value?.protocolVersion === TaoStudioProtocolVersion
+    && value?.type === 'preview-publication-update'
+    && value?.previewInstanceId === bootstrap.previewInstanceId
+    && value?.appName === publication.appName
+    && value?.project === publication.project
+    && Number.isSafeInteger(value?.compileRevision)
+    && value.compileRevision >= 0
+    && validSourceVersions(value?.sourceVersions)
+}
+
+function validSourceVersions(value: any) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    && Object.entries(value).every(([path, version]) => path.length > 0 && typeof version === 'string'
+      && version.length > 0)
 }
 
 /**

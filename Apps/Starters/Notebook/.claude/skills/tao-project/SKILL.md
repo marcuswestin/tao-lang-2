@@ -13,7 +13,7 @@ sidecars only for typed platform or network boundaries Tao cannot express.
 
 ## Project shape
 
-- `.tao/project.json`: tracked stable project identity; the nearest `.tao/` directory defines ownership.
+- `.tao/store/project.json`: tracked stable project identity; the nearest `.tao/` directory defines ownership.
 - `App.tao`: launchable apps with lowercase effective `id`, `version`, and `name`; no project block.
 - Root `package { ... }` declarations: optional name, version, license, dependencies, and `includes`
   of named modules. At most one unnamed publication; multiple uniquely named publications may overlap.
@@ -26,7 +26,7 @@ sidecars only for typed platform or network boundaries Tao cannot express.
   detail scene, actions, and queries.
 - `@/`: committed generated Tao package. Never edit anything under it.
 - `@<name>/`: named module and its authored subfolders.
-- `tsconfig.json`: developer overrides extending `.tao/typescript/tsconfig.json`.
+- `tsconfig.json`: developer overrides extending `.tao/cache/typescript/tsconfig.json`.
 - `.tao-ts/`: generated contracts and checks; never edit them. Handwritten sidecars keep relative
   type imports such as `import type { Drawer } from './Drawer.tao'`.
 - `node_modules/`: native installed dependencies.

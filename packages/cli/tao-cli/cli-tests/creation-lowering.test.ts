@@ -61,14 +61,41 @@ Describe('tao create lowering', () => {
       },
     }
     Expect(validateCreationPlan(plan)).toEqual([])
+    const files = lowerCreationPlan(plan)
+    Expect(files['.tao/.gitkeep']).toBeUndefined()
+    Expect(files['.gitignore']).toBe([
+      '# Operating system and editor files',
+      '.DS_Store',
+      '.idea/',
+      '.vscode/',
+      '',
+      '# Tao generated sidecars',
+      '*.tao.ts',
+      '/.tao-ts/',
+      '',
+      '# Tao local state and cache',
+      '/.tao/local/',
+      '/.tao/cache/',
+      '',
+      '# Tooling output',
+      'node_modules/',
+      '.expo/',
+      '*.tsbuildinfo',
+      '*.log',
+      '',
+      '# Plain-text secrets',
+      '.env',
+      '.env.*',
+      '',
+    ].join('\n'))
 
     const root = await mkTestDir('tao-create-lowering-')
     try {
       const generated = FS.resolvePath('field-notes', root)
-      await writeCreationFiles(generated, lowerCreationPlan(plan))
+      await writeCreationFiles(generated, files)
+      Expect((await FS.listDir(FS.resolvePath('.tao', generated))).toSorted())
+        .toEqual(['.gitignore', 'cache', 'local', 'store'])
       await ProjectIdentity.ensure(generated)
-      const gitignore = await FS.readText(FS.resolvePath('.gitignore', generated))
-      Expect(gitignore).toContain('!/.tao/skills.version\n')
       await runFix(generated, { cwd: root })
       const workspace = await Workspace.open(generated)
       const problems: string[] = []

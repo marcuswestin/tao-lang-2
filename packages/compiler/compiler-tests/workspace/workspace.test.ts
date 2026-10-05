@@ -2,6 +2,7 @@ import { Packages } from '@ast-utils'
 import { AST, Langium } from '@parser'
 import { type Diagnostic, Diagnostics, FS, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test, until, withTaoFiles } from '@shared/test'
+import { BridgeMetadata } from '../../compiler-src/bridge-metadata'
 import { LSPWorkspace, Workspace } from '../../compiler-src/workspace/index'
 import { createWorkspaceLspServices } from '../../compiler-src/workspace/langium-services'
 
@@ -612,6 +613,45 @@ Describe('directory-rooted Tao workspace pipeline', () => {
 
         Expect(plan.suites[0]?.name).toBe('Suite')
         Expect(plan.suites[0]?.checks.map(check => check.name)).toEqual(['out of order'])
+      },
+    )
+  })
+
+  // Contract planning uses the containing project root even when the workspace opened in a subfolder.
+  // Compilation leaves publication of that hidden contract to the caller.
+  Test('plans an imported bridge contract under its containing project root without publishing it', async () => {
+    await withTaoFiles(
+      'tao-workspace-bridge-project-root-',
+      {
+        'App/.tao/.gitkeep': '',
+        'App/@data/Data.tao': 'project action Read() returns text from ./Bindings.ts',
+        'App/@data/Bindings.ts': 'export const Read = () => "read"\n',
+        'App/screens/Main.tao': `
+          use Read from @data
+          app BridgeRoot { id "com.tao.test.bridge-root" version "1.0.0" name "Bridge Root" view MainView }
+          view MainView() {
+            action Load() { let Value = do Read() }
+            render Empty()
+          }
+          view Empty() { render inject ${tsFence} return null ${fence} }
+        `,
+      },
+      async (paths, rootDir) => {
+        const projectRoot = FS.resolvePath('App', rootDir)
+        const workspace = await Workspace.open(FS.resolvePath('App/screens', rootDir))
+
+        for (let compile = 0; compile < 2; compile += 1) {
+          const compiled = await workspace.compile(paths['App/screens/Main.tao']!)
+          Expect(errorMessages(compiled.validation)).toEqual([])
+          const contract = BridgeMetadata.collect(compiled.validation.files, projectRoot).find(module =>
+            module.sourcePath === paths['App/@data/Data.tao']
+          )
+          Expect(contract?.path).toBe(FS.resolvePath('.tao-ts/@data/Data.tao.ts', projectRoot))
+          Expect(contract?.code).toContain('Sidecar.Read')
+        }
+
+        Expect(await FS.isFile(FS.resolvePath('.tao-ts/@data/Data.tao.ts', projectRoot))).toBe(false)
+        Expect(await FS.isFile(Repo.resolvePath('packages/apps/stdlib/@tao/Prelude.tao.ts'))).toBe(false)
       },
     )
   })

@@ -1,4 +1,4 @@
-import { CLI, FS, HCI, Platform, Repo } from '@shared'
+import { CLI, FS, HCI, Platform, ProjectLocal, Repo } from '@shared'
 import { type CanaryTargetOptions, resolveCanaryTarget } from './StudioCanary'
 import type { StudioDevCleanupResult } from './StudioDev'
 import { StudioNativeIdentity } from './StudioNativeIdentity'
@@ -82,6 +82,7 @@ async function project(options: CanaryTargetOptions, artifactRoot: string, repos
       FS.resolvePath('KeyboardNavigation.tao', projectRoot),
       await FS.readText(FS.resolvePath('KeyboardNavigation.tao', target.projectRoot)),
     )
+    await ProjectLocal.prepare(projectRoot)
   } catch (error) {
     await FS.remove(projectRoot)
     throw error
@@ -105,7 +106,7 @@ async function project(options: CanaryTargetOptions, artifactRoot: string, repos
         HCI.logProcessWarn('studio-native', `Retained source project: ${projectRoot}. ${reason}`)
         return
       }
-      const ownerPath = FS.resolvePath('.tao/sessions/owner.json', projectRoot)
+      const ownerPath = ProjectLocal.localResolve('sessions/owner.json', projectRoot)
       if (await FS.exists(ownerPath)) {
         const owner = await FS.readJson<{ pid?: number }>(ownerPath)
         if (typeof owner.pid !== 'number' || Platform.processIsAlive(owner.pid)) {

@@ -47,6 +47,19 @@ const pong = {
 }
 
 Describe('packaged app agent client', () => {
+  Test('rejects a service identifier that escapes its state directory', async () => {
+    await withFixture(async bundle => {
+      await FS.writeJson(FS.resolvePath('Contents/Resources/app/tao-agent.json', bundle), {
+        ...metadata,
+        appId: '../outside',
+      })
+      Expect(await runAppAgentCommand('ping', bundle)).toEqual({
+        ok: false,
+        error: { code: 'invalid_app', message: 'The app has an invalid background service identifier.' },
+      })
+    })
+  })
+
   Test('bundled client discovers names, resolves a command, and never retries a lost execution response', async () => {
     await withFixture(async bundle => {
       const calls: { method: string; params?: unknown }[] = []
@@ -599,7 +612,7 @@ async function withFixture(work: (bundle: string, sessionPath: string) => Promis
   const root = await mkTestDir('agent-client-')
   const bundle = FS.resolvePath('Client.app', root)
   const stateRoot = FS.resolvePath('state', root)
-  const sessionPath = FS.resolvePath(`${Platform.sha256Hex(metadata.appId).slice(0, 24)}/session.json`, stateRoot)
+  const sessionPath = FS.resolvePath(`${metadata.appId}/session.json`, stateRoot)
   const restore = stateRootSlot.install(stateRoot)
   try {
     await FS.writeJson(FS.resolvePath('Contents/Resources/app/tao-agent.json', bundle), metadata)

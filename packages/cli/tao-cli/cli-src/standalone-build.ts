@@ -46,7 +46,7 @@ const COPIED_TREES = [
   // The identity is authored; generated `.tao` state and TypeScript contracts are refreshed after install.
   {
     source: 'packages/apps/stdlib',
-    within: ['@tao', 'Package.tao', '.tao/project.json'],
+    within: ['@tao', 'Package.tao', '.tao/store/project.json'],
     target: TaoResources.STDLIB_DIRECTORY,
   },
   { source: 'packages/apps/expo-host', within: ['.'], target: TaoResources.HOST_DIRECTORY },

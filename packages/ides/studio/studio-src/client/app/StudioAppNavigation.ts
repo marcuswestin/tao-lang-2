@@ -10,12 +10,12 @@ import {
   StudioDiagnosticNavigation,
   StudioSourceNavigation,
 } from '../StudioEditor'
-import { revealCanvasNode, type StudioActivePreview, type StudioPreviewConnection } from '../StudioMatrixView'
+import { revealCanvasNode, type StudioFocusedPreview, type StudioPreviewConnection } from '../StudioMatrixView'
 import type { StudioScreenItem, StudioSearchResult } from '../StudioRailPanels'
 import type { StudioOpenFile } from './StudioEditorSession'
 
 export type StudioAppNavigationDeps = Readonly<{
-  activePreview: StudioActivePreview
+  focusedPreview: StudioFocusedPreview
   focusEditor: () => void
   openFile: (path: string) => Promise<StudioOpenFile | undefined>
   onReveal: () => void
@@ -62,7 +62,7 @@ export class StudioAppNavigation {
       candidate.cell !== undefined && scenarioIds.has(candidate.cell.scenarioId)
     )
     if (preview !== undefined) {
-      this.#deps.activePreview.activate(preview)
+      this.#deps.focusedPreview.focus(preview)
       revealCanvasNode(preview.frame)
     }
     const path = this.#relativePath(item.path)

@@ -3,7 +3,7 @@ import { StudioInspector, type studioPaletteComponents } from '../../StudioInspe
 import type { StudioPreviewManifestV2 } from '../../StudioPreviewManifest'
 import type { StudioFile } from '../StudioApiClient'
 import { projectRelativePath } from '../StudioEditor'
-import { revealCanvasNode, type StudioActivePreview, type StudioPreviewConnection } from '../StudioMatrixView'
+import { revealCanvasNode, type StudioFocusedPreview, type StudioPreviewConnection } from '../StudioMatrixView'
 import {
   renderCommandResults,
   type StudioCommandItem,
@@ -14,7 +14,7 @@ import {
 import type { StudioClientView } from '../StudioShell'
 
 export type StudioCommandPaletteDeps = Readonly<{
-  activePreview: StudioActivePreview
+  focusedPreview: StudioFocusedPreview
   insertComponent: (component: (typeof studioPaletteComponents)[number]) => void
   insertProjectView: (projectView: ReturnType<typeof StudioInspector.projectViews>[number]) => void
   /** The drawer follows a scenario the palette activates. */
@@ -82,7 +82,7 @@ export function mountStudioCommandPalette(deps: StudioCommandPaletteDeps): Studi
       scenario: ({ scenarioId }) => {
         const preview = deps.previews.find(candidate => candidate.cell?.scenarioId === scenarioId)
         if (preview !== undefined) {
-          deps.activePreview.activate(preview)
+          deps.focusedPreview.focus(preview)
           deps.onScenarioActivated()
           revealCanvasNode(preview.frame)
           preview.iframe.focus()

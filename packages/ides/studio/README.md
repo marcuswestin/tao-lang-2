@@ -304,7 +304,7 @@ compile or reload, shutdown, a signal escalation, an orphan — and never source
 
 ## Freehand Draw, Snap, and Feed project state
 
-Unsnapped Draw geometry is committed in `.tao/studio/sketches.jsonc`. It is not a launch
+Unsnapped Draw geometry is committed in `.tao/store/studio/sketches.jsonc`. It is not a launch
 artifact, browser-local preference, or Tao render tree. Catalog format version 1 stores a monotonic
 `nextViewNumber`, a conflict `revision`, and ordered sketches. Each sketch records stable `id`,
 display `name`, project, generated `view`, width, height, total

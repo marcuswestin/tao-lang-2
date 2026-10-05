@@ -3,7 +3,7 @@ import { Workspace } from '@compiler/workspace'
 import Formatter from '@formatter'
 import { AST, Parser } from '@parser'
 import { ProjectTooling } from '@project-tooling'
-import { Errors, FS, Platform, Repo } from '@shared'
+import { Errors, FS, ProjectLocal, Repo } from '@shared'
 import { TaoAppModules } from './app-modules'
 import { findTaoProjectSource } from './project-root'
 import type { ShipVersion } from './ship-model'
@@ -19,6 +19,7 @@ export type ShipProjectApp = {
   isVariant: boolean
   name: string
   releaseDatasourceConfiguration?: Readonly<Record<string, string>>
+  projectRoot: string
   sourcePath: string
   /** The app configures the development-only `Dev` datasource, which needs a running dev server. */
   usesDevDatasource: boolean
@@ -96,6 +97,7 @@ async function readShipProject(root: string): Promise<ShipProject> {
           || (AST.isAppDeclaration(declaration) && declaration.value !== undefined),
         name: declaration.name,
         releaseDatasourceConfiguration: deriveHostedDatasourceConfiguration(declaration.name, bindings),
+        projectRoot: root,
         sourcePath: path,
         usesDevDatasource: bindings.some(binding => mountsProvider(binding, 'Dev')),
       })
@@ -233,41 +235,44 @@ export function selectShipApp(project: ShipProject, requested?: string): ShipPro
 
 /** Update the selected app's own version, inserting an override for an inherited version. */
 export async function writeProjectVersion(app: ShipProjectApp, version: ShipVersion): Promise<void> {
-  const source = await FS.readText(app.sourcePath)
-  const parsed = await Parser.parseCode(source, { validation: false })
-  const declaration = AST.appValueDeclarationsInFile(parsed.entry.ast).find(candidate => candidate.name === app.name)
-  if (!declaration) {
-    Errors.throwUnexpected(`App '${app.name}' disappeared from ${app.sourcePath}.`)
-  }
-  const directProperty = AST.isAppDeclaration(declaration)
-    ? AST.blockStatements(declaration).filter(AST.isAppProperty).find(property => property.name === 'version')
-    : undefined
-  const refinement = declaration.value && AST.isRefinementExpression(declaration.value)
-    ? declaration.value
-    : undefined
-  const directEntry = refinement?.patchBlock.entries.find(entry => entry.name === 'version')
-  const ownNode = directProperty?.value ?? directEntry?.value
-  let replaced: string
-  if (ownNode?.$cstNode) {
-    const cst = ownNode.$cstNode
-    replaced = `${source.slice(0, cst.offset)}${JSON.stringify(version)}${source.slice(cst.end)}`
-  } else {
-    const block = refinement?.patchBlock.$cstNode
-      ?? (AST.isAppDeclaration(declaration) ? declaration.block?.$cstNode : undefined)
-    if (!block) {
-      Errors.throwUnexpected(`App '${app.name}' in ${app.sourcePath} has no editable configuration block.`)
+  await ProjectLocal.prepare(app.projectRoot)
+  await FS.withFileMutationLock(app.sourcePath, app.projectRoot, async () => {
+    const source = await FS.readText(app.sourcePath)
+    const parsed = await Parser.parseCode(source, { validation: false })
+    const declaration = AST.appValueDeclarationsInFile(parsed.entry.ast).find(candidate => candidate.name === app.name)
+    if (!declaration) {
+      Errors.throwUnexpected(`App '${app.name}' disappeared from ${app.sourcePath}.`)
     }
-    const close = source.lastIndexOf('}', block.end - 1)
-    if (close < block.offset) {
-      Errors.throwUnexpected(`App '${app.name}' in ${app.sourcePath} has no closing brace.`)
+    const directProperty = AST.isAppDeclaration(declaration)
+      ? AST.blockStatements(declaration).filter(AST.isAppProperty).find(property => property.name === 'version')
+      : undefined
+    const refinement = declaration.value && AST.isRefinementExpression(declaration.value)
+      ? declaration.value
+      : undefined
+    const directEntry = refinement?.patchBlock.entries.find(entry => entry.name === 'version')
+    const ownNode = directProperty?.value ?? directEntry?.value
+    let replaced: string
+    if (ownNode?.$cstNode) {
+      const cst = ownNode.$cstNode
+      replaced = `${source.slice(0, cst.offset)}${JSON.stringify(version)}${source.slice(cst.end)}`
+    } else {
+      const block = refinement?.patchBlock.$cstNode
+        ?? (AST.isAppDeclaration(declaration) ? declaration.block?.$cstNode : undefined)
+      if (!block) {
+        Errors.throwUnexpected(`App '${app.name}' in ${app.sourcePath} has no editable configuration block.`)
+      }
+      const close = source.lastIndexOf('}', block.end - 1)
+      if (close < block.offset) {
+        Errors.throwUnexpected(`App '${app.name}' in ${app.sourcePath} has no closing brace.`)
+      }
+      replaced = `${source.slice(0, close)}\n   version ${JSON.stringify(version)}\n${source.slice(close)}`
     }
-    replaced = `${source.slice(0, close)}\n   version ${JSON.stringify(version)}\n${source.slice(close)}`
-  }
-  const temporary = `${app.sourcePath}.${Platform.runtimeProcess.pid}-${Platform.randomUUID()}.tmp`
-  try {
-    await FS.writeText(temporary, await Formatter.formatCode(replaced))
-    await FS.move(temporary, app.sourcePath)
-  } finally {
-    await FS.remove(temporary).catch(() => {})
-  }
+    const temporary = ProjectLocal.stagingPath(app.sourcePath, app.projectRoot)
+    try {
+      await FS.writeText(temporary, await Formatter.formatCode(replaced))
+      await FS.move(temporary, app.sourcePath)
+    } finally {
+      await FS.remove(temporary).catch(() => {})
+    }
+  }, { lockDirectory: ProjectLocal.cacheResolve('locks', app.projectRoot) })
 }

@@ -142,7 +142,7 @@ async function runCanonicalSource(path: string, options: CanonicalSourceOptions)
             ...refreshed.contractPaths,
             ...refreshed.configInputPaths,
             FS.resolvePath('tsconfig.json', workspaceRoot),
-            FS.resolvePath('.tao/typescript/tsconfig.json', workspaceRoot),
+            FS.resolvePath('.tao/cache/typescript/tsconfig.json', workspaceRoot),
           ],
         })
       }

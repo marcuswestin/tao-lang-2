@@ -510,9 +510,41 @@ function viewId(view: AST.ViewDeclaration): string {
   return `${AST.getDocument(view).uri.fsPath}#${view.name}`
 }
 
-/** studioPreviewManifestModule emits the JSON-safe manifest as a generated TypeScript sidecar. */
+/** The part of the manifest a running preview reads: what a cell seeds and which subject it shows. */
+type StudioPreviewRuntimeManifest = {
+  fixtures: readonly Omit<StudioPreviewFixtureManifest, 'source'>[]
+  formatVersion: StudioPreviewManifest['formatVersion']
+  scenarios: readonly Omit<StudioPreviewScenarioManifest, 'source'>[]
+}
+
+/**
+ * studioPreviewManifestModule emits the generated TypeScript sidecar the preview bundles. Studio keeps
+ * the whole manifest in process, so the sidecar carries only scenarios and fixtures, without source
+ * ranges: an edit that moves text leaves it byte-identical, and Metro then has no reason to re-run
+ * the generated root that imports it.
+ */
 export function studioPreviewManifestModule(manifest: StudioPreviewManifest): string {
-  return `const TaoStudioManifest = ${JSON.stringify(manifest)} as const\n\nexport default TaoStudioManifest\n`
+  const preview: StudioPreviewRuntimeManifest = {
+    fixtures: manifest.fixtures.map(fixture => ({
+      accounts: fixture.accounts,
+      creates: fixture.creates,
+      id: fixture.id,
+      name: fixture.name,
+      ...(fixture.signedIn === undefined ? {} : { signedIn: fixture.signedIn }),
+    })),
+    formatVersion: manifest.formatVersion,
+    scenarios: manifest.scenarios.map(scenario => ({
+      environment: scenario.environment,
+      ...(scenario.fixtureId === undefined ? {} : { fixtureId: scenario.fixtureId }),
+      group: scenario.group,
+      id: scenario.id,
+      name: scenario.name,
+      prepare: scenario.prepare,
+      steps: scenario.steps,
+      subject: scenario.subject,
+    })),
+  }
+  return `const TaoStudioManifest = ${JSON.stringify(preview)} as const\n\nexport default TaoStudioManifest\n`
 }
 
 function parameterSchema(parameter: AST.ParameterDeclaration): StudioPreviewParameterSchema {

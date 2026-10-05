@@ -1,5 +1,5 @@
-import { Errors, FS } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { Errors, FS, Platform, TaoHome } from '@shared'
+import { Describe, Expect, mkTestDir, Test as RunnerTest, testOverrideSlot } from '@shared/test'
 import {
   isManifest,
   isSameProcess,
@@ -19,6 +19,36 @@ import {
   stopExitCode,
   stopLaunches,
 } from '../studio-tooling-src/StudioLifecycle'
+
+const taoHomeSlot = testOverrideSlot<string | undefined>({
+  read: () => Platform.runtimeProcess.env['TAO_HOME'],
+  write: value => {
+    if (value === undefined) {
+      delete Platform.runtimeProcess.env['TAO_HOME']
+    } else {
+      Platform.runtimeProcess.env['TAO_HOME'] = value
+    }
+  },
+})
+const homeTestState = globalThis as typeof globalThis & { __taoStudioHomeTestTail?: Promise<void> }
+
+function Test(name: string, run: () => void | Promise<void>): void {
+  RunnerTest(name, () => {
+    const previous = homeTestState.__taoStudioHomeTestTail ?? Promise.resolve()
+    const running = previous.then(async () => {
+      const home = await mkTestDir('tao-studio-home-')
+      const restore = taoHomeSlot.install(home)
+      try {
+        await run()
+      } finally {
+        restore()
+        await FS.remove(home)
+      }
+    })
+    homeTestState.__taoStudioHomeTestTail = running.then(() => {}, () => {})
+    return running
+  })
+}
 
 type ProbeState = {
   listeners: Record<number, readonly number[]>
@@ -72,6 +102,54 @@ async function publish(
 }
 
 Describe('Studio launch manifests', () => {
+  Test('moves legacy launches on listing and keeps other repositories out of the result', async () => {
+    const firstRoot = await mkTestDir('tao-studio-legacy-first-')
+    const secondRoot = await mkTestDir('tao-studio-legacy-second-')
+    try {
+      const legacyDirectory = FS.resolvePath('.artifacts/user/studio/launches', firstRoot)
+      await writeManifestAtomically(FS.resolvePath('browser-fixture.json', legacyDirectory), {
+        artifactRoot: FS.resolvePath('.artifacts/user/studio', firstRoot),
+        generation: 1,
+        launchId: 'browser-fixture',
+        mode: 'browser',
+        ownerPid: 100,
+        processes: [],
+        repositoryRoot: firstRoot,
+        startedAt: '2026-01-01T00:00:00.000Z',
+        state: 'ready',
+        version: 1,
+      })
+      await publish(secondRoot, { launchId: 'browser-second', state: 'stopped' })
+
+      Expect((await readLaunches(firstRoot)).map(stored => stored.manifest.launchId)).toEqual(['browser-fixture'])
+      Expect(await FS.exists(FS.resolvePath('browser-fixture.json', legacyDirectory))).toBe(false)
+      Expect(await FS.isFile(FS.resolvePath('browser-fixture.json', TaoHome.resolve('studio/launches')))).toBe(true)
+      await openLaunchRecord({ artifactRoot: firstRoot, mode: 'browser', repositoryRoot: firstRoot })
+      Expect((await readLaunches(secondRoot)).map(stored => stored.manifest.launchId)).toEqual(['browser-second'])
+    } finally {
+      await FS.remove(firstRoot)
+      await FS.remove(secondRoot)
+    }
+  })
+
+  Test('accepts Studio launch artifacts in home without trusting another home path', async () => {
+    const root = await mkTestDir('tao-studio-native-home-')
+    try {
+      const artifactRoot = TaoHome.resolve('studio/launches/native/com.devtao.studio.fixture')
+      await publish(root, { artifactRoot, mode: 'native' })
+      const [stored] = await readLaunches(root)
+      Expect((await validateLaunch(stored!, probes())).unusableReason).toBeUndefined()
+      await publish(root, { artifactRoot: TaoHome.resolve('studio/launches/browser'), mode: 'browser' })
+      const [browser] = await readLaunches(root)
+      Expect((await validateLaunch(browser!, probes())).unusableReason).toBeUndefined()
+      await publish(root, { artifactRoot: TaoHome.resolve('studio/logs'), mode: 'native' })
+      const [outside] = await readLaunches(root)
+      Expect((await validateLaunch(outside!, probes())).unusableReason).toContain('outside')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('publishes a manifest before anything is known and advances its generation', async () => {
     const root = await mkTestDir('tao-studio-launch-')
     try {

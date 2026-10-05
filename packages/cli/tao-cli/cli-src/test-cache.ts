@@ -144,7 +144,7 @@ async function cacheableRootConfigs(testPaths: readonly string[]): Promise<boole
     const [entry] = entries
     if (
       entries.length !== 1 || entry?.[0] !== 'extends'
-      || entry[1] !== './.tao/typescript/tsconfig.json'
+      || entry[1] !== './.tao/cache/typescript/tsconfig.json'
     ) {
       return false
     }
@@ -215,7 +215,7 @@ async function sourceIdentity(request: FingerprintRequest): Promise<string | und
     const projectRoot = await inPlace.workspaceRootForPath(testPath)
     searchRoots.add(projectRoot)
     markers.add(projectRoot)
-    for (const name of ['tsconfig.json', '.tao/lock.jsonc', '.tao/project.json']) {
+    for (const name of ['tsconfig.json', '.tao/store/lock.jsonc', '.tao/store/project.json']) {
       const path = FS.resolvePath(name, projectRoot)
       if (await FS.isFile(path)) {
         sources.add(path)

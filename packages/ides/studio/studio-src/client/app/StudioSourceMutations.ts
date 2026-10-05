@@ -40,7 +40,7 @@ export type StudioSourceMutationsDeps = Readonly<{
   clearInspection: () => void
   /** Folds a mutation's compile result into the status line without regressing a newer compile. */
   completeCompile: (completion: StudioCompileCompletion) => void
-  /** The active cell's source identity, when the active file is the one the preview renders. */
+  /** The focused cell's source identity, when the active file is the one the preview renders. */
   currentIdentity: () => StudioSourceActionIdentity | undefined
   editor: () => EditorView | undefined
   focusEditor: () => void

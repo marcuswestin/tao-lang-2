@@ -1,5 +1,5 @@
 import Workspace from '@compiler/workspace'
-import { Errors, FS, Platform, ProjectIdentity, Repo } from '@shared'
+import { Errors, FS, Platform, ProjectIdentity, ProjectLocal, Repo } from '@shared'
 import { Expect, mkTestDir } from '@shared/test'
 import { installTaoSkills } from 'tao-skills'
 import { lowerCreationPlan, writeCreationFiles } from '../cli-src/create/creation-lowering'
@@ -42,6 +42,7 @@ export async function expectStarterReproducedFromItsPlan(directory: string): Pro
   try {
     const generated = FS.resolvePath(starter.directory, root)
     await writeCreationFiles(generated, lowerCreationPlan(starter.plan, { description: starter.description }))
+    await ProjectIdentity.ensure(generated)
     await installTaoSkills(generated)
     await runFix(generated, { cwd: root })
 
@@ -57,6 +58,12 @@ export async function expectStarterReproducedFromItsPlan(directory: string): Pro
     }
     Expect(await projectFilesUnder(generated)).toEqual(await projectFilesUnder(checkedIn))
     for (const relativePath of await projectFilesUnder(generated)) {
+      if (relativePath === '.tao/store/project.json') {
+        const identity = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u
+        Expect(ProjectIdentity.read(generated)).toMatch(identity)
+        Expect(ProjectIdentity.read(checkedIn)).toMatch(identity)
+        continue
+      }
       Expect(await FS.readText(FS.resolvePath(relativePath, generated))).toBe(
         await FS.readText(FS.resolvePath(relativePath, checkedIn)),
       )
@@ -69,12 +76,14 @@ export async function expectStarterReproducedFromItsPlan(directory: string): Pro
 /** updateStarterFiles publishes authored files without traversing an installed dependency tree. */
 export async function updateStarterFiles(generated: string, checkedIn: string): Promise<void> {
   const boundary = Repo.resolvePath('.')
+  await ProjectLocal.prepare(generated)
+  await ProjectLocal.prepare(checkedIn)
   await FS.withFileMutationLock(checkedIn, boundary, async () => {
     const sources = await checkedProjectFiles(generated, boundary, false)
     const targets = await checkedProjectFiles(checkedIn, boundary, true)
     const preserveIdentity = ProjectIdentity.read(checkedIn) !== undefined
     for (const relativePath of sources) {
-      if (preserveIdentity && relativePath === '.tao/project.json') {
+      if (preserveIdentity && relativePath === '.tao/store/project.json') {
         continue
       }
       const source = FS.resolvePath(relativePath, generated)
@@ -87,14 +96,14 @@ export async function updateStarterFiles(generated: string, checkedIn: string): 
     }
     const wanted = new Set(sources)
     if (preserveIdentity) {
-      wanted.add('.tao/project.json')
+      wanted.add('.tao/store/project.json')
     }
     for (const relativePath of targets) {
       if (!wanted.has(relativePath) && !relativePath.startsWith('.tao/')) {
         await FS.removeFileWithinBoundary(FS.resolvePath(relativePath, checkedIn), boundary)
       }
     }
-  })
+  }, { lockDirectory: ProjectLocal.cacheResolve('locks', checkedIn) })
 }
 
 async function checkedProjectFiles(
@@ -118,7 +127,7 @@ async function checkedProjectFiles(
   const files: string[] = []
   for await (
     const path of FS.walk(directory, {
-      excludeDirectory: name => name === 'node_modules',
+      excludeDirectory: name => name === 'node_modules' || name === '.tao',
       includeDirectories: true,
       includeHidden: true,
     })
@@ -137,26 +146,31 @@ async function checkedProjectFiles(
       files.push(FS.relativePath(directory, path))
     }
   }
+  const taoRoot = ProjectLocal.root(directory)
+  const storeRoot = ProjectLocal.storeResolve('', directory)
+  const ignorePath = FS.resolvePath('.gitignore', taoRoot)
+  for (const path of [taoRoot, storeRoot]) {
+    if ((await FS.entryMetadata(path)).kind !== 'directory') {
+      Errors.throwUnexpected(`Starter project entry is not an ordinary directory: ${path}`)
+    }
+  }
+  if ((await FS.entryMetadata(ignorePath)).kind !== 'file') {
+    Errors.throwUnexpected(`Starter project entry is not an ordinary file: ${ignorePath}`)
+  }
+  files.push(FS.relativePath(directory, ignorePath))
+  for await (const path of FS.walk(storeRoot, { includeDirectories: true, includeHidden: true })) {
+    const kind = (await FS.entryMetadata(path)).kind
+    if (kind !== 'directory' && kind !== 'file') {
+      Errors.throwUnexpected(`Starter project entry is not an ordinary file or directory: ${path}`)
+    }
+    if (kind === 'file') {
+      files.push(FS.relativePath(directory, path))
+    }
+  }
   return files.sort()
 }
 
-/**
- * projectFilesUnder lists the project files a starter comparison covers, in a stable order. It skips
- * `.tao/`, the local state a Studio or dev session records in any project it opens, which the
- * starter's own `.gitignore` leaves out of the checkout.
- */
+/** Compare authored files, committed `.tao/store`, and `.tao/.gitignore` without local state or caches. */
 async function projectFilesUnder(directory: string): Promise<string[]> {
-  const paths: string[] = []
-  for await (
-    const path of FS.walk(directory, {
-      excludeDirectory: name => name === 'node_modules' || name === '.tao',
-      includeHidden: true,
-    })
-  ) {
-    if (FS.basename(path) === 'node_modules') {
-      continue
-    }
-    paths.push(FS.relativePath(directory, path))
-  }
-  return paths.sort()
+  return await checkedProjectFiles(directory, Repo.resolvePath('.'), true)
 }

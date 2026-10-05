@@ -1,6 +1,7 @@
 import type { DependencyEnvironment } from '@compiler'
 import { managedDependencyModulesRoot, validateManagedDependencyEnvironments } from '@project-tooling'
-import { Assert, FS } from '@shared'
+import { Assert, FS, ProjectLocal } from '@shared'
+import { RuntimeToolchainPaths } from './runtime-toolchain-paths'
 
 type ModuleLink = { relativePath: string; target: string }
 type ModuleLinkManifest = { links: ModuleLink[]; version: 1 }
@@ -15,55 +16,61 @@ export async function withGeneratedModuleLinks(
   publish: () => Promise<void>,
   moduleLinkRoot = requesterRoot,
 ): Promise<void> {
-  const diagnostics = await validateManagedDependencyEnvironments(requesterRoot, environments, {
-    moduleLinkRoot,
-    checkSnapshotLinks: false,
-  })
-  Assert.input(diagnostics.length === 0, diagnostics.map(diagnostic => diagnostic.message).join('\n'))
-  const desired = await plannedLinks(requesterRoot, moduleLinkRoot, environments)
   const manifestPath = `${outputRoot}${manifestSuffix}`
-  const previous: ModuleLink[] = []
-  for (const link of await readOwnedLinks(manifestPath)) {
-    const path = FS.resolvePath(link.relativePath, outputRoot)
-    if (!await FS.exists(path) && !await FS.isSymbolicLink(path)) {
-      continue
-    }
-    await assertOwnedLink(outputRoot, link)
-    previous.push(link)
+  let boundaryPath = FS.resolvePath(requesterRoot)
+  while (!FS.pathIsWithin(manifestPath, boundaryPath)) {
+    boundaryPath = FS.dirname(boundaryPath)
   }
-  for (const link of previous) {
-    await FS.remove(FS.resolvePath(link.relativePath, outputRoot))
-  }
-  const installed: ModuleLink[] = []
-  try {
-    await publish()
-    for (const link of desired) {
-      const linkPath = FS.resolvePath(link.relativePath, outputRoot)
-      Assert.input(
-        !await FS.exists(linkPath) && !await FS.isSymbolicLink(linkPath),
-        `Generated module link path is occupied: ${linkPath}`,
-      )
-      await FS.symlink(link.target, linkPath)
-      installed.push(link)
-    }
-    if (desired.length === 0) {
-      await FS.remove(manifestPath)
-    } else {
-      await FS.writeJson(manifestPath, { version: 1, links: desired } satisfies ModuleLinkManifest)
-    }
-  } catch (error) {
-    for (const link of installed) {
+  await FS.withFileMutationLock(manifestPath, boundaryPath, async () => {
+    const diagnostics = await validateManagedDependencyEnvironments(requesterRoot, environments, {
+      moduleLinkRoot,
+      checkSnapshotLinks: false,
+    })
+    Assert.input(diagnostics.length === 0, diagnostics.map(diagnostic => diagnostic.message).join('\n'))
+    const desired = await plannedLinks(requesterRoot, moduleLinkRoot, environments)
+    const previous: ModuleLink[] = []
+    for (const link of await readOwnedLinks(manifestPath)) {
+      const path = FS.resolvePath(link.relativePath, outputRoot)
+      if (!await FS.exists(path) && !await FS.isSymbolicLink(path)) {
+        continue
+      }
       await assertOwnedLink(outputRoot, link)
-      await FS.remove(FS.resolvePath(link.relativePath, outputRoot))
+      previous.push(link)
     }
     for (const link of previous) {
-      const linkPath = FS.resolvePath(link.relativePath, outputRoot)
-      if (!await FS.exists(linkPath) && !await FS.isSymbolicLink(linkPath)) {
-        await FS.symlink(link.target, linkPath)
-      }
+      await FS.remove(FS.resolvePath(link.relativePath, outputRoot))
     }
-    throw error
-  }
+    const installed: ModuleLink[] = []
+    try {
+      await publish()
+      for (const link of desired) {
+        const linkPath = FS.resolvePath(link.relativePath, outputRoot)
+        Assert.input(
+          !await FS.exists(linkPath) && !await FS.isSymbolicLink(linkPath),
+          `Generated module link path is occupied: ${linkPath}`,
+        )
+        await FS.symlink(link.target, linkPath)
+        installed.push(link)
+      }
+      if (desired.length === 0) {
+        await FS.remove(manifestPath)
+      } else {
+        await FS.writeJson(manifestPath, { version: 1, links: desired } satisfies ModuleLinkManifest)
+      }
+    } catch (error) {
+      for (const link of installed) {
+        await assertOwnedLink(outputRoot, link)
+        await FS.remove(FS.resolvePath(link.relativePath, outputRoot))
+      }
+      for (const link of previous) {
+        const linkPath = FS.resolvePath(link.relativePath, outputRoot)
+        if (!await FS.exists(linkPath) && !await FS.isSymbolicLink(linkPath)) {
+          await FS.symlink(link.target, linkPath)
+        }
+      }
+      throw error
+    }
+  }, { lockDirectory: ProjectLocal.cacheResolve('locks', requesterRoot) })
 }
 
 async function plannedLinks(
@@ -93,6 +100,9 @@ async function plannedLinks(
       relativePath: local ? 'node_modules' : `modules/dependencies/${environment.namespace}/node_modules`,
       target,
     })
+  }
+  if (!links.some(link => link.relativePath === 'node_modules')) {
+    links.unshift({ relativePath: 'node_modules', target: RuntimeToolchainPaths.dependencyRoot() })
   }
   return links
 }

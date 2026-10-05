@@ -466,8 +466,12 @@ Describe('Tao runtime app generation', () => {
         Expect(stableRoot).toContain('TaoStudioPreviewBootstrap?.cell === true && active === undefined')
         Expect(stableRoot).toContain('if (TaoStudioPreviewConfig === undefined)')
         Expect(stableRoot).toContain('return <TaoApp />')
-        Expect(stableRoot).toContain('<TR.Studio.PreviewBridge config={config}>')
-        Expect(stableRoot).toContain('</TR.Studio.PreviewBridge>')
+        // studio-preview-runtime-dedupe.jest-test.tsx proves a held element keeps the app from rendering again.
+        Expect(stableRoot).toContain('const [TaoAppElement] = React.useState(() => <TaoApp />)')
+        Expect(stableRoot).toContain(
+          '<TR.Studio.PreviewBridge config={config}>{TaoAppElement}</TR.Studio.PreviewBridge>',
+        )
+        Expect(stableRoot).not.toContain('<TR.Studio.PreviewBridge config={config}><TaoApp />')
         Expect(await FS.readText(taoAppPath)).toContain(
           'export default TaoApps["Preview"]',
         )
@@ -511,6 +515,56 @@ Describe('Tao runtime app generation', () => {
         Expect(standard.code).not.toContain('TaoAppRefresh')
         Expect(await FS.exists(taoAppPath)).toBe(false)
         Expect(await FS.exists(publicationPath)).toBe(false)
+      },
+    )
+  })
+
+  Test('keeps the publication marker untouched while the experimental preview graph changes', async () => {
+    const runtimePackageRoot = await createExecutableRuntimePackageRoot('preview-publication-off-tests')
+    await withTaoFiles(
+      'tao-runtime-preview-publication-off-',
+      {
+        'Main.tao':
+          'app Preview { id "preview" version "1.0.0" name "Preview" view Main }\nview Main() { render inject ```ts return <RN.Text>Before</RN.Text> ``` }',
+      },
+      async paths => {
+        const first = await Runtime.generateApp(paths['Main.tao'], {
+          preview: previewOptions(1, { publicationChecks: false }),
+          runtimePackageRoot,
+        })
+        const publicationPath = generatedPreviewPath(runtimePackageRoot, 'TaoStudioPublication.ts')
+        const generatedViewPath = generatedPreviewPath(runtimePackageRoot, 'App.injection-1.tsx')
+        const publication = await FS.readText(publicationPath)
+        const markerWrite = await FS.modifiedTimeMs(publicationPath)
+        const stableRootWrite = await FS.modifiedTimeMs(first.outputPath)
+        Expect(first.code).toContain('const TaoStudioPublicationChecks = false')
+        // The marker's versions belong to its first compile; a bootstrap at a later revision carries
+        // its own, and never replaces a newer runtime update that Fast Refresh raced it against.
+        Expect(first.code).toContain('sourceVersions: nextCell.sourceVersions,')
+        Expect(first.code).toContain(
+          'previous?.cell?.identity?.compileRevision > nextCell.identity.compileRevision ? previous : next',
+        )
+        Expect(publication).toContain('"compileRevision":1')
+        Expect(await FS.readText(generatedViewPath)).toContain('Before')
+
+        await FS.writeText(
+          paths['Main.tao'],
+          'app Preview { id "preview" version "1.0.0" name "Preview" view Main }\nview Main() { render inject ```ts return <RN.Text>After</RN.Text> ``` }',
+        )
+        const second = await Runtime.generateApp(paths['Main.tao'], {
+          preview: previewOptions(2, { publicationChecks: false }),
+          runtimePackageRoot,
+        })
+        Expect(second.previewRevision).toBe(2)
+        Expect(await FS.readText(generatedViewPath)).toContain('After')
+        Expect(await FS.readText(publicationPath)).toBe(publication)
+        Expect(await FS.modifiedTimeMs(publicationPath)).toBe(markerWrite)
+        Expect(await FS.modifiedTimeMs(first.outputPath)).toBe(stableRootWrite)
+        const typecheck = await typecheckGeneratedApp(runtimePackageRoot)
+        Assert(typecheck.exitCode === 0, 'experimental Studio preview bridge type-checks', {
+          stderr: typecheck.stderr,
+          stdout: typecheck.stdout,
+        })
       },
     )
   })
@@ -563,7 +617,9 @@ Describe('Tao runtime app generation', () => {
     Expect(taoApp).toContain(JSON.stringify(scenario?.subject.subjectId))
     // The focused view mounts under a navigator of its own rather than bare, so `present` inside
     // it — which `WorkspaceRow` does — has somewhere to go.
-    Expect(taoApp).toContain('<TR.Studio.SubjectHost arguments={_TaoStudioArgs} definition={_TaoStudioSubject} />')
+    Expect(taoApp).toContain(
+      '<TR.Studio.SubjectHost key={_TaoFixtureSeed.revision} arguments={_TaoStudioArgs} definition={_TaoStudioSubject} />',
+    )
     Expect(taoApp).toContain('TR.NavKind.Slot()')
     Expect(taoApp).toContain('restoration: { exclusions: [], mode: \'fresh\' as const, variant: "WordFlower" }')
     Expect(stableRoot).toContain('<TR.Studio.Environment.Host cell={TaoStudioCell}>')

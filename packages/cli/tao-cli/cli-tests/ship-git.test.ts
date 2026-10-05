@@ -17,7 +17,7 @@ Describe('tao ship git behavior', () => {
     await git(root, 'config', 'user.email', 'test@example.com')
     await git(root, 'config', 'user.name', 'Tao Test')
     const projectPath = FS.resolvePath('App.tao', root)
-    const lockPath = FS.resolvePath('.tao/lock.jsonc', root)
+    const lockPath = FS.resolvePath('.tao/store/lock.jsonc', root)
     await FS.writeText(
       projectPath,
       'app Notes { id "notes" version "1.0.0" name "Notes" view Main }\nview Main() { }\n',
@@ -140,7 +140,7 @@ Describe('tao ship git behavior', () => {
     await git(root, 'config', 'user.email', 'test@example.com')
     await git(root, 'config', 'user.name', 'Tao Test')
     const sourcePath = FS.resolvePath('App.tao', root)
-    const lockPath = FS.resolvePath('.tao/lock.jsonc', root)
+    const lockPath = FS.resolvePath('.tao/store/lock.jsonc', root)
     await FS.writeText(sourcePath, 'app Notes { id "notes" version "1.0.0" name "Notes" view Main }\nview Main() { }\n')
     await FS.writeText(lockPath, '{"schemaVersion":1}\n')
     await git(root, 'add', '.')

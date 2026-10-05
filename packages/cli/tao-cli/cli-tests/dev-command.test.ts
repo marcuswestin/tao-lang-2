@@ -245,7 +245,7 @@ Describe('Tao run app discovery and selection', () => {
         }),
       ).toBe(0)
       Expect(runs).toBe(1)
-      Expect(await FS.isFile(FS.resolvePath('.tao/sessions/owner.json', root))).toBe(false)
+      Expect(await FS.isFile(FS.resolvePath('.tao/local/sessions/owner.json', root))).toBe(false)
     } finally {
       await FS.remove(root)
     }

@@ -1,6 +1,7 @@
-import { Expect, Test, testOverrideSlot } from '@shared/test'
-import { mountPreviewActivation } from '../studio-src/client/matrix/StudioPreviewActivation'
+import { Expect, settle, Test, testOverrideSlot } from '@shared/test'
+import { previewActivationToggle } from '../studio-src/client/matrix/StudioPreviewCellView'
 import type { StudioPreviewConnection } from '../studio-src/client/matrix/StudioPreviewConnection'
+import { mountPreviewFocus } from '../studio-src/client/matrix/StudioPreviewFocus'
 
 class PreviewElement extends EventTarget {
   className = ''
@@ -75,6 +76,45 @@ const elementSlot = testOverrideSlot<PropertyDescriptor | undefined>({
   },
 })
 
+const documentSlot = testOverrideSlot<PropertyDescriptor | undefined>({
+  equals: (left, right) => left?.value === right?.value,
+  read: () => Object.getOwnPropertyDescriptor(globalThis, 'document'),
+  write: value => {
+    if (value === undefined) {
+      Reflect.deleteProperty(globalThis, 'document')
+    } else {
+      Object.defineProperty(globalThis, 'document', value)
+    }
+  },
+})
+
+Test('Studio preview toggle starts off and reports activation accessibly', async () => {
+  const document = previewDocument()
+  const restore = documentSlot.install({ configurable: true, value: document })
+  let toggles = 0
+  const preview = {
+    activated: false,
+    toggleActivation: async () => {
+      toggles++
+    },
+  } as StudioPreviewConnection
+  try {
+    const inactive = previewActivationToggle(preview) as unknown as PreviewElement
+    Expect(inactive.attributes.get('aria-label')).toBe('Activate preview')
+    Expect(inactive.attributes.get('aria-pressed')).toBe('false')
+    Expect(inactive.title).toBe('Activate preview')
+    emit(inactive, 'click')
+    await settle()
+    Expect(toggles).toBe(1)
+    preview.activated = true
+    const active = previewActivationToggle(preview) as unknown as PreviewElement
+    Expect(active.attributes.get('aria-label')).toBe('Deactivate preview')
+    Expect(active.attributes.get('aria-pressed')).toBe('true')
+  } finally {
+    restore()
+  }
+})
+
 function emit(target: EventTarget, type: string, values: Record<string, unknown> = {}): Event {
   const event = new Event(type, { cancelable: true })
   for (const [key, value] of Object.entries({ button: 0, detail: 1, ...values })) {
@@ -84,21 +124,21 @@ function emit(target: EventTarget, type: string, values: Record<string, unknown>
   return event
 }
 
-function activationTest(
+function focusTest(
   run: (fixture: {
     host: PreviewElement
     document: ReturnType<typeof previewDocument>
     previews: StudioPreviewConnection[]
-    controls: ReturnType<typeof mountPreviewActivation>
+    controls: ReturnType<typeof mountPreviewFocus>
     add: (wholeApp?: boolean) => { preview: StudioPreviewConnection; iframe: PreviewElement; viewport: PreviewElement }
-    activations: string[]
+    focuses: string[]
   }) => void,
 ): void {
   const restore = elementSlot.install({ configurable: true, value: PreviewElement })
   const document = previewDocument()
   const host = document.createElement('div')
   const previews: StudioPreviewConnection[] = []
-  const activations: string[] = []
+  const focuses: string[] = []
   const add = (wholeApp = false) => {
     const frame = document.createElement('section')
     frame.className = 'studio-preview-cell'
@@ -117,22 +157,22 @@ function activationTest(
       previewInstanceId: id,
       origin: 'https://example.com',
       interactionMode: 'edit',
-      activate: () => activations.push(id),
+      focus: () => focuses.push(id),
     }
     previews.push(preview)
     return { preview, iframe, viewport }
   }
-  const controls = mountPreviewActivation(host as unknown as HTMLElement, previews)
+  const controls = mountPreviewFocus(host as unknown as HTMLElement, previews)
   try {
-    run({ host, document, previews, controls, add, activations })
+    run({ host, document, previews, controls, add, focuses })
   } finally {
     controls.dispose()
     restore()
   }
 }
 
-Test('Studio requires a consumed activation click before one preview accepts input', () => {
-  activationTest(({ add, controls, activations }) => {
+Test('Studio requires a consumed focus click before one preview accepts input', () => {
+  focusTest(({ add, controls, focuses }) => {
     const first = add()
     const second = add()
     controls.reconcile()
@@ -140,7 +180,9 @@ Test('Studio requires a consumed activation click before one preview accepts inp
     Expect(second.iframe.style.pointerEvents).toBe('none')
     Expect(first.iframe.tabIndex).toBe(-1)
     const shield = first.viewport.children[1]!
-    Expect(shield.attributes.get('aria-label')).toBe('Activate App preview')
+    Expect(shield.attributes.get('aria-label')).toBe('Focus App preview')
+    let iframeClicks = 0
+    first.iframe.addEventListener('click', () => iframeClicks++)
     Expect(emit(shield, 'click').defaultPrevented).toBe(true)
     Expect(shield.hidden).toBe(true)
     Expect(first.iframe.style.pointerEvents).toBe('')
@@ -150,12 +192,12 @@ Test('Studio requires a consumed activation click before one preview accepts inp
     Expect(first.iframe.style.pointerEvents).toBe('none')
     Expect(first.preview.frame!.dataset['previewInteractive']).toBeUndefined()
     Expect(second.preview.frame!.dataset['previewInteractive']).toBe('true')
-    Expect(activations).toEqual(['preview-0', 'preview-1'])
+    Expect(focuses).toEqual(['preview-0', 'preview-1'])
   })
 })
 
-Test('Studio outside pointer capture deselects despite cancelled controls while Space pans preserve selection', () => {
-  activationTest(({ add, controls, document, host, activations }) => {
+Test('Studio outside pointer capture clears focus despite cancelled controls while Space pans preserve focus', () => {
+  focusTest(({ add, controls, document, host, focuses }) => {
     const { iframe, viewport } = add()
     controls.reconcile()
     emit(viewport.children[1]!, 'click')
@@ -179,12 +221,12 @@ Test('Studio outside pointer capture deselects despite cancelled controls while 
     document.dispatchEvent(cancelled)
     Expect(iframe.style.pointerEvents).toBe('none')
     Expect(document.activeElement).toBeUndefined()
-    Expect(activations).toEqual(['preview-0'])
+    Expect(focuses).toEqual(['preview-0'])
   })
 })
 
-Test('Studio retains selection across reconciliation but clears replaced and removed connections', () => {
-  activationTest(({ add, controls, previews, document }) => {
+Test('Studio retains focus across reconciliation but clears replaced and removed connections', () => {
+  focusTest(({ add, controls, previews, document }) => {
     const retained = add()
     controls.reconcile()
     emit(retained.viewport.children[1]!, 'click')
@@ -210,20 +252,21 @@ Test('Studio retains selection across reconciliation but clears replaced and rem
   })
 })
 
-Test('Studio fallback preview activates by keyboard without reparenting and restores input on disposal', () => {
-  activationTest(({ add, controls, host, document, activations }) => {
+Test('Studio fallback preview focuses by keyboard without reparenting and restores input on disposal', () => {
+  focusTest(({ add, controls, host, document, focuses }) => {
     const { iframe } = add(true)
     iframe.style.pointerEvents = 'auto'
     iframe.tabIndex = 3
     controls.reconcile()
     const shield = host.children[1]!
+    Expect(shield.className).toContain('studio-preview-focus-whole-app')
     Expect(iframe.parentElement).toBe(host)
     Expect(emit(shield, 'keydown', { key: 'Enter' }).defaultPrevented).toBe(true)
     Expect(iframe.dataset['previewInteractive']).toBe('true')
     controls.clear()
     Expect(iframe.style.pointerEvents).toBe('none')
     emit(shield, 'keydown', { key: ' ' })
-    Expect(activations).toEqual(['preview-0', 'preview-0'])
+    Expect(focuses).toEqual(['preview-0', 'preview-0'])
     controls.dispose()
     Expect(host.children).toEqual([iframe])
     Expect(iframe.style.pointerEvents).toBe('auto')
@@ -232,13 +275,13 @@ Test('Studio fallback preview activates by keyboard without reparenting and rest
     emit(shield, 'click')
     emit(document, 'click', { target: host })
     controls.reconcile()
-    Expect(activations).toEqual(['preview-0', 'preview-0'])
+    Expect(focuses).toEqual(['preview-0', 'preview-0'])
     Expect(host.children).toEqual([iframe])
   })
 })
 
-Test('Studio neutral pan excludes controls and active previews and activation ignores Space pans', () => {
-  activationTest(({ add, controls, host, document, activations }) => {
+Test('Studio neutral pan excludes controls and focused previews and focus ignores Space pans', () => {
+  focusTest(({ add, controls, host, document, focuses }) => {
     const { iframe, viewport } = add()
     controls.reconcile()
     const shield = viewport.children[1]!
@@ -254,7 +297,7 @@ Test('Studio neutral pan excludes controls and active previews and activation ig
     Expect(canPan(button)).toBe(false)
     host.dataset['canvasPanReady'] = 'true'
     emit(shield, 'click')
-    Expect(activations).toEqual([])
+    Expect(focuses).toEqual([])
     delete host.dataset['canvasPanReady']
     emit(shield, 'click')
     Expect(canPan(viewport)).toBe(false)

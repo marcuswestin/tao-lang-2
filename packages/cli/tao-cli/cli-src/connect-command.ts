@@ -1,5 +1,5 @@
 import { Packages } from '@ast-utils'
-import { Errors, FS, HCI } from '@shared'
+import { Errors, FS, HCI, ProjectLocal } from '@shared'
 import type { Readable, Writable } from 'node:stream'
 import { type AppwriteRunner, provisionAppwrite, provisionAppwriteProject } from './appwrite-provision'
 import { type FirebaseRunner, provisionFirebase } from './firebase-provision'
@@ -58,10 +58,10 @@ export async function runTaoConnect(
   }
   const out = { output: options.output }
   const publicPath = FS.resolvePath('tao.connections.json', project)
-  const localDirectory = FS.resolvePath('.tao/local', project)
-  const localPath = FS.resolvePath('connections.json', localDirectory)
-  const privateDirectory = FS.resolvePath('.tao', project)
-  const privatePath = FS.resolvePath('connect-secrets.json', privateDirectory)
+  const localDirectory = ProjectLocal.localResolve('', project)
+  const localPath = ProjectLocal.localResolve('connections.json', project)
+  const privateDirectory = ProjectLocal.root(project)
+  const privatePath = ProjectLocal.localResolve('connect-secrets.json', project)
   if (
     await FS.isSymbolicLink(publicPath) || await FS.isSymbolicLink(privateDirectory)
     || await FS.isSymbolicLink(privatePath) || await FS.isSymbolicLink(localDirectory)
@@ -69,6 +69,7 @@ export async function runTaoConnect(
   ) {
     Errors.throwUserInput('A connection file or directory is a symbolic link; nothing was stored.')
   }
+  await ProjectLocal.prepare(project)
   const pilot = provider === 'firebase' && await isHostedCrudPilot(project)
   const publicConfig = provider === 'appwrite' || pilot ? await readObject(publicPath) : {}
   const localConfig = provider === 'firebase' ? await readObject(localPath) : {}

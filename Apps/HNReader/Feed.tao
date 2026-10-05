@@ -1,0 +1,85 @@
+use ReadingEntries, ReadingEntry, Stories, Story from @model
+use Col, Row, ScrollView, Spinner, Text, TextMultiline from @tao/ui
+
+// The front page: the feed a reader lands on, and the row each story renders as.
+folder
+scene FrontPage() {
+   Title "Hacker News"
+   query TopStories = Stories with {
+      where Rank >= 1
+      limit 30
+   }
+   action ShowBookmarks() {
+      present BookmarkList()
+   }
+   command Bookmarks() {
+      Title "Bookmarks"
+      Icon "bookmark"
+      do ShowBookmarks()
+   }
+   Toolbar { Bookmarks }
+   render Col() [screen] {
+      guard TopStories {
+         loading -> { Col() [stateBox] {
+            Spinner()
+         } }
+         error -> Context { Col() [stateBox, gap 6] {
+            Text("Couldn't reach Hacker News") [problemTitle]
+            Text(Context.Message) [meta]
+         } }
+      }
+      if TopStories is refreshing {
+         Col() [pad 10] {
+            Text("Refreshing…") [notice]
+      }  }
+      if TopStories is stale {
+         Col() [pad 10] {
+            Text("Offline — showing cached stories") [notice]
+      }  }
+      ScrollView() {
+         Col() [feed] {
+            #stories
+            loop TopStories / Story {
+               TrackedStoryRow(Story)
+}  }  }  }  }
+
+// A feed row either creates its one history record or refreshes the existing record's recency. The
+// query keeps repeat opens on the update path, and the unique scalar gives the row stable identity.
+folder
+view TrackedStoryRow(Story) {
+   query ExistingHistory = ReadingEntries with {
+      where Story == Story
+      limit 1
+   }
+   render Col() [content top stretch] {
+      when ExistingHistory {
+         empty -> { loop [Story] / NewStory {
+            StoryRow(NewStory)
+            on select -> {
+               create ReadingEntry {
+                  StoryHnId: NewStory.HnId,
+                  Story: NewStory,
+                  OpenedAt: now
+               }
+               present StoryScreen(NewStory)
+            }
+         } }
+         otherwise -> { loop ExistingHistory / ReadingEntry {
+            StoryRow(Story)
+            on select -> {
+               update ReadingEntry {
+                  OpenedAt: now
+               }
+               present StoryScreen(Story)
+            }
+         } }
+}  }  }
+
+folder
+view StoryRow(Story) {
+   render Row() [storyCard, gap 10] {
+      Text("{ Story.Rank }.") [rank]
+      Col() [gap sm, claim 1, compress] {
+         TextMultiline(Story.Title) [storyTitle]
+         Text("{ Story.Score } points by { Story.Author } · { Story.CommentCount } comments") [meta]
+}  }  }

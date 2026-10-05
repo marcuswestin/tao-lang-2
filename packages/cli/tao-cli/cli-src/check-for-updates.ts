@@ -37,7 +37,7 @@ export async function runCheckForUpdates(): Promise<void> {
   HCI.writeLine(
     `Tao ${latest} is available; this is ${own}. Install it with:\n\n`
       + `  curl -fsSL ${releases}/download/v${latest}/install.sh | sh\n\n`
-      + 'A project keeps the release its .tao/lock.jsonc pins in toolchain.version until that '
+      + 'A project keeps the release its .tao/store/lock.jsonc pins in toolchain.version until that '
       + 'is changed.',
   )
 }

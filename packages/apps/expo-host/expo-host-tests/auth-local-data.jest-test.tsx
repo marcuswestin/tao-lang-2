@@ -26,7 +26,7 @@ Describe('compiled authenticated local-only app', () => {
       await FS.remove(path(key))
     })
     const files = {
-      '.tao/project.json': '{"id":"9f77de33-02da-4bfd-a527-35496b04dd1b"}',
+      '.tao/store/project.json': '{"id":"9f77de33-02da-4bfd-a527-35496b04dd1b"}',
       'App.tao': `
         use TestAuth from @tao/auth/testing
         use Col, FormButton, Text from @tao/ui

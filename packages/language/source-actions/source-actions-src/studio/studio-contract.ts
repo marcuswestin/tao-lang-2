@@ -180,6 +180,8 @@ export type StudioRenderInspection = {
   elementName?: string
   explorations: readonly StudioStyleEntry[]
   layoutEntries: readonly StudioLayoutEntry[]
+  /** The one-step reorders among the render's siblings; a direction is absent where it cannot move. */
+  moves: Readonly<{ down?: StudioMoveRenderRequest; up?: StudioMoveRenderRequest }>
   /**
    * The view definition rendering this occurrence and that definition's root render. A host that
    * measured the root render's occurrence can size a focused frame to it instead of to the device.

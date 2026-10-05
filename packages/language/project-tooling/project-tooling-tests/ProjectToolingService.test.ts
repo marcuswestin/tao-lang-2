@@ -7,13 +7,48 @@ import { Describe, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
 import { ProjectTooling } from '../project-tooling-src/ProjectToolingService'
 
 Describe('project tooling disk refresh', () => {
+  Test('keeps current diagnostics across overlapping watches and a reopened watch', async () => {
+    const root = await mkTestDir('tao-tooling-watched-program-', { location: 'host' })
+    const watches: Awaited<ReturnType<typeof ProjectTooling.watch>>[] = []
+    try {
+      await FS.mkdir(FS.resolvePath('.tao', root))
+      const source = FS.resolvePath('Main.ts', root)
+      await FS.writeText(source, 'export const value: number = 1\n')
+      const first = await ProjectTooling.watch(root, {})
+      watches.push(first)
+      const second = await ProjectTooling.watch(root, {})
+      watches.push(second)
+      Expect(first.lastResult.status).toBe('fresh')
+      Expect(second.lastResult.status).toBe('fresh')
+      await first.dispose()
+      await first.dispose()
+
+      await FS.writeText(source, 'export const value: number = "wrong"\n')
+      const invalid = await second.requestRefresh()
+      Expect(invalid.status).toBe('stale')
+      Expect(invalid.diagnostics.some(diagnostic => diagnostic.code === 'TS2322')).toBe(true)
+      await FS.writeText(source, 'export const value: number = 2\n')
+      Expect((await second.requestRefresh()).status).toBe('fresh')
+      await second.dispose()
+
+      await FS.writeText(source, 'export const value: number = "wrong again"\n')
+      const reopened = await ProjectTooling.watch(root, {})
+      watches.push(reopened)
+      Expect(reopened.lastResult.status).toBe('stale')
+      Expect(reopened.lastResult.diagnostics.some(diagnostic => diagnostic.code === 'TS2322')).toBe(true)
+    } finally {
+      await Promise.all(watches.map(watch => watch.dispose()))
+      await FS.remove(root)
+    }
+  })
+
   Test('initializes a missing project identity and reports an invalid existing one', async () => {
     const root = await mkTestDir('tao-tooling-project-identity-', { location: 'host' })
     try {
       await FS.mkdir(FS.resolvePath('.tao', root))
       const first = await ProjectTooling.refresh(root, {})
       Expect(first.status).toBe('fresh')
-      const marker = FS.resolvePath('.tao/project.json', root)
+      const marker = FS.resolvePath('.tao/store/project.json', root)
       const saved = await FS.readText(marker)
       Expect(JSON.parse(saved).id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
       await ProjectTooling.refresh(root, {})
@@ -40,7 +75,7 @@ Describe('project tooling disk refresh', () => {
       await ProjectTooling.refresh(root, {})
       await FS.writeText(
         FS.resolvePath('tsconfig.json', root),
-        '{"extends":["./.tao/typescript/tsconfig.json","../Shared/config.json"]}\n',
+        '{"extends":["./.tao/cache/typescript/tsconfig.json","../Shared/config.json"]}\n',
       )
 
       const missing = await ProjectTooling.refresh(root, {})
@@ -51,7 +86,7 @@ Describe('project tooling disk refresh', () => {
       const recovered = await ProjectTooling.refresh(root, {})
       Expect(recovered.status).toBe('fresh')
       Expect(recovered.configInputPaths).toContain(external)
-      const identityPath = FS.resolvePath('.tao/project.json', root)
+      const identityPath = FS.resolvePath('.tao/store/project.json', root)
       const identity = await FS.readText(identityPath)
       await FS.writeText(identityPath, '{"id":"broken"}\n')
       const invalidIdentity = await ProjectTooling.refresh(root, {})
@@ -91,7 +126,7 @@ Describe('project tooling disk refresh', () => {
       Expect(missing.externalSidecarInputPaths).toContain(paths['Host/Helper.ts'])
 
       await FS.remove(paths['Project/Main.tao'])
-      const invalidIdentityPath = FS.resolvePath('Project/.tao/project.json', fixture)
+      const invalidIdentityPath = FS.resolvePath('Project/.tao/store/project.json', fixture)
       const savedIdentity = await FS.readText(invalidIdentityPath)
       await FS.writeText(invalidIdentityPath, '{"id":"broken"}\n')
       const invalidIdentity = await ProjectTooling.refresh(root, {})
@@ -436,7 +471,7 @@ package { version 0.1.0 requires "Widget Package" from ../Library version ^2.0.0
       Expect(graph.requirements[0]?.selectedPublication?.publicDeclarations.length).toBe(1)
       Expect(graph.requirements[0]?.selectedPublication?.sourceFiles.map(file => AST.getDocument(file).uri.path))
         .toEqual([paths['Library/@widgets/Widget.tao']])
-      const libraryIdentity = FS.resolvePath('Library/.tao/project.json', root)
+      const libraryIdentity = FS.resolvePath('Library/.tao/store/project.json', root)
       await FS.remove(libraryIdentity)
       const result = await ProjectTooling.refresh(consumer, {})
       Expect(result.diagnostics.filter(diagnostic => diagnostic.severity === 'error')).toEqual([])
@@ -519,7 +554,7 @@ package { version 0.1.0 requires "Child Package" from ./Child version ^2.0.0 { @
     }, async (paths, root) => {
       const child = FS.resolvePath('Child', root)
       const namespace = BridgeMetadata.dependencyNamespace(child)
-      const modulesRoot = FS.resolvePath(`.tao/install/origins/${namespace}/node_modules`, root)
+      const modulesRoot = FS.resolvePath(`.tao/cache/install/origins/${namespace}/node_modules`, root)
       await FS.writeText(
         FS.resolvePath('widget-util/package.json', modulesRoot),
         '{"name":"real-util","version":"2.1.0","types":"index.d.ts"}\n',
@@ -646,7 +681,7 @@ package { version 0.1.0 requires "Widget Package" from ../Library version ^2.0.0
       const consumer = FS.resolvePath('Consumer', root)
       const library = FS.resolvePath('Library', root)
       const namespace = BridgeMetadata.dependencyNamespace(library)
-      const modulesRoot = FS.resolvePath(`.tao/install/origins/${namespace}/node_modules`, consumer)
+      const modulesRoot = FS.resolvePath(`.tao/cache/install/origins/${namespace}/node_modules`, consumer)
       await FS.writeText(
         FS.resolvePath('widget-util/package.json', modulesRoot),
         '{"name":"real-util","version":"2.1.0","types":"index.d.ts"}\n',
@@ -661,7 +696,7 @@ package { version 0.1.0 requires "Widget Package" from ../Library version ^2.0.0
       Expect(result.diagnostics.filter(diagnostic => diagnostic.severity === 'error')).toEqual([])
       Expect(result.status).toBe('fresh')
       const config = await FS.readJson<{ compilerOptions: { paths: Record<string, string[]> } }>(
-        FS.resolvePath('.tao/typescript/tsconfig.json', consumer),
+        FS.resolvePath('.tao/cache/typescript/tsconfig.json', consumer),
       )
       Expect(config.compilerOptions.paths['widget-util']).toBeUndefined()
     }, { location: 'host', verbatim: true })

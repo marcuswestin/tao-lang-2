@@ -1,5 +1,5 @@
 import { ProjectTooling, type ProjectToolingWatch } from '@project-tooling'
-import { Errors, FS, HCI, Platform, ReleaseCapabilities, Repo } from '@shared'
+import { Errors, FS, HCI, Platform, ProjectLocal, ReleaseCapabilities, Repo } from '@shared'
 import type {
   DevLoopActions,
   DevLoopControlHooks,
@@ -8,7 +8,7 @@ import type {
 } from '@shared/DevLoopControl'
 import { DesktopHost } from '../desktop-host'
 import { RuntimeToolchainPaths } from '../runtime-toolchain-paths'
-import { devDataAppKey, devDataEnvironment } from './dev-data/DevDataBootstrap'
+import { devDataEnvironment } from './dev-data/DevDataBootstrap'
 import { DevDataServer } from './dev-data/DevDataServer'
 import { DevLoopOutput, type DevLoopReporter, lineDevLoopReporter, setDevLoopReporter } from './DevLoopOutput'
 import { DevRuntime } from './DevRuntime'
@@ -155,17 +155,18 @@ async function runDevLoopWithActiveReporter(
     && FS.pathIsWithin(selection.projectRoot, toolchainRepo)
   DevLoopOutput.showCheckoutControls(repositoryControlsAvailable)
   const { appName, appPath } = selection
-  const stateRoot = FS.resolvePath('.tao/dev', selection.projectRoot)
+  const stateRoot = ProjectLocal.cacheResolve('dev', selection.projectRoot)
   const runtime = await DevRuntime.prepare(selection.projectRoot)
   // The dev data server starts first: its port and the app's key go into Expo's environment, where
   // the checked-in `app.config.js` writes them into the manifest every development build reads.
-  const devDataApp = devDataAppKey(selection.appId)
   const devData = await DevDataServer.start({
     log: line => DevLoopOutput.logDevLoop('data', line),
-    rootDir: FS.resolvePath('data', stateRoot),
+    rootDir: ProjectLocal.cacheResolve('dev-data/fallback', selection.projectRoot),
   })
   let expo: ExpoRunnerSession
+  let devDataApp: string
   try {
+    devDataApp = await devData.registerProject(selection.projectRoot, appName, selection.appId)
     expo = await createDevLoopExpoSession(PREFERRED_EXPO_PORT, stateRoot, operations.targetOperations)
   } catch (error) {
     await devData.stop().catch(() => {})
@@ -176,7 +177,7 @@ async function runDevLoopWithActiveReporter(
   const expoServer = expo.createServer(runtime.root, {
     command: installedLauncher,
     env: { ...installedLauncher?.env, ...devDataEnvironment(devData.port, devDataApp, devData.capability) },
-    logRoot: FS.resolvePath('logs', stateRoot),
+    logRoot: ProjectLocal.cacheResolve('logs', selection.projectRoot),
     runtimeToolchainSourceRoot: runtime.sourceRoot,
   })
   const output = DevLoopOutput.start()
@@ -324,7 +325,7 @@ async function runDevLoopWithActiveReporter(
           DevLoopOutput.logDevLoop('desktop', 'Desktop app is already open.')
           return true
         }
-        const project = await DesktopHost.prepare({ appName, root: FS.resolvePath('desktop', stateRoot) })
+        const project = await DesktopHost.prepare({ appName, root: FS.resolvePath('desktop-host', stateRoot) })
         if (shouldStop()) {
           return false
         }

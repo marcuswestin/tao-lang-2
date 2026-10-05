@@ -287,7 +287,7 @@ look for what else is unowned.
 ### P15 — Real App Store Connect identifiers in a committed lock file — High
 
 **2026-10-02 amendment:** this finding records the previous lock layout. The project migration
-tracks `.tao/lock.jsonc` for reproducible dependency and toolchain pins while preserving its shipping
+tracks `.tao/store/lock.jsonc` for reproducible dependency and toolchain pins while preserving its shipping
 concern. The blanket untracking recommendation below is superseded; publication review must instead
 settle how accepted machine/account shipping identifiers are separated or redacted. No credentials
 or accepted shipping history are removed by the migration.

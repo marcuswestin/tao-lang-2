@@ -4,7 +4,7 @@ import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import ts from 'typescript'
 import { PROJECT_TSCONFIG, TaoAppModules } from '../cli-src/app-modules'
 
-const PINNED_PROJECT_TSCONFIG = '{ "extends": "./.tao/typescript/tsconfig.json" }\n'
+const PINNED_PROJECT_TSCONFIG = '{ "extends": "./.tao/cache/typescript/tsconfig.json" }\n'
 
 Describe('Tao app TypeScript modules', () => {
   Test('packages a real runtime into a relocated CLI artifact, and says so when it carries none', async () => {

@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, HCI, Platform } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, ProjectLocal } from '@shared'
 import { createAgeCipher } from 'tao-cli-kit/age-cipher'
 import {
   type Cipher,
@@ -12,7 +12,7 @@ import {
 } from 'tao-cli-kit/secrets'
 import { findTaoProjectSource } from './project-root'
 
-const STORE_PATH = 'secrets/secrets.jsonc'
+const STORE_PATH = 'secrets.jsonc'
 const IDENTITY_PATH = '.config/tao/secrets-identity.txt'
 const HEADER =
   `// Tao project secrets. Commit this file; it contains encrypted values, public recipients, and readable names.
@@ -81,7 +81,8 @@ async function ensureMachineIdentity(): Promise<string> {
 
 async function storeLocation(target: string): Promise<{ path: string; root: string }> {
   const project = await findTaoProjectSource(target)
-  return { root: project.root, path: FS.resolvePath(STORE_PATH, project.root) }
+  await ProjectLocal.prepare(project.root)
+  return { root: project.root, path: ProjectLocal.storeResolve(STORE_PATH, project.root) }
 }
 
 async function readStore(path: string): Promise<SecretStore> {
@@ -95,8 +96,8 @@ async function readStore(path: string): Promise<SecretStore> {
   return store
 }
 
-async function writeStore(path: string, store: SecretStore): Promise<void> {
-  const temporary = `${path}.${Platform.randomUUID()}.tmp`
+async function writeStore(root: string, path: string, store: SecretStore): Promise<void> {
+  const temporary = ProjectLocal.stagingPath(path, root)
   await FS.mkdir(FS.dirname(path))
   try {
     await FS.writeText(temporary, formatStore(store, { header: HEADER }), { mode: 0o600 })
@@ -107,7 +108,9 @@ async function writeStore(path: string, store: SecretStore): Promise<void> {
 }
 
 async function mutateStore<Value>(root: string, path: string, work: () => Promise<Value>): Promise<Value> {
-  return await FS.withFileMutationLock(path, root, work)
+  return await FS.withFileMutationLock(path, root, work, {
+    lockDirectory: ProjectLocal.cacheResolve('locks', root),
+  })
 }
 
 async function unlockStoreKey(store: SecretStore, cipher: Cipher): Promise<string> {
@@ -143,7 +146,7 @@ export async function initProjectSecrets(target = '.', environment = liveEnviron
     if (await FS.exists(path)) {
       Errors.throwUserInput(`Project secrets were initialized concurrently at ${FS.displayPath(path)}.`)
     }
-    await writeStore(path, {
+    await writeStore(root, path, {
       recipients: [recipient],
       storeKey: { recipient: generated.recipient, wrappedFor: [recipient], wrappedKey: armorLines(wrapped) },
       secrets: {},
@@ -183,7 +186,7 @@ export async function grantProjectSecrets(
       Errors.throwUserInput('Project recipients changed while granting access. Retry the command.')
     }
     const storeKey: StoreKey = { ...current.storeKey!, wrappedFor: recipients, wrappedKey: armorLines(wrapped) }
-    await writeStore(path, { ...current, recipients, storeKey })
+    await writeStore(root, path, { ...current, recipients, storeKey })
   })
   return true
 }
@@ -211,7 +214,7 @@ export async function setProjectSecret(
     ) {
       Errors.throwUserInput(`The project store or ${name} changed while saving. Retry the command.`)
     }
-    await writeStore(path, withSecret(current, name, armor, { now: environment.now() }))
+    await writeStore(root, path, withSecret(current, name, armor, { now: environment.now() }))
   })
   return { replaced: original.secrets[name] !== undefined, path }
 }
@@ -235,7 +238,8 @@ export async function projectSecretIfStored(
   environment?: ProjectSecretsEnvironment,
 ): Promise<string | undefined> {
   requireSecretName(name)
-  const path = FS.resolvePath(STORE_PATH, projectRoot)
+  await ProjectLocal.prepare(projectRoot)
+  const path = ProjectLocal.storeResolve(STORE_PATH, projectRoot)
   if (!await FS.exists(path)) {
     return undefined
   }
@@ -292,7 +296,7 @@ export async function removeProjectSecret(
     }
     const secrets = { ...current.secrets }
     delete secrets[name]
-    await writeStore(path, { ...current, secrets })
+    await writeStore(root, path, { ...current, secrets })
   })
   return path
 }

@@ -1,6 +1,8 @@
+import TR from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
 import { DesignControls } from '../TaoRuntime-src/TR-design'
 import { LayoutControls } from '../TaoRuntime-src/TR-layout'
+import { configuredStack } from './TR-navigation-test-fixtures'
 
 Describe('TR design runtime', () => {
   Test('expands nested bundles in source order and folds through ordinary layout semantics', () => {
@@ -474,6 +476,794 @@ function styleEntries(style: Record<string, unknown> | undefined): (readonly [st
 }
 
 /** One bundle setting every clearable slot, so a `none` test states only what it clears. */
+Test(
+  'identified designs publish isolated frozen snapshots to every subscriber and stop after unsubscribe',
+  async () => {
+    const declaration = (name: string, paper: string) =>
+      DesignControls.Declaration({
+        bundles: { Surface: DesignControls.Spec([['bg', 'paper']]) },
+        name,
+        tokens: { paper },
+      }, `test.design.${name}`)
+    const first = declaration('Alpha', '#ffffff')
+    const other = declaration('Beta', '#111111')
+    const revisions: number[] = []
+    const otherRevisions: number[] = []
+    const unsubscribeFirst = DesignControls.subscribe(first, () => revisions.push(DesignControls.revision(first)))
+    const unsubscribeSecond = DesignControls.subscribe(first, () => revisions.push(DesignControls.revision(first)))
+    const unsubscribeOther = DesignControls.subscribe(other, () => otherRevisions.push(DesignControls.revision(other)))
+    const refreshed = declaration('Alpha', '#eeeeee')
+    Expect(Object.isFrozen(first)).toBe(true)
+    Expect(Object.isFrozen(refreshed)).toBe(true)
+    Expect(first.tokens['paper']).toBe('#ffffff')
+    Expect(DesignControls.current(first)).toBe(refreshed)
+    Expect(DesignControls.current(other)).toBe(other)
+    Expect(revisions).toEqual([])
+    await Promise.resolve()
+    Expect(revisions).toEqual([2, 2])
+    Expect(otherRevisions).toEqual([])
+    unsubscribeFirst()
+    unsubscribeSecond()
+    unsubscribeOther()
+    declaration('Alpha', '#dddddd')
+    Expect(revisions).toEqual([2, 2])
+    const handwritten = DesignControls.Declaration({ bundles: {}, name: 'Alpha', tokens: { paper: '#000000' } })
+    Expect(DesignControls.current(handwritten)).toBe(handwritten)
+    Expect(DesignControls.revision(handwritten)).toBe(0)
+  },
+)
+
+Test('a retained app reads the latest design and resolves its bundle after a late publication', async () => {
+  const identity = 'test.design.retained'
+  const original = DesignControls.Declaration({
+    bundles: { Surface: DesignControls.Spec([['bg', 'paper']]) },
+    name: 'Retained',
+    tokens: { paper: '#ffffff' },
+  }, identity)
+  const updated = DesignControls.Declaration({
+    bundles: { Surface: DesignControls.Spec([['bg', 'paper']]) },
+    name: 'Retained',
+    tokens: { paper: '#224466' },
+  }, identity)
+  const home = TR.Navigation.View({ name: 'Design home', render: () => null })
+  const app = TR.Navigation.App({
+    id: 'test.design.retained-app',
+    name: 'Design app',
+    version: '1.0.0',
+    navigator: () => configuredStack('Design stack', home),
+    auxiliaries: () => ({}),
+    design: () => original,
+  })
+  const notifications: number[] = []
+  const unsubscribe = app.subscribeDesign(() => notifications.push(app.designSnapshot()))
+  try {
+    Expect(app.design).toBe(updated)
+    Expect(DesignControls.resolve(app.design, DesignControls.Spec([['Surface']])).style)
+      .toEqual({ backgroundColor: '#224466' })
+    Expect(app.designSnapshot()).toBe(2)
+    DesignControls.Declaration({
+      bundles: { Surface: DesignControls.Spec([['bg', 'paper']]) },
+      name: 'Retained',
+      tokens: { paper: '#335577' },
+    }, identity)
+    Expect(notifications).toEqual([])
+    await Promise.resolve()
+    Expect(notifications).toEqual([3])
+    Expect(DesignControls.resolve(app.design, DesignControls.Spec([['Surface']])).style)
+      .toEqual({ backgroundColor: '#335577' })
+  } finally {
+    unsubscribe()
+    app.dispose()
+  }
+  const withoutDesign = TR.Navigation.App({
+    id: 'test.design.no-design',
+    name: 'No design',
+    version: '1.0.0',
+    navigator: () => configuredStack('None stack', home),
+    auxiliaries: () => ({}),
+  })
+  try {
+    Expect(withoutDesign.design).toBeUndefined()
+    Expect(withoutDesign.designSnapshot()).toBe(0)
+    const stop = withoutDesign.subscribeDesign(() => notifications.push(-1))
+    stop()
+    Expect(notifications).toEqual([3])
+  } finally {
+    withoutDesign.dispose()
+  }
+})
+
+Test('design publications coalesce after a consumer finishes replacing its bundle reference', async () => {
+  const identity = 'test.design.coordinated-bundle'
+  const original = DesignControls.Declaration({
+    bundles: { title: DesignControls.Spec([['bg', 'paper']]) },
+    name: 'Coordinated',
+    tokens: { paper: '#ffffff' },
+  }, identity)
+  let consumerBundle = 'title'
+  const observed: Array<{ revision: number; style: unknown }> = []
+  const unsubscribe = DesignControls.subscribe(original, () => {
+    observed.push({
+      revision: DesignControls.revision(original),
+      style: DesignControls.resolve(DesignControls.current(original), DesignControls.Spec([[consumerBundle]])).style,
+    })
+  })
+  try {
+    const replacement = DesignControls.Declaration({
+      bundles: { headline: DesignControls.Spec([['bg', 'paper']]) },
+      name: 'Coordinated',
+      tokens: { paper: '#224466' },
+    }, identity)
+    consumerBundle = 'headline'
+    DesignControls.Declaration({
+      bundles: { headline: DesignControls.Spec([['bg', 'paper']]) },
+      name: 'Coordinated',
+      tokens: { paper: '#335577' },
+    }, identity)
+    Expect(DesignControls.current(original)).not.toBe(replacement)
+    Expect(DesignControls.revision(original)).toBe(3)
+    Expect(observed).toEqual([])
+    await Promise.resolve()
+    Expect(observed).toEqual([{ revision: 3, style: { backgroundColor: '#335577' } }])
+  } finally {
+    unsubscribe()
+  }
+})
+
+Test('a deferred design publication skips canceled subscribers and subscribers added afterward', async () => {
+  const identity = 'test.design.deferred-membership'
+  const original = DesignControls.Declaration({ bundles: {}, name: 'Membership', tokens: {} }, identity)
+  const observed: string[] = []
+  const unsubscribeCanceled = DesignControls.subscribe(original, () => observed.push('canceled'))
+  const unsubscribeRetained = DesignControls.subscribe(original, () => observed.push('retained'))
+  DesignControls.Declaration({ bundles: {}, name: 'Membership', tokens: {} }, identity)
+  unsubscribeCanceled()
+  const unsubscribeLate = DesignControls.subscribe(original, () => observed.push('late'))
+  try {
+    await Promise.resolve()
+    Expect(observed).toEqual(['retained'])
+    DesignControls.Declaration({ bundles: {}, name: 'Membership', tokens: {} }, identity)
+    await Promise.resolve()
+    Expect(observed).toEqual(['retained', 'retained', 'late'])
+  } finally {
+    unsubscribeRetained()
+    unsubscribeLate()
+  }
+})
+
+Test('an old render site keeps its last resolved design through a coordinated bundle rename', () => {
+  const designPath = '/project/Theme.tao'
+  const consumerPath = '/project/Counter.tao'
+  const identity = 'test.design.source-cohorts'
+  const publish = (epoch: number, bundle: string, paper: string, consumerEpoch: number) =>
+    DesignControls.Declaration(
+      {
+        bundles: { [bundle]: DesignControls.Spec([['bg', 'paper']]) },
+        name: 'Theme',
+        tokens: { paper },
+      },
+      identity,
+      { epoch, path: designPath, sourceEpochs: { [consumerPath]: consumerEpoch } },
+    )
+  const first = publish(1, 'title', '#111111', 1)
+  const oldSource = {
+    cohort: {},
+    kind: 'style' as const,
+    path: consumerPath,
+    epoch: 1,
+    designEpochs: { [designPath]: 1 },
+  }
+  const oldSpec = () => DesignControls.Spec([['title']], oldSource)
+  Expect(DesignControls.resolve(first, oldSpec()).style).toEqual({ backgroundColor: '#111111' })
+  publish(2, 'title', '#224466', 1)
+  Expect(DesignControls.resolve(first, oldSpec()).style).toEqual({ backgroundColor: '#224466' })
+  publish(3, 'headline', '#335577', 3)
+  Expect(DesignControls.resolve(first, oldSpec()).style).toEqual({ backgroundColor: '#224466' })
+  const currentSource = {
+    cohort: {},
+    kind: 'style' as const,
+    path: consumerPath,
+    epoch: 3,
+    designEpochs: { [designPath]: 3 },
+  }
+  Expect(DesignControls.resolve(first, DesignControls.Spec([['headline']], currentSource)).style)
+    .toEqual({ backgroundColor: '#335577' })
+  // A new evaluation of the same file must not evict a still-mounted old evaluation.
+  Expect(DesignControls.resolve(first, oldSpec()).style).toEqual({ backgroundColor: '#224466' })
+  Expect(() => DesignControls.resolve(first, DesignControls.Spec([['title']], currentSource)))
+    .toThrow("Design 'Theme' has no bundle 'title'.")
+})
+
+Test('an intermediate design publication preserves the old consumer until its replacement evaluates', () => {
+  const designPath = '/project/IntermediateTheme.tao'
+  const consumerPath = '/project/IntermediateView.tao'
+  const identity = 'test.design.intermediate-cohort'
+  const publish = (epoch: number, bundle: string, paper: string, consumerEpoch: number) =>
+    DesignControls.Declaration(
+      {
+        bundles: { [bundle]: DesignControls.Spec([['bg', 'paper']]) },
+        name: 'IntermediateTheme',
+        tokens: { paper },
+      },
+      identity,
+      { epoch, path: designPath, sourceEpochs: { [consumerPath]: consumerEpoch } },
+    )
+  const first = publish(1, 'title', '#111111', 1)
+  const source = { designEpochs: { [designPath]: 1 }, epoch: 1, path: consumerPath }
+  const cohort = DesignControls.Cohort(source)
+  const unvisitedCohort = DesignControls.Cohort(source)
+  const oldSpec = DesignControls.Spec([['title']], { ...source, cohort, kind: 'style' })
+  Expect(DesignControls.resolve(first, oldSpec).style).toEqual({ backgroundColor: '#111111' })
+  publish(2, 'title', '#224466', 1)
+  Expect(DesignControls.resolve(first, oldSpec).style).toEqual({ backgroundColor: '#224466' })
+  // The design module publishes before the importing consumer module has re-evaluated.
+  publish(3, 'headline', '#335577', 1)
+  Expect(DesignControls.resolve(first, oldSpec).style).toEqual({ backgroundColor: '#224466' })
+  Expect(
+    DesignControls.resolve(
+      first,
+      DesignControls.Spec([['title']], {
+        ...source,
+        cohort: unvisitedCohort,
+        kind: 'style',
+      }),
+    ).style,
+  ).toEqual({ backgroundColor: '#224466' })
+  const currentSource = { designEpochs: { [designPath]: 3 }, epoch: 3, path: consumerPath }
+  const currentSpec = DesignControls.Spec([['headline']], {
+    ...currentSource,
+    cohort: DesignControls.Cohort(currentSource),
+    kind: 'style',
+  })
+  Expect(DesignControls.resolve(first, currentSpec).style).toEqual({ backgroundColor: '#335577' })
+  Expect(() =>
+    DesignControls.resolve(
+      first,
+      DesignControls.Spec([['missing']], {
+        ...currentSource,
+        cohort: DesignControls.Cohort(currentSource),
+        kind: 'style',
+      }),
+    )
+  ).toThrow("Design 'IntermediateTheme' has no bundle 'missing'.")
+})
+
+Test('one compatible render site cannot replace the fallback needed by another in its cohort', () => {
+  const designPath = '/project/MixedTheme.tao'
+  const consumerPath = '/project/MixedView.tao'
+  const identity = 'test.design.mixed-cohort'
+  const publish = (epoch: number, includeOldNames: boolean, consumerEpoch: number) =>
+    DesignControls.Declaration(
+      {
+        bundles: {
+          ...(includeOldNames ? { title: DesignControls.Spec([['fg', 'ink']]) } : {}),
+          surface: DesignControls.Spec([['bg', 'paper']]),
+        },
+        name: 'MixedTheme',
+        sizes: includeOldNames
+          ? { spacing: { left: { kind: 'dimension' as const, unit: 'px' as const, value: epoch } } }
+          : {},
+        tokens: {
+          ...(includeOldNames ? { ink: `#${epoch}${epoch}${epoch}${epoch}${epoch}${epoch}` } : {}),
+          paper: `#${epoch}${epoch}${epoch}${epoch}${epoch}${epoch}`,
+        },
+      },
+      identity,
+      { epoch, path: designPath, sourceEpochs: { [consumerPath]: consumerEpoch } },
+    )
+  const first = publish(1, true, 1)
+  const source = { designEpochs: { [designPath]: 1 }, epoch: 1, path: consumerPath }
+  const cohort = DesignControls.Cohort(source)
+  const spec = (entries: readonly [string, ...Array<string | number>][]) =>
+    DesignControls.Spec(entries, { ...source, cohort, kind: 'style' })
+  publish(2, true, 1)
+  Expect(DesignControls.resolve(first, spec([['title'], ['gap', 'spacing']])).style)
+    .toEqual({ color: '#222222' })
+  publish(3, false, 1)
+  Expect(DesignControls.resolve(first, spec([['surface']])).style).toEqual({ backgroundColor: '#333333' })
+  Expect(DesignControls.resolve(first, spec([['title']])).style).toEqual({ color: '#222222' })
+  Expect(DesignControls.resolve(first, spec([['title'], ['surface']])).style)
+    .toEqual({ color: '#222222', backgroundColor: '#222222' })
+  Expect(DesignControls.resolve(first, spec([['fg', 'ink']])).style).toEqual({ color: '#222222' })
+  Expect(DesignControls.resolve(first, spec([['gap', 'spacing']])).layout?.entries).toEqual([['gap', 2]])
+  Expect(DesignControls.resolve(first, spec([['fg', 'ink'], ['gap', 'spacing']])).layout?.entries)
+    .toEqual([['gap', 2]])
+  const currentSource = { designEpochs: { [designPath]: 3 }, epoch: 3, path: consumerPath }
+  Expect(() =>
+    DesignControls.resolve(
+      first,
+      DesignControls.Spec([['title']], {
+        ...currentSource,
+        cohort: DesignControls.Cohort(currentSource),
+        kind: 'style',
+      }),
+    )
+  ).toThrow("Design 'MixedTheme' has no bundle 'title'.")
+})
+
+Test('repeated compatible edits retain one candidate for each lookup shape', () => {
+  const designPath = '/project/LongTheme.tao'
+  const consumerPath = '/project/LongView.tao'
+  const identity = 'test.design.long-cohort'
+  const source = { designEpochs: { [designPath]: 1 }, epoch: 1, path: consumerPath }
+  const cohort = DesignControls.Cohort(source)
+  const publish = (epoch: number, bundle: string) =>
+    DesignControls.Declaration(
+      {
+        bundles: { [bundle]: DesignControls.Spec([['bg', 'paper']]) },
+        name: 'LongTheme',
+        tokens: { paper: `#${String(epoch).padStart(6, '0')}` },
+      },
+      identity,
+      { epoch, path: designPath, sourceEpochs: { [consumerPath]: 1 } },
+    )
+  const first = publish(1, 'title')
+  for (let epoch = 2; epoch <= 80; epoch++) {
+    publish(epoch, 'title')
+  }
+  Expect(DesignControls.forSourceCandidates(first, { ...source, cohort, kind: 'style' })).toHaveLength(1)
+  publish(81, 'headline')
+  Expect(DesignControls.forSourceCandidates(first, { ...source, cohort, kind: 'style' })).toHaveLength(2)
+  Expect(
+    DesignControls.resolve(
+      first,
+      DesignControls.Spec([['title']], {
+        ...source,
+        cohort,
+        kind: 'style',
+      }),
+    ).style,
+  ).toEqual({ backgroundColor: '#000080' })
+})
+
+Test('additive bundle and token edits keep one dominating candidate for an old cohort', () => {
+  const designPath = '/project/AdditiveTheme.tao'
+  const consumerPath = '/project/AdditiveView.tao'
+  const identity = 'test.design.additive-cohort'
+  const source = { designEpochs: { [designPath]: 1 }, epoch: 1, path: consumerPath }
+  const cohort = DesignControls.Cohort(source)
+  const publish = (epoch: number) =>
+    DesignControls.Declaration(
+      {
+        bundles: {
+          title: DesignControls.Spec([['bg', 'paper']]),
+          surface: DesignControls.Spec([['fg', 'paper']]),
+          ...Object.fromEntries(Array.from({ length: epoch - 1 }, (_, index) => [
+            `extra${index + 1}`,
+            DesignControls.Spec([['bg', `token${index + 1}`]]),
+          ])),
+        },
+        name: 'AdditiveTheme',
+        tokens: {
+          paper: `#${String(epoch).padStart(6, '0')}`,
+          ...Object.fromEntries(Array.from({ length: epoch - 1 }, (_, index) => [
+            `token${index + 1}`,
+            '#ffffff',
+          ])),
+        },
+      },
+      identity,
+      { epoch, path: designPath, sourceEpochs: { [consumerPath]: 1 } },
+    )
+  const first = publish(1)
+  for (let epoch = 2; epoch <= 80; epoch++) {
+    publish(epoch)
+  }
+  Expect(DesignControls.forSourceCandidates(first, { ...source, cohort, kind: 'style' })).toHaveLength(1)
+  Expect(
+    DesignControls.resolve(
+      first,
+      DesignControls.Spec([['title'], ['surface']], {
+        ...source,
+        cohort,
+        kind: 'style',
+      }),
+    ).style,
+  ).toEqual({ backgroundColor: '#000080', color: '#000080' })
+})
+
+Test('changed nested color and size references preserve the previous compatible shape', () => {
+  const designPath = '/project/ReferenceTheme.tao'
+  const consumerPath = '/project/ReferenceView.tao'
+  const identity = 'test.design.reference-shape'
+  const source = { designEpochs: { [designPath]: 1 }, epoch: 1, path: consumerPath }
+  const cohort = DesignControls.Cohort(source)
+  const publish = (epoch: number, reference: string) =>
+    DesignControls.Declaration(
+      {
+        bundles: {},
+        colors: {
+          ink: `#${epoch}${epoch}${epoch}${epoch}${epoch}${epoch}`,
+          paper: { kind: 'reference', path: reference },
+        },
+        name: 'ReferenceTheme',
+        sizes: {
+          base: { left: { kind: 'dimension', unit: 'px', value: epoch } },
+          spacing: { left: { kind: 'reference', path: reference === 'ink' ? 'base' : 'gone' } },
+        },
+        tokens: {},
+      },
+      identity,
+      { epoch, path: designPath, sourceEpochs: { [consumerPath]: 1 } },
+    )
+  const first = publish(1, 'ink')
+  publish(2, 'ink')
+  publish(3, 'gone')
+  const oldSpec = (entry: readonly [string, string]) =>
+    DesignControls.Spec([entry], {
+      ...source,
+      cohort,
+      kind: 'style',
+    })
+  Expect(DesignControls.forSourceCandidates(first, { ...source, cohort, kind: 'style' })).toHaveLength(2)
+  Expect(DesignControls.resolve(first, oldSpec(['bg', 'paper'])).style)
+    .toEqual({ backgroundColor: '#222222' })
+  Expect(DesignControls.resolve(first, oldSpec(['gap', 'spacing'])).layout?.entries)
+    .toEqual([['gap', 2]])
+  const currentSource = { designEpochs: { [designPath]: 3 }, epoch: 3, path: consumerPath }
+  Expect(() =>
+    DesignControls.resolve(
+      first,
+      DesignControls.Spec([['bg', 'paper']], {
+        ...currentSource,
+        cohort: DesignControls.Cohort(currentSource),
+        kind: 'style',
+      }),
+    )
+  ).toThrow("Design 'ReferenceTheme' has no token 'paper'.")
+})
+
+Test('an unvisited old source sees its last compatible design after a coordinated rename', () => {
+  const designPath = '/project/LazyTheme.tao'
+  const consumerPath = '/project/LazyView.tao'
+  const identity = 'test.design.lazy-source-cohort'
+  const source = { designEpochs: { [designPath]: 1 }, epoch: 1, path: consumerPath }
+  // A generated module creates its cohort before the imported design evaluates.
+  const cohort = DesignControls.Cohort(source)
+  const publish = (epoch: number, bundle: string, paper: string, consumerEpoch: number) =>
+    DesignControls.Declaration(
+      {
+        bundles: { [bundle]: DesignControls.Spec([['bg', 'paper']]) },
+        name: 'LazyTheme',
+        tokens: { paper },
+      },
+      identity,
+      { epoch, path: designPath, sourceEpochs: { [consumerPath]: consumerEpoch } },
+    )
+  const first = publish(1, 'title', '#111111', 1)
+  publish(2, 'title', '#224466', 1)
+  publish(3, 'headline', '#335577', 3)
+  const oldSpec = DesignControls.Spec([['title']], { ...source, cohort, kind: 'style' })
+  // No resolve happened before the rename; the module cohort still captured D2.
+  Expect(DesignControls.resolve(DesignControls.current(first), oldSpec).style)
+    .toEqual({ backgroundColor: '#224466' })
+  const currentSource = { designEpochs: { [designPath]: 3 }, epoch: 3, path: consumerPath }
+  const currentCohort = DesignControls.Cohort(currentSource)
+  Expect(
+    DesignControls.resolve(
+      DesignControls.current(first),
+      DesignControls.Spec([['headline']], {
+        ...currentSource,
+        cohort: currentCohort,
+        kind: 'style',
+      }),
+    ).style,
+  ).toEqual({ backgroundColor: '#335577' })
+})
+
+Test('an unvisited cohort survives a rapid rename and revert while a consumer ahead waits', async () => {
+  const designPath = '/project/LazyRevertTheme.tao'
+  const consumerPath = '/project/LazyRevertView.tao'
+  const identity = 'test.design.lazy-revert-cohort'
+  const oldSource = { designEpochs: { [designPath]: 1 }, epoch: 1, path: consumerPath }
+  const oldCohort = DesignControls.Cohort(oldSource)
+  const publish = (epoch: number, bundle: string, paper: string, consumerEpoch: number) =>
+    DesignControls.Declaration(
+      {
+        bundles: { [bundle]: DesignControls.Spec([['bg', 'paper']]) },
+        name: 'LazyRevertTheme',
+        tokens: { paper },
+      },
+      identity,
+      { epoch, path: designPath, sourceEpochs: { [consumerPath]: consumerEpoch } },
+    )
+  const first = publish(1, 'title', '#111111', 1)
+  const futureSource = { designEpochs: { [designPath]: 4 }, epoch: 4, path: consumerPath }
+  const futureCohort = DesignControls.Cohort(futureSource)
+  const futureSpec = DesignControls.Spec([['title']], {
+    ...futureSource,
+    cohort: futureCohort,
+    kind: 'style',
+  })
+  let pending: unknown
+  try {
+    DesignControls.resolve(DesignControls.current(first), futureSpec)
+  } catch (error) {
+    pending = error
+  }
+  Expect(pending instanceof Promise).toBe(true)
+  publish(2, 'title', '#224466', 1)
+  publish(3, 'headline', '#335577', 3)
+  publish(4, 'title', '#445566', 4)
+  await pending as Promise<void>
+  Expect(
+    DesignControls.resolve(
+      DesignControls.current(first),
+      DesignControls.Spec([['title']], {
+        ...oldSource,
+        cohort: oldCohort,
+        kind: 'style',
+      }),
+    ).style,
+  ).toEqual({ backgroundColor: '#224466' })
+  Expect(DesignControls.resolve(DesignControls.current(first), futureSpec).style)
+    .toEqual({ backgroundColor: '#445566' })
+})
+
+Test('an unseen superseded cohort waits for its matching declaration without replacing the latest design', async () => {
+  const designPath = '/project/SupersededTheme.tao'
+  const consumerPath = '/project/SupersededView.tao'
+  const identity = 'test.design.superseded-unseen-cohort'
+  const publish = (epoch: number, bundle: string, paper: string, consumerEpoch: number) =>
+    DesignControls.Declaration(
+      {
+        bundles: { [bundle]: DesignControls.Spec([['bg', 'paper']]) },
+        name: 'SupersededTheme',
+        tokens: { paper },
+      },
+      identity,
+      { epoch, path: designPath, sourceEpochs: { [consumerPath]: consumerEpoch } },
+    )
+  const first = publish(1, 'title', '#111111', 1)
+  const middleSource = { designEpochs: { [designPath]: 2 }, epoch: 2, path: consumerPath }
+  const middleCohort = DesignControls.Cohort(middleSource)
+  const middleSpec = DesignControls.Spec([['title']], {
+    ...middleSource,
+    cohort: middleCohort,
+    kind: 'style',
+  })
+  publish(3, 'headline', '#335577', 3)
+  const currentSource = { designEpochs: { [designPath]: 3 }, epoch: 3, path: consumerPath }
+  const currentCohort = DesignControls.Cohort(currentSource)
+  const currentSpec = DesignControls.Spec([['headline']], {
+    ...currentSource,
+    cohort: currentCohort,
+    kind: 'style',
+  })
+  Expect(DesignControls.resolve(DesignControls.current(first), currentSpec).style)
+    .toEqual({ backgroundColor: '#335577' })
+  let pending: unknown
+  try {
+    DesignControls.resolve(DesignControls.current(first), middleSpec)
+  } catch (error) {
+    pending = error
+  }
+  Expect(pending instanceof Promise).toBe(true)
+  publish(2, 'title', '#224466', 2)
+  await pending as Promise<void>
+  Expect(DesignControls.resolve(DesignControls.current(first), middleSpec).style)
+    .toEqual({ backgroundColor: '#224466' })
+  Expect(DesignControls.resolve(DesignControls.current(first), currentSpec).style)
+    .toEqual({ backgroundColor: '#335577' })
+  Expect(() =>
+    DesignControls.resolve(
+      DesignControls.current(first),
+      DesignControls.Spec([['title']], {
+        ...currentSource,
+        cohort: currentCohort,
+        kind: 'style',
+      }),
+    )
+  ).toThrow("Design 'SupersededTheme' has no bundle 'title'.")
+})
+
+Test('a deleted source path keeps an already mounted design cohort until that render disappears', () => {
+  const designPath = '/project/DeletedTheme.tao'
+  const consumerPath = '/project/DeletedView.tao'
+  const identity = 'test.design.deleted-consumer'
+  const first = DesignControls.Declaration(
+    {
+      bundles: { title: DesignControls.Spec([['bg', 'paper']]) },
+      name: 'DeletedTheme',
+      tokens: { paper: '#111111' },
+    },
+    identity,
+    { epoch: 1, path: designPath, sourceEpochs: { [consumerPath]: 1 } },
+  )
+  const source = { cohort: {}, designEpochs: { [designPath]: 1 }, epoch: 1, kind: 'style' as const, path: consumerPath }
+  const spec = DesignControls.Spec([['title']], source)
+  Expect(DesignControls.resolve(first, spec).style).toEqual({ backgroundColor: '#111111' })
+  DesignControls.Declaration(
+    {
+      bundles: { title: DesignControls.Spec([['bg', 'paper']]) },
+      name: 'DeletedTheme',
+      tokens: { paper: '#224466' },
+    },
+    identity,
+    { epoch: 2, path: designPath, sourceEpochs: { [consumerPath]: 1 } },
+  )
+  Expect(DesignControls.resolve(first, spec).style).toEqual({ backgroundColor: '#224466' })
+  DesignControls.Declaration(
+    {
+      bundles: { headline: DesignControls.Spec([['bg', 'paper']]) },
+      name: 'DeletedTheme',
+      tokens: { paper: '#335577' },
+    },
+    identity,
+    { epoch: 3, path: designPath, sourceEpochs: {} },
+  )
+  Expect(DesignControls.resolve(first, spec).style).toEqual({ backgroundColor: '#224466' })
+})
+
+Test('older source metadata without a cohort can still resolve its original declaration', () => {
+  const designPath = '/project/LegacyTheme.tao'
+  const consumerPath = '/project/LegacyView.tao'
+  const identity = 'test.design.legacy-source'
+  const first = DesignControls.Declaration(
+    {
+      bundles: { title: DesignControls.Spec([['bg', 'paper']]) },
+      name: 'LegacyTheme',
+      tokens: { paper: '#111111' },
+    },
+    identity,
+    { epoch: 1, path: designPath, sourceEpochs: { [consumerPath]: 1 } },
+  )
+  DesignControls.Declaration(
+    {
+      bundles: { headline: DesignControls.Spec([['bg', 'paper']]) },
+      name: 'LegacyTheme',
+      tokens: { paper: '#224466' },
+    },
+    identity,
+    { epoch: 2, path: designPath, sourceEpochs: { [consumerPath]: 2 } },
+  )
+  Expect(
+    DesignControls.resolve(
+      first,
+      DesignControls.Spec([['title']], {
+        designEpochs: { [designPath]: 1 },
+        epoch: 1,
+        kind: 'style',
+        path: consumerPath,
+      }),
+    ).style,
+  ).toEqual({ backgroundColor: '#111111' })
+  Expect(
+    DesignControls.resolve(
+      first,
+      DesignControls.Spec([['headline']], {
+        designEpochs: { [designPath]: 2 },
+        epoch: 2,
+        kind: 'style',
+        path: consumerPath,
+      }),
+    ).style,
+  ).toEqual({ backgroundColor: '#224466' })
+})
+
+Test('a consumer ahead of its design suspends through superseded publications', async () => {
+  const designPath = '/project/AheadTheme.tao'
+  const consumerPath = '/project/AheadView.tao'
+  const identity = 'test.design.consumer-ahead'
+  const publish = (epoch: number, paper: string) =>
+    DesignControls.Declaration(
+      {
+        bundles: { headline: DesignControls.Spec([['bg', 'paper']]) },
+        name: 'AheadTheme',
+        tokens: { paper },
+      },
+      identity,
+      { epoch, path: designPath, sourceEpochs: { [consumerPath]: 3 } },
+    )
+  const first = publish(1, '#111111')
+  const spec = DesignControls.Spec([['headline']], {
+    cohort: {},
+    designEpochs: { [designPath]: 3 },
+    epoch: 3,
+    kind: 'style',
+    path: consumerPath,
+  })
+  let pending: unknown
+  try {
+    DesignControls.resolve(first, spec)
+  } catch (error) {
+    pending = error
+  }
+  Expect(pending instanceof Promise).toBe(true)
+  let available = false
+  void (pending as Promise<void>).then(() => {
+    available = true
+  })
+  publish(2, '#224466')
+  await Promise.resolve()
+  Expect(available).toBe(false)
+  publish(3, '#335577')
+  await pending as Promise<void>
+  Expect(available).toBe(true)
+  Expect(DesignControls.resolve(first, spec).style).toEqual({ backgroundColor: '#335577' })
+})
+
+Test('render clauses, declaration headers, and element defaults select their own design cohorts', () => {
+  const designPath = '/project/LayerTheme.tao'
+  const oldPath = '/project/OldView.tao'
+  const newPath = '/project/NewView.tao'
+  const identity = 'test.design.layer-cohorts'
+  const publish = (epoch: number, oldColor: string, includeOld: boolean) =>
+    DesignControls.Declaration(
+      {
+        bundles: {
+          ...(includeOld
+            ? {
+              button: DesignControls.Spec([['fg', 'ink']]),
+              header: DesignControls.Spec([['size', 18]]),
+            }
+            : {}),
+          headline: DesignControls.Spec([['bg', 'paper']]),
+        },
+        name: 'LayerTheme',
+        tokens: { ink: oldColor, paper: '#335577' },
+      },
+      identity,
+      { epoch, path: designPath, sourceEpochs: { [oldPath]: epoch < 3 ? 1 : 3, [newPath]: 3 } },
+    )
+  const first = publish(1, '#111111', true)
+  const oldSource = { cohort: {}, designEpochs: { [designPath]: 1 }, epoch: 1, kind: 'style' as const, path: oldPath }
+  const header = DesignControls.Spec([['header']], oldSource)
+  DesignControls.resolve(first, undefined, 'button', 'light', undefined, header, oldSource)
+  publish(2, '#224466', true)
+  DesignControls.resolve(first, undefined, 'button', 'light', undefined, header, oldSource)
+  publish(3, '#000000', false)
+  const newSource = { cohort: {}, designEpochs: { [designPath]: 3 }, epoch: 3, kind: 'style' as const, path: newPath }
+  const resolved = DesignControls.resolve(
+    first,
+    DesignControls.Spec([['headline']], newSource),
+    'button',
+    'light',
+    undefined,
+    header,
+    oldSource,
+  )
+  Expect(resolved.style).toEqual({ color: '#224466', fontSize: 18, backgroundColor: '#335577' })
+})
+
+Test('a rapid bundle rename and revert keeps the old consumer on its last valid design', () => {
+  const designPath = '/project/RevertTheme.tao'
+  const consumerPath = '/project/RevertView.tao'
+  const identity = 'test.design.revert-cohort'
+  const publish = (epoch: number, bundle: string, color: string, consumerEpoch: number) =>
+    DesignControls.Declaration(
+      {
+        bundles: { [bundle]: DesignControls.Spec([['bg', 'paper']]) },
+        name: 'RevertTheme',
+        tokens: { paper: color },
+      },
+      identity,
+      { epoch, path: designPath, sourceEpochs: { [consumerPath]: consumerEpoch } },
+    )
+  const first = publish(1, 'title', '#111111', 1)
+  const oldSpec = DesignControls.Spec([['title']], {
+    cohort: {},
+    designEpochs: { [designPath]: 1 },
+    epoch: 1,
+    kind: 'style',
+    path: consumerPath,
+  })
+  DesignControls.resolve(first, oldSpec)
+  publish(2, 'title', '#224466', 1)
+  DesignControls.resolve(first, oldSpec)
+  publish(3, 'headline', '#335577', 3)
+  publish(4, 'title', '#445566', 4)
+  Expect(DesignControls.resolve(first, oldSpec).style).toEqual({ backgroundColor: '#224466' })
+  const revertedSpec = DesignControls.Spec([['title']], {
+    cohort: {},
+    designEpochs: { [designPath]: 4 },
+    epoch: 4,
+    kind: 'style',
+    path: consumerPath,
+  })
+  Expect(DesignControls.resolve(first, revertedSpec).style).toEqual({ backgroundColor: '#445566' })
+})
+
 function clearingDesign(): ReturnType<typeof DesignControls.Declaration> {
   return DesignControls.Declaration({
     name: 'Clearing',

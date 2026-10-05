@@ -135,10 +135,10 @@ export class StudioFeedController {
     }
   }
 
-  examples(manifest?: StudioPreviewManifestV2, activeScenarioId?: string): StudioFeedExampleValues {
+  examples(manifest?: StudioPreviewManifestV2, focusedScenarioId?: string): StudioFeedExampleValues {
     return this.#state === undefined
       ? {}
-      : StudioFeedSamples.project(this.#state.catalog, this.#inventory, this.#state, manifest, activeScenarioId)
+      : StudioFeedSamples.project(this.#state.catalog, this.#inventory, this.#state, manifest, focusedScenarioId)
   }
 
   liveChanged(): void {

@@ -1,7 +1,8 @@
-import { Errors, FS, HCI, Repo, Time } from '@shared'
+import { Errors, FS, HCI, ProjectLocal, Repo, Time } from '@shared'
 import { Expect, mkTestDir, Test } from '@shared/test'
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
 import { startStudioSmokeLaunch } from '../studio-tooling-src/StudioSmokeLaunch'
+import { activateSmokePreviews } from '../studio-tooling-src/StudioSmokePreviews'
 
 /**
  * Proves, through Studio's own browser UI rather than the unit-tested runtime, the four behaviors
@@ -30,7 +31,7 @@ Test(
         FS.resolvePath('packages/ides/studio-tooling/studio-smoke/fixtures/studio-network-simulation', repositoryRoot),
         projectRoot,
       )
-      await FS.remove(FS.resolvePath('.tao/typescript/outputs.json', projectRoot))
+      await FS.remove(ProjectLocal.cacheResolve('typescript/outputs.json', projectRoot))
       await FS.remove(FS.resolvePath('.tao-ts', projectRoot))
       studio = await startStudioSmokeLaunch({
         appName: 'NetworkSimApp',
@@ -40,6 +41,7 @@ Test(
       browser = await StudioCdp.launchChrome({ artifactRoot: studio.readiness.artifactRoot })
       await browser.setViewport(1_440, 900)
       await browser.goto(studio.readiness.sessionUrl)
+      await activateSmokePreviews(browser)
       await browser.waitFor(`document.querySelectorAll('.studio-preview-cell').length === 2`, { timeoutMs: 30_000 })
       await browser.click('[data-preset="design"]')
       await browser.waitFor(
@@ -122,8 +124,7 @@ Test(
       // (d) Cross-cell isolation: cellA offline and cellB online show different states at the same
       // time, and a write performed in cellB does not appear in cellA once cellA comes back online.
       // Both reads wait on their own settled state before the assertion reads them: cellB is idle
-      // Studio's own business (the matrix suspends an off-margin cell's iframe to `about:blank` and
-      // restores it on re-intersection — see `observePreviewVisibility` — so a cell already loaded at
+      // Studio's own business (active cells retain their iframe even off-screen, so a cell loaded at
       // baseline is not guaranteed to still be mounted here), never a fixed sleep standing in for it.
       step = 'isolation'
       await applyCellNetwork(browser, 'cellA', { latencyMs: 0, outcome: 'offline' })
@@ -145,7 +146,7 @@ Test(
       )
 
       step = 'reconnect-cellA'
-      await activateCell(browser, 'cellA')
+      await focusCell(browser, 'cellA')
       await waitForEnvironmentPanel(browser, 0)
       await applyCellNetwork(browser, 'cellA', { latencyMs: 0, outcome: 'normal' })
       const reconnectedSrcA = await cellIframeSrc(browser, 'cellA')
@@ -172,10 +173,8 @@ Test(
 
 /**
  * On any failure, prints what a timeout or a single text read cannot: each cell's environment as
- * Studio's own manifest reports it, whether a cell's iframe is currently suspended to `about:blank`
- * (the matrix blanks a cell scrolled outside its canvas margin and restores it later — see
- * `observePreviewVisibility` in `StudioPreviewConnection.ts`), each cell's raw preview text when it
- * is not suspended, and the browser's own console/exception events.
+ * Studio's own manifest reports it, each cell's iframe URL and raw preview text, and the browser's
+ * own console/exception events.
  */
 async function captureFailureDiagnostics(
   browser: StudioCdp,
@@ -194,15 +193,15 @@ async function captureFailureDiagnostics(
   }
   for (const label of ['cellA', 'cellB'] as const) {
     try {
-      const state = await browser.evaluate<{ src: string; suspended: boolean } | null>(`(() => {
+      const state = await browser.evaluate<{ src: string; blank: boolean } | null>(`(() => {
         const frame = ${cellFrameExpr(label)}
         const iframe = frame?.querySelector('.studio-preview-cell-viewport iframe')
         return iframe instanceof HTMLIFrameElement
-          ? { src: iframe.src, suspended: iframe.src === 'about:blank' }
+          ? { src: iframe.src, blank: iframe.src === 'about:blank' }
           : null
       })()`)
       HCI.writeErrorLine(`${label} iframe: ${JSON.stringify(state)}`)
-      if (state !== null && !state.suspended) {
+      if (state !== null && !state.blank) {
         const text = await browser.evaluateInFrame<string>(state.src, `document.body?.textContent ?? ''`).catch(
           error => `<read failed: ${Errors.messageOf(error)}>`,
         )
@@ -218,7 +217,7 @@ async function captureFailureDiagnostics(
 
 function cellFrameExpr(label: string): string {
   return `[...document.querySelectorAll('.studio-preview-cell')].find(frame =>
-    frame.querySelector('.studio-preview-cell-label')?.childNodes?.[0]?.textContent === ${JSON.stringify(label)})`
+    frame.dataset.taoReviewLabel === ${JSON.stringify(label)})`
 }
 
 async function cellIframeSrc(browser: StudioCdp, label: string): Promise<string> {
@@ -233,18 +232,19 @@ async function cellIframeSrc(browser: StudioCdp, label: string): Promise<string>
   return src
 }
 
-async function activateCell(browser: StudioCdp, label: string): Promise<void> {
+async function focusCell(browser: StudioCdp, label: string): Promise<void> {
   const point = await browser.evaluate<{ x: number; y: number }>(`(() => {
     const frame = ${cellFrameExpr(label)}
-    const header = frame?.querySelector('.studio-preview-cell-label')
-    if (!(header instanceof HTMLElement)) throw new Error('Missing Studio preview cell header for ' + ${
+    const name = frame?.querySelector('.studio-preview-cell-label > span:not(.studio-preview-cell-details)')
+    if (!(name instanceof HTMLElement)) throw new Error('Missing Studio preview cell name for ' + ${
     JSON.stringify(label)
   })
-    header.scrollIntoView({ block: 'center', inline: 'center' })
-    const rect = header.getBoundingClientRect()
-    return { x: rect.left + Math.min(20, rect.width / 2), y: rect.top + rect.height / 2 }
+    name.scrollIntoView({ block: 'center', inline: 'center' })
+    const rect = name.getBoundingClientRect()
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
   })()`)
   await browser.clickAt(point)
+  await browser.waitFor(`(${cellFrameExpr(label)})?.getAttribute('aria-current') === 'true'`)
 }
 
 /**
@@ -265,7 +265,7 @@ async function replaceFieldValue(browser: StudioCdp, selector: string, value: st
   await browser.insertText(value)
 }
 
-/** Waits until the single active-cell Network control reflects a known latency, confirming the panel is ready. */
+/** Waits until the single focused-cell Network control reflects a known latency, confirming the panel is ready. */
 async function waitForEnvironmentPanel(browser: StudioCdp, expectedLatencyMs: number): Promise<void> {
   await browser.waitFor(
     `document.querySelector('[data-studio-section="Environment"] input[aria-label="Latency ms"]')?.value === ${
@@ -283,12 +283,12 @@ type CellNetworkDraft = Readonly<{
 }>
 
 /**
- * Edits the currently active cell's Network control (the one place Studio exposes latency, offline,
- * and declared-failure simulation, per `Docs/Spec/Tao Studio.md`) and applies it. `cellA` is the
- * default active cell, so this file never needs to activate it explicitly except once, defensively,
- * after activating `cellB` for a write.
+ * Edits the currently focused cell's Network control (the one place Studio exposes latency, offline,
+ * and declared-failure simulation, per `Docs/Spec/Tao Studio.md`) and applies it. Focus the named
+ * cell explicitly because activating the previews can leave another cell focused.
  */
 async function applyCellNetwork(browser: StudioCdp, label: string, network: CellNetworkDraft): Promise<void> {
+  await focusCell(browser, label)
   const previousSrc = await cellIframeSrc(browser, label)
   const outcomeIndex = { error: 3, normal: 1, offline: 2 }[network.outcome]
   await browser.click(

@@ -32,17 +32,17 @@ Describe('project TypeScript configuration', () => {
       const first = await ensureProjectTypeScriptConfig(root)
       Expect(first.diagnostics).toEqual([])
       Expect(first.changedOutputPaths).toEqual([first.baseConfigPath, first.rootConfigPath])
-      Expect(await FS.readJson(first.rootConfigPath)).toEqual({ extends: './.tao/typescript/tsconfig.json' })
+      Expect(await FS.readJson(first.rootConfigPath)).toEqual({ extends: './.tao/cache/typescript/tsconfig.json' })
       const base = await FS.readJson<{ compilerOptions: { rootDirs: string[]; noEmit: boolean }; include: string[] }>(
         first.baseConfigPath,
       )
-      Expect(base.compilerOptions.rootDirs).toEqual(['../..', '../../.tao-ts'])
+      Expect(base.compilerOptions.rootDirs).toEqual(['../../..', '../../../.tao-ts'])
       Expect(base.compilerOptions.noEmit).toBe(true)
-      Expect(base.include).toContain('../../**/*.tsx')
-      Expect(base.include).toContain('../../.tao-ts/**/*.ts')
+      Expect(base.include).toContain('../../../**/*.tsx')
+      Expect(base.include).toContain('../../../.tao-ts/**/*.ts')
 
       const edited =
-        '{\n  // developer-owned config\n  "extends": "./.tao/typescript/tsconfig.json",\n  "compilerOptions": { "strict": false }\n}\n'
+        '{\n  // developer-owned config\n  "extends": "./.tao/cache/typescript/tsconfig.json",\n  "compilerOptions": { "strict": false }\n}\n'
       await FS.writeText(first.rootConfigPath, edited)
       const second = await ensureProjectTypeScriptConfig(root)
       Expect(second.changedOutputPaths).toEqual([])
@@ -104,7 +104,7 @@ Describe('project TypeScript configuration', () => {
       await FS.writeText(FS.resolvePath('Override.ts', root), 'export const value: number = 1\n')
       await FS.writeText(
         FS.resolvePath('tsconfig.json', root),
-        '{"extends":"./.tao/typescript/tsconfig.json","compilerOptions":{"paths":{"tao-test-peer/extra":["./Override.ts"]}}}\n',
+        '{"extends":"./.tao/cache/typescript/tsconfig.json","compilerOptions":{"paths":{"tao-test-peer/extra":["./Override.ts"]}}}\n',
       )
       Expect(nativeDiagnostics(root)).toEqual([])
     } finally {

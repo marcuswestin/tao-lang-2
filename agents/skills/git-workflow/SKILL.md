@@ -9,7 +9,9 @@ description: >-
 
 # Git Workflow
 
-Root `AGENTS.md` owns the hard constraints on branches and the Git index; the warn-only Git hooks
+Root `AGENTS.md` owns branch and index constraints and standing authorization to merge other
+branches, including its dependency-approval exception. Apply that authorization to all incoming
+file changes. The warn-only Git hooks
 `./agent setup` installs speak up on a detached HEAD, an unnamed branch, or an attribution trailer.
 `verification-lanes` owns `merge-with-main`'s evidence, flags, and message-file format.
 

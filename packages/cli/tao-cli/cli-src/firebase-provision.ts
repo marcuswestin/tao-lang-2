@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, HCI, Platform, Time } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, ProjectLocal, Time } from '@shared'
 import type { Writable } from 'node:stream'
 
 type FirebaseResult = { exitCode: number | null; stdout: string; stderr: string }
@@ -26,7 +26,7 @@ const DEPLOY_RETRY_MILLISECONDS = 10_000
 /** Provisions the disposable Hosted CRUD Firebase backend through Google's supported CLI. */
 export async function provisionFirebase(options: FirebaseProvisionOptions): Promise<FirebaseConfig> {
   const run = options.runner ?? runFirebaseCli
-  const work = FS.resolvePath('.tao/firebase-connect', options.project)
+  const work = ProjectLocal.cacheResolve('firebase-connect', options.project)
   const configPath = FS.resolvePath('firebase.json', work)
   const rulesPath = FS.resolvePath('firestore.rules', work)
   if (await FS.isSymbolicLink(work) || await FS.isSymbolicLink(configPath) || await FS.isSymbolicLink(rulesPath)) {
@@ -52,7 +52,8 @@ export async function provisionFirebase(options: FirebaseProvisionOptions): Prom
   if (!FS.pathIsWithin(await FS.realPath(sourceRules), await FS.realPath(options.project))) {
     Errors.throwUserInput('Firebase pilot rules must stay inside the project; no cloud changes were made.')
   }
-  await FS.mkdir(work)
+  await ProjectLocal.prepare(options.project)
+  await FS.mkdirWithinBoundary(work, options.project)
 
   const out = { output: options.output }
   let accounts = await firebaseJson(run, work, ['login:list'], 'check Firebase sign-in')

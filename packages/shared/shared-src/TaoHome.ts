@@ -9,7 +9,7 @@ import * as Platform from './Platform'
  * spells the same installed-state rule in shell because it runs before any Tao binary exists.
  *
  * Project state is not here. A project's builds, sessions, and generated hosts stay under its own
- * `.tao/`, so deleting a project deletes them and no project reaches into another.
+ * `.tao/` (`ProjectLocal`), so deleting a project deletes them and no project reaches into another.
  */
 
 /** DECLARED_ROOT_ENV relocates everything Tao writes outside a project. */
@@ -20,6 +20,7 @@ export const TaoHome = {
   DECLARED_ROOT_ENV,
   cacheResolve,
   cacheRoot,
+  prepareAgentState,
   resolve,
   root,
 } as const
@@ -57,4 +58,37 @@ function cacheRoot(): string {
 /** cacheResolve names one disposable path under Tao's cache root. */
 function cacheResolve(relativePath: string): string {
   return FS.resolvePath(relativePath, cacheRoot())
+}
+
+/** Prepare one app's machine-wide agent service state, moving recognized older files once. */
+async function prepareAgentState(appId: string, baseRoot?: string, legacyBaseRoot?: string): Promise<string> {
+  if (!/^[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*$/u.test(appId)) {
+    throwUserInput(`Invalid Tao agent app ID ${JSON.stringify(appId)}.`)
+  }
+  const agentsRoot = FS.resolvePath(baseRoot ?? resolve('agents'))
+  const olderRoot = FS.resolvePath(legacyBaseRoot ?? FS.resolvePath('Library/Caches/Tao/agents', FS.homeDir()))
+  const appRoot = FS.resolvePath(appId, agentsRoot)
+  const previousRoot = FS.resolvePath(Platform.sha256Hex(appId).slice(0, 24), olderRoot)
+  const homeRoot = FS.dirname(agentsRoot)
+  const lockDirectory = FS.resolvePath('cache/agents/locks', homeRoot)
+  await FS.mkdir(homeRoot)
+  await FS.mkdirWithinBoundary(lockDirectory, homeRoot)
+  await FS.withFileMutationLock(appRoot, homeRoot, async () => {
+    await FS.mkdirWithinBoundary(appRoot, homeRoot)
+    if (!await FS.isDirectory(previousRoot) || await FS.isSymbolicLink(previousRoot)) {
+      return
+    }
+    for (const name of ['origin.json', 'session.json', 'service.log'] as const) {
+      const from = FS.resolvePath(name, previousRoot)
+      const to = FS.resolvePath(name, appRoot)
+      if (
+        await FS.isFile(from) && !await FS.exists(to)
+        && !await FS.isSymbolicLink(from) && !await FS.isSymbolicLink(to)
+      ) {
+        await FS.move(from, to)
+      }
+    }
+    await FS.removeEmptyDirectory(previousRoot)
+  }, { lockDirectory })
+  return appRoot
 }

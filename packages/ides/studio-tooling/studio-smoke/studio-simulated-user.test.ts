@@ -3,6 +3,7 @@ import { Expect, runCleanups, Test } from '@shared/test'
 import {
   openStudioPreviewSession,
   startStudioSessionServer,
+  StudioCanvasViewportStore,
   studioProtocolChannel,
   studioProtocolVersion,
   StudioSessionManager,
@@ -11,6 +12,7 @@ import {
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
 import { type StartedStudioNative, StudioNative } from '../studio-tooling-src/StudioNative'
 import { StudioNativeTestRun } from '../studio-tooling-src/StudioNativeTestRun'
+import { activateSmokePreviews } from '../studio-tooling-src/StudioSmokePreviews'
 import { exerciseStudioFeed } from './studio-feed-journey'
 
 const scrollingTail = Array.from({ length: 80 }, (_, index) => `// scroll proof ${index + 1}`).join('\n')
@@ -159,6 +161,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
     const current = manager.add({ previewUrl: preview.url, session })
     pendingShutdown.add('Studio server')
     studio = await startStudioSessionServer(manager, {
+      canvasViewportStore: new StudioCanvasViewportStore(FS.resolvePath('legacy-viewports', artifactRoot)),
       hostname: '127.0.0.1',
       port: smokePort('TAO_STUDIO_SMOKE_SERVER_PORT', 42_000),
     })
@@ -182,6 +185,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       browser = await StudioCdp.launchChrome({ artifactRoot })
       await browser.setViewport(1_440, 900)
       await browser.goto(projectUrl)
+      await activateSmokePreviews(browser)
       await browser.waitFor(
         `(() => {
         const shell = document.querySelector('.studio-shell')
@@ -196,10 +200,8 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       })()`,
         { timeoutMs: 30_000 },
       )
-      // The agent panel opens as a floating window over the workbench, covering the inspector and
-      // the lower half of every divider. Minimize it once, as anyone about to work in the editor
-      // would, so the rest of the journey reaches the workbench rather than the panel. It stays
-      // minimized across the reloads below, which is why this is done once.
+      // Expanded, the agent panel floats over the inspector and the lower half of every divider.
+      // Studio opens it minimized; the journey confirms that before reaching for the workbench.
       await browser.waitFor(
         `document.querySelector('.studio-agent-panel [data-tao-studio-agent-collapse], .studio-agent-collapse')
           instanceof HTMLButtonElement`,
@@ -259,7 +261,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
         const rect = frame.getBoundingClientRect()
         return { height: rect.height, width: rect.width }
       })()`)
-      await browser.clickAtOffset('.studio-preview-cell .studio-preview-activation-shield', {
+      await browser.clickAtOffset('.studio-preview-cell .studio-preview-focus-shield', {
         x: transformedFrame.width * 0.72,
         y: transformedFrame.height * 0.62,
       })
@@ -365,6 +367,17 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       compileRevision = await waitForCompileAfter(browser, compileRevision)
       Expect(await browser.evaluate<string>("document.querySelector('.cm-content')?.textContent ?? ''"))
         .toContain('Text("First typed")')
+
+      // An edit typed back out leaves nothing unsaved: the tab drops its dot, so it can close again.
+      const activeTabLabel =
+        `document.querySelector('.studio-editor-tab-item[aria-current="page"] .studio-editor-tab')?.textContent ?? ''`
+      await browser.insertText('x')
+      await browser.waitFor(`(${activeTabLabel}).startsWith('● ')`)
+      await browser.pressKey('Backspace')
+      await browser.waitFor(`!(${activeTabLabel}).startsWith('● ')`)
+      Expect(await browser.evaluate<string>(`document.querySelector('.studio-status')?.textContent ?? ''`))
+        .toBe('No unsaved changes.')
+      Expect(await FS.readText(sourcePath)).toBe(typedSource)
 
       // The outline lens folds every declaration to its head. Both ways of reaching hidden syntax
       // reveal the one region involved and leave every other fold alone, and neither changes the
@@ -507,7 +520,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       await waitForCompileAfter(browser, compileRevision)
 
       const generatedSketchPath = FS.resolvePath('@/studio/View1.tao', projectRoot)
-      const sketchCatalogPath = FS.resolvePath('.tao/studio/sketches.jsonc', projectRoot)
+      const sketchCatalogPath = FS.resolvePath('.tao/store/studio/sketches.jsonc', projectRoot)
       // A 360-pixel board needs a canvas column wider than the Design preset leaves at 1440; a
       // designer's display gives the sketch room, and the pointer gesture below is checked against it.
       await browser.setViewport(1_920, 1_080)

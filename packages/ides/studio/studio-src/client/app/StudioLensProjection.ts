@@ -33,7 +33,7 @@ export function projectStudioLensLines(
   const lines = [`Source: ${selected.path}`]
   if (matching.length === 0) {
     lines.push(
-      'Render timing: no observation for this source revision in the active preview.',
+      'Render timing: no observation for this source revision in the focused preview.',
       'Invalidating read: not observed.',
       'Provider wait: not observed.',
       'Resolved style: not measured.',

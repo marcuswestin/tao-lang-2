@@ -1696,6 +1696,26 @@ Test(
   },
 )
 
+Test('a managed-loop source projection retains a local project owner until ownership is released', async () => {
+  const artifactRoot = Repo.resolvePath(`.artifacts/tests/managed-loop-owner-${Platform.randomUUID()}`)
+  const fixtures = new ManagedLoopAcceptanceFixtures(artifactRoot)
+  const fixture = await fixtures.create()
+  const ownerPath = FS.resolvePath('.tao/local/sessions/owner.json', fixture.root)
+  try {
+    Expect(await FS.isFile(FS.resolvePath('.tao/store/project.json', fixture.root))).toBe(true)
+    Expect(await FS.exists(FS.resolvePath('.tao/project.json', fixture.root))).toBe(false)
+    await FS.writeJson(ownerPath, { pid: Platform.runtimeProcess.pid })
+    Expect(await fixtures.cleanup(fixture, true)).toBe(false)
+    Expect(await FS.isFile(fixture.appPath)).toBe(true)
+    await FS.remove(ownerPath)
+    Expect(await fixtures.cleanup(fixture, true)).toBe(true)
+    Expect(await FS.exists(fixture.root)).toBe(false)
+  } finally {
+    await FS.remove(fixture.root)
+    await FS.remove(artifactRoot)
+  }
+})
+
 for (const fault of ['reload-generation', 'restart-generation', 'keep-old-service'] as const) {
   Test(`finite lifecycle refuses ${fault} and still rolls back its owned loop`, async () => {
     const world = harness(fault)

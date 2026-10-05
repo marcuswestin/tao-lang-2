@@ -987,6 +987,9 @@ const placeholderDevelopmentStyle = {
   position: 'relative',
 } as const
 
+/** Wider than any placeholder, so a hatch line never wraps; the dashed frame clips it to the placeholder. */
+const placeholderHatchWidth = 4_096
+
 const placeholderHatchStyle = {
   bottom: 0,
   color: '#aeb3ae',
@@ -995,8 +998,8 @@ const placeholderHatchStyle = {
   lineHeight: 12,
   opacity: 0.55,
   position: 'absolute',
-  right: 0,
   top: 0,
+  width: placeholderHatchWidth,
 } as const
 
 const placeholderLabelStyle = {
@@ -1013,7 +1016,14 @@ function placeholderHatch(style: unknown): string {
   const lineCount = typeof height === 'number' && Number.isFinite(height) && height > 0
     ? Math.max(12, Math.ceil(height / placeholderHatchStyle.lineHeight) + 1)
     : 12
-  return Array.from({ length: lineCount }, () => '╱   ╱   ╱   ╱   ╱   ╱').join('\n')
+  // One stroke and three spaces is about 20 points at this size; a placeholder that fills its parent
+  // has no width here, so it is hatched across the widest frame a device shows.
+  const width = styleProperty(style, 'width')
+  const strokes = typeof width === 'number' && Number.isFinite(width) && width > 0
+    ? Math.max(6, Math.ceil(width / 20) + 1)
+    : 70
+  const line = '╱   '.repeat(strokes).trimEnd()
+  return Array.from({ length: lineCount }, () => line).join('\n')
 }
 
 function styleProperty(style: unknown, property: string): unknown {

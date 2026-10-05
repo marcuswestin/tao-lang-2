@@ -10,7 +10,7 @@ export type AgentRPC = {
 
 export const agentRendererSource = String.raw`
 import { Electroview } from 'electrobun/view'
-import type { AgentRPC, Reply } from '../agent-rpc'
+import type { AgentRPC, Reply } from './agent-rpc'
 type AgentAPI = {
   ready(): Promise<void>
   commands(): unknown
@@ -65,8 +65,8 @@ if (!page.__TAO_AGENT_BRIDGE__) {
 export function agentMainSource(manifest: unknown): string {
   return String.raw`
 import { BrowserWindow, BrowserView, Utils } from 'electrobun/main'
-import { startDesktopAgentHost } from './agent-host.js'
-import type { AgentRPC } from '../agent-rpc'
+import { startDesktopAgentHost } from '../../agents/agent-host.js'
+import type { AgentRPC } from '../../agents/agent-rpc'
 const manifest = ${JSON.stringify(manifest)}
 const background = Bun.env.TAO_AGENT_MODE === '1'
 let state: 'absent' | 'starting' | 'ready' | 'failed' = 'absent'

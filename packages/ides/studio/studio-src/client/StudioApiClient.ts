@@ -242,10 +242,19 @@ export const StudioApiClient = {
         keepalive,
       }),
     ),
+  saveStudioSessionField: async (
+    field: 'activatedCellIds' | 'focusedCellId' | 'editorTabs',
+    value: unknown,
+  ): Promise<void> => {
+    await request<{ saved: true }>(routes.studioSession, { field, value })
+  },
   betaShip: async (): Promise<StudioBetaShipResult> => await request(routes.shipBeta, {}),
   captureFixture: async <Result>(body: unknown): Promise<Result> => await request(routes.sourceAction, body),
   cellInstance: async (body: unknown, signal?: AbortSignal): Promise<unknown> =>
     await request(routes.previewCellInstance, body, signal),
+  releaseCellInstance: async (previewInstanceId: string): Promise<void> => {
+    await request<{ released: true }>(routes.previewCellRelease, { previewInstanceId })
+  },
   connectEvents,
   createFile: async (body: StudioCreateFileRequest): Promise<StudioCreateFileResult> =>
     await request(routes.fileCreate, body),
