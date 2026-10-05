@@ -1,8 +1,9 @@
-import { ASTUtils } from '@ast-utils'
+import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert } from '@shared'
 import { type Compiled, gen } from '../codegen-util'
 import { activeDataStorePlan } from './data-store-context'
+import { compileRuntimeType } from './runtime-type-compiler'
 
 /** Auth exports are identified by their owning library, never by an application's local names. */
 export function authLibraryExport(node: AST.Node): string | undefined {
@@ -74,7 +75,10 @@ export function contextualReference(
   if (!hasAuthContextFactory(node)) {
     return gen.scopeName(node)
   }
-  const value = gen`TR.Call(${gen.scopeName(node)}, TR.Value(_TaoAuthScope))`
+  const result = AST.isActionDeclaration(node)
+    ? gen`<${compileRuntimeType(Type.ofValueDeclaration(node))}["jsValue"]>`
+    : gen.noop()
+  const value = gen`TR.Call${result}(${gen.scopeName(node)}, TR.Value(_TaoAuthScope))`
   return AST.isFunctionDeclaration(node) || AST.isPhraseDeclaration(node)
     ? gen`(${value} as unknown as TR.Function)`
     : value

@@ -1,7 +1,7 @@
 use Duration, Length, Ratio, UpperCase from @tao/core
 use all from @tao/ui
 use Add from ./library/BookActions
-use BookStore, LoadAfter, Refresh from ./library/BookIO
+use BookStore, LoadAfter, LoadedItems, Refresh from ./library/BookIO
 use Books, ComparedNames, EarlierLabel, GroupMode, NewBook, PersonName, Score, Subtract, Title as TitleType from ./library/Library
 
 app LibraryApp {
@@ -104,6 +104,11 @@ view Library {
       }
       // 5. Acquisition is bounded; continuation extends this same owned window.
       guard Feed
+      when Feed {
+         refreshing -> Spinner
+         empty -> "No books."
+         stale -> "Showing cached books."
+      }
       loop Feed / Book {
          Book
       }
@@ -112,4 +117,7 @@ view Library {
       }
       Button("Refresh") {
          on press -> do Refresh(Feed)
+      }
+      Button("Return loaded") {
+         on press -> do LoadedItems(Feed).Return()
 }  }  }

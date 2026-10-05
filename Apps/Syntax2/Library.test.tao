@@ -58,7 +58,7 @@ test "Syntax2 Library" {
    }
    test "acknowledges only the displayed revision and returns the live book" {
       run LibraryApp
-      select #book [1] {
+      select #book[1] {
          expect text "BOOK 1"
          expect text "Unknown author"
          expect missing text "Available"
@@ -70,4 +70,13 @@ test "Syntax2 Library" {
          expect text "●"
       }
    }
-}
+   test "returns the loaded collection through its function-result receiver" {
+      run LibraryApp
+      select #book[1] {
+         expect missing text "Available"
+      }
+      press "Return loaded"
+      select #book[1] {
+         expect text "Available"
+      }
+}  }
