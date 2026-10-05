@@ -1078,7 +1078,11 @@ export function caseSetOwningCase(caseSetCase: AST.CaseSetCase): AST.TypeDeclara
 
 /** parametersOf returns the parameters declared by a parameterized declaration. */
 export function parametersOf(
-  declaration: AST.ParameterizedDeclaration | AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration,
+  declaration:
+    | AST.ParameterizedDeclaration
+    | AST.AssociatedFunctionDeclaration
+    | AST.AssociatedViewDeclaration
+    | AST.CapabilityMethodDeclaration,
 ): AST.ParameterDeclaration[] {
   // A view alias has no parameter list of its own; its interface is its target's.
   if (AST.isViewDeclaration(declaration) && declaration.aliasTarget) {
@@ -1338,6 +1342,11 @@ export function findOwningView(node: AST.Node): AST.ViewDeclaration | undefined 
   return findAncestor(node, AST.isViewDeclaration)
 }
 
+/** findOwningAssociatedView returns the associated view that contains `node`, if any. */
+export function findOwningAssociatedView(node: AST.Node): AST.AssociatedViewDeclaration | undefined {
+  return findAncestor(node, AST.isAssociatedViewDeclaration)
+}
+
 /** findOwningAction returns the action declaration that owns `node`, if any. */
 export function findOwningAction(node: AST.Node): AST.ActionDeclaration | undefined {
   return findAncestor(node, AST.isActionDeclaration)
@@ -1403,6 +1412,28 @@ export function associatedFunctionOwner(
 ): AST.TypeDeclaration | AST.PrimitiveDeclaration | undefined {
   const item = declaration.$container
   if (!AST.isItemTypeExpression(item) || !item.methods.includes(declaration)) {
+    return undefined
+  }
+  const container = item.$container
+  if (AST.isPrimitiveDeclaration(container)) {
+    return container.slots === item ? container : undefined
+  }
+  if (AST.isTypeDeclaration(container)) {
+    return container.type === item ? container : undefined
+  }
+  if (!AST.isDerivedTypeExpression(container) || container.slots !== item) {
+    return undefined
+  }
+  const owner = container.$container
+  return AST.isTypeDeclaration(owner) && owner.type === container ? owner : undefined
+}
+
+/** associatedViewOwner resolves only a view actually contained in an owner's slots.views list. */
+export function associatedViewOwner(
+  declaration: AST.AssociatedViewDeclaration,
+): AST.TypeDeclaration | AST.PrimitiveDeclaration | undefined {
+  const item = declaration.$container
+  if (!AST.isItemTypeExpression(item) || !item.views.includes(declaration)) {
     return undefined
   }
   const container = item.$container

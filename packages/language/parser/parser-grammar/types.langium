@@ -5,6 +5,7 @@ import "./expressions"
 import "./imports"
 import "./numeric-units"
 import "./terminals"
+import "./views"
 
 entry TypesGrammarEntrypoint:
     // Includes type helper rules consumed from imported grammar modules so Langium marks them reachable.
@@ -60,7 +61,7 @@ YesNoTypeExpression:
 ItemTypeExpression:
     '{' ((properties+=TypeProperty | keys+=ConfigurationKeyDeclaration | implementations+=ConfigurationImplementation
       | issues+=ConfigurationIssues | accepts+=ConfigurationAccepts | supports+=ConfigurationSupports
-      | unitBlocks+=NumericUnitBlock | methods+=AssociatedFunctionDeclaration
+      | unitBlocks+=NumericUnitBlock | methods+=AssociatedFunctionDeclaration | views+=AssociatedViewDeclaration
       | converters+=AssociatedConverterDeclaration) ','?)* '}';
 
 // A postfix `?` carries optionality. Item fields take no trait list.
@@ -112,11 +113,11 @@ NamedTypeReference:
 
 PrimitiveType returns string:
     'text' | 'number' | 'numeric' | 'boolean' | 'time' | 'duration' | 'color' | 'item' | 'list' | 'action' | 'shortcut'
-    | 'command' | 'design' | 'view' | 'scene' | 'nav' | 'datasource' | 'data' | 'app';
+    | 'command' | 'design' | 'view' | 'scene' | 'nav' | 'datasource' | 'data' | 'app' | 'rendered';
 
 NonListPrimitiveType returns string:
     'text' | 'number' | 'numeric' | 'boolean' | 'time' | 'duration' | 'color' | 'item' | 'action' | 'shortcut' | 'command'
-    | 'design' | 'view' | 'scene' | 'nav' | 'datasource' | 'data' | 'app';
+    | 'design' | 'view' | 'scene' | 'nav' | 'datasource' | 'data' | 'app' | 'rendered';
 
 ConstructablePrimitiveType returns string:
     'text' | 'number' | 'boolean' | 'item' | 'list';

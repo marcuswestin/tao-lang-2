@@ -358,6 +358,14 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (method && !method.static && methodOwner && isWithinAssociatedBody(reference, method)) {
       scope = this.createScopeForNodes([methodOwner], scope)
     }
+    const associatedView = AST.findOwningAssociatedView(reference)
+    const associatedViewOwner = associatedView && AST.associatedViewOwner(associatedView)
+    if (
+      associatedView && associatedViewOwner && AST.isTypeDeclaration(associatedViewOwner)
+      && isWithinAssociatedViewBody(reference, associatedView)
+    ) {
+      scope = this.createScopeForNodes([associatedViewOwner], scope)
+    }
     const converter = AST.findOwningAssociatedConverter(reference)
     const converterSource = converter && AST.associatedConverterSourceOwner(converter)
     if (converterSource) {
@@ -406,6 +414,9 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       const currentScope = scope ?? this.createScopeForNodes([])
       Switch.on(carrier, 'kind', {
         'associated-function': value => {
+          scope = this.createScopeForParameters(value.declaration, currentScope, reference)
+        },
+        'associated-view': value => {
           scope = this.createScopeForParameters(value.declaration, currentScope, reference)
         },
         'render-slot': value => {
@@ -917,6 +928,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     declaration:
       | AST.ParameterizedDeclaration
       | AST.AssociatedFunctionDeclaration
+      | AST.AssociatedViewDeclaration
       | AST.CapabilityMethodDeclaration
       | AST.RenderSlotDeclaration
       | AST.ForeignViewSlotDeclaration,
@@ -1187,6 +1199,7 @@ type ScopeCarrier =
   | { kind: 'action-block'; block: AST.ActionBlock }
   | { kind: 'payload'; payload: AST.CasePayload }
   | { kind: 'associated-function'; declaration: AST.AssociatedFunctionDeclaration }
+  | { kind: 'associated-view'; declaration: AST.AssociatedViewDeclaration }
   | { kind: 'render-slot'; declaration: AST.RenderSlotDeclaration | AST.ForeignViewSlotDeclaration }
 
 function renderSlotOwnerContaining(
@@ -1209,6 +1222,9 @@ function scopeCarriersContaining(node: AST.Node): ScopeCarrier[] {
   while (current) {
     if (AST.isAssociatedFunctionDeclaration(current)) {
       carriers.push({ kind: 'associated-function', declaration: current })
+    }
+    if (AST.isAssociatedViewDeclaration(current)) {
+      carriers.push({ kind: 'associated-view', declaration: current })
     }
     if (AST.isRenderSlotDeclaration(current) || AST.isForeignViewSlotDeclaration(current)) {
       carriers.push({ kind: 'render-slot', declaration: current })
@@ -1276,6 +1292,14 @@ function isWithinAssociatedBody(reference: AST.Node, declaration: AST.Associated
     current = current.$container
   }
   return false
+}
+
+function isWithinAssociatedViewBody(reference: AST.Node, declaration: AST.AssociatedViewDeclaration): boolean {
+  let current: AST.Node | undefined = reference
+  while (current && current !== declaration.block) {
+    current = current.$container
+  }
+  return current === declaration.block
 }
 
 function parameterOwningDefault(node: AST.Node | undefined): AST.ParameterDeclaration | undefined {
