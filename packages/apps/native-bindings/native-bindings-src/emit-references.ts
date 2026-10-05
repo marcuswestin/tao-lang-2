@@ -77,7 +77,7 @@ export function emitReferences(
       origin,
       ...physical.tao,
       `public type ${reference.name} is ${reference.base ?? 'item'}${
-        actions.length > 0 ? ` with {\n   ${actions.join('\n   ')}\n}` : ''
+        actions.length > 0 ? ` with { ${actions.join('\n   ')}\n}` : ''
       }`,
       '',
     )
