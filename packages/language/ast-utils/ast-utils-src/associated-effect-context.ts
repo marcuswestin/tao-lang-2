@@ -62,6 +62,9 @@ export function createAssociatedEffects(files: readonly AST.TaoFile[]): Associat
       if (!AST.isAssociatedConverterDeclaration(declaration) && !declaration.returnType) {
         continue
       }
+      const failures: FailureContract = AST.isAssociatedConverterDeclaration(declaration)
+        ? Type.associatedConverterDescriptor(declaration)?.signature.failures ?? { cases: [], open: true }
+        : { cases: [], open: declaration.failureBound !== 'never' }
       for (const statement of AST.returnStatementsOf(declaration)) {
         const bridge = statement.value
         if (!AST.isFromExpression(bridge) || !AST.isFunctionCallExpression(bridge.expression)) {
@@ -74,7 +77,7 @@ export function createAssociatedEffects(files: readonly AST.TaoFile[]): Associat
           phase: 'evaluation',
           kind: 'complete',
           purity: { violations: [], open: false },
-          failures: { cases: [], open: true },
+          failures,
         })
       }
     }
@@ -94,7 +97,7 @@ export function createAssociatedEffects(files: readonly AST.TaoFile[]): Associat
   for (const declaration of snapshot.descriptors.keys()) {
     if (
       AST.isAssociatedFunctionDeclaration(declaration) || AST.isAssociatedConverterDeclaration(declaration)
-      || AST.isFunctionDeclaration(declaration)
+      || AST.isFunctionDeclaration(declaration) || AST.isAssociatedViewDeclaration(declaration)
     ) {
       const publication = projectCallableEffectPublications(snapshot, declaration)
       const facts = discoverCallableEffectFacts(declaration, publication.inputs, publication.context)
