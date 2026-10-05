@@ -32,7 +32,7 @@ export type PrChecksDependencies = {
   writeLine: (line: string) => void
 }
 
-const defaultDependencies: PrChecksDependencies = {
+export const defaultDependencies: PrChecksDependencies = {
   env: Platform.runtimeProcess.env,
   fetch: (url, init) => fetch(url, init),
   now: () => Date.now(),
@@ -220,7 +220,7 @@ async function ghAuthToken(dependencies: PrChecksDependencies, root: string): Pr
  * gitHub wraps the REST calls this command makes. Check runs are read conditionally: GitHub does not
  * count a 304 against the rate limit, which is what lets an anonymous `--wait` poll for an hour.
  */
-function gitHub(dependencies: PrChecksDependencies, authToken?: string) {
+export function gitHub(dependencies: PrChecksDependencies, authToken?: string) {
   const token = authToken ?? dependencies.env['GH_TOKEN'] ?? dependencies.env['GITHUB_TOKEN']
   const headers = (extra: Record<string, string> = {}): Record<string, string> => ({
     Accept: 'application/vnd.github+json',
@@ -271,7 +271,7 @@ function gitHub(dependencies: PrChecksDependencies, authToken?: string) {
   }
 }
 
-async function repositorySlug(dependencies: PrChecksDependencies, root: string): Promise<string> {
+export async function repositorySlug(dependencies: PrChecksDependencies, root: string): Promise<string> {
   const url = (await dependencies.run('git', { args: ['remote', 'get-url', 'origin'], cwd: root, stdio: 'pipe' }))
     .stdout.trim()
   const match = /github\.com[:/]([^/]+\/[^/]+?)(?:\.git)?$/u.exec(url)

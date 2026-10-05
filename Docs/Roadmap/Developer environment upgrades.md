@@ -110,6 +110,7 @@ change that addressed it.
 - [DEVENV-NATIVE-SESSION-TIMESTAMPS-USE-MONOTONIC-TIME — Native session timestamps use monotonic time](<Developer environment upgrades/DEVENV-NATIVE-SESSION-TIMESTAMPS-USE-MONOTONIC-TIME.md>) — Candidate
 - [DEVENV-ONE-TEST-FILE-SPAWNS-FIVE-TYPECHECKS — One test file spawns five typechecks, so its shard cannot be split](<Developer environment upgrades/DEVENV-ONE-TEST-FILE-SPAWNS-FIVE-TYPECHECKS.md>) — Candidate
 - [DEVENV-OUTPUT-HOOK-REQUIRES-UNAVAILABLE-READ-TOOL — Output hook requires an unavailable read tool](<Developer environment upgrades/DEVENV-OUTPUT-HOOK-REQUIRES-UNAVAILABLE-READ-TOOL.md>) — Candidate
+- [DEVENV-PR-CHECKS-SPENDS-THE-ANONYMOUS-API-LIMIT — Following checks spends GitHub's anonymous API limit](<Developer environment upgrades/DEVENV-PR-CHECKS-SPENDS-THE-ANONYMOUS-API-LIMIT.md>) — Candidate
 - [DEVENV-PROFILE-LACKS-DIRENV-WHILE-DOCTOR-PASSES — Profile lacks direnv while doctor passes](<Developer environment upgrades/DEVENV-PROFILE-LACKS-DIRENV-WHILE-DOCTOR-PASSES.md>) — Candidate
 - [DEVENV-QUEUED-NODE-FIRST-WAIT-CHARGED-TO-LANE-NOT-MACHINE — A queued node's first wait is charged to the lane, not the machine](<Developer environment upgrades/DEVENV-QUEUED-NODE-FIRST-WAIT-CHARGED-TO-LANE-NOT-MACHINE.md>) — Candidate
 - [DEVENV-QUIET-UI-HOST-ACCEPTANCE — Quiet UI host acceptance](<Developer environment upgrades/DEVENV-QUIET-UI-HOST-ACCEPTANCE.md>) — Candidate

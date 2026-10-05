@@ -101,6 +101,9 @@ Read [hosted verification](references/hosted-verification.md) for contention det
 readiness without local broad verification, and merging an already verified pull request. It owns
 the choice between `open-pr` / `merge-pr` and local `land`, including evidence and authorization.
 
+A change meant to make CI faster carries its own `./agent ci-timings` before-and-after
+(`references/ci-speed.md`).
+
 ## Periodic performance proof
 
 Run `./agent unsandboxed performance-check` for a pipeline performance change and during a periodic
