@@ -38,7 +38,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
         const compiled = await workspace.compile(paths['Main.tao']!)
         const imports = parseResult.entry.ast.statements.filter(AST.isUseStatement)
 
-        Expect(imports.map(statement => statement.importedDeclarations[0]?.ref?.name)).toEqual([
+        Expect(imports.map(statement => statement.importedDeclarations[0]?.target.ref?.name)).toEqual([
           'RootView',
           'GeneratedView',
           'NestedView',
@@ -75,7 +75,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
         const parsed = await workspace.parse(paths['Main.tao']!)
         const imported = parsed.entry.ast.statements.find(AST.isUseStatement)?.importedDeclarations ?? []
 
-        Expect(imported.map(reference => reference.ref?.name)).toEqual([
+        Expect(imported.map(reference => reference.target.ref?.name)).toEqual([
           undefined,
           undefined,
           'WorkspaceVisible',
@@ -387,14 +387,14 @@ Describe('directory-rooted Tao workspace pipeline', () => {
         Expect.Is(firstFile, AST.isTaoFile)
         Expect.Is(secondFile, AST.isTaoFile)
         const firstImported = firstFile.statements.filter(AST.isUseStatement).find(use => use.importPath === '@data')
-          ?.importedDeclarations[0]?.ref
+          ?.importedDeclarations[0]?.target.ref
         const secondImported = secondFile.statements.filter(AST.isUseStatement).find(use => use.importPath === '@data')
-          ?.importedDeclarations[0]?.ref
+          ?.importedDeclarations[0]?.target.ref
         Expect(firstImported && AST.getDocument(firstImported).uri.path).toBe(paths['First/@data/Data.tao'])
         Expect(secondImported && AST.getDocument(secondImported).uri.path).toBe(paths['Second/@data/Data.tao'])
         for (const file of [firstFile, secondFile]) {
           const text = file.statements.filter(AST.isUseStatement).find(use => use.importPath === '@tao/ui')
-            ?.importedDeclarations[0]?.ref
+            ?.importedDeclarations[0]?.target.ref
           Expect(text).toBeDefined()
         }
       },
@@ -432,7 +432,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
         Expect(lspErrorMessages(app.diagnostics ?? [])).toEqual([])
         const file = app.parseResult.value
         Expect.Is(file, AST.isTaoFile)
-        const imported = file.statements.find(AST.isUseStatement)?.importedDeclarations[0]?.ref
+        const imported = file.statements.find(AST.isUseStatement)?.importedDeclarations[0]?.target.ref
         Expect(imported && AST.getDocument(imported).uri.path).toBe(paths['stdlib/@tao/ui/Labels.tao'])
       },
     )
@@ -454,7 +454,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
         await workspace.services.shared.workspace.DocumentBuilder.build([document], { eagerLinking: true })
         const file = document.parseResult.value
         Expect.Is(file, AST.isTaoFile)
-        const imported = file.statements.find(AST.isUseStatement)?.importedDeclarations[0]?.ref
+        const imported = file.statements.find(AST.isUseStatement)?.importedDeclarations[0]?.target.ref
 
         Expect(workspace.root).toBe(FS.resolvePath('screens', projectRoot))
         Expect(imported && AST.getDocument(imported).uri.path).toBe(paths['App/@data/Data.tao'])
