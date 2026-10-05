@@ -75,6 +75,25 @@ jobs:
           restore-keys: |
             tao-packages-${{ runner.os }}-${{ runner.arch }}-
 
+      # The Nix installation and the built locked profile, keyed on everything that decides them: the
+      # pinned Nix release, the devenv lock, and the profile's expressions. On a hit the installer
+      # finds Nix present and the bootstrap reuses the profile generation, so it neither downloads nor
+      # evaluates anything. Tar cannot create /nix itself, so it is made the runner's first; the
+      # single-user installer accepts an existing directory it can write.
+      - name: Prepare /nix for the Nix store cache
+        run: sudo install -d -o "$(id -u)" -g "$(id -g)" /nix
+
+      - name: Restore the Nix store and locked toolchain
+        id: nix-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            /nix
+            ~/.nix-profile
+            ~/.local/state/nix
+            ${{ github.workspace }}/.devenv/portable-generations
+          key: tao-nix-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('devenv.lock', 'packages/cli/dev-cli/dev-cli-src/environment/nix-bootstrap.sh', 'packages/cli/dev-cli/dev-cli-src/environment/portable-profile.nix', 'packages/cli/dev-cli/dev-cli-src/environment/toolchain-packages.nix') }}
+
       # Installs a checksum-pinned single-user Nix, builds the locked Linux profile, then runs
       # `./agent setup`; the same path the native Linux contributor acceptance proves.
       - name: Bootstrap Nix, the pinned toolchain, and Tao setup
@@ -82,13 +101,41 @@ jobs:
 
       # Saved straight after the bootstrap, so a partition that later fails still warms the cache.
       # All partitions share one key; the first to finish saves it and the rest are refused harmlessly.
+      # Saved under the key the restore computed: hashing the locks again here would read them after
+      # setup, and a setup that rewrote one would save under a key no later restore looks for.
       - name: Save the package download caches
         if: steps.package-cache.outputs.cache-hit != 'true'
         continue-on-error: true
         uses: actions/cache/save@v4
         with:
           path: /home/runner/tao-cache
-          key: tao-packages-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'Apps/Test Apps/Native Bridge/.tao/store/lock.jsonc') }}
+          key: ${{ steps.package-cache.outputs.cache-primary-key }}
+
+      # Collecting garbage first drops what only the build needed, chiefly the two unpacked nixpkgs
+      # sources, so the cache holds Nix and the profile's closure. Both are rooted explicitly rather
+      # than trusting where this Nix release keeps a single-user profile's roots.
+      - name: Collect Nix garbage before saving the store
+        id: nix-gc
+        if: steps.nix-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: |
+          ln -sfn "$(readlink -f ~/.nix-profile)" /nix/var/nix/gcroots/tao-nix-profile
+          ln -sfn "$(readlink -f .devenv/profile)" /nix/var/nix/gcroots/tao-portable-profile
+          ~/.nix-profile/bin/nix-store --gc 2>&1 | tail -n 2
+          test -x ~/.nix-profile/bin/nix-build
+          test -x .devenv/profile/bin/bun
+
+      - name: Save the Nix store and locked toolchain
+        if: steps.nix-gc.outcome == 'success'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            /nix
+            ~/.nix-profile
+            ~/.local/state/nix
+            ${{ github.workspace }}/.devenv/portable-generations
+          key: ${{ steps.nix-cache.outputs.cache-primary-key }}
 
       # Every partition plans from this one committed snapshot of measured durations, so all of them
       # compute the same plan, and suites split into shards sized by cost rather than running whole.
