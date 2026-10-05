@@ -58,6 +58,13 @@
     reporting, existing core barriers and timeout budgets are preserved. Focused
     runner, gate and failure-policy tests pass; a deliberate native core-barrier
     mutation fails. The complete lane must still establish actual cohort bounds.
+  - At `60d88e2bc`, the native cohort passed in 107.5 seconds, but the ordinary
+    remainder timed out. Completed receipt cases consumed 151.3 seconds alongside
+    138.1 seconds of other cases. The receipt file now forms its own ordinary
+    cohort. Studio's fixture also now consumes an observed changed receipt before
+    a newer real unchanged receipt; selecting the latter reproduces its assertion
+    failure. Focused tests pass. The failed complete run took 558.8 seconds with
+    no contention; the final split and fixture still require complete-lane proof.
 - **Proposed change:** The requested file partition and initial scheduling adjustment are implemented.
   Keep this observation open until fresh-checkout complete-lane measurements establish how much
   end-to-end tail remains; a cached skip is not a repeat measurement.

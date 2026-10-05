@@ -65,8 +65,23 @@ Test(
             // a real changed receipt after startup rather than relying on its latest receipt.
             let initialReceipt: ProjectToolingResult
             try {
+              const baselineRevision = watch.lastResult.revision
               await FS.writeText(paths['Data.tao'], 'public type PlantKind is one of Seed, Flower\n')
-              initialReceipt = await watch.requestRefresh({ force: true })
+              const requestedReceipt = await watch.requestRefresh({ force: true })
+              Expect(requestedReceipt.revision).toBeGreaterThan(baselineRevision)
+              const changedReceipt = observed.find(result =>
+                result.revision > baselineRevision && result.changedOutputPaths.includes(contractPath)
+              )
+              Expect(changedReceipt).toBeDefined()
+              if (changedReceipt === undefined) {
+                Errors.throwUnexpected('Expected a real changed watch receipt after the initial enum edit.')
+              }
+              initialReceipt = changedReceipt
+              // A later reread has no changed outputs; the older real notification must still
+              // reach preview acquisition so its consumed-revision guard gets exercised.
+              const latestReceipt = await watch.requestRefresh({ force: true })
+              Expect(latestReceipt.revision).toBeGreaterThan(initialReceipt.revision)
+              Expect(latestReceipt.changedOutputPaths).toEqual([])
             } catch (error) {
               await watch.dispose()
               throw error
@@ -103,7 +118,8 @@ Test(
             })
             try {
               const first = await preview.session.compileInitial()
-              Expect(first.status).toBe('compiled')
+              Expect({ status: first.status, error: first.status === 'error' ? first.message : undefined })
+                .toEqual({ status: 'compiled', error: undefined })
               await settle()
               Expect(preview.session.compileSnapshot().compileRevision).toBe(1)
               Expect(watchRequests).toBe(1)

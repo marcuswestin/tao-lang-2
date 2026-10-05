@@ -292,6 +292,9 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
         'packages/language/project-tooling/project-tooling-tests/ProjectNativeRefreshReceipt.test.ts',
         'packages/language/project-tooling/project-tooling-tests/ProjectNativeTypeScript.test.ts',
       ],
+    }, {
+      name: 'receipts',
+      files: ['packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceipt.test.ts'],
     }],
   }],
   ['language/source-actions', { reads: ['gen-parser', 'tao', 'ts'] }],
