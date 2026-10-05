@@ -8,6 +8,20 @@ and works in a separate feature branch/worktree. Later transfers are explicit am
 
 ## First concurrent wave
 
+### Current slot validation and formatting release
+
+The reviewed nine-path frontend is integrated at `9a39f2b0e`; those paths returned to the
+coordinator. The next bounded B release owns existing
+`parser-src/ast-structure.ts` solely for cycle-safe view-alias slot contracts,
+`validator-src/validators/views-validator.ts` solely for the real fill/placement discriminator
+and repeated placement rules, and `formatter-src/formatters/ViewsFormatter.ts` solely for slot
+declarations, arguments and colon fills. It also owns new renderer-slots-validator.ts,
+RendererSlotsValidationMessages.ts and validator/formatter renderer-slots tests in their owning
+language packages. Use the returned callable binder and real AST identities; do not create a
+second matcher. The coordinator owns facade exports, validator registration, source migrations,
+compiler integration and app graduation. No value-scope, Type or compiler ownership is transferred.
+Authored-source migrations require a separate exact-path release after inventory.
+
 The grants below record the first-wave implementation. A1, B1, C1 and D1 are committed and reviewed;
 their shared seams are returned to the coordinator for integration. The D1 foreign-error follow-up
 also returned TR.ts. Later implementation requires a fresh bounded release; current read-only
