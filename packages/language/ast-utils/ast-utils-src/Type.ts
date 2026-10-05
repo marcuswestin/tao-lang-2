@@ -134,7 +134,7 @@ type AnyTypeReference = AST.TypeReference | AST.ConstructablePrimitiveTypeRefere
 /** Type exposes static Tao type resolution and compatibility helpers. */
 export class Type {
   static ofAssociatedOwner(owner: AssociatedCallableOwner): TaoType {
-    return AST.isPrimitiveDeclaration(owner) ? primitiveType(owner.name) : Type.ofDefinition(owner)
+    return new TypeResolutionContext().ofAssociatedOwner(owner)
   }
   static associatedOperation(expression: AssociatedOperation) {
     return new TypeResolutionContext().associatedOperation(expression)
@@ -217,6 +217,7 @@ export class Type {
         return [reference.root, ...reference.members].join('.')
       },
       PrimitiveTypeReference: reference => reference.primitive,
+      YesNoTypeExpression: () => 'boolean',
     })
   }
 
@@ -400,19 +401,24 @@ export class Type {
     | undefined
   {
     const nominal = nominalOf(receiver)
-    if (nominal) {
-      for (const owner of nominalChain(nominal, definitionOfReference)) {
-        if (AST.isTypeDeclaration(owner)) {
-          const declaration = ownAssociatedMethods(owner).find(method =>
-            method.name === name && !!method.static === (dispatch === 'static')
-          ) ?? (dispatch === 'instance'
-            ? ownAssociatedViews(owner).find(view =>
-              view.name === name
-            )
-            : undefined)
-          if (declaration) {
-            return { declaration, owner }
-          }
+    const owners = receiver.kind === 'entity'
+      ? dispatch === 'instance' ? [receiver.entity] : []
+      : nominal
+      ? nominalChain(nominal, definitionOfReference)
+      : []
+    for (const owner of owners) {
+      if (AST.isTypeDeclaration(owner) || AST.isEntityDataDeclaration(owner)) {
+        const declaration = ownAssociatedMethods(owner).find(method =>
+          method.name === name && !!method.static === (dispatch === 'static')
+          && (!AST.isEntityDataDeclaration(owner) || AST.associatedEntityReceiverOwner(method) === owner)
+        ) ?? (dispatch === 'instance'
+          ? ownAssociatedViews(owner).find(view =>
+            view.name === name
+            && (!AST.isEntityDataDeclaration(owner) || AST.associatedEntityReceiverOwner(view) === owner)
+          )
+          : undefined)
+        if (declaration) {
+          return { declaration, owner }
         }
       }
     }
@@ -425,13 +431,18 @@ export class Type {
     dispatch: AssociatedMethodDispatch = 'instance',
   ): readonly AssociatedMethodSelection[] {
     const nominal = nominalOf(receiver)
-    if (!nominal) {
+    if (!nominal && receiver.kind !== 'entity') {
       return []
     }
     const selected = new Map<string, AssociatedMethodSelection>()
     const names = new Set<string>()
-    for (const owner of nominalChain(nominal)) {
-      if (!AST.isTypeDeclaration(owner)) {
+    const owners = receiver.kind === 'entity'
+      ? dispatch === 'instance' ? [receiver.entity] : []
+      : nominal
+      ? nominalChain(nominal)
+      : []
+    for (const owner of owners) {
+      if (!AST.isTypeDeclaration(owner) && !AST.isEntityDataDeclaration(owner)) {
         continue
       }
       const declarations = [
@@ -439,6 +450,9 @@ export class Type {
         ...(dispatch === 'instance' ? ownAssociatedViews(owner) : []),
       ]
       for (const declaration of declarations) {
+        if (AST.isEntityDataDeclaration(owner) && AST.associatedEntityReceiverOwner(declaration) !== owner) {
+          continue
+        }
         if (!names.has(declaration.name)) {
           names.add(declaration.name)
           const descriptor = associatedCallableDescriptor(declaration)
@@ -812,11 +826,13 @@ export class Type {
     return commonType(types, Type.isAssignable)
   }
 
-  /** entityOfReference resolves a top-level entity's singular type name. */
+  /** entityOfReference resolves the authored singular or collection name to its real declaration. */
   static entityOfReference(reference: AST.NamedTypeReference): DataEntityDefinition | undefined {
-    return reference.members.length === 0
-      ? AST.visibleFileDeclarations(reference, AST.isEntityDataDeclaration, entity => entity.singularName)
-        .find(entity => entity.singularName === reference.root)
+    const domain = reference.members.length === 0 ? writtenEntityDomain(reference, reference.root) : undefined
+    return domain?.kind === 'entity'
+      ? domain.entity
+      : domain?.kind === 'list' && domain.element?.kind === 'entity'
+      ? domain.element.entity
       : undefined
   }
 
@@ -1560,6 +1576,20 @@ function typePropertyNamed(itemType: ItemShape, name: string): AST.TypeProperty 
   return itemType.properties.find(property => property.name === name)
 }
 
+/** Cardinality belongs to the two authored entity names, including their selected import form. */
+function writtenEntityDomain(node: AST.Node, name: string): TaoType | undefined {
+  const entity = AST.visibleFileDeclarations(
+    node,
+    AST.isEntityDataDeclaration,
+    declaration => declaration.name === name ? declaration.name : declaration.singularName,
+  ).find(declaration => declaration.name === name || declaration.singularName === name)
+  if (!entity) {
+    return undefined
+  }
+  const single: TaoType = { kind: 'entity', entity }
+  return entity.name === name ? { kind: 'list', element: single } : single
+}
+
 function dataFieldNamed(entity: DataEntityDefinition, name: string): DataFieldDefinition | undefined {
   return Type.dataFields(entity).find(field => field.name === name)
 }
@@ -1649,6 +1679,12 @@ function associatedCallableInContext(
   owner: AssociatedCallableOwner,
   resolution: TypeResolutionContext,
 ): AssociatedDescriptorMaterialization {
+  if (
+    AST.isEntityDataDeclaration(owner)
+    && (AST.isCapabilityMethodDeclaration(declaration) || AST.associatedEntityReceiverOwner(declaration) !== owner)
+  ) {
+    return Object.freeze({ kind: 'pending', dependencies: Object.freeze([declaration]) })
+  }
   return materializeAssociatedCallable(declaration, owner, {
     receiver: receiverOwner => resolution.ofAssociatedOwner(receiverOwner),
     signature: callable =>
@@ -1682,7 +1718,11 @@ class TypeResolutionContext {
   ) {}
 
   ofAssociatedOwner(owner: AssociatedCallableOwner): TaoType {
-    return AST.isPrimitiveDeclaration(owner) ? primitiveType(owner.name) : this.ofDefinition(owner)
+    return AST.isEntityDataDeclaration(owner)
+      ? { kind: 'entity', entity: owner }
+      : AST.isPrimitiveDeclaration(owner)
+      ? primitiveType(owner.name)
+      : this.ofDefinition(owner)
   }
 
   associatedOperation(expression: AssociatedOperation) {
@@ -1982,14 +2022,15 @@ class TypeResolutionContext {
             )
           })
         }
-        const entity = Type.entityOfReference(reference)
+        const entity = reference.members.length === 0 ? writtenEntityDomain(reference, reference.root) : undefined
         if (entity) {
-          return { kind: 'entity', entity }
+          return entity
         }
         const definition = this.definitionOfReference(reference)
         return definition ? this.ofDefinition(definition) : unresolvedType()
       },
       PrimitiveTypeReference: reference => primitiveType(reference.primitive),
+      YesNoTypeExpression: () => primitiveType('boolean'),
     })
   }
 
@@ -2228,6 +2269,11 @@ class TypeResolutionContext {
   }
 
   ofContextualValue(declaration: AST.ValueReferenceTarget | undefined, context: AST.Node): TaoType {
+    if (AST.isEntityDataDeclaration(declaration)) {
+      return AST.associatedReceiverOwner(context) === declaration
+        ? this.ofAssociatedOwner(declaration)
+        : unresolvedType()
+    }
     if (AST.isTypeDeclaration(declaration)) {
       const view = AST.findOwningAssociatedView(context)
       return AST.associatedReceiverOwner(context) === declaration
@@ -2400,6 +2446,9 @@ class TypeResolutionContext {
     const nominal = nominalOf(receiver)
     const declarations = !staticCall && (receiver.kind === 'capability' || receiver.genericParameter)
       ? Type.aggregateCapabilityRequirements(receiver)
+      : !staticCall && receiver.kind === 'entity'
+      ? [...ownAssociatedMethods(receiver.entity), ...ownAssociatedViews(receiver.entity)]
+        .filter(declaration => AST.associatedEntityReceiverOwner(declaration) === receiver.entity)
       : nominal
       ? nominalChain(nominal, reference => this.definitionOfReference(reference))
         .flatMap(owner =>
@@ -2558,7 +2607,9 @@ class TypeResolutionContext {
       return this.ofExpression(property.value)
     }
     const shorthandType = Type.shorthandPropertyDefinition(property)
-    return shorthandType ? this.ofDefinition(shorthandType) : unresolvedType()
+    return shorthandType
+      ? this.ofDefinition(shorthandType)
+      : writtenEntityDomain(property, property.name) ?? unresolvedType()
   }
 
   ofTypeExpression(type: AST.TypeExpression): TaoType {

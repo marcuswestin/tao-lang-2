@@ -1406,11 +1406,15 @@ export function associatedConverterSourceOwner(
     : undefined
 }
 
-/** associatedFunctionOwner returns only the declared type whose own body contains this method. */
+/** associatedFunctionOwner returns the real declaration whose own body contains this method. */
 export function associatedFunctionOwner(
   declaration: AST.AssociatedFunctionDeclaration,
-): AST.TypeDeclaration | AST.PrimitiveDeclaration | undefined {
+): AST.TypeDeclaration | AST.PrimitiveDeclaration | AST.EntityDataDeclaration | undefined {
   const item = declaration.$container
+  if (AST.isEntityDataDeclarationBlock(item) && item.entries.includes(declaration)) {
+    const owner = item.$container
+    return AST.isEntityDataDeclaration(owner) && owner.block === item ? owner : undefined
+  }
   if (!AST.isItemTypeExpression(item) || !item.methods.includes(declaration)) {
     return undefined
   }
@@ -1428,11 +1432,15 @@ export function associatedFunctionOwner(
   return AST.isTypeDeclaration(owner) && owner.type === container ? owner : undefined
 }
 
-/** associatedViewOwner resolves only a view actually contained in an owner's slots.views list. */
+/** associatedViewOwner resolves only a view actually contained in its owner's body. */
 export function associatedViewOwner(
   declaration: AST.AssociatedViewDeclaration,
-): AST.TypeDeclaration | AST.PrimitiveDeclaration | undefined {
+): AST.TypeDeclaration | AST.PrimitiveDeclaration | AST.EntityDataDeclaration | undefined {
   const item = declaration.$container
+  if (AST.isEntityDataDeclarationBlock(item) && item.entries.includes(declaration)) {
+    const owner = item.$container
+    return AST.isEntityDataDeclaration(owner) && owner.block === item ? owner : undefined
+  }
   if (!AST.isItemTypeExpression(item) || !item.views.includes(declaration)) {
     return undefined
   }
@@ -1467,31 +1475,38 @@ export function associatedEntityReceiverOwner(
     : undefined
 }
 
-/** associatedReceiverOwner recognizes only references linked to the enclosing method's real type. */
+/** associatedReceiverOwner recognizes only references linked to a real instance receiver. */
 export function associatedReceiverOwner(
   reference: AST.Node,
-): AST.TypeDeclaration | undefined {
+): AST.TypeDeclaration | AST.EntityDataDeclaration | undefined {
   if (!AST.isValueReference(reference) && !AST.isMemberAccessExpression(reference)) {
     return undefined
   }
   const method = findOwningAssociatedFunction(reference)
-  if (!method) {
+  const view = findOwningAssociatedView(reference)
+  const callable = method ?? view
+  if (!callable) {
     const converter = findOwningAssociatedConverter(reference)
     const source = converter && associatedConverterSourceOwner(converter)
     return source && reference.target.ref === source ? source : undefined
   }
-  if (method.static) {
+  if (method?.static) {
     return undefined
   }
   let current: AST.Node | undefined = reference
-  while (current && current !== method.block) {
+  while (current && current !== callable.block) {
     current = current.$container
   }
   if (!current) {
     return undefined
   }
-  const owner = associatedFunctionOwner(method)
-  return owner && AST.isTypeDeclaration(owner) && reference.target.ref === owner ? owner : undefined
+  const owner = associatedEntityReceiverOwner(callable)
+    ?? (method ? associatedFunctionOwner(method) : view && associatedViewOwner(view))
+  return owner && (AST.isTypeDeclaration(owner)
+      || (AST.isEntityDataDeclaration(owner) && associatedEntityReceiverOwner(callable) === owner))
+      && reference.target.ref === owner
+    ? owner
+    : undefined
 }
 
 /** findOwningPhrase returns the phrase declaration that owns `node`, if any. */

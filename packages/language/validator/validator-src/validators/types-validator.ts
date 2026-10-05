@@ -516,6 +516,7 @@ function typeReferenceReferencesRoot(
       return typeDefinitionReferencesRoot(root, target, seen)
     },
     PrimitiveTypeReference: () => false,
+    YesNoTypeExpression: () => false,
   })
 }
 

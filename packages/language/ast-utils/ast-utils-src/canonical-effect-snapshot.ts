@@ -125,7 +125,7 @@ export function publishCanonicalEffectSnapshot(
   const associated = new Map<AssociatedDeclaration, AssociatedDescriptorMaterialization>()
   const associatedOwners = new Map<AssociatedDeclaration, AssociatedCallableOwner>()
   for (const node of nodes) {
-    if (!AST.isTypeDeclaration(node) && !AST.isPrimitiveDeclaration(node)) {
+    if (!AST.isTypeDeclaration(node) && !AST.isPrimitiveDeclaration(node) && !AST.isEntityDataDeclaration(node)) {
       continue
     }
     const declarations = AST.isTypeDeclaration(node)

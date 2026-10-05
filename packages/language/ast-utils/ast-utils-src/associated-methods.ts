@@ -4,7 +4,7 @@ import type { CallableAnalysis } from './callable-effects'
 import type { CallableSignature } from './callable-signatures'
 import type { TaoType } from './Type'
 
-export type AssociatedCallableOwner = AST.TypeDeclaration | AST.PrimitiveDeclaration
+export type AssociatedCallableOwner = AST.TypeDeclaration | AST.PrimitiveDeclaration | AST.EntityDataDeclaration
 export type AssociatedCallableDeclaration =
   | AST.AssociatedFunctionDeclaration
   | AST.CapabilityMethodDeclaration
@@ -186,6 +186,9 @@ export function materializeAssociatedCallable(
 
 /** Own members remain separate from record properties and numeric construction members. */
 export function ownAssociatedMethods(owner: AssociatedCallableOwner): readonly AST.AssociatedFunctionDeclaration[] {
+  if (AST.isEntityDataDeclaration(owner)) {
+    return owner.block.entries.filter(AST.isAssociatedFunctionDeclaration)
+  }
   if (AST.isPrimitiveDeclaration(owner)) {
     return owner.slots?.methods ?? []
   }
@@ -200,6 +203,9 @@ export function ownAssociatedMethods(owner: AssociatedCallableOwner): readonly A
 
 /** Mounted views retain their own declaration kind rather than impersonating functions. */
 export function ownAssociatedViews(owner: AssociatedCallableOwner): readonly AST.AssociatedViewDeclaration[] {
+  if (AST.isEntityDataDeclaration(owner)) {
+    return owner.block.entries.filter(AST.isAssociatedViewDeclaration)
+  }
   if (AST.isPrimitiveDeclaration(owner)) {
     return owner.slots?.views ?? []
   }
