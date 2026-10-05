@@ -2492,7 +2492,75 @@ class TypeResolutionContext {
       const entity = Type.visibleDataEntities(context).find(candidate => candidate.singularName === 'Account')
       return entity ? { kind: 'entity', entity } : unresolvedType()
     }
-    return this.ofValueDeclaration(declaration)
+    const declared = this.ofValueDeclaration(declaration)
+    const continuation = AST.isParameterDeclaration(declaration)
+      ? this.optionalEntityContinuationCandidate(declaration, context, declared)
+      : undefined
+    return continuation?.entity ?? declared
+  }
+
+  private optionalEntityContinuationCandidate(
+    parameter: AST.ParameterDeclaration,
+    context: AST.Node,
+    declared: TaoType,
+  ) {
+    const owner = parameter.$container?.$container
+    if (
+      !AST.isViewDeclaration(owner) || AST.findOwningView(context) !== owner
+      || parameter.copy || parameter.mutable || parameterRequiresWritable(parameter)
+      || declared.kind !== 'union' || declared.members.length !== 2
+    ) {
+      return undefined
+    }
+    const name = Type.parameterName(parameter)
+    for (let node: AST.Node | undefined = context; node && node !== owner; node = node.$container) {
+      if (
+        AST.isBlock(node) && node.statements.some(candidate =>
+          (AST.isAliasDeclaration(candidate) || AST.isEntityQueryDeclaration(candidate))
+          && Type.declarationName(candidate) === name
+        )
+      ) {
+        return undefined
+      }
+    }
+    const entity = declared.members.find(member => member.kind === 'entity')
+    const none = declared.members.find(member => member.kind === 'primitive' && member.primitive === 'none')
+    if (entity?.kind !== 'entity' || !none) {
+      return undefined
+    }
+    let anchor = context
+    while (anchor.$container && !AST.isBlock(anchor.$container)) {
+      if (AST.isActionBlock(anchor.$container)) {
+        return undefined
+      }
+      anchor = anchor.$container
+    }
+    const block = anchor.$container
+    // Compound render statements, declarations, and event bodies cannot inherit this proof.
+    if (!AST.isBlock(block) || !AST.isRender(anchor)) {
+      return undefined
+    }
+    const index = block.statements.indexOf(anchor)
+    if (index < 0) {
+      return undefined
+    }
+    const guard = block.statements.slice(0, index).find(statement => {
+      if (
+        !AST.isGuardRenderStatement(statement) || !AST.isValueReference(statement.subject)
+        || statement.subject.target.ref !== parameter
+      ) {
+        return false
+      }
+      if (!statement.caseBlock && !statement.single) {
+        return true
+      }
+      const branches = statement.caseBlock?.branches ?? (statement.single ? [statement.single] : [])
+      return branches.filter(branch => branch.case === 'none').length === 1
+    })
+    if (!AST.isGuardRenderStatement(guard)) {
+      return undefined
+    }
+    return { parameter, declared, entity, guard, block, anchor }
   }
 
   ofValueDeclaration(declaration: AST.ValueDeclaration | undefined): TaoType {
