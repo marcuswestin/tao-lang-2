@@ -727,7 +727,7 @@ Describe('Tao runtime app generation', () => {
     )
   })
 
-  Test('removes stale generated module files and empty directories when imports change', async () => {
+  Test('removes stale generated module files while retaining directories used by core contracts', async () => {
     const runtimePackageRoot = await createRuntimePackageRoot()
 
     await Runtime.generateApp(runtimeStdlibTestsPath, { runtimePackageRoot })
@@ -735,13 +735,19 @@ Describe('Tao runtime app generation', () => {
     const stdlibInjectionPath = await findGeneratedModule(runtimePackageRoot, 'Views.tao.injection-1.tsx')
     const stdlibModuleDir = FS.dirname(stdlibModulePath)
 
-    const generated = await Runtime.generateApp(typeSystemTestsPath, { runtimePackageRoot })
-
-    Expect(await FS.exists(stdlibModulePath)).toBe(false)
-    Expect(await FS.exists(stdlibInjectionPath)).toBe(false)
-    // Type System Tests now imports @tao/nav, so the shared generated stdlib directory remains.
-    Expect(await FS.exists(stdlibModuleDir)).toBe(true)
-    Expect(await FS.readText(generated.outputPath)).toBe(generated.code)
+    // Text rendering now retains Views through core capabilities. Use an actual import-free
+    // replacement so this check still exercises removal rather than assuming a library graph.
+    await withTaoFiles('tao-runtime-remove-imports-', {
+      'Main.tao':
+        'app Minimal { id "minimal" version "0.1.0" name "Minimal" view Main }\nview Main() { render inject ```ts return null ``` }',
+    }, async paths => {
+      const generated = await Runtime.generateApp(paths['Main.tao'], { runtimePackageRoot })
+      Expect(await FS.exists(stdlibModulePath)).toBe(false)
+      Expect(await FS.exists(stdlibInjectionPath)).toBe(false)
+      // Core contracts still publish into the shared library directory after Views retires.
+      Expect(await FS.exists(stdlibModuleDir)).toBe(true)
+      Expect(await FS.readText(generated.outputPath)).toBe(generated.code)
+    })
   })
 
   for (const errorCode of ['EPERM'] as const) {
