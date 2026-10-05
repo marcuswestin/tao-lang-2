@@ -21,7 +21,7 @@ export type TaoActionReceipt = Readonly<{
 const actionReceipts = new Map<(receipt: TaoActionReceipt) => void, number>()
 
 export type TaoDeclaredFailure = Readonly<{
-  case: { evaluate(): { jsValue: unknown } }
+  case: { evaluate(): { jsValue: unknown } } | string
   sentence: string
 }>
 

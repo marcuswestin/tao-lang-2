@@ -480,7 +480,7 @@ export const ActionsCompiler = {
   /** FailStatement aborts the joined action transaction with one declared case and sentence. */
   FailStatement(statement: AST.FailStatement): Compiled {
     const failureCase = resolveRef(statement.case)
-    return gen`TR.Fail(${Compile.ValueDeclarationReference(failureCase)}, ${gen.jsLiteral(statement.sentence)})`
+    return gen`TR.Fail(${compileFailureCase(failureCase)}, ${gen.jsLiteral(statement.sentence)})`
   },
 
   /** AskStatement suspends its action and binds the response owned by this presented occurrence. */
@@ -718,7 +718,7 @@ function compileForeignAction(action: AST.ActionDeclaration): Compiled {
     [${
     gen.join(foreign.failures, failure =>
       gen`{
-      case: ${Compile.ValueDeclarationReference(resolveRef(failure.case))},
+      case: ${compileFailureCase(resolveRef(failure.case))},
       sentence: ${gen.jsLiteral(failure.sentence)},
     }`)
   }],
@@ -726,6 +726,13 @@ function compileForeignAction(action: AST.ActionDeclaration): Compiled {
       testStubKey: ${gen.jsLiteral(foreignActionTestStubKey(action))},
       ${AST.findOwningView(action) ? gen`owner: _TaoActionOwner,` : gen``} },
   )`
+}
+
+/** Named record failures use their source declaration name; enum failure values stay nominal. */
+function compileFailureCase(failureCase: AST.FailureDeclaration): Compiled {
+  return AST.isTypeDeclaration(failureCase)
+    ? gen.jsLiteral(failureCase.name)
+    : Compile.ValueDeclarationReference(failureCase)
 }
 
 function compileForeignActionParameterBinding(parameter: ActionParameter): Compiled {

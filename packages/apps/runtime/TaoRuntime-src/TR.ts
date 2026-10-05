@@ -875,7 +875,7 @@ class TR {
   }
 
   /** Fail aborts the complete joined action transaction and skips the remaining caller block. */
-  static Fail(failureCase: TR.Evaluable, sentence: string): never {
+  static Fail(failureCase: TR.Evaluable | string, sentence: string): never {
     throw new TaoActionFailure(actionFailureCaseName(failureCase), sentence)
   }
 
