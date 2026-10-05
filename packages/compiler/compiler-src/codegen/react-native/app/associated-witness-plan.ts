@@ -44,7 +44,10 @@ export function referencedAssociatedWitnessOwners(
             || AST.isActionDeclaration(owner)),
           'Expected a callable return owner.',
         )
-        transport(node.value, AST.isActionDeclaration(owner) ? Type.ofActionResult(owner) : Type.ofFunctionReturn(owner))
+        transport(
+          node.value,
+          AST.isActionDeclaration(owner) ? Type.ofActionResult(owner) : Type.ofFunctionReturn(owner),
+        )
       }
       if (
         AST.isFunctionCallExpression(node)

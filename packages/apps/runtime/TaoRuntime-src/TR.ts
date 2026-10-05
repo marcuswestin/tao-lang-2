@@ -166,7 +166,6 @@ import { selectPluralForm, type TaoPluralCategory, type TaoPluralForms } from '.
 import { admitQuantityUnion, nativeQuantityResult } from './TR-quantity-admission'
 import { QuantityArithmetic, quantityOperand, scalarOperand } from './TR-quantity-arithmetic'
 import { isQuantityPayload } from './TR-quantity-values'
-import { renderTextValue } from './TR-ui-render'
 import { requireReactNativeRuntime } from './TR-react-native'
 import { isReactiveValue, markReactiveValue } from './TR-reactive'
 import {
@@ -239,6 +238,7 @@ import {
 import { StudioSubjectHost } from './TR-studio-subject'
 import { runtimeSwitchHandler } from './TR-switch'
 import * as TRTaoProps from './TR-TaoProps'
+import { renderTextValue } from './TR-ui-render'
 import { Clock, createTicker, makeUnitControls, type TaoTicker } from './TR-units'
 import * as TRViews from './TR-views'
 
