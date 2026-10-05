@@ -65,7 +65,10 @@ function validateConfiguredItemConstructor(
   if (AST.isArgument(value.$container)) {
     const role = Type.genericRoleConstructor(value.$container)
     const owner = role?.parameter.$container?.$container
-    if (role && (AST.isFunctionDeclaration(owner) || AST.isAssociatedFunctionDeclaration(owner))) {
+    if (
+      role
+      && (AST.isFunctionDeclaration(owner) || AST.isAssociatedFunctionDeclaration(owner) || AST.isViewDeclaration(owner))
+    ) {
       const arguments_ = value.$container.$container
       if (AST.isArgumentList(arguments_)) {
         const generic = Type.instantiateGenericInvocation(owner, arguments_.arguments)

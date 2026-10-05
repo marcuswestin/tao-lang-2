@@ -58,6 +58,7 @@ export type ResolvedRenderInvocation = {
   parameterTypes?: ReadonlyMap<AST.ParameterDeclaration, TaoType>
   transportTypes?: ReadonlyMap<AST.ParameterDeclaration, TaoType>
   result?: TaoType
+  bindings?: ReturnType<typeof Type.instantiateGenericInvocation>['bindings']
   genericDiagnostics?: ReturnType<typeof Type.instantiateGenericInvocation>['genericDiagnostics']
 }
 
@@ -96,7 +97,10 @@ export type ResolvedActionTarget =
  * declaration has parameters to bind; a nav or a parameter renders as the value it was bound to,
  * and `resolveRenderTarget` is what classifies those.
  */
-export function resolveRenderInvocation(render: AST.Render): ResolvedRenderInvocation {
+export function resolveRenderInvocation(
+  render: AST.Render,
+  metadata?: ArgumentBindingMetadata,
+): ResolvedRenderInvocation {
   const view = render.view?.ref
   if (!view || !AST.isViewDeclaration(view)) {
     return {
@@ -108,10 +112,11 @@ export function resolveRenderInvocation(render: AST.Render): ResolvedRenderInvoc
     }
   }
 
-  const generic = view.genericParameters.length > 0
-    ? Type.instantiateGenericInvocation(view, AST.argumentsOf(render))
+  const genericView = transparentViewTarget(view)
+  const generic = genericView.genericParameters.length > 0
+    ? Type.instantiateGenericInvocation(genericView, AST.argumentsOf(render), metadata)
     : undefined
-  const bindings = generic ?? resolveArgumentBindings(view, render)
+  const bindings = generic ?? resolveArgumentBindings(view, render, metadata)
   const events = resolveRenderEventBindings(render, view, bindings.pairs)
   const satisfiedParameters = new Set([
     ...events.pairs.map(pair => pair.parameter),
@@ -136,10 +141,29 @@ export function resolveRenderInvocation(render: AST.Render): ResolvedRenderInvoc
         parameterTypes: generic.parameterTypes,
         transportTypes: generic.transportTypes,
         result: generic.result,
+        bindings: generic.bindings,
         genericDiagnostics: generic.genericDiagnostics,
       }
       : {}),
   }
+}
+
+/** Only aliases without their own constraints forward the target's generic declaration. */
+function transparentViewTarget(view: AST.ViewDeclaration): AST.ViewDeclaration {
+  const seen = new Set<AST.ViewDeclaration>()
+  let current = view
+  while (current.aliasTarget) {
+    if (seen.has(current) || current.genericParameters.length > 0) {
+      return view
+    }
+    seen.add(current)
+    const target = current.aliasTarget.member.ref
+    if (!AST.isViewDeclaration(target)) {
+      return view
+    }
+    current = target
+  }
+  return current
 }
 
 function resolveRenderEventBindings(
