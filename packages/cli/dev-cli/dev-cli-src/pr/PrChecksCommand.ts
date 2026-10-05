@@ -8,8 +8,9 @@ import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
  * credentials to read its checks. A `GH_TOKEN` or `GITHUB_TOKEN` in the environment is sent when
  * present, which also lifts the anonymous limit of 60 requests an hour.
  *
- * Polling is sized to that limit: one conditional request per poll, which costs nothing when GitHub
- * answers 304, and the statuses and failure annotations only once, at the end. A failed check's
+ * Polling reads check runs, the matching Verify workflow, and commit statuses. Check and workflow
+ * reads use conditional requests; authenticated 304 responses do not spend the primary limit.
+ * Hosted callers reuse the CLI login, and standalone callers may configure a token. A failed check's
  * reason comes from its annotations, which the `Verify` job writes from each partition's summary,
  * so an agent learns which gate failed and why without downloading any log.
  */
