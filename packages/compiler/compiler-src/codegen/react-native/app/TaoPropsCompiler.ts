@@ -44,6 +44,24 @@ export const TaoPropsCompiler = {
       ViewRender: () => compileTaoPropsForViewRender(fields),
     })
   },
+
+  /** RenderSlotTaoProps compiles occurrence metadata from the actual placement, as an expression. */
+  RenderSlotTaoProps(use: AST.RenderSlotUse, options: CodegenOptions = {}): Compiled {
+    const label = AST.renderPrefixCluster(use).find(AST.isRenderAccessibilityStatement)
+    const tag = AST.attachedTag(use)?.tag.slice(1)
+    const fields: TaoPropsFields = {
+      accessibilityLabel: label ? gen`${Compile.Expression(label.value)}.evaluate().jsValue` : undefined,
+      designDefault: undefined,
+      designSource: undefined,
+      designSpec: gen`undefined`,
+      interaction: undefined,
+      journeyObservation: options.journeyObservations ? compileJourneyRenderOccurrence(use) : undefined,
+      layout: gen`undefined`,
+      studio: options.studio ? compileStudioRenderOccurrence(use, options.projectRoot) : undefined,
+      testTag: tag?.startsWith(studioRectMarkerPrefix) ? undefined : tag,
+    }
+    return gen`TR.ViewTaoProps(${compileTaoPropsObject(fields)}, _ViewProps.__tao, false)`
+  },
 } as const
 
 type TaoPropsFields = {
@@ -92,7 +110,7 @@ function compileTaoPropsObject(fields: TaoPropsFields): Compiled {
 }
 
 /** compileJourneyRenderOccurrence carries source identity through test props without Studio runtime instrumentation. */
-function compileJourneyRenderOccurrence(render: AST.Render): Compiled {
+function compileJourneyRenderOccurrence(render: AST.Render | AST.RenderSlotUse): Compiled {
   const identity = renderSourceIdentity(render)
   Assert.defined(identity, 'compiled render has source coordinates')
   return gen`{
@@ -115,12 +133,15 @@ function publicTestTagForRender(render: AST.Render): string | undefined {
 }
 
 /** compileStudioRenderOccurrence emits one version-bound source locator for a rendered occurrence. */
-function compileStudioRenderOccurrence(render: AST.Render, projectRoot: string | undefined): Compiled {
+function compileStudioRenderOccurrence(
+  render: AST.Render | AST.RenderSlotUse,
+  projectRoot: string | undefined,
+): Compiled {
   const cstNode = render.$cstNode
   Assert.defined(cstNode, 'compiled render has source coordinates')
   Assert.defined(projectRoot, 'Studio render compilation has an exact project root')
   const owner = AST.findOwningView(render)
-  const identity = studioRenderIdentity(render, projectRoot)
+  const identity = AST.isRenderSlotUse(render) ? undefined : studioRenderIdentity(render, projectRoot)
   return gen`{
     sourcePath: ${gen.jsLiteral(AST.getDocument(render).uri.fsPath)},
     start: ${cstNode.offset},

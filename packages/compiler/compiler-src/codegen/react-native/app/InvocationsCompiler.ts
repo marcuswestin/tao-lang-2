@@ -5,6 +5,7 @@ import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 import { actionBlockInterruptsAsk, actionBlockRequiresAsync } from './action-control-flow'
 import { compileReactiveArgument } from './reactive-parameters'
+import { emitSlotBody } from './renderer-slot-codegen'
 
 export const InvocationsCompiler = {
   /** RenderStatementBody compiles a Tao render statement into a JSX fragment. */
@@ -38,9 +39,7 @@ export const InvocationsCompiler = {
     const viewName = AST.isQuotedRender(render) ? gen`__tao_quoted_Text$` : gen.scopeName(view)
     const taoProps = Compile.RenderTaoProps(render, options)
     const block = render.block
-    const slotFills = AST.renderSlotUsesOf(block).filter(
-      (use): use is AST.RenderSlotUse & { render: AST.ViewRender } => use.render !== undefined,
-    )
+    const slotFills = AST.renderSlotUsesOf(block).filter(AST.isRenderSlotFill)
     if (block && slotFills.length > 0) {
       return Compile.RenderWithSlots(render, view, renderArguments, taoProps, block, slotFills, options)
     }
@@ -101,7 +100,7 @@ export const InvocationsCompiler = {
     renderArguments: Compiled,
     taoProps: Compiled,
     block: AST.Block,
-    slotFills: readonly (AST.RenderSlotUse & { render: AST.ViewRender })[],
+    slotFills: readonly AST.RenderSlotUse[],
     options: CodegenOptions = {},
   ): Compiled {
     const setupStatements = block.statements.filter(statement =>
@@ -128,14 +127,14 @@ export const InvocationsCompiler = {
 
   /** RenderSlotProps compiles opaque named visual fills into private generated component props. */
   RenderSlotProps(
-    slotFills: readonly (AST.RenderSlotUse & { render: AST.ViewRender })[],
+    slotFills: readonly AST.RenderSlotUse[],
     options: CodegenOptions = {},
   ): Compiled {
     return gen` __taoSlots={{
       ${
       gen.list(
         slotFills,
-        fill => gen`${gen.jsLiteral(fill.slot.$refText)}: ${Compile.Render(fill.render, options)},`,
+        fill => compileSlotFill(fill, options),
       )
     }
     }}`
@@ -221,6 +220,33 @@ export const InvocationsCompiler = {
     `
   },
 } as const
+
+/** compileSlotFill emits an explicit null or a fresh descriptor for one caller-owned fill. */
+function compileSlotFill(fill: AST.RenderSlotUse, options: CodegenOptions): Compiled {
+  const contract = fill.slot.ref
+  Assert.defined(contract, 'validated slot fill resolves its receiving contract')
+  const body = AST.renderSlotBodyOf(fill)
+  if (body.kind === 'empty') {
+    return gen`${gen.jsLiteral(fill.slot.$refText)}: null,`
+  }
+  Assert(body.kind !== 'absent', 'validated slot fill has a body')
+  const environment = gen`{
+    _Scope,
+    _ViewProps,
+    _TaoActionOwner,
+    _TaoAuthScope,
+    _TaoSlotDefaults,
+  }`
+  return gen`${gen.jsLiteral(fill.slot.$refText)}: ${
+    emitSlotBody({
+      anchor: fill,
+      contract,
+      body: fill,
+      options,
+      environment,
+    })
+  },`
+}
 
 /** studioLensRender wraps exactly each preview occurrence while leaving test and production output untouched. */
 function studioLensRender(render: AST.Render, child: Compiled, options: CodegenOptions): Compiled {
