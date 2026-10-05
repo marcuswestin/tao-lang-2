@@ -105,7 +105,7 @@ view Library {
       // 5. Acquisition is bounded; continuation extends this same owned window.
       guard Feed
       loop Feed / Book {
-         Book.Title
+         Book
       }
       Button("More") {
          on press -> do LoadAfter(Feed)

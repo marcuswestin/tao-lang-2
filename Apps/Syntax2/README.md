@@ -17,12 +17,14 @@ remains undiscovered.
   This collection slice uses an eager loop; the standard-library lazy host remains pending.
   Signed quantity arithmetic exercises Duration and Ratio; Title.Default supplies a structural
   UI value whose associated Render calls its pure uppercase ToText method. Book titles use that
-  same selected renderer, producing uppercase labels.
+  same selected renderer, producing uppercase labels. Bare Book placement invokes its associated
+  BookRow renderer, retaining the live entity for Return, revision acknowledgment and Export.
   EarlierLabel uses one generic Ordered/Display domain and a total first-match pick;
   Score demonstrates checked native addition and an explicit Title conversion.
   A typed NewBook draft preserves its writable Title lens. Add consumes InvalidInput locally,
   clears feedback, and resets the draft only after successful creation. The app declares an error
-  rendering boundary; delivery of unhandled action failures to that boundary remains pending.
+  rendering boundary; an actual stale continuation failure reaches it after cleanup and rollback.
+  Public fallback messages avoid claiming external operations were rolled back.
   `Title as TitleType` preserves the nominal declaration while a local `Title` value shadows its
   original spelling; the actual journey covers its static factory, construction and conversion.
 - [library/Library.tao](library/Library.tao): graduated Name/GivenName/FamilyName, PersonName and
@@ -30,9 +32,15 @@ remains undiscovered.
   and argument matcher. ComparedNames constructs a list with contextual Name elements.
   Display, Title's associated methods/view, GroupMode, EarlierLabel and Score are graduated as well.
   Library.ts supplies pure text ordering and numeric addition at the checked native boundary.
+  Book and Books have singular/collection Return actions, with one stored LoanedOut Boolean and
+  its writable inverse Returned. Book.Key and Book.Render supply ordinary library capabilities.
+- [library/BookViews.tao](library/BookViews.tao): live Book rows render an optional author through
+  a helper-local none guard, title, note and availability, with revision-specific Seen controls.
+  Export completion receives a checked Duration and schedules a detached Wait/NotifyExport action.
 - [Library.test.tao](Library.test.tao): active journey asserting the header and both directions of
   the grouping display transition, signature-role results, and bounded book acquisition,
-  continuation and refresh, local typed rejection, input editing and successful creation.
+  continuation and refresh, local typed rejection, input editing and successful creation. A fresh
+  second journey creates a book and then exercises stale-cursor recovery through the app guard.
 - [Main.tao.future](Main.tao.future): project/app boundary, controls, slots, units and bounded list UI.
 - [library/Library.tao.future](library/Library.tao.future): nominal signatures, structural capabilities,
   generics, native operator, entities, associated actions/rendering and cleanup.
@@ -45,6 +53,10 @@ remains undiscovered.
 - [library/BookIO.tao](library/BookIO.tao): active owned file/revision/query adapter contracts.
   BookIO.ts and BookStoreProvider.ts implement actual bounded acquisition, PDF creation, upload,
   cleanup and cached revision acknowledgment. Remaining adapter contracts stay in the future file.
+- [library/BookActions.tao](library/BookActions.tao): Add validates its typed input, while Export
+  samples a monotonic timer before creating/uploading an owned PDF and joins deferred deletion
+  before completing. A compiled-source acceptance test proves real PDF bytes, checked elapsed
+  Duration, and cleanup on success and upload failure; it does not claim installed-device proof.
 - [Library.test.tao.future](Library.test.tao.future): initial user-visible journey to activate with
   the entry slice; it is not current acceptance evidence.
 - [stdlib/Keyed.tao.future](stdlib/Keyed.tao.future): target ordinary declarations for @tao/ui,

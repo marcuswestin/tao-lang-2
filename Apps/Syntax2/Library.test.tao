@@ -48,4 +48,12 @@ test "Syntax2 Library" {
       press "Add"
       expect #draft input value ""
    }
+   test "routes a stale continuation failure to the app guard" {
+      run LibraryApp
+      enter "A new book" into #draft
+      press "Add"
+      expect #draft input value ""
+      press "More"
+      expect text "Couldn't finish 'action.'"
+   }
 }
