@@ -20,28 +20,7 @@ app LibraryApp {
    }
 }
 
-// 2. Repeated types, renderer defaults, repeated placement and forwarding.
-// Banner's two text roles graduated to Main.tao.
-view Heading(Title) { render Title [caption] }
-view NumberedBook(Book, Occurrence) {
-   render Row { "{Occurrence.Ordinal}." Book }
-}
-view Shelf(Items list of Book) {
-   @header(Title): Heading
-   @item(Book, Occurrence): NumberedBook
-   @footer: "Loaded snapshot" [caption]
-   render Col {
-      @header(Title "Library")
-      LazyList(Items) [claim 2] { @item: @item }
-      @header(Title "End")
-      @footer
-   }
-}
-view GroupedShelf(Items list of Book) {
-   render LazyList(GroupedRows(Items)) [claim 2] {
-      @item Entry, Occurrence -> Entry
-   }
-}
+// 2. Repeated types, renderer defaults, repeated placement and forwarding graduated to Shelves.tao.
 
 // 3. Signature projections and canonical named state construction.
 // ProfileName graduated to Main.tao.
