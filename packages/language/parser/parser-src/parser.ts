@@ -1100,7 +1100,11 @@ async function loadReferencedDocuments(
   }
   const referencedDocuments: AST.Document[] = []
   // A bare rendered value may need standard Text after linking, without an authored UI import.
-  if (AST.streamAllContents(ast).some(AST.isRender)) {
+  if (
+    AST.streamAllContents(ast).some(node =>
+      AST.isViewRender(node) || (AST.isRenderStatement(node) && node.injection === undefined)
+    )
+  ) {
     for (
       const path of await context.packages.candidateFilePaths(quotedTextImport(), { fromFilePath: document.uri.path })
     ) {

@@ -60,7 +60,18 @@ standard declarations and app graduation. Associated views require B's separate 
 B owns StatementsFormatter.ts solely for EventHandler arrow whitespace, disjoint from A's
 generic header spacing. Its current bare-text and atomic-handler packet includes mounted empty
 value suppression, existing Text rendering and source dispatch. General structural ui and
-associated view integration remain the next explicitly allocated slice.
+associated view integration now releases views.langium, render-targets.ts, views-validator.ts,
+ViewsFormatter.ts, ViewsCompiler.ts, InvocationsCompiler.ts, ui-render-codegen.ts and
+TR-ui-render.tsx to B, with focused associated-ui tests. A retains the actual associated-view
+descriptor, structural admission and rendered family in its held Type/associated-methods/type
+grammar interfaces. B starts from an already bound component and receiver props, preserving real
+occurrence props; root retains witness planning/publication and shared dispatch. Generic views
+later reuse A's ordinary generic invocation API, rather than a special LazyList compiler kind.
+
+A also owns actions.langium's StateDeclaration rule and StatesFormatter.ts solely for selected
+named-state shorthand. D retains every other action grammar rule. This is a disjoint source hunk,
+coordinated before replay; it preserves nominal state identity and the existing lexical type/value
+distinction.
 
 C owns runtime expo-module.config.json, ios/TaoContinuousClockModule.swift,
 ios/TaoRuntimeNative.podspec, android/build.gradle,
