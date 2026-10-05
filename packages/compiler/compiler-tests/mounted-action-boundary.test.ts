@@ -118,7 +118,7 @@ Describe('compiler: mounted app action failure boundary', () => {
             JSON.stringify(Repo.resolvePath('packages/apps/runtime/TaoRuntime-src/TR-error-containment.tsx'))
           })
         const { MountedAppActionBoundary } = await import(${
-            JSON.stringify(Repo.resolvePath('packages/apps/runtime/TaoRuntime-src/TR-action-boundary.tsx'))
+            JSON.stringify(Repo.resolvePath('packages/apps/runtime/TaoRuntime-src/TR-action-boundary.ts'))
           })
         const { default: TR } = await import(${
             JSON.stringify(Repo.resolvePath('packages/apps/runtime/TaoRuntime-src/TR.ts'))

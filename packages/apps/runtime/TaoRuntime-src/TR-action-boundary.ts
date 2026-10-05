@@ -1,62 +1,14 @@
 import React from 'react'
+import { ActionBoundaryContext, MountedActionBoundary } from './TR-action-boundary-model'
 import { createElement } from './TR-create-element'
 import { TaoErrorBoundary } from './TR-error-containment'
-import { actionFailurePublicMessage, type TaoActionFailureReport } from './TR-errors'
-import { runtimeRevisionStore } from './TR-listeners'
+import { actionFailurePublicMessage } from './TR-errors'
 import type { RuntimeAppDefinition } from './TR-navigation-app'
 import { reactiveValue } from './TR-reactive-values'
 import { readContext } from './TR-read-net'
 import type { TaoProps } from './TR-TaoProps'
 
-export type TaoActionFailureSink = (failure: TaoActionFailureReport) => boolean
-
-/** One host occurrence owns its failure latch; app definitions may be mounted more than once. */
-export class MountedActionBoundary {
-  private readonly changes = runtimeRevisionStore()
-  private generation = 0
-  private mountGeneration = 0
-  private active = false
-  failure: TaoActionFailureReport | undefined
-  readonly subscribe = this.changes.subscribe
-  readonly snapshot = this.changes.snapshot
-
-  mount(): () => void {
-    const mount = ++this.mountGeneration
-    this.generation += 1
-    this.active = true
-    return () => {
-      if (this.mountGeneration === mount) {
-        this.active = false
-        this.generation += 1
-      }
-    }
-  }
-
-  capture(): TaoActionFailureSink | undefined {
-    if (!this.active) {
-      return undefined
-    }
-    const generation = this.generation
-    return failure => {
-      if (!this.active || this.generation !== generation) {
-        return false
-      }
-      if (!this.failure) {
-        this.failure = failure
-        this.changes.changed()
-      }
-      return true
-    }
-  }
-
-  recover(): void {
-    this.generation += 1
-    this.failure = undefined
-    this.changes.changed()
-  }
-}
-
-export const ActionBoundaryContext = React.createContext<MountedActionBoundary | undefined>(undefined)
+export { ActionBoundaryContext, MountedActionBoundary, type TaoActionFailureSink } from './TR-action-boundary-model'
 
 /** Mount ownership and recovery stay outside the children replaced by a latched failure. */
 export function MountedAppActionBoundary(props: {

@@ -1,5 +1,9 @@
 import React from 'react'
-import { ActionBoundaryContext, type MountedActionBoundary, type TaoActionFailureSink } from './TR-action-boundary'
+import {
+  ActionBoundaryContext,
+  type MountedActionBoundary,
+  type TaoActionFailureSink,
+} from './TR-action-boundary-model'
 import { actionOwner, registerActionCleanup } from './TR-action-transactions'
 import { RuntimeAssert } from './TR-assert'
 import { reportUnownedFailure } from './TR-errors'
@@ -17,7 +21,8 @@ export class TaoActionOwner {
       return undefined
     }
     const generation = this.generation
-    return failure => this.active && this.generation === generation && sink(failure)
+    const guarded: TaoActionFailureSink = failure => this.active && this.generation === generation && sink(failure)
+    return guarded
   }
 
   dispose(): void {

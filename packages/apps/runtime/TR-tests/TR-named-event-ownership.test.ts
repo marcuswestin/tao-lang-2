@@ -1,6 +1,6 @@
 import TR from '@runtime/TR'
 import { Deferred, Describe, Expect, Test } from '@shared/test'
-import { MountedActionBoundary } from '../TaoRuntime-src/TR-action-boundary'
+import { MountedActionBoundary } from '../TaoRuntime-src/TR-action-boundary-model'
 import { actionOwner } from '../TaoRuntime-src/TR-action-transactions'
 import { TaoActionFailure } from '../TaoRuntime-src/TR-errors'
 import { TaoActionOwner } from '../TaoRuntime-src/TR-native-subscription'

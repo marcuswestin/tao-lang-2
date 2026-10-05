@@ -77,7 +77,7 @@ Describe('compiler: named event ownership', () => {
             JSON.stringify(FS.resolvePath('Native.tsx', output))
           })
         const { MountedAppActionBoundary, ActionBoundaryContext } = await import(${
-            JSON.stringify(Repo.resolvePath('packages/apps/runtime/TaoRuntime-src/TR-action-boundary.tsx'))
+            JSON.stringify(Repo.resolvePath('packages/apps/runtime/TaoRuntime-src/TR-action-boundary.ts'))
           })
         const { TaoErrorBoundary } = await import(${
             JSON.stringify(Repo.resolvePath('packages/apps/runtime/TaoRuntime-src/TR-error-containment.tsx'))
