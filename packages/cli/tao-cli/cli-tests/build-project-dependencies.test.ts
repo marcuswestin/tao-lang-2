@@ -174,7 +174,7 @@ export function Card(_props: unknown) { mark(prefix); tag(prefix); return null }
         const [alias, implementation] of [
           ['localutil', 'exports.mark = value => value\n'],
           ['otherutil', 'exports.tag = value => value\n'],
-        ]
+        ] as const
       ) {
         const resolvedPackage = await FS.realPath(FS.resolvePath(alias, sharedModules))
         Expect(FS.pathIsWithin(resolvedPackage, artifactRoot)).toBe(true)

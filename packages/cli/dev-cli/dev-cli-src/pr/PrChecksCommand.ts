@@ -76,6 +76,12 @@ type PullRequest = {
 
 type CheckRun = { conclusion: string | null; html_url: string; id: number; name: string; status: string }
 type CommitStatus = { context: string; state: string; target_url: string | null }
+type VerifyWorkflowRun = {
+  conclusion: string | null
+  head_sha: string
+  html_url: string
+  status: string
+}
 
 /** PrChecksCommand is the CLI wiring surface consumed by `dev.ts`. */
 export const PrChecksCommand = {
@@ -111,15 +117,45 @@ export const PrChecksCommand = {
     const announced = new Set<string>()
     for (;;) {
       const runs = await github.checkRuns(slug, sha)
+      const workflows = await github.verifyWorkflowRuns(slug, sha)
       const statuses = await github.json<{ statuses: CommitStatus[] }>(`/repos/${slug}/commits/${sha}/status`)
       const checks = [...runs.map(fromCheckRun), ...statuses.statuses.map(fromStatus)]
+      const verify = runs.find(run => run.name === 'Verify')
+      const activeWorkflow = workflows.find(run => run.status !== 'completed')
+      const completedWorkflow = workflows.find(run => run.status === 'completed')
       for (const check of checks.filter(check => check.state !== 'pending' && !announced.has(check.name))) {
         announced.add(check.name)
         report(`${check.state === 'success' ? 'PASS' : 'FAIL'}  ${check.name}`)
       }
       const pending = checks.filter(check => check.state === 'pending')
 
-      if (checks.length === 0) {
+      if (!options.wait && checks.some(check => check.state === 'failure')) {
+        return { exitCode: await conclude(github, slug, checks, report), lines } satisfies PrChecksResult
+      }
+      if (activeWorkflow !== undefined) {
+        report(`WAIT  Verify workflow is ${activeWorkflow.status}: ${activeWorkflow.html_url}`)
+      } else if (completedWorkflow !== undefined && verify === undefined) {
+        report(`FAIL  Verify workflow completed without a Verify check: ${completedWorkflow.html_url}`)
+        return { exitCode: 1, lines } satisfies PrChecksResult
+      } else if (
+        checks.length > 0 && verify === undefined && dependencies.now() - startedAt >= CHECKS_APPEAR_WITHIN_MS
+      ) {
+        const conflicted = (await github.json<PullRequest>(`/repos/${slug}/pulls/${pr.number}`)).mergeable_state
+          === 'dirty'
+        report(
+          conflicted
+            ? 'FAIL  No Verify workflow or check appeared: the pull request conflicts with its base, and GitHub'
+              + ' runs no pull_request workflow until it merges cleanly. Merge main into the branch and push.'
+            : `FAIL  No Verify workflow or check on ${
+              sha.slice(0, 8)
+            }. Actions may be disabled, or no workflow matches this event.`,
+        )
+        return { exitCode: 1, lines } satisfies PrChecksResult
+      } else if (
+        checks.some(check => check.state === 'failure') && (!options.wait || pending.length === 0)
+      ) {
+        return { exitCode: await conclude(github, slug, checks, report), lines } satisfies PrChecksResult
+      } else if (checks.length === 0) {
         const conflicted = (await github.json<PullRequest>(`/repos/${slug}/pulls/${pr.number}`)).mergeable_state
           === 'dirty'
         if (conflicted) {
@@ -134,14 +170,20 @@ export const PrChecksCommand = {
           return { exitCode: 1, lines } satisfies PrChecksResult
         }
         report('WAIT  No checks yet; GitHub starts them a few seconds after a push.')
-      } else if (pending.length === 0 || !options.wait) {
+      } else if (pending.length === 0 && verify?.status === 'completed' && verify.conclusion === 'success') {
         return { exitCode: await conclude(github, slug, checks, report), lines } satisfies PrChecksResult
+      } else if (!options.wait) {
+        report('WAIT  Verify has not completed successfully on this head yet.')
+        return { exitCode: 2, lines } satisfies PrChecksResult
       } else {
         report(
           `WAIT  ${checks.length - pending.length}/${checks.length} concluded; running: ${
             pending.map(check => check.name).join(', ')
           }`,
         )
+      }
+      if (!options.wait) {
+        return { exitCode: 2, lines } satisfies PrChecksResult
       }
       await dependencies.sleep(options.intervalMs ?? DEFAULT_INTERVAL_MS)
     }
@@ -186,6 +228,8 @@ async function conclude(
 function fromCheckRun(run: CheckRun): Check {
   const state = run.status !== 'completed'
     ? 'pending'
+    : run.name === 'Verify' && run.conclusion !== 'success'
+    ? 'failure'
     : run.conclusion === 'success' || run.conclusion === 'skipped' || run.conclusion === 'neutral'
     ? 'success'
     : 'failure'
@@ -264,6 +308,13 @@ export function gitHub(dependencies: PrChecksDependencies, authToken?: string) {
         check_runs: CheckRun[]
       }
       return body.check_runs
+    },
+    async verifyWorkflowRuns(slug: string, sha: string): Promise<VerifyWorkflowRun[]> {
+      const body = await request(
+        `/repos/${slug}/actions/workflows/verify.yml/runs?head_sha=${sha}&per_page=100`,
+        true,
+      ) as { workflow_runs: VerifyWorkflowRun[] }
+      return body.workflow_runs.filter(run => run.head_sha === sha)
     },
     async json<ValueT>(path: string): Promise<ValueT> {
       return await request(path, false) as ValueT
