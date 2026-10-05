@@ -189,6 +189,13 @@ import {
 import { readAvailability } from './TR-read-availability'
 import { MergeReadNet, readContext, ReadNet, renderReadNet, type TaoReadHint, type TaoReadNetCase } from './TR-read-net'
 import {
+  createSlotRenderer,
+  type RenderSlotBodyProps,
+  RenderSlotFrame,
+  selectRenderSlot,
+  type TaoSlotRenderer,
+} from './TR-render-slots'
+import {
   captureRuntime,
   registerRuntimeCaptureDomain,
   restoreRuntimeCapture,
@@ -495,6 +502,9 @@ class TR {
 
   /** Capability selects pure method witnesses while preserving the original receiver's live reads. */
   static Capability = createCapabilityRuntime(TR.Function)
+
+  /** RenderSlots keeps body components stable while captures and placement arguments remain current. */
+  static RenderSlots = Object.freeze({ create: createSlotRenderer, select: selectRenderSlot, Frame: RenderSlotFrame })
 
   /** Call invokes a Tao pure function with runtime-wrapped values. */
   static Call<T>(fn: TR.Function, ...args: TR.Evaluable[]): TR.Value<T> {
@@ -1504,6 +1514,8 @@ namespace TR {
   export type Function = RuntimeFunction
   /** Capability preserves a concrete receiver behind compile-time selected structural methods. */
   export type Capability<T = unknown> = TaoCapability<T>
+  export type SlotRenderer<Args> = TaoSlotRenderer<Args>
+  export type SlotBodyProps<Args, Environment> = RenderSlotBodyProps<Args, Environment>
   /** PluralCategory declares the CLDR plural categories a compiled phrase's forms may carry. */
   export type PluralCategory = TaoPluralCategory
   /** PluralForms is a compiled phrase's category-to-value table passed to `TR.Plural`. */
