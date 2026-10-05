@@ -84,7 +84,10 @@ export function projectCallableEffectPublications(
   // The factory promises rows for these exact syntax categories. Keep DoStatement outside this invariant.
   for (const node of snapshot.covered) {
     if (AST.isFunctionCallExpression(node) || AST.isMethodCallExpression(node) || AST.isConversionExpression(node)) {
-      Assert(snapshot.calls.has(node), 'Expected every covered supported call to have a canonical publication.')
+      Assert(
+        snapshot.calls.has(node) || snapshot.units.has(node),
+        'Expected every covered supported call to have a canonical publication.',
+      )
     }
   }
 
@@ -146,6 +149,26 @@ export function projectCallableEffectPublications(
         ...(publication.kind === 'complete'
           ? { kind: 'complete' as const }
           : { kind: 'unknown' as const, reason: publication.reason }),
+      })
+    })),
+    units: Object.freeze([...snapshot.units].map(([key, publication]) => {
+      Assert(key === publication.site, 'Expected canonical unit keys to match their sites.')
+      const site = publication.site
+      const operand = AST.isMethodCallExpression(site)
+        ? site.callee
+        : AST.isNumericUnitConstruction(site)
+        ? site.input
+        : site.receiver
+      Assert(
+        publication.operands.length === 1 && publication.operands[0] === operand,
+        'Expected unit operation operands to retain their actual authored witness.',
+      )
+      return Object.freeze({
+        site,
+        kind: publication.kind,
+        operands: Object.freeze([...publication.operands]),
+        purity: publication.purity,
+        failures: publication.failures,
       })
     })),
   })

@@ -51,11 +51,21 @@ export type ResolvedConstructorExecution =
   & EffectContract
   & Readonly<{ site: AST.ConfigurationConstructor; operands: readonly AST.Expression[] }>
 
+/** Canonically resolved intrinsic operations execute their own contract and real source operands. */
+export type ResolvedUnitExecution =
+  & EffectContract
+  & Readonly<{
+    kind: 'complete'
+    site: AST.MethodCallExpression | AST.NumericUnitConstruction | AST.PostfixMemberAccess
+    operands: readonly AST.Expression[]
+  }>
+
 export type CallableEffectFactInputs = Readonly<{
   calls: readonly ResolvedCallExecution[]
   reads: readonly ResolvedReadExecution[]
   natives: readonly NativeEffectPublication[]
   constructors?: readonly ResolvedConstructorExecution[]
+  units?: readonly ResolvedUnitExecution[]
 }>
 
 /** Real supported source implementation roots and conservative, potentially legal defaults; no signature purity promise. */
@@ -82,6 +92,7 @@ export function discoverCallableEffectFacts(
   const calls = indexRows(inputs.calls, row => row.site)
   const reads = indexRows(inputs.reads, row => row.reference)
   const constructors = indexRows(inputs.constructors ?? [], row => row.site)
+  const units = indexRows(inputs.units ?? [], row => row.site)
   const natives = indexRows(inputs.natives, row => row.declaration)
   const targets = new Map<AST.Node, Readonly<{ body?: AST.Node; contract?: EffectContract }>>()
   const exports = new Map<AST.Node, NativeEffectPublication>()
@@ -156,6 +167,7 @@ export function discoverCallableEffectFacts(
     const call = calls.get(node)
     const read = reads.get(node)
     const constructor = constructors.get(node)
+    const unit = units.get(node)
     const sourceRoot = context?.root?.node === node ? context.root : undefined
     if (sourceRoot) {
       for (const body of sourceRoot.bodies) {
@@ -204,7 +216,12 @@ export function discoverCallableEffectFacts(
         edge(child)
       }
     }
-    if (AST.isActionExpression(node) && !ownNative && !ownExported) {
+    if (unit) {
+      for (const operand of unit.operands) {
+        edge(operand)
+      }
+      applyOperationContract(unit, undefined, unit)
+    } else if (AST.isActionExpression(node) && !ownNative && !ownExported) {
       // Construction remains independent of every invocation publication targeting this value.
     } else if (!callSite && ownNative?.phase === 'invocation') {
       applyOperationContract(ownNative, undefined, ownNative)

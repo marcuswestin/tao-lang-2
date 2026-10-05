@@ -20,7 +20,10 @@ import type { NativeEffectPublication } from './callable-effect-facts'
 import { type CallableSignature, callableSignatureOf } from './callable-signatures'
 import { declaredCallableFailureContract } from './failure-contracts'
 import { resolveFunctionInvocation } from './invocations'
+import { type NumericUnitReading, resolveNumericUnitReading } from './numeric-unit-readings'
+import { NumericUnits, type NumericUnitsSuffixResolution } from './NumericUnits'
 import { type ItemShape, type TaoType, Type } from './Type'
+import { type UnitFamily, type UnitReading, Units } from './Units'
 
 type AssociatedDeclaration = AssociatedCallableDeclaration
 type SourceCallable = AST.CallableDeclaration | AssociatedDeclaration | AST.AssociatedConverterDeclaration
@@ -90,6 +93,7 @@ export type CanonicalReadPublication =
         declaration: AssociatedDeclaration
         receiver: AssociatedMethodReceiver
       }>
+      | Readonly<{ kind: 'unit-selection'; owner: AST.TypeDeclaration; reading: NumericUnitReading }>
     initializer?: AST.Expression
   }>
 
@@ -102,6 +106,26 @@ export type CanonicalConstructorPublication =
     declaration?: AST.ConstructorDeclaration
     result: TaoType
     operands: readonly AST.Expression[]
+  }>
+
+/** Intrinsic contracts retain resolved unit witnesses and evaluate their actual source operands. */
+export type CanonicalUnitOperationPublication =
+  & EffectContract
+  & Readonly<{
+    kind: 'complete'
+    site: AST.MethodCallExpression | AST.NumericUnitConstruction | AST.PostfixMemberAccess
+    operands: readonly AST.Expression[]
+    proof:
+      | Readonly<{ kind: 'numeric-reading'; reading: NumericUnitReading }>
+      | Readonly<{ kind: 'numeric-construction'; resolution: NumericUnitsSuffixResolution }>
+      | Readonly<{
+        kind: 'legacy-unit'
+        receiver: TaoType
+        family: UnitFamily
+        unit: string
+        ratio?: number
+        reading?: UnitReading
+      }>
   }>
 
 const factoryBrand: unique symbol = Symbol('canonical effect-independent snapshot')
@@ -118,6 +142,7 @@ export type CanonicalEffectIndependentSnapshot = Readonly<{
   calls: ReadonlyMap<AST.Node, CanonicalCallPublication>
   reads: ReadonlyMap<AST.Node, CanonicalReadPublication>
   constructors: ReadonlyMap<AST.Node, CanonicalConstructorPublication>
+  units: ReadonlyMap<AST.Node, CanonicalUnitOperationPublication>
   natives: readonly NativeEffectPublication[]
 }>
 
@@ -247,12 +272,55 @@ export function publishCanonicalEffectSnapshot(
   }
   const calls = new Map<AST.Node, CanonicalCallPublication>()
   const reads = new Map<AST.Node, CanonicalReadPublication>()
+  const units = new Map<AST.Node, CanonicalUnitOperationPublication>()
   const inputs = new Map(
     [...descriptors.values()].flatMap(descriptor =>
       descriptor.signature?.inputs.map(input => [input.declaration, input] as const) ?? []
     ),
   )
   for (const node of nodes) {
+    const unit = publishUnitOperation(node, resolution)
+    if (unit) {
+      units.set(node, unit)
+    }
+    if (AST.isBinaryExpression(node) || AST.isUnaryExpression(node)) {
+      const selected = resolution.associatedOperation(node)
+      const builtIn = selected.problem === 'unsupported-operator'
+        || (selected.problem === 'missing-operator' && resolution.ofExpression(node).kind !== 'unresolved')
+      if (!builtIn) {
+        const target = selected.descriptor?.declaration
+        const declared = target ? descriptors.get(target) : undefined
+        const descriptor = declared && selected.descriptor
+          ? Object.freeze({
+            ...declared,
+            signature: sealSignature(selected.descriptor.signature),
+            result: sealType(selected.result),
+          })
+          : declared
+        const complete = !!descriptor && descriptor.pending.length === 0 && !selected.problem
+        calls.set(
+          node,
+          Object.freeze({
+            site: node,
+            operation: 'function',
+            ...(target ? { target } : {}),
+            ...(descriptor ? { descriptor } : {}),
+            ...(selected.receiver
+              ? { receiver: Object.freeze({ kind: 'expression', expression: selected.receiver }) }
+              : {}),
+            ...(selected.operandTypes[0] ? { receiverType: sealType(selected.operandTypes[0]) } : {}),
+            pairs: Object.freeze([]),
+            operands: Object.freeze([...selected.operands]),
+            operandPairs: Object.freeze(
+              selected.pairs.map(pair => Object.freeze({ ...pair, type: sealType(pair.type) })),
+            ),
+            diagnostics: Object.freeze([]),
+            defaults: Object.freeze([]),
+            ...(complete ? { kind: 'complete' } as const : { kind: 'unknown', reason: 'incomplete-fact' } as const),
+          }),
+        )
+      }
+    }
     if (AST.isConversionExpression(node)) {
       const conversion = resolveAssociatedConversion(node, resolution)
       const target = conversion.descriptor?.declaration
@@ -274,7 +342,7 @@ export function publishCanonicalEffectSnapshot(
         }),
       )
     }
-    if (AST.isFunctionCallExpression(node) || AST.isMethodCallExpression(node)) {
+    if (AST.isFunctionCallExpression(node) || (AST.isMethodCallExpression(node) && !unit)) {
       let pending = false
       const metadata: ArgumentBindingMetadata = {
         parameterName: Type.parameterName,
@@ -408,6 +476,23 @@ export function publishCanonicalEffectSnapshot(
       AST.isPostfixMemberAccess(node) && AST.isMethodCallExpression(node.$container)
       && node.$container.callee === node
     ) {
+      const unit = units.get(node.$container)
+      if (unit?.proof.kind === 'numeric-reading') {
+        reads.set(
+          node,
+          Object.freeze({
+            reference: node,
+            classification: 'immutable',
+            kind: 'complete',
+            proof: Object.freeze({
+              kind: 'unit-selection',
+              owner: unit.proof.reading.concreteFactoryOwner,
+              reading: unit.proof.reading,
+            }),
+          }),
+        )
+        continue
+      }
       const receiver = resolution.ofExpression(node.receiver)
       const declaration = receiver.kind === 'capability'
         ? capabilityRequirements(receiver.declaration).find(method => method.name === node.member)
@@ -444,12 +529,111 @@ export function publishCanonicalEffectSnapshot(
     calls: immutableMap(calls),
     reads: immutableMap(reads),
     constructors: immutableMap(constructors),
+    units: immutableMap(units),
     natives: Object.freeze(
       (evidence.natives ?? []).map(native => Object.freeze({ ...native, ...sealEffectContract(native) })),
     ),
   })
   publishedSnapshots.add(snapshot)
   return snapshot
+}
+
+function publishUnitOperation(
+  node: AST.Node,
+  resolution: ReturnType<typeof Type.correspondenceResolver>,
+): CanonicalUnitOperationPublication | undefined {
+  if (!AST.isMethodCallExpression(node) && !AST.isNumericUnitConstruction(node) && !AST.isPostfixMemberAccess(node)) {
+    return undefined
+  }
+  const contract = sealEffectContract({
+    purity: { violations: [], open: false },
+    // Checked quantity ingress and views have independently modeled runtime failure cases.
+    failures: { cases: [], open: true },
+  })
+  if (AST.isMethodCallExpression(node)) {
+    const target = associatedMethodCallTarget(node)
+    if (!target || associatedMethodTypeRoot(target.receiver)) {
+      return undefined
+    }
+    const selected = resolveNumericUnitReading(node, { receiverType: resolution.receiverType })
+    if (selected.kind !== 'unit-reading') {
+      return undefined
+    }
+    const reading: NumericUnitReading = Object.freeze({
+      ...selected.reading,
+      receiverAnchor: sealReceiver(selected.reading.receiverAnchor),
+      receiverType: sealType(selected.reading.receiverType),
+      resultType: sealType(selected.reading.resultType),
+    })
+    return Object.freeze({
+      ...contract,
+      kind: 'complete',
+      site: node,
+      operands: Object.freeze([node.callee]),
+      proof: Object.freeze({ kind: 'numeric-reading', reading }),
+    })
+  }
+  if (AST.isNumericUnitConstruction(node)) {
+    const selected = NumericUnits.resolveSuffix(node)
+    const input = resolution.ofExpression(node.input)
+    if (
+      !selected || !AST.numericUnitConstructionInputIsAllowed(node)
+      || input.kind !== 'primitive' || input.primitive !== 'number'
+    ) {
+      return undefined
+    }
+    const plan = Object.freeze({
+      ...selected.plan,
+      units: Object.freeze(selected.plan.units.map(unit => Object.freeze({ ...unit }))),
+    })
+    return Object.freeze({
+      ...contract,
+      kind: 'complete',
+      site: node,
+      operands: Object.freeze([node.input]),
+      proof: Object.freeze({
+        kind: 'numeric-construction',
+        resolution: Object.freeze({ plan, unit: Object.freeze({ ...selected.unit }) }),
+      }),
+    })
+  }
+  if (
+    !AST.isPostfixMemberAccess(node)
+    || (AST.isMethodCallExpression(node.$container) && node.$container.callee === node)
+  ) {
+    return undefined
+  }
+  const receiver = resolution.ofExpression(node.receiver)
+  if (receiver.kind !== 'primitive') {
+    return undefined
+  }
+  const family = receiver.primitive === 'number'
+    ? Units.familyOf(node.member)
+    : Units.isFamily(receiver.primitive)
+    ? receiver.primitive
+    : undefined
+  if (!family) {
+    return undefined
+  }
+  const ratio = Units.ratioToBase(family, node.member)
+  const reading = receiver.primitive !== 'number' ? Units.readingOf(family, node.member) : undefined
+  if (ratio === undefined && !reading) {
+    return undefined
+  }
+  return Object.freeze({
+    ...contract,
+    kind: 'complete',
+    site: node,
+    operands: Object.freeze([node.receiver]),
+    proof: Object.freeze({
+      kind: 'legacy-unit',
+      receiver: sealType(receiver),
+      family,
+      unit: node.member,
+      ...(ratio !== undefined ? { ratio } : {}),
+      ...(reading ? { reading } : {}),
+    }),
+  })
 }
 
 function sealReceiver(receiver: AssociatedMethodReceiver): AssociatedMethodReceiver {
