@@ -99,22 +99,19 @@ Describe('Static contextual Self operators', () => {
   })
 
   Test(
-    'rejects erased abstract Self arithmetic while retaining comparisons that need no concrete factory',
+    'rejects erased abstract Self arithmetic and comparisons without a concrete domain',
     async () => {
       const operation = await operations(`${scalarDeclarations}
       func Erased(Left Scalar, Right Scalar) -> Scalar { return Left + Right }
       func Negate(Value Scalar) -> Scalar { return -Value }
       func Compare(Left Scalar, Right Scalar) -> boolean { return Left < Right }
     `)
-      for (const name of ['Erased', 'Negate']) {
+      for (const name of ['Erased', 'Negate', 'Compare']) {
         const { expression, resolved } = operation(name)
         Expect(resolved.problem).toBe('missing-operator')
         Expect(resolved.descriptor).toBeUndefined()
         Expect(Type.ofExpression(expression).kind).toBe('unresolved')
       }
-      const comparison = operation('Compare').resolved
-      Expect(comparison.problem).toBeUndefined()
-      Expect(Type.displayName(comparison.result)).toBe('boolean')
     },
   )
 
