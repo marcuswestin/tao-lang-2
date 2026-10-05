@@ -168,6 +168,7 @@ import {
 import { selectPluralForm, type TaoPluralCategory, type TaoPluralForms } from './TR-phrases'
 import { admitQuantityUnion, nativeQuantityResult } from './TR-quantity-admission'
 import { QuantityArithmetic, quantityOperand, scalarOperand } from './TR-quantity-arithmetic'
+import { factoryOfQuantityInput } from './TR-quantity-values'
 import { isQuantityPayload, type TaoQuantityPayload } from './TR-quantity-values'
 import { requireReactNativeRuntime } from './TR-react-native'
 import { isReactiveValue, markReactiveValue } from './TR-reactive'
@@ -542,6 +543,8 @@ class TR {
   static nativeQuantityResult = nativeQuantityResult
   static QuantityArithmetic = QuantityArithmetic
   static quantityOperand = quantityOperand
+  /** Trusted native Self implementations retain the receiver's exact checked concrete factory. */
+  static factoryOfQuantityInput = factoryOfQuantityInput
   static scalarOperand = scalarOperand
 
   /** Wait joins its caller and inherits cancellation, while lexical cleanup remains shielded. */
