@@ -356,7 +356,10 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       scope = this.createScopeForNodes(this.importedDeclarations(reference, AST.isTypeDeclaration), scope)
       scope = this.createScopeForNodes(root.statements.filter(AST.isTypeDeclaration), scope)
     }
-    if (method && !method.static && methodOwner && isWithinAssociatedBody(reference, method)) {
+    if (
+      method && !method.static && methodOwner && !AST.isEntityDataDeclaration(methodOwner)
+      && isWithinAssociatedBody(reference, method)
+    ) {
       scope = this.createScopeForNodes([methodOwner], scope)
     }
     if (method && entityMethodOwner && isWithinAssociatedBody(reference, method)) {
@@ -373,6 +376,17 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     }
     if (associatedView && entityViewOwner && isWithinAssociatedViewBody(reference, associatedView)) {
       scope = this.createEntityReceiverScope(entityViewOwner, scope)
+    }
+    const action = AST.findOwningAction(reference)
+    const entityActionReceiver = action && AST.associatedEntityActionReceiver(action)
+    if (action && entityActionReceiver && isWithinAssociatedActionBody(reference, action)) {
+      scope = this.createEntityReceiverScope(
+        entityActionReceiver.owner,
+        scope,
+        entityActionReceiver.cardinality === 'one'
+          ? entityActionReceiver.owner.singularName
+          : entityActionReceiver.owner.name,
+      )
     }
     const converter = AST.findOwningAssociatedConverter(reference)
     const converterSource = converter && AST.associatedConverterSourceOwner(converter)
@@ -959,9 +973,10 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
   private createEntityReceiverScope(
     entity: AST.EntityDataDeclaration,
     outerScope?: Langium.Scope,
+    name = entity.singularName,
   ): Langium.Scope {
     return this.createScope(
-      [this.descriptions.createDescription(entity, entity.singularName, AST.getDocument(entity))],
+      [this.descriptions.createDescription(entity, name, AST.getDocument(entity))],
       outerScope,
     )
   }
@@ -1288,6 +1303,7 @@ function visibleParametersAtReference(
   declaration:
     | AST.ParameterizedDeclaration
     | AST.AssociatedFunctionDeclaration
+    | AST.AssociatedViewDeclaration
     | AST.CapabilityMethodDeclaration
     | AST.RenderSlotDeclaration
     | AST.ForeignViewSlotDeclaration,
@@ -1313,6 +1329,14 @@ function isWithinAssociatedBody(reference: AST.Node, declaration: AST.Associated
 }
 
 function isWithinAssociatedViewBody(reference: AST.Node, declaration: AST.AssociatedViewDeclaration): boolean {
+  let current: AST.Node | undefined = reference
+  while (current && current !== declaration.block) {
+    current = current.$container
+  }
+  return current === declaration.block
+}
+
+function isWithinAssociatedActionBody(reference: AST.Node, declaration: AST.ActionDeclaration): boolean {
   let current: AST.Node | undefined = reference
   while (current && current !== declaration.block) {
     current = current.$container

@@ -37,7 +37,7 @@ export function associatedConverterDescriptor(
   resolution: ConverterTypeResolution = Type,
 ): AssociatedConverterDescriptor | undefined {
   const owner = AST.associatedConverterOwner(declaration)
-  if (!owner) {
+  if (!AST.isTypeDeclaration(owner)) {
     return undefined
   }
   const receiver = resolution.ofTypeExpression(declaration.conversionSource)
@@ -106,7 +106,7 @@ function sourceDomains(source: TaoType, resolution: ConverterTypeResolution): Ta
       break
     }
     seen.add(nominal)
-    const expression: AST.TypeExpression | undefined = nominal.type
+    const expression = nominal.type
     const base: AST.TypeReference | undefined = AST.isDerivedTypeExpression(expression)
       ? expression.base
       : AST.isNamedTypeReference(expression)

@@ -1051,7 +1051,8 @@ export function configuredPrimitiveOfExpression(
     return configuredPrimitiveOfValueDeclaration(expression.target.ref, seen)
   }
   if (AST.isValueReference(expression)) {
-    return configuredPrimitiveOfValueDeclaration(expression.target.ref, seen)
+    const target = expression.target.ref
+    return AST.isEntityDataDeclaration(target) ? undefined : configuredPrimitiveOfValueDeclaration(target, seen)
   }
   return undefined
 }
@@ -1475,6 +1476,30 @@ export function associatedEntityReceiverOwner(
     : undefined
 }
 
+/** An associated action belongs only to the entity block that actually contains it. */
+export function associatedActionOwner(declaration: AST.ActionDeclaration): AST.EntityDataDeclaration | undefined {
+  const block = declaration.$container
+  if (!AST.isEntityDataDeclarationBlock(block) || !block.entries.includes(declaration)) {
+    return undefined
+  }
+  const owner = block.$container
+  return AST.isEntityDataDeclaration(owner) && owner.block === block ? owner : undefined
+}
+
+/** An action's actual receiver qualifier selects one row or that entity's collection. */
+export function associatedEntityActionReceiver(
+  declaration: AST.ActionDeclaration,
+): Readonly<{ owner: AST.EntityDataDeclaration; cardinality: 'one' | 'many' }> | undefined {
+  const owner = associatedActionOwner(declaration)
+  if (!owner) {
+    return undefined
+  }
+  if (declaration.receiverName === owner.singularName) {
+    return { owner, cardinality: 'one' }
+  }
+  return declaration.receiverName === owner.name ? { owner, cardinality: 'many' } : undefined
+}
+
 /** associatedReceiverOwner recognizes only references linked to a real instance receiver. */
 export function associatedReceiverOwner(
   reference: AST.Node,
@@ -1486,6 +1511,15 @@ export function associatedReceiverOwner(
   const view = findOwningAssociatedView(reference)
   const callable = method ?? view
   if (!callable) {
+    const action = findOwningAction(reference)
+    const receiver = action && associatedEntityActionReceiver(action)
+    if (action && receiver && reference.target.ref === receiver.owner) {
+      let current: AST.Node | undefined = reference
+      while (current && current !== action.block) {
+        current = current.$container
+      }
+      return current ? receiver.owner : undefined
+    }
     const converter = findOwningAssociatedConverter(reference)
     const source = converter && associatedConverterSourceOwner(converter)
     return source && reference.target.ref === source ? source : undefined

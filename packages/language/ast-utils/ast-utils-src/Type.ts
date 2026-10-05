@@ -2270,9 +2270,15 @@ class TypeResolutionContext {
 
   ofContextualValue(declaration: AST.ValueReferenceTarget | undefined, context: AST.Node): TaoType {
     if (AST.isEntityDataDeclaration(declaration)) {
-      return AST.associatedReceiverOwner(context) === declaration
-        ? this.ofAssociatedOwner(declaration)
-        : unresolvedType()
+      if (AST.associatedReceiverOwner(context) !== declaration) {
+        return unresolvedType()
+      }
+      const action = AST.findOwningAction(context)
+      const receiver = action && AST.associatedEntityActionReceiver(action)
+      const single = this.ofAssociatedOwner(declaration)
+      return receiver?.owner === declaration && receiver.cardinality === 'many'
+        ? { kind: 'list', element: single }
+        : single
     }
     if (AST.isTypeDeclaration(declaration)) {
       const view = AST.findOwningAssociatedView(context)
@@ -2685,8 +2691,9 @@ function actionType(parameters: readonly TaoActionParameter[]): TaoType {
   return { kind: 'primitive', primitive: 'action', parameters }
 }
 
-function definitionIdentityName(type: AST.TypeDefinition | AST.PrimitiveDeclaration): string {
-  return `${AST.getDocument(type).uri.path}#${Type.definitionName(type)}`
+function definitionIdentityName(type: AST.TypeDefinition | AssociatedCallableOwner): string {
+  const name = AST.isEntityDataDeclaration(type) ? type.singularName : Type.definitionName(type)
+  return `${AST.getDocument(type).uri.path}#${name}`
 }
 
 function unresolvedType(): TaoType {

@@ -24,7 +24,10 @@ export const numericUnitReadingsValidationChecks = {
   [AST.TypeDeclaration.$type]: (owner, ctx) => {
     for (const { unit, method } of numericUnitReadingCollisions(owner)) {
       // Diagnose the authored implementation once, rather than each inheriting declaration.
-      if (owner.type && AST.isDerivedTypeExpression(owner.type) && owner.type.slots.methods.includes(method)) {
+      if (
+        owner.type && AST.isDerivedTypeExpression(owner.type)
+        && [...owner.type.slots.methods, ...owner.type.slots.views].some(declaration => declaration === method)
+      ) {
         ctx.error(method, messages.collision(unit.name))
       }
     }

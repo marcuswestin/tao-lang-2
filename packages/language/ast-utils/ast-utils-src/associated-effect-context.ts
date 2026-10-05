@@ -44,6 +44,9 @@ export function createAssociatedEffects(files: readonly AST.TaoFile[]): Associat
   // Native exports remain unknown unless independently attested by their owning bridge contract.
   const snapshot = publishCanonicalEffectSnapshot(files, { requirements })
   for (const [method, contract] of snapshot.associatedDescriptors) {
+    if (!AST.isAssociatedFunctionDeclaration(method) && !AST.isCapabilityMethodDeclaration(method)) {
+      continue
+    }
     if (contract.kind === 'ready') {
       descriptors.set(method, contract.descriptor)
     }

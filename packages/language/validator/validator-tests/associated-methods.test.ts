@@ -159,6 +159,82 @@ Describe('validator: associated declaration boundaries', () => {
   )
 
   Test(
+    'accepts an entity method whose receiver qualifier names the declared singular entity',
+    accepts(`
+      data Books / Book {
+        Title text,
+        func Book.Key() -> text { return "key" }
+      }
+    `),
+  )
+
+  Test(
+    'requires the declared receiver on an entity associated function',
+    rejects(
+      `
+        data Books / Book {
+          Title text,
+          func Key() -> text { return "key" }
+        }
+      `,
+      messages.entityReceiverRequired('Book'),
+    ),
+  )
+
+  Test(
+    'rejects an entity receiver qualifier that uses its collection name',
+    rejects(
+      `
+        data Books / Book {
+          Title text,
+          func Books.Key() -> text { return "key" }
+        }
+      `,
+      messages.receiverOwner('Books', 'Book'),
+    ),
+  )
+
+  Test(
+    'rejects an entity receiver qualifier that names a different entity',
+    rejects(
+      `
+        data Books / Book {
+          Title text,
+          func Other.Key() -> text { return "key" }
+        }
+      `,
+      messages.receiverOwner('Other', 'Book'),
+    ),
+  )
+
+  Test(
+    'rejects a parameter that shadows a bound entity receiver alias',
+    rejects(
+      `
+        data Books / Book {
+          Title text,
+          func Book.Key(Book text) -> text { return "key" }
+        }
+      `,
+      messages.entityReceiverShadow('Book'),
+    ),
+  )
+
+  Test(
+    'reports duplicate entity method contracts before witness publication',
+    rejects(
+      `
+        data Books / Book {
+          Title text,
+          func Book.Key() -> text { return "first" },
+          func Book.Key() -> text { return "second" }
+        }
+      `,
+      messages.duplicateImplementation('Books', 'Key'),
+    ),
+  )
+
+  Test(
     'keeps a declared failure bound separate and rejects unsupported bound spellings',
     rejects(
       `

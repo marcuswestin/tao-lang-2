@@ -9,6 +9,7 @@ import { ReactiveParametersValidator } from './ReactiveParametersValidator'
 export const associatedMethodsValidationChecks = {
   [AST.TypeDeclaration.$type]: validateAssociatedOwner,
   [AST.PrimitiveDeclaration.$type]: validateAssociatedOwner,
+  [AST.EntityDataDeclaration.$type]: validateAssociatedOwner,
   [AST.AssociatedFunctionDeclaration.$type]: (method, ctx) => {
     validateFailureBound(method, ctx)
     const owner = AST.associatedFunctionOwner(method)
@@ -18,6 +19,19 @@ export const associatedMethodsValidationChecks = {
     }
     if (!AST.isTaoFile(owner.$container)) {
       ctx.error(owner, messages.placement)
+    }
+    if (AST.isEntityDataDeclaration(owner)) {
+      if (method.receiverName === undefined) {
+        ctx.error(method, messages.entityReceiverRequired(owner.singularName))
+      } else {
+        if (AST.associatedEntityReceiverOwner(method) !== owner) {
+          ctx.error(method, messages.receiverOwner(method.receiverName, owner.singularName))
+        } else {
+          validateEntityReceiverShadow(method, ctx)
+        }
+      }
+    } else if (method.receiverName !== undefined && method.receiverName !== owner.name) {
+      ctx.error(method, messages.receiverOwner(method.receiverName, owner.name))
     }
     const type = Type.ofAssociatedOwner(owner)
     if (
@@ -161,7 +175,7 @@ function containsCapability(type: ASTUtils.TaoType): boolean {
 
 const operatorNames = new Set(['+', '-', '*', '/', '==', '!=', '<', '<=', '>', '>='])
 
-function validateAssociatedOwner(owner: AST.TypeDeclaration | AST.PrimitiveDeclaration, ctx: ValidationContext): void {
+function validateAssociatedOwner(owner: ASTUtils.AssociatedCallableOwner, ctx: ValidationContext): void {
   const ordinaryNames = new Set<string>()
   const operatorContracts = new Set<string>()
   for (const method of ASTUtils.ownAssociatedMethods(owner)) {
@@ -184,7 +198,7 @@ function validateAssociatedOwner(owner: AST.TypeDeclaration | AST.PrimitiveDecla
 
 function associatedOperatorContractIdentity(
   method: AST.AssociatedFunctionDeclaration,
-  owner: AST.TypeDeclaration | AST.PrimitiveDeclaration,
+  owner: ASTUtils.AssociatedCallableOwner,
 ): string | undefined {
   const materialized = Type.associatedCallable(method, owner)
   if (materialized.kind !== 'ready') {
@@ -212,6 +226,17 @@ function associatedOperatorContractIdentity(
     [...signature.failures.cases].sort(),
     signature.failures.open,
   ])
+}
+
+function validateEntityReceiverShadow(method: AST.AssociatedFunctionDeclaration, ctx: ValidationContext): void {
+  const alias = method.receiverName
+  if (alias === undefined) {
+    return
+  }
+  const shadowsParameter = AST.parametersOf(method).some(parameter => Type.parameterName(parameter) === alias)
+  if (shadowsParameter) {
+    ctx.error(method, messages.entityReceiverShadow(alias))
+  }
 }
 
 function validateFailureBound(

@@ -156,6 +156,26 @@ Describe('numeric unit readings', () => {
       .toEqual([['minutes', 'minutes']])
   })
 
+  Test('retains collisions with real mounted associated views', async () => {
+    const file = await parse(`
+      type Measure is numeric with { units { ticks 1 (default) } }
+      type Child is Measure with { view ticks() { } }
+      func Collision(Value Child) -> rendered { return Value.ticks() }
+    `)
+    const child = namedType(file, 'Child')
+    Expect.Is(child.type, AST.isDerivedTypeExpression)
+    const view = child.type.slots.views[0]
+    Expect.Is(view, AST.isAssociatedViewDeclaration)
+    const collisions = numericUnitReadingCollisions(child)
+    Expect(collisions.length).toBe(1)
+    Expect(collisions[0]?.method).toBe(view)
+    const resolution = resolveNumericUnitReading(returnedCall(namedFunction(file, 'Collision')))
+    Expect(resolution.kind).toBe('invalid-unit-reading')
+    if (resolution.kind === 'invalid-unit-reading') {
+      Expect(resolution.problem).toBe('associated-method-collision')
+    }
+  })
+
   Test('fails closed for linked alias cycles', async () => {
     await withTaoFiles('tao-numeric-unit-reading-cycles-', {
       'Main.tao': 'use package ./first as first\nlet Value = first.First',

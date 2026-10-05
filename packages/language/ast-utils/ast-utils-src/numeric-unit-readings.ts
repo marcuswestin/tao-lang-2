@@ -1,5 +1,9 @@
 import { AST } from '@parser'
-import { associatedMethodCallTarget, type AssociatedMethodReceiver } from './associated-methods'
+import {
+  type AssociatedCallableDeclaration,
+  associatedMethodCallTarget,
+  type AssociatedMethodReceiver,
+} from './associated-methods'
 import { NumericUnits } from './NumericUnits'
 import { type TaoType, Type } from './Type'
 
@@ -79,7 +83,7 @@ export function numericUnitReadingCollisions(
   owner: AST.TypeDeclaration,
 ): readonly Readonly<{
   unit: AST.NumericUnitDeclaration
-  method: AST.AssociatedFunctionDeclaration
+  method: AssociatedCallableDeclaration
 }>[] {
   const tableOwner = NumericUnits.unitOwner(owner)
   const plan = tableOwner ? NumericUnits.declarationPlan(tableOwner) : undefined

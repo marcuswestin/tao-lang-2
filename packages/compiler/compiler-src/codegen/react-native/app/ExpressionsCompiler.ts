@@ -379,12 +379,12 @@ export const ExpressionsCompiler = {
       Assert(AST.isDesignColorEntry(target), 'validated shade names a design color family member')
       return compileDesignColorValue(AST.designColorPath(target, reference.shade))
     }
-    if (AST.isTypeDeclaration(target)) {
+    if (AST.isTypeDeclaration(target) || AST.isEntityDataDeclaration(target)) {
       Assert(
         AST.associatedReceiverOwner(reference) === target,
         'validated type reference names the contextual receiver',
       )
-      return compileMemberPath(gen.scopeName(target), Type.ofDefinition(target), reference.members)
+      return compileMemberPath(gen.scopeName(target), Type.ofReferenceRoot(reference), reference.members)
     }
     const root = Compile.ValueDeclarationReference(target)
     return compileMemberPath(root, Type.ofValueDeclaration(target), reference.members)
@@ -473,7 +473,7 @@ export const ExpressionsCompiler = {
     if (AST.isEntityDataField(target)) {
       return gen`TR.Value(${reference.target.$refText === target.name ? 'true' : 'false'})`
     }
-    if (AST.isTypeDeclaration(target)) {
+    if (AST.isTypeDeclaration(target) || AST.isEntityDataDeclaration(target)) {
       Assert(
         AST.associatedReceiverOwner(reference) === target,
         'validated type reference names the contextual receiver',
@@ -1073,7 +1073,7 @@ function compileMethodReceiver(receiver: ASTUtils.AssociatedMethodReceiver): Com
     'member-path': value => {
       const site = value.site
       const declaration = resolveRef(site.target)
-      const root = AST.isTypeDeclaration(declaration)
+      const root = AST.isTypeDeclaration(declaration) || AST.isEntityDataDeclaration(declaration)
         ? gen.scopeName(declaration)
         : gen`TR.Alias(() => ${Compile.ValueDeclarationReference(declaration)})`
       return compileMemberPath(root, Type.ofReferenceRoot(site), value.members)
@@ -1222,6 +1222,7 @@ function nativePrimitiveResultBranch(type: ASTUtils.TaoType): Compiled | undefin
     command: unsupported,
     design: unsupported,
     view: unsupported,
+    rendered: unsupported,
     scene: unsupported,
     nav: unsupported,
     datasource: unsupported,

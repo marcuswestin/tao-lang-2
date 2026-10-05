@@ -11,6 +11,9 @@ export const AssociatedMethodsValidationMessages = {
   converterAmbiguous: (source: string, target: string) =>
     `Multiple equally applicable converters convert ${source} to ${target}.`,
   owner: 'Associated methods must belong directly to a named type body.',
+  receiverOwner: (name: string, owner: string) => `Associated receiver '${name}' must match its owner '${owner}'.`,
+  entityReceiverRequired: (owner: string) => `An entity associated function must declare receiver '${owner}'.`,
+  entityReceiverShadow: (name: string) => `Entity receiver alias '${name}' cannot be shadowed by a parameter.`,
   family: 'Associated methods require a concrete text, numeric, item, or entity owner.',
   placement: 'Associated method owners in this slice must be file-level types.',
   nativeMutable: 'Mutable native parameters cannot carry a capability in this slice.',
