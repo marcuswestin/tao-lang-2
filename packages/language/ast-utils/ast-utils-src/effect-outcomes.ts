@@ -59,7 +59,7 @@ export function effectFailureContract(
         return [{ cases: [node.case.$refText], open: false }]
       }
       if (AST.isDoStatement(node) && !AST.isWhenDoStatement(node.$container)) {
-        return [invocationFailureContract(node, path)]
+        return [node.then ? unhandledOutcomeContract(node, path) : invocationFailureContract(node, path)]
       }
       return AST.isWhenDoStatement(node) ? [unhandledOutcomeContract(node, path)] : []
     })
@@ -106,17 +106,27 @@ export function invokedEffect(invocation: EffectInvocation): EffectDeclaration |
  * `otherwise` to close their remainder: `rejected` handles modeled cases, `error` undeclared faults.
  */
 export function unhandledOutcomeContract(
-  statement: AST.WhenDoStatement,
+  statement: AST.WhenDoStatement | AST.DoStatement,
   seen: ReadonlySet<EffectDeclaration> = new Set(),
 ): FailureContract {
-  const named = new Set(statement.outcomes.map(outcome => outcome.case))
-  if (statement.otherwise) {
+  const outcomes = statement.outcomes
+  const otherwise = statement.otherwise || outcomes.some(outcome => outcome.case === 'otherwise')
+  const isThen = AST.isDoStatement(statement) && !!statement.then
+  const named = new Set(outcomes.map(outcome => outcome.case))
+  if (otherwise) {
     return { cases: [], open: false }
   }
   const contract = invocationFailureContract(statement, seen)
+  if (isThen && named.has('error')) {
+    return { cases: [], open: false }
+  }
   return {
-    cases: named.has('rejected') ? [] : contract.cases.filter(failureCase => !named.has(failureCase)),
-    open: contract.open && !(named.has('rejected') && named.has('error')),
+    cases: named.has('rejected') && !isThen
+      ? []
+      : contract.cases.filter(failureCase => !named.has(failureCase)),
+    open: isThen
+      ? contract.open && !named.has('error')
+      : contract.open && !(named.has('rejected') && named.has('error')),
   }
 }
 

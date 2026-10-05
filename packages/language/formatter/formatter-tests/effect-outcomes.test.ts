@@ -1,5 +1,6 @@
 import { Describe, Expect, Test } from '@shared/test'
 import Formatter from '../formatter-src/formatter'
+import { formats } from './test-format'
 
 Describe('formatter: effect outcomes', () => {
   Test('formats `when do` with one outcome per line and short outcome blocks on one line', async () => {
@@ -25,4 +26,46 @@ Describe('formatter: effect outcomes', () => {
       ].join('\n'),
     )
   })
+
+  Test(
+    'formats `then` continuations and both defer forms',
+    formats(
+      'action Save(){} action Delete(File text){} action Run(){do Save() then{done->{ } Full->Message{} error->Message{} cancelled->{} otherwise->{ }} defer{do Delete(File:"old")} defer Delete(File:"later")}',
+      `
+      action Save() { }
+
+      action Delete(File text) { }
+
+      action Run() {
+         do Save() then {
+            done -> { }
+            Full -> Message { }
+            error -> Message { }
+            cancelled -> { }
+            otherwise -> { }
+         }
+         defer {
+            do Delete(File: "old")
+         }
+         defer Delete(File: "later")
+      }
+    `,
+    ),
+  )
+
+  Test(
+    'formats bar-form `then` outcomes as one indented arm per line',
+    formats(
+      'action Save(){} action Run(){do Save() then|done->{ }|otherwise->{ }}',
+      `
+      action Save() { }
+
+      action Run() {
+         do Save() then
+            | done -> { }
+            | otherwise -> { }
+      }
+    `,
+    ),
+  )
 })

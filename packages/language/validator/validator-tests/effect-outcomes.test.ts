@@ -31,6 +31,19 @@ const declarations = `
       rejected -> { }
     }
   }
+  action ExportPartly() {
+    do ExportDocument(Format: "pdf") then { Offline -> { } }
+  }
+  action ExportHandled() {
+    do ExportDocument(Format: "pdf") then {
+      Offline -> { }
+      TooLarge -> { }
+      error -> Message { }
+    }
+  }
+  action Cleanup() { fail Full "The cleanup failed." }
+  action CleanupAtExit() { defer Cleanup() }
+  action CleanupInBlock() { defer { do Cleanup() } }
   action Quiet() { }
 `
 
@@ -68,6 +81,47 @@ Describe('validator: effect outcomes', () => {
     `))
     Expect(found).toEqual({ errors: [], warnings: [] })
   })
+
+  Test('accepts selected `then` outcomes and requires no payload on done or cancelled', async () => {
+    const found = await validated(outcomesApp(`
+      render Stack() {
+        Button(Title: "Press") {
+          on press -> {
+            do ExportDocument(Format: "pdf") then {
+              done -> { set Failure = "" }
+              Offline -> { set Failure = "offline" }
+              error -> Message { set Failure = Message }
+              cancelled -> { set Failure = "cancelled" }
+              otherwise -> { set Failure = "other" }
+            }
+          }
+        }
+      }
+    `))
+    Expect(found).toEqual({ errors: [], warnings: [] })
+  })
+
+  Test(
+    'rejects a payload on done',
+    rejects(
+      outcomesApp(`
+        action Run() { do Save() then { done -> Result { } } }
+        render Text("Ready")
+      `),
+      messages.donePayload,
+    ),
+  )
+
+  Test(
+    'rejects a legacy outcome word in a `then` continuation',
+    rejects(
+      outcomesApp(`
+        action Run() { do Save() then { saved -> { } } }
+        render Text("Ready")
+      `),
+      messages.unknownOutcome('saved', '`Save`', true),
+    ),
+  )
 
   Test(
     'rejects a case the verb does not declare',
@@ -163,6 +217,29 @@ Describe('validator: effect outcomes', () => {
       }
     `))
     Expect(found).toEqual([messages.unhandledFailure('`ExportOrQueue`', ['TooLarge'])])
+  })
+
+  Test('subtracts named `then` failures and keeps the open remainder until error or otherwise', async () => {
+    const found = await warnings(outcomesApp(`
+      render Stack() {
+        Button(Title: "Press") { on press ExportPartly }
+        Button(Title: "Press") { on press ExportHandled }
+      }
+    `))
+    Expect(found).toEqual([messages.unhandledFailure('`ExportPartly`', ['TooLarge'])])
+  })
+
+  Test('includes failures from both defer forms in the owning action contract', async () => {
+    const found = await warnings(outcomesApp(`
+      render Stack() {
+        Button(Title: "Press") { on press CleanupAtExit }
+        Button(Title: "Press") { on press CleanupInBlock }
+      }
+    `))
+    Expect(found).toEqual([
+      messages.unhandledFailure('`CleanupAtExit`', ['Full']),
+      messages.unhandledFailure('`CleanupInBlock`', ['Full']),
+    ])
   })
 
   Test('warns at a root when do for the cases it leaves unhandled', async () => {

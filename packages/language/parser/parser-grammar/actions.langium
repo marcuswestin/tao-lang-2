@@ -31,7 +31,7 @@ ActionBlock:
     '{' statements+=ActionStatement* '}';
 
 ActionStatement:
-    AsyncActionStatement | SetStatement | ToggleStatement | DoStatement | WhenDoStatement | FailStatement | CheckStatement | GuardActionStatement | IfActionStatement | AskStatement | ActionResultStatement | RespondStatement | CreateStatement | UpdateStatement | DeleteStatement | RetryStatement | ContextualPresentStatement | SelectionActivateStatement | DismissStatement | ReplaceStatement | DeclarationSlotFill;
+    AsyncActionStatement | SetStatement | ToggleStatement | DoStatement | WhenDoStatement | DeferStatement | FailStatement | CheckStatement | GuardActionStatement | IfActionStatement | AskStatement | ActionResultStatement | RespondStatement | CreateStatement | UpdateStatement | DeleteStatement | RetryStatement | ContextualPresentStatement | SelectionActivateStatement | DismissStatement | ReplaceStatement | DeclarationSlotFill;
 
 FailStatement:
     'fail' case=[CaseSetCase:ID] sentence=STRING;
@@ -77,7 +77,13 @@ SetOperator returns string:
 // `do SaveWorkspace()` and `do Finish(Document)` bind their arguments by label or by type through
 // one mechanism, and a command's parameters are its slots.
 DoStatement:
-    'do' action=ActionTargetExpression '(' argumentList=ArgumentList? ')';
+    'do' action=ActionTargetExpression '(' argumentList=ArgumentList? ')' (then?='then' ('{' outcomes+=WhenDoOutcome+ '}' | outcomes+=BarWhenDoOutcome* otherwise=WhenDoOtherwise))?;
+
+DeferStatement:
+    'defer' (block=ActionBlock | invocation=DeferredInvocation);
+
+DeferredInvocation infers DoStatement:
+    action=ActionTargetExpression '(' argumentList=ArgumentList? ')';
 
 // `when do` runs its verb exactly as `do` does, but contains the verb's failure at this site and
 // names what happens next. The outcomes are `saved`, `rejected`, `error`, and any case the verb
@@ -88,7 +94,10 @@ WhenDoStatement:
       | outcomes+=BarWhenDoOutcome* otherwise=WhenDoOtherwise);
 
 WhenDoOutcome:
-    case=SubjectCaseName '->' payload=CasePayload? block=(ActionBlock | AtomicActionBlock);
+    case=WhenDoCaseName '->' payload=CasePayload? block=(ActionBlock | AtomicActionBlock);
+
+WhenDoCaseName returns string:
+    SubjectCaseName | 'otherwise';
 
 BarWhenDoOutcome infers WhenDoOutcome:
     barSyntax?='|' case=SubjectCaseName '->' payload=CasePayload? block=(ActionBlock | AtomicActionBlock);

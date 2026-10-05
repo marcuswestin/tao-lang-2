@@ -2,6 +2,11 @@ import { AST } from '@parser'
 import { collapsesToOneLine, type FormatHandlers } from '../formatting'
 
 export const ActionsFormatter = {
+  DeferStatement(f) {
+    if (f.node.invocation) {
+      f.oneSpaceAfter('defer')
+    }
+  },
   RetryStatement(f) {
     f.oneSpaceAfter('retry')
   },
@@ -140,6 +145,17 @@ export const ActionsFormatter = {
     f.noSpaceBefore('(')
     f.noSpaceAfter('(')
     f.noSpaceBefore(')')
+    if (f.node.then) {
+      const outcomes = [...f.node.outcomes, ...(f.node.otherwise ? [f.node.otherwise] : [])]
+      f.oneSpaceBefore('then')
+      if (f.node.otherwise?.barSyntax) {
+        f.indentedLines(outcomes)
+        return
+      }
+      f.oneSpaceBefore('{')
+      f.indentedBraceBlock(outcomes)
+      f.lineSeparatedList(outcomes)
+    }
   },
 
   /** WhenDoStatement puts its invocation on the `when` line and each outcome on its own line. */

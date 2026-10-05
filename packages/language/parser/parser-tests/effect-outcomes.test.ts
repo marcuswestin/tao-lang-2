@@ -54,6 +54,44 @@ Describe('parser: effect outcomes', () => {
     Expect(set.value.target.ref).toBe(statement.outcomes[0]?.payload)
   })
 
+  Test('parses `do ... then` outcomes and cleanup forms', async () => {
+    const parsed = await testParseCode(`
+      action Save() { }
+      action Delete(File text) { }
+      view Main() {
+        action Run() {
+          do Save() then {
+            done -> { }
+            Full -> Message { }
+            error -> Message { }
+            cancelled -> { }
+            otherwise -> { }
+          }
+          defer { do Delete(File: "old") }
+          defer Delete(File: "later")
+        }
+      }
+    `)
+    const statements = AST.streamAllContents(parsed.entry.ast)
+    const then = statements.find(AST.isDoStatement)
+    Expect.Is(then, AST.isDoStatement)
+    Expect(then.then).toBe(true)
+    Expect(then.outcomes.map(outcome => [outcome.case, outcome.payload?.name])).toEqual([
+      ['done', undefined],
+      ['Full', 'Message'],
+      ['error', 'Message'],
+      ['cancelled', undefined],
+      ['otherwise', undefined],
+    ])
+    Expect(then.otherwise).toBeUndefined()
+    const deferred = statements.filter(AST.isDeferStatement)
+    Expect(deferred).toHaveLength(2)
+    Expect.Is(deferred[0]!.block, AST.isActionBlock)
+    Expect.Is(deferred[1]!.invocation, AST.isDoStatement)
+    Expect(deferred[1]!.invocation.action.$type).toBe('ValueReference')
+    Expect(deferred[1]!.invocation.$cstNode?.text.startsWith('Delete')).toBe(true)
+  })
+
   Test('leaves `saved` and `rejected` usable as ordinary names', async () => {
     const parsed = await testParseCode(`
       view Main() {
