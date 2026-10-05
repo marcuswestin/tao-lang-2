@@ -8,6 +8,19 @@ import { AssociatedMethodsValidationMessages as messages } from '../validator-sr
 import { accepts, rejects } from './test-validate'
 
 Describe('validator: associated declaration boundaries', () => {
+  Test(
+    'rejects duplicate owner methods before a private witness table can overwrite the selected implementation',
+    rejects(
+      `
+      type Token is text with {
+        func ToText() -> text { return "first" }
+        func ToText() -> text { return "second" }
+      }
+    `,
+      messages.duplicateImplementation('Token', 'ToText'),
+    ),
+  )
+
   Test('reports incomplete purity and a violated declared bound from the supplied sealed analyses', async () => {
     const parsed = await Parser.parseCode(`
       type Token is text with { func ToText() fails never -> text { return "token" } }

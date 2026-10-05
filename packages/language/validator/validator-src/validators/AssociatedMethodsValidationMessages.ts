@@ -7,6 +7,8 @@ export const AssociatedMethodsValidationMessages = {
   pending: (name: string) => `Associated method '${name}' has an unresolved callable contract.`,
   purity: (name: string) => `Associated method '${name}' requires a complete pure effect contract.`,
   failures: (name: string) => `Associated method '${name}' does not satisfy its declared failure bound.`,
+  duplicateImplementation: (owner: string, name: string) =>
+    `Associated method '${name}' is declared more than once on '${owner}'.`,
   failureBound: "This callable bound supports only 'fails never'.",
   duplicateRequirement: (name: string) => `Capability method '${name}' is declared more than once.`,
   duplicateParameter: (name: string) => `Capability parameter '${name}' is declared more than once.`,

@@ -7,6 +7,15 @@ import { FunctionsValidator } from './functions-validator'
 import { ReactiveParametersValidator } from './ReactiveParametersValidator'
 
 export const associatedMethodsValidationChecks = {
+  [AST.TypeDeclaration.$type]: (owner, ctx) => {
+    const names = new Set<string>()
+    for (const method of ASTUtils.ownAssociatedMethods(owner)) {
+      if (names.has(method.name)) {
+        ctx.error(method, messages.duplicateImplementation(owner.name, method.name))
+      }
+      names.add(method.name)
+    }
+  },
   [AST.AssociatedFunctionDeclaration.$type]: (method, ctx) => {
     validateFailureBound(method, ctx)
     const owner = AST.associatedFunctionOwner(method)
