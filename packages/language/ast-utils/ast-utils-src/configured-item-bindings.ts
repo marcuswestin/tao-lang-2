@@ -61,10 +61,19 @@ export function resolveConfiguredItemConstruction(
   }
   const candidateTypes = new Map<AST.ConfigurationEntry, TaoType>()
   const payloadTypes = new Map<AST.ConfigurationEntry, TaoType>()
-  const fieldType = (field: ItemShapeField): TaoType =>
-    AST.isTypeProperty(field) && field.type
-      ? resolution.ofTypeExpression(field.type)
-      : resolution.ofDefinition(field as AST.TypeProperty)
+  const fieldType = (field: ItemShapeField): TaoType => {
+    if (!AST.isTypeProperty(field)) {
+      return Type.itemFieldType(field)
+    }
+    if (field.type) {
+      return resolution.ofTypeExpression(field.type)
+    }
+    if (field.value) {
+      return resolution.ofExpression(field.value)
+    }
+    const shorthandType = Type.shorthandPropertyDefinition(field)
+    return shorthandType ? resolution.ofDefinition(shorthandType) : Type.itemFieldType(field)
+  }
   for (const entry of block.entries) {
     let actual: TaoType | undefined
     if (entry.label && entry.expression) {
