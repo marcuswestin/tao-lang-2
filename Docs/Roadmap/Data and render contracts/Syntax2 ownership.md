@@ -262,6 +262,22 @@ for a nonempty renderer. Preserve stable body identity and fresh captured enviro
 slot admission, facade, FilesCompiler, shared TaoProps or collision-name allocator ownership is
 released. The coordinator supplies those production seams and mounted acceptance after return.
 
+The lowercase lexical amendment is integrated at `4dd034184`; A has returned parser grammar,
+AST and scope ownership for the next explicit slot frontend release. Associated and lowercase-unit
+regressions remain required when those seams change. This return alone does not grant B unlisted
+source edits. C's authenticated ancestry runtime pair returned at `71be4aa26`.
+
+C now owns a spelling-only fixture migration in exactly these six test paths: compiler-tests/
+numeric-units.test.ts and quantity-publication.test.ts; project-tooling-tests/QuantityPublication.test.ts;
+parser-tests/numeric-units.test.ts; formatter-tests/numeric-units.test.ts; validator-tests/numeric-units.test.ts.
+The first two are under packages/compiler; the others are under their packages/language owners.
+Use lowercase unit declaration/suffix names and matching emitted unit members and diagnostics while
+preserving test cases, values, assertions and semantic failures. Keep runtime-only unit table tests
+case-sensitive and unchanged. A's new lowercase-units.test.ts is a frozen input, not a migration
+target. No production source, owner typing, grammar, native imports or metadata policy changes are
+released. A bounded worker may implement this settled migration; its manager reviews and commits
+the exact diff and returns focused proof before coordinator integration.
+
 Managers implement against supplied frozen inputs in isolated worktrees and reconcile the landed
 base before frozen return. This manifest transfers no unlisted shared file implicitly.
 
