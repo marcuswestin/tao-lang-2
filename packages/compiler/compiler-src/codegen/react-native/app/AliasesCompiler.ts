@@ -1,3 +1,4 @@
+import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert } from '@shared'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
@@ -25,6 +26,15 @@ export const AliasesCompiler = {
       return gen`${gen.scopeName(alias)} = TR.Alias(TR.BridgedAction(${
         gen.Name({ name: bridgeBindingName(alias.value) })
       }))`
+    }
+    if (AST.isExpression(alias.value)) {
+      const selected = ASTUtils.resolveActionTarget(alias.value)
+      if (selected.kind === 'named' && selected.associated) {
+        return withAuthContextFactory(
+          alias,
+          gen`${gen.scopeName(alias)} = TR.Alias(${Compile.Expression(alias.value)})`,
+        )
+      }
     }
     return withAuthContextFactory(
       alias,

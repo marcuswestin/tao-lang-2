@@ -53,6 +53,12 @@ export function referencedAssociatedWitnessOwners(
   }
   for (const statement of statements) {
     for (const node of [statement, ...AST.streamAllContents(statement)]) {
+      if (AST.isMemberAccessExpression(node) || AST.isPostfixMemberAccess(node)) {
+        const selected = ASTUtils.resolveActionTarget(node)
+        if (selected.kind === 'named' && selected.associated) {
+          owners.add(selected.associated.owner)
+        }
+      }
       if (AST.isParameterDeclaration(node) && node.defaultValue) {
         transport(node.defaultValue, Type.ofParameter(node))
       }

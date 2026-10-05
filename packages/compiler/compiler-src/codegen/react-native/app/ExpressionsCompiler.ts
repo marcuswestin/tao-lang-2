@@ -6,7 +6,11 @@ import { nativeNumericSelfContext } from '../../../numeric-self-context'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 import { compileAssociatedConversion } from './associated-converters'
-import { compileAssociatedWitness, compileCallableWitnessKey } from './AssociatedMethodsCompiler'
+import {
+  compileAssociatedActionWitness,
+  compileAssociatedWitness,
+  compileCallableWitnessKey,
+} from './AssociatedMethodsCompiler'
 import { authLibraryExport, compileCurrentAccount, contextualCommand, contextualReference } from './auth-context'
 import { compileArgumentForType, compileValueForType } from './capability-projection'
 import { configurationRuntimeBindingName } from './ConfigurationCompiler'
@@ -391,6 +395,10 @@ export const ExpressionsCompiler = {
 
   /** MemberAccessExpression compiles a typed item member path into a runtime value wrapper. */
   MemberAccessExpression(reference: AST.MemberAccessExpression): Compiled {
+    const associatedAction = compileAssociatedActionSelection(reference)
+    if (associatedAction) {
+      return associatedAction
+    }
     const target = resolveRef(reference.target)
     if (reference.shade !== undefined) {
       Assert(AST.isDesignColorEntry(target), 'validated shade names a design color family member')
@@ -484,6 +492,10 @@ export const ExpressionsCompiler = {
 
   /** PostfixMemberAccess compiles a member read on any expression, including unit accessors. */
   PostfixMemberAccess(access: AST.PostfixMemberAccess): Compiled {
+    const associatedAction = compileAssociatedActionSelection(access)
+    if (associatedAction) {
+      return associatedAction
+    }
     return compileMemberPath(
       Compile.Expression(access.receiver),
       Type.ofExpression(access.receiver),
@@ -548,6 +560,27 @@ export const ExpressionsCompiler = {
     return compileNavigationDescriptor(view)
   },
 } as const
+
+/** Selection binds the validated receiver once; invoking an alias reads its captured action. */
+function compileAssociatedActionSelection(
+  expression: AST.MemberAccessExpression | AST.PostfixMemberAccess,
+): Compiled | undefined {
+  const selected = ASTUtils.resolveActionTarget(expression)
+  if (selected.kind !== 'named' || !selected.associated) {
+    return undefined
+  }
+  Assert(AST.isActionDeclaration(selected.action), 'an associated action selection names a source action')
+  const receiver = selected.associated
+  const declared = AST.associatedEntityActionReceiver(selected.action)
+  Assert(
+    declared?.owner === receiver.owner && declared.cardinality === receiver.cardinality,
+    'the validated associated action retains its actual receiver owner and cardinality',
+  )
+  const hasOwner = AST.findOwningView(expression) || AST.findOwningAssociatedView(expression)
+  return gen`${compileAssociatedActionWitness(selected.action)}(TR.CaptureActionReceiver(${
+    compileMethodReceiver(receiver.receiver)
+  }, ${gen.jsLiteral(receiver.cardinality)})${hasOwner ? gen`, { owner: _TaoActionOwner }` : gen.noop()})`
+}
 
 /** Selected operators call the real ordered contract before any built-in runtime leaf. */
 function compileAssociatedOperation(expression: AST.BinaryExpression | AST.UnaryExpression): Compiled | undefined {

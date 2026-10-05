@@ -1,6 +1,7 @@
 import React from 'react'
 import { Dev, DevControls, type TaoDevModeOptions } from './dev-runtime/TR-dev'
 import { TestActionStubs } from './TR-action-test-stubs'
+import { captureActionReceiver } from './TR-action-receivers'
 import {
   actionCancellationSignal,
   actionFailureCaseName,
@@ -633,6 +634,8 @@ class TR {
   }
 
   static UseActionOwner = useActionOwner
+
+  static CaptureActionReceiver = captureActionReceiver
 
   static NativeSubscription = nativeSubscription
 

@@ -48,7 +48,7 @@ export function associatedWitnessBinding(owner: AssociatedOwner): Compiled {
   return gen.Name({ name: binding })
 }
 
-/** Each owner exports one module-local method witness; there is no runtime nominal registry. */
+/** Each owner exports one module-local associated witness; there is no runtime nominal registry. */
 export function AssociatedMethodsDeclaration(owner: AssociatedOwner): Compiled {
   const type = Type.ofAssociatedOwner(owner)
   if (type.kind === 'capability') {
@@ -76,8 +76,9 @@ export function AssociatedMethodsDeclaration(owner: AssociatedOwner): Compiled {
     }`
   }
   Assert(type.kind !== 'unresolved', 'Expected a resolved concrete associated owner.')
-  const views = ASTUtils.ownAssociatedViews(owner)
+  const views = Type.ownAssociatedViews(owner)
   return gen`const ${associatedWitnessBinding(owner)} = {
+    "$actions": [${gen.join(associatedActions(owner), Compile.AssociatedActionDeclaration)}],
     "$views": [${
     gen.join(views, (view) => {
       return Compile.AssociatedViewDeclaration(view, {
@@ -130,15 +131,33 @@ export function AssociatedMethodsDeclaration(owner: AssociatedOwner): Compiled {
     }`
 }
 
-/** Requirements publish only lexical default thunks; implementation owners publish method witnesses. */
+/** Requirements publish lexical defaults; concrete owners publish associated callable witnesses. */
 export function hasAssociatedWitnessPublication(owner: AssociatedOwner): boolean {
   return ASTUtils.ownAssociatedMethods(owner).length > 0
-    || ASTUtils.ownAssociatedViews(owner).length > 0
+    || associatedActions(owner).length > 0
+    || Type.ownAssociatedViews(owner).length > 0
     || (AST.isTypeDeclaration(owner) && Type.ownAssociatedConverters(owner).length > 0)
     || (AST.isTypeDeclaration(owner)
       && ASTUtils.capabilityRequirements(owner).some(method =>
         AST.parametersOf(method).some(parameter => parameter.defaultValue !== undefined)
       ))
+}
+
+/** Slots distinguish singular and collection actions that share the same authored name. */
+export function compileAssociatedActionWitness(action: AST.ActionDeclaration): Compiled {
+  const receiver = AST.associatedEntityActionReceiver(action)
+  Assert.defined(receiver, 'the selected associated action has its actual entity owner')
+  const index = associatedActions(receiver.owner).indexOf(action)
+  Assert(index >= 0, 'the selected associated action belongs to its actual publication owner')
+  return gen`${associatedWitnessBinding(receiver.owner)}["$actions"][${index}]`
+}
+
+function associatedActions(owner: AssociatedOwner): AST.ActionDeclaration[] {
+  return AST.isEntityDataDeclaration(owner)
+    ? owner.block.entries.filter(AST.isActionDeclaration).filter(action =>
+      AST.associatedEntityActionReceiver(action) !== undefined
+    )
+    : []
 }
 
 export function compileCapabilityDefault(descriptor: ASTUtils.AssociatedCallableDescriptor, index: number): Compiled {
