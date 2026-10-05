@@ -4,6 +4,7 @@ import { Assert, Switch } from '@shared'
 import { BridgeMetadata } from '../../../bridge-metadata'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
+import { compileAssociatedWitness } from './AssociatedMethodsCompiler'
 import { authLibraryExport, compileCurrentAccount, contextualCommand, contextualReference } from './auth-context'
 import { configurationRuntimeBindingName } from './ConfigurationCompiler'
 import { activeDataStorePlan } from './data-store-context'
@@ -29,6 +30,7 @@ export const ExpressionsCompiler = {
       ConfigurationConstructor: Compile.ConfiguredValue,
       WhenExpression: Compile.WhenExpression,
       FunctionCallExpression: Compile.FunctionCallExpression,
+      MethodCallExpression: Compile.MethodCallExpression,
       InterpolatedString: Compile.InterpolatedString,
       InferredConfigurationConstructor: Compile.InferredConfiguration,
       NumberLiteral: Compile.NumberLiteral,
@@ -258,6 +260,40 @@ export const ExpressionsCompiler = {
         },
         { separator: '' },
       )
+    })`
+  },
+
+  /** Method calls use the canonical selected descriptor and its parameter correspondence. */
+  MethodCallExpression(expression: AST.MethodCallExpression): Compiled {
+    const resolved = ASTUtils.resolveAssociatedMethodInvocation(expression)
+    Assert(resolved.problem === undefined, 'validated associated call resolves its receiver and contract')
+    Assert.defined(resolved.descriptor, 'validated associated call has a selected descriptor')
+    Assert(resolved.diagnostics.length === 0, 'validated associated call has no binding diagnostics')
+    const target = ASTUtils.associatedMethodCallTarget(expression)
+    Assert.defined(target, 'validated associated call retains its actual receiver anchor')
+    let receiver: Compiled
+    if (target.receiver.kind === 'expression') {
+      receiver = compileReactiveArgument(target.receiver.expression)
+    } else {
+      const site = target.receiver.site
+      const declaration = resolveRef(site.target)
+      const root = AST.isTypeDeclaration(declaration)
+        ? gen.scopeName(declaration)
+        : gen`TR.Alias(() => ${Compile.ValueDeclarationReference(declaration)})`
+      receiver = compileMemberPath(root, Type.ofReferenceRoot(site), target.receiver.members)
+    }
+    const capability = resolved.receiver?.kind === 'capability'
+    const callable = capability
+      ? gen`TR.Capability.method(${receiver}.evaluate(), ${gen.jsLiteral(target.name)})`
+      : compileAssociatedWitness(resolved.descriptor)
+    const parameters = AST.parametersOf(resolved.descriptor.declaration)
+    const argumentsByParameter = new Map(resolved.pairs.map(pair => [pair.parameter, pair.argument]))
+    const lastProvidedIndex = Math.max(...resolved.pairs.map(pair => parameters.indexOf(pair.parameter)), -1)
+    return gen`TR.Call(${callable}${capability ? gen.noop() : gen`, ${receiver}`}${
+      gen.join(parameters.slice(0, lastProvidedIndex + 1), parameter => {
+        const argument = argumentsByParameter.get(parameter)
+        return argument ? gen`, ${compileReactiveArgument(argument.value)}` : gen`, undefined`
+      }, { separator: '' })
     })`
   },
 
