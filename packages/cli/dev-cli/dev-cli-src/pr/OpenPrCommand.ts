@@ -4,11 +4,15 @@ import { type ReviewedMergeMessage, reviewedMergeMessage } from './ReviewedMerge
 /*
  * `open-pr` is the one command that pushes a feature branch, opens (or reuses) its pull request
  * against `main`, turns on auto-merge, and stays attached to watch the checks the push starts. The
- * pull request's title and description are the reviewed merge message, rewritten from it on every
- * run, and the repository squash-merges with them, so editing the message and running this again is
- * how a changed message reaches `main`. Auto-merge waits for the required Verify check; it is turned
- * on only once checks exist on the pushed head, so Verify is already pending when GitHub reads it.
- * Verify runs on every push, so a reused pull request is watched the same way as a new one.
+ * reviewed merge message is the pull request's title and description and, verbatim, auto-merge's
+ * commit headline and body, all rewritten from it on every run, so editing the message and running
+ * this again is how a changed message reaches `main`. The headline and body are set explicitly
+ * because GitHub's own squash message appends ` (#N)` to the title and wraps the description at 72
+ * columns, which breaks the repository's one-bullet-per-line format. Auto-merge waits for the
+ * required Verify check; it is turned on only once checks exist on the pushed head, so Verify is
+ * already pending when GitHub reads it. Verify runs on every push, so a reused pull request is
+ * watched the same way as a new one. A branch that already merged is refused before any push,
+ * because pushing it again would open a second, empty pull request that auto-merge also lands.
  *
  * The Developer runs it by hand and an agent runs it unattended, so every `git` and `gh` invocation is
  * behind the injected `run` seam below rather than a direct `CLI.run` call — the house pattern
@@ -92,6 +96,7 @@ export const OpenPrCommand = {
     await requireCommitsBeyondMain(dependencies, root)
     const message = await reviewedMergeMessage(dependencies, root, branch)
     await requireGh(dependencies, root)
+    await refuseMergedBranch(dependencies, root, branch)
 
     const headSha = (await git(dependencies, root, ['rev-parse', 'HEAD'])).stdout.trim()
     await pushBranch(dependencies, root, branch, report)
@@ -99,7 +104,7 @@ export const OpenPrCommand = {
     if (!await awaitChecksOnHead(dependencies, root, pr.number, headSha, report)) {
       return { exitCode: 1, lines }
     }
-    await enableAutoMerge(dependencies, root, pr.number, report)
+    await enableAutoMerge(dependencies, root, pr.number, message, report)
     const exitCode = await streamChecks(
       dependencies,
       root,
@@ -223,14 +228,18 @@ async function ensurePullRequest(
   return { number, url }
 }
 
+type AutoMergeRequest = { commitBody?: string | null; commitHeadline?: string | null }
+
 /**
- * Auto-merge squash-merges with the pull request's title and description once the required Verify
- * check passes. Asking again when it is already on would fail, so this reads it first.
+ * Auto-merge squash-merges with the headline and body given here once the required Verify check
+ * passes. One already on with this message is left alone; one carrying an older message is turned
+ * off and on again with the current one, since GitHub keeps the message it was enabled with.
  */
 async function enableAutoMerge(
   dependencies: OpenPrDependencies,
   root: string,
   prNumber: number,
+  message: ReviewedMergeMessage,
   report: (line: string) => void,
 ): Promise<void> {
   const view = await dependencies.run('gh', {
@@ -239,17 +248,43 @@ async function enableAutoMerge(
     stdio: 'pipe',
   })
   assertCommandSucceeded(view)
-  if (parseJson<{ autoMergeRequest?: unknown }>(view.stdout, {}).autoMergeRequest) {
-    report(`PASS  Auto-merge is already on for #${prNumber}.`)
+  const current = parseJson<{ autoMergeRequest?: AutoMergeRequest | null }>(view.stdout, {}).autoMergeRequest
+  if (current && current.commitHeadline === message.title && current.commitBody === message.body) {
+    report(`PASS  Auto-merge is already on for #${prNumber} with the merge message.`)
     return
   }
+  if (current) {
+    const disabled = await dependencies.run('gh', {
+      args: ['pr', 'merge', String(prNumber), '--disable-auto'],
+      cwd: root,
+      stdio: 'pipe',
+    })
+    assertCommandSucceeded(disabled)
+  }
   const enabled = await dependencies.run('gh', {
-    args: ['pr', 'merge', String(prNumber), '--auto', '--squash'],
+    args: ['pr', 'merge', String(prNumber), '--auto', '--squash', '--subject', message.title, '--body', message.body],
     cwd: root,
     stdio: 'pipe',
   })
   assertCommandSucceeded(enabled)
-  report(`PASS  Auto-merge is on: GitHub squash-merges #${prNumber} once Verify passes.`)
+  report(`PASS  Auto-merge is on: GitHub squash-merges #${prNumber} with the merge message once Verify passes.`)
+}
+
+/** A feat/<name> branch lands once; pushing a merged one again would open an empty duplicate. */
+async function refuseMergedBranch(dependencies: OpenPrDependencies, root: string, branch: string): Promise<void> {
+  const result = await dependencies.run('gh', {
+    args: ['pr', 'list', '--head', branch, '--state', 'merged', '--json', 'number,url', '--limit', '1'],
+    cwd: root,
+    stdio: 'pipe',
+  })
+  assertCommandSucceeded(result)
+  const merged = parseJson<PullRequest[]>(result.stdout, [])[0]
+  if (merged !== undefined) {
+    Errors.throwUserInput(
+      `${branch} already merged as #${merged.number} (${merged.url}); a feat/<name> branch lands once.`
+        + ' Run merge-pr to archive it, and put further work on a new branch.',
+    )
+  }
 }
 
 async function findExistingPullRequest(

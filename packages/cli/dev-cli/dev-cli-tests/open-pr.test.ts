@@ -46,6 +46,7 @@ function cleanFeatureBranchRoutes(): Record<string, RouteResult> {
     [routeKey('git', ['merge-base', 'main', 'HEAD'], ROOT)]: { stdout: 'basesha0000\n' },
     [routeKey('git', ['rev-list', '--count', 'basesha0000..HEAD'], ROOT)]: { stdout: '3\n' },
     [routeKey('gh', ['auth', 'status'], ROOT)]: {},
+    [MERGED_LIST_KEY]: { stdout: '[]' },
     [routeKey('git', ['rev-parse', 'HEAD'], ROOT)]: { stdout: `${HEAD_SHA}\n` },
     [routeKey('git', ['push', '--set-upstream', 'origin', BRANCH], ROOT)]: {},
   }
@@ -56,17 +57,30 @@ const PR_LIST_KEY = routeKey(
   ['pr', 'list', '--head', BRANCH, '--state', 'open', '--json', 'number,url', '--limit', '1'],
   ROOT,
 )
+const MERGED_LIST_KEY = routeKey(
+  'gh',
+  ['pr', 'list', '--head', BRANCH, '--state', 'merged', '--json', 'number,url', '--limit', '1'],
+  ROOT,
+)
 const SUBJECT = 'Add the example workflow'
 const BODY = '- one detail\n- another'
 const MESSAGE_FILE = `${ROOT}/.artifacts/merge/${BRANCH}.msg`
 
-/** autoMergeRoutes answers the auto-merge read as off, and accepts turning it on. */
+function enableAutoMergeKey(prNumber: number): string {
+  return routeKey(
+    'gh',
+    ['pr', 'merge', String(prNumber), '--auto', '--squash', '--subject', SUBJECT, '--body', BODY],
+    ROOT,
+  )
+}
+
+/** autoMergeRoutes answers the auto-merge read as off, and accepts turning it on with the message. */
 function autoMergeRoutes(prNumber: number): Record<string, RouteResult> {
   return {
     [routeKey('gh', ['pr', 'view', String(prNumber), '--json', 'autoMergeRequest'], ROOT)]: {
       stdout: '{"autoMergeRequest":null}',
     },
-    [routeKey('gh', ['pr', 'merge', String(prNumber), '--auto', '--squash'], ROOT)]: {},
+    [enableAutoMergeKey(prNumber)]: {},
   }
 }
 
@@ -147,7 +161,7 @@ Describe('open-pr', () => {
     Expect(result.lines).toContain('PASS  All 1 check(s) succeeded.')
     Expect(result.lines.at(-1)).toStartWith('NEXT  Run merge-pr')
     // Auto-merge goes on once checks exist on the head, so Verify is pending when GitHub reads it.
-    const autoMerge = calls.indexOf(routeKey('gh', ['pr', 'merge', '2', '--auto', '--squash'], ROOT))
+    const autoMerge = calls.indexOf(enableAutoMergeKey(2))
     Expect(autoMerge).toBeGreaterThan(calls.lastIndexOf(headViewKey(2)))
     Expect(autoMerge).toBeLessThan(calls.indexOf(routeKey('gh', ['pr', 'checks', '2', '--watch'], ROOT)))
   })
@@ -243,7 +257,9 @@ Describe('open-pr', () => {
     routes[PR_LIST_KEY] = { stdout: JSON.stringify([{ number: 7, url: 'https://github.com/tao/tao/pull/7' }]) }
     routes[routeKey('gh', ['pr', 'edit', '7', '--title', SUBJECT, '--body', BODY], ROOT)] = {}
     routes[routeKey('gh', ['pr', 'view', '7', '--json', 'autoMergeRequest'], ROOT)] = {
-      stdout: '{"autoMergeRequest":{"mergeMethod":"SQUASH"}}',
+      stdout: JSON.stringify({
+        autoMergeRequest: { commitBody: BODY, commitHeadline: SUBJECT, mergeMethod: 'SQUASH' },
+      }),
     }
     routes[headViewKey(7)] = headView(HEAD_SHA, 1)
     routes[routeKey('gh', ['pr', 'checks', '--help'], ROOT)] = { stdout: 'Show CI status.\n' }
@@ -260,9 +276,45 @@ Describe('open-pr', () => {
     // The message may have changed since the pull request opened, and it is what the squash commit says.
     Expect(calls).toContain(routeKey('gh', ['pr', 'edit', '7', '--title', SUBJECT, '--body', BODY], ROOT))
     Expect(calls.some(call => call.startsWith('gh pr create') || call.startsWith('gh pr merge'))).toBe(false)
-    Expect(result.lines).toContain('PASS  Auto-merge is already on for #7.')
+    Expect(result.lines).toContain('PASS  Auto-merge is already on for #7 with the merge message.')
     Expect(result.lines).toContain('PASS  All 1 check(s) succeeded.')
     Expect(result.lines.at(-1)).toStartWith('NEXT  Run merge-pr')
+  })
+
+  Test('re-enables auto-merge that carries an older merge message', async () => {
+    // GitHub's own squash message appends ` (#N)` and wraps the description at 72 columns, and
+    // auto-merge keeps the message it was enabled with, so a stale one is replaced, not kept.
+    const routes = cleanFeatureBranchRoutes()
+    routes[PR_LIST_KEY] = { stdout: JSON.stringify([{ number: 7, url: 'https://github.com/tao/tao/pull/7' }]) }
+    routes[routeKey('gh', ['pr', 'edit', '7', '--title', SUBJECT, '--body', BODY], ROOT)] = {}
+    routes[routeKey('gh', ['pr', 'view', '7', '--json', 'autoMergeRequest'], ROOT)] = {
+      stdout: JSON.stringify({ autoMergeRequest: { commitBody: null, commitHeadline: null, mergeMethod: 'SQUASH' } }),
+    }
+    routes[routeKey('gh', ['pr', 'merge', '7', '--disable-auto'], ROOT)] = {}
+    routes[enableAutoMergeKey(7)] = {}
+    routes[headViewKey(7)] = headView(HEAD_SHA, 1)
+    routes[routeKey('gh', ['pr', 'checks', '--help'], ROOT)] = { stdout: 'Show CI status.\n' }
+    routes[routeKey('gh', ['pr', 'checks', '7', '--json', 'name,state,link,bucket'], ROOT)] = {
+      stdout: JSON.stringify([{ bucket: 'pass', link: 'https://ci/1', name: 'Verify', state: 'SUCCESS' }]),
+    }
+    const { calls, dependencies } = fakeDependencies(routes)
+
+    const result = await OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)
+
+    Expect(result.exitCode).toBe(0)
+    Expect(calls.indexOf(routeKey('gh', ['pr', 'merge', '7', '--disable-auto'], ROOT)))
+      .toBeLessThan(calls.indexOf(enableAutoMergeKey(7)))
+    Expect(calls.indexOf(enableAutoMergeKey(7))).toBeGreaterThan(-1)
+  })
+
+  Test('refuses, before pushing, a branch that already merged', async () => {
+    // Pushing a merged branch again opened a second, empty pull request that auto-merge also landed.
+    const routes = cleanFeatureBranchRoutes()
+    routes[MERGED_LIST_KEY] = { stdout: JSON.stringify([{ number: 4, url: 'https://github.com/tao/tao/pull/4' }]) }
+    const { calls, dependencies } = fakeDependencies(routes)
+
+    await Expect(OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)).rejects.toThrow('already merged as #4')
+    Expect(calls.some(call => call.startsWith('git push'))).toBe(false)
   })
 
   Test('opens a pull request titled by the merge message and fails when a check fails', async () => {

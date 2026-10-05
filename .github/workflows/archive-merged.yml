@@ -31,7 +31,12 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           archive="merged/${HEAD_REF#feat/}"
-          existing=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$archive" --jq .object.sha 2>/dev/null || true)
+          # A missing ref is a 404, for which gh still prints the error body on stdout, so only a
+          # successful read counts as an existing ref.
+          existing=""
+          if sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$archive" --jq .object.sha 2>/dev/null); then
+            existing=$sha
+          fi
           if [ "$existing" = "$HEAD_SHA" ]; then
             echo "$archive already points at $HEAD_SHA."
           elif [ -n "$existing" ]; then
