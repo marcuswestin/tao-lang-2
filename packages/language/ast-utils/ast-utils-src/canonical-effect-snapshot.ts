@@ -4,6 +4,7 @@ import type { ArgumentBindingDiagnostic, ArgumentBindingMetadata, RenderInvocati
 import { associatedConverterDescriptor, resolveAssociatedConversion } from './associated-converters'
 import { resolveAssociatedMethodInvocation } from './associated-invocations'
 import {
+  type AssociatedCallableDeclaration,
   type AssociatedCallableDescriptor,
   type AssociatedCallableOwner,
   type AssociatedDescriptorMaterialization,
@@ -12,13 +13,14 @@ import {
   capabilityRequirements,
   hasAssociatedEffects,
   ownAssociatedMethods,
+  ownAssociatedViews,
 } from './associated-methods'
 import type { NativeEffectPublication } from './callable-effect-facts'
 import { type CallableSignature, callableSignatureOf } from './callable-signatures'
 import { resolveFunctionInvocation } from './invocations'
 import { type ItemShape, type TaoType, Type } from './Type'
 
-type AssociatedDeclaration = AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration
+type AssociatedDeclaration = AssociatedCallableDeclaration
 type SourceCallable = AST.CallableDeclaration | AssociatedDeclaration | AST.AssociatedConverterDeclaration
 type EffectContract = Pick<NativeEffectPublication, 'purity' | 'failures'>
 type PublicationStatus =
@@ -35,7 +37,7 @@ export type CanonicalCallableDescriptor = Readonly<{
   signature?: CallableSignature
   result?: TaoType
   pending: readonly AST.Node[]
-  convention: 'wrapped' | 'raw-nullish' | 'unknown'
+  convention: 'wrapped' | 'mounted' | 'raw-nullish' | 'unknown'
   contract?: EffectContract
 }>
 
@@ -127,8 +129,8 @@ export function publishCanonicalEffectSnapshot(
       continue
     }
     const declarations = AST.isTypeDeclaration(node)
-      ? [...ownAssociatedMethods(node), ...capabilityRequirements(node)]
-      : ownAssociatedMethods(node)
+      ? [...ownAssociatedMethods(node), ...ownAssociatedViews(node), ...capabilityRequirements(node)]
+      : [...ownAssociatedMethods(node), ...ownAssociatedViews(node)]
     for (const declaration of declarations) {
       associated.set(declaration, sealAssociated(Type.associatedCallable(declaration, node)))
       associatedOwners.set(declaration, node)
@@ -137,7 +139,10 @@ export function publishCanonicalEffectSnapshot(
   const resolution = Type.correspondenceResolver(associated)
   const descriptors = new Map<AST.Node, CanonicalCallableDescriptor>()
   for (const node of nodes) {
-    if (AST.isAssociatedFunctionDeclaration(node) || AST.isCapabilityMethodDeclaration(node)) {
+    if (
+      AST.isAssociatedFunctionDeclaration(node) || AST.isCapabilityMethodDeclaration(node)
+      || AST.isAssociatedViewDeclaration(node)
+    ) {
       const contract = associated.get(node)
       const ready = contract?.kind === 'ready' ? contract.descriptor : undefined
       const owner = associatedOwners.get(node)
@@ -149,11 +154,13 @@ export function publishCanonicalEffectSnapshot(
           declaration: node,
           ...(owner ? { owner } : {}),
           ...(ready ? { signature: ready.signature, result: ready.result } : {}),
-          parameters: Object.freeze([...node.parameterList.parameters]),
-          ...(AST.isAssociatedFunctionDeclaration(node) ? { body: node.block } : {}),
+          parameters: Object.freeze([...AST.parametersOf(node)]),
+          ...(AST.isAssociatedFunctionDeclaration(node) || AST.isAssociatedViewDeclaration(node)
+            ? { body: node.block }
+            : {}),
           kind: requirement ? 'requirement' : 'source',
           pending: Object.freeze(contract?.kind === 'pending' ? [...contract.dependencies] : ready ? [] : [node]),
-          convention: 'wrapped',
+          convention: AST.isAssociatedViewDeclaration(node) ? 'mounted' : 'wrapped',
           ...(effects ? { contract: sealEffectContract(effects) } : {}),
         }),
       )

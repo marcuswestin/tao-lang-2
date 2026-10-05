@@ -5,10 +5,14 @@ import type { CallableSignature } from './callable-signatures'
 import type { TaoType } from './Type'
 
 export type AssociatedCallableOwner = AST.TypeDeclaration | AST.PrimitiveDeclaration
+export type AssociatedCallableDeclaration =
+  | AST.AssociatedFunctionDeclaration
+  | AST.CapabilityMethodDeclaration
+  | AST.AssociatedViewDeclaration
 
 /** Declared callable contracts are resolved before effect discovery or structural admission. */
 export type AssociatedCallableDescriptor = Readonly<{
-  declaration: AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration
+  declaration: AssociatedCallableDeclaration
   owner: AssociatedCallableOwner
   /** The owner body sees this domain; an inherited method retains its original owner. */
   receiver: TaoType
@@ -19,7 +23,7 @@ export type AssociatedCallableDescriptor = Readonly<{
 /** Final admission consumes only contracts and analyses sealed for the current AST generation. */
 export type AssociatedEffectsContext = Readonly<{
   descriptors: ReadonlyMap<
-    AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration,
+    AssociatedCallableDeclaration,
     AssociatedCallableDescriptor
   >
   analyses: ReadonlyMap<AST.Node, CallableAnalysis>
@@ -51,7 +55,7 @@ export function hasAssociatedEffects(): boolean {
 }
 
 export function associatedCallableDescriptor(
-  declaration: AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration,
+  declaration: AssociatedCallableDeclaration,
 ): AssociatedCallableDescriptor | undefined {
   return associatedEffectsContext?.descriptors.get(declaration)
 }
@@ -120,8 +124,12 @@ export function associatedMethodTypeRoot(receiver: AssociatedMethodReceiver): AS
   }
   const owner = reference.target.ref
   const method = AST.findOwningAssociatedFunction(reference)
+  const view = AST.findOwningAssociatedView(reference)
   const instanceBody = method ? !method.static : AST.findOwningAssociatedConverter(reference) !== undefined
-  return instanceBody && AST.associatedReceiverOwner(reference) === owner ? undefined : owner
+  return (instanceBody && AST.associatedReceiverOwner(reference) === owner)
+      || (view && AST.associatedViewOwner(view) === owner)
+    ? undefined
+    : owner
 }
 
 export type AssociatedMethodCallTarget = Readonly<{
@@ -146,8 +154,8 @@ export function associatedMethodCallTarget(call: AST.MethodCallExpression): Asso
 
 export type AssociatedDescriptorResolver = Readonly<{
   receiver(owner: AssociatedCallableOwner): TaoType
-  signature(declaration: AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration): CallableSignature
-  result(declaration: AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration): TaoType
+  signature(declaration: AssociatedCallableDeclaration): CallableSignature
+  result(declaration: AssociatedCallableDeclaration): TaoType
 }>
 
 export type AssociatedDescriptorMaterialization =
@@ -156,7 +164,7 @@ export type AssociatedDescriptorMaterialization =
 
 /** Materialization does no matching, effect analysis, or provisional structural admission. */
 export function materializeAssociatedCallable(
-  declaration: AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration,
+  declaration: AssociatedCallableDeclaration,
   owner: AssociatedCallableOwner,
   resolver: AssociatedDescriptorResolver,
 ): AssociatedDescriptorMaterialization {
@@ -188,6 +196,20 @@ export function ownAssociatedMethods(owner: AssociatedCallableOwner): readonly A
     ? type
     : undefined
   return slots?.methods ?? []
+}
+
+/** Mounted views retain their own declaration kind rather than impersonating functions. */
+export function ownAssociatedViews(owner: AssociatedCallableOwner): readonly AST.AssociatedViewDeclaration[] {
+  if (AST.isPrimitiveDeclaration(owner)) {
+    return owner.slots?.views ?? []
+  }
+  const type = owner.type
+  const slots = type && AST.isDerivedTypeExpression(type)
+    ? type.slots
+    : type && AST.isItemTypeExpression(type)
+    ? type
+    : undefined
+  return slots?.views ?? []
 }
 
 export function capabilityRequirements(owner: AST.TypeDeclaration): readonly AST.CapabilityMethodDeclaration[] {

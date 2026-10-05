@@ -7,7 +7,9 @@ import {
   resolveParameterArgumentBindings,
 } from './argument-bindings'
 import {
+  type AssociatedCallableDeclaration,
   type AssociatedCallableDescriptor,
+  type AssociatedCallableOwner,
   type AssociatedDescriptorMaterialization,
   associatedMethodCallTarget,
   type AssociatedMethodDispatch,
@@ -21,7 +23,7 @@ import { type TaoType, Type } from './Type'
 export type ResolvedAssociatedMethodInvocation = {
   invocation: AST.MethodCallExpression
   receiver?: TaoType
-  declaration?: AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration
+  declaration?: AssociatedCallableDeclaration
   descriptor?: AssociatedCallableDescriptor
   pairs: RenderInvocationPair[]
   diagnostics: ArgumentBindingDiagnostic[]
@@ -37,13 +39,18 @@ export function resolveAssociatedMethodInvocation(
   options: {
     receiverType?(receiver: AssociatedMethodReceiver): TaoType
     descriptor?(
-      declaration: AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration,
+      declaration: AssociatedCallableDeclaration,
     ): AssociatedDescriptorMaterialization | undefined
     methodDeclaration?(
       receiver: TaoType,
       name: string,
       dispatch?: AssociatedMethodDispatch,
-    ): Readonly<{ declaration: AST.AssociatedFunctionDeclaration; owner: AST.TypeDeclaration }> | undefined
+    ):
+      | Readonly<{
+        declaration: AST.AssociatedFunctionDeclaration | AST.AssociatedViewDeclaration
+        owner: AssociatedCallableOwner
+      }>
+      | undefined
     bindingMetadata?: ArgumentBindingMetadata
   } = {},
 ): ResolvedAssociatedMethodInvocation {
@@ -124,6 +131,7 @@ export function resolveAssociatedMethodInvocation(
     Assert.defined(input, 'a signature input for every associated method parameter')
     return input
   }
+  AST.parametersOf(descriptor.declaration).forEach(inputOf)
   const generic =
     AST.isAssociatedFunctionDeclaration(descriptor.declaration) && descriptor.declaration.genericParameters.length > 0
       ? Type.instantiateGenericInvocation(descriptor.declaration, AST.argumentsOf(invocation), {
@@ -145,7 +153,7 @@ export function resolveAssociatedMethodInvocation(
     }
   }
   const bindings = generic ?? resolveParameterArgumentBindings(
-    descriptor.declaration.parameterList.parameters,
+    descriptor.signature.inputs.map(input => input.declaration),
     AST.argumentsOf(invocation),
     {
       ...options.bindingMetadata,

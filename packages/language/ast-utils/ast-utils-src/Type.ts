@@ -8,6 +8,7 @@ import {
 } from './associated-converters'
 import {
   associatedCallableAnalysis,
+  type AssociatedCallableDeclaration,
   type AssociatedCallableDescriptor,
   associatedCallableDescriptor,
   type AssociatedCallableOwner,
@@ -21,6 +22,7 @@ import {
   hasAssociatedEffects,
   materializeAssociatedCallable,
   ownAssociatedMethods,
+  ownAssociatedViews,
   withAssociatedAdmissionPair,
 } from './associated-methods'
 import {
@@ -66,6 +68,7 @@ export type TaoType =
         | 'command'
         | 'design'
         | 'view'
+        | 'rendered'
         | 'scene'
         | 'nav'
         | 'datasource'
@@ -138,6 +141,9 @@ export class Type {
   }
   static ownAssociatedConverters(owner: AST.TypeDeclaration) {
     return ownAssociatedConverters(owner)
+  }
+  static ownAssociatedViews(owner: AssociatedCallableOwner) {
+    return ownAssociatedViews(owner)
   }
   static associatedConverterDescriptor(declaration: AST.AssociatedConverterDeclaration) {
     return associatedConverterDescriptor(declaration)
@@ -343,7 +349,7 @@ export class Type {
   /** Correspondence uses only the supplied declared contracts and one local resolution context. */
   static correspondenceResolver(
     descriptors: ReadonlyMap<
-      AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration,
+      AssociatedCallableDeclaration,
       AssociatedDescriptorMaterialization
     >,
   ) {
@@ -386,14 +392,24 @@ export class Type {
     definitionOfReference: (reference: AST.NamedTypeReference) => AST.TypeDefinition | undefined =
       Type.definitionOfReference,
     dispatch: AssociatedMethodDispatch = 'instance',
-  ): Readonly<{ declaration: AST.AssociatedFunctionDeclaration; owner: AST.TypeDeclaration }> | undefined {
+  ):
+    | Readonly<{
+      declaration: AST.AssociatedFunctionDeclaration | AST.AssociatedViewDeclaration
+      owner: AssociatedCallableOwner
+    }>
+    | undefined
+  {
     const nominal = nominalOf(receiver)
     if (nominal) {
       for (const owner of nominalChain(nominal, definitionOfReference)) {
         if (AST.isTypeDeclaration(owner)) {
           const declaration = ownAssociatedMethods(owner).find(method =>
             method.name === name && !!method.static === (dispatch === 'static')
-          )
+          ) ?? (dispatch === 'instance'
+            ? ownAssociatedViews(owner).find(view =>
+              view.name === name
+            )
+            : undefined)
           if (declaration) {
             return { declaration, owner }
           }
@@ -418,10 +434,11 @@ export class Type {
       if (!AST.isTypeDeclaration(owner)) {
         continue
       }
-      for (const declaration of ownAssociatedMethods(owner)) {
-        if (!!declaration.static !== (dispatch === 'static')) {
-          continue
-        }
+      const declarations = [
+        ...ownAssociatedMethods(owner).filter(method => !!method.static === (dispatch === 'static')),
+        ...(dispatch === 'instance' ? ownAssociatedViews(owner) : []),
+      ]
+      for (const declaration of declarations) {
         if (!names.has(declaration.name)) {
           names.add(declaration.name)
           const descriptor = associatedCallableDescriptor(declaration)
@@ -467,7 +484,7 @@ export class Type {
 
   /** Declared materialization precedes effect-dependent admission and never selects a witness. */
   static associatedCallable(
-    declaration: AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration,
+    declaration: AssociatedCallableDeclaration,
     owner: AssociatedCallableOwner,
   ): AssociatedDescriptorMaterialization {
     return associatedCallableInContext(declaration, owner, new TypeResolutionContext())
@@ -707,7 +724,7 @@ export class Type {
     }
     let witnesses: readonly AssociatedCapabilityWitness[] | undefined
     const accepted = withAssociatedAdmissionPair(actualOwner, expectedOwner, () => {
-      const supplied = new Map<string, AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration>()
+      const supplied = new Map<string, AssociatedCallableDeclaration>()
       const owners = projection ? [actualOwner] : nominalChain(actualOwner)
       for (const requirement of Type.aggregateCapabilityRequirements(dispatchReceiver)) {
         if (!supplied.has(requirement.name)) {
@@ -720,7 +737,7 @@ export class Type {
         }
         const methods = projection
           ? capabilityRequirements(owner)
-          : ownAssociatedMethods(owner).filter(method => !method.static)
+          : [...ownAssociatedMethods(owner).filter(method => !method.static), ...ownAssociatedViews(owner)]
         for (const method of methods) {
           if (!supplied.has(method.name)) {
             supplied.set(method.name, method)
@@ -1604,6 +1621,9 @@ function contextualTypeOwner(node: AST.Node): AssociatedCallableOwner | undefine
     if (AST.isAssociatedFunctionDeclaration(current)) {
       return AST.associatedFunctionOwner(current)
     }
+    if (AST.isAssociatedViewDeclaration(current)) {
+      return AST.associatedViewOwner(current)
+    }
     if (AST.isCapabilityMethodDeclaration(current)) {
       const owner = current.$container?.$container
       return AST.isTypeDeclaration(owner) ? owner : undefined
@@ -1625,19 +1645,24 @@ function associatedInputDomain(parameter: AST.ParameterDeclaration, resolution: 
 }
 
 function associatedCallableInContext(
-  declaration: AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration,
+  declaration: AssociatedCallableDeclaration,
   owner: AssociatedCallableOwner,
   resolution: TypeResolutionContext,
 ): AssociatedDescriptorMaterialization {
   return materializeAssociatedCallable(declaration, owner, {
     receiver: receiverOwner => resolution.ofAssociatedOwner(receiverOwner),
     signature: callable =>
-      callableSignatureOf(callable.parameterList.parameters, { cases: [], open: callable.failureBound !== 'never' }, {
+      callableSignatureOf(AST.parametersOf(callable), {
+        cases: [],
+        open: AST.isAssociatedViewDeclaration(callable) || callable.failureBound !== 'never',
+      }, {
         inputDomain: parameter => associatedInputDomain(parameter, resolution),
         accepts: (actual, expected) => isPrimitiveNamed(actual, 'none') && containsNoneDomain(expected),
       }),
     result: callable =>
-      AST.isCapabilityMethodDeclaration(callable)
+      AST.isAssociatedViewDeclaration(callable)
+        ? primitiveType('rendered')
+        : AST.isCapabilityMethodDeclaration(callable)
         ? resolution.ofTypeExpression(callable.returnType)
         : resolution.ofFunctionReturn(callable),
   })
@@ -1651,7 +1676,7 @@ class TypeResolutionContext {
 
   constructor(
     private readonly descriptors?: ReadonlyMap<
-      AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration,
+      AssociatedCallableDeclaration,
       AssociatedDescriptorMaterialization
     >,
   ) {}
@@ -2204,7 +2229,11 @@ class TypeResolutionContext {
 
   ofContextualValue(declaration: AST.ValueReferenceTarget | undefined, context: AST.Node): TaoType {
     if (AST.isTypeDeclaration(declaration)) {
-      return AST.associatedReceiverOwner(context) === declaration ? this.ofDefinition(declaration) : unresolvedType()
+      const view = AST.findOwningAssociatedView(context)
+      return AST.associatedReceiverOwner(context) === declaration
+          || (view && AST.associatedViewOwner(view) === declaration)
+        ? this.ofDefinition(declaration)
+        : unresolvedType()
     }
     if (AST.isAuthLibraryDeclaration(declaration, 'Account')) {
       const entity = Type.visibleDataEntities(context).find(candidate => candidate.singularName === 'Account')
@@ -2375,7 +2404,10 @@ class TypeResolutionContext {
       ? nominalChain(nominal, reference => this.definitionOfReference(reference))
         .flatMap(owner =>
           AST.isTypeDeclaration(owner)
-            ? ownAssociatedMethods(owner).filter(method => !!method.static === staticCall)
+            ? [
+              ...ownAssociatedMethods(owner).filter(method => !!method.static === staticCall),
+              ...(!staticCall ? ownAssociatedViews(owner) : []),
+            ]
             : []
         )
       : []
@@ -2410,7 +2442,9 @@ class TypeResolutionContext {
         ? staticCall ? descriptor.result : Type.specializeAssociatedDescriptor(descriptor, receiver).result
         : unresolvedType()
     }
-    const result = AST.isCapabilityMethodDeclaration(declaration)
+    const result = AST.isAssociatedViewDeclaration(declaration)
+      ? primitiveType('rendered')
+      : AST.isCapabilityMethodDeclaration(declaration)
       ? this.ofTypeExpression(declaration.returnType)
       : this.ofFunctionReturn(declaration)
     return staticCall ? result : substituteGenericType(result, new Map(), receiver)
