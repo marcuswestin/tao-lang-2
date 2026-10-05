@@ -69,7 +69,10 @@ export const ExpressionsCompiler = {
       // app) in expression position; those keep their historical data-configuration lowering.
       return configureCall(declaration, config) ?? dataConfigureCall(declaration, config)
     }
-    if (AST.isTypeDeclaration(declaration) || AST.isParameterizedDeclaration(declaration)) {
+    if (
+      AST.isTypeDeclaration(declaration) || AST.isParameterTypeDeclaration(declaration)
+      || AST.isParameterizedDeclaration(declaration)
+    ) {
       if (value.value) {
         return checkedNumericValue(Compile.Expression(value.value), resolvedType)
       }
