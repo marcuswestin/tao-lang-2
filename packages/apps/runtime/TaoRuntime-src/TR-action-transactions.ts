@@ -83,6 +83,7 @@ class ActionTransaction {
     readonly testStubs: TestActionStubContext,
     readonly receipt?: (receipt: TaoActionReceipt) => void,
     readonly owner?: TaoActionOwner,
+    readonly failureSink?: (failure: TaoActionFailureReport) => boolean,
   ) {}
 
   pushFrame(name: string): void {
@@ -491,6 +492,8 @@ export function runAction(
   const suspendedTransaction = interrupt ? activeTransaction : undefined
   const suspendedScope = suspendedTransaction?.scope
   const launch = launchGeneration
+  // Pin the mounted occurrence before queueing, rather than borrowing a later render's owner.
+  const failureSink = name === 'async' ? undefined : owner?.captureFailureSink()
   const receipt = onReceipt === undefined ? undefined : (value: TaoActionReceipt) => {
     if (actionReceipts.delete(receipt!)) {
       onReceipt(value)
@@ -500,7 +503,7 @@ export function runAction(
     actionReceipts.set(receipt, launch)
   }
   const run = (): void | Promise<void> => {
-    const transaction = new ActionTransaction(launch, testStubs, receipt, owner)
+    const transaction = new ActionTransaction(launch, testStubs, receipt, owner, failureSink)
     liveRoots.add(transaction)
     if (abandonedByLaunch(transaction)) {
       cancelTransaction(transaction)
@@ -588,7 +591,7 @@ function finishRootFailure(
     name,
     arguments_,
     name === 'async' ? error : undefined,
-    transaction.receipt !== undefined,
+    transaction.receipt !== undefined ? true : transaction.failureSink ?? false,
   )
 }
 

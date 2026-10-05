@@ -1,9 +1,9 @@
 import React from 'react'
+import { MountedAppActionBoundary } from './TR-action-boundary'
 import { appFramePadding, AppSurfaceFrame, requireSafeAreaContext } from './TR-app-shell'
 import { AuthControls } from './TR-auth'
 import { createElement } from './TR-create-element'
 import { DataControls } from './TR-data'
-import { TaoErrorBoundary } from './TR-error-containment'
 import { InteractionControls } from './TR-interaction-catalog'
 import {
   dispatchInteractionHardwareKey,
@@ -34,12 +34,10 @@ export function NavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
     }
   }, [app, scope])
   return createElement(
-    TaoErrorBoundary,
+    MountedAppActionBoundary,
     {
       app,
-      boundaryId: `app:${props.app.declaration.canonicalIdentity?.canonical ?? props.app.definition.name}`,
-      frame: { boundary: 'app', declaration: props.app.definition.name },
-      stateKey: app.snapshot(),
+      __tao: props.__tao,
     },
     createElement(NavigationAppHostContent, mountedProps),
   )

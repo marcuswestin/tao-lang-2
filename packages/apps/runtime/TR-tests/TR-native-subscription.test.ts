@@ -5,11 +5,20 @@ import { TaoActionOwner } from '../TaoRuntime-src/TR-native-subscription'
 import { runtimeTestOverrideSlot } from '../TaoRuntime-src/TR-test-override'
 
 const hooks = runtimeTestOverrideSlot({
-  read: () => ({ effect: React.useEffect, ref: React.useRef }),
-  equals: (left, right) => left.effect === right.effect && left.ref === right.ref,
+  read: () => ({
+    effect: React.useEffect,
+    ref: React.useRef,
+    context: React.useContext,
+    insertion: React.useInsertionEffect,
+  }),
+  equals: (left, right) =>
+    left.effect === right.effect && left.ref === right.ref && left.context === right.context
+    && left.insertion === right.insertion,
   write: value => {
     React.useEffect = value.effect
     React.useRef = value.ref
+    React.useContext = value.context
+    React.useInsertionEffect = value.insertion
   },
 })
 
@@ -19,6 +28,10 @@ Describe('native subscription ownership', () => {
     let cleanup: (() => void) | undefined
     const restore = hooks.install({
       ref: (() => ref) as typeof React.useRef,
+      context: (() => undefined) as typeof React.useContext,
+      insertion: effect => {
+        effect()
+      },
       effect: effect => {
         cleanup = effect() as (() => void) | undefined
       },

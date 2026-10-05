@@ -1,4 +1,5 @@
 import React from 'react'
+import { ActionBoundaryContext, type MountedActionBoundary, type TaoActionFailureSink } from './TR-action-boundary'
 import { actionOwner, registerActionCleanup } from './TR-action-transactions'
 import { RuntimeAssert } from './TR-assert'
 import { reportUnownedFailure } from './TR-errors'
@@ -6,10 +7,22 @@ import { reportUnownedFailure } from './TR-errors'
 /** One mounted view owns its explicitly registered native subscriptions. */
 export class TaoActionOwner {
   active = true
+  boundary: MountedActionBoundary | undefined
+  private generation = 0
   readonly subscriptions = new Set<() => void>()
+
+  captureFailureSink(): TaoActionFailureSink | undefined {
+    const sink = this.active ? this.boundary?.capture() : undefined
+    if (!sink) {
+      return undefined
+    }
+    const generation = this.generation
+    return failure => this.active && this.generation === generation && sink(failure)
+  }
 
   dispose(): void {
     this.active = false
+    this.generation += 1
     for (const remove of [...this.subscriptions]) {
       try {
         remove()
@@ -22,9 +35,13 @@ export class TaoActionOwner {
 
 /** The hook keeps ownership stable through renders and removes listeners at unmount. */
 export function useActionOwner(): TaoActionOwner {
+  const boundary = React.useContext(ActionBoundaryContext)
   const owner = React.useRef<TaoActionOwner | undefined>(undefined)
   owner.current ??= new TaoActionOwner()
   const current = owner.current
+  React.useInsertionEffect(() => {
+    current.boundary = boundary
+  }, [current, boundary])
   React.useEffect(() => {
     current.active = true
     return () => current.dispose()
