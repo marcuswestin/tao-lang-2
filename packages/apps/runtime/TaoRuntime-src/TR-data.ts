@@ -3,6 +3,7 @@ import { RuntimeAssert } from './TR-assert'
 import type { TaoAuthPrincipal, TaoAuthProof, TaoDataAuthBinding } from './TR-auth'
 import { entityHandle, metadataOf } from './TR-data-entity'
 import { UnboundConnection } from './TR-data-provider'
+import { nativeQueryContext } from './TR-data-query-context'
 import {
   beginTest as beginDataTest,
   bindConfiguredDataSchema,
@@ -108,6 +109,8 @@ export type TaoQueryPlan = {
   entity: string
   filters: TaoQueryFilter[]
   limit?: number
+  /** Bounds each provider request while retaining every acquired row in the local projection. */
+  pageSize?: number
   order?: {
     direction: 'asc' | 'desc'
     field: string
@@ -124,6 +127,7 @@ export type TaoQueryPlan = {
 export type TaoQueryDescriptor = {
   entity: string
   limit?: number
+  pageSize?: number
   orderBy?: string
   orderDirection?: 'asc' | 'desc'
   where: Record<string, TaoDescriptorValue>
@@ -187,6 +191,8 @@ export type TaoDataConnection = {
    * state (`stale` over cached rows, `error` over none), never a thrown render.
    */
   fill?(request: TaoFillRequest, ops: TaoFillOps): Promise<void>
+  /** The adapter owns bounded continuations; a local result limit alone makes no such promise. */
+  pagedQueries?: true
   /** fillCacheMs suppresses re-fills of a descriptor filled within the window (default 0: always). */
   fillCacheMs?: number
   load(): Promise<string | undefined> | string | undefined
@@ -365,6 +371,8 @@ function useConfiguredProviderBinding(
 
 /** DataControls is the provider-neutral generated-code API for Tao schemas, queries, and writes. */
 export const DataControls = {
+  /** NativeQueryContext preserves query ownership without reserving public field names. */
+  NativeQueryContext: nativeQueryContext,
   /** interactionCandidates is the internal pending-command picker seam over active stores. */
   interactionCandidates(entity: string, scope?: { ownsStore(store: TaoDataSchema): boolean }): readonly unknown[] {
     return interactionEntityHandles(entity, scope)

@@ -89,6 +89,14 @@ revision-specific acknowledgment and owned export-file operations with controlle
 Root retains BookIO binding, schemas, query syntax, live-handle projection and all Tao app edits.
 This adapter leaf adds no universal query/status API and cannot count as completed app integration.
 
+C additionally owns the bounded query pagination frontend: data.langium QueryClause and its new
+PaginationClause, DataFormatter, query-specific data-validator rules/messages, and DataCompiler's
+EntityQueryDeclaration page-size hunk with focused source tests. It emits pageSize, never a local
+limit; the two clauses cannot be combined. Root owns native query context, provider operations,
+runtime page request metadata, BookProvider/BookIO and all app source graduation. C's backend
+followup adds atomic confirmed book upserts and explicit rejection of unsupported PDF text.
+Native Android compilation/invocation evidence is an independent C acceptance lane.
+
 D additionally owns TR-action-transactions.ts and its existing transaction/defer tests for a real
 root cancellation signal inherited by joined calls. Checked Wait consumes that signal through the
 root-owned facade; cleanup drains with cancellation shielded. Abandoned launches retain existing
