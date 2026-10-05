@@ -89,7 +89,7 @@ import {
   type TaoDesign,
   type TaoDesignSpec,
 } from './TR-design'
-import { runEffectOutcome, type TaoEffectContract } from './TR-effect-outcomes'
+import { runEffectOutcome, runJoinedEffectOutcome, type TaoEffectContract } from './TR-effect-outcomes'
 import {
   captureArguments,
   latestFailureCapture,
@@ -713,6 +713,21 @@ class TR {
       invoke,
       contract,
       outcomes.map(([outcome, body]) => [outcome, (message: string) => body(new RuntimeValue(message))]),
+    )
+  }
+
+  /** ThenDo joins canonical outcome handlers and preserves the returned Tao value. */
+  static ThenDo(
+    invoke: () => unknown,
+    contract: TaoEffectContract,
+    outcomes: readonly TR.CaseBranch<unknown>[],
+  ): unknown {
+    return runJoinedEffectOutcome(
+      invoke,
+      contract,
+      outcomes.map((
+        [outcome, body],
+      ) => [outcome, payload => body(isRuntimeValue(payload) ? completeRuntimeValue(payload) : TR.Value(payload))]),
     )
   }
 
