@@ -60,6 +60,11 @@ async function main() {
   config.signIn = signIn;
   // These documented output-only fields describe provisioning, rather than retained settings.
   delete config.name; delete config.subtype; delete config.defaultHostingSite;
+  // Client registration can populate these output-only values. Keep editable permissions.
+  // https://cloud.google.com/identity-platform/docs/reference/rest/v2/Config#ClientConfig
+  if (config.client) {
+    delete config.client.apiKey; delete config.client.firebaseSubdomain;
+  }
   const providerConfigs = [];
   stage = 'auth-providers';
   if (authExists) {

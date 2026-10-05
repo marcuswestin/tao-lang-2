@@ -117,7 +117,7 @@ export function createCommands(): Command {
     .option('--id <id>', 'Checked-in project id and directory name. Suggested from the name when omitted.')
     .option('--yes', 'Accept the suggested id, the plan, and the first available AI lane without asking.')
     .option('--ai <lane>', 'How to shape the plan: auto, claude, codex, ollama, apple, or none.', 'auto')
-    .option('--provider <provider>', 'Use a hosted datasource and sign-in (development: firebase).')
+    .option('--provider <provider>', 'Required datasource: local, or firebase when hosted data is available.')
     .option('--validation-tools', 'Include temporary sample credential tools with --provider firebase.')
     .option('--skip-tests', "Skip running the new project's tests after creating it.")
     .description('Create a new Tao project from a description.')
@@ -139,14 +139,11 @@ export function createCommands(): Command {
           if (ai === undefined) {
             Errors.throwUserInput(`--ai must be one of ${createAiOptions.join(', ')}, not '${options.ai}'.`)
           }
-          if (options.provider !== undefined && options.provider !== 'firebase') {
-            Errors.throwUserInput('The hosted creation provider must be firebase.')
-          }
           if (options.validationTools === true && options.provider !== 'firebase') {
             Errors.throwUserInput('--validation-tools requires --provider firebase.')
           }
           await runCreate(description, {
-            ...(options.provider === undefined ? {} : { provider: options.provider as 'firebase' }),
+            ...(options.provider === undefined ? {} : { provider: options.provider as 'local' | 'firebase' }),
             ...(options.validationTools === true ? { validationTools: true } : {}),
             ai,
             ...(options.id === undefined ? {} : { id: options.id }),
@@ -1128,6 +1125,12 @@ function registerFirebaseManagement(firebase: Command): void {
     projects.command('info').argument('<project-id>').description('Show public identity of an accessible project.'),
   )
     .action(execute('projects-info'))
+  common(
+    projects.command('inspect').argument('<project-id>').description(
+      'Read database metadata, Auth flags, and rules fingerprints; compare the local connect candidate without deploying.',
+    ),
+  )
+    .action(execute('projects-inspect'))
   common(
     projects.command('create').argument('[project-id]').description(
       'Create a Firebase project after local confirmation; Enter accepts a generated ID when omitted.',

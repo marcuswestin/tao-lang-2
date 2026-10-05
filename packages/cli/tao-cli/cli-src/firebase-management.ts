@@ -1,4 +1,4 @@
-import { Errors, FS, HCI, Platform } from '@shared'
+import { Errors, FS, HCI, Platform, ProjectLocal } from '@shared'
 import type { Readable, Writable } from 'node:stream'
 import {
   assertFirebaseManagementEnvironment,
@@ -6,11 +6,12 @@ import {
   type FirebaseRunner,
   runFirebaseCli,
 } from './firebase-cli'
-import { listFirebaseAccounts } from './firebase-inspection'
+import { type FirebaseInspector, inspectFirebase, listFirebaseAccounts } from './firebase-inspection'
 
 type Operation =
   | 'projects-list'
   | 'projects-info'
+  | 'projects-inspect'
   | 'projects-create'
   | 'apps-list'
   | 'apps-info'
@@ -40,6 +41,7 @@ type Options = {
   prompts?: Prompts
   runner?: FirebaseRunner
   accounts?: typeof listFirebaseAccounts
+  inspector?: FirebaseInspector
 }
 const PROJECT_ID = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/u
 const APP_ID = /^1:[0-9]+:(web|android|ios):[a-zA-Z0-9]+$/u
@@ -86,6 +88,7 @@ export async function runFirebaseManagement(
   const allowed: Record<Operation, readonly string[]> = {
     'projects-list': [],
     'projects-info': [],
+    'projects-inspect': [],
     'projects-create': [],
     'apps-list': ['project'],
     'apps-info': ['project'],
@@ -104,7 +107,10 @@ export async function runFirebaseManagement(
   if (options.project !== undefined || operation.startsWith('apps-') || operation === 'data-reset') {
     projectId(options.project)
   }
-  if (operation === 'projects-info' || (operation === 'projects-create' && value !== undefined)) {
+  if (
+    operation === 'projects-info' || operation === 'projects-inspect'
+    || (operation === 'projects-create' && value !== undefined)
+  ) {
     projectId(value)
   }
   if (operation === 'apps-info' || operation === 'apps-config') {
@@ -219,6 +225,32 @@ export async function runFirebaseManagement(
     Errors.throwUserInput('Choose one of the locally signed-in Google accounts.')
   }
   const run: FirebaseRunner = (args, work, interactive) => rawRun([...args, '--account', account!], work, interactive)
+  if (operation === 'projects-inspect') {
+    say('Inspecting the default database, Auth flags, and deployed rules without changing cloud resources…')
+    const state = await (options.inspector ?? inspectFirebase)({ projectId: value!, account, cwd })
+    const candidatePath = ProjectLocal.cacheResolve('firebase-connect/' + value + '.candidate.rules', cwd)
+    const candidate = await FS.isFile(candidatePath) && !await FS.isSymbolicLink(candidatePath)
+      ? await FS.readText(candidatePath)
+      : undefined
+    return finish({
+      projectId: value,
+      database: state.database ?? null,
+      auth: {
+        emailPasswordEnabled: state.auth.emailPasswordEnabled,
+        emailPasswordRequired: state.auth.emailPasswordRequired,
+        retainedSettingsFingerprint: state.auth.preserved,
+      },
+      rules: state.rules
+        ? {
+          releaseName: state.rules.releaseName,
+          rulesetName: state.rules.rulesetName,
+          sha256: Platform.sha256Hex(state.rules.source),
+          ...(candidate !== undefined ? { matchesLocalCandidate: state.rules.source === candidate } : {}),
+        }
+        : null,
+      ...(candidate !== undefined ? { candidatePath } : {}),
+    })
+  }
   const json = (args: readonly string[], action: string) =>
     firebaseManagementJson(
       run,

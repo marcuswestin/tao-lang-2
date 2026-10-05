@@ -118,11 +118,17 @@ export async function provisionFirebase(options: FirebaseProvisionOptions): Prom
       'Reuse a project from https://console.firebase.google.com. Creating another project uses your account quota.',
       out,
     )
+    if (options.currentProjectId && !saved) {
+      Errors.throwUserInput(
+        'The saved Firebase project ' + options.currentProjectId
+          + ' is not accessible on this Google account. Sign in to the account with access and retry; no different project was selected.',
+      )
+    }
     let projectId = await choose(
       options,
       'Choose the Firebase project',
       choices,
-      String(saved?.['projectId'] ?? known[0]?.['projectId'] ?? '__cancel__'),
+      String(saved?.['projectId'] ?? '__create__'),
     )
     if (projectId === '__cancel__') {
       Errors.throwUserInput('Firebase setup stopped; no cloud changes were made.')
@@ -280,9 +286,6 @@ export async function provisionFirebase(options: FirebaseProvisionOptions): Prom
       )
       : '__create__'
     if (appId === '__create__') {
-      if (!apps.length) {
-        await confirm(options, 'Register the first Firebase web app in this project?')
-      }
       HCI.writeLine('Registering the Firebase web app…', out)
       mutationAttempted = true
       const created = await firebaseJson(run, work, [
@@ -413,7 +416,26 @@ export async function provisionFirebase(options: FirebaseProvisionOptions): Prom
       || (before.auth.emailPasswordEnabled && after.auth.emailPasswordRequired !== before.auth.emailPasswordRequired)
     ) {
       Errors.throwHostEnvironment(
-        'Firebase deployment finished, but its database, rules, or preserved Auth settings did not pass inspection. No connection was saved.',
+        'Firebase deployment finished, but its database, rules, or preserved Auth settings did not pass inspection. '
+          + [
+            !after.database ? 'The default database was not found.' : undefined,
+            !after.auth.emailPasswordEnabled ? 'Email/Password Auth is not enabled.' : undefined,
+            !after.rules ? 'The deployed Firestore rules release was not found.' : undefined,
+            after.rules && after.rules.source !== candidate
+              ? 'Deployed rules differ from the reviewed candidate.'
+              : undefined,
+            before.auth.preserved !== null && stable(after.auth.preserved) !== stable(before.auth.preserved)
+              ? 'The fingerprint of other Auth settings changed.'
+              : undefined,
+            after.database && after.database.locationId !== (before.database?.locationId ?? location)
+              ? 'The database location differs from the selected location.'
+              : undefined,
+            before.auth.emailPasswordEnabled && after.auth.emailPasswordRequired !== before.auth.emailPasswordRequired
+              ? 'The existing email sign-in mode changed.'
+              : undefined,
+          ].filter(Boolean).join(' ')
+          + ' No connection was saved. Inspect without changing cloud resources: tao firebase projects inspect '
+          + projectId + '.',
       )
     }
     await FS.writeText(recordedPath, candidate)

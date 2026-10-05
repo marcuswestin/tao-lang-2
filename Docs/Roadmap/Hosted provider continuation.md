@@ -9,6 +9,42 @@ Read the [candidate roadmap](<Hosted data provider candidates.md>), the
 Current acceptance state is in [Simulator storage and live synchronization](#simulator-storage-and-live-synchronization--2026-10-05-1721-utc).
 Earlier failure and recovery entries below are historical evidence, not the current ownership state.
 
+## Firebase CLI follow-up — 2026-10-05
+
+- Creation now requires `--provider local` or `--provider firebase`, failing before planning or
+  writing a project when omitted. Local remains available in staged releases; hosted creation
+  retains its release capability gate.
+- Developer decisions: a directory without a saved Firebase association defaults to creating a
+  project; a saved accessible project remains preferred. An unavailable saved project stops with
+  access guidance instead of silently switching. The first WEB registration is automatic with
+  progress; existing registrations still offer reuse or new registration.
+- The `flow-notes-test-2` setup created `tao-flownotes-eebe8efc` and its WEB registration but failed
+  the combined post-deployment check, leaving no local connection. Read-only inspection confirmed
+  Native/Standard `(default)` in `nam5`, enabled Email/Password Auth, and a deployed rules SHA-256
+  matching the local candidate. The old run did not retain its before/after inspection, so its
+  failing comparison cannot be identified retrospectively.
+- Fixed an identified Auth fingerprint defect: documented output-only `client.apiKey` and
+  `client.firebaseSubdomain` are excluded; editable client permissions remain protected. This
+  avoids treating generated registration metadata as changed Auth settings. New failures name
+  each unsuccessful check. `tao firebase projects inspect <id>` reads sanitized state and, from
+  the app directory, compares deployed rules with the retained candidate without deployment.
+- Generated detail forms now nest the width-constrained column and decorated panel instead of
+  applying their conflicting `gap` clauses to one view. Checked-in starters match the generator.
+  Developer-created `Apps/flow-notes-test-2`, `Apps/flow-notes`, and `Apps/firebase-flow-test` are
+  preserved; they are not included in task commits.
+- The cached Simulator host `1.0.0-585e6bbd1f9e` lacks the current `expo-media-library` requirement.
+  Expo SDK 57 includes that package in Expo Go; the message describes the cached Companion.
+  The fallback could not open its URL because no installed handler was available. No dependency
+  removal is justified by that message. A local Simulator Companion build succeeded and produced
+  `1.0.0-31bce09d683a`, including `expo-media-library` 57.0.5. An isolated copy of Hosted Firebase
+  selected, installed, and opened that host on an owned iPhone 18 Pro. This proves native host
+  dispatch, not signed-in CRUD or physical-device behavior. Probe session
+  `4941eddc-86dd-4197-8e1a-4905bf4b15ac` stopped with proved cleanup, controller disposed, and
+  Simulator released. The Developer's active original-app CLI session was preserved.
+- This thread must not start CI while another workflow is running; check and poll every ten
+  seconds before dispatching a new workflow. Local checks do not start CI. Ordinary-app offline,
+  isolation, hostile-request, and physical-device gates remain open.
+
 ## State at handoff — 2026-10-03
 
 ### Done and committed

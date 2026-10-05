@@ -139,6 +139,54 @@ async function fixture() {
 }
 
 Describe('Firebase API provisioning', () => {
+  Test(
+    'an unassociated directory offers creation first while an unavailable saved project never silently switches',
+    async () => {
+      const f = await fixture()
+      await Expect(provisionFirebase({
+        ...f.options,
+        currentProjectId: undefined,
+        prompts: {
+          text: async () => '',
+          choice: async (_message, choices, defaultValue) => {
+            Expect(defaultValue).toBe('__create__')
+            Expect(choices[0]).toEqual({ value: '__create__', label: 'Create a new Firebase project' })
+            return '__cancel__'
+          },
+        },
+      })).rejects.toThrow('no cloud changes')
+      Expect(f.calls.map(args => args[0])).toEqual(['login:list', 'projects:list'])
+      await Expect(provisionFirebase({ ...f.options, currentProjectId: 'unavailable-project' })).rejects.toThrow(
+        'no different project was selected',
+      )
+      Expect(f.calls.some(args => args[0] === 'deploy' || args[0] === 'projects:create')).toBe(false)
+    },
+  )
+
+  Test('a project without web apps registers the required first app without a redundant confirmation', async () => {
+    const f = await fixture()
+    await provisionFirebase({
+      ...f.options,
+      runner: async (args, cwd, interactive) => {
+        if (args[0] === 'apps:list') {
+          return { exitCode: 0, stdout: JSON.stringify({ status: 'success', result: [] }), stderr: '' }
+        }
+        if (args[0] === 'apps:create') {
+          return {
+            exitCode: 0,
+            stdout: JSON.stringify({ status: 'success', result: { appId: 'saved-app' } }),
+            stderr: '',
+          }
+        }
+        return f.options.runner(args, cwd, interactive)
+      },
+    })
+    Expect(f.menus.map(menu => menu.message)).toEqual([
+      'Choose the Firebase project',
+      'Apply this Firebase deployment plan?',
+    ])
+    Expect(f.terminal.outputText()).toContain('Registering the Firebase web app')
+  })
   Test('streams only fixed Firebase creation phases across output chunks', () => {
     const terminal = fakeTerminal()
     const output = firebaseCreationProgress(terminal.output)
@@ -261,7 +309,7 @@ Describe('Firebase API provisioning', () => {
   Test('successful CLI exit alone cannot pass a failed Auth postcheck', async () => {
     const f = await fixture()
     f.control.postcheckBad = true
-    await Expect(provisionFirebase(f.options)).rejects.toThrow('did not pass inspection')
+    await Expect(provisionFirebase(f.options)).rejects.toThrow('Email/Password Auth is not enabled.')
     Expect(await FS.exists(FS.resolvePath('saved-project.accepted.rules', f.work))).toBe(false)
   })
 
@@ -375,6 +423,7 @@ Describe('Firebase API provisioning', () => {
         const run = f.options.runner
         const action = provisionFirebase({
           ...f.options,
+          currentProjectId: undefined,
           runner: async (args, cwd, interactive) =>
             args[0] === 'projects:create' || args[0] === 'projects:list'
               ? { exitCode: 0, stdout: JSON.stringify({ status: 'success', result: [] }), stderr: '' }

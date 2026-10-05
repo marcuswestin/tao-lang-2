@@ -638,7 +638,8 @@ ${flagActions.map(action => `${action}\n`).join('')}   action Delete${singular}(
    }
    Toolbar { Save${singular}Command }
    render ScrollView() [screen] {
-      Col() [column, panel] {
+      Col() [column] {
+         Col() [panel] {
          Text(${taoString(humanize(singular).toUpperCase())}) [eyebrow]
          guard ${singular} {
             loading -> { Spinner() }
@@ -657,6 +658,7 @@ ${detailInputs.join('\n')}${detailNumbers.join('')}${detailFlags.join('\n')}
          #delete${singular}
          FormButton(${taoString(`Delete ${singularWords}`)}) [buttonDanger] {
             on press Delete${singular}
+         }
          }
       }
    }

@@ -25,6 +25,9 @@ async function vendorFixture() {
     failureStatus: 403,
     failureCode: 'PERMISSION_DENIED',
     oauthSecret: 'OAUTH_SECRET_CANARY',
+    clientApiKey: '',
+    firebaseSubdomain: '',
+    disabledUserSignup: false,
   }
   await FS.writeJson(statePath, state)
   for (
@@ -50,6 +53,19 @@ async function vendorFixture() {
 }
 
 Describe('Firebase public inspection bridge', () => {
+  Test('web registration output metadata does not count as a change to retained Auth permissions', async () => {
+    const f = await vendorFixture()
+    const before = await inspectFirebase(f.request, f.runner)
+    f.state.clientApiKey = 'PUBLIC_GENERATED_API_KEY'
+    f.state.firebaseSubdomain = 'test-project'
+    await FS.writeJson(f.statePath, f.state)
+    const registered = await inspectFirebase(f.request, f.runner)
+    Expect(registered.auth.preserved).toBe(before.auth.preserved)
+    f.state.disabledUserSignup = true
+    await FS.writeJson(f.statePath, f.state)
+    Expect((await inspectFirebase(f.request, f.runner)).auth.preserved).not.toBe(before.auth.preserved)
+    Expect(f.captures.join('')).not.toContain('PUBLIC_GENERATED_API_KEY')
+  })
   Test('selected account binds all reads while raw credentials and Auth hash secrets never leave Node', async () => {
     const f = await vendorFixture()
     const accounts = await listFirebaseAccounts(f.root, f.runner)

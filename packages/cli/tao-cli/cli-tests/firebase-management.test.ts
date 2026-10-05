@@ -1,4 +1,4 @@
-import { CLI, FS, Platform } from '@shared'
+import { CLI, FS, Platform, ProjectLocal } from '@shared'
 import { Describe, Expect, fakeTerminal, mkTestDir, Test, testOverrideSlot } from '@shared/test'
 import type { FirebaseRunner } from '../cli-src/firebase-cli'
 import { runFirebaseManagement } from '../cli-src/firebase-management'
@@ -85,6 +85,41 @@ function fixture() {
   return { terminal, progress, calls, menus, control, options }
 }
 Describe('Firebase management', () => {
+  Test('project inspection reports public checks against the local candidate without deployment', async () => {
+    const f = fixture()
+    const cwd = await mkTestDir('firebase-management-inspect')
+    try {
+      await FS.writeText(
+        ProjectLocal.cacheResolve('firebase-connect/saved-project.candidate.rules', cwd),
+        'candidate rules',
+      )
+      const result = await runFirebaseManagement('projects-inspect', 'saved-project', {
+        ...f.options,
+        cwd,
+        inspector: async request => {
+          Expect(request).toEqual({ projectId: 'saved-project', account: 'first@example.test', cwd })
+          return {
+            database: {
+              name: 'projects/saved-project/databases/(default)',
+              type: 'FIRESTORE_NATIVE',
+              locationId: 'nam5',
+            },
+            auth: { emailPasswordEnabled: true, emailPasswordRequired: true, preserved: null },
+            rules: { releaseName: 'release', rulesetName: 'ruleset', source: 'candidate rules' },
+          }
+        },
+      })
+      Expect(result).toMatchObject({
+        projectId: 'saved-project',
+        auth: { emailPasswordEnabled: true },
+        rules: { matchesLocalCandidate: true },
+      })
+      Expect(f.calls).toEqual([])
+      Expect(f.terminal.outputText()).not.toContain('candidate rules')
+    } finally {
+      await FS.remove(cwd)
+    }
+  })
   Test('dry-run computes one encoded store path without authentication, prompts, or cloud calls', async () => {
     const f = fixture()
     const result = await runFirebaseManagement('data-reset', undefined, {
