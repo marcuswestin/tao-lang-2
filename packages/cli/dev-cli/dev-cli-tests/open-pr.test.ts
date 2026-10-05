@@ -102,6 +102,25 @@ function enableAutoMergeKey(prNumber: number): string {
   )
 }
 
+function hostAutoMergeKey(prNumber: number, method: 'DELETE' | 'PUT'): string {
+  const fields = method === 'PUT'
+    ? ['-f', `commit_message=${BODY}`, '-f', `commit_title=${SUBJECT}`, '-f', 'merge_method=squash']
+    : []
+  return routeKey('gh', ['api', '--method', method, `${PULLS}/${prNumber}/ccr/auto_merge`, ...fields, '--silent'], ROOT)
+}
+
+/** answerViewsInTurn answers successive reads of the pull request with `pulls`, the last repeating. */
+function answerViewsInTurn(dependencies: OpenPrDependencies, prNumber: number, pulls: unknown[]): void {
+  const run = dependencies.run
+  dependencies.run = (async (command, spec = {}) => {
+    const result = await run(command, spec)
+    if (routeKey(command, spec.args ?? [], spec.cwd) !== viewKey(prNumber)) {
+      return result
+    }
+    return { ...result, stdout: JSON.stringify(pulls.length > 1 ? pulls.shift() : pulls[0]) }
+  }) as OpenPrRunner
+}
+
 function createKey(branch = BRANCH): string {
   return routeKey('gh', [
     'api',
@@ -337,18 +356,79 @@ Describe('open-pr', () => {
     Expect(calls.indexOf(enableAutoMergeKey(7))).toBeGreaterThan(-1)
   })
 
-  Test('goes on, naming merge-pr, where the host refuses auto-merge', async () => {
-    // Auto-merge has no REST endpoint, and a cloud agent host's proxy refuses gh pr's GraphQL.
+  Test('turns stale auto-merge off through the host route where gh pr is refused', async () => {
+    const routes = cleanFeatureBranchRoutes()
+    const reused = pull(7, { auto_merge: { commit_message: null, commit_title: null, merge_method: 'squash' } })
+    routes[listKey('open')] = { stdout: JSON.stringify([reused]) }
+    routes[editKey(7)] = {}
+    routes[viewKey(7)] = { stdout: JSON.stringify(reused) }
+    routes[checkCountKey()] = { stdout: '{"total_count":1}' }
+    routes[hostAutoMergeKey(7, 'DELETE')] = {}
+    routes[enableAutoMergeKey(7)] = {}
+    const { calls, dependencies } = fakeDependencies(routes)
+
+    const result = await OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)
+
+    Expect(result.exitCode).toBe(0)
+    Expect(calls.indexOf(hostAutoMergeKey(7, 'DELETE'))).toBeLessThan(calls.indexOf(enableAutoMergeKey(7)))
+    Expect(calls.indexOf(hostAutoMergeKey(7, 'DELETE'))).toBeGreaterThan(-1)
+  })
+
+  Test('turns auto-merge on through the host route where gh pr’s GraphQL is refused', async () => {
+    // What the first cloud landing met: the proxy refuses GraphQL but serves its own REST route.
     const routes = openedPullRequestRoutes(2)
     routes[enableAutoMergeKey(2)] = { exitCode: 1, stderr: 'HTTP 403: GitHub GraphQL is not available\nmore' }
+    routes[hostAutoMergeKey(2, 'PUT')] = {}
+    const { calls, dependencies, followed } = fakeDependencies(routes)
+    const enabled = pull(2, { auto_merge: { commit_message: BODY, commit_title: SUBJECT, merge_method: 'squash' } })
+    // Two reads see auto-merge off (waiting for checks, then deciding); the read-back sees it on.
+    answerViewsInTurn(dependencies, 2, [pull(2), pull(2), enabled])
+
+    const result = await OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)
+
+    Expect(result.exitCode).toBe(0)
+    Expect(calls).toContain(hostAutoMergeKey(2, 'PUT'))
+    Expect(calls).not.toContain(hostAutoMergeKey(2, 'DELETE'))
+    Expect(result.lines).toContain(
+      'PASS  Auto-merge is on: GitHub squash-merges #2 with the merge message once Verify passes.',
+    )
+    Expect(followed).toEqual([2])
+  })
+
+  Test('turns host auto-merge back off when it did not keep the merge message', async () => {
+    // A squash with GitHub's own message appends ` (#N)` and rewraps the bullets, so it must not land.
+    const routes = openedPullRequestRoutes(2)
+    routes[enableAutoMergeKey(2)] = { exitCode: 1, stderr: 'HTTP 403: GitHub GraphQL is not available' }
+    routes[hostAutoMergeKey(2, 'PUT')] = {}
+    routes[hostAutoMergeKey(2, 'DELETE')] = {}
+    const { calls, dependencies, followed } = fakeDependencies(routes)
+    const defaulted = { commit_message: '* one detail', commit_title: `${SUBJECT} (#2)`, merge_method: 'squash' }
+    answerViewsInTurn(dependencies, 2, [pull(2), pull(2), pull(2, { auto_merge: defaulted })])
+
+    const result = await OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)
+
+    Expect(result.exitCode).toBe(0)
+    Expect(calls.indexOf(hostAutoMergeKey(2, 'DELETE'))).toBeGreaterThan(calls.indexOf(hostAutoMergeKey(2, 'PUT')))
+    Expect(result.lines).toContain(
+      'NOTE  Auto-merge stays off for #2 (the host route did not keep the merge message);'
+        + ' merge-pr merges it with the merge message once Verify passes.',
+    )
+    Expect(followed).toEqual([2])
+  })
+
+  Test('goes on, naming merge-pr, where both gh pr and the host route refuse auto-merge', async () => {
+    // Off a cloud agent host the route does not exist; GitHub answers it 404.
+    const routes = openedPullRequestRoutes(2)
+    routes[enableAutoMergeKey(2)] = { exitCode: 1, stderr: 'auto-merge is not allowed for this repository\nmore' }
+    routes[hostAutoMergeKey(2, 'PUT')] = { exitCode: 1, stderr: 'gh: Not Found (HTTP 404)' }
     const { dependencies, followed } = fakeDependencies(routes)
 
     const result = await OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)
 
     Expect(result.exitCode).toBe(0)
     Expect(result.lines).toContain(
-      'NOTE  Auto-merge stays off for #2 (gh said: HTTP 403: GitHub GraphQL is not available);'
-        + ' merge-pr merges it with the merge message once Verify passes.',
+      'NOTE  Auto-merge stays off for #2 (gh said: auto-merge is not allowed for this repository;'
+        + ' the host route said: gh: Not Found (HTTP 404)); merge-pr merges it with the merge message once Verify passes.',
     )
     Expect(followed).toEqual([2])
   })

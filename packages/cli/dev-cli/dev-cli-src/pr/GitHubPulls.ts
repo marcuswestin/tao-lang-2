@@ -5,7 +5,9 @@ import { type CLI, Errors } from '@shared'
  * `gh api`, not through `gh pr`: the `gh pr` subcommands speak GraphQL, which a cloud agent host's
  * GitHub proxy may refuse, while REST answers the same wherever `gh` is logged in. `{owner}/{repo}`
  * is gh's own placeholder, filled from the checkout's `origin`. Turning auto-merge on or off and
- * marking a draft ready have no REST endpoint, so those two stay on `gh pr` in their callers.
+ * marking a draft ready have no GitHub REST endpoint, so those two stay on `gh pr` in their callers;
+ * for auto-merge, a cloud agent host's proxy offers REST routes of its own under `/ccr/`, which
+ * `open-pr` falls back to where `gh pr` is refused and which GitHub itself does not serve.
  */
 
 /** PR_BRANCH_PREFIXES names the branches `open-pr` pushes and `merge-pr` merges. */
@@ -118,6 +120,32 @@ export function gitHubPulls(run: GhRunner, root: string, writeLine: (line: strin
           }),
           '--silent',
         ],
+        cwd: root,
+        stdio: 'pipe',
+      })
+    },
+    /**
+     * Turns squash auto-merge on through a cloud agent host's proxy route, for where `gh pr merge
+     * --auto` is refused. The raw result is returned: elsewhere the route does not exist.
+     */
+    async enableHostAutoMerge(number: number, fields: { body: string; title: string }): Promise<CLI.CommandResult> {
+      return await run('gh', {
+        args: [
+          'api',
+          '--method',
+          'PUT',
+          `${pulls}/${number}/ccr/auto_merge`,
+          ...formFields({ commit_message: fields.body, commit_title: fields.title, merge_method: 'squash' }),
+          '--silent',
+        ],
+        cwd: root,
+        stdio: 'pipe',
+      })
+    },
+    /** Turns auto-merge off through the same host route; the raw result, as above. */
+    async disableHostAutoMerge(number: number): Promise<CLI.CommandResult> {
+      return await run('gh', {
+        args: ['api', '--method', 'DELETE', `${pulls}/${number}/ccr/auto_merge`, '--silent'],
         cwd: root,
         stdio: 'pipe',
       })
