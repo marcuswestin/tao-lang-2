@@ -316,6 +316,96 @@ export const reverse: cross.Forwarded = types.Measure.Minutes(4)
     })
   })
 
+  Test('executes mutually forwarding quantity leaves from either ESM entry order', async () => {
+    await withTaoFiles('tao-tooling-quantity-cycle-', {
+      'Left.tao': `use package ./ as Local
+public ${measureDeclaration.replace('Measure', 'LeftMeasure')}
+type RightAlias = Local.RightMeasure
+`,
+      'Right.tao': `use package ./ as Local
+public ${measureDeclaration.replace('Measure', 'RightMeasure')}
+type LeftAlias = Local.LeftMeasure
+`,
+      'Native.ts': `import { types as left } from './Left.tao'
+import { types as right } from './Right.tao'
+export const first: left.LeftMeasure = right.LeftAlias.Minutes(2)
+export const second: right.RightMeasure = left.RightAlias.Seconds(3)
+`,
+    }, async (paths, root) => {
+      const result = await ProjectTooling.refresh(root, {})
+      Expect(result.diagnostics).toEqual([])
+      Expect(result.status).toBe('fresh')
+      Expect(nativeDiagnostics(root)).toEqual([])
+      const leaves = ['Left', 'Right'].map(name => FS.resolvePath(`.tao-ts/${name}.tao.quantities.ts`, root))
+      const validation = await (await Workspace.open(root)).validateFiles([paths['Left.tao'], paths['Right.tao']])
+      Expect(validation.diagnostics).toEqual([])
+      const surfaceFor = (name: 'Left' | 'Right') => {
+        const file = validation.files.find(file => file.path === paths[`${name}.tao`])
+        Assert.defined(file, 'the cyclic quantity source has a validated AST')
+        const surface = BridgeMetadata.quantitySurfaceFor(file.ast)
+        Assert.defined(surface, 'the cyclic quantity source has publication metadata')
+        return surface
+      }
+      const left = surfaceFor('Left')
+      const right = surfaceFor('Right')
+      const leftOwner = quantityDeclaration(left, 'LeftMeasure')
+      const rightAlias = quantityDeclaration(left, 'RightAlias')
+      const rightOwner = quantityDeclaration(right, 'RightMeasure')
+      const leftAlias = quantityDeclaration(right, 'LeftAlias')
+      for (const leaf of leaves) {
+        Expect(result.contractPaths).toContain(leaf)
+        const code = await FS.readText(leaf)
+        Expect(code.match(/: unique symbol/g)?.length).toBe(1)
+        Expect(code).not.toContain('.tao.ts')
+      }
+      await writeRuntimeLeaves(leaves)
+      for (const entry of ['Left', 'Right']) {
+        const other = entry === 'Left' ? 'Right' : 'Left'
+        const consumer = [
+          `import * as Platform from ${
+            JSON.stringify(FS.resolvePath('packages/shared/shared-src/Platform.ts', Repo.getRoot()))
+          }`,
+          `const ${entry.toLowerCase()} = await import('./.tao-ts/${entry}.tao.quantities.js')`,
+          `const ${other.toLowerCase()} = await import('./.tao-ts/${other}.tao.quantities.js')`,
+          'Platform.runtimeConsole.info(JSON.stringify({',
+          `  rightConstructor: left.${left.namespaceExport}.${rightAlias.constructorMember} === right.${right.namespaceExport}.${rightOwner.constructorMember},`,
+          `  leftConstructor: right.${right.namespaceExport}.${leftAlias.constructorMember} === left.${left.namespaceExport}.${leftOwner.constructorMember},`,
+          `  rightFactory: left.${rightAlias.factoryExport} === right.${rightOwner.factoryExport},`,
+          `  leftFactory: right.${leftAlias.factoryExport} === left.${leftOwner.factoryExport},`,
+          `  rightEnumerable: Object.keys(left.${left.namespaceExport}).includes(${
+            JSON.stringify(rightAlias.constructorMember)
+          }),`,
+          `  leftEnumerable: Object.keys(right.${right.namespaceExport}).includes(${
+            JSON.stringify(leftAlias.constructorMember)
+          }),`,
+          `  leftRead: left.${leftOwner.factoryExport}.read(right.${right.namespaceExport}.${leftAlias.constructorMember}.Minutes(2)),`,
+          `  rightRead: right.${rightOwner.factoryExport}.read(left.${left.namespaceExport}.${rightAlias.constructorMember}.Seconds(3)),`,
+          `  differentOwners: !left.${leftOwner.factoryExport}.ownsPayload(right.${right.namespaceExport}.${rightOwner.constructorMember}.Seconds(1).jsValue),`,
+          '}))',
+        ].join('\n')
+        const consumerPath = FS.resolvePath(`Cycle${entry}.js`, root)
+        await FS.writeText(consumerPath, transpile(consumer))
+        const run = await CLI.run(Platform.runtimeProcess.execPath, {
+          cwd: root,
+          args: [consumerPath],
+          processPolicy: 'test',
+        })
+        Expect({ exitCode: run.exitCode, stderr: run.stderr }).toEqual({ exitCode: 0, stderr: '' })
+        Expect(JSON.parse(run.stdout)).toEqual({
+          rightConstructor: true,
+          leftConstructor: true,
+          rightFactory: true,
+          leftFactory: true,
+          rightEnumerable: true,
+          leftEnumerable: true,
+          leftRead: { canonical: 120, unit: 'Minutes' },
+          rightRead: { canonical: 3, unit: 'Seconds' },
+          differentOwners: true,
+        })
+      }
+    })
+  })
+
   Test('publishes private dependency quantities reached by value and type-only sidecar imports', async () => {
     for (const typeOnly of [false, true]) {
       await withTaoFiles('tao-tooling-private-quantity-', {

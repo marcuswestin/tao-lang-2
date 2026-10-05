@@ -275,8 +275,18 @@ function quantityModuleFor(
     }
     append(`export namespace ${surface.namespaceExport} {`)
     append(`  export type ${row.typeMember} = ${valueType}`)
-    append(`  export const ${row.constructorMember} = ${constructors}`)
+    append(
+      canonical.leaf.path === outputPath
+        ? `  export const ${row.constructorMember} = ${constructors}`
+        : `  export const ${row.constructorMember}: typeof ${constructors} = void 0 as never`,
+    )
     append('}')
+    if (canonical.leaf.path !== outputPath) {
+      append(`Object.defineProperty(${surface.namespaceExport}, ${JSON.stringify(row.constructorMember)}, {`)
+      append('  enumerable: true, configurable: true,')
+      append(`  get: () => ${constructors},`)
+      append('})')
+    }
     if (!links.has(row.owner)) {
       links.set(row.owner, {
         owner: row.owner,
