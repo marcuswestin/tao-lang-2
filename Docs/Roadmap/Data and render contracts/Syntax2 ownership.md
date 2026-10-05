@@ -202,6 +202,11 @@ associated-body closing-brace boundary and canonical function keyword/return-arr
 hooks. This release does not authorize unrelated formatter normalization. Return both exact paths
 with the frontend cut and keep the agreed readable method layout in regression expectations.
 
+A also owns formatter-tests/{functional-core,typed-values,numeric-units,formatter}.test.ts solely
+to update existing canonical function keyword and return-arrow expectations. Preserve authored
+legacy input coverage and every unrelated assertion; do not weaken expectations to admit both
+outputs. Return these fixture paths with the associated formatter cut.
+
 D now owns exactly new ast-utils-src/callable-effect-facts.ts and
 ast-utils-tests/callable-effect-facts.test.ts. This discovery leaf consumes immutable, already
 published target, correspondence, read and native-contract rows keyed by real AST identity. It
