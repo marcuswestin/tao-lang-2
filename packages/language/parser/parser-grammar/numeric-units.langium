@@ -9,7 +9,7 @@ NumericUnitBlock:
     'units' '{' (units+=NumericUnitDeclaration (',' units+=NumericUnitDeclaration)* ','?)? '}';
 
 NumericUnitDeclaration:
-    name=ID sign='-'? scale=NUMBER ('(' default?='default' ')')?;
+    name=NUMERIC_UNIT_ID sign='-'? scale=NUMBER ('(' default?='default' ')')?;
 
 NumericUnitName returns string:
-    ID ('.' ID)*;
+    (ID '.')* NUMERIC_UNIT_ID;

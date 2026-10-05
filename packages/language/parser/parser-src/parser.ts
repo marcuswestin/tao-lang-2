@@ -677,15 +677,15 @@ class NumericContinuationParser extends Langium.LangiumParser {
   }
 
   private startsNamedDirective(start: number): boolean {
-    if (this.isRecording() || this.lookahead(start).tokenType.name !== 'ID') {
+    if (this.isRecording() || !isIdentifierToken(this.lookahead(start))) {
       return false
     }
     let cursor = start + 1
-    while (this.lookahead(cursor).image === '.' && this.lookahead(cursor + 1).tokenType.name === 'ID') {
+    while (this.lookahead(cursor).image === '.' && isIdentifierToken(this.lookahead(cursor + 1))) {
       cursor += 2
     }
     return this.lookahead(cursor).image === '{'
-      || (this.lookahead(cursor).tokenType.name === 'ID' && this.lookahead(cursor + 1).image === '{')
+      || (isIdentifierToken(this.lookahead(cursor)) && this.lookahead(cursor + 1).image === '{')
   }
 
   private continuationRule(name: string) {
@@ -732,12 +732,17 @@ class NumericContinuationParser extends Langium.LangiumParser {
       }
       cursor++
     }
-    if (this.lookahead(cursor).tokenType.name !== 'ID') {
+    if (!isIdentifierToken(this.lookahead(cursor))) {
       return true
     }
+    let unit = this.lookahead(cursor)
     cursor++
-    while (this.lookahead(cursor).image === '.' && this.lookahead(cursor + 1).tokenType.name === 'ID') {
+    while (this.lookahead(cursor).image === '.' && isIdentifierToken(this.lookahead(cursor + 1))) {
+      unit = this.lookahead(cursor + 1)
       cursor += 2
+    }
+    if (unit.tokenType.name !== 'NUMERIC_UNIT_ID') {
+      return false
     }
     const label = this.frames.findLastIndex(frame => frame.name === 'RenderAccessibilityStatement')
     const value = label >= 0 ? this.frames[label + 1] : undefined
@@ -770,7 +775,7 @@ class NumericContinuationParser extends Langium.LangiumParser {
         ]
           .includes(frame.name)
       ) && (this.lookahead(cursor).image === '{'
-        || (this.lookahead(cursor).tokenType.name === 'ID' && this.lookahead(cursor + 1).image === '{'))
+        || (isIdentifierToken(this.lookahead(cursor)) && this.lookahead(cursor + 1).image === '{'))
     ) {
       return false
     }
@@ -787,6 +792,10 @@ class NumericContinuationParser extends Langium.LangiumParser {
     }
     return true
   }
+}
+
+function isIdentifierToken(token: LexReport['tokens'][number]): boolean {
+  return token.tokenType.name === 'ID' || token.tokenType.name === 'NUMERIC_UNIT_ID'
 }
 
 type ParserLspModule = {
