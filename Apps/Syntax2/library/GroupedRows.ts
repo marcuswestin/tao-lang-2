@@ -5,7 +5,7 @@ type LiveBook = Readonly<{ Author?: LivePerson | null }>
 type Row = Readonly<{ RowKey: string; Content: TR.Capability }>
 
 /** Cached field reads register dependencies; the rows retain original live book handles. */
-export function GroupedRows(items: readonly LiveBook[], builders: TR.Capability): readonly Row[] {
+export function GroupedRows(items: readonly LiveBook[], builders: TR.Capability): Row[] {
   const groups = new Map<string, { label: string; books: { id: string; book: LiveBook }[] }>()
   for (const book of items) {
     const bookID = TR.Data.NativeEntityContext(book).id
