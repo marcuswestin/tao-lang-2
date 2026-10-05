@@ -1,10 +1,15 @@
 # Syntax2 Library
 
-Future-source forcing app for the accepted render, nominal typing, capability, quantity and action
-contracts. Requested 2026-10-04. The goal is to implement everything required to run this app, in
-vertical slices, progressively moving source from `.tao.future` to `.tao`. This is an implementation
-target. A minimal executable shell now uses the first render foundation and public wildcard imports; unsupported future source
-remains undiscovered.
+Executable forcing app for the accepted render, nominal typing, capability, quantity and action
+contracts. Requested 2026-10-04. The selected nondeferred language families are implemented as of
+2026-10-05. Syntax2 and the reference app pass source validation, and combined package typechecking
+passes. Focused tests cover language, compiler, runtime and adapter contracts.
+
+This is the language-review checkpoint, not completed app/platform acceptance. The active app now
+uses the standard-library LazyList and grouped row projection; its final combined journeys and
+native/platform acceptance remain to be proved. Further implementation is paused for the
+Developer's review. Landing this independently functioning language baseline does not close the
+remaining acceptance work. `.tao.future` files remain undiscovered and are retained for reconciliation.
 
 ## Source and authority
 
@@ -14,7 +19,8 @@ remains undiscovered.
   standard Text view; compact handlers show and clear feedback. The show handler joins an inferred
   source action result through `then { done Message -> ... }`. A named list supplies two readers.
   Feed acquires 40 books, extends to 80 and 83, and refreshes while retaining acquired content.
-  This collection slice uses an eager loop; the standard-library lazy host remains pending.
+  Shelf and GroupedShelf now use standard-library LazyList. Acquisition counts are separate from
+  visible rows, so journeys assert acquired counts without assuming all rows are mounted.
   Signed quantity arithmetic exercises Duration and Ratio; Title.Default supplies a structural
   UI value whose associated Render calls its pure uppercase ToText method. Book titles use that
   same selected renderer, producing uppercase labels. Bare Book placement invokes its associated
@@ -41,13 +47,18 @@ remains undiscovered.
   the grouping display transition, signature-role results, and bounded book acquisition,
   continuation and refresh, local typed rejection, input editing and successful creation. A fresh
   second journey creates a book and then exercises stale-cursor recovery through the app guard.
-- [Main.tao.future](Main.tao.future): project/app boundary, controls, slots, units and bounded list UI.
-- [library/GroupedRows.tao.future](library/GroupedRows.tao.future) and
-  [library/GroupedRows.ts.future](library/GroupedRows.ts.future): typed keyed rows and a pure algorithm.
-  [library/GroupedRows.ts](library/GroupedRows.ts) now implements the native projection through
+- [Shelves.tao](Shelves.tao): parameterized header/item renderers, default content, explicit empty
+  replacement, repeated header placement and exact item-renderer forwarding into LazyList.
+- [Main.tao.future](Main.tao.future): retained design fixture to reconcile against the active app;
+  it is not executable acceptance evidence.
+- [library/GroupedRows.tao](library/GroupedRows.tao): graduated typed keyed rows, structural ui,
+  checked ordinary Tao builders and the pure native projection boundary.
+  [library/GroupedRows.ts](library/GroupedRows.ts) implements the native projection through
   authenticated builder methods and original live Book handles. A focused runtime check proves
   distinct equal-name authors, absent authors, header renaming and stable book keys after regrouping.
-  Its ordinary Tao builders and complete UI integration still await graduation.
+  A compiled-source check also proves the ordinary builders and strict generated TypeScript.
+  Full grouped app journeys remain pending. The retained GroupedRows.ts.future algorithm sketch
+  is not a separate implementation contract.
 - [library/BookIO.tao](library/BookIO.tao): active owned file/revision/query adapter contracts.
   BookIO.ts and BookStoreProvider.ts implement actual bounded acquisition, PDF creation, upload,
   cleanup and cached revision acknowledgment. Its former future contracts are fully graduated.
@@ -66,23 +77,35 @@ remains undiscovered.
 owns sequencing, coverage, ownership and acceptance. Numbered comments identify forcing cases;
 they do not authorize an implementer to silently settle remaining language judgments.
 
-The high-level plan is ready after the 2026-10-04 final audit: coordinator foundation, parallel
-language workstreams, data/lazy-list integration, then complete graduation and acceptance.
-No blocking author question remains for that plan. Exact ABI/path assignment and prototypes belong
-to its prerequisite wave. The first render foundation is implemented; broader graduation is pending.
+The implementation plan's language waves are complete. The remaining slice is combined app/native
+acceptance, future-source and documentation reconciliation, final verification and landing.
+The Developer requested a pause at this language checkpoint; do not resume the remaining feature
+or acceptance work merely because the baseline becomes available on main.
 
 ## Graduation
 
-The active shell is intentionally dependency-complete and small. It compiles and passes source
-checks; the runtime journey verdict is recorded by the integration owner. The original future Main,
-library modules, adapter sketch, standard-library target and future journey remain intact.
-The shell demonstrates quotation, reachable grouping and feedback transitions, bare text-value
-placement, contextual named lists, joined source action results and graduated nominal signature/role
-matching, selected structural UI rendering and signed quantity arithmetic. The active book collection
-acquires bounded pages through its adapter. Inherited Scalar operations, parameterized slots and
-complete failure/cleanup app integration remain pending.
+The active modules compile and pass source checks. The app demonstrates quotation, grouping and
+feedback state, bare values, contextual named lists, role matching, structural capabilities,
+generic/Self checking, explicit conversions and operators, signed quantities, parameterized slots,
+bounded acquisition, inverse writes, failure ownership and joined cleanup. Runtime journeys passed
+before final lazy/grouped activation; do not attribute that older verdict to the newly combined app.
 Mounted feature proof verifies that empty bare text values emit no node;
 a quoted empty string and explicit Text("") still retain their Text nodes.
+
+### Remaining acceptance
+
+1. Run the actual Library journeys with Shelf and GroupedShelf active. Prove 40/80/83 acquired
+   counts, virtualized rows, grouping changes, author updates, stable keys, seen revisions and writes.
+2. Prove the applicable native timing/export/cancellation/cleanup boundaries. iOS build evidence
+   exists; installed-device, suspend/resume and Android acceptance are not claimed.
+3. Reconcile retained future Main/test/algorithm fixtures, documentation and coverage records.
+   Keep the future extension undiscovered; retire a fixture only after its coverage is accounted for.
+4. Run the final integrated verification and authorized landing. Record the actual verdict and
+   limitations rather than treating source validation as complete app acceptance.
+
+These items continue in the implementation task after the Developer resumes the project. General
+query-state redesign, localized text, broad static proofs, general never/conversion bans and the
+remaining time/date APIs retain their separate deferred roadmap entries.
 
 1. Extract small feature modules from the future files when necessary. Move working declarations,
    not a duplicate future/current mirror. Keep the remaining target readable.
@@ -115,15 +138,16 @@ These are deliberately narrow integration requirements, not the final A29 query-
   Key() fails never -> RenderKey. GroupedRow and Book supply methods explicitly; RowKey derives from
   RenderKey and returns upward through the declared contract. The compiler checks ordinary signatures,
   not these names. Library runtime enforces uniqueness without index repair. Other list components
-  choose their own identity contracts; loops are unaffected. Integration still needs implementation.
+  choose their own identity contracts; loops are unaffected. The implementation is active; combined
+  app acceptance remains pending.
 - GroupedRows rebuilds a projection when grouping dependencies change. Content retains Book handles;
   mounted row rendering subscribes to their fields. It never stores JSX, mounted nodes or a frozen
   Book snapshot. Keys preserve occurrence state across reorder; removal unmounts. A moved book keeps
   its key even when its author group changes. Duplicate appearances require distinct occurrence keys.
   Grouping touches only acquired rows, so a group can remain incomplete until more data arrives.
-- GroupedRows.ts.future returns builder-produced rows. Its generated binding must pass live handles,
-  register cached field reads as dependencies, build checked Tao values, and wrap the result list.
-  The callback shape is an algorithm sketch, not a selected generated TypeScript ABI.
+- GroupedRows.ts returns builder-produced rows through generated capability contracts. Its binding
+  passes live handles, records dependency reads and builds checked Tao values. The retained future
+  callback shape is an algorithm sketch, not the generated TypeScript ABI.
 - ObservedRevision returns a cached, user-scoped revision token for the displayed book. MarkSeen
   acknowledges precisely that revision; later revisions remain unseen. Rendering/visibility does
   not itself acknowledge anything. Permission failure is not a successful acknowledgment.
@@ -142,8 +166,8 @@ These are deliberately narrow integration requirements, not the final A29 query-
    Selected: scalar is an abstract operation family, not a concrete unitless value. Generic bounded T
    preserves a concrete domain; erased independent scalar values cannot be mixed in arithmetic.
    Selected unit form: `units { seconds 1 (default), milliseconds 0.001, minutes 60, hours 3600 }`.
-   Keep explicit 1; no canonical marker yet. Validate the exact declaration grammar and scalar-family
-   admission with a small stdlib fixture before editing shared parser/type infrastructure.
+   Keep explicit 1; no canonical marker. Standard-library declarations and focused source/runtime
+   tests exercise the grammar, concrete domain admission and quantity arithmetic.
 2. Generic Self: selected after review—allow ordinary upward admission to a type
    already supplied by one typed argument when that type is an ancestor of every other typed input.
    Celsius plus RoomReading may infer Celsius; Celsius plus Fahrenheit cannot invent Temperature
@@ -167,7 +191,7 @@ cannot collide with lowercase Tao units and leaves unit enumeration unchanged. A
 publish neither constructors nor factories. Native calls in associated functions use their declared
 result contract; native converter results use the converter's target type.
 
-Empty text and owner-elided methods follow the new requested target. Named-state shorthand is a
-preferred grammar target: constructor positions select a type, bare expression positions select
+Empty text and owner-elided methods implement the selected contract. Named-state shorthand is
+implemented: constructor positions select a type, bare expression positions select
 the value; ambiguous dotted calls retain the lexical value rule and can use a type import alias.
 No claim is made that every identical type/value spelling is universally unambiguous.

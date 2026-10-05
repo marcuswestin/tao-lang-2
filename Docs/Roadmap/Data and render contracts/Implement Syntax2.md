@@ -11,64 +11,73 @@ C1 checked-quantity runtime storage. The shared foundation landed at
 `580f88cc5d8bec4682ebe430d08068f16aac3cb3` with public wildcard imports, erased native sidecar
 type checks, preparatory comma migration and the runtime cleanup facade. Combined host verification
 passed at that tree; lint, typecheck and runtime packaging reused exact-tree green evidence.
-Reviewed second-wave renderer descriptors provide independently mounted placements, fresh captures
-and own-property default selection. Lexical cleanup runtime joins admitted work, drains serial
-LIFO cleanup and preserves primary failures; scoped foreign thenables are adopted once. These
-runtime leaves initially lacked the selected slot/defer source grammar and compiler lowering;
-the production integrations described below now exercise those connections.
-Concrete callable signatures now cover required inputs before preferring exact matches, preserving
-ambiguity and ordinary argument binding. The separately reviewed uniform native accessor chain is
-now integrated on `feat/syntax2-numeric-construction`; complete returned wrapper identities survive
-selection, callable results and persisted snapshots. Focused accessor, quantity and cleanup tests
-pass together; combined proof for this follow-up remains pending.
-General capabilities, operators/converters, bare values and app adapter/list graduation remain.
-No language stream is complete.
-The associated-method frontend, private defining-module witness publication and concrete
-capability transport now have focused source/execution proof. Required defaults retain their
-defining-module scope, nested inputs/results retain their receiving contracts, and raw omitted
-argument slots remain distinct from wrapped `none`. Canonical effect snapshot/discovery now runs
-before associated admission in standalone and editor validation, and the same generation's sealed
-context is retained for compilation. Transport emission and private dependencies share the
-canonical plan, including optional absence. A genuine source method passes app compilation and
-runtime invocation through an inherited live receiver; unclassified native implementations retain
-unknown effects. This is a source capability milestone, not complete app graduation. Generic/Self,
-converters, rendering capabilities, full slots, quantities and action/data integration remain.
-The app now graduates Name, its private GivenName/FamilyName roles, PersonName and Subtract into
-`library/Library.tao`, and ProfileName plus its construction into `Main.tao`. The actual Tao journey
-asserts Ada Lovelace and 3 alongside both grouping transitions; it passes with a supported
-workspace-local Tao test home. Source check is canonical after the leading-role-dot formatter
-repair. Unit-reading dispatch and authenticated descendant factory publication are integrated.
-Generated cross-file factories preserve private ancestors and identity across aliases. Production
-renderer slots compile defaults, fills and repeated placements; mounted checks prove independent
-state, fresh captures and skipped empty-renderer arguments. Canonical payload-before-arrow action
-syntax, joined cleanup codegen and canonical result/failure runtime delivery are integrated. Real
-source action result inference uses lexical returns, and failure payloads use the source-backed
-public ActionFailureContext contract. The runnable app also graduates Banner's two text roles and
-reversed arguments; its journey passes alongside names, arithmetic and grouping. Source-return
-lowering, generic/concrete Self, arithmetic leaves and bare text rendering continue in bounded
-ownership batches. Latest combined typing still requires the source compiler's action/command
-narrowing; combined verification and full app graduation are pending.
-Existing function examples now use
-the formatter's selected `func` and arrow return spelling. Broad follow-up verification is pending.
-The parameter-array signature adapter is reviewed and integrated at `0ac15b312`.
-Numeric/unit construction, the isolated capability carrier runtime, generated native unit leaf
-and existing-block cleanup compiler lowering progress in separate worktrees.
-The coordinator retains shared compiler callers, app graduation and combined proof; the current
-ownership manifest releases independent implementation batches and their required shared seams.
-Reconciled with the 2026-10-04 project/module migration before baseline landing.
 
-Planning readiness: **100% for the high-level implementation plan**, reviewed 2026-10-04.
-The bounded final audit found no unresolved author decision blocking the plan. This is not
-implementation completion. Exact native ABI, feature extraction and exclusive file assignments
-are prerequisite engineering work; return a concrete semantic conflict if one is discovered.
+## Language baseline checkpoint — 2026-10-05
+
+The accepted nondeferred language families are implemented on the integration branch. This is an
+independently functioning baseline for other branches to consume, not completion of the full
+forcing-app/platform acceptance program. Further implementation is paused for the Developer's
+language-design review; the Developer separately authorized documentation reconciliation and
+landing this baseline subject to its verification gates.
+
+Implemented:
+
+- Nominal ancestry and signature projections; contextual construction, order-independent role/type
+  matching, repeated backing types, explicit conversions, wildcard imports and aliases.
+- Structural capabilities, concrete Self and generic constraints, associated/static members,
+  inferred result contracts, operators/converters and transitive pure-function restrictions.
+- Checked numeric/Scalar/Duration/Ratio values, signed lowercase postfix units, owner-qualified
+  units, canonical native storage/factories and retained unit views.
+- Bare render views/values, quoted text, bare-empty-text omission, structural ui dispatch,
+  parameterized/defaulted/repeated renderer slots, exact forwarding and accessibility prefixes.
+- Snapshot multi-match when, single-result pick, app-owned failure guards, typed/inferred/open
+  failure contracts, joined then/done, detached roots, cancellation and lexical LIFO defer.
+- Data item/collection receivers, writable inverse fields, optional none/empty behavior, typed
+  create/update inputs, adapter-owned bounded acquisition and revision acknowledgment.
+- Standard-library Keyed/RenderKey/LazyList/Occurrence and active grouped row recipes through
+  ordinary checked Tao builders and generated native capability contracts.
+
+Latest pre-landing evidence: Syntax2 source validation (9 files, no errors/noncanonical issues),
+WordFlower source validation (13 files, no errors/noncanonical issues; four existing style warnings),
+combined package typechecking, the declaration-slot boundary suite (12 tests) and formatter suite
+(52 tests). Focused compiled-source grouped-row and renderer-slot composition checks pass.
+Four actual Library journeys passed before the final lazy/grouped activation. That earlier app
+verdict is not evidence for the newly combined app. Final integrated landing gates own the baseline's
+merge verdict; preserve separate host/device limits below even when those gates pass.
+
+## Handing over the rest
+
+The follow-up slice is `feat/syntax2-acceptance`, to start from the landed baseline when the Developer
+resumes. A baseline landing does not resume implementation or authorize a new semantic decision.
+
+1. **Combined lazy/grouped Library journeys.** Run `./agent tao test Apps/Syntax2` against active
+   Shelf/GroupedShelf. The final source composes and typechecks; app journeys have not been replayed
+   since lazy/grouped activation. The tests now distinguish 40/80/83 acquired counts from mounted
+   viewport rows. Verify stable keys, regrouping/author changes, live row updates, seen revisions,
+   writes, continuation/refresh failures and cancellation. Do not restore eager all-row assumptions.
+2. **Native acceptance.** Compiled Export tests prove PDF bytes, checked Duration and cleanup on
+   success/upload failure; native CompareTitles and grouped builder boundaries have focused proof.
+   iOS clock compilation has arm64/x86_64 evidence. Installed-device, suspend/resume and Android
+   behavior remain unproved. Use the existing managed native lanes and record their boundaries.
+3. **Future-source and coverage reconciliation.** Compare Main.tao.future, Library.test.tao.future
+   and library/GroupedRows.ts.future with active modules and the numbered obligations below. They
+   remain undiscovered design fixtures, not runtime dependencies or acceptance evidence. Account for
+   every obligation before retiring a fixture; update app documentation and coverage together.
+4. **Final program acceptance.** Address failures from the combined journeys and applicable host
+   checks, review the integrated seams, run the required final gates and land the acceptance slice.
+   The broad deferred language investigations remain outside this task's completion criteria.
+
+Planning readiness remains 100%; implementation of the language baseline and completion of the
+whole app/platform program are deliberately separate milestones. Earlier workstream/wave sections
+below describe the execution architecture and retained audit obligations, not outstanding language
+feature families.
 
 ## Scope and boundaries
 
 Use [Decisions](../Tao%20Revolution/Decisions.md) and the app README. S66's unit table, supplied-ancestor
 inference and explicit conversions, and S67's five integration choices are selected. The final
 forcing-source audit is complete; maintain its coverage obligations during implementation.
-Prototype owner-elided methods, named-state construction and bare-text rendering
-before implementation depends on their exact grammar. Do not promote provisional app adapter/API
+Owner-elided methods, named-state construction and bare-text rendering are implemented. Do not promote provisional app adapter/API
 spellings into universal language decisions. The program supplements the existing Revolution process;
 it does not silently change MVP priority or replace WordFlower tranche obligations.
 
