@@ -212,8 +212,8 @@ function validateAssociatedOperation(
     return false
   }
   if (
-    (resolved.candidates.length === 0 || AST.isUnaryExpression(expression)) && resolved.problem === 'missing-operator'
-    && !resolved.operandTypes.some(type => type.genericParameter || type.kind === 'capability' || containsNumeric(type))
+    resolved.problem === 'missing-operator'
+    && !resolved.operandTypes.some(type => Type.requiresAuthoredOperationContract(type) || containsNumeric(type))
   ) {
     return false
   }

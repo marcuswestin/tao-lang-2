@@ -156,6 +156,10 @@ export class Type {
   static associatedOperation(expression: AssociatedOperation) {
     return new TypeResolutionContext().associatedOperation(expression)
   }
+  /** Whether a domain must resolve an authored operator instead of using a primitive fallback. */
+  static requiresAuthoredOperationContract(type: TaoType): boolean {
+    return requiresAuthoredOperationContract(type)
+  }
   static associatedOperatorContract(operator: string, orderedDomains: readonly TaoType[], site: AST.Node) {
     return new TypeResolutionContext().associatedOperatorContract(operator, orderedDomains, site)
   }
