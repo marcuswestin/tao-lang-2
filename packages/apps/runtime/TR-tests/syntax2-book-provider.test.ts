@@ -1,10 +1,14 @@
 import TR from '@runtime/TR'
+import { FS, Repo } from '@shared'
 import { Deferred, Describe, Expect, Test } from '@shared/test'
-import type { BookInput } from '../../../../Apps/Syntax2/library/BookBackend'
-import { BookProvider, bookStoreSession } from '../../../../Apps/Syntax2/library/BookStoreProvider'
 import type { TaoDataConnection, TaoDataSchemaDefinition, TaoQueryDescriptor } from '../TaoRuntime-src/TR-data'
 import { testDataConnection } from '../TaoRuntime-src/TR-data-provider'
 import { HostEnvironmentError } from '../TaoRuntime-src/TR-errors'
+import type { BookInput, ProviderModule } from './syntax2-app-contracts'
+
+// Load the real app modules in the focused test process using the app's local path mappings.
+const library = Repo.resolvePath('Apps/Syntax2/library')
+const { BookProvider, bookStoreSession }: ProviderModule = await import(FS.resolvePath('BookStoreProvider.ts', library))
 
 const bookDefinition: TaoDataSchemaDefinition = {
   name: 'Syntax2BookStore',

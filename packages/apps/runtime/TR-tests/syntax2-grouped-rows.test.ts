@@ -1,6 +1,10 @@
 import TR from '@runtime/TR'
+import { Repo } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
-import { GroupedRows } from '../../../../Apps/Syntax2/library/GroupedRows'
+import type { GroupedRowsModule } from './syntax2-app-contracts'
+
+// The test process resolves this app-owned source through the app's tsconfig path mappings.
+const { GroupedRows }: GroupedRowsModule = await import(Repo.resolvePath('Apps/Syntax2/library/GroupedRows.ts'))
 
 Describe('Syntax2 grouped row projection', () => {
   Test('groups live handles by author identity and keeps book keys across regrouping', async () => {
@@ -27,7 +31,7 @@ Describe('Syntax2 grouped row projection', () => {
     // These authenticated builder callbacks stand in for checked Tao functions; no UI is built here.
     const row = (key: TR.Evaluable, content: TR.Evaluable) =>
       TR.Value({
-        RowKey: key.getJSValue(),
+        RowKey: key.evaluate().jsValue,
         Content: TR.Capability.attach(content, {}),
       })
     const builders = TR.Capability.attach(TR.Value(true), {

@@ -1,6 +1,15 @@
 import TR from '@runtime/TR'
+import { FS, Repo } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
-import {
+import { runActionResult } from '../TaoRuntime-src/TR-action-transactions'
+import type { TaoDataSchemaDefinition } from '../TaoRuntime-src/TR-data'
+import { testDataConnection } from '../TaoRuntime-src/TR-data-provider'
+import { TaoActionFailure } from '../TaoRuntime-src/TR-errors'
+import type { IOModule, ProviderModule } from './syntax2-app-contracts'
+
+// Resolve these app-owned modules at test runtime so the runtime package's typecheck stays scoped.
+const library = Repo.resolvePath('Apps/Syntax2/library')
+const {
   CreateTemporaryPDF,
   DeleteTemporaryFile,
   LoadAfter,
@@ -9,12 +18,8 @@ import {
   ObservedRevision,
   Refresh,
   UploadFile,
-} from '../../../../Apps/Syntax2/library/BookIO'
-import { BookProvider, bookStoreSession } from '../../../../Apps/Syntax2/library/BookStoreProvider'
-import { runActionResult } from '../TaoRuntime-src/TR-action-transactions'
-import type { TaoDataSchemaDefinition } from '../TaoRuntime-src/TR-data'
-import { testDataConnection } from '../TaoRuntime-src/TR-data-provider'
-import { TaoActionFailure } from '../TaoRuntime-src/TR-errors'
+}: IOModule = await import(FS.resolvePath('BookIO.ts', library))
+const { BookProvider, bookStoreSession }: ProviderModule = await import(FS.resolvePath('BookStoreProvider.ts', library))
 
 const definition: TaoDataSchemaDefinition = {
   name: 'BookIOProof',

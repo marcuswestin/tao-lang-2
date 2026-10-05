@@ -1,9 +1,10 @@
+import { Repo } from '@shared'
 import { Deferred, Describe, Expect, Test } from '@shared/test'
-import {
-  BookBackend,
-  type BookBackendResult,
-  type BookRecord,
-} from '../../../../Apps/Syntax2/library/BookBackend'
+import type { BackendModule, BookBackend, BookBackendResult, BookRecord } from './syntax2-app-contracts'
+
+// Keep app-owned source out of the runtime package's TypeScript graph. The focused Bun test process
+// loads the real app module through its own app-local tsconfig mappings.
+const { BookBackend }: BackendModule = await import(Repo.resolvePath('Apps/Syntax2/library/BookBackend.ts'))
 
 const bookFixture = (id: string, title = id, authorID = 'author-a') => ({
   ID: id,
