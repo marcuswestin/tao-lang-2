@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 import tab from '@bomb.sh/tab/commander'
+import { registerResourceCommands } from '@cli-kit/ResourceCommands'
 import { Command } from '@commander-js/extra-typings'
-import { Diagnostic, Errors, FS, HCI, Platform, ReleaseCapabilities } from '@shared'
+import { Diagnostic, Errors, FS, HCI, Platform, ReleaseCapabilities, Repo, ResourceInventory } from '@shared'
 import type { Command as BaseCommand } from 'commander'
 import * as DiagnosticReport from './diagnostic-report'
 import type { InPlace } from './in-place-files'
@@ -36,6 +37,7 @@ if (import.meta.main) {
 
 /** runTaoCli runs the Tao CLI for the provided argv. */
 export async function runTaoCli(argv = Platform.runtimeProcess.argv): Promise<void> {
+  await ResourceInventory.notifyStartup({ checkout: Repo.tryGetRoot() ?? Platform.runtimeProcess.cwd() })
   await createCommands().parseAsync(argv, { from: 'node' })
 }
 
@@ -44,6 +46,8 @@ export function createCommands(): Command {
     .name('tao')
     .description('Tao language CLI.')
     .version(TaoVersion.current(), '-v, --version', 'Print the Tao release this is, or `development` from source.')
+
+  registerResourceCommands(commands)
 
   commands
     .command('doctor')

@@ -1,4 +1,5 @@
 import { runWithCommands } from '@cli-kit/RunWithCommands'
+import { reportPostLandingResources } from '@cli-kit/ResourceCommands'
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 import { DeveloperBranchCommand, SyncMainCommand } from '@verification/DeveloperWorkflow'
 import {
@@ -340,7 +341,8 @@ await runWithCommands(commands => {
             Errors.throwHostEnvironment(landingHostGateMessage(host.missing, host.report.sandboxDetected))
           }
         }
-        await LandCommand.run({
+        const resourceCheckout = Repo.getRoot()
+        const landing = await LandCommand.run({
           showStudio: options.showStudio,
           dryRun: options.dryRun === true,
           messageFile: options.messageFile,
@@ -348,6 +350,9 @@ await runWithCommands(commands => {
           skipVerify: options.skipVerify === true,
           skipVerifyFull: options.skipVerifyFull === true,
         })
+        if (landing.mode === 'executed') {
+          await reportPostLandingResources(resourceCheckout)
+        }
         Platform.runtimeProcess.exit(0)
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))

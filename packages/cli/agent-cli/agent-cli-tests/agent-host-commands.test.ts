@@ -30,6 +30,7 @@ const expected = [
   'admission-experiment',
   'native-module-check',
   'reclaim --execute',
+  'resources',
   'prepare-release studio',
   'prepare-release ide-extension',
   'ide-extension-acceptance',
