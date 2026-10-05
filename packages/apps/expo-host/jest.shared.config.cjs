@@ -54,6 +54,9 @@ function createRuntimeJestConfig(options) {
     // from this runtime package's installed links.
     modulePaths: ['<rootDir>/node_modules'],
     testTimeout: starvationAdjustedTimeoutMs(options.testTimeout ?? JOURNEY_BUDGET_MS),
+    // Circus has no numeric unlimited timeout. The adapter disables only its runner deadlines
+    // when explicitly requested, retaining ordinary timers and the preset's environment.
+    testRunner: require.resolve('./jest-runner-adapter.cjs'),
     testMatch: options.testMatch,
     // Jest builds the file map it discovers tests from by crawling `roots`, and `roots` defaults to
     // `rootDir` — this whole package. `rootDir` also holds `_gen_tao-app-test`, the cache of

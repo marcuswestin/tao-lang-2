@@ -7,7 +7,7 @@ import {
   type ProcessIdentity,
   type ResourceOptions,
 } from '@host-control'
-import { CLI, Errors, FS, Platform, Time } from '@shared'
+import { CLI, Errors, FS, Platform, Time, VerificationTimeouts } from '@shared'
 import { type LaneInterval, type OverlapReport, RunHistory } from './RunHistory'
 import { VerificationLanes } from './VerificationLanes'
 
@@ -229,7 +229,10 @@ async function acquire(options: AcquireOptions): Promise<MachineLane> {
   const record: LaneRecord & { id: string; maxSlots: number } = {
     id,
     lane: options.lane,
-    maxSlots: Math.max(1, options.requestedJobs ?? cpuCount),
+    maxSlots: Math.max(
+      1,
+      options.requestedJobs ?? (options.cpuCount === undefined ? environmentJobs() : undefined) ?? cpuCount,
+    ),
     ...(parentLaneId === undefined || parentLaneId.length === 0 ? {} : { parentLaneId }),
     pid: Platform.runtimeProcess.pid,
     repositoryRoot: options.repositoryRoot,
@@ -283,6 +286,19 @@ async function acquire(options: AcquireOptions): Promise<MachineLane> {
     root,
     landingPriorityToken,
   })
+}
+
+/** A diagnostic width stays independent of the policy that disables execution deadlines. */
+function environmentJobs(): number | undefined {
+  const value = Platform.runtimeProcess.env['TAO_VERIFY_JOBS']
+  if (value === undefined) {
+    return undefined
+  }
+  const jobs = Number(value)
+  if (!Number.isSafeInteger(jobs) || jobs < 1) {
+    Errors.throwUserInput('TAO_VERIFY_JOBS must be a positive integer.')
+  }
+  return jobs
 }
 
 /**
@@ -487,7 +503,7 @@ function registeredLane(options: {
     },
     ceiling: options.record.maxSlots,
     id: options.id,
-    acquireExclusive: async (timeoutMs = EXCLUSIVE_TIMEOUT_MS) =>
+    acquireExclusive: async (timeoutMs = VerificationTimeouts.resolve(EXCLUSIVE_TIMEOUT_MS) ?? Infinity) =>
       acquireExclusive(options.root, options.id, timeoutMs, options.lockTimeoutMs),
     overlap: async () => {
       try {
@@ -904,7 +920,7 @@ async function activeLaneEntries(root: string, prune: boolean): Promise<LaneEntr
 async function withRegistryLock<T>(
   root: string,
   work: () => Promise<T>,
-  timeoutMs = MUTEX_ACQUIRE_TIMEOUT_MS,
+  timeoutMs = VerificationTimeouts.resolve(MUTEX_ACQUIRE_TIMEOUT_MS) ?? Infinity,
 ): Promise<T> {
   await FS.mkdir(root)
   const ownerRoot = FS.resolvePath('.mutex-contenders', root)

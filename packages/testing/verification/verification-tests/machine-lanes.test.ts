@@ -72,10 +72,10 @@ Describe('machine lanes', () => {
     // held by another worktree looks like from here.
     await writeForeignLease(registryRoot, { pid: 1 })
 
-    const lane = await MachineLanes.acquire({ lane: 'verify', registryRoot, repositoryRoot: '/here' })
+    const lane = await MachineLanes.acquire({ cpuCount: 4, lane: 'verify', registryRoot, repositoryRoot: '/here' })
 
     // Second of the two lanes this machine admits whole: it shares the machine, not its own width.
-    Expect(lane.capacity).toBe(Platform.cpuCount())
+    Expect(lane.capacity).toBe(4)
     const leases = await leaseFiles(registryRoot)
     Expect(leases).toContain('1.json')
     Expect(leases.some(name => name.startsWith(`${Platform.runtimeProcess.pid}-`) && name.endsWith('.lane.json')))
@@ -878,15 +878,16 @@ Describe('machine lanes', () => {
 
   Test('an unreadable registry leaves the lane running at full width instead of failing', async () => {
     const lane = await MachineLanes.acquire({
+      cpuCount: 4,
       lane: 'verify',
       registryRoot: '/proc/tao-machine-lanes-cannot-exist',
       repositoryRoot: '/here',
     })
 
-    Expect(lane.capacity).toBe(Platform.cpuCount())
+    Expect(lane.capacity).toBe(4)
     Expect(lane.report().contended).toBe(false)
     // Unbrokered means admitted: a lane that cannot see the queue is never told to wait in it.
-    Expect((await lane.tryAcquire(Platform.cpuCount(), false))?.slots).toBe(Platform.cpuCount())
+    Expect((await lane.tryAcquire(4, false))?.slots).toBe(4)
     Expect(lane.waitReason).toBeUndefined()
     await lane.release()
   })

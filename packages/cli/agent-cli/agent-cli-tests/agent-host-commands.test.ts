@@ -24,6 +24,7 @@ const expected = [
   'merge-pr',
   'fix-agent-config',
   'verify-full',
+  'diagnose-verification',
   'test-host',
   'qa-capture',
   'studio-smoke',

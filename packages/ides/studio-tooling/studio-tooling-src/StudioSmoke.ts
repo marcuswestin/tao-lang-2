@@ -106,7 +106,11 @@ async function run(options: StudioSmokeOptions): Promise<number> {
     try {
       await FS.mkdir(allocation.artifactRoot)
       const result = await CLI.run('bun', {
-        args: ['test', ...options.files.map(path => FS.resolvePath(path)), '--timeout=600000'],
+        args: [
+          'test',
+          ...options.files.map(path => FS.resolvePath(path)),
+          `--timeout=${Platform.runtimeProcess.env['TAO_VERIFY_NO_TIMEOUTS'] === 'true' ? 0 : 600000}`,
+        ],
         env: {
           TAO_HOME: FS.resolvePath('home', allocation.artifactRoot),
           [UiVisibility.STUDIO_ENV_KEY]: options.showStudio === true ? 'true' : 'false',

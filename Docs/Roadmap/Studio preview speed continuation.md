@@ -956,3 +956,42 @@ retain scheduler parallelism. The focused shared scope passes 108 cases, the gat
 The receipt repair scope passes three cases in 55 seconds, the skills scope thirteen in 49
 seconds, and Studio edit-to-preview seven in 87 seconds. These recoveries do not replace the
 required broad landing gate.
+
+The Developer requested controlled diagnostics before the next landing attempt. The opt-in
+`TAO_VERIFY_NO_TIMEOUTS=true` removes execution watchdogs; cleanup grace periods, explicit timeout
+behavior fixtures, and performance assertions retain their contracts. `TAO_VERIFY_JOBS=1` is a
+separate diagnostic concurrency ceiling. `just diagnose-verification` runs the full automated
+membership sequentially, prints each part's included files or command and result with elapsed
+time, streams node logs while processes are running, and records no green-tree verification proof.
+Jest prints test and hook progress in this mode. Explicitly reviewed completed node names can be
+retained with `TAO_VERIFY_DIAGNOSTIC_COMPLETED`; it affects only that diagnostic lane. A fix must
+rerun affected earlier parts. Ordinary full verification ignores the diagnostic resume list.
+
+Record the sequential node and file durations, investigate any part that stops making progress,
+and commit the resulting shard and scheduling adjustments before the next full run. Final
+verification and authorized landing use normal parallel scheduling with execution watchdogs
+disabled and live-log monitoring; sequential diagnostics are not landing evidence.
+
+The controlled sweep exercised every quiet automated part across resumable runs. Original failures
+remain in the run artifacts: two fixtures could stall without contention (an obsolete cache claim
+expectation and equal admission timestamps), and deliberate-timeout/capacity fixtures needed
+explicit diagnostic-independent inputs. Corrected focused reruns pass. The diagnostic runner also
+treated its intentionally absent green snapshot as generated drift; generated-proof comparison
+now applies only when that proof configuration is present. Normal verification retains drift
+rejection and ignores diagnostic resume.
+
+Serial costs identify scheduling work rather than a measured commit-by-commit regression:
+Tao CLI 624.7s, project tooling 461.2s, compiler 210.3s, development CLI 188.6s, Studio 186.0s,
+and runtime Jest 139.3s. The CLI total includes a subsequently repaired 30s timeout fixture.
+Bun blanket concurrency now matches the scheduler's granted slots, replacing an implicit allowance
+of twenty simultaneous tests inside a two-slot reservation. Compiler emission-cache, workspace,
+preview and app-output work, project watch/service work, and Studio session/edit work have named
+cohorts for cold checkouts. The 101.6s watch file is split into saved-input/dependency, topology,
+and refresh groups; the 85.9s preview-session file is split into receipt, source, scenario and
+watch groups. These moves preserve test bodies and assertions. Measured history continues to
+balance the remainder; no fixed machine-specific shard count was added.
+
+Diagnostic Tao preparation logs identify each submitted, completed or failed file with elapsed
+time including queueing; they do not claim actual worker start times. The next full parallel gate
+must establish correctness and actual scheduling results for the committed rebalance. Sequential
+batch measurements are not a qualified speed gain, and existing performance ceilings remain.

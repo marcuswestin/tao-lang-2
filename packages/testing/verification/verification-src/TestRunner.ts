@@ -88,6 +88,8 @@ export type SuiteSelection = {
 
 /** SuiteBuildContext is what a run hands every source that builds a process. */
 type SuiteBuildContext = {
+  /** Injected runner policy for argument fixtures; production reads the inherited environment. */
+  verificationEnv?: Readonly<Record<string, string | undefined>>
   /** Where native runner reports go; absent, the runner prints a summary instead. */
   reportRoot?: string
 }
@@ -940,7 +942,16 @@ function bunSuite(
   const testReport = context.reportRoot === undefined
     ? undefined
     : nativeReport(context.nodeName, suite, 'bun-junit', context.reportRoot)
-  const tuningArgs = GateCatalog.suiteTuning(suite).args ?? []
+  const verificationEnv = context.verificationEnv ?? Shared.Platform.runtimeProcess.env
+  const bounded = Shared.VerificationTimeouts.enabled('environment', verificationEnv)
+  const tuningArgs = (GateCatalog.suiteTuning(suite).args ?? []).filter(arg =>
+    verificationEnv['TAO_VERIFY_JOBS'] !== '1' || arg !== '--concurrent'
+  )
+  // Bun otherwise permits twenty simultaneous tests inside a process reserved for two slots.
+  // Match the admitted width, as the Jest worker pool does, without changing authored concurrency.
+  const concurrencyArgs = tuningArgs.includes('--concurrent')
+    ? [`--max-concurrency=${Math.max(1, context.slots)}`]
+    : []
   const args = [
     'test',
     // Bun reads a bare relative path as a filter, walks the whole repository to resolve it, and
@@ -951,11 +962,17 @@ function bunSuite(
     ...(testReport === undefined
       ? ['--reporter=dot']
       : ['--reporter=junit', `--reporter-outfile=${testReport.path}`]),
-    ...tuningArgs,
+    ...tuningArgs.filter((arg, index) =>
+      bounded
+      || (arg !== '--timeout' && !arg.startsWith('--timeout=') && tuningArgs[index - 1] !== '--timeout')
+    ),
+    ...concurrencyArgs,
     // Both spellings, because a table entry written as `['--timeout', '60000']` would otherwise get
     // a second `--timeout=` appended and Bun's argument precedence, not the table, would decide the
     // suite's hang guard.
-    ...(tuningArgs.some(arg => arg === '--timeout' || arg.startsWith('--timeout='))
+    ...(!bounded
+      ? ['--timeout=0']
+      : tuningArgs.some(arg => arg === '--timeout' || arg.startsWith('--timeout='))
       ? []
       : [`--timeout=${deadlineFor(tuningArgs)}`]),
     ...(pattern ? ['--pass-with-no-tests', `--test-name-pattern=${pattern}`] : []),

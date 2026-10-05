@@ -744,6 +744,11 @@ verify-changed no_cache='false': _deps
 verify-full no_cache='false' show_studio='false' jobs='': _deps
     ./dev gates {{ VERIFY_FULL_GATES }} --lane verify-full {{ if show_studio == "true" { "--show-studio" } else { "" } }} {{ if VERIFY_FULL_SKIPPED == "" { "" } else { "--skipped \"" + VERIFY_FULL_SKIPPED + "\"" } }} --green-tree verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }} {{ if jobs == "" { "" } else { "--jobs " + quote(jobs) } }}
 
+# Diagnose every automated full-lane part one at a time without execution deadlines or a green-tree record; never merge evidence
+[group('Dev')]
+diagnose-verification: _deps
+    TAO_VERIFY_NO_TIMEOUTS=true TAO_VERIFY_JOBS=1 ./dev gates {{ VERIFY_FULL_GATES }} --lane diagnose-verification --jobs 1 --output lines --no-cache
+
 # Run verify-full's gate membership in a managed shell, skipping the host-only lanes and claiming nothing about them. --no-cache ignores a recorded green tree; --partition k/n runs one CI machine's share
 [arg('no_cache', long='no-cache', value='true')]
 [arg('partition', long='partition')]

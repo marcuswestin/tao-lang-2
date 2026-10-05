@@ -21,6 +21,7 @@ import { messageOf, throwUnexpected, UnexpectedBehaviorError } from './core/Erro
 import * as Json from './core/Json'
 import { sleep } from './core/Time'
 import { processIsAlive, randomUUID, runtimeProcess, sha256Hex, spawnSync } from './Platform'
+import * as VerificationTimeouts from './VerificationTimeouts'
 
 /** WalkOptions declares filters for recursive file walking. */
 export type WalkOptions = {
@@ -959,6 +960,10 @@ type FileMutationProcessIdentity = {
 }
 
 type FileMutationLockOptions = {
+  /** Observe a real ownership wait without creating another disk claim. */
+  onWait?: () => Promise<void>
+  /** Keep explicit wait-timeout behavior fixtures bounded in diagnostic verification. */
+  timeoutPolicy?: VerificationTimeouts.Policy
   /** Keep lock, owner, and reclaim files in this directory instead of beside the target. */
   lockDirectory?: string
   beforeClaimPublish?: (lockPath: string, ownerPath: string) => Promise<void>
@@ -996,7 +1001,8 @@ async function withMutationLockFile<Value>(
   options: FileMutationLockOptions,
 ): Promise<Value> {
   const token = `${runtimeProcess.pid}-${randomUUID()}`
-  const deadline = Date.now() + FILE_MUTATION_LOCK_TIMEOUT_MS
+  const timeoutMs = VerificationTimeouts.resolve(FILE_MUTATION_LOCK_TIMEOUT_MS, options.timeoutPolicy)
+  const deadline = timeoutMs === undefined ? undefined : Date.now() + timeoutMs
   const inspect = options.inspectProcessIdentity ?? inspectFileMutationProcessIdentity
   const ownIdentity = await inspect(runtimeProcess.pid)
   const owner: FileMutationLockOwner = {
@@ -1027,10 +1033,11 @@ async function withMutationLockFile<Value>(
         existing = await readFileMutationLockSnapshot(lockPath)
       }
     }
-    if (Date.now() >= deadline) {
+    if (deadline !== undefined && Date.now() >= deadline) {
       throwUnexpected(`Timed out waiting for the file mutation lock ${lockPath}.`)
     }
     if (existing === undefined || await fileMutationLockOwnerIsLive(existing, inspect)) {
+      await options.onWait?.()
       await sleep(FILE_MUTATION_LOCK_POLL_MS)
       continue
     }

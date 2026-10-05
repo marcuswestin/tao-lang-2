@@ -1,4 +1,4 @@
-import { FS, HCI, Platform, Repo, Time } from '@shared'
+import { FS, HCI, Platform, Repo, Time, VerificationTimeouts } from '@shared'
 import { ContentionRetry } from './ContentionRetry'
 import { FailurePolicy } from './FailurePolicy'
 import { FlakeTolerance } from './FlakeTolerance'
@@ -69,6 +69,8 @@ import { WorkSchedule } from './WorkSchedule'
  */
 
 export type RunGatesOptions = {
+  /** Injected explicit diagnostic resume list; ignored by every verification lane. */
+  diagnosticCompleted?: readonly string[]
   /** Broad lanes fail fast; internal explicitly scoped diagnostic callers may collect failures. */
   failurePolicy?: FailurePolicy
   /** Gate recipe names, in the order the Justfile declared them. */
@@ -282,8 +284,21 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
       sharedRoot: options.greenTree?.sharedRoot,
     })
 
-  const gatesToRun = recipeGates.filter(name => !proved.proved.has(name) && !elsewhere(name))
-  const testStates = (testPlan?.states ?? []).filter(state => !proved.proved.has(state.suite) && !elsewhere(state.name))
+  // Diagnostic resumes are an explicit list of reviewed completed parts, never merge evidence.
+  // The caller reruns affected parts after a fix; full verification ignores this list entirely.
+  const diagnosticCompleted = options.lane === VerificationLanes.DIAGNOSE_VERIFICATION
+    ? new Set(
+      options.diagnosticCompleted
+        ?? (Platform.runtimeProcess.env['TAO_VERIFY_DIAGNOSTIC_COMPLETED'] ?? '').split(',').filter(Boolean),
+    )
+    : new Set<string>()
+  const gatesToRun = recipeGates.filter(name =>
+    !proved.proved.has(name) && !elsewhere(name) && !diagnosticCompleted.has(name)
+  )
+  const testStates = (testPlan?.states ?? []).filter(state =>
+    !proved.proved.has(state.suite) && !elsewhere(state.name)
+    && !diagnosticCompleted.has(state.name) && !diagnosticCompleted.has(state.suite)
+  )
   const partitionSkips = partition === undefined ? [] : [
     ...recipeGates.filter(elsewhere).map((name): GateResult => ({
       elapsedMs: 0,
@@ -307,6 +322,12 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
     ...(suites.includes(name) ? { suite: name } : {}),
   }))
   const declaredSkips = [
+    ...[...diagnosticCompleted].map(name => ({
+      elapsedMs: 0,
+      name,
+      reason: 'explicitly retained diagnostic result; not merge evidence',
+      status: 'skipped' as const,
+    })),
     ...[...options.skipped ?? [], ...hostSkips].map(skippedResult),
     ...greenSkips,
     ...partitionSkips,
@@ -548,7 +569,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
     summary.status = 'failed'
     summary.warnings = [...summary.warnings, STALE_PROOF_WARNING]
   }
-  if (generatedOutputs.length > 0) {
+  if (options.greenTree !== undefined && generatedOutputs.length > 0) {
     const finalGenerated = await captureGenerated(options, location.repositoryRoot, generatedOutputs)
     if (
       verifiedGenerated === undefined
@@ -790,7 +811,7 @@ async function acquirePrepare(
     name: PREPARE_RESOURCE,
     registryRoot: FS.resolvePath(PREPARE_LOCK_PATH, repositoryRoot),
     repositoryRoot,
-    waitTimeoutMs: PREPARE_WAIT_MS,
+    waitTimeoutMs: VerificationTimeouts.resolve(PREPARE_WAIT_MS) ?? Infinity,
   })
 }
 
@@ -829,7 +850,7 @@ async function acquireGuiLease(repositoryRoot: string, options: RunGatesOptions)
     name: GateCatalog.GUI_RESOURCE,
     registryRoot: options.registryRoot,
     repositoryRoot,
-    waitTimeoutMs: options.guiLeaseWaitMs ?? GUI_WAIT_MS,
+    waitTimeoutMs: options.guiLeaseWaitMs ?? VerificationTimeouts.resolve(GUI_WAIT_MS) ?? Infinity,
   })
 }
 

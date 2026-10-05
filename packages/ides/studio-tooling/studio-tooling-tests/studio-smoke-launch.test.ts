@@ -177,6 +177,7 @@ Describe('Studio smoke launch', () => {
             onOutput(Buffer.from('[studio]: Expo exited with code=1\n'))
             return command
           },
+          timeoutPolicy: 'bounded',
           timeoutMs: 1, // budget-ok: Select one readiness attempt; no elapsed-time assertion.
         })
       } catch (error) {

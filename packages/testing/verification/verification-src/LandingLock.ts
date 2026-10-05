@@ -1,4 +1,4 @@
-import { Errors, FS, Platform, Time } from '@shared'
+import { Errors, FS, Platform, Time, VerificationTimeouts } from '@shared'
 import { MachineLanes } from './MachineLanes'
 import { VerificationLanes } from './VerificationLanes'
 
@@ -441,7 +441,7 @@ async function acquire(options: AcquireLandingLockOptions): Promise<LandingLockH
   if (queueToken !== undefined) {
     await enqueue(registryRoot, options.repositoryRoot, queueToken)
   }
-  const waitTimeoutMs = options.waitTimeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS
+  const waitTimeoutMs = options.waitTimeoutMs ?? VerificationTimeouts.resolve(DEFAULT_WAIT_TIMEOUT_MS) ?? Infinity
   const startedMs = Time.nowMs()
   const deadlineMs = startedMs + Math.max(0, waitTimeoutMs)
   let reportedAtMs = startedMs
@@ -671,7 +671,8 @@ async function admitLane(options: AdmitLaneOptions): Promise<void> {
   }
   const registryRoot = options.registryRoot ?? MachineLanes.registryRoot()
   const startedMs = Time.nowMs()
-  const deadlineMs = startedMs + Math.max(0, options.waitTimeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS)
+  const deadlineMs = startedMs
+    + Math.max(0, options.waitTimeoutMs ?? VerificationTimeouts.resolve(DEFAULT_WAIT_TIMEOUT_MS) ?? Infinity)
   let reportedAtMs = startedMs
   let reportedWaiting = false
   while (true) {

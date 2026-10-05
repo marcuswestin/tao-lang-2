@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, Json, Platform, Repo, Time } from '@shared'
+import { CLI, Errors, FS, Json, Platform, Repo, Time, VerificationTimeouts } from '@shared'
 import { Buffer } from 'node:buffer'
 import { chromeSandboxArgs, findChromeExecutable } from './ChromeDiscovery'
 
@@ -219,7 +219,7 @@ export class StudioCdp {
   async goto(url: string): Promise<void> {
     await this.client.send('Page.navigate', { url })
     await this.waitFor("document.readyState === 'interactive' || document.readyState === 'complete'", {
-      timeoutMs: 20_000,
+      timeoutMs: VerificationTimeouts.resolve(20_000) ?? Infinity,
     })
   }
 
@@ -446,17 +446,24 @@ export class StudioCdp {
       // Subscribe before the gesture: Chrome reports the interception while the moves are still
       // being dispatched, and the whole gesture must land before the drop replays it.
       const intercepted = new Promise<Record<string, unknown>>((resolve, reject) => {
-        const timer = setTimeout(() => {
-          unsubscribe()
-          reject(new Errors.HostEnvironmentError('The page never started an HTML5 drag for this source element.'))
-        }, 10_000)
+        const timer = VerificationTimeouts.enabled()
+          ? setTimeout(() => {
+            unsubscribe()
+            reject(new Errors.HostEnvironmentError('The page never started an HTML5 drag for this source element.'))
+          }, 10_000)
+          : undefined
+        const clearDeadline = () => {
+          if (timer !== undefined) {
+            clearTimeout(timer)
+          }
+        }
         const unsubscribe = this.client.subscribe('Input.dragIntercepted', params => {
-          clearTimeout(timer)
+          clearDeadline()
           unsubscribe()
           resolve((params as { data: Record<string, unknown> }).data)
         })
         cancelInterception = () => {
-          clearTimeout(timer)
+          clearDeadline()
           unsubscribe()
           reject(Errors.abortError('HTML5 drag interception finished.'))
         }
@@ -706,7 +713,7 @@ export class StudioCdp {
         lastContextFailure = Errors.asError(error)
         return undefined
       }
-    }, { intervalMs: 100, timeoutMs: 10_000 })
+    }, { intervalMs: 100, timeoutMs: VerificationTimeouts.resolve(10_000) ?? Infinity })
     if (fingerprint !== undefined) {
       return fingerprint
     }
@@ -900,7 +907,7 @@ export class StudioCdp {
         lastContextFailure = Errors.asError(error)
         return undefined
       }
-    }, { intervalMs: 100, timeoutMs: 10_000 })
+    }, { intervalMs: 100, timeoutMs: VerificationTimeouts.resolve(10_000) ?? Infinity })
     if (contextId === undefined) {
       if (lastContextFailure !== undefined) {
         throw lastContextFailure
@@ -925,7 +932,7 @@ export class StudioCdp {
         last = Errors.messageOf(error)
         return false
       }
-    }, { intervalMs: 100, timeoutMs: options.timeoutMs ?? 15_000 })
+    }, { intervalMs: 100, timeoutMs: VerificationTimeouts.resolve(options.timeoutMs ?? 15_000) ?? Infinity })
     if (satisfied) {
       return
     }
@@ -949,7 +956,7 @@ export class StudioCdp {
         last = Errors.messageOf(error)
         return false
       }
-    }, { intervalMs: 100, timeoutMs: options.timeoutMs ?? 15_000 })
+    }, { intervalMs: 100, timeoutMs: VerificationTimeouts.resolve(options.timeoutMs ?? 15_000) ?? Infinity })
     if (satisfied) {
       return
     }
@@ -1320,7 +1327,7 @@ async function waitForActivePort(
       )
     }
     return undefined
-  }, { intervalMs: 100, timeoutMs })
+  }, { intervalMs: 100, timeoutMs: VerificationTimeouts.resolve(timeoutMs) ?? Infinity })
   if (port !== undefined) {
     return port
   }
@@ -1347,7 +1354,7 @@ async function waitForTarget(baseUrl: string, urlPrefix?: string): Promise<Chrom
       // Browser is still starting.
       return undefined
     }
-  }, { intervalMs: 100, timeoutMs: 20_000 })
+  }, { intervalMs: 100, timeoutMs: VerificationTimeouts.resolve(20_000) ?? Infinity })
   if (target !== undefined) {
     return target
   }
