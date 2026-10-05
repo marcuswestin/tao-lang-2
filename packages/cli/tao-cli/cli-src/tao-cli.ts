@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import tab from '@bomb.sh/tab/commander'
-import { Command } from '@commander-js/extra-typings'
+import { Command, type OptionValues } from '@commander-js/extra-typings'
 import { Diagnostic, Errors, FS, HCI, Platform, ReleaseCapabilities } from '@shared'
 import type { Command as BaseCommand } from 'commander'
 import * as DiagnosticReport from './diagnostic-report'
@@ -462,10 +462,16 @@ export function createCommands(): Command {
     })
 
   for (const provider of ['jazz', 'convex', 'pylon', 'firebase'] as const) {
-    commands
-      .command(provider)
-      .description(`Generate deployable ${provider} backend source for a Tao app.`)
-      .command('generate')
+    const providerCommands = commands.command(provider)
+      .description(
+        provider === 'firebase'
+          ? 'Generate backend source and manage Firebase projects, apps, and one user store. Project and app deletion are not implemented.'
+          : `Generate deployable ${provider} backend source for a Tao app.`,
+      )
+    if (provider === 'firebase') {
+      registerFirebaseManagement(providerCommands)
+    }
+    providerCommands.command('generate')
       .argument('[path]', 'Tao file or directory whose app should be generated.', '.')
       .option('--app <name>', 'Select a named app.')
       .requiredOption('--output <directory>', 'Directory for generated backend source files.')
@@ -1065,4 +1071,85 @@ function writeChangedResults(results: readonly InPlace.Result[], labels: InPlace
       HCI.writeSuccess(`${line}\n`)
     }
   }
+}
+
+function registerFirebaseManagement(firebase: Command): void {
+  type Management = typeof import('./firebase-management').runFirebaseManagement
+  type Options = NonNullable<Parameters<Management>[2]>
+  const execute = (operation: Parameters<Management>[0]) => async (value: string | undefined, options: Options) => {
+    try {
+      const { runFirebaseManagement } = await import('./firebase-management')
+      await runFirebaseManagement(operation, value, options)
+    } catch (error) {
+      HCI.writeErrorLine(Errors.formatForUser(error))
+      Platform.runtimeProcess.setExitCode(1)
+    }
+  }
+  const common = <Args extends unknown[], Opts extends OptionValues, GlobalOpts extends OptionValues>(
+    command: Command<Args, Opts, GlobalOpts>,
+  ) =>
+    command
+      .option(
+        '--account <email>',
+        'Use this locally signed-in Google account; otherwise choose a numbered account, first by default.',
+      )
+      .option('--json', 'Print only known public result fields as JSON; progress and local prompts use stderr.')
+  const projects = firebase.command('projects').description(
+    'List, inspect, or create Firebase projects. Project deletion is not implemented.',
+  )
+  common(projects.command('list').description('List accessible Firebase projects.'))
+    .action((options: Options) => execute('projects-list')(undefined, options))
+  common(
+    projects.command('info').argument('<project-id>').description('Show public identity of an accessible project.'),
+  )
+    .action(execute('projects-info'))
+  common(
+    projects.command('create').argument('[project-id]').description(
+      'Create a Firebase project after local confirmation; Enter accepts a generated ID when omitted.',
+    ),
+  )
+    .action(execute('projects-create'))
+  const apps = firebase.command('apps').description(
+    'Manage Firebase app registrations. Tao uses WEB apps with the Web SDK; app deletion is not implemented.',
+  )
+  common(
+    apps.command('list').requiredOption('--project <id>', 'Firebase project ID.').description(
+      'List apps on all platforms.',
+    ),
+  )
+    .action((options: Options) => execute('apps-list')(undefined, options))
+  common(
+    apps.command('info').argument('<app-id>').requiredOption('--project <id>', 'Firebase project ID.').description(
+      'Show public app metadata.',
+    ),
+  )
+    .action(execute('apps-info'))
+  common(
+    apps.command('config').argument('<web-app-id>').requiredOption('--project <id>', 'Firebase project ID.')
+      .description('Print public Firebase Web SDK configuration.'),
+  )
+    .action(execute('apps-config'))
+  common(
+    apps.command('create').argument('<display-name>').requiredOption('--project <id>', 'Firebase project ID.')
+      .description('Register a WEB app after local confirmation.'),
+  )
+    .action(execute('apps-create'))
+  common(
+    firebase.command('data').description('Reset one server store; Auth and local offline stores are preserved.')
+      .command('reset')
+      .requiredOption('--project <id>', 'Firebase project ID.')
+      .requiredOption(
+        '--uid <uid>',
+        'User UID from Firebase Console: selected project → Authentication → Users → User UID (console.firebase.google.com/project/<id>/authentication/users).',
+      )
+      .requiredOption(
+        '--store <StorageKey>',
+        'Authored Datasource Firebase StorageKey in Tao source (e.g. hosted-firebase-notes), not web app ID; s_ and URI encoding are applied automatically.',
+      )
+      .option('--dry-run', 'Print the exact recursive deletion plan locally, without authentication or changes.')
+      .description(
+        'Recursively delete users/<uid>/stores/s_<encoded StorageKey> in (default), after a local Continue (default) or Stop choice. Stop clients and clear local stores before reconnecting: offline replicas can republish data.',
+      ),
+  )
+    .action((options: Options) => execute('data-reset')(undefined, options))
 }

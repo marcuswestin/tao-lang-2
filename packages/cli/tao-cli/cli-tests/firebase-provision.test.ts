@@ -14,10 +14,10 @@ const backend = {
 }
 
 const tokenPresence = testOverrideSlot({
-  read: () => Object.hasOwn(Platform.runtimeProcess.env, 'FIREBASE_TOKEN'),
-  write: (present: boolean) => {
-    if (present) {
-      Platform.runtimeProcess.env['FIREBASE_TOKEN'] = 'test-only-secret-canary'
+  read: () => Platform.runtimeProcess.env['FIREBASE_TOKEN'],
+  write: (value: string | undefined) => {
+    if (value !== undefined) {
+      Platform.runtimeProcess.env['FIREBASE_TOKEN'] = value
     } else {
       delete Platform.runtimeProcess.env['FIREBASE_TOKEN']
     }
@@ -160,7 +160,7 @@ Describe('Firebase API provisioning', () => {
   Test('inherited token authentication stops before any CLI or cloud call', async () => {
     const f = await fixture()
     Expect(Object.hasOwn(Platform.runtimeProcess.env, 'FIREBASE_TOKEN')).toBe(false)
-    const restore = tokenPresence.install(true)
+    const restore = tokenPresence.install('test-only-secret-canary')
     try {
       await Expect(provisionFirebase(f.options)).rejects.toThrow('Unset FIREBASE_TOKEN')
       Expect(f.calls).toHaveLength(0)

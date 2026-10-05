@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, HCI, Platform, Text, Time } from '@shared'
+import { Errors, FS, HCI, Platform, Time } from '@shared'
 import type { Writable } from 'node:stream'
 import {
   type FirebaseInspection,
@@ -9,8 +9,8 @@ import {
 } from './firebase-inspection'
 import { composeFirebasePilotRules } from './firebase-rules'
 
-type FirebaseResult = { exitCode: number | null; stdout: string; stderr: string }
-export type FirebaseRunner = (args: readonly string[], cwd: string, interactive: boolean) => Promise<FirebaseResult>
+import { firebaseJson, type FirebaseRunner, runFirebaseCli } from './firebase-cli'
+export { firebaseCreationProgress, type FirebaseRunner } from './firebase-cli'
 type Choice = { value: string; label: string }
 type FirebasePrompts = {
   text: (message: string, defaultValue?: string) => Promise<string>
@@ -576,74 +576,6 @@ function firebaseConfig(config: Record<string, unknown>): FirebaseConfig {
     fields[key] = value
   }
   return fields as FirebaseConfig
-}
-async function firebaseJson(
-  run: FirebaseRunner,
-  cwd: string,
-  args: readonly string[],
-  action: string,
-): Promise<unknown> {
-  const result = await run([...args, '--json'], cwd, false)
-  let response: unknown
-  try {
-    response = JSON.parse(result.stdout)
-  } catch {
-    Errors.throwHostEnvironment('Firebase CLI could not ' + action + '; it returned no JSON result.')
-  }
-  if (!isRecord(response)) {
-    Errors.throwHostEnvironment('Firebase CLI could not ' + action + '; it returned an unexpected result.')
-  }
-  if (result.exitCode !== 0 || response['status'] !== 'success') {
-    const error = response['error']
-    const message = typeof error === 'string'
-      ? error
-      : isRecord(error) && typeof error['message'] === 'string'
-      ? error['message']
-      : 'Check the selected account, project permissions, and Firebase CLI login.'
-    Errors.throwHostEnvironment('Firebase CLI could not ' + action + ': ' + message)
-  }
-  return response['result']
-}
-async function runFirebaseCli(
-  args: readonly string[],
-  cwd: string,
-  interactive: boolean,
-  output?: Writable,
-): Promise<FirebaseResult> {
-  const binary = FS.fileUrlToPath(import.meta.resolve('firebase-tools/lib/bin/firebase.js'))
-  return CLI.run('node', {
-    args: [binary, ...args],
-    cwd,
-    stdio: interactive ? 'inherit' : 'pipe',
-    ...(args[0] === 'projects:create' ? { onOutput: firebaseCreationProgress(output) } : {}),
-  })
-}
-/** Forward only the official CLI's fixed creation stage markers, keeping provider responses private. */
-export function firebaseCreationProgress(output?: Writable): (stream: 'stderr' | 'stdout', chunk: Buffer) => void {
-  let pending = ''
-  const seen = new Set<string>()
-  const phases: Record<string, string> = {
-    'Creating Google Cloud Platform project': 'Creating the Google Cloud project…',
-    'Adding Firebase resources to Google Cloud Platform project':
-      'Adding Firebase resources to the Google Cloud project…',
-  }
-  return (stream, chunk) => {
-    if (stream !== 'stderr') {
-      return
-    }
-    pending += chunk.toString('utf8')
-    const lines = pending.split(/\r?\n/u)
-    pending = lines.pop()!.slice(-512)
-    for (const raw of lines) {
-      const line = Text.stripAnsi(raw).trim()
-      const text = line.startsWith('- ') ? line.slice(2) : undefined
-      const message = text ? phases[text] : undefined
-      if (message && !seen.has(message)) {
-        seen.add(message)
-        HCI.writeLine(message, { output })
-      }
-    }
-  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

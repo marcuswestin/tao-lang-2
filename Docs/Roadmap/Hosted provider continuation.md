@@ -496,3 +496,86 @@ the next run command with the selected app and a wrapper/path appropriate to the
 The fresh-project repair has source and fixture coverage; its live rerun remains pending. Reuse
 `tao-autocreate-test` on that rerun rather than creating another project. This follow-up is not
 authorized to land.
+
+### Ordinary Firebase validation defects and retained requests — 2026-10-04
+
+The Developer's web run signs in but fails to load with `Persisted field
+'Account.DisplayName' has an invalid text value.` The ordinary provider creates a missing
+local Account row by assigning null to every field. The app declares nonoptional
+`DisplayName text`; this is incompatible with the existing runtime validation contract.
+Both the seed and app declaration entered main in `883ea9ee8`. Required-text validation
+predates that slice, and the later `580f88cc5` integration did not change the causal files.
+Earlier accepted Hosted CRUD tests exercised the handwritten notes-only pilot, not this
+Account bootstrap. Which exact earlier build the Developer remembers testing is unknown.
+
+TypeScript accepts the seed because `FirebaseRow` is a dynamic `Record<string, unknown>`,
+not a generated Account record type. The provider load contract returns serialized JSON
+as a string; static checking of that string cannot validate its persisted field values.
+RxDB schema generation allows null for every field,
+and generated Account rules also allow required fields to be null. The principal provider
+fixture uses an optional `Name` and injected fake replicas; the rules fixture explicitly
+expects nullable required DisplayName. Local app journeys use Memory/TestAuth. No test
+joined real account bootstrap with the Tao runtime's persisted-row validation.
+
+Proposed repair, not yet implemented: declare an appropriate app DisplayName default;
+create Account fields from authored defaults/optional metadata, rejecting required fields
+without a value instead of inventing implicit scalar defaults; align RxDB and server-rule
+nullability; repair affected synthetic account values without resetting IDs or notes;
+cover bootstrap, runtime load, restart and incoming replication with a required text field.
+Do not weaken runtime validation or erase stores as a workaround.
+
+The Simulator separately reports `expo-sqlite is not installed`. The JavaScript dependency
+already exists at the expected SDK57 version. The third-party React Native adapter catches
+every import/evaluation failure and replaces its cause with this installation message.
+Expo SDK57 Go includes SQLite. A custom host missing native ExpoSQLite, a host/JS mismatch,
+or a lazy-import/evaluation failure remain possible; no original exception or launched
+binary identity has yet been established. Tests replace native storage with memory, so
+iOS bundling and source gates did not prove native database opening. Separately, host
+native-kit discovery inspects direct manifest dependencies only and misses transitive
+provider dependencies; record and fix that independently of the unconfirmed live cause.
+
+The RxDB premium text is a Dexie storage console warning on the first bulk write, forwarded
+by app logging. Supported premium suppression needs purchased premium access; narrowly
+filtering that promotional message is a separate CLI decision. No suppression was applied.
+The sign-in button boxes are horizontally centered; their labels can sit slightly high
+because the basic FormButton applies a minimum height of 44 points and symmetric padding but
+no vertical justification. The Developer requested an explanation only; layout is unchanged.
+
+Root instructions now require retention of earlier requests/questions across messages and
+compaction, a task-local unresolved queue, and explicit acknowledgement of superseded items.
+The Console-first default is superseded since API connect became default; it remains the
+`--manual` alternative. The accepted pilot remains accepted, while ordinary Tao Firebase
+acceptance is blocked by these newly observed defects. Appwrite, Jazz, Convex and Pylon
+gates retain their separate prior dispositions.
+
+### Firebase management CLI follow-up — 2026-10-04
+
+Firebase now exposes `projects list|info|create`, `apps list|info|config|create`, and
+`data reset`. Run `./tao firebase --help` and each group's help from the repository
+root. Listing/config commands use locally signed-in Google accounts; missing login uses
+an interactive local sign-in. Signed-out JSON requests stop with instructions to sign
+in in a normal terminal first. No credentials are copied into Tao app settings.
+
+`data reset --project <id> --uid <uid> --store <authored StorageKey> --dry-run`
+prints its plan without authentication or cloud calls. Actual reset deletes only the
+selected `(default)` path `users/<uid>/stores/s_<encoded StorageKey>`, recursively,
+after local confirmation. It does not delete Auth users, project/app registrations,
+other stores, rules, indexes, or local offline replicas. Stop clients and clear local
+replicas before reconnecting, because queued local writes can republish server data.
+Full project deletion, app-registration deletion and Auth-user deletion are not exposed.
+
+Management calls isolate Firebase configuration so a caller's `.firebaserc` alias cannot
+redirect the confirmed literal project ID. Endpoint overrides are rejected before account
+or cloud calls; local dry-run remains usable. Errors and JSON results redact credentials
+and raw vendor errors. Existing provisioning uses the extracted shared CLI runner.
+
+Independent review found no remaining findings after project-alias, endpoint, authored
+StorageKey, JSON-login, and exact environment-restoration repairs. Focused management
+and provisioning tests passed. These are source/fixture checks; no live management or
+reset operation has been run. The Account-default repair and native import diagnosis
+remain proposals/pending acceptance, and the Developer's explanation-only layout request
+remains unchanged. This follow-up is not authorized to land.
+
+Management commands and their flags use the existing `hosted-data` release capability.
+The immutable public-release surface regression passed after adding these classifications;
+no public release phase or provider eligibility was broadened.

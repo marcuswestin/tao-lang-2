@@ -827,7 +827,7 @@ data Notes / Note { Body text }
     }
   })
 
-  Test('reports the Firebase CLI error text instead of a generic hint', async () => {
+  Test('reports the Firebase action and HTTP status without private provider error text', async () => {
     const root = await mkConnectProject('tao-connect-firebase-error-')
     try {
       await writePilotRules(root)
@@ -840,11 +840,19 @@ data Notes / Note { Body text }
           }
           : {
             exitCode: 2,
-            stdout: JSON.stringify({ status: 'error', error: 'HTTP Error: 429, quota exceeded' }),
+            stdout: JSON.stringify({ status: 'error', error: 'HTTP Error: 429, quota exceeded; private-error-canary' }),
             stderr: '',
           }
-      await Expect(runTaoConnect('firebase', root, { ...scripted([]).options, manual: false, firebaseRunner: runner }))
-        .rejects.toThrow('could not list Firebase projects: HTTP Error: 429, quota exceeded')
+      const error = await runTaoConnect('firebase', root, {
+        ...scripted([]).options,
+        manual: false,
+        firebaseRunner: runner,
+      }).catch((error: unknown) => error)
+      Expect(error).toBeInstanceOf(Errors.HostEnvironmentError)
+      const message = Errors.formatForUser(error)
+      Expect(message).toContain('Firebase CLI could not list Firebase projects; HTTP Error: 429.')
+      Expect(message).not.toContain('quota exceeded')
+      Expect(message).not.toContain('private-error-canary')
     } finally {
       await FS.remove(root)
     }

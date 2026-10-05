@@ -365,3 +365,27 @@ inconclusive. Follow the verification commands in the [continuation handoff](<Ho
 Firebase remains the easier first-flow recommendation based on the Developer's standalone manual
 acceptance and Appwrite's failed realtime check, not a measured setup-time comparison. Appwrite
 repair acceptance is deferred. This adds no acceptance evidence for Jazz, Convex, or Pylon.
+
+### Ordinary Firebase validation follow-up — 2026-10-04
+
+The Developer's ordinary Tao app now exposes two acceptance failures: web Account loading
+rejects the provider's null seed for required DisplayName, and Simulator native storage
+fails while importing SQLite. The latter adapter hides the original exception; the JS
+package is installed and SDK57 Expo Go includes it, so the actual launched-host/import
+cause remains unconfirmed. Provider tests use optional account fields and mock/memory
+replicas; local app journeys do not exercise Firebase. Source verification and bundling
+did not close these gates. The account-seeding bug entered with the ordinary provider/app
+in `883ea9ee8`, not the later runtime merge. See the [continuation handoff](<Hosted provider continuation.md>)
+for the schema/default repair proposal and native diagnosis boundary.
+
+Continue with Firebase as the previously selected first stack, but close ordinary app
+bootstrap and native storage before calling its full flow accepted. Earlier handwritten
+Firebase pilot acceptance remains valid for that pilot. Appwrite realtime acceptance and
+its later full Tao adapter remain deferred; Jazz/Convex/Pylon gates remain separate.
+
+Firebase management tooling now lists and inspects projects/apps, creates projects/Web
+registrations after local confirmation, retrieves public SDK config, and plans or performs
+a scoped user/store server reset. Local replicas and Auth users are outside reset scope;
+project/app/Auth-user deletion is not implemented. Source/fixture checks and independent
+review cover the CLI, including protection against inherited project aliases and emulator
+routing. No live cloud-management acceptance or new provider acceptance is claimed.
