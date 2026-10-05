@@ -296,13 +296,17 @@ export const ExpressionsCompiler = {
     const receiver = staticCall ? undefined : compileMethodReceiver(target.receiver)
     const capability = !staticCall
       && (resolved.receiver?.kind === 'capability' || !!resolved.receiver?.genericParameter)
+    const rebindSelf = capability && !!resolved.receiver?.genericParameter
+      && resolved.descriptor.result.genericParameter === resolved.receiver.genericParameter
     const callable = capability
-      ? gen`TR.Capability.method(${receiver}.evaluate(), ${gen.jsLiteral(target.name)})`
+      ? gen`TR.Capability.method(${rebindSelf ? gen`_TaoGenericReceiver` : gen`${receiver}.evaluate()`}, ${
+        gen.jsLiteral(target.name)
+      })`
       : compileAssociatedWitness(resolved.descriptor)
     const parameters = AST.parametersOf(resolved.descriptor.declaration)
     const argumentsByParameter = new Map(resolved.pairs.map(pair => [pair.parameter, pair.argument]))
     const lastProvidedIndex = Math.max(...resolved.pairs.map(pair => parameters.indexOf(pair.parameter)), -1)
-    return gen`TR.Call(${callable}${capability || staticCall ? gen.noop() : gen`, ${receiver}`}${
+    const call = gen`TR.Call(${callable}${capability || staticCall ? gen.noop() : gen`, ${receiver}`}${
       gen.join(parameters.slice(0, lastProvidedIndex + 1), parameter => {
         const argument = argumentsByParameter.get(parameter)
         const expected = resolved.transportTypes?.get(parameter) ?? Type.ofParameter(parameter)
@@ -311,6 +315,12 @@ export const ExpressionsCompiler = {
           : gen`, undefined`
       }, { separator: '' })
     })`
+    return rebindSelf
+      ? gen`(() => {
+        const _TaoGenericReceiver = ${receiver}.evaluate()
+        return TR.Capability.rebind(_TaoGenericReceiver, ${call})
+      })()`
+      : call
   },
 
   /** StringLiteral compiles a Tao string literal into a Tao text value. */
