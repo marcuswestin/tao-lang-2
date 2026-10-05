@@ -76,6 +76,21 @@ export function ExportNotice(book: LiveBook): string {
   return notices.get(context.connection)?.get(context.id) ?? ''
 }
 
+/** Duration backing is canonical seconds; the native adapter never discards a Tao unit implicitly. */
+export function NotifyExport(book: LiveBook, duration: TR.Value<TR.QuantityPayload>): void {
+  const context = bookContext(book)
+  if (!TR.isQuantityPayload(duration.evaluate().jsValue)) {
+    return TR.Errors.failInput('Export completion requires a checked Duration.')
+  }
+  let messages = notices.get(context.connection)
+  if (!messages) {
+    messages = new Map()
+    notices.set(context.connection, messages)
+  }
+  messages.set(context.id, `Export completed in ${duration.getJSValue()} seconds.`)
+  context.notifyMetadataChanged()
+}
+
 export function CreateTemporaryPDF(book: LiveBook): FileToken {
   const context = bookContext(book)
   const session = bookStoreSession(context.connection)

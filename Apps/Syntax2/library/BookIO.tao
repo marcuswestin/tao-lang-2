@@ -1,3 +1,4 @@
+use Duration from @tao/core
 use Book, Books, People from ./Library
 
 public
@@ -71,6 +72,9 @@ action UploadFile(TemporaryFile) from ./BookIO.ts
 
 public
 action MarkSeen(Revision) from ./BookIO.ts
+
+public
+action NotifyExport(Book, Duration) from ./BookIO.ts
 
 public
 action LoadAfter(BookWindow) from ./BookIO.ts
