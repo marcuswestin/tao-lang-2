@@ -41,7 +41,8 @@ export const FilesCompiler = {
     const moduleCommands = statements.filter(AST.isCommandDeclaration)
     const dataEntities = opts.dataEntities ?? statements.filter(AST.isEntityDataDeclaration)
     const hasRuntimeStatements = statements.some(statement =>
-      (AST.isTypeDeclaration(statement) && hasAssociatedWitnessPublication(statement))
+      ((AST.isTypeDeclaration(statement) || AST.isPrimitiveDeclaration(statement))
+        && hasAssociatedWitnessPublication(statement))
       || (AST.isEmittingRuntimeBinding(statement)
         && (!AST.isTypeDeclaration(statement) || isRuntimeConfigurableDeclaration(statement)))
     )
@@ -116,7 +117,8 @@ export const FilesCompiler = {
 function inDeclarationOrder(statements: readonly AST.Statement[]): AST.Statement[] {
   const reusableType = (statement: AST.Statement) =>
     isRuntimeConfigurableDeclaration(statement)
-    || (AST.isTypeDeclaration(statement) && hasAssociatedWitnessPublication(statement))
+    || ((AST.isTypeDeclaration(statement) || AST.isPrimitiveDeclaration(statement))
+      && hasAssociatedWitnessPublication(statement))
   const types = statements.filter(reusableType)
   const rest = statements.filter(statement => !reusableType(statement))
   const apps = new Set(rest.filter(AST.isAppValueDeclaration))

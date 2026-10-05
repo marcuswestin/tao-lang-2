@@ -20,7 +20,7 @@ import {
   planAssociatedWitnessBindings,
   referencedAssociatedWitnessOwners,
 } from './app/associated-witness-plan'
-import { withAssociatedWitnessBindings } from './app/AssociatedMethodsCompiler'
+import { hasAssociatedWitnessPublication, withAssociatedWitnessBindings } from './app/AssociatedMethodsCompiler'
 import {
   configurationAliasTargetTypeBindingName,
   configurationRuntimeBindingName,
@@ -205,7 +205,8 @@ function compileReactNative(
     (selectedSources.has(file.path) || FS.pathIsWithin(file.path, context.packagesContext.stdlibRoot))
     && (sidecarTaoSources.projectRootBySourcePath.has(file.path) || file.ast.statements.length === 0
       || !file.ast.statements.every(statement =>
-        AST.isPrimitiveDeclaration(statement) || AST.isPackageDeclaration(statement)
+        (AST.isPrimitiveDeclaration(statement) && !hasAssociatedWitnessPublication(statement))
+        || AST.isPackageDeclaration(statement)
       ))
   )
   const identityProjects = declarationIdentityProjects(

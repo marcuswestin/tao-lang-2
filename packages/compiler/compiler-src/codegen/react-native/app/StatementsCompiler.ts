@@ -95,9 +95,9 @@ export const StatementsCompiler = {
       : gen.noop()
   },
 
-  /** PrimitiveDeclaration is parsed semantic input and emits no runtime binding. */
-  PrimitiveDeclaration(): Compiled {
-    return gen.noop()
+  /** Primitive implementations publish their authored witnesses without creating nominal bindings. */
+  PrimitiveDeclaration(declaration: AST.PrimitiveDeclaration): Compiled {
+    return hasAssociatedWitnessPublication(declaration) ? Compile.AssociatedMethodsDeclaration(declaration) : gen.noop()
   },
 
   /** FixtureDeclaration is Studio/test setup metadata and emits no production app binding. */

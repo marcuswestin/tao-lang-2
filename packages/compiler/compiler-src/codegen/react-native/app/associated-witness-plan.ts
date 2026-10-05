@@ -4,11 +4,15 @@ import { Assert } from '@shared'
 import { hasAssociatedWitnessPublication } from './AssociatedMethodsCompiler'
 import { capabilityTransportOwners } from './capability-projection'
 
+type AssociatedOwner = ASTUtils.AssociatedCallableDescriptor['owner']
+
 /** Private export names are stable for a source module, independent of the selected app graph. */
-export function associatedWitnessExports(file: AST.TaoFile): ReadonlyMap<AST.TypeDeclaration, string> {
+export function associatedWitnessExports(file: AST.TaoFile): ReadonlyMap<AssociatedOwner, string> {
   const reserved = authoredNames(file)
-  const exports = new Map<AST.TypeDeclaration, string>()
-  for (const owner of file.statements.filter(AST.isTypeDeclaration)) {
+  const exports = new Map<AssociatedOwner, string>()
+  for (const owner of file.statements.filter((statement): statement is AssociatedOwner =>
+    AST.isTypeDeclaration(statement) || AST.isPrimitiveDeclaration(statement)
+  )) {
     if (hasAssociatedWitnessPublication(owner)) {
       exports.set(owner, allocate('__tao_associated_witness_', exports.size + 1, reserved))
     }
@@ -19,8 +23,8 @@ export function associatedWitnessExports(file: AST.TaoFile): ReadonlyMap<AST.Typ
 /** Method references use the canonical selected defining owner, independent of receiver spelling. */
 export function referencedAssociatedWitnessOwners(
   statements: readonly AST.Statement[],
-): ReadonlySet<AST.TypeDeclaration> {
-  const owners = new Set<AST.TypeDeclaration>()
+): ReadonlySet<AssociatedOwner> {
+  const owners = new Set<AssociatedOwner>()
   const transport = (expression: AST.Expression, expected: ASTUtils.TaoType) => {
     for (const owner of capabilityTransportOwners(Type.ofExpression(expression), expected)) {
       owners.add(owner)
@@ -35,18 +39,22 @@ export function referencedAssociatedWitnessOwners(
         let owner: AST.Node | undefined = node.$container
         while (
           owner && !AST.isFunctionDeclaration(owner) && !AST.isAssociatedFunctionDeclaration(owner)
-          && !AST.isActionDeclaration(owner)
+          && !AST.isActionDeclaration(owner) && !AST.isAssociatedConverterDeclaration(owner)
         ) {
           owner = owner.$container
         }
         Assert(
           owner && (AST.isFunctionDeclaration(owner) || AST.isAssociatedFunctionDeclaration(owner)
-            || AST.isActionDeclaration(owner)),
+            || AST.isActionDeclaration(owner) || AST.isAssociatedConverterDeclaration(owner)),
           'Expected a callable return owner.',
         )
         transport(
           node.value,
-          AST.isActionDeclaration(owner) ? Type.ofActionResult(owner) : Type.ofFunctionReturn(owner),
+          AST.isActionDeclaration(owner)
+            ? Type.ofActionResult(owner)
+            : AST.isAssociatedConverterDeclaration(owner)
+            ? Type.associatedConverterDescriptor(owner)!.result
+            : Type.ofFunctionReturn(owner),
         )
       }
       if (
@@ -59,6 +67,19 @@ export function referencedAssociatedWitnessOwners(
           'Expected a validated function call correspondence.',
         )
         invocation.pairs.forEach(pair => transport(pair.argument.value, Type.ofParameter(pair.parameter)))
+      }
+      if (AST.isConversionExpression(node)) {
+        const converter = Type.associatedConversion(node).descriptor
+        if (converter) {
+          owners.add(converter.owner)
+        }
+      }
+      if (AST.isBinaryExpression(node) || AST.isUnaryExpression(node)) {
+        const operation = Type.associatedOperation(node)
+        if (operation.descriptor && AST.isAssociatedFunctionDeclaration(operation.descriptor.declaration)) {
+          owners.add(operation.descriptor.owner)
+          operation.pairs.forEach(pair => transport(pair.operand, pair.type))
+        }
       }
       if (!AST.isMethodCallExpression(node)) {
         continue
@@ -81,14 +102,14 @@ export function referencedAssociatedWitnessOwners(
 /** Imports address the actual defining owner, even when the receiver is a descendant or an alias. */
 export function planAssociatedWitnessBindings(
   file: AST.TaoFile,
-  ownExports: ReadonlyMap<AST.TypeDeclaration, string>,
-  referencedOwners: ReadonlySet<AST.TypeDeclaration>,
-  exportedByOwner: ReadonlyMap<AST.TypeDeclaration, string>,
+  ownExports: ReadonlyMap<AssociatedOwner, string>,
+  referencedOwners: ReadonlySet<AssociatedOwner>,
+  exportedByOwner: ReadonlyMap<AssociatedOwner, string>,
   reservedBindings: readonly string[] = [],
 ) {
   const reserved = new Set([...authoredNames(file), ...reservedBindings, ...ownExports.values()])
   const bindings = new Map(ownExports)
-  const imports: { owner: AST.TypeDeclaration; sourcePath: string; exported: string; binding: string }[] = []
+  const imports: { owner: AssociatedOwner; sourcePath: string; exported: string; binding: string }[] = []
   for (const owner of referencedOwners) {
     if (bindings.has(owner)) {
       continue

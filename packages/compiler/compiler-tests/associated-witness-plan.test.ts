@@ -4,9 +4,39 @@ import { Describe, Expect, Test } from '@shared/test'
 import {
   associatedWitnessExports,
   planAssociatedWitnessBindings,
+  referencedAssociatedWitnessOwners,
 } from '../compiler-src/codegen/react-native/app/associated-witness-plan'
 
 Describe('compiler: private associated witness bindings', () => {
+  Test('publishes actual primitive operators and discovers defining converter owners', async () => {
+    const parsed = await Parser.parseCode(`
+      primitive number with {
+        static func +(Left number, Right number) fails never -> number { return Left }
+      }
+      type Caption is text
+      type Reading is numeric with {
+        Reading as Caption fails never { return Caption "reading" }
+      }
+      func Add(Left number, Right number) -> number { return Left + Right }
+      func Label(Reading) -> Caption { return Reading as Caption }
+    `, { validation: false })
+    Expect(parsed.entry.document.parseResult.parserErrors).toEqual([])
+    const primitive = parsed.entry.ast.statements.find(AST.isPrimitiveDeclaration)
+    const reading = parsed.entry.ast.statements.find(node => AST.isTypeDeclaration(node) && node.name === 'Reading')
+    Expect.Is(primitive, AST.isPrimitiveDeclaration)
+    Expect.Is(reading, AST.isTypeDeclaration)
+    const exports = associatedWitnessExports(parsed.entry.ast)
+    Expect(exports.has(primitive)).toBe(true)
+    Expect(exports.has(reading)).toBe(true)
+    const references = referencedAssociatedWitnessOwners(parsed.entry.ast.statements)
+    Expect(references.has(primitive)).toBe(true)
+    Expect(references.has(reading)).toBe(true)
+    const plan = planAssociatedWitnessBindings(parsed.entry.ast, exports, references, exports)
+    Expect(plan.imports).toEqual([])
+    Expect(plan.bindings.get(primitive)).toBe(exports.get(primitive))
+    Expect(plan.bindings.get(reading)).toBe(exports.get(reading))
+  })
+
   Test('reserves authored names and keeps export allocation independent of graph order', async () => {
     const parsed = await Parser.parseCode(`
       let __tao_associated_witness_1__ = "authored"
