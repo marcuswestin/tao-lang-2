@@ -56,6 +56,11 @@ callable admission, lexical name precedence and source identities. The coordinat
 export aggregation, production effect installation, registration and app graduation. B's current
 alias-only ast-structure.ts grant remains separate.
 
+A additionally owns configured-item-validator.ts solely for constructor-member resolution and
+diagnostics needed by these actual signature projections and explicit role constructions. The
+forcing declaration `type ProfileName is PersonName.GivenName` uses the selected named-type `is`
+relation; this grant does not introduce transparent `=` aliases or widen package-alias consumers.
+
 C resumes generated unit-reading methods such as Span.seconds(), preserving concrete descendant
 roles and canonical backing. It owns new numeric-unit-readings.ts, its focused semantic test,
 numeric-unit-readings-validator.ts, NumericUnitReadingsValidationMessages.ts and validator test,
@@ -100,6 +105,21 @@ language packages. Use the returned callable binder and real AST identities; do 
 second matcher. The coordinator owns facade exports, validator registration, source migrations,
 compiler integration and app graduation. No value-scope, Type or compiler ownership is transferred.
 Authored-source migrations require a separate exact-path release after inventory.
+
+### Current slot compiler integration batch
+
+B also owns ViewsCompiler.ts, InvocationsCompiler.ts and FilesCompiler.ts solely for production
+renderer-slot descriptor wiring, argument binding and stable module-level slot-body components.
+Its existing renderer-slot-codegen.ts and render-slot-hoists.ts helpers and focused compiler and
+mounted renderer-slot tests belong to this batch. Use the integrated TR.RenderSlots runtime,
+actual source anchors and returned semantic binder. Preserve legacy zero-argument/native-slot
+compatibility while connecting parameterized defaults, colon fills and repeated placements.
+Captured environments update without replacing the body component; placement instances retain
+independent state. Explicit empty suppresses defaults and unselected renderers do not evaluate
+arguments. Compatible forwarding preserves the descriptor identity. The coordinator retains
+Compile/TR facades, registrations, authored migrations and app graduation; Type and
+ExpressionsCompiler remain A-owned. No associated-method or numeric-publication changes in
+FilesCompiler belong to this grant.
 
 The grants below record the first-wave implementation. A1, B1, C1 and D1 are committed and reviewed;
 their shared seams are returned to the coordinator for integration. The D1 foreign-error follow-up
