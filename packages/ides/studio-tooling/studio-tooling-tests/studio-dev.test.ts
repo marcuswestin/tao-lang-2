@@ -548,8 +548,10 @@ Describe('Studio native wrapper foundation', () => {
   Test('forces Electrobun closed after the graceful timeout and closes process resources', async () => {
     const fake = fakeCommand(false)
 
-    // Preserve production timer ordering while the fake advances through its graceful budget.
-    await StudioNative.testing.stopCommand(fake.command, () => Time.sleep(0))
+    // Polls pass at once and the output-close bound never elapses, so the fake reaches SIGKILL and
+    // closes without real timers, which a loaded runner once stretched past the 5000ms stop bound.
+    const neverElapses = new Promise<void>(() => {})
+    await StudioNative.testing.stopCommand(fake.command, async ms => ms > 25 ? await neverElapses : undefined)
 
     Expect(fake.events).toEqual(['kill SIGTERM', 'kill SIGKILL', 'close-output', 'dispose'])
   })

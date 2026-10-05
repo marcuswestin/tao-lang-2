@@ -844,7 +844,7 @@ await runWithCommands(commands => {
   commands
     .command('open-pr')
     .description(
-      'Push this feature branch, open or reuse its pull request against main, then stream the checks opening it starts.',
+      'Push this feature branch, open or reuse its pull request titled by the reviewed merge message, turn on auto-merge, then stream the checks the push starts.',
     )
     .option('--poll-interval-ms <ms>', 'How often to poll checks when this gh has no `--watch` flag.')
     .action(async (options: { pollIntervalMs?: string } = {}) => {
@@ -858,7 +858,7 @@ await runWithCommands(commands => {
   commands
     .command('merge-pr')
     .description(
-      "Squash-merge this branch's pull request once every check on its pushed head, Verify among them, has passed; then archive it at merged/<name> and delete the remote branch.",
+      "Wait for every check on this branch's pushed head, Verify among them; squash-merge unless auto-merge already did, then archive it at merged/<name>.",
     )
     .option('--interval-ms <ms>', 'How often to poll the checks while they run (default 60000).')
     .action(async (options: { intervalMs?: string } = {}) => {

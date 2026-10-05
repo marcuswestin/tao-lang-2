@@ -131,6 +131,16 @@ Describe('output discipline', () => {
     Expect(isAllowed('bun run packages/cli/dev-cli/dev-cli-src/dev.ts')).toEqual(true)
   })
 
+  Test('refuses a direct pull request merge, even with an override, and leaves the rest of gh', () => {
+    // Through the Developer's admin login, a plain merge can bypass the required Verify check.
+    Expect(refusalFor('gh pr merge 3 --squash').includes('open-pr')).toEqual(true)
+    Expect(refusalFor('gh -R owner/repo pr merge 3 --auto').includes('merge-pr')).toEqual(true)
+    Expect(refusalFor('env GH_PAGER= gh pr merge 3')).not.toEqual('')
+    Expect(refusalFor('gh pr merge 3 # hook-ok: just this once')).not.toEqual('')
+    Expect(isAllowed('gh pr view 3 --json state')).toEqual(true)
+    Expect(isAllowed('gh pr checks 3')).toEqual(true)
+  })
+
   Test('refuses the index operations that would carry away work this agent did not make', () => {
     Expect(refusalFor('git add .').includes('exact reviewed paths')).toEqual(true)
     Expect(refusalFor('git add -A').includes('exact reviewed paths')).toEqual(true)

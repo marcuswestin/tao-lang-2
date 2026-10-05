@@ -20,6 +20,11 @@
       // One owner prevents concurrent or redundant Bun installs from colliding in node_modules.
       // The generated harness rules reject this directly and point agents to `./agent setup`.
       "bun install *": "deny",
+      // Through the Developer's admin login a direct merge can bypass the required Verify check;
+      // `open-pr` turns on auto-merge and `merge-pr` merges only after Verify. The output-discipline
+      // hook refuses it too, which is what binds Codex, since its rules carry only `allow`.
+      "gh pr merge": "deny",
+      "gh pr merge *": "deny",
       // Routine inspection stays sandboxed. State-changing variants are deliberately absent.
       "pwd": "allow",
       // Harmless on its own, and listed so a compound `cd <dir> && rg …` keeps every part inside
