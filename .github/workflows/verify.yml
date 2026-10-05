@@ -11,6 +11,7 @@ name: Verify
 #
 # PARTITIONS and the matrix list below must change together. Never cache `.artifacts`: the plan
 # reads recorded timings, and partitions that restored different ones would place nodes differently.
+# Each partition instead seeds them from `.github/verify/durations.json`.
 
 on:
   pull_request:
@@ -63,6 +64,14 @@ jobs:
       # `./agent setup`; the same path the native Linux contributor acceptance proves.
       - name: Bootstrap Nix, the pinned toolchain, and Tao setup
         run: ./.config/bootstrap-tao-dev-env --install-nix
+
+      # Every partition plans from this one committed snapshot of measured durations, so all of them
+      # compute the same plan, and suites split into shards sized by cost rather than running whole.
+      # Refresh it from a checkout whose recent full runs measured the current suite names.
+      - name: Seed the plan with the committed durations
+        run: |
+          mkdir -p .artifacts/timings
+          cp .github/verify/durations.json .artifacts/timings/durations.json
 
       - name: Verify partition ${{ matrix.partition }}/${{ env.PARTITIONS }}
         run: ./agent verify-full-sandbox --partition ${{ matrix.partition }}/${{ env.PARTITIONS }}
