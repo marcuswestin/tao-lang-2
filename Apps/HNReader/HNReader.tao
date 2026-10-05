@@ -35,8 +35,8 @@ app HNReader {
 // The stub variant swaps the feed while keeping bookmarks and reading history, so journeys exercise
 // the real fill machinery and persistent local history deterministically, with no network.
 app HNReaderStub = HNReader with {
-   id "hnreader-stub"
-   name "HNReader Stub"
+   id "hnreader-stub",
+   name "HNReader Stub",
    Datasource {
       StubNews,
       Personal,
@@ -67,7 +67,7 @@ datasource StubNews = StubSource {
 // CloudKit is Apple-native, so off a device the bookmarks still work from their local checkpoint and
 // the missing native side shows as a sync error. Checks replace it with an in-memory store.
 datasource Personal = CloudKit {
-   StorageKey "HNReaderBookmarksDev"
+   StorageKey "HNReaderBookmarksDev",
    Data {
       Bookmarks
 }  }
@@ -75,7 +75,7 @@ datasource Personal = CloudKit {
 // Reading history is device-owned rather than a field on the remote feed row. The real and stub
 // variants bind this same declaration, so a feed refill cannot erase what this device opened.
 datasource ReadingHistory = Local {
-   StorageKey "HNReaderReadingHistory"
+   StorageKey "HNReaderReadingHistory",
    Data {
       ReadingEntries
 }  }
@@ -92,16 +92,16 @@ nav ReadingStack = StackNav {
 }
 
 nav HNNavigator = SelectionNav {
-   Initial @top
-   Display "toggle"
+   Initial @top,
+   Display "toggle",
    @top {
-      Label "Top"
-      Icon "newspaper"
+      Label "Top",
+      Icon "newspaper",
       Content TopStack
-   }
+   },
    @reading {
-      Label "Reading"
-      Icon "book"
+      Label "Reading",
+      Icon "book",
       Content ReadingStack
 }  }
 

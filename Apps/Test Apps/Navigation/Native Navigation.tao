@@ -21,21 +21,21 @@ nav NativeSettingsStack = StackNav {
 }
 
 nav NativeTabs = SelectionNav {
-   Initial @notes
-   Display "automatic"
+   Initial @notes,
+   Display "automatic",
    @notes {
-      Label "Notes"
-      Icon "pencil"
+      Label "Notes",
+      Icon "pencil",
       Content NativeNotesStack
-   }
+   },
    @library {
-      Label "Library"
-      Icon "book"
+      Label "Library",
+      Icon "book",
       Content NativeLibraryStack
-   }
+   },
    @settings {
-      Label "Settings"
-      Icon "gear"
+      Label "Settings",
+      Icon "gear",
       Content NativeSettingsStack
 }  }
 

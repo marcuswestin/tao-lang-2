@@ -4,6 +4,11 @@ import type { FormatHandlers, NodeFormat } from '../formatting'
 export const ViewsFormatter = {
   TagStatement() {},
 
+  /** RenderAccessibilityStatement keeps the label expression's authored grouping intact. */
+  RenderAccessibilityStatement(f) {
+    f.oneSpaceAfter('accessible', 'a11y', 'label')
+  },
+
   ViewCommandExclusion(f) {
     f.oneSpaceAfter('hide')
     f.commaSpacedList()
@@ -80,6 +85,72 @@ export const ViewsFormatter = {
   /** LayoutNoneLiteral is a single token with no interior formatting. */
   LayoutNoneLiteral() {},
 } satisfies Partial<FormatHandlers>
+
+/** renderPrefixLine returns a tag/label pair that can share a line without moving comments. */
+export function renderPrefixLine(render: AST.Render): AST.RenderPrefix[] {
+  const cluster = AST.renderPrefixCluster(render)
+  if (
+    cluster.length !== 2 || !cluster.some(AST.isTagStatement)
+    || !cluster.some(AST.isRenderAccessibilityStatement)
+  ) {
+    return []
+  }
+  const first = AST.nodeRange(cluster[0]!)
+  const last = AST.nodeRange(cluster[1]!)
+  const target = AST.nodeRange(render)
+  const block = render.$container
+  if (
+    !first || !last || !target || !AST.isBlock(block)
+    || AST.commentRanges(block).some(comment => comment.from >= first.from && comment.to <= target.from)
+  ) {
+    return []
+  }
+  return cluster
+}
+
+/** canonicalRenderPrefixSource normalizes metadata by CST ranges without guessing expression ends. */
+export function canonicalRenderPrefixSource(
+  document: AST.Document,
+  preserveOrder: ReadonlySet<AST.RenderAccessibilityStatement> = new Set(),
+): string | undefined {
+  const source = document.textDocument.getText()
+  const edits: { range: AST.SyntaxRange; text: string }[] = []
+  const reordered = new Set<AST.RenderAccessibilityStatement>()
+  const nodes = AST.streamAllContents(document.parseResult.value)
+  for (const render of nodes.filter(AST.isRender)) {
+    const cluster = renderPrefixLine(render)
+    const [label, tag] = cluster
+    if (!AST.isRenderAccessibilityStatement(label) || !AST.isTagStatement(tag) || preserveOrder.has(label)) {
+      continue
+    }
+    const labelRange = AST.nodeRange(label)!
+    const tagRange = AST.nodeRange(tag)!
+    const spelling = AST.propertyRange(label, 'spelling')!
+    // Take the complete statement CST, including parentheses omitted from the expression AST.
+    const labelText = source.slice(labelRange.from, spelling.from) + 'accessible'
+      + source.slice(spelling.to, labelRange.to)
+    edits.push({
+      range: { from: labelRange.from, to: tagRange.to },
+      text: `${source.slice(tagRange.from, tagRange.to)} ${labelText}`,
+    })
+    reordered.add(label)
+  }
+  for (const label of nodes.filter(AST.isRenderAccessibilityStatement)) {
+    if (label.spelling === 'a11y' && !reordered.has(label)) {
+      const spelling = AST.propertyRange(label, 'spelling')
+      if (spelling) {
+        edits.push({ range: spelling, text: 'accessible' })
+      }
+    }
+  }
+  if (edits.length === 0) {
+    return undefined
+  }
+  return edits.sort((left, right) => right.range.from - left.range.from).reduce(
+    (text, edit) => text.slice(0, edit.range.from) + edit.text + text.slice(edit.range.to),
+    source,
+  )
+}
 
 function ViewDeclaration(f: NodeFormat<AST.ViewDeclaration>): void {
   f.visibilityOnOwnLine()

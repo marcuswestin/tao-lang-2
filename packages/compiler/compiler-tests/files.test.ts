@@ -822,7 +822,7 @@ Describe('compiler: files and packages', () => {
         'Package.tao': 'package { version "1.0.0" license AGPL-3.0-only }',
         'Main.tao': `
           use PackageApp from @feature
-          app Preview = PackageApp with { id "com.tao.test.preview"  name "Preview" }
+          app Preview = PackageApp with { id "com.tao.test.preview",  name "Preview" }
         `,
         '@feature/App.tao': `
           use StackNav from @tao/nav

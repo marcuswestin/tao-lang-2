@@ -44,7 +44,7 @@ action ExportDocument(Document) from ./Export.ts
       Expect(errors).toEqual([])
       const metadata = await FS.readText(FS.resolvePath('.tao-ts/Main.tao.ts', root))
       Expect(metadata).toContain('export type Save = (arg0: string, arg1: string) => void | Promise<void>')
-      Expect(metadata).toContain('unknown as 2 satisfies Parameters<typeof Sidecar.Save>')
+      Expect(metadata).toContain("__TaoBridgeCheck<Parameters<typeof Sidecar.Save>['length'], 2>")
     })
   })
 

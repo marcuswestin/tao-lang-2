@@ -39,6 +39,7 @@ export function resolveItemPropertyBindings(
     targetType: expected => Type.itemFieldType(expected),
     namedTypeAccepts: (actual, expected) => Type.isCastCompatible(actual, expected),
     duplicateTargetTypesOnlyWithCandidates: true,
+    compatibleTypeAccepts: Type.isAssignableToConstruction,
     targetRequiresValue: expected => Type.itemFieldRequiresValue(expected),
     unresolvedCandidatesExcuseMissing: true,
   })

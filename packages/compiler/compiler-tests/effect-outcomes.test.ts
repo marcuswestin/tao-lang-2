@@ -73,6 +73,6 @@ Describe('compiler: effect outcomes', () => {
     `)
     const code = compiled.code.replace(/\s+/g, ' ')
 
-    Expect(code).toContain('{ name: "Callback", declared: null, }')
+    Expect(code).toContain('{ name: "Callback", declared: [], open: true, }')
   })
 })

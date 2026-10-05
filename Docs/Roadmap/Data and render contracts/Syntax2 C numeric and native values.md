@@ -37,6 +37,12 @@ not implicitly granted by this proposal. The coordinator wires the TR facade, br
 .tao-ts publication; A supplies nominal/member/operator admission; D supplies computational failure
 inference. Preserve publication ownership and live-handle contracts from the shared manifest.
 
+C0's runtime/cell/native contract was reviewed on 2026-10-04. C1 may implement and independently
+review those two runtime paths, retaining existing wrappers and modeled failure machinery. The
+coordinator then supplies accessor/facade and declaration-owned factory publication. C1's final
+acceptance includes that integrated bridge evidence; a runtime-only commit is its first prerequisite,
+not completion of the generated native contract. Exact parser/stdlib ownership remains unreleased.
+
 Then implement numeric/number/scalar contracts, explicit operators/converters, unit declarations
 and postfix constructions, checked factories/accessor, Duration/Ratio and selected Wait/timer APIs.
 Request exact parser/validator/formatter/compiler/stdlib paths before each slice. Preserve concrete

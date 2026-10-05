@@ -136,7 +136,7 @@ Describe('project tooling disk refresh', () => {
       Expect(first.status).toBe('fresh')
       Expect(first.contractPaths).toEqual([FS.resolvePath('.tao-ts/Main.tao.ts', root)])
       const contract = await FS.readText(first.contractPaths[0]!)
-      Expect(contract).toContain('CountWords satisfies CountWords')
+      Expect(contract).toContain('__TaoBridgeCheck<CountWords, typeof Sidecar.CountWords>')
 
       await FS.writeText(paths['Main.tao'], 'function CountWords( {\n')
       const stale = await ProjectTooling.refresh(root, {})
@@ -167,7 +167,7 @@ Describe('project tooling disk refresh', () => {
       const mapped = result.diagnostics.find(diagnostic =>
         diagnostic.filePath === paths['Main.tao'] && diagnostic.message.startsWith('TypeScript:')
       )
-      Expect(mapped?.code).toBe('TS1360')
+      Expect(mapped?.code).toBe('TS2344')
       Expect(mapped?.range?.start.line).toBe(0)
     }, { location: 'host' })
   })

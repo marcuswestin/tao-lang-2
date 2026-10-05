@@ -67,24 +67,28 @@ function wrapRenderSource(source: string, render: AST.Render, wrapper: StudioWra
   if (AST.isRenderStatement(render) && render.injection !== undefined) {
     Errors.throwUserInput('Cannot wrap an injected root render.')
   }
-  const tag = AST.attachedTag(render)
-  const statement = directViewRenderStatement(render)
-  const slice = tag !== undefined && statement !== undefined && AST.isBlock(statement.$container)
-    ? blockStatementSlices(source, statement.$container).find(candidate => candidate.statement === statement)
+  const prefixes = AST.renderPrefixCluster(render)
+  const slice = prefixes.length > 0 && AST.isBlock(render.$container)
+    ? blockStatementSlices(source, render.$container).find(candidate => candidate.statement === render)
     : undefined
   const editStart = slice?.start ?? cstNode.offset
-  const selectedSource = source.slice(editStart, cstNode.end).trimEnd()
+  let selectedSource = source.slice(editStart, cstNode.end).trimEnd()
+  if (AST.isRenderStatement(render)) {
+    const keyword = AST.keywordRange(render, 'render')!
+    selectedSource = applySourceEdits(selectedSource, [{
+      end: keyword.to - editStart,
+      replacement: '',
+      start: keyword.from - editStart,
+    }])
+  }
   const normalizedSource = editStart === cstNode.offset
     ? selectedSource
     : selectedSource.split('\n').map(line => line.startsWith(indent) ? line.slice(indent.length) : line).join('\n')
-  const childSource = AST.isRenderStatement(render)
-    ? normalizedSource.replace(/^render\s+/, '')
-    : normalizedSource
   const rootPrefix = AST.isRenderStatement(render) ? 'render ' : ''
   return applySourceEdits(source, [{
     end: cstNode.end,
     replacement: `${editStart === cstNode.offset ? '' : indent}${rootPrefix}${wrapper}() [gap 8, pad 8] {\n${
-      indentSnippet(childSource, childIndent)
+      indentSnippet(normalizedSource, childIndent)
     }\n${indent}}`,
     start: editStart,
   }])
@@ -262,7 +266,7 @@ function sliceContainsBlock(slice: BlockStatementSlice, block: AST.Block): boole
 }
 
 /**
- * removeRender deletes one direct child render statement and the tag attached to it. A render a
+ * removeRender deletes one direct child render statement and its attached prefixes. A render a
  * sketch snapped in, and the last child of a container, stay: the first owns Unsnap's marker and the
  * second would leave an empty block behind.
  */
@@ -278,7 +282,7 @@ export async function removeRender(document: AST.Document, request: StudioRemove
   const block = statement.$container
   const source = document.textDocument.getText()
   const slices = blockStatementSlices(source, block)
-  const tag = AST.attachedTag(render)
+  const selected = new Set<AST.Statement>([statement, ...AST.renderPrefixCluster(render)])
   // A `#studio_rect_` tag is the private marker that ties this render back to its sketch rectangle.
   // Deleting the render would take the marker with it and leave Unsnap with nothing to undo.
   const snapped = [render, ...AST.streamAllContents(render).filter(AST.isRender)]
@@ -288,14 +292,12 @@ export async function removeRender(document: AST.Document, request: StudioRemove
       'Studio cannot remove a render snapped in from a sketch; Unsnap the sketch first.',
     )
   }
-  if (block.statements.every(candidate => candidate === statement || candidate === tag)) {
+  if (block.statements.every(candidate => selected.has(candidate))) {
     Errors.throwUserInput(
       "Studio cannot remove a container's only child; remove the container instead.",
     )
   }
-  const removed = slices.filter(slice =>
-    slice.statement === statement || (tag !== undefined && slice.statement === tag)
-  )
+  const removed = slices.filter(slice => selected.has(slice.statement))
   return await Formatter.formatCode(applySourceEdits(
     source,
     removed.map(slice => ({ end: slice.end, replacement: '', start: slice.start })),

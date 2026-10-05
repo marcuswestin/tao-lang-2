@@ -814,10 +814,10 @@ Describe('parser: core language syntax', () => {
       }
       view Home() { }
       let Main = CustomNav {
-        Initial @home
-        Display "tabs"
+        Initial @home,
+        Display "tabs",
         @home {
-          Label "Home"
+          Label "Home",
           Content Home
         }
       }
@@ -924,7 +924,7 @@ Describe('parser: core language syntax', () => {
       let StarterTags = PromptTags ["daily", "warmup"]
       let StarterPrompt = WritingPrompt {
         Title: "Morning pages",
-        Minutes: 10
+        Minutes: 10,
         StarterTags,
         Card {
           Label "Nested"
@@ -993,7 +993,7 @@ Describe('parser: core language syntax', () => {
     const result = await testParseSyntax(`
       app Workspace {
         state PaneWidth is number = 320 (persist)
-        Navigator SplitNav { @pane { Content Pane Width PaneWidth Resizable true } }
+        Navigator SplitNav { @pane { Content Pane, Width PaneWidth, Resizable true } }
       }
     `)
     const app = result.entry.ast.statements.find(AST.isAppDeclaration)

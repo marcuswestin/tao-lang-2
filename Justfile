@@ -5,6 +5,11 @@ BUN := justfile_directory() + "/.devenv/profile/bin/bun"
 BUNX := justfile_directory() + "/.devenv/profile/bin/bunx"
 export PATH := justfile_directory() + "/.devenv/profile/bin:" + env("PATH")
 
+# Formatting plugins and Swift modules need writable caches in managed worktrees.
+# Preserve an explicit caller override; ordinary workflows keep their cache state local.
+export DPRINT_CACHE_DIR := env("DPRINT_CACHE_DIR", justfile_directory() + "/.artifacts/cache/dprint")
+export CLANG_MODULE_CACHE_PATH := env("CLANG_MODULE_CACHE_PATH", justfile_directory() + "/.artifacts/cache/clang")
+
 WORD_FLOWER_APP := justfile_directory() + "/Apps/WordFlower/1 - Current/WordFlower.tao"
 IDE_EXTENSION_VSIX := justfile_directory() + "/.artifacts/build/tao-ide-extension.vsix"
 LOCAL_INSTANTDB_APP_ID := "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f"

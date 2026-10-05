@@ -52,7 +52,7 @@ Describe('validator: multiple datasources', () => {
         folder data Bookmarks / Bookmark { Note text }
         folder type Personal is text
         folder datasource Feed = Memory { Data { Stories } }
-        folder datasource Personal = Local { StorageKey "personal" Data { Bookmarks } }
+        folder datasource Personal = Local { StorageKey "personal", Data { Bookmarks } }
       `,
     }),
   )

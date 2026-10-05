@@ -60,7 +60,7 @@ Describe('project tooling disk watch with a polling test driver', () => {
         const broken = await until(() =>
           results.find(result =>
             result.revision > 1 && result.status === 'stale'
-            && result.diagnostics.some(diagnostic => diagnostic.code === 'TS1360')
+            && result.diagnostics.some(diagnostic => diagnostic.code === 'TS2344')
           ), { description: 'a stale result after a saved sidecar edit' })
         Expect(broken.contractPaths).toContain(contract)
         Expect(await FS.isFile(contract)).toBe(true)
@@ -145,7 +145,7 @@ package { version 0.1.0 requires "Widget Package" from ../Library version ^2.0.0
         const broken = await until(() =>
           results.find(result =>
             result.revision > 1 && result.status === 'stale'
-            && result.diagnostics.some(diagnostic => diagnostic.code === 'TS1360')
+            && result.diagnostics.some(diagnostic => diagnostic.code === 'TS2344')
           ), { description: 'a stale consumer after a selected dependency edit' })
 
         await FS.writeText(
@@ -228,7 +228,7 @@ package { version 0.1.0 requires "Widget Package" from ../Library version ^2.0.0
         await until(() =>
           results.find(result =>
             result.revision > recovered.revision
-            && result.status === 'stale' && result.diagnostics.some(diagnostic => diagnostic.code === 'TS1360')
+            && result.status === 'stale' && result.diagnostics.some(diagnostic => diagnostic.code === 'TS2344')
           ), { description: 'a dependency edit after attachment retry' })
       } finally {
         await watcher.dispose()
@@ -271,7 +271,7 @@ package { version 0.1.0 requires "Widget Package" from ../Library version ^2.0.0
         Expect(calls).toBe(2)
         Expect(results).toHaveLength(1)
         Expect(watcher.lastResult.status).toBe('stale')
-        Expect(watcher.lastResult.diagnostics.some(diagnostic => diagnostic.code === 'TS1360')).toBe(true)
+        Expect(watcher.lastResult.diagnostics.some(diagnostic => diagnostic.code === 'TS2344')).toBe(true)
       } finally {
         await watcher.dispose()
       }

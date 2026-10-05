@@ -43,9 +43,9 @@ nav HarnessNavigator = SlotNav {
 
 folder
 let WordFlowerStackByLetWith = app with {
-   id "wordflower-stack-by-let-with"
-   version "1.0.0"
-   name "WordFlower Declaration Let With"
+   id "wordflower-stack-by-let-with",
+   version "1.0.0",
+   name "WordFlower Declaration Let With",
    Navigator StackByLetWith
 }
 

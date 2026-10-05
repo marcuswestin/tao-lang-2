@@ -14,6 +14,10 @@ entry ViewsGrammarEntrypoint:
 TagStatement:
     tag=TagOrHexColor;
 
+// Occurrence metadata remains a block sibling; its contiguous cluster belongs to the next render.
+RenderAccessibilityStatement:
+    spelling=('accessible' | 'a11y') 'label' value=Expression;
+
 // A view may exclude entity-default verbs from this occurrence's surface. The command remains in
 // the catalog and may still be promoted explicitly through `Commands { ... }`.
 ViewCommandExclusion:

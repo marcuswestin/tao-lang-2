@@ -540,7 +540,7 @@ function bindSingleSlot(
   )
   const assignable = exact.length === 1
     ? exact
-    : [...remaining].filter(property => Type.isAssignable(actual, Type.itemFieldType(property)))
+    : [...remaining].filter(property => Type.isAssignableToConstruction(actual, Type.itemFieldType(property)))
   Assert(assignable.length === 1, message)
   return assignable[0]!
 }
