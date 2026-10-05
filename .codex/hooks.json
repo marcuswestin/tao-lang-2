@@ -12,6 +12,18 @@
         ]
       }
     ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-prompt-submit.zsh\" || true",
+            "name": "Mark cloud session titles",
+            "description": "Prefix a cloud session's title with CLOUD: once it has one; does nothing in local sessions."
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash",

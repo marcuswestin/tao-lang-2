@@ -77,19 +77,21 @@ Describe('board', () => {
     const registryRoot = await mkTestDir('tao-board-registry-')
     const worktreePath = await mkTestDir('tao-board-worktree-')
     try {
+      // One clock read: separate reads under load made the phase a few ms short of 1m, rendered "60s".
+      const now = Date.now()
       await FS.writeJson(FS.resolvePath('.landing-lock.json', registryRoot), {
-        acquiredAt: new Date(Date.now() - 12 * 60 * 1_000).toISOString(),
+        acquiredAt: new Date(now - 12 * 60 * 1_000).toISOString(),
         durable: false,
         holder: '/peer-worktree',
         label: 'land feat/peer',
         landing: true,
         phases: [
           {
-            endedAt: new Date(Date.now() - 11 * 60 * 1_000).toISOString(),
+            endedAt: new Date(now - 11 * 60 * 1_000).toISOString(),
             name: 'integrating',
-            startedAt: new Date(Date.now() - 12 * 60 * 1_000).toISOString(),
+            startedAt: new Date(now - 12 * 60 * 1_000).toISOString(),
           },
-          { name: 'host proof', startedAt: new Date(Date.now() - 11 * 60 * 1_000).toISOString() },
+          { name: 'host proof', startedAt: new Date(now - 11 * 60 * 1_000).toISOString() },
         ],
         pid: Platform.runtimeProcess.pid,
         scopedHolds: [{ pid: Platform.runtimeProcess.pid, token: 'peer-token' }],
