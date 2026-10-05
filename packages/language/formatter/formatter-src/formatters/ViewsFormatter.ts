@@ -16,6 +16,15 @@ export const ViewsFormatter = {
   /** ViewDeclaration formats a `view Name parameters` header with its optional responds clause. */
   ViewDeclaration: ViewDeclaration,
 
+  /** AssociatedViewDeclaration keeps the receiver-qualified name and ordinary view header spacing. */
+  AssociatedViewDeclaration(f) {
+    f.oneSpaceAfter('view')
+    f.noSpaceBefore('.')
+    f.noSpaceAfter('.')
+    f.noSpaceBefore('(')
+    f.oneSpaceBeforeProperty('layoutClause')
+  },
+
   /** ForeignViewImplementation formats its declared capabilities before the sidecar boundary. */
   ForeignViewImplementation(f) {
     f.oneSpaceAfter('accepts')
