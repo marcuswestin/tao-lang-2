@@ -82,6 +82,11 @@ export function createCapabilityRuntime(functionFactory: typeof TR.Function) {
   return {
     /** Item fields retain authenticated behavior carriers while ordinary values retain raw backing. */
     storedValue,
+    /** A concrete typed slot recovers its saved source without reading or reconstructing its payload. */
+    concreteSource<ValueT>(value: TaoEvaluable<ValueT>): TaoEvaluable<ValueT> {
+      return (ownedCapabilities.get(value)?.source ?? value) as TaoEvaluable<ValueT>
+    },
+
     /** List storage retains authenticated behavior wrappers and otherwise preserves original payloads. */
     listElements<StoredT>(
       source: TaoEvaluable<readonly unknown[]>,

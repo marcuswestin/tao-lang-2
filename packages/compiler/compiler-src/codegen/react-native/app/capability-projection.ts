@@ -65,7 +65,7 @@ function compileTransport(
       }
     })`,
     reproject: reproject =>
-      gen`TR.Alias(() => TR.Capability.reproject(${evaluated ?? gen`${source}.evaluate()`}, {
+      gen`TR.Alias(() => TR.Capability.reproject(${evaluated ?? gen`${source}.evaluate()`} as TR.Capability, {
       ${
         gen.list(
           reproject.methods,

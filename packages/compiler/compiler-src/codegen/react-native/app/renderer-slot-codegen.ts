@@ -22,7 +22,6 @@ export function emitSlotBody(
 ): Compiled {
   const occurrence = AST.isRenderSlotUse(input.body) ? input.body : undefined
   const signature = ASTUtils.rendererSlotSignatureOf(input.contract, occurrence)
-  const parameters = signature.inputs.map(input => input.declaration)
   const argumentType = slotArgumentType(signature)
   const environmentType = gen`Readonly<{
     _Scope: TR.Scope
@@ -53,9 +52,10 @@ export function emitSlotBody(
         ? gen.list(occurrence.inputBindings, binding => {
           const domain = ASTUtils.resolveRendererSlotInputBinding(binding)
           Assert.defined(domain, 'validated inline slot name retains its receiving input')
-          return slotBodyParameterBinding(domain.parameter, domain.input.labelName, binding.name)
+          return slotBodyParameterBinding(domain.parameter, domain.input.labelName, binding.name, domain.input.type)
         })
-        : gen.list(parameters, parameter => slotBodyParameterBinding(parameter))
+        : gen.list(signature.inputs, input =>
+          slotBodyParameterBinding(input.declaration, input.labelName, input.labelName, input.type))
     }
           ${viewBody}
         })
@@ -232,7 +232,7 @@ function compileSlotBody(
       gen.list(comparison.correspondence, pair =>
         gen`${gen.jsLiteral(pair.supplied.labelName)}: ${
           compileValueForType(
-            gen`args[${gen.jsLiteral(pair.required.labelName)}]`,
+            gen`_Scope[${gen.jsLiteral(pair.required.labelName)}]`,
             pair.required.type,
             pair.supplied.type,
           )
@@ -257,8 +257,10 @@ function slotBodyParameterBinding(
   parameter: AST.ParameterDeclaration,
   argumentName = Type.parameterName(parameter),
   localName = Type.parameterName(parameter),
+  type: ASTUtils.TaoType = Type.ofParameter(parameter),
 ): Compiled {
-  const value = gen`args[${gen.jsLiteral(argumentName)}]`
+  const argument = gen`args[${gen.jsLiteral(argumentName)}]`
+  const value = ASTUtils.containsCapability(type) ? argument : gen`TR.Capability.concreteSource(${argument})`
   const binding = parameter.copy || ASTUtils.parameterRequiresWritable(parameter)
     ? gen`TR.UseParameterCell(${value}, { copy: ${parameter.copy} })`
     : value

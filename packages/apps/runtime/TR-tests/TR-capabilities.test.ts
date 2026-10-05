@@ -36,6 +36,45 @@ Describe('Capability witnesses', () => {
       .toBe('Value:After')
   })
 
+  Test('hands back the original live entity source for a concrete witness after keyed transport', async () => {
+    const schema = TR.Data.Schema({
+      name: 'SlotBooks',
+      schemaVersion: 1,
+      entities: { Book: { collection: 'Books', fields: { Title: { kind: 'text' } } } },
+    }, { load: () => undefined, save: () => {} })
+    await TR.Data.Settle(schema)
+    TR.Data.Create(schema, 'Book', { Title: TR.Value('Before') })
+    const book = schema.query({ entity: 'Book', filters: [] })[0]!
+    const id = TR.Data.NativeEntityContext(book).id
+    const source = TR.Value(book)
+    const keyed = capabilities.attach(source, {
+      Key: TR.Function((receiver: typeof source) => {
+        Expect(receiver).toBe(source)
+        return TR.Value(id)
+      }),
+    })
+    const forwarded = capabilities.reproject(keyed, { Key: 'Key' })
+    Expect(TR.Call(capabilities.method(forwarded, 'Key')).getJSValue()).toBe(id)
+    const concrete = capabilities.concreteSource(forwarded)
+    Expect(concrete).toBe(source)
+    Expect(concrete.evaluate().jsValue).toBe(book)
+    Expect(capabilities.concreteSource(source)).toBe(source)
+    const rendered = capabilities.attach(concrete, {
+      Render: TR.Function((receiver: typeof source) => {
+        Expect(receiver).toBe(source)
+        return TR.Value(TR.Data.Read(receiver.evaluate().jsValue, 'Title'))
+      }),
+    })
+    const render = capabilities.method(rendered, 'Render')
+    Expect(TR.Call(render).getJSValue()).toBe('Before')
+    TR.Data.Update(source, { Title: TR.Value('After') })
+    await TR.Data.Settle(schema)
+    Expect(TR.Call(render).getJSValue()).toBe('After')
+    Expect(schema.query({ entity: 'Book', filters: [] })[0]).toBe(book)
+    Expect(() => capabilities.attach(forwarded, {})).toThrow(UnexpectedBehaviorError)
+    Expect(() => capabilities.method(forwarded, 'Render')).toThrow(UnexpectedBehaviorError)
+  })
+
   Test('rebinds selected adapted witnesses to a new live Self result without reading or changing the donor', () => {
     const original = TR.Cell(TR.Value('Original'))
     const replacement = TR.Cell(TR.Value('Replacement'))
@@ -134,6 +173,8 @@ Describe('Capability witnesses', () => {
     })
     const carrier = capabilities.attach(source, { display })
     const projected = capabilities.reproject(carrier, { text: 'display' })
+    Expect(capabilities.concreteSource(carrier)).toBe(source)
+    Expect(capabilities.concreteSource(projected)).toBe(source)
     const held = capabilities.method(projected, 'text')
     Expect(carrier.evaluate()).toBe(carrier)
     Expect(projected.evaluate()).toBe(projected)

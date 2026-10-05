@@ -30,8 +30,8 @@ Describe('compiler: generic LazyList source', () => {
   Test('binds inline row names to specialized Item and public Occurrence inputs', async () => {
     const compiled = await Compiler.compileCode(declarations.replace('SLOT', '@item Row, Position -> Row'))
     const code = compiled.code.replace(/\s+/g, ' ')
-    Expect(code).toContain('_Scope["Row"] = args["Item"]')
-    Expect(code).toContain('_Scope["Position"] = args["Occurrence"]')
+    Expect(code).toContain('_Scope["Row"] = TR.Capability.concreteSource(args["Item"])')
+    Expect(code).toContain('_Scope["Position"] = TR.Capability.concreteSource(args["Occurrence"])')
     Expect(code).toContain('TR.MountRendered(')
     Expect(code).toContain('TR.Capability.method(')
   })
