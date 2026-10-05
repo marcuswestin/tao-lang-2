@@ -427,8 +427,8 @@ Describe('test runner suite registry', () => {
         argsOf(byName, suite).find(argument => argument.startsWith('--timeout='))?.slice('--timeout='.length),
       )
 
-    Expect(argsOf(byName, 'language/validator')).toContain('--concurrent')
-    Expect(timeoutOf('language/validator')).toBe(TestRunner.MAX_TEST_DEADLINE_MS)
+    Expect(argsOf(byName, 'ides/ide-extension')).toContain('--concurrent')
+    Expect(timeoutOf('ides/ide-extension')).toBe(TestRunner.MAX_TEST_DEADLINE_MS)
     // A suite whose tests run one at a time keeps the budget, which is what catches a regression.
     Expect(argsOf(byName, 'shared')).not.toContain('--concurrent')
     Expect(timeoutOf('shared')).toBeLessThanOrEqual(TestRunner.MAX_TEST_DEADLINE_MS)
@@ -472,7 +472,7 @@ Describe('test runner suite registry', () => {
     )
   })
 
-  // `validator` is tuned `--concurrent` (like `dev`) and stays shardable; `shared` is neither. A
+  // `ide-extension` is tuned `--concurrent` and stays shardable; `shared` is neither. A
   // `--concurrent` suite's per-file ledger sums are inflated by however many other tests in the file
   // finished after the one being measured (see the `--concurrent` timeout test above), not by real
   // work, so packing by them would weigh a file wrong in exactly the suites this catches.
@@ -519,7 +519,7 @@ Describe('test runner suite registry', () => {
           samples: 1,
           source: 'wall' as const,
         },
-        'language/validator': {
+        'ides/ide-extension': {
           emaMs: 8_600,
           lastMs: 8_600,
           lastRunAt: '2026-01-01T00:00:00.000Z',
@@ -531,10 +531,10 @@ Describe('test runner suite registry', () => {
     }
 
     const concurrentPlan = TestNodes.build({
-      ledger: skewedLedgerFor('language/validator'),
-      selected: [{ buildProcess, files, name: 'language/validator' }],
+      ledger: skewedLedgerFor('ides/ide-extension'),
+      selected: [{ buildProcess, files, name: 'ides/ide-extension' }],
       timings,
-    }).plans.find(plan => plan.suite === 'language/validator')
+    }).plans.find(plan => plan.suite === 'ides/ide-extension')
     const serialPlan = TestNodes.build({
       ledger: skewedLedgerFor('shared'),
       selected: [{ buildProcess, files, name: 'shared' }],
