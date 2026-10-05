@@ -4,6 +4,7 @@ import { Assert } from '@shared'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 import { actionBlockInterruptsAsk, actionBlockRequiresAsync } from './action-control-flow'
+import { compileValueForType } from './capability-projection'
 import { compileReactiveArgument } from './reactive-parameters'
 import { emitSlotBody } from './renderer-slot-codegen'
 import { compileStructuralUiRender } from './structural-ui-render-codegen'
@@ -49,6 +50,7 @@ export const InvocationsCompiler = {
     const view = invocation.view
     Assert.defined(view, 'validated render targets a view declaration', { render: render.view?.$refText })
     Assert(invocation.diagnostics.length === 0, 'validated render invocation has no binding diagnostics')
+    Assert(!invocation.genericDiagnostics?.length, 'validated generic render has one bounded specialization')
     Assert(invocation.eventDiagnostics.length === 0, 'validated render events have no binding diagnostics')
 
     const renderArguments = Compile.RenderArguments(invocation)
@@ -106,7 +108,7 @@ export const InvocationsCompiler = {
   /** RenderArguments compiles render invocation arguments into JSX props. */
   RenderArguments(invocation: ASTUtils.ResolvedRenderInvocation): Compiled {
     return gen`
-      ${gen.join(invocation.pairs, Compile.InvocationArgument, { separator: '' })}
+      ${gen.join(invocation.pairs, pair => Compile.InvocationArgument(pair, invocation), { separator: '' })}
       ${gen.join(invocation.eventPairs, Compile.EventHandlerArgument, { separator: '' })}
       ${invocation.implicitChange ? Compile.ImplicitChangeArgument(invocation.implicitChange) : ''}
     `
@@ -160,8 +162,11 @@ export const InvocationsCompiler = {
   },
 
   /** InvocationArgument compiles one render invocation argument into a JSX prop. */
-  InvocationArgument(pair: ASTUtils.RenderInvocationPair): Compiled {
-    let value = Compile.Argument(pair.argument)
+  InvocationArgument(pair: ASTUtils.RenderInvocationPair, invocation?: ASTUtils.ResolvedRenderInvocation): Compiled {
+    const source = Type.genericRoleConstructor(pair.argument)?.value ?? pair.argument.value
+    let value = compileReactiveArgument(source)
+    const expected = invocation?.transportTypes?.get(pair.parameter) ?? Type.ofParameter(pair.parameter)
+    value = compileValueForType(value, Type.ofExpression(source), expected)
     const render = pair.argument.$container?.$container
     if (pair.parameter.mutable && Type.parameterName(pair.parameter) === 'Value' && AST.isRender(render)) {
       const invocation = ASTUtils.resolveRenderInvocation(render)
@@ -173,7 +178,7 @@ export const InvocationsCompiler = {
         ? Compile.Argument(argument.argument)
         : undefined
       if (change) {
-        value = gen`TR.Mapped(() => ${Compile.Expression(pair.argument.value)}, ${change})`
+        value = gen`TR.Mapped(() => ${Compile.Expression(source)}, ${change})`
       }
     }
     return gen` ${gen.Name({ name: Type.parameterName(pair.parameter) })}={${value}}`
