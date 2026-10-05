@@ -37,9 +37,9 @@ export function BookProvider(): TaoDataProvider {
         Title: `Book ${index + 1}`,
         Note: '',
       })))
-      const bookEntity = context.schema.entities.Book
+      const bookEntity = context.schema.entities['Book']
       if (!bookEntity) {
-        TR.Errors.failInput("BookStore requires a 'Book' entity.")
+        return TR.Errors.failInput("BookStore requires a 'Book' entity.")
       }
       const supportedFields = new Set(['Title', 'Note', 'Author', 'LoanedOut'])
       for (const field of Object.keys(bookEntity.fields)) {
@@ -85,7 +85,7 @@ export function BookProvider(): TaoDataProvider {
           if (field !== 'Author' || value === null || typeof value !== 'object') {
             TR.Errors.failInput(`BookStore does not support the '${field}' query filter.`)
           }
-          const candidate = (value as Readonly<Record<string, unknown>>).Id
+          const candidate = (value as Readonly<Record<string, unknown>>)['Id']
           if (typeof candidate !== 'string') {
             return TR.Errors.failInput('BookStore author filters require a text author ID.')
           }
@@ -102,7 +102,7 @@ export function BookProvider(): TaoDataProvider {
         return { ...(authorID === undefined ? {} : { authorID }), identity, maximum }
       }
 
-      const projectBook = (book: BookRecord): Record<string, unknown> => ({
+      const projectBook = (book: BookRecord) => ({
         Id: book.ID,
         Title: book.Title,
         Note: book.Note,
@@ -161,7 +161,7 @@ export function BookProvider(): TaoDataProvider {
               }
 
               const stored = TR.Data.NativeSnapshots.decode(ownedSnapshot, context.schema)
-              const rows = [...stored.rows.Book!]
+              const rows = [...stored.rows['Book']!]
               for (const book of result.value.Books) {
                 const projected = projectBook(book)
                 const index = rows.findIndex(row => row.Id === projected.Id)
@@ -206,16 +206,16 @@ export function BookProvider(): TaoDataProvider {
             writeContext?.previousSnapshot ?? ownedSnapshot,
             context.schema,
           )
-          const nextIDs = new Set(next.rows.Book!.map(row => row.Id))
-          if (previous.rows.Book!.some(row => !nextIDs.has(row.Id))) {
+          const nextIDs = new Set(next.rows['Book']!.map(row => row.Id))
+          if (previous.rows['Book']!.some(row => !nextIDs.has(row.Id))) {
             TR.Errors.failInput('BookStore does not support deleting books.')
           }
-          const records: BookInput[] = next.rows.Book!.map(row => ({
+          const records: BookInput[] = next.rows['Book']!.map(row => ({
             ID: row.Id,
-            Title: String(row.Title),
-            Note: String(row.Note),
-            ...(row.Author === null || row.Author === undefined ? {} : { AuthorID: String(row.Author) }),
-            LoanedOut: Boolean(row.LoanedOut),
+            Title: String(row['Title']),
+            Note: String(row['Note']),
+            ...(row['Author'] === null || row['Author'] === undefined ? {} : { AuthorID: String(row['Author']) }),
+            LoanedOut: Boolean(row['LoanedOut']),
           }))
           const result = backend.upsertBooks(records)
           if (!result.ok) {

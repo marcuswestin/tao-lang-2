@@ -8,8 +8,8 @@ app LibraryApp {
    id "com.tao.syntax2"
    name "Syntax2 Library"
    version "0.1.0"
-   Datasource (BookStore)
-   Design (LibraryDesign)
+   Datasource BookStore
+   Design LibraryDesign
    view Library
    guard {
       error Problem -> { "{ Problem.Message }" }
