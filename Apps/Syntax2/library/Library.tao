@@ -26,9 +26,7 @@ public
 type Title is text
 
 public
-type NewBook is {
-   Title
-}
+type NewBook is Book { Title }
 
 public
 data People / Person {

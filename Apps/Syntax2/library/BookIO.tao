@@ -1,5 +1,8 @@
 use Book, Books, People from ./Library
 
+public
+type InputFailure is one of InvalidInput
+
 // 1. Bounded server acquisition is supplied by this app's adapter.
 type BookProvider is datasource with {
    supports { Relations, FieldUpdates }

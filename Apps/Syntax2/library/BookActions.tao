@@ -1,0 +1,11 @@
+use InputFailure from ./BookIO
+use Book, NewBook from ./Library
+
+// Validation rejection is handled locally; storage failures retain the app boundary.
+public
+action Add(NewBook) {
+   if NewBook.Title is empty {
+      fail InvalidInput "Enter a title"
+   }
+   create Book with NewBook
+}
