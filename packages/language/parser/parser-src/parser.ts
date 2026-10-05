@@ -685,6 +685,7 @@ class NumericContinuationParser extends Langium.LangiumParser {
       cursor += 2
     }
     return this.lookahead(cursor).image === '{'
+      || (this.lookahead(cursor).tokenType.name === 'ID' && this.lookahead(cursor + 1).image === '{')
   }
 
   private continuationRule(name: string) {
@@ -748,6 +749,7 @@ class NumericContinuationParser extends Langium.LangiumParser {
           'NumericUnitConstructionInput',
           'WhenExpression',
           'FunctionCallExpression',
+          'MemberMethodCallExpression',
           'ActionExpression',
         ].includes(frame.name)
       ) && this.lookahead(cursor).image === '('
@@ -759,8 +761,16 @@ class NumericContinuationParser extends Langium.LangiumParser {
     if (
       entry >= 0
       && !this.frames.slice(entry + 1).some(frame =>
-        ['PrimaryExpression', 'WhenExpression', 'FunctionCallExpression', 'ActionExpression'].includes(frame.name)
-      ) && this.lookahead(cursor).image === '{'
+        [
+          'PrimaryExpression',
+          'WhenExpression',
+          'FunctionCallExpression',
+          'MemberMethodCallExpression',
+          'ActionExpression',
+        ]
+          .includes(frame.name)
+      ) && (this.lookahead(cursor).image === '{'
+        || (this.lookahead(cursor).tokenType.name === 'ID' && this.lookahead(cursor + 1).image === '{'))
     ) {
       return false
     }

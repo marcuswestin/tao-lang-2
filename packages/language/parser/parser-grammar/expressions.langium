@@ -118,11 +118,11 @@ DeclarationSlotUnaryExpression infers Expression:
 DeclarationSlotPostfixExpression infers Expression:
     DeclarationSlotPrimaryExpression
     ({infer PostfixMemberAccess.receiver=current} '.' member=ID
-      | {infer MethodCallExpression.callee=current} '(' argumentList=ArgumentList? ')')*;
+      ({infer MethodCallExpression.callee=current} '(' argumentList=ArgumentList? ')')?)*;
 
 DeclarationSlotPrimaryExpression infers Expression:
     CopyExpression | WhenExpression | NowExpression | ActionExpression | TypedConstructor | PrimitiveConfigurationConstructor
-    | ConfigurationConstructor | ListLiteral | MemberAccessExpression
+    | ConfigurationConstructor | ListLiteral | MemberMethodCallExpression | MemberAccessExpression
     | InterpolatedString | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral
     | FunctionCallExpression | RefinementExpression | ValueReference;
 
@@ -165,10 +165,10 @@ UnaryExpression infers Expression:
 PostfixExpression infers Expression:
     PrimaryExpression
     ({infer PostfixMemberAccess.receiver=current} '.' member=ID
-      | {infer MethodCallExpression.callee=current} '(' argumentList=ArgumentList? ')')*;
+      ({infer MethodCallExpression.callee=current} '(' argumentList=ArgumentList? ')')?)*;
 
 PrimaryExpression infers Expression:
-    '(' Expression ')' | CopyExpression | WhenExpression | NowExpression | ActionExpression | TypedConstructor | PrimitiveConfigurationConstructor | ConfigurationConstructor | InferredConfigurationConstructor | ListLiteral | MemberAccessExpression | InterpolatedString | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral | FunctionCallExpression | RefinementExpression | ValueReference;
+    '(' Expression ')' | CopyExpression | WhenExpression | NowExpression | ActionExpression | TypedConstructor | PrimitiveConfigurationConstructor | ConfigurationConstructor | InferredConfigurationConstructor | ListLiteral | MemberMethodCallExpression | MemberAccessExpression | InterpolatedString | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral | FunctionCallExpression | RefinementExpression | ValueReference;
 
 CopyExpression:
     'copy' value=PostfixExpression ('as' type=TypeReference)?;
@@ -177,6 +177,10 @@ CopyExpression:
 // patching an existing configured value.
 ConfigurationConstructor:
     type=[ConstructorDeclaration:ID] ('.' members+=ID)* (block=ConfigurationBlock | value=DeclaredConstructorValue);
+
+// A typed block is a directive boundary without admitting adjacent scalar values.
+ConfigurationBlockConstructor infers ConfigurationConstructor:
+    type=[ConstructorDeclaration:ID] block=ConfigurationBlock;
 
 // `with` is the one refinement operation. Primitive constructors accept the bare-block
 // construction sugar as well as its explicit spelling.
@@ -208,7 +212,8 @@ ConfigurationDirective infers ConfigurationEntry:
     | requirement=PackageRequires
     | appGuard=AppGuardStatement
     | key=USE_IMPORT_PATH block=ConfigurationBlock
-    | name=MetadataName ('.' nameMembers+=ID)* block=ConfigurationBlock;
+    | name=MetadataName ('.' nameMembers+=ID)* block=ConfigurationBlock
+    | name=MetadataName ('.' nameMembers+=ID)* value=ConfigurationBlockConstructor;
 
 ConfigurationValueEntry infers ConfigurationEntry:
     label=ID ':' expression=Expression
@@ -315,12 +320,12 @@ WhenSubjectUnaryExpression infers Expression:
 WhenSubjectPostfixExpression infers Expression:
     WhenSubjectPrimaryExpression
     ({infer PostfixMemberAccess.receiver=current} '.' member=ID
-      | {infer MethodCallExpression.callee=current} '(' argumentList=ArgumentList? ')')*;
+      ({infer MethodCallExpression.callee=current} '(' argumentList=ArgumentList? ')')?)*;
 
 // Every brace-initial primary is left out, which is what lets the block form be recognized by its
 // opening brace alone.
 WhenSubjectPrimaryExpression infers Expression:
-    '(' Expression ')' | WhenExpression | NowExpression | ListLiteral | MemberAccessExpression
+    '(' Expression ')' | WhenExpression | NowExpression | ListLiteral | MemberMethodCallExpression | MemberAccessExpression
     | InterpolatedString | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral
     | FunctionCallExpression | ValueReference;
 
@@ -374,6 +379,9 @@ ItemProperty:
 // or default may pass; the validator rejects a shade on any other value.
 MemberAccessExpression:
     target=[ValueReferenceTarget:ID] '.' (members+=ID ('.' members+=ID)* | shade=NUMBER);
+
+MemberMethodCallExpression infers MethodCallExpression:
+    callee=MemberAccessExpression '(' argumentList=ArgumentList? ')';
 
 // A call invokes a pure function or named copy; both share this one shape (`Name(...)`), so a
 // separate phrase-call rule would be structurally ambiguous with this one at parse time — nothing

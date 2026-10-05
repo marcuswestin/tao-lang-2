@@ -171,6 +171,63 @@ Describe('parser: associated methods', () => {
     Expect(nestedReturn.target.ref).not.toBe(AST.parametersOf(outer)[0])
   })
 
+  Test('keeps persisted state modifiers separate from declared numeric constructors', async () => {
+    const result = await testParseCode(`
+      type PaneWidth is number
+      app Workspace {
+        id "com.tao.test.workspace"
+        state Width is PaneWidth = PaneWidth 320 (persist)
+      }
+    `)
+    const workspace = result.entry.ast.statements.find(AST.isAppDeclaration)
+    Expect.Is(workspace, AST.isAppDeclaration)
+    const state = workspace.block?.statements.find(AST.isStateDeclaration)
+    Expect.Is(state, AST.isStateDeclaration)
+    Expect(state.persist).toBe(true)
+    Expect.Is(state.value, AST.isConfigurationConstructor)
+    Expect(state.value.type.ref).toBe(namedType(result.entry.ast, 'PaneWidth'))
+    Expect.Is(state.value.value, AST.isNumberLiteral)
+    Expect(state.value.value.value).toBe(320)
+    Expect([...AST.streamAllContents(state)].filter(AST.isMethodCallExpression)).toEqual([])
+  })
+
+  Test('starts a typed navigation block after scalar configuration values without a comma', async () => {
+    const result = await testParseCode(`
+      type StackNav is nav with { Initial scene }
+      type ReusableApp is app with { name text is "Reusable" }
+      let Product = ReusableApp {
+        id "com.tao.test.product",
+        version "1.0.0"
+        Navigator StackNav { Initial Home }
+      }
+      let Variant = Product with {
+        id "com.tao.test.variant"
+        Navigator StackNav { Initial Home }
+      }
+      scene Home() { Title "Home" }
+    `)
+    const product = result.entry.ast.statements.find(AST.isAliasDeclaration)
+    Expect.Is(product, AST.isAliasDeclaration)
+    Expect.Is(product.value, AST.isConfigurationConstructor)
+    const entries = product.value.block?.entries
+    Expect(entries?.map(entry => entry.name)).toEqual(['id', 'version', 'Navigator'])
+    const navigator = entries?.[2]
+    Expect.Is(navigator, AST.isConfigurationEntry)
+    Expect.Is(navigator.value, AST.isConfigurationConstructor)
+    Expect(navigator.value.type.$refText).toBe('StackNav')
+    Expect(navigator.value.type.ref?.name).toBe('StackNav')
+    Expect(navigator.value.block?.entries[0]?.name).toBe('Initial')
+    const variant = result.entry.ast.statements.find(statement =>
+      AST.isAliasDeclaration(statement) && statement.name === 'Variant'
+    )
+    Expect.Is(variant, AST.isAliasDeclaration)
+    Expect.Is(variant.value, AST.isRefinementExpression)
+    Expect(variant.value.patchBlock.entries.map(entry => entry.name)).toEqual(['id', 'Navigator'])
+    const variantNavigator = variant.value.patchBlock.entries[1]?.value
+    Expect.Is(variantNavigator, AST.isConfigurationConstructor)
+    Expect(variantNavigator.type.$refText).toBe('StackNav')
+  })
+
   Test('keeps contextual receiver values out of ordinary functions and parameter defaults', async () => {
     const result = await parseCodeWithErrors(`
       type Token is text with {
