@@ -27,6 +27,15 @@ export const AliasesCompiler = {
         gen.Name({ name: bridgeBindingName(alias.value) })
       }))`
     }
+    if (AST.isActionBlock(alias.$container)) {
+      const value = AST.isConfiguredValue(alias.value)
+        ? Compile.ConfiguredValue(alias.value)
+        : Compile.Expression(alias.value)
+      return withAuthContextFactory(
+        alias,
+        gen`${gen.scopeName(alias)} = TR.Readonly(TR.Alias(() => ${value}).evaluate())`,
+      )
+    }
     if (AST.isExpression(alias.value)) {
       const selected = ASTUtils.resolveActionTarget(alias.value)
       if (selected.kind === 'named' && selected.associated) {
