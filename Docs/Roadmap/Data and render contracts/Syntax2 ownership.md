@@ -6,6 +6,21 @@ language decisions. The first render foundation must land before A1/D1 dispatch.
 starts from fetched main containing this document and that implementation, records its exact base,
 and works in a separate feature branch/worktree. Later transfers are explicit amendments.
 
+## Review cadence
+
+The Developer selected substantially less frequent independent review on 2026-10-05. Managers
+implement substantial coherent batches, making multiple sensible commits before requesting one
+review of the accumulated range. Focused checks and manager inspection continue while writing;
+individual commits, worker returns and small integration handoffs do not require a dedicated
+reviewer. The coordinator may integrate inspected commits and continue dependent work within the
+existing ownership grants.
+
+Reserve independent review for substantial completed milestones and the final integrated change
+before landing. Request an earlier targeted review only for a concrete unresolved correctness risk.
+Finish an already running review without duplicating it. This cadence supersedes earlier requests
+for independent review of each bounded cut; historical review receipts and ownership boundaries
+remain valid.
+
 ## First concurrent wave
 
 ### Current slot validation and formatting release

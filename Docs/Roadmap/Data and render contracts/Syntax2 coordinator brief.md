@@ -43,10 +43,13 @@ stopping point and return contract. Link the shared plan for process/semantics. 
 transfers explicitly; a separate worktree prevents file clobbering but does not remove merge hazards.
 Managers may use their own sub-agents only within those ownership boundaries.
 
-Review each returned diff and its evidence before dependent work starts. Keep shared source
-generation and cross-workstream exports with the coordinator. Integrate complete slices into main
-in dependency order; use one coherent coordinator-owned change when a shared interface cannot be
-split safely. Reserve independent cross-seam review before calling the integrated app complete.
+Inspect returned diffs and focused evidence before dependent work starts. Follow the
+[review cadence](<Syntax2 ownership.md#review-cadence>): managers make multiple commits across
+substantial implementation batches before one independent review of the accumulated range. Keep
+shared source generation and cross-workstream exports with the coordinator. Integrate complete
+slices into main in dependency order; use one coherent coordinator-owned change when a shared
+interface cannot be split safely. Reserve independent cross-seam review before calling the
+integrated app complete.
 
 ## Acceptance and handoff
 
