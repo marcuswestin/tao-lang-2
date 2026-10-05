@@ -1,8 +1,8 @@
 import { EmittedModuleCache } from '@compiler/compiler'
 import { Workspace } from '@compiler/workspace'
 import Runtime from '@expo-host'
-import { ProjectTooling, type ProjectToolingWatch } from '@project-tooling'
-import { Assert, Errors, FS, HCI, Switch } from '@shared'
+import { ProjectTooling, type ProjectToolingResult, type ProjectToolingWatch } from '@project-tooling'
+import { Assert, Errors, FS, HCI, Platform, Switch } from '@shared'
 import SourceActions from '@source-actions'
 import type {
   StudioParameterSchema,
@@ -30,23 +30,48 @@ export async function openStudioPreviewSession(
 ): Promise<StudioPreviewSession> {
   let session: StudioProjectSession | undefined
   let previewWorkspace: Workspace | undefined
-  let previewWorkspaceFiles: string | undefined
   const emittedModuleCache = new EmittedModuleCache()
   const sourceChanges = new Map<string, { version: string; epoch: number }>()
   let toolingWatch: ProjectToolingWatch | undefined
+  let toolingAcquisitions = 0
+  let consumedToolingRevision = 0
+  let deferredToolingResult: ProjectToolingResult | undefined
+  const profileEnabled = Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_PROFILE'] === 'true'
+  const profileNow = () => profileEnabled ? performance.now() : 0
+  function compileToolingChange(result: ProjectToolingResult): void {
+    if (result.revision <= consumedToolingRevision) {
+      return
+    }
+    void session?.compileInitial().catch(error =>
+      HCI.logProcessError('studio-project-tooling', Errors.formatForLog(error))
+    )
+  }
   session = await StudioProjectSession.open({
     ...options,
     async compile(request) {
       Assert.defined(session, 'the Tao Studio project session to exist before its first compile')
-      const tooling = await ProjectTooling.refresh(request.project, {
-        hostModulesRoot: FS.resolvePath('node_modules', options.previewRuntimeRoot),
-      })
+      Assert.defined(toolingWatch, 'the project tooling watch exists before preview compilation')
+      const startedAt = profileNow()
+      toolingAcquisitions += 1
+      let tooling: ProjectToolingResult
+      try {
+        tooling = await toolingWatch.requestRefresh()
+        consumedToolingRevision = tooling.revision
+      } finally {
+        toolingAcquisitions -= 1
+        if (toolingAcquisitions === 0 && deferredToolingResult !== undefined) {
+          const deferred = deferredToolingResult
+          deferredToolingResult = undefined
+          compileToolingChange(deferred)
+        }
+      }
       if (tooling.status !== 'fresh') {
         Errors.throwUserInput(
           tooling.diagnostics.map(diagnostic => diagnostic.message).join('\n')
             || 'Project tooling is stale; keeping the last working preview.',
         )
       }
+      const toolingDoneAt = profileNow()
       const feedSources = session.feedSourceOverrides()
       const sourceOverrides = feedSources === undefined ? undefined : Object.freeze({ ...feedSources })
       const files = await session.files()
@@ -66,15 +91,9 @@ export async function openStudioPreviewSession(
           sourceChanges.delete(path)
         }
       }
-      if (sourceOverrides === undefined) {
-        // A workspace indexes the project's `@` packages when it opens, so a Tao file added, removed,
-        // or renamed (a new package above all) needs a fresh one. Edits to known files reuse it.
-        const filePaths = files.map(file => file.path).toSorted().join('\n')
-        if (previewWorkspace === undefined || filePaths !== previewWorkspaceFiles) {
-          previewWorkspace = await Workspace.open(request.project)
-          previewWorkspaceFiles = filePaths
-        }
-      }
+      const sourcesDoneAt = profileNow()
+      previewWorkspace ??= await Workspace.open(request.project)
+      const workspaceDoneAt = profileNow()
       const generated = await Runtime.generateApp(session.entryPath, {
         appName: request.appName,
         preview: {
@@ -90,6 +109,22 @@ export async function openStudioPreviewSession(
         previewWorkspace,
         emittedModuleCache,
       })
+      if (profileEnabled) {
+        const generatedAt = profileNow()
+        HCI.logProcessInfo(
+          'studio',
+          JSON.stringify({
+            type: 'studio-preview-pipeline-profile',
+            revision: request.compileRevision,
+            toolingRevision: tooling.revision,
+            toolingMs: toolingDoneAt - startedAt,
+            sourceSnapshotMs: sourcesDoneAt - toolingDoneAt,
+            workspaceOpenMs: workspaceDoneAt - sourcesDoneAt,
+            generateAppMs: generatedAt - workspaceDoneAt,
+            totalMs: generatedAt - startedAt,
+          }),
+        )
+      }
       if (generated.emittedModuleCache !== undefined) {
         const { hits, misses, files: emitted } = generated.emittedModuleCache
         HCI.logProcessInfo(
@@ -118,9 +153,11 @@ export async function openStudioPreviewSession(
       if (!watchReady || result.status !== 'fresh' || result.changedOutputPaths.length === 0) {
         return
       }
-      void session?.compileInitial().catch(error =>
-        HCI.logProcessError('studio-project-tooling', Errors.formatForLog(error))
-      )
+      if (toolingAcquisitions > 0) {
+        deferredToolingResult = result
+        return
+      }
+      compileToolingChange(result)
     },
   })
   watchReady = true

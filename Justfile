@@ -644,6 +644,11 @@ simplify-audit *ARGS:
 bench iterations="10":
     "{{ BUN }}" run packages/cli/dev-cli/dev-cli-src/performance/language-performance.ts "{{ iterations }}"
 
+# Protect language and real Studio preview timing on a quiet machine; standalone, outside parallel verification
+[group('Host proofs')]
+performance-check:
+    ./dev performance-check
+
 # Measure machine-wide lane admission against DEVENV-094's bar; agents use ./agent unsandboxed admission-experiment on a quiet machine. --provision <count> makes and removes its own checkouts
 [group('Report')]
 admission-experiment *ARGS:

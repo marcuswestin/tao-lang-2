@@ -115,11 +115,48 @@ export namespace Packages {
         )
           .then(paths => paths.filter((path): path is string => path !== undefined))
       },
-      async projectRootFilePaths(fromFilePath) {
+      async validationBoundary(fromFilePath) {
+        const ownerRoot = sourceRootForPath(context, fromFilePath)
+        const namespace = containingPath(fromFilePath, context.index)
+        const inStdlib = FS.pathIsWithin(fromFilePath, context.stdlibRoot)
+        const projectRoot = inStdlib ? undefined : projectRootForPath(context.index, fromFilePath)
+        const marker = projectRoot && FS.resolvePath('.tao', projectRoot)
+        try {
+          // Use the resolver's indexed owners. Do not climb outside them looking for markers.
+          const physicalFile = context.sourcePaths?.has(fromFilePath)
+            ? physicalPath(context, fromFilePath)
+            : await FS.realPath(fromFilePath)
+          const physicalOwner = ownerRoot && await FS.realPath(ownerRoot)
+          const physicalModule = namespace && await FS.realPath(namespace.path)
+          const physicalMarker = marker && await FS.isDirectory(marker) ? await FS.realPath(marker) : undefined
+          if (projectRoot && !physicalMarker) {
+            return undefined
+          }
+          return JSON.stringify({
+            ownerRoot,
+            projectRoot,
+            namespace: namespace
+              && { name: namespace.name, path: namespace.path, duplicatePaths: namespace.duplicatePaths },
+            physicalFile,
+            physicalOwner,
+            physicalModule,
+            physicalMarker,
+          })
+        } catch {
+          return undefined
+        }
+      },
+      async projectRootFilePaths(fromFilePath, options) {
         // Each parser load rebuilds requirement bindings from current source, including removals.
-        context.requirementAliases.clear()
-        const root = await containingProjectRoot(FS.dirname(fromFilePath))
-        if (!root) {
+        if (options?.clearRequirementAliases ?? true) {
+          context.requirementAliases.clear()
+        }
+        const root = options?.clearRequirementAliases === false
+          ? sourceRootForPath(context, fromFilePath)
+          : await containingProjectRoot(FS.dirname(fromFilePath))
+        if (
+          !root || options?.clearRequirementAliases === false && !await FS.isDirectory(FS.resolvePath('.tao', root))
+        ) {
           return []
         }
         return (await FS.listDir(root)).filter(isImportableTaoSourceName)

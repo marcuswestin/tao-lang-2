@@ -13,11 +13,14 @@ export const requirementOwnershipMessages = {
 
 /** requirementProjectGraph shares the linked project graph across validators in one build. */
 export function requirementProjectGraph(ctx: ValidationContext): ProjectGraph {
-  return ctx.memo('package-validator.projectGraph', () =>
-    Packages.createResolver(ctx.packagesContext).projectGraph({
-      fromFilePath: ctx.entryFilePath,
-      workspaceFiles: ctx.workspaceFiles,
-    }))
+  return ctx.memo(
+    'package-validator.projectGraph',
+    ctx.requirementGraph ?? (() =>
+      Packages.createResolver(ctx.packagesContext).projectGraph({
+        fromFilePath: ctx.entryFilePath,
+        workspaceFiles: ctx.workspaceFiles,
+      })),
+  )
 }
 
 export function validateAppRequirementOwnership(app: AST.AppValueDeclaration, ctx: ValidationContext): void {

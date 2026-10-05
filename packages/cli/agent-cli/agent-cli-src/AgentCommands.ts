@@ -47,6 +47,7 @@ export const JUST_COMMANDS = [
   // second spelling.
   'open-pr',
   'parser-gen',
+  'performance-check',
   'qa',
   'qa-capture',
   'reclaim',

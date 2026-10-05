@@ -77,7 +77,12 @@ type ImportingStatement = AST.UseStatement | AST.UsePackageStatement
 /** PackageResolver resolves declarations and files reachable through Tao use statements. */
 export type PackageResolver = {
   intrinsicFilePaths(): Promise<readonly string[]>
-  projectRootFilePaths(fromFilePath: string): Promise<readonly string[]>
+  /** Current resolver ownership and physical boundaries; unavailable metadata cannot authorize reuse. */
+  validationBoundary(fromFilePath: string): Promise<string | undefined>
+  projectRootFilePaths(
+    fromFilePath: string,
+    options?: { clearRequirementAliases?: boolean },
+  ): Promise<readonly string[]>
   requirementFilePaths(requirement: AST.PackageRequires, fromFilePath: string): Promise<readonly string[]>
   collectTargetDeclarations(
     useStatement: ImportingStatement,
@@ -103,6 +108,7 @@ export type PackageResolver = {
  */
 export const emptyPackageResolver: PackageResolver = {
   intrinsicFilePaths: async () => [],
+  validationBoundary: async () => 'standalone',
   projectRootFilePaths: async () => [],
   requirementFilePaths: async () => [],
   collectTargetDeclarations: () => [],

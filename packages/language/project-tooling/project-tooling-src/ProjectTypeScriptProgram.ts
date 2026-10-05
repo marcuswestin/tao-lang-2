@@ -1,4 +1,4 @@
-import { FS, Switch, Time } from '@shared'
+import { FS, HCI, Platform, Switch, Time } from '@shared'
 import * as ts from 'typescript'
 
 type Observation = {
@@ -46,8 +46,22 @@ export class ProjectTypeScriptProgramSession {
       ts.sys.newLine,
     ])
     const last = this.last
-    if (last !== undefined && last.key === key && last.valid && observationsMatch(last.observations)) {
+    const profile = Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_PROFILE'] === 'true'
+    const rejection = last === undefined
+      ? { reason: 'no-program' }
+      : last.key !== key
+      ? { reason: 'program-inputs-changed' }
+      : !last.valid
+      ? { reason: 'unstable-observations' }
+      : observationsMismatch(last.observations)
+    if (last !== undefined && rejection === undefined) {
       return { program: last.program, cacheHit: true, programAuditMs: Time.nowMs() - auditAt }
+    }
+    if (profile) {
+      HCI.logProcessInfo(
+        'project-tooling',
+        JSON.stringify({ type: 'studio-native-program-profile', root, ...rejection }),
+      )
     }
 
     const programAuditMs = Time.nowMs() - auditAt
@@ -101,7 +115,9 @@ export class ProjectTypeScriptProgramSession {
   }
 }
 
-function observationsMatch(observations: ReadonlyMap<string, Observation>): boolean {
+function observationsMismatch(
+  observations: ReadonlyMap<string, Observation>,
+): { reason: string; kind?: Observation['kind']; path?: string } | undefined {
   try {
     for (const observation of observations.values()) {
       const [path, extensions, include, exclude, depth] = observation.args as [
@@ -120,13 +136,13 @@ function observationsMatch(observations: ReadonlyMap<string, Observation>): bool
         realpath: () => ts.sys.realpath?.(path),
       })
       if (!sameValue(observation.value, current)) {
-        return false
+        return { reason: 'observation-changed', kind: observation.kind, path }
       }
     }
-    return true
+    return undefined
   } catch {
     // Inaccessible or transient filesystem results cannot establish equivalence.
-    return false
+    return { reason: 'observation-unavailable' }
   }
 }
 

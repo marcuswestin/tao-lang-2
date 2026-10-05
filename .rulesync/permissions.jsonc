@@ -108,7 +108,7 @@
     // the same entry outside the sandbox; this reaches it mid-session.
     "setup",
     "land", "finalize", "merge-main", "merge-recover", "landed", "capabilities", "open-pr", "fix-agent-config", "verify-full",
-    "test-host", "qa-capture", "studio-smoke", "studio-proof-real-app", "admission-experiment",
+    "test-host", "qa-capture", "studio-smoke", "studio-proof-real-app", "admission-experiment", "performance-check",
     "native-module-check", "reclaim --execute",
     "prepare-release studio", "prepare-release ide-extension", "ide-extension-acceptance",
     "app-dev", "dev-loop", "test-watch", "standalone-cli-acceptance", "studio", "studio-native", "studio-ps", "studio-stop", "studio-canary", "studio-manual-checks",
