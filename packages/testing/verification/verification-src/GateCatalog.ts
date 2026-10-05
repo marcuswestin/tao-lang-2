@@ -129,6 +129,8 @@ const DEFAULT_METADATA: GateMetadata = { cost: 1, reads: ['gen-app', 'gen-ide', 
 
 /** SuiteTuning is what one test suite needs beyond the defaults every suite gets. */
 export type SuiteTuning = {
+  /** Stable file cohorts run separately without adding an ordering barrier or widening selection. */
+  filePartitions?: readonly { name: string; files: readonly string[] }[]
   /** Repository-relative, measured small core files; execute once before dependent app suites. */
   preflightFiles?: readonly string[]
   /** Wait for the core files present in this request; absent core selections add no dependency. */
@@ -278,6 +280,19 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
       'packages/language/parser/parser-tests/syntax-parse.test.ts',
     ],
     reads: ['gen-parser', 'tao', 'ts'],
+  }],
+  ['language/project-tooling', {
+    filePartitions: [{
+      name: 'native',
+      files: [
+        'packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingInventory.test.ts',
+        'packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingModules.test.ts',
+        'packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingsService.test.ts',
+        'packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingsWatch.integration.test.ts',
+        'packages/language/project-tooling/project-tooling-tests/ProjectNativeRefreshReceipt.test.ts',
+        'packages/language/project-tooling/project-tooling-tests/ProjectNativeTypeScript.test.ts',
+      ],
+    }],
   }],
   ['language/source-actions', { reads: ['gen-parser', 'tao', 'ts'] }],
 ])

@@ -44,6 +44,20 @@
     timing history. The full-verification recipe now forwards the scheduler's
     optional `--jobs` ceiling for controlled admission without changing its
     default, gate membership, assertions, timeout budgets or permission scope.
+  - The four-job comparison at `64239c933` finished failed after 546 seconds,
+    with no contention and peak load 15.1 on 18 CPUs. Compiler, source actions,
+    validator, runtime Jest and native smoke passed; the growing 17-file
+    project-tooling suite still reached its 300-second whole-node bound. Studio
+    passed 865 tests and exposed an outdated startup-receipt fixture assumption.
+    Producing a real post-startup contract change corrected that fixture; its
+    unchanged acquisition/revision/publication checks passed in the 12-test file.
+    This comparison isolates remaining test seams; it is not complete green proof
+    or a stable performance-tail measurement.
+  - Native project-tooling integration files now form an ordinary named cohort,
+    separate from the automatically packed remainder. Selection, parent-suite
+    reporting, existing core barriers and timeout budgets are preserved. Focused
+    runner, gate and failure-policy tests pass; a deliberate native core-barrier
+    mutation fails. The complete lane must still establish actual cohort bounds.
 - **Proposed change:** The requested file partition and initial scheduling adjustment are implemented.
   Keep this observation open until fresh-checkout complete-lane measurements establish how much
   end-to-end tail remains; a cached skip is not a repeat measurement.
