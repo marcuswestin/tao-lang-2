@@ -11,6 +11,8 @@ export const JUST_COMMANDS = [
   'board',
   'capabilities',
   'check',
+  // Like `pr-checks`, reads the public Actions API, so a before-and-after needs no credentials.
+  'ci-timings',
   'dead-exports',
   'delegation-report',
   'doctor',

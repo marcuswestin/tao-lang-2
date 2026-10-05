@@ -77,10 +77,11 @@ on its size.
 
 ## Working inside a busy machine
 
-- Before starting a costly local lane, compare machine contention with CI queue pressure using
-  [hosted verification](references/hosted-verification.md). Prefer CI when the machine is heavily
-  contended and CI has little or no contention, provided its gates cover the change. Reuse current
-  green PR evidence at merge time; do not repeat covered verification through local `land`.
+- GitHub CI is the default for final portable verification and hosted landing; local checks remain
+  useful for iteration, diagnosis, faster appropriate proof, and host-only acceptance. Read
+  [hosted verification](references/hosted-verification.md) for route selection, offline limits,
+  auto-merge readiness, and direct merging of a fully verified PR. Reuse current green PR evidence;
+  do not repeat covered verification through local `land`.
 - Never background a gate and then poll for its output in a sleep loop: run it in the foreground with
   a timeout, since the gate is no faster for being backgrounded. **Reporting while a lane runs**,
   below, is the one exception — a lane too long to wait out, with the Developer waiting on it.
@@ -97,9 +98,12 @@ on its size.
 
 ## Hosted verification
 
-Read [hosted verification](references/hosted-verification.md) for contention detection, CI coverage,
-readiness without local broad verification, and merging an already verified pull request. It owns
-the choice between `open-pr` / `merge-pr` and local `land`, including evidence and authorization.
+Read [hosted verification](references/hosted-verification.md) for CI-default routing, contention,
+CI coverage, offline limits, readiness, and merging an already verified pull request. It owns the
+choice between `open-pr` / `merge-pr` and local `land`, including evidence and authorization.
+
+A change meant to make CI faster carries its own `./agent ci-timings` before-and-after
+(`references/ci-speed.md`).
 
 ## Periodic performance proof
 

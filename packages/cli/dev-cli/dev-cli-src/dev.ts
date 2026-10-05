@@ -29,6 +29,7 @@ import { MyStatusCommand } from './doctor/MyStatusCommand'
 import { ReclaimCommand } from './doctor/ReclaimCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
 import { MergeRecovery } from './git/MergeRecovery'
+import { CiTimingsCommand } from './pr/CiTimingsCommand'
 import { MergePrCommand } from './pr/MergePrCommand'
 import { OpenPrCommand } from './pr/OpenPrCommand'
 import { PrChecksCommand } from './pr/PrChecksCommand'
@@ -854,7 +855,7 @@ await runWithCommands(commands => {
     )
     .option(
       '--auto-merge',
-      'Enable GitHub auto-merge after checks start; by default, refuse an already enabled pull request.',
+      'Enable GitHub auto-merge after checks start for authorized ready landing; omitted keeps it off and refuses an already enabled pull request.',
     )
     .option('--poll-interval-ms <ms>', 'How often to poll the checks while they run (default 60000).')
     .action(async (options: { autoMerge?: boolean; pollIntervalMs?: string } = {}) => {
@@ -894,6 +895,22 @@ await runWithCommands(commands => {
           intervalMs: parseOptionalPositiveInteger(options.intervalMs, '--interval-ms'),
           pr: parseOptionalPositiveInteger(options.pr, '--pr'),
           wait: options.wait === true,
+        })).exitCode
+      )
+    })
+
+  commands
+    .command('ci-timings')
+    .description(
+      "Compare two Verify runs step by step, median and slowest across partitions: by default this branch's newest run against main's newest green push.",
+    )
+    .option('--run <id>', "The after run; by default, the newest Verify run of this worktree's branch.")
+    .option('--compare <id>', 'The before run; by default, the newest green Verify push to main.')
+    .action(async (options: { compare?: string; run?: string } = {}) => {
+      await runExitCommand(async () =>
+        (await CiTimingsCommand.run({
+          compare: parseOptionalPositiveInteger(options.compare, '--compare'),
+          run: parseOptionalPositiveInteger(options.run, '--run'),
         })).exitCode
       )
     })

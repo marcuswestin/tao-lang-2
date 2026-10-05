@@ -94,9 +94,10 @@ For landing a finished slice during a longer task, or `/merge-progress`, read
 `references/merge-progress.md` before preparing the partial landing.
 
 Require a clean feature branch with its merge message reviewed; `verification-lanes` owns the
-landing command's mechanics, evidence, message format, and local-versus-hosted route. After the
-Developer authorizes landing this slice, use the route it selects; an already verified pull request
-goes through `merge-pr` when its proof covers the change. For the local route, run
+landing command's mechanics, evidence, message format, and CI-default route. After the Developer
+authorizes landing this slice, use that skill's route; merge an existing fully verified pull request
+directly with `merge-pr`. Personal `dev/<name>` branches keep their supported local `land` lifecycle.
+For the local route, run
 `./agent unsandboxed land`: it fetches and integrates current `main`, verifies, and pushes while holding
 one lock. Every integration must attempt to fetch `origin/main` first and use the fetched tip when
 available, never prefer stale local `main`. If preparation falls back to local `main` because fetching
@@ -106,16 +107,18 @@ Do not fetch and merge `main` beforehand merely to satisfy a stale precondition.
 landing reports a conflict, resolve it outside the lock; after any merge of `main` into a branch,
 skim what arrived: `references/after-merging-main.md`.
 
-The hosted route, `./agent unsandboxed open-pr`, opens the pull request with auto-merge off and follows
-its checks; once they fully pass on the current head, `./agent unsandboxed merge-pr` merges it without
-rerunning covered local landing gates (`verification-lanes` says when
-this route suffices). GitHub refuses a pull
+For a new hosted verification, use plain `open-pr` while host acceptance is pending or the slice is
+not ready to land; once landing is authorized and host acceptance is complete, prefer
+`./agent unsandboxed open-pr --auto-merge` and follow all checks through completion. An existing
+fully verified pull request goes directly through `merge-pr`, without reopening or rearming it
+(`verification-lanes` owns route details). GitHub refuses a pull
 request that conflicts with `main`, so bring `main` in with `./agent merge-main` and run `open-pr` again;
 the checks run on that push. After it merges, the remote `feat/<name>` is gone and `merged/<name>`
 holds its head; the local branch and worktree remain for the resource review below.
 
-A person's branch is `dev/<name>`. It lands through the same `./agent unsandboxed land` as
-`feat/<name>`, then the same name is created again from `main` (`references/personal-dev-branch.md`).
+A person's branch is `dev/<name>`. `open-pr` and `merge-pr` do not support this branch shape; it
+uses the local `./agent unsandboxed land` lifecycle and verification, then the same name is created
+again from `main` (`references/personal-dev-branch.md`).
 A `feat/<name>` branch lands once and is not recreated for more commits. Pushing is irreversible:
 confirm with the Developer before pushing anything the Developer did not ask to be pushed.
 
