@@ -47,8 +47,16 @@ An earlier prototype invocation `cf491870-35fe-4673-8d36-3264d466ddf6` remains f
 an overly strict new comparison confused the optional resource timestamp with the controller's
 kernel timestamp. The corrected check uses exact resource snapshots and the device's kernel
 holder. Its simulator `FA80D19D-0CC2-4B32-88C5-9ECD17BC8E10` and source projection
-`tao-managed-loop-project-7YhENw` remain quarantined pending scoped shutdown approval.
-No supported arbitrary private-iOS recovery route exists. Keep its failure receipt and fences.
+`tao-managed-loop-project-7YhENw` initially remained quarantined pending scoped shutdown approval.
+The Developer subsequently authorized that exact recovery and landing. Separate recovery
+`authorized-recovery/ios-a54f846e-c6b4-46c7-beac-9322611429b0/recovery.json` in the prototype
+invocation proves identity-fenced shutdown with the production command barrier and original
+`launchd_sim 20479 / 1791164697:613048` exit. Exact resource generations were checked at
+physical admission; the original receipt/journal and retained fences remain unchanged.
+The source projection is removed after kernel closure and project-owner disposal proof.
+The simulator's apps/data and diagnostic records remain intentionally preserved in Shutdown.
+No live task-owned simulator remains. No supported arbitrary private-iOS recovery route exists;
+this explicitly authorized one-off recovery does not upgrade the failed acceptance receipt.
 
 ## Accepted follow-up priorities — 2026-10-04
 
