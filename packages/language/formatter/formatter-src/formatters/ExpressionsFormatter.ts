@@ -14,7 +14,10 @@ export const ExpressionsFormatter = {
 
   /** ConfigurationConstructor formats a declaration-linked constructor and its value or block. */
   ConfigurationConstructor(f) {
-    f.noSpaceBefore('.')
+    // A leading role dot starts this expression; its parent owns the preceding argument gap.
+    if (!f.node.relative) {
+      f.noSpaceBefore('.')
+    }
     f.noSpaceAfter('.')
     f.oneSpaceBeforeProperty('block', 'value')
   },
