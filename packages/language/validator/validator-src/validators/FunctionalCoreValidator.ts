@@ -29,7 +29,7 @@ const messages = {
     "A bare `guard` sends its subject's exceptional cases to the read net, so its subject must be an entity or a query.",
   emptyGuardCases: 'A `guard` case block names at least one case; to send every case to the read net, drop the braces.',
   appGuardCase: (name: string) =>
-    `App guard handles only loading, missing, unauthorized, and error; '${name}' is not one of them.`,
+    `App guard handles only loading, none, unauthorized, and error; '${name}' is not one of them.`,
   retiredGuardDefault: '`guard default` moved into the app: write `guard { ... }` inside an app block.',
   conditionalBranch: '`when` branches must produce compatible value types.',
   pickTotal: '`pick` requires an otherwise branch unless every input is covered.',
@@ -492,7 +492,7 @@ function validateReadNetReach(statement: AST.GuardRenderStatement, ctx: Validati
 }
 
 /** The read net's cases: the exceptional ones, which are exactly those carrying no content. */
-const readNetCaseNames: ReadonlySet<string> = new Set(['loading', 'missing', 'unauthorized', 'error'])
+const readNetCaseNames: ReadonlySet<string> = new Set(['loading', 'none', 'unauthorized', 'error'])
 
 function readNetCases(category: SubjectCaseCategory): ReadonlySet<string> {
   return new Set([...allowedCases(category)].filter(caseName => readNetCaseNames.has(caseName)))
@@ -532,7 +532,12 @@ function subjectCaseCategory(subject: AST.Expression): SubjectCaseCategory {
     entity: () => 'entity',
     enum: () => 'enum',
     capability: () => 'unsupported',
-    union: () => 'unsupported',
+    union: type =>
+      type.members.length === 2
+        && type.members.some(member => member.kind === 'entity')
+        && type.members.some(member => member.kind === 'primitive' && member.primitive === 'none')
+        ? 'entity'
+        : 'unsupported',
   })
 }
 
@@ -540,7 +545,7 @@ function allowedCases(category: SubjectCaseCategory): ReadonlySet<string> {
   return Switch(category, {
     enum: () => new Set<string>(),
     boolean: () => new Set(['true', 'false']),
-    entity: () => new Set(['loading', 'missing', 'unauthorized', 'error']),
+    entity: () => new Set(['loading', 'none', 'unauthorized', 'error']),
     list: () => new Set(['empty']),
     query: () => new Set(['empty', 'loading', 'refreshing', 'stale', 'error']),
     text: () => new Set(['empty']),

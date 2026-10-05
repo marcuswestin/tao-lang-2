@@ -328,12 +328,25 @@ function readHint(subject: AST.Expression): Compiled {
   }
   const target = subject.target.ref
   const type = Type.ofExpression(subject)
-  const readKind = AST.isEntityQueryDeclaration(target) ? 'query' : type.kind === 'entity' ? 'entity' : undefined
+  const entityType = entityTypeIncludingNone(type)
+  const readKind = AST.isEntityQueryDeclaration(target) ? 'query' : entityType ? 'entity' : undefined
   return readKind
     ? gen`, ${
-      gen.jsLiteral({ readKind, subjectType: type.kind === 'entity' ? Type.dataEntityName(type.entity) : undefined })
+      gen.jsLiteral({ readKind, subjectType: entityType ? Type.dataEntityName(entityType.entity) : undefined })
     }`
     : gen.noop()
+}
+
+function entityTypeIncludingNone(type: ReturnType<typeof Type.ofExpression>) {
+  if (type.kind === 'entity') {
+    return type
+  }
+  if (type.kind !== 'union' || type.members.length !== 2) {
+    return undefined
+  }
+  const entity = type.members.find(member => member.kind === 'entity')
+  const none = type.members.find(member => member.kind === 'primitive' && member.primitive === 'none')
+  return entity?.kind === 'entity' && none?.kind === 'primitive' ? entity : undefined
 }
 
 function functionRuntimeParameterName(index: number): Compiled {

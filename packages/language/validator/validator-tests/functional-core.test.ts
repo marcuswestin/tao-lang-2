@@ -229,7 +229,7 @@ Describe('validator: functional core', () => {
     accepts(`
       data Documents / Document { Final yes / Draft no }
       view Main(Document) {
-        render Stack(){ guard Document { missing -> Context { Text(Context.Message) } } }
+        render Stack(){ guard Document { none -> Context { Text(Context.Message) } } }
       }
       ${runtimeViews}
     `),
@@ -316,7 +316,7 @@ Describe('validator: functional core', () => {
     accepts(`
       app NetApp { id "netapp" version "1.0.0" name "NetApp" view Shell guard {
         loading -> Text("Opening…")
-        missing -> { Text("Gone") }
+        none -> { Text("Gone") }
         error -> Context { Text(Context.Message) }
       } }
       data Documents / Document { Title text }
@@ -372,7 +372,7 @@ Describe('validator: functional core', () => {
           rejected -> { Text("Refused") }
           loading -> { Text("One") }
           loading -> { Text("Two") }
-          missing -> Context { Text(Context.Message) }
+          none -> Context { Text(Context.Message) }
         } }
         view Main() { render Text("Ready") }
         ${runtimeViews}
@@ -397,7 +397,7 @@ Describe('validator: functional core', () => {
   Test(
     'rejects a second guard in one app',
     rejects(
-      `app NetApp { id "netapp" version "1.0.0" name "NetApp" view Main guard { loading -> { Text("Loading") } } guard { missing -> { Text("Gone") } } }
+      `app NetApp { id "netapp" version "1.0.0" name "NetApp" view Main guard { loading -> { Text("Loading") } } guard { none -> { Text("Gone") } } }
       view Main() { render Text("Ready") }
       ${runtimeViews}`,
       AppValidator.messages.guardDuplicate('NetApp'),
@@ -410,7 +410,7 @@ Describe('validator: functional core', () => {
       app NetApp { id "netapp" version "1.0.0" name "NetApp" view Main }
       app Offline = NetApp with {
         id "offline"
-        guard { missing -> { Text("Unavailable") } }
+        guard { none -> { Text("Unavailable") } }
       }
       view Main() { render Text("Ready") }
       ${runtimeViews}

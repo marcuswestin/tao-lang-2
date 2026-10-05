@@ -1,7 +1,7 @@
 import React from 'react'
 import { Dev, DevControls, type TaoDevModeOptions } from './dev-runtime/TR-dev'
-import { TestActionStubs } from './TR-action-test-stubs'
 import { captureActionReceiver } from './TR-action-receivers'
+import { TestActionStubs } from './TR-action-test-stubs'
 import {
   actionCancellationSignal,
   actionFailureCaseName,
@@ -483,6 +483,13 @@ class TR {
         : undefined)
     if (availability && availability.status !== 'available') {
       const status = availability.status as TaoReadNetCase
+      const handlerBranch = branches.find(([name]) => name === status)
+        ?? (entityAvailability?.status === 'missing' ? branches.find(([name]) => name === 'none') : undefined)
+      const appReadNet = TRTaoProps.TaoPropsControls.appInChain(siteProps)?.readNet
+      const selectedCase = handlerBranch?.[0] === 'none'
+          || (!handlerBranch && status === 'missing' && appReadNet?.none)
+        ? 'none'
+        : status
       const entity = entityAvailability ? DataControls.EntityInteraction(value)?.entity : undefined
       const context = new RuntimeValue(readContext(status, {
         readKind: accountAvailability
@@ -492,15 +499,19 @@ class TR {
         subjectType: hint?.subjectType ?? entity,
       }, {
         UnauthorizedReason: availability.status === 'unauthorized' ? availability.reason : undefined,
-      }))
-      const handler = branches.find(([name]) => name === status)?.[1]
+      }, selectedCase))
       const payload = legacyPayload
         ? new RuntimeValue(
           matchSubjectCase(value, status).payload
             ?? (accountAvailability?.status === 'error' ? accountAvailability.message : undefined),
         )
         : context
-      return handler ? handler(payload) : renderReadNet(status, context, siteProps)
+      return handlerBranch ? handlerBranch[1](payload) : renderReadNet(status, context, siteProps)
+    }
+    if (!legacyPayload && value === null && hint?.readKind === 'entity') {
+      const noneBranch = branches.find(([name]) => name === 'none')
+      const context = new RuntimeValue(readContext('missing', hint, {}, 'none'))
+      return noneBranch ? noneBranch[1](context) : renderReadNet('missing', context, siteProps)
     }
     if (legacyPayload) {
       return renderMatchedBranches(value, branches, remaining)
@@ -1609,6 +1620,7 @@ namespace TR {
     | 'refreshing'
     | 'stale'
     | 'missing'
+    | 'none'
     | 'unauthorized'
     | 'error'
     | 'true'
@@ -1905,6 +1917,9 @@ function matchSubjectCase(value: unknown, caseName: string): SubjectCaseMatch {
   }
   const entity = DataControls.EntityAvailability(value)
   if (entity) {
+    if (caseName === 'none') {
+      return { matched: entity.status === 'missing', payload: undefined }
+    }
     if (caseName === 'error') {
       return {
         matched: entity.status === 'error',
@@ -1937,6 +1952,9 @@ function matchSubjectCase(value: unknown, caseName: string): SubjectCaseMatch {
       matched: isCountableValue(value) && value.length === 0,
       payload: undefined,
     }
+  }
+  if (caseName === 'none') {
+    return { matched: value === null, payload: undefined }
   }
   if (caseName === 'true' || caseName === 'false') {
     return { matched: value === (caseName === 'true'), payload: undefined }
