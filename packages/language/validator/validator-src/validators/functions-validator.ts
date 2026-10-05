@@ -6,6 +6,11 @@ import type { ValidationContext } from '../validation'
 
 const messages = {
   duplicateParameter: (name: string) => `Parameter '${name}' is declared more than once in this function.`,
+  duplicateGenericParameter: (name: string) => `Type parameter '${name}' is declared more than once in this function.`,
+  uninferredGeneric: (name: string, parameter: string) =>
+    `Function '${name}' needs a typed input to infer type parameter '${parameter}'.`,
+  incompatibleGeneric: (name: string, parameter: string) =>
+    `Function '${name}' cannot infer type parameter '${parameter}' from these inputs within all its bounds.`,
   functionMissingArgument: (name: string, parameter: string) =>
     `Function '${name}' is missing argument for parameter '${parameter}'.`,
   functionUnmatchedArgument: (name: string) =>
@@ -52,6 +57,13 @@ function validateFunction(
     ctx.error(fn, messages.functionPlacement)
   }
   const seen = new Set<string>()
+  for (const parameter of fn.genericParameters) {
+    if (seen.has(parameter.name)) {
+      ctx.error(parameter, messages.duplicateGenericParameter(parameter.name))
+    }
+    seen.add(parameter.name)
+  }
+  seen.clear()
   for (const parameter of AST.parametersOf(fn)) {
     const name = Type.parameterName(parameter)
     if (seen.has(name)) {
@@ -124,7 +136,19 @@ function validateFunctionCall(call: AST.FunctionCallExpression, ctx: ValidationC
   if (!fn || !AST.isFunctionDeclaration(fn)) {
     return
   }
-  reportBindingDiagnostics(call, fn.name, resolved.diagnostics, ctx)
+  reportBindingDiagnostics(
+    call,
+    fn.name,
+    resolved.diagnostics,
+    ctx,
+    parameter => resolved.parameterTypes?.get(parameter) ?? Type.ofParameter(parameter),
+  )
+  for (const diagnostic of resolved.genericDiagnostics ?? []) {
+    Switch.kind(diagnostic, {
+      'uninferred-generic': value => ctx.error(call, messages.uninferredGeneric(fn.name, value.parameter.name)),
+      'incompatible-generic': value => ctx.error(call, messages.incompatibleGeneric(fn.name, value.parameter.name)),
+    })
+  }
 }
 
 /** Ordinary and associated calls report the same shared argument binder's diagnostics. */

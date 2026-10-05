@@ -221,7 +221,40 @@ export function publishCanonicalEffectSnapshot(
         : 'function' in resolved
         ? resolved.function
         : undefined
-      const descriptor = target ? descriptors.get(target) : undefined
+      const declaredDescriptor = target ? descriptors.get(target) : undefined
+      const instantiation = target && (AST.isFunctionDeclaration(target) || AST.isAssociatedFunctionDeclaration(target))
+          && target.genericParameters.length > 0
+        ? resolution.instantiateGenericInvocation(target, AST.argumentsOf(node), {
+          ...metadata,
+          parameterType: parameter =>
+            ('transportTypes' in resolved ? resolved.transportTypes?.get(parameter) : undefined)
+              ?? metadata.parameterType!(parameter),
+        })
+        : undefined
+      const descriptor = declaredDescriptor && instantiation
+        ? Object.freeze({
+          ...declaredDescriptor,
+          ...(declaredDescriptor.signature
+            ? {
+              signature: sealSignature({
+                ...declaredDescriptor.signature,
+                inputs: declaredDescriptor.signature.inputs.map(input => ({
+                  ...input,
+                  type: instantiation.parameterTypes.get(input.declaration) ?? input.type,
+                })),
+              }),
+            }
+            : {}),
+          result: sealType(
+            AST.isMethodCallExpression(node) && 'descriptor' in resolved && resolved.descriptor
+              ? resolved.descriptor.result
+              : instantiation.result,
+          ),
+          pending: Object.freeze(
+            instantiation.genericDiagnostics.length > 0 ? [target!] : [...declaredDescriptor.pending],
+          ),
+        })
+        : declaredDescriptor
       const unresolved = AST.argumentsOf(node).some(argument => unresolvedDomain(resolution.ofArgument(argument)))
         || descriptor?.signature?.inputs.some(input => unresolvedDomain(input.type))
       const complete = !!descriptor && descriptor.pending.length === 0 && !pending && !unresolved
@@ -492,7 +525,12 @@ function sealEffectContract(contract: EffectContract): EffectContract {
 }
 
 function sealType(type: TaoType): TaoType {
-  return Switch.kind(type, {
+  const domain: TaoType = {
+    ...type,
+    ...(type.genericBounds ? { genericBounds: Object.freeze(type.genericBounds.map(sealType)) } : {}),
+    ...(type.genericReceiver ? { genericReceiver: sealType(type.genericReceiver) } : {}),
+  }
+  return Switch.kind(domain, {
     unresolved: type => Object.freeze({ ...type }),
     primitive: type =>
       Object.freeze(

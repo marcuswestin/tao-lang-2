@@ -54,7 +54,7 @@ export function AssociatedMethodsDeclaration(owner: AST.TypeDeclaration): Compil
       }
     }`
   }
-  Assert(type.kind === 'primitive' && type.primitive === 'text', 'Expected a supported text associated owner.')
+  Assert(type.kind !== 'unresolved', 'Expected a resolved concrete associated owner.')
   return gen`const ${associatedWitnessBinding(owner)} = {
       ${
     gen.list(ASTUtils.ownAssociatedMethods(owner), method =>

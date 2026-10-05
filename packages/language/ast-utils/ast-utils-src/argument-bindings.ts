@@ -35,6 +35,7 @@ export type ArgumentBindingResult = {
 
 /** Invocation callers can supply phase-local domains and compatibility without replacing binding. */
 export type ArgumentBindingMetadata = {
+  argumentLabel?(argument: AST.Argument): string | undefined
   parameterName?(parameter: AST.ParameterDeclaration): string
   parameterType?(parameter: AST.ParameterDeclaration): TaoType
   parameterOmissible?(parameter: AST.ParameterDeclaration): boolean
@@ -68,7 +69,13 @@ export function resolveParameterArgumentBindings(
   const resolution = resolveBindings<AST.Argument, AST.ParameterDeclaration>({
     candidates: arguments_,
     targets: parameters,
-    candidateLabel: argument => argument.label,
+    candidateLabel: argument => {
+      if (metadata.argumentLabel) {
+        return metadata.argumentLabel(argument)
+      }
+      const role = Type.genericRoleConstructor(argument)
+      return argument.label ?? (role ? Type.parameterName(role.parameter) : undefined)
+    },
     targetName: metadata.parameterName ?? Type.parameterName,
     candidateType: metadata.argumentType ?? Type.ofArgument,
     targetType: metadata.parameterType ?? Type.ofParameter,

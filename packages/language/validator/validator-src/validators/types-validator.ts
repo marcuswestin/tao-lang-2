@@ -290,6 +290,9 @@ function validateNamedTypeReference(reference: AST.NamedTypeReference, ctx: Vali
   }
   const root = Type.rootOfReference(reference)
   if (!root.definition) {
+    if (Type.ofReference(reference).kind !== 'unresolved') {
+      return
+    }
     ctx.error(reference, typeValidationMessages.unknownType(Type.referenceName(reference)))
     return
   }

@@ -6,7 +6,7 @@ import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 import { compileAssociatedWitness } from './AssociatedMethodsCompiler'
 import { authLibraryExport, compileCurrentAccount, contextualCommand, contextualReference } from './auth-context'
-import { compileArgumentForType } from './capability-projection'
+import { compileArgumentForType, compileValueForType } from './capability-projection'
 import { configurationRuntimeBindingName } from './ConfigurationCompiler'
 import { activeDataStorePlan } from './data-store-context'
 import { compileDeclarationIdentity } from './declaration-identity'
@@ -252,6 +252,7 @@ export const ExpressionsCompiler = {
     const fn = resolved.function
     Assert.defined(fn, 'validated function call resolves its declaration')
     Assert(resolved.diagnostics.length === 0, 'validated function call has no binding diagnostics')
+    Assert(!resolved.genericDiagnostics?.length, 'validated generic call has one bounded type substitution')
     const parameters = AST.parametersOf(fn)
     const argumentsByParameter = new Map(resolved.pairs.map(pair => [pair.parameter, pair.argument]))
     const lastProvidedIndex = Math.max(...resolved.pairs.map(pair => parameters.indexOf(pair.parameter)), -1)
@@ -261,7 +262,13 @@ export const ExpressionsCompiler = {
         parameter => {
           const argument = argumentsByParameter.get(parameter)
           return argument
-            ? gen`, ${compileArgumentForType(argument.value, Type.ofParameter(parameter))}`
+            ? gen`, ${
+              compileGenericArgument(
+                argument,
+                resolved.transportTypes?.get(parameter) ?? Type.ofParameter(parameter),
+                resolved.parameterTypes?.get(parameter),
+              )
+            }`
             : gen`, undefined`
         },
         { separator: '' },
@@ -280,10 +287,11 @@ export const ExpressionsCompiler = {
     Assert(resolved.problem === undefined, 'validated associated call resolves its receiver and contract')
     Assert.defined(resolved.descriptor, 'validated associated call has a selected descriptor')
     Assert(resolved.diagnostics.length === 0, 'validated associated call has no binding diagnostics')
+    Assert(!resolved.genericDiagnostics?.length, 'validated generic associated call has one bounded type substitution')
     const target = ASTUtils.associatedMethodCallTarget(expression)
     Assert.defined(target, 'validated associated call retains its actual receiver anchor')
     const receiver = compileMethodReceiver(target.receiver)
-    const capability = resolved.receiver?.kind === 'capability'
+    const capability = resolved.receiver?.kind === 'capability' || !!resolved.receiver?.genericParameter
     const callable = capability
       ? gen`TR.Capability.method(${receiver}.evaluate(), ${gen.jsLiteral(target.name)})`
       : compileAssociatedWitness(resolved.descriptor)
@@ -293,13 +301,9 @@ export const ExpressionsCompiler = {
     return gen`TR.Call(${callable}${capability ? gen.noop() : gen`, ${receiver}`}${
       gen.join(parameters.slice(0, lastProvidedIndex + 1), parameter => {
         const argument = argumentsByParameter.get(parameter)
-        const expected = Type.ofParameter(parameter)
+        const expected = resolved.transportTypes?.get(parameter) ?? Type.ofParameter(parameter)
         return argument
-          ? gen`, ${
-            expected.kind === 'capability'
-              ? compileArgumentForType(argument.value, expected)
-              : compileReactiveArgument(argument.value)
-          }`
+          ? gen`, ${compileGenericArgument(argument, expected, resolved.parameterTypes?.get(parameter))}`
           : gen`, undefined`
       }, { separator: '' })
     })`
@@ -496,6 +500,30 @@ export const ExpressionsCompiler = {
  * A `color` value is the design color's name, never its hex: the mounted design resolves it at render,
  * so a derived color follows `Scheme` and each app that mounts the view reads its own design.
  */
+function compileGenericArgument(
+  argument: AST.Argument,
+  transport: ASTUtils.TaoType,
+  instantiated?: ASTUtils.TaoType,
+): Compiled {
+  const role = Type.genericRoleConstructor(argument)
+  if (!role && !transport.genericParameter) {
+    return compileArgumentForType(argument.value, transport)
+  }
+  const payload = role?.value ?? argument.value
+  const actual = Type.ofExpression(payload)
+  const target = instantiated ?? actual
+  // A contextual backing is constructed in inferred T; already typed wrappers keep their owner.
+  if (actual.kind === 'primitive' && !actual.nominal && target.kind === 'primitive' && target.nominal) {
+    const owner = Type.quantityOwner(target)
+    const value = owner
+      ? gen`${quantityFactoryBinding(owner)}.fromJSValue(${Compile.Expression(payload)}.jsValue)`
+      : checkedNumericValue(Compile.Expression(payload), target)
+    return compileValueForType(value, target, transport)
+  }
+  const source = ASTUtils.containsCapability(transport) ? compileReactiveArgument(payload) : Compile.Expression(payload)
+  return compileValueForType(source, actual, transport)
+}
+
 function compileDesignColorValue(path: string): Compiled {
   return gen`TR.Value(${gen.jsLiteral(path)})`
 }

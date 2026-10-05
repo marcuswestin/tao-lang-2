@@ -75,6 +75,10 @@ export type ResolvedFunctionInvocation = {
   function?: AST.CallableDeclaration
   pairs: RenderInvocationPair[]
   diagnostics: ArgumentBindingDiagnostic[]
+  parameterTypes?: ReadonlyMap<AST.ParameterDeclaration, TaoType>
+  transportTypes?: ReadonlyMap<AST.ParameterDeclaration, TaoType>
+  result?: TaoType
+  genericDiagnostics?: ReturnType<typeof Type.instantiateGenericInvocation>['genericDiagnostics']
 }
 
 /** ResolvedActionTarget declares how an expression resolves as an action target. */
@@ -282,6 +286,9 @@ export function resolveFunctionInvocation(
   const fn = invocation.function.ref
   if (!fn) {
     return { invocation, pairs: [], diagnostics: [] }
+  }
+  if (AST.isFunctionDeclaration(fn) && fn.genericParameters.length > 0) {
+    return { invocation, function: fn, ...Type.instantiateGenericInvocation(fn, AST.argumentsOf(invocation), metadata) }
   }
   const bindings = resolveArgumentBindings(fn, invocation, metadata)
   return {

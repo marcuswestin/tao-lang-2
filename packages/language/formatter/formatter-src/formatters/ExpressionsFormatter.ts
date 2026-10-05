@@ -93,7 +93,33 @@ export const ExpressionsFormatter = {
     f.oneSpaceBefore('returns')
     f.oneSpaceAround('fails')
     f.oneSpaceAround('->')
-    f.noSpaceBefore('(')
+    if (f.node.genericParameters.length > 0) {
+      f.oneSpaceBefore('where')
+      f.oneSpaceAfter('where')
+      f.commaSpacedList()
+    } else {
+      f.noSpaceBefore('(')
+    }
+  },
+
+  /** AssociatedFunctionDeclaration formats its optional bounded generic header. */
+  AssociatedFunctionDeclaration(f) {
+    f.oneSpaceAfter('func')
+    f.oneSpaceAround('fails')
+    f.oneSpaceAround('->')
+    if (f.node.genericParameters.length > 0) {
+      f.oneSpaceBefore('where')
+      f.oneSpaceAfter('where')
+      f.commaSpacedList()
+    } else {
+      f.noSpaceBefore('(')
+    }
+  },
+
+  /** GenericTypeParameter formats its name and conjunctive bounds. */
+  GenericTypeParameter(f) {
+    f.oneSpaceAfter('type', 'is')
+    f.oneSpaceAround('and')
   },
 
   /** FunctionBlock formats return-oriented function control flow. */

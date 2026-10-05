@@ -16,6 +16,11 @@ export function compileArgumentForType(expression: AST.Expression, expected: AST
   return compileTransport(compileReactiveArgument(expression), plan)
 }
 
+/** Prepared contextual constructors retain their real payload domain through the same proof. */
+export function compileValueForType(source: Compiled, actual: ASTUtils.TaoType, expected: ASTUtils.TaoType): Compiled {
+  return ASTUtils.containsCapability(expected) ? compileTransport(source, validatedPlan(actual, expected)) : source
+}
+
 function validatedPlan(actual: ASTUtils.TaoType, expected: ASTUtils.TaoType): ASTUtils.CapabilityTransportPlan {
   const result = ASTUtils.planCapabilityTransport(actual, expected)
   Assert(result.kind === 'ready', 'Expected validated capability transport proof.')

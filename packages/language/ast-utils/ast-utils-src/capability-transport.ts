@@ -4,7 +4,6 @@ import {
   associatedCallableAnalysis,
   type AssociatedCallableDescriptor,
   associatedCallableDescriptor,
-  capabilityRequirements,
   hasAssociatedEffects,
 } from './associated-methods'
 import {
@@ -92,6 +91,9 @@ class CapabilityTransportPlanner {
       }
       if (expected.kind === 'union') {
         return this.expectedUnion(actual, flattenUnion(expected.members), admission)
+      }
+      if (expected.genericParameter && Type.aggregateCapabilityRequirements(expected).length > 0) {
+        return this.capability(actual, expected)
       }
       return Switch.kind(expected, {
         capability: capability => this.capability(actual, capability),
@@ -224,16 +226,21 @@ class CapabilityTransportPlanner {
 
   private capability(
     actual: TaoType,
-    expected: Extract<TaoType, { kind: 'capability' }>,
+    expected: TaoType,
   ): CapabilityTransportResult {
     if (
-      actual.kind !== 'capability'
-      && !(actual.kind === 'primitive' && actual.primitive === 'text' && AST.isTypeDeclaration(actual.nominal))
+      actual.kind !== 'capability' && !actual.genericParameter
+      && !((actual.kind === 'primitive' || actual.kind === 'item' || actual.kind === 'list')
+        && AST.isTypeDeclaration(actual.nominal))
     ) {
       return unsupported('incompatible-types')
     }
-    const requirements = capabilityRequirements(expected.declaration)
-    const requiredDescriptors = requirements.map(associatedCallableDescriptor)
+    const receiver = expected.genericReceiver ?? actual
+    const requirements = Type.aggregateCapabilityRequirements(expected)
+    const requiredDescriptors = requirements.map(requirement => {
+      const descriptor = associatedCallableDescriptor(requirement)
+      return descriptor ? Type.specializeAssociatedDescriptor(descriptor, receiver) : undefined
+    })
     if (requiredDescriptors.some(descriptor => !descriptor)) {
       return unknown('missing-proof')
     }
@@ -241,26 +248,30 @@ class CapabilityTransportPlanner {
       return unknown('unresolved-domain')
     }
     // Identity still requires the final declaration contracts; it cannot bless a concrete value.
-    if (actual.kind === 'capability' && actual.declaration === expected.declaration) {
+    if (
+      (actual.kind === 'capability' || actual.genericParameter)
+      && Type.identityKey(actual) === Type.identityKey(expected)
+    ) {
       return ready(identity)
     }
     const methods: { required: AssociatedCallableDescriptor; supplied: AssociatedCallableDescriptor }[] = []
     for (let index = 0; index < requirements.length; index++) {
       const requirement = requirements[index]!
-      const declaration = actual.kind === 'capability'
-        ? capabilityRequirements(actual.declaration).find(method => method.name === requirement.name)
-        : Type.associatedMethodDeclaration(actual, requirement.name)?.declaration
+      const declaration = actual.kind === 'capability' || actual.genericParameter
+        ? Type.aggregateCapabilityRequirements(actual).find(method => method.name === requirement.name)
+        : Type.associatedMethodDeclaration(receiver, requirement.name)?.declaration
       if (!declaration) {
         return unsupported('incompatible-types')
       }
-      const supplied = associatedCallableDescriptor(declaration)
-      if (!supplied) {
+      const descriptor = associatedCallableDescriptor(declaration)
+      if (!descriptor) {
         return unknown('missing-proof')
       }
+      const supplied = Type.specializeAssociatedDescriptor(descriptor, receiver)
       if (descriptorUnresolved(supplied)) {
         return unknown('unresolved-domain')
       }
-      if (actual.kind !== 'capability') {
+      if (actual.kind !== 'capability' && !actual.genericParameter) {
         const analysis = associatedCallableAnalysis(declaration)
         if (!analysis || analysis.effects.purity.open) {
           return unknown('missing-proof')
@@ -275,7 +286,7 @@ class CapabilityTransportPlanner {
       if (result.kind === 'unknown') {
         return result
       }
-      const analysis = actual.kind === 'capability'
+      const analysis = actual.kind === 'capability' || actual.genericParameter
         ? undefined
         : associatedCallableAnalysis(method.supplied.declaration)
       const signature = analysis
@@ -340,7 +351,7 @@ class CapabilityTransportPlanner {
       }))
     }
     return unsupportedPlan ?? ready(Object.freeze({
-      kind: actual.kind === 'capability' ? 'reproject' : 'attach',
+      kind: actual.kind === 'capability' || actual.genericParameter ? 'reproject' : 'attach',
       methods: Object.freeze(planned),
     }))
   }
@@ -384,6 +395,12 @@ class CapabilityTransportPlanner {
     }
     const snapshot = { ...type } as TaoType
     this.domains.set(type, snapshot)
+    Object.assign(snapshot, {
+      ...(type.genericBounds
+        ? { genericBounds: Object.freeze(type.genericBounds.map(bound => this.snapshotDomain(bound))) }
+        : {}),
+      ...(type.genericReceiver ? { genericReceiver: this.snapshotDomain(type.genericReceiver) } : {}),
+    })
     Switch.kind(snapshot, {
       primitive: primitive => {
         if (primitive.primitive === 'action') {
@@ -441,6 +458,9 @@ function admitsTransport(actual: TaoType, expected: TaoType, admission: Transpor
 }
 
 function domainWitness(type: TaoType): object {
+  if (type.genericParameter || type.genericReceiver) {
+    return type
+  }
   return type.kind === 'capability' ? type.declaration : 'nominal' in type ? type.nominal ?? type : type
 }
 
@@ -482,6 +502,9 @@ function descriptorUnresolved(descriptor: AssociatedCallableDescriptor): boolean
 
 /** Whether a receiving domain needs capability transport rather than ordinary source construction. */
 export function containsCapability(type: TaoType): boolean {
+  if (type.genericBounds?.some(containsCapability)) {
+    return true
+  }
   return Switch.kind(type, {
     capability: () => true,
     union: union => union.members.some(containsCapability),

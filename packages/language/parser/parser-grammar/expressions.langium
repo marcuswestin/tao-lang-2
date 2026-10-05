@@ -24,12 +24,15 @@ ArgumentValue infers Expression:
 
 // Both return spellings accept a full type expression, including structural records.
 FunctionDeclaration:
-    visibility=DeclarationVisibility? ('func' | 'function') name=ID parameterList=ParameterList
+    visibility=DeclarationVisibility? ('func' | 'function') name=ID
+    ('where' genericParameters+=GenericTypeParameter (',' genericParameters+=GenericTypeParameter)*)?
+    parameterList=ParameterList
     ('fails' failureBound=ID)? (('->' | 'returns') returnType=TypeExpression)? block=FunctionBlock;
 
 // Associated methods inherit their owner's visibility and keep their own callable identity.
 AssociatedFunctionDeclaration:
-    'func' name=ID parameterList=ParameterList ('fails' failureBound=ID)?
+    'func' name=ID ('where' genericParameters+=GenericTypeParameter (',' genericParameters+=GenericTypeParameter)*)?
+    parameterList=ParameterList ('fails' failureBound=ID)?
     ('->' returnType=TypeExpression)? block=FunctionBlock;
 
 FunctionBlock:
@@ -176,7 +179,10 @@ CopyExpression:
 // A bare configuration block instantiates a declared type. `with` is reserved for copying and
 // patching an existing configured value.
 ConfigurationConstructor:
-    relative?='.'? type=[ConstructorDeclaration:ID] ('.' members+=ID)* (block=ConfigurationBlock | value=DeclaredConstructorValue);
+    relative?='.' type=[ConstructorDeclaration:ID] ('.' members+=ID)*
+      (block=ConfigurationBlock | value=DeclaredConstructorValue)
+    | type=[ConstructorDeclaration:ID] ('.' members+=ID)*
+      (block=ConfigurationBlock | value=UnparenthesizedDeclaredConstructorValue);
 
 // A typed block is a directive boundary without admitting adjacent scalar values.
 ConfigurationBlockConstructor infers ConfigurationConstructor:
@@ -360,8 +366,11 @@ CasePayload:
 TypedConstructor:
     type=ConstructablePrimitiveTypeReference value=TypedConstructorValue;
 
-DeclaredConstructorValue:
-    StringLiteral | NumberLiteral | ListLiteral;
+DeclaredConstructorValue infers Expression:
+    UnparenthesizedDeclaredConstructorValue | '(' Expression ')';
+
+UnparenthesizedDeclaredConstructorValue infers Expression:
+    StringLiteral | NumberLiteral | InterpolatedString | ListLiteral | MemberAccessExpression | ValueReference;
 
 TypedConstructorValue:
     StringLiteral | NumberLiteral | ListLiteral | ItemLiteral;

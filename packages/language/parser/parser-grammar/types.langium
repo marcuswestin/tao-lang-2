@@ -8,7 +8,10 @@ import "./terminals"
 
 entry TypesGrammarEntrypoint:
     // Includes type helper rules consumed from imported grammar modules so Langium marks them reachable.
-    PrimitiveDeclaration | TypeDeclaration | ParameterTypeDeclaration | ConstructablePrimitiveTypeReference | TraitList;
+    PrimitiveDeclaration | TypeDeclaration | ParameterTypeDeclaration | ConstructablePrimitiveTypeReference | GenericTypeParameter | TraitList;
+
+GenericTypeParameter:
+    'type' name=ID 'is' bounds+=TypeReference ('and' bounds+=TypeReference)*;
 
 PrimitiveDeclaration:
     'primitive' name=PrimitiveType ('is' base=PrimitiveType)? ('with' slots=ItemTypeExpression)?;
@@ -99,7 +102,7 @@ ConstructablePrimitiveTypeReference:
     primitive=ConstructablePrimitiveType;
 
 NamedTypeReference:
-    root=ID ('.' members+=ID)*;
+    root=(ID | 'type') ('.' members+=ID)*;
 
 PrimitiveType returns string:
     'text' | 'number' | 'numeric' | 'boolean' | 'time' | 'duration' | 'color' | 'item' | 'list' | 'action' | 'shortcut'

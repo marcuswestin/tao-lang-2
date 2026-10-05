@@ -43,7 +43,15 @@ export const StatementsFormatter = {
   /** ParameterList formats comma-separated parameter declarations. */
   ParameterList(f) {
     f.commaSpacedList()
-    f.noSpaceBefore('(')
+    const owner = f.node.$container
+    if (
+      (AST.isFunctionDeclaration(owner) || AST.isAssociatedFunctionDeclaration(owner))
+      && owner.genericParameters.length > 0
+    ) {
+      f.oneSpaceBefore('(')
+    } else {
+      f.noSpaceBefore('(')
+    }
     f.noSpaceAfter('(')
     f.noSpaceBefore(')')
   },

@@ -1,5 +1,6 @@
 import { AST } from '@parser'
 import { Switch } from '@shared'
+import type { ArgumentBindingMetadata } from './argument-bindings'
 import {
   associatedCallableAnalysis,
   type AssociatedCallableDescriptor,
@@ -17,6 +18,7 @@ import {
 import { puritySatisfiesFunction } from './callable-effects'
 import { type CallableSignatureComparison, callableSignatureOf, compareCallableSignatures } from './callable-signatures'
 import { failureContractSatisfiesBound } from './failure-contracts'
+import { instantiateGenericInvocation, substituteGenericType } from './generic-bindings'
 import { resolveActionInvocation, resolveActionTarget } from './invocations'
 import { resolveNumericUnitReading } from './numeric-unit-readings'
 import { NumericUnits } from './NumericUnits'
@@ -26,42 +28,53 @@ import { type UnitFamily, Units } from './Units'
 
 /** TaoType declares the static Tao type shape used by semantic helpers. */
 export type TaoType =
-  | {
-    kind: 'primitive'
-    primitive:
-      | 'text'
-      | 'number'
-      | 'numeric'
-      | 'boolean'
-      | 'time'
-      | 'duration'
-      | 'color'
-      | 'none'
-      | 'shortcut'
-      | 'command'
-      | 'design'
-      | 'view'
-      | 'scene'
-      | 'nav'
-      | 'datasource'
-      | 'data'
-      | 'app'
-    nominal?: AST.TypeDefinition
-    slots?: ItemShape
-  }
-  | {
-    kind: 'primitive'
-    primitive: 'action'
-    parameters: readonly TaoActionParameter[]
-    nominal?: AST.TypeDefinition
-  }
-  | { kind: 'list'; element?: TaoType; nominal?: AST.TypeDefinition }
-  | { kind: 'item'; item?: ItemShape; nominal?: AST.TypeDefinition }
-  | { kind: 'entity'; entity: DataEntityDefinition }
-  | { kind: 'enum'; declaration: AST.TypeDeclaration }
-  | { kind: 'capability'; declaration: AST.TypeDeclaration }
-  | { kind: 'union'; members: readonly TaoType[] }
-  | { kind: 'unresolved' }
+  & Readonly<{
+    /** Symbolic identity belongs to the actual lexical declaration, never its first bound. */
+    genericParameter?: AST.GenericTypeParameter
+    genericBounds?: readonly TaoType[]
+    /** A transported bounded contract specializes Self to this supplied invocation domain. */
+    genericReceiver?: TaoType
+    /** Contextual Self retains the real defining owner until receiver specialization. */
+    selfOwner?: AST.TypeDeclaration
+  }>
+  & (
+    | {
+      kind: 'primitive'
+      primitive:
+        | 'text'
+        | 'number'
+        | 'numeric'
+        | 'boolean'
+        | 'time'
+        | 'duration'
+        | 'color'
+        | 'none'
+        | 'shortcut'
+        | 'command'
+        | 'design'
+        | 'view'
+        | 'scene'
+        | 'nav'
+        | 'datasource'
+        | 'data'
+        | 'app'
+      nominal?: AST.TypeDefinition
+      slots?: ItemShape
+    }
+    | {
+      kind: 'primitive'
+      primitive: 'action'
+      parameters: readonly TaoActionParameter[]
+      nominal?: AST.TypeDefinition
+    }
+    | { kind: 'list'; element?: TaoType; nominal?: AST.TypeDefinition }
+    | { kind: 'item'; item?: ItemShape; nominal?: AST.TypeDefinition }
+    | { kind: 'entity'; entity: DataEntityDefinition }
+    | { kind: 'enum'; declaration: AST.TypeDeclaration }
+    | { kind: 'capability'; declaration: AST.TypeDeclaration }
+    | { kind: 'union'; members: readonly TaoType[] }
+    | { kind: 'unresolved' }
+  )
 
 export type ItemShapeField = AST.TypeProperty | AST.EntityDataField
 
@@ -184,6 +197,12 @@ export class Type {
 
   /** displayName renders a resolved Tao type to a human-facing name for diagnostics. */
   static displayName(type: TaoType): string {
+    if (type.genericParameter) {
+      return type.genericParameter.name
+    }
+    if (type.selfOwner) {
+      return 'Self'
+    }
     const nominal = nominalOf(type)
     if (nominal) {
       return Type.definitionName(nominal)
@@ -215,6 +234,71 @@ export class Type {
     return new TypeResolutionContext().ofDefinition(type)
   }
 
+  static instantiateGenericInvocation(
+    declaration: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration,
+    arguments_: readonly AST.Argument[],
+    metadata?: ArgumentBindingMetadata,
+  ) {
+    return new TypeResolutionContext().instantiateGenericInvocation(declaration, arguments_, metadata)
+  }
+
+  /** A contextual role constructor directs the ordinary binder and exposes its real payload. */
+  static genericRoleConstructor(argument: AST.Argument):
+    | Readonly<{
+      parameter: AST.ParameterDeclaration
+      value: AST.Expression
+    }>
+    | undefined
+  {
+    const constructor = argument.value
+    if (!AST.isConfigurationConstructor(constructor) || !constructor.value) {
+      return undefined
+    }
+    const definition = constructor.type.ref
+    const parameter = AST.isParameterTypeDeclaration(definition)
+      ? definition.$container
+      : AST.isFunctionDeclaration(definition) && constructor.members?.length === 1
+      ? definition.parameterList.parameters.find(parameter =>
+        Type.parameterName(parameter) === constructor.members?.[0]
+      )
+      : undefined
+    return AST.isParameterDeclaration(parameter) && Type.ofParameter(parameter).genericParameter
+      ? { parameter, value: constructor.value }
+      : undefined
+  }
+
+  /** Bound discovery combines real requirements while preserving their declaration owners. */
+  static aggregateCapabilityRequirements(type: TaoType): readonly AST.CapabilityMethodDeclaration[] {
+    if (type.genericParameter) {
+      return (type.genericBounds ?? []).flatMap(bound => Type.aggregateCapabilityRequirements(bound))
+    }
+    return type.kind === 'capability' ? capabilityRequirements(type.declaration) : []
+  }
+
+  /** Specialization changes contextual domains, retaining the defining implementation owner. */
+  static specializeAssociatedDescriptor(
+    descriptor: AssociatedCallableDescriptor,
+    receiver: TaoType,
+  ): AssociatedCallableDescriptor {
+    const specialize = (type: TaoType) => substituteGenericType(type, new Map(), receiver.genericReceiver ?? receiver)
+    const result = specialize(descriptor.result)
+    const inputs = descriptor.signature.inputs.map(input => {
+      const type = specialize(input.type)
+      return type === input.type ? input : Object.freeze({ ...input, type })
+    })
+    if (result === descriptor.result && inputs.every((input, index) => input === descriptor.signature.inputs[index])) {
+      return descriptor
+    }
+    return Object.freeze({
+      ...descriptor,
+      signature: Object.freeze({
+        ...descriptor.signature,
+        inputs: Object.freeze(inputs),
+      }),
+      result,
+    })
+  }
+
   /** Correspondence uses only the supplied declared contracts and one local resolution context. */
   static correspondenceResolver(
     descriptors: ReadonlyMap<
@@ -238,6 +322,11 @@ export class Type {
       receiverType: (receiver: AssociatedMethodReceiver) => resolution.receiverType(receiver),
       associatedMethodDeclaration: (receiver: TaoType, name: string) =>
         Type.associatedMethodDeclaration(receiver, name, reference => resolution.definitionOfReference(reference)),
+      instantiateGenericInvocation: (
+        declaration: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration,
+        arguments_: readonly AST.Argument[],
+        metadata?: ArgumentBindingMetadata,
+      ) => resolution.instantiateGenericInvocation(declaration, arguments_, metadata),
       compare: (actual: TaoType, expected: TaoType) => resolution.compare(actual, expected),
     }
   }
@@ -285,7 +374,10 @@ export class Type {
               : { kind: 'pending', dependencies: [declaration] }
             : Type.associatedCallable(declaration, owner)
           if (materialized.kind === 'ready') {
-            selected.set(declaration.name, { receiver, descriptor: materialized.descriptor })
+            selected.set(declaration.name, {
+              receiver,
+              descriptor: Type.specializeAssociatedDescriptor(materialized.descriptor, receiver),
+            })
           }
         }
       }
@@ -294,14 +386,23 @@ export class Type {
   }
 
   static capabilityMethods(
-    type: Extract<TaoType, { kind: 'capability' }>,
+    type: TaoType,
   ): readonly AssociatedDescriptorMaterialization[] {
-    return capabilityRequirements(type.declaration).map(declaration => {
+    return Type.aggregateCapabilityRequirements(type).map(declaration => {
       if (!hasAssociatedEffects()) {
-        return Type.associatedCallable(declaration, type.declaration)
+        const owner = contextualTypeOwner(declaration.returnType)
+        if (!owner) {
+          return { kind: 'pending', dependencies: [declaration] }
+        }
+        const materialized = Type.associatedCallable(declaration, owner)
+        return materialized.kind === 'ready'
+          ? { kind: 'ready', descriptor: Type.specializeAssociatedDescriptor(materialized.descriptor, type) }
+          : materialized
       }
       const descriptor = associatedCallableDescriptor(declaration)
-      return descriptor ? { kind: 'ready', descriptor } : { kind: 'pending', dependencies: [declaration] }
+      return descriptor
+        ? { kind: 'ready', descriptor: Type.specializeAssociatedDescriptor(descriptor, type) }
+        : { kind: 'pending', dependencies: [declaration] }
     })
   }
 
@@ -544,27 +645,46 @@ export class Type {
   /** Final admission consumes sealed contracts/effects and never invokes a resolver or analyzer. */
   static capabilityWitnesses(
     actual: TaoType,
-    expected: Extract<TaoType, { kind: 'capability' }>,
+    expected: TaoType,
   ): readonly AssociatedCapabilityWitness[] | undefined {
     if (!hasAssociatedEffects()) {
       return undefined
     }
-    const actualOwner = actual.kind === 'capability' ? actual.declaration : nominalOf(actual)
+    const dispatchReceiver = expected.genericReceiver ?? actual
+    if (expected.genericReceiver && !Type.isCallableAssignable(actual, dispatchReceiver)) {
+      return undefined
+    }
+    const projection = dispatchReceiver.kind === 'capability' || dispatchReceiver.genericParameter !== undefined
+    const actualOwner = dispatchReceiver.genericParameter
+      ? contextualTypeOwner(
+        Type.aggregateCapabilityRequirements(dispatchReceiver)[0]?.returnType ?? dispatchReceiver.genericParameter,
+      )
+      : dispatchReceiver.kind === 'capability'
+      ? dispatchReceiver.declaration
+      : nominalOf(dispatchReceiver)
+    const expectedRequirement = Type.aggregateCapabilityRequirements(expected)[0]
+    const expectedOwner = expected.kind === 'capability'
+      ? expected.declaration
+      : expectedRequirement && contextualTypeOwner(expectedRequirement.returnType)
     if (
-      !AST.isTypeDeclaration(actualOwner)
-      || (actual.kind !== 'capability' && !isPrimitiveNamed(actual, 'text'))
+      !AST.isTypeDeclaration(actualOwner) || !AST.isTypeDeclaration(expectedOwner)
     ) {
       return undefined
     }
     let witnesses: readonly AssociatedCapabilityWitness[] | undefined
-    const accepted = withAssociatedAdmissionPair(actualOwner, expected.declaration, () => {
+    const accepted = withAssociatedAdmissionPair(actualOwner, expectedOwner, () => {
       const supplied = new Map<string, AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration>()
-      const owners = actual.kind === 'capability' ? [actual.declaration] : nominalChain(actualOwner)
+      const owners = projection ? [actualOwner] : nominalChain(actualOwner)
+      for (const requirement of Type.aggregateCapabilityRequirements(dispatchReceiver)) {
+        if (!supplied.has(requirement.name)) {
+          supplied.set(requirement.name, requirement)
+        }
+      }
       for (const owner of owners) {
         if (!AST.isTypeDeclaration(owner)) {
           continue
         }
-        const methods = actual.kind === 'capability' ? capabilityRequirements(owner) : ownAssociatedMethods(owner)
+        const methods = projection ? capabilityRequirements(owner) : ownAssociatedMethods(owner)
         for (const method of methods) {
           if (!supplied.has(method.name)) {
             supplied.set(method.name, method)
@@ -572,20 +692,24 @@ export class Type {
         }
       }
       const selected: AssociatedCapabilityWitness[] = []
-      const requiredMethods = capabilityRequirements(expected.declaration)
+      const requiredMethods = Type.aggregateCapabilityRequirements(expected)
       if (new Set(requiredMethods.map(method => method.name)).size !== requiredMethods.length) {
         return false
       }
       for (const requirement of requiredMethods) {
-        const required = associatedCallableDescriptor(requirement)
+        const contractReceiver = expected.genericReceiver ?? actual
+        const requiredDescriptor = associatedCallableDescriptor(requirement)
+        const required = requiredDescriptor && Type.specializeAssociatedDescriptor(requiredDescriptor, contractReceiver)
         const implementation = supplied.get(requirement.name)
-        const implementationDescriptor = implementation && associatedCallableDescriptor(implementation)
+        const definingDescriptor = implementation && associatedCallableDescriptor(implementation)
+        const implementationDescriptor = definingDescriptor
+          && Type.specializeAssociatedDescriptor(definingDescriptor, contractReceiver)
         if (!required || !implementation || !implementationDescriptor) {
           return false
         }
-        const analysis = actual.kind === 'capability' ? undefined : associatedCallableAnalysis(implementation)
+        const analysis = projection ? undefined : associatedCallableAnalysis(implementation)
         if (
-          actual.kind !== 'capability'
+          !projection
           && (!analysis || !puritySatisfiesFunction(analysis.effects.purity)
             || !failureContractSatisfiesBound(analysis.effects.failures, implementationDescriptor.signature.failures))
         ) {
@@ -599,7 +723,7 @@ export class Type {
           return false
         }
         selected.push({
-          kind: actual.kind === 'capability' ? 'projection' : 'concrete',
+          kind: projection ? 'projection' : 'concrete',
           receiver: actual,
           required,
           supplied: implementationDescriptor,
@@ -669,6 +793,14 @@ export class Type {
   static identityKey(type: TaoType): string | undefined {
     if (isUnresolvedType(type)) {
       return undefined
+    }
+    if (type.genericParameter) {
+      const parameter = type.genericParameter
+      const owner = parameter.$container
+      return `generic:${AST.getDocument(parameter).uri.path}#${owner?.$cstNode?.offset ?? ''}:${parameter.name}`
+    }
+    if (type.selfOwner) {
+      return `self:${definitionIdentityName(type.selfOwner)}`
     }
     const nominal = nominalOf(type)
     if (nominal) {
@@ -1092,6 +1224,21 @@ function admitsType(
   if (isUnresolvedType(actual) || isUnresolvedType(expected)) {
     return unresolvedAccepts()
   }
+  if (expected.genericParameter) {
+    return actual.genericParameter === expected.genericParameter
+  }
+  if (expected.selfOwner && expected.kind === 'capability') {
+    return actual.selfOwner === expected.selfOwner
+  }
+  if (actual.genericParameter) {
+    if ((actual.genericBounds ?? []).some(bound => accepts(bound, expected))) {
+      return true
+    }
+    if (expected.kind === 'capability' && Type.aggregateCapabilityRequirements(actual).length > 0) {
+      return capabilityAccepts(actual, expected)
+    }
+    return false
+  }
   // Bare text constructs a shortcut; callable substitution cannot construct that value.
   if (isPrimitiveNamed(expected, 'shortcut') && isPrimitiveNamed(actual, 'text')) {
     return constructsNominal
@@ -1394,6 +1541,35 @@ function memberType(
     && (AST.isEntityDataField(property) ? dataFieldType(property) : propertyType(property))
 }
 
+function contextualGenericParameter(node: AST.Node, name: string): AST.GenericTypeParameter | undefined {
+  let current: AST.Node | undefined = node.$container
+  while (current) {
+    if (AST.isFunctionDeclaration(current) || AST.isAssociatedFunctionDeclaration(current)) {
+      const found = current.genericParameters.find(parameter => parameter.name === name)
+      if (found) {
+        return found
+      }
+    }
+    current = current.$container
+  }
+  return undefined
+}
+
+function contextualTypeOwner(node: AST.Node): AST.TypeDeclaration | undefined {
+  let current: AST.Node | undefined = node.$container
+  while (current) {
+    if (AST.isAssociatedFunctionDeclaration(current)) {
+      return AST.associatedFunctionOwner(current)
+    }
+    if (AST.isCapabilityMethodDeclaration(current)) {
+      const owner = current.$container?.$container
+      return AST.isTypeDeclaration(owner) ? owner : undefined
+    }
+    current = current.$container
+  }
+  return undefined
+}
+
 class TypeResolutionContext {
   /** resolving holds what this context is already resolving, so a declaration that reaches itself
    * resolves to unresolved instead of recursing forever. */
@@ -1440,10 +1616,14 @@ class TypeResolutionContext {
     actual: TaoType,
     expected: Extract<TaoType, { kind: 'capability' }>,
   ): 'compatible' | 'incompatible' | 'pending' {
-    const actualOwner = actual.kind === 'capability' ? actual.declaration : nominalOf(actual)
+    const projection = actual.kind === 'capability' || actual.genericParameter !== undefined
+    const actualOwner = actual.genericParameter
+      ? contextualTypeOwner(Type.aggregateCapabilityRequirements(actual)[0]?.returnType ?? actual.genericParameter)
+      : actual.kind === 'capability'
+      ? actual.declaration
+      : nominalOf(actual)
     if (
       !AST.isTypeDeclaration(actualOwner)
-      || (actual.kind !== 'capability' && !isPrimitiveNamed(actual, 'text'))
     ) {
       return 'incompatible'
     }
@@ -1460,8 +1640,8 @@ class TypeResolutionContext {
       }
       let pending = false
       for (const requirement of requirements) {
-        const implementation = actual.kind === 'capability'
-          ? capabilityRequirements(actual.declaration).find(method => method.name === requirement.name)
+        const implementation = projection
+          ? Type.aggregateCapabilityRequirements(actual).find(method => method.name === requirement.name)
           : Type.associatedMethodDeclaration(
             actual,
             requirement.name,
@@ -1477,19 +1657,21 @@ class TypeResolutionContext {
           pending = true
           continue
         }
+        const requiredDescriptor = Type.specializeAssociatedDescriptor(required.descriptor, actual)
+        const suppliedDescriptor = Type.specializeAssociatedDescriptor(supplied.descriptor, actual)
         if (
-          [...required.descriptor.signature.inputs, ...supplied.descriptor.signature.inputs]
+          [...requiredDescriptor.signature.inputs, ...suppliedDescriptor.signature.inputs]
             .some(input => typeHasUnresolvedDomain(input.type))
-          || typeHasUnresolvedDomain(required.descriptor.result)
-          || typeHasUnresolvedDomain(supplied.descriptor.result)
+          || typeHasUnresolvedDomain(requiredDescriptor.result)
+          || typeHasUnresolvedDomain(suppliedDescriptor.result)
         ) {
           pending = true
           continue
         }
         let inputPending = false
         const comparison = compareCallableSignatures(
-          supplied.descriptor.signature,
-          required.descriptor.signature,
+          suppliedDescriptor.signature,
+          requiredDescriptor.signature,
           (actual, expected) => {
             const result = this.compareDomains(actual, expected, false)
             inputPending ||= result === 'pending'
@@ -1499,7 +1681,7 @@ class TypeResolutionContext {
         // A source body's inferred failures are checked in final admission. Projection instead
         // retains the independent declared requirement bound as part of substitution.
         const diagnostics = comparison.diagnostics.filter(diagnostic =>
-          actual.kind === 'capability' || diagnostic.kind !== 'failure-bound'
+          projection || diagnostic.kind !== 'failure-bound'
         )
         if (diagnostics.some(diagnostic => diagnostic.kind === 'failure-bound')) {
           return 'incompatible'
@@ -1507,7 +1689,7 @@ class TypeResolutionContext {
         if (diagnostics.some(diagnostic => diagnostic.kind !== 'unresolved-input')) {
           return inputPending ? 'pending' : 'incompatible'
         }
-        const result = this.compareDomains(supplied.descriptor.result, required.descriptor.result, false)
+        const result = this.compareDomains(suppliedDescriptor.result, requiredDescriptor.result, false)
         if (result === 'incompatible') {
           return 'incompatible'
         }
@@ -1603,6 +1785,23 @@ class TypeResolutionContext {
         ),
       ListTypeReference: reference => ({ kind: 'list', element: this.ofReference(reference.elementType) }),
       NamedTypeReference: reference => {
+        if (reference.root === 'Self' || reference.root === 'type') {
+          const owner = contextualTypeOwner(reference)
+          return owner
+            ? this.atMemberPath(Object.freeze({ ...this.ofDefinition(owner), selfOwner: owner }), reference.members)
+            : unresolvedType()
+        }
+        const generic = contextualGenericParameter(reference, reference.root)
+        if (generic) {
+          return this.withoutCycles(generic, () => {
+            const bounds = Object.freeze(generic.bounds.map(bound => this.ofReference(bound)))
+            const carrier = bounds[0] ?? unresolvedType()
+            return this.atMemberPath(
+              Object.freeze({ ...carrier, selfOwner: undefined, genericParameter: generic, genericBounds: bounds }),
+              reference.members,
+            )
+          })
+        }
         const entity = Type.entityOfReference(reference)
         if (entity) {
           return { kind: 'entity', entity }
@@ -1640,9 +1839,21 @@ class TypeResolutionContext {
 
   ofConfiguredValue(value: AST.ConfiguredValue): TaoType {
     const declaration = value.type.ref
+    if (AST.isConfigurationConstructor(value) && value.value && AST.isParameterTypeDeclaration(declaration)) {
+      const domain = this.ofDefinition(declaration)
+      if (domain.genericParameter) {
+        return this.ofExpression(value.value)
+      }
+    }
     const typeOfParameterizedDeclaration = (declaration: AST.ParameterizedDeclaration): TaoType => {
       const [member, ...remainingMembers] = value.members ?? []
       const parameterType = member ? this.signatureParameterDefinition(declaration, member) : undefined
+      if (parameterType && remainingMembers.length === 0 && AST.isConfigurationConstructor(value) && value.value) {
+        const domain = this.ofDefinition(parameterType)
+        if (domain.genericParameter) {
+          return this.ofExpression(value.value)
+        }
+      }
       return parameterType
         ? this.atMemberPath(this.ofDefinition(parameterType), remainingMembers)
         : unresolvedType()
@@ -1912,7 +2123,38 @@ class TypeResolutionContext {
     if (!target) {
       return unresolvedType()
     }
-    return AST.isPhraseDeclaration(target) ? primitiveType('text') : this.ofFunctionReturn(target)
+    if (AST.isPhraseDeclaration(target)) {
+      return primitiveType('text')
+    }
+    return target.genericParameters.length > 0
+      ? this.withoutCycles(call, () => {
+        const instantiated = this.instantiateGenericInvocation(target, AST.argumentsOf(call))
+        return instantiated.diagnostics.length === 0 && instantiated.genericDiagnostics.length === 0
+          ? instantiated.result
+          : unresolvedType()
+      })
+      : this.ofFunctionReturn(target)
+  }
+
+  instantiateGenericInvocation(
+    declaration: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration,
+    arguments_: readonly AST.Argument[],
+    metadata: ArgumentBindingMetadata = {},
+  ) {
+    return instantiateGenericInvocation(declaration, arguments_, {
+      parameterType: parameter => this.ofParameter(parameter),
+      argumentType: argument => this.ofExpression(argument.value),
+      accepts: (actual, expected) =>
+        this.descriptors
+          ? this.compare(actual, expected) === 'compatible'
+          : Type.isAssignable(actual, expected),
+      ...metadata,
+      resultType: declaration => this.ofFunctionReturn(declaration),
+      strictAccepts: (actual, expected) =>
+        this.descriptors
+          ? this.compareDomains(actual, expected, false) === 'compatible'
+          : Type.isCallableAssignable(actual, expected),
+    })
   }
 
   private methodCallExpressionType(call: AST.MethodCallExpression): TaoType {
@@ -1929,8 +2171,8 @@ class TypeResolutionContext {
     }
     const receiver = this.receiverType(target.receiver)
     const nominal = nominalOf(receiver)
-    const declarations = receiver.kind === 'capability'
-      ? capabilityRequirements(receiver.declaration)
+    const declarations = receiver.kind === 'capability' || receiver.genericParameter
+      ? Type.aggregateCapabilityRequirements(receiver)
       : nominal
       ? nominalChain(nominal, reference => this.definitionOfReference(reference))
         .flatMap(owner => AST.isTypeDeclaration(owner) ? ownAssociatedMethods(owner) : [])
@@ -1939,16 +2181,30 @@ class TypeResolutionContext {
     if (!declaration) {
       return unresolvedType()
     }
+    if (AST.isAssociatedFunctionDeclaration(declaration) && declaration.genericParameters.length > 0) {
+      return this.withoutCycles(call, () => {
+        const instantiated = this.instantiateGenericInvocation(declaration, AST.argumentsOf(call), {
+          parameterType: parameter => substituteGenericType(this.ofParameter(parameter), new Map(), receiver),
+        })
+        return instantiated.diagnostics.length === 0 && instantiated.genericDiagnostics.length === 0
+          ? substituteGenericType(instantiated.result, new Map(), receiver)
+          : unresolvedType()
+      })
+    }
     if (this.descriptors) {
       const contract = this.descriptors.get(declaration)
-      return contract?.kind === 'ready' ? contract.descriptor.result : unresolvedType()
+      return contract?.kind === 'ready'
+        ? Type.specializeAssociatedDescriptor(contract.descriptor, receiver).result
+        : unresolvedType()
     }
     if (hasAssociatedEffects()) {
-      return associatedCallableDescriptor(declaration)?.result ?? unresolvedType()
+      const descriptor = associatedCallableDescriptor(declaration)
+      return descriptor ? Type.specializeAssociatedDescriptor(descriptor, receiver).result : unresolvedType()
     }
-    return AST.isCapabilityMethodDeclaration(declaration)
+    const result = AST.isCapabilityMethodDeclaration(declaration)
       ? this.ofTypeExpression(declaration.returnType)
       : this.ofFunctionReturn(declaration)
+    return substituteGenericType(result, new Map(), receiver)
   }
 
   ofFunctionReturn(declaration: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration): TaoType {

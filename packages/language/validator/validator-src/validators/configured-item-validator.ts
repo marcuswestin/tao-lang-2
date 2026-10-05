@@ -60,7 +60,21 @@ function validateConfiguredItemConstructor(
   value: AST.ConfigurationConstructor,
   ctx: ValidationContext,
 ): void {
-  const constructed = Type.ofConfiguredValue(value)
+  let constructed = Type.ofConfiguredValue(value)
+  if (AST.isArgument(value.$container)) {
+    const role = Type.genericRoleConstructor(value.$container)
+    const owner = role?.parameter.$container?.$container
+    if (role && (AST.isFunctionDeclaration(owner) || AST.isAssociatedFunctionDeclaration(owner))) {
+      const arguments_ = value.$container.$container
+      if (AST.isArgumentList(arguments_)) {
+        const generic = Type.instantiateGenericInvocation(owner, arguments_.arguments)
+        if (generic.genericDiagnostics.length > 0) {
+          return
+        }
+        constructed = generic.parameterTypes.get(role.parameter) ?? constructed
+      }
+    }
+  }
   if (
     !AST.isTypeDeclaration(value.type.ref) && !AST.isParameterizedDeclaration(value.type.ref)
     && !AST.isParameterTypeDeclaration(value.type.ref)
@@ -73,16 +87,15 @@ function validateConfiguredItemConstructor(
   const typeName = [value.type.ref?.name ?? value.type.$refText, ...(value.members ?? [])].join('.')
   if (value.value) {
     const expectedKind = constructorLiteralKind(constructed)
-    const actualKind = Switch.type(value.value, {
-      StringLiteral: () => 'text' as const,
-      NumberLiteral: () => 'number' as const,
-      ListLiteral: () => 'list' as const,
-    })
-    if (actualKind !== expectedKind) {
+    const actual = Type.ofExpression(value.value)
+    if (actual.kind === 'unresolved') {
+      return
+    }
+    const actualKind = constructorLiteralKind(actual)
+    if (constructed.kind !== 'capability' && actualKind !== expectedKind) {
       ctx.error(value, configuredItemValidationMessages.constructorShape(typeName, expectedKind))
       return
     }
-    const actual = Type.ofExpression(value.value)
     if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, constructed)) {
       ctx.error(
         value.value,
