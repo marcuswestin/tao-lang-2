@@ -13,7 +13,7 @@ import { Compile } from '../compiler-src/codegen/react-native/Compile'
 
 const declaration = `
   type Measure is numeric with {
-    units { Seconds 1 (default), Minutes 60, Milliseconds 0.001 }
+    units { seconds 1 (default), minutes 60, milliseconds 0.001 }
   }
 `
 const validatorSession = Validator.createSession()
@@ -54,8 +54,8 @@ async function factory() {
   return makeQuantityType(
     {
       domain: 'Measure',
-      defaultUnit: 'Seconds',
-      units: { Seconds: 1, Minutes: 60, Milliseconds: 0.001 },
+      defaultUnit: 'seconds',
+      units: { seconds: 1, minutes: 60, milliseconds: 0.001 },
     } as const,
     TR.Value,
   )
@@ -171,7 +171,7 @@ Describe('compiler: numeric units', () => {
     const invoke = new Function('TR', '_Scope', '__tao_bridge_1__', code)
     const { default: TR } = await runtimeModule
     const ownerFactory = await factory()
-    const present = ownerFactory.fromUnit(2, 'Minutes')
+    const present = ownerFactory.fromUnit(2, 'minutes')
     for (const input of [present, TR.Value(null)]) {
       let calls = 0
       let received: unknown
@@ -183,14 +183,14 @@ Describe('compiler: numeric units', () => {
       Expect(calls).toBe(1)
       Expect(received).toBe(input === present ? present : null)
       if (received === present) {
-        Expect(ownerFactory.read(present)).toEqual({ canonical: 120, unit: 'Minutes' })
+        Expect(ownerFactory.read(present)).toEqual({ canonical: 120, unit: 'minutes' })
       }
     }
   })
 
   Test('preserves either canonical owner wrapper through a quantity-only native union', async () => {
     const file = await validated(`${declaration}
-      type Other is numeric with { units { Items 1 (default) } }
+      type Other is numeric with { units { items 1 (default) } }
       type Choice is Measure | Other
       function Inspect(Value Choice) returns text { return Inspect(Value) from ./Inspect.ts }
     `)
@@ -203,11 +203,11 @@ Describe('compiler: numeric units', () => {
     const { default: TR } = await runtimeModule
     const { makeQuantityType } = await quantityModule
     const first = await factory()
-    const second = makeQuantityType({ domain: 'Other', units: { Items: 1 }, defaultUnit: 'Items' }, TR.Value)
+    const second = makeQuantityType({ domain: 'Other', units: { items: 1 }, defaultUnit: 'items' }, TR.Value)
     for (
       const [input, owner, canonical] of [
-        [first.fromUnit(2, 'Minutes'), first, 120],
-        [second.fromUnit(3, 'Items'), second, 3],
+        [first.fromUnit(2, 'minutes'), first, 120],
+        [second.fromUnit(3, 'items'), second, 3],
       ] as const
     ) {
       let received: unknown
@@ -233,7 +233,7 @@ Describe('compiler: numeric units', () => {
     const invoke = new Function('TR', '_Scope', '__tao_bridge_1__', code)
     const { default: TR } = await runtimeModule
     const ownerFactory = await factory()
-    const quantity = ownerFactory.fromUnit(2, 'Minutes')
+    const quantity = ownerFactory.fromUnit(2, 'minutes')
     for (const input of [quantity, TR.Value(7)]) {
       let evaluations = 0
       let calls = 0
@@ -254,14 +254,14 @@ Describe('compiler: numeric units', () => {
       Expect(calls).toBe(1)
       Expect(received).toBe(input === quantity ? quantity : 7)
       if (received === quantity) {
-        Expect(ownerFactory.read(quantity)).toEqual({ canonical: 120, unit: 'Minutes' })
+        Expect(ownerFactory.read(quantity)).toEqual({ canonical: 120, unit: 'minutes' })
       }
     }
   })
 
   Test('admits either exact quantity owner from a native result union without reconstructing wrappers', async () => {
     const file = await validated(`${declaration}
-      type Other is numeric with { units { Items 1 (default) } }
+      type Other is numeric with { units { items 1 (default) } }
       type Choice is Measure | Other
       function Make() returns Choice { return Make() from ./Make.ts }
     `)
@@ -276,8 +276,8 @@ Describe('compiler: numeric units', () => {
     const { default: TR } = await runtimeModule
     const { makeQuantityType } = await quantityModule
     const first = await factory()
-    const second = makeQuantityType({ domain: 'Other', units: { Items: 1 }, defaultUnit: 'Items' }, TR.Value)
-    for (const input of [first.fromUnit(2, 'Minutes'), second.fromUnit(3, 'Items')]) {
+    const second = makeQuantityType({ domain: 'Other', units: { items: 1 }, defaultUnit: 'items' }, TR.Value)
+    for (const input of [first.fromUnit(2, 'minutes'), second.fromUnit(3, 'items')]) {
       let invocations = 0
       let evaluations = 0
       let getters = 0
@@ -304,9 +304,9 @@ Describe('compiler: numeric units', () => {
     }
     for (
       const [input, failureCase] of [
-        [(await factory()).fromUnit(2, 'Minutes'), 'QuantityDomainMismatch'],
+        [(await factory()).fromUnit(2, 'minutes'), 'QuantityDomainMismatch'],
         [120, 'QuantityBadShape'],
-        [first.fromUnit(2, 'Minutes').jsValue, 'QuantityBadShape'],
+        [first.fromUnit(2, 'minutes').jsValue, 'QuantityBadShape'],
         [TR.Value(120), 'QuantityBadShape'],
       ] as const
     ) {
@@ -328,7 +328,7 @@ Describe('compiler: numeric units', () => {
   Test('admits mixed native quantity and primitive results without double wrapping', async () => {
     const { default: TR } = await runtimeModule
     const ownerFactory = await factory()
-    const quantity = ownerFactory.fromUnit(2, 'Minutes')
+    const quantity = ownerFactory.fromUnit(2, 'minutes')
     for (const target of ['number', 'numeric', 'text']) {
       const file = await validated(`${declaration}
         type Choice is Measure | ${target}
@@ -348,7 +348,7 @@ Describe('compiler: numeric units', () => {
         Expect(invocations).toBe(1)
         if (input === quantity) {
           Expect(result).toBe(quantity)
-          Expect(ownerFactory.read(result)).toEqual({ canonical: 120, unit: 'Minutes' })
+          Expect(ownerFactory.read(result)).toEqual({ canonical: 120, unit: 'minutes' })
         } else {
           Expect(result.jsValue).toBe(input)
         }
@@ -366,7 +366,7 @@ Describe('compiler: numeric units', () => {
       }
       for (
         const [input, failureCase] of [
-          [(await factory()).fromUnit(2, 'Minutes'), 'QuantityDomainMismatch'],
+          [(await factory()).fromUnit(2, 'minutes'), 'QuantityDomainMismatch'],
           [quantity.jsValue, 'QuantityBadShape'],
           [TR.Value(target === 'text' ? 'ready' : 7), 'QuantityBadShape'],
         ] as const
@@ -396,7 +396,7 @@ Describe('compiler: numeric units', () => {
         `return ${expressionCode(bridge, quantityOwner(file))}`,
       )
       const invoke = new Function('TR', 'Factory', '__tao_bridge_1__', code)
-      const quantity = ownerFactory.fromUnit(2, 'Minutes')
+      const quantity = ownerFactory.fromUnit(2, 'minutes')
       for (const input of [quantity, 7, NaN, Infinity, 'ready', true]) {
         const result = invoke(TR, ownerFactory, () => input)
         if (input === quantity) {
@@ -425,16 +425,16 @@ Describe('compiler: numeric units', () => {
       })
       Expect(result.jsValue).toBe(input)
       Expect(calls).toBe(1)
-      const quantity = ownerFactory.fromUnit(2, 'Minutes')
+      const quantity = ownerFactory.fromUnit(2, 'minutes')
       Expect(invoke(TR, ownerFactory, () => quantity)).toBe(quantity)
-      Expect(ownerFactory.read(quantity)).toEqual({ canonical: 120, unit: 'Minutes' })
+      Expect(ownerFactory.read(quantity)).toEqual({ canonical: 120, unit: 'minutes' })
     })
   }
 
   Test('does not probe getter or prototype lookalikes at an ambiguous native result boundary', async () => {
     const { default: TR } = await runtimeModule
     const ownerFactory = await factory()
-    const quantity = ownerFactory.fromUnit(2, 'Minutes')
+    const quantity = ownerFactory.fromUnit(2, 'minutes')
     const recordInvoke = await mixedResultInvoker('{}')
     const arrayInvoke = await mixedResultInvoker('list of text')
     for (
@@ -471,14 +471,14 @@ Describe('compiler: numeric units', () => {
       const invoke = await mixedResultInvoker('{}')
       const { default: TR } = await runtimeModule
       const ownerFactory = await factory()
-      const quantity = ownerFactory.fromUnit(2, 'Minutes')
+      const quantity = ownerFactory.fromUnit(2, 'minutes')
       for (const input of [quantity, TR.Readonly(quantity)]) {
         Expect(invoke(TR, ownerFactory, () => input)).toBe(input)
-        Expect(ownerFactory.read(input)).toEqual({ canonical: 120, unit: 'Minutes' })
+        Expect(ownerFactory.read(input)).toEqual({ canonical: 120, unit: 'minutes' })
       }
       for (
         const [input, failureCase] of [
-          [(await factory()).fromUnit(2, 'Minutes'), 'QuantityDomainMismatch'],
+          [(await factory()).fromUnit(2, 'minutes'), 'QuantityDomainMismatch'],
           [quantity.jsValue, 'QuantityBadShape'],
           [TR.Value({}), 'QuantityBadShape'],
         ] as const
@@ -503,7 +503,7 @@ Describe('compiler: numeric units', () => {
     const invoke = await mixedResultInvoker('{}')
     const { default: TR } = await runtimeModule
     const ownerFactory = await factory()
-    const quantity = ownerFactory.fromUnit(2, 'Minutes')
+    const quantity = ownerFactory.fromUnit(2, 'minutes')
     let evaluations = 0
     let reads = 0
     const legacy = Object.freeze({
@@ -533,12 +533,12 @@ Describe('compiler: numeric units', () => {
     Expect(calls).toBe(1)
     Expect(evaluations).toBe(1)
     Expect(reads).toBe(1)
-    Expect(ownerFactory.read(result)).toEqual({ canonical: 120, unit: 'Minutes' })
+    Expect(ownerFactory.read(result)).toEqual({ canonical: 120, unit: 'minutes' })
     const plainData = invoke(TR, ownerFactory, () => legacy)
     Expect(plainData.jsValue).toBe(legacy)
     Expect(evaluations).toBe(2)
     Expect(reads).toBe(2)
-    const wrongOwner = (await factory()).fromUnit(2, 'Minutes')
+    const wrongOwner = (await factory()).fromUnit(2, 'minutes')
     let failure: unknown
     try {
       invoke(TR, ownerFactory, () => TR.nativeQuantityResult({ evaluate: () => wrongOwner }))
@@ -589,7 +589,7 @@ Describe('compiler: numeric units', () => {
     Expect(code).not.toContain('fromJSValue')
     const { default: TR } = await runtimeModule
     const ownerFactory = await factory()
-    const returned = ownerFactory.fromUnit(2, 'Minutes')
+    const returned = ownerFactory.fromUnit(2, 'minutes')
     let calls = 0
     const native = () => {
       calls += 1
@@ -600,27 +600,27 @@ Describe('compiler: numeric units', () => {
     const result = invoke(TR, ownerFactory, native)
     Expect(calls).toBe(1)
     Expect(result).toBe(returned)
-    Expect(ownerFactory.read(result)).toEqual({ canonical: 120, unit: 'Minutes' })
+    Expect(ownerFactory.read(result)).toEqual({ canonical: 120, unit: 'minutes' })
     const otherFactory = await factory()
-    Expect(() => invoke(TR, ownerFactory, () => otherFactory.fromUnit(2, 'Minutes'))).toThrow()
+    Expect(() => invoke(TR, ownerFactory, () => otherFactory.fromUnit(2, 'minutes'))).toThrow()
     Expect(() => invoke(TR, ownerFactory, () => TR.Value(120))).toThrow()
   })
 
   Test('constructs signed, grouped and qualified units through the supplied owner factory', async () => {
     const file = await validated(`${declaration}
-      let Signed = -2 Minutes
-      let Grouped = (-2) Minutes
-      let Qualified = 1500 Measure.Milliseconds
-      let Calculated = (1 + 2) Minutes
+      let Signed = -2 minutes
+      let Grouped = (-2) minutes
+      let Qualified = 1500 Measure.milliseconds
+      let Calculated = (1 + 2) minutes
     `)
     const owner = quantityOwner(file)
     const ownerFactory = await factory()
     for (
       const [name, canonical, unit] of [
-        ['Signed', -120, 'Minutes'],
-        ['Grouped', -120, 'Minutes'],
-        ['Qualified', 1.5, 'Milliseconds'],
-        ['Calculated', 180, 'Minutes'],
+        ['Signed', -120, 'minutes'],
+        ['Grouped', -120, 'minutes'],
+        ['Qualified', 1.5, 'milliseconds'],
+        ['Calculated', 180, 'minutes'],
       ] as const
     ) {
       const code = expressionCode(aliasValue(file, name), owner)
@@ -631,7 +631,7 @@ Describe('compiler: numeric units', () => {
   })
 
   Test('requires a canonical owner binding and releases the scope after nesting and emission failure', async () => {
-    const file = await validated(`${declaration} let Value = 2 Minutes`)
+    const file = await validated(`${declaration} let Value = 2 minutes`)
     const owner = quantityOwner(file)
     const expression = aliasValue(file, 'Value')
     Expect(() => Compile.Expression(expression)).toThrow('quantity factory bindings are scoped')
@@ -651,7 +651,7 @@ Describe('compiler: numeric units', () => {
   Test('preserves generated quantity values through an ordinary function and mutable cell', async () => {
     const file = await validated(`${declaration}
       function Pass(Value Measure) returns Measure { return Value }
-      let Initial = 2 Minutes
+      let Initial = 2 minutes
       let Through = Pass(Initial)
     `)
     const owner = quantityOwner(file)
@@ -666,7 +666,7 @@ Describe('compiler: numeric units', () => {
     const scope = { Initial: TR.Cell(initial) }
     new Function('TR', '_Scope', generated)(TR, scope)
     const through = await executeExpression(expressionCode(aliasValue(file, 'Through'), owner), ownerFactory, scope)
-    Expect(ownerFactory.read(through)).toEqual({ canonical: 120, unit: 'Minutes' })
+    Expect(ownerFactory.read(through)).toEqual({ canonical: 120, unit: 'minutes' })
     Expect(through.jsValue).toBe(scope.Initial.evaluate().jsValue)
   })
 
@@ -685,7 +685,7 @@ Describe('compiler: numeric units', () => {
     Expect(code).toContain('_Scope.Label.evaluate().jsValue')
     const { default: TR } = await runtimeModule
     const ownerFactory = await factory()
-    const input = ownerFactory.fromUnit(2, 'Minutes')
+    const input = ownerFactory.fromUnit(2, 'minutes')
     const javascript = new Bun.Transpiler({ loader: 'ts' }).transformSync(`return ${code}`)
     let received: unknown[] = []
     const native = (...args: unknown[]) => {

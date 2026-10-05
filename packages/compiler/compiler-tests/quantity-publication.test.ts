@@ -6,21 +6,21 @@ import { BridgeMetadata } from '../compiler-src/bridge-metadata'
 import type { CompiledFile } from '../compiler-src/compiler'
 
 const measure = `type Measure is numeric with {
-  units { Seconds 1 (default), Minutes 60 }
+  units { seconds 1 (default), minutes 60 }
 }`
 
 Describe('compiler: quantity publication', () => {
   Test('executes Tao and native construction through one leaf without a native initialization cycle', async () => {
     await withTaoFiles('tao-compiled-quantity-publication-', {
       'Main.tao': `${measure}
-        public let InTao = 2 Minutes
+        public let InTao = 2 minutes
         public function Make() returns Measure { return Make() from ./Native.ts }
         public let FromNative = Make()
         app Demo { id "com.tao.quantity" version "1.0.0" name "Quantity" view Main }
         view Main() from ./View.tsx
       `,
       'Native.ts': `import { types, type Measure } from './Main.tao'
-        export const initial = types.Measure.Minutes(2)
+        export const initial = types.Measure.minutes(2)
         export function Make(): Measure { return initial }
       `,
       'View.tsx': 'export function Main() { return null }',
@@ -58,7 +58,7 @@ Describe('compiler: quantity publication', () => {
         Platform.runtimeConsole.info(JSON.stringify({
           tao: Factory.read(tao), native: Factory.read(native),
           nativeIdentity: native === initial,
-          constructors: types.${row.constructorMember}.Minutes(2).getJSValue(),
+          constructors: types.${row.constructorMember}.minutes(2).getJSValue(),
         }))
       `,
       )
@@ -69,8 +69,8 @@ Describe('compiler: quantity publication', () => {
       })
       Expect({ exitCode: execution.exitCode, stderr: execution.stderr }).toEqual({ exitCode: 0, stderr: '' })
       Expect(JSON.parse(execution.stdout)).toEqual({
-        tao: { canonical: 120, unit: 'Minutes' },
-        native: { canonical: 120, unit: 'Minutes' },
+        tao: { canonical: 120, unit: 'minutes' },
+        native: { canonical: 120, unit: 'minutes' },
         nativeIdentity: true,
         constructors: 120,
       })
@@ -89,8 +89,8 @@ Describe('compiler: quantity publication', () => {
       `,
       'Native.ts': `import { types as left } from './Left.tao'
         import { types as right } from './Right.tao'
-        export const first = right.LeftAlias.Minutes(2)
-        export const second = left.RightAlias.Seconds(3)
+        export const first = right.LeftAlias.minutes(2)
+        export const second = left.RightAlias.seconds(3)
         export function Home() { return null }
       `,
       'Main.tao': `app Demo { id "com.tao.quantity.cycle" version "1.0.0" name "Cycle" view Home }
@@ -124,8 +124,8 @@ Describe('compiler: quantity publication', () => {
         import type { ${left.surface.facadeNamespaceExport} as Contracts } from './types-out/${companion.relativePath}'
         import { ${left.surface.namespaceExport} as left } from './types-out/${left.leaf.relativePath}'
         import { ${right.surface.namespaceExport} as right } from './types-out/${right.leaf.relativePath}'
-        export const same: Contracts.LeftMeasure = right.LeftAlias.Minutes(2)
-        export const alias: Contracts.RightAlias = right.RightMeasure.Seconds(3)
+        export const same: Contracts.LeftMeasure = right.LeftAlias.minutes(2)
+        export const alias: Contracts.RightAlias = right.RightMeasure.seconds(3)
       `
       await FS.writeText(typedConsumer, typedSource)
       const options: ts.CompilerOptions = {
@@ -154,7 +154,7 @@ Describe('compiler: quantity publication', () => {
       Expect(typeDiagnostics()).toEqual([])
       await FS.writeText(
         typedConsumer,
-        `${typedSource}\nexport const wrong: Contracts.LeftMeasure = left.RightAlias.Seconds(3)`,
+        `${typedSource}\nexport const wrong: Contracts.LeftMeasure = left.RightAlias.seconds(3)`,
       )
       Expect(typeDiagnostics().map(diagnostic => diagnostic.code)).toEqual([2719])
       for (const entry of ['Left', 'Right'] as const) {
@@ -174,7 +174,7 @@ Describe('compiler: quantity publication', () => {
           Platform.runtimeConsole.info(JSON.stringify({
             left: left.${left.surface.namespaceExport}.LeftMeasure === right.${right.surface.namespaceExport}.LeftAlias,
             right: right.${right.surface.namespaceExport}.RightMeasure === left.${left.surface.namespaceExport}.RightAlias,
-            value: right.${right.surface.namespaceExport}.LeftAlias.Minutes(2).getJSValue(),
+            value: right.${right.surface.namespaceExport}.LeftAlias.minutes(2).getJSValue(),
           }))
         `,
         )
@@ -195,7 +195,7 @@ Describe('compiler: quantity publication', () => {
       'Library/Package.tao': 'package { name "Widgets" version 1.0.0 includes @ui }',
       'Library/@ui/Widget.tao': 'public view Widget() from ./Widget.tsx',
       'Library/@ui/Widget.tsx': `import { types } from './Private.tao'
-        export const initial = types.Measure.Minutes(2)
+        export const initial = types.Measure.minutes(2)
         export function Widget() { return null }
       `,
       'Library/@ui/Private.tao': `use package @owners as Canonical
@@ -259,7 +259,7 @@ Describe('compiler: quantity publication', () => {
         processPolicy: 'test',
       })
       Expect({ exitCode: execution.exitCode, stderr: execution.stderr }).toEqual({ exitCode: 0, stderr: '' })
-      Expect(JSON.parse(execution.stdout)).toEqual({ same: true, reading: { canonical: 120, unit: 'Minutes' } })
+      Expect(JSON.parse(execution.stdout)).toEqual({ same: true, reading: { canonical: 120, unit: 'minutes' } })
     })
   })
 })

@@ -6,7 +6,7 @@ import * as ts from 'typescript'
 import { ProjectTooling } from '../project-tooling-src/ProjectToolingService'
 
 const measureDeclaration = `type Measure is numeric with {
-  units { Seconds 1 (default), Minutes 60 }
+  units { seconds 1 (default), minutes 60 }
 }`
 
 Describe('project tooling quantity publication', () => {
@@ -18,7 +18,7 @@ function Read() returns Measure {
 }
 `,
       'Native.ts': `import { types } from './Main.tao'
-export function Read(): types.Measure { return types.Measure.Minutes(2) }
+export function Read(): types.Measure { return types.Measure.minutes(2) }
 `,
     }, async (paths, root) => {
       const companion = FS.resolvePath('.tao-ts/Main.tao.ts', root)
@@ -39,7 +39,7 @@ export function Read(): types.Measure { return types.Measure.Minutes(2) }
       Expect(leafCode).toContain('unique symbol')
       Expect(leafCode).toContain('export namespace types')
       Expect(leafCode).toContain('export type Measure')
-      Expect(leafCode).toContain('["Minutes"]')
+      Expect(leafCode).toContain('["minutes"]')
       Expect(
         first.sourceMappings.some(mapping =>
           mapping.generatedPath === leaf && mapping.sourcePath === paths['Main.tao']
@@ -68,7 +68,7 @@ function Read() returns Measure {
 }
 `,
       'Native.ts': `import { types } from './@left/Measure.tao'
-export function Read(): types.Measure { return types.Measure.Seconds(1) }
+export function Read(): types.Measure { return types.Measure.seconds(1) }
 `,
     }, async (paths, root) => {
       const matching = await ProjectTooling.refresh(root, {})
@@ -85,7 +85,7 @@ export function Read(): types.Measure { return types.Measure.Seconds(1) }
       await FS.writeText(
         paths['Native.ts'],
         `import { types } from './@right/Measure.tao'
-export function Read(): types.Measure { return types.Measure.Seconds(1) }
+export function Read(): types.Measure { return types.Measure.seconds(1) }
 `,
       )
       const mismatch = await ProjectTooling.refresh(root, {})
@@ -104,7 +104,7 @@ export function Read(): types.Measure { return types.Measure.Seconds(1) }
       await FS.writeText(
         paths['Native.ts'],
         `import { types } from './@left/Measure.tao'
-export function Read(): types.Measure { return types.Measure.Seconds(1) }
+export function Read(): types.Measure { return types.Measure.seconds(1) }
 `,
       )
       const repaired = await ProjectTooling.refresh(root, {})
@@ -118,12 +118,12 @@ export function Read(): types.Measure { return types.Measure.Seconds(1) }
     const native = `import { types, type First, type Second } from './Aliases.tao'
 import { types as leftTypes } from './@left/Measure.tao'
 import { types as rightTypes } from './@right/Measure.tao'
-export const first: First = types.First.Seconds(1)
-export const second: Second = types.Second.Minutes(2)
+export const first: First = types.First.seconds(1)
+export const second: Second = types.Second.minutes(2)
 export const canonicalFirst: leftTypes.Measure = first
 export const canonicalSecond: rightTypes.Measure = second
-export const aliasFirst: First = leftTypes.Measure.Minutes(1)
-export const aliasSecond: Second = rightTypes.Measure.Seconds(2)
+export const aliasFirst: First = leftTypes.Measure.minutes(1)
+export const aliasSecond: Second = rightTypes.Measure.seconds(2)
 export const namespaceFirst: types.First = first
 export const namespaceSecond: types.Second = second
 `
@@ -183,9 +183,9 @@ function Renamed() returns Renamed {
 `,
       'Native.ts': `import { types, type Renamed as ReadContract } from './Main.tao'
 import { types as canonical } from './@left/Measure.tao'
-export const Renamed: ReadContract = () => types.Renamed.Seconds(1)
+export const Renamed: ReadContract = () => types.Renamed.seconds(1)
 export const value: canonical.Measure = Renamed()
-export const reverse: types.Renamed = canonical.Measure.Minutes(2)
+export const reverse: types.Renamed = canonical.Measure.minutes(2)
 `,
     }, async (_paths, root) => {
       const companion = FS.resolvePath('.tao-ts/Main.tao.ts', root)
@@ -214,7 +214,7 @@ function Read() returns __TaoBridgeCheck {
 }
 `,
       'Native.ts': `import { types } from './Main.tao'
-export function Read(): types.__TaoBridgeCheck { return types.__TaoBridgeCheck.Seconds(1) }
+export function Read(): types.__TaoBridgeCheck { return types.__TaoBridgeCheck.seconds(1) }
 `,
     }, async (_paths, root) => {
       const companion = FS.resolvePath('.tao-ts/Main.tao.ts', root)
@@ -243,10 +243,10 @@ type Forwarded = Local.Measure
 `,
       'Native.ts': `import { types } from './Local.tao'
 import { types as cross } from './Cross.tao'
-export const before: types.Measure = types.Before.Seconds(1)
-export const after: types.Measure = types.After.Minutes(2)
-export const forwarded: types.Measure = cross.Forwarded.Seconds(3)
-export const reverse: cross.Forwarded = types.Measure.Minutes(4)
+export const before: types.Measure = types.Before.seconds(1)
+export const after: types.Measure = types.After.minutes(2)
+export const forwarded: types.Measure = cross.Forwarded.seconds(3)
+export const reverse: cross.Forwarded = types.Measure.minutes(4)
 `,
     }, async (paths, root) => {
       const localLeaf = FS.resolvePath('.tao-ts/Local.tao.quantities.ts', root)
@@ -293,7 +293,7 @@ export const reverse: cross.Forwarded = types.Measure.Minutes(4)
         '  beforeFactory: BeforeFactory === OwnerFactory,',
         '  afterFactory: AfterFactory === OwnerFactory,',
         '  forwardedFactory: ForwardedFactory === OwnerFactory,',
-        `  read: OwnerFactory.read(cross.${forwarded.constructorMember}.Minutes(2)),`,
+        `  read: OwnerFactory.read(cross.${forwarded.constructorMember}.minutes(2)),`,
         '}))',
       ].join('\n')
       const consumerPath = FS.resolvePath('Identity.js', root)
@@ -311,7 +311,7 @@ export const reverse: cross.Forwarded = types.Measure.Minutes(4)
         beforeFactory: true,
         afterFactory: true,
         forwardedFactory: true,
-        read: { canonical: 120, unit: 'Minutes' },
+        read: { canonical: 120, unit: 'minutes' },
       })
     })
   })
@@ -328,8 +328,8 @@ type LeftAlias = Local.LeftMeasure
 `,
       'Native.ts': `import { types as left } from './Left.tao'
 import { types as right } from './Right.tao'
-export const first: left.LeftMeasure = right.LeftAlias.Minutes(2)
-export const second: right.RightMeasure = left.RightAlias.Seconds(3)
+export const first: left.LeftMeasure = right.LeftAlias.minutes(2)
+export const second: right.RightMeasure = left.RightAlias.seconds(3)
 `,
     }, async (paths, root) => {
       const result = await ProjectTooling.refresh(root, {})
@@ -378,9 +378,9 @@ export const second: right.RightMeasure = left.RightAlias.Seconds(3)
           `  leftEnumerable: Object.keys(right.${right.namespaceExport}).includes(${
             JSON.stringify(leftAlias.constructorMember)
           }),`,
-          `  leftRead: left.${leftOwner.factoryExport}.read(right.${right.namespaceExport}.${leftAlias.constructorMember}.Minutes(2)),`,
-          `  rightRead: right.${rightOwner.factoryExport}.read(left.${left.namespaceExport}.${rightAlias.constructorMember}.Seconds(3)),`,
-          `  differentOwners: !left.${leftOwner.factoryExport}.ownsPayload(right.${right.namespaceExport}.${rightOwner.constructorMember}.Seconds(1).jsValue),`,
+          `  leftRead: left.${leftOwner.factoryExport}.read(right.${right.namespaceExport}.${leftAlias.constructorMember}.minutes(2)),`,
+          `  rightRead: right.${rightOwner.factoryExport}.read(left.${left.namespaceExport}.${rightAlias.constructorMember}.seconds(3)),`,
+          `  differentOwners: !left.${leftOwner.factoryExport}.ownsPayload(right.${right.namespaceExport}.${rightOwner.constructorMember}.seconds(1).jsValue),`,
           '}))',
         ].join('\n')
         const consumerPath = FS.resolvePath(`Cycle${entry}.js`, root)
@@ -398,8 +398,8 @@ export const second: right.RightMeasure = left.RightAlias.Seconds(3)
           leftFactory: true,
           rightEnumerable: true,
           leftEnumerable: true,
-          leftRead: { canonical: 120, unit: 'Minutes' },
-          rightRead: { canonical: 3, unit: 'Seconds' },
+          leftRead: { canonical: 120, unit: 'minutes' },
+          rightRead: { canonical: 3, unit: 'seconds' },
           differentOwners: true,
         })
       }
@@ -423,7 +423,7 @@ export function Widget(_props: unknown) {
 `
           : `import { types, Read } from './Private.tao'
 export function Widget(_props: unknown) {
-  void types.Measure.Minutes(2)
+  void types.Measure.minutes(2)
   void (null as unknown as Read)
   return null
 }
@@ -435,7 +435,7 @@ function Read() returns Measure {
 }
 `,
         'Library/@ui/QuantityNative.ts': `import { types } from './Private.tao'
-export function Read(): types.Measure { return types.Measure.Minutes(2) }
+export function Read(): types.Measure { return types.Measure.minutes(2) }
 `,
         'Library/@owners/Owner.tao': `public ${measureDeclaration}
 type UnusedSource is datasource with {

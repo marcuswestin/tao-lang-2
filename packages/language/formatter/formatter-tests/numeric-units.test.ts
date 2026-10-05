@@ -6,12 +6,12 @@ Describe('formatter: numeric units', () => {
   Test(
     'formats owned unit tables and default markers with stable commas',
     formats(
-      'type Measure is numeric with{units{Seconds 1(default),Minutes 60}}',
+      'type Measure is numeric with{units{seconds 1(default),minutes 60}}',
       `
       type Measure is numeric with {
          units {
-            Seconds 1 (default),
-            Minutes 60
+            seconds 1 (default),
+            minutes 60
          }
       }
     `,
@@ -20,12 +20,12 @@ Describe('formatter: numeric units', () => {
   Test(
     'preserves ordered with-body entries around the unit table',
     formats(
-      'type Measure is numeric with{Label text,units{Seconds 1(default)},Other number}',
+      'type Measure is numeric with{Label text,units{seconds 1(default)},Other number}',
       `
       type Measure is numeric with {
          Label text,
          units {
-            Seconds 1 (default)
+            seconds 1 (default)
          },
          Other number
       }
@@ -35,12 +35,12 @@ Describe('formatter: numeric units', () => {
   Test(
     'formats invalid signed scales without changing their sign',
     formats(
-      'type Measure is numeric with{units{Seconds - 1(default),Other 0}}',
+      'type Measure is numeric with{units{seconds - 1(default),other 0}}',
       `
       type Measure is numeric with {
          units {
-            Seconds -1 (default),
-            Other 0
+            seconds -1 (default),
+            other 0
          }
       }
     `,
@@ -49,13 +49,13 @@ Describe('formatter: numeric units', () => {
   Test(
     'preserves a last unit table closing without changing ordinary closing-brace groups',
     formats(
-      `type Measure is numeric with{Label text,units{Seconds 1(default)}}
+      `type Measure is numeric with{Label text,units{seconds 1(default)}}
        function Read(Value boolean){if Value{return "ordinary"}}`,
       `
       type Measure is numeric with {
          Label text,
          units {
-            Seconds 1 (default)
+            seconds 1 (default)
          }
       }
 
@@ -68,23 +68,23 @@ Describe('formatter: numeric units', () => {
   )
   Test('retains signed and grouped suffix precedence and the linked AST after formatting', async () => {
     const source = `
-      type Measure is numeric with{units{Seconds 1(default)}}
-      let Signed=-2   Measure.Seconds
-      let Grouped=(1+2)   Measure.Seconds
-      let Negated=-(2   Measure.Seconds)
+      type Measure is numeric with{units{seconds 1(default)}}
+      let Signed=-2   Measure.seconds
+      let Grouped=(1+2)   Measure.seconds
+      let Negated=-(2   Measure.seconds)
     `
     const formatted = await formats(
       source,
       `
       type Measure is numeric with {
          units {
-            Seconds 1 (default)
+            seconds 1 (default)
          }
       }
 
-      let Signed = -2 Measure.Seconds
-      let Grouped = (1 + 2) Measure.Seconds
-      let Negated = -(2 Measure.Seconds)
+      let Signed = -2 Measure.seconds
+      let Grouped = (1 + 2) Measure.seconds
+      let Negated = -(2 Measure.seconds)
     `,
     )()
     for (const text of [source, formatted]) {
@@ -97,17 +97,17 @@ Describe('formatter: numeric units', () => {
       Expect(signed.input.operator).toBe('-')
       Expect.Is(signed.input.operand, AST.isNumberLiteral)
       Expect(signed.input.operand.value).toBe(2)
-      Expect(signed.unit.ref?.name).toBe('Seconds')
+      Expect(signed.unit.ref?.name).toBe('seconds')
       const grouped = aliases.find(alias => alias.name === 'Grouped')!.value
       Expect.Is(grouped, AST.isNumericUnitConstruction)
       Expect.Is(grouped.input, AST.isBinaryExpression)
       Expect(grouped.input.operator).toBe('+')
-      Expect(grouped.unit.ref?.name).toBe('Seconds')
+      Expect(grouped.unit.ref?.name).toBe('seconds')
       const negated = aliases.find(alias => alias.name === 'Negated')!.value
       Expect.Is(negated, AST.isUnaryExpression)
       Expect(negated.operator).toBe('-')
       Expect.Is(negated.operand, AST.isNumericUnitConstruction)
-      Expect(negated.operand.unit.ref?.name).toBe('Seconds')
+      Expect(negated.operand.unit.ref?.name).toBe('seconds')
     }
   })
 })

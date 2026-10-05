@@ -4,7 +4,7 @@ import { Diagnostics } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { rejectsParser, testParseCode, testParseSyntax } from './test-parse'
 
-const measure = 'type Measure is numeric with { units { Seconds 1 (default), Minutes 60 } }'
+const measure = 'type Measure is numeric with { units { seconds 1 (default), minutes 60 } }'
 
 function alias(file: AST.TaoFile, name: string): AST.AliasDeclaration {
   const declaration = file.statements.find(statement => AST.isAliasDeclaration(statement) && statement.name === name)
@@ -15,10 +15,10 @@ function alias(file: AST.TaoFile, name: string): AST.AliasDeclaration {
 Describe('parser: numeric units', () => {
   Test('keeps signed construction, outer negation, grouping and precedence distinct', async () => {
     const result = await testParseCode(`${measure}
-      let Signed = -2 Seconds
-      let Negated = -(2 Seconds)
-      let Grouped = (1 + 2) Measure.Minutes
-      let Product = 2 Seconds * 3
+      let Signed = -2 seconds
+      let Negated = -(2 seconds)
+      let Grouped = (1 + 2) Measure.minutes
+      let Product = 2 seconds * 3
       let Legacy = 2.ms
     `)
     const signed = alias(result.entry.ast, 'Signed').value
@@ -33,7 +33,7 @@ Describe('parser: numeric units', () => {
     const grouped = alias(result.entry.ast, 'Grouped').value
     Expect.Is(grouped, AST.isNumericUnitConstruction)
     Expect.Is(grouped.input, AST.isBinaryExpression)
-    Expect(grouped.unit.$refText).toBe('Measure.Minutes')
+    Expect(grouped.unit.$refText).toBe('Measure.minutes')
     Expect(AST.numericUnitConstructionInputIsAllowed(grouped)).toBe(true)
     const product = alias(result.entry.ast, 'Product').value
     Expect.Is(product, AST.isBinaryExpression)
@@ -44,7 +44,7 @@ Describe('parser: numeric units', () => {
 
   Test('keeps grouping and comments available to source-shape checks', async () => {
     const result = await testParseCode(`${measure}
-      let Quantity = (/* input */ 1 + (2)) /* unit */ Seconds
+      let Quantity = (/* input */ 1 + (2)) /* unit */ seconds
     `)
     const quantity = alias(result.entry.ast, 'Quantity').value
     Expect.Is(quantity, AST.isNumericUnitConstruction)
@@ -55,11 +55,11 @@ Describe('parser: numeric units', () => {
     const result = await testParseSyntax(`${measure}
       let Compact = when Left > 0 Left.Clock / not "Time's up"
       let Arithmetic = when Left > 0 Left.Clock + 1 / not 0
-      let Quantity = when Reading > 2 Seconds "slow" / not "fast"
-      let Qualified = when Reading > -2 Measure.Seconds "slow" / not "fast"
-      let Grouped = when Reading > (1 + 2) Seconds "slow" / not "fast"
+      let Quantity = when Reading > 2 seconds "slow" / not "fast"
+      let Qualified = when Reading > -2 Measure.seconds "slow" / not "fast"
+      let Grouped = when Reading > (1 + 2) seconds "slow" / not "fast"
       let Commented = when Left > 0 /* branch */ Left.Clock / not "done"
-      let Block = when Reading > 2 Seconds { true -> "slow" otherwise -> "fast" }
+      let Block = when Reading > 2 seconds { true -> "slow" otherwise -> "fast" }
     `)
     for (const name of ['Compact', 'Arithmetic', 'Commented']) {
       const expression = alias(result.entry.ast, name).value
@@ -80,17 +80,17 @@ Describe('parser: numeric units', () => {
   Test('resolves later and nested when suffix choices without reentering the parser', () => {
     const context = Parser.createContext()
     const sources = [
-      'let X = when Reading > 2 Seconds and Left > 0 Left.Clock + 1 / not 0',
-      'let X = when Reading > 2 Seconds (when Left > 0 Left.Clock / not 0) / not 0',
-      'let X = when Reading > (when Left > 0 2 / not 3) Seconds "slow" / not "fast"',
-      'let X = when Reading > 2 Seconds { true -> when Left > 0 Left.Clock / not 0 otherwise -> 0 }',
-      'let X = when Reading > 2 Seconds | true -> 1 | otherwise -> 0',
+      'let X = when Reading > 2 seconds and Left > 0 Left.Clock + 1 / not 0',
+      'let X = when Reading > 2 seconds (when Left > 0 Left.Clock / not 0) / not 0',
+      'let X = when Reading > (when Left > 0 2 / not 3) seconds "slow" / not "fast"',
+      'let X = when Reading > 2 seconds { true -> when Left > 0 Left.Clock / not 0 otherwise -> 0 }',
+      'let X = when Reading > 2 seconds | true -> 1 | otherwise -> 0',
     ]
     for (const source of sources) {
       Expect(Parser.parseSyntax(source, context).errors).toBe(0)
     }
     for (
-      const source of ['let X = when Reading > 2 Seconds "slow" / not', 'let X = when Reading > 2 Seconds { true -> 1']
+      const source of ['let X = when Reading > 2 seconds "slow" / not', 'let X = when Reading > 2 seconds { true -> 1']
     ) {
       Expect(Parser.parseSyntax(source, context).errors).toBeGreaterThan(0)
       Expect(Parser.parseSyntax(sources[0]!, context).errors).toBe(0)
@@ -100,9 +100,9 @@ Describe('parser: numeric units', () => {
   Test('preserves quantity subjects in surrounding block and interpolation lexer contexts', () => {
     const context = Parser.createContext()
     const sources = [
-      'let X = Holder { A: when Reading > 2 Seconds "slow" / not "fast" }',
-      'let X = when Ready { true -> when Reading > 2 Seconds "slow" / not "fast" otherwise -> 0 }',
-      'let X = "{when Reading > 2 Seconds "slow" / not "fast"}"',
+      'let X = Holder { A: when Reading > 2 seconds "slow" / not "fast" }',
+      'let X = when Ready { true -> when Reading > 2 seconds "slow" / not "fast" otherwise -> 0 }',
+      'let X = "{when Reading > 2 seconds "slow" / not "fast"}"',
     ]
     for (const source of sources) {
       const parsed = Parser.parseSyntax(source, context)
@@ -115,7 +115,7 @@ Describe('parser: numeric units', () => {
       Expect(expression.positive).toBeDefined()
       Expect(expression.negative).toBeDefined()
     }
-    const invalidTail = Parser.parseSyntax('let X = when Reading > 2 Seconds "slow" / not "fast"\n$', context)
+    const invalidTail = Parser.parseSyntax('let X = when Reading > 2 seconds "slow" / not "fast"\n$', context)
     Expect(invalidTail.errors).toBeGreaterThan(0)
     const expression = alias(invalidTail.ast, 'X').value
     Expect.Is(expression, AST.isWhenExpression)
@@ -124,7 +124,7 @@ Describe('parser: numeric units', () => {
   })
 
   Test('retains every quantity in a longer header while leaving its compact branch intact', () => {
-    const conditions = Array.from({ length: 24 }, (_, index) => `Reading > ${index + 1} Seconds`)
+    const conditions = Array.from({ length: 24 }, (_, index) => `Reading > ${index + 1} seconds`)
     const parsed = Parser.parseSyntax(`let X = when ${conditions.join(' and ')} and Left > 0 Left.Clock / not 0`)
     Expect(parsed.errors).toBe(0)
     const expression = alias(parsed.ast, 'X').value
@@ -138,7 +138,7 @@ Describe('parser: numeric units', () => {
     Test(`requires a literal or complete grouped input: ${input}`, async () => {
       const result = await testParseSyntax(`${measure}
       let Value = 2
-      let Wrong = ${input} Seconds
+      let Wrong = ${input} seconds
       `)
       const wrong = alias(result.entry.ast, 'Wrong').value
       Expect(wrong).toBeDefined()
@@ -150,14 +150,14 @@ Describe('parser: numeric units', () => {
   Test('preserves directly owned unit rows, including invalid rows for validator diagnostics', async () => {
     const result = await testParseSyntax(`
       type Measure is numeric with {
-        units { Seconds 1 (default), Minutes -60, Seconds 0 (default) }
+        units { seconds 1 (default), minutes -60, seconds 0 (default) }
       }
     `)
     const declaration = result.entry.ast.statements.find(AST.isTypeDeclaration)
     Expect.Is(declaration, AST.isTypeDeclaration)
     Expect.Is(declaration.type, AST.isDerivedTypeExpression)
     Expect(declaration.type.slots.unitBlocks[0]?.units.map(unit => [unit.name, unit.sign, unit.scale, unit.default]))
-      .toEqual([['Seconds', undefined, 1, true], ['Minutes', '-', 60, false], ['Seconds', undefined, 0, true]])
+      .toEqual([['seconds', undefined, 1, true], ['minutes', '-', 60, false], ['seconds', undefined, 0, true]])
   })
 
   Test('requires adjacent value commas and lets directives reset the separator state', async () => {
@@ -191,10 +191,10 @@ Describe('parser: numeric units', () => {
         use Measure from ./library/Measure
         use package ./library as library
         type Renamed = library.Measure
-        let Short = 2 Seconds
-        let Named = 2 Measure.Seconds
-        let Qualified = 2 library.Measure.Seconds
-        let Aliased = 2 Renamed.Seconds
+        let Short = 2 seconds
+        let Named = 2 Measure.seconds
+        let Qualified = 2 library.Measure.seconds
+        let Aliased = 2 Renamed.seconds
       `,
       'library/Measure.tao': `public ${measure}`,
     }, async paths => {
@@ -212,10 +212,10 @@ Describe('parser: numeric units', () => {
 
   Test('rejects shorthand shared by distinct owners while qualified names remain linked', async () => {
     const result = await testParseSyntax(`${measure}
-      type Other is numeric with { units { Seconds 1 (default) } }
-      let Ambiguous = 2 Seconds
-      let First = 2 Measure.Seconds
-      let Second = 2 Other.Seconds
+      type Other is numeric with { units { seconds 1 (default) } }
+      let Ambiguous = 2 seconds
+      let First = 2 Measure.seconds
+      let Second = 2 Other.seconds
     `)
     const ambiguous = alias(result.entry.ast, 'Ambiguous').value
     Expect.Is(ambiguous, AST.isNumericUnitConstruction)
@@ -227,6 +227,6 @@ Describe('parser: numeric units', () => {
     Expect(first.unit.ref).toBeDefined()
     Expect(second.unit.ref).toBeDefined()
     Expect(first.unit.ref).not.toBe(second.unit.ref)
-    Expect(Diagnostics.errorMessages(result.diagnostics).some(message => message.includes('Seconds'))).toBe(true)
+    Expect(Diagnostics.errorMessages(result.diagnostics).some(message => message.includes('seconds'))).toBe(true)
   })
 })
