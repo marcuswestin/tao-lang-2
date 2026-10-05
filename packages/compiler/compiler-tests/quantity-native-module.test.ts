@@ -407,6 +407,115 @@ export namespace types {
     })
   })
 
+  Test('derives descendants through their parent factories with inherited proof and exact owner identity', async () => {
+    const source = 'type Grandchild is Child\ntype Child is Measure\ntype Sibling is Measure\ntype Measure is numeric'
+    await withTaoFiles('tao-quantity-native-descendants-', { 'Main.tao': source }, async (_paths, root) => {
+      const owners = await parseOwners(source)
+      const byName = new Map(owners.map(entry => [entry.owner.name, entry]))
+      const measure = byName.get('Measure')
+      const child = byName.get('Child')
+      const grandchild = byName.get('Grandchild')
+      const siblingOwner = byName.get('Sibling')
+      Assert.defined(measure, 'the descendant fixture declares Measure')
+      Assert.defined(child, 'the descendant fixture declares Child')
+      Assert.defined(grandchild, 'the descendant fixture declares Grandchild')
+      Assert.defined(siblingOwner, 'the descendant fixture declares Sibling')
+      const foreignOwners = await parseOwners('type Measure is numeric')
+      const foreign = foreignOwners[0]
+      Assert.defined(foreign, 'the foreign fixture declares a separate same-spelling Measure')
+      const outputPath = FS.resolvePath('Quantity.ts', root)
+      const declarations = owners.map(entry => entry.owner)
+      const planned = QuantityNativeModule.planSurface({ declarations })
+      const exportOf = (owner: QuantityNativeOwner): string => {
+        const names = planned.byDeclaration.get(owner.owner)
+        Assert.defined(names, 'descendant fixture owner has planned factory names')
+        return names.factoryExport
+      }
+      const parentsByOwner = new Map([
+        [child.owner, { owner: measure.owner, path: outputPath, factoryExport: exportOf(measure) }],
+        [grandchild.owner, { owner: child.owner, path: outputPath, factoryExport: exportOf(child) }],
+        [siblingOwner.owner, { owner: measure.owner, path: outputPath, factoryExport: exportOf(measure) }],
+      ])
+      const emitted = QuantityNativeModule.emit({ owners, outputPath, runtimeRoot, parentsByOwner })
+      Expect(emitted.code.indexOf('const __q3Checked') < emitted.code.indexOf('const __q1Checked')).toBe(true)
+      Expect(emitted.code).toContain('.derive<"Child"')
+      Expect(emitted.code).toContain('.derive<"Grandchild"')
+      const foreignOutput = QuantityNativeModule.emit({
+        owners: [foreign],
+        outputPath: FS.resolvePath('Foreign.ts', root),
+        runtimeRoot,
+      })
+      await writeLeaf(emitted)
+      await writeLeaf(foreignOutput)
+      const measureLink = linkage(emitted, measure)
+      const childLink = linkage(emitted, child)
+      const grandchildLink = linkage(emitted, grandchild)
+      const siblingLink = linkage(emitted, siblingOwner)
+      const foreignLink = linkage(foreignOutput, foreign)
+      const consumerPath = FS.resolvePath('Descendants.ts', root)
+      const baseline = [
+        `import { ${measureLink.factoryExport} as Measure, ${childLink.factoryExport} as Child, ${grandchildLink.factoryExport} as Grandchild, ${siblingLink.factoryExport} as Sibling } from './Quantity.js'`,
+        `import { ${foreignLink.factoryExport} as ForeignMeasure } from './Foreign.js'`,
+        `import { copyValue, reactiveValue } from ${runtimeImport('TR-reactive-values')}`,
+        `import * as Platform from ${
+          JSON.stringify(FS.resolvePath('packages/shared/shared-src/Platform.ts', Repo.getRoot()))
+        }`,
+        'const child = Child.fromUnit(2, "Minutes")',
+        'const deep = Grandchild.fromUnit(3, "Seconds")',
+        'const parentValue: ReturnType<typeof Measure.fromUnit> = child',
+        'const parentView = Measure.inUnit(child, "Seconds")',
+        'const copied = reactiveValue(copyValue(child.jsValue))',
+        'const childView = Child.inUnit(deep, "Minutes")',
+        'const readings = {',
+        '  parent: Measure.read(parentView), child: Child.read(child), copied: Child.read(copied),',
+        '  grandchild: Grandchild.read(deep), grandchildView: Child.read(childView),',
+        '  exactChild: Child.ownsPayload(child.jsValue), exactChildView: Child.ownsPayload(parentView.jsValue),',
+        '  exactGrandchildView: Grandchild.ownsPayload(childView.jsValue),',
+        '  foreignRejected: Child.acceptsPayload(ForeignMeasure.fromJSValue(2).jsValue),',
+        '  siblingRejected: Child.acceptsPayload(Sibling.fromJSValue(2).jsValue), parentValue: Measure.read(parentValue),',
+        '}',
+        'Platform.runtimeConsole.info(JSON.stringify(readings))',
+      ].join('\n')
+      await FS.writeText(consumerPath, baseline)
+      Expect(diagnosticSummary(consumerPath)).toEqual([])
+      await FS.writeText(
+        consumerPath.replace(/\.ts$/, '.js'),
+        ts.transpileModule(baseline, {
+          compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+        }).outputText,
+      )
+      const run = await CLI.run(Platform.runtimeProcess.execPath, {
+        cwd: root,
+        args: [consumerPath.replace(/\.ts$/, '.js')],
+        processPolicy: 'test',
+      })
+      Expect({ exitCode: run.exitCode, stderr: run.stderr }).toEqual({ exitCode: 0, stderr: '' })
+      Expect(JSON.parse(run.stdout)).toEqual({
+        parent: { canonical: 120, unit: 'Seconds' },
+        child: { canonical: 120, unit: 'Minutes' },
+        copied: { canonical: 120, unit: 'Minutes' },
+        grandchild: { canonical: 3, unit: 'Seconds' },
+        grandchildView: { canonical: 3, unit: 'Minutes' },
+        exactChild: true,
+        exactChildView: true,
+        exactGrandchildView: true,
+        foreignRejected: false,
+        siblingRejected: false,
+        parentValue: { canonical: 120, unit: 'Minutes' },
+      })
+      const rejected = [
+        'Child.read(Measure.fromUnit(2, "Seconds"))',
+        'Child.read(Sibling.fromJSValue(2))',
+        'Child.read(ForeignMeasure.fromJSValue(2))',
+        'Child.inUnit(Measure.fromUnit(2, "Seconds"), "Seconds")',
+      ]
+      for (const expression of rejected) {
+        await FS.writeText(consumerPath, `${baseline}\n${expression}`)
+        Expect(diagnostics(consumerPath).map(diagnostic => diagnostic.code)).toEqual([2345])
+      }
+    })
+  })
+
   Test(
     'allocates colliding names deterministically and executes computed constructor keys with owner mappings',
     async () => {
