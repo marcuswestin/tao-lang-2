@@ -9,8 +9,8 @@ import { CLI, Errors, FS, HCI, Repo } from '@shared'
  * `android.ts`'s `compatibility.requireAdb ?? requireAdb` uses for the same reason: a test can script
  * every answer without a real remote or a real `gh`.
  *
- * It never merges, never enables auto-merge, and never force-pushes; those stay a person's or
- * `./dev land`'s decision, not this command's.
+ * It never merges, never enables auto-merge, and never force-pushes; merging stays `land`'s or
+ * `merge-pr`'s, not this command's.
  */
 
 const FEATURE_BRANCH_PREFIX = 'feat/'

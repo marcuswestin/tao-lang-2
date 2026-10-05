@@ -38,6 +38,9 @@ export const JUST_COMMANDS = [
   // sandboxed merge stops partway. This is the merge alone, reachable unsandboxed by name, without
   // the lane and message work `finalize` adds or the push `land` adds.
   'merge-main',
+  // The hosted alternative to `land`: merges this branch's pull request on GitHub only after every
+  // check on its pushed head, Verify among them, has passed, then archives it like a landing.
+  'merge-pr',
   'model-audit',
   'native-module-check',
   'notify-developer',

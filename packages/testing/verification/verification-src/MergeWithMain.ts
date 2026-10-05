@@ -258,7 +258,7 @@ const defaultDependencies: MergeWithMainDependencies = {
  * archiveStem is the undated archive name: `merged/<name>` with the `feat/` or `dev/` prefix removed.
  * A feature branch publishes exactly this ref. A personal branch publishes children under it.
  */
-function archiveStem(branch: string): string {
+export function archiveStem(branch: string): string {
   const prefix = LANDABLE_PREFIXES.find(candidate => branch.startsWith(candidate)) ?? ''
   return `merged/${branch.slice(prefix.length)}`
 }

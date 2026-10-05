@@ -608,6 +608,11 @@ worktree-status:
 open-pr *ARGS:
     ./dev open-pr {{ ARGS }}
 
+# Squash-merge this branch's pull request once its checks, Verify among them, pass
+[group('Dev')]
+merge-pr *ARGS:
+    ./dev merge-pr {{ ARGS }}
+
 # Report a pull request's checks and why failed ones failed; --wait follows them to the end
 [group('Dev')]
 pr-checks *ARGS:

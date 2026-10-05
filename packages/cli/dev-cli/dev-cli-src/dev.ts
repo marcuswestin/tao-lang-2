@@ -28,6 +28,7 @@ import { MyStatusCommand } from './doctor/MyStatusCommand'
 import { ReclaimCommand } from './doctor/ReclaimCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
 import { MergeRecovery } from './git/MergeRecovery'
+import { MergePrCommand } from './pr/MergePrCommand'
 import { OpenPrCommand } from './pr/OpenPrCommand'
 import { PrChecksCommand } from './pr/PrChecksCommand'
 
@@ -845,6 +846,20 @@ await runWithCommands(commands => {
       await runExitCommand(async () =>
         (await OpenPrCommand.run({
           pollIntervalMs: parseOptionalPositiveInteger(options.pollIntervalMs, '--poll-interval-ms'),
+        })).exitCode
+      )
+    })
+
+  commands
+    .command('merge-pr')
+    .description(
+      "Squash-merge this branch's pull request once every check on its pushed head, Verify among them, has passed; then archive it at merged/<name> and delete the remote branch.",
+    )
+    .option('--interval-ms <ms>', 'How often to poll the checks while they run (default 60000).')
+    .action(async (options: { intervalMs?: string } = {}) => {
+      await runExitCommand(async () =>
+        (await MergePrCommand.run({
+          intervalMs: parseOptionalPositiveInteger(options.intervalMs, '--interval-ms'),
         })).exitCode
       )
     })

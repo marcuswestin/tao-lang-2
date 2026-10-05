@@ -93,12 +93,24 @@ on its size.
 
 ## Hosted verification
 
-`.github/workflows/verify.yml` runs `verify-full-sandbox` split across eight free Linux runners
-(`--partition k/8`) on every pull request push, merge-queue entry, and push to `main`; its `Verify`
-job is the single verdict. It proves the portable gates only — never the host-only lanes — and it
-does not replace `./agent unsandboxed land`. Each partition's logs and `summary.json` are the
-`verify-partition-<k>` artifact: read the failed partition's artifact, reproduce with
-`./agent test-file` locally, push the fix, and read the next verdict.
+`.github/workflows/verify.yml` runs `verify-full-sandbox` split across twelve free Linux runners
+(`--partition k/12`) on every pull request push, merge-queue entry, and push to `main`; its `Verify`
+job is the single verdict. It proves the portable gates only — never the host-only lanes.
+`./agent pr-checks --wait` follows a pull request's checks and prints each failure's reason from its
+annotations; a failed partition uploads its logs as the `verify-partition-<k>` artifact. Reproduce
+with `./agent test-file` locally, push the fix, and read the next verdict.
+
+An authorized landing takes one of two routes, both squash-merging the reviewed merge message and
+archiving the branch at `merged/<name>`:
+
+- **`./agent unsandboxed merge-pr`** when the green `Verify` verdict proves the change: the cases
+  "Propose it as ready to land" lists below, short of anything only a host lane exercises. Push with
+  `./agent unsandboxed open-pr`, write the message at `.artifacts/merge/<branch>.msg`, then run it: it
+  waits for every check on the pushed head, merges only after `Verify` passed on that exact commit,
+  and deletes the remote branch. GitHub never merges on its own; nothing enables auto-merge.
+- **`./agent unsandboxed land`** when the change reaches a host-only lane (Studio, browser, native
+  shell, simulator, canary), or when CI is unavailable: it verifies on this machine under the landing
+  lock, including what the hosted runners cannot.
 
 ## Reporting while a lane runs
 
