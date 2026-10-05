@@ -442,6 +442,8 @@
     ],
     "deny": [
       "Bash(bun install *)",
+      "Bash(gh pr merge *)",
+      "Bash(gh pr merge)",
       "Read(**/.env)",
       "Read(**/.env.*)",
       "Read(~/.aws/**)",

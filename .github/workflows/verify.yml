@@ -15,7 +15,8 @@ name: Verify
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    # Not `ready_for_review`: every push already ran Verify, and marking a draft ready changes no code.
+    types: [opened, synchronize, reopened]
     branches: [main]
   merge_group:
   push:

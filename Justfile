@@ -603,12 +603,12 @@ reclaim *ARGS:
 worktree-status:
     ./dev worktree-status
 
-# Push this feature branch, open or reuse its pull request against main, then stream the checks opening starts
+# Push this feature branch, open or reuse its pull request with auto-merge on, then stream its checks
 [group('Dev')]
 open-pr *ARGS:
     ./dev open-pr {{ ARGS }}
 
-# Squash-merge this branch's pull request once its checks, Verify among them, pass
+# Wait for this branch's checks, Verify among them, then squash-merge unless auto-merge already did
 [group('Dev')]
 merge-pr *ARGS:
     ./dev merge-pr {{ ARGS }}
