@@ -1099,7 +1099,8 @@ async function loadReferencedDocuments(
     return []
   }
   const referencedDocuments: AST.Document[] = []
-  if (AST.streamAllContents(ast).some(AST.isQuotedRender)) {
+  // A bare rendered value may need standard Text after linking, without an authored UI import.
+  if (AST.streamAllContents(ast).some(AST.isRender)) {
     for (
       const path of await context.packages.candidateFilePaths(quotedTextImport(), { fromFilePath: document.uri.path })
     ) {

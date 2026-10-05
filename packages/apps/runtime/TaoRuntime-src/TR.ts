@@ -164,7 +164,9 @@ import {
 } from './TR-persisted-state'
 import { selectPluralForm, type TaoPluralCategory, type TaoPluralForms } from './TR-phrases'
 import { admitQuantityUnion, nativeQuantityResult } from './TR-quantity-admission'
+import { QuantityArithmetic, quantityOperand, scalarOperand } from './TR-quantity-arithmetic'
 import { isQuantityPayload } from './TR-quantity-values'
+import { renderTextValue } from './TR-ui-render'
 import { requireReactNativeRuntime } from './TR-react-native'
 import { isReactiveValue, markReactiveValue } from './TR-reactive'
 import {
@@ -494,6 +496,9 @@ class TR {
   static admitQuantityUnion = admitQuantityUnion
   static isRuntimeValue = isRuntimeValue
   static nativeQuantityResult = nativeQuantityResult
+  static QuantityArithmetic = QuantityArithmetic
+  static quantityOperand = quantityOperand
+  static scalarOperand = scalarOperand
 
   /** Function creates a Tao pure-function value. */
   static Function(body: (...args: any[]) => TR.Evaluable | TR.Function): TR.Function {
@@ -505,6 +510,9 @@ class TR {
 
   /** RenderSlots keeps body components stable while captures and placement arguments remain current. */
   static RenderSlots = Object.freeze({ create: createSlotRenderer, select: selectRenderSlot, Frame: RenderSlotFrame })
+
+  /** Bare empty text emits no node while nonempty values keep the normal reactive Text path. */
+  static RenderText = renderTextValue
 
   /** Call preserves raw omission holes separately from a wrapped none value. */
   static Call<T>(fn: TR.Function, ...args: (TR.Evaluable | undefined)[]): TR.Value<T> {
