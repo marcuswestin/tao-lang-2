@@ -1,0 +1,8 @@
+// Library consumers choose stable render identity through this ordinary capability.
+public
+type RenderKey is text
+
+public
+can Keyed {
+   Key() fails never -> RenderKey
+}
