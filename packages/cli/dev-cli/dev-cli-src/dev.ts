@@ -161,6 +161,17 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('firebase-auth')
+    .description('List, log in, or log out of the pinned Firebase CLI. Logout signs out all local CLI accounts.')
+    .argument('<action>', 'list, login, or logout. Google sign-in happens locally in your browser.')
+    .action(async (action: string) => {
+      await runExitCommand(async () => {
+        const { runFirebaseAuthCommand } = await import('./firebase/FirebaseAuthCommand')
+        return await runFirebaseAuthCommand(action)
+      })
+    })
+
+  commands
     .command('app-dev')
     .description('Run the agent dev loop with reserved iOS/Android devices and owned Chrome.')
     .argument(

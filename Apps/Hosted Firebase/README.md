@@ -11,6 +11,15 @@ From this project directory:
    the checked-in placeholders in `App.tao` are overridden locally.
 2. Run `tao run . --app FirebaseNotes` and sign in or create an account.
 
+To test first-time Google authentication from the repository checkout, run
+`./dev firebase-auth logout` at the repository root, then `./dev firebase-auth list`.
+Logout signs out all locally saved Firebase CLI accounts, but preserves cloud projects and
+app users. The next API connect opens Google's local browser sign-in when no account is saved.
+`./dev firebase-auth login` explicitly reauthenticates instead. These commands use the same
+pinned official Firebase CLI as connect; no separate installation is required.
+Google's CLI account and the app's Email/Password accounts are separate. A new Firebase
+project needs new app accounts created through the app's Create account button.
+
 For Console setup instead, run `tao connect firebase --manual` and follow its direct project links.
 To generate deployment files without deploying, run
 `tao firebase generate --app FirebaseNotes --output .tao/firebase-backend`.
