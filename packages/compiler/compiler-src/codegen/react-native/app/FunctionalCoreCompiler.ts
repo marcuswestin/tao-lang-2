@@ -209,6 +209,13 @@ export const FunctionalCoreCompiler = {
     remaining: readonly AST.RenderFragment[],
     options: CodegenOptions = {},
   ): Compiled {
+    const capturedParameter = guardContinuationParameter(statement)
+    const continuation = capturedParameter
+      ? gen`_TaoGuardSubject => TR.BlockScope(_Scope, _Scope => {
+        ${gen.scopeName({ name: Type.parameterName(capturedParameter) })} = _TaoGuardSubject
+        return <>${Compile.RenderBlockFragments(remaining, options)}</>
+      })`
+      : gen`() => <>${Compile.RenderBlockFragments(remaining, options)}</>`
     return gen`
       {TR.GuardRender(${Compile.Expression(statement.subject)}, [
         ${
@@ -223,9 +230,9 @@ export const FunctionalCoreCompiler = {
         })],`,
       )
     }
-      ], () => <>
-        ${Compile.RenderBlockFragments(remaining, options)}
-      </>, _ViewProps.__tao${readHint(statement.subject)})}
+      ], ${continuation}, _ViewProps.__tao${readHint(statement.subject)}${
+      capturedParameter ? gen`, true` : gen.noop()
+    })}
     `
   },
 
@@ -347,6 +354,43 @@ function entityTypeIncludingNone(type: ReturnType<typeof Type.ofExpression>) {
   const entity = type.members.find(member => member.kind === 'entity')
   const none = type.members.find(member => member.kind === 'primitive' && member.primitive === 'none')
   return entity?.kind === 'entity' && none?.kind === 'primitive' ? entity : undefined
+}
+
+/** Only an immutable view parameter can acquire a guard's continuation-local snapshot. */
+function guardContinuationParameter(statement: AST.GuardRenderStatement): AST.ParameterDeclaration | undefined {
+  const subject = statement.subject
+  if (!AST.isValueReference(subject) || !AST.isBlock(statement.$container)) {
+    return undefined
+  }
+  const parameter = subject.target.ref
+  const owner = AST.findOwningView(statement)
+  if (
+    !AST.isParameterDeclaration(parameter) || !owner || parameter.$container?.$container !== owner
+    || parameter.copy || parameter.mutable || ASTUtils.parameterRequiresWritable(parameter)
+  ) {
+    return undefined
+  }
+  const name = Type.parameterName(parameter)
+  for (let node: AST.Node | undefined = statement.$container; node && node !== owner; node = node.$container) {
+    if (
+      AST.isBlock(node)
+      && node.statements.some(candidate =>
+        (AST.isAliasDeclaration(candidate) || AST.isEntityQueryDeclaration(candidate))
+        && Type.declarationName(candidate) === name
+      )
+    ) {
+      return undefined
+    }
+  }
+  const domain = Type.ofParameter(parameter)
+  if (domain.kind !== 'union' || !entityTypeIncludingNone(domain)) {
+    return undefined
+  }
+  const branches = ASTUtils.guardBranches(statement)
+  return (!statement.caseBlock && !statement.single)
+      || branches.filter(branch => branch.case === 'none').length === 1
+    ? parameter
+    : undefined
 }
 
 function functionRuntimeParameterName(index: number): Compiled {

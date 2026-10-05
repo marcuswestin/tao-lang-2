@@ -450,8 +450,24 @@ class TR {
     remaining: () => React.ReactNode,
     siteProps?: TR.TaoProps,
     hint?: TaoReadHint,
+  ): React.ReactNode
+  static GuardRender(
+    subject: TR.Evaluable,
+    branches: readonly TR.CaseBranch<React.ReactNode>[],
+    remaining: (capturedSubject: TR.Value<unknown>) => React.ReactNode,
+    siteProps: TR.TaoProps | undefined,
+    hint: TaoReadHint | undefined,
+    captureSubject: true,
+  ): React.ReactNode
+  static GuardRender(
+    subject: TR.Evaluable,
+    branches: readonly TR.CaseBranch<React.ReactNode>[],
+    remaining: (capturedSubject: TR.Value<unknown>) => React.ReactNode,
+    siteProps?: TR.TaoProps,
+    hint?: TaoReadHint,
+    captureSubject = false,
   ): React.ReactNode {
-    return TR.renderReadCases(subject, branches, remaining, siteProps, hint, false)
+    return TR.renderReadCases(subject, branches, remaining, siteProps, hint, false, captureSubject)
   }
 
   /** WhenReadRender keeps an ordinary `when` branch's error-message payload as text. */
@@ -467,10 +483,11 @@ class TR {
   private static renderReadCases(
     subject: TR.Evaluable,
     branches: readonly TR.CaseBranch<React.ReactNode>[],
-    remaining: () => React.ReactNode,
+    remaining: (capturedSubject: TR.Value<unknown>) => React.ReactNode,
     siteProps: TR.TaoProps | undefined,
     hint: TaoReadHint | undefined,
     legacyPayload: boolean,
+    captureSubject = false,
   ): React.ReactNode {
     const evaluated = subject.evaluate()
     const value = evaluated.jsValue
@@ -520,7 +537,9 @@ class TR {
     if (matched) {
       return matched.result
     }
-    return remaining()
+    return legacyPayload || !captureSubject
+      ? (remaining as () => React.ReactNode)()
+      : remaining(completeRuntimeValue(evaluated))
   }
 
   /** ReadNet freezes the handlers a compiled app guard declares. */
