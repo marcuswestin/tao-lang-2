@@ -4,6 +4,8 @@ import {
   type AssociatedCallableDescriptor,
   type AssociatedEffectsContext,
   capabilityRequirements,
+  ownAssociatedMethods,
+  ownAssociatedViews,
 } from './associated-methods'
 import { discoverCallableEffectFacts, type NativeEffectPublication } from './callable-effect-facts'
 import { projectCallableEffectPublications } from './callable-effect-publications'
@@ -15,15 +17,28 @@ import { Type } from './Type'
 /** Materialize correspondence, discover real source effects, then seal final structural admission. */
 export function createAssociatedEffects(files: readonly AST.TaoFile[]): AssociatedEffectsContext {
   const owners = files.flatMap(file =>
-    AST.streamAllContents(file).filter(AST.isTypeDeclaration).filter(owner => capabilityRequirements(owner).length > 0)
+    AST.streamAllContents(file).filter((
+      node,
+    ): node is AST.TypeDeclaration | AST.PrimitiveDeclaration | AST.EntityDataDeclaration =>
+      AST.isTypeDeclaration(node) || AST.isPrimitiveDeclaration(node) || AST.isEntityDataDeclaration(node)
+    ).filter(owner =>
+      ownAssociatedMethods(owner).length > 0 || ownAssociatedViews(owner).length > 0
+      || (AST.isTypeDeclaration(owner) && capabilityRequirements(owner).length > 0)
+    )
   )
-  const descriptors = new Map<AssociatedCallableDeclaration, AssociatedCallableDescriptor>()
+  const descriptors = new Map<
+    AssociatedCallableDeclaration,
+    AssociatedCallableDescriptor
+  >()
   const analyses = new Map<AST.Node, CallableAnalysis>()
   const requirements = new Map<
     AST.CapabilityMethodDeclaration,
     Readonly<{ purity: PurityContract; failures: FailureContract }>
   >()
   for (const owner of owners) {
+    if (!AST.isTypeDeclaration(owner)) {
+      continue
+    }
     for (const method of capabilityRequirements(owner)) {
       const contract = Type.associatedCallable(method, owner)
       requirements.set(method, {
@@ -64,9 +79,6 @@ export function createAssociatedEffects(files: readonly AST.TaoFile[]): Associat
   }
   const snapshot = publishCanonicalEffectSnapshot(files, { requirements, natives })
   for (const [method, contract] of snapshot.associatedDescriptors) {
-    if (!AST.isAssociatedFunctionDeclaration(method) && !AST.isCapabilityMethodDeclaration(method)) {
-      continue
-    }
     if (contract.kind === 'ready') {
       descriptors.set(method, contract.descriptor)
     }

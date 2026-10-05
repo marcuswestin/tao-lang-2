@@ -1,6 +1,7 @@
 import { AST, Parser } from '@parser'
 import { Assert } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
+import { createAssociatedEffects } from '../ast-utils-src/associated-effect-context'
 import { resolveAssociatedMethodInvocation } from '../ast-utils-src/associated-invocations'
 import {
   capabilityRequirements,
@@ -13,6 +14,18 @@ import { publishCanonicalEffectSnapshot } from '../ast-utils-src/canonical-effec
 import { Type } from '../ast-utils-src/Type'
 
 Describe('Associated view descriptors', () => {
+  Test('production inventory retains actual entity mounted declarations and owners', async () => {
+    const file = await parse(`
+      data Books / Book { Title text, view Book.Render() { render Book.Title } }
+    `)
+    const entity = file.statements.find(AST.isEntityDataDeclaration)
+    Assert(entity, 'actual entity owner exists')
+    const view = ownAssociatedViews(entity)[0]
+    Expect.Is(view, AST.isAssociatedViewDeclaration)
+    const context = createAssociatedEffects([file])
+    Expect(context.descriptors.get(view)?.declaration).toBe(view)
+    Expect(context.descriptors.get(view)?.owner).toBe(entity)
+  })
   Test('selects the real mounted view and binds optional parameters by declaration identity', async () => {
     const file = await parse(`
       view Text(Value text) { }
