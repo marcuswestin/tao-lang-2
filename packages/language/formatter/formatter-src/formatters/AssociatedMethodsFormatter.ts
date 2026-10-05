@@ -20,6 +20,8 @@ export const AssociatedMethodsFormatter = {
   /** AssociatedFunctionDeclaration formats an implementation inside its owning item type. */
   AssociatedFunctionDeclaration(f) {
     f.oneSpaceAfter('func')
+    f.noSpaceBefore('.')
+    f.noSpaceAfter('.')
     f.oneSpaceAround('fails')
     f.oneSpaceAround('->')
     f.noSpaceBefore('(')

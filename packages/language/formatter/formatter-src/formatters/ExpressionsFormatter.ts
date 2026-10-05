@@ -110,6 +110,8 @@ export const ExpressionsFormatter = {
   /** AssociatedFunctionDeclaration formats its optional bounded generic header. */
   AssociatedFunctionDeclaration(f) {
     f.oneSpaceAfter('static', 'func')
+    f.noSpaceBefore('.')
+    f.noSpaceAfter('.')
     f.oneSpaceAround('fails')
     f.oneSpaceAround('->')
     if (f.node.genericParameters.length > 0) {
