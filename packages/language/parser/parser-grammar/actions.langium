@@ -124,7 +124,11 @@ AtomicActionBlock infers ActionBlock:
     statements+=ActionStatement;
 
 ActionTargetExpression:
-    ActionExpression | NamedActionTarget;
+    ActionExpression | CallResultActionTarget | NamedActionTarget;
+
+// The call produces the receiver; the outer DoStatement parentheses still belong to the action.
+CallResultActionTarget infers PostfixMemberAccess:
+    receiver=FunctionCallExpression '.' member=ID;
 
 // A verb named at the invocation: a value by name, or a member reached through one.
 NamedActionTarget:
