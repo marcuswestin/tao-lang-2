@@ -19,6 +19,12 @@ export type CapabilityTransportPlan =
   | Readonly<{ kind: 'attach'; methods: readonly CapabilityTransportMethod[] }>
   | Readonly<{ kind: 'reproject'; methods: readonly CapabilityTransportMethod[] }>
   | Readonly<{ kind: 'optional'; present: CapabilityTransportPlan }>
+  | Readonly<{
+    kind: 'list'
+    actual: Extract<TaoType, { kind: 'list' }>
+    expected: Extract<TaoType, { kind: 'list' }>
+    element: CapabilityTransportPlan
+  }>
 
 /** Contravariant input transport follows the admitted implementation's parameter order. */
 export type CapabilityTransportInput = Readonly<{
@@ -185,19 +191,30 @@ class CapabilityTransportPlanner {
     if (!actual.element && expected.element && containsCapability(expected.element)) {
       return unknown('missing-proof')
     }
+    if (
+      actual.element && expected.element?.genericParameter && !expected.element.genericReceiver
+      && !admitsTransport(actual.element, expected.element, 'callable')
+    ) {
+      return unsupported('incompatible-types')
+    }
     const element = actual.element && expected.element
       ? this.plan(actual.element, expected.element, admission)
       : ready(identity)
     if (element.kind === 'unknown') {
       return element
     }
-    if (!admitsTransport(actual, expected, admission)) {
+    if (!admitsTransport(actual, receivingAdmissionDomain(expected), admission)) {
       return unsupported('incompatible-types')
     }
     if (element.kind === 'unsupported') {
-      return element.reason === 'incompatible-types' ? element : unsupported('list-mapping')
+      return element
     }
-    return element.plan.kind === 'identity' ? ready(identity) : unsupported('list-mapping')
+    return element.plan.kind === 'identity' ? ready(identity) : ready(Object.freeze({
+      kind: 'list',
+      actual: this.snapshotDomain(actual) as Extract<TaoType, { kind: 'list' }>,
+      expected: this.snapshotDomain(expected) as Extract<TaoType, { kind: 'list' }>,
+      element: element.plan,
+    }))
   }
 
   private primitive(
@@ -487,6 +504,20 @@ function admitsTransport(actual: TaoType, expected: TaoType, admission: Transpor
   return admission === 'source' ? Type.isAssignable(actual, expected) : Type.isCallableAssignable(actual, expected)
 }
 
+/** Only the binder's recorded receiver can replace a symbolic receiving domain for admission. */
+function receivingAdmissionDomain(type: TaoType): TaoType {
+  if (type.genericReceiver) {
+    return type.genericReceiver
+  }
+  if (type.kind === 'list' && type.element) {
+    return { ...type, element: receivingAdmissionDomain(type.element) }
+  }
+  if (type.kind === 'union') {
+    return { ...type, members: type.members.map(receivingAdmissionDomain) }
+  }
+  return type
+}
+
 function domainWitness(type: TaoType): object {
   if (type.genericParameter || type.genericReceiver) {
     return type
@@ -570,6 +601,11 @@ function equivalentPlan(left: CapabilityTransportPlan, right: CapabilityTranspor
     optional: optional => right.kind === 'optional' && equivalentPlan(optional.present, right.present),
     attach: attach => right.kind === 'attach' && equivalentMethods(attach.methods, right.methods),
     reproject: reproject => right.kind === 'reproject' && equivalentMethods(reproject.methods, right.methods),
+    list: list =>
+      right.kind === 'list'
+      && equivalentDomain(list.actual, right.actual)
+      && equivalentDomain(list.expected, right.expected)
+      && equivalentPlan(list.element, right.element),
   })
 }
 
