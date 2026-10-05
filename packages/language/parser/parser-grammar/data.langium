@@ -54,7 +54,7 @@ QueryBlock:
     '{' clauses+=QueryClause* '}';
 
 QueryClause:
-    WhereClause | BooleanWhereClause | SearchClause | OrderClause | LimitClause;
+    WhereClause | BooleanWhereClause | SearchClause | OrderClause | LimitClause | PaginationClause;
 
 WhereClause:
     'where' fieldName=ID operator=QueryComparisonOperator value=Expression;
@@ -74,6 +74,9 @@ OrderClause:
 
 LimitClause:
     'limit' count=NumberLiteral;
+
+PaginationClause:
+    'paginate' pageSize=NumberLiteral;
 
 OrderDirection returns string:
     'asc' | 'desc';

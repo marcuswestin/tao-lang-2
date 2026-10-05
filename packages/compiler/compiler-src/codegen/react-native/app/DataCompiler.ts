@@ -152,6 +152,7 @@ export const DataCompiler = {
           ],
           ${clauses.find(AST.isOrderClause) ? Compile.OrderClause(clauses.find(AST.isOrderClause)!) : ''}
           ${compileLimitClause(clauses.find(AST.isLimitClause))}
+          ${compilePaginationClause(clauses.find(AST.isPaginationClause))}
           ${compileSearchClause(clauses.find(AST.isSearchClause))}
         },
         TR.Value,
@@ -266,6 +267,10 @@ function catalogScopeOf(entity: ASTUtils.DataEntityDefinition): Compiled {
 
 function compileLimitClause(limit: AST.LimitClause | undefined): Compiled {
   return limit ? gen`limit: ${limit.count.value},` : gen.noop()
+}
+
+function compilePaginationClause(pagination: AST.PaginationClause | undefined): Compiled {
+  return pagination ? gen`pageSize: ${pagination.pageSize.value},` : gen.noop()
 }
 
 function compileSearchClause(search: AST.SearchClause | undefined): Compiled {

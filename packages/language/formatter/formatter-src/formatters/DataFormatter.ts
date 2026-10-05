@@ -129,6 +129,10 @@ export const DataFormatter = {
     f.oneSpaceAfter('limit')
   },
 
+  PaginationClause(f) {
+    f.oneSpaceAfter('paginate')
+  },
+
   CreateStatement(f) {
     f.oneSpaceAfter('create')
     f.oneSpaceAround('with')
