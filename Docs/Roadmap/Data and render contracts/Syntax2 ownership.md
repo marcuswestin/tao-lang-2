@@ -163,6 +163,18 @@ failures and broad error fallback propagate through the existing failure machine
 exceptions. Preserve existing spellings as inputs where safe; migrate authored source separately
 through the coordinator. No function grammar, Type or ExpressionsCompiler ownership transfers.
 
+### Next multi-outcome runtime leaf
+
+D may implement new TR-multi-outcome.ts and focused tests while its source-return packet finishes.
+Capture one supplied subject observation and determine matching branches before running handlers;
+run every matched handler in declaration order. Await joined action handlers and stop on their
+unhandled failure. Rendering returns all selected results; an optional fallback runs only when
+no branch matched. Single-value pick remains first-match and separate. Reuse supplied canonical
+case matching and availability snapshots rather than add a second state model or re-read a live
+subject per branch. Root retains TR facade and existing runtime matcher publication. This grant
+does not transfer A's FunctionalCoreCompiler or B's views grammar; source when/pick integration
+follows their current batches and needs a separate ownership release.
+
 ### Current slot validation and formatting release
 
 The reviewed nine-path frontend is integrated at `9a39f2b0e`; those paths returned to the
