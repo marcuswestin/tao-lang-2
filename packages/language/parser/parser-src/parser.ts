@@ -738,6 +738,23 @@ class NumericContinuationParser extends Langium.LangiumParser {
     while (this.lookahead(cursor).image === '.' && this.lookahead(cursor + 1).tokenType.name === 'ID') {
       cursor += 2
     }
+    const label = this.frames.findLastIndex(frame => frame.name === 'RenderAccessibilityStatement')
+    const value = label >= 0 ? this.frames[label + 1] : undefined
+    if (
+      value?.name === 'Expression' && value.role === 'value'
+      && !this.frames.slice(label + 2).some(frame =>
+        [
+          'PrimaryExpression',
+          'NumericUnitConstructionInput',
+          'WhenExpression',
+          'FunctionCallExpression',
+          'ActionExpression',
+        ].includes(frame.name)
+      ) && this.lookahead(cursor).image === '('
+    ) {
+      // The direct label ends before the next ordinary view invocation.
+      return false
+    }
     const entry = this.frames.findLastIndex(frame => frame.name === 'ConfigurationValueEntry')
     if (
       entry >= 0
