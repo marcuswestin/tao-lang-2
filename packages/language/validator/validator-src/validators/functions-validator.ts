@@ -32,6 +32,7 @@ const messages = {
   functionLabelType: (name: string, label: string, expected: string, actual: string) =>
     `Labeled argument '${label}:' of function '${name}' expects ${expected}, got ${actual}.`,
   functionPlacement: 'Pure functions must be declared at file level.',
+  functionPurity: (name: string) => `Function '${name}' requires a complete pure effect contract.`,
   functionMissingReturn: (name: string) => `Function '${name}' must end with a return so every path produces a value.`,
   functionReturn: (name: string, expected: string, actual: string) =>
     `Function '${name}' returns ${expected}, but a return produces ${actual}.`,
@@ -53,6 +54,12 @@ function validateFunction(
   fn: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration,
   ctx: ValidationContext,
 ): void {
+  if (AST.isFunctionDeclaration(fn)) {
+    const analysis = ASTUtils.associatedCallableAnalysis(fn)
+    if (!analysis || analysis.effects.purity.open || analysis.effects.purity.violations.length > 0) {
+      ctx.error(fn, messages.functionPurity(fn.name))
+    }
+  }
   if (AST.isFunctionDeclaration(fn) && !AST.isTaoFile(fn.$container)) {
     ctx.error(fn, messages.functionPlacement)
   }
@@ -130,6 +137,10 @@ function validateInferredReturnType(
 }
 
 function validateFunctionCall(call: AST.FunctionCallExpression, ctx: ValidationContext): void {
+  // A foreign head names the sidecar export, independently of a same-named Tao declaration.
+  if (AST.isFromExpression(call.$container) && call.$container.expression === call) {
+    return
+  }
   const resolved = ASTUtils.resolveFunctionInvocation(call)
   const fn = resolved.function
   // A call shares its one shape with a phrase call (Decisions §14); phrases-validator owns those.

@@ -1,6 +1,7 @@
 import { AST, Parser } from '@parser'
 import { Assert, Errors } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
+import { createAssociatedEffects } from '../ast-utils-src/associated-effect-context'
 import {
   capabilityRequirements,
   ownAssociatedMethods,
@@ -14,6 +15,485 @@ import {
 } from '../ast-utils-src/canonical-effect-snapshot'
 
 Describe('Canonical callable effect projection', () => {
+  Test('closes direct entity and entity-list forwarding to real declared native call heads', async () => {
+    const file = await parse(`
+      data Books / Book { Title text }
+      func ForwardEntity(Value Book) -> Book { return Export(Value) from ./Native.ts }
+      func ForwardList(Value Books) -> Books { return Export(Value) from ./Native.ts }
+    `)
+    const entity = file.statements.find(AST.isEntityDataDeclaration)
+    Expect.Is(entity, AST.isEntityDataDeclaration)
+    const owners = ['ForwardEntity', 'ForwardList'].map(name => namedFunction(file, name))
+    const heads = owners.map(owner => {
+      const bridge = AST.returnStatementsOf(owner)[0]?.value
+      Expect.Is(bridge, AST.isFromExpression)
+      Expect.Is(bridge.expression, AST.isFunctionCallExpression)
+      Expect.Is(bridge.$container, AST.isReturnStatement)
+      Expect(bridge.$container.value).toBe(bridge)
+      const argument = bridge.expression.argumentList?.arguments[0]
+      Expect.Is(argument, AST.isArgument)
+      Expect.Is(argument.value, AST.isValueReference)
+      Expect(argument.value.target.ref).toBe(owner.parameterList.parameters[0])
+      Expect(argument.value.$container).toBe(argument)
+      return bridge.expression
+    })
+    const natives: NativeEffectPublication[] = heads.map(head => ({
+      declaration: head,
+      exportSource: head,
+      phase: 'evaluation',
+      kind: 'complete',
+      purity: { violations: [], open: false },
+      failures: { cases: [], open: true },
+    }))
+    const snapshot = publishCanonicalEffectSnapshot([file], { natives })
+    const [single, collection] = owners.map(owner => snapshot.descriptors.get(owner)?.signature?.inputs[0]?.type)
+    Assert(single?.kind === 'entity', 'the actual Book input is an entity domain')
+    Expect(single.entity).toBe(entity)
+    Assert(collection?.kind === 'list' && collection.element?.kind === 'entity', 'the actual Books input has rows')
+    Expect(collection.element.entity).toBe(entity)
+    const observed = owners.map((owner, index) => {
+      const head = heads[index]!
+      const reference = head.argumentList!.arguments[0]!.value
+      const canonical = snapshot.calls.get(head)
+      Assert.defined(canonical, 'the native foreign head has its actual canonical operation row')
+      Expect(canonical.site).toBe(head)
+      const native = snapshot.natives.find(publication => publication.declaration === head)
+      Assert.defined(native, 'the typed pure native contract is anchored at this real foreign head')
+      Expect(native.exportSource).toBe(head)
+      Expect(native.phase).toBe('evaluation')
+      const read = snapshot.reads.get(reference)
+      Assert.defined(read, 'the factory publishes the real directly forwarded parameter read')
+      Expect(read.declaration).toBe(owner.parameterList.parameters[0])
+      const projected = projectCallableEffectPublications(snapshot, owner)
+      const facts = discoverCallableEffectFacts(owner, projected.inputs, projected.context)
+      Expect(facts.some(fact => fact.node === reference)).toBe(true)
+      return {
+        read: { classification: read.classification, kind: read.kind },
+        effects: analyzeCallableEffects(owner, facts).effects,
+      }
+    })
+    const registered = createAssociatedEffects([file])
+
+    Expect({ observed, registered: owners.map(owner => registered.analyses.get(owner)?.effects) }).toEqual({
+      observed: [
+        {
+          read: { classification: 'immutable', kind: 'complete' },
+          effects: { purity: { violations: [], open: false }, failures: { cases: [], open: true } },
+        },
+        {
+          read: { classification: 'immutable', kind: 'complete' },
+          effects: { purity: { violations: [], open: false }, failures: { cases: [], open: true } },
+        },
+      ],
+      registered: [
+        { purity: { violations: [], open: false }, failures: { cases: [], open: true } },
+        { purity: { violations: [], open: false }, failures: { cases: [], open: true } },
+      ],
+    })
+  })
+
+  Test(
+    'keeps entity member reads nested calls and ordinary whole-entity returns outside native forwarding',
+    async () => {
+      const file = await parse(`
+      data Books / Book { Title text }
+      func Other(Value Book) -> Book { return Value }
+      func Field(Value Book) -> text { return Export(Value.Title) from ./Native.ts }
+      func Nested(Value Book) -> Book { return Export(Other(Value)) from ./Native.ts }
+    `)
+      const field = namedFunction(file, 'Field')
+      const nested = namedFunction(file, 'Nested')
+      const other = namedFunction(file, 'Other')
+      const heads = [field, nested].map(owner => {
+        const bridge = AST.returnStatementsOf(owner)[0]?.value
+        Expect.Is(bridge, AST.isFromExpression)
+        Expect.Is(bridge.expression, AST.isFunctionCallExpression)
+        return bridge.expression
+      })
+      const snapshot = publishCanonicalEffectSnapshot([file], {
+        natives: heads.map(head => ({
+          declaration: head,
+          exportSource: head,
+          phase: 'evaluation',
+          kind: 'complete',
+          purity: { violations: [], open: false },
+          failures: { cases: [], open: true },
+        })),
+      })
+      const member = heads[0]!.argumentList?.arguments[0]?.value
+      Expect.Is(member, AST.isMemberAccessExpression)
+      Expect(member.members).toEqual(['Title'])
+      const inner = heads[1]!.argumentList?.arguments[0]?.value
+      Expect.Is(inner, AST.isFunctionCallExpression)
+      Expect(inner.function.ref).toBe(other)
+      const nestedReference = inner.argumentList?.arguments[0]?.value
+      Expect.Is(nestedReference, AST.isValueReference)
+      const ordinaryReference = AST.returnStatementsOf(other)[0]?.value
+      Expect.Is(ordinaryReference, AST.isValueReference)
+      for (const reference of [member, nestedReference, ordinaryReference]) {
+        const read = snapshot.reads.get(reference)
+        Assert.defined(read, 'the real conservative read keeps its canonical publication')
+        Expect(read.classification).toBe('unknown')
+        Expect(read.kind).toBe('unknown')
+      }
+      const projected = projectCallableEffectPublications(snapshot, nested)
+      const facts = discoverCallableEffectFacts(nested, projected.inputs, projected.context)
+      Expect(projected.inputs.calls.find(call => call.site === inner)?.target).toBe(other)
+      Expect(facts.find(fact => fact.node === inner)?.executes.some(edge => edge.target === other)).toBe(true)
+      Expect(facts.some(fact => fact.node === other.block)).toBe(true)
+      const registered = createAssociatedEffects([file])
+      for (const owner of [field, nested, other]) {
+        Expect(registered.analyses.get(owner)?.effects.purity).toEqual({ violations: [], open: true })
+      }
+    },
+  )
+
+  Test('closes an ordinary pure function selecting an optional scalar from an immutable item parameter', async () => {
+    const file = await parse(`
+      type Result is { Value text? }
+      func Label(ResultValue Result) fails never -> text { return "{ResultValue.Value}" }
+    `)
+    const label = namedFunction(file, 'Label')
+    const parameter = label.parameterList.parameters[0]
+    Assert.defined(parameter, 'Label declares the actual ResultValue item parameter')
+    const selection = AST.streamAllContents(label).find(AST.isMemberAccessExpression)
+    Expect.Is(selection, AST.isMemberAccessExpression)
+    Expect(selection.target.ref).toBe(parameter)
+    Expect(selection.members).toEqual(['Value'])
+    const result = namedType(file, 'Result')
+    Expect.Is(result.type, AST.isItemTypeExpression)
+    Expect(result.type.properties.find(property => property.name === 'Value')?.optional).toBe(true)
+    const snapshot = publishCanonicalEffectSnapshot([file])
+    const read = snapshot.reads.get(selection)
+    Assert.defined(read, 'the factory publishes the actual selected optional field read')
+    Expect(read.reference).toBe(selection)
+    Expect(read.declaration).toBe(parameter)
+    Expect(read.proof?.kind).toBe('parameter')
+    Expect(read.proof?.owner).toBe(label)
+    const projected = projectCallableEffectPublications(snapshot, label)
+    const facts = discoverCallableEffectFacts(label, projected.inputs, projected.context)
+    Expect(facts.some(fact => fact.node === selection)).toBe(true)
+    const registered = createAssociatedEffects([file])
+
+    Expect({
+      read: { classification: read.classification, kind: read.kind },
+      discovered: analyzeCallableEffects(label, facts).effects,
+      registered: registered.analyses.get(label)?.effects,
+    }).toEqual({
+      read: { classification: 'immutable', kind: 'complete' },
+      discovered: {
+        purity: { violations: [], open: false },
+        failures: { cases: [], open: false },
+      },
+      registered: {
+        purity: { violations: [], open: false },
+        failures: { cases: [], open: false },
+      },
+    })
+  })
+
+  Test('keeps whole item and entity reads unknown and mutable copy and state selections reactive', async () => {
+    const file = await parse(`
+      type Result is { Value text? }
+      data Notes / Note { Title text }
+      type Envelope is { Record Note }
+      func Whole(ResultValue Result) fails never -> Result { return ResultValue }
+      func EntityRead(Value Note) fails never -> text { return "{Value.Title}" }
+      func NestedEntityRead(Value Envelope) fails never -> text { return "{Value.Record.Title}" }
+      func MutableRead(mutable ResultValue Result) fails never -> text { return "{ResultValue.Value}" }
+      func CopyRead(copy ResultValue Result) fails never -> text { return "{ResultValue.Value}" }
+      view Example {
+        state Current is Result = Result { Value "current" }
+        func StateRead() fails never -> text { return "{Current.Value}" }
+      }
+    `)
+    const snapshot = publishCanonicalEffectSnapshot([file])
+    const registered = createAssociatedEffects([file])
+    for (const name of ['Whole', 'EntityRead', 'NestedEntityRead']) {
+      const owner = namedFunction(file, name)
+      const reference = name === 'Whole'
+        ? AST.returnStatementsOf(owner)[0]?.value
+        : AST.streamAllContents(owner).find(AST.isMemberAccessExpression)
+      Assert.defined(reference, 'each conservative control contains its actual read')
+      if (name === 'NestedEntityRead') {
+        Expect.Is(reference, AST.isMemberAccessExpression)
+        Expect(reference.members).toEqual(['Record', 'Title'])
+      }
+      const read = snapshot.reads.get(reference)
+      Assert.defined(read, 'each conservative control has its canonical read publication')
+      Expect(read.declaration).toBe(owner.parameterList.parameters[0])
+      Expect(read.classification).toBe('unknown')
+      Expect(read.kind).toBe('unknown')
+      Expect(registered.analyses.get(owner)?.effects.purity).toEqual({ violations: [], open: true })
+    }
+    for (const name of ['MutableRead', 'CopyRead', 'StateRead']) {
+      const owner = namedFunction(file, name)
+      const reference = AST.streamAllContents(owner).find(AST.isMemberAccessExpression)
+      Expect.Is(reference, AST.isMemberAccessExpression)
+      Expect(reference.members).toEqual(['Value'])
+      const read = snapshot.reads.get(reference)
+      Assert.defined(read, 'each reactive control has its canonical selected read publication')
+      Expect(read.declaration).toBe(reference.target.ref)
+      if (name === 'StateRead') {
+        Expect.Is(reference.target.ref, AST.isStateDeclaration)
+      } else {
+        const parameter = owner.parameterList.parameters[0]
+        Assert.defined(parameter, 'each parameter control has its actual parameter')
+        Expect(reference.target.ref).toBe(parameter)
+        Expect(name === 'MutableRead' ? parameter.mutable : parameter.copy).toBe(true)
+      }
+      Expect(read.classification).toBe('reactive')
+      Expect(read.kind).toBe('complete')
+      Expect(registered.analyses.get(owner)?.effects.purity).toEqual({
+        violations: ['reactive-state'],
+        open: false,
+      })
+    }
+  })
+
+  Test('trusts only a declared foreign call head while retaining executing defaults and open arguments', async () => {
+    const file = await parse(`
+      let Host is text = Unclassified from ./Native.ts
+      func Export(Value text default Host) -> text { return Host }
+      func Native(Value text) -> text { return Export(Value) from ./Native.ts }
+      func NoArguments() -> text { return Export() from ./Native.ts }
+      func Defaulted(Value text default Host) -> text { return Export(Value) from ./Native.ts }
+      func Unknown() -> text { return Host }
+      func CallsOpen() -> text { return Export(Unknown()) from ./Native.ts }
+    `)
+    const registered = createAssociatedEffects([file])
+    Expect(registered.analyses.get(namedFunction(file, 'Native'))?.effects).toEqual({
+      purity: { violations: [], open: false },
+      failures: { cases: [], open: true },
+    })
+    Expect(registered.analyses.get(namedFunction(file, 'NoArguments'))?.effects).toEqual({
+      purity: { violations: [], open: false },
+      failures: { cases: [], open: true },
+    })
+    for (const name of ['Defaulted', 'Unknown', 'CallsOpen', 'Export']) {
+      Expect(registered.analyses.get(namedFunction(file, name))?.effects.purity.open).toBe(true)
+    }
+  })
+
+  Test('retains a reactive argument executed before a declared foreign head', async () => {
+    const file = await parse(`
+      view Example {
+        state Counter = 1
+        func Native() -> number { return Export(Counter) from ./Native.ts }
+        func Defaulted(Value number default Counter) -> number { return Export(Value) from ./Native.ts }
+      }
+    `)
+    const registered = createAssociatedEffects([file])
+    Expect(registered.analyses.get(namedFunction(file, 'Native'))?.effects).toEqual({
+      purity: { violations: ['reactive-state'], open: false },
+      failures: { cases: [], open: true },
+    })
+    Expect(registered.analyses.get(namedFunction(file, 'Defaulted'))?.effects).toEqual({
+      purity: { violations: ['reactive-state'], open: false },
+      failures: { cases: [], open: true },
+    })
+  })
+
+  Test('registers ordinary source functions even without associated declarations', async () => {
+    const file = await parse('func Entry() fails never -> text { return "pure" }')
+    const entry = namedFunction(file, 'Entry')
+    const registered = createAssociatedEffects([file])
+
+    Expect(registered.descriptors.size).toBe(0)
+    Expect(registered.analyses.get(entry)?.effects).toEqual({
+      purity: { violations: [], open: false },
+      failures: { cases: [], open: false },
+    })
+  })
+
+  Test('registers an uncalled converter on an owner without associated methods', async () => {
+    const file = await parse(`
+      type Token is text with { Token as text fails never { return "token" } }
+    `)
+    const converter = AST.streamAllContents(file).find(AST.isAssociatedConverterDeclaration)
+    Expect.Is(converter, AST.isAssociatedConverterDeclaration)
+    const snapshot = publishCanonicalEffectSnapshot([file])
+    const projected = projectCallableEffectPublications(snapshot, converter)
+    const facts = discoverCallableEffectFacts(converter, projected.inputs, projected.context)
+    const analysis = analyzeCallableEffects(converter, facts)
+    const registered = createAssociatedEffects([file])
+
+    Expect(snapshot.descriptors.get(converter)?.body).toBe(converter.block)
+    Expect(projected.context.root?.node).toBe(converter)
+    Expect(facts.some(fact => fact.node === converter.block)).toBe(true)
+    Expect(analysis.effects).toEqual({
+      purity: { violations: [], open: false },
+      failures: { cases: [], open: false },
+    })
+    Expect(registered.analyses.get(converter)?.effects).toEqual(analysis.effects)
+    Expect(registered.descriptors.size).toBe(0)
+  })
+
+  Test('executes a real conversion operand once and carries converter bridge effects to its caller', async () => {
+    const file = await parse(`
+      let Host is text = Native from ./Native.ts
+      type Token is text with {
+        Token as text fails never { return Host }
+      }
+      func Operand(Value Token) fails never -> Token { return Value }
+      func Convert(Value Token) fails never -> text { return Operand(Value) as text }
+    `)
+    const converter = AST.streamAllContents(file).find(AST.isAssociatedConverterDeclaration)
+    const convert = namedFunction(file, 'Convert')
+    Expect.Is(converter, AST.isAssociatedConverterDeclaration)
+    const conversion = AST.returnStatementsOf(convert)[0]?.value
+    Expect.Is(conversion, AST.isConversionExpression)
+    Expect.Is(conversion.value, AST.isFunctionCallExpression)
+    const alias = file.statements.find(AST.isAliasDeclaration)
+    Expect.Is(alias, AST.isAliasDeclaration)
+    const bridge = alias.value
+    Expect.Is(bridge, AST.isFromExpression)
+    const snapshot = publishCanonicalEffectSnapshot([file], {
+      natives: [{
+        declaration: bridge,
+        exportSource: bridge,
+        phase: 'evaluation',
+        kind: 'complete',
+        purity: { violations: ['io'], open: false },
+        failures: { cases: ['ReadFailed'], open: false },
+      }],
+    })
+    const projected = projectCallableEffectPublications(snapshot, convert)
+    const facts = discoverCallableEffectFacts(convert, projected.inputs, projected.context)
+    const call = projected.inputs.calls.find(value => value.site === conversion)
+    Assert.defined(call, 'the actual conversion has its canonical projected execution row')
+
+    Expect(call.target).toBe(converter)
+    Expect(call.body).toBe(converter.block)
+    Expect(call.kind).toBe('complete')
+    Expect(call.pairs).toEqual([])
+    Expect(call.defaults).toEqual([])
+    Expect(facts.filter(fact => fact.node === conversion.value)).toHaveLength(1)
+    Expect(facts.find(fact => fact.node === conversion)?.executes.filter(edge => edge.target === conversion.value))
+      .toHaveLength(1)
+    Expect(facts.some(fact => fact.node === namedFunction(file, 'Operand').block)).toBe(true)
+    Expect(facts.some(fact => fact.node === converter.block)).toBe(true)
+    Expect(analyzeCallableEffects(convert, facts).effects).toEqual({
+      purity: { violations: ['io'], open: true },
+      failures: { cases: ['ReadFailed'], open: true },
+    })
+  })
+
+  Test('projects authored primitive operators and leaves boolean built-ins outside call completeness', async () => {
+    const file = await parse(`
+      primitive number with {
+        static func +(Left number, Right number) fails never -> number { return Left }
+        static func -(Value number) fails never -> number { return Value }
+      }
+      func Operand(Value number) fails never -> number { return Value }
+      func Add(Left number, Right number) fails never -> number { return Operand(Left) + Right }
+      func Negate(Value number) fails never -> number { return -Value }
+      func Both(Left boolean, Right boolean) fails never -> boolean { return Left and Right }
+    `)
+    const primitive = file.statements.find(AST.isPrimitiveDeclaration)
+    Expect.Is(primitive, AST.isPrimitiveDeclaration)
+    const methods = ownAssociatedMethods(primitive)
+    Expect(methods).toHaveLength(2)
+    const snapshot = publishCanonicalEffectSnapshot([file])
+    const registered = createAssociatedEffects([file])
+    for (const method of methods) {
+      Expect(registered.analyses.get(method)?.effects).toEqual({
+        purity: { violations: [], open: false },
+        failures: { cases: [], open: false },
+      })
+      Expect(registered.descriptors.get(method)?.owner).toBe(primitive)
+    }
+    for (const name of ['Add', 'Negate', 'Both']) {
+      const owner = namedFunction(file, name)
+      const site = AST.returnStatementsOf(owner)[0]?.value
+      Assert.defined(site, 'each function contains its real operation expression')
+      const projected = projectCallableEffectPublications(snapshot, owner)
+      const facts = discoverCallableEffectFacts(owner, projected.inputs, projected.context)
+      const call = projected.inputs.calls.find(value => value.site === site)
+      if (name === 'Both') {
+        Expect(call).toBeUndefined()
+      } else {
+        Assert.defined(call, 'an authored operation has its real projected call')
+        Expect(call.kind).toBe('complete')
+        Expect(call.target).toBe(methods[name === 'Add' ? 0 : 1])
+        Expect(facts.some(fact => fact.node === call.body)).toBe(true)
+      }
+      if (name === 'Add') {
+        Expect.Is(site, AST.isBinaryExpression)
+        Expect(facts.find(fact => fact.node === site)?.executes.filter(edge => edge.target === site.left))
+          .toHaveLength(1)
+        Expect(facts.some(fact => fact.node === namedFunction(file, 'Operand').block)).toBe(true)
+      }
+      Expect(analyzeCallableEffects(owner, facts).effects).toEqual({
+        purity: { violations: [], open: false },
+        failures: { cases: [], open: false },
+      })
+    }
+  })
+
+  Test('keeps an actual unselected conversion open while executing its known operand', async () => {
+    const file = await parse(`
+      type Token is text
+      func Operand(Value Token) fails never -> Token { return Value }
+      func Convert(Value Token) fails never -> text { return Operand(Value) as text }
+    `)
+    const convert = namedFunction(file, 'Convert')
+    const conversion = AST.returnStatementsOf(convert)[0]?.value
+    Expect.Is(conversion, AST.isConversionExpression)
+    const snapshot = publishCanonicalEffectSnapshot([file])
+    const projected = projectCallableEffectPublications(snapshot, convert)
+    const facts = discoverCallableEffectFacts(convert, projected.inputs, projected.context)
+    const call = projected.inputs.calls.find(value => value.site === conversion)
+    Assert.defined(call, 'an unselected actual conversion still has a published row')
+
+    Expect(call.kind).toBe('unknown')
+    Expect(call.target).toBeUndefined()
+    Expect(facts.some(fact => fact.node === namedFunction(file, 'Operand').block)).toBe(true)
+    Expect(analyzeCallableEffects(convert, facts).effects).toEqual({
+      purity: { violations: [], open: true },
+      failures: { cases: [], open: true },
+    })
+  })
+
+  Test('carries actual authored operator bridge effects into an ordinary function analysis', async () => {
+    const file = await parse(`
+      let Host is Scalar = Native from ./Native.ts
+      type Scalar is numeric with {
+        static func +(Left Scalar, Right Scalar) fails never -> Scalar { return Host }
+      }
+      func Add(Left Scalar, Right Scalar) fails never -> Scalar { return Left + Right }
+    `)
+    const method = ownAssociatedMethods(namedType(file, 'Scalar'))[0]
+    Assert.defined(method, 'Scalar declares its actual authored operator body')
+    const alias = file.statements.find(AST.isAliasDeclaration)
+    Expect.Is(alias, AST.isAliasDeclaration)
+    const bridge = alias.value
+    Expect.Is(bridge, AST.isFromExpression)
+    const add = namedFunction(file, 'Add')
+    const site = AST.returnStatementsOf(add)[0]?.value
+    Expect.Is(site, AST.isBinaryExpression)
+    const snapshot = publishCanonicalEffectSnapshot([file], {
+      natives: [{
+        declaration: bridge,
+        exportSource: bridge,
+        phase: 'evaluation',
+        kind: 'complete',
+        purity: { violations: ['io'], open: false },
+        failures: { cases: ['ReadFailed'], open: false },
+      }],
+    })
+    const projected = projectCallableEffectPublications(snapshot, add)
+    const facts = discoverCallableEffectFacts(add, projected.inputs, projected.context)
+
+    Expect(projected.inputs.calls.find(value => value.site === site)?.target).toBe(method)
+    Expect(facts.some(fact => fact.node === method.block)).toBe(true)
+    Expect(facts.some(fact => fact.node === bridge)).toBe(true)
+    Expect(analyzeCallableEffects(add, facts).effects).toEqual({
+      purity: { violations: ['io'], open: true },
+      failures: { cases: ['ReadFailed'], open: true },
+    })
+  })
+
   Test('discovers and closes a real uncalled pure associated method root', async () => {
     const file = await parse(`
       type Title is text with {

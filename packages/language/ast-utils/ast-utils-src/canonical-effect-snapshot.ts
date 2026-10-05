@@ -137,6 +137,7 @@ export function publishCanonicalEffectSnapshot(
     }
   }
   const resolution = Type.correspondenceResolver(associated)
+  const nativeForwardOwners = nativeForwardingOwners(evidence)
   const descriptors = new Map<AST.Node, CanonicalCallableDescriptor>()
   for (const node of nodes) {
     if (
@@ -337,7 +338,11 @@ export function publishCanonicalEffectSnapshot(
       )
     }
     if (AST.isValueReference(node) || AST.isMemberAccessExpression(node)) {
-      reads.set(node, publishRead(node, resolution.ofReferenceRoot(node)))
+      const domain = resolution.ofReferenceRoot(node)
+      const selectedDomain = AST.isMemberAccessExpression(node) && domain.kind === 'item' && node.members.length === 1
+        ? resolution.atMemberPath(domain, node.members)
+        : domain
+      reads.set(node, publishRead(node, domain, selectedDomain, nativeForwardOwners))
     }
     if (
       AST.isPostfixMemberAccess(node) && AST.isMethodCallExpression(node.$container)
@@ -421,9 +426,84 @@ function defaultEligibility(
   }))
 }
 
+/** A real declared foreign call head witnesses only its wrapper's direct binding transports. */
+function nativeForwardingOwners(
+  evidence: CanonicalEffectEvidence,
+): ReadonlyMap<AST.FunctionCallExpression, AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration> {
+  const owners = new Map<AST.FunctionCallExpression, AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration>()
+  for (const native of evidence.natives ?? []) {
+    const call = native.declaration
+    if (
+      native.kind !== 'complete' || native.phase !== 'evaluation' || native.purity.open
+      || native.purity.violations.length > 0 || !AST.isFunctionCallExpression(call)
+      || native.exportSource !== call
+    ) {
+      continue
+    }
+    const bridge = call.$container
+    if (!AST.isFromExpression(bridge) || bridge.expression !== call) {
+      continue
+    }
+    const statement = bridge.$container
+    if (!AST.isReturnStatement(statement) || statement.value !== bridge) {
+      continue
+    }
+    let owner: AST.Node | undefined = statement.$container
+    while (owner !== undefined) {
+      if (AST.isFunctionDeclaration(owner) || AST.isAssociatedFunctionDeclaration(owner)) {
+        if (owner.returnType) {
+          owners.set(call, owner)
+        }
+        break
+      }
+      if (
+        AST.isAssociatedConverterDeclaration(owner) || AST.isActionDeclaration(owner) || AST.isCommandDeclaration(owner)
+      ) {
+        break
+      }
+      owner = owner.$container
+    }
+  }
+  return owners
+}
+
+/** Forwarding a bound handle evaluates its identity, while member reads keep live ownership. */
+function nativeHandleTransport(
+  reference: AST.ValueReference | AST.MemberAccessExpression,
+  domain: TaoType,
+  owner: AST.Node,
+  nativeForwardOwners: ReadonlyMap<
+    AST.FunctionCallExpression,
+    AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration
+  >,
+): boolean {
+  if (!AST.isValueReference(reference)) {
+    return false
+  }
+  const argument = reference.$container
+  if (!AST.isArgument(argument) || argument.value !== reference) {
+    return false
+  }
+  const call = argument.$container?.$container
+  if (
+    !AST.isFunctionCallExpression(call) || call.argumentList !== argument.$container
+    || nativeForwardOwners.get(call) !== owner
+  ) {
+    return false
+  }
+  return domain.kind === 'entity'
+    ? AST.isEntityDataDeclaration(domain.entity)
+    : domain.kind === 'list' && domain.element?.kind === 'entity' && AST.isEntityDataDeclaration(domain.element.entity)
+}
+
 function publishRead(
   reference: AST.ValueReference | AST.MemberAccessExpression,
   domain: TaoType,
+  selectedDomain: TaoType = domain,
+  nativeForwardOwners: ReadonlyMap<
+    AST.FunctionCallExpression,
+    AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration
+  > = new Map(),
 ): CanonicalReadPublication {
   const declaration = reference.target.ref
   const owner = AST.associatedReceiverOwner(reference)
@@ -441,7 +521,11 @@ function publishRead(
     const fn = AST.findOwningFunction(declaration)
     const phrase = AST.findOwningPhrase(declaration)
     const pureOwner = method ?? fn ?? phrase
-    if (pureOwner && !declaration.mutable && !declaration.copy && immutableReadDomain(domain)) {
+    if (
+      pureOwner && !declaration.mutable && !declaration.copy
+      && (immutableReadDomain(selectedDomain)
+        || nativeHandleTransport(reference, domain, pureOwner, nativeForwardOwners))
+    ) {
       return Object.freeze({
         reference,
         declaration,
