@@ -1560,6 +1560,16 @@ function quantityOwnersAgree(
   }
   const actualOwner = quantityOwner(actual)
   const expectedOwner = quantityOwner(expected)
+  const actualNominal = nominalOf(actual)
+  const expectedNominal = nominalOf(expected)
+  // Authentic quantity children admit upward; concrete factories retain their own owners.
+  if (
+    actualOwner && actualNominal && expectedNominal
+    && (expectedOwner || AST.isTypeDeclaration(expectedNominal) && expectedNominal.abstract)
+    && nominalChain(actualNominal, definitionOfReference).includes(expectedNominal)
+  ) {
+    return true
+  }
   return !actualOwner && !expectedOwner || actualOwner !== undefined && actualOwner === expectedOwner
 }
 
@@ -1849,6 +1859,7 @@ class TypeResolutionContext {
         this.associatedOperatorContracts(operands, operator, site),
       accepts: (actual: TaoType, expected: TaoType) => this.compareDomains(actual, expected, false) === 'compatible',
       specialize: Type.specializeAssociatedDescriptor,
+      isAbstractDomain: Type.isAbstractDomain,
     }
   }
 
@@ -1859,6 +1870,10 @@ class TypeResolutionContext {
   ): readonly AssociatedOperatorContract[] {
     const primitives = AST.visibleFileDeclarations(site, AST.isPrimitiveDeclaration, declaration => declaration.name)
     const receiverDeclarations = new Set<AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration>()
+    const eligibleOperandIndices = new Map<
+      AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration,
+      number[]
+    >()
     const declarations = operands.flatMap((receiver, index) => {
       const nominal = nominalOf(receiver)
       const discovered: (AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration)[] = [
@@ -1888,6 +1903,11 @@ class TypeResolutionContext {
       if (index === 0) {
         discovered.forEach(declaration => receiverDeclarations.add(declaration))
       }
+      discovered.forEach(declaration => {
+        const indices = eligibleOperandIndices.get(declaration) ?? []
+        indices.push(index)
+        eligibleOperandIndices.set(declaration, indices)
+      })
       return discovered
     })
     const visibleOwners = [
@@ -1913,6 +1933,12 @@ class TypeResolutionContext {
         owner,
         contract,
         receiverEligible: receiverDeclarations.has(declaration),
+        eligibleOperandIndices: eligibleOperandIndices.get(declaration) ?? [],
+        ownerAncestors: AST.isTypeDeclaration(owner)
+          ? nominalChain(owner, reference => this.definitionOfReference(reference)).slice(1).filter(
+            AST.isTypeDeclaration,
+          )
+          : [],
         inputTypes: contract.kind === 'pending'
           ? AST.parametersOf(declaration).map(parameter => associatedInputDomain(parameter, this))
           : undefined,

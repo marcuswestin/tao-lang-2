@@ -14,6 +14,10 @@ export type AssociatedOperatorContract = Readonly<{
   owner: AssociatedCallableOwner
   contract: AssociatedDescriptorMaterialization
   receiverEligible?: boolean
+  /** Only declarations discovered through an actual operand may anchor contextual Self. */
+  eligibleOperandIndices?: readonly number[]
+  /** Actual declaration ancestry, excluding the defining owner itself. */
+  ownerAncestors?: readonly AssociatedCallableOwner[]
   inputTypes?: readonly TaoType[]
 }>
 
@@ -57,6 +61,7 @@ export type AssociatedOperatorTypeResolution = Readonly<{
   contracts(operands: readonly TaoType[], operator: string): readonly AssociatedOperatorContract[]
   accepts(actual: TaoType, expected: TaoType): boolean
   specialize(descriptor: AssociatedCallableDescriptor, receiver: TaoType): AssociatedCallableDescriptor
+  isAbstractDomain?(domain: TaoType): boolean
 }>
 
 export type AssociatedOperationTypeResolution =
@@ -111,6 +116,8 @@ export function resolveAssociatedOperatorContract(
   const receiver = operandTypes[0]!
   const contracts = resolution.contracts(operandTypes, operator)
   const candidates: AssociatedOperatorCandidate[] = []
+  const contextualStaticCandidates = new Set<AssociatedOperatorCandidate>()
+  const contractsByDeclaration = new Map<AssociatedOperatorContract['declaration'], AssociatedOperatorContract>()
   const declarations = new Set<AssociatedOperatorContract['declaration']>()
   let pending = false
   for (const candidate of contracts) {
@@ -119,6 +126,7 @@ export function resolveAssociatedOperatorContract(
       continue
     }
     declarations.add(declaration)
+    contractsByDeclaration.set(declaration, candidate)
     const staticDeclaration = AST.isAssociatedFunctionDeclaration(declaration) && declaration.static
     if (!staticDeclaration && candidate.receiverEligible === false) {
       continue
@@ -155,12 +163,37 @@ export function resolveAssociatedOperatorContract(
       pending = true
       continue
     }
+    const declaredDescriptor = candidate.contract.descriptor
+    const selfIndices = staticDeclaration
+      ? declaredDescriptor.signature.inputs.flatMap((input, index) => input.type.selfOwner ? [index] : [])
+      : []
+    const eligibleIndices = candidate.eligibleOperandIndices ?? (candidate.receiverEligible === false ? [] : [0])
+    const suppliedSelfDomains = selfIndices.map(index => operandTypes[index]!)
+    const selectedSelf = suppliedSelfDomains.find((domain, index) =>
+      eligibleIndices.includes(selfIndices[index]!)
+      && suppliedSelfDomains.every(actual => resolution.accepts(actual, domain))
+    )
+    if (selfIndices.length > 0 && !selectedSelf) {
+      continue
+    }
+    if (
+      selectedSelf?.kind === 'primitive' && selectedSelf.primitive === 'numeric'
+      && !selectedSelf.genericParameter && declaredDescriptor.result.selfOwner
+      && resolution.isAbstractDomain?.(selectedSelf)
+    ) {
+      continue
+    }
     const contextualReceiver = candidate.receiverEligible !== false
       && (comparisonOperators.has(operator) || (!staticDeclaration
         && (receiver.kind === 'capability' || receiver.genericParameter !== undefined)))
-    const descriptor = contextualReceiver
-      ? resolution.specialize(candidate.contract.descriptor, receiver.genericReceiver ?? receiver)
-      : candidate.contract.descriptor
+    const descriptor = selectedSelf
+      ? Object.freeze({
+        ...resolution.specialize(declaredDescriptor, selectedSelf.genericReceiver ?? selectedSelf),
+        receiver: selectedSelf.genericReceiver ?? selectedSelf,
+      })
+      : contextualReceiver
+      ? resolution.specialize(declaredDescriptor, receiver.genericReceiver ?? receiver)
+      : declaredDescriptor
     const operandDomains = [
       ...(staticDeclaration
         ? []
@@ -168,13 +201,32 @@ export function resolveAssociatedOperatorContract(
       ...descriptor.signature.inputs.map(input => input.type),
     ]
     const dispatch = staticDeclaration ? 'static' : 'instance'
-    candidates.push({ descriptor, dispatch, operandDomains })
+    const resolvedCandidate: AssociatedOperatorCandidate = { descriptor, dispatch, operandDomains }
+    candidates.push(resolvedCandidate)
+    if (selectedSelf) {
+      contextualStaticCandidates.add(resolvedCandidate)
+    }
   }
   if (pending) {
     return { ...base, candidates, problem: 'pending-contract' }
   }
-  const applicable = candidates.filter(candidate =>
+  const matching = candidates.filter(candidate =>
     operandTypes.every((actual, index) => resolution.accepts(actual, candidate.operandDomains[index]!))
+  )
+  const applicable = matching.filter(candidate =>
+    !contextualStaticCandidates.has(candidate)
+    || !matching.some(other => {
+      const declaration = other.descriptor.declaration
+      const contract = AST.isAssociatedViewDeclaration(declaration)
+        ? undefined
+        : contractsByDeclaration.get(declaration)
+      return other.dispatch === candidate.dispatch
+        && contract?.ownerAncestors?.includes(candidate.descriptor.owner)
+        && candidate.operandDomains.every((domain, index) =>
+          resolution.accepts(domain, other.operandDomains[index]!)
+          && resolution.accepts(other.operandDomains[index]!, domain)
+        )
+    })
   )
   const mostSpecific = applicable.filter(candidate =>
     applicable.every(other =>
