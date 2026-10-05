@@ -1,4 +1,4 @@
-import { app, Describe, stubContainer, stubView, Test } from '@shared/test'
+import { Describe, stubContainer, stubView, Test } from '@shared/test'
 import { dataValidationMessages } from '../validator-src/validators/data-validator'
 import { accepts, app, rejects } from './test-validate'
 
