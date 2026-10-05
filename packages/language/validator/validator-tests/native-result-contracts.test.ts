@@ -49,6 +49,15 @@ Describe('validator: native quantity result contracts', () => {
   )
 
   Test(
+    'accepts contextual Self as the native result specialized to the actual numeric receiver',
+    accepts(`
+      abstract type Scalar is numeric with {
+        static func +(Left Self, Right Self) -> Self { return Add(Left, Right) from ./Native.ts }
+      }
+    `),
+  )
+
+  Test(
     'accepts concrete native results for ordinary methods and converters',
     accepts(`
       abstract type Quantity is numeric

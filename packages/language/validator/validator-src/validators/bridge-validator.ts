@@ -113,4 +113,5 @@ function containsAbstractNumeric(type: ASTUtils.TaoType): boolean {
   return type.kind === 'union'
     ? type.members.some(containsAbstractNumeric)
     : type.kind === 'primitive' && type.primitive === 'numeric' && Type.isAbstractDomain(type)
+      && type.selfOwner === undefined
 }
