@@ -1,5 +1,5 @@
 use all from @tao/ui
-use PersonName, Subtract from ./library/Library
+use ComparedNames, PersonName, Subtract from ./library/Library
 
 app LibraryApp {
    id "com.tao.syntax2"
@@ -20,11 +20,22 @@ view Banner(Title text, Subtitle text) {
 
 view Library {
    state GroupMode is boolean = false
+   state Feedback = ""
    let Person = PersonName(ProfileName "Ada", .FamilyName "Lovelace")
+   let Readers = ComparedNames ["Ada", "Lovelace"]
    render Col {
       #heading accessible label "Library"
       Banner(Subtitle "Reversed text roles", Title "Library")
-      "{ Person }"
+      Person
+      "{ Readers.Count } readers"
+      Feedback
+      Row {
+         Button("Show feedback") {
+            on press -> set Feedback = "Ready"
+         }
+         Button("Clear feedback") {
+            on press -> set Feedback = ""
+      }  }
       "{ Subtract(Right 2, Left 5) }"
       Spacer
       Button("Group") {

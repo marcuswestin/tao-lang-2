@@ -44,6 +44,40 @@ does not imply whole-app or landing acceptance.
 
 ## First concurrent wave
 
+### Operator, source rendering and production timing amendment
+
+The generic packet `ebdf859c4` is integrated as `4662886f8`. A now owns the reused and
+additional paths in its committed-worktree proposal
+`.artifacts/checkpoint/next-operators-converters-grant.md`: blocks.langium,
+ast-structure.ts, TypesFormatter.ts, FunctionalCoreValidator.ts, numeric-units-validator.ts,
+associated-methods-validator.ts and its messages, target-capabilities-validator.ts, plus
+the existing generic/type/invocation/compiler paths and new focused operator/converter helpers.
+This covers authored operators, explicit pure converters, static methods and concrete numeric,
+item and entity method owners. D retains callable-effect-facts.ts; actual converter descriptors
+must enter that existing purity/effect pipeline. Root retains runtime facades, module publication,
+standard declarations and app graduation. Associated views require B's separate type-grammar seam.
+
+B owns StatementsFormatter.ts solely for EventHandler arrow whitespace, disjoint from A's
+generic header spacing. Its current bare-text and atomic-handler packet includes mounted empty
+value suppression, existing Text rendering and source dispatch. General structural ui and
+associated view integration remain the next explicitly allocated slice.
+
+C owns runtime expo-module.config.json, ios/TaoContinuousClockModule.swift,
+ios/TaoRuntimeNative.podspec, android/build.gradle,
+android/src/main/java/tao/runtime/TaoContinuousClockModule.kt, runtime package.json native files,
+CLI app-modules.ts native packaging and Companion package.json local runtime linkage, with
+focused loader/native tests. The synchronous native clock uses sleep-inclusive monotonic platform
+primitives. Unsupported web or absent native capability reports HostEnvironmentError rather than
+silently changing the timing contract. Root retains TR-time hookup, the facade and standard Time
+declarations. Native build evidence and actual device-sleep acceptance remain distinct.
+
+D additionally owns TR-action-transactions.ts and its existing transaction/defer tests for a real
+root cancellation signal inherited by joined calls. Checked Wait consumes that signal through the
+root-owned facade; cleanup drains with cancellation shielded. Abandoned launches retain existing
+receipt and failure-report suppression. This does not change ask parking or promise cancellation
+of noncooperative awaits. The source return packet and new multi-outcome runtime leaf remain D's
+current integration work; when/pick grammar dispatch must coordinate with A's held files.
+
 ### Current signature projections and unit-reading batches
 
 A resumes private signature projections and bare/dot role construction, including the forcing

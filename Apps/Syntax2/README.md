@@ -10,10 +10,11 @@ remains undiscovered.
 
 - [Main.tao](Main.tao): active shell with a quoted Library header, bare zero-argument render calls,
   signature-scoped private types, reversed role-bound arguments for number and text pairs, and a Group button switching
-  ordinary boolean state between two quoted labels.
+  ordinary boolean state between two quoted labels. Bare Person and Feedback placement use the
+  standard Text view; compact handlers show and clear feedback. A named list supplies two readers.
 - [library/Library.tao](library/Library.tao): graduated Name/GivenName/FamilyName, PersonName and
   Subtract declarations. The app renders Ada Lovelace and 3 using the actual signature projections
-  and argument matcher. It uses quotation while bare text-value rendering remains pending.
+  and argument matcher. ComparedNames constructs a list with contextual Name elements.
 - [Library.test.tao](Library.test.tao): active journey asserting the header and both directions of
   the grouping display transition and the signature-role results. It exercises no book collection
   or acquisition behavior.
@@ -45,10 +46,11 @@ to its prerequisite wave. The first render foundation is implemented; broader gr
 The active shell is intentionally dependency-complete and small. It compiles and passes source
 checks; the runtime journey verdict is recorded by the integration owner. The original future Main,
 library modules, adapter sketch, standard-library target and future journey remain intact.
-The shell demonstrates quotation, a reachable grouping-state transition and the graduated nominal
-signature/role matching. It does not implement the future collection, capability, quantity,
-parameterized-slot, failure/cleanup or adapter contracts. Bare text-value placement and empty-value
-suppression are deferred; a quoted empty string still retains the explicit Text node.
+The shell demonstrates quotation, reachable grouping and feedback transitions, bare text-value
+placement, contextual named lists and graduated nominal signature/role matching. It does not yet
+implement the future book collection, capability, quantity, parameterized-slot, failure/cleanup
+or adapter contracts. Mounted feature proof verifies that empty bare text values emit no node;
+a quoted empty string and explicit Text("") still retain their Text nodes.
 
 1. Extract small feature modules from the future files when necessary. Move working declarations,
    not a duplicate future/current mirror. Keep the remaining target readable.

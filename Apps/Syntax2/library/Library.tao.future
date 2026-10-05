@@ -5,7 +5,7 @@ use CreateTemporaryPDF, DeleteTemporaryFile, UploadFile,
     ObservedRevision, MarkSeen, NotifyExport from ./BookIO
 
 // 1. Name, private signature types and PersonName graduated to Library.tao.
-public type ComparedNames is list of Name
+// ComparedNames graduated to Library.tao.
 public type GroupMode is yes/no
 
 // 2. Structural capabilities; omitted owner prefix is canonical in with.

@@ -57,8 +57,8 @@ view Library {
    state GroupMode no
    let GroupMode2 = GroupMode yes
    let Title = TitleType.Default()
-   // Person construction graduated to Main.tao; bare placement remains a target.
-   let Readers = ComparedNames ["Ada", "Lovelace"]
+   // Person construction and bare text placement graduated to Main.tao.
+   // Readers construction graduated to Main.tao.
    let Label = EarlierLabel(.Right TitleType "Shelf", .Left Title)
    let Score = Score 2 + Score 3
 

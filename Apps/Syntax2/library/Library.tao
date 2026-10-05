@@ -6,6 +6,10 @@ type GivenName is Name
 
 type FamilyName is Name
 
+// 1.1 Contextual literal elements acquire the list's named element type.
+public
+type ComparedNames is list of Name
+
 public
 func PersonName(GivenName, FamilyName) {
    return "{ GivenName } { FamilyName }"
