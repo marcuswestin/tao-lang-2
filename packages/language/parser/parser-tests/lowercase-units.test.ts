@@ -92,13 +92,40 @@ Describe('parser: lowercase numeric units', () => {
     })
   }
 
-  for (const suffix of ['Duration.Seconds', 'Duration.secondsX']) {
+  Test('links a lowercase qualified suffix inside an argument', async () => {
+    const result = await testParseCode(`${duration}
+      func Take(Value Duration) fails never -> Duration { return Value }
+      let Quantity = Take(2 Duration.seconds)
+    `)
+    const call = alias(result.entry.ast, 'Quantity').value
+    Expect.Is(call, AST.isFunctionCallExpression)
+    const argument = call.argumentList?.arguments[0]?.value
+    Expect.Is(argument, AST.isNumericUnitConstruction)
+    Expect(argument.unit.$refText).toBe('Duration.seconds')
+    Expect(argument.unit.ref?.name).toBe('seconds')
+  })
+
+  for (const [suffix, member] of [['Duration.Seconds', 'Seconds'], ['Duration.secondsX', 'secondsX']]) {
     Test(
-      `rejects an uppercase final suffix segment: ${suffix}`,
+      `rejects an uppercase final suffix segment inside an argument: ${suffix}`,
       rejectsParser(`${duration}
-      let Wrong = 2 ${suffix}
+      func Take(Value Duration) fails never -> Duration { return Value }
+      let Wrong = Take(2 ${suffix})
     `),
     )
+
+    Test(`keeps an adjacent qualified render separate from a numeric suffix: ${suffix}`, async () => {
+      const result = await testParseSyntax(`${duration}
+        let Number = 2 ${suffix}
+      `)
+      Expect.Is(alias(result.entry.ast, 'Number').value, AST.isNumberLiteral)
+      Expect(AST.streamAllContents(result.entry.ast).filter(AST.isNumericUnitConstruction)).toEqual([])
+      const render = result.entry.ast.statements.find(AST.isViewRender)
+      Expect.Is(render, AST.isViewRender)
+      Expect.Is(render.expression, AST.isMemberAccessExpression)
+      Expect(render.expression.target.$refText).toBe('Duration')
+      Expect(render.expression.members).toEqual([member])
+    })
   }
 
   Test('lexes whole lowercase names and mixed-case keyword prefixes without splitting them', () => {
