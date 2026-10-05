@@ -15,6 +15,8 @@ import {
   studioPreviewManifestModule,
 } from '../../studio-preview-manifest'
 import { withActionInstrumentation } from './app/action-control-flow'
+import { associatedWitnessExports } from './app/associated-witness-plan'
+import { withAssociatedWitnessBindings } from './app/AssociatedMethodsCompiler'
 import {
   configurationAliasTargetTypeBindingName,
   configurationRuntimeBindingName,
@@ -703,6 +705,9 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
   }
   const planned = outputPaths.bySourcePath.get(file.path)
   Assert.defined(planned, compiledSourceOutputPathMessage, { sourcePath: file.path })
+  const associatedExports = new Map(
+    [...associatedWitnessExports(file.ast)].filter(([owner]) => selectedStatements.includes(owner)),
+  )
   const factoryBindings = new Map<AST.TypeDeclaration, string>()
   const quantityImports: string[] = []
   for (const [owner, leaf] of outputPaths.canonicalQuantities) {
@@ -765,48 +770,52 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
   const emitted = (relativePath: string, code: string): CompiledFile => ({ code, relativePath, sourcePath: file.path })
   const module = emitted(
     planned.modulePath,
-    withQuantityFactoryBindings(
-      factoryBindings,
-      () =>
-        emitWithQuantityTypes(planned.modulePath, () =>
-          withDataStorePlan(
-            dataCatalog?.stores,
-            () =>
-              withDeclarationIdentityContext(identityProjects, identityOwnerBySourcePath, () =>
-                withInlineInjectionBindings(
-                  new Map(planned.injections.map(injection => [injection.node, injection.binding])),
-                  () =>
-                    withActionInstrumentation(debug, () =>
-                      RuntimeGen.TaoFile(file.ast, {
-                        bridgeTypes: BridgeMetadata.typesFor(file.ast, selectedStatements),
-                        configurationTypes: planned.declarationsPath === undefined
-                          ? undefined
-                          : RuntimeGen.ConfigurationTypes(file.ast, typeStatements),
-                        dataEntities: ownsDataCatalog ? dataCatalog.entities : [],
-                        dataAccess: ownsDataCatalog ? dataCatalog.access : [],
-                        emitDataCatalog: ownsDataCatalog,
-                        importLines,
-                        localDataCatalog: usesLocalDataCatalog,
-                        journeyObservations,
-                        scopeBindings,
-                        exportedBindings,
-                        selectedAppDatasourceConfiguration,
-                        selectedAppFirebaseConfiguration,
-                        selectedAppAuthConfiguration,
-                        selectedAppName,
-                        projectRoot,
-                        studioDataCatalog: studio && dataCatalog !== undefined
-                          && (ownsDataCatalog || needsStudioDataCatalog),
-                        studio,
-                        debug,
-                        studioViews: studio && selectedAppName !== undefined ? studioViews : [],
-                        viewRegistrations: RuntimeGen.ViewRegistrations(file.ast, { studio }, selectedStatements),
-                        selectedStatements,
-                      })),
-                )),
-          )),
-    ),
+    withAssociatedWitnessBindings(associatedExports, () =>
+      withQuantityFactoryBindings(
+        factoryBindings,
+        () =>
+          emitWithQuantityTypes(planned.modulePath, () =>
+            withDataStorePlan(
+              dataCatalog?.stores,
+              () =>
+                withDeclarationIdentityContext(identityProjects, identityOwnerBySourcePath, () =>
+                  withInlineInjectionBindings(
+                    new Map(planned.injections.map(injection => [injection.node, injection.binding])),
+                    () =>
+                      withActionInstrumentation(debug, () =>
+                        RuntimeGen.TaoFile(file.ast, {
+                          bridgeTypes: BridgeMetadata.typesFor(file.ast, selectedStatements),
+                          configurationTypes: planned.declarationsPath === undefined
+                            ? undefined
+                            : RuntimeGen.ConfigurationTypes(file.ast, typeStatements),
+                          dataEntities: ownsDataCatalog ? dataCatalog.entities : [],
+                          dataAccess: ownsDataCatalog ? dataCatalog.access : [],
+                          emitDataCatalog: ownsDataCatalog,
+                          importLines,
+                          localDataCatalog: usesLocalDataCatalog,
+                          journeyObservations,
+                          scopeBindings,
+                          exportedBindings,
+                          selectedAppDatasourceConfiguration,
+                          selectedAppFirebaseConfiguration,
+                          selectedAppAuthConfiguration,
+                          selectedAppName,
+                          projectRoot,
+                          studioDataCatalog: studio && dataCatalog !== undefined
+                            && (ownsDataCatalog || needsStudioDataCatalog),
+                          studio,
+                          debug,
+                          studioViews: studio && selectedAppName !== undefined ? studioViews : [],
+                          viewRegistrations: RuntimeGen.ViewRegistrations(file.ast, { studio }, selectedStatements),
+                          selectedStatements,
+                        })),
+                  )),
+            )),
+      )),
   )
+  if (associatedExports.size > 0) {
+    module.code += `\nexport { ${[...associatedExports.values()].join(', ')} }\n`
+  }
   if (planned.quantityModule !== undefined) {
     module.code += `\n${BridgeMetadata.quantityExportsFor(file.ast, planned.modulePath, planned.quantityModule)}\n`
   }
