@@ -9,6 +9,39 @@ Read the [candidate roadmap](<Hosted data provider candidates.md>), the
 Current acceptance state is in [Simulator storage and live synchronization](#simulator-storage-and-live-synchronization--2026-10-05-1721-utc).
 Earlier failure and recovery entries below are historical evidence, not the current ownership state.
 
+## Companion launch and ownership follow-up — 2026-10-05
+
+- Companion launch links disable Expo onboarding, automatic developer-menu opening, and its
+  floating controls. Expo developer tools remain available from Tao's existing developer menu.
+  Both CLI and Studio use the normalized launch link.
+- The reported `@runtime/dev-runtime/TR-dev` loading failure came from this follow-up's import,
+  not reinstalling Companion. The host now uses the public `@runtime/TR` entry. Restart an
+  already-running dev loop (`x`) to refresh its copied host entry before reopening the app.
+- Physical-device opening prints discovery, installed-app checks, network selection, and launch
+  progress. Busy keyboard diagnostics identify the command holding the operation lock.
+- New development manifests identify the app and project. Companion's iOS recent-project list
+  shows last-used time and a trash button; deletion removes the history entry, not application
+  data or cloud resources. Old entries keep their old name until reopened. These native controls
+  require rebuilding and reinstalling Companion; no new dependency was added.
+- The iOS Simulator Companion build succeeded with the projected launcher sources. An isolated
+  FirebaseNotes copy installed and opened it, then bundled 2,051 modules in 1,500 ms. Focused
+  tests cover the menu, launch links, device progress, metadata, and history projection. This is
+  build and bundle evidence; physical-device visuals and signed-in CRUD are separate gates.
+- Owned probe `1071ef78-c05e-42ec-8751-a7650b2b217a` stopped with proved cleanup and released its
+  Simulator. The Developer's existing sessions, including PID 30445, were preserved. Its live
+  parent chain was PID 63576 (`/bin/zsh`) and PID 22863 (desktop app), so it was not proved orphaned.
+  A later explicit Developer cleanup request authorized stopping user-started sessions; PID 30445
+  and the older FirebaseNotes PID 52039 then stopped with their recorded descendants.
+- New foreground CLI ownership records retain exact process and parent identities. Only a
+  confirmed orphan offers interactive stop/recovery with Continue as the default; live,
+  ambiguous, legacy, Studio, and managed-session owners remain protected. Identity is rechecked
+  after the prompt, and recovery uses a bounded graceful shutdown rather than a process-group kill.
+- Landing is authorized for this follow-up, including the local landing route if hosted checks
+  prevent a merge. The required order is Preview SPEED first, then this branch. A clean temporary
+  landing checkout preserves the three Developer-owned untracked app directories. Work stops
+  after confirmed landing. No new CI verification has been dispatched.
+  Firebase ordinary-app acceptance and Appwrite debugging below remain separate follow-up work.
+
 ## Firebase CLI follow-up — 2026-10-05
 
 - Creation now requires `--provider local` or `--provider firebase`, failing before planning or
