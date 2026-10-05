@@ -147,26 +147,29 @@ export const FunctionalCoreCompiler = {
     })
   },
 
-  /** WhenRenderStatement evaluates one subject and renders one lazy case. */
+  /** WhenRenderStatement observes one subject and renders its matching lazy cases. */
   WhenRenderStatement(statement: AST.WhenRenderStatement, options: CodegenOptions = {}): Compiled {
     if (!statement.subject) {
-      return gen`{(() => {
+      return gen`{TR.WhenPredicatesRender([
         ${
         gen.list(statement.branches, branch => {
           Assert.defined(branch.condition, 'predicate render branch has a condition')
-          return gen`if (${
-            Compile.Expression(branch.condition)
-          }.evaluate().jsValue === true) return TR.BlockScope(_Scope, _Scope => {
+          return gen`[() => ${Compile.Expression(branch.condition)}, () => TR.BlockScope(_Scope, _Scope => {
             ${Compile.RenderBlockBody(branch.block, options)}
-          })`
+          })],`
         })
       }
-        return TR.BlockScope(_Scope, _Scope => { ${Compile.RenderBlockBody(statement.otherwise.block, options)} })
-      })()}`
+      ]${
+        statement.otherwise
+          ? gen`, () => TR.BlockScope(_Scope, _Scope => {
+        ${Compile.RenderBlockBody(statement.otherwise.block, options)}
+      })`
+          : gen.noop()
+      })}`
     }
     const availability = Type.ofExpression(statement.subject).kind === 'entity'
     return gen`
-      {TR.${availability ? 'WhenReadRender' : 'WhenCaseRender'}(${Compile.Expression(statement.subject)}, [
+      {TR.${availability ? 'WhenReadRender' : 'WhenAllRender'}(${Compile.Expression(statement.subject)}, [
         ${
       gen.list(
         statement.branches,
