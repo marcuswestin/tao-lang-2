@@ -87,6 +87,12 @@ import { isPluralCategory, phraseIsPlural, phraseNumberParameters, pluralCategor
 import { literalExpression, parameterRequiresWritable, writableExpression } from './reactive-parameters'
 import { referencedNames } from './references'
 import { renderTargetIsNav, renderTargetName, resolveRenderTarget } from './render-targets'
+import {
+  bindRendererSlotArguments,
+  compareRendererSlotRenderer,
+  rendererSlotDefaultParameterCorrespondence,
+  rendererSlotSignatureOf,
+} from './renderer-slots'
 import { Type } from './Type'
 import { literalDurationOf, Units } from './Units'
 
@@ -106,6 +112,10 @@ export const ASTUtils = {
   parameterRequiresWritable,
   writableExpression,
   literalExpression,
+  bindRendererSlotArguments,
+  compareRendererSlotRenderer,
+  rendererSlotDefaultParameterCorrespondence,
+  rendererSlotSignatureOf,
   appBoundDatasources,
   effectiveAppConfiguration,
   listedEntryOf,
