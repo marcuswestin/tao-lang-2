@@ -12,6 +12,7 @@ export const TypesFormatter = {
   /** TypeDeclaration formats nominal definitions and transparent package-member aliases. */
   TypeDeclaration(f) {
     f.visibilityOnOwnLine()
+    f.oneSpaceAfter('abstract')
     f.oneSpaceAfter('type')
     f.oneSpaceAfter('can')
     f.oneSpaceAround('is')
@@ -48,6 +49,7 @@ export const TypesFormatter = {
       ...f.node.supports,
       ...f.node.implementations,
       ...f.node.methods,
+      ...f.node.views,
       ...f.node.converters,
     ]
       .toSorted((left, right) => (left.$cstNode?.offset ?? 0) - (right.$cstNode?.offset ?? 0))
@@ -59,6 +61,8 @@ export const TypesFormatter = {
         AST.isConfigurationImplementation(next)
           || AST.isAssociatedFunctionDeclaration(previous)
           || AST.isAssociatedFunctionDeclaration(next)
+          || AST.isAssociatedViewDeclaration(previous)
+          || AST.isAssociatedViewDeclaration(next)
           || AST.isAssociatedConverterDeclaration(previous)
           || AST.isAssociatedConverterDeclaration(next)
           ? 2

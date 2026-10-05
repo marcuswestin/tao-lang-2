@@ -5,6 +5,7 @@ import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 
 export const configuredItemValidationMessages = {
+  abstractTypeConstruction: (type: string) => `Abstract type '${type}' cannot be constructed directly.`,
   constructorShape: (type: string, expected: string) => `Typed constructor '${type}' expects a ${expected} literal.`,
   constructorValueType: (type: string, expected: string, actual: string) =>
     `Typed constructor '${type}' expects ${expected}, got ${actual}.`,
@@ -81,10 +82,14 @@ function validateConfiguredItemConstructor(
   ) {
     return
   }
+  const typeName = [value.type.$refText, ...(value.members ?? [])].join('.')
+  if (Type.isAbstractDomain(constructed)) {
+    ctx.error(value, configuredItemValidationMessages.abstractTypeConstruction(typeName))
+    return
+  }
   if (!validateConfiguredConstructorMembers(value, ctx)) {
     return
   }
-  const typeName = [value.type.ref?.name ?? value.type.$refText, ...(value.members ?? [])].join('.')
   if (value.value) {
     const expectedKind = constructorLiteralKind(constructed)
     const actual = Type.ofExpression(value.value)

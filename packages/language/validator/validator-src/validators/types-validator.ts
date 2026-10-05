@@ -334,6 +334,13 @@ function validateTypedConstructor(constructor: AST.TypedConstructor, ctx: Valida
   if (expected.kind === 'unresolved') {
     return
   }
+  if (Type.isAbstractDomain(expected)) {
+    ctx.error(
+      constructor,
+      typeValidationMessages.abstractTypeConstruction(Type.referenceName(constructor.type)),
+    )
+    return
+  }
   const expectedKind = constructorLiteralKind(expected)
   Switch.type(constructor.value, {
     ItemLiteral: value => {

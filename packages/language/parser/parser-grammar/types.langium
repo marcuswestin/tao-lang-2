@@ -19,7 +19,7 @@ PrimitiveDeclaration:
 
 TypeDeclaration:
     visibility=DeclarationVisibility?
-    ('type' name=ID ('is' type=TypeExpression | '=' aliasTarget=PackageMemberReference)
+    (abstract?='abstract'? 'type' name=ID ('is' type=TypeExpression | '=' aliasTarget=PackageMemberReference)
       | 'can' name=ID type=CapabilityTypeExpression);
 
 CapabilityTypeExpression:

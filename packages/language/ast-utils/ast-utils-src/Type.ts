@@ -268,6 +268,13 @@ export class Type {
     return new TypeResolutionContext().ofDefinition(type)
   }
 
+  /** Abstractness belongs to the resolved declaration, never its nominal ancestors. */
+  static isAbstractDomain(type: TaoType): boolean {
+    const declaration = nominalOf(type)
+      ?? (type.kind === 'capability' || type.kind === 'enum' ? type.declaration : undefined)
+    return AST.isTypeDeclaration(declaration) && declaration.abstract
+  }
+
   static instantiateGenericInvocation(
     declaration: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration,
     arguments_: readonly AST.Argument[],
