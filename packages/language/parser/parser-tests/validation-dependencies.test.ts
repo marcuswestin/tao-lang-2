@@ -17,7 +17,7 @@ Describe('parser validation dependency snapshots', () => {
           stdlibRoot: FS.resolvePath('absent-stdlib', root),
         }),
       )
-      const sourcePaths = ['@ui/One.tao', '@ui/Two.tao', '@ui/Three.tao'].map(name => paths[name]!)
+      const sourcePaths = (['@ui/One.tao', '@ui/Two.tao', '@ui/Three.tao'] as const).map(name => paths[name]!)
       const marker = FS.resolvePath('.tao', root)
       const moduleRoot = FS.resolvePath('@ui', root)
       const reads = new Map<string, number>()
