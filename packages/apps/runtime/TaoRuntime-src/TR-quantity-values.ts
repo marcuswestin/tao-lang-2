@@ -168,11 +168,28 @@ export function quantityPayloadJSValue(input: unknown): number | undefined {
 export function factoryOfQuantityInput(
   value: TaoEvaluable<unknown>,
 ): TaoQuantityFactory<string, Readonly<Record<string, number>>, object> {
-  const payload = value.evaluate().jsValue
-  if (!QuantityPayload.is(payload)) {
+  return QuantityPayload.factoryOf(authenticatedQuantityPayload(value.evaluate().jsValue))
+}
+
+/** Renders an authenticated quantity in its retained selected unit view. */
+export function quantityToText(value: TaoEvaluable<unknown>): string {
+  const payload = authenticatedQuantityPayload(value.evaluate().jsValue)
+  const factory = QuantityPayload.factoryOf(payload)
+  const canonical = payload.canonical
+  const unit = payload.unit
+  const scale = factory.definition.units[unit]
+  RuntimeAssert.defined(scale, 'a selected quantity view retains its declared unit scale')
+  const reading = canonical / scale
+  return Number.isFinite(reading) && (reading !== 0 || canonical === 0)
+    ? `${reading} ${unit}`
+    : `${canonical} / ${scale} ${unit}`
+}
+
+function authenticatedQuantityPayload(input: unknown): QuantityPayload<string> {
+  if (!QuantityPayload.is(input)) {
     throw new TaoActionFailure(QuantityFailureCases.BadShape, 'A checked quantity value is required.')
   }
-  return QuantityPayload.factoryOf(payload)
+  return input
 }
 
 /**
