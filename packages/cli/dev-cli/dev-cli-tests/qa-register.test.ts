@@ -3,6 +3,9 @@ import { Describe, Expect, initGitTestRepository, mkGitTestDir, Test } from '@sh
 import { QaInventory } from '../dev-cli-src/qa/QaInventory'
 import { QaRegister } from '../dev-cli-src/qa/QaRegister'
 
+/** GIT_IDENTITY commits as a fixed author, as `initGitTestRepository` does, since a CI runner has none. */
+const GIT_IDENTITY = ['-c', 'user.name=Tao Test', '-c', 'user.email=tao@example.test']
+
 async function fixture(exitCode = 0): Promise<{ root: string; qa: QaRegister }> {
   const root = await mkGitTestDir('qa-register-')
   await initGitTestRepository(root, {
@@ -27,7 +30,10 @@ async function fixture(exitCode = 0): Promise<{ root: string; qa: QaRegister }> 
     },
   })
   await FS.chmod(FS.resolvePath('agent', root), 0o755)
-  await CLI.mustRun('git', { args: ['commit', '-qam', 'Make the fixture agent executable'], cwd: root })
+  await CLI.mustRun('git', {
+    args: [...GIT_IDENTITY, 'commit', '-qam', 'Make the fixture agent executable'],
+    cwd: root,
+  })
   return { root, qa: new QaRegister(root) }
 }
 

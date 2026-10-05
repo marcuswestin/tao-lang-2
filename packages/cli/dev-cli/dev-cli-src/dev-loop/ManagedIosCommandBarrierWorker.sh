@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Repository-owned finite native worker. No executable, PID, shell command, or endpoint is accepted.
 [ "$#" -ge 5 ] || exit 71
 generation=$1

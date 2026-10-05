@@ -28,7 +28,7 @@ if (
   Errors.throwHostEnvironment('Private iOS command plan publication is not its exact private invocation file.')
 }
 let workerOutput = ''
-const worker = CLI.start('/bin/sh', {
+const worker = CLI.start('/bin/bash', {
   args: [
     Repo.resolvePath('packages/cli/dev-cli/dev-cli-tests/ManagedIosCommandBarrierSourceWorker.sh'),
     plan.generation,
