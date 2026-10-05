@@ -1,44 +1,81 @@
 import { AST } from '@parser'
-import { resolveArgumentBindings } from './argument-bindings'
+import { resolveArgumentBindings, resolveParameterArgumentBindings } from './argument-bindings'
+import { rendererSlotDefaultParameterCorrespondence } from './renderer-slots'
 import { Type } from './Type'
+
+// Signature extraction re-enters storage analysis synchronously; this guard is traversal context, never a cache.
+const activeParameters = new Set<AST.ParameterDeclaration>()
 
 /** parameterRequiresWritable reports whether a parameter shares caller-owned writable storage. */
 export function parameterRequiresWritable(
   parameter: AST.ParameterDeclaration,
   seen: ReadonlySet<AST.ParameterDeclaration> = new Set(),
 ): boolean {
-  if (parameter.copy || seen.has(parameter)) {
+  if (parameter.copy || seen.has(parameter) || activeParameters.has(parameter)) {
     return false
   }
   if (parameter.mutable) {
     return true
   }
   const nextSeen = new Set(seen).add(parameter)
-  const owner = parameterOwner(parameter)
-  if (!owner || AST.isFunctionDeclaration(owner)) {
+  activeParameters.add(parameter)
+  try {
+    const owner = parameterOwner(parameter)
+    if (!owner || AST.isFunctionDeclaration(owner)) {
+      return false
+    }
+    if (AST.isRenderSlotDeclaration(owner)) {
+      const renderer = owner.renderer?.ref
+      if (AST.isViewDeclaration(renderer)) {
+        const correspondence = rendererSlotDefaultParameterCorrespondence(owner, renderer)
+        if (
+          correspondence.some(pair =>
+            pair.required.declaration === parameter
+            && parameterRequiresWritable(pair.supplied.declaration, nextSeen)
+          )
+        ) {
+          return true
+        }
+      }
+    }
+    for (const node of AST.streamAllContents(owner)) {
+      if ((AST.isSetStatement(node) || AST.isToggleStatement(node)) && node.target.ref === parameter) {
+        return true
+      }
+      if (
+        AST.isParameterDeclaration(node)
+        && node.defaultValue
+        && expressionReferencesParameter(node.defaultValue, parameter)
+        && parameterRequiresWritable(node, nextSeen)
+      ) {
+        return true
+      }
+      const forwarding = forwardedParameters(node, parameter)
+      if (forwarding.some(target => parameterRequiresWritable(target, nextSeen))) {
+        return true
+      }
+      if (AST.isRenderSlotUse(node) && !AST.isRenderSlotFill(node)) {
+        const contract = node.slot.ref
+        if (contract) {
+          const bindings = resolveParameterArgumentBindings(AST.renderSlotParametersOf(contract), AST.argumentsOf(node))
+          if (
+            bindings.pairs.some(pair =>
+              expressionReferencesParameter(pair.argument.value, parameter)
+              && parameterRequiresWritable(pair.parameter, nextSeen)
+            )
+          ) {
+            return true
+          }
+        }
+      }
+      if (AST.isDoStatement(node) && dynamicActionForwardsWritableParameter(node, parameter)) {
+        return true
+      }
+    }
     return false
+  } finally {
+    activeParameters.delete(parameter)
   }
-  for (const node of AST.streamAllContents(owner)) {
-    if ((AST.isSetStatement(node) || AST.isToggleStatement(node)) && node.target.ref === parameter) {
-      return true
-    }
-    if (
-      AST.isParameterDeclaration(node)
-      && node.defaultValue
-      && expressionReferencesParameter(node.defaultValue, parameter)
-      && parameterRequiresWritable(node, nextSeen)
-    ) {
-      return true
-    }
-    const forwarding = forwardedParameters(node, parameter)
-    if (forwarding.some(target => parameterRequiresWritable(target, nextSeen))) {
-      return true
-    }
-    if (AST.isDoStatement(node) && dynamicActionForwardsWritableParameter(node, parameter)) {
-      return true
-    }
-  }
-  return false
 }
 
 /** writableExpression reports whether an expression names storage that an action may mutate. */
@@ -60,9 +97,14 @@ export function literalExpression(expression: AST.Expression): boolean {
     || (AST.isTypedConstructor(expression) && literalConstructorValue(expression.value))
 }
 
-function parameterOwner(parameter: AST.ParameterDeclaration): AST.ParameterizedDeclaration | undefined {
+function parameterOwner(
+  parameter: AST.ParameterDeclaration,
+): AST.ParameterizedDeclaration | AST.RenderSlotContract | undefined {
   const parent = parameter.$container?.$container
-  return parent && AST.isParameterizedDeclaration(parent) ? parent : undefined
+  if (parent && AST.isParameterizedDeclaration(parent)) {
+    return parent
+  }
+  return AST.renderSlotParameterOwner(parameter)
 }
 
 function writableExpressionTarget(expression: AST.Expression): AST.ValueDeclaration | undefined {

@@ -229,6 +229,7 @@ export function resolvedImportedDeclarations(useStatement: AST.UseStatement): AS
 
 type ArgumentListOwner =
   | AST.Render
+  | AST.RenderSlotUse
   | AST.AppView
   | AST.DoStatement
   | AST.CommandDoClause
@@ -560,7 +561,7 @@ export function renderPrefixTarget(prefix: RenderPrefix): AST.Statement | undefi
 }
 
 /** renderPrefixCluster returns only contiguous metadata immediately before this occurrence. */
-export function renderPrefixCluster(node: AST.Render | AST.ForStatement): RenderPrefix[] {
+export function renderPrefixCluster(node: AST.Render | AST.RenderSlotUse | AST.ForStatement): RenderPrefix[] {
   const block = node.$container
   if (!AST.isBlock(block)) {
     return []
@@ -574,7 +575,7 @@ export function renderPrefixCluster(node: AST.Render | AST.ForStatement): Render
 }
 
 /** attachedTag preserves the occurrence tag even when accessibility metadata intervenes. */
-export function attachedTag(node: AST.Render | AST.ForStatement): AST.TagStatement | undefined {
+export function attachedTag(node: AST.Render | AST.RenderSlotUse | AST.ForStatement): AST.TagStatement | undefined {
   return renderPrefixCluster(node).find(AST.isTagStatement)
 }
 
@@ -1122,6 +1123,55 @@ export function renderSlotDeclarationsOf(
   return view.block?.statements.filter(AST.isRenderSlotDeclaration) ?? view.foreign?.slots ?? []
 }
 
+export type RenderSlotParameterOwner = AST.RenderSlotDeclaration | AST.ForeignViewSlotDeclaration
+
+/** renderSlotParametersOf returns only the actual typed slot parameters. */
+export function renderSlotParametersOf(owner: RenderSlotParameterOwner): AST.ParameterDeclaration[] {
+  return owner.parameterList?.parameters ?? []
+}
+
+/** renderSlotParameterOwner returns the declaration that owns a real slot parameter. */
+export function renderSlotParameterOwner(parameter: AST.ParameterDeclaration): RenderSlotParameterOwner | undefined {
+  const list = parameter.$container
+  if (!AST.isParameterList(list)) {
+    return undefined
+  }
+  const owner = list.$container
+  if (!AST.isRenderSlotDeclaration(owner) && !AST.isForeignViewSlotDeclaration(owner)) {
+    return undefined
+  }
+  return owner.parameterList === list && list.parameters.includes(parameter) ? owner : undefined
+}
+
+export type RenderSlotBody =
+  | { kind: 'named'; renderer: NonNullable<AST.RenderSlotUse['renderer']> }
+  | { kind: 'empty' }
+  | { kind: 'render'; render: AST.ViewRender }
+  | { kind: 'block'; block: AST.Block }
+  | { kind: 'absent' }
+
+/** renderSlotBodyOf exposes the parsed RHS without conflating a fill and a placement. */
+export function renderSlotBodyOf(node: AST.RenderSlotDeclaration | AST.RenderSlotUse): RenderSlotBody {
+  if (node.renderer) {
+    return { kind: 'named', renderer: node.renderer }
+  }
+  if (node.empty) {
+    return { kind: 'empty' }
+  }
+  if (node.render) {
+    return { kind: 'render', render: node.render }
+  }
+  if (node.block) {
+    return { kind: 'block', block: node.block }
+  }
+  return { kind: 'absent' }
+}
+
+/** isRenderSlotFill distinguishes colon fills from bare slot placements. */
+export function isRenderSlotFill(use: AST.RenderSlotUse): boolean {
+  return use.fill === true
+}
+
 /**
  * viewPlacesCallerContent reports whether a view's body places `@@content` — in its render tree or
  * by naming the channel in a render injection — which is the placement that makes the view accept
@@ -1165,7 +1215,7 @@ export type RenderFragment =
 export function isRenderFragment(statement: AST.Statement): statement is RenderFragment {
   return AST.isRender(statement)
     || AST.isCallerContentStatement(statement)
-    || (AST.isRenderSlotUse(statement) && !statement.render)
+    || (AST.isRenderSlotUse(statement) && !isRenderSlotFill(statement))
     || AST.isWhenRenderStatement(statement)
     || AST.isGuardRenderStatement(statement)
     || AST.isIfRenderStatement(statement)

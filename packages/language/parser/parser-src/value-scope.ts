@@ -1,3 +1,5 @@
+import { Switch } from '@shared'
+import * as ASTStruct from './ast-structure'
 import { Langium } from './langium-exports'
 import type { PackageResolver } from './package-resolver'
 import * as AST from './parserASTExport'
@@ -166,6 +168,12 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     }
     if (context.property === 'slot' && AST.isRenderSlotUse(context.container)) {
       return this.createRenderSlotScope(context.container)
+    }
+    if (
+      context.property === 'renderer'
+      && (AST.isRenderSlotUse(context.container) || AST.isRenderSlotDeclaration(context.container))
+    ) {
+      return this.createDeclarationScope(context.container, AST.isViewDeclaration)
     }
     if (context.property === 'view' && AST.isAppView(context.container)) {
       return this.createAppViewScope(context.container)
@@ -386,26 +394,35 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     // Blocks and case payloads layer together at their lexical depth, so a handler payload wins
     // over outer bindings while bindings declared inside the handler shadow the payload.
     for (const carrier of scopeCarriersContaining(reference).reverse()) {
-      if (carrier.kind === 'associated-function') {
-        scope = this.createScopeForParameters(carrier.declaration, scope, reference)
-        continue
-      }
-      if (carrier.kind === 'payload') {
-        scope = this.createScopeForNodes([carrier.payload], scope)
-        continue
-      }
-      if (carrier.kind === 'action-block') {
-        const results = AST.actionResultDeclarationsOwnedByActionBlock(carrier.block).filter(binding =>
-          (binding.$cstNode?.end ?? Infinity) <= (reference.$cstNode?.offset ?? 0)
-        )
-        scope = this.createScopeForNodes([...AST.askDeclarationsOwnedByActionBlock(carrier.block), ...results], scope)
-        continue
-      }
-      const forBinding = AST.forBindingOwnedByBlock(carrier.block)
-      if (forBinding) {
-        scope = this.createScopeForNodes([forBinding], scope)
-      }
-      scope = this.createScopeForNodes(AST.valueDeclarationsOwnedByBlock(carrier.block).filter(visible), scope)
+      const currentScope = scope ?? this.createScopeForNodes([])
+      Switch.on(carrier, 'kind', {
+        'associated-function': value => {
+          scope = this.createScopeForParameters(value.declaration, currentScope, reference)
+        },
+        'render-slot': value => {
+          scope = this.createScopeForParameters(value.declaration, currentScope, reference)
+        },
+        payload: value => {
+          scope = this.createScopeForNodes([value.payload], currentScope)
+        },
+        'action-block': value => {
+          const results = AST.actionResultDeclarationsOwnedByActionBlock(value.block).filter(binding =>
+            (binding.$cstNode?.end ?? Infinity) <= (reference.$cstNode?.offset ?? 0)
+          )
+          scope = this.createScopeForNodes(
+            [...AST.askDeclarationsOwnedByActionBlock(value.block), ...results],
+            currentScope,
+          )
+        },
+        block: value => {
+          let nextScope = currentScope
+          const forBinding = AST.forBindingOwnedByBlock(value.block)
+          if (forBinding) {
+            nextScope = this.createScopeForNodes([forBinding], nextScope)
+          }
+          scope = this.createScopeForNodes(AST.valueDeclarationsOwnedByBlock(value.block).filter(visible), nextScope)
+        },
+      })
     }
 
     // A command's own slots are the innermost values in its body: they are what its metadata reads
@@ -519,6 +536,10 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (view) {
       scope = this.createScopeForParameters(view, scope, statement)
     }
+    const slotOwner = renderSlotOwnerContaining(statement)
+    if (slotOwner) {
+      scope = this.createScopeForParameters(slotOwner, scope, statement)
+    }
     const action = AST.findOwningAction(statement)
     if (action) {
       scope = this.createScopeForParameters(action, scope, statement)
@@ -546,7 +567,12 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     let scope = this.createScopeForNodes(root.statements.filter(isRenderable))
     scope = this.createScopeForNodes(this.importedDeclarations(render, isRenderable), scope)
     const owner = AST.findOwningView(render)
-    const parameters = owner ? AST.parametersOf(owner).filter(isRenderableParameter) : []
+    const slotOwner = renderSlotOwnerContaining(render)
+    const slotParameters = slotOwner ? visibleParametersAtReference(slotOwner, render) : []
+    const parameters = [
+      ...(owner ? AST.parametersOf(owner) : []),
+      ...slotParameters,
+    ].filter(isRenderableParameter)
     const firstParameter = parameters[0]
     if (!firstParameter) {
       return scope
@@ -560,7 +586,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
   }
 
   private createRenderSlotScope(use: AST.RenderSlotUse): Langium.Scope {
-    if (!use.render) {
+    if (!ASTStruct.isRenderSlotFill(use)) {
       const owner = AST.findOwningView(use)
       return this.createScopeForNodes(
         AST.isViewDeclaration(owner) ? AST.renderSlotDeclarationsOf(owner) : [],
@@ -862,7 +888,12 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
   }
 
   private createScopeForParameters(
-    declaration: AST.ParameterizedDeclaration | AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration,
+    declaration:
+      | AST.ParameterizedDeclaration
+      | AST.AssociatedFunctionDeclaration
+      | AST.CapabilityMethodDeclaration
+      | AST.RenderSlotDeclaration
+      | AST.ForeignViewSlotDeclaration,
     outerScope: Langium.Scope,
     reference?: AST.Node,
   ): Langium.Scope {
@@ -1081,6 +1112,20 @@ type ScopeCarrier =
   | { kind: 'action-block'; block: AST.ActionBlock }
   | { kind: 'payload'; payload: AST.CasePayload }
   | { kind: 'associated-function'; declaration: AST.AssociatedFunctionDeclaration }
+  | { kind: 'render-slot'; declaration: AST.RenderSlotDeclaration | AST.ForeignViewSlotDeclaration }
+
+function renderSlotOwnerContaining(
+  node: AST.Node,
+): AST.RenderSlotDeclaration | AST.ForeignViewSlotDeclaration | undefined {
+  let current: AST.Node | undefined = node
+  while (current) {
+    if (AST.isRenderSlotDeclaration(current) || AST.isForeignViewSlotDeclaration(current)) {
+      return current
+    }
+    current = current.$container
+  }
+  return undefined
+}
 
 /** scopeCarriersContaining returns blocks and case payloads from innermost to outermost. */
 function scopeCarriersContaining(node: AST.Node): ScopeCarrier[] {
@@ -1089,6 +1134,9 @@ function scopeCarriersContaining(node: AST.Node): ScopeCarrier[] {
   while (current) {
     if (AST.isAssociatedFunctionDeclaration(current)) {
       carriers.push({ kind: 'associated-function', declaration: current })
+    }
+    if (AST.isRenderSlotDeclaration(current) || AST.isForeignViewSlotDeclaration(current)) {
+      carriers.push({ kind: 'render-slot', declaration: current })
     }
     if (AST.isBlock(current)) {
       carriers.push({ kind: 'block', block: current })
@@ -1127,10 +1175,17 @@ function owningAppDeclaration(node: AST.Node): AST.AppDeclaration | undefined {
 }
 
 function visibleParametersAtReference(
-  declaration: AST.ParameterizedDeclaration | AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration,
+  declaration:
+    | AST.ParameterizedDeclaration
+    | AST.AssociatedFunctionDeclaration
+    | AST.CapabilityMethodDeclaration
+    | AST.RenderSlotDeclaration
+    | AST.ForeignViewSlotDeclaration,
   reference: AST.Node | undefined,
 ): readonly AST.ParameterDeclaration[] {
-  const parameters = AST.parametersOf(declaration)
+  const parameters = AST.isRenderSlotDeclaration(declaration) || AST.isForeignViewSlotDeclaration(declaration)
+    ? ASTStruct.renderSlotParametersOf(declaration)
+    : AST.parametersOf(declaration)
   const defaultParameter = parameterOwningDefault(reference)
   const index = defaultParameter ? parameters.indexOf(defaultParameter) : -1
   return index >= 0 ? parameters.slice(0, index) : parameters

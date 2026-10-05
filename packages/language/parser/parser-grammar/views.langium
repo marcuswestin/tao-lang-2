@@ -51,7 +51,7 @@ ForeignViewImplementation:
     'from' path=USE_IMPORT_PATH;
 
 ForeignViewSlotDeclaration:
-    name=USE_IMPORT_PATH;
+    name=USE_IMPORT_PATH parameterList=ParameterList?;
 
 // The source is context-sensitive here: bare supplied slots belong only to declaration bodies,
 // while nested render blocks retain the ordinary statement grammar. Returning Block preserves the
@@ -59,15 +59,28 @@ ForeignViewSlotDeclaration:
 ViewBlock returns Block:
     '{' statements+=ViewStatement* '}';
 
-// Views own optional, single-fill visual holes. A use without a render value places the slot in
-// the declaring view's implementation; a use with a render value fills that slot at one call site.
+// Views own renderer contracts. Bare and argument-bearing uses place a slot in the declaring
+// view's implementation; colon uses fill the receiving view's slot at one call site.
 RenderSlotDeclaration:
-    name=USE_IMPORT_PATH '=' 'empty';
+    name=USE_IMPORT_PATH parameterList=ParameterList ':'
+      (renderer=[ViewDeclaration:ID] | empty?='empty')
+    | name=USE_IMPORT_PATH ':'
+      (renderer=[ViewDeclaration:ID] | empty?='empty' | render=SlotInlineRender | block=Block)?
+    | name=USE_IMPORT_PATH '=' empty?='empty';
 
 type RenderSlotContract = RenderSlotDeclaration | ForeignViewSlotDeclaration;
 
 RenderSlotUse:
-    slot=[RenderSlotContract:USE_IMPORT_PATH] render=ViewRender?;
+    slot=[RenderSlotContract:USE_IMPORT_PATH]
+    (fill?=':' (renderer=[ViewDeclaration:ID] | empty?='empty' | render=SlotInlineRender | block=Block)?
+    | ('(' argumentList=ArgumentList? ')')?);
+
+// A bare identifier is a named renderer target. Calls, quotations and decorated named renders are
+// real zero-input inline bodies and retain the standard ViewRender AST shape.
+SlotInlineRender returns ViewRender:
+    (quotation=PhraseText
+    | view=[RenderTarget:ID] ('(' argumentList=ArgumentList? ')')?)
+    layoutClause=LayoutClause? block=Block?;
 
 // A content-accepting view places its opaque unnamed caller content explicitly in its render tree.
 CallerContentStatement:

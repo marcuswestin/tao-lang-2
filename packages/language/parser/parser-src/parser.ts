@@ -627,6 +627,27 @@ class NumericContinuationParser extends Langium.LangiumParser {
 
   override alternatives(...[index, choices]: Parameters<GrammarParser['alternatives']>): void {
     const name = this.frames[this.frames.length - 1]?.name
+    if (name === 'ViewStatement') {
+      const rule = this.continuationRule(name)
+      const alternative = rule?.definition
+      if (Langium.GrammarAST.isAlternatives(alternative)) {
+        const declaration = alternative.elements.findIndex(element =>
+          Langium.GrammarAST.isRuleCall(element) && element.rule.ref?.name === 'RenderSlotDeclaration'
+        )
+        choices = choices.map((choice, position) =>
+          position === declaration
+            ? { ...choice, GATE: () => (!choice.GATE || choice.GATE()) && this.startsSlotDeclaration() }
+            : choice
+        )
+      }
+    }
+    if (name === 'SlotInlineRender') {
+      choices = choices.map((choice, position) =>
+        position === 1
+          ? { ...choice, GATE: () => (!choice.GATE || choice.GATE()) && this.startsSlotInlineRender() }
+          : choice
+      )
+    }
     const rules = [
       'NumericUnitExpression',
       'DeclarationSlotNumericUnitExpression',
@@ -686,6 +707,40 @@ class NumericContinuationParser extends Langium.LangiumParser {
     }
     return this.lookahead(cursor).image === '{'
       || (isIdentifierToken(this.lookahead(cursor)) && this.lookahead(cursor + 1).image === '{')
+  }
+
+  private startsSlotDeclaration(): boolean {
+    if (this.isRecording()) {
+      return true
+    }
+    if (!this.lookahead(1).image.startsWith('@')) {
+      return false
+    }
+    let cursor = 2
+    if (this.lookahead(cursor).image === '(') {
+      let depth = 0
+      do {
+        const token = this.lookahead(cursor++)
+        if (token.image === '(') {
+          depth++
+        }
+        if (token.image === ')') {
+          depth--
+        }
+        if (!Number.isFinite(token.startOffset)) {
+          return true
+        }
+      } while (depth > 0)
+    }
+    return this.lookahead(cursor).image === ':' || this.lookahead(cursor).image === '='
+  }
+
+  private startsSlotInlineRender(): boolean {
+    if (this.isRecording()) {
+      return true
+    }
+    return isIdentifierToken(this.lookahead(1))
+      && ['(', '[', '{'].includes(this.lookahead(2).image)
   }
 
   private continuationRule(name: string) {
