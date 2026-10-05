@@ -1,10 +1,12 @@
 import { AST } from '@parser'
-import { Type } from './Type'
+import { type AssociatedCapabilityWitness, type TaoType, Type } from './Type'
+
+type RenderValueSource = AST.AliasDeclaration | AST.StateDeclaration | AST.ParameterDeclaration | AST.Expression
 
 /**
  * RenderTarget classifies what a render site names. A view declaration is invoked with arguments;
- * text values render as text, while nav declarations and view-, scene-, or nav-typed parameters
- * render as the value they were bound to.
+ * admitted ui values invoke their selected render witness and rendered descriptions mount directly.
+ * Text values render as text; nav declarations and visual parameters retain their bound occurrence.
  */
 export type RenderTarget =
   | { kind: 'view'; view: AST.ViewDeclaration }
@@ -15,12 +17,24 @@ export type RenderTarget =
     expression?: undefined
   }
   | { kind: 'text'; expression: AST.Expression; declaration?: undefined }
+  | { kind: 'rendered'; source: RenderValueSource }
+  | {
+    kind: 'ui'
+    source: RenderValueSource
+    actual: TaoType
+    contract: TaoType
+    witness: AssociatedCapabilityWitness
+  }
   | { kind: 'parameter'; parameter: AST.ParameterDeclaration; family: 'view' | 'scene' | 'nav' }
 
 /** resolveRenderTarget classifies the linked target of one render site. */
 export function resolveRenderTarget(render: AST.Render): RenderTarget | undefined {
   if (render.expression) {
     const type = Type.ofExpression(render.expression)
+    const visual = resolveVisualValue(render, render.expression, type)
+    if (visual) {
+      return visual
+    }
     return type.kind === 'primitive' && type.primitive === 'text'
       ? { kind: 'text', expression: render.expression }
       : undefined
@@ -36,6 +50,10 @@ export function resolveRenderTarget(render: AST.Render): RenderTarget | undefine
     return { kind: 'nav', declaration: target }
   }
   const type = Type.ofValueDeclaration(target, render)
+  const visual = resolveVisualValue(render, target, type)
+  if (visual) {
+    return visual
+  }
   if (type.kind === 'primitive' && type.primitive === 'text') {
     return { kind: 'text', declaration: target }
   }
@@ -55,8 +73,39 @@ export function resolveRenderTarget(render: AST.Render): RenderTarget | undefine
   return { kind: 'parameter', parameter: target, family }
 }
 
+/** The ordinary package contract selects a sealed witness before any text fallback. */
+function resolveVisualValue(render: AST.Render, source: RenderValueSource, actual: TaoType): RenderTarget | undefined {
+  if (actual.kind === 'primitive' && actual.primitive === 'rendered') {
+    return { kind: 'rendered', source }
+  }
+  const root = AST.findRoot(render)
+  if (!AST.isTaoFile(root)) {
+    return undefined
+  }
+  const file = AST.workspaceFilesFor(root).find(file => AST.getDocument(file).uri.path.endsWith('/@tao/ui/UI.tao'))
+  const declaration = file?.statements.filter(AST.isTypeDeclaration).find(declaration => declaration.name === 'ui')
+  if (!declaration) {
+    return undefined
+  }
+  const contract = Type.ofDefinition(declaration)
+  if (contract.kind !== 'capability') {
+    return undefined
+  }
+  const witness = Type.capabilityWitnesses(actual, contract)?.find(witness =>
+    witness.required.owner === declaration
+    && witness.required.signature.inputs.length === 0
+    && witness.required.result.kind === 'primitive' && witness.required.result.primitive === 'rendered'
+  )
+  return witness ? { kind: 'ui', source, actual, contract, witness } : undefined
+}
+
 /** renderTargetName returns the name a diagnostic uses for one render target. */
 export function renderTargetName(target: RenderTarget): string {
+  if (target.kind === 'ui' || target.kind === 'rendered') {
+    return AST.isExpression(target.source)
+      ? target.source.$cstNode?.text ?? 'expression'
+      : Type.declarationName(target.source)
+  }
   return target.kind === 'view'
     ? target.view.name
     : target.kind === 'nav'

@@ -6,6 +6,7 @@ import { Compile } from '../Compile'
 import { actionBlockInterruptsAsk, actionBlockRequiresAsync } from './action-control-flow'
 import { compileReactiveArgument } from './reactive-parameters'
 import { emitSlotBody } from './renderer-slot-codegen'
+import { compileStructuralUiRender } from './structural-ui-render-codegen'
 import { compileBareTextRender } from './ui-render-codegen'
 
 export const InvocationsCompiler = {
@@ -27,6 +28,9 @@ export const InvocationsCompiler = {
   Render(render: AST.Render, options: CodegenOptions = {}): Compiled {
     const target = ASTUtils.resolveRenderTarget(render)
     Assert.defined(target, 'validated render names a supported visual or text value', { render: render.view?.$refText })
+    if (target.kind === 'ui' || target.kind === 'rendered') {
+      return studioLensRender(render, compileStructuralUiRender(render, target, options), options)
+    }
     if (target.kind === 'text') {
       return studioLensRender(
         render,
@@ -85,7 +89,10 @@ export const InvocationsCompiler = {
    * its clauses and its tag, and the validator has already refused arguments, content, and events.
    */
   RenderOccurrence(render: AST.Render, target: ASTUtils.RenderTarget, options: CodegenOptions = {}): Compiled {
-    Assert(target.kind !== 'view' && target.kind !== 'text', 'a visual declaration target compiles directly')
+    Assert(
+      target.kind === 'nav' || target.kind === 'parameter',
+      'a navigation or bound visual target compiles as an occurrence',
+    )
     const declaration = target.kind === 'nav' ? target.declaration : target.parameter
     return studioLensRender(
       render,

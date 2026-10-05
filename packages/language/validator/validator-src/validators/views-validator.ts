@@ -26,7 +26,7 @@ const viewValidationMessages = {
   loopSelectInline: '`on select` requires an inline action block.',
   renderTarget: '`render` must target a view or inject block.',
   bareRenderTargetType: (name: string, actual: string) =>
-    `Bare render target '${name}' must have type text, got ${actual}.`,
+    `Bare render target '${name}' must have type text or rendered, or satisfy ui, got ${actual}.`,
   sceneComposed: (name: string) => `Scene '${name}' is presented, never composed. Present it, or declare it as a view.`,
   sceneBoundToView: (scene: string, parameter: string) =>
     `Scene '${scene}' cannot be bound to view parameter '${parameter}'; a view renders it inline where no host reads its chrome.`,
