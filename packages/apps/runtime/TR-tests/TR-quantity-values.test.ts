@@ -16,19 +16,19 @@ import {
 // Fixtures model declaration-owned metadata; production supplies no Duration/Ratio registry.
 const durationDefinition = {
   domain: 'Duration',
-  defaultUnit: 'Seconds',
-  units: { Seconds: 1, Milliseconds: 0.001, Minutes: 60, Hours: 3600 },
+  defaultUnit: 'seconds',
+  units: { seconds: 1, milliseconds: 0.001, minutes: 60, hours: 3600 },
 } as const
 const Duration = makeQuantityType(durationDefinition, TR.Value)
 const Ratio = makeQuantityType({
   domain: 'Ratio',
-  defaultUnit: 'Unity',
-  units: { Unity: 1, Percent: 0.01, Permille: 0.001 },
+  defaultUnit: 'unity',
+  units: { unity: 1, percent: 0.01, permille: 0.001 },
 }, TR.Value)
 const Probability = makeQuantityType({
   domain: 'Probability',
-  defaultUnit: 'Unity',
-  units: { Unity: 1, Percent: 0.01 },
+  defaultUnit: 'unity',
+  units: { unity: 1, percent: 0.01 },
   invariant: canonical => canonical >= 0 && canonical <= 1,
 }, TR.Value)
 
@@ -54,11 +54,11 @@ function addDuration(left: TR.Value<unknown>, right: TR.Value<unknown>): Duratio
 
 Describe('checked quantity values', () => {
   Test('normalizes a signed unit input once and treats native input as canonical', () => {
-    const minutes = Duration.fromUnit(-2, 'Minutes')
-    Expect(Duration.read(minutes)).toEqual({ canonical: -120, unit: 'Minutes' })
-    Expect(Duration.read(Duration.fromJSValue(120))).toEqual({ canonical: 120, unit: 'Seconds' })
+    const minutes = Duration.fromUnit(-2, 'minutes')
+    Expect(Duration.read(minutes)).toEqual({ canonical: -120, unit: 'minutes' })
+    Expect(Duration.read(Duration.fromJSValue(120))).toEqual({ canonical: 120, unit: 'seconds' })
     Expect(quantityPayloadJSValue(minutes.jsValue)).toBe(-120)
-    Expect(Duration.read(Duration.fromUnit(1500, 'Milliseconds')).canonical).toBe(1.5)
+    Expect(Duration.read(Duration.fromUnit(1500, 'milliseconds')).canonical).toBe(1.5)
   })
 
   Test('retains canonical data while selecting views without repeating the invariant', () => {
@@ -66,15 +66,15 @@ Describe('checked quantity values', () => {
     const measured = makeQuantityType({
       domain: 'Measured',
       defaultUnit: 'Base',
-      units: { Base: 1, Double: 2, Tiny: Number.MIN_VALUE },
+      units: { Base: 1, Double: 2, tiny: Number.MIN_VALUE },
       invariant: () => {
         checks += 1
         return true
       },
     }, TR.Value)
     const value = measured.fromUnit(4, 'Double')
-    const tinyView = measured.inUnit(measured.inUnit(value, 'Base'), 'Tiny')
-    Expect(measured.read(tinyView)).toEqual({ canonical: 8, unit: 'Tiny' })
+    const tinyView = measured.inUnit(measured.inUnit(value, 'Base'), 'tiny')
+    Expect(measured.read(tinyView)).toEqual({ canonical: 8, unit: 'tiny' })
     Expect(checks).toBe(1)
     Expect(quantityPayloadJSValue(tinyView.jsValue)).toBe(8)
     const negativeZero = measured.inUnit(measured.fromJSValue(-0), 'Double')
@@ -82,31 +82,31 @@ Describe('checked quantity values', () => {
   })
 
   Test('preserves the domain and view through real cells, aliases, argument passing and copies', () => {
-    const minutes = Duration.fromUnit(2, 'Minutes')
+    const minutes = Duration.fromUnit(2, 'minutes')
     const cell = TR.Cell(minutes)
-    cell.set(Duration.inUnit(minutes, 'Milliseconds'))
+    cell.set(Duration.inUnit(minutes, 'milliseconds'))
     const alias = TR.Alias(() => cell.evaluate())
     const throughArgument = (value: TR.Value<unknown>) => value.evaluate()
     const copy = TR.Copy(alias)
-    Expect(Duration.read(throughArgument(copy))).toEqual({ canonical: 120, unit: 'Milliseconds' })
+    Expect(Duration.read(throughArgument(copy))).toEqual({ canonical: 120, unit: 'milliseconds' })
     Expect(copy.jsValue).toBe(cell.evaluate().jsValue)
     const nested = TR.Copy(TR.Value({ Amount: cell.evaluate().jsValue }))
-    Expect(Duration.read(TR.Value(nested.jsValue.Amount))).toEqual({ canonical: 120, unit: 'Milliseconds' })
+    Expect(Duration.read(TR.Value(nested.jsValue.Amount))).toEqual({ canonical: 120, unit: 'milliseconds' })
     Expect(TR.isQuantityPayload(nested.jsValue.Amount)).toBe(true)
   })
 
   Test('serializes extracted canonical data and restores the declared default when decoding', () => {
-    const value = Duration.inUnit(Duration.fromUnit(2, 'Minutes'), 'Milliseconds')
+    const value = Duration.inUnit(Duration.fromUnit(2, 'minutes'), 'milliseconds')
     const serialized = JSON.stringify(quantityPayloadJSValue(value.jsValue))
     Expect(serialized).toBe('120')
-    Expect(Duration.read(Duration.fromJSValue(JSON.parse(serialized)))).toEqual({ canonical: 120, unit: 'Seconds' })
+    Expect(Duration.read(Duration.fromJSValue(JSON.parse(serialized)))).toEqual({ canonical: 120, unit: 'seconds' })
     Expect(quantityPayloadJSValue(TR.Value(120).jsValue)).toBeUndefined()
     Expect(quantityPayloadJSValue(undefined)).toBeUndefined()
   })
 
   Test('exposes canonical native numbers through value copies, readonly views, aliases and cells', () => {
     for (const canonical of [120, 0, -0]) {
-      const value = Duration.inUnit(Duration.fromJSValue(canonical), 'Minutes')
+      const value = Duration.inUnit(Duration.fromJSValue(canonical), 'minutes')
       const copied = TR.Copy(value)
       const readonly = TR.Readonly<typeof value.jsValue>(copied)
       const cell = TR.Cell(value)
@@ -120,29 +120,29 @@ Describe('checked quantity values', () => {
       Expect(Object.is(alias.getJSValue(), canonical)).toBe(true)
       Expect(TR.isQuantityPayload(readonly.jsValue)).toBe(true)
       Expect(readonly.jsValue).toBe(value.jsValue)
-      Expect(Duration.read(readonly).unit).toBe('Minutes')
-      cell.set(Duration.fromUnit(3, 'Hours'))
+      Expect(Duration.read(readonly).unit).toBe('minutes')
+      cell.set(Duration.fromUnit(3, 'hours'))
       Expect(alias.getJSValue()).toBe(10800)
-      Expect(Duration.read(alias).unit).toBe('Hours')
+      Expect(Duration.read(alias).unit).toBe('hours')
     }
   })
 
   Test('keeps Ratio signed and unbounded while an authored Duration contract selects its result view', () => {
-    Expect(Ratio.read(Ratio.fromUnit(150, 'Percent'))).toEqual({ canonical: 1.5, unit: 'Percent' })
-    Expect(Ratio.read(Ratio.fromUnit(-250, 'Permille'))).toEqual({ canonical: -0.25, unit: 'Permille' })
-    Expect(Duration.read(addDuration(Duration.fromUnit(2, 'Minutes'), Duration.fromUnit(500, 'Milliseconds'))))
-      .toEqual({ canonical: 120.5, unit: 'Minutes' })
+    Expect(Ratio.read(Ratio.fromUnit(150, 'percent'))).toEqual({ canonical: 1.5, unit: 'percent' })
+    Expect(Ratio.read(Ratio.fromUnit(-250, 'permille'))).toEqual({ canonical: -0.25, unit: 'permille' })
+    Expect(Duration.read(addDuration(Duration.fromUnit(2, 'minutes'), Duration.fromUnit(500, 'milliseconds'))))
+      .toEqual({ canonical: 120.5, unit: 'minutes' })
   })
 
   Test('rejects different nominal domains even when factories share a diagnostic name', () => {
     const sibling = makeQuantityType(durationDefinition, TR.Value)
     expectFailure(() => Duration.read(sibling.fromJSValue(120)), QuantityFailureCases.DomainMismatch)
     expectFailure(
-      () => Duration.inUnit(Ratio.fromJSValue(1) as TR.Value<unknown>, 'Seconds'),
+      () => Duration.inUnit(Ratio.fromJSValue(1) as TR.Value<unknown>, 'seconds'),
       QuantityFailureCases.DomainMismatch,
     )
     expectFailure(() => addDuration(Duration.fromJSValue(1), Ratio.fromJSValue(1)), QuantityFailureCases.DomainMismatch)
-    Expect(Duration.read(Duration.fromJSValue(1))).toEqual({ canonical: 1, unit: 'Seconds' })
+    Expect(Duration.read(Duration.fromJSValue(1))).toEqual({ canonical: 1, unit: 'seconds' })
   })
 
   Test('rejects foreign shapes and forged prototypes before extracting private storage', () => {
@@ -153,7 +153,7 @@ Describe('checked quantity values', () => {
     Expect(TR.isQuantityPayload(forged)).toBe(false)
     Expect(quantityPayloadJSValue(forged)).toBeUndefined()
     expectFailure(() => Duration.read(TR.Value(forged)), QuantityFailureCases.BadShape)
-    expectFailure(() => Duration.read(TR.Value({ canonical: 120, unit: 'Seconds' })), QuantityFailureCases.BadShape)
+    expectFailure(() => Duration.read(TR.Value({ canonical: 120, unit: 'seconds' })), QuantityFailureCases.BadShape)
   })
 
   Test('protects canonical access, domain admission and branding from prototype or constructor replacement', () => {
@@ -165,16 +165,16 @@ Describe('checked quantity values', () => {
     Expect(Reflect.set(constructor, 'is', () => true)).toBe(false)
     Expect(quantityPayloadJSValue(value.jsValue)).toBe(2)
     Expect(quantityPayloadJSValue({ canonical: Infinity })).toBeUndefined()
-    Expect(Duration.read(Duration.inUnit(value, 'Minutes'))).toEqual({ canonical: 2, unit: 'Minutes' })
+    Expect(Duration.read(Duration.inUnit(value, 'minutes'))).toEqual({ canonical: 2, unit: 'minutes' })
     expectFailure(() => Duration.read(Ratio.fromJSValue(2)), QuantityFailureCases.DomainMismatch)
   })
 
   Test('rejects nonfinite backing, unit normalization and authored results', () => {
     for (const input of [NaN, Infinity, -Infinity]) {
       expectFailure(() => Duration.fromJSValue(input), QuantityFailureCases.NonFinite)
-      expectFailure(() => Duration.fromUnit(input, 'Seconds'), QuantityFailureCases.NonFinite)
+      expectFailure(() => Duration.fromUnit(input, 'seconds'), QuantityFailureCases.NonFinite)
     }
-    expectFailure(() => Duration.fromUnit(Number.MAX_VALUE, 'Hours'), QuantityFailureCases.NonFinite)
+    expectFailure(() => Duration.fromUnit(Number.MAX_VALUE, 'hours'), QuantityFailureCases.NonFinite)
     expectFailure(
       () => addDuration(Duration.fromJSValue(Number.MAX_VALUE), Duration.fromJSValue(Number.MAX_VALUE)),
       QuantityFailureCases.NonFinite,
@@ -183,7 +183,7 @@ Describe('checked quantity values', () => {
   })
 
   Test('checks declared invariants on construction and authored results', () => {
-    expectFailure(() => Probability.fromUnit(101, 'Percent'), QuantityFailureCases.Invariant)
+    expectFailure(() => Probability.fromUnit(101, 'percent'), QuantityFailureCases.Invariant)
     expectFailure(() => Probability.fromJSValue(-0.01), QuantityFailureCases.Invariant)
     const first = Probability.fromJSValue(0.75)
     const second = Probability.fromJSValue(0.5)
@@ -191,30 +191,30 @@ Describe('checked quantity values', () => {
       () => Probability.fromJSValue(Probability.read(first).canonical + Probability.read(second).canonical),
       QuantityFailureCases.Invariant,
     )
-    Expect(Probability.read(Probability.fromUnit(100, 'Percent'))).toEqual({ canonical: 1, unit: 'Percent' })
+    Expect(Probability.read(Probability.fromUnit(100, 'percent'))).toEqual({ canonical: 1, unit: 'percent' })
   })
 
   Test('rejects unrelated and inherited unit names without defaulting them', () => {
-    for (const name of ['Percent', 'toString', '__proto__']) {
+    for (const name of ['percent', 'toString', '__proto__']) {
       expectFailure(() => Duration.fromUnit(1, name as never), QuantityFailureCases.UnknownUnit)
       expectFailure(() => Duration.inUnit(Duration.fromJSValue(1), name as never), QuantityFailureCases.UnknownUnit)
     }
-    expectFailure(() => Duration.fromUnit(1, new String('Seconds') as never), QuantityFailureCases.UnknownUnit)
+    expectFailure(() => Duration.fromUnit(1, new String('seconds') as never), QuantityFailureCases.UnknownUnit)
   })
 
   Test('snapshots and freezes declaration metadata against later caller mutation', () => {
     const source = {
       domain: 'MutableMetadata',
-      defaultUnit: 'Seconds' as 'Seconds' | 'Minutes',
-      units: { Seconds: 1, Minutes: 60 },
+      defaultUnit: 'seconds' as 'seconds' | 'minutes',
+      units: { seconds: 1, minutes: 60 },
       invariant: (canonical: number) => canonical >= 0,
     }
     const factory = makeQuantityType(source, TR.Value)
-    source.units.Minutes = 600
-    source.defaultUnit = 'Minutes'
+    source.units.minutes = 600
+    source.defaultUnit = 'minutes'
     source.invariant = () => true
-    Expect(factory.read(factory.fromUnit(2, 'Minutes'))).toEqual({ canonical: 120, unit: 'Minutes' })
-    Expect(factory.read(factory.fromJSValue(120)).unit).toBe('Seconds')
+    Expect(factory.read(factory.fromUnit(2, 'minutes'))).toEqual({ canonical: 120, unit: 'minutes' })
+    Expect(factory.read(factory.fromJSValue(120)).unit).toBe('seconds')
     expectFailure(() => factory.fromJSValue(-1), QuantityFailureCases.Invariant)
     Expect(Object.isFrozen(factory)).toBe(true)
     Expect(Object.isFrozen(factory.definition)).toBe(true)
@@ -246,21 +246,21 @@ Describe('checked quantity values', () => {
       // @ts-expect-error Undeclared default units must not widen the unit union.
       makeQuantityType({ domain: 'Bad', defaultUnit: 'Other', units: { Base: 1 } }, TR.Value)
       // @ts-expect-error A Duration factory admits all its declared units, and no Ratio unit.
-      Duration.fromUnit(1, 'Percent')
+      Duration.fromUnit(1, 'percent')
     }
   })
 
   Test('contains a modeled quantity failure at the real savepoint and preserves the earlier view', async () => {
-    const cell = TR.Cell(Duration.fromUnit(1, 'Seconds'))
+    const cell = TR.Cell(Duration.fromUnit(1, 'seconds'))
     let receipt: TaoActionReceipt | undefined
     await runAction(
       'quantity savepoint',
       [],
       () => {
-        cell.set(Duration.fromUnit(2, 'Minutes'))
+        cell.set(Duration.fromUnit(2, 'minutes'))
         runEffectOutcome(
           () => {
-            cell.set(Duration.fromUnit(3, 'Hours'))
+            cell.set(Duration.fromUnit(3, 'hours'))
             Probability.fromJSValue(2)
           },
           { declared: [QuantityFailureCases.Invariant], name: 'checked factory' },
@@ -275,18 +275,18 @@ Describe('checked quantity values', () => {
       },
     )
     Expect(receipt?.outcome).toBe('committed')
-    Expect(Duration.read(cell)).toEqual({ canonical: 120, unit: 'Minutes' })
+    Expect(Duration.read(cell)).toEqual({ canonical: 120, unit: 'minutes' })
   })
 
   Test('rolls back a root on an unhandled modeled result and skips subsequent work', async () => {
-    const cell = TR.Cell(Duration.fromUnit(2, 'Minutes'))
+    const cell = TR.Cell(Duration.fromUnit(2, 'minutes'))
     let later = false
     let receipt: TaoActionReceipt | undefined
     await runAction(
       'quantity root',
       [],
       () => {
-        cell.set(Duration.fromUnit(3, 'Hours'))
+        cell.set(Duration.fromUnit(3, 'hours'))
         Ratio.fromJSValue(1 / 0)
         later = true
       },
@@ -300,7 +300,7 @@ Describe('checked quantity values', () => {
     Expect(receipt?.outcome).toBe('failed')
     Expect(receipt?.failure?.case).toBe(QuantityFailureCases.NonFinite)
     Expect(later).toBe(false)
-    Expect(Duration.read(cell)).toEqual({ canonical: 120, unit: 'Minutes' })
+    Expect(Duration.read(cell)).toEqual({ canonical: 120, unit: 'minutes' })
   })
 
   Test('converts new seconds explicitly while retaining legacy native Interval nanosecond behavior', () => {
@@ -313,9 +313,9 @@ Describe('checked quantity values', () => {
       return nanoseconds
     }
     const fromLegacy = (nanoseconds: number) => Duration.fromJSValue(nanoseconds / 1e9)
-    const converted = toLegacy(Duration.fromUnit(2000, 'Milliseconds'))
+    const converted = toLegacy(Duration.fromUnit(2000, 'milliseconds'))
     Expect(converted).toBe(2e9)
-    Expect(Duration.read(fromLegacy(converted))).toEqual({ canonical: 2, unit: 'Seconds' })
+    Expect(Duration.read(fromLegacy(converted))).toEqual({ canonical: 2, unit: 'seconds' })
     expectFailure(() => toLegacy(Duration.fromJSValue(Number.MAX_VALUE)), QuantityFailureCases.NonFinite)
     TR.Clock.beginTest(1000)
     try {
@@ -352,11 +352,11 @@ Describe('authenticated quantity parents', () => {
     const sibling = Duration.derive({ domain: 'SiblingDuration' })
     const unrelated = makeQuantityType({ ...durationDefinition, domain: 'ChildDuration' }, TR.Value)
     const parentValue = Duration.fromJSValue(120)
-    const childValue = child.fromUnit(2, 'Minutes')
-    const grandchildValue = grandchild.fromUnit(2, 'Minutes')
-    Expect(Duration.read(childValue)).toEqual({ canonical: 120, unit: 'Minutes' })
-    Expect(Duration.read(grandchildValue)).toEqual({ canonical: 120, unit: 'Minutes' })
-    Expect(child.read(grandchildValue)).toEqual({ canonical: 120, unit: 'Minutes' })
+    const childValue = child.fromUnit(2, 'minutes')
+    const grandchildValue = grandchild.fromUnit(2, 'minutes')
+    Expect(Duration.read(childValue)).toEqual({ canonical: 120, unit: 'minutes' })
+    Expect(Duration.read(grandchildValue)).toEqual({ canonical: 120, unit: 'minutes' })
+    Expect(child.read(grandchildValue)).toEqual({ canonical: 120, unit: 'minutes' })
     for (
       const [factory, exact, accepted] of [
         [Duration, [true, false, false], [true, true, true]],
@@ -383,7 +383,7 @@ Describe('authenticated quantity parents', () => {
   Test('uses an explicit upward union adapter with one evaluation, payload getter and admitted read', () => {
     const child = Duration.derive({ domain: 'UnionChild' })
     const grandchild = child.derive({ domain: 'UnionGrandchild' })
-    const value = grandchild.fromUnit(2, 'Minutes')
+    const value = grandchild.fromUnit(2, 'minutes')
     let evaluations = 0
     let getters = 0
     let reads = 0
@@ -402,7 +402,7 @@ Describe('authenticated quantity parents', () => {
       ownsPayload: Duration.acceptsPayload,
       read(input: Parameters<typeof Duration.read>[0]) {
         reads += 1
-        Expect(Duration.read(input)).toEqual({ canonical: 120, unit: 'Minutes' })
+        Expect(Duration.read(input)).toEqual({ canonical: 120, unit: 'minutes' })
       },
     }
     Expect(TR.admitQuantityUnion(native, [adapter], 'Duration')).toBeUndefined()
@@ -440,7 +440,7 @@ Describe('authenticated quantity parents', () => {
     const parent = makeQuantityType({
       domain: 'SignedParent',
       defaultUnit: 'Base',
-      units: { Base: 1, Double: 2, Tiny: Number.MIN_VALUE },
+      units: { Base: 1, Double: 2, tiny: Number.MIN_VALUE },
       invariant: () => {
         checks.push('parent')
         return true
@@ -463,11 +463,11 @@ Describe('authenticated quantity parents', () => {
     for (const input of [-4, -0]) {
       checks.length = 0
       const original = grandchild.fromUnit(input, 'Double')
-      const viewed = parent.inUnit(child.inUnit(original, 'Base'), 'Tiny')
+      const viewed = parent.inUnit(child.inUnit(original, 'Base'), 'tiny')
       Expect(checks).toEqual(['parent', 'child', 'grandchild'])
       Expect(Object.is(viewed.getJSValue(), input === 0 ? -0 : -8)).toBe(true)
-      Expect(grandchild.read(viewed).unit).toBe('Tiny')
-      Expect(parent.read(viewed).unit).toBe('Tiny')
+      Expect(grandchild.read(viewed).unit).toBe('tiny')
+      Expect(parent.read(viewed).unit).toBe('tiny')
       Expect(viewed.jsValue.domain).toBe('SignedGrandchild')
       Expect(grandchild.ownsPayload(viewed.jsValue)).toBe(true)
       Expect(child.ownsPayload(viewed.jsValue)).toBe(false)
@@ -604,7 +604,7 @@ Describe('authenticated quantity parents', () => {
     Expect(() => detached({ domain: 'DetachedChild' })).toThrow(UserInputError)
     Expect(() => Reflect.apply(child.derive, Duration, [{ domain: 'BorrowedChild' }])).toThrow(UserInputError)
     const authentic = Reflect.apply(Duration.derive, Duration, [{ domain: 'AuthenticChild' }])
-    Expect(Duration.read(authentic.fromJSValue(2))).toEqual({ canonical: 2, unit: 'Seconds' })
+    Expect(Duration.read(authentic.fromJSValue(2))).toEqual({ canonical: 2, unit: 'seconds' })
   })
 
   Test('keeps lineage immutable through metadata and cycle attempts without trusting copied descriptors', () => {
@@ -628,16 +628,16 @@ Describe('authenticated quantity parents', () => {
   Test('retains child admission through real aliases, cells, readonly views, copies and arguments', () => {
     const child = Duration.derive({ domain: 'StoredChild' })
     const grandchild = child.derive({ domain: 'StoredGrandchild' })
-    const original = grandchild.fromUnit(2, 'Minutes')
+    const original = grandchild.fromUnit(2, 'minutes')
     const cell = TR.Cell(original)
-    cell.set(Duration.inUnit(original, 'Milliseconds'))
+    cell.set(Duration.inUnit(original, 'milliseconds'))
     const alias = TR.Alias(() => cell.evaluate())
     const copy = TR.Copy(alias)
     const readonly = TR.Readonly<typeof copy.jsValue>(copy)
     const throughArgument = (value: TR.Value<unknown>) => value.evaluate()
     for (const value of [cell, alias, copy, readonly, throughArgument(copy)]) {
-      Expect(Duration.read(value)).toEqual({ canonical: 120, unit: 'Milliseconds' })
-      Expect(child.read(value)).toEqual({ canonical: 120, unit: 'Milliseconds' })
+      Expect(Duration.read(value)).toEqual({ canonical: 120, unit: 'milliseconds' })
+      Expect(child.read(value)).toEqual({ canonical: 120, unit: 'milliseconds' })
       // A live alias carries the current payload on its evaluated value.
       Expect(grandchild.ownsPayload(value.evaluate().jsValue)).toBe(true)
       Expect(value.getJSValue()).toBe(120)
@@ -645,10 +645,10 @@ Describe('authenticated quantity parents', () => {
     }
     Expect(copy.jsValue).toBe(cell.evaluate().jsValue)
     const nested = TR.Copy(TR.Value({ Amount: readonly.jsValue }))
-    Expect(grandchild.read(TR.Value(nested.jsValue.Amount))).toEqual({ canonical: 120, unit: 'Milliseconds' })
+    Expect(grandchild.read(TR.Value(nested.jsValue.Amount))).toEqual({ canonical: 120, unit: 'milliseconds' })
     cell.set(grandchild.fromJSValue(-0))
     Expect(Object.is(alias.getJSValue(), -0)).toBe(true)
-    Expect(Duration.read(alias).unit).toBe('Seconds')
+    Expect(Duration.read(alias).unit).toBe('seconds')
   })
 
   Test(

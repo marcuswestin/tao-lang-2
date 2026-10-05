@@ -14,8 +14,8 @@ import { type TaoWaitScheduler, wait } from '../TaoRuntime-src/TR-wait'
 
 const Duration = makeQuantityType({
   domain: 'Duration',
-  defaultUnit: 'Seconds',
-  units: { Seconds: 1, Milliseconds: 0.001 },
+  defaultUnit: 'seconds',
+  units: { seconds: 1, milliseconds: 0.001 },
 }, TR.Value)
 
 type Scheduled = { callback: () => void; delayMilliseconds: number; cancelCalls: number }
@@ -35,47 +35,50 @@ function manualScheduler(): Readonly<{ schedule: TaoWaitScheduler; scheduled: Sc
 }
 
 Describe('checked Wait', () => {
-  Test('inherits actual root cancellation and lets deferred checked waits finish under the cleanup shield', async () => {
-    const started = Deferred()
-    const seen: string[] = []
-    let continuation: TaoActionContinuation = {}
-    let signal: AbortSignal | undefined
-    let failure: unknown
-    const stop = TR.Errors.onFailure(() => undefined)
-    try {
-      const running = TR.Action(async () => {
-        try {
-          await runActionScope(async () => {
-            continuation = captureActionContinuation()
-            signal = actionCancellationSignal()
-            registerDeferredAction(async () => {
-              Expect(actionCancellationSignal()).toBeUndefined()
-              seen.push('cleanup started')
-              await TR.Wait(Duration.read, Duration.fromUnit(0.001, 'Seconds'))
-              seen.push('cleanup finished')
+  Test(
+    'inherits actual root cancellation and lets deferred checked waits finish under the cleanup shield',
+    async () => {
+      const started = Deferred()
+      const seen: string[] = []
+      let continuation: TaoActionContinuation = {}
+      let signal: AbortSignal | undefined
+      let failure: unknown
+      const stop = TR.Errors.onFailure(() => undefined)
+      try {
+        const running = TR.Action(async () => {
+          try {
+            await runActionScope(async () => {
+              continuation = captureActionContinuation()
+              signal = actionCancellationSignal()
+              registerDeferredAction(async () => {
+                Expect(actionCancellationSignal()).toBeUndefined()
+                seen.push('cleanup started')
+                await TR.Wait(Duration.read, Duration.fromUnit(0.001, 'seconds'))
+                seen.push('cleanup finished')
+              })
+              const waiting = TR.Wait(Duration.read, Duration.fromUnit(3600, 'seconds'))
+              started.resolve()
+              await waiting
+              seen.push('unexpected tail')
             })
-            const waiting = TR.Wait(Duration.read, Duration.fromUnit(3600, 'Seconds'))
-            started.resolve()
-            await waiting
-            seen.push('unexpected tail')
-          })
-        } catch (error) {
-          failure = error
-          throw error
-        }
-      }).jsValue.invoke()
-      await started.promise
-      Expect(cancelActionContinuation(continuation)).toBe(true)
-      await running
-      Expect(seen).toEqual(['cleanup started', 'cleanup finished'])
-      Expect(failure).toBeInstanceOf(TaoActionFailure)
-      Expect((failure as TaoActionFailure).caseName).toBe('cancelled')
-      Expect(failure).toBe(signal?.reason)
-      Expect(actionCancellationSignal()).toBeUndefined()
-    } finally {
-      stop()
-    }
-  })
+          } catch (error) {
+            failure = error
+            throw error
+          }
+        }).jsValue.invoke()
+        await started.promise
+        Expect(cancelActionContinuation(continuation)).toBe(true)
+        await running
+        Expect(seen).toEqual(['cleanup started', 'cleanup finished'])
+        Expect(failure).toBeInstanceOf(TaoActionFailure)
+        Expect((failure as TaoActionFailure).caseName).toBe('cancelled')
+        Expect(failure).toBe(signal?.reason)
+        Expect(actionCancellationSignal()).toBeUndefined()
+      } finally {
+        stop()
+      }
+    },
+  )
 
   Test('reads one authenticated duration and resolves signed nonpositive values without scheduling', async () => {
     const scheduler = manualScheduler()
@@ -85,8 +88,8 @@ Describe('checked Wait', () => {
       return Duration.read(value)
     }
 
-    await wait(read, Duration.fromUnit(-1, 'Seconds'), undefined, scheduler.schedule)
-    await wait(read, Duration.fromUnit(0, 'Seconds'), undefined, scheduler.schedule)
+    await wait(read, Duration.fromUnit(-1, 'seconds'), undefined, scheduler.schedule)
+    await wait(read, Duration.fromUnit(0, 'seconds'), undefined, scheduler.schedule)
 
     Expect(reads).toBe(2)
     Expect(scheduler.scheduled).toEqual([])
@@ -133,7 +136,7 @@ Describe('checked Wait', () => {
     Expect(resolved).toBe(true)
 
     const fractional = manualScheduler()
-    const brief = wait(Duration.read, Duration.fromUnit(0.0001, 'Seconds'), undefined, fractional.schedule)
+    const brief = wait(Duration.read, Duration.fromUnit(0.0001, 'seconds'), undefined, fractional.schedule)
     Expect(fractional.scheduled[0]?.delayMilliseconds).toBe(1)
     fractional.scheduled[0]?.callback()
     await brief
@@ -151,7 +154,7 @@ Describe('checked Wait', () => {
           reads += 1
           return Duration.read(value)
         },
-        Duration.fromUnit(1, 'Seconds'),
+        Duration.fromUnit(1, 'seconds'),
         controller.signal,
         scheduler.schedule,
       )
@@ -180,7 +183,7 @@ Describe('checked Wait', () => {
       listenersRemoved += 1
       return remove(...args)
     }) as AbortSignal['removeEventListener']
-    const pending = wait(Duration.read, Duration.fromUnit(3, 'Seconds'), controller.signal, scheduler.schedule)
+    const pending = wait(Duration.read, Duration.fromUnit(3, 'seconds'), controller.signal, scheduler.schedule)
     const lateCallback = scheduler.scheduled[0]?.callback
     controller.abort()
 
@@ -202,7 +205,7 @@ Describe('checked Wait', () => {
   Test('cancellation remains the primary joined action failure when cleanup also fails', async () => {
     const controller = new AbortController()
     const scheduler = manualScheduler()
-    const pending = wait(Duration.read, Duration.fromUnit(3, 'Seconds'), controller.signal, scheduler.schedule)
+    const pending = wait(Duration.read, Duration.fromUnit(3, 'seconds'), controller.signal, scheduler.schedule)
     controller.abort()
     let caught: unknown
     try {
@@ -235,7 +238,7 @@ Describe('checked Wait', () => {
     }) as AbortSignal['removeEventListener']
     let caught: unknown
     try {
-      await wait(Duration.read, Duration.fromUnit(1, 'Seconds'), controller.signal, () => {
+      await wait(Duration.read, Duration.fromUnit(1, 'seconds'), controller.signal, () => {
         throw expected
       })
     } catch (error) {
@@ -247,7 +250,7 @@ Describe('checked Wait', () => {
 
     const undefinedFailure = await wait(
       Duration.read,
-      Duration.fromUnit(1, 'Seconds'),
+      Duration.fromUnit(1, 'seconds'),
       undefined,
       () => {
         throw undefined

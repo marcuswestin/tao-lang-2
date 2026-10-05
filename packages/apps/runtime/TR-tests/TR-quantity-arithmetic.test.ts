@@ -8,18 +8,18 @@ import { makeQuantityType, QuantityFailureCases } from '../TaoRuntime-src/TR-qua
 
 const Duration = makeQuantityType({
   domain: 'Duration',
-  defaultUnit: 'Seconds',
-  units: { Seconds: 1, Milliseconds: 0.001, Minutes: 60, Hours: 3600 },
+  defaultUnit: 'seconds',
+  units: { seconds: 1, milliseconds: 0.001, minutes: 60, hours: 3600 },
 }, TR.Value)
 const Ratio = makeQuantityType({
   domain: 'Ratio',
-  defaultUnit: 'Unity',
-  units: { Unity: 1, Percent: 0.01, Permille: 0.001 },
+  defaultUnit: 'unity',
+  units: { unity: 1, percent: 0.01, permille: 0.001 },
 }, TR.Value)
 const Probability = makeQuantityType({
   domain: 'Probability',
-  defaultUnit: 'Unity',
-  units: { Unity: 1, Percent: 0.01 },
+  defaultUnit: 'unity',
+  units: { unity: 1, percent: 0.01 },
   invariant: canonical => canonical >= 0 && canonical <= 1,
 }, TR.Value)
 const Reading = makeQuantityType({ domain: 'Reading', defaultUnit: 'Base', units: { Base: 1, Double: 2 } }, TR.Value)
@@ -56,58 +56,58 @@ function expectFailure(body: () => unknown, expected: string): void {
 
 Describe('authored quantity arithmetic', () => {
   Test('uses signed ordered canonical arithmetic and preserves the left quantity view', () => {
-    const left = Duration.fromUnit(-2, 'Minutes')
-    const right = Duration.fromUnit(30, 'Seconds')
+    const left = Duration.fromUnit(-2, 'minutes')
+    const right = Duration.fromUnit(30, 'seconds')
     Expect(
       Duration.read(
         QuantityArithmetic.add(Duration, quantityOperand(Duration, left), quantityOperand(Duration, right)),
       ),
     )
-      .toEqual({ canonical: -90, unit: 'Minutes' })
+      .toEqual({ canonical: -90, unit: 'minutes' })
     Expect(
       Duration.read(
         QuantityArithmetic.subtract(Duration, quantityOperand(Duration, right), quantityOperand(Duration, left)),
       ),
     )
-      .toEqual({ canonical: 150, unit: 'Seconds' })
+      .toEqual({ canonical: 150, unit: 'seconds' })
     Expect(Duration.read(QuantityArithmetic.divide(Duration, scalarOperand(-4), quantityOperand(Duration, left))))
-      .toEqual({ canonical: 1 / 30, unit: 'Minutes' })
+      .toEqual({ canonical: 1 / 30, unit: 'minutes' })
     Expect(Duration.read(QuantityArithmetic.divide(Duration, quantityOperand(Duration, left), scalarOperand(-4))))
-      .toEqual({ canonical: 30, unit: 'Minutes' })
+      .toEqual({ canonical: 30, unit: 'minutes' })
     Expect(Duration.read(QuantityArithmetic.negate(Duration, quantityOperand(Duration, right))))
-      .toEqual({ canonical: -30, unit: 'Seconds' })
+      .toEqual({ canonical: -30, unit: 'seconds' })
   })
 
   Test('keeps one quantity view regardless of numeric operand order and honors explicit result units', () => {
-    const minutes = Duration.fromUnit(2, 'Minutes')
+    const minutes = Duration.fromUnit(2, 'minutes')
     Expect(Duration.read(QuantityArithmetic.multiply(Duration, scalarOperand(3), quantityOperand(Duration, minutes))))
-      .toEqual({ canonical: 360, unit: 'Minutes' })
+      .toEqual({ canonical: 360, unit: 'minutes' })
     Expect(Duration.read(QuantityArithmetic.multiply(Duration, quantityOperand(Duration, minutes), scalarOperand(3))))
-      .toEqual({ canonical: 360, unit: 'Minutes' })
+      .toEqual({ canonical: 360, unit: 'minutes' })
     Expect(
       Duration.read(
-        QuantityArithmetic.multiply(Duration, quantityOperand(Duration, minutes), scalarOperand(3), 'Seconds'),
+        QuantityArithmetic.multiply(Duration, quantityOperand(Duration, minutes), scalarOperand(3), 'seconds'),
       ),
     )
-      .toEqual({ canonical: 360, unit: 'Seconds' })
+      .toEqual({ canonical: 360, unit: 'seconds' })
     Expect(Duration.read(QuantityArithmetic.add(Duration, scalarOperand(5), scalarOperand(7))))
-      .toEqual({ canonical: 12, unit: 'Seconds' })
+      .toEqual({ canonical: 12, unit: 'seconds' })
     expectFailure(
-      () => QuantityArithmetic.add(Duration, scalarOperand(1), scalarOperand(2), 'Percent' as never),
+      () => QuantityArithmetic.add(Duration, scalarOperand(1), scalarOperand(2), 'percent' as never),
       QuantityFailureCases.UnknownUnit,
     )
   })
 
   Test('retains unrestricted signed ratios and selects result-domain defaults or explicit units', () => {
-    const negativeRatio = Ratio.fromUnit(-250, 'Percent')
-    const positiveRatio = Ratio.fromUnit(50, 'Percent')
-    const duration = Duration.fromUnit(2, 'Minutes')
+    const negativeRatio = Ratio.fromUnit(-250, 'percent')
+    const positiveRatio = Ratio.fromUnit(50, 'percent')
+    const duration = Duration.fromUnit(2, 'minutes')
     Expect(
       Ratio.read(
         QuantityArithmetic.add(Ratio, quantityOperand(Ratio, negativeRatio), quantityOperand(Ratio, positiveRatio)),
       ),
     )
-      .toEqual({ canonical: -2, unit: 'Percent' })
+      .toEqual({ canonical: -2, unit: 'percent' })
     Expect(
       Duration.read(
         QuantityArithmetic.multiply(
@@ -117,7 +117,7 @@ Describe('authored quantity arithmetic', () => {
         ),
       ),
     )
-      .toEqual({ canonical: -300, unit: 'Minutes' })
+      .toEqual({ canonical: -300, unit: 'minutes' })
     Expect(
       Duration.read(
         QuantityArithmetic.multiply(
@@ -127,25 +127,25 @@ Describe('authored quantity arithmetic', () => {
         ),
       ),
     )
-      .toEqual({ canonical: -300, unit: 'Minutes' })
+      .toEqual({ canonical: -300, unit: 'minutes' })
     Expect(
       Ratio.read(
         QuantityArithmetic.divide(
           Ratio,
           quantityOperand(Duration, duration),
-          quantityOperand(Duration, Duration.fromUnit(30, 'Seconds')),
+          quantityOperand(Duration, Duration.fromUnit(30, 'seconds')),
         ),
       ),
-    ).toEqual({ canonical: 4, unit: 'Unity' })
+    ).toEqual({ canonical: 4, unit: 'unity' })
     Expect(
       Reading.read(
-        QuantityArithmetic.add(Reading, quantityOperand(Duration, Duration.fromUnit(2, 'Minutes')), scalarOperand(1)),
+        QuantityArithmetic.add(Reading, quantityOperand(Duration, Duration.fromUnit(2, 'minutes')), scalarOperand(1)),
       ),
     )
       .toEqual({ canonical: 121, unit: 'Base' })
     Expect(Reading.read(QuantityArithmetic.add(
       Reading,
-      quantityOperand(Duration, Duration.fromUnit(2, 'Minutes')),
+      quantityOperand(Duration, Duration.fromUnit(2, 'minutes')),
       scalarOperand(1),
       'Double',
     ))).toEqual({ canonical: 121, unit: 'Double' })
@@ -174,9 +174,9 @@ Describe('authored quantity arithmetic', () => {
   })
 
   Test('compares exact canonical magnitudes only after both values enter one supplied domain', () => {
-    const oneMinute = Duration.fromUnit(1, 'Minutes')
-    const sixtySeconds = Duration.fromUnit(60, 'Seconds')
-    const twoMinutes = Duration.fromUnit(2, 'Minutes')
+    const oneMinute = Duration.fromUnit(1, 'minutes')
+    const sixtySeconds = Duration.fromUnit(60, 'seconds')
+    const twoMinutes = Duration.fromUnit(2, 'minutes')
     Expect(QuantityArithmetic.compare(Duration, oneMinute, sixtySeconds)).toBe(0)
     Expect(QuantityArithmetic.compare(Duration, oneMinute, twoMinutes)).toBe(-1)
     Expect(QuantityArithmetic.compare(Duration, twoMinutes, oneMinute)).toBe(1)
@@ -231,8 +231,8 @@ Describe('authored quantity arithmetic', () => {
   })
 
   Test('evaluates operands once in order and preserves their original payloads and views', () => {
-    const left = Duration.fromUnit(2, 'Minutes')
-    const right = Duration.fromUnit(30, 'Seconds')
+    const left = Duration.fromUnit(2, 'minutes')
+    const right = Duration.fromUnit(30, 'seconds')
     const leftPayload = left.jsValue
     const rightPayload = right.jsValue
     const events: string[] = []
@@ -249,12 +249,12 @@ Describe('authored quantity arithmetic', () => {
       quantityOperand(Duration, leftAlias),
       quantityOperand(Duration, rightAlias),
     )
-    Expect(Duration.read(result)).toEqual({ canonical: 90, unit: 'Minutes' })
+    Expect(Duration.read(result)).toEqual({ canonical: 90, unit: 'minutes' })
     Expect(events).toEqual(['left', 'right'])
     Expect(left.jsValue).toBe(leftPayload)
     Expect(right.jsValue).toBe(rightPayload)
-    Expect(Duration.read(left)).toEqual({ canonical: 120, unit: 'Minutes' })
-    Expect(Duration.read(right)).toEqual({ canonical: 30, unit: 'Seconds' })
+    Expect(Duration.read(left)).toEqual({ canonical: 120, unit: 'minutes' })
+    Expect(Duration.read(right)).toEqual({ canonical: 30, unit: 'seconds' })
   })
 
   Test('checks a computed result invariant once and retains the explicitly requested view', () => {
@@ -281,7 +281,7 @@ Describe('authored quantity arithmetic', () => {
       read(value: typeof sample) {
         return Duration.read(value)
       },
-      inUnit(value: typeof sample, unit: 'Seconds' | 'Milliseconds' | 'Minutes' | 'Hours') {
+      inUnit(value: typeof sample, unit: 'seconds' | 'milliseconds' | 'minutes' | 'hours') {
         return Duration.inUnit(value, unit)
       },
       acceptsPayload: Duration.acceptsPayload,
@@ -291,7 +291,7 @@ Describe('authored quantity arithmetic', () => {
       quantityOperand(Duration, sample),
       scalarOperand(1),
     )
-    Expect(Duration.read(result)).toEqual({ canonical: 3, unit: 'Seconds' })
+    Expect(Duration.read(result)).toEqual({ canonical: 3, unit: 'seconds' })
     if (false) {
       // @ts-expect-error An authored Reading result cannot be assigned the Duration role.
       const wrongRole: ReturnType<typeof Reading.fromJSValue> = QuantityArithmetic.add(

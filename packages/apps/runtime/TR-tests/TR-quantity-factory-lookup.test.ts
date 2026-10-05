@@ -8,7 +8,7 @@ import {
   QuantityFailureCases,
 } from '../TaoRuntime-src/TR-quantity-values'
 
-const units = { Base: 1, Minutes: 60 } as const
+const units = { Base: 1, minutes: 60 } as const
 const First = makeQuantityType({ domain: 'SameDomain', defaultUnit: 'Base', units }, TR.Value)
 const Second = makeQuantityType({ domain: 'SameDomain', defaultUnit: 'Base', units }, TR.Value)
 
@@ -44,7 +44,7 @@ Describe('quantity factory lookup', () => {
 
   Test('resolves authentic payloads carried through cells, aliases, copies and readonly values', () => {
     const child = First.derive({ domain: 'StoredChild' })
-    const value = child.inUnit(child.fromJSValue(2), 'Minutes')
+    const value = child.inUnit(child.fromJSValue(2), 'minutes')
     const cell = TR.Cell(value)
     const alias = TR.Alias(() => cell.evaluate())
     const copy = TR.Copy(alias)
@@ -59,7 +59,7 @@ Describe('quantity factory lookup', () => {
     let evaluations = 0
     const child = First.derive({ domain: 'Bounded', invariant: canonical => canonical >= 0 && canonical <= 10 })
     const value = child.fromJSValue(2)
-    const view = child.inUnit(value, 'Minutes')
+    const view = child.inUnit(value, 'minutes')
     const once = {
       evaluate() {
         evaluations += 1
@@ -70,12 +70,12 @@ Describe('quantity factory lookup', () => {
 
     Expect(evaluations).toBe(1)
     Expect(factory).toBe(child)
-    Expect(factory.read(view)).toEqual({ canonical: 2, unit: 'Minutes' })
+    Expect(factory.read(view)).toEqual({ canonical: 2, unit: 'minutes' })
     const result = QuantityArithmetic.add(factory, quantityOperand(factory, view), scalarOperand(1))
     Expect(factoryOfQuantityInput(result)).toBe(child)
     Expect(factory.read(result)).toEqual({
       canonical: 3,
-      unit: 'Minutes',
+      unit: 'minutes',
     })
     for (
       const body of [

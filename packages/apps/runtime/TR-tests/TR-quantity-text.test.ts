@@ -9,13 +9,13 @@ import {
 
 const Duration = makeQuantityType({
   domain: 'Duration',
-  defaultUnit: 'Seconds',
-  units: { Seconds: 1, Minutes: 60, Tiny: 5e-324, Huge: 1e308 },
+  defaultUnit: 'seconds',
+  units: { seconds: 1, minutes: 60, tiny: 5e-324, huge: 1e308 },
 }, TR.Value)
 const Ratio = makeQuantityType({
   domain: 'Ratio',
-  defaultUnit: 'Unity',
-  units: { Unity: 1, Percent: 0.01 },
+  defaultUnit: 'unity',
+  units: { unity: 1, percent: 0.01 },
 }, TR.Value)
 
 function expectBadShape(value: unknown): void {
@@ -34,39 +34,39 @@ Describe('quantity text formatting', () => {
     let reads = 0
     const source = TR.Alias(() => {
       reads += 1
-      return Duration.fromUnit(reads === 1 ? 2 : 3, 'Minutes')
+      return Duration.fromUnit(reads === 1 ? 2 : 3, 'minutes')
     })
-    Expect(TR.Interpolate([TR.Value('Wait '), source, TR.Value(undefined)]).jsValue).toBe('Wait 2 Minutes')
+    Expect(TR.Interpolate([TR.Value('Wait '), source, TR.Value(undefined)]).jsValue).toBe('Wait 2 minutes')
     Expect(reads).toBe(1)
-    Expect(TR.quantityToText(Ratio.fromUnit(50, 'Percent'))).toBe('50 Percent')
+    Expect(TR.quantityToText(Ratio.fromUnit(50, 'percent'))).toBe('50 percent')
   })
 
   Test('renders canonical values in their selected units', () => {
-    Expect(quantityToText(Duration.fromUnit(2, 'Minutes'))).toBe('2 Minutes')
-    Expect(quantityToText(Duration.fromJSValue(120))).toBe('120 Seconds')
-    Expect(quantityToText(Ratio.fromUnit(50, 'Percent'))).toBe('50 Percent')
-    Expect(quantityToText(Ratio.fromUnit(5, 'Unity'))).toBe('5 Unity')
+    Expect(quantityToText(Duration.fromUnit(2, 'minutes'))).toBe('2 minutes')
+    Expect(quantityToText(Duration.fromJSValue(120))).toBe('120 seconds')
+    Expect(quantityToText(Ratio.fromUnit(50, 'percent'))).toBe('50 percent')
+    Expect(quantityToText(Ratio.fromUnit(5, 'unity'))).toBe('5 unity')
   })
 
   Test('keeps signed and zero readings', () => {
-    Expect(quantityToText(Duration.fromUnit(-2, 'Minutes'))).toBe('-2 Minutes')
-    Expect(quantityToText(Duration.fromUnit(0, 'Minutes'))).toBe('0 Minutes')
+    Expect(quantityToText(Duration.fromUnit(-2, 'minutes'))).toBe('-2 minutes')
+    Expect(quantityToText(Duration.fromUnit(0, 'minutes'))).toBe('0 minutes')
   })
 
   Test('retains alternate and descendant unit views through runtime values', () => {
     const child = Duration.derive({ domain: 'ChildDuration' })
-    const source = child.fromUnit(2, 'Minutes')
-    const minutes = Duration.inUnit(source, 'Minutes')
-    const seconds = child.inUnit(source, 'Seconds')
+    const source = child.fromUnit(2, 'minutes')
+    const minutes = Duration.inUnit(source, 'minutes')
+    const seconds = child.inUnit(source, 'seconds')
 
-    Expect(quantityToText(minutes)).toBe('2 Minutes')
-    Expect(quantityToText(seconds)).toBe('120 Seconds')
-    Expect(quantityToText(TR.Copy(seconds))).toBe('120 Seconds')
+    Expect(quantityToText(minutes)).toBe('2 minutes')
+    Expect(quantityToText(seconds)).toBe('120 seconds')
+    Expect(quantityToText(TR.Copy(seconds))).toBe('120 seconds')
   })
 
   Test('evaluates a changing wrapper once', () => {
-    const first = Duration.fromUnit(2, 'Minutes')
-    const next = Duration.fromUnit(3, 'Minutes')
+    const first = Duration.fromUnit(2, 'minutes')
+    const next = Duration.fromUnit(3, 'minutes')
     let evaluations = 0
     const changing = {
       evaluate() {
@@ -75,18 +75,18 @@ Describe('quantity text formatting', () => {
       },
     }
 
-    Expect(quantityToText(changing)).toBe('2 Minutes')
+    Expect(quantityToText(changing)).toBe('2 minutes')
     Expect(evaluations).toBe(1)
   })
 
   Test('uses a finite canonical ratio expression when the selected reading overflows', () => {
-    Expect(quantityToText(Duration.inUnit(Duration.fromJSValue(1e308), 'Tiny')))
-      .toBe('1e+308 / 5e-324 Tiny')
+    Expect(quantityToText(Duration.inUnit(Duration.fromJSValue(1e308), 'tiny')))
+      .toBe('1e+308 / 5e-324 tiny')
   })
 
   Test('keeps a nonzero reading visible when selected unit division underflows', () => {
-    Expect(quantityToText(Duration.inUnit(Duration.fromJSValue(5e-324), 'Huge')))
-      .toBe('5e-324 / 1e+308 Huge')
+    Expect(quantityToText(Duration.inUnit(Duration.fromJSValue(5e-324), 'huge')))
+      .toBe('5e-324 / 1e+308 huge')
   })
 
   Test('rejects forged quantity shapes without reading fields', () => {
@@ -94,13 +94,13 @@ Describe('quantity text formatting', () => {
     const getters = Object.defineProperties({}, {
       canonical: { get: () => (reads += 1, 1) },
       domain: { get: () => (reads += 1, 'Duration') },
-      unit: { get: () => (reads += 1, 'Seconds') },
+      unit: { get: () => (reads += 1, 'seconds') },
     })
     const prototype = Object.create(Object.getPrototypeOf(Duration.fromJSValue(1).jsValue))
     Object.defineProperties(prototype, {
       canonical: { get: () => (reads += 1, 1) },
       domain: { get: () => (reads += 1, 'Duration') },
-      unit: { get: () => (reads += 1, 'Seconds') },
+      unit: { get: () => (reads += 1, 'seconds') },
     })
 
     expectBadShape(getters)

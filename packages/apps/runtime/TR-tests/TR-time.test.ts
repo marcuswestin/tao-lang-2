@@ -6,8 +6,8 @@ import { startTimer } from '../TaoRuntime-src/TR-time'
 
 const Duration = makeQuantityType({
   domain: 'Duration',
-  defaultUnit: 'Seconds',
-  units: { Seconds: 1, Milliseconds: 0.001 },
+  defaultUnit: 'seconds',
+  units: { seconds: 1, milliseconds: 0.001 },
 }, TR.Value)
 
 Describe('monotonic Timer', () => {
@@ -29,9 +29,9 @@ Describe('monotonic Timer', () => {
     const first: ReturnType<typeof Duration.fromJSValue> = timer.Duration()
     const second = timer.Duration()
 
-    Expect(Duration.read(first)).toEqual({ canonical: 1.5, unit: 'Seconds' })
-    Expect(Duration.read(second)).toEqual({ canonical: 2, unit: 'Seconds' })
-    Expect(Duration.read(first)).toEqual({ canonical: 1.5, unit: 'Seconds' })
+    Expect(Duration.read(first)).toEqual({ canonical: 1.5, unit: 'seconds' })
+    Expect(Duration.read(second)).toEqual({ canonical: 2, unit: 'seconds' })
+    Expect(Duration.read(first)).toEqual({ canonical: 1.5, unit: 'seconds' })
     Expect([clockReads, factoryCalls]).toEqual([3, 2])
   })
 
