@@ -533,7 +533,7 @@ class TR {
       }
       value = value?.[member]
     }
-    return new RuntimeValue(value === undefined ? null : value)
+    return isRuntimeValue(value) ? completeRuntimeValue(value) : new RuntimeValue(value === undefined ? null : value)
   }
 
   /** checkedNumericBacking checks raw native/computed numeric storage before wrapping it. */

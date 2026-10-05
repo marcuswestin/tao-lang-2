@@ -10,6 +10,32 @@ import { completeRuntimeValue } from '../TaoRuntime-src/TR-reactive-values'
 const capabilities = TR.Capability
 
 Describe('Capability witnesses', () => {
+  Test('retains selected live behavior in item fields and writable field reads', () => {
+    const source = TR.Cell(TR.Value('Before'))
+    const carrier = capabilities.attach(source, {
+      text: TR.Function((receiver: TaoEvaluable<string>) => TR.Value(`Value:${getJSValue(receiver)}`)),
+    })
+    const row = TR.Value({ Content: capabilities.storedValue(carrier), Count: capabilities.storedValue(TR.Value(2)) })
+    const writable = TR.Cell(row)
+    for (const owner of [row, writable]) {
+      const field = TR.Member(owner, ['Content']).evaluate() as TaoCapability<string>
+      Expect(field).toBe(carrier)
+      Expect(TR.Call<string>(capabilities.method(field, 'text')).getJSValue()).toBe('Value:Before')
+      Expect(TR.Member(owner, ['Count']).getJSValue()).toBe(2)
+    }
+    source.set(TR.Value('After'))
+    Expect(TR.Call<string>(capabilities.method(TR.Member(row, ['Content']).evaluate(), 'text')).getJSValue())
+      .toBe('Value:After')
+    const replacement = capabilities.attach(TR.Value('Replacement'), {
+      text: TR.Function((receiver: TaoEvaluable<string>) => TR.Value(`New:${getJSValue(receiver)}`)),
+    })
+    writable.at(['Content']).set(replacement)
+    Expect(TR.Call<string>(capabilities.method(TR.Member(writable, ['Content']).evaluate(), 'text')).getJSValue())
+      .toBe('New:Replacement')
+    Expect(TR.Call<string>(capabilities.method(TR.Member(row, ['Content']).evaluate(), 'text')).getJSValue())
+      .toBe('Value:After')
+  })
+
   Test('rebinds selected adapted witnesses to a new live Self result without reading or changing the donor', () => {
     const original = TR.Cell(TR.Value('Original'))
     const replacement = TR.Cell(TR.Value('Replacement'))

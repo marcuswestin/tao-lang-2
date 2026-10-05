@@ -23,6 +23,20 @@ export type TaoRuntimeValue<ValueT> = Readonly<{
 
 const registeredCompleteValues = new WeakSet<object>()
 const registeredRuntimeValues = new WeakSet<object>()
+const preservedStorageValues = new WeakSet<object>()
+
+/** Behavior carriers keep their selected witnesses when placed in mutable item storage. */
+export function registerPreservedStorageValue(value: TaoRuntimeValue<unknown>): void {
+  preservedStorageValues.add(value)
+}
+
+/** Only explicitly registered carriers survive storage; ordinary values retain raw backing. */
+export function runtimeStorageValue<ValueT>(
+  source: TaoRuntimeValueInput<ValueT>,
+): ValueT | TaoRuntimeValueInput<ValueT> {
+  const value = source.evaluate()
+  return preservedStorageValues.has(value) ? value : value.jsValue
+}
 
 /** Runtime-owned evaluables may be categorized without promising the complete output protocol. */
 export function registerRuntimeValue(value: TaoEvaluable<unknown>): void {
@@ -152,7 +166,9 @@ class PathLens implements TaoWritable<unknown> {
     for (const segment of this.path) {
       value = value !== null && typeof value === 'object' ? (value as Record<string, unknown>)[segment] : undefined
     }
-    return reactiveValue(value === undefined ? null : value)
+    return isRuntimeValue(value)
+      ? completeRuntimeValue(value).evaluate()
+      : reactiveValue(value === undefined ? null : value)
   }
 
   get jsValue(): unknown {
@@ -167,9 +183,9 @@ class PathLens implements TaoWritable<unknown> {
     RuntimeAssert.input(this.path.length > 0, 'A writable field path must name a field.')
     const root = this.root.evaluate().jsValue
     if (isReactiveValue(root) && root.writeMember) {
-      return root.writeMember(this.path, value.evaluate().jsValue)
+      return root.writeMember(this.path, runtimeStorageValue(value))
     }
-    return this.root.set(reactiveValue(replacePath(root, this.path, value.evaluate().jsValue)))
+    return this.root.set(reactiveValue(replacePath(root, this.path, runtimeStorageValue(value))))
   }
 
   at(path: readonly string[]): TaoWritable<unknown> {

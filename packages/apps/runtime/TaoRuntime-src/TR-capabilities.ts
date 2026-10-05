@@ -2,7 +2,13 @@ import type TR from './TR'
 import type { TaoEvaluable } from './TR-action-values'
 import { RuntimeAssert } from './TR-assert'
 import { getJSValue } from './TR-js-value'
-import { isRuntimeValue, reactiveValue, registerCompleteRuntimeValue, type TaoRuntimeValue } from './TR-reactive-values'
+import {
+  isRuntimeValue,
+  reactiveValue,
+  registerCompleteRuntimeValue,
+  registerPreservedStorageValue,
+  type TaoRuntimeValue,
+} from './TR-reactive-values'
 
 declare const capabilityBrand: unique symbol
 
@@ -29,6 +35,7 @@ class Capability<ValueT> implements TaoCapability<ValueT> {
   constructor(source: TaoEvaluable<ValueT>) {
     this.#source = source
     registerCompleteRuntimeValue(this)
+    registerPreservedStorageValue(this)
   }
 
   evaluate(): this {
@@ -67,7 +74,14 @@ export function createCapabilityRuntime(functionFactory: typeof TR.Function) {
     return implementation
   }
 
+  function storedValue<ValueT>(source: TaoEvaluable<ValueT>): ValueT | TaoCapability<ValueT> {
+    const value = source.evaluate()
+    return ownedCapabilities.has(value) ? value as TaoCapability<ValueT> : value.jsValue
+  }
+
   return {
+    /** Item fields retain authenticated behavior carriers while ordinary values retain raw backing. */
+    storedValue,
     /** List storage retains authenticated behavior wrappers and otherwise preserves original payloads. */
     listElements<StoredT>(
       source: TaoEvaluable<readonly unknown[]>,
@@ -77,8 +91,7 @@ export function createCapabilityRuntime(functionFactory: typeof TR.Function) {
       RuntimeAssert(Array.isArray(values), 'the admitted list has an array payload')
       return reactiveValue(values.map(value => {
         const element = isRuntimeValue(value) ? value : reactiveValue(value)
-        const projected = project(element).evaluate()
-        return (ownedCapabilities.has(projected) ? projected : projected.jsValue) as StoredT
+        return storedValue(project(element)) as StoredT
       }))
     },
 
