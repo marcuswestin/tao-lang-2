@@ -64,13 +64,20 @@ export type CanonicalCallPublication =
 export type CanonicalReadPublication =
   & PublicationStatus
   & Readonly<{
-    reference: AST.ValueReference | AST.MemberAccessExpression
-    declaration?: AST.ValueReferenceTarget
+    reference: AST.ValueReference | AST.MemberAccessExpression | AST.PostfixMemberAccess
+    declaration?: AST.ValueReferenceTarget | AssociatedDeclaration
     classification: 'immutable' | 'reactive' | 'unknown'
-    proof?: Readonly<{
-      kind: 'parameter' | 'contextual-owner' | 'state' | 'live-alias'
-      owner: AST.Node
-    }>
+    proof?:
+      | Readonly<{
+        kind: 'parameter' | 'contextual-owner' | 'state' | 'live-alias'
+        owner: AST.Node
+      }>
+      | Readonly<{
+        kind: 'static-method-selection'
+        owner: AST.TypeDeclaration
+        declaration: AssociatedDeclaration
+        receiver: AST.Expression
+      }>
     initializer?: AST.Expression
   }>
 
@@ -244,6 +251,35 @@ export function publishCanonicalEffectSnapshot(
     }
     if (AST.isValueReference(node) || AST.isMemberAccessExpression(node)) {
       reads.set(node, publishRead(node, resolution.ofReferenceRoot(node)))
+    }
+    if (
+      AST.isPostfixMemberAccess(node) && AST.isMethodCallExpression(node.$container)
+      && node.$container.callee === node
+    ) {
+      const receiver = resolution.ofExpression(node.receiver)
+      const declaration = receiver.kind === 'capability'
+        ? capabilityRequirements(receiver.declaration).find(method => method.name === node.member)
+        : resolution.associatedMethodDeclaration(receiver, node.member)?.declaration
+      const descriptor = declaration ? associated.get(declaration) : undefined
+      reads.set(
+        node,
+        Object.freeze({
+          reference: node,
+          ...(declaration ? { declaration } : {}),
+          ...(descriptor?.kind === 'ready'
+            ? {
+              classification: 'immutable',
+              kind: 'complete',
+              proof: Object.freeze({
+                kind: 'static-method-selection',
+                owner: descriptor.descriptor.owner,
+                declaration: descriptor.descriptor.declaration,
+                receiver: node.receiver,
+              }),
+            } as const
+            : { classification: 'unknown', kind: 'unknown', reason: 'incomplete-fact' } as const),
+        }),
+      )
     }
   }
   const snapshot: CanonicalEffectIndependentSnapshot = Object.freeze({

@@ -6,6 +6,7 @@ import {
   ownAssociatedMethods,
   withAssociatedEffects,
 } from '../ast-utils-src/associated-methods'
+import { discoverCallableEffectFacts } from '../ast-utils-src/callable-effect-facts'
 import {
   assertCanonicalEffectSnapshot,
   publishCanonicalEffectSnapshot,
@@ -355,6 +356,143 @@ Describe('Canonical effect-independent source snapshot', () => {
     Expect(call.pairs).toHaveLength(0)
     Expect(call.defaults[0]?.parameter).toBe(AST.parametersOf(take)[2])
     Expect(call.defaults[0]?.eligibility).toBe('unknown')
+  })
+
+  Test('publishes static selection reads separately from real chained method calls and receiver reads', async () => {
+    const file = await parse(`
+      type Token is text with {
+        func Again() -> Token { return Token "again" }
+        func Format(Suffix text default "fallback") -> text { return Suffix }
+      }
+      func Build(Value Token) -> Token { return Value }
+      func Chain(Value Token) -> text { return Build(Value).Again().Format(Suffix: true) }
+    `)
+    const token = namedType(file, 'Token')
+    const again = ownAssociatedMethods(token).find(method => method.name === 'Again')
+    const format = ownAssociatedMethods(token).find(method => method.name === 'Format')
+    const build = namedFunction(file, 'Build')
+    const chain = namedFunction(file, 'Chain')
+    Assert.defined(again, 'Token declares the selected Again method')
+    Assert.defined(format, 'Token declares the selected Format method')
+    const parameter = AST.parametersOf(chain)[0]
+    Assert.defined(parameter, 'Chain has its real receiver input')
+    const calls = AST.streamAllContents(chain).filter(AST.isMethodCallExpression)
+    const againCall = calls.find(call => AST.isPostfixMemberAccess(call.callee) && call.callee.member === 'Again')
+    const formatCall = calls.find(call => AST.isPostfixMemberAccess(call.callee) && call.callee.member === 'Format')
+    Assert.defined(againCall, 'the actual chained Again invocation exists')
+    Assert.defined(formatCall, 'the actual chained Format invocation exists')
+    Expect.Is(againCall.callee, AST.isPostfixMemberAccess)
+    Expect.Is(formatCall.callee, AST.isPostfixMemberAccess)
+    const snapshot = publishCanonicalEffectSnapshot([file])
+    const againRead = snapshot.reads.get(againCall.callee)
+    const formatRead = snapshot.reads.get(formatCall.callee)
+    Assert.defined(againRead, 'the actual Again callee has a selection read')
+    Assert.defined(formatRead, 'the actual Format callee has a selection read')
+    for (
+      const [read, declaration, call] of [
+        [againRead, again, againCall],
+        [formatRead, format, formatCall],
+      ] as const
+    ) {
+      Expect(read.classification).toBe('immutable')
+      Assert(read.proof?.kind === 'static-method-selection', 'the selection has its independent static proof')
+      Expect.Is(call.callee, AST.isPostfixMemberAccess)
+      const callee = call.callee
+      Expect(read.proof.owner).toBe(token)
+      Expect(read.proof.declaration).toBe(declaration)
+      Expect(read.proof.receiver).toBe(call.callee.receiver)
+      const facts = discoverCallableEffectFacts(call.callee, {
+        calls: [],
+        reads: [...snapshot.reads.values()],
+        natives: [],
+      })
+      const selection = facts.find(fact => fact.node === call.callee)
+      Assert.defined(selection, 'the consumer discovers the actual static callee')
+      Expect(selection.kind).toBe('complete')
+      Expect(selection.executes.some(edge => edge.target === callee.receiver)).toBe(true)
+      const publication = snapshot.calls.get(call)
+      Assert.defined(publication, 'the snapshot retains the actual method call site')
+      Expect(publication.site).toBe(call)
+      Expect(publication.target).toBe(declaration)
+    }
+    const formatPublication = snapshot.calls.get(formatCall)
+    Assert.defined(formatPublication, 'the actual Format call remains published')
+    Expect(formatPublication.kind).toBe('unknown')
+    const valueReads = [...snapshot.reads.values()].filter(read => read.declaration === parameter)
+    Expect(valueReads.length).toBeGreaterThan(0)
+    Expect(valueReads.every(read => read.classification === 'immutable')).toBe(true)
+    Expect(snapshot.descriptors.get(build)?.declaration).toBe(build)
+    const pendingFile = await parse(`
+      type Token is text with {
+        func Again(Suffix text default "fallback") { return Token.Again() }
+      }
+      func Build(Value Token) -> Token { return Value }
+      func Read(Value Token) { return Build(Value).Again() }
+    `)
+    const pendingToken = namedType(pendingFile, 'Token')
+    const pendingMethod = ownAssociatedMethods(pendingToken)[0]
+    Assert.defined(pendingMethod, 'the pending recursive method declaration exists')
+    const pendingCall = AST.streamAllContents(namedFunction(pendingFile, 'Read'))
+      .find(AST.isMethodCallExpression)
+    Expect.Is(pendingCall, AST.isMethodCallExpression)
+    Expect.Is(pendingCall.callee, AST.isPostfixMemberAccess)
+    const pendingSnapshot = publishCanonicalEffectSnapshot([pendingFile])
+    const pendingRead = pendingSnapshot.reads.get(pendingCall.callee)
+    Assert.defined(pendingRead, 'the pending method has a static selection read')
+    Expect(pendingRead.declaration).toBe(pendingMethod)
+    Expect(pendingRead.classification).toBe('unknown')
+    Expect(pendingSnapshot.calls.get(pendingCall)?.kind).toBe('unknown')
+  })
+
+  Test('keeps static selection immutable while preserving a reactive state receiver edge', async () => {
+    const file = await parse(`
+      type Token is text with {
+        func Again() -> Token { return Token "again" }
+        func Format() -> text { return "formatted" }
+      }
+      func Build(Value Token) -> Token { return Value }
+      view Example {
+        state Current is Token = Token "current"
+        let Output = Build(Current).Again().Format()
+      }
+    `)
+    const token = namedType(file, 'Token')
+    const view = file.statements.find(AST.isViewDeclaration)
+    Expect.Is(view, AST.isViewDeclaration)
+    const state = AST.streamAllContents(view).find(AST.isStateDeclaration)
+    Expect.Is(state, AST.isStateDeclaration)
+    const calls = AST.streamAllContents(view).filter(AST.isMethodCallExpression)
+    const againCall = calls.find(call => AST.isPostfixMemberAccess(call.callee) && call.callee.member === 'Again')
+    const formatCall = calls.find(call => AST.isPostfixMemberAccess(call.callee) && call.callee.member === 'Format')
+    Assert.defined(againCall, 'the state receiver invokes Again')
+    Assert.defined(formatCall, 'the returned Token invokes Format')
+    Expect.Is(againCall.callee, AST.isPostfixMemberAccess)
+    Expect.Is(formatCall.callee, AST.isPostfixMemberAccess)
+    const stateReference = AST.streamAllContents(view).find(node =>
+      AST.isValueReference(node) && node.target.ref === state
+    )
+    Expect.Is(stateReference, AST.isValueReference)
+    const snapshot = publishCanonicalEffectSnapshot([file])
+    const stateRead = snapshot.reads.get(stateReference)
+    const againSelection = snapshot.reads.get(againCall.callee)
+    const formatSelection = snapshot.reads.get(formatCall.callee)
+    Assert.defined(stateRead, 'the real Current reference remains in the read graph')
+    Assert.defined(againSelection, 'the Again selection has a snapshot read')
+    Assert.defined(formatSelection, 'the Format selection has a snapshot read')
+    Expect(stateRead.declaration).toBe(state)
+    Expect(stateRead.classification).toBe('reactive')
+    Expect(stateRead.proof?.kind).toBe('state')
+    for (const [read, call] of [[againSelection, againCall], [formatSelection, formatCall]] as const) {
+      Expect(read.classification).toBe('immutable')
+      Assert(
+        read.proof?.kind === 'static-method-selection',
+        'the state-backed receiver has an independent selection proof',
+      )
+      Expect.Is(call.callee, AST.isPostfixMemberAccess)
+      Expect(read.proof.owner).toBe(token)
+      Expect(read.proof.receiver).toBe(call.callee.receiver)
+      Expect(snapshot.calls.get(call)?.site).toBe(call)
+    }
   })
 })
 
