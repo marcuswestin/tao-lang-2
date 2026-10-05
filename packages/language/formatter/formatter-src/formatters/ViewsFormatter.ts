@@ -60,7 +60,19 @@ export const ViewsFormatter = {
   /** RenderSlotUse separates a named slot fill from its visual value. */
   RenderSlotUse(f) {
     f.oneSpaceBeforeProperty('render')
+    f.noSpaceBefore('(')
+    f.noSpaceBefore(':')
+    if (AST.renderSlotBodyOf(f.node).kind === 'block') {
+      f.noSpaceAfter(':')
+    } else {
+      f.oneSpaceAfter(':')
+    }
+    f.commaSpacedList()
+    f.oneSpaceAround('->')
   },
+
+  /** RenderSlotInputBinding is one name owned by its inline renderer. */
+  RenderSlotInputBinding() {},
 
   /** CallerContentStatement is one atomic ambient placeholder. */
   CallerContentStatement() {},

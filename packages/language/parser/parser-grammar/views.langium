@@ -77,8 +77,15 @@ type RenderSlotContract = RenderSlotDeclaration | ForeignViewSlotDeclaration;
 
 RenderSlotUse:
     slot=[RenderSlotContract:USE_IMPORT_PATH]
-    (fill?=':' (render=QualifiedSlotInlineRender | renderer=[ViewDeclaration:ID] | empty?='empty' | render=SlotInlineRender | block=Block)?
+    ((inputBindings+=RenderSlotInputBinding (',' inputBindings+=RenderSlotInputBinding)*
+      | '(' inputBindings+=RenderSlotInputBinding (',' inputBindings+=RenderSlotInputBinding)* ')')
+      fill?='->' render=ViewRender
+    | fill?=':' (forwardedSlot=[RenderSlotContract:USE_IMPORT_PATH] | render=QualifiedSlotInlineRender | renderer=[ViewDeclaration:ID] | empty?='empty' | render=SlotInlineRender | block=Block)?
     | ('(' argumentList=ArgumentList? ')')?);
+
+// Inline renderer names receive their types from the receiving slot's ordinary input contract.
+RenderSlotInputBinding:
+    name=ID;
 
 // A bare identifier is a named renderer target. Calls, quotations and decorated named renders are
 // real zero-input inline bodies and retain the standard ViewRender AST shape.
@@ -100,7 +107,7 @@ CallerContentStatement:
 // A render site names a view, nav, or a value declaration in the owning lexical scope. Text-valued
 // aliases, states, and parameters render as text; view-, scene-, and nav-typed parameters retain
 // their value-rendering behavior. A value render takes no arguments, content, or events of its own.
-type RenderTarget = ViewDeclaration | NavDeclaration | AliasDeclaration | StateDeclaration | ParameterDeclaration;
+type RenderTarget = ViewDeclaration | NavDeclaration | AliasDeclaration | StateDeclaration | ParameterDeclaration | RenderSlotInputBinding;
 
 RenderStatement:
     'render' (injection=Injection layoutClause=LayoutClause?

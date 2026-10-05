@@ -11,6 +11,7 @@ import {
   type FormattedNodeType,
   taoTabSize,
 } from './formatting'
+import { canonicalInlineRendererSource } from './inline-renderer-inputs'
 import { assignedQuerySource } from './query-syntax'
 
 /** TaoFormatter formats Tao documents by dispatching per-node Format handlers. */
@@ -23,6 +24,16 @@ export class TaoFormatter extends Langium.AbstractFormatter {
     document: Langium.LangiumDocument,
     params: Langium.DocumentFormattingParams,
   ): Promise<Langium.TextEdit[]> {
+    const rendererInputs = document.parseResult.parserErrors.length === 0
+      ? canonicalInlineRendererSource(document as AST.Document)
+      : undefined
+    if (rendererInputs !== undefined) {
+      const parsed = await Parser.parseCode(rendererInputs, { validation: false, uri: document.uri })
+      const canonical = parsed.entry.document
+      Assert(canonical.parseResult.parserErrors.length === 0, 'renderer input normalization preserves valid syntax')
+      const canonicalEdits = await new TaoFormatter().formatDocument(canonical, params)
+      return [wholeDocumentEdit(document, applyTextEdits(canonical, canonicalEdits))]
+    }
     const functions = document.parseResult.parserErrors.length === 0
       ? canonicalFunctionSource(document as AST.Document)
       : undefined
