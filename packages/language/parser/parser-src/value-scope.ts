@@ -351,8 +351,17 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     const method = AST.findOwningAssociatedFunction(reference)
     const methodOwner = method ? AST.associatedFunctionOwner(method) : undefined
     let scope = outer
-    if (method && methodOwner && isWithinAssociatedBody(reference, method)) {
+    if (isAssociatedTypeRootReference(reference)) {
+      scope = this.createScopeForNodes(this.importedDeclarations(reference, AST.isTypeDeclaration), scope)
+      scope = this.createScopeForNodes(root.statements.filter(AST.isTypeDeclaration), scope)
+    }
+    if (method && !method.static && methodOwner && isWithinAssociatedBody(reference, method)) {
       scope = this.createScopeForNodes([methodOwner], scope)
+    }
+    const converter = AST.findOwningAssociatedConverter(reference)
+    const converterSource = converter && AST.associatedConverterSourceOwner(converter)
+    if (converterSource) {
+      scope = this.createScopeForNodes([converterSource], scope)
     }
     scope = this.createScopeForNodes(AST.importableValueDeclarationsInFile(root).filter(visible), scope)
     scope = this.createScopeForNodes(
@@ -1004,6 +1013,18 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     this.useTargets.set(useStatement, declarations)
     return declarations
   }
+}
+
+/** Only an actual method receiver may fall back from lexical values to a type root. */
+function isAssociatedTypeRootReference(reference: AST.Node): boolean {
+  if (AST.isMemberAccessExpression(reference)) {
+    return AST.isMethodCallExpression(reference.$container) && reference.$container.callee === reference
+  }
+  if (AST.isValueReference(reference) && AST.isPostfixMemberAccess(reference.$container)) {
+    const callee = reference.$container
+    return AST.isMethodCallExpression(callee.$container) && callee.$container.callee === callee
+  }
+  return false
 }
 
 /** Only the nearest argument owner supplies contextual constructor names. */

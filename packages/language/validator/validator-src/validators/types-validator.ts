@@ -11,6 +11,7 @@ import {
 
 /** typeValidationMessages declares diagnostics for custom types, constructors is item, and member access. */
 export const typeValidationMessages = {
+  namedStateBoolean: (name: string) => `Named state '${name}' requires a same-name yes/no type.`,
   unknownType: (name: string) => `Unknown type '${name}'.`,
   duplicateItemField: (name: string) => `Item field '${name}' is declared more than once.`,
   slotDefaultType: (name: string, expected: string, actual: string) =>
@@ -37,6 +38,20 @@ export const typeValidationMessages = {
 
 /** typeValidationChecks validates custom type declarations and item/list/custom expression forms. */
 export const typeValidationChecks = {
+  [AST.StateDeclaration.$type]: (state, ctx) => {
+    if (!AST.isNamedStateShorthand(state)) {
+      return
+    }
+    const declaration = AST.namedStateTypeDeclaration(state)
+    if (!declaration) {
+      ctx.error(state, typeValidationMessages.unknownType(state.name))
+      return
+    }
+    const type = Type.ofDefinition(declaration)
+    if (type.kind !== 'unresolved' && (type.kind !== 'primitive' || type.primitive !== 'boolean')) {
+      ctx.error(state, typeValidationMessages.namedStateBoolean(state.name))
+    }
+  },
   [AST.TypeDeclaration.$type]: validateTypeDeclaration,
   [AST.DerivedTypeExpression.$type]: validateDerivedType,
   [AST.ItemTypeExpression.$type]: validateItemType,

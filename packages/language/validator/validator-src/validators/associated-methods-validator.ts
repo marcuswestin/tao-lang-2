@@ -27,7 +27,10 @@ export const associatedMethodsValidationChecks = {
       ctx.error(owner, messages.placement)
     }
     const type = Type.ofDefinition(owner)
-    if (type.kind !== 'primitive' || type.primitive !== 'text') {
+    if (
+      type.kind !== 'entity' && type.kind !== 'item'
+      && (type.kind !== 'primitive' || !['text', 'number', 'numeric'].includes(type.primitive))
+    ) {
       ctx.error(method, messages.family)
     }
     const descriptor = ASTUtils.associatedCallableDescriptor(method)
@@ -41,6 +44,51 @@ export const associatedMethodsValidationChecks = {
       ) {
         ctx.error(method, messages.failures(method.name))
       }
+    }
+  },
+  [AST.AssociatedConverterDeclaration.$type]: (converter, ctx) => {
+    const descriptor = Type.associatedConverterDescriptor(converter)
+    if (!descriptor) {
+      ctx.error(converter, messages.converterOwner)
+      return
+    }
+    const { owner, receiver, result, signature } = descriptor
+    const ownerType = Type.ofDefinition(owner)
+    if (
+      Type.identityKey(ownerType) !== Type.identityKey(receiver)
+      && Type.identityKey(ownerType) !== Type.identityKey(result)
+    ) {
+      ctx.error(converter, messages.converterAttachment)
+    }
+    if (converter.failureBounds.includes('never') && converter.failureBounds.length > 1) {
+      ctx.error(converter, messages.converterNever)
+    }
+    if (!AST.functionHasFallthroughReturn(converter)) {
+      ctx.error(converter.block, messages.converterReturn)
+    }
+    for (const statement of AST.returnStatementsOf(converter)) {
+      const actual = Type.ofExpression(statement.value)
+      if (actual.kind !== 'unresolved' && result.kind !== 'unresolved' && !Type.isAssignable(actual, result)) {
+        ctx.error(statement.value, messages.converterResult(Type.displayName(result), Type.displayName(actual)))
+      }
+    }
+    const analysis = ASTUtils.associatedCallableAnalysis(converter)
+    if (!analysis || analysis.effects.purity.open || analysis.effects.purity.violations.length > 0) {
+      ctx.error(converter, messages.converterPurity)
+    }
+    if (analysis && !ASTUtils.failureContractSatisfiesBound(analysis.effects.failures, signature.failures)) {
+      ctx.error(converter, messages.converterFailures)
+    }
+  },
+  [AST.ConversionExpression.$type]: (conversion, ctx) => {
+    const resolved = Type.associatedConversion(conversion)
+    if (resolved.problem && resolved.problem !== 'unresolved-contract') {
+      ctx.error(
+        conversion,
+        resolved.problem === 'ambiguous-converter'
+          ? messages.converterAmbiguous(Type.displayName(resolved.source), Type.displayName(resolved.target))
+          : messages.converterMissing(Type.displayName(resolved.source), Type.displayName(resolved.target)),
+      )
     }
   },
   [AST.CapabilityTypeExpression.$type]: (capability, ctx) => {

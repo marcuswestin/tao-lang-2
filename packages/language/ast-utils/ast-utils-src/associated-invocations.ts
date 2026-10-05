@@ -10,7 +10,9 @@ import {
   type AssociatedCallableDescriptor,
   type AssociatedDescriptorMaterialization,
   associatedMethodCallTarget,
+  type AssociatedMethodDispatch,
   type AssociatedMethodReceiver,
+  associatedMethodTypeRoot,
 } from './associated-methods'
 import { substituteGenericType } from './generic-bindings'
 import { type TaoType, Type } from './Type'
@@ -40,6 +42,7 @@ export function resolveAssociatedMethodInvocation(
     methodDeclaration?(
       receiver: TaoType,
       name: string,
+      dispatch?: AssociatedMethodDispatch,
     ): Readonly<{ declaration: AST.AssociatedFunctionDeclaration; owner: AST.TypeDeclaration }> | undefined
     bindingMetadata?: ArgumentBindingMetadata
   } = {},
@@ -48,8 +51,13 @@ export function resolveAssociatedMethodInvocation(
   if (!target) {
     return { invocation, pairs: [], diagnostics: [], problem: 'unsupported-callee' }
   }
+  const typeRoot = associatedMethodTypeRoot(target.receiver)
+  const staticCall = typeRoot !== undefined
+  const dispatch: AssociatedMethodDispatch = staticCall ? 'static' : 'instance'
   const receiver = options.receiverType
     ? options.receiverType(target.receiver)
+    : typeRoot
+    ? Type.ofDefinition(typeRoot)
     : target.receiver.kind === 'expression'
     ? Type.ofExpression(target.receiver.expression)
     : Type.atMemberPath(Type.ofReferenceRoot(target.receiver.site), target.receiver.members)
@@ -59,9 +67,11 @@ export function resolveAssociatedMethodInvocation(
 
   let descriptor: AssociatedCallableDescriptor | undefined
   if (options.descriptor) {
-    const declaration = receiver.kind === 'capability' || receiver.genericParameter
+    const declaration = !staticCall && (receiver.kind === 'capability' || receiver.genericParameter)
       ? Type.aggregateCapabilityRequirements(receiver).find(requirement => requirement.name === target.name)
-      : (options.methodDeclaration ?? Type.associatedMethodDeclaration)(receiver, target.name)?.declaration
+      : options.methodDeclaration
+      ? options.methodDeclaration(receiver, target.name, dispatch)?.declaration
+      : Type.associatedMethodDeclaration(receiver, target.name, undefined, dispatch)?.declaration
     if (!declaration) {
       return { invocation, receiver, pairs: [], diagnostics: [], problem: 'unknown-method' }
     }
@@ -70,7 +80,7 @@ export function resolveAssociatedMethodInvocation(
       return { invocation, receiver, declaration, pairs: [], diagnostics: [], problem: 'pending-contract' }
     }
     descriptor = contract.descriptor
-  } else if (receiver.kind === 'capability' || receiver.genericParameter) {
+  } else if (!staticCall && (receiver.kind === 'capability' || receiver.genericParameter)) {
     const requirements = Type.aggregateCapabilityRequirements(receiver)
     const index = requirements.findIndex(requirement => requirement.name === target.name)
     if (index === -1) {
@@ -90,12 +100,12 @@ export function resolveAssociatedMethodInvocation(
     }
     descriptor = contract.descriptor
   } else {
-    descriptor = Type.associatedMethods(receiver).find(selection =>
+    descriptor = Type.associatedMethods(receiver, dispatch).find(selection =>
       selection.descriptor.declaration.name === target.name
     )
       ?.descriptor
     if (!descriptor) {
-      const declaration = Type.associatedMethodDeclaration(receiver, target.name)
+      const declaration = Type.associatedMethodDeclaration(receiver, target.name, undefined, dispatch)
       return {
         invocation,
         receiver,
@@ -107,7 +117,7 @@ export function resolveAssociatedMethodInvocation(
     }
   }
 
-  descriptor = Type.specializeAssociatedDescriptor(descriptor, receiver)
+  descriptor = staticCall ? descriptor : Type.specializeAssociatedDescriptor(descriptor, receiver)
   const inputs = new Map(descriptor.signature.inputs.map(input => [input.declaration, input]))
   const inputOf = (parameter: AST.ParameterDeclaration) => {
     const input = inputs.get(parameter)
@@ -131,7 +141,7 @@ export function resolveAssociatedMethodInvocation(
           type: generic.parameterTypes.get(input.declaration) ?? input.type,
         })),
       },
-      result: substituteGenericType(generic.result, generic.bindings, receiver),
+      result: staticCall ? generic.result : substituteGenericType(generic.result, generic.bindings, receiver),
     }
   }
   const bindings = generic ?? resolveParameterArgumentBindings(
@@ -139,7 +149,7 @@ export function resolveAssociatedMethodInvocation(
     AST.argumentsOf(invocation),
     {
       ...options.bindingMetadata,
-      parameterType: parameter => generic?.parameterTypes.get(parameter) ?? inputOf(parameter).type,
+      parameterType: parameter => inputOf(parameter).type,
       parameterName: options.bindingMetadata?.parameterName ?? Type.parameterName,
       parameterOmissible: parameter => inputOf(parameter).omissible,
       argumentType: options.bindingMetadata?.argumentType ?? Type.ofArgument,

@@ -53,14 +53,22 @@ export const FunctionalCoreCompiler = {
   /** ReturnStatement returns one runtime-wrapped Tao value from the function callback. */
   ReturnStatement(statement: AST.ReturnStatement): Compiled {
     let owner: AST.Node | undefined = statement.$container
-    while (owner && !AST.isFunctionDeclaration(owner) && !AST.isAssociatedFunctionDeclaration(owner)) {
+    while (
+      owner && !AST.isFunctionDeclaration(owner) && !AST.isAssociatedFunctionDeclaration(owner)
+      && !AST.isAssociatedConverterDeclaration(owner)
+    ) {
       owner = owner.$container
     }
     Assert(
-      owner && (AST.isFunctionDeclaration(owner) || AST.isAssociatedFunctionDeclaration(owner)),
+      owner && (AST.isFunctionDeclaration(owner) || AST.isAssociatedFunctionDeclaration(owner)
+        || AST.isAssociatedConverterDeclaration(owner)),
       'Expected a function return owner.',
     )
-    return gen`return ${compileArgumentForType(statement.value, Type.ofFunctionReturn(owner))}`
+    const result = AST.isAssociatedConverterDeclaration(owner)
+      ? Type.associatedConverterDescriptor(owner)?.result
+      : Type.ofFunctionReturn(owner)
+    Assert.defined(result, 'a function or converter has its declared or inferred return domain')
+    return gen`return ${compileArgumentForType(statement.value, result)}`
   },
 
   /** IfFunctionStatement preserves native callback return behavior for early exits. */

@@ -2,13 +2,20 @@ import { AST } from '@parser'
 import { Switch } from '@shared'
 import type { ArgumentBindingMetadata } from './argument-bindings'
 import {
+  associatedConverterDescriptor,
+  ownAssociatedConverters,
+  resolveAssociatedConversion,
+} from './associated-converters'
+import {
   associatedCallableAnalysis,
   type AssociatedCallableDescriptor,
   associatedCallableDescriptor,
   type AssociatedDescriptorMaterialization,
   associatedMethodCallTarget,
+  type AssociatedMethodDispatch,
   type AssociatedMethodReceiver,
   type AssociatedMethodSelection,
+  associatedMethodTypeRoot,
   capabilityRequirements,
   hasAssociatedEffects,
   materializeAssociatedCallable,
@@ -117,6 +124,20 @@ type AnyTypeReference = AST.TypeReference | AST.ConstructablePrimitiveTypeRefere
 
 /** Type exposes static Tao type resolution and compatibility helpers. */
 export class Type {
+  static ownAssociatedConverters(owner: AST.TypeDeclaration) {
+    return ownAssociatedConverters(owner)
+  }
+  static associatedConverterDescriptor(declaration: AST.AssociatedConverterDeclaration) {
+    return associatedConverterDescriptor(declaration)
+  }
+
+  static associatedConversion(expression: AST.ConversionExpression) {
+    return resolveAssociatedConversion(expression)
+  }
+
+  static associatedMethodTypeRoot(receiver: AssociatedMethodReceiver): AST.TypeDeclaration | undefined {
+    return associatedMethodTypeRoot(receiver)
+  }
   private constructor() {}
 
   /** quantityOwner returns the directly owning declaration, retaining scoped field identity. */
@@ -320,8 +341,13 @@ export class Type {
         resolution.ofContextualValue(reference.target.ref, reference),
       atMemberPath: (root: TaoType, members: readonly string[]) => resolution.atMemberPath(root, members),
       receiverType: (receiver: AssociatedMethodReceiver) => resolution.receiverType(receiver),
-      associatedMethodDeclaration: (receiver: TaoType, name: string) =>
-        Type.associatedMethodDeclaration(receiver, name, reference => resolution.definitionOfReference(reference)),
+      associatedMethodDeclaration: (receiver: TaoType, name: string, dispatch?: AssociatedMethodDispatch) =>
+        Type.associatedMethodDeclaration(
+          receiver,
+          name,
+          reference => resolution.definitionOfReference(reference),
+          dispatch,
+        ),
       instantiateGenericInvocation: (
         declaration: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration,
         arguments_: readonly AST.Argument[],
@@ -337,12 +363,15 @@ export class Type {
     name: string,
     definitionOfReference: (reference: AST.NamedTypeReference) => AST.TypeDefinition | undefined =
       Type.definitionOfReference,
+    dispatch: AssociatedMethodDispatch = 'instance',
   ): Readonly<{ declaration: AST.AssociatedFunctionDeclaration; owner: AST.TypeDeclaration }> | undefined {
     const nominal = nominalOf(receiver)
     if (nominal) {
       for (const owner of nominalChain(nominal, definitionOfReference)) {
         if (AST.isTypeDeclaration(owner)) {
-          const declaration = ownAssociatedMethods(owner).find(method => method.name === name)
+          const declaration = ownAssociatedMethods(owner).find(method =>
+            method.name === name && !!method.static === (dispatch === 'static')
+          )
           if (declaration) {
             return { declaration, owner }
           }
@@ -353,7 +382,10 @@ export class Type {
   }
 
   /** Discovery retains nominal identity and chooses the nearest inherited implementation. */
-  static associatedMethods(receiver: TaoType): readonly AssociatedMethodSelection[] {
+  static associatedMethods(
+    receiver: TaoType,
+    dispatch: AssociatedMethodDispatch = 'instance',
+  ): readonly AssociatedMethodSelection[] {
     const nominal = nominalOf(receiver)
     if (!nominal) {
       return []
@@ -365,6 +397,9 @@ export class Type {
         continue
       }
       for (const declaration of ownAssociatedMethods(owner)) {
+        if (!!declaration.static !== (dispatch === 'static')) {
+          continue
+        }
         if (!names.has(declaration.name)) {
           names.add(declaration.name)
           const descriptor = associatedCallableDescriptor(declaration)
@@ -376,7 +411,9 @@ export class Type {
           if (materialized.kind === 'ready') {
             selected.set(declaration.name, {
               receiver,
-              descriptor: Type.specializeAssociatedDescriptor(materialized.descriptor, receiver),
+              descriptor: dispatch === 'static'
+                ? materialized.descriptor
+                : Type.specializeAssociatedDescriptor(materialized.descriptor, receiver),
             })
           }
         }
@@ -684,7 +721,9 @@ export class Type {
         if (!AST.isTypeDeclaration(owner)) {
           continue
         }
-        const methods = projection ? capabilityRequirements(owner) : ownAssociatedMethods(owner)
+        const methods = projection
+          ? capabilityRequirements(owner)
+          : ownAssociatedMethods(owner).filter(method => !method.static)
         for (const method of methods) {
           if (!supplied.has(method.name)) {
             supplied.set(method.name, method)
@@ -1741,6 +1780,10 @@ class TypeResolutionContext {
   }
 
   receiverType(receiver: AssociatedMethodReceiver): TaoType {
+    const typeRoot = associatedMethodTypeRoot(receiver)
+    if (typeRoot) {
+      return this.ofDefinition(typeRoot)
+    }
     return Switch.kind(receiver, {
       expression: receiver => this.ofExpression(receiver.expression),
       'member-path': receiver =>
@@ -1877,6 +1920,10 @@ class TypeResolutionContext {
     return Switch.type(expression, {
       ActionExpression: () => actionType([]),
       BinaryExpression: binary => this.binaryExpressionType(binary),
+      ConversionExpression: conversion => {
+        const selected = resolveAssociatedConversion(conversion, this)
+        return selected.descriptor?.result ?? unresolvedType()
+      },
       NowExpression: () => primitiveType('time'),
       // A bridged value has no Tao expression to read a type from; its declaration states one.
       FromExpression: () => unresolvedType(),
@@ -2158,24 +2205,31 @@ class TypeResolutionContext {
   }
 
   private methodCallExpressionType(call: AST.MethodCallExpression): TaoType {
-    const reading = resolveNumericUnitReading(call, { receiverType: receiver => this.receiverType(receiver) })
+    const target = associatedMethodCallTarget(call)
+    const staticCall = target && associatedMethodTypeRoot(target.receiver) !== undefined
+    const reading = staticCall
+      ? { kind: 'not-unit-reading' } as const
+      : resolveNumericUnitReading(call, { receiverType: receiver => this.receiverType(receiver) })
     if (reading.kind !== 'not-unit-reading') {
       return Switch.kind(reading, {
         'unit-reading': value => value.reading.resultType,
         'invalid-unit-reading': unresolvedType,
       })
     }
-    const target = associatedMethodCallTarget(call)
     if (!target) {
       return unresolvedType()
     }
     const receiver = this.receiverType(target.receiver)
     const nominal = nominalOf(receiver)
-    const declarations = receiver.kind === 'capability' || receiver.genericParameter
+    const declarations = !staticCall && (receiver.kind === 'capability' || receiver.genericParameter)
       ? Type.aggregateCapabilityRequirements(receiver)
       : nominal
       ? nominalChain(nominal, reference => this.definitionOfReference(reference))
-        .flatMap(owner => AST.isTypeDeclaration(owner) ? ownAssociatedMethods(owner) : [])
+        .flatMap(owner =>
+          AST.isTypeDeclaration(owner)
+            ? ownAssociatedMethods(owner).filter(method => !!method.static === staticCall)
+            : []
+        )
       : []
     const declaration = declarations.find(method => method.name === target.name)
     if (!declaration) {
@@ -2184,27 +2238,34 @@ class TypeResolutionContext {
     if (AST.isAssociatedFunctionDeclaration(declaration) && declaration.genericParameters.length > 0) {
       return this.withoutCycles(call, () => {
         const instantiated = this.instantiateGenericInvocation(declaration, AST.argumentsOf(call), {
-          parameterType: parameter => substituteGenericType(this.ofParameter(parameter), new Map(), receiver),
+          parameterType: parameter =>
+            staticCall
+              ? this.ofParameter(parameter)
+              : substituteGenericType(this.ofParameter(parameter), new Map(), receiver),
         })
         return instantiated.diagnostics.length === 0 && instantiated.genericDiagnostics.length === 0
-          ? substituteGenericType(instantiated.result, new Map(), receiver)
+          ? staticCall ? instantiated.result : substituteGenericType(instantiated.result, new Map(), receiver)
           : unresolvedType()
       })
     }
     if (this.descriptors) {
       const contract = this.descriptors.get(declaration)
       return contract?.kind === 'ready'
-        ? Type.specializeAssociatedDescriptor(contract.descriptor, receiver).result
+        ? staticCall
+          ? contract.descriptor.result
+          : Type.specializeAssociatedDescriptor(contract.descriptor, receiver).result
         : unresolvedType()
     }
     if (hasAssociatedEffects()) {
       const descriptor = associatedCallableDescriptor(declaration)
-      return descriptor ? Type.specializeAssociatedDescriptor(descriptor, receiver).result : unresolvedType()
+      return descriptor
+        ? staticCall ? descriptor.result : Type.specializeAssociatedDescriptor(descriptor, receiver).result
+        : unresolvedType()
     }
     const result = AST.isCapabilityMethodDeclaration(declaration)
       ? this.ofTypeExpression(declaration.returnType)
       : this.ofFunctionReturn(declaration)
-    return substituteGenericType(result, new Map(), receiver)
+    return staticCall ? result : substituteGenericType(result, new Map(), receiver)
   }
 
   ofFunctionReturn(declaration: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration): TaoType {
@@ -2250,7 +2311,12 @@ class TypeResolutionContext {
     if (state.type) {
       return this.ofReference(state.type)
     }
-    return this.withoutCycles(state, () => this.ofExpression(state.value))
+    const namedType = AST.namedStateTypeDeclaration(state)
+    return namedType
+      ? this.ofDefinition(namedType)
+      : AST.isNamedStateShorthand(state)
+      ? unresolvedType()
+      : this.withoutCycles(state, () => this.ofExpression(state.value))
   }
 
   atMemberPath(root: TaoType, members: readonly string[]): TaoType {

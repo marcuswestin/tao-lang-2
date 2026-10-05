@@ -42,6 +42,11 @@ export const ExpressionsFormatter = {
     f.oneSpaceAround('as')
   },
 
+  /** ConversionExpression casts the value produced by its full addition expression. */
+  ConversionExpression(f) {
+    f.oneSpaceAround('as')
+  },
+
   /** ValueReference preserves a single value-namespace identifier. */
   ValueReference() {},
 
@@ -104,7 +109,7 @@ export const ExpressionsFormatter = {
 
   /** AssociatedFunctionDeclaration formats its optional bounded generic header. */
   AssociatedFunctionDeclaration(f) {
-    f.oneSpaceAfter('func')
+    f.oneSpaceAfter('static', 'func')
     f.oneSpaceAround('fails')
     f.oneSpaceAround('->')
     if (f.node.genericParameters.length > 0) {

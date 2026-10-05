@@ -69,7 +69,9 @@ export function actionFailureContextDeclaration(node: AST.Node): AST.TypeDeclara
   const contract = (visibleWorkspaceFiles.get(root) ?? []).find(file =>
     AST.getDocument(file).uri.path.endsWith('/@tao/actions/ActionFailureContext.tao')
   )
-  return contract?.statements.filter(AST.isTypeDeclaration).find(declaration => declaration.name === 'ActionFailureContext')
+  return contract?.statements.filter(AST.isTypeDeclaration).find(declaration =>
+    declaration.name === 'ActionFailureContext'
+  )
 }
 
 /**
@@ -1088,14 +1090,14 @@ export function parametersOf(
 
 /** returnStatementsOf returns every function return in source order, including early returns. */
 export function returnStatementsOf(
-  declaration: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration,
+  declaration: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration | AST.AssociatedConverterDeclaration,
 ): AST.ReturnStatement[] {
   return returnsInFunctionBlock(declaration.block)
 }
 
 /** functionHasFallthroughReturn reports whether every one-sided early-return path has a final fallback. */
 export function functionHasFallthroughReturn(
-  declaration: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration,
+  declaration: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration | AST.AssociatedConverterDeclaration,
 ): boolean {
   return AST.isReturnStatement(declaration.block.statements.at(-1))
 }
@@ -1361,6 +1363,40 @@ export function findOwningAssociatedFunction(node: AST.Node): AST.AssociatedFunc
   return findAncestor(node, AST.isAssociatedFunctionDeclaration)
 }
 
+/** Converters retain their actual source body and containing ownership declaration. */
+export function findOwningAssociatedConverter(node: AST.Node): AST.AssociatedConverterDeclaration | undefined {
+  return findAncestor(node, AST.isAssociatedConverterDeclaration)
+}
+
+export function associatedConverterOwner(
+  declaration: AST.AssociatedConverterDeclaration,
+): AST.TypeDeclaration | undefined {
+  const item = declaration.$container
+  if (!AST.isItemTypeExpression(item) || !item.converters.includes(declaration)) {
+    return undefined
+  }
+  const container = item.$container
+  if (AST.isTypeDeclaration(container)) {
+    return container.type === item ? container : undefined
+  }
+  if (!AST.isDerivedTypeExpression(container) || container.slots !== item) {
+    return undefined
+  }
+  const owner = container.$container
+  return AST.isTypeDeclaration(owner) && owner.type === container ? owner : undefined
+}
+
+/** The converter body receives its stated source domain, independently of attachment ownership. */
+export function associatedConverterSourceOwner(
+  declaration: AST.AssociatedConverterDeclaration,
+): AST.TypeDeclaration | undefined {
+  const source = declaration.conversionSource
+  return AST.isNamedTypeReference(source) && source.members.length === 0
+    ? visibleFileDeclarations(source, AST.isTypeDeclaration, owner => owner.name)
+      .find(owner => owner.name === source.root)
+    : undefined
+}
+
 /** associatedFunctionOwner returns only the declared type whose own body contains this method. */
 export function associatedFunctionOwner(
   declaration: AST.AssociatedFunctionDeclaration,
@@ -1389,6 +1425,11 @@ export function associatedReceiverOwner(
   }
   const method = findOwningAssociatedFunction(reference)
   if (!method) {
+    const converter = findOwningAssociatedConverter(reference)
+    const source = converter && associatedConverterSourceOwner(converter)
+    return source && reference.target.ref === source ? source : undefined
+  }
+  if (method.static) {
     return undefined
   }
   let current: AST.Node | undefined = reference
@@ -1420,6 +1461,20 @@ export function findOwningAlias(node: AST.Node): AST.AliasDeclaration | undefine
 /** findOwningState returns the state declaration that owns `node`, if any. */
 export function findOwningState(node: AST.Node): AST.StateDeclaration | undefined {
   return findAncestor(node, AST.isStateDeclaration)
+}
+
+/** Named state shorthand resolves its same-name type independently of the writable value. */
+export function namedStateTypeDeclaration(state: AST.StateDeclaration): AST.TypeDeclaration | undefined {
+  if (!isNamedStateShorthand(state)) {
+    return undefined
+  }
+  return visibleFileDeclarations(state, AST.isTypeDeclaration, declaration => declaration.name)
+    .find(declaration => declaration.name === state.name)
+}
+
+export function isNamedStateShorthand(state: AST.StateDeclaration): boolean {
+  return !state.type && AST.isBooleanLiteral(state.value) && state.$cstNode !== undefined
+    && Langium.GrammarUtils.findNodesForKeyword(state.$cstNode, '=').length === 0
 }
 
 /** findOwningFromExpression returns the bridge expression whose names denote module exports. */

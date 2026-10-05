@@ -70,7 +70,7 @@ Describe('Associated method invocation resolution', () => {
     Expect(shadowed.callee.target.ref).toBe(AST.parametersOf(shadow)[0])
     Expect(resolveAssociatedMethodInvocation(shadowed).descriptor?.owner).toBe(label)
     const global = resolveAssociatedMethodInvocation(returnedCall(namedFunction(file, 'Global')))
-    Expect(global.problem).toBe('unresolved-receiver')
+    Expect(global.problem).toBe('unknown-method')
     Expect(global.descriptor).toBeUndefined()
     Expect(global.pairs).toEqual([])
   })

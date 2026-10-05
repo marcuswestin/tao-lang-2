@@ -33,6 +33,11 @@ export const TypesFormatter = {
     f.oneSpaceBefore('no')
   },
 
+  AssociatedConverterDeclaration(f) {
+    f.oneSpaceAround('as', 'fails')
+    f.commaSpacedList()
+  },
+
   /** ItemTypeExpression formats item type property blocks. */
   ItemTypeExpression(f) {
     const entries = [
@@ -43,6 +48,7 @@ export const TypesFormatter = {
       ...f.node.supports,
       ...f.node.implementations,
       ...f.node.methods,
+      ...f.node.converters,
     ]
       .toSorted((left, right) => (left.$cstNode?.offset ?? 0) - (right.$cstNode?.offset ?? 0))
     f.indentedBraceBlock(entries)
@@ -53,6 +59,8 @@ export const TypesFormatter = {
         AST.isConfigurationImplementation(next)
           || AST.isAssociatedFunctionDeclaration(previous)
           || AST.isAssociatedFunctionDeclaration(next)
+          || AST.isAssociatedConverterDeclaration(previous)
+          || AST.isAssociatedConverterDeclaration(next)
           ? 2
           : 1,
     )

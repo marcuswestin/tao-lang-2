@@ -10,7 +10,7 @@ entry ActionsGrammarEntrypoint:
     StateDeclaration | ActionDeclaration | ActionExpression | ActionStatement;
 
 StateDeclaration:
-    'state' name=ID ('is' type=TypeReference)? '=' value=Expression ('(' persist?='persist' ')')?;
+    'state' name=ID (('is' type=TypeReference)? '=' value=Expression | value=BooleanLiteral) ('(' persist?='persist' ')')?;
 
 ActionDeclaration:
     visibility=DeclarationVisibility? 'action' name=ID parameterList=ParameterList

@@ -26,7 +26,12 @@ CapabilityTypeExpression:
 
 // Failure bounds are contextual names; `never` remains available as an ordinary identifier.
 CapabilityMethodDeclaration:
-    name=ID parameterList=ParameterList ('fails' failureBound=ID)? '->' returnType=TypeExpression;
+    name=AssociatedFunctionName parameterList=ParameterList ('fails' failureBound=ID)? '->' returnType=TypeExpression;
+
+// Explicit converters are function bodies with source/target contracts and no value slots.
+AssociatedConverterDeclaration:
+    conversionSource=TypeReference 'as' conversionTarget=TypeReference
+    ('fails' failureBounds+=ID (',' failureBounds+=ID)*)? block=FunctionBlock;
 
 TypeExpression:
     ProjectedItemTypeExpression | DerivedTypeExpression | UnionTypeExpression | CaseSetTypeExpression | YesNoTypeExpression | ItemTypeExpression | TypeReference;
@@ -49,13 +54,14 @@ CaseSetCase:
 
 // The alias precedes `no`, so the keyword terminates it and no contextual lexer token is needed.
 YesNoTypeExpression:
-    'yes' '/' negativeName=ID? 'no';
+    'yes/no' | 'yes' '/' negativeName=ID? 'no';
 
 // The structural record type. No `item` keyword: `item { ... }` constructs a value.
 ItemTypeExpression:
     '{' ((properties+=TypeProperty | keys+=ConfigurationKeyDeclaration | implementations+=ConfigurationImplementation
       | issues+=ConfigurationIssues | accepts+=ConfigurationAccepts | supports+=ConfigurationSupports
-      | unitBlocks+=NumericUnitBlock | methods+=AssociatedFunctionDeclaration) ','?)* '}';
+      | unitBlocks+=NumericUnitBlock | methods+=AssociatedFunctionDeclaration
+      | converters+=AssociatedConverterDeclaration) ','?)* '}';
 
 // A postfix `?` carries optionality. Item fields take no trait list.
 TypeProperty:

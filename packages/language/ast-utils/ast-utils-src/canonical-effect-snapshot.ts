@@ -1,6 +1,7 @@
 import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
 import type { ArgumentBindingDiagnostic, ArgumentBindingMetadata, RenderInvocationPair } from './argument-bindings'
+import { associatedConverterDescriptor, resolveAssociatedConversion } from './associated-converters'
 import { resolveAssociatedMethodInvocation } from './associated-invocations'
 import {
   type AssociatedCallableDescriptor,
@@ -17,7 +18,7 @@ import { resolveFunctionInvocation } from './invocations'
 import { type ItemShape, type TaoType, Type } from './Type'
 
 type AssociatedDeclaration = AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration
-type SourceCallable = AST.CallableDeclaration | AssociatedDeclaration
+type SourceCallable = AST.CallableDeclaration | AssociatedDeclaration | AST.AssociatedConverterDeclaration
 type EffectContract = Pick<NativeEffectPublication, 'purity' | 'failures'>
 type PublicationStatus =
   | Readonly<{ kind: 'complete'; reason?: never }>
@@ -49,7 +50,7 @@ export type CanonicalDefaultEligibility = Readonly<{
 export type CanonicalCallPublication =
   & PublicationStatus
   & Readonly<{
-    site: AST.FunctionCallExpression | AST.MethodCallExpression
+    site: AST.FunctionCallExpression | AST.MethodCallExpression | AST.ConversionExpression
     operation: 'function'
     target?: SourceCallable
     descriptor?: CanonicalCallableDescriptor
@@ -152,6 +153,27 @@ export function publishCanonicalEffectSnapshot(
           ...(effects ? { contract: sealEffectContract(effects) } : {}),
         }),
       )
+    } else if (AST.isAssociatedConverterDeclaration(node)) {
+      const converter = associatedConverterDescriptor(node, resolution)
+      const pending = !converter || converter.receiver.kind === 'unresolved' || converter.result.kind === 'unresolved'
+      descriptors.set(
+        node,
+        Object.freeze({
+          declaration: node,
+          ...(converter
+            ? {
+              owner: converter.owner,
+              signature: sealSignature(converter.signature),
+              result: sealType(converter.result),
+            }
+            : {}),
+          parameters: Object.freeze([]),
+          body: node.block,
+          kind: 'source',
+          pending: Object.freeze(pending ? [node] : []),
+          convention: 'wrapped',
+        }),
+      )
     } else if (AST.isFunctionDeclaration(node) || AST.isPhraseDeclaration(node)) {
       const parameters = AST.parametersOf(node)
       const result = AST.isPhraseDeclaration(node)
@@ -196,6 +218,27 @@ export function publishCanonicalEffectSnapshot(
     ),
   )
   for (const node of nodes) {
+    if (AST.isConversionExpression(node)) {
+      const conversion = resolveAssociatedConversion(node, resolution)
+      const target = conversion.descriptor?.declaration
+      const descriptor = target ? descriptors.get(target) : undefined
+      const complete = !!descriptor && descriptor.pending.length === 0 && !conversion.problem
+      calls.set(
+        node,
+        Object.freeze({
+          site: node,
+          operation: 'function',
+          ...(target ? { target } : {}),
+          ...(descriptor ? { descriptor } : {}),
+          receiver: Object.freeze({ kind: 'expression', expression: node.value }),
+          receiverType: sealType(conversion.source),
+          pairs: Object.freeze([]),
+          diagnostics: Object.freeze([]),
+          defaults: Object.freeze([]),
+          ...(complete ? { kind: 'complete' } as const : { kind: 'unknown', reason: 'incomplete-fact' } as const),
+        }),
+      )
+    }
     if (AST.isFunctionCallExpression(node) || AST.isMethodCallExpression(node)) {
       let pending = false
       const metadata: ArgumentBindingMetadata = {

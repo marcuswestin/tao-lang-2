@@ -104,6 +104,24 @@ export type AssociatedMethodReceiver =
   | Readonly<{ kind: 'member-path'; site: AST.MemberAccessExpression; members: readonly string[] }>
   | Readonly<{ kind: 'expression'; expression: AST.Expression }>
 
+export type AssociatedMethodDispatch = 'instance' | 'static'
+
+/** A static root is an authored type reference, never a value carrying that type. */
+export function associatedMethodTypeRoot(receiver: AssociatedMethodReceiver): AST.TypeDeclaration | undefined {
+  const reference = receiver.kind === 'member-path'
+    ? receiver.members.length === 0 ? receiver.site : undefined
+    : AST.isValueReference(receiver.expression)
+    ? receiver.expression
+    : undefined
+  if (!reference || !AST.isTypeDeclaration(reference.target.ref)) {
+    return undefined
+  }
+  const owner = reference.target.ref
+  const method = AST.findOwningAssociatedFunction(reference)
+  const instanceBody = method ? !method.static : AST.findOwningAssociatedConverter(reference) !== undefined
+  return instanceBody && AST.associatedReceiverOwner(reference) === owner ? undefined : owner
+}
+
 export type AssociatedMethodCallTarget = Readonly<{
   name: string
   receiver: AssociatedMethodReceiver

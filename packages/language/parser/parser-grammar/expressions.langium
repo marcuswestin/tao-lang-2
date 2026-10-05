@@ -31,9 +31,12 @@ FunctionDeclaration:
 
 // Associated methods inherit their owner's visibility and keep their own callable identity.
 AssociatedFunctionDeclaration:
-    'func' name=ID ('where' genericParameters+=GenericTypeParameter (',' genericParameters+=GenericTypeParameter)*)?
+    static?='static'? 'func' name=AssociatedFunctionName ('where' genericParameters+=GenericTypeParameter (',' genericParameters+=GenericTypeParameter)*)?
     parameterList=ParameterList ('fails' failureBound=ID)?
     ('->' returnType=TypeExpression)? block=FunctionBlock;
+
+AssociatedFunctionName returns string:
+    ID | '+' | '-' | '*' | '/' | '==' | '!=' | '<' | '<=' | '>' | '>=';
 
 FunctionBlock:
     '{' statements+=FunctionStatement* '}';
@@ -99,9 +102,12 @@ DeclarationSlotComparisonExpression infers Expression:
     ({infer BinaryExpression.left=current} operator=('<=' | '>=' | '<' | '>') right=CaseTestExpression)*;
 
 DeclarationSlotCaseTestExpression infers Expression:
-    DeclarationSlotAdditionExpression
+    DeclarationSlotConversionExpression
     ({infer CaseTestExpression.value=current} 'is' negated?='not'?
         (builtinCase=BuiltInSubjectCaseName | declaredCase=[CaseDeclaration:ID]))?;
+
+DeclarationSlotConversionExpression infers Expression:
+    DeclarationSlotAdditionExpression ({infer ConversionExpression.value=current} 'as' target=TypeReference)*;
 
 DeclarationSlotAdditionExpression infers Expression:
     DeclarationSlotMultiplicationExpression
@@ -148,8 +154,11 @@ ComparisonExpression infers Expression:
     CaseTestExpression ({infer BinaryExpression.left=current} operator=('<=' | '>=' | '<' | '>') right=CaseTestExpression)*;
 
 CaseTestExpression infers Expression:
-    AdditionExpression ({infer CaseTestExpression.value=current} 'is' negated?='not'?
+    ConversionExpression ({infer CaseTestExpression.value=current} 'is' negated?='not'?
         (builtinCase=BuiltInSubjectCaseName | declaredCase=[CaseDeclaration:ID]))?;
+
+ConversionExpression infers Expression:
+    AdditionExpression ({infer ConversionExpression.value=current} 'as' target=TypeReference)*;
 
 AdditionExpression infers Expression:
     MultiplicationExpression ({infer BinaryExpression.left=current} operator=('+' | '-') right=MultiplicationExpression)*;
@@ -370,7 +379,7 @@ DeclaredConstructorValue infers Expression:
     UnparenthesizedDeclaredConstructorValue | '(' Expression ')';
 
 UnparenthesizedDeclaredConstructorValue infers Expression:
-    StringLiteral | NumberLiteral | InterpolatedString | ListLiteral | MemberAccessExpression | ValueReference;
+    StringLiteral | NumberLiteral | BooleanLiteral | InterpolatedString | ListLiteral | MemberAccessExpression | ValueReference;
 
 TypedConstructorValue:
     StringLiteral | NumberLiteral | ListLiteral | ItemLiteral;
@@ -423,7 +432,7 @@ BooleanLiteral:
     value=BooleanLiteralValue;
 
 BooleanLiteralValue returns string:
-    'true' | 'false';
+    'true' | 'false' | 'yes' | 'no';
 
 NoneLiteral:
     value='none';

@@ -4,6 +4,7 @@ import { Assert, Switch } from '@shared'
 import { BridgeMetadata } from '../../../bridge-metadata'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
+import { compileAssociatedConversion } from './associated-converters'
 import { compileAssociatedWitness } from './AssociatedMethodsCompiler'
 import { authLibraryExport, compileCurrentAccount, contextualCommand, contextualReference } from './auth-context'
 import { compileArgumentForType, compileValueForType } from './capability-projection'
@@ -28,6 +29,7 @@ export const ExpressionsCompiler = {
       BooleanLiteral: Compile.BooleanLiteral,
       CaseTestExpression: Compile.CaseTestExpression,
       CopyExpression: Compile.CopyExpression,
+      ConversionExpression: compileAssociatedConversion,
       ConfigurationConstructor: Compile.ConfiguredValue,
       WhenExpression: Compile.WhenExpression,
       FunctionCallExpression: Compile.FunctionCallExpression,
@@ -152,7 +154,7 @@ export const ExpressionsCompiler = {
 
   /** BooleanLiteral compiles a Tao boolean literal into a Tao value. */
   BooleanLiteral(value: AST.BooleanLiteral): Compiled {
-    return gen`TR.Value(${value.value === 'true' ? 'true' : 'false'})`
+    return gen`TR.Value(${value.value === 'true' || value.value === 'yes' ? 'true' : 'false'})`
   },
 
   /** NoneLiteral compiles Tao absence to JavaScript null behind a Tao value. */
@@ -278,7 +280,9 @@ export const ExpressionsCompiler = {
 
   /** Method calls use the canonical selected descriptor and its parameter correspondence. */
   MethodCallExpression(expression: AST.MethodCallExpression): Compiled {
-    const reading = ASTUtils.resolveNumericUnitReading(expression)
+    const target = ASTUtils.associatedMethodCallTarget(expression)
+    const staticCall = !!target && Type.associatedMethodTypeRoot(target.receiver) !== undefined
+    const reading = staticCall ? { kind: 'not-unit-reading' } as const : ASTUtils.resolveNumericUnitReading(expression)
     if (reading.kind !== 'not-unit-reading') {
       Assert(reading.kind === 'unit-reading', 'validated unit reading has no argument or method collision')
       return compileNumericUnitReading(reading.reading, compileMethodReceiver(reading.reading.receiverAnchor))
@@ -288,17 +292,17 @@ export const ExpressionsCompiler = {
     Assert.defined(resolved.descriptor, 'validated associated call has a selected descriptor')
     Assert(resolved.diagnostics.length === 0, 'validated associated call has no binding diagnostics')
     Assert(!resolved.genericDiagnostics?.length, 'validated generic associated call has one bounded type substitution')
-    const target = ASTUtils.associatedMethodCallTarget(expression)
     Assert.defined(target, 'validated associated call retains its actual receiver anchor')
-    const receiver = compileMethodReceiver(target.receiver)
-    const capability = resolved.receiver?.kind === 'capability' || !!resolved.receiver?.genericParameter
+    const receiver = staticCall ? undefined : compileMethodReceiver(target.receiver)
+    const capability = !staticCall
+      && (resolved.receiver?.kind === 'capability' || !!resolved.receiver?.genericParameter)
     const callable = capability
       ? gen`TR.Capability.method(${receiver}.evaluate(), ${gen.jsLiteral(target.name)})`
       : compileAssociatedWitness(resolved.descriptor)
     const parameters = AST.parametersOf(resolved.descriptor.declaration)
     const argumentsByParameter = new Map(resolved.pairs.map(pair => [pair.parameter, pair.argument]))
     const lastProvidedIndex = Math.max(...resolved.pairs.map(pair => parameters.indexOf(pair.parameter)), -1)
-    return gen`TR.Call(${callable}${capability ? gen.noop() : gen`, ${receiver}`}${
+    return gen`TR.Call(${callable}${capability || staticCall ? gen.noop() : gen`, ${receiver}`}${
       gen.join(parameters.slice(0, lastProvidedIndex + 1), parameter => {
         const argument = argumentsByParameter.get(parameter)
         const expected = resolved.transportTypes?.get(parameter) ?? Type.ofParameter(parameter)
