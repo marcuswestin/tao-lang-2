@@ -40,11 +40,16 @@ Describe('validator: bare renders', () => {
         const main = result.entry.ast.statements.find(statement =>
           AST.isViewDeclaration(statement) && statement.name === 'Main'
         )!
-        const root = main.block!.statements.find(AST.isRenderStatement)!
-        const child = AST.streamAllContents(root).find(node =>
-          AST.isViewRender(node) && node.view.$refText === 'Caption'
-        )!
-        const inner = AST.streamAllContents(root.block!).find(AST.isAliasDeclaration)!
+        Expect.Is(main, AST.isViewDeclaration)
+        Expect.Is(main.block, AST.isBlock)
+        const root = main.block.statements.find(AST.isRenderStatement)
+        Expect.Is(root, AST.isRenderStatement)
+        Expect.Is(root.block, AST.isBlock)
+        const child = AST.streamAllContents(root).filter(AST.isViewRender)
+          .find(render => render.view.$refText === 'Caption')
+        Expect.Is(child, AST.isViewRender)
+        const inner = AST.streamAllContents(root.block).find(AST.isAliasDeclaration)
+        Expect.Is(inner, AST.isAliasDeclaration)
         Expect(child.view.ref).toBe(inner)
         Expect(validationErrorMessages(result)).toEqual([
           ViewsValidator.messages.bareRenderTargetType('Caption', 'number'),
