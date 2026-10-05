@@ -106,7 +106,7 @@ function sourceDomains(source: TaoType, resolution: ConverterTypeResolution): Ta
       break
     }
     seen.add(nominal)
-    const expression = nominal.type
+    const expression: AST.TypeDefinition['type'] = nominal.type
     const base: AST.TypeReference | undefined = AST.isDerivedTypeExpression(expression)
       ? expression.base
       : AST.isNamedTypeReference(expression)
