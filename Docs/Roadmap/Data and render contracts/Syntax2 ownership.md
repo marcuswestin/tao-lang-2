@@ -110,6 +110,15 @@ Root retains facades, production effect installation, capability transport and a
 D retains action result helpers and failure/runtime ownership. Operators and converters require
 the next bounded amendment after this generic batch, rather than being included implicitly.
 
+A additionally owns associated-invocations.ts and capability-transport.ts for aggregate generic
+constraints and already-selected witness forwarding, plus compiler capability-projection.ts for
+emitting that same correspondence. argument-bindings.ts is released solely for directed generic
+constructor-role metadata in the existing matcher, and StatementsFormatter.ts solely for generic
+header/parameter-list spacing. These grants supersede root ownership for those bounded changes;
+root will not write them concurrently. Preserve optional carrier sampling, input/result variance,
+concrete receiver identity and capability failure bounds. Existing configured-item-validator.ts
+ownership also covers validation of the selected newly admitted constructor payload expressions.
+
 ### Next checked quantity arithmetic leaf
 
 C may implement new TR-quantity-arithmetic.ts and its focused runtime test under the existing
