@@ -60,9 +60,13 @@ would infringe.
 
 ## 6. How to accept
 
-Post this sentence in the description of, or a comment on, your first pull request:
+Post this sentence, exactly as written, in the description of or a comment on your first pull
+request, from the GitHub account that authored it:
 
 > I have read the Tao Contributor License Agreement, version 1.0, and I agree to it.
 
-A pull request is not merged until its author has accepted. If You contribute on behalf of a company,
-say so in the same comment and name the company.
+Posting it is Your signature: You agree that it has the same effect as signing this agreement by
+hand. It covers that pull request and every later Contribution. The repository's "Contributor
+agreement" check finds it and holds every pull request whose author has not posted it, and nothing is
+merged while that check is failing. If You contribute on behalf of a company, say so in the same
+comment and name the company.

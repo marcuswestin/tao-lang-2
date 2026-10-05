@@ -29,8 +29,10 @@ releases; it waives none of these publication or licensing prerequisites.
 - [ ] **Re-run the full-history credential scan** (`P22`, clean as of 2026-09-20) over the history
       being pushed, and revoke anything it finds.
 - [x] **Apply the app-safe licence structure** (`R1`, applied 2026-10-04: AGPL-3.0 with the Tao
-      Application Exception, and the contributor licence agreement; `P24`). Remaining: ship
-      `LICENSE-APP-EXCEPTION.md` inside each published runtime package.
+      Application Exception, the contributor licence agreement enforced by a pull request check,
+      CC BY 4.0 for `Docs/`, and a trademark policy; the standalone payload carries the licence
+      texts; `P24`). Remaining: register the marks, and require the "Contributor agreement" check
+      on `main` once the repository is public.
 - [ ] **No login name or home directory in the generated harness config** (`P17`, `P18`): the
       Watchman socket rule in `.claude/settings.json` and `.codex/config.toml`.
 - [ ] **Register the public identifiers.** Most cannot be changed once published or once users

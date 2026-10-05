@@ -23,7 +23,8 @@ it never reaches into an app because Tao was used to build it.
 - **"Runtime Material"** is any part of Tao that Tao's tools compile, copy, bundle, link, or generate
   into an application or its build output in the ordinary course of building, running, testing, or
   shipping it. It includes at least `packages/apps/runtime`, `packages/apps/stdlib`,
-  `packages/apps/expo-host`, `packages/apps/native-bindings`, and `packages/apps/providers`.
+  `packages/apps/expo-host`, `packages/apps/native-bindings`, `packages/apps/providers`, and the parts
+  of `packages/shared` that Tao's tools carry into an application.
 - **"Example Material"** is the code samples in `Docs/`, the project starters in `Apps/Starters`, and
   any template Tao's tools copy into a new project.
 - **"Excluded Work"** is software whose primary purpose is to provide the functionality of Tao

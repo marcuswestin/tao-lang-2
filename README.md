@@ -135,8 +135,13 @@ runtime and standard library that Tao builds into your app.
 **Tao itself is under the GNU Affero General Public License v3.0** ([LICENSE](LICENSE)). Anyone may
 use, study, and change Tao, but whoever distributes a changed Tao, or offers one to users over a
 network, must share those changes under the same licence. That includes changes made to the runtime
-inside an app; it does not include the rest of the app. Tao's name and logo are not licensed.
+inside an app; it does not include the rest of the app.
+
+**Documentation** in [`Docs/`](Docs/) is under [CC BY 4.0](Docs/LICENSE): reuse it however you like,
+with credit. **Tao's names and logo** are not covered by any of these licences; see the
+[trademark policy](TRADEMARKS.md).
 
 **Contributing:** a pull request is merged once its author has accepted the
-[Contributor License Agreement](CLA.md), which leaves you the copyright in your contribution and
+[Contributor License Agreement](CLA.md) by posting the one sentence it asks for; a check on every
+pull request holds it until then. The agreement leaves you the copyright in your contribution and
 lets the maintainer license Tao, your contribution included, under any terms.

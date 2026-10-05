@@ -55,7 +55,8 @@ worth one of the forms above.
 
 A pull request is merged once its author has accepted the
 [Tao Contributor License Agreement](../CLA.md). Post this in the pull request's description or a
-comment, once; it covers every later contribution too:
+comment, once; it covers every later contribution too, and the "Contributor agreement" check on your
+pull request turns green when it finds it:
 
 > I have read the Tao Contributor License Agreement, version 1.0, and I agree to it.
 
