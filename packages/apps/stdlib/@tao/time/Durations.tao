@@ -7,6 +7,10 @@ public type Timer is {
 }
 
 public type Time is {
+   static func Now() -> time {
+      return Now() from ./Durations.ts
+   }
+
    static func StartTimer() -> Timer {
       return StartTimer() from ./Durations.ts
    }

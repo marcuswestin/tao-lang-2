@@ -7,6 +7,8 @@ import type { SampleDuration as SampleDurationContract } from './Durations.tao'
 
 const timers = new WeakMap<object, TaoTimer<Duration>>()
 
+export const Now = (): number => TR.now()
+
 export const StartTimer = (): TaoTimer<Duration> => {
   const timer = startTimer(types.Duration.Factory, nowMilliseconds)
   timers.set(timer, timer)
