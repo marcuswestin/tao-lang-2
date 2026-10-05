@@ -9,6 +9,27 @@ import {
 } from '../project-tooling-src/ProjectWatchPaths'
 
 Describe('project watch paths', () => {
+  Test('watches exact maintained inputs and native output through generated and installed ignores', () => {
+    const root = FS.resolvePath('project')
+    const input = FS.resolvePath('host/node_modules/expo-file-system/build/index.d.ts')
+    const output = FS.resolvePath('.tao-ts/native-bindings/files/Bindings.ts', root)
+    const native = new Set([input, output, FS.resolvePath('host')])
+    const empty = new Set<string>()
+    for (const path of [input, output]) {
+      Expect(ignoredProjectWatchPath(path, root, empty, empty, empty, empty, native)).toBe(false)
+      for (const event of ['add', 'change', 'unlink']) {
+        Expect(isProjectWatchInput(event, path, root, empty, empty, empty, empty, native)).toBe(true)
+      }
+    }
+    Expect(ignoredProjectWatchPath(FS.dirname(input), root, empty, empty, empty, empty, native)).toBe(false)
+    Expect(
+      isProjectWatchInput('change', FS.resolvePath('.tao-ts/Other.ts', root), root, empty, empty, empty, empty, native),
+    ).toBe(false)
+    Expect(
+      isProjectWatchInput('change', FS.resolvePath('host/.tao-ts/Other.ts'), root, empty, empty, empty, empty, native),
+    ).toBe(false)
+  })
+
   Test('watches only exact external config inputs and missing targets', () => {
     const root = FS.resolvePath('project')
     const external = FS.resolvePath('shared/config.json')

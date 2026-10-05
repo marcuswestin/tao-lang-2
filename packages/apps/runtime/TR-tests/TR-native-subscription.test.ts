@@ -1,5 +1,5 @@
 import TR from '@runtime/TR'
-import { Describe, Expect, Test } from '@shared/test'
+import { Deferred, Describe, Expect, Test } from '@shared/test'
 import React from 'react'
 import { TaoActionOwner } from '../TaoRuntime-src/TR-native-subscription'
 import { runtimeTestOverrideSlot } from '../TaoRuntime-src/TR-test-override'
@@ -14,6 +14,43 @@ const hooks = runtimeTestOverrideSlot({
 })
 
 Describe('native subscription ownership', () => {
+  Test('owns structural subscription methods and cancels queued delivery with one native cleanup', async () => {
+    const owner = new TaoActionOwner()
+    const held = Deferred()
+    const seen: string[] = []
+    let removed = 0
+    let token!: ReturnType<typeof TR.NativeSubscription>
+    const callback = {
+      prefix: 'receiver',
+      invoke(value: TR.Value<string>) {
+        seen.push(`${this.prefix}:${value.jsValue}`)
+      },
+    }
+    await TR.Action(() => {
+      token = TR.NativeSubscription()
+      token.attach(() => {
+        removed += 1
+      })
+    }, { owner }).jsValue.invoke()
+    token.invoke(callback, TR.Value('accepted'))
+    Expect(seen).toEqual(['receiver:accepted'])
+    const blocked = TR.Action(async () => await held.promise).jsValue.invoke()
+    try {
+      token.invoke(callback, TR.Value('queued'))
+      owner.dispose()
+      token.remove()
+      token.invoke(callback, TR.Value('late'))
+    } finally {
+      held.resolve()
+    }
+    await blocked
+    await TR.Action(() => {}).jsValue.invoke()
+    Expect(seen).toEqual(['receiver:accepted'])
+    Expect(removed).toBe(1)
+    Expect(token.active).toBe(false)
+    Expect(owner.subscriptions.size).toBe(0)
+  })
+
   Test('keeps a hook owner across renders and removes its listeners on unmount', async () => {
     const ref: { current: TaoActionOwner | undefined } = { current: undefined }
     let cleanup: (() => void) | undefined

@@ -63,13 +63,19 @@ async function runRetry(
 }
 
 Describe('contended failure confirmation', () => {
-  Test('preserves scoped native consent on confirmation and dependent resumption', async () => {
+  Test('preserves scoped native consent and flat logs on confirmation and dependent resumption', async () => {
     const root = await mkTestDir('tao-contention-consent-')
     const location = RunArtifacts.locate({ lane: 'verify', repositoryRoot: root })
-    const compile = failedState('compile', 'timed out after 5000ms')
-    const native = WorkGraph.createState({ name: 'native', needs: ['compile'], run: { args: [], command: 'true' } })
+    const compileName = 'language/project-tooling:receipts'
+    const nativeName = 'native:dependent'
+    const compile = failedState(compileName, 'timed out after 5000ms')
+    const native = WorkGraph.createState({
+      name: nativeName,
+      needs: [compileName],
+      run: { args: [], command: 'true' },
+    })
     native.status = 'skipped'
-    native.reason = 'dependency failed: compile'
+    native.reason = `dependency failed: ${compileName}`
     const states = [compile, native]
     await RunArtifacts.assignLogPaths(states, location)
     const lane = await MachineLanes.acquire({
@@ -90,11 +96,18 @@ Describe('contended failure confirmation', () => {
           observed.push(state.name)
           Expect(context.env[UiVisibility.STUDIO_ENV_KEY]).toBe('true')
           Expect(context.env['TAO_TEST_NO_CACHE']).toBe('true')
-          return { exitCode: 0 }
+          return { exitCode: 0, output: state.name }
         },
       })
-      Expect(observed).toEqual(['compile', 'native'])
+      Expect(observed).toEqual([compileName, nativeName])
       Expect(native.status).toBe('passed')
+      await RunArtifacts.finishRun({ location, recordTimings: false, states, summary: { ok: true } })
+      Expect(await FS.readText(FS.resolvePath('language_project-tooling_receipts.retry.log', location.logRoot)))
+        .toBe(compileName)
+      Expect(await FS.readText(FS.resolvePath('native_dependent.resume.log', location.logRoot))).toBe(nativeName)
+      Expect(await FS.readText(FS.resolvePath('language_project-tooling_receipts.initial.log', location.logRoot)))
+        .toBe('timed out after 5000ms')
+      Expect(await FS.isDirectory(FS.resolvePath('language', location.logRoot))).toBe(false)
     } finally {
       await lane.release()
       await FS.remove(root)

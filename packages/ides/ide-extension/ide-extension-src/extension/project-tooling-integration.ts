@@ -3,6 +3,7 @@ import { type DiagnosticRange, Errors, FS } from '@shared'
 import * as vscode from 'vscode'
 import {
   hideToolingPatterns,
+  nativeOriginMappings,
   originCommandUri,
   originMappingsForPath,
   showToolingPatterns,
@@ -133,19 +134,46 @@ export async function startProjectTooling(context: vscode.ExtensionContext): Pro
     })
   }))
   subscriptions.push(vscode.languages.registerDocumentLinkProvider(
-    [{ scheme: 'file', language: 'typescript' }, { scheme: 'file', language: 'typescriptreact' }],
+    [{ scheme: 'file', language: 'tao' }, { scheme: 'file', language: 'typescript' }, {
+      scheme: 'file',
+      language: 'typescriptreact',
+    }],
     {
       provideDocumentLinks(document) {
         const links: vscode.DocumentLink[] = []
+        const nativeLinks = new Set<string>()
         for (const root of publishedPaths.keys()) {
           const result = session.result(root)
-          if (result === undefined || !result.contractPaths.includes(document.uri.fsPath)) {
+          if (result === undefined) {
             continue
           }
-          for (const mapping of originMappingsForPath(document.uri.fsPath, result.sourceMappings)) {
+          const taoMappings = result.contractPaths.includes(document.uri.fsPath)
+            ? originMappingsForPath(document.uri.fsPath, result.sourceMappings)
+            : []
+          for (const mapping of taoMappings) {
             const target = vscode.Uri.parse(originCommandUri(mapping.sourcePath, mapping.sourceRange))
             const link = new vscode.DocumentLink(toRange(mapping.generatedRange), target)
             link.tooltip = result.status === 'stale' ? 'Open Tao origin (contracts stale)' : 'Open Tao origin'
+            links.push(link)
+          }
+          for (
+            const mapping of nativeOriginMappings(
+              document.uri.fsPath,
+              document.getText(),
+              result.nativeBindingOutputPaths,
+            )
+          ) {
+            const key =
+              `${mapping.generatedRange.start.line}:${mapping.generatedRange.start.character}:${mapping.sourcePath}`
+            if (nativeLinks.has(key)) {
+              continue
+            }
+            nativeLinks.add(key)
+            const target = vscode.Uri.parse(originCommandUri(mapping.sourcePath, mapping.sourceRange))
+            const link = new vscode.DocumentLink(toRange(mapping.generatedRange), target)
+            link.tooltip = result.status === 'stale'
+              ? 'Open pinned native declaration (bindings stale)'
+              : 'Open pinned native declaration'
             links.push(link)
           }
         }

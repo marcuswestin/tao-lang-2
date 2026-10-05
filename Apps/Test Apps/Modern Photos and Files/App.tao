@@ -1,0 +1,27 @@
+use StackNav from @tao/nav
+use Button, Col, TextMultiline from @tao/ui
+use FilesAcceptance from ./Files.tao
+use PhotosAcceptance from ./Photos.tao
+
+app ModernPhotosFiles {
+   id "modern-photos-files-acceptance"
+   version "0.1.0"
+   name "Modern Photos and Files"
+   Navigator StackNav {
+      Initial AcceptanceHome
+}  }
+
+scene AcceptanceHome() {
+   Title "Modern Photos and Files"
+   render Col() {
+      TextMultiline("Generated native APIs. Effects run only when you press a control.")
+
+      #files
+      Button("Files acceptance") {
+         on press -> { present FilesAcceptance() }
+      }
+
+      #photos
+      Button("Photos acceptance") {
+         on press -> { present PhotosAcceptance() }
+}  }  }

@@ -104,6 +104,11 @@ export async function runTaoInstall(
       environments: installEnvironmentsByProjectRoot(previous.installs?.environments ?? {}),
       local: { ...previous.installs?.local },
     }
+    await progress.run('dependency link verification', 'Verifying managed dependency links', async () => {
+      for (const environment of environments) {
+        await verifyEnvironmentLinks(root, environment, installs)
+      }
+    })
     for (const environment of environments) {
       await progress.run(
         `dependency preparation for ${FS.displayPath(environment.projectRoot)}`,
@@ -249,7 +254,15 @@ async function installEnvironment(
     await progress.run(
       `dependency link for ${FS.displayPath(environment.projectRoot)}`,
       `Linking dependencies for ${FS.displayPath(environment.projectRoot)}`,
-      () => ensureManagedLink(modulesRoot, link, `generated dependency namespace '${namespace}'`),
+      () =>
+        ensureManagedLink(
+          modulesRoot,
+          link,
+          `generated dependency namespace '${namespace}'`,
+          previous !== undefined && Object.keys(previous.npm).length > 0
+            ? ManagedInstallEnvironment.legacyModulesRoot(consumerRoot, namespace)
+            : undefined,
+        ),
     )
   }
 }
@@ -268,12 +281,16 @@ async function installNpmAlias(
   const directory = ManagedInstallEnvironment.packageRoot(consumerRoot, namespace, item.alias)
   const linkPath = FS.resolvePath(item.alias, modulesRoot)
   const installed = FS.resolvePath(`node_modules/${item.alias}`, directory)
+  const legacyInstalled = FS.resolvePath(
+    `node_modules/${item.alias}`,
+    ManagedInstallEnvironment.legacyPackageRoot(consumerRoot, namespace, item.alias),
+  )
   await progress.run(
     `npm package preparation for ${packageLabel}`,
     `Preparing npm package ${packageLabel}`,
     async () => {
       if (owned) {
-        await verifyOwnedLink(linkPath, installed, item.alias)
+        await verifyOwnedLink(linkPath, installed, item.alias, legacyInstalled)
       } else if (await FS.exists(linkPath) || await FS.isSymbolicLink(linkPath)) {
         Errors.throwUserInput(`Cannot install npm alias '${item.alias}': ${linkPath} is not Tao-managed.`)
       }
@@ -304,7 +321,8 @@ async function installNpmAlias(
     `Linking npm alias ${item.alias}`,
     async () => {
       const manifest = await FS.readJson<{ version: string }>(FS.resolvePath('package.json', installed))
-      if (!await FS.isSymbolicLink(linkPath)) {
+      const legacy = owned && await verifyOwnedLink(linkPath, installed, item.alias, legacyInstalled)
+      if (legacy || !await FS.isSymbolicLink(linkPath)) {
         await FS.replaceSymlink(installed, linkPath)
       }
       return manifest.version
@@ -313,24 +331,73 @@ async function installNpmAlias(
   return { name: item.name, requested: item.requested, version: installedVersion }
 }
 
-async function verifyOwnedLink(linkPath: string, expected: string, alias: string): Promise<void> {
-  if (!await FS.exists(linkPath) && !await FS.isSymbolicLink(linkPath)) {
-    return
+async function verifyEnvironmentLinks(
+  consumerRoot: string,
+  environment: DependencyEnvironment,
+  installs: InstallsLock,
+): Promise<void> {
+  const namespace = environment.namespace
+  const previous = installs.environments[FS.relativePath(consumerRoot, environment.projectRoot) || '.']
+  const modulesRoot = ManagedInstallEnvironment.modulesRoot(consumerRoot, environment.projectRoot, namespace)
+  for (const item of environment.npm) {
+    const linkPath = FS.resolvePath(item.alias, modulesRoot)
+    if (previous?.npm[item.alias] !== undefined) {
+      await verifyOwnedLink(
+        linkPath,
+        FS.resolvePath(
+          `node_modules/${item.alias}`,
+          ManagedInstallEnvironment.packageRoot(consumerRoot, namespace, item.alias),
+        ),
+        item.alias,
+        FS.resolvePath(
+          `node_modules/${item.alias}`,
+          ManagedInstallEnvironment.legacyPackageRoot(consumerRoot, namespace, item.alias),
+        ),
+      )
+    } else if (await FS.exists(linkPath) || await FS.isSymbolicLink(linkPath)) {
+      Errors.throwUserInput(`Cannot install npm alias '${item.alias}': ${linkPath} is not Tao-managed.`)
+    }
   }
-  const existing = await FS.entryMetadata(linkPath)
-  if (existing.kind !== 'symlink' || FS.resolvePath(existing.linkTarget!, FS.dirname(linkPath)) !== expected) {
-    Errors.throwUserInput(`Cannot update npm alias '${alias}': ${linkPath} is no longer Tao-managed.`)
+  if (FS.resolvePath(environment.projectRoot) !== FS.resolvePath(consumerRoot) && environment.npm.length > 0) {
+    await verifyManagedLink(
+      modulesRoot,
+      ManagedInstallEnvironment.generatedModulesLink(consumerRoot, namespace),
+      `generated dependency namespace '${namespace}'`,
+      previous !== undefined && Object.keys(previous.npm).length > 0
+        ? ManagedInstallEnvironment.legacyModulesRoot(consumerRoot, namespace)
+        : undefined,
+    )
   }
 }
 
-async function ensureManagedLink(target: string, link: string, label: string): Promise<void> {
+/** A dangling link remains owned only when its lexical target matches the exact managed path. */
+async function verifyOwnedLink(linkPath: string, expected: string, alias: string, legacy: string): Promise<boolean> {
+  if (!await FS.exists(linkPath) && !await FS.isSymbolicLink(linkPath)) {
+    return false
+  }
+  const existing = await FS.entryMetadata(linkPath)
+  const target = existing.kind === 'symlink' ? FS.resolvePath(existing.linkTarget!, FS.dirname(linkPath)) : undefined
+  if (target !== expected && target !== legacy) {
+    Errors.throwUserInput(`Cannot update npm alias '${alias}': ${linkPath} is no longer Tao-managed.`)
+  }
+  return target === legacy
+}
+
+async function verifyManagedLink(target: string, link: string, label: string, legacy?: string): Promise<boolean> {
   if (await FS.exists(link) || await FS.isSymbolicLink(link)) {
     const existing = await FS.entryMetadata(link)
-    if (existing.kind !== 'symlink' || FS.resolvePath(existing.linkTarget!, FS.dirname(link)) !== target) {
+    const resolved = existing.kind === 'symlink' ? FS.resolvePath(existing.linkTarget!, FS.dirname(link)) : undefined
+    if (existing.kind !== 'symlink' || (resolved !== target && resolved !== legacy)) {
       Errors.throwUserInput(`Cannot update ${label}: ${link} is not Tao-managed.`)
     }
+    return resolved === legacy
   }
-  if (!await FS.isSymbolicLink(link)) {
+  return false
+}
+
+async function ensureManagedLink(target: string, link: string, label: string, legacy?: string): Promise<void> {
+  const old = await verifyManagedLink(target, link, label, legacy)
+  if (old || !await FS.isSymbolicLink(link)) {
     await FS.replaceSymlink(target, link)
   }
 }

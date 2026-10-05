@@ -7,16 +7,16 @@ description: >-
 targets: [codexcli, claudecode, cursor]
 codexcli:
   model: gpt-6.1-sol
-  model_reasoning_effort: xhigh
+  model_reasoning_effort: medium
   sandbox_mode: read-only
   nickname_candidates: [Correctness, Regression, Coverage, Drift, Boundary, Verifier]
 claudecode:
   model: opus
-  effort: xhigh
+  effort: medium
   permissionMode: plan
   tools: Bash, Read, Skill
 cursor:
-  model: claude-opus-5-5[effort=high]
+  model: claude-opus-5-5[effort=medium]
   readonly: true
 ---
 

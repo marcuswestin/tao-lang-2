@@ -25,8 +25,18 @@ export function ignoredProjectWatchPath(
   configInputPaths: ReadonlySet<string> = new Set(),
   externalSidecarInputPaths: ReadonlySet<string> = new Set(),
   sidecarOwnershipInputPaths: ReadonlySet<string> = new Set(),
+  nativeBindingPaths: ReadonlySet<string> = new Set(),
+  nativeBindingAncestors?: ReadonlySet<string>,
 ): boolean {
   const absolute = FS.resolvePath(path)
+  if (
+    nativeBindingPaths.has(absolute)
+    || (nativeBindingAncestors === undefined
+      ? [...nativeBindingPaths].some(input => FS.pathIsWithin(input, absolute))
+      : nativeBindingAncestors.has(absolute))
+  ) {
+    return false
+  }
   if (isGeneratedWatchPath(absolute)) {
     return true
   }
@@ -63,6 +73,8 @@ export function isProjectWatchInput(
   configInputPaths: ReadonlySet<string> = new Set(),
   externalSidecarInputPaths: ReadonlySet<string> = new Set(),
   sidecarOwnershipInputPaths: ReadonlySet<string> = new Set(),
+  nativeBindingPaths: ReadonlySet<string> = new Set(),
+  nativeBindingAncestors?: ReadonlySet<string>,
 ): boolean {
   if (
     ignoredProjectWatchPath(
@@ -72,20 +84,25 @@ export function isProjectWatchInput(
       configInputPaths,
       externalSidecarInputPaths,
       sidecarOwnershipInputPaths,
+      nativeBindingPaths,
+      nativeBindingAncestors,
     )
   ) {
     return false
   }
   if (event === 'addDir' || event === 'unlinkDir') {
     const absolute = FS.resolvePath(path)
-    return sidecarOwnershipInputPaths.has(absolute)
+    return nativeBindingPaths.has(absolute) || sidecarOwnershipInputPaths.has(absolute)
       || FS.pathIsWithin(absolute, projectRoot)
       || [...dependencyRoots].some(root => FS.pathIsWithin(absolute, root))
   }
   if (event !== 'add' && event !== 'change' && event !== 'unlink') {
     return false
   }
-  if (configInputPaths.has(FS.resolvePath(path)) || externalSidecarInputPaths.has(FS.resolvePath(path))) {
+  if (
+    nativeBindingPaths.has(FS.resolvePath(path))
+    || configInputPaths.has(FS.resolvePath(path)) || externalSidecarInputPaths.has(FS.resolvePath(path))
+  ) {
     return true
   }
   return SOURCE_EXTENSIONS.has(FS.extname(path))

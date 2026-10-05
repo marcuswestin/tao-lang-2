@@ -687,6 +687,9 @@ async function synchronizedFiles(
       continue
     }
     for (const path of await walkedFiles(root)) {
+      if (isFileMutationAuxiliaryPath(path)) {
+        continue
+      }
       const relative = relativePath(root, path)
       files.push({ fileSetIndex: index, label: `${index}/${relative}`, path, relative, root })
     }
@@ -917,6 +920,13 @@ function commonPathAncestorOf(paths: readonly string[]): string {
     }
   }
   return ancestor
+}
+
+/** Mutation ownership and synchronization sidecars are coordination state, never source inputs. */
+export function isFileMutationAuxiliaryPath(path: string): boolean {
+  const name = basename(path)
+  return /\.tao-file-mutation\.lock(?:$|\.reclaim$|\.(?:owner|stale|release)-[^/]+$)/u.test(name)
+    || /\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.\d+\.(?:tmp|restore)$/u.test(name)
 }
 
 /**

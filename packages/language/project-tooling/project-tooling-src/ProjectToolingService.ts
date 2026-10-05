@@ -1,6 +1,6 @@
-import { Packages } from '@ast-utils'
+import { Packages, Type } from '@ast-utils'
 import { CompilerDependencies, type DependencyEnvironment } from '@compiler'
-import { BridgeMetadata } from '@compiler/bridge-metadata'
+import { BridgeMetadata, type BridgeModule, type BridgeTypeOriginResolver } from '@compiler/bridge-metadata'
 import { inspectSidecarSourceGraph, type SidecarSourceGraphInspection } from '@compiler/sidecar-source-graph'
 import { discoverProjectTaoFiles, Workspace } from '@compiler/workspace'
 import {
@@ -21,6 +21,7 @@ import {
   ProjectLocal,
   ReleaseCapabilities,
 } from '@shared'
+import { inspectMaintainedNativeBindings, readMaintainedNativeBridgeTypeOrigins } from 'tao-native-bindings'
 import { collectProjectDependencySnapshots, resolveRelativeSource } from './ProjectDependencySnapshots'
 import { ProjectHostModuleSession } from './ProjectHostModules'
 import { validateManagedDependencyEnvironments } from './ProjectManagedDependencies'
@@ -114,6 +115,10 @@ function profileTime<Result>(
   return profile === undefined ? action() : profile.time(name, action)
 }
 
+const ProjectNativeBindingValidationMessages = {
+  changedDuringRefresh: 'Maintained native bindings changed during project refresh. Refresh the project again.',
+} as const
+
 /** ProjectTooling refreshes saved project files and owns their generated TypeScript publication. */
 export const ProjectTooling: ProjectToolingService = {
   async refresh(inputRoot, options) {
@@ -122,8 +127,16 @@ export const ProjectTooling: ProjectToolingService = {
   async watch(root, options) {
     const projectRoot = await findProjectRoot(root) ?? FS.resolvePath(root)
     const { startProjectFileWatch } = await import('./ProjectFileWatch')
-    const receipt = await FS.isDirectory(FS.resolvePath('.tao', projectRoot))
-      ? new ProjectRefreshReceipt(projectRoot, (await Packages.createContext(projectRoot)).stdlibRoot)
+    const inspected = await inspectMaintainedNativeBindings(options.nativeBindings)
+    const receipt = inspected.status === 'fresh' && await FS.isDirectory(FS.resolvePath('.tao', projectRoot))
+      ? new ProjectRefreshReceipt(
+        projectRoot,
+        (await Packages.createContext(projectRoot, {
+          ...(options.nativeBindings?.stdlibRoot === undefined
+            ? {}
+            : { stdlibRoot: options.nativeBindings.stdlibRoot }),
+        })).stdlibRoot,
+      )
       : undefined
     const retained = typeScriptSessions.get(projectRoot)
       ?? { references: 0, session: new ProjectTypeScriptProgramSession(), hostModules: new ProjectHostModuleSession() }
@@ -180,6 +193,63 @@ async function refreshProject(
   try {
     const root = await findProjectRoot(inputRoot) ?? FS.resolvePath(inputRoot)
     profileRoot = root
+    const nativeBindings = await inspectMaintainedNativeBindings(options.nativeBindings)
+    if (nativeBindings.status === 'stale') {
+      receipt?.clear()
+      hostModuleSession?.clear()
+      const previous = lastGoodResults.get(root)
+      return result(
+        root,
+        'stale',
+        nativeBindings.diagnostics,
+        previous?.contractPaths ?? [],
+        previous?.sourceMappings ?? [],
+        previous?.dependencyRoots ?? [],
+        previous?.configInputPaths ?? [],
+        previous?.externalSidecarInputPaths ?? [],
+        previous?.sidecarOwnershipInputPaths ?? [],
+        [],
+        nextRevision(root),
+        nativeBindings,
+      )
+    }
+    let typeOriginResolver: BridgeTypeOriginResolver
+    try {
+      const origins = await readMaintainedNativeBridgeTypeOrigins({
+        ...options.nativeBindings,
+        inspection: nativeBindings,
+      })
+      const bySource = new Map<string, Map<string, typeof origins[number]>>()
+      for (const origin of origins) {
+        const types = bySource.get(origin.sourcePath) ?? new Map()
+        types.set(origin.name, origin)
+        bySource.set(origin.sourcePath, types)
+      }
+      typeOriginResolver = declaration =>
+        AST.isTypeDeclaration(declaration)
+          ? bySource.get(AST.getDocument(declaration).uri.path)?.get(declaration.name)
+          : undefined
+    } catch (error) {
+      if (!(error instanceof Errors.UserInputError)) {
+        throw error
+      }
+      receipt?.clear()
+      const previous = lastGoodResults.get(root)
+      return result(
+        root,
+        'stale',
+        [{ severity: 'error', source: 'compiler', message: error.messageForUser }],
+        previous?.contractPaths ?? [],
+        previous?.sourceMappings ?? [],
+        previous?.dependencyRoots ?? [],
+        previous?.configInputPaths ?? [],
+        previous?.externalSidecarInputPaths ?? [],
+        previous?.sidecarOwnershipInputPaths ?? [],
+        [],
+        nextRevision(root),
+        nativeBindings,
+      )
+    }
     if (force) {
       hostModuleSession?.clear()
     }
@@ -199,6 +269,7 @@ async function refreshProject(
         lastGoodResults.get(root)?.sidecarOwnershipInputPaths ?? [],
         [],
         nextRevision(root),
+        nativeBindings,
       )
       status = missingProjectResult.status
       revision = missingProjectResult.revision
@@ -214,7 +285,11 @@ async function refreshProject(
         if (force) {
           hostModuleSession?.clear()
         }
-        const before = await profileTime(profile, 'audit-before', async () => await receipt?.audit(options, force))
+        const before = await profileTime(
+          profile,
+          'audit-before',
+          async () => await receipt?.audit(options, force, nativeBindings.identity),
+        )
         const auditChangedPaths: string[] = []
         const candidate = force
           ? undefined
@@ -229,6 +304,7 @@ async function refreshProject(
                   root,
                   options,
                   candidate,
+                  nativeBindings,
                   receipt!,
                   session,
                   auditChangedPaths,
@@ -253,6 +329,8 @@ async function refreshProject(
             refreshUnderLock(
               root,
               options,
+              nativeBindings,
+              typeOriginResolver,
               session,
               receipt,
               before,
@@ -265,6 +343,14 @@ async function refreshProject(
       },
     )
     if (refreshed.status === 'fresh') {
+      const confirmed = await inspectMaintainedNativeBindings(options.nativeBindings)
+      if (confirmed.status === 'stale' || confirmed.identity !== nativeBindings.identity) {
+        receipt?.clear()
+        status = 'stale'
+        const stale = staleNativeResult(root, confirmed)
+        revision = stale.revision
+        return stale
+      }
       lastGoodResults.set(root, refreshed)
     }
     status = refreshed.status
@@ -278,9 +364,37 @@ async function refreshProject(
   }
 }
 
+function staleNativeResult(
+  root: string,
+  nativeBindings: Awaited<ReturnType<typeof inspectMaintainedNativeBindings>>,
+): ProjectToolingResult {
+  const previous = lastGoodResults.get(root)
+  return result(
+    root,
+    'stale',
+    nativeBindings.diagnostics.length > 0 ? nativeBindings.diagnostics : [{
+      severity: 'error',
+      source: 'compiler',
+      code: 'maintained-native-bindings-stale',
+      message: ProjectNativeBindingValidationMessages.changedDuringRefresh,
+    }],
+    previous?.contractPaths ?? [],
+    previous?.sourceMappings ?? [],
+    previous?.dependencyRoots ?? [],
+    previous?.configInputPaths ?? [],
+    previous?.externalSidecarInputPaths ?? [],
+    previous?.sidecarOwnershipInputPaths ?? [],
+    [],
+    nextRevision(root),
+    nativeBindings,
+  )
+}
+
 async function refreshUnderLock(
   root: string,
   options: ProjectToolingOptions,
+  nativeBindings: Awaited<ReturnType<typeof inspectMaintainedNativeBindings>>,
+  typeOriginResolver: BridgeTypeOriginResolver,
   typeScriptSession?: ProjectTypeScriptProgramSession,
   receipt?: ProjectRefreshReceipt,
   before?: Awaited<ReturnType<ProjectRefreshReceipt['audit']>>,
@@ -313,6 +427,7 @@ async function refreshUnderLock(
       previous?.sidecarOwnershipInputPaths ?? [],
       [],
       nextRevision(root),
+      nativeBindings,
     )
   }
   const { sourcePaths, sourceOwners, entryPaths } = await profileTime(profile, 'source-discovery-owners', async () => {
@@ -343,16 +458,22 @@ async function refreshUnderLock(
     }
   }
   let planned: ProjectPlannedOutput[] | undefined = []
+  let nativeContracts: readonly BridgeModule[] = []
   let finishPlanning: (() => void) | undefined
   if (entryPaths.length > 0) {
-    const workspace = await openWorkspace(root, workspaces)
+    const workspace = await openWorkspace(root, options, nativeBindings.identity, workspaces)
     let validation = await profileTime(profile, 'workspace-validation', () => workspace.validateFiles(entryPaths))
     consumeFiles(validation.files)
     diagnostics.push(...validation.diagnostics)
     if (Diagnostics.hasError(diagnostics)) {
       planned = undefined
     } else {
-      const context = await profileTime(profile, 'package-context', () => Packages.createContext(root))
+      const context = await profileTime(profile, 'package-context', () =>
+        Packages.createContext(root, {
+          ...(options.nativeBindings?.stdlibRoot === undefined
+            ? {}
+            : { stdlibRoot: options.nativeBindings.stdlibRoot }),
+        }))
       contextFingerprint = ProjectRefreshReceipt.contextFingerprint(context)
       finishPlanning = profile?.start('project-graph-contract-planning')
       const graph = Packages.createResolver(context).projectGraph({
@@ -446,10 +567,14 @@ async function refreshUnderLock(
             validation.files.filter(file => contractSourcePaths.has(file.path)),
             root,
             origins,
-            { runtimeRoot: options.runtimeRoot, selectedStatementsBySourcePath: statementsBySourcePath },
+            {
+              runtimeRoot: options.runtimeRoot,
+              selectedStatementsBySourcePath: statementsBySourcePath,
+              typeOriginResolver,
+            },
           )
         let modules = collectContracts()
-        let snapshots = await collectProjectDependencySnapshots(root, modules, origins)
+        let snapshots = await collectProjectDependencySnapshots(root, modules, origins, nativeBindings)
         let changed = true
         while (changed && !Diagnostics.hasError(diagnostics)) {
           changed = false
@@ -474,7 +599,9 @@ async function refreshUnderLock(
               const dependencyValidation = await profileTime(
                 profile,
                 'workspace-validation',
-                async () => await (await openWorkspace(dependencyRoot, workspaces)).validateFiles(paths),
+                async () =>
+                  await (await openWorkspace(dependencyRoot, options, nativeBindings.identity, workspaces))
+                    .validateFiles(paths),
               )
               consumeFiles(dependencyValidation.files)
               diagnostics.push(...dependencyValidation.diagnostics)
@@ -524,7 +651,7 @@ async function refreshUnderLock(
           }
           if (changed) {
             modules = collectContracts()
-            snapshots = await collectProjectDependencySnapshots(root, modules, origins)
+            snapshots = await collectProjectDependencySnapshots(root, modules, origins, nativeBindings)
           }
         }
         diagnostics.push(...snapshots.diagnostics)
@@ -538,6 +665,16 @@ async function refreshUnderLock(
         ))
         diagnostics.push(...await validateSelectedAppImports(root, graph.appRequirements))
         diagnostics.push(...await validateManagedDependencyEnvironments(root, environments))
+        const nativeStatements = reachedNativeStatements([...ownDeclarations], new Set(nativeBindings.outputPaths))
+        const nativeFiles = validation.files.filter(file => nativeStatements.has(file.path))
+        const nativeRoot = nativeFiles[0]?.path.split('/@tao/')[0]
+        if (nativeRoot !== undefined) {
+          nativeContracts = BridgeMetadata.collect(nativeFiles, nativeRoot, new Map(), {
+            runtimeRoot: options.runtimeRoot,
+            selectedStatementsBySourcePath: nativeStatements,
+            typeOriginResolver,
+          })
+        }
         planned = Diagnostics.hasError(diagnostics) ? undefined : [
           ...modules.map(module => ({
             path: module.path,
@@ -564,6 +701,29 @@ async function refreshUnderLock(
   )
   diagnostics.push(...config.diagnostics)
   const changedOutputPaths = [...auditChangedPaths, ...config.changedOutputPaths]
+  const confirmedNativeBindings = await inspectMaintainedNativeBindings(options.nativeBindings)
+  if (confirmedNativeBindings.status === 'stale' || confirmedNativeBindings.identity !== nativeBindings.identity) {
+    const previous = lastGoodResults.get(root)
+    return result(
+      root,
+      'stale',
+      confirmedNativeBindings.diagnostics.length > 0 ? confirmedNativeBindings.diagnostics : [{
+        severity: 'error',
+        source: 'compiler',
+        code: 'maintained-native-bindings-stale',
+        message: ProjectNativeBindingValidationMessages.changedDuringRefresh,
+      }],
+      previous?.contractPaths ?? [],
+      previous?.sourceMappings ?? [],
+      dependencyRoots,
+      previous?.configInputPaths ?? [],
+      previous?.externalSidecarInputPaths ?? [],
+      previous?.sidecarOwnershipInputPaths ?? [],
+      [],
+      nextRevision(root),
+      confirmedNativeBindings,
+    )
+  }
   const published = await profileTime(profile, 'output-publication', async () => {
     const published = await publishProjectOutputs(root, planned)
     changedOutputPaths.push(...published.changedOutputPaths)
@@ -583,6 +743,8 @@ async function refreshUnderLock(
       published.sourceMappings,
       options,
       hasExternalSidecars ? undefined : typeScriptSession,
+      nativeBindings,
+      nativeContracts,
     ))
   diagnostics.push(...typeCheck.diagnostics)
   const status = Diagnostics.hasError(diagnostics) ? 'stale' : 'fresh'
@@ -606,11 +768,14 @@ async function refreshUnderLock(
     [...sidecarOwnershipInputs].sort(),
     changedOutputPaths,
     nextRevision(root),
+    nativeBindings,
   )
   await profileTime(profile, 'receipt-remember', async () =>
     await receipt?.remember(before, options, {
       result: refreshed,
       nativeDiagnostics: typeCheck.diagnostics,
+      nativeIdentity: nativeBindings.identity,
+      nativeContracts,
       published,
       planned: planned ?? [],
       environments,
@@ -623,14 +788,19 @@ async function refreshUnderLock(
   return refreshed
 }
 
-async function openWorkspace(root: string, workspaces?: WatchedWorkspaces): Promise<Workspace> {
+async function openWorkspace(
+  root: string,
+  options: ProjectToolingOptions,
+  nativeIdentity: string,
+  workspaces?: WatchedWorkspaces,
+): Promise<Workspace> {
   if (!workspaces) {
-    return await Workspace.open(root)
+    return await Workspace.open(root, { nativeBindings: options.nativeBindings })
   }
-  const key = JSON.stringify([root, ReleaseCapabilities.fingerprint()])
+  const key = JSON.stringify([root, ReleaseCapabilities.fingerprint(), options.nativeBindings, nativeIdentity])
   let workspace = workspaces.get(key)
   if (!workspace) {
-    workspace = Workspace.open(root).catch(error => {
+    workspace = Workspace.open(root, { nativeBindings: options.nativeBindings }).catch(error => {
       workspaces.delete(key)
       throw error
     })
@@ -643,12 +813,17 @@ async function reuseReceipt(
   root: string,
   options: ProjectToolingOptions,
   candidate: ProjectRefreshReceiptData,
+  nativeBindings: Awaited<ReturnType<typeof inspectMaintainedNativeBindings>>,
   receipt: ProjectRefreshReceipt,
   session: ProjectTypeScriptProgramSession | undefined,
   auditChangedPaths: string[],
   profile?: ProjectToolingProfile,
   hostModuleSession?: ProjectHostModuleSession,
 ): Promise<ProjectToolingResult | undefined> {
+  if (candidate.nativeIdentity !== nativeBindings.identity) {
+    profile?.reject('native-identity-mismatch')
+    return undefined
+  }
   await ProjectIdentity.ensure(root)
   for (const dependencyRoot of candidate.result.dependencyRoots) {
     if (dependencyRoot !== root) {
@@ -656,7 +831,9 @@ async function reuseReceipt(
     }
   }
   if (candidate.discovery.contextFingerprint !== undefined || candidate.sidecars.size > 0) {
-    const context = await Packages.createContext(root)
+    const context = await Packages.createContext(root, {
+      ...(options.nativeBindings?.stdlibRoot === undefined ? {} : { stdlibRoot: options.nativeBindings.stdlibRoot }),
+    })
     if (
       candidate.discovery.contextFingerprint !== undefined
       && ProjectRefreshReceipt.contextFingerprint(context) !== candidate.discovery.contextFingerprint
@@ -719,8 +896,12 @@ async function reuseReceipt(
       candidate.published.sourceMappings,
       options,
       session,
+      nativeBindings,
+      candidate.nativeContracts,
     ))
-  if (!checked.cacheHit) {
+  // Native facade programs are checked in full on every replay; their reader-local
+  // declarations deliberately do not retain the ordinary program session.
+  if (!checked.cacheHit && candidate.nativeContracts.length === 0) {
     profile?.reject('native-miss')
     return undefined
   }
@@ -732,7 +913,7 @@ async function reuseReceipt(
     profile?.reject('config-input-mismatch')
     return undefined
   }
-  if (!await receipt.candidate(await receipt.audit(options))) {
+  if (!await receipt.candidate(await receipt.audit(options, false, nativeBindings.identity))) {
     profile?.reject('final-receipt-mismatch')
     return undefined
   }
@@ -929,6 +1110,50 @@ async function validateSelectedAppImports(
   return diagnostics
 }
 
+/** Follow semantic references without selecting unrelated standard capabilities. */
+function reachedNativeStatements(
+  declarations: readonly AST.Declaration[],
+  nativePaths: ReadonlySet<string>,
+): ReadonlyMap<string, readonly AST.Statement[]> {
+  const statements = new Map<string, AST.Statement[]>()
+  const reached = new Set<AST.Declaration>()
+  const queue = [...declarations]
+  const enqueue = (target: AST.Node | undefined): void => {
+    let current = target
+    while (current !== undefined) {
+      if (AST.isDeclaration(current) && AST.isTaoFile(current.$container)) {
+        queue.push(current)
+        break
+      }
+      current = current.$container
+    }
+  }
+  while (queue.length > 0) {
+    const declaration = queue.shift()!
+    if (reached.has(declaration)) {
+      continue
+    }
+    reached.add(declaration)
+    const path = AST.getDocument(declaration).uri.path
+    if (nativePaths.has(path)) {
+      const selected = statements.get(path) ?? []
+      selected.push(declaration)
+      statements.set(path, selected)
+    }
+    for (const node of [declaration, ...AST.streamAllContents(declaration)]) {
+      // Named type roots use semantic visibility rather than Langium references.
+      if (AST.isNamedTypeReference(node)) {
+        enqueue(Type.definitionOfReference(node))
+      }
+      for (const reference of AST.streamReferences(node)) {
+        const target = 'ref' in reference.reference ? reference.reference.ref : undefined
+        enqueue(target)
+      }
+    }
+  }
+  return statements
+}
+
 function nextRevision(root: string): number {
   const revision = (revisions.get(root) ?? 0) + 1
   revisions.set(root, revision)
@@ -947,6 +1172,7 @@ function result(
   sidecarOwnershipInputPaths: ProjectToolingResult['sidecarOwnershipInputPaths'],
   changedOutputPaths: ProjectToolingResult['changedOutputPaths'],
   revision: number,
+  nativeBindings: Awaited<ReturnType<typeof inspectMaintainedNativeBindings>>,
 ): ProjectToolingResult {
   return {
     root,
@@ -958,6 +1184,18 @@ function result(
     configInputPaths,
     externalSidecarInputPaths,
     sidecarOwnershipInputPaths,
+    nativeBindingInputPaths: [
+      ...new Set([
+        ...nativeBindings.inputPaths,
+        ...(status === 'stale' ? lastGoodResults.get(root)?.nativeBindingInputPaths ?? [] : []),
+      ]),
+    ].sort(),
+    nativeBindingOutputPaths: [
+      ...new Set([
+        ...nativeBindings.outputPaths,
+        ...(status === 'stale' ? lastGoodResults.get(root)?.nativeBindingOutputPaths ?? [] : []),
+      ]),
+    ].sort(),
     changedOutputPaths,
     revision,
   }

@@ -147,11 +147,41 @@ async function accept(release: string): Promise<void> {
               'stdlib/@tao/device/haptic/Haptic.tao',
               'stdlib/@tao/device/haptic/Haptic.ts',
               'modules/@tao/runtime/TaoRuntime-src/TR-haptic.ts',
+              'stdlib/@tao/device/files/Bindings.tao',
+              'stdlib/@tao/device/photos/Bindings.tao',
+              'stdlib/.tao-ts/native-bindings/files/Bindings.ts',
+              'stdlib/.tao-ts/native-bindings/photos/Bindings.ts',
+              'native-bindings-generator/maintained-native-bindings.ts',
+              'native-bindings-engine/node_modules/typescript/lib/typescript.js',
             ]
           ) {
             if (!await FS.isFile(FS.resolvePath(path, resources))) {
               Errors.throwUnexpected(`The installed resource bundle omitted ${path}.`)
             }
+          }
+        },
+      },
+      {
+        name: 'recover maintained native bindings with only installed resources',
+        run: async () => {
+          const resources = FS.resolvePath(`.tao/versions/${version}/resources`, home)
+          const hostModules = FS.resolvePath('host/node_modules', resources)
+          if (await FS.exists(hostModules)) {
+            Errors.throwUnexpected('Native recovery must run before host dependency installation.')
+          }
+          const files = ['files', 'photos'].map(capability =>
+            FS.resolvePath(`stdlib/.tao-ts/native-bindings/${capability}/Bindings.ts`, resources)
+          )
+          const previous = await Promise.all(files.map(path => FS.readText(path)))
+          await FS.remove(files[0]!)
+          await shell(home, 'tao bindings generate --maintained')
+          for (const [index, path] of files.entries()) {
+            if (await FS.readText(path) !== previous[index]) {
+              Errors.throwUnexpected('Installed native regeneration changed the pinned generated implementation.')
+            }
+          }
+          if (await FS.exists(hostModules)) {
+            Errors.throwUnexpected('Native declaration recovery unexpectedly installed host dependencies.')
           }
         },
       },
@@ -184,8 +214,7 @@ async function accept(release: string): Promise<void> {
         name: 'compile the installed starter',
         run: async () => {
           await shell(project, 'tao compile App.tao')
-          const installed = FS.resolvePath(`.tao/versions/${version}`, home)
-          const generated = FS.resolvePath('resources/host/_gen_tao-app/App.tsx', installed)
+          const generated = ProjectLocal.cacheResolve('_gen_tao-app/App.tsx', project)
           if (!await FS.isFile(generated)) {
             Errors.throwUnexpected(`tao compile reported success but wrote no ${generated}.`)
           }

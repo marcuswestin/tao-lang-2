@@ -1,0 +1,111 @@
+use AssetField, AssetMetadata, GetPermissionsAsync, GranularPermission, MediaType, PermissionResponseAccessPrivilegesAll, PermissionResponseAccessPrivilegesLimited, PermissionResponseAccessPrivilegesNone, QueryConstruct, QueryEqForAssetFieldMEDIATYPE, QueryExeForMetadata, QueryLimit, QueryOffset, QueryOrderBy, ReleaseQuery, RequestPermissionsAsync, SortDescriptor from @tao/device/photos
+use Button, Col, ScrollView, Text, TextMultiline from @tao/ui
+
+public
+scene PhotosAcceptance() {
+   Title "Photos acceptance"
+   state Status = "Ready"
+   state Permission = "Not checked"
+   state Access = "Not checked"
+   state Granted = false
+   state CanAskAgain = false
+   state Offset = 0
+   state Count = 0
+   state Assets is list of AssetMetadata = []
+   action CheckPermissions() {
+      let Result = do GetPermissionsAsync(GranularPermissions: [GranularPermission_Photo])
+      set Permission = when Result.Status {
+         GRANTED -> "granted"
+         UNDETERMINED -> "undetermined"
+         otherwise -> "denied"
+      }
+      set Access = "not reported"
+      if Result.AccessPrivileges == All {
+         set Access = "all"
+      }
+      if Result.AccessPrivileges == Limited {
+         set Access = "limited"
+      }
+      if Result.AccessPrivileges == None {
+         set Access = "none"
+      }
+      set Granted = Result.Granted
+      set CanAskAgain = Result.CanAskAgain
+   }
+   action RefreshPermissions() {
+      when do CheckPermissions() {
+         saved -> { set Status = "Permission check complete" }
+         error -> Message { set Status = "Permission check failed: { Message }" }
+   }  }
+   action AskPermission() {
+      do RequestPermissionsAsync(GranularPermissions: [GranularPermission_Photo])
+      do CheckPermissions()
+   }
+   action RequestPermission() {
+      when do AskPermission() {
+         saved -> { set Status = "Permission request complete" }
+         error -> Message { set Status = "Permission request failed: { Message }" }
+   }  }
+   action QueryPage() {
+      check Granted
+      let Query = do QueryConstruct()
+      do QueryEqForAssetFieldMEDIATYPE(Query, Value: IMAGE)
+      do QueryOrderBy(Query, SortDescriptors: SortDescriptor {
+         Key: CREATION_TIME,
+         Ascending: true
+      })
+      do QueryLimit(Query, Limit: 2)
+      do QueryOffset(Query, Offset: Offset)
+      let Result = do QueryExeForMetadata(Query)
+      set Assets = Result
+      set Count = Result.Count
+      do ReleaseQuery(Query)
+   }
+   action FirstPage() {
+      set Offset = 0
+      when do QueryPage() {
+         saved -> { set Status = "Photo query complete" }
+         error -> Message { set Status = "Photo query failed: { Message }" }
+   }  }
+   action NextPage() {
+      set Offset += 2
+      when do QueryPage() {
+         saved -> { set Status = "Photo query complete" }
+         error -> Message { set Status = "Photo query failed: { Message }" }
+   }  }
+   render ScrollView() {
+      Col() {
+         TextMultiline("Permissions are checked without prompting. Request access opens the platform consent flow. Queries only read existing photo metadata.")
+         TextMultiline("Status: { Status }")
+
+         #permission
+         Button("Check current permission") {
+            on press RefreshPermissions
+         }
+
+         #request
+         Button("Request photo access") {
+            on press RequestPermission
+         }
+         Text("Permission: { Permission }")
+         Text("Access: { Access }")
+         Text("Can ask again: { CanAskAgain }")
+
+         #firstPage
+         Button("Read first photo page", Disabled: not Granted) {
+            on press FirstPage
+         }
+
+         #nextPage
+         Button("Read next photo page", Disabled: not Granted) {
+            on press NextPage
+         }
+         Text("Offset: { Offset }")
+         Text("Returned photos: { Count }")
+
+         #photos
+         loop Assets / Asset {
+            Col() {
+               Text("Photo id: { Asset.Id }")
+               Text("Photo filename: { Asset.Filename }")
+}  }  }  }  }

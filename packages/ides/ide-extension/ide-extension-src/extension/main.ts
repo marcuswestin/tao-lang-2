@@ -1,3 +1,4 @@
+import '../resources/packaged-resource-root'
 import { Errors, FS, Platform } from '@shared'
 import Workspace from 'tao-compiler/workspace'
 import { type AST, Langium } from 'tao-parser'

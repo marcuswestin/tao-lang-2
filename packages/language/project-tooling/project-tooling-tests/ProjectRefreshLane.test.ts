@@ -14,6 +14,8 @@ function result(revision: number, status: ProjectToolingResult['status'] = 'fres
     configInputPaths: [],
     externalSidecarInputPaths: [],
     sidecarOwnershipInputPaths: [],
+    nativeBindingInputPaths: [],
+    nativeBindingOutputPaths: [],
     changedOutputPaths: [],
     revision,
   }

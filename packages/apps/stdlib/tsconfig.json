@@ -10,6 +10,12 @@
     ".tao-ts/**/*",
     ".tao-ts/.dependencies/**/*"
   ],
+  "exclude": [
+    "**/node_modules/**/*",
+    ".tao-ts/native-bindings/**/*",
+    ".tao-ts/@tao/device/files/**/*",
+    ".tao-ts/@tao/device/photos/**/*"
+  ],
   "compilerOptions": {
     "rootDirs": [".", ".tao-ts"],
     "allowJs": true,

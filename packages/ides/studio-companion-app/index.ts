@@ -1,5 +1,9 @@
+import { installNativeAbortSupport } from '@runtime/TR-native-abort'
 import { registerRootComponent } from 'expo'
-import { CompanionPlaceholder } from './src/CompanionPlaceholder'
+import type { ComponentType } from 'react'
+
+installNativeAbortSupport()
+const { CompanionPlaceholder } = require('./src/CompanionPlaceholder') as { CompanionPlaceholder: ComponentType }
 
 /*
  * The companion shell holds no Studio logic. Tao Studio serves the real bundle from its own Metro and

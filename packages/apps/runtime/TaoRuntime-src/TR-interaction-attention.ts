@@ -207,17 +207,17 @@ export class InteractionAttention {
     })
   }
 
-  targetAndActivate(identity: string, fallback?: () => unknown): unknown {
+  targetAndActivate(identity: string, fallback?: (rawEvent?: unknown) => unknown, rawEvent?: unknown): unknown {
     const candidate = this.node(identity)
     if (!candidate) {
-      return fallback?.()
+      return fallback?.(rawEvent)
     }
     if (!this.activatable(candidate)) {
       return
     }
     const activate = candidate.live?.activate
     this.target(identity)
-    return activate ? activate() : fallback?.()
+    return activate ? activate(rawEvent) : fallback?.(rawEvent)
   }
 
   /** A secondary pointer gesture selects a mounted target and opens its applicable verbs. */
