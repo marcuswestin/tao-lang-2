@@ -19,7 +19,6 @@ export const StateFormatter = {
   /** StateDeclaration formats state declaration spacing. */
   StateDeclaration(f) {
     f.oneSpaceAfter('state')
-    f.oneSpaceBeforeProperty('value')
     f.oneSpaceAround('is')
     f.oneSpaceAround('=')
     f.oneSpaceBefore('(')
