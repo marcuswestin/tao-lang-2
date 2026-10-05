@@ -21,6 +21,7 @@ import { resolveActionInvocation, resolveActionTarget } from './invocations'
 import { resolveNumericUnitReading } from './numeric-unit-readings'
 import { NumericUnits } from './NumericUnits'
 import { parameterRequiresWritable } from './reactive-parameters'
+import { sourceActionResult } from './source-action-results'
 import { type UnitFamily, Units } from './Units'
 
 /** TaoType declares the static Tao type shape used by semantic helpers. */
@@ -360,10 +361,9 @@ export class Type {
     return context ? resolution.ofContextualValue(declaration, context) : resolution.ofValueDeclaration(declaration)
   }
 
-  /** ofActionResult resolves a foreign action's declared value, including nullable results. */
+  /** ofActionResult resolves a declared or lexical source-action result, including nullable results. */
   static ofActionResult(action: AST.ActionDeclaration): TaoType {
-    const declared = action.returnType ? Type.ofTypeExpression(action.returnType) : unresolvedType()
-    return action.optionalResult ? { kind: 'union', members: [declared, primitiveType('none')] } : declared
+    return new TypeResolutionContext().ofActionResult(action)
   }
 
   /** ofFunctionReturn resolves an explicit function result or infers it from every return statement. */
@@ -1817,27 +1817,20 @@ class TypeResolutionContext {
       CommandDeclaration: command => this.ofAction(command),
       AliasDeclaration: alias => this.aliasDeclarationType(alias),
       AppDeclaration: declaration => declaration.value ? this.ofExpression(declaration.value) : primitiveType('app'),
-      ActionResultStatement: statement => {
-        const action = this.descriptors
-          ? resolveActionTarget(statement.invocation.action, expression => this.ofExpression(expression))
-          : undefined
-        const declaration = action
-          ? action.kind === 'named' ? action.action : undefined
-          : resolveActionInvocation(statement.invocation).action
-        if (!AST.isActionDeclaration(declaration) || !declaration.returnType) {
-          return unresolvedType()
-        }
-        const declared = this.ofTypeExpression(declaration.returnType)
-        return declaration.optionalResult
-          ? { kind: 'union', members: [declared, primitiveType('none')] }
-          : declared
-      },
+      ActionResultStatement: statement => this.ofInvocationResult(statement.invocation),
       AskStatement: ask =>
         ask.view.ref?.response?.ref
           ? { kind: 'enum', declaration: ask.view.ref.response.ref }
           : unresolvedType(),
       CasePayload: payload => {
         const branch = payload.$container
+        if (AST.isWhenDoOutcome(branch) && AST.isDoStatement(branch.$container) && branch.$container.then) {
+          if (branch.case === 'done') {
+            return this.ofInvocationResult(branch.$container)
+          }
+          const context = AST.actionFailureContextDeclaration(payload)
+          return context ? this.ofDefinition(context) : unresolvedType()
+        }
         const exceptionalReadCase = AST.isGuardRenderBranch(branch)
           && ['loading', 'missing', 'unauthorized', 'error'].includes(AST.canonicalSubjectCase(branch.case))
         if (!AST.isAppGuardBranch(branch) && !exceptionalReadCase) {
@@ -1867,6 +1860,28 @@ class TypeResolutionContext {
   /** A command invokes exactly as an action does: its parameters are its slots. */
   ofAction(declaration: AST.ActionDeclaration | AST.CommandDeclaration): TaoType {
     return this.actionTypeOfParameters(AST.parametersOf(declaration))
+  }
+
+  ofActionResult(action: AST.ActionDeclaration): TaoType {
+    const declared = action.returnType
+      ? this.ofTypeExpression(action.returnType)
+      : this.withoutCycles(
+        action,
+        () =>
+          this.commonType(sourceActionResult(action, value => this.ofExpression(value)).map(result => result.type))
+            ?? unresolvedType(),
+      )
+    return action.optionalResult ? { kind: 'union', members: [declared, primitiveType('none')] } : declared
+  }
+
+  private ofInvocationResult(invocation: AST.DoStatement): TaoType {
+    const target = this.descriptors
+      ? resolveActionTarget(invocation.action, expression => this.ofExpression(expression))
+      : undefined
+    const action = target
+      ? target.kind === 'named' ? target.action : undefined
+      : resolveActionInvocation(invocation).action
+    return AST.isActionDeclaration(action) ? this.ofActionResult(action) : unresolvedType()
   }
 
   /**

@@ -406,9 +406,10 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
           scope = this.createScopeForNodes([value.payload], currentScope)
         },
         'action-block': value => {
-          const results = AST.actionResultDeclarationsOwnedByActionBlock(value.block).filter(binding =>
-            (binding.$cstNode?.end ?? Infinity) <= (reference.$cstNode?.offset ?? 0)
-          )
+          const results = [
+            ...AST.actionResultDeclarationsOwnedByActionBlock(value.block),
+            ...value.block.statements.filter(AST.isAliasDeclaration),
+          ].filter(binding => (binding.$cstNode?.end ?? Infinity) <= (reference.$cstNode?.offset ?? 0))
           scope = this.createScopeForNodes(
             [...AST.askDeclarationsOwnedByActionBlock(value.block), ...results],
             currentScope,
