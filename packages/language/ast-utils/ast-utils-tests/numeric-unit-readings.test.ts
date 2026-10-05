@@ -84,6 +84,7 @@ Describe('numeric unit readings', () => {
     const span = namedType(file, 'Measure')
     const label = namedType(file, 'Label')
     const reader = namedType(file, 'Reader')
+    Expect(NumericUnits.unitOwner(reader)).toBe(span)
     const read = ownMethod(reader, 'Read')
     const contextual = returnedCall(read)
     Expect.Is(contextual.callee, AST.isMemberAccessExpression)

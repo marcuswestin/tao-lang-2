@@ -65,6 +65,11 @@ its case name, as in `Final yes / Draft no`. The `no` side is the default unless
 They exercise declaration syntax and do not require product journeys. Writes, `is <Case>` tests,
 and boolean query filters use named declared cases rather than raw spelling conventions.
 
+Explicit write labels also accept the negative alias. For `Final yes / Draft no`,
+`update Document { Draft: true }` writes `Final: false`; `Draft: false` writes `Final: true`.
+Only `Final` is stored. Supplying both `Final` and `Draft` in the same write is rejected,
+including when their values agree. A bare `Draft` case continues to write the stored false case.
+
 Indexes are separate entries, one default `order by` may be declared for the entity, and
 `local only` states that the entity is stored on the device whatever the app binds as its
 `Datasource`. These are entity-level storage facts and trail the field list as one group:
