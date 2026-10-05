@@ -1869,7 +1869,7 @@ class TypeResolutionContext {
         kind: 'ready',
         supplied: Type.specializeAssociatedDescriptor(descriptor, receiver),
         receiverPlacement: { kind: 'implicit' },
-        receiverDomain: descriptor.receiver,
+        receiverDomain: receiver.kind === 'capability' || receiver.genericParameter ? receiver : descriptor.receiver,
       }
       : { kind: 'pending' }
   }
