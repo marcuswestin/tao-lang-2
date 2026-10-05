@@ -60,6 +60,7 @@ export type CanonicalCallPublication =
   & PublicationStatus
   & Readonly<{
     site: AST.FunctionCallExpression | AST.MethodCallExpression | AST.ConversionExpression
+      | AST.BinaryExpression | AST.UnaryExpression
     operation: 'function'
     target?: SourceCallable
     descriptor?: CanonicalCallableDescriptor
