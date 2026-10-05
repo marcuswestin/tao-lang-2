@@ -26,6 +26,114 @@ async function withParsed(source: string, check: (parsed: Awaited<ReturnType<typ
 }
 
 Describe('typed renderer slot domains', () => {
+  Test('matches specialized generic renderer inputs by concrete nominal type without losing their owners', async () => {
+    await withParsed(
+      `
+      ${declarations}
+      type OtherName is text
+      view Concrete(Occurrence, Name) { render Name }
+      view Sibling(OtherName, Occurrence) { render OtherName }
+      view ConcreteOwner(Items Names) {
+        @row(Name, Occurrence): empty
+        render Rows(Items, 1) { @item: @row }
+      }
+      view NamedOwner(Items Names) {
+        render Rows(Items, 1) { @item: Concrete }
+      }
+      view WrongOwner(Items Names) {
+        render Rows(Items, 1) { @item: Sibling }
+      }
+    `,
+      parsed => {
+        const name = parsed.entry.ast.statements.find(node => AST.isTypeDeclaration(node) && node.name === 'Name')
+        Expect.Is(name, AST.isTypeDeclaration)
+        const owner = namedView(parsed.entry.ast, 'ConcreteOwner')
+        const use = [...AST.streamAllContents(owner)].find(AST.isRenderSlotUse)!
+        const comparison = ASTUtils.compareRendererSlotForwarding(use)!
+        Expect(comparison.diagnostics.map(diagnostic => diagnostic.kind)).toEqual([])
+        const pair = comparison.correspondence.find(pair => pair.supplied.localName === 'Name')!
+        Expect(pair.required.declaration).toBe(AST.renderSlotParametersOf(use.slot.ref!)[0])
+        Expect(pair.supplied.declaration).toBe(AST.renderSlotParametersOf(use.forwardedSlot!.ref!)[0])
+        Expect(Type.identityKey(pair.required.type)).toBe(Type.identityKey(Type.ofDefinition(name)))
+        Expect(Type.identityKey(pair.supplied.type)).toBe(Type.identityKey(Type.ofDefinition(name)))
+        for (
+          const [ownerName, rendererName, compatible] of [
+            ['NamedOwner', 'Concrete', true],
+            ['WrongOwner', 'Sibling', false],
+          ] as const
+        ) {
+          const fill = [...AST.streamAllContents(namedView(parsed.entry.ast, ownerName))].find(AST.isRenderSlotUse)!
+          Expect(
+            ASTUtils.compareRendererSlotRenderer(fill.slot.ref!, namedView(parsed.entry.ast, rendererName), fill)
+              .compatible,
+          ).toBe(compatible)
+        }
+      },
+    )
+  })
+
+  Test('retains generic role preference and rejects ambiguous, wrong-domain and writable correspondences', async () => {
+    await withParsed(
+      `
+      ${declarations}
+      type Count is number
+      type OtherName is text
+      view Pair where type T is text (Items list of T) accepts slots @item(First T, Second T) from ./Pair.tsx
+      view Directed(Items Names) {
+        @row(Second Name, First Name): empty
+        render Pair(Items) { @item: @row }
+      }
+      view Ambiguous(Items Names) {
+        @row(Left Name, Right Name): empty
+        render Pair(Items) { @item: @row }
+      }
+      view Wrong(Items Names) {
+        @row(Count, Occurrence): empty
+        render Rows(Items, 1) { @item: @row }
+      }
+      view Writer(Items Names) {
+        @row(mutable Name, Occurrence): empty
+        render Rows(Items, 1) { @item: @row }
+      }
+      view Conflicting(Items Names) {
+        @row(Value OtherName default "other", Name, Occurrence): empty
+        render Rows(Items, 1) { @item: @row }
+      }
+      view Ordinary accepts slots @item(Value text) from ./Ordinary.tsx
+      view WrongRole {
+        @row(Wrong text): empty
+        render Ordinary { @item: @row }
+      }
+    `,
+      parsed => {
+        for (const name of ['Directed', 'Ambiguous', 'Wrong', 'Writer', 'Conflicting', 'WrongRole']) {
+          const use = [...AST.streamAllContents(namedView(parsed.entry.ast, name))].find(AST.isRenderSlotUse)!
+          const comparison = ASTUtils.compareRendererSlotForwarding(use)!
+          Expect(comparison.compatible).toBe(name === 'Directed')
+          if (name === 'Directed') {
+            Expect(comparison.correspondence.map(pair => [pair.required.role, pair.supplied.role])).toEqual([
+              ['Second', 'Second'],
+              ['First', 'First'],
+            ])
+          }
+          if (name === 'Ambiguous') {
+            Expect(comparison.correspondence).toEqual([])
+          }
+          if (name === 'WrongRole') {
+            Expect(comparison.diagnostics.map(diagnostic => diagnostic.kind)).toEqual(['unknown-named', 'missing'])
+          }
+          if (name === 'Conflicting') {
+            Expect(
+              comparison.diagnostics.some(diagnostic =>
+                diagnostic.kind === 'incompatible-input' && diagnostic.required.role === 'Value'
+              ),
+            ).toBe(true)
+          }
+        }
+      },
+    )
+  })
+
   Test(
     'specializes inline input domains while retaining actual slot, binding and library Occurrence owners',
     async () => {

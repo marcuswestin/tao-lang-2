@@ -62,7 +62,7 @@ export function compareRendererSlotForwarding(
   const required = use.slot.ref
   const supplied = use.forwardedSlot?.ref
   return AST.isRenderSlotFill(use) && required && supplied
-    ? compareCallableSignatures(rendererSlotSignatureOf(supplied), rendererSlotSignatureOf(required, use, metadata))
+    ? compareRendererSignatures(rendererSlotSignatureOf(supplied), rendererSlotSignatureOf(required, use, metadata))
     : undefined
 }
 
@@ -84,7 +84,29 @@ export function compareRendererSlotRenderer(
   occurrence?: AST.RenderSlotUse,
   metadata?: ArgumentBindingMetadata,
 ): ReturnType<typeof compareCallableSignatures> {
-  return compareCallableSignatures(callableSignatureOf(view), rendererSlotSignatureOf(contract, occurrence, metadata))
+  return compareRendererSignatures(callableSignatureOf(view), rendererSlotSignatureOf(contract, occurrence, metadata))
+}
+
+/** A specialized generic role can correspond by its unique concrete domain when no role matches. */
+function compareRendererSignatures(
+  supplied: CallableSignature,
+  required: CallableSignature,
+): ReturnType<typeof compareCallableSignatures> {
+  const inputs = required.inputs.map(input => {
+    const generic = Type.ofParameter(input.declaration).genericParameter
+    const specialized = generic && input.type.genericParameter !== generic
+    const roleExists = supplied.inputs.some(target => (target.role ?? target.labelName) === input.role)
+    return input.role && specialized && !roleExists ? { ...input, role: undefined } : input
+  })
+  const comparison = compareCallableSignatures(supplied, { ...required, inputs })
+  const originals = new Map(required.inputs.map(input => [input.declaration, input]))
+  return {
+    ...comparison,
+    correspondence: comparison.correspondence.map(pair => ({
+      ...pair,
+      required: originals.get(pair.required.declaration)!,
+    })),
+  }
 }
 
 /** rendererSlotDefaultParameterCorrespondence maps default-view inputs to slot inputs by contract. */
