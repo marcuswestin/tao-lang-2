@@ -30,9 +30,9 @@ type StudioContextSummaryProps =
 
 /** Compact presentation-only adapter; Tao owns the StudioContext query and supplied values. */
 export function StudioContextSummary(props: StudioContextSummaryProps): React.ReactElement {
-  const scenario = studioCellLabel(props.ScenarioId) || 'No active scenario'
+  const scenario = studioCellLabel(props.ScenarioId) || 'No focused scenario'
   return (
-    <div className="studio-context-summary" data-active-cell={props.CellId} data-testid={props.Tag}>
+    <div className="studio-context-summary" data-focused-cell={props.CellId} data-testid={props.Tag}>
       <strong title={props.FilePath}>{props.FilePath || 'No open file'}</strong>
       <span title={props.ScenarioId}>{scenario}</span>
       {props.ViewportWidth > 0 && props.ViewportHeight > 0

@@ -64,9 +64,9 @@ Describe('installed editor project resources', () => {
       Expect(refreshed.status).toBe('fresh')
       Expect(refreshed.diagnostics).toEqual([])
       const config = await FS.readJson<{ extends: string }>(FS.resolvePath('tsconfig.json', project))
-      Expect(config.extends).toBe('./.tao/typescript/tsconfig.json')
+      Expect(config.extends).toBe('./.tao/cache/typescript/tsconfig.json')
       const base = await FS.readJson<{ compilerOptions: { paths: Record<string, string[]> } }>(
-        FS.resolvePath('.tao/typescript/tsconfig.json', project),
+        FS.resolvePath('.tao/cache/typescript/tsconfig.json', project),
       )
       Expect(base.compilerOptions.paths['@tao/runtime'])
         .toEqual([FS.resolvePath('runtime/TaoRuntime-src/TR.ts', output)])

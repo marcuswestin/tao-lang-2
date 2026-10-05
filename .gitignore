@@ -4,6 +4,8 @@
 node_modules/
 *.tsbuildinfo
 .tao-ts/
+# Ignore sidecars left by the previous generated-contract layout.
+*.tao.ts
 
 .devenv/
 .direnv/
@@ -24,16 +26,15 @@ local.properties
 .artifacts/*
 !.artifacts/.gitkeep
 _gen_*/
-# Project markers and reproducible locks are tracked; generated tooling and runtime state are not.
-**/.tao/*
-!**/.tao/.gitkeep
-!**/.tao/project.json
-!**/.tao/lock.jsonc
-!**/.tao/skills.version
-# Existing authored Studio sketches stay portable across clones.
-!**/.tao/studio/
-**/.tao/studio/*
-!**/.tao/studio/sketches.jsonc
+# Project-local state uses .tao/.gitignore; store/ is committed.
+# Keep former generated layouts ignored when integration precedes local migration.
+# Running loops and conflicting cache destinations may still retain these files.
+**/.tao/typescript/
+**/.tao/bridge-check.tsconfig.json
+**/.tao/connect-run/
+**/.tao/dev/runtime/
+# Preserve the surviving pre-migration identity beside the committed store identity.
+/Apps/Hosted Firebase/.tao/project.json
 
 # Disposable package diagnostics. Scripts here inherit their package tsconfig and workspace context.
 packages/*/.scratch/
@@ -46,7 +47,7 @@ packages/apps/expo-host/android/
 packages/ides/studio-companion-app/ios/
 packages/ides/studio-companion-app/android/
 
-# Decrypted secrets, written by `just secrets`. The encrypted originals live in secrets/secrets.jsonc.
+# Decrypted repository-tool secrets, written by `just secrets`; encrypted originals live in secrets/.
 .env.secrets
 # Local overrides kept by hand. Nothing generates this, so nothing can overwrite it.
 .env.local

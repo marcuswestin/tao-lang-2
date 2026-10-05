@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, HCI, Platform, ProjectIdentity, Repo, SecretsFile } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, ProjectIdentity, ProjectLocal, Repo, SecretsFile } from '@shared'
 
 const APP_NAME = 'AuthReviewInstant'
 /** The variant signed in through Clerk, which InstantDB verifies with the app's registered Clerk client. */
@@ -172,7 +172,14 @@ export async function runInstantReview(
         ? substituted
         : substituted.replaceAll(PUBLISHABLE_KEY_PLACEHOLDER, publishableKey),
     )
-    await FS.writeJson(FS.resolvePath('.tao/project.json', projectRoot), { id: projectIdentity })
+    const identityProjectRoot = projectRoot
+    await ProjectLocal.prepare(identityProjectRoot)
+    const identityPath = ProjectLocal.storeResolve('project.json', identityProjectRoot)
+    await FS.withFileMutationLock(identityPath, identityProjectRoot, async () => {
+      const staged = ProjectLocal.stagingPath(identityPath, identityProjectRoot)
+      await FS.writeJson(staged, { id: projectIdentity })
+      await FS.move(staged, identityPath)
+    }, { lockDirectory: ProjectLocal.cacheResolve('locks', identityProjectRoot) })
     environment.write(`Instant review: ${appName} against Instant app ${fingerprint}…`)
     if (options.skipPush !== true) {
       stage = options.dryRun === true ? 'plan InstantDB push' : 'push InstantDB schema and rules'

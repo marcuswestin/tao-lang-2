@@ -430,7 +430,8 @@ Describe('compiler: Studio render occurrences', () => {
 
       const generated = compiled.files.find(file => file.relativePath === 'TaoStudioManifest.ts')
       Expect(generated?.code).toContain('"formatVersion":2')
-      Expect(generated?.code).toContain(JSON.stringify(paths['Main.tao']))
+      Expect(generated?.code).toContain(JSON.stringify(manifest?.scenarios[0]?.id))
+      Expect(generated?.code).not.toContain('"renders"')
       Expect(compiled.code).toContain(
         "import { _TaoDataCatalog, Detail } from './modules/More.tao'",
       )
@@ -444,7 +445,7 @@ Describe('compiler: Studio render occurrences', () => {
         `${JSON.stringify(`${paths['Main.tao']}#OwnerCard`)}: subjectArguments => ({`,
       )
       Expect(compiled.code).toContain(
-        '<TR.Studio.SubjectHost arguments={_TaoStudioArgs} definition={_TaoStudioSubject} />',
+        '<TR.Studio.SubjectHost key={_TaoFixtureSeed.revision} arguments={_TaoStudioArgs} definition={_TaoStudioSubject} />',
       )
       Expect(compiled.code).toContain('restoration: { exclusions: [], mode: \'fresh\' as const, variant: "Preview" }')
 
@@ -452,6 +453,35 @@ Describe('compiler: Studio render occurrences', () => {
       Expect(production.studioManifest).toBeUndefined()
       Expect(production.files.some(file => file.relativePath === 'TaoStudioManifest.ts')).toBe(false)
       Expect(production.code).not.toContain('useTaoGeneratedStudioScenario')
+    })
+  })
+
+  // The preview bundles the manifest sidecar, and the generated root imports it. Source ranges moved
+  // by every length-changing edit used to change it, so Metro re-ran the root and re-rendered the tree.
+  Test('keeps the preview manifest sidecar unchanged when an edit only moves text', async () => {
+    const source = (label: string) => `
+      app Preview { id "com.tao.test.preview" version "1.0.0" name "Preview" view Main }
+      view Main() { render Label(Text: "${label}") }
+      view Label(Text text) { render inject ${tsFence} return null ${fence} }
+
+      scenarios Label "states" {
+        device phone
+        scenario "short" {
+          render (Text: "Short")
+        }
+      }
+    `
+    await withTaoFiles('tao-studio-manifest-sidecar-', { 'Main.tao': source('Edit') }, async paths => {
+      const sidecar = (compiled: Awaited<ReturnType<typeof Workspace.compile>>) =>
+        compiled.files.find(file => file.relativePath === 'TaoStudioManifest.ts')?.code
+      const before = await Workspace.compile(paths['Main.tao'], { studio: true })
+      await FS.writeText(paths['Main.tao'], source('A much longer edit'))
+      const after = await Workspace.compile(paths['Main.tao'], { studio: true })
+
+      Expect(after.studioManifest?.scenarios[0]?.source).not.toEqual(before.studioManifest?.scenarios[0]?.source)
+      Expect(sidecar(after)).toBeDefined()
+      Expect(sidecar(after)).toBe(sidecar(before))
+      Expect(sidecar(after)).not.toContain('"source"')
     })
   })
 
@@ -560,9 +590,14 @@ Describe('compiler: Studio render occurrences', () => {
           ],
         },
       ])
+      // Studio reads generation schemas from its in-process manifest; the preview never does.
       const generated = compiled.files.find(file => file.relativePath === 'TaoStudioManifest.ts')
-      Expect(generated?.code).toContain('"generationDeclarations"')
-      Expect(generated?.code).toContain('"guidance":"Use a realistic workspace name."')
+      Expect(generated?.code).not.toContain('"generationDeclarations"')
+      Expect(generated?.code).not.toContain('"guidance":"Use a realistic workspace name."')
+
+      const production = await Workspace.compile(paths['Main.tao'])
+      Expect(production.studioManifest).toBeUndefined()
+      Expect(production.files.some(file => file.relativePath === 'TaoStudioManifest.ts')).toBe(false)
     })
   })
 })

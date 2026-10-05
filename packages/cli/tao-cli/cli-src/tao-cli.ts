@@ -341,7 +341,7 @@ export function createCommands(): Command {
     .option('--visionos', 'Export an experimental visionOS Xcode project with bundled web UI.')
     .option('--watchos', 'Export an experimental native SwiftUI watchOS Xcode project.')
     .option('--agents', 'Build a background app service and bundled client executable (defaults to desktop).')
-    .option('--output <directory>', 'Retain builds in this directory instead of the project’s .tao/builds.')
+    .option('--output <directory>', 'Retain builds in this directory instead of the project’s .tao/local/builds.')
     .option('--ios', 'Show the status of local iOS builds.')
     .option('--android', 'Show the status of local Android builds.')
     .option('--compile-only', 'Retain generated source without exporting or packaging.')
@@ -631,9 +631,9 @@ export function createCommands(): Command {
 
   commands
     .command('compile')
-    .argument('<appPath>', 'Tao app path to compile into the local runtime package.')
+    .argument('<appPath>', 'Tao app path to compile into its project cache.')
     .option('--app <name>', 'Select a named app when the file declares multiple apps.')
-    .description('Compile a Tao app into the local runtime package.')
+    .description('Compile a Tao app into its project .tao/cache/_gen_tao-app directory.')
     .action(async (appPath: string, options: { app?: string }) => {
       try {
         await (await import('./install-offer')).offerMissingInstalls([appPath])

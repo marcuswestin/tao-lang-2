@@ -362,6 +362,17 @@ export async function remove(inputPath: string): Promise<void> {
   await nodeFs.rm(inputPath, { force: true, recursive: true })
 }
 
+/** Remove a directory only while it is empty; retain a concurrently added entry. */
+export async function removeEmptyDirectory(inputPath: string): Promise<void> {
+  try {
+    await nodeFs.rmdir(inputPath)
+  } catch (error) {
+    if (!['ENOENT', 'ENOTEMPTY', 'EEXIST'].includes(fileErrorCode(error) ?? '')) {
+      throw error
+    }
+  }
+}
+
 /** copyFile copies a file, creating the destination parent directory. */
 export async function copyFile(fromPath: string, toPath: string): Promise<void> {
   await mkdir(dirname(toPath))
@@ -882,6 +893,8 @@ type FileMutationProcessIdentity = {
 }
 
 type FileMutationLockOptions = {
+  /** Keep lock, owner, and reclaim files in this directory instead of beside the target. */
+  lockDirectory?: string
   beforeClaimPublish?: (lockPath: string, ownerPath: string) => Promise<void>
   beforeRelease?: () => Promise<void>
   beforeStaleReclaim?: (lockPath: string) => Promise<void>
@@ -903,7 +916,10 @@ export async function withFileMutationLock<Value>(
   await assertNoSymbolicLinkComponents(resolvedBoundary, resolvedTarget, 'mutation target')
   const canonicalBoundary = await realPath(resolvedBoundary)
   const canonicalTarget = resolvePath(relativePath(resolvedBoundary, resolvedTarget), canonicalBoundary)
-  const lockPath = `${canonicalTarget}.tao-file-mutation.lock`
+  const lockPath = options.lockDirectory === undefined
+    ? `${canonicalTarget}.tao-file-mutation.lock`
+    : resolvePath(`${sha256Hex(canonicalTarget)}.tao-file-mutation.lock`, options.lockDirectory)
+  await assertNoSymbolicLinkComponents(canonicalBoundary, lockPath, 'mutation lock')
   await mkdirWithinBoundary(dirname(lockPath), canonicalBoundary)
   return await withMutationLockFile(lockPath, work, options)
 }

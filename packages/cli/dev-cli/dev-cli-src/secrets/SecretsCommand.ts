@@ -22,6 +22,7 @@ import {
 } from 'tao-cli-kit/secrets'
 
 /** Committed: readable keys, readable metadata, encrypted values. */
+// Repository tooling is not a Tao app project; its store must not create a project marker.
 const STORE_PATH = 'secrets/secrets.jsonc'
 /** Outside the repository, so every worktree on this machine shares one identity. */
 const IDENTITY_PATH = '~/.config/tao/secrets-identity.txt'
@@ -141,13 +142,17 @@ function liveStoreAccess(cipher: Cipher = ageCipher(), now = () => new Date()): 
 
 /** Every encrypted-store writer uses this lock; prompts and encryption happen before entering it. */
 async function withStoreMutation<Value>(work: () => Promise<Value>): Promise<Value> {
-  return await FS.withFileMutationLock(Repo.resolvePath(STORE_PATH), Repo.getRoot(), work)
+  const projectRoot = Repo.getRoot()
+  return await FS.withFileMutationLock(Repo.resolvePath(STORE_PATH), projectRoot, work, {
+    lockDirectory: Repo.resolvePath('.artifacts/cache/secrets/locks'),
+  })
 }
 
 async function writeStore(store: SecretStore): Promise<void> {
   const path = Repo.resolvePath(STORE_PATH)
-  const temporary = `${path}.${Platform.randomUUID()}.tmp`
+  const temporary = Repo.resolvePath(`.artifacts/cache/secrets/tmp/${Platform.randomUUID()}.tmp`)
   await FS.mkdir(FS.dirname(path))
+  await FS.mkdir(FS.dirname(temporary))
   try {
     await FS.writeText(temporary, formatStore(store), { mode: 0o600 })
     await FS.move(temporary, path)

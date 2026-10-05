@@ -1,5 +1,5 @@
 /// <reference path="./markdown.d.ts" />
-import { Errors, FS } from '@shared'
+import { Errors, FS, Json, ProjectLocal, Text } from '@shared'
 import taoCreate from '../skills/tao-create/SKILL.md' with { type: 'text' }
 import taoData from '../skills/tao-data/SKILL.md' with { type: 'text' }
 import taoDesign from '../skills/tao-design/SKILL.md' with { type: 'text' }
@@ -49,12 +49,28 @@ const bundledSkills: Record<TaoSkillName, string> = {
 
 /** Markdown imports embed the shipped guidance in a compiled Tao CLI. */
 export async function installTaoSkills(projectRoot: string): Promise<InstallTaoSkillsResult> {
-  const root = FS.resolvePath(projectRoot)
+  await FS.mkdir(FS.resolvePath(projectRoot))
+  const root = await FS.realPath(projectRoot)
+  await ProjectLocal.prepare(root)
   const files = installedSkillFiles()
   for (const [relativePath, content] of Object.entries(files)) {
-    await FS.writeText(FS.resolvePath(relativePath, root), content)
+    await writeCommittedFile(FS.resolvePath(relativePath, root), root, content)
   }
-  return { paths: Object.keys(files).sort(), version: TAO_SKILLS_VERSION }
+  const lockPath = ProjectLocal.storeResolve('lock.jsonc', root)
+  await FS.withFileMutationLock(lockPath, root, async () => {
+    const current: unknown = await FS.isFile(lockPath)
+      ? JSON.parse(Text.stripJsonc(await FS.readText(lockPath)))
+      : { schemaVersion: 1 }
+    if (!Json.isRecord(current) || current['schemaVersion'] !== 1) {
+      Errors.throwUserInput(`Tao project lock at ${lockPath} must declare schemaVersion 1.`)
+    }
+    await writeStagedFile(
+      lockPath,
+      root,
+      `${JSON.stringify({ ...current, skillsVersion: TAO_SKILLS_VERSION }, null, 2)}\n`,
+    )
+  }, { lockDirectory: ProjectLocal.cacheResolve('locks', root) })
+  return { paths: [...Object.keys(files), '.tao/store/lock.jsonc'].sort(), version: TAO_SKILLS_VERSION }
 }
 
 /** The source root is used only by the executable Markdown proof. */
@@ -71,8 +87,23 @@ function installedSkillFiles(): Record<string, string> {
   files['.claude/skills/tao-layout/references/flexbox-mapping.md'] = flexboxMapping
   files['AGENTS.md'] = skillBody(taoProject)
   files['CLAUDE.md'] = '@AGENTS.md\n'
-  files['.tao/skills.version'] = `${TAO_SKILLS_VERSION}\n`
   return files
+}
+
+async function writeCommittedFile(path: string, projectRoot: string, content: string): Promise<void> {
+  await FS.withFileMutationLock(path, projectRoot, async () => {
+    await writeStagedFile(path, projectRoot, content)
+  }, { lockDirectory: ProjectLocal.cacheResolve('locks', projectRoot) })
+}
+
+async function writeStagedFile(path: string, projectRoot: string, content: string): Promise<void> {
+  const temporary = ProjectLocal.stagingPath(path, projectRoot)
+  try {
+    await FS.writeText(temporary, content)
+    await FS.move(temporary, path)
+  } finally {
+    await FS.remove(temporary).catch(() => {})
+  }
 }
 
 function skillBody(source: string): string {

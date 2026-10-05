@@ -23,17 +23,27 @@ export type RenderSourceIdentity = {
 
 /** renderSourceIdentity identifies one authored render and the exact source text it came from. */
 export function renderSourceIdentity(render: AST.Render): RenderSourceIdentity | undefined {
+  const location = renderSourceLocation(render)
+  return location && {
+    ...location,
+    sourceVersion: sourceTextVersion(AST.getDocument(render).textDocument.getText()),
+  }
+}
+
+/**
+ * renderSourceLocation locates one authored render without versioning its file. Hashing the whole
+ * file per render made a Studio compile quadratic in file size, for a version nothing Studio-side read.
+ */
+function renderSourceLocation(render: AST.Render): Omit<RenderSourceIdentity, 'sourceVersion'> | undefined {
   const cstNode = render.$cstNode
   if (cstNode === undefined) {
     return undefined
   }
-  const document = AST.getDocument(render)
-  const sourcePath = document.uri.fsPath
+  const sourcePath = AST.getDocument(render).uri.fsPath
   return {
     end: cstNode.end,
     renderId: `${sourcePath}:${cstNode.offset}:${cstNode.end}`,
     sourcePath,
-    sourceVersion: sourceTextVersion(document.textDocument.getText()),
     start: cstNode.offset,
   }
 }
@@ -45,7 +55,7 @@ export function studioRenderIdentity(render: AST.Render, projectRoot: string): {
   studioRectId?: string
 } | undefined {
   const elementName = ASTUtils.design.standardElementName(render)
-  const source = renderSourceIdentity(render)
+  const source = renderSourceLocation(render)
   if (elementName === undefined || source === undefined) {
     return undefined
   }

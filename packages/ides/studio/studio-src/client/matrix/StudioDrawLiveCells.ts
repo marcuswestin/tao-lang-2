@@ -160,7 +160,7 @@ function placeLiveCells(parent: HTMLElement): void {
     }
   }
   if (grid !== null) {
-    // The grid's box must reach every placed row: preview cells suspend once they leave it.
+    // The grid's box reaches every placed row so canvas bounds include drawn live cells.
     writeStyle(grid, 'min-width', draw && right > 0 ? `max(100%, ${Math.ceil(right)}px)` : '')
     writeStyle(grid, 'min-height', draw && bottom > 0 ? `max(100%, ${Math.ceil(bottom)}px)` : '')
   }

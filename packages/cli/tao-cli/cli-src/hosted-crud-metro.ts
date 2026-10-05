@@ -4,7 +4,7 @@ import {
   startStudioProcessTree,
   stopStudioProcessTree,
 } from '@expo-host/dev-loop/StudioProcessTree'
-import { Errors, FS, HCI, Json, Platform, Text, Time } from '@shared'
+import { Errors, FS, HCI, Json, Platform, ProjectLocal, Text, Time } from '@shared'
 import type { Readable, Writable } from 'node:stream'
 import { renderTerminalQr } from './hosted-crud-qr'
 import METRO_EVENTS_PRELOAD from './metro-events-preload.cjs.txt'
@@ -63,8 +63,9 @@ export async function runMetroSession(options: MetroSessionOptions): Promise<voi
   if (await metroAnswers(fetchImpl, origin)) {
     Errors.throwUserInput(`Something already serves ${origin}. Stop that Metro server first.`)
   }
-  const directory = FS.resolvePath('.tao/connect-run', options.project)
-  await FS.mkdir(directory)
+  const directory = ProjectLocal.cacheResolve('connect-run', options.project)
+  await ProjectLocal.prepare(options.project)
+  await FS.mkdirWithinBoundary(directory, options.project)
   const preload = FS.resolvePath('metro-events.cjs', directory)
   const events = FS.resolvePath('metro-events.jsonl', directory)
   await FS.writeText(preload, METRO_EVENTS_PRELOAD)
@@ -118,7 +119,7 @@ export async function runMetroSession(options: MetroSessionOptions): Promise<voi
 
     const showActions = () =>
       screen.line(
-        'Actions: r reload · i iOS Simulator · a Android emulator · c Show connection · d Device (Android/iPhone) · q quit',
+        'Actions: r reload · i iOS Simulator · a Android emulator · c Show connection · d Device (Android/iPhone) · ? show this again · q quit',
       )
     const pendingActions = new Set<Promise<void>>()
     const onKey = async (key: string) => {

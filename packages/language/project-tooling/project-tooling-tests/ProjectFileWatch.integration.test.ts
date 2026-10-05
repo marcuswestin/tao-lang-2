@@ -289,7 +289,7 @@ package { version 0.1.0 requires "Widget Package" from ../Library version ^2.0.0
       await ProjectTooling.refresh(root, {})
       await FS.writeText(
         FS.resolvePath('tsconfig.json', root),
-        '{"extends":["./.tao/typescript/tsconfig.json","../Shared/config.json"]}\n',
+        '{"extends":["./.tao/cache/typescript/tsconfig.json","../Shared/config.json"]}\n',
       )
 
       const results: ProjectToolingResult[] = []
@@ -499,7 +499,7 @@ view Widget() from ../Host/Widget.tsx
       await ProjectTooling.refresh(root, {})
       await FS.writeText(
         FS.resolvePath('tsconfig.json', root),
-        '{"extends":["./.tao/typescript/tsconfig.json","../Shared/config.json"]}\n',
+        '{"extends":["./.tao/cache/typescript/tsconfig.json","../Shared/config.json"]}\n',
       )
 
       const results: ProjectToolingResult[] = []

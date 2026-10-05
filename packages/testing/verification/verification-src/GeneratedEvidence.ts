@@ -1,5 +1,5 @@
 import { FS, Json, TaoStdlib } from '@shared'
-import { compileAppOutputHash } from './CompileApp'
+import { compileAppOutputHash, WORD_FLOWER_OUTPUT_ROOT } from './CompileApp'
 import { parserGenerateInputHash, parserGenerateOutputHash } from './ParserGenerate'
 
 /** GeneratedOutput names ignored output whose bytes a Git-tree hash cannot describe. */
@@ -92,7 +92,7 @@ async function captureOutput(repositoryRoot: string, output: GeneratedOutput): P
       ]),
     }
   }
-  const outputRoot = FS.resolvePath('packages/apps/expo-host/_gen_tao-app', repositoryRoot)
+  const outputRoot = FS.resolvePath(WORD_FLOWER_OUTPUT_ROOT, repositoryRoot)
   return {
     // CompileApp's repository inputs are already covered by the enclosing visible-tree hash. The
     // declared stdlib is the one input allowed to live outside that tree.

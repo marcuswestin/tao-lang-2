@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { FS, TaoHome } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { planShipPipeline, planUnsignedArchive, runShipPipeline } from '../cli-src/ship-pipeline'
 
@@ -6,8 +6,8 @@ Describe('tao ship Apple command pipeline', () => {
   Test('derives the exact local Apple command vectors', () => {
     const runtimeRoot = '/repo/packages/apps/expo-host'
     const plan = planShipPipeline({
-      archivePath: '/tmp/WordFlower.xcarchive',
-      exportPath: '/tmp/export',
+      archivePath: '/project/.tao/cache/ship/WordFlower/WordFlower.xcarchive',
+      exportPath: '/project/.tao/cache/ship/WordFlower/export',
       issuerId: 'issuer-id',
       keyId: 'KEY123',
       keyPath: '/keys/AuthKey_KEY123.p8',
@@ -24,7 +24,7 @@ Describe('tao ship Apple command pipeline', () => {
       args: ['install', '--ansi'],
       command: 'pod',
       cwd: `${runtimeRoot}/ios`,
-      env: { CP_HOME_DIR: `${runtimeRoot}/.artifacts/cocoapods`, LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' },
+      env: { CP_HOME_DIR: TaoHome.resolve('cache/cocoapods'), LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' },
     })
     Expect(plan.archive.args).toEqual([
       '-workspace',
@@ -34,9 +34,9 @@ Describe('tao ship Apple command pipeline', () => {
       '-configuration',
       'Release',
       '-archivePath',
-      '/tmp/WordFlower.xcarchive',
+      '/project/.tao/cache/ship/WordFlower/WordFlower.xcarchive',
       '-derivedDataPath',
-      `${runtimeRoot}/.artifacts/ship/DerivedData`,
+      '/project/.tao/cache/ship/WordFlower/DerivedData',
       '-allowProvisioningUpdates',
       'DEVELOPMENT_TEAM=TEAM123456',
       '-authenticationKeyPath',
@@ -57,8 +57,8 @@ Describe('tao ship Apple command pipeline', () => {
     const runtimeRoot = await mkTestDir('tao-ship-pipeline-')
     try {
       const plan = planShipPipeline({
-        archivePath: '/tmp/App.xcarchive',
-        exportPath: '/tmp/export',
+        archivePath: `${runtimeRoot}/.tao/cache/ship/App/App.xcarchive`,
+        exportPath: `${runtimeRoot}/.tao/cache/ship/App/export`,
         issuerId: 'issuer',
         keyId: 'key',
         keyPath: '/key.p8',
@@ -79,7 +79,7 @@ Describe('tao ship Apple command pipeline', () => {
         'xcodebuild -exportArchive',
       ])
       Expect(phases).toEqual(['ios-project', 'ios-dependencies', 'ios-archive', 'upload'])
-      Expect(await FS.exists(`${runtimeRoot}/.artifacts/cocoapods`)).toBe(true)
+      Expect(await FS.exists(TaoHome.resolve('cache/cocoapods'))).toBe(true)
       Expect(await FS.readText(plan.exportOptionsPath)).toBe(plan.exportOptionsPlist)
     } finally {
       await FS.remove(runtimeRoot)
@@ -92,8 +92,8 @@ Describe('tao ship Apple command pipeline', () => {
       const binary = '/installed/versions/0.4.0/tao'
       const metro = { TAO_RUNTIME_SOURCE_ROOT: '/installed/versions/0.4.0/resources/runtime' }
       const plan = planShipPipeline({
-        archivePath: '/tmp/App.xcarchive',
-        exportPath: '/tmp/export',
+        archivePath: `${runtimeRoot}/.tao/cache/ship/App/App.xcarchive`,
+        exportPath: `${runtimeRoot}/.tao/cache/ship/App/export`,
         issuerId: 'issuer',
         keyId: 'key',
         keyPath: '/key.p8',
@@ -112,7 +112,7 @@ Describe('tao ship Apple command pipeline', () => {
         expoEnvironment: () => metro,
         hostInstallRoot: '/installed/versions/0.4.0/host',
       })
-      const node = `${runtimeRoot}/.artifacts/ship/bin/node`
+      const node = `${runtimeRoot}/.tao/cache/ship/App/bin/node`
       Expect(plan.prebuild).toEqual({
         command: binary,
         args: ['--bun', `${runtimeRoot}/node_modules/.bin/expo`, 'prebuild', '--platform', 'ios', '--no-install'],
@@ -121,7 +121,7 @@ Describe('tao ship Apple command pipeline', () => {
       })
       for (const invocation of [plan.installPods, plan.archive, plan.exportArchive]) {
         Expect(invocation.env?.['TAO_RUNTIME_SOURCE_ROOT']).toBe(metro.TAO_RUNTIME_SOURCE_ROOT)
-        Expect(invocation.env?.['PATH']?.startsWith(`${runtimeRoot}/.artifacts/ship/bin:`)).toBe(true)
+        Expect(invocation.env?.['PATH']?.startsWith(`${runtimeRoot}/.tao/cache/ship/App/bin:`)).toBe(true)
       }
       const seen: string[] = []
       await runShipPipeline(plan, async (command) => {

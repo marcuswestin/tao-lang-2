@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, HCI, Platform, Repo, Text, Time } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, ProjectLocal, Repo, Text, Time } from '@shared'
 import { StandaloneScenarios } from './standalone-scenarios'
 
 /**
@@ -135,7 +135,7 @@ async function accept(release: string): Promise<void> {
         run: async () => {
           const resources = FS.resolvePath(`.tao/versions/${version}/resources`, home)
           const stdlib = FS.resolvePath('stdlib', resources)
-          const identity = await FS.readJson<{ id: string }>(FS.resolvePath('.tao/project.json', stdlib))
+          const identity = await FS.readJson<{ id: string }>(FS.resolvePath('.tao/store/project.json', stdlib))
           if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(identity.id)) {
             Errors.throwUnexpected('The installed stdlib has no stable project identity.')
           }
@@ -196,7 +196,7 @@ async function accept(release: string): Promise<void> {
         run: async () => {
           await shell(project, 'tao build --web --compile-only')
           const compiled: string[] = []
-          for await (const path of FS.walk(FS.resolvePath('.tao/builds', project))) {
+          for await (const path of FS.walk(ProjectLocal.localResolve('builds', project))) {
             if (path.endsWith('/compiled/web/_gen_tao-app/App.tsx')) {
               compiled.push(path)
             }
@@ -214,7 +214,7 @@ async function accept(release: string): Promise<void> {
             Errors.throwUnexpected('The first web build did not say it was installing the host.')
           }
           const sites: string[] = []
-          for await (const path of FS.walk(FS.resolvePath('.tao/builds', project))) {
+          for await (const path of FS.walk(ProjectLocal.localResolve('builds', project))) {
             if (path.includes('/web/') && path.endsWith('/index.html')) {
               sites.push(path)
             }
@@ -478,7 +478,7 @@ scene CounterView() {
  * release listing.
  */
 async function versionPinWorks(environment: Platform.ProcessEnv, project: string, version: string): Promise<void> {
-  const lock = JSON.parse(Text.stripJsonc(await FS.readText(FS.resolvePath('.tao/lock.jsonc', project))))
+  const lock = JSON.parse(Text.stripJsonc(await FS.readText(ProjectLocal.storeResolve('lock.jsonc', project))))
   if (lock?.toolchain?.version !== version) {
     Errors.throwUnexpected(`tao create pinned ${JSON.stringify(lock?.toolchain)}, not Tao ${version}.`)
   }
@@ -536,7 +536,7 @@ async function devLoopServesWeb(environment: Platform.ProcessEnv, project: strin
         args: [
           `http://127.0.0.1:${port}/`,
           FS.resolvePath('App.tao', project),
-          ACCEPTANCE_LOG_DIR ?? FS.resolvePath('.tao/browser-acceptance', project),
+          ACCEPTANCE_LOG_DIR ?? ProjectLocal.cacheResolve('browser-acceptance', project),
         ],
         cwd: project,
         env: {

@@ -11,9 +11,9 @@ Describe('setup: Tao project dependencies', () => {
         schemaVersion: 1,
         installs: { lockfileVersion: 2, local: {}, environments: { '.': { projectRoot: '.', publications: [], npm } } },
       })
-      await FS.writeJson(FS.resolvePath('Apps/Pinned/.tao/lock.jsonc', root), lock({ util: pinned }))
-      await FS.writeJson(FS.resolvePath('Apps/Plain/.tao/lock.jsonc', root), lock({}))
-      await FS.writeJson(FS.resolvePath('Apps/Untracked/.tao/lock.jsonc', root), lock({ util: pinned }))
+      await FS.writeJson(FS.resolvePath('Apps/Pinned/.tao/store/lock.jsonc', root), lock({ util: pinned }))
+      await FS.writeJson(FS.resolvePath('Apps/Plain/.tao/store/lock.jsonc', root), lock({}))
+      await FS.writeJson(FS.resolvePath('Apps/Untracked/.tao/store/lock.jsonc', root), lock({ util: pinned }))
       await initGitTestRepository(root)
       await CLI.mustRun('git', { args: ['add', 'Apps/Pinned', 'Apps/Plain'], cwd: root })
 

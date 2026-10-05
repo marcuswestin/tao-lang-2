@@ -24,6 +24,10 @@ export type StudioCellRuntime = {
   resolvedState: StudioResolvedState
 }
 
+export type StudioCellBootstrap = StudioCellRuntime & {
+  sourceVersions: StudioPreviewManifestV2['sourceVersions']
+}
+
 type StudioCellOverrides = {
   args?: StudioJsonObject
   environment?: StudioCellEnvironment
@@ -148,6 +152,15 @@ export class StudioMatrixSession {
       throw new StudioMatrixConflictError('stale-instance', 'Studio preview instance is no longer current.')
     }
     return this.cell(identity.cellId)
+  }
+
+  /**
+   * bootstrap is the instance's runtime with the source versions its compile revision was built from.
+   * A preview whose publication marker stays byte-stable cannot read them from that marker, and
+   * pairing this revision with the marker's older versions would make every Draw action stale.
+   */
+  bootstrap(previewInstanceId: string): StudioCellBootstrap {
+    return { ...this.instance(previewInstanceId), sourceVersions: this.manifest.sourceVersions }
   }
 
   reconfigure(request: StudioCellReconfigureRequest): StudioCellRuntime {

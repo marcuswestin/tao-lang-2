@@ -18,7 +18,7 @@ Describe('Studio iframe Feed drops', () => {
     const calls: unknown[] = []
     let activated = 0
     const actions = {
-      activate: () => {
+      focus: () => {
         activated++
       },
       async applySourceAction() {},
@@ -47,7 +47,7 @@ Describe('Studio iframe Feed drops', () => {
         sketchId: 'sketch1',
       },
     ])
-    // Switching the active preview refreshes Feed and would invalidate the drag's row registry.
+    // Switching the focused preview refreshes Feed and would invalidate the drag's row registry.
     Expect(activated).toBe(0)
   })
 
@@ -121,7 +121,7 @@ Describe('Studio iframe Feed drops', () => {
     const status = { dataset: {}, textContent: '' } as unknown as HTMLElement
     const listener = studioPreviewMessageListener(
       {
-        activePreview: { activate() {} },
+        focusedPreview: { focus() {} },
         drawer: {},
         handshake,
         inspection: {},

@@ -20,6 +20,7 @@ export class StudioEditorTabs {
   readonly #available = new Set<string>()
   readonly #key: string
   readonly #storage: StudioEditorTabStorage
+  readonly #onChange?: (snapshot: StudioEditorTabSnapshot) => void
   #activePath: string | undefined
   #paths: string[] = []
 
@@ -28,13 +29,21 @@ export class StudioEditorTabs {
     availablePaths: readonly string[]
     project: string
     storage: StudioEditorTabStorage
+    initial?: StudioEditorTabSnapshot
+    onChange?: (snapshot: StudioEditorTabSnapshot) => void
   }) {
     this.#available = new Set(options.availablePaths.filter(validPath))
     this.#key = storageKey(options.project, options.appName)
     this.#storage = options.storage
-    const restored = read(this.#storage, this.#key, this.#available)
+    this.#onChange = options.onChange
+    const restored = options.initial === undefined
+      ? read(this.#storage, this.#key, this.#available)
+      : normalize(options.initial, this.#available)
     this.#paths = [...restored.paths]
     this.#activePath = restored.activePath
+    if (options.initial === undefined && restored.paths.length > 0) {
+      this.#onChange?.(restored)
+    }
   }
 
   snapshot(): StudioEditorTabSnapshot {
@@ -112,11 +121,14 @@ export class StudioEditorTabs {
 
   #save(): StudioEditorTabSnapshot {
     const snapshot = this.snapshot()
-    try {
-      this.#storage.setItem(this.#key, JSON.stringify({ ...snapshot, version: 1 } satisfies StudioEditorTabEnvelope))
-    } catch {
-      // Tab history is auxiliary device-local state and cannot block editing.
+    if (this.#onChange === undefined) {
+      try {
+        this.#storage.setItem(this.#key, JSON.stringify({ ...snapshot, version: 1 } satisfies StudioEditorTabEnvelope))
+      } catch {
+        // Tab history is auxiliary device-local state and cannot block editing.
+      }
     }
+    this.#onChange?.(snapshot)
     return snapshot
   }
 }
@@ -131,16 +143,21 @@ function read(
     if (value === null || value.version !== 1 || !Array.isArray(value.paths)) {
       return { paths: [] }
     }
-    const paths = [
-      ...new Set(value.paths.filter(path => typeof path === 'string' && validPath(path) && available.has(path))),
-    ].slice(-maximumTabs)
-    const activePath = typeof value.activePath === 'string' && paths.includes(value.activePath)
-      ? value.activePath
-      : paths.at(-1)
-    return { ...(activePath === undefined ? {} : { activePath }), paths }
+    return normalize(value as StudioEditorTabSnapshot, available)
   } catch {
     return { paths: [] }
   }
+}
+
+function normalize(value: StudioEditorTabSnapshot, available: ReadonlySet<string>): StudioEditorTabSnapshot {
+  const paths = [
+    ...new Set(value.paths.filter(path => typeof path === 'string' && validPath(path) && available.has(path))),
+  ]
+    .slice(-maximumTabs)
+  const activePath = typeof value.activePath === 'string' && paths.includes(value.activePath)
+    ? value.activePath
+    : paths.at(-1)
+  return { ...(activePath === undefined ? {} : { activePath }), paths }
 }
 
 function storageKey(project: string, appName: string): string {

@@ -1,4 +1,5 @@
-import { Describe, Expect, Test, withCapturedOutput } from '@shared/test'
+import { FS } from '@shared'
+import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import { CleanCommand, type CleanScope, type CleanStep } from '../dev-cli-src/clean/CleanCommand'
 
 function commandLine(step: CleanStep): string {
@@ -30,10 +31,34 @@ async function stepping(
 }
 
 Describe('cleaning a checkout', () => {
+  Test('refuses a linked project cache ancestor before starting removal', async () => {
+    const root = await mkTestDir('tao-clean-project-')
+    const external = await mkTestDir('tao-clean-external-')
+    const linked = FS.resolvePath('Apps/WordFlower/1 - Current/.tao', root)
+    const externalOutput = FS.resolvePath('cache/_gen_tao-app/App.tsx', external)
+    const ran: string[] = []
+    try {
+      await FS.writeText(externalOutput, 'keep')
+      await FS.symlink(external, linked)
+      await Expect(CleanCommand.run({
+        repositoryRoot: root,
+        runStep: async step => {
+          ran.push(step.name)
+          return 0
+        },
+      })).rejects.toThrow('Cannot clean generated project cache through linked path')
+      Expect(ran).toEqual([])
+      Expect(await FS.readText(externalOutput)).toBe('keep')
+    } finally {
+      await FS.remove(root)
+      await FS.remove(external)
+    }
+  })
+
   Test('removes checkout artifacts without deleting shared test caches', async () => {
     const checkout = (await CleanCommand.stepsFor('checkout')).map(commandLine)
     Expect(checkout[0]).toMatch(
-      /^rm -rf \.artifacts\/build \.artifacts\/dev packages\/apps\/expo-host\/\.expo packages\/apps\/expo-host\/_gen_tao-app packages\/apps\/expo-host\/_gen_tao-app-test$/,
+      /^rm -rf \.artifacts\/build \.artifacts\/dev packages\/apps\/expo-host\/\.expo packages\/apps\/expo-host\/_gen_tao-app packages\/apps\/expo-host\/_gen_tao-app-test Apps\/WordFlower\/1 - Current\/\.tao\/cache\/_gen_tao-app$/,
     )
     // Pruned rather than descended: `find` must not walk into a tree it is about to delete.
     Expect(checkout[1]).toBe('find . -name node_modules -type d -prune -exec rm -rf {} +')

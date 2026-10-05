@@ -30,7 +30,7 @@ Test(
   'Studio physically double-clicks free Text, saves Enter once, and cancels Escape without persistence',
   async () => {
     const projectRoot = await mkTestDir('tao-studio-canvas-editing-')
-    const catalogPath = FS.resolvePath('.tao/studio/sketches.jsonc', projectRoot)
+    const catalogPath = FS.resolvePath('.tao/store/studio/sketches.jsonc', projectRoot)
     let browser: StudioCdp | undefined
     let studio: Awaited<ReturnType<typeof startStudioSmokeLaunch>> | undefined
     try {

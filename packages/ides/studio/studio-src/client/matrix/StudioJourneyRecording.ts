@@ -21,7 +21,6 @@ export const StudioJourneyRecorder = {
     const appliedRevision = preview.appliedRevision
     return identity !== undefined
       && preview.iframe.contentWindow !== null
-      && preview.suspended !== true
       && appliedRevision !== undefined
       && appliedRevision >= identity.compileRevision
       && (preview.expectedRevision === undefined || appliedRevision >= preview.expectedRevision)

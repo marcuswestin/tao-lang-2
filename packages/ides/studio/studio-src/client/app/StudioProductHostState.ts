@@ -95,7 +95,7 @@ export function publishStudioHostSnapshot(snapshot: StudioHostSnapshot): void {
     ? undefined
     : projectRelativePath(snapshot.project, journeySource)
   publishStudioProductHostState({
-    activeCell: preview?.cell === undefined
+    focusedCell: preview?.cell === undefined
       ? undefined
       : {
         cellId: preview.cell.cellId,

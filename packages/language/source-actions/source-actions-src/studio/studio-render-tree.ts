@@ -12,6 +12,7 @@ import type {
 } from './studio-contract'
 import {
   directViewRenderStatement,
+  renderIdFor,
   renderStatementIndex,
   requireLocalRenderId,
   requireRenderById,
@@ -177,7 +178,7 @@ function moveRenderInsideBlockSource(
 ): string {
   const draggedSlice = slices[draggedIndex]!
   const remaining = slices.filter((_, index) => index !== draggedIndex)
-  const beforeIndex = requireOrderedTargetIndex(remaining, request)
+  const beforeIndex = requireOrderedTargetIndex(remaining, request, draggedIndex)
   remaining.splice(beforeIndex, 0, draggedSlice)
   return applySourceEdits(source, [replaceBlockStatementsEdit(source, block, slices, remaining)])
 }
@@ -215,31 +216,88 @@ function insertStatementEdit(
   return replaceBlockStatementsEdit(source, block, slices, next)
 }
 
-function requireOrderedTargetIndex(slices: BlockStatementSlice[], request: StudioMoveRenderRequest): number {
+/**
+ * The slice index a move lands at. Anchors are renders, so adjacency and the edges are counted over
+ * the statements that render: a `state` line or event handler between two renders, or above the
+ * first, is not a place anyone dropped anything. When such statements sit inside the gap, the render
+ * stays on the side of them it came from, crossing no more of them than the move needs; one step up
+ * never lifts a render above the `state` it reads unless that `state` sat between it and its
+ * neighbour. `draggedIndex` is where the render sat in this block, when the move stays in it.
+ */
+function requireOrderedTargetIndex(
+  slices: BlockStatementSlice[],
+  request: StudioMoveRenderRequest,
+  draggedIndex?: number,
+): number {
   const afterIndex = request.afterId === undefined ? undefined : renderStatementIndex(slices, request.afterId)
   const beforeIndex = request.beforeId === undefined ? undefined : renderStatementIndex(slices, request.beforeId)
   if (afterIndex === -1 || beforeIndex === -1) {
     Errors.throwUserInput('Drop target is no longer between the requested render expressions.')
   }
+  const rendering = renderingSliceIndexes(slices)
   if (afterIndex !== undefined && beforeIndex !== undefined) {
-    if (beforeIndex !== afterIndex + 1) {
+    if (rendering.indexOf(beforeIndex) !== rendering.indexOf(afterIndex) + 1) {
       Errors.throwUserInput('Drop-gap anchors are no longer adjacent render expressions.')
+    }
+    return draggedIndex !== undefined && draggedIndex <= afterIndex ? afterIndex + 1 : beforeIndex
+  }
+  if (beforeIndex !== undefined) {
+    if (beforeIndex !== rendering[0]) {
+      Errors.throwUserInput('A before-only drop anchor must be the first render expression.')
     }
     return beforeIndex
   }
-  if (beforeIndex !== undefined) {
-    if (beforeIndex !== 0) {
-      Errors.throwUserInput('A before-only drop anchor must be the first render expression.')
-    }
-    return 0
-  }
   if (afterIndex !== undefined) {
-    if (afterIndex !== slices.length - 1) {
+    if (afterIndex !== rendering.at(-1)) {
       Errors.throwUserInput('An after-only drop anchor must be the last render expression.')
     }
-    return slices.length
+    return afterIndex + 1
   }
   Errors.throwUserInput('A render move requires at least one drop-gap anchor.')
+}
+
+/** The indexes of the slices that put something on screen: a render, or a loop or branch of them. */
+function renderingSliceIndexes(slices: readonly BlockStatementSlice[]): number[] {
+  return slices.flatMap((slice, index) =>
+    AST.isRender(slice.statement) || AST.streamAllContents(slice.statement).some(AST.isRender) ? [index] : []
+  )
+}
+
+/**
+ * The moves one step up and one step down among a render's siblings, or none where it is already
+ * first or last, is not a direct child of a render block, or its neighbour is a loop or branch that
+ * no anchor can name. Each is the drop gap the canvas would send for the same step, so a move button
+ * and a drag are the same edit.
+ */
+export function renderSiblingMoves(
+  render: AST.Render,
+): Readonly<{ down?: StudioMoveRenderRequest; up?: StudioMoveRenderRequest }> {
+  const statement = directViewRenderStatement(render)
+  if (statement === undefined || !AST.isBlock(statement.$container)) {
+    return {}
+  }
+  const source = AST.getDocument(render).textDocument.getText()
+  const slices = blockStatementSlices(source, statement.$container)
+  const siblings = renderingSliceIndexes(slices).map(index => slices[index]!.statement)
+  const position = siblings.indexOf(statement)
+  const anchor = (sibling: AST.Statement | undefined): string | null | undefined =>
+    sibling === undefined ? undefined : AST.isRender(sibling) ? renderIdFor(sibling) : null
+  const step = (direction: -1 | 1): StudioMoveRenderRequest | undefined => {
+    const neighbour = anchor(siblings[position + direction])
+    const beyond = anchor(siblings[position + 2 * direction])
+    if (position < 0 || typeof neighbour !== 'string' || beyond === null) {
+      return undefined
+    }
+    const [afterId, beforeId] = direction === -1 ? [beyond, neighbour] : [neighbour, beyond]
+    return {
+      ...(afterId === undefined ? {} : { afterId }),
+      ...(beforeId === undefined ? {} : { beforeId }),
+      draggedId: renderIdFor(render),
+    }
+  }
+  const up = step(-1)
+  const down = step(1)
+  return { ...(down === undefined ? {} : { down }), ...(up === undefined ? {} : { up }) }
 }
 
 function throwEmptyMoveTarget(): never {

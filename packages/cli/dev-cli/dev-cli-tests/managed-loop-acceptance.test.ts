@@ -502,6 +502,7 @@ function faultOrchestrationFixture(
   omitCombinedMobile = false,
   malformedCleanupFailure = false,
   nativeFault?: 'closed' | 'entry-exit' | 'owner-rotation' | 'retained-cleanup' | 'active-native' | 'peer-churn',
+  iosStartupDiagnostic = "No value named 'MissingAcceptanceDeclaration' is in scope.",
 ) {
   type Actor = {
     receipt: DevLoopReceipt
@@ -564,7 +565,11 @@ function faultOrchestrationFixture(
     const metro = { pid: ++pid, startedAt: `metro-${pid}`, command: 'source Metro' }
     kernel.set(controller.pid, controller)
     kernel.set(metro.pid, metro)
-    const target = kind?.startsWith('mobile-android-') ? 'android' : kind?.startsWith('mobile-ios-') ? 'ios' : undefined
+    const target = kind?.startsWith('mobile-android-')
+      ? 'android'
+      : kind?.startsWith('mobile-ios-') || kind === 'ios-owned-normal'
+      ? 'ios'
+      : undefined
     const combined = kind?.startsWith('combined-') === true
     const receipt: DevLoopReceipt = {
       version: 1,
@@ -701,9 +706,16 @@ function faultOrchestrationFixture(
     } else if (kind === 'pause-restart') {
       actor.events.push({ event: 'phase', phase: 'compile' })
     }
-    if (kind === undefined && (await FS.readText(fixture.appPath)).includes('MissingAcceptanceDeclaration')) {
+    if (
+      (kind === undefined || kind === 'ios-owned-normal')
+      && (await FS.readText(fixture.appPath)).includes('MissingAcceptanceDeclaration')
+    ) {
       receipt.state = 'failed'
       receipt.message = 'MissingAcceptanceDeclaration source error'
+      if (kind === 'ios-owned-normal') {
+        await FS.mkdir(devLoopDirectory(session))
+        await FS.writeText(FS.resolvePath('loop.log', devLoopDirectory(session)), iosStartupDiagnostic)
+      }
     }
     if (receipt.state === 'failed') {
       receipt.controllerDisposed = true
@@ -990,6 +1002,35 @@ function faultOrchestrationFixture(
     },
   }
   return { actors, commands, signals, interactions, collected, operations, borrowedPreserved: () => borrowedPreserved }
+}
+
+for (const intendedFailure of [true, false]) {
+  Test(
+    `iOS cleanup acceptance ${intendedFailure ? 'proves compiler failure' : 'rejects unrelated startup failure'}`,
+    async () => {
+      const world = faultOrchestrationFixture(
+        false,
+        false,
+        undefined,
+        intendedFailure
+          ? "No value named 'MissingAcceptanceDeclaration' is in scope."
+          : 'Could not download application.',
+      )
+      const result = await proof({ case: 'ios-cleanup' }, world.operations)
+      try {
+        Expect(result.exitCode).toBe(intendedFailure ? 0 : 1)
+        Expect(result.report.rows.some(row => row.name === 'iOS successful session cleanup')).toBe(true)
+        Expect(result.report.rows.some(row => row.name === 'iOS failed startup cleanup')).toBe(intendedFailure)
+        Expect(world.actors.size).toBe(2)
+        Expect([...world.actors.values()].every(actor => actor.receipt.cleanupOutcome === 'proved')).toBe(true)
+      } finally {
+        for (const session of world.actors.keys()) {
+          await FS.remove(devLoopDirectory(session))
+        }
+        await result.cleanup()
+      }
+    },
+  )
 }
 
 for (const fail of [false, true]) {
@@ -1695,6 +1736,26 @@ Test(
     }
   },
 )
+
+Test('a managed-loop source projection retains a local project owner until ownership is released', async () => {
+  const artifactRoot = Repo.resolvePath(`.artifacts/tests/managed-loop-owner-${Platform.randomUUID()}`)
+  const fixtures = new ManagedLoopAcceptanceFixtures(artifactRoot)
+  const fixture = await fixtures.create()
+  const ownerPath = FS.resolvePath('.tao/local/sessions/owner.json', fixture.root)
+  try {
+    Expect(await FS.isFile(FS.resolvePath('.tao/store/project.json', fixture.root))).toBe(true)
+    Expect(await FS.exists(FS.resolvePath('.tao/project.json', fixture.root))).toBe(false)
+    await FS.writeJson(ownerPath, { pid: Platform.runtimeProcess.pid })
+    Expect(await fixtures.cleanup(fixture, true)).toBe(false)
+    Expect(await FS.isFile(fixture.appPath)).toBe(true)
+    await FS.remove(ownerPath)
+    Expect(await fixtures.cleanup(fixture, true)).toBe(true)
+    Expect(await FS.exists(fixture.root)).toBe(false)
+  } finally {
+    await FS.remove(fixture.root)
+    await FS.remove(artifactRoot)
+  }
+})
 
 for (const fault of ['reload-generation', 'restart-generation', 'keep-old-service'] as const) {
   Test(`finite lifecycle refuses ${fault} and still rolls back its owned loop`, async () => {

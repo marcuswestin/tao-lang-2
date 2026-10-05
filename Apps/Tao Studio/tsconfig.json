@@ -1,6 +1,6 @@
 {
   "extends": [
-    "./.tao/typescript/tsconfig.json",
+    "./.tao/cache/typescript/tsconfig.json",
     "../../packages/ides/studio/tsconfig.json"
   ],
   "compilerOptions": {

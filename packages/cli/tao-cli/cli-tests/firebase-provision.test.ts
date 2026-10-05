@@ -134,7 +134,7 @@ async function fixture() {
     state,
     control,
     options,
-    work: FS.resolvePath('.tao/firebase-connect', project),
+    work: FS.resolvePath('.tao/cache/firebase-connect', project),
   }
 }
 

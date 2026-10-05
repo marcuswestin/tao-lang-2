@@ -7,7 +7,7 @@ Describe('install offer before a project command', () => {
     const root = await mkTestDir('tao-install-offer-')
     try {
       const project = FS.resolvePath('Pinned', root)
-      await FS.writeJson(FS.resolvePath('.tao/lock.jsonc', project), {
+      await FS.writeJson(FS.resolvePath('.tao/store/lock.jsonc', project), {
         schemaVersion: 1,
         installs: {
           environments: {

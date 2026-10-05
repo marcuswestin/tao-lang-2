@@ -114,11 +114,11 @@ function fakeAppwriteCloud(projectId: string) {
 
 /** An Appwrite CLI whose account starts signed out and whose organization holds the given projects. */
 function fakeAppwriteCli(projects: { $id: string; region: string }[]) {
-  const calls: { args: readonly string[]; interactive: boolean }[] = []
+  const calls: { args: readonly string[]; cwd: string; interactive: boolean }[] = []
   let signedIn = false
   const ok = (value: unknown) => ({ exitCode: 0, stdout: JSON.stringify(value), stderr: '' })
-  const runner = async (args: readonly string[], _cwd: string, interactive: boolean) => {
-    calls.push({ args, interactive })
+  const runner = async (args: readonly string[], cwd: string, interactive: boolean) => {
+    calls.push({ args, cwd, interactive })
     const [command, subcommand] = args
     if (command === 'whoami') {
       return signedIn
@@ -176,7 +176,8 @@ Describe('tao connect', () => {
           tableId: 'notes',
         },
       })
-      Expect(await FS.exists(FS.resolvePath('.tao/connect-secrets.json', root))).toBe(false)
+      Expect(await FS.exists(FS.resolvePath('.tao/local/connect-secrets.json', root))).toBe(false)
+      Expect(cli.calls.every(call => call.cwd === FS.resolvePath('.tao/cache/appwrite-connect', root))).toBe(true)
       Expect(cli.calls.filter(call => call.interactive).map(call => call.args)).toEqual([['login']])
       const create = cli.calls.find(call => call.args[1] === 'create-project')!.args
       Expect(create).toContain('--region')
@@ -304,7 +305,7 @@ Describe('tao connect', () => {
         client_email: 'service@example.test',
       }
       const existingSecrets = { appwrite: { apiKey: 'keep-secret' }, firebase: { serviceAccount } }
-      await FS.writeJson(FS.resolvePath('.tao/connect-secrets.json', root), existingSecrets, { mode: 0o600 })
+      await FS.writeJson(FS.resolvePath('.tao/local/connect-secrets.json', root), existingSecrets, { mode: 0o600 })
       const { terminal, options } = scripted(
         ['firebase-project', 'web-api-key', 'web-app-id', 'firebase-project.firebaseapp.com'],
         'manual',
@@ -313,7 +314,7 @@ Describe('tao connect', () => {
 
       const publicText = await FS.readText(FS.resolvePath('tao.connections.json', root))
       const localText = await FS.readText(FS.resolvePath('.tao/local/connections.json', root))
-      const privateText = await FS.readText(FS.resolvePath('.tao/connect-secrets.json', root))
+      const privateText = await FS.readText(FS.resolvePath('.tao/local/connect-secrets.json', root))
       Expect(JSON.parse(publicText)).toEqual({
         appwrite: { projectId: 'keep-appwrite' },
       })
@@ -326,7 +327,7 @@ Describe('tao connect', () => {
         },
       })
       Expect(JSON.parse(privateText)).toEqual(existingSecrets)
-      Expect(await FS.fileMode(FS.resolvePath('.tao/connect-secrets.json', root))).toBe(0o600)
+      Expect(await FS.fileMode(FS.resolvePath('.tao/local/connect-secrets.json', root))).toBe(0o600)
       Expect(publicText).not.toContain('private-key-canary')
       Expect(localText).not.toContain('private-key-canary')
       Expect(terminal.outputText()).not.toContain('private-key-canary')
@@ -388,7 +389,7 @@ Describe('tao connect', () => {
           },
         })
       }
-      Expect(await FS.exists(FS.resolvePath('.tao/connect-secrets.json', root))).toBe(false)
+      Expect(await FS.exists(FS.resolvePath('.tao/local/connect-secrets.json', root))).toBe(false)
     } finally {
       await FS.remove(root)
     }
@@ -551,7 +552,7 @@ data Notes / Note { Body text }
         },
         other: { keep: true },
       })
-      Expect(await FS.readText(FS.resolvePath('.tao/firebase-connect/firestore.rules', root))).toContain(
+      Expect(await FS.readText(FS.resolvePath('.tao/cache/firebase-connect/firestore.rules', root))).toContain(
         'match /Note/{id}',
       )
       Expect(await FS.exists(FS.resolvePath('tao.connections.json', root))).toBe(false)
@@ -617,7 +618,7 @@ data Notes / Note { Body text }
           },
         })).rejects.toThrow('symbolic links')
         Expect(calls).toEqual([])
-        Expect(await FS.exists(FS.resolvePath('.tao/firebase-connect', root))).toBe(false)
+        Expect(await FS.exists(FS.resolvePath('.tao/cache/firebase-connect', root))).toBe(false)
       } finally {
         await FS.remove(root)
       }
@@ -633,7 +634,11 @@ data Notes / Note { Body text }
       })
       const calls: string[][] = []
       let signedIn = false
-      const runner = async (args: readonly string[]): Promise<{ exitCode: number; stdout: string; stderr: string }> => {
+      const runner = async (
+        args: readonly string[],
+        cwd: string,
+      ): Promise<{ exitCode: number; stdout: string; stderr: string }> => {
+        Expect(cwd).toBe(FS.resolvePath('.tao/cache/firebase-connect', root))
         calls.push([...args])
         const command = args[0]
         const project = args[args.indexOf('--project') + 1]
@@ -789,17 +794,17 @@ data Notes / Note { Body text }
       Expect(terminal.outputText()).not.toContain('Appwrite')
       Expect(calls.find(call => call[0] === 'login')).toEqual(['login', '--reauth'])
       Expect(calls.filter(call => call[0] === 'deploy')[0]).toContain('auth,firestore:rules')
-      Expect(await FS.readJson(FS.resolvePath('.tao/firebase-connect/firebase.json', root))).toEqual({
+      Expect(await FS.readJson(FS.resolvePath('.tao/cache/firebase-connect/firebase.json', root))).toEqual({
         auth: { providers: { emailPassword: true } },
         firestore: { database: '(default)', edition: 'standard', rules: 'firestore.rules', location: 'nam5' },
       })
-      Expect(await FS.readText(FS.resolvePath('.tao/firebase-connect/firestore.rules', root)))
+      Expect(await FS.readText(FS.resolvePath('.tao/cache/firebase-connect/firestore.rules', root)))
         .toBe("rules_version = '2';\n")
       Expect(terminal.outputText()).toContain(
         `Creating Firebase project ${created}… This usually takes about a minute.`,
       )
       Expect(terminal.outputText()).toContain('This can take a few minutes.')
-      Expect(await FS.exists(FS.resolvePath('.tao/connect-secrets.json', root))).toBe(false)
+      Expect(await FS.exists(FS.resolvePath('.tao/local/connect-secrets.json', root))).toBe(false)
       Expect(calls.some(call => call.includes('hosting'))).toBe(false)
     } finally {
       await FS.remove(root)
@@ -939,7 +944,7 @@ data Notes / Note { Body text }
         databaseId: 'tao_notes',
         tableId: 'notes',
       })
-      const privatePath = FS.resolvePath('.tao/connect-secrets.json', root)
+      const privatePath = FS.resolvePath('.tao/local/connect-secrets.json', root)
       Expect(await FS.readJson(privatePath)).toEqual({
         appwrite: {
           endpoint: 'https://fra.cloud.appwrite.io/v1',
@@ -955,11 +960,22 @@ data Notes / Note { Body text }
         .toBe(true)
       Expect(terminal.outputText()).toContain('Create API key')
       const writes = requests.filter(request => request.method !== 'GET').length
+      const legacyPrivatePath = FS.resolvePath('.tao/connect-secrets.json', root)
+      await FS.move(privatePath, legacyPrivatePath)
       await runTaoConnect('appwrite', root, {
         ...scripted(['manual', 'https://fra.cloud.appwrite.io/v1', 'appwrite-project']).options,
         fetch: fetchImpl,
       })
       Expect(requests.filter(request => request.method !== 'GET')).toHaveLength(writes)
+      Expect(await FS.exists(legacyPrivatePath)).toBe(false)
+      Expect(await FS.fileMode(privatePath)).toBe(0o600)
+      Expect(await FS.readJson(privatePath)).toEqual({
+        appwrite: {
+          endpoint: 'https://fra.cloud.appwrite.io/v1',
+          projectId: 'appwrite-project',
+          apiKey: 'appwrite-secret-canary',
+        },
+      })
       cloud.tableMalformed = true
       await Expect(runTaoConnect('appwrite', root, {
         ...scripted(['manual', 'https://fra.cloud.appwrite.io/v1', 'appwrite-project'], '', 'appwrite-secret-canary')
@@ -972,6 +988,34 @@ data Notes / Note { Body text }
     }
   })
 
+  Test('rejects linked private connection files and ancestors before setup or storage', async () => {
+    for (const linked of ['.tao', '.tao/local', '.tao/local/connect-secrets.json']) {
+      const root = await mkTestDir('tao-connect-linked-secrets-')
+      try {
+        const targetDirectory = FS.resolvePath('private-target', root)
+        const targetPath = FS.resolvePath('connect-secrets.json', targetDirectory)
+        const existingSecrets = { appwrite: { apiKey: 'untouched-secret-canary' } }
+        await FS.writeJson(targetPath, existingSecrets, { mode: 0o600 })
+        await FS.symlink(linked.endsWith('.json') ? targetPath : targetDirectory, FS.resolvePath(linked, root))
+        const cloud = fakeAppwriteCloud('appwrite-project')
+        const { terminal, options } = scripted(
+          ['manual', 'https://fra.cloud.appwrite.io/v1', 'appwrite-project'],
+          '',
+          'replacement-secret-canary',
+        )
+        await Expect(runTaoConnect('appwrite', root, { ...options, fetch: cloud.fetchImpl }))
+          .rejects.toThrow('symbolic link')
+        Expect(cloud.requests).toEqual([])
+        Expect(await FS.readJson(targetPath)).toEqual(existingSecrets)
+        Expect(await FS.fileMode(targetPath)).toBe(0o600)
+        Expect(await FS.exists(FS.resolvePath('tao.connections.json', root))).toBe(false)
+        Expect(terminal.outputText()).not.toContain('secret-canary')
+      } finally {
+        await FS.remove(root)
+      }
+    }
+  })
+
   Test('rejects a noninteractive run before creating files', async () => {
     const root = await mkConnectProject('tao-connect-noninteractive-')
     try {
@@ -979,7 +1023,7 @@ data Notes / Note { Body text }
         Errors.UserInputError,
       )
       Expect(await FS.exists(FS.resolvePath('tao.connections.json', root))).toBe(false)
-      Expect(await FS.exists(FS.resolvePath('.tao/connect-secrets.json', root))).toBe(false)
+      Expect(await FS.exists(FS.resolvePath('.tao/local/connect-secrets.json', root))).toBe(false)
     } finally {
       await FS.remove(root)
     }
@@ -1001,7 +1045,7 @@ data Notes / Note { Body text }
       Expect(await FS.readJson(FS.resolvePath('.tao/local/connections.json', root))).toEqual({
         firebase: { projectId: 'project', apiKey: 'web-key', appId: 'app-id', authDomain: 'project.firebaseapp.com' },
       })
-      Expect(await FS.exists(FS.resolvePath('.tao/connect-secrets.json', root))).toBe(false)
+      Expect(await FS.exists(FS.resolvePath('.tao/local/connect-secrets.json', root))).toBe(false)
     } finally {
       await FS.remove(root)
     }
@@ -1051,7 +1095,7 @@ data Notes / Note { Body text }
         ).options,
       )).rejects.toThrow('HTTPS URL')
       Expect(await FS.readText(publicPath)).toBe(beforePublic)
-      Expect(await FS.exists(FS.resolvePath('.tao/connect-secrets.json', root))).toBe(false)
+      Expect(await FS.exists(FS.resolvePath('.tao/local/connect-secrets.json', root))).toBe(false)
     } finally {
       await FS.remove(root)
     }
@@ -1072,7 +1116,7 @@ data Notes / Note { Body text }
         fetch: async () => new Response('{}', { status: 403 }),
       })).rejects.toThrow('Check the project ID, API key, and its scopes')
       Expect(await FS.readJson(publicPath)).toEqual({ existing: true })
-      Expect(await FS.exists(FS.resolvePath('.tao/connect-secrets.json', root))).toBe(false)
+      Expect(await FS.exists(FS.resolvePath('.tao/local/connect-secrets.json', root))).toBe(false)
       Expect(terminal.outputText()).not.toContain('rejected-key-canary')
     } finally {
       await FS.remove(root)

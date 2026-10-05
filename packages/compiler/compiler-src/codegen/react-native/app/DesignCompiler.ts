@@ -3,6 +3,7 @@ import { AST } from '@parser'
 import { Assert } from '@shared'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
+import { compileDeclarationIdentity } from './declaration-identity'
 
 /** DesignCompiler lowers structured §13 declarations while preserving the absorbed flat ABI. */
 export const DesignCompiler = {
@@ -51,13 +52,26 @@ export const DesignCompiler = {
         ${
       options.studio === true
         ? gen`sources: {
-          ${gen.list(legacyBundles, bundle => gen`${gen.jsLiteral(bundle.name)}: ${designSpecSource(bundle.spec)},`)}
-          ${gen.list(text, entry => gen`${gen.jsLiteral(entry.name)}: ${designSpecSource(entry.spec)},`)}
-          ${gen.list(styles, entry => gen`${gen.jsLiteral(entry.name)}: ${designSpecSource(entry.spec)},`)}
+          ${
+          gen.list(legacyBundles, bundle =>
+            gen`${gen.jsLiteral(bundle.name)}: ${designSpecSource(bundle.spec, options)},`)
+        }
+          ${
+          gen.list(text, entry => gen`${gen.jsLiteral(entry.name)}: ${designSpecSource(entry.spec, options)},`)
+        }
+          ${gen.list(styles, entry => gen`${gen.jsLiteral(entry.name)}: ${designSpecSource(entry.spec, options)},`)}
         },`
         : ''
     }
-      })
+      }, ${compileDeclarationIdentity(declaration)}.canonical${
+      options.studio === true && options.studioSourceEpochs !== undefined
+        ? gen`, {
+          path: ${gen.jsLiteral(AST.getDocument(declaration).uri.fsPath)},
+          epoch: ${options.studioSourceEpochs[AST.getDocument(declaration).uri.fsPath] ?? 0},
+          sourceEpochs: ${gen.jsLiteral(options.studioSourceEpochs)},
+        }`
+        : gen.noop()
+    })
     `
   },
 
@@ -140,7 +154,7 @@ function designPath(path: AST.DesignValuePath): string {
   return [path.head, ...path.segments].join('.')
 }
 
-function designSpecSource(spec: AST.LayoutClause): Compiled {
+function designSpecSource(spec: AST.LayoutClause | AST.Render, options: CodegenOptions = {}): Compiled {
   const owner = spec.$container
   const cst = spec.$cstNode
   const named = AST.isDesignBundle(owner) || AST.isDesignStyleEntry(owner) || AST.isDesignTextEntry(owner)
@@ -152,11 +166,21 @@ function designSpecSource(spec: AST.LayoutClause): Compiled {
     ? 'legacy-style'
     : AST.isViewDeclaration(owner)
     ? 'declaration'
+    : AST.isRender(spec)
+    ? 'element-default'
     : 'inline'
+  const path = AST.getDocument(spec).uri.fsPath
   return gen`{
     kind: ${gen.jsLiteral(kind)},
     ${named ? gen`member: ${gen.jsLiteral(owner.name)},` : ''}
-    path: ${gen.jsLiteral(AST.getDocument(spec).uri.path)},
+    path: ${gen.jsLiteral(path)},
+    ${
+    options.studio === true && options.studioSourceEpochs !== undefined
+      ? gen`cohort: __tao_design_cohort__,`
+      : gen.noop()
+  }
+    ${options.studioSourceEpochs === undefined ? '' : gen`epoch: ${options.studioSourceEpochs[path] ?? 0},`}
+    ${options.studioDesignEpochs === undefined ? '' : gen`designEpochs: ${gen.jsLiteral(options.studioDesignEpochs)},`}
     ${cst === undefined ? '' : gen`end: ${cst.end}, start: ${cst.offset},`}
   }`
 }

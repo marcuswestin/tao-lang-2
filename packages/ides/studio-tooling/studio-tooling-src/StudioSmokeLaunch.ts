@@ -15,6 +15,7 @@ const READY_POLL_MS = 200
 export type StudioSmokeLaunchOptions = {
   appName?: string
   port?: number
+  previewPublication?: 'on' | 'off'
   projectRoot: string
   repositoryRoot?: string
   /** Injected in tests so the launch does not need a real Studio. */
@@ -47,6 +48,7 @@ export async function startStudioSmokeLaunch(
     '--json',
     ...(options.appName === undefined ? [] : ['--app', options.appName]),
     ...(options.port === undefined ? [] : ['--port', String(options.port)]),
+    ...(options.previewPublication === undefined ? [] : ['--preview-publication', options.previewPublication]),
   ]
   let output = ''
   const command = (options.start ?? defaultStart)(

@@ -84,7 +84,7 @@ Describe('Studio Feed controller', () => {
       },
       context: () => ({
         cellId: 'cell:1',
-        activeScenarioId: 'scenario:1',
+        focusedScenarioId: 'scenario:1',
         sketchId: activeSketch ? 'sketch:1' : undefined,
       }),
       canMutate: () => true,

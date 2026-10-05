@@ -46,7 +46,7 @@ export function MemoryProvider(): TR.DataProvider {
       ...checkedProjectFile,
       'Main.tao': functionSource,
       'tsconfig.json': JSON.stringify({
-        extends: './.tao/typescript/tsconfig.json',
+        extends: './.tao/cache/typescript/tsconfig.json',
         compilerOptions: {
           typeRoots: ['./node_modules/@types'],
           types: ['project'],
@@ -66,7 +66,7 @@ export function CountWords(value: string): number {
       Expect(results.flatMap(result => result.diagnostics ?? []).filter(diagnostic => diagnostic.severity === 'error'))
         .toEqual([])
       const base = await FS.readJson<{ compilerOptions: { paths: Record<string, string[]> } }>(
-        FS.resolvePath('.tao/typescript/tsconfig.json', root),
+        FS.resolvePath('.tao/cache/typescript/tsconfig.json', root),
       )
       Expect(base.compilerOptions.paths['react-native']?.[0]).toContain('react-native')
     })

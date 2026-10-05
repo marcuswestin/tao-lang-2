@@ -1,4 +1,4 @@
-import { Errors, FS, HCI, Platform, Repo, Time } from '@shared'
+import { Errors, FS, HCI, Platform, ProjectIdentity, ProjectLocal, Repo, Time } from '@shared'
 import { Expect, mkTestDir, Test } from '@shared/test'
 import {
   openStudioPreviewSession,
@@ -6,6 +6,7 @@ import {
 } from '@studio'
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
 import { startStudioSmokeLaunch } from '../studio-tooling-src/StudioSmokeLaunch'
+import { activateSmokePreviews } from '../studio-tooling-src/StudioSmokePreviews'
 import { exerciseHnreaderFeed } from './studio-hnreader-feed-journey'
 
 Test(
@@ -17,7 +18,7 @@ Test(
 async function canvasTranslation(browser: StudioCdp): Promise<{ x: number; y: number }> {
   return await browser.evaluate(`(() => {
     const grid = document.querySelector('.studio-preview > .studio-preview-grid')
-    if (!(grid instanceof HTMLElement)) throw new Error('Missing Studio canvas grid')
+    if (!(grid instanceof HTMLElement)) throw new TypeError('Missing Studio canvas grid')
     const matrix = new DOMMatrix(getComputedStyle(grid).transform)
     return { x: matrix.e, y: matrix.f }
   })()`)
@@ -60,7 +61,7 @@ Test('Studio compiles, applies insertion and undo, and publishes the real HNRead
   try {
     await FS.remove(previewRuntimeRoot)
     await FS.copyDirectory(Repo.resolvePath('Apps/HNReader'), projectRoot)
-    await FS.remove(FS.resolvePath('.tao/typescript/outputs.json', projectRoot))
+    await FS.remove(ProjectLocal.cacheResolve('typescript/outputs.json', projectRoot))
     await FS.remove(FS.resolvePath('.tao-ts', projectRoot))
     preview = await openStudioPreviewSession({
       appName: 'HNReaderStub',
@@ -73,7 +74,8 @@ Test('Studio compiles, applies insertion and undo, and publishes the real HNRead
     if (initialCompile.status !== 'compiled') {
       Errors.throwUnexpected(`Initial HNReader compile failed: ${JSON.stringify(initialCompile.diagnostics)}`)
     }
-    const initial = await preview.session.readFile('HNReader.tao')
+    // HNReader.tao holds the app shell; the front page's views live beside it.
+    const initial = await preview.session.readFile('Feed.tao')
     const identity = {
       ...preview.session.identity(),
       path: initial.path,
@@ -100,11 +102,11 @@ Test('Studio compiles, applies insertion and undo, and publishes the real HNRead
     Expect(applied.content).toContain('Text("New text")')
     Expect(undone.compile.compileRevision).toBe(3)
     Expect(undone.content).toBe(initial.content)
-    Expect(await FS.readText(FS.resolvePath('HNReader.tao', projectRoot))).toBe(initial.content)
+    Expect(await FS.readText(FS.resolvePath('Feed.tao', projectRoot))).toBe(initial.content)
     Expect(stableRoot).toContain('TR.Studio.PreviewBridge')
     Expect(publication).toContain('"appName":"HNReaderStub"')
     Expect(publication).toContain('"compileRevision":3')
-    Expect(publication).toContain(FS.resolvePath('HNReader.tao', projectRoot))
+    Expect(publication).toContain(FS.resolvePath('Feed.tao', projectRoot))
     Expect(publication).toContain(initial.sourceVersion)
   } finally {
     await preview?.close()
@@ -133,16 +135,69 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
     browser = await StudioCdp.launchChrome({ artifactRoot: studio.readiness.artifactRoot })
     await browser.setViewport(1_440, 900)
     await browser.goto(studio.readiness.sessionUrl)
+    await browser.waitFor("document.querySelector('.studio-preview-activation-toggle') !== null")
+    Expect(await browser.evaluate("document.querySelectorAll('.studio-preview-cell iframe').length")).toBe(0)
+    Expect(await browser.evaluate("document.querySelector('.studio-preview-inactive-activate')?.textContent"))
+      .toBe('activate')
+    Expect(
+      await browser.evaluate(`(() => {
+      const viewport = document.querySelector('.studio-preview-cell-viewport')
+      const canvas = document.querySelector('.studio-preview')
+      const cell = document.querySelector('.studio-preview-cell')
+      if (!viewport || !canvas || !cell) throw new TypeError('Missing inactive preview surfaces')
+      return {
+        background: getComputedStyle(viewport).backgroundColor,
+        canvasCursor: getComputedStyle(canvas).cursor,
+        previewCursor: getComputedStyle(cell).cursor,
+        panel: getComputedStyle(document.documentElement).getPropertyValue('--studio-panel').trim(),
+      }
+    })()`),
+    ).toMatchObject({ canvasCursor: 'grab', previewCursor: 'pointer' })
+    Expect(
+      await browser.evaluate(`(() => {
+      const viewport = document.querySelector('.studio-preview-cell-viewport')
+      const swatch = document.createElement('div')
+      swatch.style.backgroundColor = 'var(--studio-panel)'
+      document.body.append(swatch)
+      const matches = viewport && getComputedStyle(viewport).backgroundColor === getComputedStyle(swatch).backgroundColor
+      swatch.remove()
+      return matches
+    })()`),
+    ).toBe(true)
+    Expect(
+      await browser.evaluate(`(() => {
+      const header = document.querySelector('.studio-preview-cell-label')
+      const toggle = header?.querySelector('.studio-preview-activation-toggle')
+      const name = toggle?.nextElementSibling
+      return header instanceof HTMLElement && toggle instanceof HTMLButtonElement && name instanceof HTMLElement
+        && toggle.getBoundingClientRect().left <= header.getBoundingClientRect().left + 1
+        && toggle.getBoundingClientRect().right <= name.getBoundingClientRect().left
+    })()`),
+    ).toBe(true)
+    await browser.captureScreenshot('preview-inactive')
+    await browser.click('.studio-preview-inactive-activate')
     await browser.waitFor(
       `document.querySelector('.studio-preview-cell iframe') instanceof HTMLIFrameElement`,
       { timeoutMs: 30_000 },
     )
     // The native button renders its title uppercase on web, and innerText reports the transformed text.
     await waitForPreview(browser, studio, previewUrl, `document.body?.textContent?.includes('Increment') === true`)
+    Expect(await browser.evaluate(`getComputedStyle(document.querySelector('.studio-preview-focus-shield')).cursor`))
+      .toBe('pointer')
+    Expect(await browser.evaluate("document.querySelector('.studio-preview-inactive-activate')")).toBe(null)
+    Expect(
+      await browser.evaluate(
+        "document.querySelector('.studio-preview-activation-toggle')?.getAttribute('aria-pressed')",
+      ),
+    )
+      .toBe('true')
+    // Keep the header's active bolt visible even when waiting for the tall iframe scrolled it away.
+    await browser.evaluate("document.querySelector('.studio-preview-cell-label')?.scrollIntoView({ block: 'nearest' })")
+    await browser.captureScreenshot('preview-active')
 
     await browser.click('[data-preset="design"]')
     await browser.waitFor(`document.querySelector('.studio-canvas-zoom') !== null`)
-    await activateFirstPreview(browser)
+    await focusFirstPreview(browser)
     await browser.withKeyHeld(' ', async () => {
       await browser!.waitFor(`document.querySelector('.studio-preview')?.dataset.canvasPanReady === 'true'`)
       const before = await canvasTranslation(browser!)
@@ -182,6 +237,7 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
       `fetch(location.pathname + '/api/protocol').then(r => r.json()).then(h => h.canvasViewport?.z === 1.5)`,
     )
     await browser.goto(studio.readiness.sessionUrl)
+    await activateSmokePreviews(browser)
     await browser.waitFor(
       `document.querySelector('.studio-preview-grid')?.style.transform === ${JSON.stringify(savedCamera)}`,
     )
@@ -193,7 +249,7 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
 
     await browser.evaluate(`(() => {
       const frame = document.querySelector('.studio-preview-cell iframe')
-      if (!(frame instanceof HTMLIFrameElement)) throw new Error('Missing Studio preview iframe')
+      if (!(frame instanceof HTMLIFrameElement)) throw new TypeError('Missing Studio preview iframe')
       window.__taoFastRefreshFrameProbe = { loads: 0 }
       frame.addEventListener('load', () => { window.__taoFastRefreshFrameProbe.loads += 1 })
       return true
@@ -220,7 +276,7 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
     // Edit mode gives Studio every click for selection, so the press happens in Run mode, the way a
     // person would press it, and the drag after it happens back in Edit mode.
     await setInteractionMode(browser, 'run')
-    await exerciseInactivePreview(browser, previewUrl)
+    await exerciseUnfocusedPreview(browser, previewUrl)
     await pressIncrementOnce(browser, previewUrl)
     await exercisePreviewFocusRelease(browser, previewUrl)
     await browser.evaluateInFrame(
@@ -273,7 +329,7 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
     await browser.waitForInFrame(previewUrl, `window.__taoSmokeMode === 'edit'`)
 
     const compileRevision = await waitForCompileAfter(browser, -1)
-    await activateFirstPreview(browser)
+    await focusFirstPreview(browser)
     await dragThirdBetweenFirstAndSecond(browser, previewUrl)
     await waitForSourceOrder(sourcePath, ['Text("First")', 'Text("Third")', 'Text("Second")'])
     const movedRevision = await waitForCompileAfter(browser, compileRevision)
@@ -511,7 +567,7 @@ async function waitForCompileAfter(browser: StudioCdp, previousRevision: number)
 async function setInteractionMode(browser: StudioCdp, mode: 'edit' | 'run'): Promise<void> {
   await browser.evaluate(`(() => {
     const button = document.querySelector('.studio-interaction-mode')
-    if (!(button instanceof HTMLButtonElement)) throw new Error('Missing Studio interaction mode control')
+    if (!(button instanceof HTMLButtonElement)) throw new TypeError('Missing Studio interaction mode control')
     if (button.dataset.mode !== ${JSON.stringify(mode)}) button.click()
     return button.dataset.mode
   })()`)
@@ -540,14 +596,14 @@ async function pressIncrementOnce(browser: StudioCdp, previewUrl: string): Promi
         .filter(element => element.textContent?.trim() === 'Increment')
         .toSorted((left, right) => left.querySelectorAll('[data-tao-studio]').length
           - right.querySelectorAll('[data-tao-studio]').length)[0]
-      if (!(increment instanceof HTMLElement)) throw new Error('Missing Increment control')
+      if (!(increment instanceof HTMLElement)) throw new TypeError('Missing Increment control')
       const rect = increment.getBoundingClientRect()
       return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
     })()`,
     )
     const point = await browser.evaluate<Readonly<{ x: number; y: number }>>(`(() => {
       const frame = document.querySelector('.studio-preview-cell iframe')
-      if (!(frame instanceof HTMLIFrameElement)) throw new Error('Missing Studio preview iframe')
+      if (!(frame instanceof HTMLIFrameElement)) throw new TypeError('Missing Studio preview iframe')
       const rect = frame.getBoundingClientRect()
       const scale = frame.clientWidth === 0 ? 1 : rect.width / frame.clientWidth
       return { x: rect.left + ${inFrame.x} * scale, y: rect.top + ${inFrame.y} * scale }
@@ -625,6 +681,17 @@ async function waitForSourceOrder(path: string, ordered: readonly string[]): Pro
 }
 
 async function dragThirdBetweenFirstAndSecond(browser: StudioCdp, previewUrl: string): Promise<void> {
+  await dragRenderBetween(browser, previewUrl, 'Third', 'First', 'Second')
+}
+
+/** Drops the render reading `moved` midway between the renders reading `before` and `after`. */
+async function dragRenderBetween(
+  browser: StudioCdp,
+  previewUrl: string,
+  moved: string,
+  before: string,
+  after: string,
+): Promise<void> {
   await browser.evaluateInFrame(
     previewUrl,
     `(() => {
@@ -632,11 +699,11 @@ async function dragThirdBetweenFirstAndSecond(browser: StudioCdp, previewUrl: st
       .filter(element => element.textContent?.trim() === text)
       .toSorted((left, right) => left.querySelectorAll('[data-tao-studio]').length
         - right.querySelectorAll('[data-tao-studio]').length)[0]
-    const first = exactRender('First')
-    const second = exactRender('Second')
-    const third = exactRender('Third')
+    const first = exactRender(${JSON.stringify(before)})
+    const second = exactRender(${JSON.stringify(after)})
+    const third = exactRender(${JSON.stringify(moved)})
     if (!(first instanceof HTMLElement) || !(second instanceof HTMLElement) || !(third instanceof HTMLElement)) {
-      throw new Error('Missing draggable Studio render targets')
+      throw new TypeError('Missing draggable Studio render targets')
     }
     const firstRect = first.getBoundingClientRect()
     const secondRect = second.getBoundingClientRect()
@@ -672,25 +739,31 @@ async function dragThirdBetweenFirstAndSecond(browser: StudioCdp, previewUrl: st
   )
 }
 
-async function activateFirstPreview(browser: StudioCdp): Promise<void> {
+async function focusFirstPreview(browser: StudioCdp): Promise<void> {
   if (
     !await browser.evaluate<boolean>(
       `document.querySelector('.studio-preview-cell')?.dataset.previewInteractive === 'true'`,
     )
   ) {
-    await browser.clickAtOffset('.studio-preview-cell .studio-preview-activation-shield', { x: 100, y: 250 })
+    await browser.clickAtOffset('.studio-preview-cell .studio-preview-focus-shield', { x: 100, y: 250 })
   }
   await browser.waitFor(`document.querySelector('.studio-preview-cell')?.dataset.previewInteractive === 'true'`)
 }
 
-async function exerciseInactivePreview(browser: StudioCdp, previewUrl: string): Promise<void> {
-  await browser.waitFor(`document.querySelectorAll('[data-preview-interactive="true"]').length === 0`)
+async function exerciseUnfocusedPreview(browser: StudioCdp, previewUrl: string): Promise<void> {
+  await browser.waitFor(`(() => {
+    const frame = document.querySelector('.studio-preview-cell iframe')
+    const shield = document.querySelector('.studio-preview-cell .studio-preview-focus-shield')
+    return frame !== null && shield !== null && !shield.hidden
+      && getComputedStyle(frame).pointerEvents === 'none'
+      && document.querySelectorAll('[data-preview-interactive="true"]').length === 0
+  })()`)
   await browser.evaluateInFrame(
     previewUrl,
     `(() => {
-    window.__taoInactiveEvents = []
+    window.__taoUnfocusedEvents = []
     for (const type of ['pointermove', 'pointerdown', 'click', 'wheel']) {
-      document.addEventListener(type, () => window.__taoInactiveEvents.push(type), true)
+      document.addEventListener(type, () => window.__taoUnfocusedEvents.push(type), true)
     }
   })()`,
   )
@@ -703,7 +776,7 @@ async function exerciseInactivePreview(browser: StudioCdp, previewUrl: string): 
   await browser.dragBy('.studio-preview-cell iframe', { x: 40, y: 20 })
   Expect(await canvasTranslation(browser)).toEqual({ x: before.x + 30, y: before.y })
   Expect(await browser.evaluate(`document.querySelectorAll('[data-preview-interactive="true"]').length`)).toBe(0)
-  Expect(await browser.evaluateInFrame(previewUrl, 'window.__taoInactiveEvents')).toEqual([])
+  Expect(await browser.evaluateInFrame(previewUrl, 'window.__taoUnfocusedEvents')).toEqual([])
   // Click directly over Increment: selecting the preview must not also press its button.
   const point = await browser.evaluateInFrame<{ x: number; y: number }>(
     previewUrl,
@@ -715,9 +788,9 @@ async function exerciseInactivePreview(browser: StudioCdp, previewUrl: string): 
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
   })()`,
   )
-  await browser.clickAtOffset('.studio-preview-cell .studio-preview-activation-shield', point)
+  await browser.clickAtOffset('.studio-preview-cell .studio-preview-focus-shield', point)
   await browser.waitFor(`document.querySelector('.studio-preview-cell')?.dataset.previewInteractive === 'true'`)
-  Expect(await browser.evaluateInFrame(previewUrl, 'window.__taoInactiveEvents.includes("click")')).toBe(false)
+  Expect(await browser.evaluateInFrame(previewUrl, 'window.__taoUnfocusedEvents.includes("click")')).toBe(false)
   Expect(
     await browser.evaluateInFrame(
       previewUrl,
@@ -727,6 +800,8 @@ async function exerciseInactivePreview(browser: StudioCdp, previewUrl: string): 
 }
 
 async function exerciseExclusivePreviewSelection(browser: StudioCdp): Promise<void> {
+  await browser.waitFor(`document.querySelectorAll('.studio-preview-cell').length === 2`)
+  await activateSmokePreviews(browser)
   await browser.waitFor(`document.querySelectorAll('.studio-preview-cell iframe').length === 2`)
   await browser.pressShortcut('0')
   const frames = await browser.evaluate<string[]>(
@@ -786,6 +861,126 @@ async function exercisePreviewFocusRelease(browser: StudioCdp, previewUrl: strin
   await browser.pressShortcut('1')
   Expect(await browser.evaluateInFrame(previewUrl, 'window.__taoInactiveKeys')).toEqual([])
   await browser.click('.studio-canvas-zoom')
-  await activateFirstPreview(browser)
+  await focusFirstPreview(browser)
   await browser.clickAtOffset('.studio-preview-cell iframe', { x: 100, y: 250 })
 }
+
+Test('Studio publication-off preview renders edits without reloading its frame', async () => {
+  const repositoryRoot = Repo.getRoot()
+  const projectRoot = await mkTestDir('tao-studio-publication-off-')
+  const sourcePath = FS.resolvePath('RefreshSmoke.tao', projectRoot)
+  let browser: StudioCdp | undefined
+  let studio: Awaited<ReturnType<typeof startStudioSmokeLaunch>> | undefined
+  try {
+    await FS.writeText(sourcePath, fastRefreshSource)
+    await FS.mkdir(FS.resolvePath('.tao', projectRoot))
+    await ProjectIdentity.ensure(projectRoot)
+    studio = await startStudioSmokeLaunch({
+      appName: 'RefreshSmoke',
+      previewPublication: 'off',
+      projectRoot,
+      repositoryRoot,
+    })
+    const previewUrl = studio.readiness.previewUrl
+    if (previewUrl === undefined) {
+      Errors.throwUnexpected('The browser Studio launch did not advertise its Metro preview URL.')
+    }
+    Expect(new URL(previewUrl).searchParams.get('taoStudioPublication')).toBe('off')
+    browser = await StudioCdp.launchChrome({ artifactRoot: studio.readiness.artifactRoot })
+    await browser.setViewport(1_440, 900)
+    await browser.goto(studio.readiness.sessionUrl)
+    await activateSmokePreviews(browser)
+    await browser.waitFor(`document.querySelector('.studio-preview-cell iframe') instanceof HTMLIFrameElement`)
+    await waitForPreview(browser, studio, previewUrl, `document.body?.textContent?.includes('First') === true`)
+    await browser.click('[data-preset="design"]')
+    await browser.evaluate(`(() => {
+      const frame = document.querySelector('.studio-preview-cell iframe')
+      window.__taoPublicationOffLoads = 0
+      frame.addEventListener('load', () => { window.__taoPublicationOffLoads += 1 })
+      return true
+    })()`)
+    await browser.evaluateInFrame(
+      previewUrl,
+      `(() => {
+      window.__taoPublicationOffMode = 'pending'
+      window.addEventListener('message', event => {
+        if (event.data?.type === 'set-interaction-mode') window.__taoPublicationOffMode = event.data.mode
+      })
+      return true
+    })()`,
+    )
+    await setInteractionMode(browser, 'edit')
+    await browser.waitForInFrame(previewUrl, `window.__taoPublicationOffMode === 'edit'`)
+    await focusFirstPreview(browser)
+    await browser.evaluate(`(() => {
+      window.__taoPublicationOffActions = []
+      window.addEventListener('message', event => {
+        if (event.data?.type === 'source-action') window.__taoPublicationOffActions.push(event.data)
+      })
+      return true
+    })()`)
+    await dragThirdBetweenFirstAndSecond(browser, previewUrl)
+    const sent = await Time.pollUntil(
+      async () => await browser!.evaluate<number>('window.__taoPublicationOffActions.length') > 0,
+      {
+        intervalMs: 100,
+        timeoutMs: 10_000,
+      },
+    )
+    if (!sent) {
+      const diagnostics = await browser.evaluateInFrame(previewUrl, 'window.__taoStudioPreviewDiagnostics', {
+        world: 'page',
+      })
+      Errors.throwHostEnvironment(
+        `The publication-off preview emitted no Draw source action: ${JSON.stringify(diagnostics)}`,
+      )
+    }
+    try {
+      await waitForSourceOrder(sourcePath, ['Text("First")', 'Text("Third")', 'Text("Second")'])
+    } catch (error) {
+      const actions = await browser.evaluate('window.__taoPublicationOffActions')
+      const status = await browser.evaluate(`document.querySelector('.studio-status')?.textContent`)
+      Errors.throwHostEnvironment(`Draw action was not saved: ${JSON.stringify({ actions, status })}`, { cause: error })
+    }
+    await waitForPreview(
+      browser,
+      studio,
+      previewUrl,
+      `document.body?.innerText.indexOf('First') < document.body?.innerText.indexOf('Third')
+        && document.body?.innerText.indexOf('Third') < document.body?.innerText.indexOf('Second')`,
+    )
+    const initialRevision = await waitForCompileAfter(browser, -1)
+    const movedSource = await FS.readText(sourcePath)
+    await replaceEditorSource(
+      browser,
+      movedSource.replace('Text("Third")', 'Text("Third")\n      Text("Updated")'),
+    )
+    const saved = await Time.pollUntil(async () => (await FS.readText(sourcePath)).includes('Text("Updated")'), {
+      intervalMs: 100,
+      timeoutMs: 10_000,
+    })
+    Expect(saved).toBe(true)
+    await browser.waitFor(`fetch(location.pathname + '/api/preview/manifest')
+      .then(response => response.json())
+      .then(manifest => manifest.compileRevision > ${initialRevision})`)
+    await waitForPreview(browser, studio, previewUrl, `document.body?.textContent?.includes('Updated') === true`)
+    // Draw after Code: the Code save's Metro refresh re-bootstraps the cell, which must keep the
+    // saved source's version rather than the byte-stable marker's first one.
+    await Time.sleep(500)
+    await dragRenderBetween(browser, previewUrl, 'Updated', 'First', 'Third')
+    try {
+      await waitForSourceOrder(sourcePath, ['Text("First")', 'Text("Updated")', 'Text("Third")'])
+    } catch (error) {
+      const actions = await browser.evaluate('window.__taoPublicationOffActions')
+      const status = await browser.evaluate(`document.querySelector('.studio-status')?.textContent`)
+      Errors.throwHostEnvironment(`Draw after Code was not saved: ${JSON.stringify({ actions, status })}`, {
+        cause: error,
+      })
+    }
+    Expect(await browser.evaluate<number>('window.__taoPublicationOffLoads')).toBe(0)
+  } finally {
+    await browser?.close()
+    await studio?.stop()
+    await FS.remove(projectRoot)
+  }
+}, 180_000)

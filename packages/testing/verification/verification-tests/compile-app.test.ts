@@ -1,4 +1,4 @@
-import { CLI, FS, Repo, Time } from '@shared'
+import { CLI, FS, ProjectLocal, Repo, Time } from '@shared'
 import { Describe, Expect, mkTestDir, Test, until } from '@shared/test'
 import {
   COMPILE_INPUT_FILES,
@@ -7,11 +7,12 @@ import {
   compileAppOutputHash,
   NO_CACHE_ENV_KEYS,
   runCompileApp,
+  WORD_FLOWER_OUTPUT_ROOT,
 } from '../verification-src/CompileApp'
 import { TAO_TEST_NO_CACHE_ENV_KEY } from '../verification-src/GateRunner'
 
 const APP_PATH = 'Apps/Example/Example.tao'
-const OUTPUT_ROOT = 'packages/apps/expo-host/_gen_tao-app'
+const OUTPUT_ROOT = 'Apps/Example/.tao/cache/_gen_tao-app'
 const SOURCE_ROOTS = ['packages/compiler/compiler-src', 'packages/stdlib'] as const
 const INPUT_FILES = ['bun.lock', 'packages/compiler/package.json'] as const
 const STAMP = '.artifacts/compile-app-stamp.json'
@@ -23,6 +24,7 @@ const GENERATED = ['App.tsx', 'modules/@ui/Shell.tao.tsx', 'modules/external/Vie
 async function repository(): Promise<string> {
   const root = await mkTestDir('tao-compile-app-')
   await FS.writeText(FS.resolvePath(APP_PATH, root), 'app Example\n')
+  await ProjectLocal.prepare(FS.resolvePath('Apps/Example', root))
   await FS.writeText(FS.resolvePath('Apps/Example/@ui/Shell.tao', root), 'view Shell\n')
   await FS.writeText(FS.resolvePath('Apps/Example/@ui/Shell.ts', root), 'export const shell = 1\n')
   await FS.writeText(FS.resolvePath('packages/compiler/compiler-src/Compiler.ts', root), 'export const compiler = 1\n')
@@ -77,6 +79,41 @@ async function run(
 }
 
 Describe('app compilation staleness stamp', () => {
+  Test('default gate accepts only the WordFlower project cache output', async () => {
+    const root = await repository()
+    const appPath = 'Apps/WordFlower/1 - Current/WordFlower.tao'
+    try {
+      await FS.writeText(FS.resolvePath(appPath, root), 'app WordFlower\n')
+      await ProjectLocal.prepare(FS.resolvePath('Apps/WordFlower/1 - Current', root))
+      const options = {
+        appPath,
+        inputFiles: INPUT_FILES,
+        noCache: false,
+        repositoryRoot: root,
+        sourceRoots: SOURCE_ROOTS,
+      }
+      await Expect(runCompileApp({
+        ...options,
+        compile: async () => {
+          await FS.writeText(FS.resolvePath('packages/apps/expo-host/_gen_tao-app/App.tsx', root), 'old output\n')
+          return 0
+        },
+      })).rejects.toThrow('App compilation produced no output')
+      Expect(
+        await runCompileApp({
+          ...options,
+          compile: async () => {
+            await FS.writeText(FS.resolvePath(`${WORD_FLOWER_OUTPUT_ROOT}/App.tsx`, root), 'new output\n')
+            return 0
+          },
+        }),
+      ).toBe(0)
+      Expect(await FS.isFile(FS.resolvePath(`${WORD_FLOWER_OUTPUT_ROOT}/App.tsx`, root))).toBe(true)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('compiles once and skips while the inputs and the generated tree are unchanged', async () => {
     const root = await repository()
     const tao = compiler()
@@ -145,14 +182,36 @@ Describe('app compilation staleness stamp', () => {
     try {
       await FS.writeText(FS.resolvePath('Apps/Example/.tao/.gitkeep', root), '')
       await run(root, tao.compile)
-      await FS.writeText(FS.resolvePath('Apps/Example/.tao/dev/runtime/App.tsx', root), 'generated dev app\n')
+      await FS.writeText(FS.resolvePath('Apps/Example/.tao/cache/dev/runtime/App.tsx', root), 'generated dev app\n')
       await FS.symlink(
         FS.resolvePath('packages/stdlib', root),
-        FS.resolvePath('Apps/Example/.tao/dev/runtime/node_modules/tao-runtime', root),
+        FS.resolvePath('Apps/Example/.tao/cache/dev/runtime/node_modules/tao-runtime', root),
       )
 
       Expect(await run(root, tao.compile)).toBe(0)
       Expect(tao.calls).toEqual(['Apps/Example/Example.tao#Example'])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('allows contract migration to remove legacy generated sidecars during compilation', async () => {
+    const root = await repository()
+    const tao = compiler()
+    const legacy = FS.resolvePath('Apps/Example/Example.tao.ts', root)
+    try {
+      await FS.writeText(legacy, 'export type Generated = string\n')
+      const migrate: NonNullable<CompileAppOptions['compile']> = async (...args) => {
+        await FS.remove(legacy)
+        await FS.writeText(
+          FS.resolvePath('Apps/Example/.tao-ts/Example.tao.ts', root),
+          'export type Generated = number\n',
+        )
+        return await tao.compile(...args)
+      }
+      Expect(await run(root, migrate)).toBe(0)
+      Expect(await run(root, migrate)).toBe(0)
+      Expect(tao.calls).toHaveLength(1)
     } finally {
       await FS.remove(root)
     }
@@ -218,7 +277,7 @@ Describe('app compilation staleness stamp', () => {
     const root = await repository()
     const tao = compiler()
     try {
-      const identity = FS.resolvePath('Apps/Example/.tao/project.json', root)
+      const identity = FS.resolvePath('Apps/Example/.tao/store/project.json', root)
       await FS.writeJson(identity, { id: '550e8400-e29b-41d4-a716-446655440000' })
       await run(root, tao.compile)
       await FS.writeJson(identity, { id: '550e8400-e29b-41d4-a716-446655440001' })
@@ -295,7 +354,7 @@ Describe('app compilation staleness stamp', () => {
   Test('retains a private dependency directory link in the output stamp and repairs a deleted link', async () => {
     const root = await repository()
     const tao = compiler()
-    const installed = FS.resolvePath('.tao/install/origins/library/node_modules', root)
+    const installed = FS.resolvePath('.tao/cache/install/origins/library/node_modules', root)
     const link = FS.resolvePath(`${OUTPUT_ROOT}/modules/dependencies/library/node_modules`, root)
     const compile: CompileAppOptions['compile'] = async (appPath, appName, repositoryRoot) => {
       const code = await tao.compile(appPath, appName, repositoryRoot)

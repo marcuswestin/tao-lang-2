@@ -1,13 +1,22 @@
-import { Errors, FS, Json, Platform } from '@shared'
-import type { StudioCanvasViewport } from './StudioProtocol'
+import { Errors, FS, Json, Platform, ProjectLocal } from '@shared'
+import type { StudioCanvasViewport, StudioSessionAppState } from './StudioProtocol'
 
-type ViewportStoreIO = Pick<typeof FS, 'move' | 'readJson' | 'realPath' | 'remove' | 'writeJson'>
+type SessionStoreIO = Pick<typeof FS, 'move' | 'readJson' | 'realPath' | 'remove' | 'writeJson'>
 
-/** Device-local canvas state, keyed by the canonical project path rather than the server's port. */
+type SessionFile = Readonly<{
+  apps: Readonly<Record<string, StudioSessionAppState>>
+  canvasViewport?: StudioCanvasViewport
+  version: 1
+}>
+
+const emptySession: SessionFile = { apps: {}, version: 1 }
+
+/** The project's device-local Studio session. Every field update reads and preserves its peers. */
 export class StudioCanvasViewportStore {
   #pending: Promise<void> = Promise.resolve()
 
-  constructor(readonly root: string, private readonly io: ViewportStoreIO = FS) {}
+  /** root is the former viewport directory, used only to migrate a saved viewport once. */
+  constructor(readonly root: string, private readonly io: SessionStoreIO = FS) {}
 
   static normalize(value: unknown): StudioCanvasViewport {
     if (
@@ -22,26 +31,44 @@ export class StudioCanvasViewportStore {
   }
 
   async load(projectRoot: string): Promise<StudioCanvasViewport | undefined> {
-    await this.#pending.catch(() => {})
-    try {
-      const value = await this.io.readJson(await this.#path(projectRoot))
-      if (!Json.isRecord(value) || value['version'] !== 1) {
-        return undefined
-      }
-      return StudioCanvasViewportStore.normalize(value['viewport'])
-    } catch {
-      // Missing, corrupt, or future-version preferences start with the default viewport.
-      return undefined
-    }
+    return (await this.#read(projectRoot)).canvasViewport
+  }
+
+  async loadApp(projectRoot: string, appName: string): Promise<StudioSessionAppState> {
+    return (await this.#read(projectRoot)).apps[appName] ?? { activatedCellIds: [] }
   }
 
   save(projectRoot: string, value: StudioCanvasViewport): Promise<void> {
     const viewport = StudioCanvasViewportStore.normalize(value)
+    return this.#update(projectRoot, session => ({ ...session, canvasViewport: viewport }))
+  }
+
+  saveApp(projectRoot: string, appName: string, patch: Partial<StudioSessionAppState>): Promise<void> {
+    return this.#update(projectRoot, session => ({
+      ...session,
+      apps: {
+        ...session.apps,
+        [appName]: { activatedCellIds: [], ...session.apps[appName], ...patch },
+      },
+    }))
+  }
+
+  flush(): Promise<void> {
+    return this.#pending
+  }
+
+  #update(projectRoot: string, change: (current: SessionFile) => SessionFile): Promise<void> {
     const write = async () => {
-      const path = await this.#path(projectRoot)
-      const temporaryPath = `${path}.${Platform.randomUUID()}.tmp`
+      const session = change(await this.#readFile(projectRoot))
+      await ProjectLocal.prepare(projectRoot)
+      const directory = ProjectLocal.localResolve('studio', projectRoot)
+      const temporaryDirectory = ProjectLocal.cacheResolve('studio/tmp', projectRoot)
+      await FS.mkdir(directory)
+      await FS.mkdir(temporaryDirectory)
+      const path = ProjectLocal.localResolve('studio/session.json', projectRoot)
+      const temporaryPath = FS.resolvePath(`session-${Platform.randomUUID()}.tmp`, temporaryDirectory)
       try {
-        await this.io.writeJson(temporaryPath, { version: 1, viewport })
+        await this.io.writeJson(temporaryPath, session)
         await this.io.move(temporaryPath, path)
       } finally {
         await this.io.remove(temporaryPath)
@@ -52,12 +79,47 @@ export class StudioCanvasViewportStore {
     return saving
   }
 
-  flush(): Promise<void> {
-    return this.#pending
+  async #read(projectRoot: string): Promise<SessionFile> {
+    await this.#pending.catch(() => {})
+    return await this.#readFile(projectRoot)
   }
 
-  async #path(projectRoot: string): Promise<string> {
-    const canonical = await this.io.realPath(projectRoot)
-    return FS.resolvePath(`${Platform.sha256Hex(canonical)}.json`, this.root)
+  async #readFile(projectRoot: string): Promise<SessionFile> {
+    try {
+      const value = await this.io.readJson(ProjectLocal.localResolve('studio/session.json', projectRoot))
+      if (Json.isRecord(value) && value['version'] === 1 && Json.isRecord(value['apps'])) {
+        const apps: Record<string, StudioSessionAppState> = {}
+        for (const [name, app] of Object.entries(value['apps'])) {
+          if (!Json.isRecord(app)) {
+            continue
+          }
+          apps[name] = {
+            activatedCellIds: Array.isArray(app['activatedCellIds'])
+              ? app['activatedCellIds'].filter((id): id is string => typeof id === 'string')
+              : [],
+            ...(typeof app['focusedCellId'] === 'string' ? { focusedCellId: app['focusedCellId'] } : {}),
+            ...(Json.isRecord(app['editorTabs'])
+              ? { editorTabs: app['editorTabs'] as StudioSessionAppState['editorTabs'] }
+              : {}),
+          }
+        }
+        const viewport = value['canvasViewport'] === undefined
+          ? undefined
+          : StudioCanvasViewportStore.normalize(value['canvasViewport'])
+        return { apps, ...(viewport === undefined ? {} : { canvasViewport: viewport }), version: 1 }
+      }
+    } catch {
+      // Missing or damaged session state starts with an empty session.
+    }
+    try {
+      const canonical = await this.io.realPath(projectRoot)
+      const legacy = await this.io.readJson(FS.resolvePath(`${Platform.sha256Hex(canonical)}.json`, this.root))
+      if (Json.isRecord(legacy) && legacy['version'] === 1) {
+        return { ...emptySession, canvasViewport: StudioCanvasViewportStore.normalize(legacy['viewport']) }
+      }
+    } catch {
+      // A missing former viewport is normal for a fresh project.
+    }
+    return emptySession
   }
 }

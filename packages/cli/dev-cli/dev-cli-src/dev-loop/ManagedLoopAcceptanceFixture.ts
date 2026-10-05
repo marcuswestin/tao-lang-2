@@ -1,4 +1,4 @@
-import { Errors, FS, Repo } from '@shared'
+import { Errors, FS, ProjectIdentity, ProjectLocal, Repo } from '@shared'
 
 export type ManagedLoopFixture = { root: string; appPath: string; sourceIdentity: string }
 
@@ -57,7 +57,8 @@ export class ManagedLoopAcceptanceFixtures {
     const fixture = { root, appPath, sourceIdentity: '' }
     this.projects.push(fixture)
     await this.save()
-    await FS.writeJson(FS.resolvePath('.tao/project.json', root), {})
+    await FS.mkdir(FS.resolvePath('.tao', root))
+    await ProjectIdentity.ensure(root)
     let source = await FS.readText(Repo.resolvePath('Apps/Test Apps/Data MVP/Data MVP.tao'))
     if (shape === 'ambiguous') {
       source +=
@@ -79,7 +80,7 @@ export class ManagedLoopAcceptanceFixtures {
     }
     // A dead owner can leave escaped children. Require both the caller's kernel proof and disposal
     // of the project owner; never delete an active project based on its age or PID alone.
-    const ownerPath = FS.resolvePath('.tao/sessions/owner.json', fixture.root)
+    const ownerPath = ProjectLocal.localResolve('sessions/owner.json', fixture.root)
     if (!resourcesStopped || await FS.exists(ownerPath)) {
       record.state = 'retained'
       record.reason = resourcesStopped ? 'The project owner record remains.' : 'Owned resource shutdown was not proved.'

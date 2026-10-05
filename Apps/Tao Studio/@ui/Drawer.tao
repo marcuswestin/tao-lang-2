@@ -232,7 +232,7 @@ view StudioLogsPanelView(Logs StudioLogsPanel, Dispatch action(text, text)) {
       }
       Text("Showing { Logs.RetainedCount } of { Logs.TotalCount } messages")
       when Logs.Rows {
-         empty -> { Text("No console messages from the active preview or device.") }
+         empty -> { Text("No console messages from the focused preview or device.") }
          otherwise -> { loop Logs.Rows / Row {
             Text("{ Row.Level } · { Row.Timestamp } · { Row.Message }")
          } }

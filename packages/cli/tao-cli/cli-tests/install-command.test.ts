@@ -200,7 +200,7 @@ view Main() { render inject \`\`\`ts return null \`\`\` }
 `,
       )
       const pinned = { name: 'date-fns', requested: '^4.0.0', version: '4.1.0' }
-      await FS.writeJson(FS.resolvePath('.tao/lock.jsonc', root), {
+      await FS.writeJson(FS.resolvePath('.tao/store/lock.jsonc', root), {
         schemaVersion: 1,
         installs: {
           lockfileVersion: 2,

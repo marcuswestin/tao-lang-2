@@ -1,4 +1,4 @@
-import { Errors, FS, HCI, Platform, Time } from '@shared'
+import { Errors, FS, HCI, Platform, ProjectLocal, Time } from '@shared'
 import type { Writable } from 'node:stream'
 import {
   type FirebaseInspection,
@@ -45,14 +45,15 @@ export async function provisionFirebase(options: FirebaseProvisionOptions): Prom
       'Unset FIREBASE_TOKEN in your local terminal before connecting. Firebase setup uses your locally signed-in Google account; no cloud calls were made.',
     )
   }
-  const work = FS.resolvePath('.tao/firebase-connect', options.project)
+  const work = ProjectLocal.cacheResolve('firebase-connect', options.project)
   await safeSetupPaths(options.project, work)
   const generated = options.backend?.files['firestore.rules'] ?? await pilotRules(options.project)
   let candidate = options.rulesFile ? await reviewedRules(options.rulesFile, options.project) : generated
   if (!candidate.trim()) {
     Errors.throwUserInput('Firebase rules are empty; no cloud changes were made.')
   }
-  await FS.mkdir(work)
+  await ProjectLocal.prepare(options.project)
+  await FS.mkdirWithinBoundary(work, options.project)
   const out = { output: options.output }
   let stage = 'local setup validation'
   let mutationAttempted = false
@@ -523,7 +524,7 @@ async function assertRegularPaths(paths: readonly string[]): Promise<void> {
   }
 }
 async function safeSetupPaths(project: string, work: string): Promise<void> {
-  for (const path of [FS.resolvePath('.tao', project), work]) {
+  for (const path of [ProjectLocal.root(project), ProjectLocal.cacheResolve('', project), work]) {
     if (
       await FS.isSymbolicLink(path) || (await FS.exists(path) && (await FS.entryMetadata(path)).kind !== 'directory')
     ) {

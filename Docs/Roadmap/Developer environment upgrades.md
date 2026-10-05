@@ -83,6 +83,7 @@ change that addressed it.
 - [DEVENV-ANDROID-EMULATOR-LEASE-RELEASE-PRECEDES-EXIT — Android emulator lease release precedes confirmed exit](<Developer environment upgrades/DEVENV-ANDROID-EMULATOR-LEASE-RELEASE-PRECEDES-EXIT.md>) — Candidate
 - [DEVENV-APP-DEV-WEB-OPENS-CHROME-IN-THE-FOREGROUND — `app-dev --web` opens Chrome in the foreground](<Developer environment upgrades/DEVENV-APP-DEV-WEB-OPENS-CHROME-IN-THE-FOREGROUND.md>) — Planned
 - [DEVENV-CLAUDE-CODE-BELOW-CONFIGURED-OPUS-MINIMUM — Claude Code is below the configured Opus minimum](<Developer environment upgrades/DEVENV-CLAUDE-CODE-BELOW-CONFIGURED-OPUS-MINIMUM.md>) — Candidate
+- [DEVENV-CLOSED-STDIN-PIPE-TEST-FLAKES-UNDER-LOAD — The closed-stdin-pipe test fails `verify-changed` under load](<Developer environment upgrades/DEVENV-CLOSED-STDIN-PIPE-TEST-FLAKES-UNDER-LOAD.md>) — Candidate
 - [DEVENV-CODEX-HOST-COMMANDS-COST-THE-CREDENTIAL-READ-DENIES — Codex host commands cost the credential read denies](<Developer environment upgrades/DEVENV-CODEX-HOST-COMMANDS-COST-THE-CREDENTIAL-READ-DENIES.md>) — Deferred
 - [DEVENV-COLD-SHELL-EVALUATION-REPEATS-PER-WORKTREE — Cold shell evaluation repeats per worktree](<Developer environment upgrades/DEVENV-COLD-SHELL-EVALUATION-REPEATS-PER-WORKTREE.md>) — Candidate
 - [DEVENV-COMPANION-CAPTURE-REGISTRATION-FAILS-AFTER-LIVE-EDIT — Companion capture registration fails after live edit](<Developer environment upgrades/DEVENV-COMPANION-CAPTURE-REGISTRATION-FAILS-AFTER-LIVE-EDIT.md>) — Candidate
@@ -101,8 +102,11 @@ change that addressed it.
 - [DEVENV-LANDING-TESTS-A-CODEX-CONFIG-IT-NEVER-REGENERATED — A landing tests a Codex config it never regenerated](<Developer environment upgrades/DEVENV-LANDING-TESTS-A-CODEX-CONFIG-IT-NEVER-REGENERATED.md>) — Candidate
 - [DEVENV-MACOS-STARTUP-AFTER-CACHE-CLEANUP-NEEDS-VERIFICATION — macOS startup after cache cleanup needs verification](<Developer environment upgrades/DEVENV-MACOS-STARTUP-AFTER-CACHE-CLEANUP-NEEDS-VERIFICATION.md>) — Planned
 - [DEVENV-MANAGED-COMMIT-DENIES-WORKTREE-GIT-METADATA — Managed commit denies worktree Git metadata](<Developer environment upgrades/DEVENV-MANAGED-COMMIT-DENIES-WORKTREE-GIT-METADATA.md>) — Candidate
+- [DEVENV-MERGE-EXPOSES-LEGACY-GENERATED-CACHES — Merge exposes legacy generated caches](<Developer environment upgrades/DEVENV-MERGE-EXPOSES-LEGACY-GENERATED-CACHES.md>) — Candidate
+- [DEVENV-MERGE-WRITE-PROBE-REFUSES-READ-ONLY-SKETCHES — Merge write probe refuses read-only tracked sketches](<Developer environment upgrades/DEVENV-MERGE-WRITE-PROBE-REFUSES-READ-ONLY-SKETCHES.md>) — Candidate
 - [DEVENV-METRO-FAILS-TO-START-WITHIN-ITS-WAIT-UNDER-CONTENTION — Expo Metro intermittently fails to start within its wait under machine contention](<Developer environment upgrades/DEVENV-METRO-FAILS-TO-START-WITHIN-ITS-WAIT-UNDER-CONTENTION.md>) — Candidate
 - [DEVENV-METRO-STALLS-AFTER-ANDROID-DEV-STOP — iOS dev loop can stall after an Android loop stops](<Developer environment upgrades/DEVENV-METRO-STALLS-AFTER-ANDROID-DEV-STOP.md>) — Candidate
+- [DEVENV-MODEL-ROUTING-TRAILS-INSTALLED-CATALOG — Model routing trails the installed catalog](<Developer environment upgrades/DEVENV-MODEL-ROUTING-TRAILS-INSTALLED-CATALOG.md>) — Candidate
 - [DEVENV-NATIVE-KIT-OMITS-PROVIDER-TRANSITIVES — Native kit omits provider transitives](<Developer environment upgrades/DEVENV-NATIVE-KIT-OMITS-PROVIDER-TRANSITIVES.md>) — Candidate
 - [DEVENV-NATIVE-SESSION-TIMESTAMPS-USE-MONOTONIC-TIME — Native session timestamps use monotonic time](<Developer environment upgrades/DEVENV-NATIVE-SESSION-TIMESTAMPS-USE-MONOTONIC-TIME.md>) — Candidate
 - [DEVENV-ONE-TEST-FILE-SPAWNS-FIVE-TYPECHECKS — One test file spawns five typechecks, so its shard cannot be split](<Developer environment upgrades/DEVENV-ONE-TEST-FILE-SPAWNS-FIVE-TYPECHECKS.md>) — Candidate
@@ -126,4 +130,5 @@ change that addressed it.
 - [DEVENV-TAO-TEST-WAITS-FOREVER-ON-A-JEST-WORKER-LEFT-OPEN — `tao test` waits forever on a Jest worker left open](<Developer environment upgrades/DEVENV-TAO-TEST-WAITS-FOREVER-ON-A-JEST-WORKER-LEFT-OPEN.md>) — Candidate
 - [DEVENV-TEST-FILE-REFUSES-STANDALONE-APP-TESTS — Focused test-file refuses standalone app tests](<Developer environment upgrades/DEVENV-TEST-FILE-REFUSES-STANDALONE-APP-TESTS.md>) — Candidate
 - [DEVENV-TEST-FILE-TAKES-NO-TAO-FILE-OR-TEST-NAME — `test-file` takes no Tao test file or test name](<Developer environment upgrades/DEVENV-TEST-FILE-TAKES-NO-TAO-FILE-OR-TEST-NAME.md>) — Candidate
+- [DEVENV-TEST-FILE-WRAPPER-REMAINS-AFTER-FAILED-SUITE — Test-file wrapper remains after a failed suite reports](<Developer environment upgrades/DEVENV-TEST-FILE-WRAPPER-REMAINS-AFTER-FAILED-SUITE.md>) — Candidate
 - [DEVENV-VISUAL-REVIEW-SCENARIO-READINESS-TIMEOUTS — Visual review scenario readiness timeouts](<Developer environment upgrades/DEVENV-VISUAL-REVIEW-SCENARIO-READINESS-TIMEOUTS.md>) — Candidate

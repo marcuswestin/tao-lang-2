@@ -439,6 +439,48 @@ Describe('Expo runtime', () => {
     )
   })
 
+  Test('rejects a tag without a row index when it matches more than one element', async () => {
+    await withTaoFiles(
+      'tao-runtime-ambiguous-tag-',
+      {
+        'Main.test.tao': `
+          use RepeatedTagApp from ./
+
+          test "Repeated tag" {
+            test "presses a tag every row repeats" {
+              run RepeatedTagApp
+              press #item
+            }
+          }
+        `,
+        'Main.tao': `
+          use Col, Text from @tao/ui
+
+          let Items = ["One", "Two"]
+
+          app RepeatedTagApp { id "test.repeated-tags" version "1.0.0" name "Repeated tags" view Main }
+
+          view Main() {
+            render Col() {
+              #rows
+              loop Items / Item {
+                Col() {
+                  #item
+                  Text(Item)
+                }
+              }
+            }
+          }
+        `,
+      },
+      async paths => {
+        await Expect(RuntimeTesting.runTaoTestPlan(paths['Main.test.tao']!)).rejects.toThrow(
+          /press tag "item" expected one pressable but found 2 matches/,
+        )
+      },
+    )
+  })
+
   Test('rejects pressing a disabled toolbar command', async () => {
     await withTaoFiles(
       'tao-runtime-disabled-toolbar-test-plan-',

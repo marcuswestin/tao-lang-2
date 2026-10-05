@@ -2,6 +2,7 @@ import { Errors, FS } from '@shared'
 import { Expect, until } from '@shared/test'
 import { type StudioProjectSession, studioProtocolChannel, studioProtocolVersion } from '@studio'
 import type { StudioCdp } from '../studio-tooling-src/StudioCdp'
+import { activateSmokePreviews } from '../studio-tooling-src/StudioSmokePreviews'
 
 /** Invoked by the simulated-user lane: the real Feed controls drive the real source/compiler session. */
 export async function exerciseStudioFeed(
@@ -31,7 +32,9 @@ export async function exerciseStudioFeed(
     writeId: 'feed-smoke-seed',
   })
   Expect(seeded.saved).toBe(true)
-  Expect(seeded.compile?.status).toBe('compiled')
+  if (seeded.compile?.status !== 'compiled') {
+    Errors.throwUnexpected(`Feed seed did not compile: ${JSON.stringify(seeded.compile?.diagnostics)}`)
+  }
   Expect(session.previewManifest()?.generationDeclarations.some(declaration => declaration.name === 'Playlist')).toBe(
     true,
   )
@@ -193,6 +196,25 @@ async function feedDragToPreview(
   const subject = manifest.subjects.find(subject => subject.kind === 'view' && subject.viewName === sketch.view)!
   const scenario = manifest.scenarios.find(scenario => scenario.subjectId === subject.subjectId)!
   const cell = manifest.cells.find(cell => cell.scenarioId === scenario.scenarioId)!
+  await browser.waitFor(`document.querySelector('[data-tao-studio-cell="${cell.cellId}"]') !== null`)
+  // Earlier shell gestures used a static preview with no rendered-publication acknowledgement.
+  // Retire its unused realm before activating the one cell this Feed drop actually addresses.
+  const unusedCellIds = await browser.evaluate<string[]>(`[...document.querySelectorAll('.studio-preview-cell')]
+    .filter(frame => frame.dataset.taoStudioCell !== ${JSON.stringify(cell.cellId)}
+      && frame.querySelector('.studio-preview-activation-toggle')?.getAttribute('aria-pressed') === 'true')
+    .map(frame => frame.dataset.taoStudioCell)`)
+  for (const unusedCellId of unusedCellIds) {
+    const frame = `[...document.querySelectorAll('.studio-preview-cell')]
+      .find(frame => frame.dataset.taoStudioCell === ${JSON.stringify(unusedCellId)})`
+    await browser.evaluate(`(${frame})?.querySelector('.studio-preview-activation-toggle')?.click()`)
+    await browser.waitFor(`(() => {
+      const frame = ${frame}
+      return frame === undefined || (
+        frame.querySelector('.studio-preview-activation-toggle')?.getAttribute('aria-pressed') === 'false'
+        && frame.querySelector('iframe') === null)
+    })()`)
+  }
+  await activateSmokePreviews(browser, [cell.cellId])
   const frameSelector = `[data-tao-studio-cell="${cell.cellId}"] iframe`
   await browser.waitFor(`document.querySelector(${JSON.stringify(frameSelector)}) instanceof HTMLIFrameElement`)
   const url = await browser.evaluate<string>(`document.querySelector(${JSON.stringify(frameSelector)}).src`)

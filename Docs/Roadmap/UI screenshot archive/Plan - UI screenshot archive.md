@@ -76,7 +76,7 @@ the window chrome.
   runtime's floating dev menu inside it, so tooling stays out of the shot. Studio's CDP capture is
   the adapter for Studio itself, and Appium the planned one for native targets. No new dependency.
   A capture removes what it leaves in ignored folders: its work directory once the run is written,
-  and the session records its Studio launches add under the project's `.tao/sessions/`.
+  and the session records its Studio launches add under the project's `.tao/local/sessions/`.
 - **Apps**: Studio previews one app per session, so a run launches Studio once per app. The first
   launch opens Studio's default app and captures its own scenarios and every view scenario. Every
   app whose source reaches a view lists its scenarios, so capturing them once avoids a duplicate per

@@ -1,7 +1,22 @@
+# Operating system and editor files
+.DS_Store
+.idea/
+.vscode/
+
+# Tao generated sidecars
+*.tao.ts
 /.tao-ts/
-/.tao/*
-!/.tao/.gitkeep
-!/.tao/project.json
-!/.tao/lock.jsonc
-!/.tao/skills.version
+
+# Tao local state and cache
+/.tao/local/
+/.tao/cache/
+
+# Tooling output
 node_modules/
+.expo/
+*.tsbuildinfo
+*.log
+
+# Plain-text secrets
+.env
+.env.*

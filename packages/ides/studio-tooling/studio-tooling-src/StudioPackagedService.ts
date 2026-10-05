@@ -1,6 +1,6 @@
 import { DevDataServer } from '@expo-host/dev-loop/dev-data/DevDataServer'
 import { detectLanIPv4 } from '@expo-host/dev-loop/expo-runner/lan-host'
-import { Errors, FS, HCI, ReleaseCapabilities } from '@shared'
+import { Errors, FS, HCI, ReleaseCapabilities, TaoHome } from '@shared'
 import {
   startStudioSessionServer,
   StudioCanvasViewportStore,
@@ -12,6 +12,7 @@ import {
 } from '@studio'
 import { StudioBrowser } from './StudioBrowser'
 import { createRecentProjectStore, openStudioProjectResource } from './StudioDev'
+import { prepareStudioHome } from './StudioHome'
 
 export type StudioPackagedServiceOptions = {
   runtimeToolchainRoot: string
@@ -19,7 +20,8 @@ export type StudioPackagedServiceOptions = {
   stdlibRoot: string
   testCommandPath: string
   testNodePath: string
-  userStateRoot: string
+  userStateRoot?: string
+  legacyUserStateRoot?: string
 }
 
 export type StartedStudioPackagedService = {
@@ -60,12 +62,15 @@ export async function startStudioPackagedService(
   let stopping = false
   let stopPromise: Promise<void> | undefined
   StudioClientAssets.usePrebuiltBundle(await FS.readText(options.studioClientBundlePath))
+  const legacyUserStateRoot = options.legacyUserStateRoot ?? options.userStateRoot ?? TaoHome.resolve('studio')
+  const userStateRoot = options.userStateRoot ?? await prepareStudioHome(legacyUserStateRoot)
   const recentProjects = createRecentProjectStore(
-    FS.resolvePath('recent-projects.json', options.userStateRoot),
+    FS.resolvePath('recent-projects.json', userStateRoot),
   )
-  const canvasViewportStore = new StudioCanvasViewportStore(FS.resolvePath('project-viewports', options.userStateRoot))
+  const canvasViewportStore = new StudioCanvasViewportStore(FS.resolvePath('project-viewports', legacyUserStateRoot))
   const devDataServer = await (dependencies.startDevDataServer ?? DevDataServer.start)({
-    rootDir: FS.resolvePath('dev-data', options.userStateRoot),
+    rootDir: TaoHome.cacheResolve('studio/dev-data-routing'),
+    legacyRootDirs: [FS.resolvePath('dev-data', legacyUserStateRoot)],
   })
   let manager: StudioSessionManager | undefined
   let trustStore: StudioDeviceTrustStore | undefined
@@ -73,7 +78,7 @@ export async function startStudioPackagedService(
   try {
     if (ReleaseCapabilities.allows('companion')) {
       trustStore = await (dependencies.openTrustStore ?? StudioDeviceTrustStore.open)(
-        FS.resolvePath('device-trust', options.userStateRoot),
+        FS.resolvePath('device-trust', userStateRoot),
       )
       deviceGateway = await (dependencies.startDeviceGateway ?? StudioDeviceGateway.start)({
         hosts: async () => [await detectLanIPv4()].filter(host => host !== 'localhost'),
@@ -108,13 +113,12 @@ export async function startStudioPackagedService(
       },
       async openProject(request) {
         return await openStudioProjectResource(request, {
-          devDataAuthority: { capability: devDataServer.capability, port: devDataServer.port },
+          devDataAuthority: devDataServer,
           deviceGatewayPort: deviceGateway?.port,
           entryPath: request.entryPath,
           expoCommand: packagedExpoCommand(options),
           isStopping: () => stopping,
-          logRoot: FS.resolvePath('logs', options.userStateRoot),
-          previewArtifactRoot: FS.resolvePath('preview', options.userStateRoot),
+          previewArtifactRoot: FS.resolvePath('preview', userStateRoot),
           runtimeToolchainRoot: options.runtimeToolchainRoot,
           testCommandArgs: projectRoot => [options.testCommandPath, projectRoot],
           testCommandEnv: {
@@ -148,6 +152,7 @@ export async function startStudioPackagedService(
       compileOnStart: false,
       deviceGateway,
       openBrowser: StudioBrowser.open,
+      preferencesRoot: userStateRoot,
     })
   } catch (error) {
     return await rollbackPackagedStart(error, [

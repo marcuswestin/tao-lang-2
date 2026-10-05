@@ -13,7 +13,7 @@ Describe('project watch paths', () => {
     const root = FS.resolvePath('project')
     const external = FS.resolvePath('shared/config.json')
     const missing = FS.resolvePath('shared/missing.json')
-    const generated = FS.resolvePath('.tao/typescript/tsconfig.json', root)
+    const generated = FS.resolvePath('.tao/cache/typescript/tsconfig.json', root)
     const dependencies = new Set<string>()
     const inputs = new Set([external, missing, generated])
     Expect(explicitProjectConfigWatchPaths(inputs, root, dependencies)).toEqual([external, missing])
@@ -47,7 +47,7 @@ Describe('project watch paths', () => {
     const root = FS.resolvePath('project')
     const marker = FS.resolvePath('host/.tao')
     const sibling = FS.resolvePath('host/other')
-    const markerChild = FS.resolvePath('host/.tao/project.json')
+    const markerChild = FS.resolvePath('host/.tao/store/project.json')
     const inputs = new Set([marker])
     const dependencies = new Set<string>()
     Expect(explicitProjectOwnershipWatchPaths(inputs, root)).toEqual([marker])
@@ -70,9 +70,10 @@ Describe('project watch paths', () => {
     Expect(ignoredProjectWatchPath(FS.resolvePath('Screen.tao', root), root, dependencies)).toBe(false)
     Expect(ignoredProjectWatchPath(FS.resolvePath('src/Screen.tsx', root), root, dependencies)).toBe(false)
     Expect(ignoredProjectWatchPath(FS.resolvePath('.tao-ts/Screen.tao.ts', root), root, dependencies)).toBe(true)
-    Expect(ignoredProjectWatchPath(FS.resolvePath('.tao/typescript/tsconfig.json', root), root, dependencies)).toBe(
-      true,
-    )
+    Expect(ignoredProjectWatchPath(FS.resolvePath('.tao/cache/typescript/tsconfig.json', root), root, dependencies))
+      .toBe(
+        true,
+      )
     Expect(ignoredProjectWatchPath(FS.resolvePath('node_modules/@tao/runtime/index.ts', root), root, dependencies))
       .toBe(true)
     Expect(ignoredProjectWatchPath(FS.resolvePath('.artifacts/logs/check.log', root), root, dependencies)).toBe(true)
@@ -80,7 +81,7 @@ Describe('project watch paths', () => {
 
   Test('watches selected local dependencies while excluding their own generated output', () => {
     const root = FS.resolvePath('project')
-    const dependencyRoot = FS.resolvePath('.tao/deps/cards', root)
+    const dependencyRoot = FS.resolvePath('Library/cards', root)
     const dependencies = new Set([dependencyRoot])
     Expect(ignoredProjectWatchPath(FS.resolvePath('View.tao', dependencyRoot), root, dependencies)).toBe(false)
     Expect(ignoredProjectWatchPath(FS.resolvePath('.tao-ts/View.tao.ts', dependencyRoot), root, dependencies)).toBe(
@@ -94,11 +95,11 @@ Describe('project watch paths', () => {
     const dependencies = new Set<string>()
     const marker = FS.resolvePath('.tao', root)
     const gitkeep = FS.resolvePath('.tao/.gitkeep', root)
-    const lock = FS.resolvePath('.tao/lock.jsonc', root)
-    const identity = FS.resolvePath('.tao/project.json', root)
+    const lock = FS.resolvePath('.tao/store/lock.jsonc', root)
+    const identity = FS.resolvePath('.tao/store/project.json', root)
     const config = FS.resolvePath('tao.config.jsonc', root)
-    const generated = FS.resolvePath('.tao/typescript/tsconfig.json', root)
-    const install = FS.resolvePath('.tao/install/origins/one/node_modules/pkg/package.json', root)
+    const generated = FS.resolvePath('.tao/cache/typescript/tsconfig.json', root)
+    const install = FS.resolvePath('.tao/cache/install/origins/one/node_modules/pkg/package.json', root)
     Expect(ignoredProjectWatchPath(marker, root, dependencies)).toBe(false)
     Expect(ignoredProjectWatchPath(gitkeep, root, dependencies)).toBe(false)
     Expect(ignoredProjectWatchPath(lock, root, dependencies)).toBe(false)
@@ -120,14 +121,14 @@ Describe('project watch paths', () => {
     const root = FS.resolvePath('project')
     const dependencyRoot = FS.resolvePath('Library', root)
     const dependencies = new Set([dependencyRoot])
-    Expect(isProjectWatchInput('change', FS.resolvePath('.tao/lock.jsonc', dependencyRoot), root, dependencies))
+    Expect(isProjectWatchInput('change', FS.resolvePath('.tao/store/lock.jsonc', dependencyRoot), root, dependencies))
       .toBe(true)
     Expect(isProjectWatchInput('addDir', FS.resolvePath('.tao', dependencyRoot), root, dependencies))
       .toBe(true)
     Expect(
       isProjectWatchInput(
         'change',
-        FS.resolvePath('.tao/typescript/tsconfig.json', dependencyRoot),
+        FS.resolvePath('.tao/cache/typescript/tsconfig.json', dependencyRoot),
         root,
         dependencies,
       ),

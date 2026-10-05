@@ -160,7 +160,7 @@ export async function runCreate(description: string, options: CreateCommandOptio
   }
   say('')
   say(`Wrote ${FS.displayPath(directory)}:`)
-  for (const path of [...Object.keys(files), '.tao/project.json', ...installedSkills.paths].sort()) {
+  for (const path of [...Object.keys(files), '.tao/store/project.json', ...installedSkills.paths].sort()) {
     say(`  ${path}`)
   }
 

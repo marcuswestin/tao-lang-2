@@ -298,6 +298,12 @@ export type StudioCanvasViewportSaveRequest = Readonly<{
   viewport: StudioCanvasViewport
 }>
 
+export type StudioSessionAppState = Readonly<{
+  activatedCellIds: readonly string[]
+  focusedCellId?: string
+  editorTabs?: Readonly<{ activePath?: string; paths: readonly string[] }>
+}>
+
 export type StudioSessionHandshake = {
   apps: readonly StudioAppVariant[]
   capabilities: {
@@ -329,6 +335,7 @@ export type StudioSessionHandshake = {
   previewManifest?: StudioPreviewManifestV2
   sketchCatalog: StudioSketchCatalogSnapshot
   canvasViewport?: StudioCanvasViewport
+  studioSession: StudioSessionAppState
   protocolVersion: typeof studioProtocolVersion
   type: 'handshake'
 }
@@ -494,6 +501,14 @@ export type StudioPreviewAppliedMessage = {
   identity: StudioPreviewIdentity
   protocolVersion: typeof studioProtocolVersion
   type: 'preview-applied'
+}
+
+/** A bridge mount in the publication-off experiment restores interaction without claiming an applied revision. */
+type StudioPreviewMountedMessage = {
+  channel: typeof studioProtocolChannel
+  identity: StudioPreviewIdentity
+  protocolVersion: typeof studioProtocolVersion
+  type: 'preview-mounted'
 }
 
 /** Parent-to-preview publication of the runtime state paired with one compiled generated module revision. */
@@ -859,6 +874,7 @@ export type StudioWindowMessage =
   | StudioCanvasGestureOwnershipMessage
   | StudioJourneyRecordingControlMessage
   | StudioPreviewAppliedMessage
+  | StudioPreviewMountedMessage
   | StudioPreviewFixtureCapturedMessage
   | StudioPreviewFixtureCaptureFailedMessage
   | StudioPreviewLogMessage
@@ -964,6 +980,7 @@ const windowMessageParsers: {
   'feed-drop-at-point': parseFeedDropAtPoint,
   'highlight-source': parseHighlightSource,
   'preview-applied': parsePreviewApplied,
+  'preview-mounted': parsePreviewMounted,
   'preview-canvas-gesture': parsePreviewCanvasGesture,
   'preview-canvas-pan-key': parsePreviewCanvasPanKey,
   'preview-canvas-shortcut': parsePreviewCanvasShortcut,
@@ -1750,6 +1767,11 @@ function parsePreviewApplied(value: StudioJsonObject): StudioPreviewAppliedMessa
     identity,
     type: 'preview-applied',
   })
+}
+
+function parsePreviewMounted(value: StudioJsonObject): StudioPreviewMountedMessage | undefined {
+  const identity = parsePreviewIdentity(value['identity'])
+  return identity === undefined ? undefined : envelope({ identity, type: 'preview-mounted' })
 }
 
 function parsePreviewSource(value: StudioJsonObject): StudioPreviewSourceMessage | undefined {

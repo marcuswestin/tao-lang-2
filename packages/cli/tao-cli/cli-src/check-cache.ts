@@ -297,8 +297,8 @@ async function workspaceInputIdentity(
     `tree\n${await treeIdentity(workspaceRoot)}`,
     `modules\n${await moduleLinkIdentity(workspaceRoot)}`,
     await fileEntry(workspaceRoot, FS.resolvePath('tsconfig.json', workspaceRoot)),
-    await fileEntry(workspaceRoot, FS.resolvePath('.tao/lock.jsonc', workspaceRoot)),
-    await fileEntry(workspaceRoot, FS.resolvePath('.tao/project.json', workspaceRoot)),
+    await fileEntry(workspaceRoot, FS.resolvePath('.tao/store/lock.jsonc', workspaceRoot)),
+    await fileEntry(workspaceRoot, FS.resolvePath('.tao/store/project.json', workspaceRoot)),
     `markers\n${await ancestorMarkerIdentity(repositoryRoot, workspaceRoot)}`,
   ])
 }

@@ -3,6 +3,9 @@ import * as ts from 'typescript'
 import { belongsToProject, nestedProjectRoots } from './ProjectSourceOwnership'
 import type { ProjectToolingOptions, ProjectToolingSourceMapping } from './ProjectTooling'
 import { ProjectConfigValidationMessages } from './ProjectTypeScriptConfig'
+import { ProjectTypeScriptProgramSession } from './ProjectTypeScriptProgram'
+
+export { ProjectTypeScriptProgramSession } from './ProjectTypeScriptProgram'
 
 /** Check authored TypeScript and published contracts as one no-emit program. */
 export async function checkProjectTypeScript(
@@ -20,6 +23,8 @@ export type ProjectTypeScriptCheckResult = {
   diagnostics: Diagnostic[]
   /** Native config probes, including missing extends targets needed for recovery. */
   configInputPaths: readonly string[]
+  cacheHit?: boolean
+  programAuditMs?: number
 }
 
 export async function checkProjectTypeScriptWithConfigInputs(
@@ -28,11 +33,19 @@ export async function checkProjectTypeScriptWithConfigInputs(
   snapshotPaths: readonly string[],
   sourceMappings: readonly ProjectToolingSourceMapping[],
   _options: ProjectToolingOptions,
+  session?: ProjectTypeScriptProgramSession,
 ): Promise<ProjectTypeScriptCheckResult> {
   const projectRoot = FS.resolvePath(root)
   const configPath = FS.resolvePath('tsconfig.json', projectRoot)
-  const read = ts.readConfigFile(configPath, ts.sys.readFile)
+  const configurationSources = new Map<string, string | undefined>()
+  const readConfiguration = (path: string): string | undefined => {
+    const text = ts.sys.readFile(path)
+    configurationSources.set(FS.resolvePath(path), text)
+    return text
+  }
+  const read = ts.readConfigFile(configPath, readConfiguration)
   if (read.error !== undefined) {
+    session?.clear()
     return { diagnostics: [typescriptDiagnostic(read.error, sourceMappings)], configInputPaths: [] }
   }
   const configInputs = new Set<string>()
@@ -44,7 +57,7 @@ export async function checkProjectTypeScriptWithConfigInputs(
     },
     readFile(path) {
       configInputs.add(FS.resolvePath(path))
-      return ts.sys.readFile(path)
+      return readConfiguration(path)
     },
   }
   const parsed = ts.parseJsonConfigFileContent(read.config, configHost, projectRoot, undefined, configPath)
@@ -110,6 +123,7 @@ export async function checkProjectTypeScriptWithConfigInputs(
     ))
   }
   if (diagnostics.some(diagnostic => diagnostic.severity === 'error')) {
+    session?.clear()
     return { diagnostics, configInputPaths }
   }
 
@@ -120,9 +134,11 @@ export async function checkProjectTypeScriptWithConfigInputs(
     ...contractPaths,
     ...snapshotPaths,
   ])
-  const program = ts.createProgram([...files], parsed.options)
+  const { program, cacheHit, programAuditMs } =
+    session?.program(projectRoot, [...files], parsed.options, [...configurationSources])
+      ?? { program: ts.createProgram([...files], parsed.options), cacheHit: false, programAuditMs: 0 }
   diagnostics.push(...ts.getPreEmitDiagnostics(program).map(error => typescriptDiagnostic(error, sourceMappings)))
-  return { diagnostics, configInputPaths }
+  return { diagnostics, configInputPaths, cacheHit, programAuditMs }
 }
 
 function configDiagnostic(filePath: string, message: string): Diagnostic {

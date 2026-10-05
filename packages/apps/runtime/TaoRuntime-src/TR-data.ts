@@ -338,9 +338,9 @@ function useConfiguredProviderBinding(
   source: TaoConfiguredDatasource,
   storageName?: string,
 ): void {
-  // The wrapped declaration must be stable across renders: the app root reconstructs the
-  // configured value per render, and bindConfigured treats a new declaration object as a full
-  // rebind. Only `source.declaration` and the studio overlay are stable inputs.
+  // A generated app can remount beneath one Studio cell Host during Fast Refresh. Its datasource
+  // wrapper must survive that child remount, or binding starts a new provider generation and the
+  // Host's existing fixture handles become inactive.
   const requestedStudioProvider = StudioEnvironmentControls.useProvider(source.declaration.provider)
   // A Tao check uses the Studio fixture seeding seam, but snapshot providers get their behavior
   // from the provider-faithful test world. The Studio overlay would erase their recovery/network
@@ -348,10 +348,7 @@ function useConfiguredProviderBinding(
   const studioProvider = isDataTestMode() && source.declaration.provider.fills === undefined
     ? source.declaration.provider
     : requestedStudioProvider
-  const declaration = React.useMemo<TaoDatasourceDeclaration>(() =>
-    studioProvider === source.declaration.provider
-      ? source.declaration
-      : Object.freeze({ ...source.declaration, provider: studioProvider }), [source.declaration, studioProvider])
+  const declaration = StudioEnvironmentControls.useDatasourceDeclaration(source.declaration, studioProvider)
   // The effect re-runs on each render's fresh `config` object and BindConfigured compares
   // evaluated configuration values to make an unchanged rebind a cheap no-op.
   React.useLayoutEffect(() => {
@@ -452,7 +449,11 @@ export const DataControls = {
     source: TaoConfiguredDatasource,
     storageName?: string,
   ): void {
+    const before = schema.bindingGeneration()
     bindConfiguredDataSchema(schema, source, storageName)
+    if (schema.bindingGeneration() !== before) {
+      schema.recordConfiguredAppBinding()
+    }
   },
 
   /** UseConfigured binds a declaration-owned datasource configuration at an app root. */
@@ -685,6 +686,7 @@ export const DataControls = {
 registerRuntimeCaptureDomain({
   capture: () => captureDataSchemas() as TaoRuntimeJson,
   domain: 'data',
+  module: 'TR-data',
   restore: value => restoreDataSchemas(value as unknown as TaoDataCapture),
   version: 1,
 })

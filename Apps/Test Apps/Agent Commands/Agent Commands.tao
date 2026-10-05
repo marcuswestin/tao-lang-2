@@ -6,11 +6,18 @@ app AgentCommandsProof {
    id "agent-commands"
    version "0.1.0"
    name "Agent Commands"
+   Design AgentCommandsDesign
    Datasource Local {
       StorageKey "AgentCommandsProof"
    }
    AgentCommands [AppendEntry, VerifyEntries, DisabledEntry]
    view EntriesView()
+}
+
+design AgentCommandsDesign {
+   styles {
+      entries [gap 8, pad 16]
+   }
 }
 
 action WriteEntry(Message text, Quantity number, Marked boolean) {
@@ -47,7 +54,7 @@ command UnlistedEntry() {
 
 view EntriesView() {
    query AgentCommandEntries = AgentCommandEntries with { }
-   render Col() [gap 8, pad 16] {
+   render Col() [entries] {
       Text("Agent command entries: { AgentCommandEntries.Count }")
       loop AgentCommandEntries / Entry {
          Text("{ Entry.Message }: { Entry.Quantity }")

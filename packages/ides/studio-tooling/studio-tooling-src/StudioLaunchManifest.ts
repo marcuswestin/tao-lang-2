@@ -1,4 +1,5 @@
-import { CLI, FS, HCI, Platform, Repo } from '@shared'
+import { CLI, FS, HCI, Platform, Repo, TaoHome } from '@shared'
+import { prepareStudioHome } from './StudioHome'
 
 /**
  * Every running Studio publishes one manifest describing exactly what it owns, so a later
@@ -7,8 +8,8 @@ import { CLI, FS, HCI, Platform, Repo } from '@shared'
  * nothing here acts on a manifest until the live machine has confirmed each claim it makes.
  */
 
-/** The launch directory, relative to the repository root that owns it. */
-const LAUNCH_DIRECTORY = '.artifacts/user/studio/launches'
+/** Older launches remain discoverable when a command runs before Studio itself starts. */
+const LEGACY_STUDIO_DIRECTORY = '.artifacts/user/studio'
 
 /** The manifest schema version. A manifest carrying anything else is read but never acted on. */
 const STUDIO_LAUNCH_MANIFEST_VERSION = 1
@@ -114,9 +115,14 @@ export type ValidatedLaunch = {
   unusableReason?: string
 }
 
-/** launchDirectory returns where a repository keeps its launch manifests. */
-export function launchDirectory(repositoryRoot = Repo.getRoot()): string {
-  return FS.resolvePath(LAUNCH_DIRECTORY, repositoryRoot)
+/** launchDirectory returns the shared home directory for launch manifests. */
+export function launchDirectory(_repositoryRoot?: string): string {
+  return TaoHome.resolve('studio/launches')
+}
+
+async function prepareLaunchDirectory(repositoryRoot: string): Promise<string> {
+  await prepareStudioHome(FS.resolvePath(LEGACY_STUDIO_DIRECTORY, repositoryRoot))
+  return launchDirectory()
 }
 
 /** createLaunchId returns a collision-free identifier for one launch. */
@@ -149,7 +155,7 @@ type OpenLaunchOptions = {
 export async function openLaunchRecord(options: OpenLaunchOptions): Promise<StudioLaunchRecord> {
   const repositoryRoot = options.repositoryRoot ?? Repo.getRoot()
   const launchId = createLaunchId(options.mode)
-  const directory = options.launchRecordsRoot ?? launchDirectory(repositoryRoot)
+  const directory = options.launchRecordsRoot ?? await prepareLaunchDirectory(repositoryRoot)
   const path = FS.resolvePath(`${launchId}.json`, directory)
   let manifest: StudioLaunchManifest = {
     appName: options.appName,
@@ -224,8 +230,9 @@ export async function writeManifestAtomically(path: string, manifest: StudioLaun
 /** readLaunches reads every manifest a repository has published, newest launch first. */
 export async function readLaunches(
   repositoryRoot = Repo.getRoot(),
-  directory = launchDirectory(repositoryRoot),
+  launchRecordsRoot?: string,
 ): Promise<StoredLaunch[]> {
+  const directory = launchRecordsRoot ?? await prepareLaunchDirectory(repositoryRoot)
   if (!await FS.isDirectory(directory)) {
     return []
   }
@@ -236,7 +243,7 @@ export async function readLaunches(
     }
     const path = FS.resolvePath(name, directory)
     const manifest = await readManifest(path)
-    if (manifest !== undefined) {
+    if (manifest !== undefined && manifest.repositoryRoot === repositoryRoot) {
       launches.push({ manifest, path, supported: manifest.version === STUDIO_LAUNCH_MANIFEST_VERSION })
     }
   }
@@ -305,7 +312,10 @@ export async function validateLaunch(
       unusableReason: `manifest schema version ${manifest.version} is not supported by this build`,
     }
   }
-  if (!FS.pathIsWithin(manifest.artifactRoot, manifest.repositoryRoot)) {
+  const homeArtifactRoot = TaoHome.resolve('studio/launches')
+  const artifactInRepository = FS.pathIsWithin(manifest.artifactRoot, manifest.repositoryRoot)
+  const artifactInStudioHome = FS.pathIsWithin(manifest.artifactRoot, homeArtifactRoot)
+  if (!artifactInRepository && !artifactInStudioHome) {
     return {
       ...base,
       stale: false,

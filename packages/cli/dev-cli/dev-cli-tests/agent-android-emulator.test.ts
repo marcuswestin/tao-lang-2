@@ -491,6 +491,8 @@ Test('owned emulator shutdown escalates through TERM and KILL and joins concurre
 Test('failed startup and boot timeout use the same bounded shutdown and release only after close', async () => {
   for (const failure of ['exit', 'timeout']) {
     const f = fixture()
+    // budget-ok: prove cleanup after close, allowing the scheduler to deliver the fake close reaction.
+    f.operations.shutdownTimeoutMs = 1_000
     if (failure === 'exit') {
       f.failStartup()
     } else {

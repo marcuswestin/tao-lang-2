@@ -142,6 +142,12 @@ Describe('tao connect run', () => {
         '--port',
         '8081',
       ])
+      Expect(fake.started()?.args.slice(0, 2)).toEqual([
+        '--require',
+        FS.resolvePath('.tao/cache/connect-run/metro-events.cjs', project),
+      ])
+      Expect(fake.started()?.env['TAO_METRO_EVENTS'])
+        .toBe(FS.resolvePath('.tao/cache/connect-run/metro-events.jsonl', project))
       Expect(output).toContain('For iPhone, open Expo Go Home, tap the account icon, and sign in as dev-user')
       Expect(output).toContain('exp://192.168.1.5:8081')
       Expect(output).toContain('\u001b[48;2;255;255;255m')
@@ -155,14 +161,14 @@ Describe('tao connect run', () => {
       Expect(output).toContain('hello {"id":1}')
       Expect(output).toContain('Reloading connected apps.')
       Expect(output).toContain(
-        'Actions: r reload · i iOS Simulator · a Android emulator · c Show connection · d Device (Android/iPhone) · q quit',
+        'Actions: r reload · i iOS Simulator · a Android emulator · c Show connection · d Device (Android/iPhone) · ? show this again · q quit',
       )
       Expect(output).not.toContain('Open the app on')
       Expect(output).toContain('Opened Expo Go in the Android emulator.')
       Expect(output).toContain('Shutting down… stopping Metro and its child processes.')
       Expect(output).toContain('Metro stopped.')
       Expect(fake.requests).not.toContain('POST /_expo/open?platform=ios')
-      Expect(await FS.exists(FS.resolvePath('.tao/connect-run/expo.log', project))).toBe(true)
+      Expect(await FS.exists(FS.resolvePath('.tao/cache/connect-run/expo.log', project))).toBe(true)
     } finally {
       await FS.remove(root)
     }

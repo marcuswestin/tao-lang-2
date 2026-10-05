@@ -12,8 +12,8 @@ import {
   postCanvasGestureOwnership,
   postClearSelection,
   postEditorSelection,
-  type StudioActivePreview,
   type StudioCanvasViewportControls,
+  type StudioFocusedPreview,
   type StudioPreviewConnection,
   StudioPreviewSourceSync,
 } from '../StudioMatrixView'
@@ -24,7 +24,7 @@ import type { StudioInspection } from './StudioInspection'
 import type { StudioSourceMutations } from './StudioSourceMutations'
 
 export type StudioPreviewWiringDeps = Readonly<{
-  activePreview: StudioActivePreview
+  focusedPreview: StudioFocusedPreview
   canvasGesturesOwned: () => boolean
   drawer: StudioDrawerPanels
   handshake: StudioHandshake
@@ -46,11 +46,11 @@ export type StudioPreviewWiringDeps = Readonly<{
 
 /**
  * How the previews talk to the app: source-identity sync and mutation callbacks on each connection,
- * the active-cell follow-through, and palette drops onto the canvas. Returns the wiring so the
+ * the focused-cell follow-through, and palette drops onto the canvas. Returns the wiring so the
  * active-preview set can re-run it after a manifest replaces connections.
  */
 export function wireStudioPreviews(deps: StudioPreviewWiringDeps): (preview: StudioPreviewConnection) => void {
-  const { activePreview, drawer, handshake, inspection, mutations, session } = deps
+  const { focusedPreview, drawer, handshake, inspection, mutations, session } = deps
 
   const postActiveSelection = (preview: StudioPreviewConnection): void => {
     const active = session.active()
@@ -62,7 +62,7 @@ export function wireStudioPreviews(deps: StudioPreviewWiringDeps): (preview: Stu
   const wirePreview = (preview: StudioPreviewConnection): void => {
     StudioPreviewSourceSync.connect(preview, () => {
       postCanvasGestureOwnership(preview, handshake, deps.canvasGesturesOwned())
-      if (preview === activePreview.current()) {
+      if (preview === focusedPreview.current()) {
         postActiveSelection(preview)
       }
     })
@@ -75,7 +75,7 @@ export function wireStudioPreviews(deps: StudioPreviewWiringDeps): (preview: Stu
       await mutations.apply(envelope)
     }
     preview.changed = () => {
-      if (preview === activePreview.current()) {
+      if (preview === focusedPreview.current()) {
         deps.publish()
         inspection.render()
         if (drawer.dataPanelVisible()) {
@@ -87,9 +87,9 @@ export function wireStudioPreviews(deps: StudioPreviewWiringDeps): (preview: Stu
     }
   }
 
-  activePreview.subscribe(() => {
+  focusedPreview.subscribe(() => {
     drawer.resetData()
-    const preview = activePreview.current()
+    const preview = focusedPreview.current()
     if (preview !== undefined) {
       postActiveSelection(preview)
     }
@@ -98,7 +98,7 @@ export function wireStudioPreviews(deps: StudioPreviewWiringDeps): (preview: Stu
     deps.publish()
     drawer.loadDataIfVisible()
   })
-  activePreview.reconcile(wirePreview)
+  focusedPreview.reconcile(wirePreview)
 
   deps.preview.addEventListener('dragover', event => {
     if (event.dataTransfer?.types.includes(studioPaletteMime)) {
@@ -110,7 +110,7 @@ export function wireStudioPreviews(deps: StudioPreviewWiringDeps): (preview: Stu
       return
     }
     const item = StudioPaletteTransfer.parse(event.dataTransfer?.getData(studioPaletteMime) ?? '')
-    const identity = currentSourceIdentity(handshake, activePreview.current(), session.activeFile())
+    const identity = currentSourceIdentity(handshake, focusedPreview.current(), session.activeFile())
     if (item === undefined) {
       deps.status.dataset['state'] = 'error'
       deps.status.textContent = 'Studio could not read the dropped palette item.'
@@ -119,7 +119,7 @@ export function wireStudioPreviews(deps: StudioPreviewWiringDeps): (preview: Stu
     event.preventDefault()
     if (identity === undefined) {
       deps.status.dataset['state'] = 'error'
-      deps.status.textContent = 'Wait for the active preview before dropping a component.'
+      deps.status.textContent = 'Wait for the focused preview before dropping a component.'
       return
     }
     const inspected = inspection.selected()
@@ -160,14 +160,14 @@ export type StudioPreviewMessagesDeps =
 
 /** One listener owns preview-originated selection so the editor receives one navigation transaction. */
 export function studioPreviewMessageListener(deps: StudioPreviewMessagesDeps): (event: MessageEvent) => void {
-  const { activePreview, drawer, handshake, inspection, mutations, previews, session } = deps
+  const { focusedPreview, drawer, handshake, inspection, mutations, previews, session } = deps
   return event => {
     const connection = previews.find(candidate => candidate.iframe.contentWindow === event.source)
     if (connection === undefined) {
       return
     }
     void handlePreviewMessage(event, connection, handshake, path => session.openFile(path), {
-      activate: () => activePreview.activate(connection),
+      focus: () => focusedPreview.focus(connection),
       applySourceAction: envelope => mutations.submitPreview(envelope),
       canvasGesture: gesture => deps.onCanvasGesture?.(connection, gesture),
       canvasGesturesOwned: deps.canvasGesturesOwned,

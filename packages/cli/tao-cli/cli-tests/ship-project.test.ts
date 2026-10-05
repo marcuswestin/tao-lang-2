@@ -131,6 +131,8 @@ Describe('tao ship project discovery', () => {
       const source = await FS.readText(paths['App.tao']!)
       Expect(source).toContain('version "2.0.0-beta.1"')
       Expect(source).toContain('app Notes {\n   id "notes"\n   version "1.2.3"')
+      Expect(await FS.listDir(FS.resolvePath('.tao/cache/tmp', project.root))).toEqual([])
+      Expect(await FS.listDir(FS.resolvePath('.tao/cache/locks', project.root))).toEqual([])
     })
   })
 

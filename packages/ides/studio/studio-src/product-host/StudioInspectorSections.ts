@@ -1,4 +1,5 @@
 import { Errors } from '@shared/core'
+import { studioRenderActionIds, StudioRenderActions } from '../StudioRenderActions'
 import { StudioInspectorLayoutDrafts } from './StudioInspectorLayout'
 import {
   draftOwnerKey,
@@ -29,9 +30,9 @@ export function StudioInspectorDraftsFor(section: string, inspection: string, dr
 export function StudioInspectorDataLines(
   inspection: string,
   selection: string,
-  activeCellId: string,
-  activeCellRevision: number,
-  activeScenarioId: string,
+  focusedCellId: string,
+  focusedCellRevision: number,
+  focusedScenarioId: string,
 ): string[] {
   const selected = studioInspectorSelection(selection)
   const candidate = studioInspectorInspection(inspection)
@@ -45,31 +46,20 @@ export function StudioInspectorDataLines(
     parsed?.text === undefined
       ? 'Binding metadata: not published for this render.'
       : `Text bindings: ${parsed.text.candidates.length} values in scope; bind one in the Text section.`,
-    activeCellId === ''
-      ? 'Datasource context: no active preview cell.'
-      : `Datasource context: cell ${activeCellId} revision ${activeCellRevision}.`,
-    activeScenarioId === '' ? 'Scenario context: none.' : `Scenario context: ${activeScenarioId}.`,
+    focusedCellId === ''
+      ? 'Datasource context: no focused preview cell.'
+      : `Datasource context: cell ${focusedCellId} revision ${focusedCellRevision}.`,
+    focusedScenarioId === '' ? 'Scenario context: none.' : `Scenario context: ${focusedScenarioId}.`,
     'Entity tables are available in the Data panel.',
   ]
 }
 
-/** Inspector actions that act on the selected render as a whole; each lowers to one source action. */
-const studioInspectorActions: Readonly<Record<string, Readonly<{ action: Record<string, unknown>; label: string }>>> = {
-  'make-view': { action: { kind: 'extract-view' }, label: 'Make view' },
-  'remove-element': { action: { kind: 'remove-render' }, label: 'Remove element' },
-  'wrap-col': { action: { kind: 'wrap-render', wrapper: 'Col' }, label: 'Wrap in Col' },
-  'wrap-row': { action: { kind: 'wrap-render', wrapper: 'Row' }, label: 'Wrap in Row' },
-  'wrap-stack': { action: { kind: 'wrap-render', wrapper: 'Stack' }, label: 'Wrap in Stack' },
-}
-
 export function StudioInspectorActionIds(inspection: string, selection: string): string[] {
-  return StudioInspectorReady(inspection, selection)
-    ? ['wrap-row', 'wrap-col', 'wrap-stack', 'make-view', 'remove-element']
-    : []
+  return StudioInspectorReady(inspection, selection) ? [...studioRenderActionIds] : []
 }
 
 export function StudioInspectorActionLabel(actionId: string): string {
-  return studioInspectorActions[actionId]?.label ?? actionId
+  return StudioRenderActions.label(actionId)
 }
 
 export function StudioInspectorActionValid(
@@ -80,23 +70,26 @@ export function StudioInspectorActionValid(
   actionId: string,
 ): boolean {
   const selected = studioInspectorSelection(selection)
-  return studioInspectorActions[actionId] !== undefined
-    && !busy
+  const parsed = studioInspectorInspection(inspection)
+  return !busy
     && StudioInspectorReady(inspection, selection)
     && selected !== undefined
     && selected.identity.sourceVersion === currentSourceVersion
+    && parsed !== undefined
+    && StudioRenderActions.action(parsed, actionId) !== undefined
 }
 
-export function StudioInspectorAction(selection: string, actionId: string): string {
-  const selected = studioInspectorSelection(selection)
-  const definition = studioInspectorActions[actionId]
-  if (selected === undefined || definition === undefined) {
-    Errors.throwUserInput('The selected element does not expose that Studio action.')
+export function StudioInspectorAction(inspection: string, selection: string, actionId: string): string {
+  const parsed = studioInspectorInspection(inspection)
+  const action = parsed === undefined || !StudioInspectorReady(inspection, selection)
+    ? undefined
+    : StudioRenderActions.action(parsed, actionId)
+  if (action === undefined) {
+    Errors.throwUserInput(
+      StudioRenderActions.isMove(actionId)
+        ? `The selected element has nowhere to ${StudioRenderActions.label(actionId).toLowerCase()}.`
+        : 'The selected element does not expose that Studio action.',
+    )
   }
-  // Selection-wide actions take a list of renders; the inspector offers them for its one selection.
-  return JSON.stringify(
-    definition.action['kind'] === 'extract-view'
-      ? { ...definition.action, renderIds: [selected.renderId] }
-      : { ...definition.action, renderId: selected.renderId },
-  )
+  return JSON.stringify(action)
 }

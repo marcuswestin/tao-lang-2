@@ -1,6 +1,6 @@
 import { ASTUtils, Packages, Type } from '@ast-utils'
 import { AST, codeProjectRoot, type ParsedFile, type ProjectGraph } from '@parser'
-import { Assert, Errors, FS, ProjectIdentity } from '@shared'
+import { Assert, Errors, FS, Platform, ProjectIdentity, Time } from '@shared'
 import type { ValidationResult } from '@validator'
 import { appMetadata } from '../../app-metadata'
 import { authPolicy } from '../../auth-policy'
@@ -212,8 +212,25 @@ function compileReactNative(
       }
       : undefined,
   })
-  const compiledFiles = sourceFiles.flatMap(file =>
-    compileSourceFile(file, {
+  const studioSourceEpochs = studio && options.studioSourceEpochs !== undefined
+    ? Object.fromEntries([
+      ...validationResult.files.map(file => [file.path, 0] as const),
+      ...Object.entries(options.studioSourceEpochs).map(([path, epoch]) =>
+        [FS.resolvePath(path, context.sourceRoot), epoch] as const
+      ),
+    ])
+    : undefined
+  const studioDesignEpochs = studioSourceEpochs === undefined
+    ? undefined
+    : Object.fromEntries(
+      validationResult.files
+        .filter(file => file.ast.statements.some(AST.isDesignDeclaration))
+        .map(file => [file.path, studioSourceEpochs[file.path] ?? 0]),
+    )
+  const cacheFiles: NonNullable<CompileResult['emittedModuleCache']>['files'] = []
+  let fingerprintContext: EmissionFingerprintContext | undefined
+  const compiledFiles = sourceFiles.flatMap(file => {
+    const sourceOptions: CompileSourceFileOptions = {
       dataCatalog,
       sourceByPath,
       selectedStatements: selectedStatements(file),
@@ -230,9 +247,35 @@ function compileReactNative(
       journeyObservations,
       studio,
       studioViews,
+      studioSourceEpochs,
+      studioDesignEpochs,
       debug: options.debug === true,
-    })
-  )
+    }
+    const cache = options.emittedModuleCache
+    if (cache === undefined) {
+      return compileSourceFile(file, sourceOptions)
+    }
+    const start = Time.nowMs()
+    fingerprintContext ??= createEmissionFingerprintContext(sourceOptions, sourceFiles)
+    const fingerprint = emissionFingerprint(file, sourceOptions, fingerprintContext)
+    const cached = fingerprint === undefined ? undefined : cache.get(file.path, fingerprint)
+    if (cached !== undefined) {
+      const files = [...cached, ...copySidecars(file.path, outputPaths)]
+      cacheFiles.push({ sourcePath: file.path, hit: true, emitMs: 0, totalMs: Time.nowMs() - start })
+      return files
+    }
+    const emitStart = Time.nowMs()
+    const emitted = compileSourceFile(file, sourceOptions)
+    const emitMs = Time.nowMs() - emitStart
+    if (fingerprint !== undefined) {
+      const sidecarPaths = new Set(
+        outputPaths.bySourcePath.get(file.path)?.sidecarCopies.map(copy => copy.relativePath),
+      )
+      cache.set(file.path, fingerprint, emitted.filter(output => !sidecarPaths.has(output.relativePath)))
+    }
+    cacheFiles.push({ sourcePath: file.path, hit: false, emitMs, totalMs: Time.nowMs() - start })
+    return emitted
+  })
 
   if (dataCatalog?.access.length) {
     compiledFiles.push({
@@ -270,6 +313,13 @@ function compileReactNative(
     ...compileResultForApp(validationResult, compiledFiles, selectedApp, selectedAppPath),
     dependencyEnvironments: CompilerDependencies.collect(graph, { kind: 'app', app: selectedApp }),
     ...(studioManifest === undefined ? {} : { studioManifest }),
+    ...(options.emittedModuleCache === undefined ? {} : {
+      emittedModuleCache: {
+        hits: cacheFiles.filter(file => file.hit).length,
+        misses: cacheFiles.filter(file => !file.hit).length,
+        files: cacheFiles,
+      },
+    }),
   }
 }
 
@@ -575,6 +625,8 @@ type CompileSourceFileOptions = {
   journeyObservations: boolean
   studio: boolean
   studioViews: ReadonlyArray<{ id: string; view: AST.ViewDeclaration }>
+  studioSourceEpochs: Readonly<Record<string, number>> | undefined
+  studioDesignEpochs: Readonly<Record<string, number>> | undefined
   debug: boolean
 }
 
@@ -596,6 +648,8 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
     journeyObservations,
     studio,
     studioViews,
+    studioSourceEpochs,
+    studioDesignEpochs,
     debug,
   } = options
   const imports = resolveImports(file.path, file.ast, sourceByPath, selectedStatements, selectedStatementsFor)
@@ -700,6 +754,8 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
                   studio,
                   debug,
                   studioViews: studio && selectedAppName !== undefined ? studioViews : [],
+                  studioSourceEpochs,
+                  studioDesignEpochs,
                   viewRegistrations: RuntimeGen.ViewRegistrations(file.ast, { studio }, selectedStatements),
                   selectedStatements,
                 })),
@@ -724,6 +780,12 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
   const injections = planned.injections.map(injection =>
     emitted(injection.relativePath, RuntimeGen.InjectionBoundary(injection.node))
   )
+  return [module, ...injections, ...declarations, ...copySidecars(file.path, outputPaths)]
+}
+
+function copySidecars(sourcePath: string, outputPaths: PlannedOutputs): CompiledFile[] {
+  const planned = outputPaths.bySourcePath.get(sourcePath)
+  Assert.defined(planned, compiledSourceOutputPathMessage, { sourcePath })
   const copiedSidecars = new Map<string, CompiledFile>()
   for (const sidecar of planned.sidecarCopies) {
     // A synthetic in-memory source has no directory to copy from. Real compiles still assert,
@@ -744,7 +806,216 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
       ),
     })
   }
-  return [module, ...injections, ...declarations, ...copiedSidecars.values()]
+  return [...copiedSidecars.values()]
+}
+
+type ReferenceGraphEntry = {
+  sourceHash: string
+  targets: readonly AST.TaoFile[]
+  unresolved: boolean
+}
+
+type EmissionFingerprintContext = {
+  globalFingerprint: string
+  dataReferences: Array<[string, string]> | undefined
+  referenceGraph: Map<string, ReferenceGraphEntry>
+}
+
+/** Cache shared graph and plan work for the duration of this one validated compile. */
+function createEmissionFingerprintContext(
+  options: CompileSourceFileOptions,
+  sourceFiles: readonly ParsedFile[],
+): EmissionFingerprintContext {
+  const referenceGraph = new Map<string, ReferenceGraphEntry>()
+  const dataSources = sourceFiles.filter(candidate =>
+    options.selectedStatementsFor(candidate).some(statement =>
+      AST.isEntityDataDeclaration(statement)
+      || AST.isDatasourceDeclaration(statement)
+      || AST.isAccessDeclaration(statement)
+    )
+  )
+  const outputPlan = [...options.outputPaths.bySourcePath].map(([path, planned]) => [
+    path,
+    planned.modulePath,
+    planned.declarationsPath,
+    planned.injections.map(injection => [injection.binding, injection.relativePath]),
+    planned.sidecars.map(sidecar => [sidecar.sourcePath, sidecar.relativePath, sidecar.binding, sidecar.exportName]),
+    planned.sidecarCopies.map(sidecar => [sidecar.sourcePath, sidecar.relativePath]),
+  ])
+  return {
+    globalFingerprint: Platform.sha256Hex(JSON.stringify({
+      sourcePaths: sourceFiles.map(source => source.path),
+      outputPlan,
+      dataPlan: options.dataCatalog === undefined ? undefined : {
+        ownerPath: options.dataCatalog.ownerPath,
+        localOnly: options.dataCatalog.localOnly,
+        userPaths: [...options.dataCatalog.userPaths],
+        localUserPaths: [...options.dataCatalog.localUserPaths],
+      },
+      identityProjects: options.identityProjects,
+      identityOwnerBySourcePath: [...options.identityOwnerBySourcePath],
+      projectRoot: options.projectRoot,
+      selectedAppDatasourceConfiguration: options.selectedAppDatasourceConfiguration,
+      selectedAppFirebaseConfiguration: options.selectedAppFirebaseConfiguration,
+      selectedAppAuthConfiguration: options.selectedAppAuthConfiguration,
+      studio: options.studio,
+      studioViewIds: options.studioViews.map(item => item.id),
+      journeyObservations: options.journeyObservations,
+      debug: options.debug,
+    })),
+    dataReferences: referencedSources(dataSources.map(source => source.ast), referenceGraph),
+    referenceGraph,
+  }
+}
+
+/** A missing resolved Tao reference makes reuse unsafe, so that file is emitted normally. */
+function referencedSources(
+  roots: readonly AST.TaoFile[],
+  graph: Map<string, ReferenceGraphEntry>,
+): Array<[string, string]> | undefined {
+  const visited = new Map<string, string>()
+  const pending = [...roots]
+  while (pending.length > 0) {
+    const root = pending.pop()!
+    const document = AST.getDocument(root)
+    const path = document.uri.fsPath
+    if (visited.has(path)) {
+      continue
+    }
+    let entry = graph.get(path)
+    if (entry === undefined) {
+      const targets: AST.TaoFile[] = []
+      let unresolved = false
+      for (const node of [root, ...AST.streamAllContents(root)]) {
+        for (const reference of AST.streamReferences(node)) {
+          const target = 'ref' in reference.reference ? reference.reference.ref : undefined
+          if (target === undefined) {
+            // A `from` expression's head names a TypeScript export, not a Tao declaration.
+            // Its arguments are ordinary Tao references and still require resolved targets.
+            const bridge = node.$container
+            if (
+              AST.isFromExpression(bridge) && bridge.expression === node
+              && ((AST.isValueReference(node) && reference.property === 'target')
+                || (AST.isFunctionCallExpression(node) && reference.property === 'function'))
+            ) {
+              continue
+            }
+            unresolved = true
+            continue
+          }
+          const targetRoot = AST.findRoot(target)
+          if (!AST.isTaoFile(targetRoot)) {
+            unresolved = true
+            continue
+          }
+          targets.push(targetRoot)
+        }
+      }
+      entry = { sourceHash: Platform.sha256Hex(document.textDocument.getText()), targets, unresolved }
+      graph.set(path, entry)
+    }
+    if (entry.unresolved) {
+      return undefined
+    }
+    visited.set(path, entry.sourceHash)
+    pending.push(...entry.targets)
+  }
+  return [...visited].sort(([left], [right]) => left.localeCompare(right))
+}
+
+/** The key combines this file's resolved dependencies with shared validated planning inputs. */
+function emissionFingerprint(
+  file: ParsedFile,
+  options: CompileSourceFileOptions,
+  context: EmissionFingerprintContext,
+): string | undefined {
+  if (context.dataReferences === undefined) {
+    return undefined
+  }
+  const imports = resolveImports(
+    file.path,
+    file.ast,
+    options.sourceByPath,
+    options.selectedStatements,
+    options.selectedStatementsFor,
+  )
+  const localReferences = referencedSources([
+    file.ast,
+    ...(options.studio && options.selectedAppName !== undefined
+      ? options.studioViews.map(item => AST.findRoot(item.view)).filter(AST.isTaoFile)
+      : []),
+  ], context.referenceGraph)
+  if (localReferences === undefined) {
+    return undefined
+  }
+  const importedSources = [...imports.bySource.keys()].map(path => options.sourceByPath.get(path))
+  if (importedSources.some(source => source === undefined)) {
+    return undefined
+  }
+  const importedReferences = referencedSources(importedSources.map(source => source!.ast), context.referenceGraph)
+  if (importedReferences === undefined) {
+    return undefined
+  }
+  // A file containing only Design declarations contributes its emitted value through an import.
+  // Its body is compiled in that file, not in an unchanged consumer. Preserve that consumer's
+  // Studio source-epoch snapshot until the consumer itself changes and is emitted again.
+  const dependencyReferences = (references: Array<[string, string]>): Array<[string, string]> =>
+    references.map(([path, hash]) => {
+      const source = options.sourceByPath.get(path)
+      if (
+        options.studioSourceEpochs === undefined || path === file.path || source === undefined
+        || source.ast.statements.length === 0
+        || !source.ast.statements.every(AST.isDesignDeclaration)
+        || [file.ast, ...AST.streamAllContents(file.ast)].some(node => {
+          if (!AST.isValueReference(node) || !AST.isDesignDeclaration(node.target?.ref)) {
+            return false
+          }
+          return AST.getDocument(node.target.ref).uri.fsPath === path
+            && !(AST.isAppProperty(node.$container) && node.$container.name === 'Design')
+        })
+      ) {
+        return [path, hash]
+      }
+      return [
+        path,
+        JSON.stringify(
+          source.ast.statements.filter(AST.isDesignDeclaration).map(
+            declaration => [declaration.name, Packages.visibilityOf(declaration)],
+          ),
+        ),
+      ]
+    })
+  const referenced = [...new Map([...context.dataReferences, ...dependencyReferences(localReferences)])]
+    .sort(([left], [right]) => left.localeCompare(right))
+  return Platform.sha256Hex(JSON.stringify({
+    globalFingerprint: context.globalFingerprint,
+    sourcePath: file.path,
+    selectedStatements: options.selectedStatements.map(selectedStatementIdentity),
+    studioSourceEpoch: options.studioSourceEpochs?.[file.path],
+    referenced,
+    importedReferences: dependencyReferences(importedReferences),
+    imports: [...imports.bySource].map(([path, names]) => [path, [...names]]),
+    scopeBindings: [...imports.scopeBindings],
+    sidecarRuntimeExports: [...(options.sidecarRuntimeExports ?? [])].map(declaration => [
+      AST.getDocument(declaration).uri.fsPath,
+      declaration.$type,
+      declaration.name,
+      declaration.$cstNode?.offset,
+    ]),
+    selectedAppName: options.selectedAppName,
+  }))
+}
+
+/** Selection can change without source text changing; source offsets are not selection identity. */
+function selectedStatementIdentity(statement: AST.Statement): readonly (string | number | undefined)[] {
+  const root = AST.findRoot(statement)
+  return [
+    AST.getDocument(statement).uri.fsPath,
+    AST.isTaoFile(root) ? root.statements.indexOf(statement) : -1,
+    statement.$type,
+    'name' in statement && typeof statement.name === 'string' ? statement.name : undefined,
+    AST.isDeclaration(statement) ? Packages.visibilityOf(statement) : undefined,
+  ]
 }
 
 /** Keep compilation's existing user error while graph inspection stays diagnostic-only. */
@@ -877,7 +1148,7 @@ function identityProject(root: string): DeclarationIdentityProject {
   const id = ProjectIdentity.read(root)
   if (id === undefined) {
     Errors.throwUserInput(
-      `Tao project identity is missing in ${root}/.tao/project.json. Run tao check to initialize it.`,
+      `Tao project identity is missing in ${root}/.tao/store/project.json. Run tao check to initialize it.`,
     )
   }
   return { id, root }

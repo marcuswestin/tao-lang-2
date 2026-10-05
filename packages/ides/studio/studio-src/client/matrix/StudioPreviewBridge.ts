@@ -2,6 +2,7 @@ import { Assert, Errors, Switch } from '@shared/core'
 import type { EditorView } from 'codemirror'
 import type { StudioDraftFile } from '../../StudioDraftSync'
 import { StudioInspector, type StudioInspectorSelection } from '../../StudioInspector'
+import type { StudioPreviewManifestV2 } from '../../StudioPreviewManifest'
 import {
   type StudioDebugCommandMessage,
   type StudioPreviewCanvasGestureMessage,
@@ -29,6 +30,7 @@ import { absoluteSourcePath, StudioSourceNavigation } from '../StudioEditor'
 import { revealCanvasNode } from './StudioCanvasViewport'
 import { StudioDebugEvents } from './StudioDebugEvents'
 import { invalidatePreviewJourneyRecording, StudioJourneyRecorder } from './StudioJourneyRecording'
+import { StudioPreviewActivationGate } from './StudioPreviewActivationGate'
 import {
   type StudioInteractionMode,
   type StudioPreviewConnection,
@@ -40,7 +42,7 @@ import { openRuntimeFailureSource, showRuntimeFailure, type StudioOpenFile } fro
 
 /** The actions the app wires into the bridge so a preview message can reach the editor and inspector. */
 type StudioPreviewMessageActions = {
-  activate?: () => void
+  focus?: () => void
   applySourceAction: (envelope: StudioSourceActionEnvelope) => Promise<void>
   canvasGesture?: (gesture: StudioPreviewCanvasGestureMessage) => void
   canvasGesturesOwned?: () => boolean
@@ -178,19 +180,40 @@ export function postDebugCommand(
 export function postPreviewRuntimeUpdate(
   preview: StudioPreviewConnection,
   runtime: StudioCellRuntimeResponse,
+  sourceVersions?: Readonly<Record<string, string>>,
 ): void {
   const target = preview.iframe.contentWindow
   if (target === null) {
     return
   }
-  const message: StudioPreviewRuntimeUpdateMessage<StudioCellRuntimeResponse> = {
+  const message: StudioPreviewRuntimeUpdateMessage<StudioCellRuntimeResponse> & {
+    sourceVersions?: Readonly<Record<string, string>>
+  } = {
     channel: studioProtocolChannel,
     identity: { ...runtime.identity, previewInstanceId: preview.previewInstanceId },
     protocolVersion: studioProtocolVersion,
     runtime,
+    ...(sourceVersions === undefined ? {} : { sourceVersions }),
     type: 'preview-runtime-update',
   }
   target.postMessage(message, preview.origin)
+}
+
+export function postWholeAppPublicationUpdate(
+  preview: StudioPreviewConnection,
+  manifest: StudioPreviewManifestV2,
+  handshake: StudioHandshake,
+): void {
+  preview.iframe.contentWindow?.postMessage({
+    appName: handshake.identity.appName,
+    channel: studioProtocolChannel,
+    compileRevision: manifest.compileRevision,
+    previewInstanceId: preview.previewInstanceId,
+    project: handshake.identity.project,
+    protocolVersion: studioProtocolVersion,
+    sourceVersions: manifest.sourceVersions,
+    type: 'preview-publication-update',
+  }, preview.origin)
 }
 
 export function configureInteractionMode(
@@ -262,6 +285,8 @@ export async function handlePreviewMessage(
     'highlight-source': ignored,
     'preview-applied': type =>
       receivePreviewApplied(preview, received(message, type), handshake, actions.canvasGesturesOwned?.()),
+    'preview-mounted': type =>
+      receivePreviewMounted(preview, received(message, type), handshake, actions.canvasGesturesOwned?.()),
     'preview-console': type => receiveConsole(preview, received(message, type), actions),
     'preview-canvas-gesture': type => actions.canvasGesture?.(received(message, type)),
     'preview-canvas-pan-key': type => actions.canvasPanKey?.(received(message, type)),
@@ -449,12 +474,14 @@ async function receivePreviewApplied(
 ): Promise<void> {
   postInteractionMode(preview, handshake)
   const identity = preview.cellIdentity
-  const currentCell = identity === undefined || (
-    message.identity.cellId === identity.cellId
-    && message.identity.cellRevision === identity.cellRevision
-    && message.identity.compileRevision === identity.compileRevision
-    && message.identity.manifestRevision === identity.manifestRevision
-  )
+  const currentCell = identity === undefined
+    ? message.compileRevision === preview.expectedRevision
+    : (
+      message.identity.cellId === identity.cellId
+      && message.identity.cellRevision === identity.cellRevision
+      && message.identity.compileRevision === identity.compileRevision
+      && message.identity.manifestRevision === identity.manifestRevision
+    )
   if (!currentCell) {
     return
   }
@@ -463,10 +490,16 @@ async function receivePreviewApplied(
   if (canvasGesturesOwned !== undefined) {
     postCanvasGestureOwnership(preview, handshake, canvasGesturesOwned)
   }
+  preview.appliedRevision = Math.max(preview.appliedRevision ?? 0, message.appliedRevision)
   if (identity !== undefined) {
-    preview.appliedRevision = Math.max(preview.appliedRevision ?? 0, message.appliedRevision)
     preview.appliedIdentity = { identity, previewInstanceId: preview.previewInstanceId }
   }
+  StudioPreviewPublication.acknowledged(
+    preview,
+    identity ?? { compileRevision: message.compileRevision },
+    message.identity.previewInstanceId,
+  )
+  StudioPreviewActivationGate.changed(preview)
   if (preview.frame !== undefined && StudioReviewDom.appliedReady(preview.journeyReplayStatus)) {
     StudioReviewDom.status(preview.frame, 'ready')
   }
@@ -474,11 +507,39 @@ async function receivePreviewApplied(
   // The server correctly rejects that stale report; it does not indicate a broken preview.
   try {
     await StudioApiClient.previewApplied(message)
-    if (identity !== undefined) {
-      StudioPreviewPublication.acknowledged(preview, identity, message.identity.previewInstanceId)
-    }
   } catch (error) {
     ignoreSupersededPreviewReport(error)
+  }
+}
+
+function receivePreviewMounted(
+  preview: StudioPreviewConnection,
+  message: StudioWindowMessageOf<'preview-mounted'>,
+  handshake: StudioHandshake,
+  canvasGesturesOwned?: boolean,
+): void {
+  const current = preview.cellIdentity
+  if (
+    current === undefined
+      ? message.identity.compileRevision !== preview.expectedRevision
+      : (
+        message.identity.cellId !== current.cellId
+        || message.identity.cellRevision !== current.cellRevision
+        || message.identity.compileRevision !== current.compileRevision
+        || message.identity.manifestRevision !== current.manifestRevision
+      )
+  ) {
+    return
+  }
+  postInteractionMode(preview, handshake)
+  StudioPreviewPublication.acknowledged(
+    preview,
+    current ?? { compileRevision: message.identity.compileRevision! },
+    message.identity.previewInstanceId,
+  )
+  StudioPreviewActivationGate.changed(preview)
+  if (canvasGesturesOwned !== undefined) {
+    postCanvasGestureOwnership(preview, handshake, canvasGesturesOwned)
   }
 }
 
@@ -487,7 +548,7 @@ async function receiveSourceAction(
   message: StudioWindowMessageOf<'source-action'>,
   actions: StudioPreviewMessageActions,
 ): Promise<void> {
-  actions.activate?.()
+  actions.focus?.()
   await actions.applySourceAction({
     ...message,
     identity: {
@@ -504,7 +565,7 @@ function receiveRuntimeFailure(
   openFile: StudioOpenFileRequest,
   actions: StudioPreviewMessageActions,
 ): void {
-  actions.activate?.()
+  actions.focus?.()
   const capture = runtimeCaptureWithEnvironment(
     message.capture,
     preview.cell?.environment,
@@ -574,7 +635,7 @@ async function receiveSelectSource(
   openFile: StudioOpenFileRequest,
   actions: StudioPreviewMessageActions,
 ): Promise<void> {
-  actions.activate?.()
+  actions.focus?.()
   const opened = await StudioSourceNavigation.openAndSelect({
     focus: actions.editorTakesFocus?.() ?? true,
     identity: message.identity,
@@ -604,7 +665,7 @@ export function requestRuntimeCapture(
 ): Promise<StudioRuntimeCaptureArtifact> {
   const target = preview.iframe.contentWindow
   if (target === null) {
-    return Promise.reject(new Errors.HostEnvironmentError('The active preview is not connected.'))
+    return Promise.reject(new Errors.HostEnvironmentError('The focused preview is not connected.'))
   }
   preview.runtimeCaptureRequest?.reject(
     new Errors.UnexpectedBehaviorError('A newer live-data refresh replaced this request.'),
@@ -617,7 +678,7 @@ export function requestRuntimeCapture(
     const timeout = setTimeout(() => {
       if (preview.runtimeCaptureRequest?.requestId === requestId) {
         preview.runtimeCaptureRequest = undefined
-        reject(new Errors.HostEnvironmentError('The active preview did not return live app data.'))
+        reject(new Errors.HostEnvironmentError('The focused preview did not return live app data.'))
       }
     }, 5_000)
     preview.runtimeCaptureRequest = { reject, requestId, resolve, timeout }

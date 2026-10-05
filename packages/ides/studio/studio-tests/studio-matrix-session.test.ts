@@ -29,6 +29,21 @@ Describe('Studio matrix session', () => {
     Expect(() => session.instance('device-instance')).toThrow('no longer current')
   })
 
+  Test('bootstraps an instance with the source versions of its own compile revision', () => {
+    const first = new StudioMatrixSession(fixture())
+    first.registerInstance(instance(first, 'phone', 'phone-instance'))
+    const rebased = first.rebase({
+      ...fixture({ compileRevision: 8, manifestRevision: 'manifest-8' }),
+      sourceVersions: { '/project/App.tao': 'text-v8:app' },
+    })
+    rebased.registerInstance(instance(rebased, 'phone', 'phone-instance'))
+
+    const bootstrap = rebased.bootstrap('phone-instance')
+    Expect(bootstrap.identity.compileRevision).toBe(8)
+    Expect(bootstrap.sourceVersions).toEqual({ '/project/App.tao': 'text-v8:app' })
+    Expect(() => rebased.bootstrap('unknown-instance')).toThrow('no longer current')
+  })
+
   Test('reconfigures one cell, resolves state layers, and rejects only its stale instance', () => {
     const session = new StudioMatrixSession(fixture())
     const phone = instance(session, 'phone', 'phone-instance')

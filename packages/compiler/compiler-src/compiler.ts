@@ -4,6 +4,7 @@ import { Assert, Diagnostics, ReleaseCapabilities, type ReleaseProfile } from '@
 import Validator, { type ValidationResult } from '@validator'
 import { designValidationCodes } from '@validator/diagnostic-codes'
 import { Backends } from './codegen/Backend'
+import { EmittedModuleCache } from './codegen/react-native/EmittedModuleCache'
 import type { DependencyEnvironment } from './compiler-dependencies'
 import { compileStudioPreviewManifest, type StudioPreviewManifest } from './studio-preview-manifest'
 import { compileTestPlan, type TaoTestPlan } from './test-plan-compiler'
@@ -30,6 +31,12 @@ export type CompileResult = {
   code: string
   files: CompiledFile[]
   studioManifest?: StudioPreviewManifest
+  /** Present only when emitted Tao modules were compiled through a caller-owned cache. */
+  emittedModuleCache?: {
+    hits: number
+    misses: number
+    files: Array<{ sourcePath: string; hit: boolean; emitMs: number; totalMs: number }>
+  }
 }
 
 export type CompileOptions = {
@@ -43,13 +50,19 @@ export type CompileOptions = {
   appAuthConfiguration?: Readonly<Record<string, string>>
   /** studio emits preview-only render occurrence metadata into generated Tao props. */
   studio?: boolean
+  /** Studio's last changed compile revision for each project-relative Tao source path. */
+  studioSourceEpochs?: Readonly<Record<string, number>>
   /** journeyObservations emits test-harness-only render locators into generated Tao props. */
   journeyObservations?: boolean
   /** debug instruments every action statement with a debugger gate. */
   debug?: boolean
   /** release promotes only stable release-gate diagnostics; ordinary development warnings stay non-blocking. */
   validationMode?: 'development' | 'release'
+  /** Reuses generated Tao modules across validated compiles in one caller-owned session. */
+  emittedModuleCache?: EmittedModuleCache
 }
+
+export { EmittedModuleCache }
 
 /** CompilerSession reuses standalone validation and package state across source strings. */
 export type CompilerSession = {
