@@ -3,11 +3,13 @@ import { Type } from './Type'
 
 /**
  * RenderTarget classifies what a render site names. A view declaration is invoked with arguments;
- * a nav declaration or a view-, scene-, or nav-typed parameter renders as the value it was bound to.
+ * text values render as text, while nav declarations and view-, scene-, or nav-typed parameters
+ * render as the value they were bound to.
  */
 export type RenderTarget =
   | { kind: 'view'; view: AST.ViewDeclaration }
   | { kind: 'nav'; declaration: AST.NavDeclaration }
+  | { kind: 'text'; declaration: AST.AliasDeclaration | AST.StateDeclaration | AST.ParameterDeclaration }
   | { kind: 'parameter'; parameter: AST.ParameterDeclaration; family: 'view' | 'scene' | 'nav' }
 
 /** resolveRenderTarget classifies the linked target of one render site. */
@@ -22,9 +24,22 @@ export function resolveRenderTarget(render: AST.Render): RenderTarget | undefine
   if (AST.isNavDeclaration(target)) {
     return { kind: 'nav', declaration: target }
   }
-  const type = Type.ofParameter(target)
-  const family = type.kind === 'primitive' && (type.primitive === 'scene' || type.primitive === 'nav')
-    ? type.primitive
+  const type = Type.ofValueDeclaration(target, render)
+  if (type.kind === 'primitive' && type.primitive === 'text') {
+    return { kind: 'text', declaration: target }
+  }
+  if (!AST.isParameterDeclaration(target)) {
+    return undefined
+  }
+  const parameterType = Type.ofParameter(target)
+  if (
+    parameterType.kind !== 'primitive'
+    || (parameterType.primitive !== 'view' && parameterType.primitive !== 'scene' && parameterType.primitive !== 'nav')
+  ) {
+    return undefined
+  }
+  const family = parameterType.primitive === 'scene' || parameterType.primitive === 'nav'
+    ? parameterType.primitive
     : 'view'
   return { kind: 'parameter', parameter: target, family }
 }
@@ -35,6 +50,8 @@ export function renderTargetName(target: RenderTarget): string {
     ? target.view.name
     : target.kind === 'nav'
     ? target.declaration.name
+    : target.kind === 'text'
+    ? Type.declarationName(target.declaration)
     : Type.parameterName(target.parameter)
 }
 
