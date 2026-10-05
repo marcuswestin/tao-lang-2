@@ -455,44 +455,13 @@ async function snapshotInstalledEnvironments(
     const snapshotNamespace = BridgeMetadata.dependencyNamespace(snapshotOrigin)
     const originalModules = ManagedInstallEnvironment.modulesRoot(originalRoot, origin, environment.namespace)
     const snapshotModules = ManagedInstallEnvironment.modulesRoot(snapshotRoot, snapshotOrigin, snapshotNamespace)
-    for (const requirement of environment.npm) {
-      const sourcePackageRoot = ManagedInstallEnvironment.packageRoot(
-        originalRoot,
-        environment.namespace,
-        requirement.alias,
-      )
-      const sourcePackage = FS.resolvePath(`node_modules/${requirement.alias}`, sourcePackageRoot)
-      const sourceAlias = FS.resolvePath(requirement.alias, originalModules)
-      const resolvedAlias = await FS.realPath(sourceAlias).catch(() => undefined)
-      if (
-        !await FS.isDirectory(sourcePackage)
-        || resolvedAlias !== await FS.realPath(sourcePackage).catch(() => undefined)
-      ) {
-        Errors.throwUserInput(`Build dependency '${requirement.alias}' is not Tao-managed; run tao install first.`)
-      }
-      const snapshotPackageRoot = ManagedInstallEnvironment.packageRoot(
-        snapshotRoot,
-        snapshotNamespace,
-        requirement.alias,
-      )
-      const sourceModules = FS.resolvePath('node_modules', sourcePackageRoot)
-      const snapshotModulesForAlias = FS.resolvePath('node_modules', snapshotPackageRoot)
-      const before = await installTreeIdentity(sourceModules)
-      await FS.copyDirectory(sourceModules, snapshotModulesForAlias)
-      if (
-        await installTreeIdentity(sourceModules) !== before
-        || await installTreeIdentity(snapshotModulesForAlias) !== before
-      ) {
-        Errors.throwUserInput(
-          `Build dependency '${requirement.alias}' changed while creating the snapshot; retry the build.`,
-        )
-      }
-      digests.push(`${FS.relativePath(originalRoot, origin)}:${requirement.alias}:${before}`)
-      await FS.replaceSymlink(
-        FS.resolvePath(`node_modules/${requirement.alias}`, snapshotPackageRoot),
-        FS.resolvePath(requirement.alias, snapshotModules),
-      )
-    }
+    const copied = await copyInstalledTrees(
+      { modules: originalModules, namespace: environment.namespace, root: originalRoot },
+      { modules: snapshotModules, namespace: snapshotNamespace, root: snapshotRoot },
+      environment.npm.map(requirement => requirement.alias),
+      'while creating the snapshot; retry the build',
+    )
+    digests.push(...copied.map(identity => `${FS.relativePath(originalRoot, origin)}:${identity}`))
     if (origin !== originalRoot) {
       await FS.replaceSymlink(
         snapshotModules,
@@ -514,27 +483,75 @@ async function retainCompiledEnvironments(
   for (const environment of environments) {
     const snapshotOrigin = snapshotRootFor(FS.resolvePath(environment.projectRoot))
     const namespace = BridgeMetadata.dependencyNamespace(snapshotOrigin)
+    if (environment.npm.length === 0) {
+      continue
+    }
+    const snapshotModules = ManagedInstallEnvironment.modulesRoot(snapshotRoot, snapshotOrigin, namespace)
     const retainedModules = ManagedInstallEnvironment.modulesRoot(
       retainedRoot,
       FS.resolvePath(environment.projectRoot) === FS.resolvePath(originalRoot) ? retainedRoot : snapshotOrigin,
       namespace,
     )
-    for (const requirement of environment.npm) {
-      const snapshotPackageRoot = ManagedInstallEnvironment.packageRoot(snapshotRoot, namespace, requirement.alias)
-      const sourceModules = FS.resolvePath('node_modules', snapshotPackageRoot)
-      const retainedPackageRoot = ManagedInstallEnvironment.packageRoot(retainedRoot, namespace, requirement.alias)
-      const retainedPackageModules = FS.resolvePath('node_modules', retainedPackageRoot)
-      const before = await installTreeIdentity(sourceModules)
-      await FS.copyDirectory(sourceModules, retainedPackageModules)
-      if (await installTreeIdentity(retainedPackageModules) !== before) {
-        Errors.throwUserInput(`Build dependency '${requirement.alias}' changed while retaining compiled output.`)
-      }
-      await FS.replaceSymlink(
-        FS.resolvePath(`node_modules/${requirement.alias}`, retainedPackageRoot),
-        FS.resolvePath(requirement.alias, retainedModules),
-      )
+    await copyInstalledTrees(
+      { modules: snapshotModules, namespace, root: snapshotRoot },
+      { modules: retainedModules, namespace, root: retainedRoot },
+      environment.npm.map(requirement => requirement.alias),
+      'while retaining compiled output',
+    )
+  }
+}
+
+type InstallSide = { modules: string; namespace: string; root: string }
+
+/**
+ * Where `tao install` may have put one alias's npm tree: the origin's shared prefix, or the
+ * per-alias prefix of the layout before it, which a checkout keeps until its next install.
+ */
+function installedTreeCandidates(side: InstallSide, alias: string): string[] {
+  return [
+    FS.resolvePath('node_modules', ManagedInstallEnvironment.environmentRoot(side.root, side.namespace)),
+    FS.resolvePath('node_modules', ManagedInstallEnvironment.legacyPackageRoot(side.root, side.namespace, alias)),
+  ]
+}
+
+/**
+ * Copies the npm trees `aliases` link into from one consumer's managed install to another's, once
+ * per tree however many aliases share it, then links each alias to its copy. An alias whose link
+ * does not resolve into one of its origin's own trees is refused. Returns one identity per tree.
+ */
+async function copyInstalledTrees(
+  source: InstallSide,
+  destination: InstallSide,
+  aliases: readonly string[],
+  during: string,
+): Promise<string[]> {
+  const trees = new Map<string, { aliases: string[]; destination: string }>()
+  for (const alias of aliases) {
+    const resolved = await FS.realPath(FS.resolvePath(alias, source.modules)).catch(() => undefined)
+    const candidates = installedTreeCandidates(source, alias)
+    const realCandidates = await Promise.all(candidates.map(path => FS.realPath(path).catch(() => undefined)))
+    const index = realCandidates.findIndex(tree => tree !== undefined && resolved === FS.resolvePath(alias, tree))
+    if (index === -1 || !await FS.isDirectory(resolved!)) {
+      Errors.throwUserInput(`Build dependency '${alias}' is not Tao-managed; run tao install first.`)
+    }
+    const tree = trees.get(candidates[index]!)
+      ?? { aliases: [], destination: installedTreeCandidates(destination, alias)[index]! }
+    tree.aliases.push(alias)
+    trees.set(candidates[index]!, tree)
+  }
+  const identities: string[] = []
+  for (const [sourceTree, tree] of trees) {
+    const before = await installTreeIdentity(sourceTree)
+    await FS.copyDirectory(sourceTree, tree.destination)
+    if (await installTreeIdentity(sourceTree) !== before || await installTreeIdentity(tree.destination) !== before) {
+      Errors.throwUserInput(`Build dependency '${tree.aliases.join("', '")}' changed ${during}.`)
+    }
+    identities.push(`${tree.aliases.join(',')}:${before}`)
+    for (const alias of tree.aliases) {
+      await FS.replaceSymlink(FS.resolvePath(alias, tree.destination), FS.resolvePath(alias, destination.modules))
     }
   }
+  return identities
 }
 
 async function installTreeIdentity(root: string): Promise<string> {

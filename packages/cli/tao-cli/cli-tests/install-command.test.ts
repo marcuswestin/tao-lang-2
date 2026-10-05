@@ -172,7 +172,7 @@ view Main() { render inject \`\`\`ts return null \`\`\` }
         Expect(environment?.npm['util']).toEqual({ name: 'date-fns', requested: version, version })
         const modulesRoot = ManagedInstallEnvironment.modulesRoot(consumer, origin, namespace)
         Expect(await FS.realPath(FS.resolvePath('util', modulesRoot))).toBe(
-          ManagedInstallEnvironment.packageRoot(consumer, namespace, 'util') + '/node_modules/util',
+          ManagedInstallEnvironment.environmentRoot(consumer, namespace) + '/node_modules/util',
         )
         Expect(await FS.realPath(ManagedInstallEnvironment.generatedModulesLink(consumer, namespace)))
           .toBe(modulesRoot)
@@ -292,8 +292,8 @@ view Main() { render inject \`\`\`ts return null \`\`\` }
         '4.1.0',
       )
       Expect(calls.toSorted()).toEqual([
-        ManagedInstallEnvironment.packageRoot(consumer, BridgeMetadata.dependencyNamespace(first), 'util'),
-        ManagedInstallEnvironment.packageRoot(consumer, BridgeMetadata.dependencyNamespace(second), 'util'),
+        ManagedInstallEnvironment.environmentRoot(consumer, BridgeMetadata.dependencyNamespace(first)),
+        ManagedInstallEnvironment.environmentRoot(consumer, BridgeMetadata.dependencyNamespace(second)),
       ].toSorted())
     } finally {
       await FS.remove(directory)
@@ -305,7 +305,7 @@ view Main() { render inject \`\`\`ts return null \`\`\` }
     try {
       await writeNpmApp(root)
       const namespace = BridgeMetadata.dependencyNamespace(root)
-      const directory = ManagedInstallEnvironment.packageRoot(root, namespace, 'util')
+      const directory = ManagedInstallEnvironment.environmentRoot(root, namespace)
       const manifestPath = FS.resolvePath('package.json', directory)
       const installed = FS.resolvePath('node_modules/util', directory)
       const linkPath = FS.resolvePath('util', ManagedInstallEnvironment.modulesRoot(root, root, namespace))
@@ -379,6 +379,133 @@ view Main() { render inject \`\`\`ts return null \`\`\` }
     }
   })
 
+  Test('installs every alias of one origin with a single npm invocation into one shared tree', async () => {
+    const root = await mkTestDir('tao-install-batched-')
+    try {
+      await writeNpmApp(root, ['date-fns version 4.1.0 as util', 'lodash version 4.17.21 as fp'])
+      const namespace = BridgeMetadata.dependencyNamespace(root)
+      const directory = ManagedInstallEnvironment.environmentRoot(root, namespace)
+      const manifests: unknown[] = []
+      const terminal = fakeTerminal()
+      await runTaoInstall(root, { appName: 'Reader', output: terminal.output }, {
+        installNpm: async path => {
+          manifests.push(await FS.readJson(FS.resolvePath('package.json', path)))
+          await writeInstalled(path, 'util', 'date-fns', '4.1.0')
+          await writeInstalled(path, 'fp', 'lodash', '4.17.21')
+        },
+      })
+
+      Expect(manifests).toEqual([{
+        private: true,
+        dependencies: { fp: 'npm:lodash@4.17.21', util: 'npm:date-fns@4.1.0' },
+      }])
+      Expect(terminal.outputText()).toContain(
+        'Checking/installing npm packages date-fns@4.1.0 as util, lodash@4.17.21 as fp...\n',
+      )
+      Expect(terminal.outputText()).toContain('(1 npm invocation).')
+      const modulesRoot = ManagedInstallEnvironment.modulesRoot(root, root, namespace)
+      for (const alias of ['util', 'fp']) {
+        Expect(await FS.realPath(FS.resolvePath(alias, modulesRoot))).toBe(
+          await FS.realPath(FS.resolvePath(`node_modules/${alias}`, directory)),
+        )
+      }
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('a scoped install keeps an alias another app installed into the shared tree', async () => {
+    const root = await mkTestDir('tao-install-shared-scope-')
+    try {
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', root), '')
+      await FS.writeText(
+        FS.resolvePath('App.tao', root),
+        `app First {
+   id "first"
+   version "1.0.0"
+   name "First"
+   requires ts npm:date-fns version 4.1.0 as util
+   view Main
+}
+app Second {
+   id "second"
+   version "1.0.0"
+   name "Second"
+   requires ts npm:lodash version 4.17.21 as fp
+   view Main
+}
+view Main() { render inject \`\`\`ts return null \`\`\` }
+`,
+      )
+      const manifests: { dependencies: Record<string, string> }[] = []
+      const installNpm = async (path: string) => {
+        const manifest = await FS.readJson<{ dependencies: Record<string, string> }>(
+          FS.resolvePath('package.json', path),
+        )
+        manifests.push(manifest)
+        for (const alias of Object.keys(manifest.dependencies)) {
+          await writeInstalled(
+            path,
+            alias,
+            alias === 'util' ? 'date-fns' : 'lodash',
+            alias === 'util' ? '4.1.0' : '4.17.21',
+          )
+        }
+      }
+      await runTaoInstall(root, { appName: 'First' }, { installNpm })
+      await runTaoInstall(root, { appName: 'Second' }, { installNpm })
+
+      // npm prunes what its manifest omits, so the second, Second-only install still lists util.
+      Expect(manifests.map(manifest => manifest.dependencies)).toEqual([
+        { util: 'npm:date-fns@4.1.0' },
+        { fp: 'npm:lodash@4.17.21', util: 'npm:date-fns@4.1.0' },
+      ])
+      const environment = (await readProjectLock(root)).installs?.environments['.']
+      Expect(Object.keys(environment?.npm ?? {}).toSorted()).toEqual(['fp', 'util'])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('moves an alias the per-alias layout installed into the shared tree and removes the old one', async () => {
+    const root = await mkTestDir('tao-install-legacy-')
+    try {
+      await writeNpmApp(root)
+      const namespace = BridgeMetadata.dependencyNamespace(root)
+      const legacy = ManagedInstallEnvironment.legacyPackageRoot(root, namespace, 'util')
+      const linkPath = FS.resolvePath('util', ManagedInstallEnvironment.modulesRoot(root, root, namespace))
+      await writeInstalled(legacy, 'util', 'date-fns', '4.1.0')
+      await FS.replaceSymlink(FS.resolvePath('node_modules/util', legacy), linkPath)
+      await FS.writeJson(FS.resolvePath('.tao/store/lock.jsonc', root), {
+        schemaVersion: 1,
+        installs: {
+          lockfileVersion: 2,
+          local: {},
+          environments: {
+            '.': {
+              projectRoot: '.',
+              publications: [],
+              npm: { util: { name: 'date-fns', requested: '4.1.0', version: '4.1.0' } },
+            },
+          },
+        },
+      })
+
+      await runTaoInstall(root, { appName: 'Reader' }, {
+        installNpm: path => writeInstalled(path, 'util', 'date-fns', '4.1.0'),
+      })
+
+      Expect(await FS.realPath(linkPath)).toBe(
+        await FS.realPath(
+          FS.resolvePath('node_modules/util', ManagedInstallEnvironment.environmentRoot(root, namespace)),
+        ),
+      )
+      Expect(await FS.exists(ManagedInstallEnvironment.legacyNamespaceRoot(root, namespace))).toBe(false)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('refuses to replace an unrelated root npm installation', async () => {
     const root = await mkTestDir('tao-install-unowned-')
     try {
@@ -411,7 +538,7 @@ view Main() { render inject \`\`\`ts return null \`\`\` }
   })
 })
 
-async function writeNpmApp(root: string): Promise<void> {
+async function writeNpmApp(root: string, requirements = ['date-fns version 4.1.0 as util']): Promise<void> {
   await FS.writeText(FS.resolvePath('.tao/.gitkeep', root), '')
   await FS.writeText(
     FS.resolvePath('App.tao', root),
@@ -419,10 +546,14 @@ async function writeNpmApp(root: string): Promise<void> {
    id "reader"
    version "1.0.0"
    name "Reader"
-   requires ts npm:date-fns version 4.1.0 as util
-   view Main
+${requirements.map(requirement => `   requires ts npm:${requirement}\n`).join('')}   view Main
 }
 view Main() { render inject \`\`\`ts return null \`\`\` }
 `,
   )
+}
+
+/** writeInstalled stands in for npm placing `alias` in the tree under `prefix`. */
+async function writeInstalled(prefix: string, alias: string, name: string, version: string): Promise<void> {
+  await FS.writeJson(FS.resolvePath(`node_modules/${alias}/package.json`, prefix), { name, version })
 }

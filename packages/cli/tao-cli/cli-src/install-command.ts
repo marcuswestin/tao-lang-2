@@ -15,6 +15,9 @@ export type InstallOptions = HCI.OutputOptions & {
 }
 
 type NpmRequirement = { alias: string; name: string; requested: string }
+/** A requirement with the version to install, and whether an earlier install recorded its alias. */
+type NpmInstallItem = NpmRequirement & { owned: boolean; version: string }
+type NpmPin = InstallsLock['environments'][string]['npm'][string]
 type InstallDependencies = {
   installNpm?: (directory: string, consumerRoot: string, args: readonly string[]) => Promise<void>
   nowMs?: () => number
@@ -222,25 +225,18 @@ async function installEnvironment(
     publications: environment.publications.map(item => ({ ...item })),
   }
   const modulesRoot = ManagedInstallEnvironment.modulesRoot(consumerRoot, environment.projectRoot, namespace)
-  for (const requirement of environment.npm) {
-    const item: NpmRequirement = {
-      alias: requirement.alias,
-      name: requirement.packageName,
-      requested: requirement.versionRange,
-    }
+  const selected = environment.npm.map((requirement): NpmInstallItem => {
+    const item = { alias: requirement.alias, name: requirement.packageName, requested: requirement.versionRange }
     const prior = entry.npm[item.alias]
     const version = prior?.name === item.name && prior.requested === item.requested
       ? prior.version
       : item.requested
-    entry.npm[item.alias] = await installNpmAlias(
-      consumerRoot,
-      modulesRoot,
-      namespace,
-      item,
-      version,
-      prior !== undefined,
-      dependencies,
-      progress,
+    return { ...item, owned: prior !== undefined, version }
+  })
+  if (selected.length > 0) {
+    Object.assign(
+      entry.npm,
+      await installNpmEnvironment(consumerRoot, modulesRoot, namespace, selected, entry.npm, dependencies, progress),
     )
   }
   installs.environments[projectRoot] = entry
@@ -254,32 +250,69 @@ async function installEnvironment(
   }
 }
 
-async function installNpmAlias(
+/**
+ * Installs every selected alias of one origin with a single npm invocation into the origin's shared
+ * prefix, then links each alias into the origin's modules root. One tree per origin lets npm resolve
+ * the aliases together, so a peer they share, such as `expo`, is installed once rather than per alias.
+ */
+async function installNpmEnvironment(
   consumerRoot: string,
   modulesRoot: string,
   namespace: string,
-  item: NpmRequirement,
-  version: string,
-  owned: boolean,
+  selected: readonly NpmInstallItem[],
+  recorded: Readonly<Record<string, NpmPin>>,
   dependencies: InstallDependencies,
   progress: InstallProgress,
-): Promise<InstallsLock['environments'][string]['npm'][string]> {
-  const packageLabel = `${item.name}@${version}${item.alias === item.name ? '' : ` as ${item.alias}`}`
-  const directory = ManagedInstallEnvironment.packageRoot(consumerRoot, namespace, item.alias)
-  const linkPath = FS.resolvePath(item.alias, modulesRoot)
-  const installed = FS.resolvePath(`node_modules/${item.alias}`, directory)
+): Promise<Record<string, NpmPin>> {
+  const directory = ManagedInstallEnvironment.environmentRoot(consumerRoot, namespace)
+  const installed = (alias: string) => FS.resolvePath(`node_modules/${alias}`, directory)
+  const linkPath = (alias: string) => FS.resolvePath(alias, modulesRoot)
+  const managedTargets = (alias: string) => [
+    installed(alias),
+    ManagedInstallEnvironment.legacyPackageRoot(consumerRoot, namespace, alias) + `/node_modules/${alias}`,
+  ]
+  const label = selected.map(item =>
+    `${item.name}@${item.version}${item.alias === item.name ? '' : ` as ${item.alias}`}`
+  )
+    .join(', ')
+  const noun = selected.length === 1 ? 'package' : 'packages'
+  // An alias an earlier, differently scoped install linked stays in the shared manifest, because
+  // npm prunes from the tree whatever its manifest no longer lists.
+  const retained: NpmInstallItem[] = []
   await progress.run(
-    `npm package preparation for ${packageLabel}`,
-    `Preparing npm package ${packageLabel}`,
+    `npm ${noun} preparation for ${label}`,
+    `Preparing npm ${noun} ${label}`,
     async () => {
-      if (owned) {
-        await verifyOwnedLink(linkPath, installed, item.alias)
-      } else if (await FS.exists(linkPath) || await FS.isSymbolicLink(linkPath)) {
-        Errors.throwUserInput(`Cannot install npm alias '${item.alias}': ${linkPath} is not Tao-managed.`)
+      for (const item of selected) {
+        if (item.owned) {
+          if (!await isManagedLink(linkPath(item.alias), managedTargets(item.alias), true)) {
+            Errors.throwUserInput(
+              `Cannot update npm alias '${item.alias}': ${linkPath(item.alias)} is no longer Tao-managed.`,
+            )
+          }
+        } else if (await FS.exists(linkPath(item.alias)) || await FS.isSymbolicLink(linkPath(item.alias))) {
+          Errors.throwUserInput(`Cannot install npm alias '${item.alias}': ${linkPath(item.alias)} is not Tao-managed.`)
+        }
+      }
+      for (const [alias, pin] of Object.entries(recorded)) {
+        if (
+          !selected.some(item => item.alias === alias)
+          && await isManagedLink(linkPath(alias), managedTargets(alias), false)
+        ) {
+          retained.push({ alias, name: pin.name, owned: true, requested: pin.requested, version: pin.version })
+        }
       }
       const manifestPath = FS.resolvePath('package.json', directory)
+      const wanted = [...selected, ...retained].toSorted((a, b) => a.alias.localeCompare(b.alias))
       const manifest = `${
-        JSON.stringify({ private: true, dependencies: { [item.alias]: `npm:${item.name}@${version}` } }, null, 2)
+        JSON.stringify(
+          {
+            private: true,
+            dependencies: Object.fromEntries(wanted.map(item => [item.alias, `npm:${item.name}@${item.version}`])),
+          },
+          null,
+          2,
+        )
       }\n`
       if (!await FS.exists(manifestPath) || await FS.readText(manifestPath) !== manifest) {
         await FS.writeText(manifestPath, manifest)
@@ -288,8 +321,8 @@ async function installNpmAlias(
   )
   const args = ['install', '--prefix', directory, '--no-audit', '--no-fund']
   await progress.run(
-    `npm package ${packageLabel}`,
-    `Checking/installing npm package ${packageLabel}`,
+    `npm ${noun} ${label}`,
+    `Checking/installing npm ${noun} ${label}`,
     async () => {
       progress.npmInvocations++
       if (dependencies.installNpm === undefined) {
@@ -299,28 +332,39 @@ async function installNpmAlias(
       }
     },
   )
-  const installedVersion = await progress.run(
-    `npm alias link ${item.alias}`,
-    `Linking npm alias ${item.alias}`,
-    async () => {
-      const manifest = await FS.readJson<{ version: string }>(FS.resolvePath('package.json', installed))
-      if (!await FS.isSymbolicLink(linkPath)) {
-        await FS.replaceSymlink(installed, linkPath)
-      }
-      return manifest.version
-    },
-  )
-  return { name: item.name, requested: item.requested, version: installedVersion }
+  const pins: Record<string, NpmPin> = {}
+  for (const item of [...selected, ...retained]) {
+    const version = await progress.run(
+      `npm alias link ${item.alias}`,
+      `Linking npm alias ${item.alias}`,
+      async () => {
+        const manifest = await FS.readJson<{ version: string }>(FS.resolvePath('package.json', installed(item.alias)))
+        if (!await isManagedLink(linkPath(item.alias), [installed(item.alias)], false)) {
+          await FS.replaceSymlink(installed(item.alias), linkPath(item.alias))
+        }
+        return manifest.version
+      },
+    )
+    if (selected.includes(item)) {
+      pins[item.alias] = { name: item.name, requested: item.requested, version }
+    }
+  }
+  // Every alias this origin recorded now links into the shared prefix, so the per-alias trees an
+  // earlier layout installed are unreferenced.
+  await FS.remove(ManagedInstallEnvironment.legacyNamespaceRoot(consumerRoot, namespace))
+  return pins
 }
 
-async function verifyOwnedLink(linkPath: string, expected: string, alias: string): Promise<void> {
+/**
+ * isManagedLink reports whether `linkPath` is a symlink to one of `targets`; an absent link counts
+ * as managed only when `absentIsManaged` says so.
+ */
+async function isManagedLink(linkPath: string, targets: readonly string[], absentIsManaged: boolean): Promise<boolean> {
   if (!await FS.exists(linkPath) && !await FS.isSymbolicLink(linkPath)) {
-    return
+    return absentIsManaged
   }
   const existing = await FS.entryMetadata(linkPath)
-  if (existing.kind !== 'symlink' || FS.resolvePath(existing.linkTarget!, FS.dirname(linkPath)) !== expected) {
-    Errors.throwUserInput(`Cannot update npm alias '${alias}': ${linkPath} is no longer Tao-managed.`)
-  }
+  return existing.kind === 'symlink' && targets.includes(FS.resolvePath(existing.linkTarget!, FS.dirname(linkPath)))
 }
 
 async function ensureManagedLink(target: string, link: string, label: string): Promise<void> {
