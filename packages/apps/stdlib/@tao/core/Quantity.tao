@@ -1,0 +1,98 @@
+public abstract type Scalar is numeric
+
+public type Duration is Scalar with {
+   units { seconds 1 (default), milliseconds 0.001, minutes 60, hours 3600 }
+
+   static func +(Left Duration, Right Duration) -> Duration {
+      return DurationAdd(Left, Right) from ./Quantity.ts
+   }
+   static func -(Left Duration, Right Duration) -> Duration {
+      return DurationSubtract(Left, Right) from ./Quantity.ts
+   }
+   static func -(Value Duration) -> Duration {
+      return DurationNegate(Value) from ./Quantity.ts
+   }
+   static func *(Left Duration, Right number) -> Duration {
+      return DurationMultiplyNumber(Left, Right) from ./Quantity.ts
+   }
+   static func *(Left number, Right Duration) -> Duration {
+      return NumberMultiplyDuration(Left, Right) from ./Quantity.ts
+   }
+   static func /(Left Duration, Right number) -> Duration {
+      return DurationDivideNumber(Left, Right) from ./Quantity.ts
+   }
+   static func /(Left Duration, Right Duration) -> Ratio {
+      return DurationDivideDuration(Left, Right) from ./Quantity.ts
+   }
+   static func *(Left Duration, Right Ratio) -> Duration {
+      return DurationMultiplyRatio(Left, Right) from ./Quantity.ts
+   }
+   static func /(Left Duration, Right Ratio) -> Duration {
+      return DurationDivideRatio(Left, Right) from ./Quantity.ts
+   }
+   static func ==(Left Duration, Right Duration) -> boolean {
+      return DurationEqual(Left, Right) from ./Quantity.ts
+   }
+   static func !=(Left Duration, Right Duration) -> boolean {
+      return DurationNotEqual(Left, Right) from ./Quantity.ts
+   }
+   static func <(Left Duration, Right Duration) -> boolean {
+      return DurationLess(Left, Right) from ./Quantity.ts
+   }
+   static func <=(Left Duration, Right Duration) -> boolean {
+      return DurationLessEqual(Left, Right) from ./Quantity.ts
+   }
+   static func >(Left Duration, Right Duration) -> boolean {
+      return DurationGreater(Left, Right) from ./Quantity.ts
+   }
+   static func >=(Left Duration, Right Duration) -> boolean {
+      return DurationGreaterEqual(Left, Right) from ./Quantity.ts
+   }
+}
+
+public type Ratio is Scalar with {
+   units { unity 1 (default), percent 0.01, permille 0.001 }
+
+   static func +(Left Ratio, Right Ratio) -> Ratio {
+      return RatioAdd(Left, Right) from ./Quantity.ts
+   }
+   static func -(Left Ratio, Right Ratio) -> Ratio {
+      return RatioSubtract(Left, Right) from ./Quantity.ts
+   }
+   static func -(Value Ratio) -> Ratio {
+      return RatioNegate(Value) from ./Quantity.ts
+   }
+   static func *(Left Ratio, Right Ratio) -> Ratio {
+      return RatioMultiply(Left, Right) from ./Quantity.ts
+   }
+   static func /(Left Ratio, Right Ratio) -> Ratio {
+      return RatioDivide(Left, Right) from ./Quantity.ts
+   }
+   static func *(Left Ratio, Right number) -> Ratio {
+      return RatioMultiplyNumber(Left, Right) from ./Quantity.ts
+   }
+   static func *(Left number, Right Ratio) -> Ratio {
+      return NumberMultiplyRatio(Left, Right) from ./Quantity.ts
+   }
+   static func /(Left Ratio, Right number) -> Ratio {
+      return RatioDivideNumber(Left, Right) from ./Quantity.ts
+   }
+   static func ==(Left Ratio, Right Ratio) -> boolean {
+      return RatioEqual(Left, Right) from ./Quantity.ts
+   }
+   static func !=(Left Ratio, Right Ratio) -> boolean {
+      return RatioNotEqual(Left, Right) from ./Quantity.ts
+   }
+   static func <(Left Ratio, Right Ratio) -> boolean {
+      return RatioLess(Left, Right) from ./Quantity.ts
+   }
+   static func <=(Left Ratio, Right Ratio) -> boolean {
+      return RatioLessEqual(Left, Right) from ./Quantity.ts
+   }
+   static func >(Left Ratio, Right Ratio) -> boolean {
+      return RatioGreater(Left, Right) from ./Quantity.ts
+   }
+   static func >=(Left Ratio, Right Ratio) -> boolean {
+      return RatioGreaterEqual(Left, Right) from ./Quantity.ts
+   }
+}

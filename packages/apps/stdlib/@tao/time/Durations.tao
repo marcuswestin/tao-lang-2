@@ -1,0 +1,15 @@
+use Duration from ../core/Quantity
+
+public type Timer is {
+   func Duration() -> Duration {
+      return SampleDuration(Timer) from ./Durations.ts
+   }
+}
+
+public type Time is {
+   static func StartTimer() -> Timer {
+      return StartTimer() from ./Durations.ts
+   }
+}
+
+public action Wait(Duration) from ./Durations.ts
