@@ -97,6 +97,32 @@ runtime page request metadata, BookProvider/BookIO and all app source graduation
 followup adds atomic confirmed book upserts and explicit rejection of unsupported PDF text.
 Native Android compilation/invocation evidence is an independent C acceptance lane.
 
+C now also owns the app-only BookStoreProvider.ts and
+TR-tests/syntax2-book-provider.test.ts. It uses the root's authenticated native query/entity
+contexts and shared validated snapshot codec, preserves live server IDs and private continuation
+ownership, and proves bounded acquisition and confirmed writes through real runtime schemas.
+Root retains BookIO.ts and its Tao declarations, schemas, all app graduation, and runtime APIs.
+Managers may replay required committed coordinator dependencies into their own worktrees;
+those dependency copies are not returned for integration.
+
+C's next isolated standard-library grant is @tao/core/Quantity.tao and Quantity.ts,
+@tao/time/Durations.tao and Durations.ts, and one focused native-source proof file. It implements
+the selected concrete Duration/Ratio operators and units, Timer fixed samples and cancellable Wait
+through checked factories. Existing Time.tao/Time.ts ticker APIs and root-owned Core.tao/Core.ts
+remain outside this grant. Generic abstract-family arithmetic cannot claim concrete construction
+without actual selected-factory transport. Root retains Prelude, facades and native publication.
+Managers may merge a specifically supplied committed integration snapshot when dependency replay
+would dominate the work; return only owned leaf commits, never the dependency merge.
+
+A additionally owns an explicit abstract flag on real type declarations and constructor rejection
+for the selected abstract Scalar contract. Root owns quantity factory surface gating and standard
+declarations. Abstractness must use source metadata, never the spelling of a type name.
+
+A supplies the real entity/collection receiver containment, scoping and descriptor ABI for
+data-associated functions and views; B consumes it for components and D for associated actions.
+Root's narrow runtime-type-compiler quantity correction preserves opaque backing and is complete;
+A retains expression lowering, including native abstract-family argument preservation.
+
 D additionally owns TR-action-transactions.ts and its existing transaction/defer tests for a real
 root cancellation signal inherited by joined calls. Checked Wait consumes that signal through the
 root-owned facade; cleanup drains with cancellation shielded. Abandoned launches retain existing
