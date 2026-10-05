@@ -39,25 +39,15 @@ const viewValidationMessages = {
   callerContentCount: (name: string) => `View '${name}' may place caller content at most once with @@content.`,
   callerContentPlacement: '@@content is only available inside the render tree of a view.',
   leafContent: (name: string) => `View '${name}' places no @@content and cannot accept unnamed caller content.`,
-<<<<<<< HEAD
   duplicateRenderSlot: rendererSlotMessages.duplicateDeclaration,
   renderSlotPlacementCount: rendererSlotMessages.renderSlotPlacementCount,
   duplicateRenderSlotFill: rendererSlotMessages.duplicateFill,
-=======
-  renderSlotDeclarationPlacement: 'A render slot must be declared directly in a view body.',
-  duplicateRenderSlot: (name: string) => `Render slot '${name}' is declared more than once in this view.`,
-  renderSlotPlacementCount: (name: string) =>
-    `View render slot '${name}' must be placed exactly once in its render tree.`,
-  renderSlotReferencePlacement: 'A bare render slot reference is only available in its owning view render tree.',
-  renderSlotFillPlacement: 'A render slot fill must be a direct child of an invocation of its owning view.',
-  duplicateRenderSlotFill: (name: string) => `Render slot '${name}' is filled more than once at this call site.`,
   renderSlotRendererContract: (name: string) =>
     `Renderer for slot '${name}' does not satisfy its callable input contract.`,
   renderSlotArguments: (name: string) => `Arguments of render slot '${name}' do not match its declared parameters.`,
   renderSlotInputCount: (name: string, available: number) =>
     `Inline renderer for slot '${name}' accepts at most ${available} input names.`,
   duplicateRenderSlotInput: (name: string) => `Inline renderer input '${name}' is declared more than once.`,
->>>>>>> ddd2cf876 (Resolve typed renderer slot bindings through actual occurrences)
   tagAttachment: 'A #tag must be followed immediately by a render or loop in the same block.',
   accessibilityAttachment: 'An accessible label cluster must be followed immediately by a render in the same block.',
   accessibilityText: 'An accessible label must be a text expression.',

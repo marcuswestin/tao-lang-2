@@ -1608,8 +1608,13 @@ function containsNumericStorage(type: TaoType): boolean {
 /** A structural receiving role retains lexical identity without declaring an operator owner. */
 function requiresAuthoredOperationContract(type: TaoType): boolean {
   const nominal = nominalOf(type)
+  const structuralItemField = type.kind === 'primitive'
+    && AST.isTypeProperty(nominal)
+    && AST.isItemTypeExpression(nominal.$container)
+    && AST.isPrimitiveTypeReference(nominal.type)
   return !!type.genericParameter || type.kind === 'capability'
     || !!nominal && !expectedNominalAcceptsBaseCompatibleNominals(nominal)
+      && !structuralItemField
 }
 
 function actualSatisfiesExpectedNominal(
