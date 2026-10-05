@@ -14,7 +14,7 @@ StateDeclaration:
 
 ActionDeclaration:
     visibility=DeclarationVisibility? 'action' name=ID parameterList=ParameterList
-    ('returns' returnType=TypeExpression optionalResult?='?'?)? (runsLatest?='runs' 'latest')? (block=ActionBlock | foreign=ForeignActionImplementation);
+    ('returns' returnType=TypeExpression optionalResult?='?'? | '->' returnType=TypeExpression)? (runsLatest?='runs' 'latest')? (block=ActionBlock | foreign=ForeignActionImplementation);
 
 // A foreign action publishes the failures its TypeScript implementation may deliberately raise.
 // Repeating a case is intentional: one stable case may have several place-specific sentences.
@@ -31,7 +31,7 @@ ActionBlock:
     '{' statements+=ActionStatement* '}';
 
 ActionStatement:
-    AsyncActionStatement | SetStatement | ToggleStatement | DoStatement | WhenDoStatement | DeferStatement | FailStatement | CheckStatement | GuardActionStatement | IfActionStatement | AskStatement | ActionResultStatement | RespondStatement | CreateStatement | UpdateStatement | DeleteStatement | RetryStatement | ContextualPresentStatement | SelectionActivateStatement | DismissStatement | ReplaceStatement | DeclarationSlotFill;
+    AsyncActionStatement | AliasDeclaration | ReturnStatement | SetStatement | ToggleStatement | DoStatement | WhenDoStatement | DeferStatement | FailStatement | CheckStatement | GuardActionStatement | IfActionStatement | AskStatement | ActionResultStatement | RespondStatement | CreateStatement | UpdateStatement | DeleteStatement | RetryStatement | ContextualPresentStatement | SelectionActivateStatement | DismissStatement | ReplaceStatement | DeclarationSlotFill;
 
 FailStatement:
     'fail' case=[CaseSetCase:ID] sentence=STRING;

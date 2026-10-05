@@ -35,6 +35,8 @@ export const ActionsFormatter = {
     f.noSpaceBefore('(')
     f.oneSpaceBefore('returns')
     f.oneSpaceAfter('returns')
+    f.oneSpaceBefore('->')
+    f.oneSpaceAfter('->')
     f.noSpaceBefore('?')
     f.oneSpaceBefore('runs')
     f.oneSpaceAfter('runs')
