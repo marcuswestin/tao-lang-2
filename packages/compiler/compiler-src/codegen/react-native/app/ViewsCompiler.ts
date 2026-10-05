@@ -169,6 +169,9 @@ function ViewDeclaration(renderable: AST.ViewDeclaration, options: CodegenOption
   const setupStatements = renderIndex < 0 ? statements : statements.slice(0, renderIndex)
   const renderStatements = renderIndex < 0 ? [] : statements.slice(renderIndex)
   const slotDefaults = AST.renderSlotDeclarationsOf(renderable)
+  const slotDefaultsBinding = slotDefaults.length > 0 || statements.some(capturesSlotDefaults)
+    ? gen`const _TaoSlotDefaults: Record<string, TR.SlotRenderer<any> | null> = {}`
+    : gen.noop()
   const commands = AST.commandsOf(renderable)
   const commandTable = commands.length === 0
     ? gen.noop()
@@ -198,7 +201,7 @@ function ViewDeclaration(renderable: AST.ViewDeclaration, options: CodegenOption
       return TR.BlockScope(_Scope, _Scope => {
         ${gen.list(AST.parametersOf(renderable), Compile.ViewParameterBinding)}
         ${gen.list(setupStatements, statement => Compile.Statement(statement, options))}
-        const _TaoSlotDefaults: Record<string, TR.SlotRenderer<any> | null> = {}
+        ${slotDefaultsBinding}
         ${gen.list(slotDefaults, slot => compileDefaultSlot(slot, options))}
         ${commandTable}
         ${commandSurface}
@@ -209,6 +212,17 @@ function ViewDeclaration(renderable: AST.ViewDeclaration, options: CodegenOption
     }
     ${options.studio ? gen`${gen.scopeName(renderable)} = ${gen.Name(functionName)}` : gen.noop()}
   `
+}
+
+/** capturesSlotDefaults finds descriptors in this view's lexical body, excluding nested views. */
+function capturesSlotDefaults(node: AST.Node): boolean {
+  if (AST.isViewDeclaration(node)) {
+    return false
+  }
+  if (AST.isRenderSlotUse(node)) {
+    return !AST.isRenderSlotFill(node) || !['empty', 'absent'].includes(AST.renderSlotBodyOf(node).kind)
+  }
+  return AST.streamContents(node).some(capturesSlotDefaults)
 }
 
 /** compileDefaultSlot installs a declaration-scope fallback before the view's root render runs. */
