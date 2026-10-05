@@ -163,7 +163,7 @@ import {
   usePersistedState,
 } from './TR-persisted-state'
 import { selectPluralForm, type TaoPluralCategory, type TaoPluralForms } from './TR-phrases'
-import { admitQuantityUnion } from './TR-quantity-admission'
+import { admitQuantityUnion, nativeQuantityResult } from './TR-quantity-admission'
 import { isQuantityPayload } from './TR-quantity-values'
 import { requireReactNativeRuntime } from './TR-react-native'
 import { isReactiveValue, markReactiveValue } from './TR-reactive'
@@ -171,11 +171,13 @@ import {
   completeRuntimeValue,
   copyValue,
   createWritableCell,
+  isRuntimeValue,
   isWritable,
   mappedWritable,
   nativeMutationLease,
   reactiveValue,
   registerCompleteRuntimeValue,
+  registerRuntimeValue,
   type TaoRuntimeValue,
   type TaoRuntimeValueInput,
   type TaoWritable,
@@ -483,6 +485,8 @@ class TR {
 
   /** Admit one native quantity snapshot against the caller's explicit canonical owner set. */
   static admitQuantityUnion = admitQuantityUnion
+  static isRuntimeValue = isRuntimeValue
+  static nativeQuantityResult = nativeQuantityResult
 
   /** Function creates a Tao pure-function value. */
   static Function(body: (...args: any[]) => TR.Evaluable | TR.Function): TR.Function {
@@ -1137,7 +1141,9 @@ class RuntimeReadonlyValue<T> implements TR.Value<T> {
 }
 
 class RuntimeAlias<Source extends TR.Evaluable> {
-  constructor(private readonly value: Source | (() => Source)) {}
+  constructor(private readonly value: Source | (() => Source)) {
+    registerRuntimeValue(this)
+  }
 
   evaluate(): TR.AliasValue<Source> {
     return (typeof this.value === 'function' ? this.value() : this.value).evaluate() as TR.AliasValue<Source>

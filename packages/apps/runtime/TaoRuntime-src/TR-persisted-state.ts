@@ -503,8 +503,12 @@ function storage(): TaoKeyValueStorage {
   return storageOverride ?? platformKeyValueStorage()
 }
 
+const registeredPersistedValues = new WeakSet<object>()
+
 class PersistedValue<T> implements TaoRuntimeValue<T> {
-  constructor(readonly jsValue: T) {}
+  constructor(readonly jsValue: T) {
+    registeredPersistedValues.add(this)
+  }
 
   evaluate(): TaoRuntimeValue<T> {
     return this
@@ -517,7 +521,7 @@ class PersistedValue<T> implements TaoRuntimeValue<T> {
 
 /** Recognize complete persisted snapshots without evaluating or inspecting their payloads. */
 export function isCompletePersistedValue(candidate: object): boolean {
-  return candidate instanceof PersistedValue
+  return registeredPersistedValues.has(candidate)
 }
 
 function value<T>(jsValue: T): TaoRuntimeValue<T> {

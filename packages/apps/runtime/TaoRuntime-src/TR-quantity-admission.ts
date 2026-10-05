@@ -2,6 +2,12 @@ import type { TaoEvaluable } from './TR-action-values'
 import { RuntimeAssert } from './TR-assert'
 import { TaoActionFailure } from './TR-errors'
 import { isQuantityPayload, QuantityFailureCases } from './TR-quantity-values'
+import { completeRuntimeValue, type TaoRuntimeValue } from './TR-reactive-values'
+
+/** Explicitly categorize a legacy wrapper at a native union whose ordinary data can look identical. */
+export function nativeQuantityResult<ValueT>(input: TaoEvaluable<ValueT>): TaoRuntimeValue<ValueT> {
+  return completeRuntimeValue(input)
+}
 
 type QuantityAdmissionFactory = Readonly<{
   ownsPayload(payload: unknown): boolean
