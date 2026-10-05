@@ -138,8 +138,8 @@ Describe('compiler: quantity publication', () => {
         module: ts.ModuleKind.ESNext,
         moduleResolution: ts.ModuleResolutionKind.Bundler,
         allowSyntheticDefaultImports: true,
-        allowImportingTsExtensions: true,
         jsx: ts.JsxEmit.React,
+        allowImportingTsExtensions: true,
         paths: {
           '@runtime/*': [FS.resolvePath('packages/apps/runtime/TaoRuntime-src/*', Repo.getRoot())],
           react: [FS.resolvePath('packages/apps/runtime/node_modules/@types/react/index.d.ts', Repo.getRoot())],
@@ -189,17 +189,166 @@ Describe('compiler: quantity publication', () => {
     })
   })
 
+  Test('publishes cross-file descendants through canonical parent factories in reverse declaration order', async () => {
+    await withTaoFiles('tao-compiled-quantity-descendant-publication-', {
+      'Child.tao': `use package ./ as Local
+        type MeasureAlias = Local.Measure
+        public type Grandchild is Child
+        public type Child is MeasureAlias
+      `,
+      'Parent.tao': `public ${measure}`,
+      'Foreign.tao': `public ${measure.replace('Measure', 'OtherMeasure')}`,
+      'Native.tsx': `import { types as child } from './Child.tao'
+        import { types as foreignTypes } from './Foreign.tao'
+        export const initial = child.Grandchild.minutes(2)
+        export const foreign = foreignTypes.OtherMeasure.minutes(3)
+        export function Home() { return null }
+      `,
+      'Main.tao': `app Demo { id "com.tao.quantity.descendant" version "1.0.0" name "Descendant" view Home }
+        view Home() from ./Native.tsx
+      `,
+    }, async (paths, root) => {
+      const result = await Workspace.compile(paths['Main.tao'])
+      const leafFor = (sourcePath: string) => {
+        const leaf = result.files.find(file =>
+          file.sourcePath === sourcePath && file.relativePath.endsWith('.quantities.ts')
+        )
+        Assert.defined(leaf, 'compiled descendant graph retains each canonical quantity leaf')
+        const parsed = result.validation.files.find(file => file.path === sourcePath)
+        Assert.defined(parsed, 'compiled descendant graph retains each quantity AST')
+        const surface = BridgeMetadata.quantitySurfaceFor(parsed.ast)
+        Assert.defined(surface, 'compiled descendant graph retains owner linkage')
+        return { leaf, surface, parsed }
+      }
+      const child = leafFor(paths['Child.tao'])
+      const parent = leafFor(paths['Parent.tao'])
+      const foreign = leafFor(paths['Foreign.tao'])
+      const childRow = child.surface.declarations.find(row => row.declaration.name === 'Child')
+      const grandchildRow = child.surface.declarations.find(row => row.declaration.name === 'Grandchild')
+      const parentRow = parent.surface.declarations.find(row => row.declaration.name === 'Measure')
+      Assert.defined(childRow, 'child source publishes the descendant factory')
+      Assert.defined(grandchildRow, 'child source publishes the grandchild factory')
+      Assert.defined(parentRow, 'parent source publishes its root factory')
+      Expect(childRow.parent?.name).toBe('Measure')
+      Expect(grandchildRow.parent?.name).toBe('Child')
+      Expect(child.leaf.code).toContain(parentRow.factoryExport)
+      Expect(child.leaf.code).toContain('.derive<"Child"')
+      Expect(child.leaf.code).toContain('.derive<"Grandchild"')
+      Expect(child.leaf.code).not.toContain('domain: "Child",\n  units:')
+      Expect(foreign.leaf.code).toContain('domain: "OtherMeasure"')
+      const collected = BridgeMetadata.collect([child.parsed, parent.parsed], root)
+      const collectedChild = collected.find(module => module.sourcePath === paths['Child.tao'])
+      Assert.defined(collectedChild?.quantityModule, 'direct bridge collection preplans child-first canonical leaves')
+      Expect(collectedChild.quantityModule.code).toContain(parentRow.factoryExport)
+      Expect(collectedChild.quantityModule.code).toContain('.derive<"Child"')
+      Expect(collectedChild.quantityModule.code).toContain('.derive<"Grandchild"')
+      await writeCompiledGraph(result.files, root)
+      for (const generated of result.files) {
+        await FS.writeText(FS.resolvePath(`types-out/${generated.relativePath}`, root), generated.code)
+      }
+
+      const typecheckPath = FS.resolvePath('DescendantTypes.ts', root)
+      const typeChildSpecifier = `./types-out/${child.leaf.relativePath}`
+      const typeParentSpecifier = `./types-out/${parent.leaf.relativePath}`
+      const typeForeignSpecifier = `./types-out/${foreign.leaf.relativePath}`
+      const childSpecifier = `./out/${child.leaf.relativePath.replace(/\.ts$/, '.js')}`
+      const parentSpecifier = `./out/${parent.leaf.relativePath.replace(/\.ts$/, '.js')}`
+      const foreignSpecifier = `./out/${foreign.leaf.relativePath.replace(/\.ts$/, '.js')}`
+      const typedSource = `
+        import { ${childRow.factoryExport} as Child, ${grandchildRow.factoryExport} as Grandchild } from '${typeChildSpecifier}'
+        import { ${parentRow.factoryExport} as Parent } from '${typeParentSpecifier}'
+        import { ${foreign.surface.declarations[0]!.factoryExport} as ForeignMeasure } from '${typeForeignSpecifier}'
+        const child = Child.fromUnit(2, 'minutes')
+        const parent: ReturnType<typeof Parent.fromUnit> = child
+        Parent.read(Child.inUnit(child, 'seconds'))
+        Grandchild.read(Grandchild.fromUnit(3, 'minutes'))
+      `
+      const options: ts.CompilerOptions = {
+        strict: true,
+        noEmit: true,
+        skipLibCheck: true,
+        types: ['bun'],
+        lib: ['lib.es2023.d.ts'],
+        target: ts.ScriptTarget.ES2022,
+        module: ts.ModuleKind.ESNext,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+        allowSyntheticDefaultImports: true,
+        jsx: ts.JsxEmit.React,
+        allowImportingTsExtensions: true,
+        paths: {
+          '@runtime/*': [FS.resolvePath('packages/apps/runtime/TaoRuntime-src/*', Repo.getRoot())],
+          react: [FS.resolvePath('packages/apps/runtime/node_modules/@types/react/index.d.ts', Repo.getRoot())],
+        },
+      }
+      const typeDiagnostics = () =>
+        ts.getPreEmitDiagnostics(ts.createProgram([typecheckPath], options)).map(diagnostic => ({
+          code: diagnostic.code,
+          message: ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'),
+        }))
+      await FS.writeText(typecheckPath, typedSource)
+      Expect(typeDiagnostics()).toEqual([])
+      const rejected = [
+        'Child.read(Parent.fromUnit(2, "seconds"))',
+        'Child.read(ForeignMeasure.fromUnit(2, "seconds"))',
+        'Grandchild.read(Child.fromUnit(2, "minutes"))',
+      ]
+      for (const expression of rejected) {
+        await FS.writeText(typecheckPath, `${typedSource}\n${expression}`)
+        Expect(typeDiagnostics().map(diagnostic => diagnostic.code)).toEqual([2345])
+      }
+
+      const runtimePath = FS.resolvePath('DescendantRuntime.ts', root)
+      const native = result.files.find(file => file.relativePath.endsWith('Native.tsx'))
+      Assert.defined(native, 'descendant graph publishes its native consumer')
+      await FS.writeText(
+        runtimePath,
+        `
+        import { ${childRow.factoryExport} as Child, ${grandchildRow.factoryExport} as Grandchild } from '${childSpecifier}'
+        import { ${parentRow.factoryExport} as Parent } from '${parentSpecifier}'
+        import { ${foreign.surface.declarations[0]!.factoryExport} as ForeignMeasure } from '${foreignSpecifier}'
+        import { initial, foreign as foreignValue } from './out/${native.relativePath.replace(/\.tsx?$/, '.js')}'
+        import * as Platform from ${
+          JSON.stringify(FS.resolvePath('packages/shared/shared-src/Platform.ts', Repo.getRoot()))
+        }
+        const parentView = Parent.inUnit(initial, 'seconds')
+        Platform.runtimeConsole.info(JSON.stringify({
+          parent: Parent.read(parentView), child: Child.read(initial), grandchild: Grandchild.read(initial),
+          grandchildViewKeepsOwner: Grandchild.ownsPayload(parentView.jsValue),
+          grandchildKeepsOwner: Grandchild.ownsPayload(Child.inUnit(initial, 'minutes').jsValue),
+          foreign: ForeignMeasure.read(foreignValue), foreignRejected: Child.acceptsPayload(foreignValue.jsValue),
+        }))
+      `,
+      )
+      const execution = await CLI.run(Platform.runtimeProcess.execPath, {
+        args: [runtimePath],
+        cwd: root,
+        processPolicy: 'test',
+      })
+      Expect({ exitCode: execution.exitCode, stderr: execution.stderr }).toEqual({ exitCode: 0, stderr: '' })
+      Expect(JSON.parse(execution.stdout)).toEqual({
+        parent: { canonical: 120, unit: 'seconds' },
+        child: { canonical: 120, unit: 'minutes' },
+        grandchild: { canonical: 120, unit: 'minutes' },
+        grandchildViewKeepsOwner: true,
+        grandchildKeepsOwner: true,
+        foreign: { canonical: 180, unit: 'minutes' },
+        foreignRejected: false,
+      })
+    })
+  })
+
   Test('reaches a private alias owner without copying its unrelated provider', async () => {
     await withTaoFiles('tao-compiled-quantity-private-', {
       'Library/.tao/.gitkeep': '',
       'Library/Package.tao': 'package { name "Widgets" version 1.0.0 includes @ui }',
       'Library/@ui/Widget.tao': 'public view Widget() from ./Widget.tsx',
       'Library/@ui/Widget.tsx': `import { types } from './Private.tao'
-        export const initial = types.Measure.minutes(2)
+        export const initial = types.Child.minutes(2)
         export function Widget() { return null }
       `,
       'Library/@ui/Private.tao': `use package @owners as Canonical
-        type Measure = Canonical.Measure
+        public type Measure = Canonical.Measure
+        public type Child is Measure
       `,
       'Library/@owners/Owner.tao': `public ${measure}
         type UnusedSource is datasource with {
@@ -227,7 +376,8 @@ Describe('compiler: quantity publication', () => {
       const aliasLeaf = leaves.find(file => file.sourcePath === paths['Library/@ui/Private.tao'])
       Assert.defined(ownerLeaf, 'compiled private alias retains its canonical owner leaf')
       Assert.defined(aliasLeaf, 'compiled private alias retains its forwarding leaf')
-      Expect(aliasLeaf.code).not.toContain('unique symbol')
+      Expect(aliasLeaf.code.match(/: unique symbol/g)).toHaveLength(1)
+      Expect(aliasLeaf.code).toContain('.derive<"Child"')
       Expect(ownerLeaf.code.match(/: unique symbol/g)).toHaveLength(1)
       Expect(ownerLeaf.relativePath).toContain('modules/dependencies/')
       Expect(result.files.some(file => file.relativePath.endsWith('Providers.ts'))).toBe(false)
@@ -237,7 +387,12 @@ Describe('compiler: quantity publication', () => {
       Assert.defined(ownerFile, 'compiled private owner has its source AST')
       Assert.defined(aliasFile, 'compiled private alias has its source AST')
       const owner = BridgeMetadata.quantitySurfaceFor(ownerFile.ast)!.declarations[0]!
-      const alias = BridgeMetadata.quantitySurfaceFor(aliasFile.ast)!.declarations[0]!
+      const aliasSurface = BridgeMetadata.quantitySurfaceFor(aliasFile.ast)!
+      const alias = aliasSurface.declarations.find(row => row.declaration.name === 'Measure')
+      const child = aliasSurface.declarations.find(row => row.declaration.name === 'Child')
+      Assert.defined(alias, 'public alias forwards the canonical private dependency owner')
+      Assert.defined(child, 'public descendant links through the alias to its canonical owner')
+      Expect(child.parent?.name).toBe('Measure')
       const native = result.files.find(file => file.relativePath.endsWith('Widget.tsx'))
       Assert.defined(native, 'compiled private alias retains its native consumer')
       const program = FS.resolvePath('Check.ts', root)
@@ -246,11 +401,15 @@ Describe('compiler: quantity publication', () => {
         `
         import { ${owner.factoryExport} as Factory } from './out/${ownerLeaf.relativePath.replace(/\.ts$/, '.js')}'
         import { ${alias.factoryExport} as AliasFactory } from './out/${aliasLeaf.relativePath.replace(/\.ts$/, '.js')}'
+        import { ${child.factoryExport} as ChildFactory } from './out/${aliasLeaf.relativePath.replace(/\.ts$/, '.js')}'
         import { initial } from './out/${native.relativePath.replace(/\.tsx$/, '.js')}'
         import * as Platform from ${
           JSON.stringify(FS.resolvePath('packages/shared/shared-src/Platform.ts', Repo.getRoot()))
         }
-        Platform.runtimeConsole.info(JSON.stringify({ same: Factory === AliasFactory, reading: Factory.read(initial) }))
+        Platform.runtimeConsole.info(JSON.stringify({
+          same: Factory === AliasFactory, reading: Factory.read(initial), child: ChildFactory.read(initial),
+          childLink: Factory.acceptsPayload(initial.jsValue),
+        }))
       `,
       )
       const execution = await CLI.run(Platform.runtimeProcess.execPath, {
@@ -259,7 +418,12 @@ Describe('compiler: quantity publication', () => {
         processPolicy: 'test',
       })
       Expect({ exitCode: execution.exitCode, stderr: execution.stderr }).toEqual({ exitCode: 0, stderr: '' })
-      Expect(JSON.parse(execution.stdout)).toEqual({ same: true, reading: { canonical: 120, unit: 'minutes' } })
+      Expect(JSON.parse(execution.stdout)).toEqual({
+        same: true,
+        reading: { canonical: 120, unit: 'minutes' },
+        child: { canonical: 120, unit: 'minutes' },
+        childLink: true,
+      })
     })
   })
 })

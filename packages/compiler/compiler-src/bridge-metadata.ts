@@ -122,21 +122,42 @@ export const BridgeMetadata = {
     } = {},
   ): BridgeModule[] {
     const canonicalLeaves = new Map<AST.TypeDeclaration, QuantityCanonicalLeaf>()
+    const surfaces = new Map<string, QuantityPublicationSurface>()
     for (const file of files) {
       const surface = quantitySurfaceFor(file.ast)
       if (surface === undefined) {
         continue
       }
+      surfaces.set(file.path, surface)
       const companionPath = bridgeOutputPath(projectRoot, file.path, origins.get(file.path))
-      const direct = directQuantityModuleFor(
-        file.ast,
-        `${companionPath.replace(/\.ts$/, '')}.quantities.ts`,
-        quantityRuntimeRoot(options.runtimeRoot),
-        surface,
-      )
-      if (direct !== undefined) {
-        for (const owner of direct.linkageByOwner.keys()) {
-          canonicalLeaves.set(owner, direct)
+      const outputPath = `${companionPath.replace(/\.ts$/, '')}.quantities.ts`
+      const directRows = surface.declarations.filter(row => row.declaration === row.owner)
+      if (directRows.length > 0) {
+        const planned = QuantityNativeModule.planSurface({
+          declarations: surface.declarations.map(row => row.declaration),
+          parentsByDeclaration: new Map(
+            surface.declarations.flatMap(row =>
+              row.parent === undefined ? [] : [[row.declaration, row.parent] as const]
+            ),
+          ),
+          reservedNames: quantityReservedNames(file.ast),
+        })
+        for (const row of directRows) {
+          const names = planned.byDeclaration.get(row.owner)
+          Assert.defined(names, 'canonical quantity declaration has preplanned linkage names')
+          const previous = canonicalLeaves.get(row.owner)
+          Assert(previous === undefined, 'canonical quantity owner has one publication leaf')
+          canonicalLeaves.set(row.owner, {
+            path: outputPath,
+            namespaceExport: planned.namespaceExport,
+            linkageByOwner: new Map([[row.owner, {
+              owner: row.owner,
+              constructorMember: names.constructorMember,
+              typeMember: names.typeMember,
+              valueTypeExport: names.valueTypeExport,
+              factoryExport: names.factoryExport,
+            }]]),
+          })
         }
       }
     }
@@ -147,6 +168,7 @@ export const BridgeMetadata = {
         `${companionPath.replace(/\.ts$/, '')}.quantities.ts`,
         quantityRuntimeRoot(options.runtimeRoot),
         canonicalLeaves,
+        surfaces.get(file.path),
       )
       return leaf === undefined ? [] : [[file.path, leaf] as const]
     }))
@@ -229,12 +251,13 @@ function quantityModuleFor(
   outputPath: string,
   runtimeRoot: QuantityNativeModuleOptions['runtimeRoot'],
   canonicalLeaves: QuantityCanonicalLeaves = new Map(),
+  plannedSurface?: QuantityPublicationSurface,
 ): QuantityPublicationModule | undefined {
-  const surface = quantitySurfaceFor(file)
+  const surface = plannedSurface ?? quantitySurfaceFor(file)
   if (surface === undefined) {
     return undefined
   }
-  const direct = directQuantityModuleFor(file, outputPath, runtimeRoot, surface)
+  const direct = directQuantityModuleFor(file, outputPath, runtimeRoot, surface, canonicalLeaves)
   const lines = direct?.code.trimEnd().split('\n') ?? [bridgeGeneratedMarker]
   const mappings = [...direct?.sourceMappings ?? []]
   const links = new Map(direct?.linkageByOwner)
@@ -313,6 +336,7 @@ function directQuantityModuleFor(
   outputPath: string,
   runtimeRoot: QuantityNativeModuleOptions['runtimeRoot'],
   surface: QuantityPublicationSurface,
+  canonicalLeaves: QuantityCanonicalLeaves,
 ): QuantityNativeModuleOutput | undefined {
   const owners = surface.declarations.filter(row => row.declaration === row.owner).map(row => {
     const plan = NumericUnits.declarationPlan(row.owner)
@@ -328,20 +352,36 @@ function directQuantityModuleFor(
     runtimeRoot,
     reservedNames: quantityReservedNames(file),
     surfaceDeclarations: surface.declarations.map(row => row.declaration),
+    parentsByOwner: new Map(surface.declarations.flatMap(row => {
+      if (row.parent === undefined || row.declaration !== row.owner) {
+        return []
+      }
+      const parent = canonicalLeaves.get(row.parent)
+      Assert.defined(parent, `quantity parent ${row.parent.name} has a canonical publication leaf`)
+      const link = parent.linkageByOwner.get(row.parent)
+      Assert.defined(link, `quantity parent ${row.parent.name} has canonical factory linkage`)
+      return [[row.owner, { owner: row.parent, path: parent.path, factoryExport: link.factoryExport }] as const]
+    })),
   })
 }
 
 function quantitySurfaceFor(file: AST.TaoFile): QuantityPublicationSurface | undefined {
   const resolved = AST.streamAllContents(file).filter(AST.isTypeDeclaration).flatMap(declaration => {
-    const owner = NumericUnits.declarationPlan(declaration)?.owner
-      ?? (declaration.aliasTarget === undefined ? undefined : Type.quantityOwner(Type.ofDefinition(declaration)))
-    return owner === undefined ? [] : [{ declaration, owner }]
+    const owner = declaration.aliasTarget === undefined
+      ? NumericUnits.declarationPlan(declaration)?.owner
+      : Type.quantityOwner(Type.ofDefinition(declaration))
+    return owner === undefined
+      ? []
+      : [{ declaration, owner, ...(declaration === owner ? { parent: quantityParentOwner(owner) } : {}) }]
   })
   if (resolved.length === 0) {
     return undefined
   }
   const allocated = QuantityNativeModule.planSurface({
     declarations: resolved.map(row => row.declaration),
+    parentsByDeclaration: new Map(
+      resolved.flatMap(row => row.parent === undefined ? [] : [[row.declaration, row.parent] as const]),
+    ),
     reservedNames: quantityReservedNames(file),
   })
   const declarations = resolved.map(row => {
@@ -355,6 +395,31 @@ function quantitySurfaceFor(file: AST.TaoFile): QuantityPublicationSurface | und
     declarations,
     typeExportsByName: quantityNamedTypeExports(file, declarations),
   }
+}
+
+function quantityParentOwner(owner: AST.TypeDeclaration): AST.TypeDeclaration | undefined {
+  const type = owner.type
+  if (!type) {
+    return undefined
+  }
+  const referenceTarget = AST.isDerivedTypeExpression(type)
+    ? type.slots.unitBlocks.length > 0 ? undefined : Type.definitionOfReference(type.base)
+    : AST.isNamedTypeReference(type)
+    ? Type.definitionOfReference(type)
+    : undefined
+  if (!AST.isTypeDeclaration(referenceTarget)) {
+    return undefined
+  }
+  const visited = new Set<AST.TypeDeclaration>()
+  let parent = referenceTarget
+  while (parent.aliasTarget !== undefined) {
+    Assert(!visited.has(parent), `quantity parent alias chain for ${owner.name} is acyclic`)
+    visited.add(parent)
+    const target = parent.aliasTarget.member.ref
+    Assert(AST.isTypeDeclaration(target), `quantity parent alias ${parent.name} resolves to a type declaration`)
+    parent = target
+  }
+  return NumericUnits.declarationPlan(parent) === undefined ? undefined : parent
 }
 
 function canonicalQuantityLink(owner: AST.TypeDeclaration, leaves: QuantityCanonicalLeaves): {
@@ -391,10 +456,20 @@ function physicalQuantityOwnerKey(owner: AST.TypeDeclaration): string {
 
 function quantityReferencedOwnersOf(file: AST.TaoFile): readonly AST.TypeDeclaration[] {
   const owners = new Set<AST.TypeDeclaration>()
+  const addOwnerAndParents = (owner: AST.TypeDeclaration): void => {
+    if (owners.has(owner) || NumericUnits.declarationPlan(owner) === undefined) {
+      return
+    }
+    owners.add(owner)
+    const parent = quantityParentOwner(owner)
+    if (parent !== undefined) {
+      addOwnerAndParents(parent)
+    }
+  }
   const addType = (type: ASTUtils.TaoType): void => {
     const owner = Type.quantityOwner(type)
     if (owner !== undefined) {
-      owners.add(owner)
+      addOwnerAndParents(owner)
     }
   }
   for (const node of AST.streamAllContents(file)) {
@@ -408,7 +483,7 @@ function quantityReferencedOwnersOf(file: AST.TaoFile): readonly AST.TypeDeclara
     if (AST.isNumericUnitConstruction(node)) {
       const resolved = NumericUnits.resolveSuffix(node)
       if (resolved !== undefined) {
-        owners.add(resolved.plan.owner)
+        addOwnerAndParents(resolved.plan.owner)
       }
     }
     for (const reference of AST.streamReferences(node)) {
