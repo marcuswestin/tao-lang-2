@@ -23,6 +23,8 @@ remains undiscovered.
   A typed NewBook draft preserves its writable Title lens. Add consumes InvalidInput locally,
   clears feedback, and resets the draft only after successful creation. The app declares an error
   rendering boundary; delivery of unhandled action failures to that boundary remains pending.
+  `Title as TitleType` preserves the nominal declaration while a local `Title` value shadows its
+  original spelling; the actual journey covers its static factory, construction and conversion.
 - [library/Library.tao](library/Library.tao): graduated Name/GivenName/FamilyName, PersonName and
   Subtract declarations. The app renders Ada Lovelace and 3 using the actual signature projections
   and argument matcher. ComparedNames constructs a list with contextual Name elements.

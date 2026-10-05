@@ -212,7 +212,7 @@ function authoredNames(file: AST.TaoFile): Set<string> {
     }
   }
   for (const use of file.statements.filter(AST.isUseStatement)) {
-    use.importedDeclarations.forEach(reference => names.add(reference.$refText))
+    use.importedDeclarations.forEach(specifier => names.add(AST.importLocalName(specifier)))
   }
   return names
 }

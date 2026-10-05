@@ -159,6 +159,14 @@ the related rows in the collection. A stored to-one relationship does not declar
 without owner-side `owned`, deletion is restricted while another row refers to the target.
 Relationship values are live entity handles, not text IDs.
 
+An optional entity parameter in an ordinary view can be guarded before direct later render siblings
+read its fields: `guard Person { none -> "Unknown author" }`, then `"{Person.Name}"`. A matched
+guard ends that render block. The successful continuation captures the evaluated entity handle in
+a child scope, so a live caller retargeting its argument cannot change the value between the guard
+and that field read. This bounded refinement applies to the same immutable, noncopy parameter and
+either a bare guard or an explicit `none` branch; it does not infer general flow narrowing through
+aliases, nested blocks, actions, mutable parameters or guard handlers.
+
 ## Accounts, authentication, and access
 
 Authentication is configured independently of storage through the app's `Auth` slot. `@tao/auth`

@@ -17,7 +17,7 @@ can RowBuilders {
    Header(RowKey, HeaderLabel) fails never -> GroupedRow
    BookRow(RowKey, Book) fails never -> GroupedRow
 }
-type RowFactory is yes/no with {
+type RowFactory is { } with {
    func Header(RowKey, HeaderLabel) fails never {
       return GroupedRow { RowKey, Content: GroupHeader { HeaderLabel } }
    }
@@ -28,7 +28,7 @@ type RowFactory is yes/no with {
 
 // 2.1 The ordinary parameter projects the provider before the native boundary.
 public func GroupedRows(Items list of Book) fails never -> list of GroupedRow {
-   return BuildRows(Items, RowFactory yes)
+   return BuildRows(Items, RowFactory { })
 }
 func BuildRows(Items list of Book, Builders RowBuilders) fails never -> list of GroupedRow {
    return GroupedRows(Items, Builders) from ./GroupedRows.ts

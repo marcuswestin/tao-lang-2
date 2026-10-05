@@ -1330,7 +1330,7 @@ function resolveImports(
     const importedNames = new Set(
       useStatement.all
         ? declarations.map(declaration => declaration.name)
-        : useStatement.importedDeclarations.map(reference => reference.$refText),
+        : useStatement.importedDeclarations.map(AST.importSourceName),
     )
     for (const declaration of declarations) {
       const importedName = declaration.name

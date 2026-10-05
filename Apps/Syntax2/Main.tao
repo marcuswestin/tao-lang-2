@@ -2,7 +2,7 @@ use Duration, Length, Ratio, UpperCase from @tao/core
 use all from @tao/ui
 use Add from ./library/BookActions
 use BookStore, LoadAfter, Refresh from ./library/BookIO
-use Books, ComparedNames, EarlierLabel, GroupMode, NewBook, PersonName, Score, Subtract, Title from ./library/Library
+use Books, ComparedNames, EarlierLabel, GroupMode, NewBook, PersonName, Score, Subtract, Title as TitleType from ./library/Library
 
 app LibraryApp {
    id "com.tao.syntax2"
@@ -29,16 +29,16 @@ view Library {
    state GroupMode no
    state Feedback = ""
    state Draft = NewBook {
-      Title: Title ""
+      Title: TitleType ""
    }
    let Person = PersonName(ProfileName "Ada", .FamilyName "Lovelace")
    let Readers = ComparedNames ["Ada", "Lovelace"]
    let Shout = UpperCase(ProfileName "Ada")
-   let Caption = Title.Default()
-   let ShelfLabel = Title "Shelf"
-   let Label = EarlierLabel(.Right ShelfLabel, .Left Caption)
+   let Title = TitleType.Default()
+   let ShelfLabel = TitleType "Shelf"
+   let Label = EarlierLabel(.Right ShelfLabel, .Left Title)
    let Points = Score 2 + Score 3
-   let ScoreLabel = Points as Title
+   let ScoreLabel = Points as TitleType
    // 2.1 Quantities keep their unit view; dimensionless division yields Ratio.
    let Span = 2 minutes + 30 seconds
    let Scaled = 2 * Span
@@ -55,10 +55,10 @@ view Library {
    }
    render Col {
       #heading accessible label "Library"
-      Banner(Subtitle "Reversed text roles", Title "Library")
+      Banner(Subtitle "Reversed text roles", .Title "Library")
       Person
       Shout
-      Caption
+      Title
       "Earlier: { Label }"
       ScoreLabel
       "{ Length(Readers) } readers"
@@ -70,7 +70,7 @@ view Library {
             on press -> do Add(Draft) then {
                InvalidInput Problem -> { set Feedback = Problem.Message }
                done -> { set Draft = NewBook {
-                  Title: Title ""
+                  Title: TitleType ""
                } }
       }  }  }
       Row {

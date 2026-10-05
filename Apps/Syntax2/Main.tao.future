@@ -7,14 +7,8 @@ use Col, Row, Button, TextField, Spinner, Spacer, LazyList from @tao/ui
 use Length, ConversionFailure from @tao/core
 use minutes, seconds from @tao/time
 
-// 1. Future project; activate only with a dependency-complete entry slice.
-project {
-   id "syntax2"
-   name "Syntax2 Library"
-   version "0.1.0"
-   app LibraryApp
-   remote none
-}
+// 1. App metadata graduated to Main.tao; the former project block is retired.
+// The implemented project/module contract puts identity and dependencies on apps.
 
 app LibraryApp {
    Datasource BookStore
