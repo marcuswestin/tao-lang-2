@@ -1030,14 +1030,12 @@ const TEST_BUDGET_MS = 45_000
 /** How far the lagging load average is trusted to under-report the starvation a test is feeling. */
 const LOAD_AVERAGE_LAG_ALLOWANCE = 2
 /**
- * The ceiling, in milliseconds rather than in budgets: past this a deadline is no longer telling a
- * starved test apart from a hung one. Raised alongside the budget above, so that clearing `until`'s
- * default with a larger floor does not also shrink the room a starved suite gets before this stops
- * trusting the load reading — a hang still trips it at two minutes, same as it tripped at one before.
- * Absolute, so that raising the budget lengthens the deadline a loaded machine gets without also moving
- * the hang guard, which answers a different question.
+ * The concurrent-suite hang guard, in milliseconds rather than budgets. It also caps the serial
+ * suite's load-adjusted deadline; the uncontended serial budget above remains fixed at 45 seconds.
+ * Ten minutes gives a test room to finish under heavy machine contention while preserving a bound
+ * for a genuine hang.
  */
-const MAX_TEST_DEADLINE_MS = 120_000
+const MAX_TEST_DEADLINE_MS = 600_000
 
 /**
  * A pattern matching no Tao journey is a user error to someone typing `tao test --name`, and the

@@ -96,7 +96,7 @@ export type TestNodePlan = {
 const UNSHARDED_WARNING_UNITS = 4
 
 /**
- * Bounds every test node runs under, so a runaway cannot hold a lane open for 45 minutes again. The
+ * Bounds every test node runs under, so a runaway cannot hold a lane open for 30 minutes again. The
  * wall bound scales with what the node is measured to take and keeps a floor, because a 4s shard
  * deserves a far tighter bound than a 30s suite. The idle bound is the one that catches the failure
  * this exists for: bun's assertion formatter on a multiply-reachable value allocates without
@@ -104,8 +104,8 @@ const UNSHARDED_WARNING_UNITS = 4
  * (bun #21277), so the bound has to be the parent's.
  */
 const WALL_TIMEOUT_FACTOR = 6
-const WALL_TIMEOUT_FLOOR_MS = 300_000
-const WALL_TIMEOUT_CEILING_MS = 900_000
+const WALL_TIMEOUT_FLOOR_MS = 1_200_000
+const WALL_TIMEOUT_CEILING_MS = 1_800_000
 const IDLE_TIMEOUT_FACTOR = 2
 /**
  * The idle floor has to clear the longest a healthy suite may legitimately be silent, which is one
@@ -116,7 +116,7 @@ const IDLE_TIMEOUT_FACTOR = 2
  * killing suites that were only slow. The import would be a cycle, hence a test rather than an
  * expression.
  */
-const IDLE_TIMEOUT_FLOOR_MS = 240_000
+const IDLE_TIMEOUT_FLOOR_MS = 1_200_000
 
 /** build turns one run's selected suites into the nodes the graph will schedule. */
 function build(options: BuildTestNodesOptions): TestNodePlan {

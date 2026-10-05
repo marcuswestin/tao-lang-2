@@ -948,7 +948,9 @@ export function contentIdentity(identities: readonly string[]): string {
 }
 
 const FILE_MUTATION_LOCK_POLL_MS = 10
-const FILE_MUTATION_LOCK_TIMEOUT_MS = 120_000
+// Concurrent compiler batches can legitimately queue behind a live source mutation. Keep a
+// bounded wait with margin for that batch; owner identity and stale reclamation remain mandatory.
+const FILE_MUTATION_LOCK_TIMEOUT_MS = 300_000
 const FILE_MUTATION_RECLAIM_GRACE_MS = 2_000
 
 type FileMutationProcessIdentity = {
