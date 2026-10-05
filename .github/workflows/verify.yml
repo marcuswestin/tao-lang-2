@@ -34,6 +34,9 @@ env:
   # Per-gate green records travel between runs of the same tree through the Actions cache, which
   # accepts only an absolute path with no `..` in it.
   TAO_GREEN_STORE: /home/runner/tao-green
+  # Bun's and npm's download caches, restored before the bootstrap installs from them.
+  BUN_INSTALL_CACHE_DIR: /home/runner/tao-cache/bun
+  npm_config_cache: /home/runner/tao-cache/npm
 
 jobs:
   partition:
@@ -60,10 +63,31 @@ jobs:
           restore-keys: |
             tao-green-${{ runner.os }}-${{ runner.arch }}-${{ steps.tree.outputs.hash }}-
 
+      # Keyed on every lock the bootstrap installs from: the repository's Bun lockfile, and the Tao
+      # lock that pins Native Bridge's npm packages.
+      - name: Restore the package download caches
+        id: package-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /home/runner/tao-cache
+          key: tao-packages-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'Apps/Test Apps/Native Bridge/.tao/store/lock.jsonc') }}
+          restore-keys: |
+            tao-packages-${{ runner.os }}-${{ runner.arch }}-
+
       # Installs a checksum-pinned single-user Nix, builds the locked Linux profile, then runs
       # `./agent setup`; the same path the native Linux contributor acceptance proves.
       - name: Bootstrap Nix, the pinned toolchain, and Tao setup
         run: ./.config/bootstrap-tao-dev-env --install-nix
+
+      # Saved straight after the bootstrap, so a partition that later fails still warms the cache.
+      # All partitions share one key; the first to finish saves it and the rest are refused harmlessly.
+      - name: Save the package download caches
+        if: steps.package-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: /home/runner/tao-cache
+          key: tao-packages-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'Apps/Test Apps/Native Bridge/.tao/store/lock.jsonc') }}
 
       # Every partition plans from this one committed snapshot of measured durations, so all of them
       # compute the same plan, and suites split into shards sized by cost rather than running whole.
