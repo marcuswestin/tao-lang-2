@@ -5,7 +5,7 @@ import { checkedWorkspaces, NESTED_WORKSPACE, TWO_WORKSPACES } from './helpers/c
 import { copyMaintainedBindingPayload } from './maintained-bindings-fixture'
 import { withTaoFixture } from './test-cli-files'
 
-Describe('tao check per-workspace stamp', () => {
+Describe('tao check cache controls', () => {
   for (const key of CheckCache.NO_CACHE_ENV_KEYS) {
     Test(`checks every workspace from source when ${key} is set`, async () => {
       await withTaoFixture(TWO_WORKSPACES, async rootDir => {

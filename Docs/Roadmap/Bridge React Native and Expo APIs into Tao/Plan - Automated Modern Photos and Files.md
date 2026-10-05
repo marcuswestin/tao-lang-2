@@ -490,6 +490,13 @@ checking and independent review pass; another hosted run remains pending.
 Both Companion host jobs passed at `6fdda50d`, including Android and iOS simulator
 builds and native-kit parity. This is build evidence, not native-operation proof.
 
+Hosted recheck at `918a0130` passed eleven of twelve partitions, including the
+previous cache and receipt failures. Partition eight stopped at repository lint:
+the split cache files duplicated a suite title. Three titles now identify their
+own scopes; assertions and test bodies are unchanged, and repository lint passes.
+The remaining hosted jobs were followed to completion before reviewing the full
+failure list. The next hosted verdict remains pending.
+
 Branch setup exposed pre-existing old `.tao/typescript`, `.tao/install` and
 `.tao/sessions` output as untracked under main's current local-state layout.
 They are not part of this implementation. The source check refreshed some of

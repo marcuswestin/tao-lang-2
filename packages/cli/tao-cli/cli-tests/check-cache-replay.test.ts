@@ -4,7 +4,7 @@ import { runCheck } from '../cli-src/source-commands'
 import { checkedWorkspaces, TWO_WORKSPACES } from './helpers/check-cache-fixtures'
 import { withTaoFixture } from './test-cli-files'
 
-Describe('tao check per-workspace stamp', () => {
+Describe('tao check cache replay', () => {
   // `tao check` reports errors, and its exit code rides on them, so a stamp that replayed one would
   // keep failing a run whose source the author may already have fixed. A workspace carrying an error
   // is never stamped; its neighbour, which carries none, still is.

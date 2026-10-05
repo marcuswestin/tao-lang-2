@@ -4,7 +4,7 @@ import { type CheckWorkspaceOutcome, runCheck } from '../cli-src/source-commands
 import { checkedWorkspaces, TWO_WORKSPACES } from './helpers/check-cache-fixtures'
 import { withGitTaoFixture, withTaoFixture } from './test-cli-files'
 
-Describe('tao check per-workspace stamp', () => {
+Describe('tao check cache external inputs', () => {
   Test('does not replay a clean verdict through an external extended TypeScript config', async () => {
     await withTaoFixture({
       ...TWO_WORKSPACES,

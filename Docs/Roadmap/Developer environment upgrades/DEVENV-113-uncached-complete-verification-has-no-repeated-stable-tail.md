@@ -93,6 +93,12 @@
     output is redacted. Independent review and type checking pass; hosted recheck
     remains pending. Neither the local passes nor the split establish the receipt
     failure's cause or a stable tail measurement.
+  - Hosted recheck `918a0130` passed eleven partitions, including the formerly
+    failing cache and receipt scopes. The remaining partition stopped at lint
+    because the relocated cache cases retained a duplicated suite title. Only
+    those three titles are renamed; local lint passes. The complete hosted verdict
+    for that correction remains pending. This recheck also completed authenticated
+    check following without the anonymous quota failure.
 - **Proposed change:** The requested file partition and initial scheduling adjustment are implemented.
   Keep this observation open until fresh-checkout complete-lane measurements establish how much
   end-to-end tail remains; a cached skip is not a repeat measurement.
