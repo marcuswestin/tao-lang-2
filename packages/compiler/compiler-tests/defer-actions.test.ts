@@ -11,6 +11,7 @@ type Probe = {
   createFile?(): string
   removeFile?(file: string): void
   currentSample?: string
+  duration?: unknown
 }
 
 type ActionName =
@@ -30,6 +31,10 @@ type ActionName =
   | 'ResultJoined'
   | 'BuildReport'
   | 'JoinedResult'
+  | 'JoinedTitle'
+  | 'BuildTitle'
+  | 'FixedDuration'
+  | 'NativeDuration'
   | 'CreateFile'
   | 'RemoveFile'
   | 'Read'
@@ -70,6 +75,11 @@ const authoredActions = `
   action CreateFile() returns text from ./Native.ts
   action RemoveFile(File text) from ./Native.ts
   func CurrentSample() -> text { return ReadSample() from ./Native.ts }
+  type Title is text with { func ToText() -> text { return Title } }
+  can Display { ToText() -> text }
+  type Duration is numeric with { units { seconds 1 (default), minutes 60 } }
+  action ReadDuration() returns Duration from ./Native.ts
+  action ChangeDuration() from ./Native.ts
   public action Run(Label text) {
     do Register(Label)
     if true { do Register("inner") do Suspend() }
@@ -159,6 +169,25 @@ const authoredActions = `
       done Result -> { do Mark(Result) }
     }
     do Mark("caller-tail")
+  }
+  public action BuildTitle() -> Display {
+    defer { do Mark("title-cleanup") do Suspend() }
+    return Title "ready"
+  }
+  public action JoinedTitle() {
+    do BuildTitle() then {
+      done Result -> { do Mark(Result.ToText()) }
+    }
+    do Mark("title-parent-tail")
+  }
+  public action FixedDuration() -> Duration {
+    defer { do Mark("duration-cleanup") }
+    return 2 minutes
+  }
+  public action NativeDuration() -> Duration {
+    let Original = do ReadDuration()
+    defer { do ChangeDuration() }
+    return Original
   }
 `
 
@@ -485,7 +514,7 @@ Describe('compiler: lexical action cleanup', () => {
         },
       })
 
-      const direct = TR.DoResult<string>(actions.BuildReport!)
+      const direct = TR.DoResult(actions.BuildReport!)
       try {
         await started(cleanupStarted, direct.then(() => undefined))
         Expect(events).toEqual([
@@ -547,6 +576,80 @@ Describe('compiler: lexical action cleanup', () => {
         releaseCleanup.resolve()
         await direct
       }
+    })
+  })
+
+  Test('transports a concrete Display result through awaited source-action cleanup', async () => {
+    await withCompiledActions(false, async (actions, native) => {
+      const events: string[] = []
+      const cleanupStarted = Deferred()
+      const releaseCleanup = Deferred()
+      native.Configure({
+        register() {},
+        suspend() {
+          cleanupStarted.resolve()
+          return releaseCleanup.promise
+        },
+        mark(label) {
+          events.push(label)
+        },
+      })
+      const joined = Promise.resolve(actions.JoinedTitle!.jsValue.invoke())
+      try {
+        await started(cleanupStarted, joined)
+        Expect(events).toEqual(['title-cleanup'])
+        releaseCleanup.resolve()
+        await joined
+        Expect(events).toEqual(['title-cleanup', 'ready', 'title-parent-tail'])
+      } finally {
+        releaseCleanup.resolve()
+        await joined
+      }
+    })
+  })
+
+  Test('preserves a fixed quantity payload through source-action cleanup', async () => {
+    await withCompiledActions(false, async (actions, native) => {
+      const events: string[] = []
+      native.Configure({
+        register() {},
+        suspend() {
+          return Promise.resolve()
+        },
+        mark(label) {
+          events.push(label)
+        },
+      })
+      const result = await TR.DoResult(actions.FixedDuration!)
+      const payload = result.evaluate().jsValue
+      Expect(TR.isQuantityPayload(payload)).toBe(true)
+      Expect(payload).toHaveProperty('unit', 'minutes')
+      Expect(payload).toHaveProperty('canonical', 120)
+      Expect(events).toEqual(['duration-cleanup'])
+    })
+  })
+
+  Test('preserves a native quantity returned before cleanup replaces its provider value', async () => {
+    await withCompiledActions(false, async (actions, native) => {
+      const events: string[] = []
+      const original = native.MakeDuration(2)
+      native.Configure({
+        register() {},
+        suspend() {
+          return Promise.resolve()
+        },
+        mark(label) {
+          events.push(label)
+        },
+        duration: original,
+      })
+      const result = await TR.DoResult(actions.NativeDuration!)
+      const payload = result.evaluate().jsValue
+      Expect(TR.isQuantityPayload(payload)).toBe(true)
+      Expect(payload).toHaveProperty('unit', 'minutes')
+      Expect(payload).toHaveProperty('canonical', 120)
+      Expect(payload).toBe(original.evaluate().jsValue)
+      Expect(events).toEqual(['duration-changed'])
     })
   })
 
@@ -641,7 +744,10 @@ async function started(gate: Deferred, completion: Promise<void>): Promise<void>
 
 async function withCompiledActions(
   debug: boolean,
-  test: (actions: Actions, native: { Configure(probe: Probe): void }) => Promise<void>,
+  test: (
+    actions: Actions,
+    native: { Configure(probe: Probe): void; MakeDuration(value: number): { evaluate(): { jsValue: unknown } } },
+  ) => Promise<void>,
 ): Promise<void> {
   const previous = runtimeFixture
   const released = Deferred()
@@ -652,14 +758,15 @@ async function withCompiledActions(
   try {
     await withTaoFiles('tao-lexical-actions-', {
       'Main.tao': `
-          use Run, Recover, Otherwise, CheckExit, GuardExit, Inline, Detached, Sync, Joined, DeferredOrder, DeferredInvocation, JoinedError, JoinedOtherwise, ResultJoined, BuildReport, JoinedResult, Mark, Alternative from ./Actions
+          use Run, Recover, Otherwise, CheckExit, GuardExit, Inline, Detached, Sync, Joined, DeferredOrder, DeferredInvocation, JoinedError, JoinedOtherwise, ResultJoined, BuildReport, JoinedResult, JoinedTitle, BuildTitle, FixedDuration, NativeDuration, Mark, Alternative from ./Actions
         app Demo { id "com.tao.lexical" version "1.0.0" name "Lexical" view Main }
         view Main() {
-          render inject Run, Recover, Otherwise, CheckExit, GuardExit, Inline, Detached, Sync, Joined, DeferredOrder, DeferredInvocation, JoinedError, JoinedOtherwise, ResultJoined, BuildReport, JoinedResult, Mark, Alternative
+          render inject Run, Recover, Otherwise, CheckExit, GuardExit, Inline, Detached, Sync, Joined, DeferredOrder, DeferredInvocation, JoinedError, JoinedOtherwise, ResultJoined, BuildReport, JoinedResult, JoinedTitle, BuildTitle, FixedDuration, NativeDuration, Mark, Alternative
             \`\`\`ts
               void Run; void Recover; void Otherwise; void CheckExit; void GuardExit; void Inline; void Detached; void Sync
               void Joined; void DeferredOrder; void DeferredInvocation; void JoinedError; void JoinedOtherwise; void ResultJoined
               void BuildReport; void JoinedResult
+              void JoinedTitle; void BuildTitle; void FixedDuration; void NativeDuration
               void Mark; void Alternative
               return null
             \`\`\`
@@ -667,7 +774,8 @@ async function withCompiledActions(
       `,
       'Actions.tao': authoredActions,
       'Native.ts': `
-        type Probe = { register(label: string): void; suspend(): Promise<void>; mark(label: string): void; alternative?(label: string): void; read?(): string; createFile?(): string; removeFile?(file: string): void; currentSample?: string }
+        import * as Actions from './Actions.tao'
+        type Probe = { register(label: string): void; suspend(): Promise<void>; mark(label: string): void; alternative?(label: string): void; read?(): string; createFile?(): string; removeFile?(file: string): void; currentSample?: string; duration?: unknown }
         let probe: Probe
         export function Configure(value: Probe): void { probe = value }
         export function Register(label: string): void { probe.register(label) }
@@ -678,6 +786,12 @@ async function withCompiledActions(
         export function CreateFile(): string { return probe.createFile?.() ?? '' }
         export function RemoveFile(file: string): void { probe.removeFile?.(file) }
         export function ReadSample(): string { return probe.currentSample ?? '' }
+        export function MakeDuration(value: number) { return Actions.types.Duration.minutes(value) }
+        export function ReadDuration() { return probe.duration }
+        export function ChangeDuration(): void {
+          probe.duration = Actions.types.Duration.seconds(9)
+          probe.mark('duration-changed')
+        }
       `,
     }, async (paths, root) => {
       const compiled = await (await Workspace.open(root)).compile(paths['Main.tao'], { debug })

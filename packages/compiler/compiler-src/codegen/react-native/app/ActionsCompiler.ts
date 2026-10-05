@@ -12,6 +12,7 @@ import {
   actionInvocationRequiresAsync,
 } from './action-control-flow'
 import { authLibraryExport, withAuthContextFactory } from './auth-context'
+import { compileArgumentForType } from './capability-projection'
 import { compileDeclarationIdentity, declarationModuleName } from './declaration-identity'
 import { foreignActionBindingName } from './injection-plan'
 import { compileReactiveArgument, compileWritableTarget } from './reactive-parameters'
@@ -144,7 +145,7 @@ export const ActionsCompiler = {
     const asyncKeyword = actionBlockRequiresAsync(action.block) ? gen`async ` : gen``
     return gen`
       TR.Action(${asyncKeyword}() => {
-      return ${Compile.ActionScopedBlock(action.block, undefined, false, true)}
+      return ${Compile.ActionScopedBlock(action.block)}
       }, { ${AST.findOwningView(action) ? gen`owner: _TaoActionOwner,` : gen``}
         ${actionBlockInterruptsAsk(action.block) ? gen`interrupt: true,` : gen``} })
     `
@@ -202,7 +203,6 @@ export const ActionsCompiler = {
     block: AST.ActionBlock | undefined,
     bindings?: Compiled,
     asyncBoundary = false,
-    _returnBoundary = false,
   ): Compiled {
     const asyncKeyword = actionBlockRequiresAsync(block) ? gen`async ` : gen``
     const boundaryKeyword = asyncBoundary ? gen`async ` : gen``
@@ -272,7 +272,7 @@ export const ActionsCompiler = {
   /** AsyncActionStatement launches an isolated action sub-block without delaying its caller. */
   AsyncActionStatement(statement: AST.AsyncActionStatement): Compiled {
     return gen`TR.Async(() => {
-      return ${Compile.ActionScopedBlock(statement.block, undefined, true, true)}
+      return ${Compile.ActionScopedBlock(statement.block, undefined, true)}
     })`
   },
 
@@ -318,9 +318,7 @@ export const ActionsCompiler = {
       ${compileJoinedOutcomes(statement)}
       ${
       statement.otherwise
-        ? gen`['otherwise', async () => ${
-          Compile.ActionScopedBlock(statement.otherwise.block, undefined, false, true)
-        }],`
+        ? gen`['otherwise', async () => ${Compile.ActionScopedBlock(statement.otherwise.block)}],`
         : gen.noop()
     }
     ])`
@@ -349,17 +347,13 @@ export const ActionsCompiler = {
             Compile.ActionScopedBlock(
               outcome.block,
               outcome.payload ? gen`${gen.scopeName(outcome.payload)} = _TaoCasePayload` : gen.noop(),
-              false,
-              true,
             )
           }],`,
       )
     }
       ${
       statement.otherwise
-        ? gen`['otherwise', async () => ${
-          Compile.ActionScopedBlock(statement.otherwise.block, undefined, false, true)
-        }],`
+        ? gen`['otherwise', async () => ${Compile.ActionScopedBlock(statement.otherwise.block)}],`
         : gen.noop()
     }
     ])`
@@ -371,16 +365,18 @@ export const ActionsCompiler = {
     const belongsToSourceAction = action
       ? ASTUtils.sourceActionResult(action, value => value).some(result => result.statement === statement)
       : false
-    const value = gen`${Compile.Expression(statement.value)}.evaluate().jsValue`
-    return belongsToSourceAction
-      ? gen`_TaoSourceReturn.value = ${value}; _TaoSourceReturn.returned = true;`
-      : gen`return ${value}`
+    if (!belongsToSourceAction) {
+      return gen`return ${Compile.Expression(statement.value)}.evaluate().jsValue`
+    }
+    Assert.is(action, AST.isActionDeclaration, 'validated source action return has an action owner')
+    const value = gen`${compileArgumentForType(statement.value, Type.ofActionResult(action))}.evaluate()`
+    return gen`_TaoSourceReturn.value = ${value}; _TaoSourceReturn.returned = true;`
   },
 
   /** DeferStatement registers a lexical cleanup block or invocation for the current action scope. */
   DeferStatement(statement: AST.DeferStatement): Compiled {
     if (statement.block) {
-      return gen`TR.Defer(() => ${Compile.ActionScopedBlock(statement.block, undefined, false, true)})`
+      return gen`TR.Defer(() => ${Compile.ActionScopedBlock(statement.block)})`
     }
     Assert.defined(statement.invocation, 'validated defer shorthand has an invocation')
     const invocation = statement.invocation
@@ -559,13 +555,11 @@ function compileJoinedOutcomes(statement: AST.DoStatement): Compiled {
         outcome.payload
           ? gen`${gen.scopeName(outcome.payload)} = _TaoCasePayload`
           : gen.noop(),
-        false,
-        true,
       )
     }`
   const direct = statement.outcomes.flatMap(outcome => {
     if (outcome.case === 'otherwise') {
-      return [gen`['otherwise', async () => ${Compile.ActionScopedBlock(outcome.block, undefined, false, true)}],`]
+      return [gen`['otherwise', async () => ${Compile.ActionScopedBlock(outcome.block)}],`]
     }
     return [gen`[${gen.jsLiteral(outcome.case)}, ${outcomeBlock(outcome)}],`]
   })
