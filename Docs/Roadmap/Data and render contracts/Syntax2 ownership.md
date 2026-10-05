@@ -246,6 +246,14 @@ A additionally owns parser-src/grammar-words.ts solely to preserve the existing 
 `value` diagnostic for the new ValueReferenceTarget union. Preserve all other wording and grammar
 roles; this diagnostic adapter grant adds no lexer or unit-case source ownership.
 
+A's reviewed lowercase-unit lexical amendment additionally releases parser-grammar/terminals.langium,
+parser-grammar/numeric-units.langium and parser-src/tao-token-builder.ts. Add a lowercase unit token
+categorized as ordinary ID, and use its distinct grammar role for unit declarations and qualified
+final segments. Preserve all ordinary identifier spellings, keyword-prefix handling, existing
+continuation boundaries and persisted state syntax. Prove generation plus positive lowercase and
+negative uppercase/mixed-case suffixes, uppercase owners, lowercase ordinary views/fields/aliases
+and interpolation. No uppercase naming mandate for ordinary declarations is introduced.
+
 B's reviewed isolated slot-emitter packet releases exactly compiler-src/codegen/react-native/app/
 render-slot-hoists.ts and renderer-slot-codegen.ts, with compiler-tests/render-slot-hoists.test.ts
 and renderer-slot-codegen.test.ts. Consume already compiled fragments and real source anchors;
