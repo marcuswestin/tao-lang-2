@@ -98,6 +98,7 @@ Examples:
   ./agent test packages/language/parser/parser-tests/Parser.test.ts
   ./agent test-all
   ./agent test-file packages/language/parser/parser-tests/Parser.test.ts
+  ./agent test-source-file packages/language/parser/parser-tests/Parser.test.ts
   ./agent test-changed
   ./agent test-retry
   ./agent verify-changed
@@ -198,6 +199,11 @@ directory is a path, anything else is a test-name pattern. It prints which readi
 test runs the suites the branch diff reaches, which can be green while a suite the change broke
 never ran; a name pattern filters those same suites rather than widening back out to all of them.
 test-all runs every suite, and takes an optional name pattern of its own.
+
+test-source-file runs an explicit file/directory after parser generation, without building the
+reference app. Use it for language bootstrap when the new parser cannot compile that app yet;
+it is focused source evidence, never app or merge acceptance. Other test and verification lanes
+keep their existing reference-app prerequisite.
 
 Broad checks, verification, bare test/test-changed, and unfiltered test-all stop admitting new work
 after a definite failure. Running work drains and cleans up before the lane releases its leases.
