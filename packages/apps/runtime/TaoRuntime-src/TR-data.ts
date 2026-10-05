@@ -4,6 +4,7 @@ import type { TaoAuthPrincipal, TaoAuthProof, TaoDataAuthBinding } from './TR-au
 import { entityHandle, metadataOf } from './TR-data-entity'
 import { UnboundConnection } from './TR-data-provider'
 import { nativeQueryContext } from './TR-data-query-context'
+import { emptyData, envelope, parseEnvelope, type StoredData } from './TR-data-persistence'
 import {
   beginTest as beginDataTest,
   bindConfiguredDataSchema,
@@ -373,6 +374,22 @@ function useConfiguredProviderBinding(
 export const DataControls = {
   /** NativeQueryContext preserves query ownership without reserving public field names. */
   NativeQueryContext: nativeQueryContext,
+  /** NativeEntityContext authenticates a live row before an adapter accesses its connection. */
+  NativeEntityContext(value: unknown): Readonly<{ connection: TaoDataConnection; entity: string; id: string }> {
+    const handle = entityHandle(value)
+    RuntimeAssert.input(handle, 'This operation expects a live data item.')
+    return metadataOf(handle).schema.nativeEntityContext(handle)
+  },
+  /** NativeSnapshots shares the runtime's checked wire format with datasource implementations. */
+  NativeSnapshots: {
+    empty: emptyData,
+    decode: parseEnvelope,
+    encode(data: StoredData, definition: TaoDataSchemaDefinition): string {
+      const serialized = JSON.stringify(envelope(data, definition))
+      parseEnvelope(serialized, definition)
+      return serialized
+    },
+  },
   /** interactionCandidates is the internal pending-command picker seam over active stores. */
   interactionCandidates(entity: string, scope?: { ownsStore(store: TaoDataSchema): boolean }): readonly unknown[] {
     return interactionEntityHandles(entity, scope)

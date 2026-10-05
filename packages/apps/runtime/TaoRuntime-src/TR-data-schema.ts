@@ -1271,6 +1271,21 @@ export class RuntimeDataSchema {
     return metadata.id
   }
 
+  /** Native adapters obtain the current connection only from an owned, present entity handle. */
+  nativeEntityContext(handle: RuntimeEntityHandle): Readonly<{
+    connection: TaoDataConnection
+    entity: string
+    id: string
+  }> {
+    const metadata = this.requireOwnedHandle(handle)
+    this.requireReady('access')
+    RuntimeAssert.input(
+      this.storedRow(metadata.entity, metadata.id),
+      `This operation refers to unavailable ${metadata.entity} '${metadata.id}'.`,
+    )
+    return { connection: this.connection, entity: metadata.entity, id: metadata.id }
+  }
+
   availability(handle: RuntimeEntityHandle): TaoEntityAvailability {
     const metadata = metadataOf(handle)
     if (metadata.schema !== this) {

@@ -55,6 +55,25 @@ function storiesPlan(limit?: number): Parameters<TR.DataSchema['query']>[0] {
 }
 
 Describe('TR.Data query fills', () => {
+  Test('native entity adapters authenticate row identity and reject old or reconstructed handles', async () => {
+    const connection = testDataConnection()
+    const schema = TR.Data.Schema(feedDefinition, connection)
+    await schema.settle()
+    const row = schema.create('Story', { HnId: 7, Title: 'Seven', Rank: 7 })
+    const context = TR.Data.NativeEntityContext(row)
+    Expect(context).toEqual({ connection, entity: 'Story', id: TR.Data.Read(row, 'Id') })
+    Expect(() => TR.Data.NativeEntityContext({ Id: context.id })).toThrow('live data item')
+    const snapshot = TR.Data.NativeSnapshots.decode(schema.captureSnapshot(), feedDefinition)
+    const encoded = TR.Data.NativeSnapshots.encode(snapshot, feedDefinition)
+    Expect(TR.Data.NativeSnapshots.decode(encoded, feedDefinition)).toEqual(snapshot)
+    Expect(() => TR.Data.NativeSnapshots.encode({ ...snapshot, rows: {} }, feedDefinition)).toThrow(
+      'entity collections',
+    )
+    schema.configure(testDataConnection())
+    await schema.settle()
+    Expect(() => TR.Data.NativeEntityContext(row)).toThrow('inactive provider generation')
+  })
+
   Test('fences a suspended native acquisition from a replacement datasource connection', async () => {
     const connection = fillConnection(async () => undefined)
     const schema = TR.Data.Schema(feedDefinition, connection)
