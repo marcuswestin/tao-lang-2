@@ -27,11 +27,12 @@ keeps its intentional zero-preview setup and waits for its expanding cloud contr
 the network smoke selects the named cell without pressing its activation bolt; the simulated-user
 fixture installs its persisted session store and activates only previews its current journey uses.
 Their focused browser runs pass (21 assertions in 6.2s, 5 in 12.8s, and 102 in 29.7s), with an
-independent five-file review. The launch smoke still opens this worktree's live HNReader project:
-landing stopped without a push because the Developer's session owns it. Fixture isolation or an
-explicitly authorized session stop is required before the next landing attempt; the live session
-was preserved. [The launch-smoke ledger entry](<Developer environment upgrades/DEVENV-STUDIO-LAUNCH-SMOKE-USES-SHARED-PROJECT.md>)
-records that remaining workflow obstruction.
+independent five-file review. The launch smoke now uses an isolated authored keyboard-navigation
+project with the decided project layout, retaining its real CLI readiness, session, process, port,
+and teardown assertions. Its focused host run passes all 14 assertions in 6.7s while the Developer's
+HNReader Studio remains live at the same PID and port. Unproved shutdown retains the disposable
+project with an ownership receipt. [The archived launch-smoke ledger entry](<Developer environment upgrades/Archive/DEVENV-STUDIO-LAUNCH-SMOKE-USES-SHARED-PROJECT.md>)
+records the fix; the ordinary full landing lane remains required before pushing.
 Mutation checks caught deliberately removed activation serialization and callback rewiring. A real
 browser run exposed an empty session-save response; the endpoint now returns JSON, with a real HTTP
 regression. The corrected real-app Metro smoke passes all four journeys (run
