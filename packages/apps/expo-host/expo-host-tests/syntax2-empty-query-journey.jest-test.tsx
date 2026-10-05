@@ -25,12 +25,8 @@ Describe('Syntax2 actual app empty query journey', () => {
     const providerPath = 'library/BookStoreProvider.ts'
     const provider = sources[providerPath]
     Assert.defined(provider, 'the actual app provider is part of the isolated source copy')
-    const seededBooks = `backend.seedServer(Array.from({ length: 83 }, (_, index) => ({
-        ID: \`book-\${String(index + 1).padStart(3, '0')}\`,
-        Title: \`Book \${index + 1}\`,
-        Note: '',
-      })))`
-    Expect(provider.split(seededBooks)).toHaveLength(2)
+    const seededBooks = /backend\.seedServer\(Array\.from\(\{ length: 83 \}, \(_, index\) => \(\{[\s\S]*?\}\)\)\)/g
+    Expect(provider.match(seededBooks)).toHaveLength(1)
     sources[providerPath] = provider.replace(seededBooks, 'backend.seedServer([])')
     sources['Empty.test.tao'] = `
       use LibraryApp from ./Main
