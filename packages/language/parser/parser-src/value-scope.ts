@@ -859,8 +859,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       root.statements.filter(AST.isTypeDeclaration).flatMap(AST.caseSetCasesOf),
     )
     scope = this.createScopeForNodes(this.importedCaseSetCases(node), scope)
-    scope = this.createScopeForNodes(AST.visibleFileDeclarations(node, AST.isTypeDeclaration), scope)
-    scope = this.createScopeForNodes(this.importedDeclarations(node, AST.isTypeDeclaration), scope)
+    scope = this.createScopeForBindings(AST.visibleFileBindings(node, AST.isTypeDeclaration), scope)
     return scope
   }
 
