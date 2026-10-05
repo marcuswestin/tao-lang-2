@@ -192,8 +192,8 @@ export async function insertCapturedFixture(
 
 function capturedFixtureImportEdits(file: AST.TaoFile, entityNames: readonly string[]): SourceEdit[] {
   const visibleNames = new Set(
-    AST.visibleFileDeclarations(file, AST.isEntityDataDeclaration, entity => entity.singularName)
-      .map(entity => entity.singularName),
+    AST.visibleFileBindings(file, AST.isEntityDataDeclaration, entity => entity.singularName)
+      .map(binding => binding.localName),
   )
   const uses = file.statements.filter(AST.isUseStatement)
   const additions = new Map<AST.UseStatement, Set<string>>()
@@ -212,15 +212,12 @@ function capturedFixtureImportEdits(file: AST.TaoFile, entityNames: readonly str
     if (targets.size !== 1) {
       Errors.throwUserInput(`Studio captured entity is not uniquely available in this source file: ${name}`)
     }
-    const { binding, use } = matchingBindings[0]!
+    const { use } = matchingBindings[0]!
     if (use.all) {
       continue
     }
-    if (binding.localName === name) {
-      continue
-    }
     const names = additions.get(use) ?? new Set(use.importedDeclarations.map(AST.importSpecifierText))
-    names.add(binding.sourceName === name ? name : `${binding.sourceName} as ${name}`)
+    names.add(name)
     additions.set(use, names)
   }
   return [...additions].map(([use, names]) => {
