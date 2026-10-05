@@ -1,6 +1,7 @@
 import { AST } from '@parser'
 import {
   type ArgumentBindingDiagnostic,
+  type ArgumentBindingMetadata,
   type RenderInvocationPair,
   resolveArgumentBindings,
 } from './argument-bindings'
@@ -274,12 +275,15 @@ export function resolveActionInvocation(invocation: AST.DoStatement): ResolvedAc
 }
 
 /** resolveFunctionInvocation resolves a pure function call through the shared owner binder. */
-export function resolveFunctionInvocation(invocation: AST.FunctionCallExpression): ResolvedFunctionInvocation {
+export function resolveFunctionInvocation(
+  invocation: AST.FunctionCallExpression,
+  metadata?: ArgumentBindingMetadata,
+): ResolvedFunctionInvocation {
   const fn = invocation.function.ref
   if (!fn) {
     return { invocation, pairs: [], diagnostics: [] }
   }
-  const bindings = resolveArgumentBindings(fn, invocation)
+  const bindings = resolveArgumentBindings(fn, invocation, metadata)
   return {
     invocation,
     function: fn,
@@ -289,8 +293,11 @@ export function resolveFunctionInvocation(invocation: AST.FunctionCallExpression
 }
 
 /** resolveActionTarget classifies an expression used as a Tao action value. */
-export function resolveActionTarget(expression: AST.Expression | undefined): ResolvedActionTarget {
-  return resolveActionTargetWithSeenAliases(expression, new Set())
+export function resolveActionTarget(
+  expression: AST.Expression | undefined,
+  typeOfExpression: (expression: AST.Expression) => TaoType = Type.ofExpression,
+): ResolvedActionTarget {
+  return resolveActionTargetWithSeenAliases(expression, new Set(), typeOfExpression)
 }
 
 const UnresolvedActionTarget: ResolvedActionTarget = { kind: 'unresolved' }
@@ -298,6 +305,7 @@ const UnresolvedActionTarget: ResolvedActionTarget = { kind: 'unresolved' }
 function resolveActionTargetWithSeenAliases(
   expression: AST.Expression | undefined,
   seenAliases: Set<AST.AliasDeclaration>,
+  typeOfExpression: (expression: AST.Expression) => TaoType,
 ): ResolvedActionTarget {
   if (!expression) {
     return UnresolvedActionTarget
@@ -306,9 +314,9 @@ function resolveActionTargetWithSeenAliases(
     return { kind: 'dynamic' }
   }
   if (AST.isValueReference(expression)) {
-    return resolveActionTargetReference(expression, seenAliases)
+    return resolveActionTargetReference(expression, seenAliases, typeOfExpression)
   }
-  const type = Type.ofExpression(expression)
+  const type = typeOfExpression(expression)
   if (type.kind === 'primitive' && type.primitive === 'action') {
     return { kind: 'dynamic' }
   }
@@ -318,6 +326,7 @@ function resolveActionTargetWithSeenAliases(
 function resolveActionTargetReference(
   reference: AST.ValueReference,
   seenAliases: Set<AST.AliasDeclaration>,
+  typeOfExpression: (expression: AST.Expression) => TaoType,
 ): ResolvedActionTarget {
   const target = reference.target.ref
   if (!target) {
@@ -329,10 +338,12 @@ function resolveActionTargetReference(
     return { kind: 'named', action: target }
   }
   if (AST.isAliasDeclaration(target)) {
-    return resolveAliasActionTarget(target, seenAliases)
+    return resolveAliasActionTarget(target, seenAliases, typeOfExpression)
   }
   if (AST.isParameterDeclaration(target)) {
-    return parameterAcceptsAction(target) ? { kind: 'dynamic' } : UnresolvedActionTarget
+    return parameterAcceptsAction(target, () => typeOfExpression(reference))
+      ? { kind: 'dynamic' }
+      : UnresolvedActionTarget
   }
   return UnresolvedActionTarget
 }
@@ -340,17 +351,21 @@ function resolveActionTargetReference(
 function resolveAliasActionTarget(
   target: AST.AliasDeclaration,
   seenAliases: Set<AST.AliasDeclaration>,
+  typeOfExpression: (expression: AST.Expression) => TaoType,
 ): ResolvedActionTarget {
   if (seenAliases.has(target)) {
     return UnresolvedActionTarget
   }
   seenAliases.add(target)
   return AST.isExpression(target.value)
-    ? resolveActionTargetWithSeenAliases(target.value, seenAliases)
+    ? resolveActionTargetWithSeenAliases(target.value, seenAliases, typeOfExpression)
     : UnresolvedActionTarget
 }
 
-function parameterAcceptsAction(parameter: AST.ParameterDeclaration): boolean {
-  const type = Type.ofParameter(parameter)
+function parameterAcceptsAction(
+  parameter: AST.ParameterDeclaration,
+  typeOfParameter: (parameter: AST.ParameterDeclaration) => TaoType,
+): boolean {
+  const type = typeOfParameter(parameter)
   return type.kind === 'primitive' && type.primitive === 'action'
 }

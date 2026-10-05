@@ -6,6 +6,7 @@ import {
   associatedCallableDescriptor,
   type AssociatedDescriptorMaterialization,
   associatedMethodCallTarget,
+  type AssociatedMethodReceiver,
   type AssociatedMethodSelection,
   capabilityRequirements,
   hasAssociatedEffects,
@@ -16,7 +17,7 @@ import {
 import { puritySatisfiesFunction } from './callable-effects'
 import { type CallableSignatureComparison, callableSignatureOf, compareCallableSignatures } from './callable-signatures'
 import { failureContractSatisfiesBound } from './failure-contracts'
-import { resolveActionInvocation } from './invocations'
+import { resolveActionInvocation, resolveActionTarget } from './invocations'
 import { NumericUnits } from './NumericUnits'
 import { parameterRequiresWritable } from './reactive-parameters'
 import { type UnitFamily, Units } from './Units'
@@ -204,14 +205,43 @@ export class Type {
     return new TypeResolutionContext().ofDefinition(type)
   }
 
+  /** Correspondence uses only the supplied declared contracts and one local resolution context. */
+  static correspondenceResolver(
+    descriptors: ReadonlyMap<
+      AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration,
+      AssociatedDescriptorMaterialization
+    >,
+  ) {
+    const resolution = new TypeResolutionContext(descriptors)
+    return {
+      ofExpression: (expression: AST.Expression | AST.ConfiguredValue) => resolution.ofExpression(expression),
+      ofArgument: (argument: AST.Argument) => resolution.ofExpression(argument.value),
+      ofParameter: (parameter: AST.ParameterDeclaration) => resolution.ofParameter(parameter),
+      ofTypeExpression: (expression: AST.TypeExpression) => resolution.ofTypeExpression(expression),
+      ofDefinition: (definition: AST.TypeDefinition) => resolution.ofDefinition(definition),
+      definitionOfReference: (reference: AST.NamedTypeReference) => resolution.definitionOfReference(reference),
+      ofFunctionReturn: (declaration: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration) =>
+        resolution.ofFunctionReturn(declaration),
+      ofReferenceRoot: (reference: AST.ValueReference | AST.MemberAccessExpression) =>
+        resolution.ofContextualValue(reference.target.ref, reference),
+      atMemberPath: (root: TaoType, members: readonly string[]) => resolution.atMemberPath(root, members),
+      receiverType: (receiver: AssociatedMethodReceiver) => resolution.receiverType(receiver),
+      associatedMethodDeclaration: (receiver: TaoType, name: string) =>
+        Type.associatedMethodDeclaration(receiver, name, reference => resolution.definitionOfReference(reference)),
+      compare: (actual: TaoType, expected: TaoType) => resolution.compare(actual, expected),
+    }
+  }
+
   /** Discovery retains nominal identity and chooses the nearest inherited implementation. */
   static associatedMethodDeclaration(
     receiver: TaoType,
     name: string,
+    definitionOfReference: (reference: AST.NamedTypeReference) => AST.TypeDefinition | undefined =
+      Type.definitionOfReference,
   ): Readonly<{ declaration: AST.AssociatedFunctionDeclaration; owner: AST.TypeDeclaration }> | undefined {
     const nominal = nominalOf(receiver)
     if (nominal) {
-      for (const owner of nominalChain(nominal)) {
+      for (const owner of nominalChain(nominal, definitionOfReference)) {
         if (AST.isTypeDeclaration(owner)) {
           const declaration = ownAssociatedMethods(owner).find(method => method.name === name)
           if (declaration) {
@@ -339,23 +369,7 @@ export class Type {
 
   /** ofConfiguredValue resolves one declaration-linked named constructor. */
   static ofConfiguredValue(value: AST.ConfiguredValue): TaoType {
-    const declaration = value.type.ref
-    const typeOfParameterizedDeclaration = (declaration: AST.ParameterizedDeclaration): TaoType => {
-      const [member, ...remainingMembers] = value.members ?? []
-      const parameterType = member ? parameterTypeDeclarationNamed(declaration, member) : undefined
-      return parameterType
-        ? Type.atMemberPath(Type.ofDefinition(parameterType), remainingMembers)
-        : unresolvedType()
-    }
-    return Switch.typeMaybe<typeof declaration, TaoType>(declaration, {
-      TypeDeclaration: declaration => Type.atMemberPath(Type.ofDefinition(declaration), value.members ?? []),
-      ActionDeclaration: typeOfParameterizedDeclaration,
-      CommandDeclaration: typeOfParameterizedDeclaration,
-      FunctionDeclaration: typeOfParameterizedDeclaration,
-      PhraseDeclaration: typeOfParameterizedDeclaration,
-      ViewDeclaration: typeOfParameterizedDeclaration,
-      undefined: unresolvedType,
-    })
+    return new TypeResolutionContext().ofConfiguredValue(value)
   }
 
   /** ofInferredConfiguration resolves a bare block from its same-name declaration context. */
@@ -510,53 +524,12 @@ export class Type {
 
   /** isAssignable returns whether an actual value type can satisfy an expected parameter/property type. */
   static isAssignable(actual: TaoType, expected: TaoType): boolean {
-    return Type.admitsType(actual, expected, true)
+    return admitsType(actual, expected, true)
   }
 
   /** Callable substitution cannot construct a nominal value promised by the receiving contract. */
   static isCallableAssignable(actual: TaoType, expected: TaoType): boolean {
-    return Type.admitsType(actual, expected, false)
-  }
-
-  private static admitsType(actual: TaoType, expected: TaoType, constructsNominal: boolean): boolean {
-    const accepts = constructsNominal ? Type.isAssignable : Type.isCallableAssignable
-    // A bare key is written as text and read as the shortcut it names, the way a bare number in
-    // size position is read as a size. The reverse is not true: a shortcut is not text.
-    if (isPrimitiveNamed(expected, 'shortcut') && isPrimitiveNamed(actual, 'text')) {
-      return constructsNominal
-    }
-    // Every value the actual can be must be one the expected accepts. Distributing the actual side
-    // first is what lets an optional satisfy an optional: asking instead whether the whole actual
-    // union fits one member of the expected union would reject it.
-    if (actual.kind === 'union') {
-      return actual.members.every(member => accepts(member, expected))
-    }
-    if (expected.kind === 'union') {
-      return expected.members.some(member => accepts(actual, member))
-    }
-    if (expected.kind === 'capability') {
-      return (actual.kind === 'capability' && actual.declaration === expected.declaration)
-        || Type.capabilityWitnesses(actual, expected) !== undefined
-    }
-    if (actual.kind === 'capability') {
-      return false
-    }
-    if (!quantityOwnersAgree(actual, expected)) {
-      return false
-    }
-    if (!typesHaveCompatibleBase(actual, expected, accepts)) {
-      return false
-    }
-    if (actual.kind === 'list' && expected.kind === 'list' && !listTypeIsAssignable(actual, expected, accepts)) {
-      return false
-    }
-    if (
-      !constructsNominal && actual.kind === 'item' && expected.kind === 'item'
-      && !nominalOf(expected) && !itemContractHasSameFieldWitnesses(actual.item, expected.item)
-    ) {
-      return false
-    }
-    return nominalOf(expected) ? actualSatisfiesExpectedNominal(actual, expected, constructsNominal) : true
+    return admitsType(actual, expected, false)
   }
 
   /** Final admission consumes sealed contracts/effects and never invokes a resolver or analyzer. */
@@ -650,29 +623,7 @@ export class Type {
 
   /** commonType returns a branch-safe type that every resolved input can satisfy. */
   static commonType(types: readonly TaoType[]): TaoType | undefined {
-    if (types.length === 0 || types.some(isUnresolvedType)) {
-      return undefined
-    }
-
-    const candidates = types.filter(candidate => types.every(actual => Type.isAssignable(actual, candidate)))
-    const best = candidates.reduce<TaoType | undefined>((best, candidate) => {
-      if (!best) {
-        return candidate
-      }
-      return commonTypeCandidateIsPreferred(candidate, best) ? candidate : best
-    }, undefined)
-    if (best) {
-      return best
-    }
-    // Absence unifies with any one value type, because that is what an optional already is: an
-    // optional field reads as `union(declared, none)`. So a conditional whose branches are a value
-    // and `none` produces the optional of that value rather than nothing at all.
-    const present = types.filter(type => !isPrimitiveNamed(type, 'none'))
-    if (present.length === types.length || present.length === 0) {
-      return undefined
-    }
-    const common = Type.commonType(present)
-    return common && { kind: 'union', members: [common, primitiveType('none')] }
+    return commonType(types, Type.isAssignable)
   }
 
   /** entityOfReference resolves a top-level entity's singular type name. */
@@ -948,7 +899,10 @@ export class Type {
   }
 
   /** rootOfReference resolves the root definition and unresolved suffix of a named type reference. */
-  static rootOfReference(reference: AST.NamedTypeReference): TypeReferenceRoot {
+  static rootOfReference(
+    reference: AST.NamedTypeReference,
+    constructorItemType: (reference: AnyTypeReference) => ItemShape | undefined = Type.constructorReferenceItemType,
+  ): TypeReferenceRoot {
     const owner = visibleParameterizedDeclaration(reference, reference.root)
     if (owner) {
       const [member, ...remainingMembers] = reference.members
@@ -960,7 +914,7 @@ export class Type {
       }
     }
 
-    const root = itemConstructorProperty(reference, reference.root)
+    const root = itemConstructorProperty(reference, reference.root, constructorItemType)
       ?? visibleTypeDeclaration(reference, reference.root)
     return { definition: root, remainingMembers: reference.members }
   }
@@ -1098,7 +1052,102 @@ function itemContractHasSameFieldWitnesses(actual: ItemShape | undefined, expect
     && (expected.dataFields ?? []).every(field => actual.dataFields?.includes(field))
 }
 
-function commonTypeCandidateIsPreferred(candidate: TaoType, current: TaoType): boolean {
+/** Both final admission and correspondence share ordinary domain rules and recursive dispatch. */
+function admitsType(
+  actual: TaoType,
+  expected: TaoType,
+  constructsNominal: boolean,
+  capabilityAccepts: (actual: TaoType, expected: Extract<TaoType, { kind: 'capability' }>) => boolean = (
+    actual,
+    expected,
+  ) => Type.capabilityWitnesses(actual, expected) !== undefined,
+  quantityOwner: (type: TaoType) => AST.TypeDeclaration | undefined = Type.quantityOwner,
+  unresolvedAccepts: () => boolean = () => false,
+  definitionOfReference: (reference: AST.NamedTypeReference) => AST.TypeDefinition | undefined =
+    Type.definitionOfReference,
+): boolean {
+  const accepts = (actual: TaoType, expected: TaoType) =>
+    admitsType(
+      actual,
+      expected,
+      constructsNominal,
+      capabilityAccepts,
+      quantityOwner,
+      unresolvedAccepts,
+      definitionOfReference,
+    )
+  if (isUnresolvedType(actual) || isUnresolvedType(expected)) {
+    return unresolvedAccepts()
+  }
+  // Bare text constructs a shortcut; callable substitution cannot construct that value.
+  if (isPrimitiveNamed(expected, 'shortcut') && isPrimitiveNamed(actual, 'text')) {
+    return constructsNominal
+  }
+  // Distribute the actual union first so that an optional can satisfy an optional.
+  if (actual.kind === 'union') {
+    return actual.members.every(member => accepts(member, expected))
+  }
+  if (expected.kind === 'union') {
+    return expected.members.some(member => accepts(actual, member))
+  }
+  if (expected.kind === 'capability') {
+    return (actual.kind === 'capability' && actual.declaration === expected.declaration)
+      || capabilityAccepts(actual, expected)
+  }
+  if (actual.kind === 'capability') {
+    return false
+  }
+  if (!quantityOwnersAgree(actual, expected, quantityOwner)) {
+    return false
+  }
+  if (!typesHaveCompatibleBase(actual, expected, accepts)) {
+    return false
+  }
+  if (actual.kind === 'list' && expected.kind === 'list' && !listTypeIsAssignable(actual, expected, accepts)) {
+    return false
+  }
+  if (
+    !constructsNominal && actual.kind === 'item' && expected.kind === 'item'
+    && !nominalOf(expected) && !itemContractHasSameFieldWitnesses(actual.item, expected.item)
+  ) {
+    return false
+  }
+  return nominalOf(expected)
+    ? actualSatisfiesExpectedNominal(actual, expected, constructsNominal, definitionOfReference)
+    : true
+}
+
+function commonType(
+  types: readonly TaoType[],
+  accepts: (actual: TaoType, expected: TaoType) => boolean,
+): TaoType | undefined {
+  if (types.length === 0 || types.some(isUnresolvedType)) {
+    return undefined
+  }
+  const candidates = types.filter(candidate => types.every(actual => accepts(actual, candidate)))
+  const best = candidates.reduce<TaoType | undefined>((best, candidate) => {
+    if (!best) {
+      return candidate
+    }
+    return commonTypeCandidateIsPreferred(candidate, best, accepts) ? candidate : best
+  }, undefined)
+  if (best) {
+    return best
+  }
+  // A value and none produce the optional of the same locally resolved common domain.
+  const present = types.filter(type => !isPrimitiveNamed(type, 'none'))
+  if (present.length === types.length || present.length === 0) {
+    return undefined
+  }
+  const common = commonType(present, accepts)
+  return common && { kind: 'union', members: [common, primitiveType('none')] }
+}
+
+function commonTypeCandidateIsPreferred(
+  candidate: TaoType,
+  current: TaoType,
+  accepts: (actual: TaoType, expected: TaoType) => boolean,
+): boolean {
   if (candidate.kind === 'list' && current.kind === 'list') {
     if (candidate.element && !current.element) {
       return true
@@ -1109,8 +1158,8 @@ function commonTypeCandidateIsPreferred(candidate: TaoType, current: TaoType): b
   }
 
   // One of them is the more specific exactly when assignability runs one way and not the other.
-  const currentAcceptsCandidate = Type.isAssignable(candidate, current)
-  const candidateAcceptsCurrent = Type.isAssignable(current, candidate)
+  const currentAcceptsCandidate = accepts(candidate, current)
+  const candidateAcceptsCurrent = accepts(current, candidate)
   if (currentAcceptsCandidate !== candidateAcceptsCurrent) {
     return currentAcceptsCandidate
   }
@@ -1201,41 +1250,53 @@ function containsNoneDomain(type: TaoType): boolean {
   return isPrimitiveNamed(type, 'none') || (type.kind === 'union' && type.members.some(containsNoneDomain))
 }
 
-function quantityOwnersAgree(actual: TaoType, expected: TaoType): boolean {
+function quantityOwnersAgree(
+  actual: TaoType,
+  expected: TaoType,
+  quantityOwner: (type: TaoType) => AST.TypeDeclaration | undefined = Type.quantityOwner,
+): boolean {
   if (actual.kind === 'union') {
-    return actual.members.every(member => quantityOwnersAgree(member, expected))
+    return actual.members.every(member => quantityOwnersAgree(member, expected, quantityOwner))
   }
   if (expected.kind === 'union') {
-    return expected.members.some(member => quantityOwnersAgree(actual, member))
+    return expected.members.some(member => quantityOwnersAgree(actual, member, quantityOwner))
   }
   if (actual.kind === 'list' && expected.kind === 'list') {
     return actual.element && expected.element
-      ? quantityOwnersAgree(actual.element, expected.element)
-      : !containsQuantityOwner(actual.element) && !containsQuantityOwner(expected.element)
+      ? quantityOwnersAgree(actual.element, expected.element, quantityOwner)
+      : !containsQuantityOwner(actual.element, quantityOwner) && !containsQuantityOwner(expected.element, quantityOwner)
   }
-  const actualOwner = Type.quantityOwner(actual)
-  const expectedOwner = Type.quantityOwner(expected)
+  const actualOwner = quantityOwner(actual)
+  const expectedOwner = quantityOwner(expected)
   return !actualOwner && !expectedOwner || actualOwner !== undefined && actualOwner === expectedOwner
 }
 
-function containsQuantityOwner(type: TaoType | undefined): boolean {
+function containsQuantityOwner(
+  type: TaoType | undefined,
+  quantityOwner: (type: TaoType) => AST.TypeDeclaration | undefined = Type.quantityOwner,
+): boolean {
   if (!type) {
     return false
   }
   if (type.kind === 'list') {
-    return containsQuantityOwner(type.element)
+    return containsQuantityOwner(type.element, quantityOwner)
   }
   if (type.kind === 'union') {
-    return type.members.some(containsQuantityOwner)
+    return type.members.some(member => containsQuantityOwner(member, quantityOwner))
   }
-  return Type.quantityOwner(type) !== undefined
+  return quantityOwner(type) !== undefined
 }
 
 function containsNumericStorage(type: TaoType): boolean {
   return type.kind === 'union' ? type.members.some(containsNumericStorage) : isPrimitiveNamed(type, 'numeric')
 }
 
-function actualSatisfiesExpectedNominal(actual: TaoType, expected: TaoType, constructsNominal: boolean): boolean {
+function actualSatisfiesExpectedNominal(
+  actual: TaoType,
+  expected: TaoType,
+  constructsNominal: boolean,
+  definitionOfReference: (reference: AST.NamedTypeReference) => AST.TypeDefinition | undefined,
+): boolean {
   const actualNominal = nominalOf(actual)
   const expectedNominal = nominalOf(expected)
   if (!actualNominal && expectedNominal) {
@@ -1249,7 +1310,7 @@ function actualSatisfiesExpectedNominal(actual: TaoType, expected: TaoType, cons
     return true
   }
   return actualNominal && expectedNominal
-    ? nominalChain(actualNominal).includes(expectedNominal)
+    ? nominalChain(actualNominal, definitionOfReference).includes(expectedNominal)
     : false
 }
 
@@ -1287,7 +1348,12 @@ function dataFieldNamed(entity: DataEntityDefinition, name: string): DataFieldDe
  * memberType resolves one member read on an already-resolved type, or nothing where the type has no
  * such member: a count, a unit reading, an entity field, or an item property.
  */
-function memberType(current: TaoType, member: string): TaoType | undefined {
+function memberType(
+  current: TaoType,
+  member: string,
+  propertyType: (property: AST.TypeProperty) => TaoType = Type.ofPropertyRead,
+  dataFieldType: (field: DataFieldDefinition) => TaoType = Type.dataFieldValueType,
+): TaoType | undefined {
   if (member === 'Count' && (current.kind === 'list' || isPrimitiveNamed(current, 'text'))) {
     return primitiveType('number')
   }
@@ -1308,17 +1374,196 @@ function memberType(current: TaoType, member: string): TaoType | undefined {
       return builtin
     }
     const field = dataFieldNamed(current.entity, member)
-    return field && Type.dataFieldValueType(field)
+    return field && dataFieldType(field)
   }
   const property = isItemKind(current) && current.item ? propertyNamed(current.item, member) : undefined
   return property
-    && (AST.isEntityDataField(property) ? Type.dataFieldValueType(property) : Type.ofPropertyRead(property))
+    && (AST.isEntityDataField(property) ? dataFieldType(property) : propertyType(property))
 }
 
 class TypeResolutionContext {
   /** resolving holds what this context is already resolving, so a declaration that reaches itself
    * resolves to unresolved instead of recursing forever. */
   private readonly resolving = new Set<AST.Node>()
+  private readonly comparing = new Map<AST.TypeDeclaration, Set<AST.TypeDeclaration>>()
+
+  constructor(
+    private readonly descriptors?: ReadonlyMap<
+      AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration,
+      AssociatedDescriptorMaterialization
+    >,
+  ) {}
+
+  compare(actual: TaoType, expected: TaoType): 'compatible' | 'incompatible' | 'pending' {
+    return this.compareDomains(actual, expected, true)
+  }
+
+  private compareDomains(
+    actual: TaoType,
+    expected: TaoType,
+    constructsNominal: boolean,
+  ): 'compatible' | 'incompatible' | 'pending' {
+    let pending = false
+    const accepted = admitsType(
+      actual,
+      expected,
+      constructsNominal,
+      (actual, expected) => {
+        const comparison = this.compareCapability(actual, expected)
+        pending ||= comparison === 'pending'
+        return comparison !== 'incompatible'
+      },
+      type => this.quantityOwner(type),
+      () => {
+        pending = true
+        return true
+      },
+      reference => this.definitionOfReference(reference),
+    )
+    return !accepted ? 'incompatible' : pending ? 'pending' : 'compatible'
+  }
+
+  private compareCapability(
+    actual: TaoType,
+    expected: Extract<TaoType, { kind: 'capability' }>,
+  ): 'compatible' | 'incompatible' | 'pending' {
+    const actualOwner = actual.kind === 'capability' ? actual.declaration : nominalOf(actual)
+    if (
+      !AST.isTypeDeclaration(actualOwner)
+      || (actual.kind !== 'capability' && !isPrimitiveNamed(actual, 'text'))
+    ) {
+      return 'incompatible'
+    }
+    const expectedOwners = this.comparing.get(actualOwner) ?? new Set<AST.TypeDeclaration>()
+    if (expectedOwners.has(expected.declaration)) {
+      return 'pending'
+    }
+    this.comparing.set(actualOwner, expectedOwners)
+    expectedOwners.add(expected.declaration)
+    try {
+      const requirements = capabilityRequirements(expected.declaration)
+      if (new Set(requirements.map(method => method.name)).size !== requirements.length) {
+        return 'incompatible'
+      }
+      let pending = false
+      for (const requirement of requirements) {
+        const implementation = actual.kind === 'capability'
+          ? capabilityRequirements(actual.declaration).find(method => method.name === requirement.name)
+          : Type.associatedMethodDeclaration(
+            actual,
+            requirement.name,
+            reference => this.definitionOfReference(reference),
+          )
+            ?.declaration
+        if (!implementation) {
+          return 'incompatible'
+        }
+        const required = this.descriptors?.get(requirement)
+        const supplied = this.descriptors?.get(implementation)
+        if (!required || !supplied || required.kind === 'pending' || supplied.kind === 'pending') {
+          pending = true
+          continue
+        }
+        if (
+          [...required.descriptor.signature.inputs, ...supplied.descriptor.signature.inputs]
+            .some(input => typeHasUnresolvedDomain(input.type))
+          || typeHasUnresolvedDomain(required.descriptor.result)
+          || typeHasUnresolvedDomain(supplied.descriptor.result)
+        ) {
+          pending = true
+          continue
+        }
+        let inputPending = false
+        const comparison = compareCallableSignatures(
+          supplied.descriptor.signature,
+          required.descriptor.signature,
+          (actual, expected) => {
+            const result = this.compareDomains(actual, expected, false)
+            inputPending ||= result === 'pending'
+            return result !== 'incompatible'
+          },
+        )
+        // A source body's inferred failures are checked in final admission. Projection instead
+        // retains the independent declared requirement bound as part of substitution.
+        const diagnostics = comparison.diagnostics.filter(diagnostic =>
+          actual.kind === 'capability' || diagnostic.kind !== 'failure-bound'
+        )
+        if (diagnostics.some(diagnostic => diagnostic.kind === 'failure-bound')) {
+          return 'incompatible'
+        }
+        if (diagnostics.some(diagnostic => diagnostic.kind !== 'unresolved-input')) {
+          return inputPending ? 'pending' : 'incompatible'
+        }
+        const result = this.compareDomains(supplied.descriptor.result, required.descriptor.result, false)
+        if (result === 'incompatible') {
+          return 'incompatible'
+        }
+        pending ||= inputPending || diagnostics.length > 0 || result === 'pending'
+      }
+      return pending ? 'pending' : 'compatible'
+    } finally {
+      expectedOwners.delete(expected.declaration)
+      if (expectedOwners.size === 0) {
+        this.comparing.delete(actualOwner)
+      }
+    }
+  }
+
+  private commonType(types: readonly TaoType[]): TaoType | undefined {
+    if (!this.descriptors) {
+      return commonType(types, Type.isAssignable)
+    }
+    let pending = types.some(typeHasUnresolvedDomain)
+    const common = commonType(types, (actual, expected) => {
+      const comparison = this.compare(actual, expected)
+      pending ||= comparison === 'pending'
+      return comparison === 'compatible'
+    })
+    return pending ? unresolvedType() : common
+  }
+
+  private quantityOwner(type: TaoType): AST.TypeDeclaration | undefined {
+    if (!isPrimitiveNamed(type, 'numeric')) {
+      return undefined
+    }
+    const nominal = nominalOf(type)
+    if (!nominal) {
+      return undefined
+    }
+    if (AST.isTypeDeclaration(nominal)) {
+      const alias = nominal.aliasTarget?.member.ref
+      return AST.isTypeDeclaration(alias)
+        ? this.quantityOwner(this.ofDefinition(alias))
+        : NumericUnits.declarationPlan(nominal)?.owner
+    }
+    const parent = parentTypeDefinition(nominal, reference => this.definitionOfReference(reference))
+    if (parent) {
+      return this.quantityOwner(this.ofDefinition(parent))
+    }
+    return AST.isTypeProperty(nominal) && nominal.value
+      ? this.quantityOwner(this.ofExpression(nominal.value))
+      : undefined
+  }
+
+  receiverType(receiver: AssociatedMethodReceiver): TaoType {
+    return Switch.kind(receiver, {
+      expression: receiver => this.ofExpression(receiver.expression),
+      'member-path': receiver =>
+        this.atMemberPath(this.ofContextualValue(receiver.site.target.ref, receiver.site), receiver.members),
+    })
+  }
+
+  definitionOfReference(reference: AST.NamedTypeReference): AST.TypeDefinition | undefined {
+    const root = Type.rootOfReference(reference, reference =>
+      itemShape(
+        AST.isConstructablePrimitiveTypeReference(reference)
+          ? primitiveType(reference.primitive)
+          : this.ofReference(reference),
+      ))
+    return root.definition
+      ? definitionAtMemberPath(root.definition, root.remainingMembers, definition => this.ofDefinition(definition))
+      : undefined
+  }
 
   /** withoutCycles resolves one declaration, yielding unresolved when it is already being resolved. */
   private withoutCycles(declaration: AST.Node, resolve: () => TaoType): TaoType {
@@ -1349,7 +1594,7 @@ class TypeResolutionContext {
         if (entity) {
           return { kind: 'entity', entity }
         }
-        const definition = Type.definitionOfReference(reference)
+        const definition = this.definitionOfReference(reference)
         return definition ? this.ofDefinition(definition) : unresolvedType()
       },
       PrimitiveTypeReference: reference => primitiveType(reference.primitive),
@@ -1366,7 +1611,30 @@ class TypeResolutionContext {
       : declared
   }
 
-  ofExpression(expression: AST.Expression): TaoType {
+  ofConfiguredValue(value: AST.ConfiguredValue): TaoType {
+    const declaration = value.type.ref
+    const typeOfParameterizedDeclaration = (declaration: AST.ParameterizedDeclaration): TaoType => {
+      const [member, ...remainingMembers] = value.members ?? []
+      const parameterType = member ? parameterTypeDeclarationNamed(declaration, member) : undefined
+      return parameterType
+        ? this.atMemberPath(this.ofDefinition(parameterType), remainingMembers)
+        : unresolvedType()
+    }
+    return Switch.typeMaybe<typeof declaration, TaoType>(declaration, {
+      TypeDeclaration: declaration => this.atMemberPath(this.ofDefinition(declaration), value.members ?? []),
+      ActionDeclaration: typeOfParameterizedDeclaration,
+      CommandDeclaration: typeOfParameterizedDeclaration,
+      FunctionDeclaration: typeOfParameterizedDeclaration,
+      PhraseDeclaration: typeOfParameterizedDeclaration,
+      ViewDeclaration: typeOfParameterizedDeclaration,
+      undefined: unresolvedType,
+    })
+  }
+
+  ofExpression(expression: AST.Expression | AST.ConfiguredValue): TaoType {
+    if (AST.isConfiguredValue(expression)) {
+      return this.ofConfiguredValue(expression)
+    }
     return Switch.type(expression, {
       ActionExpression: () => actionType([]),
       BinaryExpression: binary => this.binaryExpressionType(binary),
@@ -1376,8 +1644,10 @@ class TypeResolutionContext {
       PostfixMemberAccess: access => this.postfixMemberAccessType(access),
       BooleanLiteral: () => primitiveType('boolean'),
       CaseTestExpression: () => primitiveType('boolean'),
-      ConfigurationConstructor: value => Type.ofConfiguredValue(value),
-      InferredConfigurationConstructor: value => Type.ofInferredConfiguration(value),
+      InferredConfigurationConstructor: value => {
+        const declaration = Type.inferredConfigurationDeclaration(value)
+        return declaration ? this.ofDefinition(declaration) : unresolvedType()
+      },
       PrimitiveConfigurationConstructor: value => primitiveType(value.primitive),
       CopyExpression: copy => copy.type ? this.ofReference(copy.type) : this.ofExpression(copy.value),
       RefinementExpression: reference => {
@@ -1460,19 +1730,35 @@ class TypeResolutionContext {
   private whenExpressionType(expression: AST.WhenExpression): TaoType {
     const outcomes = AST.whenExpressionOutcomes(expression)
     const types = outcomes.values.map(value => this.ofExpression(value))
-    return Type.commonType(outcomes.total ? types : [...types, primitiveType('none')]) ?? unresolvedType()
+    return this.commonType(outcomes.total ? types : [...types, primitiveType('none')]) ?? unresolvedType()
   }
 
   private listLiteralType(list: AST.ListLiteral): TaoType {
     if (list.elements.length === 0) {
       return { kind: 'list' }
     }
-    const element = Type.commonType(list.elements.map(candidate => this.ofExpression(candidate)))
+    const element = this.commonType(list.elements.map(candidate => this.ofExpression(candidate)))
     return element ? { kind: 'list', element } : { kind: 'list' }
   }
 
   ofProperty(property: AST.TypeProperty): TaoType {
     return this.ofDefinition(property)
+  }
+
+  private ofPropertyRead(property: AST.TypeProperty): TaoType {
+    const declared = this.ofProperty(property)
+    return property.optional ? { kind: 'union', members: [declared, primitiveType('none')] } : declared
+  }
+
+  private dataFieldValueType(field: DataFieldDefinition): TaoType {
+    const relation = Type.dataFieldRelationEntity(field)
+    const definition = !field.primitive && !field.boolean && !relation
+      ? visibleTypeDeclaration(field, field.typeName ?? field.name)
+      : undefined
+    const declared = definition ? this.ofDefinition(definition) : Type.dataFieldType(field)
+    return field.optional && declared.kind !== 'list'
+      ? { kind: 'union', members: [declared, primitiveType('none')] }
+      : declared
   }
 
   ofMemberAccess(expression: AST.MemberAccessExpression): TaoType {
@@ -1504,10 +1790,19 @@ class TypeResolutionContext {
       AliasDeclaration: alias => this.aliasDeclarationType(alias),
       AppDeclaration: declaration => declaration.value ? this.ofExpression(declaration.value) : primitiveType('app'),
       ActionResultStatement: statement => {
-        const action = resolveActionInvocation(statement.invocation).action
-        return AST.isActionDeclaration(action) && action.returnType
-          ? Type.ofActionResult(action)
-          : unresolvedType()
+        const action = this.descriptors
+          ? resolveActionTarget(statement.invocation.action, expression => this.ofExpression(expression))
+          : undefined
+        const declaration = action
+          ? action.kind === 'named' ? action.action : undefined
+          : resolveActionInvocation(statement.invocation).action
+        if (!AST.isActionDeclaration(declaration) || !declaration.returnType) {
+          return unresolvedType()
+        }
+        const declared = this.ofTypeExpression(declaration.returnType)
+        return declaration.optionalResult
+          ? { kind: 'union', members: [declared, primitiveType('none')] }
+          : declared
       },
       AskStatement: ask =>
         ask.view.ref?.response?.ref
@@ -1582,21 +1877,21 @@ class TypeResolutionContext {
     if (!target) {
       return unresolvedType()
     }
-    const receiver = target.receiver.kind === 'expression'
-      ? this.ofExpression(target.receiver.expression)
-      : this.atMemberPath(
-        this.ofContextualValue(target.receiver.site.target.ref, target.receiver.site),
-        target.receiver.members,
-      )
+    const receiver = this.receiverType(target.receiver)
     const nominal = nominalOf(receiver)
     const declarations = receiver.kind === 'capability'
       ? capabilityRequirements(receiver.declaration)
       : nominal
-      ? nominalChain(nominal).flatMap(owner => AST.isTypeDeclaration(owner) ? ownAssociatedMethods(owner) : [])
+      ? nominalChain(nominal, reference => this.definitionOfReference(reference))
+        .flatMap(owner => AST.isTypeDeclaration(owner) ? ownAssociatedMethods(owner) : [])
       : []
     const declaration = declarations.find(method => method.name === target.name)
     if (!declaration) {
       return unresolvedType()
+    }
+    if (this.descriptors) {
+      const contract = this.descriptors.get(declaration)
+      return contract?.kind === 'ready' ? contract.descriptor.result : unresolvedType()
     }
     if (hasAssociatedEffects()) {
       return associatedCallableDescriptor(declaration)?.result ?? unresolvedType()
@@ -1614,19 +1909,22 @@ class TypeResolutionContext {
       const returnTypes = AST.returnStatementsOf(declaration).map(statement => this.ofExpression(statement.value))
       // Contract discovery cannot consult effect-dependent capability admission. Identical
       // carrier contracts already agree; mixed structural contracts remain pending.
-      if (returnTypes.some(typeContainsCapability)) {
+      if (!this.descriptors && returnTypes.some(typeContainsCapability)) {
         const first = returnTypes[0]
         const identity = first && Type.identityKey(first)
         return first && identity && returnTypes.every(type => Type.identityKey(type) === identity)
           ? first
           : unresolvedType()
       }
-      return Type.commonType(returnTypes) ?? unresolvedType()
+      return this.commonType(returnTypes) ?? unresolvedType()
     })
   }
 
   private queryDeclarationType(query: QueryDefinition): TaoType {
-    const entity = Type.queryEntity(query)
+    const source = query.source ? this.ofMemberAccess(query.source) : undefined
+    const entity = source
+      ? source.kind === 'list' && source.element?.kind === 'entity' ? source.element.entity : undefined
+      : Type.queryEntity(query)
     return entity ? { kind: 'list', element: { kind: 'entity', entity } } : { kind: 'list' }
   }
 
@@ -1639,10 +1937,7 @@ class TypeResolutionContext {
     if (alias.type) {
       return this.ofReference(alias.type)
     }
-    return this.withoutCycles(alias, () =>
-      AST.isConfiguredValue(alias.value)
-        ? Type.ofConfiguredValue(alias.value)
-        : this.ofExpression(alias.value))
+    return this.withoutCycles(alias, () => this.ofExpression(alias.value))
   }
 
   private stateDeclarationType(state: AST.StateDeclaration): TaoType {
@@ -1655,7 +1950,12 @@ class TypeResolutionContext {
   atMemberPath(root: TaoType, members: readonly string[]): TaoType {
     let current = root
     for (const member of members) {
-      const next = memberType(current, member)
+      const next = memberType(
+        current,
+        member,
+        property => this.ofPropertyRead(property),
+        field => this.dataFieldValueType(field),
+      )
       if (!next) {
         return unresolvedType()
       }
@@ -1727,12 +2027,6 @@ class TypeResolutionContext {
   private derivedType(derived: AST.DerivedTypeExpression): TaoType {
     const base = this.ofReference(derived.base)
     const baseShape = slotShape(base)
-    if (base.kind !== 'item' && base.kind !== 'primitive') {
-      return base
-    }
-    if (base.kind === 'primitive' && base.primitive === 'action') {
-      return base
-    }
     const properties = [...(baseShape?.properties ?? [])]
     for (const property of derived.slots.properties) {
       const existing = properties.findIndex(candidate => candidate.name === property.name)
@@ -1742,9 +2036,16 @@ class TypeResolutionContext {
         properties[existing] = property
       }
     }
-    return base.kind === 'item'
-      ? { ...base, item: { properties } }
-      : { ...base, slots: { properties } }
+    return Switch.kind(base, {
+      item: base => ({ ...base, item: { properties } }),
+      primitive: base => base.primitive === 'action' ? base : { ...base, slots: { properties } },
+      list: base => base,
+      entity: base => base,
+      enum: base => base,
+      capability: base => base,
+      union: base => base,
+      unresolved: base => base,
+    })
   }
 
   private projectedItemType(projected: AST.ProjectedItemTypeExpression): TaoType {
@@ -1788,16 +2089,29 @@ function unresolvedType(): TaoType {
 }
 
 function typeContainsCapability(type: TaoType): boolean {
-  if (type.kind === 'capability') {
-    return true
-  }
-  if (type.kind === 'union') {
-    return type.members.some(typeContainsCapability)
-  }
-  if (type.kind === 'list') {
-    return type.element !== undefined && typeContainsCapability(type.element)
-  }
-  return isActionType(type) && type.parameters.some(parameter => typeContainsCapability(parameter.type))
+  return Switch.kind(type, {
+    capability: () => true,
+    union: type => type.members.some(typeContainsCapability),
+    list: type => type.element !== undefined && typeContainsCapability(type.element),
+    primitive: type => isActionType(type) && type.parameters.some(parameter => typeContainsCapability(parameter.type)),
+    item: () => false,
+    entity: () => false,
+    enum: () => false,
+    unresolved: () => false,
+  })
+}
+
+function typeHasUnresolvedDomain(type: TaoType): boolean {
+  return Switch.kind(type, {
+    unresolved: () => true,
+    union: type => type.members.some(typeHasUnresolvedDomain),
+    list: type => type.element !== undefined && typeHasUnresolvedDomain(type.element),
+    primitive: type => isActionType(type) && type.parameters.some(parameter => typeHasUnresolvedDomain(parameter.type)),
+    item: () => false,
+    entity: () => false,
+    enum: () => false,
+    capability: () => false,
+  })
 }
 
 function withNominal(type: TaoType, nominal: AST.TypeDefinition): TaoType {
@@ -1818,40 +2132,50 @@ function canCarryNominal(
   return isPrimitiveKind(type) || type.kind === 'list' || isItemKind(type)
 }
 
-function nominalChain(definition: AST.TypeDefinition): AST.TypeDefinition[] {
-  return chainFrom(definition, parentTypeDefinition)
+function nominalChain(
+  definition: AST.TypeDefinition,
+  definitionOfReference: (reference: AST.NamedTypeReference) => AST.TypeDefinition | undefined =
+    Type.definitionOfReference,
+): AST.TypeDefinition[] {
+  return chainFrom(definition, definition => parentTypeDefinition(definition, definitionOfReference))
 }
 
-function parentTypeDefinition(definition: AST.TypeDefinition): AST.TypeDefinition | undefined {
+function parentTypeDefinition(
+  definition: AST.TypeDefinition,
+  definitionOfReference: (reference: AST.NamedTypeReference) => AST.TypeDefinition | undefined =
+    Type.definitionOfReference,
+): AST.TypeDefinition | undefined {
   return Switch.type(definition, {
-    ParameterTypeDeclaration: declaration => parentDefinitionOfExpression(declaration.type),
+    ParameterTypeDeclaration: declaration => parentDefinitionOfExpression(declaration.type, definitionOfReference),
     TypeDeclaration: declaration => {
       const target = declaration.aliasTarget?.member.ref
       return AST.isTypeDeclaration(target)
         ? target
         : declaration.type
-        ? parentDefinitionOfExpression(declaration.type)
+        ? parentDefinitionOfExpression(declaration.type, definitionOfReference)
         : undefined
     },
     TypeProperty: property =>
       property.type
-        ? namedParentDefinition(property.type)
+        ? namedParentDefinition(property.type, definitionOfReference)
         : Type.shorthandPropertyDefinition(property),
   })
 }
 
 function parentDefinitionOfExpression(
   type: AST.TypeExpression | AST.CapabilityTypeExpression,
+  definitionOfReference: (reference: AST.NamedTypeReference) => AST.TypeDefinition | undefined,
 ): AST.TypeDefinition | undefined {
   return AST.isDerivedTypeExpression(type)
-    ? namedParentDefinition(type.base)
-    : namedParentDefinition(type)
+    ? namedParentDefinition(type.base, definitionOfReference)
+    : namedParentDefinition(type, definitionOfReference)
 }
 
 function namedParentDefinition(
   type: AST.TypeExpression | AST.CapabilityTypeExpression,
+  definitionOfReference: (reference: AST.NamedTypeReference) => AST.TypeDefinition | undefined,
 ): AST.TypeDefinition | undefined {
-  return AST.isNamedTypeReference(type) ? Type.definitionOfReference(type) : undefined
+  return AST.isNamedTypeReference(type) ? definitionOfReference(type) : undefined
 }
 
 function visibleTypeDeclaration(node: AST.Node, name: string): AST.TypeDeclaration | undefined {
@@ -1882,10 +2206,11 @@ function owningParameterizedDeclaration(
 function definitionAtMemberPath(
   root: AST.TypeDefinition,
   members: readonly string[],
+  ofDefinition: (definition: AST.TypeDefinition) => TaoType = Type.ofDefinition,
 ): AST.TypeDefinition | undefined {
   let current: AST.TypeDefinition | undefined = root
   for (const member of members) {
-    const itemType = itemShape(Type.ofDefinition(current))
+    const itemType = itemShape(ofDefinition(current))
     if (!itemType) {
       return undefined
     }
@@ -1904,26 +2229,36 @@ function parameterTypeDeclarationNamed(
   return AST.parametersOf(declaration).find(parameter => parameter.inlineType?.name === name)?.inlineType
 }
 
-function itemConstructorProperty(reference: AST.NamedTypeReference, name: string): AST.TypeProperty | undefined {
-  const itemType = owningItemLiteralType(reference)
+function itemConstructorProperty(
+  reference: AST.NamedTypeReference,
+  name: string,
+  constructorItemType: (reference: AnyTypeReference) => ItemShape | undefined,
+): AST.TypeProperty | undefined {
+  const itemType = owningItemLiteralType(reference, constructorItemType)
   return itemType ? typePropertyNamed(itemType, name) : undefined
 }
 
-function owningItemLiteralType(reference: AST.NamedTypeReference): ItemShape | undefined {
+function owningItemLiteralType(
+  reference: AST.NamedTypeReference,
+  constructorItemType: (reference: AnyTypeReference) => ItemShape | undefined,
+): ItemShape | undefined {
   let current: AST.Node | undefined = reference.$container
   while (current) {
     if (AST.isItemLiteral(current)) {
-      return itemLiteralType(current)
+      return itemLiteralType(current, constructorItemType)
     }
     current = current.$container
   }
   return undefined
 }
 
-function itemLiteralType(item: AST.ItemLiteral): ItemShape | undefined {
+function itemLiteralType(
+  item: AST.ItemLiteral,
+  constructorItemType: (reference: AnyTypeReference) => ItemShape | undefined,
+): ItemShape | undefined {
   const parent = item.$container
   if (AST.isTypedConstructor(parent)) {
-    return Type.constructorReferenceItemType(parent.type)
+    return constructorItemType(parent.type)
   }
   return undefined
 }

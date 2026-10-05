@@ -2,12 +2,15 @@ import { AST } from '@parser'
 import { Assert } from '@shared'
 import {
   type ArgumentBindingDiagnostic,
+  type ArgumentBindingMetadata,
   type RenderInvocationPair,
   resolveParameterArgumentBindings,
 } from './argument-bindings'
 import {
   type AssociatedCallableDescriptor,
+  type AssociatedDescriptorMaterialization,
   associatedMethodCallTarget,
+  type AssociatedMethodReceiver,
   capabilityRequirements,
 } from './associated-methods'
 import { type TaoType, Type } from './Type'
@@ -16,6 +19,7 @@ import { type TaoType, Type } from './Type'
 export type ResolvedAssociatedMethodInvocation = {
   invocation: AST.MethodCallExpression
   receiver?: TaoType
+  declaration?: AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration
   descriptor?: AssociatedCallableDescriptor
   pairs: RenderInvocationPair[]
   diagnostics: ArgumentBindingDiagnostic[]
@@ -25,12 +29,25 @@ export type ResolvedAssociatedMethodInvocation = {
 /** Resolve a real postfix call without fabricating a receiver expression or rebinding its root. */
 export function resolveAssociatedMethodInvocation(
   invocation: AST.MethodCallExpression,
+  options: {
+    receiverType?(receiver: AssociatedMethodReceiver): TaoType
+    descriptor?(
+      declaration: AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration,
+    ): AssociatedDescriptorMaterialization | undefined
+    methodDeclaration?(
+      receiver: TaoType,
+      name: string,
+    ): Readonly<{ declaration: AST.AssociatedFunctionDeclaration; owner: AST.TypeDeclaration }> | undefined
+    bindingMetadata?: ArgumentBindingMetadata
+  } = {},
 ): ResolvedAssociatedMethodInvocation {
   const target = associatedMethodCallTarget(invocation)
   if (!target) {
     return { invocation, pairs: [], diagnostics: [], problem: 'unsupported-callee' }
   }
-  const receiver = target.receiver.kind === 'expression'
+  const receiver = options.receiverType
+    ? options.receiverType(target.receiver)
+    : target.receiver.kind === 'expression'
     ? Type.ofExpression(target.receiver.expression)
     : Type.atMemberPath(Type.ofReferenceRoot(target.receiver.site), target.receiver.members)
   if (receiver.kind === 'unresolved') {
@@ -38,7 +55,19 @@ export function resolveAssociatedMethodInvocation(
   }
 
   let descriptor: AssociatedCallableDescriptor | undefined
-  if (receiver.kind === 'capability') {
+  if (options.descriptor) {
+    const declaration = receiver.kind === 'capability'
+      ? capabilityRequirements(receiver.declaration).find(requirement => requirement.name === target.name)
+      : (options.methodDeclaration ?? Type.associatedMethodDeclaration)(receiver, target.name)?.declaration
+    if (!declaration) {
+      return { invocation, receiver, pairs: [], diagnostics: [], problem: 'unknown-method' }
+    }
+    const contract = options.descriptor(declaration)
+    if (!contract || contract.kind === 'pending') {
+      return { invocation, receiver, declaration, pairs: [], diagnostics: [], problem: 'pending-contract' }
+    }
+    descriptor = contract.descriptor
+  } else if (receiver.kind === 'capability') {
     const requirements = capabilityRequirements(receiver.declaration)
     const index = requirements.findIndex(requirement => requirement.name === target.name)
     if (index === -1) {
@@ -47,7 +76,14 @@ export function resolveAssociatedMethodInvocation(
     const contract = Type.capabilityMethods(receiver)[index]
     Assert.defined(contract, 'a materialized contract for every capability requirement')
     if (contract.kind === 'pending') {
-      return { invocation, receiver, pairs: [], diagnostics: [], problem: 'pending-contract' }
+      return {
+        invocation,
+        receiver,
+        declaration: requirements[index],
+        pairs: [],
+        diagnostics: [],
+        problem: 'pending-contract',
+      }
     }
     descriptor = contract.descriptor
   } else {
@@ -60,6 +96,7 @@ export function resolveAssociatedMethodInvocation(
       return {
         invocation,
         receiver,
+        ...(declaration ? { declaration: declaration.declaration } : {}),
         pairs: [],
         diagnostics: [],
         problem: declaration ? 'pending-contract' : 'unknown-method',
@@ -77,12 +114,20 @@ export function resolveAssociatedMethodInvocation(
     descriptor.declaration.parameterList.parameters,
     AST.argumentsOf(invocation),
     {
+      ...options.bindingMetadata,
       parameterType: parameter => inputOf(parameter).type,
-      parameterName: Type.parameterName,
+      parameterName: options.bindingMetadata?.parameterName ?? Type.parameterName,
       parameterOmissible: parameter => inputOf(parameter).omissible,
-      argumentType: Type.ofArgument,
-      accepts: Type.isAssignable,
+      argumentType: options.bindingMetadata?.argumentType ?? Type.ofArgument,
+      accepts: options.bindingMetadata?.accepts ?? Type.isAssignable,
     },
   )
-  return { invocation, receiver, descriptor, pairs: bindings.pairs, diagnostics: bindings.diagnostics }
+  return {
+    invocation,
+    receiver,
+    declaration: descriptor.declaration,
+    descriptor,
+    pairs: bindings.pairs,
+    diagnostics: bindings.diagnostics,
+  }
 }
