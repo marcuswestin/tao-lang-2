@@ -10,3 +10,15 @@
 - **Dependencies:** An authorized host comparison; permission-policy changes require their own named approval if needed.
 - **Acceptance:** The same focused suite passes in its intended verification environment, or a genuine capability failure is reported before the suite with a tested remediation. Port-occupied coverage remains meaningful; ordinary verification cannot claim success while these tests are unrun.
 - **Source:** Modern Photos and Files shared-runtime iteration and isolated repeat.
+
+## Managed iteration reproduction — October 5, 2026
+
+The integrated native bridge tree `7e964b4` reproduced this failure in
+`verify-changed/2026-10-05T12-21-45-355Z-66104-0f0ecda6`: account-server recorded
+38 `EADDRINUSE` reports from loopback port-zero startup, and Studio/dev-cli recorded
+the same bind error alongside explicit home-cache `EPERM` refusals. This does not
+establish an occupied fixed port or a native-inspection deadlock. Three independent
+outdated fixture expectations were corrected separately; none changes the bind
+policy, server coverage or timeout limits. The managed lane is not green. Compare
+against the task's named host verification receipt before attributing remaining
+failures to source code; no new host operation or permission expansion is included.

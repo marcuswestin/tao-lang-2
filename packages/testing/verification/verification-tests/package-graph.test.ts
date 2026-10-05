@@ -106,6 +106,7 @@ Describe('workspace package graph', () => {
     Expect(graph.imports.get('language/parser')!.has('compiler')).toBe(true)
     Expect(graph.imports.get('compiler')!.has('apps/runtime')).toBe(true)
     Expect([...graph.imports.get('ides/ide-extension')!].sort()).toEqual([
+      'apps/native-bindings',
       'compiler',
       'language/formatter',
       'language/parser',
