@@ -22,8 +22,9 @@ selection, callable results and persisted snapshots. Focused accessor, quantity 
 pass together; combined proof for this follow-up remains pending.
 Checked native factory publication, capabilities, full slots, units, cleanup lowering and app
 adapter/list graduation remain. No language stream is complete.
-Numeric/unit construction, the parameter-array signature adapter, the isolated generated native
-unit leaf and existing-block cleanup compiler lowering are active in separate worktrees.
+The parameter-array signature adapter is reviewed and integrated at `0ac15b312`.
+Numeric/unit construction, the isolated capability carrier runtime, generated native unit leaf
+and existing-block cleanup compiler lowering progress in separate worktrees.
 The coordinator retains native factory
 publication, shared compiler callers, app graduation and combined proof; slot and associated
 capability frontend work waits for numeric grammar/type ownership to return.

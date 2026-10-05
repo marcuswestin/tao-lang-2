@@ -97,16 +97,25 @@ The coordinator retains TR.ts and native publication; existing cleanup facade me
 
 Current exclusive assignments:
 
-- A owns the parameter-array overload in callable-signatures.ts and its existing test, preserving
-  the ordinary binder. Associated capability/method/converter source remains withheld.
+- A's reviewed parameter-array adapter is integrated at `0ac15b312`; those paths have returned.
+  A now owns only new TR-capabilities.ts and TR-capabilities.test.ts for the reviewed carrier runtime
+  packet: attach, reproject and method selection preserve the original receiver and live reads through
+  ordinary Function returns. Inject the existing Function factory and register complete outputs;
+  retain minimally evaluable inputs without eager probes or a public nominal registry. This isolated
+  runtime leaf does not admit source-level structural dispatch before purity/type/frontend proof.
+  Associated capability/method/converter frontend source remains withheld.
 - C owns the complete numeric/unit construction vertical: its focused feature modules/tests,
   numeric grammar integration and parser AST/scoping, Type.ts, the AST facade, registrations,
   NumericUnitsCompiler and ExpressionsCompiler. Its bounded validator adapters also own
   types-validator.ts and configured-item-validator.ts for numeric unit bodies/construction,
-  preserving unrelated item construction and upward-only invocation admission. No other manager
+  DeclarationOrder.ts for unit-construction traversal, InjectionsCompiler.ts and
+  runtime-type-compiler.ts for numeric backing cases, preserving unrelated item construction and
+  upward-only invocation admission. The coordinator adds branded owner publication after return.
+  No other manager
   writes these shared seams.
 - D owns existing-block cleanup lowering in ActionsCompiler.ts, action-control-flow.ts and a new
-  defer-actions compiler test. Defer grammar, then/result-token and purity extensions remain held.
+  defer-actions compiler test, plus the bounded effect-outcomes.test.ts expectation amendment for
+  the lexical wrapper. Defer grammar, then/result-token and purity extensions remain held.
 - B's renderer paths have returned; slot frontend and foreign adapters remain held. Its reviewed
   native namespace investigation releases only new quantity-native-module.ts and its compiler
   test. The isolated leaf supplies constructor-only types.Owner.Unit methods and allocated
