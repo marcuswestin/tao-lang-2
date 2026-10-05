@@ -5,4 +5,8 @@ plugins {
 
 android {
   namespace "tao.runtime"
+
+  defaultConfig {
+    versionName "0.0.0"
+  }
 }
