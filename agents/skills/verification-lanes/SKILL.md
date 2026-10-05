@@ -100,11 +100,8 @@ job is the single verdict. It proves the portable gates only — never the host-
 annotations; a failed partition uploads its logs as the `verify-partition-<k>` artifact. Reproduce
 with `./agent test-file` locally, push the fix, and read the next verdict.
 
-A change meant to make CI faster carries its own measurement. After its run, `./agent ci-timings`
-prints a step-by-step Markdown table: by default it compares this branch's newest `Verify` run with
-`main`'s newest green push, and `--run <after> --compare <before>` names both runs. A cache only
-pays off on the run after the one that saved it, so measure a rerun of the same commit. Put the
-table in the pull request description or the merge message.
+A change meant to make CI faster carries its own `./agent ci-timings` before-and-after
+(`references/ci-speed.md`).
 
 An authorized landing takes one of two routes, both squash-merging the reviewed merge message and
 archiving the branch at `merged/<name>`:
@@ -114,10 +111,9 @@ archiving the branch at `merged/<name>`:
   review the message at `.artifacts/merge/<branch>.msg`, then run
   `./agent unsandboxed open-pr --auto-merge`: it pushes, makes the message the pull request's title
   and description, turns on auto-merge with the message verbatim as the squash commit's (GitHub's
-  default appends ` (#N)` and wraps bullets at 72 columns), and follows the checks. Always pass
-  `--auto-merge` on a run meant to land, and never on one that is not — to run CI, to put a change
-  up for review, or to open a pull request for any other reason: without it `open-pr` pushes and
-  follows the checks but turns any auto-merge off, so nothing lands. It refuses a branch that already merged. When they pass, run `./agent unsandboxed merge-pr`: it
+  default appends ` (#N)` and wraps bullets at 72 columns), and follows the checks. Pass
+  `--auto-merge` exactly when the run is meant to land, never to only run CI, request review, or
+  for any other reason: without it `open-pr` turns auto-merge off, so nothing lands. It refuses a branch that already merged. When they pass, run `./agent unsandboxed merge-pr`: it
   confirms `Verify` passed on the pushed head, squash-merges unless auto-merge already did, archives
   `merged/<name>`, and reports the merge. GitHub deletes the branch, and the archive workflow writes the
   same `merged/<name>` for a pull request merged any other way. To change the message, edit it and run
