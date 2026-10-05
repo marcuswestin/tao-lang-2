@@ -707,7 +707,7 @@ class TR {
   ): Promise<TR.Value<ResultT>> {
     const result = await action.evaluate().jsValue.invokeJoinedResult(...args)
     return isRuntimeValue(result)
-      ? completeRuntimeValue(result as TR.Evaluable<ResultT>)
+      ? completeRuntimeValue(result as TaoRuntimeValueInput<ResultT>)
       : TR.Value(result as ResultT)
   }
 
