@@ -60,6 +60,18 @@ export function readContextDeclaration(node: AST.Node): AST.TypeDeclaration | un
   return contract?.statements.filter(AST.isTypeDeclaration).find(declaration => declaration.name === 'ReadContext')
 }
 
+/** actionFailureContextDeclaration resolves the actual intrinsic canonical action payload contract. */
+export function actionFailureContextDeclaration(node: AST.Node): AST.TypeDeclaration | undefined {
+  const root = findRoot(node)
+  if (!AST.isTaoFile(root)) {
+    return undefined
+  }
+  const contract = (visibleWorkspaceFiles.get(root) ?? []).find(file =>
+    AST.getDocument(file).uri.path.endsWith('/@tao/actions/ActionFailureContext.tao')
+  )
+  return contract?.statements.filter(AST.isTypeDeclaration).find(declaration => declaration.name === 'ActionFailureContext')
+}
+
 /**
  * isTestSidecarPath says whether a path names a `.test.tao` sidecar. An app file's graph never holds
  * one: the loader leaves them out of a folder's siblings, and folder scope leaves them out too, so

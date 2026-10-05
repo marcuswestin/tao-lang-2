@@ -1,0 +1,5 @@
+// Canonical action outcome bindings carry a safe display message.
+public
+type ActionFailureContext is {
+   Message text
+}
