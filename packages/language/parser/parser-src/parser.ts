@@ -692,7 +692,7 @@ class NumericContinuationParser extends Langium.LangiumParser {
 
   override alternatives(...[index, choices]: Parameters<GrammarParser['alternatives']>): void {
     const name = this.frames[this.frames.length - 1]?.name
-    if (name === 'PrimaryExpression') {
+    if (name === 'PrimaryExpression' || name === 'DeclarationSlotPrimaryExpression') {
       const alternative = this.continuationRule(name)?.definition
       if (Langium.GrammarAST.isAlternatives(alternative)) {
         const constructor = alternative.elements.findIndex(element =>
@@ -700,7 +700,12 @@ class NumericContinuationParser extends Langium.LangiumParser {
         )
         choices = choices.map((choice, position) =>
           position === constructor
-            ? { ...choice, GATE: () => (!choice.GATE || choice.GATE()) && this.allowAppConstructorInput() }
+            ? {
+              ...choice,
+              GATE: () => (!choice.GATE || choice.GATE())
+                && (name !== 'PrimaryExpression' || this.allowAppConstructorInput())
+                && this.allowDeclarationSlotConstructorInput(),
+            }
             : choice
         )
       }
@@ -773,6 +778,28 @@ class NumericContinuationParser extends Langium.LangiumParser {
       return false
     }
     return this.startsNamedDirective(2)
+  }
+
+  /** A declaration's next reference-block fill cannot be the current constructor's scalar input. */
+  private allowDeclarationSlotConstructorInput(): boolean {
+    if (this.isRecording()) {
+      return true
+    }
+    const slot = this.frames.findLastIndex(frame => frame.name === 'DeclarationSlotExpression')
+    if (slot < 0 || this.frames.slice(slot + 1).some(frame =>
+      frame.name === 'ActionBlock' || frame.name === 'AtomicActionBlock'
+      || frame.name === 'FunctionBlock' || frame.name === 'Block'
+    )) {
+      return true
+    }
+    let payload = this.lookahead(1).image === '.' ? 3 : 2
+    while (this.lookahead(payload).image === '.' && isIdentifierToken(this.lookahead(payload + 1))) {
+      payload += 2
+    }
+    if (!isIdentifierToken(this.lookahead(payload))) {
+      return true
+    }
+    return this.lookahead(payload + 1).image !== '{'
   }
 
   /** App properties separate adjacent identifier pairs; grouping retains constructor intent. */
