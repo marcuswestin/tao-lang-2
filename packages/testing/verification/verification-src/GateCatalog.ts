@@ -214,7 +214,8 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
   // scheduler spread the work within its existing CPU budget until measured costs take over.
   ['cli/tao-cli', { coldShardCount: 12 }],
   ['language/validator', {
-    args: ['--concurrent'],
+    // Validation shares the maintained-source publication lock. Keep test work sequential
+    // within each batch rather than starting every lock waiter and timeout window together.
     preflightFiles: ['packages/language/validator/validator-tests/phrases.test.ts'],
     reads: ['gen-parser', 'tao', 'ts'],
   }],

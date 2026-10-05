@@ -943,3 +943,16 @@ Targeted checks had registered as broad test lanes and were also blocked by the 
 window. Collect-all requests now use narrow admission while retaining their artifact paths;
 narrow developer lanes can proceed during landing priority. Broad verification still yields,
 and resource leases are unchanged. The deterministic machine-lane regression covers both sides.
+
+A subsequent changed-scope gate still failed despite the larger execution budgets: validator
+cases waited five minutes on the shared maintained-source mutation lock, while Studio and skills
+processes reached twenty minutes. The failed run also reported a process-identity inspection
+error during timeout cleanup. It was stopped after failure and is not verification evidence.
+Mutation waiters now inspect an existing owner before creating another fsynced claim file and
+poll at 50ms; atomic acquisition and identity-safe stale reclamation remain unchanged. Compiler
+and validator batches no longer use Bun's blanket concurrency flag, while independent suites
+retain scheduler parallelism. The focused shared scope passes 108 cases, the gate catalog passes
+27 cases, and all 982 validator cases pass in 96 seconds at load up to 13.8 on 18 CPUs.
+The receipt repair scope passes three cases in 55 seconds, the skills scope thirteen in 49
+seconds, and Studio edit-to-preview seven in 87 seconds. These recoveries do not replace the
+required broad landing gate.

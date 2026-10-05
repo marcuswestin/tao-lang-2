@@ -299,6 +299,11 @@ Describe('gate catalog metadata', () => {
     Expect(GateCatalog.reportsAttributableDurations('compiler')).toBe(true)
   })
 
+  Test('keeps validator batches from overlapping their shared publication lock', () => {
+    Expect(GateCatalog.suiteTuning('language/validator').args).toBeUndefined()
+    Expect(GateCatalog.reportsAttributableDurations('language/validator')).toBe(true)
+  })
+
   Test('derives each audited suite dependency from only the source classes it consumes', () => {
     for (
       const suite of [
