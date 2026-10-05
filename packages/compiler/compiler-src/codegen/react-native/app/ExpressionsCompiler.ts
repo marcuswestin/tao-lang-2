@@ -6,6 +6,7 @@ import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 import { compileAssociatedWitness } from './AssociatedMethodsCompiler'
 import { authLibraryExport, compileCurrentAccount, contextualCommand, contextualReference } from './auth-context'
+import { compileArgumentForType } from './capability-projection'
 import { configurationRuntimeBindingName } from './ConfigurationCompiler'
 import { activeDataStorePlan } from './data-store-context'
 import { compileDeclarationIdentity } from './declaration-identity'
@@ -256,7 +257,9 @@ export const ExpressionsCompiler = {
         parameters.slice(0, lastProvidedIndex + 1),
         parameter => {
           const argument = argumentsByParameter.get(parameter)
-          return argument ? gen`, ${Compile.Expression(argument.value)}` : gen`, undefined`
+          return argument
+            ? gen`, ${compileArgumentForType(argument.value, Type.ofParameter(parameter))}`
+            : gen`, undefined`
         },
         { separator: '' },
       )
@@ -292,7 +295,14 @@ export const ExpressionsCompiler = {
     return gen`TR.Call(${callable}${capability ? gen.noop() : gen`, ${receiver}`}${
       gen.join(parameters.slice(0, lastProvidedIndex + 1), parameter => {
         const argument = argumentsByParameter.get(parameter)
-        return argument ? gen`, ${compileReactiveArgument(argument.value)}` : gen`, undefined`
+        const expected = Type.ofParameter(parameter)
+        return argument
+          ? gen`, ${
+            expected.kind === 'capability'
+              ? compileArgumentForType(argument.value, expected)
+              : compileReactiveArgument(argument.value)
+          }`
+          : gen`, undefined`
       }, { separator: '' })
     })`
   },

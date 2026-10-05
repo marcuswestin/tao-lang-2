@@ -22,6 +22,13 @@ selection, callable results and persisted snapshots. Focused accessor, quantity 
 pass together; combined proof for this follow-up remains pending.
 Checked native factory publication, capabilities, full slots, units, cleanup lowering and app
 adapter/list graduation remain. No language stream is complete.
+The associated-method frontend, private defining-module witness publication and concrete
+capability transport now have focused source/execution proof. Required defaults retain their
+defining-module scope, nested inputs/results retain their receiving contracts, and raw omitted
+argument slots remain distinct from wrapped `none`. Canonical effect snapshot/discovery adapters
+are integrated, but production effect installation, union transport and complete slot integration
+remain prerequisites for capability-driven app graduation. Existing function examples now use
+the formatter's selected `func` and arrow return spelling. Broad follow-up verification is pending.
 The parameter-array signature adapter is reviewed and integrated at `0ac15b312`.
 Numeric/unit construction, the isolated capability carrier runtime, generated native unit leaf
 and existing-block cleanup compiler lowering progress in separate worktrees.

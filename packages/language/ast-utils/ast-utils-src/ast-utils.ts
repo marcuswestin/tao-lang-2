@@ -16,6 +16,7 @@ import {
   ownAssociatedMethods,
   withAssociatedEffects,
 } from './associated-methods'
+import { analyzeCallableEffects } from './callable-effects'
 import { bindCallableArguments, callableSignatureOf, compareCallableSignatures } from './callable-signatures'
 import { colorValues } from './color-values'
 import {
@@ -131,6 +132,7 @@ export const ASTUtils = {
   storeOfDatasource,
   resolveDatasourceValue,
   design,
+  analyzeCallableEffects,
   effectFailureCases,
   effectFailureContract,
   effectOutcomeWords,

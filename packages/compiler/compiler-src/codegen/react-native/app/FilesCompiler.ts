@@ -1,8 +1,8 @@
-import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert } from '@shared'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
+import { hasAssociatedWitnessPublication } from './AssociatedMethodsCompiler'
 import { isRuntimeConfigurableDeclaration } from './ConfigurationCompiler'
 import { activeFixtureStores } from './data-store-context'
 
@@ -35,7 +35,7 @@ export const FilesCompiler = {
     const moduleCommands = statements.filter(AST.isCommandDeclaration)
     const dataEntities = opts.dataEntities ?? statements.filter(AST.isEntityDataDeclaration)
     const hasRuntimeStatements = statements.some(statement =>
-      (AST.isTypeDeclaration(statement) && ASTUtils.ownAssociatedMethods(statement).length > 0)
+      (AST.isTypeDeclaration(statement) && hasAssociatedWitnessPublication(statement))
       || (AST.isEmittingRuntimeBinding(statement)
         && (!AST.isTypeDeclaration(statement) || isRuntimeConfigurableDeclaration(statement)))
     )
@@ -99,7 +99,7 @@ export const FilesCompiler = {
 function inDeclarationOrder(statements: readonly AST.Statement[]): AST.Statement[] {
   const reusableType = (statement: AST.Statement) =>
     isRuntimeConfigurableDeclaration(statement)
-    || (AST.isTypeDeclaration(statement) && ASTUtils.ownAssociatedMethods(statement).length > 0)
+    || (AST.isTypeDeclaration(statement) && hasAssociatedWitnessPublication(statement))
   const types = statements.filter(reusableType)
   const rest = statements.filter(statement => !reusableType(statement))
   const apps = new Set(rest.filter(AST.isAppValueDeclaration))

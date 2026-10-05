@@ -4,6 +4,7 @@ import { Assert, Switch } from '@shared'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 import { withAuthContextFactory } from './auth-context'
+import { compileArgumentForType } from './capability-projection'
 import { compileDeclarationIdentity } from './declaration-identity'
 
 type FunctionParameter = {
@@ -51,7 +52,15 @@ export const FunctionalCoreCompiler = {
 
   /** ReturnStatement returns one runtime-wrapped Tao value from the function callback. */
   ReturnStatement(statement: AST.ReturnStatement): Compiled {
-    return gen`return ${Compile.Expression(statement.value)}`
+    let owner: AST.Node | undefined = statement.$container
+    while (owner && !AST.isFunctionDeclaration(owner) && !AST.isAssociatedFunctionDeclaration(owner)) {
+      owner = owner.$container
+    }
+    Assert(
+      owner && (AST.isFunctionDeclaration(owner) || AST.isAssociatedFunctionDeclaration(owner)),
+      'Expected a function return owner.',
+    )
+    return gen`return ${compileArgumentForType(statement.value, Type.ofFunctionReturn(owner))}`
   },
 
   /** IfFunctionStatement preserves native callback return behavior for early exits. */
@@ -99,18 +108,18 @@ export const FunctionalCoreCompiler = {
 
   /** FunctionRuntimeParameter emits one runtime-wrapped function parameter. */
   FunctionRuntimeParameter(parameter: FunctionParameter): Compiled {
-    return gen`${functionRuntimeParameterName(parameter.index)}${
-      parameter.parameter.defaultValue === undefined ? '' : '?'
-    }: ${Compile.ParameterType(parameter.parameter)}`
+    const hasDefault = parameter.parameter.defaultValue !== undefined
+    const list = parameter.parameter.$container
+    const followedByRequired = AST.isParameterList(list)
+      && list.parameters.slice(parameter.index + 1).some(input => input.defaultValue === undefined)
+    return gen`${functionRuntimeParameterName(parameter.index)}${hasDefault && !followedByRequired ? '?' : ''}: ${
+      Compile.ParameterType(parameter.parameter)
+    }${hasDefault && followedByRequired ? gen` | undefined` : gen.noop()}`
   },
 
   /** FunctionParameterBinding exposes one positional argument through Tao lexical scope. */
   FunctionParameterBinding(parameter: FunctionParameter): Compiled {
-    const name = { name: Type.parameterName(parameter.parameter) }
-    const runtimeParameter = functionRuntimeParameterName(parameter.index)
-    return parameter.parameter.defaultValue === undefined
-      ? gen`${gen.scopeName(name)} = ${runtimeParameter}`
-      : gen`${gen.scopeName(name)} = ${runtimeParameter} ?? ${Compile.Expression(parameter.parameter.defaultValue)}`
+    return compileFunctionParameterBinding(parameter)
   },
 
   /** RenderFragmentStatement compiles one child render/control-flow fragment. */
@@ -277,6 +286,18 @@ export const FunctionalCoreCompiler = {
     }`
   },
 } as const
+
+/** A projected contract can supply its defining-module default without rebinding it in the caller. */
+export function compileFunctionParameterBinding(parameter: FunctionParameter, defaultValue?: Compiled): Compiled {
+  const name = { name: Type.parameterName(parameter.parameter) }
+  const runtimeParameter = functionRuntimeParameterName(parameter.index)
+  if (parameter.parameter.defaultValue === undefined) {
+    return gen`${gen.scopeName(name)} = ${runtimeParameter}`
+  }
+  const fallback = defaultValue
+    ?? compileArgumentForType(parameter.parameter.defaultValue, Type.ofParameter(parameter.parameter))
+  return gen`${gen.scopeName(name)} = ${runtimeParameter} ?? ${fallback}`
+}
 
 /** A read net handler without a block is, by the grammar, one bare render. */
 function requiredRender(branch: AST.AppGuardBranch): AST.ViewRender {

@@ -1,8 +1,8 @@
-import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
+import { hasAssociatedWitnessPublication } from './AssociatedMethodsCompiler'
 import { isRuntimeConfigurableDeclaration } from './ConfigurationCompiler'
 
 export const StatementsCompiler = {
@@ -87,7 +87,7 @@ export const StatementsCompiler = {
     if (AST.isCaseSetTypeExpression(declaration.type)) {
       return Compile.CaseSetDeclaration(declaration)
     }
-    if (ASTUtils.ownAssociatedMethods(declaration).length > 0) {
+    if (hasAssociatedWitnessPublication(declaration)) {
       return Compile.AssociatedMethodsDeclaration(declaration)
     }
     return isRuntimeConfigurableDeclaration(declaration)

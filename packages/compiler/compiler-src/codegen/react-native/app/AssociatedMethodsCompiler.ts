@@ -3,6 +3,7 @@ import { AST } from '@parser'
 import { Assert } from '@shared'
 import { type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
+import { compileArgumentForType } from './capability-projection'
 import { compileRuntimeType } from './runtime-type-compiler'
 
 let witnessBindings: ReadonlyMap<AST.TypeDeclaration, string> = new Map()
@@ -30,13 +31,50 @@ function associatedWitnessBinding(owner: AST.TypeDeclaration): Compiled {
 /** Each owner exports one module-local method witness; there is no runtime nominal registry. */
 export function AssociatedMethodsDeclaration(owner: AST.TypeDeclaration): Compiled {
   const type = Type.ofDefinition(owner)
+  if (type.kind === 'capability') {
+    return gen`const ${associatedWitnessBinding(owner)} = {
+      defaults: {
+        ${
+      gen.list(ASTUtils.capabilityRequirements(owner), method => {
+        const parameters = AST.parametersOf(method).map((parameter, index) => ({ index, parameter }))
+        return gen`[${gen.jsLiteral(method.name)}]: {
+            ${
+          gen.list(parameters.filter(input => input.parameter.defaultValue !== undefined), input => {
+            const preceding = parameters.slice(0, input.index)
+            return gen`[${input.index}]: TR.Function((${gen.join(preceding, Compile.FunctionRuntimeParameter)}) =>
+                TR.BlockScope(_Scope, _Scope => {
+                  ${gen.list(preceding, Compile.FunctionParameterBinding)}
+                  return ${compileArgumentForType(input.parameter.defaultValue!, Type.ofParameter(input.parameter))}
+                })),`
+          })
+        }
+          },`
+      })
+    }
+      }
+    }`
+  }
   Assert(type.kind === 'primitive' && type.primitive === 'text', 'Expected a supported text associated owner.')
   return gen`const ${associatedWitnessBinding(owner)} = {
       ${
     gen.list(ASTUtils.ownAssociatedMethods(owner), method =>
-      gen`${gen.jsLiteral(method.name)}: ${Compile.AssociatedFunctionDeclaration(method)},`)
+      gen`[${gen.jsLiteral(method.name)}]: ${Compile.AssociatedFunctionDeclaration(method)},`)
   }
     }`
+}
+
+/** Requirements publish only lexical default thunks; implementation owners publish method witnesses. */
+export function hasAssociatedWitnessPublication(owner: AST.TypeDeclaration): boolean {
+  return ASTUtils.ownAssociatedMethods(owner).length > 0
+    || ASTUtils.capabilityRequirements(owner).some(method =>
+      AST.parametersOf(method).some(parameter => parameter.defaultValue !== undefined)
+    )
+}
+
+export function compileCapabilityDefault(descriptor: ASTUtils.AssociatedCallableDescriptor, index: number): Compiled {
+  return gen`${associatedWitnessBinding(descriptor.owner)}.defaults[${
+    gen.jsLiteral(descriptor.declaration.name)
+  }][${index}]`
 }
 
 /** Receiver binding retains the caller's exact wrapper, including inherited nominal storage. */
