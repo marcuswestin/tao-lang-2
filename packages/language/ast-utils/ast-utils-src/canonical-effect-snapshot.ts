@@ -86,7 +86,7 @@ export type CanonicalReadPublication =
     classification: 'immutable' | 'reactive' | 'unknown'
     proof?:
       | Readonly<{
-        kind: 'parameter' | 'contextual-owner' | 'state' | 'live-alias'
+        kind: 'parameter' | 'contextual-owner' | 'state' | 'live-alias' | 'enum-case'
         owner: AST.Node
       }>
       | Readonly<{
@@ -1077,6 +1077,15 @@ function publishRead(
   const contextualEntityIdentity = AST.isMemberAccessExpression(reference) && AST.isEntityDataDeclaration(owner)
     && domain.kind === 'entity' && domain.entity === owner && reference.shade === undefined
     && reference.members.length === 1 && reference.members[0] === 'Id'
+  if (AST.isValueReference(reference) && AST.isCaseSetCase(declaration) && domain.kind === 'enum') {
+    return Object.freeze({
+      reference,
+      declaration,
+      classification: 'immutable',
+      kind: 'complete',
+      proof: Object.freeze({ kind: 'enum-case', owner: domain.declaration }),
+    })
+  }
   if (
     owner && declaration === owner
     && (immutableReadDomain(domain) || contextualItemField || contextualEntityIdentity || contextualTransport)
