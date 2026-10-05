@@ -1,7 +1,7 @@
 import type { ComponentType, ReactElement } from 'react'
 import { RuntimeAssert } from './TR-assert'
+import { createElement } from './TR-create-element'
 import type { TaoRuntimeValueInput } from './TR-reactive-values'
-import { mountUiComponent } from './TR-ui-render'
 
 declare const renderedBrand: unique symbol
 /** Rendered is an opaque description; constructing it never mounts its component. */
@@ -31,5 +31,5 @@ export function mountRenderedView(
   const rendered = value.evaluate().jsValue
   const description = descriptions.get(rendered)
   RuntimeAssert.input(description, 'This render requires content produced by a view.')
-  return mountUiComponent(description.component, { ...description.props, ...occurrence })
+  return createElement(description.component, { ...description.props, ...occurrence })
 }
