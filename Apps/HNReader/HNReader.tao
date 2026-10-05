@@ -276,7 +276,7 @@ view ReadingHistoryRow(ReadingEntry) {
          loading -> { Col() [storyCard] {
             Text("Loading story…") [notice]
          } }
-         missing -> { Col() [storyCard] {
+         none -> { Col() [storyCard] {
             Text("This story is not in the feed right now.") [notice]
          } }
          error Message -> { Col() [storyCard] {
@@ -383,7 +383,7 @@ view BookmarkRow(Bookmark) {
    render Col() [storyCard, gap 4] {
       guard Bookmark.Story {
          loading -> { Text("Loading story…") [notice] }
-         missing -> { Text("This story is not in the feed right now.") [notice] }
+         none -> { Text("This story is not in the feed right now.") [notice] }
          error -> Context { Text(Context.Message) [notice] }
       }
       TextMultiline(Bookmark.Story.Title) [storyTitle]

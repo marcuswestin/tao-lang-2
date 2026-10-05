@@ -100,7 +100,7 @@ scene NoteDetail(Note) {
          Text("NOTE") [eyebrow]
          guard Note {
             loading -> { Spinner() }
-            missing -> { TextMultiline("This note no longer exists.") [body] }
+            none -> { TextMultiline("This note no longer exists.") [body] }
             error -> Context { TextMultiline("The note could not be loaded: { Context.Message }") [body] }
          }
 

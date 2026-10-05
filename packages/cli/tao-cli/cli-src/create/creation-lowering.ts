@@ -239,7 +239,7 @@ ${plan.entities.length === 1 ? '' : `   state Active = ${taoString(plan.entities
             }
             when Account {
                loading -> Text("Opening account…")
-               missing -> Text("Account data is missing")
+               none -> Text("Account data is missing")
                unauthorized -> Text("You do not have access")
                error -> Text("Account data could not be loaded")
                otherwise -> {
@@ -608,7 +608,7 @@ ${flagActions.map(action => `${action}\n`).join('')}   action Delete${singular}(
          Text(${taoString(humanize(singular).toUpperCase())}) [eyebrow]
          guard ${singular} {
             loading -> { Spinner() }
-            missing -> { TextMultiline(${taoString(`This ${singularWords} no longer exists.`)}) [body] }
+            none -> { TextMultiline(${taoString(`This ${singularWords} no longer exists.`)}) [body] }
             error -> Context { TextMultiline(${
     taoString(`The ${singularWords} could not be loaded: { Context.Message }`)
   }) [body] }

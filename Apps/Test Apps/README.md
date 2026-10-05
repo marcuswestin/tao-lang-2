@@ -333,15 +333,15 @@ Exercise the type system through a small UI that passes typed values into views.
 ## Read Net
 
 Exercise the read net: the runtime's handling of exceptional read cases a render guard leaves
-unnamed, and app-level `guard` handlers replacing it case by case. `ReadNetApp` replaces `missing`;
-its two variants demonstrate replacing `missing` and inheriting it when only `error` is replaced.
-`RuntimeDefaultApp` replaces `loading` and `error` and leaves `missing` to the runtime.
+unnamed, and app-level `guard` handlers replacing it case by case. `ReadNetApp` replaces `none`;
+its two variants demonstrate replacing `none` and inheriting it when only `error` is replaced.
+`RuntimeDefaultApp` replaces `loading` and `error` and leaves `none` to the runtime.
 
 **Belongs here:** a bare `guard Subject` over an entity and a query; a deleted row reaching the net
-as `missing`; an app's override rendering at the guarding site; a guard that names `missing`
-winning over the net; a variant's `missing` override and inheritance of its base app's `missing`
-handler; the runtime's `missing` sentence where the app's net does not replace it; a deleted handle
-keeping `.Id` inside a site's own `missing` handler.
+as public `none` with internal `missing` state; an app's override rendering at the guarding site;
+a guard that names `none` winning over the net; a variant's `none` override and inheritance of its
+base app's `none` handler; the runtime's absence sentence where the app's net does not replace it;
+a deleted handle keeping `.Id` inside a site's own `none` handler.
 
 **Does not belong here:** `loading`, `unauthorized`, and `error` rendered through a journey, which
 Memory cannot produce on demand and the runtime package tests prove; read-net diagnostics

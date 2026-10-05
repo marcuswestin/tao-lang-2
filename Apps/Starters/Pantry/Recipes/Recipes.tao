@@ -101,7 +101,7 @@ scene RecipeDetail(Recipe) {
          Text("RECIPE") [eyebrow]
          guard Recipe {
             loading -> { Spinner() }
-            missing -> { TextMultiline("This recipe no longer exists.") [body] }
+            none -> { TextMultiline("This recipe no longer exists.") [body] }
             error -> Context { TextMultiline("The recipe could not be loaded: { Context.Message }") [body] }
          }
 

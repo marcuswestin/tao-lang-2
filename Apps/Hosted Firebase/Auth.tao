@@ -23,7 +23,7 @@ scene FirebaseNotesAccountGate() {
             }
             when Account {
                loading -> Text("Opening account…")
-               missing -> Text("Account data is missing")
+               none -> Text("Account data is missing")
                unauthorized -> Text("You do not have access")
                error -> Text("Account data could not be loaded")
                otherwise -> { ItemList() }

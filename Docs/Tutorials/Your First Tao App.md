@@ -383,7 +383,7 @@ scene BookScreen(Book) {
       Col() [width max 720, centered, gap 10] {
          guard Book {
             loading -> { Spinner() }
-            missing -> { Text("That book is gone.") [body] }
+            none -> { Text("That book is gone.") [body] }
             error -> Context { Text("Could not load that book: { Context.Message }") [body] }
          }
          Text(Book.Title) [title]
@@ -419,7 +419,7 @@ That completes CRUD:
 - **`update Book { … }`** writes named fields on a live row.
 - **`delete Book`** removes it, and **`dismiss`** closes this screen — without it you would be
   looking at a screen for a row that no longer exists.
-- **`guard Book { … }`** guards a single row rather than a list. `missing` is the case for a row
+- **`guard Book { … }`** guards a single row rather than a list. `none` is the case for a row
   that has been deleted out from under the screen, which is exactly what the guard is for.
 - **`Book.Finished is Finished`** reads the two-case field as a yes/no for the checkbox, and
   `on change SetFinished` hands the new value to an action that writes it back.
@@ -778,7 +778,7 @@ scene BookScreen(Book) {
       Col() [width max 720, centered, gap 10] {
          guard Book {
             loading -> { Spinner() }
-            missing -> { Text("That book is gone.") [body] }
+            none -> { Text("That book is gone.") [body] }
             error -> Context { Text("Could not load that book: { Context.Message }") [body] }
          }
          Text(Book.Title) [title]
