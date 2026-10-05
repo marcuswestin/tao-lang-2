@@ -23,7 +23,7 @@ import { declaredCallableFailureContract } from './failure-contracts'
 import { resolveFunctionInvocation } from './invocations'
 import { type NumericUnitReading, resolveNumericUnitReading } from './numeric-unit-readings'
 import { NumericUnits, type NumericUnitsSuffixResolution } from './NumericUnits'
-import { type ItemShape, type TaoType, Type } from './Type'
+import { type ItemShape, type ItemShapeField, type TaoType, Type } from './Type'
 import { type UnitFamily, type UnitReading, Units } from './Units'
 
 type AssociatedDeclaration = AssociatedCallableDeclaration
@@ -96,6 +96,16 @@ export type CanonicalReadPublication =
         receiver: AssociatedMethodReceiver
       }>
       | Readonly<{ kind: 'unit-selection'; owner: AST.TypeDeclaration; reading: NumericUnitReading }>
+      | Readonly<{
+        kind: 'configured-entity-transport'
+        owner: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration
+        constructor: AST.ConfigurationConstructor | AST.ConfigurationEntry
+        entry: AST.ConfigurationEntry
+        field: ItemShapeField
+        parameter: AST.ParameterDeclaration
+        entity: AST.EntityDataDeclaration
+        capability: AST.TypeDeclaration
+      }>
     initializer?: AST.Expression
   }>
 
@@ -552,6 +562,7 @@ export function publishCanonicalEffectSnapshot(
       )
     }
   }
+  publishConfiguredEntityTransport(constructors, reads, resolution)
   const snapshot: CanonicalEffectIndependentSnapshot = Object.freeze({
     [factoryBrand]: true as const,
     phase: 'correspondence',
@@ -820,6 +831,85 @@ function nativeArgumentOwner(
     return undefined
   }
   return nativeForwardOwners.get(call)
+}
+
+/** A complete supplied capability binding captures a readonly handle without reading its fields. */
+function publishConfiguredEntityTransport(
+  constructors: ReadonlyMap<AST.Node, CanonicalConstructorPublication>,
+  reads: Map<AST.Node, CanonicalReadPublication>,
+  resolution: Pick<ReturnType<typeof Type.correspondenceResolver>, 'ofParameter' | 'ofReferenceRoot'>,
+): void {
+  for (const constructor of constructors.values()) {
+    const binding = constructor.binding
+    if (constructor.kind !== 'complete' || binding?.kind !== 'complete' || binding.site !== constructor.site) {
+      continue
+    }
+    for (const pair of binding.pairs) {
+      if (pair.actual.kind !== 'entity' || pair.expected.kind !== 'capability') {
+        continue
+      }
+      const entry = pair.entry
+      if (
+        !binding.operands.some(operand =>
+          operand.origin === 'supplied' && operand.field === pair.field
+          && operand.node === entry
+        )
+      ) {
+        continue
+      }
+      const reference = entry.reference ? entry : entry.expression && AST.isValueReference(entry.expression)
+        ? entry.expression
+        : undefined
+      if (!reference) {
+        continue
+      }
+      const parameter = AST.isConfigurationEntry(reference) ? reference.reference?.ref : reference.target.ref
+      if (!AST.isParameterDeclaration(parameter) || parameter.mutable || parameter.copy) {
+        continue
+      }
+      const owner = AST.findOwningAssociatedFunction(entry) ?? AST.findOwningFunction(entry)
+      const parameterOwner = AST.findOwningAssociatedFunction(parameter) ?? AST.findOwningFunction(parameter)
+      if (!owner || parameterOwner !== owner) {
+        continue
+      }
+      const domain = resolution.ofParameter(parameter)
+      const sourceDomain = AST.isConfigurationEntry(reference)
+        ? Type.ofValueDeclaration(parameter)
+        : resolution.ofReferenceRoot(reference)
+      if (
+        domain.kind !== 'entity' || sourceDomain.kind !== 'entity'
+        || domain.entity !== pair.actual.entity || sourceDomain.entity !== domain.entity
+      ) {
+        continue
+      }
+      const read = reads.get(reference)
+      if (
+        read?.kind !== 'unknown' || read.classification !== 'unknown' || read.declaration !== parameter
+        || read.proof?.kind !== 'parameter' || read.proof.owner !== owner
+      ) {
+        continue
+      }
+      reads.set(
+        reference,
+        Object.freeze({
+          reference,
+          declaration: parameter,
+          classification: 'immutable',
+          kind: 'complete',
+          proof: Object.freeze({
+            kind: 'configured-entity-transport',
+            owner,
+            constructor: constructor.site,
+            entry,
+            field: pair.field,
+            parameter,
+            entity: domain.entity,
+            capability: pair.expected.declaration,
+          }),
+        }),
+      )
+    }
+  }
 }
 
 function publishRead(
