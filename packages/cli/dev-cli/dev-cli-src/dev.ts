@@ -29,6 +29,7 @@ import { ReclaimCommand } from './doctor/ReclaimCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
 import { MergeRecovery } from './git/MergeRecovery'
 import { OpenPrCommand } from './pr/OpenPrCommand'
+import { PrChecksCommand } from './pr/PrChecksCommand'
 
 /*
  * Studio and Expo command modules load lazily inside their actions. Studio reaches the generated
@@ -844,6 +845,24 @@ await runWithCommands(commands => {
       await runExitCommand(async () =>
         (await OpenPrCommand.run({
           pollIntervalMs: parseOptionalPositiveInteger(options.pollIntervalMs, '--poll-interval-ms'),
+        })).exitCode
+      )
+    })
+
+  commands
+    .command('pr-checks')
+    .description(
+      "Report every check on a pull request's head, with the reasons failed ones give; --wait follows them to the end.",
+    )
+    .option('--pr <number>', "The pull request; by default, the open one for this worktree's branch.")
+    .option('--wait', 'Follow the checks until every one has concluded.')
+    .option('--interval-ms <ms>', 'How often --wait polls GitHub (default 60000).')
+    .action(async (options: { intervalMs?: string; pr?: string; wait?: boolean } = {}) => {
+      await runExitCommand(async () =>
+        (await PrChecksCommand.run({
+          intervalMs: parseOptionalPositiveInteger(options.intervalMs, '--interval-ms'),
+          pr: parseOptionalPositiveInteger(options.pr, '--pr'),
+          wait: options.wait === true,
         })).exitCode
       )
     })

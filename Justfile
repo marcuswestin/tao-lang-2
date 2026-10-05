@@ -608,6 +608,11 @@ worktree-status:
 open-pr *ARGS:
     ./dev open-pr {{ ARGS }}
 
+# Report a pull request's checks and why failed ones failed; --wait follows them to the end
+[group('Dev')]
+pr-checks *ARGS:
+    ./dev pr-checks {{ ARGS }}
+
 # Report host capabilities
 [group('Report')]
 capabilities *ARGS:

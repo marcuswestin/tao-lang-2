@@ -47,6 +47,8 @@ export const JUST_COMMANDS = [
   // second spelling.
   'open-pr',
   'parser-gen',
+  // Reads the public checks API rather than gh, so it works from the sandbox without credentials.
+  'pr-checks',
   'qa',
   'qa-capture',
   'reclaim',
