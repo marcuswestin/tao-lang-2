@@ -16,7 +16,10 @@ Describe('Associated callable witness keys', () => {
     const ordinary = declarations.filter(declaration => declaration.name === 'Format')
     Expect(ordinary).toHaveLength(2)
     const context: AssociatedCallableWitnessKeyContext = {
-      operatorKey: () => { throw new Error('ordinary names do not allocate operator keys') },
+      operatorKey: () => {
+        Assert(false, 'ordinary names do not allocate operator keys')
+        return undefined
+      },
     }
     ordinary.forEach(declaration => {
       Expect(associatedCallableWitnessKey(declaration)).toBe('Format')
