@@ -32,6 +32,7 @@ const messages = {
     `App guard handles only loading, missing, unauthorized, and error; '${name}' is not one of them.`,
   retiredGuardDefault: '`guard default` moved into the app: write `guard { ... }` inside an app block.',
   conditionalBranch: '`when` branches must produce compatible value types.',
+  pickTotal: '`pick` requires an otherwise branch unless every input is covered.',
   compactWhenSubject: 'The compact `when Subject Value / label Value` form requires a yes/no subject.',
   compactWhenLabel: (label: string, expected: string) =>
     `'${label}' is not this subject's no-pole label; use '${expected}'.`,
@@ -86,6 +87,7 @@ export const FunctionalCoreValidator = {
       validateWhenBranches(expression.subject, expression.branches, ctx)
       validateCompatibleBranches(AST.whenExpressionOutcomes(expression).values, ctx)
       validateCompactWhen(expression, ctx)
+      validatePickCompleteness(expression, ctx)
     },
     [AST.StringInterpolation.$type]: (interpolation, ctx) => {
       const type = Type.ofExpression(interpolation.expression)
@@ -379,6 +381,34 @@ function validateCheck(statement: AST.CheckStatement, ctx: ValidationContext): v
   if (AST.isIfActionStatement(owner) || AST.isGuardActionBranch(owner) || AST.isWhenDoOutcome(owner)) {
     ctx.error(statement, messages.checkPlacement)
   }
+}
+
+/** A pick is total only with a fallback or a proved finite-domain/unconditional match. */
+function validatePickCompleteness(expression: AST.WhenExpression, ctx: ValidationContext): void {
+  if (!expression.pickSyntax || expression.otherwise) {
+    return
+  }
+  if (!expression.subject) {
+    if (expression.branches.some(branch =>
+      AST.isBooleanLiteral(branch.condition) && AST.canonicalSubjectCase(branch.condition.value) === 'true'
+    )) {
+      return
+    }
+  } else {
+    const type = Type.ofExpression(expression.subject)
+    const expected = type.kind === 'enum'
+      ? AST.caseSetCasesOf(type.declaration).map(AST.caseSetCaseName)
+      : type.kind === 'primitive' && type.primitive === 'boolean'
+      ? ['true', 'false']
+      : []
+    const covered = new Set(expression.branches.flatMap(branch =>
+      branch.case === undefined ? [] : [AST.canonicalSubjectCase(branch.case)]
+    ))
+    if (expected.length > 0 && expected.every(name => covered.has(name))) {
+      return
+    }
+  }
+  ctx.error(expression, messages.pickTotal)
 }
 
 function validateWhenBranches(

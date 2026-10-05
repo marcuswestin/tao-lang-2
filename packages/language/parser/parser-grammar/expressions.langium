@@ -285,7 +285,9 @@ ConfigurationReference:
 // `when` subject stops before `{`, which is what distinguishes a block from a bare item constructor,
 // and it stops before `/`, which is what leaves the compact form's separator visible.
 WhenExpression:
-    'when' (subject=WhenSubjectExpression
+    pickSyntax?='pick' ('{' branches+=PickPredicateBranch* otherwise=WhenOtherwise? '}'
+        | subject=WhenSubjectExpression '{' branches+=WhenBranch* otherwise=WhenOtherwise? '}')
+    | 'when' (subject=WhenSubjectExpression
     ('{' branches+=WhenBranch* otherwise=WhenOtherwise '}'
         | branches+=BarWhenBranch* otherwise=BarWhenOtherwise
         | positive=WhenSubjectExpression ('/' negativeLabel=CompactNegativeLabel negative=WhenSubjectExpression)?)
@@ -352,6 +354,9 @@ BarWhenBranch infers WhenBranch:
 
 PredicateWhenBranch infers WhenBranch:
     barSyntax?='|' condition=OrExpression '->' value=OrExpression;
+
+PickPredicateBranch infers WhenBranch:
+    condition=OrExpression '->' value=OrExpression;
 
 WhenOtherwise:
     'otherwise' '->' value=OrExpression;

@@ -209,7 +209,12 @@ export const ExpressionsCompiler = {
   /** WhenExpression evaluates one subject and selects one lazy value case. */
   WhenExpression(expression: AST.WhenExpression): Compiled {
     if (!expression.subject) {
-      Assert.defined(expression.otherwise, 'a predicate match has a terminal otherwise')
+      if (!expression.otherwise) {
+        Assert(expression.pickSyntax, 'only a validated exhaustive pick can omit its fallback')
+      }
+      const fallback = expression.otherwise
+        ? Compile.Expression(expression.otherwise.value)
+        : gen`TR.Errors.failInvariant("A validated exhaustive pick did not match.")`
       return gen`(() => {
         ${
         gen.list(expression.branches, branch => {
@@ -219,7 +224,7 @@ export const ExpressionsCompiler = {
           }`
         })
       }
-        return ${Compile.Expression(expression.otherwise.value)}
+        return ${fallback}
       })()`
     }
     // The compact form is the two-outcome sibling of the block form, so it lowers to the same case
@@ -230,7 +235,12 @@ export const ExpressionsCompiler = {
         ['true', () => ${Compile.Expression(expression.positive)}],
       ], () => ${negative ? Compile.Expression(negative) : gen`TR.Value(null)`})`
     }
-    Assert.defined(expression.otherwise, 'validated block-form when has an otherwise branch')
+    if (!expression.otherwise) {
+      Assert(expression.pickSyntax, 'only a validated exhaustive pick can omit its fallback')
+    }
+    const otherwise = expression.otherwise
+      ? gen`() => ${Compile.Expression(expression.otherwise.value)}`
+      : gen`() => TR.Errors.failInvariant("A validated exhaustive pick did not match.")`
     return gen`TR.WhenCase(${Compile.Expression(expression.subject)}, [
       ${
       gen.list(
@@ -239,7 +249,7 @@ export const ExpressionsCompiler = {
           gen`[${gen.jsLiteral(AST.canonicalSubjectCase(branch.case!))}, () => ${Compile.Expression(branch.value)}],`,
       )
     }
-    ], () => ${Compile.Expression(expression.otherwise.value)})`
+    ], ${otherwise})`
   },
 
   /** InterpolatedString joins literal text and lazily evaluated scalar expressions. */

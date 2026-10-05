@@ -198,6 +198,10 @@ export const ExpressionsFormatter = {
    */
   WhenExpression(f) {
     f.oneSpaceAfter('when')
+    // Without a subject, the opening brace owns the gap after `pick`.
+    if (f.node.subject) {
+      f.oneSpaceAfter('pick')
+    }
     if (f.node.otherwise?.barSyntax) {
       f.indentedLines([...f.node.branches, f.node.otherwise])
       return
