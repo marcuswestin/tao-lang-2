@@ -43,6 +43,7 @@ import {
   type TaoConfiguredAuth,
   type TaoDataAuthBinding,
 } from './TR-auth'
+import { createCapabilityRuntime, type TaoCapability } from './TR-capabilities'
 import { createClipboard, type TaoPasteboard } from './TR-clipboard'
 import { createElement } from './TR-create-element'
 import {
@@ -479,6 +480,9 @@ class TR {
   static Function(body: (...args: any[]) => TR.Evaluable | TR.Function): TR.Function {
     return new RuntimeFunction(body)
   }
+
+  /** Capability selects pure method witnesses while preserving the original receiver's live reads. */
+  static Capability = createCapabilityRuntime(TR.Function)
 
   /** Call invokes a Tao pure function with runtime-wrapped values. */
   static Call<T>(fn: TR.Function, ...args: TR.Evaluable[]): TR.Value<T> {
@@ -1484,6 +1488,8 @@ namespace TR {
   export type CaseBranch<ResultT> = readonly [string, (payload: TR.Value<any>) => ResultT]
   /** Function declares a runtime Tao pure function. */
   export type Function = RuntimeFunction
+  /** Capability preserves a concrete receiver behind compile-time selected structural methods. */
+  export type Capability<T = unknown> = TaoCapability<T>
   /** PluralCategory declares the CLDR plural categories a compiled phrase's forms may carry. */
   export type PluralCategory = TaoPluralCategory
   /** PluralForms is a compiled phrase's category-to-value table passed to `TR.Plural`. */

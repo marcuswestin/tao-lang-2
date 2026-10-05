@@ -98,11 +98,12 @@ The coordinator retains TR.ts and native publication; existing cleanup facade me
 Current exclusive assignments:
 
 - A's reviewed parameter-array adapter is integrated at `0ac15b312`; those paths have returned.
-  A now owns only new TR-capabilities.ts and TR-capabilities.test.ts for the reviewed carrier runtime
-  packet: attach, reproject and method selection preserve the original receiver and live reads through
-  ordinary Function returns. Inject the existing Function factory and register complete outputs;
-  retain minimally evaluable inputs without eager probes or a public nominal registry. This isolated
-  runtime leaf does not admit source-level structural dispatch before purity/type/frontend proof.
+  Its carrier runtime is integrated at `dc1e7266c`, returning TR-capabilities.ts and its tests.
+  Attach, reproject and method selection preserve the original receiver and live reads through
+  ordinary Function returns, without eager probes or a public nominal registry. The coordinator
+  owns its facade hookup. This isolated runtime leaf does not admit source-level structural
+  dispatch before purity/type/frontend proof. A independently reviews native import routing while
+  the shared frontend remains held; this read-only review transfers no source ownership.
   Associated capability/method/converter frontend source remains withheld.
 - C owns the complete numeric/unit construction vertical: its focused feature modules/tests,
   numeric grammar integration and parser AST/scoping, Type.ts, the AST facade, registrations,
@@ -120,8 +121,15 @@ Current exclusive assignments:
 - D's existing-block cleanup lowering and outcome assertion are integrated at `858a971f9`;
   their source ownership has returned. Coordinator event/selection callers and mounted payload
   cleanup proof are committed at `033a6d760`, including a caught scope-removal mutation.
-  D prepares the transitive purity/failure producer packet without a new source grant. Defer grammar,
-  then/result-token and purity extensions remain held.
+  D's reviewed transitive purity/failure packet releases exactly new failure-contracts.ts,
+  callable-effects.ts and ast-utils-tests/callable-effects.test.ts, plus effect-outcomes.ts and
+  callable-signatures.ts solely to move/reexport the unchanged failure algebra. The producer
+  consumes immutable, already-resolved execution facts, without Type/admission reentry, native
+  trust inferred from spelling, or a second target resolver. Separate purity and known/open failure
+  contracts preserve conservative unknown boundaries and recursive computation. Root supplies
+  resolution/native facts and shared admission/validation hooks after C returns its frontend.
+  No validator registration, native classification, function-failure lowering, defer grammar or
+  then/result-token extension is released by this semantic-leaf grant.
 - B's renderer and native-leaf paths have returned; slot frontend and foreign adapters remain held.
   The isolated leaf is integrated at `62b2cac5d`, supplying constructor-only types.Owner.Unit methods
   and allocated checked-factory/type linkage metadata from one owner factory, with executable/static

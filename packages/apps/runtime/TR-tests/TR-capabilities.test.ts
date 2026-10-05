@@ -2,12 +2,12 @@ import TR from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
 import type { TaoEvaluable } from '../TaoRuntime-src/TR-action-values'
 import { RuntimeAssert } from '../TaoRuntime-src/TR-assert'
-import { createCapabilityRuntime, type TaoCapability } from '../TaoRuntime-src/TR-capabilities'
+import type { TaoCapability } from '../TaoRuntime-src/TR-capabilities'
 import { UnexpectedBehaviorError } from '../TaoRuntime-src/TR-errors'
 import { getJSValue } from '../TaoRuntime-src/TR-js-value'
 import { completeRuntimeValue } from '../TaoRuntime-src/TR-reactive-values'
 
-const capabilities = createCapabilityRuntime(TR.Function)
+const capabilities = TR.Capability
 
 Describe('Capability witnesses', () => {
   Test('keeps receiver backing private so public property writes cannot diverge from selected witnesses', () => {
