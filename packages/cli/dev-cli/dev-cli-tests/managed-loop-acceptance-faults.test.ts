@@ -1231,7 +1231,7 @@ for (const outcome of ['preparation-failure', 'publication-failure', 'output-clo
         Repo.resolvePath('packages/cli/dev-cli/dev-cli-tests/subprocess-test-api.ts'),
       )
     };
-      let created = false, booted = false, name = '', taoStarts = 0, registered = 0;
+      let created = false, booted = false, name = '', taoStarts = 0, registered = 0, cleanupRegistered = 0;
       const stages = [], captureFailures = [];
       const bootstrap = {pid: 2 ** 29, startedAt: 'owned-source-ios-bootstrap', command: 'launchd_sim'};
       const result = stdout => ({command: 'source target', args: [], stdout, stderr: '', exitCode: 0, signal: null});
@@ -1294,10 +1294,14 @@ for (const outcome of ['preparation-failure', 'publication-failure', 'output-clo
             }
             if (${JSON.stringify(outcome)} === 'publication-failure' && registered === 3)
               Errors.throwHostEnvironment('Injected private child publication failure'); },
+          onCleanupChild: async (child, capture, reservation) => {
+            registered++; cleanupRegistered++;
+            await managed.onCleanupChild(child, capture, reservation);
+          },
         }),
       });
       await controller.waitForDisposal();
-      await FS.writeJson(${JSON.stringify(sourceEvidence)}, {taoStarts, registered, stages, booted,
+      await FS.writeJson(${JSON.stringify(sourceEvidence)}, {taoStarts, registered, cleanupRegistered, stages, booted,
         message: (await readDevLoopReceipt(${JSON.stringify(session)})).message, captureFailures});
     `
     const controller = CLI.start(Platform.runtimeProcess.execPath, {
@@ -1315,6 +1319,7 @@ for (const outcome of ['preparation-failure', 'publication-failure', 'output-clo
         {
           taoStarts: number
           registered: number
+          cleanupRegistered: number
           stages: string[]
           booted: boolean
           message?: string
@@ -1335,6 +1340,7 @@ for (const outcome of ['preparation-failure', 'publication-failure', 'output-clo
         outcome === 'preparation-failure' ? ['create', 'boot', 'download', 'shutdown'] : ['create', 'boot', 'download'],
       )
       Expect(evidence.registered).toBe(evidence.stages.length)
+      Expect(evidence.cleanupRegistered).toBe(outcome === 'preparation-failure' ? 1 : 0)
       const failed = await readDevLoopReceipt(session)
       Expect(failed.controllerDisposed).toBe(true)
       Expect(failed.provenance).toBe(outcome === 'preparation-failure' ? 'complete' : 'uncertain')

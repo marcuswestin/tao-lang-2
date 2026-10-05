@@ -310,6 +310,7 @@ export async function runManagedLoopAcceptance(
         await lifecycle(['ios'])
         await borrowed('ios')
       },
+      'ios-cleanup': iosCleanup,
       'ios-parallel': () => parallel('ios'),
       'ios-recovery': () => targetFault('ios-recovery'),
     })
@@ -1217,6 +1218,35 @@ export async function runManagedLoopAcceptance(
     } else {
       pass('proof-owned borrowed target preservation', evidence)
     }
+  }
+
+  /** Quiet cleanup proof owns two fresh simulators and does not require a mobile interaction driver. */
+  async function iosCleanup(): Promise<void> {
+    const successful = await start(await fixtures.create(), ['ios'])
+    await observe(successful)
+    await stop(successful)
+    pass('iOS successful session cleanup', successful.receipt)
+
+    const failed = await start(await fixtures.create('invalid'), ['ios'])
+    const terminal = await Time.pollUntil(async () => {
+      await command(['status', '--session', failed.session, '--json'])
+      remember(failed, await operations.receipt(failed.session))
+      if (failed.receipt.state === 'ready') {
+        Errors.throwHostEnvironment('Invalid Tao source reached iOS managed readiness.')
+      }
+      return ['failed', 'stopped', 'cleanup-failed'].includes(failed.receipt.state) ? failed.receipt : undefined
+    }, { intervalMs: 500, timeoutMs: 180_000 })
+    if (terminal === undefined || !(terminal.failures?.length || terminal.message)) {
+      Errors.throwHostEnvironment('The owned iOS compilation failure did not preserve its failure diagnostic.')
+    }
+    remember(failed, await waitManagedLoopStartupFailureDisposal(terminal, operations))
+    const diagnostic = "No value named 'MissingAcceptanceDeclaration' is in scope."
+    const output = await FS.readText(FS.resolvePath('loop.log', devLoopDirectory(failed.session)))
+    if (!output.includes(diagnostic)) {
+      Errors.throwHostEnvironment('The owned iOS startup failed without the intended Tao compiler diagnostic.')
+    }
+    await stop(failed)
+    pass('iOS failed startup cleanup', failed.receipt)
   }
 
   async function lifecycleFaults(): Promise<void> {

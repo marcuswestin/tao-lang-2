@@ -1,7 +1,12 @@
 import { EXPO_SDK_VERSION } from '@expo-host/dev-loop/expo-runner/expo-config'
 import { type MachineResourceOwner, MachineResources } from '@host-control'
 import { CLI, Errors, FS, Platform, ProcessTree, Repo, Time, type TrackedProcess } from '@shared'
-import type { AgentAppDevDevice, AgentAppDevReservation, ManagedChildCapture } from '../simulators/AgentAppDev'
+import type {
+  AgentAppDevDevice,
+  AgentAppDevReservation,
+  ManagedChildCapture,
+  ManagedCleanupChild,
+} from '../simulators/AgentAppDev'
 import type { DevLoopReceipt } from './DevLoopStore'
 import {
   type ManagedIosCommandEvidence,
@@ -23,6 +28,7 @@ export type PrivateIosPreparation = {
   reservation: AgentAppDevReservation
   shouldStop: () => boolean
   onChild?: (child: CLI.StartedCommand, capture?: ManagedChildCapture) => Promise<void>
+  onCleanupChild?: ManagedCleanupChild
 }
 type Artifact = {
   sdk: string
@@ -168,6 +174,7 @@ export async function createManagedIosFixture(options: {
   shouldStop: () => boolean
   /** Publish each fixed finite child through the existing managed ownership boundary. */
   onChild?: (child: CLI.StartedCommand, capture?: ManagedChildCapture) => Promise<void>
+  onCleanupChild?: ManagedCleanupChild
   /** Borrowing producer already owns the single external CoreSimulator ledger record. */
   externalLedger?: boolean
 }, overrides: Partial<ManagedIosRuntimeOperations> = {}) {
@@ -198,6 +205,7 @@ export async function createManagedIosFixture(options: {
   }
   const save = () => operations.save(path, asset)
   let publishChild = options.onChild
+  let publishCleanupChild = options.onCleanupChild
   const assertHolder = () => {
     if (!operations.tree.sameProcess(operations.tree.identities([holder.pid]).get(holder.pid), holder)) {
       uncertain('Private iOS fixture holder lost its kernel identity.')
@@ -373,7 +381,24 @@ export async function createManagedIosFixture(options: {
           processIsAlive: operations.processIsAlive,
           save: operations.save,
           shouldStop: () => shouldStop() || cancelled,
-          onChild: publishChild,
+          onChild: stage === 'shutdown' && publishCleanupChild !== undefined
+            ? async (child, capture) => {
+              if (capture === undefined || asset.id === undefined) {
+                uncertain('Private iOS shutdown lacks its exact child capture and minted target.')
+              }
+              const resources = Object.freeze(structuredClone(owners).map(owner => Object.freeze(owner)))
+              await publishCleanupChild!(
+                child,
+                capture,
+                Object.freeze({
+                  platform: 'ios',
+                  id: asset.id,
+                  resources,
+                  assertCurrent: () => assertOwners(resources),
+                }),
+              )
+            }
+            : publishChild,
           onNativeExecution: operations.onNativeExecution === undefined ? undefined : async (execution, child) => {
             assertHolder()
             await assertOwners(owners)
@@ -643,8 +668,9 @@ export async function createManagedIosFixture(options: {
     }
     return result
   }
-  const prepare = async ({ device, reservation, shouldStop, onChild }: PrivateIosPreparation) => {
+  const prepare = async ({ device, reservation, shouldStop, onChild, onCleanupChild }: PrivateIosPreparation) => {
     publishChild = onChild ?? publishChild
+    publishCleanupChild = onCleanupChild ?? publishCleanupChild
     await observeDevice(device)
     await reservation.assertCurrent()
     const capturedBootstrap = asset.bootstrap
