@@ -114,6 +114,48 @@ Describe('native quantity owner admission', () => {
     }
   })
 
+  Test('classifies malformed adapted snapshots without leaking raw exceptions', () => {
+    for (const snapshot of [null, undefined, 2]) {
+      let evaluations = 0
+      const adapted = TR.nativeQuantityResult(
+        {
+          evaluate: () => {
+            evaluations += 1
+            return snapshot
+          },
+        } as unknown as Parameters<typeof TR.nativeQuantityResult>[0],
+      )
+      Expect(evaluations).toBe(0)
+      let failure: unknown
+      try {
+        TR.admitQuantityUnion(adapted, [First, Second], 'Choice')
+      } catch (error) {
+        failure = error
+      }
+      Expect(evaluations).toBe(1)
+      Expect(failure).toBeInstanceOf(TaoActionFailure)
+      Expect((failure as TaoActionFailure).caseName).toBe(QuantityFailureCases.BadShape)
+    }
+  })
+
+  Test('completes a registered alias whose evaluated snapshot is a legacy value', () => {
+    let evaluations = 0
+    const payload = First.fromUnit(3, 'Double').jsValue
+    const alias = TR.Alias(() => {
+      evaluations += 1
+      return { evaluate: () => ({ jsValue: payload }) }
+    })
+    const adapted = TR.nativeQuantityResult(alias)
+    Expect(TR.isRuntimeValue(alias)).toBe(true)
+    Expect(evaluations).toBe(0)
+    const snapshot = adapted.evaluate()
+    Expect(evaluations).toBe(1)
+    Expect(snapshot.getJSValue()).toBe(6)
+    Expect(snapshot.evaluate()).toBe(snapshot)
+    TR.admitQuantityUnion(snapshot, [First, Second], 'Choice')
+    Expect(evaluations).toBe(1)
+  })
+
   Test('admits either declared owner without changing its wrapper or unit view', () => {
     for (const owner of [First, Second]) {
       const value = owner.fromUnit(-2, 'Double')

@@ -6,7 +6,11 @@ import { completeRuntimeValue, type TaoRuntimeValue } from './TR-reactive-values
 
 /** Explicitly categorize a legacy wrapper at a native union whose ordinary data can look identical. */
 export function nativeQuantityResult<ValueT>(input: TaoEvaluable<ValueT>): TaoRuntimeValue<ValueT> {
-  return completeRuntimeValue(input)
+  return completeRuntimeValue(input, snapshot => {
+    if (!isObject(snapshot)) {
+      throw new TaoActionFailure(QuantityFailureCases.BadShape, 'A checked quantity value is required.')
+    }
+  })
 }
 
 type QuantityAdmissionFactory = Readonly<{

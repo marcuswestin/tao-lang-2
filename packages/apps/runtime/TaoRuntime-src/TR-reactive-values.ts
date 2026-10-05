@@ -243,12 +243,16 @@ class MappedWritable<ValueT> implements TaoWritable<ValueT> {
 
 /** ForwardedValue adds output methods while preserving an input's current read semantics. */
 class ForwardedValue<ValueT> implements TaoRuntimeValue<ValueT> {
-  constructor(private readonly source: TaoEvaluable<ValueT>) {
+  constructor(
+    private readonly source: TaoEvaluable<ValueT>,
+    private readonly validateSnapshot?: (snapshot: unknown) => void,
+  ) {
     registerCompleteRuntimeValue(this)
   }
 
   evaluate(): TaoRuntimeValue<ValueT> {
     const evaluated = this.source.evaluate()
+    this.validateSnapshot?.(evaluated)
     const completed = isKnownCompleteRuntimeValue(evaluated)
       ? evaluated as TaoRuntimeValue<ValueT>
       : new EvaluatedValue(evaluated)
@@ -285,8 +289,13 @@ class EvaluatedValue<ValueT> implements TaoRuntimeValue<ValueT> {
 }
 
 /** completeRuntimeValue adds output methods without eagerly reading a legacy callable result. */
-export function completeRuntimeValue<ValueT>(value: TaoEvaluable<ValueT>): TaoRuntimeValue<ValueT> {
-  return isKnownCompleteRuntimeValue(value) ? value as TaoRuntimeValue<ValueT> : new ForwardedValue(value)
+export function completeRuntimeValue<ValueT>(
+  value: TaoEvaluable<ValueT>,
+  validateSnapshot?: (snapshot: unknown) => void,
+): TaoRuntimeValue<ValueT> {
+  return isKnownCompleteRuntimeValue(value)
+    ? value as TaoRuntimeValue<ValueT>
+    : new ForwardedValue(value, validateSnapshot)
 }
 
 /** Only registered runtime outputs guarantee complete evaluations; prototypes convey no authority. */
