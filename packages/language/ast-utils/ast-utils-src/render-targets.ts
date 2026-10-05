@@ -1,7 +1,7 @@
 import { AST } from '@parser'
 import { type AssociatedCapabilityWitness, type TaoType, Type } from './Type'
 
-type RenderValueSource = AST.AliasDeclaration | AST.StateDeclaration | AST.ParameterDeclaration | AST.Expression
+type RenderValueSource = AST.AliasDeclaration | AST.StateDeclaration | AST.ParameterDeclaration | AST.RenderSlotInputBinding | AST.Expression
 
 /**
  * RenderTarget classifies what a render site names. A view declaration is invoked with arguments;
@@ -13,7 +13,7 @@ export type RenderTarget =
   | { kind: 'nav'; declaration: AST.NavDeclaration }
   | {
     kind: 'text'
-    declaration: AST.AliasDeclaration | AST.StateDeclaration | AST.ParameterDeclaration
+    declaration: AST.AliasDeclaration | AST.StateDeclaration | AST.ParameterDeclaration | AST.RenderSlotInputBinding
     expression?: undefined
   }
   | { kind: 'text'; expression: AST.Expression; declaration?: undefined }
@@ -25,7 +25,11 @@ export type RenderTarget =
     contract: TaoType
     witness: AssociatedCapabilityWitness
   }
-  | { kind: 'parameter'; parameter: AST.ParameterDeclaration; family: 'view' | 'scene' | 'nav' }
+  | {
+    kind: 'parameter'
+    parameter: AST.ParameterDeclaration | AST.RenderSlotInputBinding
+    family: 'view' | 'scene' | 'nav'
+  }
 
 /** resolveRenderTarget classifies the linked target of one render site. */
 export function resolveRenderTarget(render: AST.Render): RenderTarget | undefined {
@@ -60,10 +64,10 @@ export function resolveRenderTarget(render: AST.Render): RenderTarget | undefine
   if (type.kind === 'primitive' && type.primitive === 'text') {
     return { kind: 'text', declaration: target }
   }
-  if (!AST.isParameterDeclaration(target)) {
+  if (!AST.isParameterDeclaration(target) && !AST.isRenderSlotInputBinding(target)) {
     return undefined
   }
-  const parameterType = Type.ofParameter(target)
+  const parameterType = type
   if (
     parameterType.kind !== 'primitive'
     || (parameterType.primitive !== 'view' && parameterType.primitive !== 'scene' && parameterType.primitive !== 'nav')
@@ -116,7 +120,11 @@ export function renderTargetName(target: RenderTarget): string {
     : target.kind === 'text'
     ? target.expression !== undefined
       ? target.expression.$cstNode?.text ?? 'expression'
+      : AST.isRenderSlotInputBinding(target.declaration)
+      ? target.declaration.name
       : Type.declarationName(target.declaration)
+    : AST.isRenderSlotInputBinding(target.parameter)
+    ? target.parameter.name
     : Type.parameterName(target.parameter)
 }
 

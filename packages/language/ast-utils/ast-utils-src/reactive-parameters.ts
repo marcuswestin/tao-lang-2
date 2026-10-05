@@ -1,6 +1,6 @@
 import { AST } from '@parser'
 import { resolveArgumentBindings, resolveParameterArgumentBindings } from './argument-bindings'
-import { rendererSlotDefaultParameterCorrespondence } from './renderer-slots'
+import { rendererSlotDefaultParameterCorrespondence, resolveRendererSlotInputBinding } from './renderer-slots'
 import { Type } from './Type'
 
 // Signature extraction re-enters storage analysis synchronously; this guard is traversal context, never a cache.
@@ -89,6 +89,7 @@ export function writableExpression(
   const target = writableExpressionTarget(expression)
   const writableRoot = AST.isStateDeclaration(target)
     || (AST.isParameterDeclaration(target) && (target.copy || parameterRequiresWritable(target)))
+    || (AST.isRenderSlotInputBinding(target) && resolveRendererSlotInputBinding(target)?.input.callerWritable === true)
   return writableRoot
     && (!AST.isMemberAccessExpression(expression) || ordinaryWritableItemPath(target, expression.members))
 }

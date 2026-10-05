@@ -39,9 +39,25 @@ const viewValidationMessages = {
   callerContentCount: (name: string) => `View '${name}' may place caller content at most once with @@content.`,
   callerContentPlacement: '@@content is only available inside the render tree of a view.',
   leafContent: (name: string) => `View '${name}' places no @@content and cannot accept unnamed caller content.`,
+<<<<<<< HEAD
   duplicateRenderSlot: rendererSlotMessages.duplicateDeclaration,
   renderSlotPlacementCount: rendererSlotMessages.renderSlotPlacementCount,
   duplicateRenderSlotFill: rendererSlotMessages.duplicateFill,
+=======
+  renderSlotDeclarationPlacement: 'A render slot must be declared directly in a view body.',
+  duplicateRenderSlot: (name: string) => `Render slot '${name}' is declared more than once in this view.`,
+  renderSlotPlacementCount: (name: string) =>
+    `View render slot '${name}' must be placed exactly once in its render tree.`,
+  renderSlotReferencePlacement: 'A bare render slot reference is only available in its owning view render tree.',
+  renderSlotFillPlacement: 'A render slot fill must be a direct child of an invocation of its owning view.',
+  duplicateRenderSlotFill: (name: string) => `Render slot '${name}' is filled more than once at this call site.`,
+  renderSlotRendererContract: (name: string) =>
+    `Renderer for slot '${name}' does not satisfy its callable input contract.`,
+  renderSlotArguments: (name: string) => `Arguments of render slot '${name}' do not match its declared parameters.`,
+  renderSlotInputCount: (name: string, available: number) =>
+    `Inline renderer for slot '${name}' accepts at most ${available} input names.`,
+  duplicateRenderSlotInput: (name: string) => `Inline renderer input '${name}' is declared more than once.`,
+>>>>>>> ddd2cf876 (Resolve typed renderer slot bindings through actual occurrences)
   tagAttachment: 'A #tag must be followed immediately by a render or loop in the same block.',
   accessibilityAttachment: 'An accessible label cluster must be followed immediately by a render in the same block.',
   accessibilityText: 'An accessible label must be a text expression.',
@@ -476,6 +492,10 @@ function validateRenderSlotDeclarationPlacement(
   if (!AST.isBlock(block) || !AST.isViewDeclaration(block.$container) || block.$container.block !== block) {
     ctx.error(declaration, rendererSlotMessages.declarationPlacement)
   }
+  const renderer = declaration.renderer?.ref
+  if (renderer && !ASTUtils.compareRendererSlotRenderer(declaration, renderer).compatible) {
+    ctx.error(declaration, viewValidationMessages.renderSlotRendererContract(declaration.name))
+  }
 }
 
 function validateRenderSlots(view: AST.ViewDeclaration, ctx: ValidationContext): void {
@@ -504,6 +524,12 @@ function validateRenderSlotUse(use: AST.RenderSlotUse, ctx: ValidationContext): 
     ) {
       ctx.error(use, rendererSlotMessages.referencePlacement)
     }
+    for (const diagnostic of ASTUtils.bindRendererSlotArguments(use)?.diagnostics ?? []) {
+      ctx.error(
+        'argument' in diagnostic ? diagnostic.argument : use,
+        viewValidationMessages.renderSlotArguments(use.slot.$refText),
+      )
+    }
     return
   }
 
@@ -517,10 +543,29 @@ function validateRenderSlotUse(use: AST.RenderSlotUse, ctx: ValidationContext): 
   if (!validOwner) {
     ctx.error(use, rendererSlotMessages.fillPlacement)
   }
-  if (declaration && AST.isBlock(block)) {
+  if (declaration) {
+    const renderer = use.renderer?.ref
+    const comparison = renderer
+      ? ASTUtils.compareRendererSlotRenderer(declaration, renderer, use)
+      : ASTUtils.compareRendererSlotForwarding(use)
+    if (comparison && !comparison.compatible) {
+      ctx.error(use, viewValidationMessages.renderSlotRendererContract(declaration.name))
+    }
+    const availableInputs = AST.renderSlotParametersOf(declaration).length
+    if (use.inputBindings.length > availableInputs) {
+      ctx.error(use, viewValidationMessages.renderSlotInputCount(declaration.name, availableInputs))
+    }
+  }
+  const seenInputs = new Set<string>()
+  for (const input of use.inputBindings) {
+    if (seenInputs.has(input.name)) {
+      ctx.error(input, viewValidationMessages.duplicateRenderSlotInput(input.name))
+    }
+    seenInputs.add(input.name)
+  }
+  if (AST.isBlock(block)) {
     const fills = AST.renderSlotUsesOf(block)
-      .filter(AST.isRenderSlotFill)
-      .filter(candidate => candidate.slot.ref === declaration)
+      .filter(candidate => AST.isRenderSlotFill(candidate) && candidate.slot.$refText === use.slot.$refText)
     if (fills.indexOf(use) > 0) {
       ctx.error(use, rendererSlotMessages.duplicateFill(use.slot.$refText))
     }

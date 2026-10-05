@@ -1168,6 +1168,7 @@ export function renderSlotParameterOwner(parameter: AST.ParameterDeclaration): R
 
 export type RenderSlotBody =
   | { kind: 'named'; renderer: NonNullable<AST.RenderSlotUse['renderer']> }
+  | { kind: 'forwarded'; slot: NonNullable<AST.RenderSlotUse['forwardedSlot']> }
   | { kind: 'empty' }
   | { kind: 'render'; render: AST.ViewRender }
   | { kind: 'block'; block: AST.Block }
@@ -1175,6 +1176,9 @@ export type RenderSlotBody =
 
 /** renderSlotBodyOf exposes the parsed RHS without conflating a fill and a placement. */
 export function renderSlotBodyOf(node: AST.RenderSlotDeclaration | AST.RenderSlotUse): RenderSlotBody {
+  if (AST.isRenderSlotUse(node) && node.forwardedSlot) {
+    return { kind: 'forwarded', slot: node.forwardedSlot }
+  }
   if (node.renderer) {
     return { kind: 'named', renderer: node.renderer }
   }
@@ -1193,6 +1197,14 @@ export function renderSlotBodyOf(node: AST.RenderSlotDeclaration | AST.RenderSlo
 /** isRenderSlotFill distinguishes colon fills from bare slot placements. */
 export function isRenderSlotFill(use: AST.RenderSlotUse): boolean {
   return use.fill === true
+}
+
+/** renderSlotInvocationOf retains the actual direct invocation receiving one slot fill. */
+export function renderSlotInvocationOf(use: AST.RenderSlotUse): AST.Render | undefined {
+  const block = use.$container
+  return isRenderSlotFill(use) && AST.isBlock(block) && AST.isRender(block.$container)
+    ? block.$container
+    : undefined
 }
 
 /**

@@ -169,6 +169,9 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (context.property === 'slot' && AST.isRenderSlotUse(context.container)) {
       return this.createRenderSlotScope(context.container)
     }
+    if (context.property === 'forwardedSlot' && AST.isRenderSlotUse(context.container)) {
+      return this.createOwnedRenderSlotScope(context.container)
+    }
     if (
       context.property === 'renderer'
       && (AST.isRenderSlotUse(context.container) || AST.isRenderSlotDeclaration(context.container))
@@ -444,6 +447,9 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
         'render-slot': value => {
           scope = this.createScopeForParameters(value.declaration, currentScope, reference)
         },
+        'render-slot-inputs': value => {
+          scope = this.createScopeForNodes(value.use.inputBindings, currentScope)
+        },
         payload: value => {
           scope = this.createScopeForNodes([value.payload], currentScope)
         },
@@ -633,6 +639,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       AST.AliasDeclaration.$type,
       AST.StateDeclaration.$type,
       AST.ParameterDeclaration.$type,
+      AST.RenderSlotInputBinding.$type,
     ])
     const seen = new Set<string>()
     return this.createScope(
@@ -648,10 +655,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
 
   private createRenderSlotScope(use: AST.RenderSlotUse): Langium.Scope {
     if (!ASTStruct.isRenderSlotFill(use)) {
-      const owner = AST.findOwningView(use)
-      return this.createScopeForNodes(
-        AST.isViewDeclaration(owner) ? AST.renderSlotDeclarationsOf(owner) : [],
-      )
+      return this.createOwnedRenderSlotScope(use)
     }
 
     const block = use.$container
@@ -670,6 +674,11 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     ]
     const target = views.find(candidate => candidate.name === targetName)
     return this.createScopeForNodes(target ? AST.renderSlotDeclarationsOf(target) : [])
+  }
+
+  private createOwnedRenderSlotScope(use: AST.RenderSlotUse): Langium.Scope {
+    const owner = AST.findOwningView(use)
+    return this.createScopeForNodes(AST.isViewDeclaration(owner) ? AST.renderSlotDeclarationsOf(owner) : [])
   }
 
   /** A call resolves a pure function or named copy; both share the one call shape (Decisions §14). */
@@ -1238,6 +1247,7 @@ type ScopeCarrier =
   | { kind: 'associated-function'; declaration: AST.AssociatedFunctionDeclaration }
   | { kind: 'associated-view'; declaration: AST.AssociatedViewDeclaration }
   | { kind: 'render-slot'; declaration: AST.RenderSlotDeclaration | AST.ForeignViewSlotDeclaration }
+  | { kind: 'render-slot-inputs'; use: AST.RenderSlotUse }
 
 function renderSlotOwnerContaining(
   node: AST.Node,
@@ -1257,6 +1267,9 @@ function scopeCarriersContaining(node: AST.Node): ScopeCarrier[] {
   const carriers: ScopeCarrier[] = []
   let current: AST.Node | undefined = node.$container
   while (current) {
+    if (AST.isRenderSlotUse(current) && current.render && current.inputBindings.length > 0) {
+      carriers.push({ kind: 'render-slot-inputs', use: current })
+    }
     if (AST.isAssociatedFunctionDeclaration(current)) {
       carriers.push({ kind: 'associated-function', declaration: current })
     }

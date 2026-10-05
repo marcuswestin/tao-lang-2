@@ -41,6 +41,7 @@ import { resolveActionInvocation, resolveActionTarget, resolveAssociatedActionTa
 import { resolveNumericUnitReading } from './numeric-unit-readings'
 import { NumericUnits } from './NumericUnits'
 import { parameterRequiresWritable } from './reactive-parameters'
+import { resolveRendererSlotInputBinding } from './renderer-slots'
 import { sourceActionResult } from './source-action-results'
 import { type UnitFamily, Units } from './Units'
 
@@ -574,6 +575,14 @@ export class Type {
   /** ofParameter resolves a parameter declaration's accepted Tao type. */
   static ofParameter(parameter: AST.ParameterDeclaration): TaoType {
     return new TypeResolutionContext().ofParameter(parameter)
+  }
+
+  /** ofRenderSlotInputBinding resolves a real inline binding against its receiving occurrence. */
+  static ofRenderSlotInputBinding(
+    binding: AST.RenderSlotInputBinding,
+    metadata?: ArgumentBindingMetadata,
+  ): TaoType {
+    return resolveRendererSlotInputBinding(binding, metadata)?.input.type ?? unresolvedType()
   }
 
   /** ofExpression resolves the static Tao type of a value expression. */
@@ -2535,6 +2544,7 @@ class TypeResolutionContext {
       CaseSetCase: caseSetCase => ({ kind: 'enum', declaration: AST.caseSetOwningCase(caseSetCase) }),
       ForStatement: statement => this.forStatementBindingType(statement),
       ParameterDeclaration: parameter => this.ofParameter(parameter),
+      RenderSlotInputBinding: binding => this.withoutCycles(binding, () => Type.ofRenderSlotInputBinding(binding)),
       DatasourceDeclaration: declaration =>
         declaration.value ? this.ofExpression(declaration.value) : primitiveType('datasource'),
       DesignDeclaration: () => primitiveType('design'),

@@ -96,9 +96,11 @@ import { referencedNames } from './references'
 import { renderTargetIsNav, renderTargetName, resolveRenderTarget } from './render-targets'
 import {
   bindRendererSlotArguments,
+  compareRendererSlotForwarding,
   compareRendererSlotRenderer,
   rendererSlotDefaultParameterCorrespondence,
   rendererSlotSignatureOf,
+  resolveRendererSlotInputBinding,
 } from './renderer-slots'
 import { sourceActionResult } from './source-action-results'
 import { Type } from './Type'
@@ -111,6 +113,7 @@ export type {
 } from './associated-callable-witness-key'
 export { declaredCallableFailureContract } from './failure-contracts'
 export type { NumericUnitsDeclarationPlan, NumericUnitsSuffixResolution } from './NumericUnits'
+export type { RendererSlotInputDomain } from './renderer-slots'
 
 /** ASTUtils groups shared semantic helpers for Tao AST consumers. */
 export const ASTUtils = {
@@ -133,7 +136,9 @@ export const ASTUtils = {
   writableExpression,
   literalExpression,
   bindRendererSlotArguments,
+  compareRendererSlotForwarding,
   compareRendererSlotRenderer,
+  resolveRendererSlotInputBinding,
   rendererSlotDefaultParameterCorrespondence,
   rendererSlotSignatureOf,
   appBoundDatasources,
