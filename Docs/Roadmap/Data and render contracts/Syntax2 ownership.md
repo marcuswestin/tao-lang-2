@@ -72,6 +72,16 @@ A owns Type and ExpressionsCompiler dispatch and may integrate C's committed API
 grant, through the coordinator relay. C does not edit those shared files. The coordinator retains
 facade exports, validator registration, factory dependency publication and app graduation.
 
+C's unit-reading resolver/emitter and validator are returned at `20c59ae86` and `37a676ec7`,
+replayed as `4d9fd8270` and `053c8b76e`. Its next batch owns quantity-native-module.ts and
+bridge-metadata.ts solely for generated descendant quantity factories and dependency publication,
+plus focused quantity-native-module and quantity-publication tests. Derive each child through its
+actual checked parent factory rather than creating a separate nominal root with a copied table.
+Preserve parent admission, concrete role authentication, canonical backing, inherited units,
+cross-file linkage and generated TypeScript contracts. Existing aliases continue to forward the
+same owner instead of becoming descendants. Return any minimal shared resolver/facade request;
+Type and ExpressionsCompiler remain A-owned. No unrelated bridge or backend edits belong here.
+
 Both managers implement multiple sensible commits with focused checks; routine returns do not
 wait for a dedicated review. Remaining generic/Self/operator and converter work is still required,
 but these grants do not authorize unrelated shared-file changes or new language decisions.
@@ -120,6 +130,11 @@ arguments. Compatible forwarding preserves the descriptor identity. The coordina
 Compile/TR facades, registrations, authored migrations and app graduation; Type and
 ExpressionsCompiler remain A-owned. No associated-method or numeric-publication changes in
 FilesCompiler belong to this grant.
+
+B additionally owns TaoPropsCompiler.ts solely to publish a props-expression API for an actual
+slot placement source node, preserving its own layout and occurrence identity. Reuse existing
+props compilation; do not fabricate a render AST or omit placement metadata. This does not
+transfer other render-prefix semantics or the shared Compile facade.
 
 The grants below record the first-wave implementation. A1, B1, C1 and D1 are committed and reviewed;
 their shared seams are returned to the coordinator for integration. The D1 foreign-error follow-up
