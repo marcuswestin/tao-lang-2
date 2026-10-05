@@ -1,4 +1,4 @@
-import { FS, readFirebaseConnections } from '@shared'
+import { CLI, FS, Platform, readFirebaseConnections } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 
 const connection = {
@@ -73,12 +73,15 @@ Describe('project-local Firebase connections', () => {
     const path = FS.resolvePath('.tao/local/connections.json', root)
     try {
       await FS.writeJson(path, { firebase: connection })
-      await FS.chmod(path, 0o000)
-      try {
-        await Expect(readFirebaseConnections(root)).rejects.toThrow('could not be read')
-      } finally {
-        await FS.chmod(path, 0o600)
-      }
+      // Inject the denial in an isolated child: root ignores `chmod 000`, and module mocks must not leak.
+      const probe = await CLI.run(Platform.runtimeProcess.execPath, {
+        args: [FS.resolvePath('fixtures/firebase-unreadable-connection.ts', import.meta.dir), root],
+        processPolicy: 'test',
+      })
+      Expect({ exitCode: probe.exitCode, stderr: probe.stderr }).toEqual({ exitCode: 0, stderr: '' })
+      const { denied, error } = JSON.parse(probe.stdout) as { denied: number; error?: string }
+      Expect(denied).toBe(1)
+      Expect(error).toContain('could not be read')
     } finally {
       await FS.remove(root)
     }

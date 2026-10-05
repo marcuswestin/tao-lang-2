@@ -188,11 +188,13 @@ async function stop(
   const noSpawn = () =>
     closed && options.started.pid === undefined && options.started.error !== undefined
     && state.rootPid === undefined && state.processes.length === 0
-  const wait = () =>
-    Time.pollUntil(() => noSpawn() || (closed && treeStopped(state, options)) ? true : undefined, {
+  const settled = () => noSpawn() || (closed && treeStopped(state, options)) ? true : undefined
+  // Read once more after the deadline: a close that lands during the last interval still counts.
+  const wait = async () =>
+    await Time.pollUntil(settled, {
       intervalMs: Math.min(100, Math.max(1, timeoutMs / 5)),
       timeoutMs,
-    })
+    }) ?? settled()
   if (options.serial !== undefined && await ownsSerial(options.serial, options.avdName, state, options)) {
     await bounded(
       options.run('adb', {

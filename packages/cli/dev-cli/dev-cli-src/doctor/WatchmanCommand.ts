@@ -14,6 +14,7 @@ async function run(
     readFacts?: typeof readWatchmanFacts
     repositoryRoot?: string
     run?: typeof CLI.run
+    stdio?: 'inherit' | 'pipe'
   } = {},
 ): Promise<number> {
   if (!Object.hasOwn(ACTIONS, action)) {
@@ -36,7 +37,7 @@ async function run(
   }
   const result = await (options.run ?? CLI.run)(facts.stableClient, {
     args: [...ACTIONS[action as keyof typeof ACTIONS]],
-    stdio: 'inherit',
+    stdio: options.stdio ?? 'inherit',
   })
   if (result.error !== undefined) {
     HCI.writeErrorLine(`Watchman ${action} failed: ${result.error.message}`)
@@ -44,4 +45,21 @@ async function run(
   return result.exitCode ?? 1
 }
 
-export const WatchmanCommand = { run }
+/**
+ * startBeforeLoweringPriority starts the shared daemon at this process's priority when a lane needs
+ * it off macOS, and reports the start's exit code; it returns undefined when there is nothing to do.
+ * Only macOS has launchd start Watchman. Elsewhere the first client forks the daemon, which inherits
+ * that client's priority, and Watchman refuses to start below normal priority. A lane must call this
+ * before lowering its own priority, or its Studio gates' clients would fork a daemon that refuses.
+ */
+async function startBeforeLoweringPriority(
+  needsWatchman: boolean,
+  options: Parameters<typeof run>[1] & { hostPlatform: string },
+): Promise<number | undefined> {
+  if (!needsWatchman || options.hostPlatform === 'darwin') {
+    return undefined
+  }
+  return await run('start', { ...options, stdio: 'pipe' })
+}
+
+export const WatchmanCommand = { run, startBeforeLoweringPriority }

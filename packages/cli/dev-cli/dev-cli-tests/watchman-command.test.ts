@@ -59,4 +59,31 @@ Describe('Watchman management', () => {
       await FS.remove(root)
     }
   })
+
+  Test('starts the daemon before a lane lowers its priority only off macOS and only when a gate needs it', async () => {
+    const root = await mkTestDir('tao-watchman-priority-')
+    try {
+      const client = FS.resolvePath('primary/.devenv/profile/bin/watchman', root)
+      await FS.writeText(client, '')
+      const calls: Array<{ args: string[]; stdio: unknown }> = []
+      const start = (needsWatchman: boolean, hostPlatform: string) =>
+        WatchmanCommand.startBeforeLoweringPriority(needsWatchman, {
+          hostPlatform,
+          repositoryRoot: root,
+          readFacts: async () => ({ repositoryRoot: root, stableClient: client }),
+          run: async (command, spec) => {
+            const args = [...spec?.args ?? []]
+            calls.push({ args, stdio: spec?.stdio })
+            return { args, command, exitCode: 0, signal: null, stderr: '', stdout: '' }
+          },
+        })
+      Expect(await start(true, 'darwin')).toBeUndefined()
+      Expect(await start(false, 'linux')).toBeUndefined()
+      Expect(calls).toEqual([])
+      Expect(await start(true, 'linux')).toBe(0)
+      Expect(calls).toEqual([{ args: ['--no-local', 'version'], stdio: 'pipe' }])
+    } finally {
+      await FS.remove(root)
+    }
+  })
 })

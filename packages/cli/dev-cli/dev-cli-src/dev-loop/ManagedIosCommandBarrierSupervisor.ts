@@ -39,6 +39,7 @@ if (download) {
     Errors.throwHostEnvironment('Private iOS held downloader refused its fixed SDK plan/environment.')
   }
 }
+// Bash, not /bin/sh: the workers' bounded `read -t` is absent from Linux's dash.
 const worker = CLI.start('/bin/bash', {
   args: [
     Repo.resolvePath(

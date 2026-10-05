@@ -8,6 +8,7 @@ import {
   type ManagedIosNativeExecution,
   runManagedIosCommandBarrier,
 } from '../dev-cli-src/dev-loop/ManagedIosCommandBarrier'
+import { metadataTool } from './ManagedIosCommandBarrierMetadataTool'
 
 // Real kernels execute fixed repository source children. These tests never release a native worker.
 // Native ancestry plus the private child handle corroborates shell PPID; it is not authenticated direct PPID.
@@ -381,7 +382,7 @@ Test('fast fixed source downloader captures and drains its original plutil metad
   try {
     const result = await f.execute()
     Expect(result.exitCode).toBe(0)
-    const metadata = f.evidence()!.processes.filter(process => process.command === 'plutil')
+    const metadata = f.evidence()!.processes.filter(process => process.command === metadataTool.command)
     Expect(metadata).toHaveLength(1)
     Expect(metadata[0]!.pid).not.toBe(f.evidence()!.worker.pid)
     Expect(ProcessTree.identities(metadata.map(process => process.pid)).size).toBe(0)
