@@ -1,6 +1,6 @@
 import { AST } from '@parser'
 import { Describe, Expect, Test } from '@shared/test'
-import { testParseCode } from './test-parse'
+import { parseCodeWithErrors, testParseCode } from './test-parse'
 
 Describe('parser: effect outcomes', () => {
   Test('parses `when do` with its invocation and every outcome form', async () => {
@@ -90,6 +90,47 @@ Describe('parser: effect outcomes', () => {
     Expect.Is(deferred[1]!.invocation, AST.isDoStatement)
     Expect(deferred[1]!.invocation.action.$type).toBe('ValueReference')
     Expect(deferred[1]!.invocation.$cstNode?.text.startsWith('Delete')).toBe(true)
+  })
+
+  Test('binds left-side done and error payloads inside async and single-do bodies', async () => {
+    const parsed = await testParseCode(`
+      action Export() returns text from ./Bindings.ts
+      action Notify(Value text) { }
+      action Run() {
+        do Export() then {
+          done Duration -> async { do Notify(Duration) }
+          error Problem -> { do Notify(Problem) }
+        }
+        do Export() then { done Result -> do Notify(Result) }
+      }
+    `)
+    const invocations = AST.streamAllContents(parsed.entry.ast).filter(AST.isDoStatement)
+    const thenStatements = invocations.filter(invocation => invocation.then)
+    Expect(thenStatements).toHaveLength(2)
+    const done = thenStatements[0]!.outcomes[0]!
+    const error = thenStatements[0]!.outcomes[1]!
+    const shorthandDone = thenStatements[1]!.outcomes[0]!
+    Expect([done.case, done.payload?.name, error.case, error.payload?.name]).toEqual([
+      'done',
+      'Duration',
+      'error',
+      'Problem',
+    ])
+    Expect.Is(done.block.statements[0], AST.isAsyncActionStatement)
+    Expect.Is(error.block.statements[0], AST.isDoStatement)
+    Expect.Is(shorthandDone.block.statements[0], AST.isDoStatement)
+    const references = AST.streamAllContents(parsed.entry.ast).filter(AST.isValueReference)
+    Expect(references.some(reference => reference.target.ref === done.payload)).toBe(true)
+    Expect(references.some(reference => reference.target.ref === error.payload)).toBe(true)
+    Expect(references.some(reference => reference.target.ref === shorthandDone.payload)).toBe(true)
+  })
+
+  Test('rejects two payload positions on one outcome', async () => {
+    const parsed = await parseCodeWithErrors(`
+      action Export() returns text from ./Bindings.ts
+      action Run() { do Export() then { done Result -> Extra { } } }
+    `)
+    Expect(parsed.entry.document.parseResult.parserErrors.length).toBeGreaterThan(0)
   })
 
   Test('leaves `saved` and `rejected` usable as ordinary names', async () => {

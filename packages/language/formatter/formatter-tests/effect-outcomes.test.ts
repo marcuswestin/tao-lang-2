@@ -68,4 +68,27 @@ Describe('formatter: effect outcomes', () => {
     `,
     ),
   )
+
+  Test(
+    'formats left-side result and failure bindings with async and single-action bodies',
+    async () => {
+      const formatted = await Formatter.formatCode(
+        'action Export(){} action Notify(Value text){} action Run(){do Export() then{done Duration->async{do Notify(Duration)} error Problem->do Notify(Problem)}}',
+      )
+      Expect(formatted).toBe([
+        'action Export() { }',
+        '',
+        'action Notify(Value text) { }',
+        '',
+        'action Run() {',
+        '   do Export() then {',
+        '      done Duration -> async {',
+        '         do Notify(Duration)',
+        '      }',
+        '      error Problem -> do Notify(Problem)',
+        '}  }',
+        '',
+      ].join('\n'))
+    },
+  )
 })

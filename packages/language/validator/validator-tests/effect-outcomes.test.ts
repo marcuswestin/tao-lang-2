@@ -82,7 +82,7 @@ Describe('validator: effect outcomes', () => {
     Expect(found).toEqual({ errors: [], warnings: [] })
   })
 
-  Test('accepts selected `then` outcomes and requires no payload on done or cancelled', async () => {
+  Test('accepts selected `then` outcomes and requires no payload on cancelled', async () => {
     const found = await validated(outcomesApp(`
       render Stack() {
         Button(Title: "Press") {
@@ -101,16 +101,24 @@ Describe('validator: effect outcomes', () => {
     Expect(found).toEqual({ errors: [], warnings: [] })
   })
 
-  Test(
-    'rejects a payload on done',
-    rejects(
-      outcomesApp(`
-        action Run() { do Save() then { done -> Result { } } }
-        render Text("Ready")
-      `),
-      messages.donePayload,
-    ),
-  )
+  Test('accepts a left-bound action result and error payload', async () => {
+    const found = await validated(outcomesApp(
+      `
+      action Run() {
+        do Read() then {
+          done Result -> { do Consume(Result) }
+          error Problem -> { do Consume(Problem) }
+        }
+      }
+      render Text("Ready")
+    `,
+      `
+      action Read() returns text from ./Bindings.ts
+      action Consume(Value text) { }
+    `,
+    ))
+    Expect(found).toEqual({ errors: [], warnings: [] })
+  })
 
   Test(
     'rejects a legacy outcome word in a `then` continuation',

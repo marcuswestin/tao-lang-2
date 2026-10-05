@@ -11,7 +11,6 @@ const effectOutcomeValidationMessages = {
       ? `'${outcome}' is not an outcome of ${effect}; name \`done\`, \`error\`, \`cancelled\`, or a case it declares.`
       : `'${outcome}' is not an outcome of ${effect}; name \`saved\`, \`rejected\`, \`error\`, or a case it declares.`,
   savedPayload: '`saved` carries no message, so it takes no name.',
-  donePayload: '`done` carries no message, so it takes no name.',
   otherwisePayload: '`otherwise` carries no message, so it takes no name.',
   emptyPayload: (outcome: string) => `\`${outcome}\` carries no message, so it takes no name.`,
   unhandledFailure: (effect: string, cases: readonly string[]) =>
@@ -99,13 +98,8 @@ function validateThenOutcomes(statement: AST.DoStatement, ctx: ValidationContext
     if (!allowed.has(outcome.case)) {
       ctx.error(outcome, effectOutcomeValidationMessages.unknownOutcome(outcome.case, effectName(statement), true))
     }
-    if (['done', 'cancelled'].includes(outcome.case) && outcome.payload) {
-      ctx.error(
-        outcome.payload,
-        outcome.case === 'done'
-          ? effectOutcomeValidationMessages.donePayload
-          : effectOutcomeValidationMessages.emptyPayload(outcome.case),
-      )
+    if (outcome.case === 'cancelled' && outcome.payload) {
+      ctx.error(outcome.payload, effectOutcomeValidationMessages.emptyPayload(outcome.case))
     }
     if (outcome.case === 'otherwise' && outcome.payload) {
       ctx.error(outcome.payload, effectOutcomeValidationMessages.otherwisePayload)

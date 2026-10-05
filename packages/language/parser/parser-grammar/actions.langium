@@ -94,7 +94,7 @@ WhenDoStatement:
       | outcomes+=BarWhenDoOutcome* otherwise=WhenDoOtherwise);
 
 WhenDoOutcome:
-    case=WhenDoCaseName '->' payload=CasePayload? block=(ActionBlock | AtomicActionBlock);
+    case=WhenDoCaseName (payload=CasePayload '->' | '->' payload=CasePayload?) block=(ActionBlock | AtomicActionBlock);
 
 WhenDoCaseName returns string:
     SubjectCaseName | 'otherwise';
