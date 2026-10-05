@@ -20,7 +20,7 @@ function step(name: string, from: number, to: number, conclusion = 'success') {
 }
 
 /** partition is one partition job whose bootstrap takes `bootstrap` seconds and whose cache save skips. */
-function partition(index: number, bootstrap: number) {
+function partition(index: number, bootstrap: number, evenSample?: number) {
   return {
     completed_at: at(bootstrap + 100),
     name: `Partition ${index}/3`,
@@ -29,6 +29,7 @@ function partition(index: number, bootstrap: number) {
       step('Bootstrap', 0, bootstrap),
       step('Save the cache', bootstrap, bootstrap, 'skipped'),
       step(`Verify partition ${index}/3`, bootstrap, bootstrap + 100),
+      ...(evenSample === undefined ? [] : [step('Even sample', 0, evenSample)]),
     ],
   }
 }
@@ -49,8 +50,12 @@ function fakeDependencies() {
   const requested: string[] = []
   const respond = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status })
   const jobs: Record<number, unknown[]> = {
-    1: [partition(1, 120), partition(2, 130), partition(3, 140), { ...partition(0, 0), name: 'Verify', steps: [] }],
-    2: [partition(1, 40), partition(2, 50), partition(3, 90)],
+    1: [partition(1, 120, 10), partition(2, 130, 20), partition(3, 140), {
+      ...partition(0, 0),
+      name: 'Verify',
+      steps: [],
+    }],
+    2: [partition(1, 40, 20), partition(2, 50, 30), partition(3, 90)],
   }
   const dependencies: PrChecksDependencies = {
     env: {},
@@ -92,6 +97,7 @@ Describe('ci-timings', () => {
     Expect(result.exitCode).toBe(0)
     Expect(fake.requested.some(path => path.includes('branch=main&event=push&status=success'))).toBe(true)
     Expect(fake.lines).toContain('| Bootstrap | 130s / 140s | 50s / 90s | -80s |')
+    Expect(fake.lines).toContain('| Even sample | 15s / 20s | 25s / 30s | +10s |')
     Expect(fake.lines).toContain('| Save the cache | skipped | skipped |  |')
     // Each partition's index folds into one row rather than three.
     Expect(fake.lines).toContain('| Verify partition k/3 | 100s / 100s | 100s / 100s | 0s |')

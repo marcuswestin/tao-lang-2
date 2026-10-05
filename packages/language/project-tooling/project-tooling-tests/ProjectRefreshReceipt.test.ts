@@ -146,22 +146,29 @@ Describe('watched project refresh receipts', () => {
             const changed = await watch.requestRefresh()
             Expect(changed.revision).toBeGreaterThan(previous.revision)
             Expect(changed.status).toBe(status)
-            Expect(semanticResult(changed)).toEqual(semanticResult(await watch.requestRefresh({ force: true })))
+            const parity = await watch.requestRefresh({ force: true })
+            Expect(semanticResult(changed)).toEqual(semanticResult(parity))
             if (path === contract) {
               Expect(changed.changedOutputPaths).toContain(contract)
               Expect(await FS.readText(contract)).toBe(savedContract)
             }
-            if (saved === undefined) {
-              await FS.remove(path)
-              if (path.includes('Nested/.tao/')) {
-                await FS.remove(FS.resolvePath('Nested/.tao', root))
-              }
+            if (group === 'publication') {
+              Expect(parity.status).toBe('fresh')
+              previous = await warmReceipt(watch, parity)
+              Expect(previous.status).toBe('fresh')
             } else {
-              await FS.writeText(path, saved)
+              if (saved === undefined) {
+                await FS.remove(path)
+                if (path.includes('Nested/.tao/')) {
+                  await FS.remove(FS.resolvePath('Nested/.tao', root))
+                }
+              } else {
+                await FS.writeText(path, saved)
+              }
+              const repaired = await watch.requestRefresh({ force: true })
+              Expect(repaired.status).toBe('fresh')
+              previous = await warmReceipt(watch, repaired)
             }
-            const repaired = await watch.requestRefresh({ force: true })
-            Expect(repaired.status).toBe('fresh')
-            previous = await warmReceipt(watch, repaired)
           }
           if (group === 'publication') {
             await FS.remove(contract)

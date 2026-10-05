@@ -95,6 +95,7 @@ export const MergePrCommand = {
     let after = before
     if (before.state === 'open') {
       const checks = await dependencies.followChecks({
+        ghAuth: true,
         intervalMs: options.intervalMs,
         pr: before.number,
         repositoryRoot: root,

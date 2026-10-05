@@ -43,7 +43,10 @@ function fakeDependencies(script: Script = {}) {
   })
   const dependencies: MergePrDependencies = {
     exists: async () => !('message' in script) || script.message !== undefined,
-    followChecks: async () => ({ exitCode: script.checksExitCode ?? 0 }),
+    followChecks: async options => {
+      calls.push(`checks ${options.ghAuth ? 'authenticated' : 'anonymous'}`)
+      return { exitCode: script.checksExitCode ?? 0 }
+    },
     readText: async () => script.message ?? MESSAGE,
     run: async (command, spec = {}) => {
       const args = (spec.args ?? []).join(' ')
@@ -100,6 +103,7 @@ Describe('merge-pr', () => {
     const fake = fakeDependencies()
     const outcome = await MergePrCommand.run({ repositoryRoot: ROOT }, fake.dependencies)
     Expect(outcome.exitCode).toBe(0)
+    Expect(fake.calls).toContain('checks authenticated')
     const merge = fake.calls.findIndex(call => call.startsWith(`gh ${MERGE_CALL}`))
     const archive = fake.calls.indexOf(`git push origin ${SHA}:refs/heads/merged/example`)
     const deletion = fake.calls.indexOf('git push origin --delete feat/example')

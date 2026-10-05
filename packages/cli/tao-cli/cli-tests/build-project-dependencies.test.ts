@@ -53,7 +53,7 @@ export function Main(_props: unknown) { return value === 'reached-helper' ? null
     }
   }, 180_000)
 
-  Test('exports a sibling publication with a private TypeScript helper and npm alias', async () => {
+  Test('exports a sibling publication with a private TypeScript helper and npm aliases', async () => {
     const root = await mkTestDir('tao-build-dependencies-')
     const consumer = FS.resolvePath('consumer', root)
     const library = FS.resolvePath('library', root)
@@ -78,31 +78,55 @@ view Main() { render Card() }
       )
       await FS.writeText(
         FS.resolvePath('Package.tao', library),
-        'package { version 1.0.0 license MIT includes @ui requires ts npm:some-name version 1.0.0 as localutil }\n',
+        `package {
+   version 1.0.0
+   license MIT
+   includes @ui
+   requires ts npm:some-name version 1.0.0 as localutil
+   requires ts npm:other-name version 2.0.0 as otherutil
+}
+`,
       )
       await FS.writeText(FS.resolvePath('@ui/Card.tao', library), 'public view Card() from ./Native.tsx\n')
       await FS.writeText(
         FS.resolvePath('@ui/Native.tsx', library),
         `import { mark } from 'localutil'
+import { tag } from 'otherutil'
 import { prefix } from './Helper'
-export function Card(_props: unknown) { mark(prefix); return null }
+export function Card(_props: unknown) { mark(prefix); tag(prefix); return null }
 `,
       )
       await FS.writeText(FS.resolvePath('@ui/Helper.ts', library), 'export const prefix = "private helper"\n')
       await runTaoInstall(consumer, { appName: 'Reader' }, {
         installNpm: async directory => {
-          const packageRoot = FS.resolvePath('node_modules/localutil', directory)
-          await FS.writeJson(FS.resolvePath('package.json', packageRoot), {
-            name: 'some-name',
-            version: '1.0.0',
-            main: 'index.js',
-            types: 'index.d.ts',
-          })
-          await FS.writeText(
-            FS.resolvePath('index.d.ts', packageRoot),
-            'export declare function mark(value: string): string\n',
-          )
-          await FS.writeText(FS.resolvePath('index.js', packageRoot), 'exports.mark = value => value\n')
+          for (
+            const dependency of [
+              {
+                alias: 'localutil',
+                name: 'some-name',
+                version: '1.0.0',
+                declaration: 'export declare function mark(value: string): string\n',
+                implementation: 'exports.mark = value => value\n',
+              },
+              {
+                alias: 'otherutil',
+                name: 'other-name',
+                version: '2.0.0',
+                declaration: 'export declare function tag(value: string): string\n',
+                implementation: 'exports.tag = value => value\n',
+              },
+            ]
+          ) {
+            const packageRoot = FS.resolvePath(`node_modules/${dependency.alias}`, directory)
+            await FS.writeJson(FS.resolvePath('package.json', packageRoot), {
+              name: dependency.name,
+              version: dependency.version,
+              main: 'index.js',
+              types: 'index.d.ts',
+            })
+            await FS.writeText(FS.resolvePath('index.d.ts', packageRoot), dependency.declaration)
+            await FS.writeText(FS.resolvePath('index.js', packageRoot), dependency.implementation)
+          }
         },
       })
 
@@ -137,10 +161,25 @@ export function Card(_props: unknown) { mark(prefix); return null }
       const links = await FS.readJson<{ links: { relativePath: string; target: string }[] }>(
         `${generated}.tao-module-links.json`,
       )
-      const privateLink = links.links.find(link => link.relativePath.includes('/dependencies/'))
-      Expect(privateLink === undefined).toBe(false)
-      Expect(await FS.isFile(FS.resolvePath('localutil/package.json', privateLink!.target))).toBe(true)
-      Expect(FS.pathIsWithin(privateLink!.target, FS.resolvePath(compiledId!, compiledOutput))).toBe(true)
+      const dependencyLinks = links.links.filter(link => link.relativePath.includes('/dependencies/'))
+      Expect(dependencyLinks.length).toBe(1)
+      const sharedModules = dependencyLinks[0]!.target
+      await FS.remove(FS.resolvePath('.tao/cache/install', consumer))
+      Expect(await FS.exists(FS.resolvePath('.tao/cache/install', consumer))).toBe(false)
+      const artifactRoot = FS.resolvePath(compiledId!, compiledOutput)
+      const resolvedModules = await FS.realPath(sharedModules)
+      Expect(FS.pathIsWithin(resolvedModules, artifactRoot)).toBe(true)
+      for (
+        const [alias, implementation] of [
+          ['localutil', 'exports.mark = value => value\n'],
+          ['otherutil', 'exports.tag = value => value\n'],
+        ]
+      ) {
+        const resolvedPackage = await FS.realPath(FS.resolvePath(alias, sharedModules))
+        Expect(FS.pathIsWithin(resolvedPackage, artifactRoot)).toBe(true)
+        Expect(FS.dirname(resolvedPackage)).toBe(resolvedModules)
+        Expect(await FS.readText(FS.resolvePath('index.js', resolvedPackage))).toBe(implementation)
+      }
       Expect(await FS.exists(FS.resolvePath('.tao-ts', library))).toBe(false)
       Expect(await FS.exists(FS.resolvePath('node_modules', library))).toBe(false)
     } finally {
