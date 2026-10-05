@@ -34,9 +34,10 @@ import {
 } from './associated-operators'
 import { puritySatisfiesFunction } from './callable-effects'
 import { type CallableSignatureComparison, callableSignatureOf, compareCallableSignatures } from './callable-signatures'
+import { resolveInvocationFailureDeclaration } from './effect-outcomes'
 import { declaredCallableFailureContract, failureContractSatisfiesBound } from './failure-contracts'
 import { instantiateGenericInvocation, substituteGenericType } from './generic-bindings'
-import { resolveActionInvocation, resolveActionTarget } from './invocations'
+import { resolveActionInvocation, resolveActionTarget, resolveAssociatedActionTarget } from './invocations'
 import { resolveNumericUnitReading } from './numeric-unit-readings'
 import { NumericUnits } from './NumericUnits'
 import { parameterRequiresWritable } from './reactive-parameters'
@@ -2320,6 +2321,10 @@ class TypeResolutionContext {
    * on a value of the family reads it back as a number. A family may also expose named readings.
    */
   private postfixMemberAccessType(access: AST.PostfixMemberAccess): TaoType {
+    const associated = resolveAssociatedActionTarget(access, receiver => this.receiverType(receiver))
+    if (associated) {
+      return this.ofAction(associated.action)
+    }
     const receiver = this.ofExpression(access.receiver)
     if (!isPrimitiveKind(receiver)) {
       return unresolvedType()
@@ -2436,6 +2441,10 @@ class TypeResolutionContext {
         ? primitiveType('color')
         : unresolvedType()
     }
+    const associated = resolveAssociatedActionTarget(expression, receiver => this.receiverType(receiver))
+    if (associated) {
+      return this.ofAction(associated.action)
+    }
     return this.atMemberPath(this.ofContextualValue(target, expression), expression.members)
   }
 
@@ -2482,12 +2491,36 @@ class TypeResolutionContext {
         if (AST.isWhenActionBranch(branch) || AST.isWhenRenderBranch(branch)) {
           return primitiveType('text')
         }
-        if (AST.isWhenDoOutcome(branch) && AST.isDoStatement(branch.$container) && branch.$container.then) {
-          if (branch.case === 'done') {
-            return this.ofInvocationResult(branch.$container)
+        if (AST.isWhenDoOutcome(branch)) {
+          const owner = branch.$container
+          const invocation = AST.isDoStatement(owner)
+            ? owner
+            : AST.isWhenDoStatement(owner)
+            ? owner.invocation
+            : undefined
+          if (invocation) {
+            const canonicalThen = AST.isDoStatement(owner) && !!invocation.then
+            if (canonicalThen && branch.case === 'done') {
+              return this.ofInvocationResult(invocation)
+            }
+            const intrinsicCases = canonicalThen
+              ? ['error', 'cancelled', 'otherwise']
+              : ['saved', 'rejected', 'error', 'otherwise']
+            if (!intrinsicCases.includes(branch.case)) {
+              const failure = resolveInvocationFailureDeclaration(invocation, branch.case)
+              if (failure.kind === 'unresolved') {
+                return unresolvedType()
+              }
+              if (AST.isTypeDeclaration(failure.declaration)) {
+                return this.ofDefinition(failure.declaration)
+              }
+            }
+            if (canonicalThen) {
+              const context = AST.actionFailureContextDeclaration(payload)
+              return context ? this.ofDefinition(context) : unresolvedType()
+            }
+            return primitiveType('text')
           }
-          const context = AST.actionFailureContextDeclaration(payload)
-          return context ? this.ofDefinition(context) : unresolvedType()
         }
         const exceptionalReadCase = AST.isGuardRenderBranch(branch)
           && ['loading', 'missing', 'unauthorized', 'error'].includes(AST.canonicalSubjectCase(branch.case))

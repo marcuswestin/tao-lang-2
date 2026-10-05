@@ -448,12 +448,14 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
           scope = this.createScopeForNodes([value.payload], currentScope)
         },
         'action-block': value => {
+          const loop = value.block.$container
+          const bindings = AST.isForStatement(loop) && loop.block === value.block ? [loop] : []
           const results = [
             ...AST.actionResultDeclarationsOwnedByActionBlock(value.block),
             ...value.block.statements.filter(AST.isAliasDeclaration),
           ].filter(binding => (binding.$cstNode?.end ?? Infinity) <= (reference.$cstNode?.offset ?? 0))
           scope = this.createScopeForNodes(
-            [...AST.askDeclarationsOwnedByActionBlock(value.block), ...results],
+            [...bindings, ...AST.askDeclarationsOwnedByActionBlock(value.block), ...results],
             currentScope,
           )
         },
@@ -858,6 +860,8 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       root.statements.filter(AST.isTypeDeclaration).flatMap(AST.caseSetCasesOf),
     )
     scope = this.createScopeForNodes(this.importedCaseSetCases(node), scope)
+    scope = this.createScopeForNodes(AST.visibleFileDeclarations(node, AST.isTypeDeclaration), scope)
+    scope = this.createScopeForNodes(this.importedDeclarations(node, AST.isTypeDeclaration), scope)
     return scope
   }
 

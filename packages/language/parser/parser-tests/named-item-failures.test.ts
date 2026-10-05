@@ -31,6 +31,7 @@ Describe('parser: named item failures', () => {
     Expect.Is(save, AST.isActionDeclaration)
     const failStatements = save.block?.statements.filter(AST.isFailStatement) ?? []
     Expect(failStatements.map(statement => statement.case.$refText)).toEqual(['InvalidInput', 'Offline'])
+    Expect(failStatements[0]?.case.ref).toBe(invalidInput)
     Expect(failStatements[1]?.case.ref).toBe(offline)
     const failReferenceTarget: NonNullable<typeof failStatements[number]['case']['ref']> = invalidInput
     Expect(failReferenceTarget).toBe(invalidInput)
@@ -43,6 +44,7 @@ Describe('parser: named item failures', () => {
     const nativeFailure = foreign.failures[0]
     Expect.Is(nativeFailure, AST.isActionFailureDeclaration)
     Expect(nativeFailure.case.$refText).toBe('InvalidInput')
+    Expect(nativeFailure.case.ref).toBe(invalidInput)
     const nativeReferenceTarget: NonNullable<typeof foreign.failures[number]['case']['ref']> = invalidInput
     Expect(nativeReferenceTarget).toBe(invalidInput)
 
