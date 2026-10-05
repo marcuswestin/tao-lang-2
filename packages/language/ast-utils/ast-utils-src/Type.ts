@@ -343,7 +343,7 @@ export class Type {
   }
 
   static instantiateGenericInvocation(
-    declaration: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration,
+    declaration: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration | AST.ViewDeclaration,
     arguments_: readonly AST.Argument[],
     metadata?: ArgumentBindingMetadata,
   ) {
@@ -365,10 +365,9 @@ export class Type {
     const definition = constructor.type.ref
     const parameter = AST.isParameterTypeDeclaration(definition)
       ? definition.$container
-      : AST.isFunctionDeclaration(definition) && constructor.members?.length === 1
-      ? definition.parameterList.parameters.find(parameter =>
-        Type.parameterName(parameter) === constructor.members?.[0]
-      )
+      : (AST.isFunctionDeclaration(definition) || AST.isViewDeclaration(definition))
+          && constructor.members?.length === 1
+      ? AST.parametersOf(definition).find(parameter => Type.parameterName(parameter) === constructor.members?.[0])
       : undefined
     return AST.isParameterDeclaration(parameter) && Type.ofParameter(parameter).genericParameter
       ? { parameter, value: constructor.value }
@@ -440,7 +439,7 @@ export class Type {
           dispatch,
         ),
       instantiateGenericInvocation: (
-        declaration: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration,
+        declaration: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration | AST.ViewDeclaration,
         arguments_: readonly AST.Argument[],
         metadata?: ArgumentBindingMetadata,
       ) => resolution.instantiateGenericInvocation(declaration, arguments_, metadata),
@@ -1694,7 +1693,10 @@ function memberType(
 function contextualGenericParameter(node: AST.Node, name: string): AST.GenericTypeParameter | undefined {
   let current: AST.Node | undefined = node.$container
   while (current) {
-    if (AST.isFunctionDeclaration(current) || AST.isAssociatedFunctionDeclaration(current)) {
+    if (
+      AST.isFunctionDeclaration(current) || AST.isAssociatedFunctionDeclaration(current)
+      || AST.isViewDeclaration(current)
+    ) {
       const found = current.genericParameters.find(parameter => parameter.name === name)
       if (found) {
         return found
@@ -2551,7 +2553,7 @@ class TypeResolutionContext {
   }
 
   instantiateGenericInvocation(
-    declaration: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration,
+    declaration: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration | AST.ViewDeclaration,
     arguments_: readonly AST.Argument[],
     metadata: ArgumentBindingMetadata = {},
   ) {
@@ -2563,7 +2565,8 @@ class TypeResolutionContext {
           ? this.compare(actual, expected) === 'compatible'
           : Type.isAssignable(actual, expected),
       ...metadata,
-      resultType: declaration => this.ofFunctionReturn(declaration),
+      resultType: declaration =>
+        AST.isViewDeclaration(declaration) ? primitiveType('rendered') : this.ofFunctionReturn(declaration),
       strictAccepts: (actual, expected) =>
         this.descriptors
           ? this.compareDomains(actual, expected, false) === 'compatible'

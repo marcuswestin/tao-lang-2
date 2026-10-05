@@ -7,7 +7,7 @@ import {
 } from './argument-bindings'
 import { type TaoType, Type } from './Type'
 
-type GenericCallable = AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration
+type GenericCallable = AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration | AST.ViewDeclaration
 
 export type GenericInvocationDiagnostic = Readonly<{
   kind: 'uninferred-generic' | 'incompatible-generic'
@@ -39,7 +39,7 @@ export function instantiateGenericInvocation(
   arguments_: readonly AST.Argument[],
   resolution: GenericInvocationResolution,
 ): GenericInvocationInstantiation {
-  const parameters = declaration.parameterList.parameters
+  const parameters = AST.parametersOf(declaration)
   const parameterType = resolution.parameterType ?? Type.ofParameter
   const argumentType = resolution.argumentType ?? Type.ofArgument
   const accepts = resolution.accepts ?? Type.isAssignable

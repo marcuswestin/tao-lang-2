@@ -55,6 +55,10 @@ export type ResolvedRenderInvocation = {
   eventPairs: RenderEventBindingPair[]
   implicitChange?: ImplicitChangeBinding
   eventDiagnostics: RenderEventBindingDiagnostic[]
+  parameterTypes?: ReadonlyMap<AST.ParameterDeclaration, TaoType>
+  transportTypes?: ReadonlyMap<AST.ParameterDeclaration, TaoType>
+  result?: TaoType
+  genericDiagnostics?: ReturnType<typeof Type.instantiateGenericInvocation>['genericDiagnostics']
 }
 
 /** ResolvedActionInvocation declares the semantic shape of an action invocation. */
@@ -104,7 +108,10 @@ export function resolveRenderInvocation(render: AST.Render): ResolvedRenderInvoc
     }
   }
 
-  const bindings = resolveArgumentBindings(view, render)
+  const generic = view.genericParameters.length > 0
+    ? Type.instantiateGenericInvocation(view, AST.argumentsOf(render))
+    : undefined
+  const bindings = generic ?? resolveArgumentBindings(view, render)
   const events = resolveRenderEventBindings(render, view, bindings.pairs)
   const satisfiedParameters = new Set([
     ...events.pairs.map(pair => pair.parameter),
@@ -124,6 +131,14 @@ export function resolveRenderInvocation(render: AST.Render): ResolvedRenderInvoc
     eventPairs: events.pairs,
     implicitChange: events.implicitChange,
     eventDiagnostics: events.diagnostics,
+    ...(generic
+      ? {
+        parameterTypes: generic.parameterTypes,
+        transportTypes: generic.transportTypes,
+        result: generic.result,
+        genericDiagnostics: generic.genericDiagnostics,
+      }
+      : {}),
   }
 }
 
