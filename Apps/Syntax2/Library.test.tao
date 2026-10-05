@@ -5,6 +5,8 @@ test "Syntax2 Library" {
       run LibraryApp
 
       expect text "Library"
+      expect text "Ada Lovelace"
+      expect text "3"
       expect text "All books."
       expect missing text "Grouped books."
       press "Group"

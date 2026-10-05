@@ -9,9 +9,14 @@ remains undiscovered.
 ## Source and authority
 
 - [Main.tao](Main.tao): active shell with a quoted Library header, bare zero-argument render calls,
-  and a Group button switching ordinary boolean state between two quoted labels.
+  signature-scoped private types, reversed role-bound arguments, and a Group button switching
+  ordinary boolean state between two quoted labels.
+- [library/Library.tao](library/Library.tao): graduated Name/GivenName/FamilyName, PersonName and
+  Subtract declarations. The app renders Ada Lovelace and 3 using the actual signature projections
+  and argument matcher. It uses quotation while bare text-value rendering remains pending.
 - [Library.test.tao](Library.test.tao): active journey asserting the header and both directions of
-  the grouping display transition. It exercises no book collection or acquisition behavior.
+  the grouping display transition and the signature-role results. It exercises no book collection
+  or acquisition behavior.
 - [Main.tao.future](Main.tao.future): project/app boundary, controls, slots, units and bounded list UI.
 - [library/Library.tao.future](library/Library.tao.future): nominal signatures, structural capabilities,
   generics, native operator, entities, associated actions/rendering and cleanup.
@@ -40,8 +45,8 @@ to its prerequisite wave. The first render foundation is implemented; broader gr
 The active shell is intentionally dependency-complete and small. It compiles and passes source
 checks; the runtime journey verdict is recorded by the integration owner. The original future Main,
 library modules, adapter sketch, standard-library target and future journey remain intact.
-The shell demonstrates quotation and a reachable grouping-state transition, with ordinary existing
-types and actions. It does not implement the future collection, nominal/capability, quantity,
+The shell demonstrates quotation, a reachable grouping-state transition and the graduated nominal
+signature/role matching. It does not implement the future collection, capability, quantity,
 parameterized-slot, failure/cleanup or adapter contracts. Bare text-value placement and empty-value
 suppression are deferred; a quoted empty string still retains the explicit Text node.
 

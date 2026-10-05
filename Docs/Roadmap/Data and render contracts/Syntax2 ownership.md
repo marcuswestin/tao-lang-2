@@ -61,6 +61,11 @@ diagnostics needed by these actual signature projections and explicit role const
 forcing declaration `type ProfileName is PersonName.GivenName` uses the selected named-type `is`
 relation; this grant does not introduce transparent `=` aliases or widen package-alias consumers.
 
+A also owns ExpressionsFormatter.ts solely for explicit leading-dot constructor spacing and
+stable fix/check behavior, with focused signature-role formatter tests. Canonical role selection
+must not consume its enclosing comma's space. Its next Type-only outcome hook may consume D's
+actual action-result descriptor; no recursive initializer visibility is introduced.
+
 C resumes generated unit-reading methods such as Span.seconds(), preserving concrete descendant
 roles and canonical backing. It owns new numeric-unit-readings.ts, its focused semantic test,
 numeric-unit-readings-validator.ts, NumericUnitReadingsValidationMessages.ts and validator test,
@@ -95,6 +100,13 @@ effect-outcomes-validator.ts and its message module; compiler ActionsCompiler.ts
 action-control-flow.ts; and focused parser/formatter/validator/compiler tests for this batch.
 New focused defer codegen/semantic helpers belong to D. The coordinator retains shared parser
 installation, ASTUtils/Compile/Format/TR facade dispatch, validator registration and app migration.
+
+D additionally owns ActionsValidator.ts and FunctionalCoreValidator.ts solely to admit selected
+action-local aliases and infer source action returns. New focused action-result semantic helpers
+belong to D; publish inference through the actual action/return nodes and a caller-supplied
+expression resolver so A can connect its held Type context. Preserve function purity and existing
+foreign action contracts. Canonical done/error payload bindings go before the arrow; legacy
+when-do input compatibility does not redefine the selected then syntax.
 Reuse the integrated runtime action scope and deferred-action primitives. Ordinary calls and their
 handlers remain joined; cleanup is serial LIFO on every scope exit and preserves a primary failure.
 Deferred shorthand registers the invocation instead of executing it during registration. Named

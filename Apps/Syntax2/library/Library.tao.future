@@ -4,13 +4,7 @@ use Time, Wait, seconds from @tao/time
 use CreateTemporaryPDF, DeleteTemporaryFile, UploadFile,
     ObservedRevision, MarkSeen, NotifyExport from ./BookIO
 
-// 1. Private signature types projected through an exported callable.
-public type Name is text
-type GivenName is Name
-type FamilyName is Name
-public func PersonName(GivenName, FamilyName) {
-   return "{GivenName} {FamilyName}"
-}
+// 1. Name, private signature types and PersonName graduated to Library.tao.
 public type ComparedNames is list of Name
 public type GroupMode is yes/no
 
@@ -30,7 +24,7 @@ public func EarlierLabel
       otherwise -> Right.ToText()
    }
 }
-public func Subtract(Left number, Right number) { return Left - Right }
+// 2.1 Subtract graduated to Library.tao.
 
 // 2.1 Pure native operator; raw JavaScript output must be checked and wrapped.
 public type Score is number with {

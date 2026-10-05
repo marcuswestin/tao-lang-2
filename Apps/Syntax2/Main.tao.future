@@ -52,14 +52,14 @@ view GroupedShelf(Items list of Book) {
 }
 
 // 3. Signature projections and canonical named state construction.
-type ProfileName is PersonName.GivenName
+// ProfileName graduated to Main.tao.
 view Library {
    state Draft = NewBook { Title TitleType "" }
    state Feedback = TitleType ""
    state GroupMode no
    let GroupMode2 = GroupMode yes
    let Title = TitleType.Default()
-   let Person = PersonName(ProfileName "Ada", .FamilyName "Lovelace")
+   // Person construction graduated to Main.tao; bare placement remains a target.
    let Readers = ComparedNames ["Ada", "Lovelace"]
    let Label = EarlierLabel(.Right TitleType "Shelf", .Left Title)
    let Score = Score 2 + Score 3

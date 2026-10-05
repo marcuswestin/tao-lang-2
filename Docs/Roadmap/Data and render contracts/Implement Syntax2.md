@@ -32,6 +32,14 @@ canonical plan, including optional absence. A genuine source method passes app c
 runtime invocation through an inherited live receiver; unclassified native implementations retain
 unknown effects. This is a source capability milestone, not complete app graduation. Generic/Self,
 converters, rendering capabilities, full slots, quantities and action/data integration remain.
+The app now graduates Name, its private GivenName/FamilyName roles, PersonName and Subtract into
+`library/Library.tao`, and ProfileName plus its construction into `Main.tao`. The actual Tao journey
+asserts Ada Lovelace and 3 alongside both grouping transitions; it passes with a supported
+workspace-local Tao test home. Source check is canonical after the leading-role-dot formatter
+repair. Unit-reading dispatch is integrated and descendant factory publication is in progress.
+Action then/defer grammar is incremental; canonical payload and production codegen connections
+remain in progress. A batched typecheck found specific scope, unit-reference and test-import
+typing repairs, plus the expected in-progress defer dispatcher; combined verification is pending.
 Existing function examples now use
 the formatter's selected `func` and arrow return spelling. Broad follow-up verification is pending.
 The parameter-array signature adapter is reviewed and integrated at `0ac15b312`.

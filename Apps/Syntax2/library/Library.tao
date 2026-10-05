@@ -1,0 +1,18 @@
+// 1. Private semantic roles remain accessible through the exported signature.
+public
+type Name is text
+
+type GivenName is Name
+
+type FamilyName is Name
+
+public
+func PersonName(GivenName, FamilyName) {
+   return "{ GivenName } { FamilyName }"
+}
+
+// 2. Inline roles share backing; their names determine argument binding.
+public
+func Subtract(Left number, Right number) {
+   return Left - Right
+}
