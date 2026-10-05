@@ -807,7 +807,13 @@ function publishRead(
   const contextualItemField = AST.isMemberAccessExpression(reference) && AST.isTypeDeclaration(owner)
     && domain.kind === 'item' && domain.nominal === owner && selectedDomain !== domain
     && immutableReadDomain(selectedDomain)
-  if (owner && declaration === owner && (immutableReadDomain(domain) || contextualItemField || contextualTransport)) {
+  const contextualEntityIdentity = AST.isMemberAccessExpression(reference) && AST.isEntityDataDeclaration(owner)
+    && domain.kind === 'entity' && domain.entity === owner && reference.shade === undefined
+    && reference.members.length === 1 && reference.members[0] === 'Id'
+  if (
+    owner && declaration === owner
+    && (immutableReadDomain(domain) || contextualItemField || contextualEntityIdentity || contextualTransport)
+  ) {
     return Object.freeze({
       reference,
       declaration,
