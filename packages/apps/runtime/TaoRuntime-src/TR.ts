@@ -706,7 +706,9 @@ class TR {
     ...args: any[]
   ): Promise<TR.Value<ResultT>> {
     const result = await action.evaluate().jsValue.invokeJoinedResult(...args)
-    return isRuntimeValue(result) ? completeRuntimeValue<ResultT>(result) : TR.Value(result as ResultT)
+    return isRuntimeValue(result)
+      ? completeRuntimeValue(result as TR.Evaluable<ResultT>)
+      : TR.Value(result as ResultT)
   }
 
   /**
