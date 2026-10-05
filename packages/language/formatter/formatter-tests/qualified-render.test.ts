@@ -82,10 +82,14 @@ Describe('formatter: qualified renders', () => {
 
     const [named, called, member, method, slotCall] = renders
     Expect.Is(named, AST.isRenderStatement)
-    Expect(named.view?.ref?.name).toBe('Label')
+    const namedView = named.view?.ref
+    Expect.Is(namedView, AST.isViewDeclaration)
+    Expect(namedView.name).toBe('Label')
 
     Expect.Is(called, AST.isRenderStatement)
-    Expect(called.view?.ref?.name).toBe('Foo')
+    const calledView = called.view?.ref
+    Expect.Is(calledView, AST.isViewDeclaration)
+    Expect(calledView.name).toBe('Foo')
     Expect(called.argumentList?.arguments).toHaveLength(1)
     const argument = called.argumentList!.arguments[0]!.value
     Expect.Is(argument, AST.isMemberAccessExpression)
@@ -117,12 +121,14 @@ Describe('formatter: qualified renders', () => {
     Expect(fills[1]!.slot.ref).toBe(slotDeclarations[1])
 
     const [memberFill, methodFill] = fills
+    Expect.Is(memberFill, AST.isRenderSlotUse)
     Expect.Is(memberFill.render, AST.isViewRender)
     Expect.Is(memberFill.render.expression, AST.isMemberAccessExpression)
     Expect(memberFill.render.expression.target.ref).toBe(parameter)
     Expect(memberFill.render.expression.members).toEqual(['Content'])
     Expect(memberFill.render.layoutClause?.entries[0]?.head.$cstNode?.text).toBe('pad')
 
+    Expect.Is(methodFill, AST.isRenderSlotUse)
     Expect.Is(methodFill.render, AST.isViewRender)
     Expect.Is(methodFill.render.expression, AST.isMethodCallExpression)
     Expect.Is(methodFill.render.expression.callee, AST.isMemberAccessExpression)

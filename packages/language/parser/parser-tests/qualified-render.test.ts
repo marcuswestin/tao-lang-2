@@ -89,12 +89,14 @@ Describe('parser: qualified renders', () => {
     Expect(fills[1]!.slot.ref).toBe(slotDeclarations[1])
     const [memberFill, methodFill] = fills
 
+    Expect.Is(memberFill, AST.isRenderSlotUse)
     Expect.Is(memberFill.render, AST.isViewRender)
     Expect.Is(memberFill.render.expression, AST.isMemberAccessExpression)
     Expect(memberFill.render.expression.target.ref).toBe(parameter)
     Expect(memberFill.render.expression.members).toEqual(['Content'])
     Expect(memberFill.render.layoutClause?.entries[0]?.head.$cstNode?.text).toBe('pad')
 
+    Expect.Is(methodFill, AST.isRenderSlotUse)
     Expect.Is(methodFill.render, AST.isViewRender)
     Expect.Is(methodFill.render.expression, AST.isMethodCallExpression)
     Expect.Is(methodFill.render.expression.callee, AST.isMemberAccessExpression)

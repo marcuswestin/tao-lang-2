@@ -1,4 +1,5 @@
 import { AST } from '@parser'
+import { Assert } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { parseCodeWithErrors, testParseCode } from './test-parse'
 
@@ -73,6 +74,7 @@ Describe('parser: functional core', () => {
     const when = controls.find(AST.isWhenRenderStatement)
     Expect.Is(when, AST.isWhenRenderStatement)
     Expect(when.branches).toHaveLength(1)
+    Assert.defined(when.otherwise, 'the when expression has its otherwise branch')
     Expect(when.otherwise.block.statements).toHaveLength(1)
     const loop = controls.find(AST.isForStatement)
     Expect.Is(loop, AST.isForStatement)
@@ -83,12 +85,16 @@ Describe('parser: functional core', () => {
     Expect(loopValue.target.ref).toBe(loop)
   })
 
-  Test('requires otherwise in value and render subject cases', async () => {
+  Test('requires otherwise for values and permits a render subject without a fallback', async () => {
     const value = await parseCodeWithErrors('let Result = when true { true -> "yes" }')
     const render = await parseCodeWithErrors('view Main() { render Stack() { when true { true -> { Text("yes") } } } }')
 
     Expect(value.entry.document.parseResult.parserErrors.length).toBeGreaterThan(0)
-    Expect(render.entry.document.parseResult.parserErrors.length).toBeGreaterThan(0)
+    Expect(render.entry.document.parseResult.parserErrors).toEqual([])
+    const when = AST.streamAllContents(render.entry.ast).find(AST.isWhenRenderStatement)
+    Expect.Is(when, AST.isWhenRenderStatement)
+    Expect(when.branches).toHaveLength(1)
+    Expect(when.otherwise).toBeUndefined()
   })
 
   Test('parses declaration-linked case tests, enums, and one-sided action and render if', async () => {
@@ -207,8 +213,10 @@ Describe('parser: functional core', () => {
     Expect.Is(net, AST.isAppGuardStatement)
     Expect(net.branches.map(branch => branch.case)).toEqual(['loading', 'missing', 'error'])
     const [loading, missing, error] = net.branches
-    Expect.Is(loading?.render, AST.isViewRender)
-    Expect(loading?.render?.view.$refText).toBe('Spinner')
+    Assert.defined(loading, 'the loading branch exists')
+    Expect.Is(loading.render, AST.isViewRender)
+    Assert.defined(loading.render.view, 'the loading render has a view reference')
+    Expect(loading.render.view.$refText).toBe('Spinner')
     Expect(missing?.block?.statements).toHaveLength(1)
     const errorText = error?.block?.statements[0]
     Expect.Is(errorText, AST.isViewRender)

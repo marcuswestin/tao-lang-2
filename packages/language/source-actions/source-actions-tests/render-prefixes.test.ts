@@ -1,5 +1,5 @@
 import { AST } from '@parser'
-import { Diagnostics } from '@shared'
+import { Assert, Diagnostics } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import Validator from '@validator'
 import SourceActions from '../source-actions-src/source-actions'
@@ -254,7 +254,10 @@ Describe('Studio render occurrence prefixes', () => {
       Text("B")
     } }`)
     const container = AST.streamAllContents(document.parseResult.value)
-      .find((node): node is AST.ViewRender => AST.isViewRender(node) && node.view.$refText === 'Row')!
+      .find((node): node is AST.ViewRender => AST.isViewRender(node) && node.view?.$refText === 'Row')
+    Expect.Is(container, AST.isViewRender)
+    Assert.defined(container.view, 'the snapped descendant fixture has a named container reference')
+    Expect(container.view.$refText).toBe('Row')
     const renderIds = [renderId(container), renderId(textRender(document, 'B'))]
     await Expect(SourceActions.applyStudioPatch(document, { kind: 'extract-view', name: 'Pair', renderIds }))
       .rejects.toThrow('Unsnap the sketch first')
@@ -285,7 +288,7 @@ Describe('Studio render occurrence prefixes', () => {
     const document = await parseDocument(`use Text from @tao/ui
       view Host() accepts content slots @toolbar from ./Host.tsx
       view Main() { render Host() {
-        @toolbar Text("Tools")
+        @toolbar: Text("Tools")
         #a accessible label "A name" Text("A")
         Text("B")
       } }
@@ -295,7 +298,7 @@ Describe('Studio render occurrence prefixes', () => {
       renderId: renderId(textRender(document, 'A')),
     })
     const updated = await updatedDocument(patch.content)
-    Expect(patch.content).toContain('@toolbar Text("Tools")')
+    Expect(patch.content).toContain('@toolbar: Text("Tools")')
     Expect(textRender(updated, 'Tools')).toBeDefined()
     Expect(labels(textRender(updated, 'Tools'))).toEqual([])
     Expect(labels(textRender(updated, 'B'))).toEqual([])

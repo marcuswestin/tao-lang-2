@@ -26,9 +26,9 @@ Describe('opaque associated rendered content', () => {
     const second = () => null
     let content = TR.RenderView(first, { Caption: 'first' })
     const live = TR.Alias(() => content)
-    Expect(TR.MountRendered(live).type).toBe(first)
+    Expect(TR.MountRendered(live.evaluate()).type).toBe(first)
     content = TR.RenderView(second, { Caption: 'second' })
-    Expect(TR.MountRendered(live).type).toBe(second)
+    Expect(TR.MountRendered(live.evaluate()).type).toBe(second)
     Expect(() => TR.MountRendered(TR.Value({} as TR.Rendered))).toThrow('content produced by a view')
   })
 })

@@ -4,6 +4,8 @@ import { Describe, Expect, Test } from '@shared/test'
 import { createAssociatedEffects } from '../ast-utils-src/associated-effect-context'
 import { resolveAssociatedMethodInvocation } from '../ast-utils-src/associated-invocations'
 import {
+  type AssociatedCallableDeclaration,
+  type AssociatedCallableDescriptor,
   capabilityRequirements,
   ownAssociatedMethods,
   ownAssociatedViews,
@@ -110,8 +112,12 @@ Describe('Associated view descriptors', () => {
     const supplied = Type.associatedCallable(view, owner)
     const required = Type.associatedCallable(requirement, requirementOwner)
     Assert(supplied.kind === 'ready' && required.kind === 'ready', 'the declared contracts resolve')
+    const descriptors = new Map<AssociatedCallableDeclaration, AssociatedCallableDescriptor>([
+      [view, supplied.descriptor],
+      [requirement, required.descriptor],
+    ])
     withAssociatedEffects({
-      descriptors: new Map([[view, supplied.descriptor], [requirement, required.descriptor]]),
+      descriptors,
       analyses: new Map(),
     }, () => {
       Expect(Type.capabilityWitnesses(Type.ofDefinition(owner), Type.ofDefinition(requirementOwner))).toBeUndefined()

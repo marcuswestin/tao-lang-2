@@ -26,14 +26,14 @@ type FlatListProps = {
   onScroll?: (event: ScrollEvent) => void
   renderItem(info: { item: Row; index: number }): React.ReactNode
   scrollEventThrottle?: number
-  style?: unknown
+  style?: RN.StyleProp<RN.ViewStyle>
   testID?: string
 }
 type ScrollViewProps = {
   accessibilityLabel?: string
   children?: React.ReactNode
   onScroll?: (event: ScrollEvent) => void
-  style?: unknown
+  style?: RN.StyleProp<RN.ViewStyle>
   testID?: string
 }
 

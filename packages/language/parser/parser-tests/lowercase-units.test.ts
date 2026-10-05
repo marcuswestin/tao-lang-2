@@ -1,6 +1,6 @@
 import { Workspace } from '@compiler/workspace'
 import { AST, Parser } from '@parser'
-import { Diagnostics } from '@shared'
+import { Assert, Diagnostics } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { parseCodeWithErrors, rejectsParser, testLexCode, testParseCode, testParseSyntax } from './test-parse'
 
@@ -83,9 +83,10 @@ Describe('parser: lowercase numeric units', () => {
       Expect.Is(alias(result.entry.ast, 'Wrong').value, AST.isNumberLiteral)
       Expect(AST.streamAllContents(result.entry.ast).filter(AST.isNumericUnitConstruction)).toEqual([])
       const reference = AST.streamAllContents(result.entry.ast).find(node =>
-        AST.isViewRender(node) && node.view.$refText === suffix
+        AST.isViewRender(node) && node.view?.$refText === suffix
       )
       Expect.Is(reference, AST.isViewRender)
+      Assert.defined(reference.view, 'the uppercase suffix fixture has a view reference')
       Expect(reference.view.ref).toBeUndefined()
       Expect(Diagnostics.errorMessages(result.diagnostics).some(message => message.includes(suffix))).toBe(true)
     })
@@ -169,6 +170,7 @@ Describe('parser: lowercase numeric units', () => {
     Expect.Is(label.value, AST.isNumberLiteral)
     const child = AST.streamAllContents(result.entry.ast).find(AST.isViewRender)
     Expect.Is(child, AST.isViewRender)
+    Assert.defined(child.view, 'the child render has a named view reference')
     Expect(child.view.$refText).toBe('leaf')
   })
 

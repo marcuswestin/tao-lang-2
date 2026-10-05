@@ -1,5 +1,6 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
+import { Assert } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { testParseCode, testParseSyntax } from './test-parse'
 
@@ -119,6 +120,8 @@ Describe('parser: core language syntax', () => {
     const [_localAlias, firstChild, secondChild] = AST.statementsOf(render.block)
     Expect.Is(firstChild, AST.isViewRender)
     Expect.Is(secondChild, AST.isViewRender)
+    Assert.defined(firstChild.view, 'the first content child has a named view reference')
+    Assert.defined(secondChild.view, 'the second content child has a named view reference')
     Expect(firstChild.view.$refText).toBe('Text')
     Expect(secondChild.view.$refText).toBe('Text')
   })

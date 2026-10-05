@@ -1,4 +1,5 @@
 import { AST } from '@parser'
+import { Assert } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { testParseCode, testParseSyntax } from './test-parse'
 
@@ -58,7 +59,10 @@ Describe('parser: render prefixes', () => {
     Expect(prefixes.map(prefix => prefix.value.$type)).toEqual(['ValueReference', 'ValueReference', 'StringLiteral'])
     Expect(prefixes.map(prefix => prefix.spelling)).toEqual(['accessible', 'a11y', 'accessible'])
     const children = root.block!.statements.filter(AST.isViewRender)
-    Expect(children[0]!.view.$refText).toBe('Leaf')
+    const firstChild = children[0]
+    Expect.Is(firstChild, AST.isViewRender)
+    Assert.defined(firstChild.view, 'the bare child after its prefix has a named view reference')
+    Expect(firstChild.view.$refText).toBe('Leaf')
     Expect(children.slice(1).map(AST.isQuotedRender)).toEqual([true, true])
     Expect(children.slice(1).map(child => child.argumentList!.arguments[0]!.value.$cstNode!.text)).toEqual([
       '"Quoted child"',

@@ -1,4 +1,5 @@
 import { AST } from '@parser'
+import { Assert } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { testParseCode, testParseSyntax } from './test-parse'
 
@@ -69,6 +70,7 @@ Describe('parser: bare renders', () => {
     const when = AST.streamAllContents(parsed.entry.ast).find(AST.isWhenRenderStatement)!
     Expect(when.branches[0]!.payload!.name).toBe('Reason')
     Expect(when.branches[0]!.block.statements.length).toBe(1)
+    Expect.Is(when.otherwise, AST.isWhenRenderOtherwise)
     Expect(when.otherwise.block.statements[0]!.$type).toBe('ViewRender')
   })
 
@@ -82,6 +84,9 @@ Describe('parser: bare renders', () => {
     Expect(branches[0]!.payload!.name).toBe('Context')
     Expect(branches[0]!.render).toBeUndefined()
     Expect(branches[0]!.block!.statements.length).toBe(1)
-    Expect(branches[1]!.render!.view.$refText).toBe('Handler')
+    const handler = branches[1]?.render
+    Expect.Is(handler, AST.isViewRender)
+    Assert.defined(handler.view, 'the bare app guard alternative names a view')
+    Expect(handler.view.$refText).toBe('Handler')
   })
 })
