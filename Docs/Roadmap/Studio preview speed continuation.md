@@ -234,6 +234,24 @@ mutation checks prove invalidation. The old approximately 270ms result has not b
 the current corpus. Partial source-text parsing is still unimplemented; current parser reuse is
 whole-document reuse. Selective design subscriptions remain deferred.
 
+The first changed-suite gate found a real caller-lifetime regression: Studio's declaration scope
+check parsed before/after source concurrently through one mutable parser context, allowing both
+results to observe the newer canonical AST. It now compares independent syntax-only trees, which
+are the inputs that this authored-change check needs. Nineteen focused tests pass, including
+overlapping allowed and rejected requests. The host-command expected list now includes the new
+performance operation (eight tests pass). The missing-result guard fixture now supplies a real
+suite inventory and proves that the report-promising node actually ran before asserting failure;
+its forty-one focused tests pass. These corrections preserve the failed broad report rather than
+attributing deterministic failures to its recorded host contention.
+
+The caller inventory also corrected two retained-AST lifetimes. Scenario relocation inspects its
+destination through an independent standalone parse, preserving the linked source build whose
+references it still consumes. Wrap/group/extract actions now parse the source and same-directory
+siblings as one completed batch, then pass that batch's document and ASTs to the patch operation.
+Six relocation tests and fifty session tests pass; real-session proposals match cold patches and
+extraction respects sibling-owned names. Restoring either old lifetime pattern fails its new
+witness. Existing project-view insertion still passes its separate regression.
+
 Separate existing follow-up: parsing a consumer root before a library root can clear the
 consumer's requirement aliases before linking. A cold fixture with Library publishing
 `@ui/Widget` and Consumer requiring `@ui as @parts` then importing from `@parts` reported

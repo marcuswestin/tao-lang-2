@@ -28,6 +28,7 @@ const expected = [
   'studio-smoke',
   'studio-proof-real-app',
   'admission-experiment',
+  'performance-check',
   'native-module-check',
   'reclaim --execute',
   'prepare-release studio',

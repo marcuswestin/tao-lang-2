@@ -1,7 +1,8 @@
 import { loadSemanticSnapshot, Workspace } from '@compiler/workspace'
 import { AST } from '@parser'
 import { Errors, FS } from '@shared'
-import { Deferred, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
+import { Deferred, Expect, mkTestDir, Test, testOverrideSlot, withTaoFiles } from '@shared/test'
+import SourceActions, { type StudioSourcePatchRequest } from '@source-actions'
 import { studioGeneratedSourceHeader } from '../studio-src/StudioGeneratedSources'
 import { StudioPreviewManifest } from '../studio-src/StudioPreviewManifest'
 import {
@@ -16,6 +17,25 @@ import {
 } from '../studio-src/StudioProtocol'
 import { StudioServerDatasource } from '../studio-src/StudioServerDatasource'
 import { contendingSketchCreate, systemLightScheme } from './test-studio-fixtures'
+
+const parseSlot = testOverrideSlot({
+  read: () => Workspace.prototype.parse,
+  write: value => {
+    Workspace.prototype.parse = value
+  },
+})
+const parseFilesSlot = testOverrideSlot({
+  read: () => Workspace.prototype.parseFiles,
+  write: value => {
+    Workspace.prototype.parseFiles = value
+  },
+})
+const studioPatchSlot = testOverrideSlot({
+  read: () => SourceActions.applyStudioPatch,
+  write: value => {
+    SourceActions.applyStudioPatch = value
+  },
+})
 
 Test('Studio project session resolves one current Tao app and serves contained versioned files', async () => {
   await withStudioProject(async (session, paths, root) => {
@@ -1241,6 +1261,116 @@ Test('Studio binds render edits to their compiler-owned occurrence identity', as
     const applied = await session.applySourceAction(envelope)
     Expect(applied.content).toBe(proposal.content)
   })
+})
+
+Test('Studio prepares sibling-aware render actions from one completed parse batch', async () => {
+  await withTaoFiles('tao-studio-sibling-actions-', {
+    'Garden.tao': `
+      use Col, Text from @tao/ui
+      app Garden { id "garden" version "1.0.0" name "Garden" view MainView }
+      view MainView() { render Col() { Text("First") Text("Second") } }
+    `,
+    'One.tao': 'use Text from @tao/ui\nfolder view View1() { render Text("One") }',
+    'Two.tao': 'use Text from @tao/ui\nfolder view View2() { render Text("Two") }',
+    'Other/Three.tao': 'view View3() { }',
+  }, async (paths, root) => {
+    const session = await StudioProjectSession.open({ entryPath: paths['Garden.tao'], projectRoot: root })
+    session.registerPreview({ previewInstanceId: 'sibling-actions' })
+    const file = await session.readFile('Garden.tao')
+    const renderId = (text: string) => {
+      const selected = `Text("${text}")`
+      const start = file.content.indexOf(selected)
+      Expect(start).toBeGreaterThan(-1)
+      return `${paths['Garden.tao']}:${start}:${start + selected.length}`
+    }
+    const actions: StudioSourcePatchRequest[] = [
+      { kind: 'wrap-render', renderId: renderId('First'), wrapper: 'Row' },
+      { kind: 'group-renders', renderIds: [renderId('First'), renderId('Second')], wrapper: 'Row' },
+      { kind: 'extract-view', renderIds: [renderId('First'), renderId('Second')] },
+    ]
+    const occurrence = { nodeKind: 'render', renderOwner: 'MainView' } as const
+    const entryPaths = [paths['Garden.tao'], paths['One.tao'], paths['Two.tao']]
+    const cold = await Workspace.open(root)
+    const coldEntries = await cold.parseFiles(entryPaths)
+    const expected = await Promise.all(
+      actions.map(action =>
+        SourceActions.applyStudioPatch(coldEntries[0]!.entry.document, action, {
+          files: [...new Set(coldEntries.flatMap(entry => entry.files.map(candidate => candidate.ast)))],
+          occurrence,
+        })
+      ),
+    )
+    const parse = Workspace.prototype.parse
+    const parseFiles = Workspace.prototype.parseFiles
+    const applyPatch = SourceActions.applyStudioPatch
+    const singles: string[] = []
+    const batches: string[][] = []
+    let completed: Awaited<ReturnType<typeof parseFiles>> | undefined
+    let applied = 0
+    const restoreParse = parseSlot.install(async function(entry) {
+      if (this.root === session.projectRoot) {
+        singles.push(entry)
+        completed = undefined
+      }
+      return await parse.call(this, entry)
+    })
+    const restoreBatch = parseFilesSlot.install(async function(entries) {
+      const results = await parseFiles.call(this, entries)
+      if (this.root === session.projectRoot) {
+        batches.push([...entries])
+        completed = results
+      }
+      return results
+    })
+    const restorePatch = studioPatchSlot.install(async (document, request, context) => {
+      if (document.uri.fsPath === paths['Garden.tao']) {
+        Expect(completed).toBeDefined()
+        Expect(document).toBe(completed![0]!.entry.document)
+        for (const entry of completed!) {
+          Expect(context?.files).toContain(entry.entry.ast)
+        }
+        applied += 1
+      }
+      return await applyPatch(document, request, context)
+    })
+    try {
+      for (const [index, action] of actions.entries()) {
+        const proposal = await session.proposeSourceAction({
+          action,
+          channel: studioProtocolChannel,
+          checkpoint: { id: `sibling-${index}`, phase: 'single' },
+          identity: {
+            ...session.identity(),
+            occurrence,
+            path: file.path,
+            previewInstanceId: 'sibling-actions',
+            sourceVersion: file.sourceVersion,
+          },
+          protocolVersion: studioProtocolVersion,
+          requestId: `sibling-${index}`,
+          sourceActionVersion: studioSourceActionVersion,
+          type: 'source-action',
+        })
+        Expect(proposal.content).toBe(expected[index]!.content)
+      }
+      Expect(singles).toEqual(actions.map(() => paths['Garden.tao']))
+      Expect(batches).toEqual(actions.map(() => entryPaths))
+      Expect(applied).toBe(3)
+      Expect(expected[0]!.content).toContain('Row() [gap 8, pad 8]')
+      Expect(expected[1]!.content).toContain('Row() {')
+      Expect(expected[2]!.content).toContain('view View3()')
+      Expect(expected[2]!.content).toContain('View3()')
+    } finally {
+      restorePatch()
+      restoreBatch()
+      restoreParse()
+    }
+    await FS.writeText(paths['Garden.tao'], expected[2]!.content)
+    const after = await (await Workspace.open(root)).validate(paths['Garden.tao'])
+    Expect(after.diagnostics.filter(diagnostic => diagnostic.severity === 'error')).toEqual([])
+    Expect((await session.readFile('One.tao')).content).toContain('view View1()')
+    Expect((await session.readFile('Two.tao')).content).toContain('view View2()')
+  }, { location: 'host' })
 })
 
 Test('Studio revalidates source-action proposals and undo against the exact current source', async () => {

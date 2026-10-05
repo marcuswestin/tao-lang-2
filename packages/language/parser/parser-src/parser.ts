@@ -48,7 +48,11 @@ export type ParserLspServices = {
   language: Langium.LangiumServices
 }
 
-/** ParserContext declares parser invocation state. */
+/**
+ * ParserContext owns a mutable linked-document store. Serialize builds and their AST consumers
+ * across callers sharing these services: a subsequent build may relink or replace those documents.
+ * Compare independent authored syntax with parseSyntax, or use separate contexts for separate builds.
+ */
 export type ParserContext<ServicesT extends ParserServices = ParserServices> = {
   packages: PackageResolver
   services: ServicesT
