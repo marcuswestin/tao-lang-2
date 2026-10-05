@@ -148,6 +148,21 @@ Describe('Studio agent chat authoring', () => {
     Expect(names.sort()).toEqual(['listTestFiles', 'proposeScenario', 'proposeTest', 'requestCodeChanges'])
   })
 
+  Test('overlapping scope checks keep each authored change independent', async () => {
+    const [allowed, alias, fn] = await Promise.all([
+      requireOnly('', 'fixture Allowed { }', ['fixture']),
+      requireOnly('let Kept = 1', 'let Kept = 1\nlet Escaped = 2', ['fixture']),
+      requireOnly('', 'function Leaked() { return 3 }', ['fixture']),
+    ])
+    Expect(allowed).toBeUndefined()
+    Expect(alias).toBe(
+      'That would also alias Escaped. This mode may only add fixture declarations; check your arguments for a stray brace or quote.',
+    )
+    Expect(fn).toBe(
+      'That would also function Leaked. This mode may only add fixture declarations; check your arguments for a stray brace or quote.',
+    )
+  })
+
   Test('describing a state stages a fixture and a scenario for the view', async () => {
     const staged: Staged[] = []
 

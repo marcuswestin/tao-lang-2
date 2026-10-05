@@ -49,8 +49,8 @@ compiler-known names are involved.
 - The command writes the canonical layout of `Docs/Roadmap/Tao Revolution/Decisions.md` §1, as far
   as the toolchain runs it today: `App.tao` (app metadata and configuration), `Data.tao`, `Chrome.tao`,
   `Design.tao`, one folder per feature with a list and a detail scene, `Scenarios.tao`,
-  `<App>.test.tao`, `tsconfig.json` (extending the generated `.tao/typescript/tsconfig.json`), a tracked
-  `.tao/project.json` project identity, and the committed generated-Tao scaffold `@/.gitkeep`. The result is
+  `<App>.test.tao`, `tsconfig.json` (extending the generated `.tao/cache/typescript/tsconfig.json`), a tracked
+  `.tao/store/project.json` project identity, and the committed generated-Tao scaffold `@/.gitkeep`. The result is
   formatted, validated, and its behavior tests are run before the command reports success;
   `--skip-tests` skips only the test run.
 - The initial app `id` is also the directory name. `--id <id>` chooses it; otherwise it is suggested
@@ -119,7 +119,7 @@ scene ThreadUi(Message) {
 }
 ```
 
-A project is the nearest ancestor containing a `.tao/` directory. A tracked `.tao/project.json`
+A project is the nearest ancestor containing a `.tao/` directory. A tracked `.tao/store/project.json`
 contains an automatically generated project ID, retained across clones and build snapshots. The ID
 keeps persisted declaration origins independent of physical checkout paths. No special Tao filename or `project` declaration is
 required. Root Tao files may contain ordinary declarations, apps, and publications. Nested projects
@@ -480,25 +480,38 @@ terminal, Tao offers to run `tao install` when the project's lock pins packages 
 installed. Declining, or running without a terminal, leaves the compile to report them; aliases a
 source declares that no lock pins yet surface only through that diagnostic.
 
+## The `.tao` folder
+
+The project `.tao/` contains exactly `.gitignore`, committed `store/`, ignored `local/`, and ignored
+`cache/`. Stable project identity lives at `.tao/store/project.json`; the shared Tao lock lives at
+`.tao/store/lock.jsonc`. Managed package installs live under `.tao/cache/install/` and generated
+TypeScript configuration under `.tao/cache/typescript/`. Temporary files and locks, including the
+TypeScript generation lock at `.tao/cache/locks/ts-gen-lock`, live under cache.
+
 ## Tooling files and TypeScript
 
 ```text
 project/
   .tao/
-    project.json              tracked stable project identity
-    lock.jsonc                shared Tao lock: installs, ship, toolchain concerns
-    typescript/tsconfig.json  generated TypeScript base
-    install/                  managed installation metadata
-  .tao-ts/                    generated TypeScript contracts and checks
-  node_modules/               native installed dependencies
-  tsconfig.json               developer configuration
+    .gitignore               ignores local/ and cache/
+    store/
+      project.json           tracked stable project identity
+      lock.jsonc             shared Tao lock: installs, ship, toolchain concerns
+    local/                   developer state for this project
+    cache/
+      install/                managed package installations
+      typescript/tsconfig.json  generated TypeScript base
+      locks/ts-gen-lock      TypeScript generation lock
+  .tao-ts/                   generated TypeScript contracts and checks
+  node_modules/              native installed dependencies
+  tsconfig.json              developer configuration
   App.tao
   @ui/
     Drawer.tao
-    Drawer.ts                 handwritten implementation
+    Drawer.ts                handwritten implementation
 ```
 
-The initial root configuration contains only `{"extends":"./.tao/typescript/tsconfig.json"}`.
+The initial root configuration contains only `{"extends":"./.tao/cache/typescript/tsconfig.json"}`.
 Developer overrides are preserved; incompatible overrides are diagnosed. The checker and editor
 use the same native TypeScript configuration for strictness, source selection, and import resolution.
 Required overlay and implementation-check options cannot be disabled.

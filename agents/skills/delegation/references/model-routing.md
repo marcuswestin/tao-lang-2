@@ -16,7 +16,7 @@ model priority over `agents.default_subagent_model`; a custom agent file can pin
 The repository generates `[agents]` from the standard row. Follow the skill's task-selection policy:
 bounded settled implementation favors the fast tier, with escalation and assigning-agent review;
 unsettled judgments and independent reviews use the appropriate higher tier. Pass the selected
-concrete ID explicitly when the harness allows it. Generated defaults
+concrete ID and effort explicitly; personal and harness defaults are not inputs to that choice. Generated defaults
 and role files still require concrete IDs. `model-audit` reports when those
 defaults lag; refreshing them is a separate repository change, not an automatic catalog rewrite.
 An unavailable newest release is a reported limitation, not permission to silently change families.
@@ -43,9 +43,9 @@ does not establish a cheaper completed task. Missing usage data stays unknown.
 transcript metadata provide them. Spawn hooks do not share an agent ID with start hooks, so a
 transcript observation cannot establish which explicit selection produced it.
 
-`./agent model-audit` also compares the personal Codex `[agents].default_subagent_model`, when set,
-with the repository's standard default. It reports only the selected model IDs and never dumps
-personal configuration; refreshing a personal setting needs separate authorization.
+`./agent model-audit` ignores personal subagent defaults and does not read personal configuration;
+callers choose the model and effort explicitly. Generated defaults remain a fallback for callers
+outside this policy.
 
 The routing audit compares the table with what this machine ran: a Codex id the
 installed catalog supersedes; a full Claude id behind a newer model of its family; and a Claude

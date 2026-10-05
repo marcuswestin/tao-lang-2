@@ -850,7 +850,13 @@ export class StudioCdp {
       | (options.control === true ? 2 : 0)
       | (options.shift === true ? 8 : 0)
     const params = { ...details, modifiers }
-    await this.client.send('Input.dispatchKeyEvent', { ...params, type: 'rawKeyDown' })
+    // Native activation needs the character phase, including Enter's carriage return.
+    const text = modifiers === 0 ? key === 'Enter' ? '\r' : key.length === 1 ? key : undefined : undefined
+    await this.client.send('Input.dispatchKeyEvent', {
+      ...params,
+      ...(text === undefined ? {} : { text }),
+      type: text === undefined ? 'rawKeyDown' : 'keyDown',
+    })
     await this.client.send('Input.dispatchKeyEvent', { ...params, type: 'keyUp' })
   }
 

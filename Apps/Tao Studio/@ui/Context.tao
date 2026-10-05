@@ -1,7 +1,7 @@
 use Col, Text, TextInput from @tao/ui
 
 folder
-view StudioContextPanel(Revision number, ProjectRoot text, ActiveFilePath text, ActiveFileContent text, ActiveFileVersion text, SelectionAnchor number, SelectionHead number, SelectedRenderId text, SelectedRenderPath text, SelectedRenderVersion text, ActiveCellId text, CellRevision number, ActiveScenarioId text, ViewportWidth number, ViewportHeight number, InspectorBusy boolean, InspectorCanUndo boolean, InspectorInspection text, InspectorSelection text, LensLines list of text, LensJourneyPath text) {
+view StudioContextPanel(Revision number, ProjectRoot text, ActiveFilePath text, ActiveFileContent text, ActiveFileVersion text, SelectionAnchor number, SelectionHead number, SelectedRenderId text, SelectedRenderPath text, SelectedRenderVersion text, FocusedCellId text, CellRevision number, FocusedScenarioId text, ViewportWidth number, ViewportHeight number, InspectorBusy boolean, InspectorCanUndo boolean, InspectorInspection text, InspectorSelection text, LensLines list of text, LensJourneyPath text) {
    action ApplyInspector(Action text, Proposed boolean) {
       do ApplyInspectorAction(Action, Proposed)
    }
@@ -9,12 +9,12 @@ view StudioContextPanel(Revision number, ProjectRoot text, ActiveFilePath text, 
       do UndoInspectorAction()
    }
    render StudioContextPanelSurface() {
-      StudioContextSummary(FilePath: ActiveFilePath, ScenarioId: ActiveScenarioId, CellId: ActiveCellId, RenderId: SelectedRenderId, ViewportWidth: ViewportWidth, ViewportHeight: ViewportHeight)
+      StudioContextSummary(FilePath: ActiveFilePath, ScenarioId: FocusedScenarioId, CellId: FocusedCellId, RenderId: SelectedRenderId, ViewportWidth: ViewportWidth, ViewportHeight: ViewportHeight)
       StudioInspectorSummary(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection, Content: ActiveFileContent, Path: ActiveFilePath)
       StudioLensPanel(Lines: LensLines, JourneyPath: LensJourneyPath)
       StudioInspectorLayout(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection, Busy: InspectorBusy, CanUndo: InspectorCanUndo, Apply: ApplyInspector, Undo: UndoInspector)
       StudioInspectorStyle(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection, Busy: InspectorBusy, Apply: ApplyInspector)
-      StudioInspectorData(Inspection: InspectorInspection, Selection: InspectorSelection, ActiveCellId: ActiveCellId, ActiveCellRevision: CellRevision, ActiveScenarioId: ActiveScenarioId)
+      StudioInspectorData(Inspection: InspectorInspection, Selection: InspectorSelection, FocusedCellId: FocusedCellId, FocusedCellRevision: CellRevision, FocusedScenarioId: FocusedScenarioId)
       StudioInspectorText(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection, Busy: InspectorBusy, Apply: ApplyInspector)
       StudioInspectorActions(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection, Busy: InspectorBusy, Apply: ApplyInspector)
 }  }
@@ -34,7 +34,7 @@ view StudioLensPanel(Lines list of text, JourneyPath text) {
 
 // The active cell's environment is edited in one place, the Scenario pane, and this view owns the drafts.
 folder
-view StudioEnvironmentPanel(ActiveCellId text, CellRevision number, ViewportPresetId text, ViewportWidth number, ViewportHeight number, NetworkOutcome text, NetworkLatencyMs number, NetworkErrorMessage text, NetworkErrorStatus number, SchemeRequested text, SchemeResolved text, SchemeSource text, SchemeCapability text) {
+view StudioEnvironmentPanel(FocusedCellId text, CellRevision number, ViewportPresetId text, ViewportWidth number, ViewportHeight number, NetworkOutcome text, NetworkLatencyMs number, NetworkErrorMessage text, NetworkErrorStatus number, SchemeRequested text, SchemeResolved text, SchemeSource text, SchemeCapability text) {
    state Preset = ViewportPresetId
    state Width = ViewportWidth
    state Height = ViewportHeight
@@ -86,10 +86,10 @@ view StudioEnvironmentPanel(ActiveCellId text, CellRevision number, ViewportPres
       set ErrorStatusValid = Value
    }
    action ApplyEnvironment() {
-      do ApplyActiveCellEnvironment(CellId: ActiveCellId, CellRevision: CellRevision, Preset: Preset, Width: Width, Height: Height, Network: Network, Latency: Latency, ErrorMessage: ErrorMessage, ErrorStatus: ErrorStatus)
+      do ApplyFocusedCellEnvironment(CellId: FocusedCellId, CellRevision: CellRevision, Preset: Preset, Width: Width, Height: Height, Network: Network, Latency: Latency, ErrorMessage: ErrorMessage, ErrorStatus: ErrorStatus)
    }
    render Col() {
-      when ActiveCellId {
+      when FocusedCellId {
          empty -> { }
          otherwise -> { StudioScenarioEnvironment(Preset: Preset, Width: Width, Height: Height, Network: Network, Latency: Latency, ErrorMessage: ErrorMessage, ErrorStatus: ErrorStatus, WidthValid: WidthValid, HeightValid: HeightValid, LatencyValid: LatencyValid, ErrorStatusValid: ErrorStatusValid, SchemeRequested: SchemeRequested, SchemeResolved: SchemeResolved, SchemeSource: SchemeSource, SchemeCapability: SchemeCapability, ChangePreset: ChangePreset, ChangeWidth: ChangeWidth, ChangeHeight: ChangeHeight, ChangeNetwork: ChangeNetwork, ChangeLatency: ChangeLatency, ChangeErrorMessage: ChangeErrorMessage, ChangeErrorStatus: ChangeErrorStatus, ChangeWidthValid: ChangeWidthValid, ChangeHeightValid: ChangeHeightValid, ChangeLatencyValid: ChangeLatencyValid, ChangeErrorStatusValid: ChangeErrorStatusValid, Apply: ApplyEnvironment) }
 }  }  }

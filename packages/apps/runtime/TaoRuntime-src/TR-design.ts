@@ -1,3 +1,4 @@
+import { Arrays } from './core/RuntimeCore'
 import { RuntimeAssert } from './TR-assert'
 import { UserInputError } from './TR-errors'
 import {
@@ -14,7 +15,11 @@ type TaoDesignSpecTerm = number | string
 export type TaoDesignSpecEntry = readonly [string, ...TaoDesignSpecTerm[]]
 
 export type TaoDesignSource = Readonly<{
+  /** One stable object per generated source-module evaluation; old renders retain their object. */
+  cohort?: object
+  designEpochs?: Readonly<Record<string, number>>
   end?: number
+  epoch?: number
   kind: 'declaration' | 'element-default' | 'inline' | 'legacy-style' | 'style' | 'text-style'
   member?: string
   path?: string
@@ -107,10 +112,358 @@ const visualHeadValues = ['bg', 'border', 'fg', 'line', 'radius', 'size', 'weigh
 type TaoDesignVisualHead = typeof visualHeadValues[number]
 const visualHeads = new Set<string>(visualHeadValues)
 
+type PublishedDesign = {
+  cohortSnapshots: WeakMap<object, Map<string, TaoDesign>>
+  cohortWaiters: WeakMap<object, { promise: Promise<void>; resolve: () => void }>
+  lastValid: WeakMap<object, TaoDesign>
+  latest: TaoDesign
+  listeners: Set<DesignListener>
+  metadata?: TaoDesignPublication
+  pendingListeners: Set<DesignListener>
+  revision: number
+  notificationQueued: boolean
+  waiters: Map<number, { promise: Promise<void>; resolve: () => void }>
+}
+
+type DesignListener = Readonly<{ notify: () => void }>
+type TaoDesignPublication = Readonly<{
+  epoch: number
+  path: string
+  sourceEpochs: Readonly<Record<string, number>>
+}>
+type TaoDesignCohortSource = Readonly<{
+  designEpochs: Readonly<Record<string, number>>
+  epoch: number
+  path: string
+}>
+
+const designIdentities = new WeakMap<TaoDesign, string>()
+type DesignLookupShape = Readonly<{
+  bundles: ReadonlyMap<string, string>
+  colors: ReadonlyMap<string, string>
+  key: string
+  sizes: ReadonlyMap<string, string>
+}>
+
+const designLookupShapes = new WeakMap<TaoDesign, DesignLookupShape>()
+const designPublications = new WeakMap<TaoDesign, TaoDesignPublication>()
+const publishedDesigns = new Map<string, PublishedDesign>()
+const cohortSources = new WeakMap<object, TaoDesignCohortSource>()
+const liveCohorts = new Set<WeakRef<object>>()
+
+/** Ignore changed literal values while retaining every name and reference a lookup can follow. */
+function designLookupShape(design: TaoDesign): DesignLookupShape {
+  const cached = designLookupShapes.get(design)
+  if (cached !== undefined) {
+    return cached
+  }
+  const atom = (value: TaoDesignColorAtom): unknown =>
+    typeof value === 'string' ? value.startsWith('#') ? '#' : value : ['reference', value.path]
+  const color = (value: TaoDesignColorValue): unknown =>
+    typeof value === 'string' || value.kind === 'reference'
+      ? atom(value)
+      : ['conditional', value.environment, value.expected, atom(value.positive), atom(value.negative)]
+  const sizeAtom = (value: TaoDesignSizeAtom): unknown =>
+    value.kind === 'reference' ? ['reference', value.path] : ['dimension', value.unit]
+  const bundles = new Map(
+    Object.entries(design.bundles).map(([name, spec]) =>
+      [
+        name,
+        JSON.stringify(
+          spec.entries.map(entry =>
+            entry.map(term => typeof term === 'number' ? 0 : term.startsWith('#') ? '#' : term)
+          ),
+        ),
+      ] as const
+    ),
+  )
+  const colors = new Map(
+    Object.entries(design.colors).map(([name, value]) => [name, JSON.stringify(color(value))] as const),
+  )
+  const sizes = new Map(
+    Object.entries(design.sizes).map(([name, value]) =>
+      [
+        name,
+        JSON.stringify([sizeAtom(value.left), value.right === undefined ? undefined : sizeAtom(value.right)]),
+      ] as const
+    ),
+  )
+  const sorted = (components: ReadonlyMap<string, string>): readonly (readonly [string, string])[] =>
+    Arrays.sorted([...components], ([a], [b]) => a.localeCompare(b))
+  const shape = { bundles, colors, key: JSON.stringify([sorted(bundles), sorted(colors), sorted(sizes)]), sizes }
+  designLookupShapes.set(design, shape)
+  return shape
+}
+
+function designShapeDominates(newer: DesignLookupShape, older: DesignLookupShape): boolean {
+  const includes = (next: ReadonlyMap<string, string>, prior: ReadonlyMap<string, string>): boolean =>
+    [...prior].every(([name, value]) => next.get(name) === value)
+  return includes(newer.bundles, older.bundles)
+    && includes(newer.colors, older.colors)
+    && includes(newer.sizes, older.sizes)
+}
+
+/** Keep incomparable lookup shapes; one later structural superset replaces every shape it covers. */
+function retainDesignCandidate(candidates: Map<string, TaoDesign>, design: TaoDesign): void {
+  const shape = designLookupShape(design)
+  const epoch = designPublications.get(design)?.epoch ?? 0
+  for (const [key, prior] of candidates) {
+    const priorShape = designLookupShape(prior)
+    const priorEpoch = designPublications.get(prior)?.epoch ?? 0
+    if (priorEpoch === epoch && priorShape.key === shape.key) {
+      candidates.set(key, design)
+      return
+    }
+    if (priorEpoch < epoch && designShapeDominates(shape, priorShape)) {
+      candidates.delete(key)
+    } else if (priorEpoch > epoch && designShapeDominates(priorShape, shape)) {
+      return
+    }
+  }
+  candidates.set(shape.key, design)
+}
+
+function publishedDesign(design: TaoDesign | undefined): PublishedDesign | undefined {
+  const identity = design === undefined ? undefined : designIdentities.get(design)
+  return identity === undefined ? undefined : publishedDesigns.get(identity)
+}
+
+function seedCohort(
+  published: PublishedDesign,
+  cohort: object,
+  source: TaoDesignCohortSource,
+  design = published.latest,
+  metadata = published.metadata,
+): void {
+  if (!metadata) {
+    return
+  }
+  const expected = source.designEpochs[metadata.path]
+  if (expected === undefined || expected > metadata.epoch) {
+    return
+  }
+  if (expected === metadata.epoch || source.epoch === metadata.sourceEpochs[source.path]) {
+    let snapshots = published.cohortSnapshots.get(cohort)
+    if (snapshots === undefined) {
+      snapshots = new Map()
+      published.cohortSnapshots.set(cohort, snapshots)
+    }
+    retainDesignCandidate(snapshots, design)
+    const waiter = published.cohortWaiters.get(cohort)
+    if (waiter) {
+      published.cohortWaiters.delete(cohort)
+      waiter.resolve()
+    }
+  }
+}
+
+function seedLiveCohorts(published: PublishedDesign, design = published.latest, metadata = published.metadata): void {
+  for (const reference of liveCohorts) {
+    const cohort = reference.deref()
+    if (cohort === undefined) {
+      liveCohorts.delete(reference)
+      continue
+    }
+    const source = cohortSources.get(cohort)
+    if (source) {
+      seedCohort(published, cohort, source, design, metadata)
+    }
+  }
+}
+
+function pruneDeadCohorts(): void {
+  for (const reference of liveCohorts) {
+    if (reference.deref() === undefined) {
+      liveCohorts.delete(reference)
+    }
+  }
+}
+
+function designsForSource(design: TaoDesign | undefined, source?: TaoDesignSource): readonly (TaoDesign | undefined)[] {
+  const published = publishedDesign(design)
+  const metadata = published?.metadata
+  if (!published || !metadata || !source) {
+    return [published?.latest ?? design]
+  }
+  const expected = source.designEpochs?.[metadata.path]
+  if (expected === undefined) {
+    return [published.latest]
+  }
+  if (expected > metadata.epoch) {
+    let waiter = published.waiters.get(expected)
+    if (waiter === undefined) {
+      let resolve!: () => void
+      const promise = new Promise<void>(ready => {
+        resolve = ready
+      })
+      waiter = { promise, resolve }
+      published.waiters.set(expected, waiter)
+    }
+    throw waiter.promise
+  }
+  const candidates = new Map<string, TaoDesign>()
+  const add = (snapshot: TaoDesign | undefined): void => {
+    if (snapshot === undefined) {
+      return
+    }
+    const publication = designPublications.get(snapshot)
+    if (
+      publication !== undefined && publication.epoch >= expected
+      && (publication.epoch === expected || source.path !== undefined
+          && source.epoch === publication.sourceEpochs[source.path])
+    ) {
+      retainDesignCandidate(candidates, snapshot)
+    }
+  }
+  add(published.latest)
+  if (source.cohort !== undefined) {
+    for (const snapshot of published.cohortSnapshots.get(source.cohort)?.values() ?? []) {
+      add(snapshot)
+    }
+    add(published.lastValid.get(source.cohort))
+  }
+  add(design)
+  if (candidates.size > 0) {
+    return Arrays.sorted(
+      [...candidates.values()],
+      (a, b) => (designPublications.get(b)?.epoch ?? 0) - (designPublications.get(a)?.epoch ?? 0),
+    )
+  }
+  if (source.cohort !== undefined && cohortSources.has(source.cohort)) {
+    let waiter = published.cohortWaiters.get(source.cohort)
+    if (waiter === undefined) {
+      let resolve!: () => void
+      const promise = new Promise<void>(ready => {
+        resolve = ready
+      })
+      waiter = { promise, resolve }
+      published.cohortWaiters.set(source.cohort, waiter)
+    }
+    throw waiter.promise
+  }
+  return [published.latest]
+}
+
+function designForSource(design: TaoDesign | undefined, source?: TaoDesignSource): TaoDesign | undefined {
+  return designsForSource(design, source)[0]
+}
+
+function recordResolvedDesign(design: TaoDesign | undefined, source: TaoDesignSource | undefined): void {
+  const published = publishedDesign(design)
+  if (!published || !design || source?.cohort === undefined) {
+    return
+  }
+  published.lastValid.set(source.cohort, design)
+}
+
 /** DesignControls is the generated-code and runtime surface for minimal Tao design declarations. */
 export const DesignControls = {
-  Declaration(definition: TaoDesignDefinition): TaoDesign {
-    return new RuntimeDesign(definition)
+  Declaration(definition: TaoDesignDefinition, identity?: string, metadata?: TaoDesignPublication): TaoDesign {
+    const snapshot = new RuntimeDesign(definition)
+    if (identity !== undefined) {
+      designIdentities.set(snapshot, identity)
+      if (metadata !== undefined) {
+        designPublications.set(snapshot, metadata)
+      }
+      const published = publishedDesigns.get(identity)
+      if (published === undefined) {
+        const entry: PublishedDesign = {
+          cohortSnapshots: new WeakMap(),
+          cohortWaiters: new WeakMap(),
+          lastValid: new WeakMap(),
+          latest: snapshot,
+          listeners: new Set(),
+          metadata,
+          pendingListeners: new Set(),
+          revision: 1,
+          notificationQueued: false,
+          waiters: new Map(),
+        }
+        publishedDesigns.set(identity, entry)
+        seedLiveCohorts(entry)
+      } else {
+        if (
+          metadata !== undefined && published.metadata !== undefined
+          && metadata.epoch < published.metadata.epoch
+        ) {
+          seedLiveCohorts(published, snapshot, metadata)
+          return snapshot
+        }
+        published.latest = snapshot
+        published.metadata = metadata
+        seedLiveCohorts(published)
+        if (metadata !== undefined) {
+          for (const [epoch, waiter] of published.waiters) {
+            if (metadata.epoch >= epoch) {
+              published.waiters.delete(epoch)
+              waiter.resolve()
+            }
+          }
+        }
+        published.revision++
+        // A refreshed design can publish before its importing view finishes evaluating. Keep
+        // snapshots current immediately, then notify mounted readers after this module turn.
+        for (const listener of published.listeners) {
+          published.pendingListeners.add(listener)
+        }
+        if (!published.notificationQueued && published.pendingListeners.size > 0) {
+          published.notificationQueued = true
+          queueMicrotask(() => {
+            published.notificationQueued = false
+            const pending = published.pendingListeners
+            published.pendingListeners = new Set()
+            for (const listener of pending) {
+              if (published.listeners.has(listener)) {
+                listener.notify()
+              }
+            }
+          })
+        }
+      }
+    }
+    return snapshot
+  },
+
+  current(design: TaoDesign | undefined): TaoDesign | undefined {
+    return publishedDesign(design)?.latest ?? design
+  },
+
+  /** Register one generated source-module evaluation before its views first render. */
+  Cohort(source: TaoDesignCohortSource): object {
+    const cohort = Object.freeze({})
+    cohortSources.set(cohort, source)
+    pruneDeadCohorts()
+    liveCohorts.add(new WeakRef(cohort))
+    for (const published of publishedDesigns.values()) {
+      seedCohort(published, cohort, source)
+    }
+    return cohort
+  },
+
+  /** Pick the design generation that was valid for this rendered source file. */
+  forSource(design: TaoDesign | undefined, source?: TaoDesignSource): TaoDesign | undefined {
+    return designForSource(design, source)
+  },
+
+  /** Candidate snapshots remain available to readers that must inspect every compatible cohort shape. */
+  forSourceCandidates(design: TaoDesign | undefined, source?: TaoDesignSource): readonly (TaoDesign | undefined)[] {
+    return designsForSource(design, source)
+  },
+
+  revision(design: TaoDesign | undefined): number {
+    return publishedDesign(design)?.revision ?? 0
+  },
+
+  subscribe(design: TaoDesign | undefined, listener: () => void): () => void {
+    const published = publishedDesign(design)
+    if (published === undefined) {
+      return () => {}
+    }
+    const subscription = { notify: listener }
+    published.listeners.add(subscription)
+    return () => {
+      published.listeners.delete(subscription)
+    }
   },
 
   Spec(entries: readonly TaoDesignSpecEntry[], source?: TaoDesignSource): TaoDesignSpec {
@@ -178,14 +531,19 @@ function resolve(
   scheme: TaoScheme = 'light',
   condition?: TaoDesignCondition,
   declarationSpec?: TaoDesignSpec,
+  consumerSource?: TaoDesignSource,
 ): TaoResolvedDesignSpec {
-  const defaultSpec = elementDefault === undefined || design?.bundles[elementDefault] === undefined
+  const defaultSpec = elementDefault === undefined || design === undefined
     ? undefined
-    : DesignControls.Spec([[elementDefault]], { kind: 'element-default', member: elementDefault })
+    : DesignControls.Spec([[elementDefault]], {
+      ...consumerSource,
+      kind: 'element-default',
+      member: elementDefault,
+    })
   const headerSpec = declarationSpec === undefined || declarationSpec.entries.length === 0
     ? undefined
     : declarationSpec.source === undefined
-    ? DesignControls.Source(declarationSpec, { kind: 'declaration' })
+    ? DesignControls.Source(declarationSpec, { ...consumerSource, kind: 'declaration' })
     : declarationSpec
   if (defaultSpec === undefined && headerSpec === undefined && (!spec || spec.entries.length === 0)) {
     return {}
@@ -200,19 +558,43 @@ function resolve(
     if (effectiveSpec === undefined) {
       continue
     }
-    for (const expanded of expandEntries(design, effectiveSpec, [], scheme, condition, [])) {
-      const entry = resolveSizeTerms(design, expanded.entry)
-      const head = entry[0]
-      if (layoutHeads.has(head as TaoLayoutEntry[0])) {
-        layoutEntries.push(entry as TaoLayoutEntry)
-        provenance.push({ chain: expanded.chain, entry, property: head })
+    const layerSource = effectiveSpec.source ?? consumerSource
+    const candidates = designsForSource(design, layerSource)
+    for (const [index, layerDesign] of candidates.entries()) {
+      if (effectiveSpec === defaultSpec && layerDesign?.bundles[elementDefault!] === undefined) {
         continue
       }
-      if (!isVisualEntry(entry)) {
-        throw new UserInputError(`Unknown design clause '${entry.join(' ')}'.`, { entry })
+      const layerLayoutEntries: TaoLayoutEntry[] = []
+      const layerStyle: TaoResolvedLayoutStyle = {}
+      const layerProvenance: TaoDesignProvenance[] = []
+      try {
+        for (const expanded of expandEntries(layerDesign, effectiveSpec, [], scheme, condition, [])) {
+          const entry = resolveSizeTerms(layerDesign, expanded.entry)
+          const head = entry[0]
+          if (layoutHeads.has(head as TaoLayoutEntry[0])) {
+            layerLayoutEntries.push(entry as TaoLayoutEntry)
+            layerProvenance.push({ chain: expanded.chain, entry, property: head })
+            continue
+          }
+          if (!isVisualEntry(entry)) {
+            throw new UserInputError(`Unknown design clause '${entry.join(' ')}'.`, { entry })
+          }
+          applyVisualEntry(layerStyle, layerDesign, entry, scheme)
+          layerProvenance.push({ chain: expanded.chain, entry, property: visualProperty(head) })
+        }
+      } catch (error) {
+        if (
+          error instanceof UserInputError && error.details?.['designLookup'] === true && index < candidates.length - 1
+        ) {
+          continue
+        }
+        throw error
       }
-      applyVisualEntry(style, design, entry, scheme)
-      provenance.push({ chain: expanded.chain, entry, property: visualProperty(head) })
+      layoutEntries.push(...layerLayoutEntries)
+      Object.assign(style, layerStyle)
+      provenance.push(...layerProvenance)
+      recordResolvedDesign(layerDesign, layerSource)
+      break
     }
   }
 
@@ -256,7 +638,10 @@ function* expandEntries(
     }
     RuntimeAssert.input(design, `Design bundle '${head}' requires a mounted app design.`, { bundle: head })
     const bundle = design.bundles[head]
-    RuntimeAssert.input(bundle, `Design '${design.name}' has no bundle '${head}'.`, { design: design.name })
+    RuntimeAssert.input(bundle, `Design '${design.name}' has no bundle '${head}'.`, {
+      design: design.name,
+      designLookup: true,
+    })
     if (bundlePath.includes(head)) {
       throw new UserInputError(`Design '${design.name}' has a bundle cycle: ${[...bundlePath, head].join(' -> ')}.`, {
         design: design.name,
@@ -385,7 +770,10 @@ function resolveColorToken(design: TaoDesign | undefined, entry: TaoDesignSpecEn
   }
   RuntimeAssert.input(design, `Design token '${tokenName}' requires a mounted app design.`, { token: tokenName })
   const color = resolveColor(design, tokenName, scheme, [])
-  RuntimeAssert.input(color, `Design '${design.name}' has no token '${tokenName}'.`, { design: design.name })
+  RuntimeAssert.input(color, `Design '${design.name}' has no token '${tokenName}'.`, {
+    design: design.name,
+    designLookup: true,
+  })
   return color
 }
 
@@ -447,7 +835,11 @@ function resolveSize(design: TaoDesign, path: string, resolving: readonly string
     })
   }
   const value = design.sizes[path]
-  RuntimeAssert.input(value, `Design '${design.name}' has no size '${path}'.`, { design: design.name, size: path })
+  RuntimeAssert.input(value, `Design '${design.name}' has no size '${path}'.`, {
+    design: design.name,
+    designLookup: true,
+    size: path,
+  })
   return sizeAtom(design, value.left, [...resolving, path])
     + (value.right === undefined ? 0 : sizeAtom(design, value.right, [...resolving, path]))
 }

@@ -19,10 +19,10 @@ export const TaoPropsCompiler = {
   /** RenderTaoPropsValue shares occurrence metadata with mounts that consume a props object. */
   RenderTaoPropsValue(render: AST.Render, options: CodegenOptions = {}): Compiled {
     const designSpec = render.layoutClause ? Compile.DesignSpec(render.layoutClause) : gen`undefined`
-    const designSource = options.studio === true && render.layoutClause
-      ? Compile.DesignSpecSource(render.layoutClause)
-      : undefined
     const elementName = ASTUtils.design.standardElementName(render)
+    const designSource = options.studio === true && (render.layoutClause || elementName !== undefined)
+      ? Compile.DesignSpecSource(render.layoutClause ?? render, options)
+      : undefined
     const designDefault = elementName === undefined ? undefined : gen`${gen.jsLiteral(elementName)}`
     // Every view occurrence takes the same defaults; layout comes only from the call site's clauses.
     const layout = gen`undefined`

@@ -196,6 +196,7 @@ export async function runDevLoopController(
   let wrapper: Promise<void> | undefined
   let attached = false
   let generationStarted = false
+  let authorizedGeneration = receipt.generation
   let cleanupFailed = false
   let running = false
   let poll: ((command: DevLoopWorkerCommand | null) => void) | undefined
@@ -599,6 +600,7 @@ export async function runDevLoopController(
                 if (generationStarted) {
                   receipt.generation = Platform.randomUUID()
                 }
+                authorizedGeneration = receipt.generation
                 generationStarted = true
                 if (!stopRequested) {
                   receipt.state = 'starting'
@@ -694,6 +696,7 @@ export async function runDevLoopController(
     generationStarted = false
     receipt.generation = Platform.randomUUID()
     const startGeneration = receipt.generation
+    authorizedGeneration = startGeneration
     receipt.state = 'starting'
     receipt.children = []
     receipt.processGroups = []
@@ -705,6 +708,37 @@ export async function runDevLoopController(
     delete receipt.message
     delete receipt.url
     delete receipt.targets
+    const publishCapture = async (
+      process: Parameters<NonNullable<Parameters<typeof runAgentAppDev>[2]>['onChild']>[0],
+      capture: ManagedChildCapture,
+      assertCurrent: () => Promise<void>,
+      generation = startGeneration,
+    ): Promise<void> => {
+      try {
+        const snapshot = structuredClone(capture)
+        await assertCurrent()
+        const members = validateManagedChildCapture(process.pid, snapshot)
+        for (const member of members) {
+          if (!receipt.children.some(current => sameCapturedProcess(current, member))) {
+            receipt.children.push(member)
+          }
+        }
+        if (!receipt.processGroups?.some(current => sameCapturedProcess(current, snapshot.root))) {
+          receipt.processGroups?.push(snapshot.root)
+        }
+        await save()
+        await assertCurrent()
+        validateManagedChildCapture(process.pid, snapshot)
+      } catch (cause) {
+        const failure = new Errors.HostEnvironmentError(
+          'Could not durably publish the managed child capture; fences remain retained.',
+          { cause, details: { retainsTargetLease: true } },
+        )
+        append(`${Errors.formatForLog(failure)}\n`)
+        await recordOwnershipRefusal(failure, generation).catch(() => {})
+        throw failure
+      }
+    }
     wrapper = (async () => {
       try {
         await save()
@@ -712,37 +746,12 @@ export async function runDevLoopController(
           childEnv: { TAO_DEV_LOOP_WORKER_CREDENTIALS: credentialsPath },
           onChild: async (process, capture) => {
             if (capture !== undefined) {
-              const assertActive = (): void => {
+              const assertActive = async (): Promise<void> => {
                 if (!running || stopRequested || receipt.generation !== startGeneration) {
                   Errors.throwHostEnvironment('The managed child capture no longer belongs to the active generation.')
                 }
               }
-              try {
-                const snapshot = structuredClone(capture)
-                assertActive()
-                const members = validateManagedChildCapture(process.pid, snapshot)
-                for (const member of members) {
-                  if (!receipt.children.some(current => sameCapturedProcess(current, member))) {
-                    receipt.children.push(member)
-                  }
-                }
-                if (!receipt.processGroups?.some(current => sameCapturedProcess(current, snapshot.root))) {
-                  receipt.processGroups?.push(snapshot.root)
-                }
-                await save()
-                assertActive()
-                validateManagedChildCapture(process.pid, snapshot)
-              } catch (cause) {
-                const failure = new Errors.HostEnvironmentError(
-                  'Could not durably publish the managed child capture; fences remain retained.',
-                  {
-                    cause,
-                    details: { retainsTargetLease: true },
-                  },
-                )
-                await recordOwnershipRefusal(failure, startGeneration).catch(() => {})
-                throw failure
-              }
+              await publishCapture(process, capture, assertActive)
               return
             }
             const identity = process.pid === undefined
@@ -757,6 +766,47 @@ export async function runDevLoopController(
             }
             receipt.processGroups?.push(identity)
             await save()
+          },
+          onCleanupChild: async (process, capture, reservation) => {
+            const cleanupGeneration = authorizedGeneration
+            const target = { ...reservation, resources: structuredClone(reservation.resources) }
+            const assertCleanupCurrent = async (): Promise<void> => {
+              const assertReceipt = (current: DevLoopReceipt): void => {
+                const device = current.devices?.find(value =>
+                  value.platform === target.platform && value.id === target.id
+                )
+                if (
+                  !running || current.generation !== cleanupGeneration || authorizedGeneration !== cleanupGeneration
+                  || current.ownershipRefusal
+                  || !ProcessTree.sameProcess(current.controller, controller)
+                  || target.platform !== 'ios' || device?.owned !== true
+                  || !ProcessTree.sameProcess(device.holder, controller)
+                  || !['booted', 'retained'].includes(device.state)
+                  || target.resources.length !== 1 || target.resources[0]?.name !== `ios-simulator:${target.id}`
+                  || device.resources?.length !== target.resources.length
+                  || target.resources.some(owner =>
+                    !device.resources?.some(expected =>
+                      expected.name === owner.name && expected.id === owner.id && expected.pid === owner.pid
+                      && expected.processStartedAt === owner.processStartedAt
+                      && expected.repositoryRoot === owner.repositoryRoot && owner.repositoryRoot === receipt.checkout
+                      && owner.pid === controller.pid
+                    )
+                  )
+                ) {
+                  Errors.throwHostEnvironment(
+                    'Managed shutdown capture lost its current controller, target or resource generation.',
+                  )
+                }
+              }
+              assertReceipt(receipt)
+              if (!ProcessTree.sameProcess(ProcessTree.identities([controller.pid]).get(controller.pid), controller)) {
+                Errors.throwHostEnvironment('Managed shutdown capture lost its controller kernel identity.')
+              }
+              await target.assertCurrent()
+              assertReceipt(await readDevLoopReceipt(receipt.session))
+              assertReceipt(receipt)
+            }
+            await publishCapture(process, capture, assertCleanupCurrent, cleanupGeneration)
           },
           shouldStop: () => stopRequested,
           onReservation: async reservation => {

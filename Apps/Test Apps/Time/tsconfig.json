@@ -1,3 +1,3 @@
 {
-  "extends": "./.tao/typescript/tsconfig.json"
+  "extends": "./.tao/cache/typescript/tsconfig.json"
 }

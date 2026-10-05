@@ -20,6 +20,13 @@ Describe('sidecar source graph', () => {
       )
       await FS.writeText(helper, 'export const helper = 1')
       const graph = inspectSidecarSourceGraph(entry)
+      Expect([...graph.sourceTexts]).toEqual([
+        [
+          entry,
+          "import { helper } from './Helper'\nimport type { Config } from './Types.tao'\nimport { missing } from './Missing'\nexport const Widget = helper",
+        ],
+        [helper, 'export const helper = 1'],
+      ])
       Expect(graph.sourcePaths).toEqual([entry, helper])
       Expect(graph.unresolvedCandidatePaths).toEqual([
         ...['.ts', '.tsx', '.js', '.jsx', '.json'].map(extension => FS.resolvePath(`Missing${extension}`, root)),
@@ -38,6 +45,7 @@ Describe('sidecar source graph', () => {
     try {
       const path = FS.resolvePath('Missing.tsx', root)
       Expect(inspectSidecarSourceGraph(path)).toEqual({
+        sourceTexts: new Map(),
         sourcePaths: [path],
         unresolvedCandidatePaths: [path],
         ownershipInputPaths: [],

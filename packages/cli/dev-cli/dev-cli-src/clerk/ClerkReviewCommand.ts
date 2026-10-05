@@ -1,5 +1,5 @@
 import type { AccountServerOptions } from '@account-server'
-import { CLI, Errors, FS, HCI, Json, Platform, Repo, SecretsFile } from '@shared'
+import { CLI, Errors, FS, HCI, Json, Platform, ProjectLocal, Repo, SecretsFile } from '@shared'
 import type { StudioDevOptions } from '@studio-tooling/StudioDev'
 
 type ReviewOptions = { host?: string; instantUrl?: string; browser?: boolean; device?: string }
@@ -181,10 +181,17 @@ export async function runClerkReview(
       source.replaceAll('pk_test_REPLACE_WITH_YOUR_KEY', publishableKey)
         .replaceAll('http://127.0.0.1:4738', gateway.url),
     )
-    await FS.copyFile(
-      Repo.resolvePath('Apps/Test Apps/Auth Review/.tao/project.json'),
-      FS.resolvePath('.tao/project.json', projectRoot),
-    )
+    const identityProjectRoot = projectRoot
+    await ProjectLocal.prepare(identityProjectRoot)
+    const identityPath = ProjectLocal.storeResolve('project.json', identityProjectRoot)
+    await FS.withFileMutationLock(identityPath, identityProjectRoot, async () => {
+      const staged = ProjectLocal.stagingPath(identityPath, identityProjectRoot)
+      await FS.copyFile(
+        Repo.resolvePath('Apps/Test Apps/Auth Review/.tao/store/project.json'),
+        staged,
+      )
+      await FS.move(staged, identityPath)
+    }, { lockDirectory: ProjectLocal.cacheResolve('locks', identityProjectRoot) })
     environment.write(`Clerk phone review gateway: ${gateway.url}`)
     environment.write(
       options.device === undefined

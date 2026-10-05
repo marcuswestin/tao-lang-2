@@ -21,7 +21,7 @@ Describe('tao test CLI', () => {
       // Keep the runtime runner inert: this test owns the repository-root fallback, not Jest.
       'jest-stub.mjs': '',
     }, async rootDir => {
-      const identityPath = FS.resolvePath('.tao/project.json', rootDir)
+      const identityPath = FS.resolvePath('.tao/store/project.json', rootDir)
       await FS.remove(identityPath)
       const previousCwd = Platform.runtimeProcess.cwd()
       await withRuntimeRoot(FS.resolvePath('runtime-root', rootDir), async () => {

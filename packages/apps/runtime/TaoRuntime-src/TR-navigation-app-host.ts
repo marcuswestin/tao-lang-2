@@ -54,6 +54,7 @@ function NavigationAppHostContent(props: { app: RuntimeAppDefinition; __tao?: Ta
 
 function MountedNavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: TaoProps }): React.JSX.Element {
   useSubscription(props.app)
+  React.useSyncExternalStore(props.app.subscribeDesign, props.app.designSnapshot, props.app.designSnapshot)
   const navigator = props.app.navigator
   const auxiliaries = Object.values(props.app.auxiliaries)
   useSubscription(navigator)
@@ -79,6 +80,14 @@ function MountedNavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
         return
       }
       const hardwareEvent = event.nativeEvent ?? event
+      // Native buttons embedded in a foreign view own their browser activation keys.
+      if (
+        isUnmodifiedKey(hardwareEvent)
+        && (hardwareEvent.key === 'Enter' || hardwareEvent.key === ' ')
+        && isNativeButtonTarget(event.target)
+      ) {
+        return
+      }
       // The outline deliberately stops at an injected or foreign view. Let the browser deliver keys
       // to an editable descendant that Tao does not own. Escape and Tab return to Tao attention only
       // while a Tao control is actually engaged.
@@ -226,6 +235,15 @@ function isEditableTarget(target: unknown): boolean {
     || tag === 'select'
     || element.getAttribute?.('role') === 'textbox'
     || editableAncestor !== null && editableAncestor !== undefined
+}
+
+function isNativeButtonTarget(target: unknown): boolean {
+  if (!target || typeof target !== 'object') {
+    return false
+  }
+  const element = target as TaoEditableTarget
+  const button = element.closest?.('button')
+  return element.tagName?.toLocaleLowerCase() === 'button' || button !== null && button !== undefined
 }
 
 /**

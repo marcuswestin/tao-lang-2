@@ -615,7 +615,7 @@ Tao owns the type. A bridged value therefore needs a declared one — a `returns
 compiler copies the named sidecar beside its generated module and imports the export from there.
 `tao check`, `tao compile`, and the shared development refresh publish
 `.tao-ts/<source-path-from-root>.tao.ts` for Tao sources with a TypeScript boundary, configuration
-declaration, or case-set declaration. The initial root TypeScript configuration extends `.tao/typescript/tsconfig.json`, whose
+declaration, or case-set declaration. The initial root TypeScript configuration extends `.tao/cache/typescript/tsconfig.json`, whose
 authored/generated overlay resolves unchanged relative imports such as
 `import type { Drawer } from './Drawer.tao'` in handwritten sidecars. The module
 exports Tao-derived contract types and checks each sidecar's named export with erased TypeScript

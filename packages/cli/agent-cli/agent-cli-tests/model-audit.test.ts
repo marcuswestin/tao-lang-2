@@ -432,72 +432,54 @@ Describe('model audit — checkout measurements', () => {
   })
 })
 
-Describe('model audit — personal subagent default', () => {
-  Test('reports a different personal default in brief and full reports without exposing other settings', async () => {
+Describe('model audit — explicit selection ignores personal defaults', () => {
+  Test('keeps reports quiet and personal configuration untouched regardless of its defaults or validity', async () => {
     const paths = await fixture()
     const configPath = FS.resolvePath('config.toml', paths.codexHome)
-    const config = '[agents]\ndefault_subagent_model = "gpt-5.6-luna"\nprivate_setting = "fixture-private-value"\n'
-    await FS.writeText(configPath, config)
+    Expect((await ModelAuditCommand.audit(options(paths))).findings).toEqual([])
+    for (
+      const config of [
+        '[agents]\ndefault_subagent_model = "gpt-5.6-luna"\nprivate_setting = "fixture-private-value"\n',
+        '[agents]\ndefault_subagent_model = "gpt-6.1-sol"\n',
+        '[agents]\nmax_threads = 4\n',
+        'default_subagent_model = "gpt-5.6-luna"\n[other]\ndefault_subagent_model = "gpt-5.6-luna"\n',
+        '[agents]\nprivate_setting = "fixture-private-value',
+        '[agents]\ndefault_subagent_model = 42\n',
+        '[agents]\ndefault_subagent_model = "fixture-private-value\\nother"\n',
+      ]
+    ) {
+      await FS.writeText(configPath, config)
+      for (const brief of [false, true]) {
+        const report = await ModelAuditCommand.audit(options(paths, { brief }))
+        Expect(report.findings).toEqual([])
+        Expect(report.notes).toEqual([])
+        const output = await withCapturedOutput(() => ModelAuditCommand.write(report, { brief, json: !brief }))
+        if (brief) {
+          Expect(output.stdout).toEqual('')
+        }
+        Expect(output.stdout).not.toContain('gpt-5.6-luna')
+        Expect(output.stdout).not.toContain('fixture-private-value')
+        Expect(output.stdout).not.toContain('private_setting')
+      }
+      Expect(await FS.readText(configPath)).toEqual(config)
+    }
+  })
+
+  Test('still reports an outdated repository model independently of the personal default', async () => {
+    const paths = await fixture({ fetchedAt: FRESH, slugs: [...CATALOG, 'gpt-7-astra'] })
+    await FS.writeText(
+      FS.resolvePath('config.toml', paths.codexHome),
+      '[agents]\ndefault_subagent_model = "gpt-5.6-luna"\n',
+    )
 
     for (const brief of [false, true]) {
       const report = await ModelAuditCommand.audit(options(paths, { brief }))
       Expect(report.findings).toEqual([
-        "personal Codex subagent default names 'gpt-5.6-luna', differing from repository standard 'gpt-6.1-sol'",
+        "codex tier frontier names 'gpt-6-astra', superseded by 'gpt-7-astra' in the installed catalog",
       ])
       const output = await withCapturedOutput(() => ModelAuditCommand.write(report, { brief, json: !brief }))
-      Expect(output.stdout).toContain('gpt-5.6-luna')
-      Expect(output.stdout).not.toContain('fixture-private-value')
-      Expect(output.stdout).not.toContain('private_setting')
-    }
-    Expect(await FS.readText(configPath)).toEqual(config)
-  })
-
-  Test('stays quiet when a personal default matches or inherits the repository default', async () => {
-    const paths = await fixture()
-    Expect((await ModelAuditCommand.audit(options(paths))).findings).toEqual([])
-    for (
-      const config of [
-        '[agents]\ndefault_subagent_model = "gpt-6.1-sol"\n',
-        '[agents]\nmax_threads = 4\n',
-        'default_subagent_model = "gpt-5.6-luna"\n[other]\ndefault_subagent_model = "gpt-5.6-luna"\n',
-      ]
-    ) {
-      await FS.writeText(FS.resolvePath('config.toml', paths.codexHome), config)
-      const report = await ModelAuditCommand.audit(options(paths, { brief: true }))
-      Expect(report.findings).toEqual([])
-      Expect(report.notes).toEqual([])
-      const output = await withCapturedOutput(() => ModelAuditCommand.write(report, { brief: true }))
-      Expect(output.stdout).toEqual('')
-    }
-  })
-
-  Test('contains malformed personal configuration without printing its contents', async () => {
-    const paths = await fixture()
-    await FS.writeText(
-      FS.resolvePath('config.toml', paths.codexHome),
-      '[agents]\nprivate_setting = "fixture-private-value',
-    )
-    const report = await ModelAuditCommand.audit(options(paths))
-
-    Expect(report.findings).toEqual([])
-    Expect(report.notes).toEqual([
-      'personal Codex configuration could not be read; its subagent default was not compared',
-    ])
-    const output = await withCapturedOutput(() => ModelAuditCommand.write(report, { json: true }))
-    Expect(output.stdout).not.toContain('fixture-private-value')
-  })
-
-  Test('does not reflect invalid default values into findings or notes', async () => {
-    const paths = await fixture()
-    for (const value of ['42', '"fixture-private-value\\nother"']) {
-      await FS.writeText(
-        FS.resolvePath('config.toml', paths.codexHome),
-        `[agents]\ndefault_subagent_model = ${value}\n`,
-      )
-      const report = await ModelAuditCommand.audit(options(paths))
-
-      Expect(report.findings).toEqual([])
-      Expect(report.notes).toEqual(['personal Codex subagent default is not a model ID; it was not compared'])
+      Expect(output.stdout).toContain('gpt-7-astra')
+      Expect(output.stdout).not.toContain('gpt-5.6-luna')
     }
   })
 })

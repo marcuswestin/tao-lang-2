@@ -1,6 +1,6 @@
 import type { DependencyEnvironment } from '@compiler'
 import { BridgeMetadata } from '@compiler/bridge-metadata'
-import { type Diagnostic, FS, Json, Platform, Text } from '@shared'
+import { type Diagnostic, FS, Json, Platform, ProjectLocal, Text } from '@shared'
 import { managedDependencyModulesRoot } from './ProjectHostModules'
 
 const ProjectManagedDependencyValidationMessages = {
@@ -41,7 +41,7 @@ export function installRemedy(requesterRoot: string): string {
  * compile diagnostics.
  */
 export async function uninstalledLockedDependencies(projectRoot: string): Promise<string[]> {
-  const lockPath = FS.resolvePath('.tao/lock.jsonc', projectRoot)
+  const lockPath = ProjectLocal.storeResolve('lock.jsonc', projectRoot)
   if (!await FS.isFile(lockPath)) {
     return []
   }
@@ -92,8 +92,8 @@ export async function validateManagedDependencyEnvironments(
 ): Promise<Diagnostic[]> {
   const diagnostics: Diagnostic[] = []
   const moduleLinkRoot = options.moduleLinkRoot ?? requesterRoot
-  const lockPath = FS.resolvePath('.tao/lock.jsonc', requesterRoot)
-  const lock = await readInstallPins(lockPath)
+  const lockPath = ProjectLocal.storeResolve('lock.jsonc', requesterRoot)
+  const lock = await readInstallPins(lockPath, requesterRoot)
   diagnostics.push(...lock.diagnostics)
   for (const environment of environments) {
     const requesterOwned = FS.resolvePath(environment.projectRoot) === FS.resolvePath(requesterRoot)
@@ -209,7 +209,7 @@ export async function validateManagedDependencyEnvironments(
 
 type InstallPin = { name: string; requested: string; version: string }
 
-async function readInstallPins(path: string): Promise<{
+async function readInstallPins(path: string, requesterRoot: string): Promise<{
   byNamespace: Map<string, Map<string, InstallPin>>
   byProjectRoot: Map<string, Map<string, InstallPin> | null>
   diagnostics: Diagnostic[]
@@ -251,7 +251,7 @@ async function readInstallPins(path: string): Promise<{
     }
     byNamespace.set(namespace, npm)
     if (typeof environment['projectRoot'] === 'string') {
-      const root = FS.resolvePath(environment['projectRoot'], FS.dirname(FS.dirname(path)))
+      const root = FS.resolvePath(environment['projectRoot'], requesterRoot)
       byProjectRoot.set(root, byProjectRoot.has(root) ? null : npm)
     }
   }

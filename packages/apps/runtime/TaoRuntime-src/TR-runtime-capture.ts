@@ -39,6 +39,12 @@ export type TaoRuntimeCaptureArtifact = Readonly<{
 export type TaoRuntimeCaptureDomainRegistration = Readonly<{
   capture(): Promise<TaoRuntimeJson> | TaoRuntimeJson
   domain: string
+  /**
+   * The module whose top level registers the domain. A hot reload runs that module again while the
+   * registry keeps its first registration, so the same module registering again replaces it; any
+   * other second registration is still a conflict.
+   */
+  module?: string
   restore?(value: TaoRuntimeJson): Promise<void> | void
   version: number
 }>
@@ -59,14 +65,16 @@ const replayedDomains = new Set<string>()
 registerRuntimeCaptureDomain({
   capture: () => captureActionHistory() as TaoRuntimeJson,
   domain: 'action-history',
+  module: 'TR-runtime-capture',
   restore: restoreActionHistory,
   version: 1,
 })
 
 /** Registration is explicit: unregistered auth and credential stores cannot enter a capture. */
 export function registerRuntimeCaptureDomain(registration: TaoRuntimeCaptureDomainRegistration): () => void {
+  const existing = domains.get(registration.domain)
   RuntimeAssert(
-    !domains.has(registration.domain),
+    existing === undefined || (existing.module !== undefined && existing.module === registration.module),
     `runtime capture domain '${registration.domain}' is registered exactly once`,
     { domain: registration.domain },
   )

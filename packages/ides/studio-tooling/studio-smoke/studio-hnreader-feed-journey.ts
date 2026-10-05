@@ -1,8 +1,9 @@
-import { Errors, FS, HCI, Repo } from '@shared'
+import { Errors, FS, HCI, ProjectLocal, Repo } from '@shared'
 import { Expect, mkTestDir, runCleanups, until } from '@shared/test'
 import type { StudioSketchCatalogSnapshot } from '@studio'
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
 import { startStudioSmokeLaunch } from '../studio-tooling-src/StudioSmokeLaunch'
+import { activateSmokePreviews } from '../studio-tooling-src/StudioSmokePreviews'
 
 /** The manual Feed review, driven through Chrome against an isolated HNReader Metro preview. */
 export async function exerciseHnreaderFeed(): Promise<void> {
@@ -28,15 +29,17 @@ export async function exerciseHnreaderFeed(): Promise<void> {
       }
     }
     await FS.copyDirectory(FS.resolvePath('@model', fixtureRoot), FS.resolvePath('@model', projectRoot))
+    await ProjectLocal.prepare(projectRoot)
     await FS.copyFile(
-      FS.resolvePath('.tao/project.json', fixtureRoot),
-      FS.resolvePath('.tao/project.json', projectRoot),
+      ProjectLocal.storeResolve('project.json', fixtureRoot),
+      ProjectLocal.storeResolve('project.json', projectRoot),
     )
     studio = await startStudioSmokeLaunch({ appName: 'HNReaderStub', projectRoot, repositoryRoot: Repo.getRoot() })
     browser = await StudioCdp.launchChrome({ artifactRoot: studio.readiness.artifactRoot })
     const driver = browser
     await driver.setViewport(1_920, 1_080)
     await driver.goto(studio.readiness.sessionUrl)
+    await activateSmokePreviews(driver)
     HCI.logProcessInfo('HNReader Feed', 'draw board and rectangles')
     await driver.waitFor(`document.querySelector('[data-preset="draw"]') !== null`)
     await driver.click('[data-preset="draw"]')
@@ -44,7 +47,7 @@ export async function exerciseHnreaderFeed(): Promise<void> {
     await driver.waitFor(`document.querySelector('[data-tao-studio-sketch-workspace]') instanceof HTMLElement`)
     await driver.click(rectangleTool)
     await driver.dragBy('[data-tao-studio-sketch-workspace]', { x: 360, y: 110 }, { steps: 12 })
-    const catalogPath = FS.resolvePath('.tao/studio/sketches.jsonc', projectRoot)
+    const catalogPath = FS.resolvePath('.tao/store/studio/sketches.jsonc', projectRoot)
     const viewPath = FS.resolvePath('@/studio/View1.tao', projectRoot)
     const fixturePath = FS.resolvePath('@/studio/Sketches.tao', projectRoot)
     await until(async () => await FS.isFile(catalogPath) && await FS.isFile(viewPath))
@@ -53,7 +56,8 @@ export async function exerciseHnreaderFeed(): Promise<void> {
     Expect(created.sketches).toHaveLength(1)
     const sketchId = created.sketches[0]!.id
     const board = `[data-tao-studio-sketch="${sketchId}"]`
-    await driver.waitFor(`document.querySelector(${JSON.stringify(board)}) !== null`)
+    // The catalog reaches disk before the board renders; a loaded host can take longer than the default wait.
+    await driver.waitFor(`document.querySelector(${JSON.stringify(board)}) !== null`, { timeoutMs: 30_000 })
     await drawRect(driver, board, { x: 225, y: 60 }, { x: 110, y: 30 })
     await until(async () => (await catalog()).sketches[0]?.rects.length === 1)
     await waitForCompiledPreview(driver)
@@ -105,7 +109,8 @@ export async function exerciseHnreaderFeed(): Promise<void> {
     await driver.waitForInFrame(livePreviewUrl, `Boolean(${renderedRect(snappedId)})`, { timeoutMs: 30_000 })
     await waitForCompiledPreview(driver)
     HCI.logProcessInfo('HNReader Feed', 'Generated Story and Title drops')
-    await driver.click('.studio-agent-collapse')
+    // Studio opens the agent minimized, so the Data rail is not covered.
+    await driver.waitFor(`document.querySelector('.studio-agent-panel')?.getAttribute('data-minimized') === 'true'`)
     await driver.click('.studio-rail-button[data-panel="data"]')
     await driver.waitFor(`document.querySelector('${feedPanel} [aria-label="Feed entity"]') !== null`)
     await driver.waitFor(`document.querySelector('${feedPanel} [aria-label="Feed entity"]')?.value === 'Story'`)
@@ -118,6 +123,7 @@ export async function exerciseHnreaderFeed(): Promise<void> {
         `document.querySelector(${JSON.stringify(board)}).scrollIntoView({block:'center',inline:'center'})`,
       )
       await waitForVisibleTarget(driver, board)
+      await waitForEnabledFeedRow(driver, 'StoryTypical')
       const typical = await markText(driver, `${feedPanel} .studio-feed-row`, 'StoryTypical', 'row')
       await driver.drag(typical, board)
       await waitForKeep(driver)
@@ -194,6 +200,7 @@ export async function exerciseHnreaderFeed(): Promise<void> {
     HCI.logProcessInfo('HNReader Feed', 'reopen persisted project')
     studio = await startStudioSmokeLaunch({ appName: 'HNReaderStub', projectRoot, repositoryRoot: Repo.getRoot() })
     await driver.goto(studio.readiness.sessionUrl)
+    await activateSmokePreviews(driver)
     const reopenedFrame = await sketchFrame(driver, 'View1')
     previewUrl = await driver.evaluate<string>(`document.querySelector(${JSON.stringify(reopenedFrame)}).src`)
     await waitForRenderedTitle(driver, previewUrl, snappedId)
@@ -242,7 +249,7 @@ export async function exerciseHnreaderFeed(): Promise<void> {
             rootChildren: document.getElementById('tao-studio-root')?.childElementCount,
           })`,
         ).catch(Errors.messageOf),
-        catalog: await FS.readJson(FS.resolvePath('.tao/studio/sketches.jsonc', projectRoot)).catch(
+        catalog: await FS.readJson(FS.resolvePath('.tao/store/studio/sketches.jsonc', projectRoot)).catch(
           Errors.messageOf,
         ),
         error: Errors.messageOf(error),
@@ -276,12 +283,23 @@ const feedButtons = `${feedPanel} button`
 const rectangleTool = '[data-tao-studio-draw-tool="rect"]'
 
 async function waitForCompiledPreview(browser: StudioCdp): Promise<void> {
+  await activateSmokePreviews(browser)
   await browser.waitFor(
     `(() => {
       const status = document.querySelector('.studio-status')
       const revisions = /^compiled (\\d+) · applied (\\d+) —/.exec(status?.textContent ?? '')
       return status?.dataset.state === 'compiled' && revisions !== null && revisions[1] === revisions[2]
     })()`,
+    { timeoutMs: 30_000 },
+  )
+}
+
+/** Feed rows stay disabled while the feed reloads after a compile; wait for the compile, then the row. */
+async function waitForEnabledFeedRow(browser: StudioCdp, text: string): Promise<void> {
+  await waitForCompiledPreview(browser)
+  await browser.waitFor(
+    `[...document.querySelectorAll('${feedPanel} .studio-feed-row')]
+      .some(row => !row.disabled && row.textContent.trim() === ${JSON.stringify(text)})`,
     { timeoutMs: 30_000 },
   )
 }
@@ -379,13 +397,16 @@ async function sketchFrame(browser: StudioCdp, view: string): Promise<string> {
     })
     const scenario = manifest.scenarios.find(scenario => scenario.subjectId === subject?.subjectId)
     const cell = manifest.cells.find(cell => cell.scenarioId === scenario?.scenarioId)
-    return cell ? '[data-tao-studio-cell="' + cell.cellId + '"] iframe' : ''
+    return cell ? '[data-tao-studio-cell="' + cell.cellId + '"]' : ''
   })`
   await browser.waitFor(
     `(${expression}).then(selector => selector !== '' && document.querySelector(selector) !== null)`,
     { timeoutMs: 30_000 },
   )
-  return await browser.evaluate<string>(expression)
+  await activateSmokePreviews(browser)
+  const frame = `${await browser.evaluate<string>(expression)} iframe`
+  await browser.waitFor(`document.querySelector(${JSON.stringify(frame)}) !== null`, { timeoutMs: 30_000 })
+  return frame
 }
 
 async function dropTitleInFrame(

@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, HCI, Platform, Time } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, ProjectLocal, Time } from '@shared'
 import type { Writable } from 'node:stream'
 
 type AppwriteConnection = {
@@ -55,12 +55,13 @@ export async function provisionAppwriteProject(
   options: AppwriteProjectOptions,
 ): Promise<{ endpoint: string; projectId: string }> {
   const run = options.runner ?? runAppwriteCli
-  const work = FS.resolvePath('.tao/appwrite-connect', options.project)
+  const work = ProjectLocal.cacheResolve('appwrite-connect', options.project)
   if (await FS.isSymbolicLink(work)) {
     Errors.throwUserInput('Appwrite setup directory cannot be a symbolic link; no cloud changes were made.')
   }
   // The Appwrite CLI may write appwrite.config.json beside where it runs; keep that out of the app.
-  await FS.mkdir(work)
+  await ProjectLocal.prepare(options.project)
+  await FS.mkdirWithinBoundary(work, options.project)
   const out = { output: options.output }
 
   if (!await appwriteAccount(run, work)) {

@@ -8,7 +8,20 @@ import {
   type StudioProcessTree,
 } from '@expo-host/dev-loop/StudioProcessTree'
 import type { HostController } from '@host-control'
-import { CLI, Errors, FS, HCI, Json, Platform, ReleaseCapabilities, ReleaseToolchain, Repo, Text, Time } from '@shared'
+import {
+  CLI,
+  Errors,
+  FS,
+  HCI,
+  Json,
+  Platform,
+  ReleaseCapabilities,
+  ReleaseToolchain,
+  Repo,
+  TaoHome,
+  Text,
+  Time,
+} from '@shared'
 import { StudioClientAssets } from '@studio'
 import {
   MachineLanes,
@@ -121,7 +134,9 @@ type WaitForNativeClose = () => Promise<number>
 type CommandRunner = (command: string, spec: CLI.CommandSpec) => Promise<CLI.CommandResult>
 type Sleep = (milliseconds: number) => Promise<void>
 type NativePhaseLog = (message: string) => void
-type StartProcessTree = typeof startStudioProcessTree
+type StartProcessTree = (
+  ...args: Parameters<typeof startStudioProcessTree>
+) => StudioProcessTree | Promise<StudioProcessTree>
 /** NativeHostLease is every machine lease one native Studio holds from preparation to shutdown. */
 type NativeHostLease = Pick<MachineResourceLease, 'release'>
 type NativeStartLifecycleOptions = {
@@ -248,7 +263,7 @@ async function startWithInterruption(
 ): Promise<StartedStudioNative> {
   const hutchPath = options.hutchPath ?? defaultHutchCommand
   const identity = options.identity ?? await StudioNativeIdentity.forWorktree()
-  const artifactRoot = FS.resolvePath(options.artifactRoot ?? '.artifacts/user/studio-native', Repo.getRoot())
+  const artifactRoot = options.artifactRoot ?? TaoHome.resolve(`studio/launches/native/${identity.bundleIdentifier}`)
   const phaseOptions = { signal: options.signal }
   const stoppedNativeProcesses = await runNativePhase(
     'owned process inspection',
@@ -267,7 +282,7 @@ async function startWithInterruption(
     'isolate Hutch mutable state',
     async () =>
       await StudioHutchHome.prepare({
-        targetHome: options.hutchHome ?? Repo.resolvePath('.artifacts/user/studio-hutch-home'),
+        targetHome: options.hutchHome ?? TaoHome.cacheResolve('studio/hutch'),
       }),
     phaseOptions,
   )
@@ -1319,7 +1334,7 @@ async function runHutchCommand(
   }
   let command: StudioProcessTree
   try {
-    command = (options.startCommand ?? startStudioProcessTree)(hutchPath, commandSpec)
+    command = await (options.startCommand ?? startStudioProcessTree)(hutchPath, commandSpec)
   } catch (error) {
     Errors.throwHostEnvironment(
       `Could not start ${args.join(' ')} in ${projectRoot}.`,

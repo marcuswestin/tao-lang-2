@@ -11,12 +11,12 @@ import { CLI, FS, HCI, Platform, Repo } from '@shared'
 /** projectsNeedingInstall lists tracked Tao projects, relative to the repository, whose pins are not installed. */
 export async function projectsNeedingInstall(repositoryRoot: string): Promise<string[]> {
   const listed = await CLI.mustRun('git', {
-    args: ['ls-files', '-z', '--', '.tao/lock.jsonc', '*/.tao/lock.jsonc'],
+    args: ['ls-files', '-z', '--', '.tao/store/lock.jsonc', '*/.tao/store/lock.jsonc'],
     cwd: repositoryRoot,
   })
   const projects: string[] = []
   for (const lockPath of listed.stdout.split('\0').filter(path => path !== '')) {
-    const project = FS.dirname(FS.dirname(lockPath))
+    const project = FS.dirname(FS.dirname(FS.dirname(lockPath)))
     if ((await uninstalledLockedDependencies(FS.resolvePath(project, repositoryRoot))).length > 0) {
       projects.push(project)
     }

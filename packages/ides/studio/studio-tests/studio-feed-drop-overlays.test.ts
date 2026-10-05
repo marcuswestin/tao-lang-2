@@ -140,7 +140,7 @@ Test('Feed and palette listeners on the same canvas route only their own drop MI
   const status = { dataset: { state: 'compiled' }, textContent: 'Ready' }
   let mutations = 0
   wireStudioPreviews({
-    activePreview: { subscribe() {}, reconcile() {}, current: () => undefined },
+    focusedPreview: { subscribe() {}, reconcile() {}, current: () => undefined },
     session: { activeFile: () => undefined },
     preview: f.host,
     status,

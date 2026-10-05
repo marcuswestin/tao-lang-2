@@ -1,0 +1,413 @@
+{
+  "nodes": {
+    "_compile-word-flower-app": {
+      "emaMs": 155,
+      "lastMs": 157,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "_doctor-json": {
+      "emaMs": 2717,
+      "lastMs": 2705,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "_dprint-check": {
+      "emaMs": 7231,
+      "lastMs": 7533,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "_fix-dprint": {
+      "emaMs": 7660,
+      "lastMs": 7855,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "_fix-just-fmt": {
+      "emaMs": 13,
+      "lastMs": 12,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "_fix-ledger-index": {
+      "emaMs": 146,
+      "lastMs": 139,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "_fix-tao": {
+      "emaMs": 5908,
+      "lastMs": 5714,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "_ide-extension-build": {
+      "emaMs": 9683,
+      "lastMs": 10076,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "_parser-gen": {
+      "emaMs": 46,
+      "lastMs": 47,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "_repo-lint": {
+      "emaMs": 1770,
+      "lastMs": 1767,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "_runtime-pack-check": {
+      "emaMs": 63,
+      "lastMs": 61,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "_tao-check": {
+      "emaMs": 39702,
+      "lastMs": 34054,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "_typecheck": {
+      "emaMs": 29920,
+      "lastMs": 29125,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "ai/generation": {
+      "emaMs": 773,
+      "lastMs": 773,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "ai/tao-skills": {
+      "emaMs": 49019,
+      "lastMs": 49019,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "apps/expo-host": {
+      "emaMs": 56071,
+      "lastMs": 56071,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "apps/native-bindings": {
+      "emaMs": 30709,
+      "lastMs": 30709,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "apps/providers/icloud": {
+      "emaMs": 292,
+      "lastMs": 292,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "apps/providers/instantdb": {
+      "emaMs": 565,
+      "lastMs": 565,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "apps/runtime": {
+      "emaMs": 1941,
+      "lastMs": 1941,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "apps/stdlib": {
+      "emaMs": 671,
+      "lastMs": 671,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "cli/agent-cli": {
+      "emaMs": 7468,
+      "lastMs": 7468,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "cli/cli-kit": {
+      "emaMs": 118,
+      "lastMs": 118,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "cli/dev-cli": {
+      "emaMs": 68717,
+      "lastMs": 68717,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "cli/tao-cli": {
+      "emaMs": 1051323,
+      "lastMs": 1051323,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "compiler": {
+      "emaMs": 68184,
+      "lastMs": 68184,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "dead-exports": {
+      "emaMs": 9356,
+      "lastMs": 9356,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "ides/ide-extension": {
+      "emaMs": 23394,
+      "lastMs": 23394,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "ides/studio": {
+      "emaMs": 128364,
+      "lastMs": 128364,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "ides/studio-tooling": {
+      "emaMs": 30489,
+      "lastMs": 30489,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "keyboard-navigation-smoke": {
+      "emaMs": 78318,
+      "lastMs": 86053,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "language/ast-utils": {
+      "emaMs": 5640,
+      "lastMs": 5640,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "language/formatter": {
+      "emaMs": 4051,
+      "lastMs": 4051,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "language/formatter:core": {
+      "emaMs": 592,
+      "lastMs": 592,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "language/parser": {
+      "emaMs": 23684,
+      "lastMs": 23684,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "language/parser:core": {
+      "emaMs": 595,
+      "lastMs": 595,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "language/project-tooling": {
+      "emaMs": 179947,
+      "lastMs": 179947,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "language/source-actions": {
+      "emaMs": 28979,
+      "lastMs": 28979,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "language/validator": {
+      "emaMs": 47397,
+      "lastMs": 47397,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "language/validator:core": {
+      "emaMs": 1850,
+      "lastMs": 1850,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "native-bindings": {
+      "emaMs": 24386,
+      "lastMs": 27549,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "performance-checks": {
+      "emaMs": 389,
+      "lastMs": 389,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "providers/icloud": {
+      "emaMs": 203,
+      "lastMs": 206,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "providers/instantdb": {
+      "emaMs": 116,
+      "lastMs": 134,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "runtime-jest": {
+      "emaMs": 105740,
+      "lastMs": 105740,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "services/account-server": {
+      "emaMs": 50042,
+      "lastMs": 50042,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "services/update-server": {
+      "emaMs": 45,
+      "lastMs": 45,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "shared": {
+      "emaMs": 8450,
+      "lastMs": 8450,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "ship-bundle-proof": {
+      "emaMs": 35713,
+      "lastMs": 35713,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "studio-agent-browser": {
+      "emaMs": 18868,
+      "lastMs": 19023,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "studio-canary": {
+      "emaMs": 43841,
+      "lastMs": 44768,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "studio-dialog-browser": {
+      "emaMs": 1994,
+      "lastMs": 1917,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "studio-network-simulation": {
+      "emaMs": 51079,
+      "lastMs": 51293,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "studio-proof-real-app": {
+      "emaMs": 238002,
+      "lastMs": 232736,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "studio-smoke": {
+      "emaMs": 29673,
+      "lastMs": 30112,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "studio-smoke-native": {
+      "emaMs": 10543,
+      "lastMs": 10596,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "studio-smoke-simulated-user": {
+      "emaMs": 61598,
+      "lastMs": 61466,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "tao-apps": {
+      "emaMs": 235845,
+      "lastMs": 235845,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "tao-apps:finalize": {
+      "emaMs": 412,
+      "lastMs": 372,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "tao-apps:prepare": {
+      "emaMs": 53926,
+      "lastMs": 53042,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "testing/appium-driver": {
+      "emaMs": 311,
+      "lastMs": 311,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "testing/e2e-testing": {
+      "emaMs": 43190,
+      "lastMs": 43190,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "testing/host-control": {
+      "emaMs": 545,
+      "lastMs": 545,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "testing/verification": {
+      "emaMs": 15573,
+      "lastMs": 15573,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "apps/providers/convex": {
+      "emaMs": 149,
+      "lastMs": 149,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "apps/providers/firebase": {
+      "emaMs": 966,
+      "lastMs": 966,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "apps/providers/jazz": {
+      "emaMs": 484,
+      "lastMs": 484,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    },
+    "apps/providers/pylon": {
+      "emaMs": 198,
+      "lastMs": 198,
+      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "samples": 1
+    }
+  },
+  "version": 1
+}

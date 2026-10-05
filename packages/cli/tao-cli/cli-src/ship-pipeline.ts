@@ -1,5 +1,5 @@
 import { RuntimeToolchainPaths } from '@expo-host'
-import { CLI, FS, Platform } from '@shared'
+import { CLI, FS, Platform, TaoHome } from '@shared'
 import type { ShipProgressPhaseId } from './ship-progress'
 
 type ShipAppleCredentials = {
@@ -56,13 +56,14 @@ export function planShipPipeline(
   toolchain: ShipToolchain = RuntimeToolchainPaths,
 ): ShipPipelinePlan {
   const workspace = FS.resolvePath(`ios/${input.xcodeProjectName}.xcworkspace`, input.runtimeRoot)
-  const derivedDataPath = FS.resolvePath('.artifacts/ship/DerivedData', input.runtimeRoot)
-  const exportOptionsPath = FS.resolvePath('.artifacts/ship/ExportOptions.plist', input.runtimeRoot)
-  const cocoaPodsHome = FS.resolvePath('.artifacts/cocoapods', input.runtimeRoot)
+  const artifactsRoot = FS.dirname(input.archivePath)
+  const derivedDataPath = FS.resolvePath('DerivedData', artifactsRoot)
+  const exportOptionsPath = FS.resolvePath('ExportOptions.plist', artifactsRoot)
+  const cocoaPodsHome = TaoHome.resolve('cache/cocoapods')
   const expo = toolchain.expoCommand(input.runtimeRoot, ['prebuild', '--platform', 'ios', '--no-install'])
   const expoEnvironment = toolchain.expoEnvironment()
   const nodeBridge = toolchain.hostInstallRoot === undefined ? undefined : {
-    path: FS.resolvePath('.artifacts/ship/bin/node', input.runtimeRoot),
+    path: FS.resolvePath('bin/node', artifactsRoot),
     script: `#!/bin/sh\nBUN_BE_BUN=1 exec ${shellQuoted(expo.command)} "$@"\n`,
     xcodeEnvironmentPath: FS.resolvePath('ios/.xcode.env.local', input.runtimeRoot),
   }
@@ -150,7 +151,7 @@ export function planUnsignedArchive(
       '-archivePath',
       input.archivePath,
       '-derivedDataPath',
-      FS.resolvePath('.artifacts/ship/DerivedData', input.runtimeRoot),
+      FS.resolvePath('DerivedData', FS.dirname(input.archivePath)),
       'CODE_SIGNING_ALLOWED=NO',
       'CODE_SIGNING_REQUIRED=NO',
       'archive',

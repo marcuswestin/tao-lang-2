@@ -1,6 +1,6 @@
 import Runtime from '@expo-host'
 import { findProjectRoot, ProjectTooling } from '@project-tooling'
-import { Errors, FS, HCI } from '@shared'
+import { Errors, FS, HCI, ProjectLocal } from '@shared'
 import type { Readable, Writable } from 'node:stream'
 import { TaoAppModules } from './app-modules'
 
@@ -18,7 +18,7 @@ type CompileCommandOptions = {
   runtimePackageRoot?: string
 }
 
-/** runCompile compiles the Tao app at `appPath` into the local runtime package. */
+/** runCompile compiles the Tao app at `appPath` into its project's cache by default. */
 export async function runCompile(
   appPath: string,
   options: CompileCommandOptions = {},
@@ -36,11 +36,13 @@ export async function runCompile(
   if (refreshed.status !== 'fresh') {
     Errors.throwUserInput(refreshed.diagnostics.map(diagnostic => diagnostic.message).join('\n'))
   }
+  await ProjectLocal.prepare(projectRoot)
+  const runtimePackageRoot = options.runtimePackageRoot ?? ProjectLocal.cacheResolve('', projectRoot)
   const appNames = await Runtime.appNames(sourcePath)
   const appName = await selectAppName(sourcePath, appNames, options)
   const generated = await Runtime.generateApp(sourcePath, {
     appName,
-    runtimePackageRoot: options.runtimePackageRoot,
+    runtimePackageRoot,
   })
   return { sourcePath: generated.sourcePath, outputPath: generated.outputPath }
 }

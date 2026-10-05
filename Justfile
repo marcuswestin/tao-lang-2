@@ -136,8 +136,8 @@ instant-review *ARGS: _parser-gen
 
 # Launch Tao Studio against a project folder; HNReader by default, whose project names its DefaultApp
 [group('Run')]
-studio project="Apps/HNReader": _parser-gen
-    ./dev studio "{{ project }}"
+studio project="Apps/HNReader" *ARGS: _parser-gen
+    ./dev studio "{{ project }}" {{ ARGS }}
 
 # Launch this worktree's Tao Studio in its local Electrobun shell; offers to stop another session of it in this worktree
 [group('Run')]
@@ -238,11 +238,11 @@ studio-proof-real-app run_id="local":
 keyboard-navigation-smoke run_id="local":
     ./dev studio-smoke --run-id "{{ run_id }}" --worker 4 packages/ides/studio-tooling/studio-smoke/runtime-keyboard-navigation.test.ts
 
-# Run native Tao Studio against a deterministic project and report what it proved
+# Run native Tao Studio against a disposable deterministic project, or an explicit project and app
 [arg('show_studio', long='show-studio', value='true')]
 [group('Host proofs')]
-studio-canary project="Apps/HNReader" app="HNReader" show_studio='false':
-    ./dev studio-canary {{ if show_studio == "true" { "--show-studio" } else { "" } }} --project "{{ project }}" --app "{{ app }}"
+studio-canary project="" app="" show_studio='false':
+    ./dev studio-canary {{ if show_studio == "true" { "--show-studio" } else { "" } }} {{ if project != "" { "--project " + quote(project) } else { "" } }} {{ if app != "" { "--app " + quote(app) } else { "" } }}
 
 # Export real release and Studio-preview iOS bundles and prove only the preview carries Studio code
 [group('Host proofs')]
@@ -608,10 +608,20 @@ reclaim *ARGS:
 worktree-status:
     ./dev worktree-status
 
-# Push this feature branch, open or reuse its pull request against main, then stream the checks opening starts
+# Push this feature branch, open or reuse its pull request with auto-merge on, then stream its checks
 [group('Dev')]
 open-pr *ARGS:
     ./dev open-pr {{ ARGS }}
+
+# Wait for this branch's checks, Verify among them, then squash-merge unless auto-merge already did
+[group('Dev')]
+merge-pr *ARGS:
+    ./dev merge-pr {{ ARGS }}
+
+# Report a pull request's checks and why failed ones failed; --wait follows them to the end
+[group('Dev')]
+pr-checks *ARGS:
+    ./dev pr-checks {{ ARGS }}
 
 # Report host capabilities
 [group('Report')]
@@ -648,6 +658,11 @@ simplify-audit *ARGS:
 [group('Report')]
 bench iterations="10":
     "{{ BUN }}" run packages/cli/dev-cli/dev-cli-src/performance/language-performance.ts "{{ iterations }}"
+
+# Protect language and real Studio preview timing on a quiet machine; standalone, outside parallel verification
+[group('Host proofs')]
+performance-check:
+    ./dev performance-check
 
 # Measure machine-wide lane admission against DEVENV-094's bar; agents use ./agent unsandboxed admission-experiment on a quiet machine. --provision <count> makes and removes its own checkouts
 [group('Report')]
@@ -728,11 +743,12 @@ verify-changed no_cache='false': _deps
 verify-full no_cache='false' show_studio='false': _deps
     ./dev gates {{ VERIFY_FULL_GATES }} --lane verify-full {{ if show_studio == "true" { "--show-studio" } else { "" } }} {{ if VERIFY_FULL_SKIPPED == "" { "" } else { "--skipped \"" + VERIFY_FULL_SKIPPED + "\"" } }} --green-tree verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
 
-# Run verify-full's gate membership in a managed shell, skipping the host-only lanes and claiming nothing about them. --no-cache ignores a recorded green tree
+# Run verify-full's gate membership in a managed shell, skipping the host-only lanes and claiming nothing about them. --no-cache ignores a recorded green tree; --partition k/n runs one CI machine's share
 [arg('no_cache', long='no-cache', value='true')]
+[arg('partition', long='partition')]
 [group('Dev')]
-verify-full-sandbox no_cache='false':
-    ./dev gates {{ VERIFY_FULL_GATES }} --skip-unsandboxed --lane verify-full-sandbox {{ if VERIFY_FULL_SKIPPED == "" { "" } else { "--skipped \"" + VERIFY_FULL_SKIPPED + "\"" } }} --green-tree verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
+verify-full-sandbox no_cache='false' partition='':
+    ./dev gates {{ VERIFY_FULL_GATES }} --skip-unsandboxed --lane verify-full-sandbox {{ if VERIFY_FULL_SKIPPED == "" { "" } else { "--skipped \"" + VERIFY_FULL_SKIPPED + "\"" } }} --green-tree verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }} {{ if partition == "" { "" } else { "--partition " + partition } }}
 
 # `verify-repo` is the end of the widening order, past where a scope can go: it is the only entry
 # that gives up every shortcut the others keep. `clean` removes the build outputs and the generated

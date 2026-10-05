@@ -40,6 +40,12 @@ export function devDataAppKey(appId: string): string {
   return `${name === '' ? 'app' : name}-${digest}`
 }
 
+/** A readable, path-safe directory for one app inside a project's own dev-data folder. */
+export function devDataSafeAppName(appName: string): string {
+  const name = appName.replace(/[^A-Za-z0-9._-]/g, '_').replace(/^[^A-Za-z0-9]+/, '')
+  return name === '' ? 'app' : name
+}
+
 /** devDataManifest is the `expo.extra.taoDevData` value a development build reads. */
 export function devDataManifest(port: number, app: string, capability: string): DevDataManifest {
   return { app, capability, port, protocol: DevDataProtocol.name }

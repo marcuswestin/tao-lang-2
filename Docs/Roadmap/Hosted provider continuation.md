@@ -38,7 +38,7 @@ Read the [candidate roadmap](<Hosted data provider candidates.md>), the
   - How it runs: Expo starts headless as `node --require <preload> <expo> start --go --port N`,
     with stdin ignored.
   - The preload (`metro-events-preload.cjs.txt`, copied to the app's ignored
-    `.tao/connect-run/`) wraps Metro's `MetroTerminalReporter.update` and writes events as JSON
+    `.tao/cache/connect-run/`) wraps Metro's `MetroTerminalReporter.update` and writes events as JSON
     lines.
   - The screen shows:
     - Expo's own Expo Go URL, from `GET /_expo/open?platform=ios` with an `Origin` header.
@@ -51,7 +51,7 @@ Read the [candidate roadmap](<Hosted data provider candidates.md>), the
     with `platform=android`; `c` reprints the connection; `d` shows device guidance and the QR;
     `?` aliases `c`; `q` or Ctrl-C stops the process tree.
   - It takes a free port when 8081 is busy.
-  - When Expo stops early, it prints Expo's output tail and writes it to `.tao/connect-run/expo.log`.
+  - When Expo stops early, it prints Expo's output tail and writes it to `.tao/cache/connect-run/expo.log`.
   - Verified so far: against real Metro headlessly (QR, URL, bundle event, reload, stop) and by
     focused tests.
   - On 2026-10-04 the Developer confirmed that the larger repaired QR scans on an iPhone.
@@ -99,7 +99,7 @@ Read the [candidate roadmap](<Hosted data provider candidates.md>), the
 
 - **Secrets.** Never paste or commit Google tokens, service-account JSON, or Appwrite keys. The
   Developer completes browser sign-ins and key entry locally. Appwrite's manual-path key lives in
-  the ignored, owner-only, **unencrypted** `.tao/connect-secrets.json`.
+  the ignored, owner-only, **unencrypted** `.tao/local/connect-secrets.json`.
 - **The older source checkout.** `/Users/ro/.codex/worktrees/0629/tao-lang-2` holds a
   Developer-owned uncommitted `Apps/Hosted CRUD/tao.connections.json`. Never alter it or carry it
   over.

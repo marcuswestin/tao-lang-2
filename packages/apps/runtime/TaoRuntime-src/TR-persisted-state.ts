@@ -531,6 +531,7 @@ function value<T>(jsValue: T): TaoRuntimeValue<T> {
 registerRuntimeCaptureDomain({
   capture: () => capturePersistedState() as TaoRuntimeJson,
   domain: 'persisted-state',
+  module: 'TR-persisted-state',
   restore: value => restorePersistedState(value as Readonly<Record<string, unknown>>),
   version: 1,
 })

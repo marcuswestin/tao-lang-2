@@ -4,7 +4,7 @@ import {
   startStudioProcessTree,
   stopStudioProcessTree,
 } from '@expo-host/dev-loop/StudioProcessTree'
-import { Errors, FS, HCI, Json, Platform, Text, Time } from '@shared'
+import { Errors, FS, HCI, Json, Platform, ProjectLocal, Text, Time } from '@shared'
 import type { Readable, Writable } from 'node:stream'
 import { renderTerminalQr } from './hosted-crud-qr'
 import METRO_EVENTS_PRELOAD from './metro-events-preload.cjs.txt'
@@ -13,7 +13,9 @@ import METRO_EVENTS_PRELOAD from './metro-events-preload.cjs.txt'
 type MetroProcess = { exited: Promise<number | null>; output(): string; stop(): Promise<void> }
 
 /** MetroStarter launches Expo CLI with the given `node` arguments; a test hands in a scripted one. */
-export type MetroStarter = (spec: { args: readonly string[]; cwd: string; env: Record<string, string> }) => MetroProcess
+export type MetroStarter = (
+  spec: { args: readonly string[]; cwd: string; env: Record<string, string> },
+) => MetroProcess | Promise<MetroProcess>
 
 export type MetroSessionOptions = {
   expo: string
@@ -63,14 +65,15 @@ export async function runMetroSession(options: MetroSessionOptions): Promise<voi
   if (await metroAnswers(fetchImpl, origin)) {
     Errors.throwUserInput(`Something already serves ${origin}. Stop that Metro server first.`)
   }
-  const directory = FS.resolvePath('.tao/connect-run', options.project)
-  await FS.mkdir(directory)
+  const directory = ProjectLocal.cacheResolve('connect-run', options.project)
+  await ProjectLocal.prepare(options.project)
+  await FS.mkdirWithinBoundary(directory, options.project)
   const preload = FS.resolvePath('metro-events.cjs', directory)
   const events = FS.resolvePath('metro-events.jsonl', directory)
   await FS.writeText(preload, METRO_EVENTS_PRELOAD)
   await FS.writeText(events, '')
 
-  const metro = (options.metro ?? startMetro)({
+  const metro = await (options.metro ?? startMetro)({
     args: ['--require', preload, options.expo, 'start', '--go', '--port', String(port)],
     cwd: options.project,
     env: { TAO_METRO_EVENTS: events },
@@ -442,9 +445,11 @@ function createScreen(output: Writable | undefined): Screen {
   }
 }
 
-function startMetro(spec: { args: readonly string[]; cwd: string; env: Record<string, string> }): MetroProcess {
+async function startMetro(
+  spec: { args: readonly string[]; cwd: string; env: Record<string, string> },
+): Promise<MetroProcess> {
   let output = ''
-  const tree = startStudioProcessTree('node', {
+  const tree = await startStudioProcessTree('node', {
     args: spec.args,
     cwd: spec.cwd,
     env: spec.env,

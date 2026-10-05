@@ -1,7 +1,7 @@
 import { Errors } from '@shared/core'
 import { StudioPanelPayloads } from '../StudioPanelPayloads'
 import {
-  requestStudioProductHostApplyActiveCellEnvironment,
+  requestStudioProductHostApplyFocusedCellEnvironment,
   requestStudioProductHostApplyInspectorAction,
   requestStudioProductHostCreateFile,
   requestStudioProductHostDeleteFile,
@@ -73,7 +73,7 @@ export async function ProductPanelAction(name: string, payload: string): Promise
 }
 
 /** Applies Tao-owned scenario environment draft state through the active workbench cell controller. */
-export async function ApplyActiveCellEnvironment(
+export async function ApplyFocusedCellEnvironment(
   cellId: string,
   cellRevision: number,
   preset: string,
@@ -87,7 +87,7 @@ export async function ApplyActiveCellEnvironment(
   if (network !== 'error' && network !== 'normal' && network !== 'offline') {
     Errors.throwUserInput(`Unsupported Studio network outcome: ${network}`)
   }
-  await requestStudioProductHostApplyActiveCellEnvironment({ cellId, cellRevision }, {
+  await requestStudioProductHostApplyFocusedCellEnvironment({ cellId, cellRevision }, {
     network: {
       ...(network === 'error' ? { error: { message: errorMessage, status: errorStatus } } : {}),
       latencyMs: latency,

@@ -1,6 +1,8 @@
+import { EmittedModuleCache } from '@compiler/compiler'
+import { Workspace } from '@compiler/workspace'
 import Runtime from '@expo-host'
-import { ProjectTooling, type ProjectToolingWatch } from '@project-tooling'
-import { Assert, Errors, FS, HCI, Switch } from '@shared'
+import { ProjectTooling, type ProjectToolingResult, type ProjectToolingWatch } from '@project-tooling'
+import { Assert, Errors, FS, HCI, Platform, Switch } from '@shared'
 import SourceActions from '@source-actions'
 import type {
   StudioParameterSchema,
@@ -12,6 +14,7 @@ import { StudioProjectSession, type StudioProjectSessionOptions } from './Studio
 import { reactiveBrowserSchemeCapability, type StudioJsonObject, type StudioJsonValue } from './StudioProtocol'
 
 export type OpenStudioPreviewSessionOptions = Omit<StudioProjectSessionOptions, 'compile'> & {
+  previewPublication?: 'on' | 'off'
   previewRuntimeRoot: string
   validationMode?: 'development' | 'release'
 }
@@ -26,20 +29,49 @@ export async function openStudioPreviewSession(
   options: OpenStudioPreviewSessionOptions,
 ): Promise<StudioPreviewSession> {
   let session: StudioProjectSession | undefined
+  let previewWorkspace: Workspace | undefined
+  const emittedModuleCache = new EmittedModuleCache()
+  const sourceChanges = new Map<string, { version: string; epoch: number }>()
   let toolingWatch: ProjectToolingWatch | undefined
+  let toolingAcquisitions = 0
+  let consumedToolingRevision = 0
+  let deferredToolingResult: ProjectToolingResult | undefined
+  const profileEnabled = Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_PROFILE'] === 'true'
+  const profileNow = () => profileEnabled ? performance.now() : 0
+  function compileToolingChange(result: ProjectToolingResult): void {
+    if (result.revision <= consumedToolingRevision) {
+      return
+    }
+    void session?.compileInitial().catch(error =>
+      HCI.logProcessError('studio-project-tooling', Errors.formatForLog(error))
+    )
+  }
   session = await StudioProjectSession.open({
     ...options,
     async compile(request) {
       Assert.defined(session, 'the Tao Studio project session to exist before its first compile')
-      const tooling = await ProjectTooling.refresh(request.project, {
-        hostModulesRoot: FS.resolvePath('node_modules', options.previewRuntimeRoot),
-      })
+      Assert.defined(toolingWatch, 'the project tooling watch exists before preview compilation')
+      const startedAt = profileNow()
+      toolingAcquisitions += 1
+      let tooling: ProjectToolingResult
+      try {
+        tooling = await toolingWatch.requestRefresh()
+        consumedToolingRevision = tooling.revision
+      } finally {
+        toolingAcquisitions -= 1
+        if (toolingAcquisitions === 0 && deferredToolingResult !== undefined) {
+          const deferred = deferredToolingResult
+          deferredToolingResult = undefined
+          compileToolingChange(deferred)
+        }
+      }
       if (tooling.status !== 'fresh') {
         Errors.throwUserInput(
           tooling.diagnostics.map(diagnostic => diagnostic.message).join('\n')
             || 'Project tooling is stale; keeping the last working preview.',
         )
       }
+      const toolingDoneAt = profileNow()
       const feedSources = session.feedSourceOverrides()
       const sourceOverrides = feedSources === undefined ? undefined : Object.freeze({ ...feedSources })
       const files = await session.files()
@@ -47,17 +79,66 @@ export async function openStudioPreviewSession(
       for (const [path, source] of Object.entries(sourceOverrides ?? {})) {
         sourceVersions[FS.relativePath(request.project, path)] = SourceActions.studioSourceVersion(source)
       }
+      const sourceEpochs: Record<string, number> = {}
+      for (const [path, version] of Object.entries(sourceVersions)) {
+        const previous = sourceChanges.get(path)
+        const epoch = previous?.version === version ? previous.epoch : request.compileRevision
+        sourceChanges.set(path, { version, epoch })
+        sourceEpochs[path] = epoch
+      }
+      for (const path of sourceChanges.keys()) {
+        if (!(path in sourceVersions)) {
+          sourceChanges.delete(path)
+        }
+      }
+      const sourcesDoneAt = profileNow()
+      previewWorkspace ??= await Workspace.open(request.project)
+      const workspaceDoneAt = profileNow()
       const generated = await Runtime.generateApp(session.entryPath, {
         appName: request.appName,
         preview: {
+          publicationChecks: options.previewPublication !== 'off',
           project: request.project,
           revision: request.compileRevision,
           sourceOverrides,
           sourceVersions,
+          sourceEpochs,
         },
         runtimePackageRoot: options.previewRuntimeRoot,
         validationMode: options.validationMode,
+        previewWorkspace,
+        emittedModuleCache,
       })
+      if (profileEnabled) {
+        const generatedAt = profileNow()
+        HCI.logProcessInfo(
+          'studio',
+          JSON.stringify({
+            type: 'studio-preview-pipeline-profile',
+            revision: request.compileRevision,
+            toolingRevision: tooling.revision,
+            toolingMs: toolingDoneAt - startedAt,
+            sourceSnapshotMs: sourcesDoneAt - toolingDoneAt,
+            workspaceOpenMs: workspaceDoneAt - sourcesDoneAt,
+            generateAppMs: generatedAt - workspaceDoneAt,
+            totalMs: generatedAt - startedAt,
+          }),
+        )
+      }
+      if (generated.emittedModuleCache !== undefined) {
+        const { hits, misses, files: emitted } = generated.emittedModuleCache
+        HCI.logProcessInfo(
+          'studio',
+          JSON.stringify({
+            type: 'studio-emitted-module-cache',
+            revision: request.compileRevision,
+            hits,
+            misses,
+            emitMs: emitted.reduce((sum, file) => sum + file.emitMs, 0),
+            totalMs: emitted.reduce((sum, file) => sum + file.totalMs, 0),
+          }),
+        )
+      }
       if (generated.studioManifest !== undefined && generated.preview !== undefined) {
         session.setMatrixManifest(matrixManifest(session, generated, request.compileRevision))
       }
@@ -72,9 +153,11 @@ export async function openStudioPreviewSession(
       if (!watchReady || result.status !== 'fresh' || result.changedOutputPaths.length === 0) {
         return
       }
-      void session?.compileInitial().catch(error =>
-        HCI.logProcessError('studio-project-tooling', Errors.formatForLog(error))
-      )
+      if (toolingAcquisitions > 0) {
+        deferredToolingResult = result
+        return
+      }
+      compileToolingChange(result)
     },
   })
   watchReady = true

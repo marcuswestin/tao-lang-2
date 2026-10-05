@@ -12,7 +12,7 @@ unrelated `feat/real-host-acceptance` history. The design discussion changed the
 skill separately; no skill change is part of this CLI work.
 
 The first implementation slice starts bare `tao run` without opening a target, places its generated
-Expo host under the project, records session history at `.tao/sessions/`, and shares exclusive
+Expo host under the project, records session history at `.tao/local/sessions/`, and shares exclusive
 project ownership with Studio. Slice two adds local web and desktop builds, live desktop opening,
 and build cleanup. Ship, invite, native packaging, and installer behavior remain later slices;
 command help describes what is implemented now.
@@ -26,8 +26,8 @@ command help describes what is implemented now.
   development-session/build API sits beneath both surfaces; Studio must not shell out to the CLI as
   its core architecture. Keep Studio-only editor and preview behavior in Studio.
 - Each project owns its generated state. Retain versioned, machine-readable dev-session records at
-  `.tao/sessions/<id>.json`, including completed status, without secrets. Keep local build artifacts
-  and their records under ignored `.tao/builds/`. The exact JSON schema and internal package split
+  `.tao/local/sessions/<id>.json`, including completed status, without secrets. Keep local build artifacts
+  and their records under ignored `.tao/local/builds/`. The exact JSON schema and internal package split
   are implementation details, not product decisions.
 - One project may have only one live development-session owner. A second CLI dev session refuses.
   Studio also refuses to open a project owned by a CLI session or another Studio window, identifying
@@ -138,7 +138,7 @@ command help describes what is implemented now.
   deferred. Show unavailable ship targets in the picker with a clear alert rather than pretending
   the commands succeed.
 - Shipping history and accepted deployment configuration belong in the existing project lock
-  (`.tao/lock.jsonc`) or a clearly separate durable shipping store, not in disposable local
+  (`.tao/store/lock.jsonc`) or a clearly separate durable shipping store, not in disposable local
   build records. Do not make `tao clean` remove that history.
 
 ## `tao invite`
@@ -156,7 +156,7 @@ command help describes what is implemented now.
   dirty-source builds in that selection without a special warning. Before deleting, show the exact
   selected paths and sizes and ask for permanent deletion; **Yes** is the default answer.
 - Delete each selected build folder and its local record. Keep no “cleaned build” tombstone. Do not
-  delete shipping history, `.tao/lock.jsonc`, source, credentials, deployed records, or
+  delete shipping history, `.tao/store/lock.jsonc`, source, credentials, deployed records, or
   session records. Current source can usually be built again, but historical or dirty-source
   artifacts may not be byte-for-byte reproducible; the choice to show no special warning was
   deliberate. `tao clean` is interactive-only in this slice; it does not accept a noninteractive

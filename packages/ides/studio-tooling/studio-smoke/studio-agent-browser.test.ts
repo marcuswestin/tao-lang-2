@@ -151,6 +151,18 @@ Test('Studio agent streams, serializes turns, and refuses stale undo in Chrome',
     Expect(await browser.evaluate<boolean>(`document.querySelector('[data-tao-studio-draw-canvas]') !== null`)).toBe(
       true,
     )
+    // Studio opens with the agent minimized.
+    Expect(await browser.evaluate<string>(`document.querySelector('.studio-agent-panel')?.dataset.minimized ?? ''`))
+      .toBe('true')
+    await browser.click('.studio-agent-collapse')
+    await browser.waitFor(`document.querySelector('.studio-agent-panel')?.getAttribute('data-minimized') === 'false'`)
+    await browser.waitFor(`(() => {
+      const cloud = document.querySelector('.chat-cloud')
+      if (!(cloud instanceof HTMLInputElement) || cloud.disabled) return false
+      const rect = cloud.getBoundingClientRect()
+      return rect.width > 0 && rect.height > 0
+        && document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2) === cloud
+    })()`)
     await browser.click('.chat-cloud')
     await browser.waitFor(`document.querySelector('.chat-status')?.getAttribute('data-state') === 'on'`)
 

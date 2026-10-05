@@ -78,7 +78,7 @@ import {
   TreeFolder,
 } from '../studio-src/TaoStudioProductHost'
 
-function activeCell(cellRevision: number): NonNullable<StudioProductHostState['activeCell']> {
+function focusedCell(cellRevision: number): NonNullable<StudioProductHostState['focusedCell']> {
   return {
     cellId: 'cell:one',
     cellRevision,
@@ -208,8 +208,8 @@ Test('Tao Studio environment number inputs expose their field labels', () => {
 })
 
 Test('Tao Studio keeps scenario and environment drafts mounted across each other remounting the cell', () => {
-  const before = activeCell(7)
-  const after = activeCell(8)
+  const before = focusedCell(7)
+  const after = focusedCell(8)
   Expect(StudioProductHostMountIdentity.environment(after)).toBe(
     StudioProductHostMountIdentity.environment(before),
   )
@@ -259,7 +259,88 @@ Test('Tao Studio product host retains viewport ownership over generated Tao layo
   })
 })
 
-// REMOVAL CANDIDATE: Source-only bridge shape check; deletion loses the remaining static panel-injection smoke while projection and native control behavior stay tested.
+Test('Tao Studio uses a content-only navigator and keeps recursive file CRUD in Tao', async () => {
+  const source = (await Promise.all([
+    'TaoStudioClient.tao',
+    '@ui/Workbench.tao',
+    '@ui/Explorer.tao',
+    '@ui/Context.tao',
+    '@ui/Inspector.tao',
+    '@ui/PanelState.tao',
+    '@ui/Drawer.tao',
+    '@ui/Scenario.tao',
+  ].map(path => FS.readText(Repo.resolvePath(`Apps/Tao Studio/${path}`))))).join('\n')
+
+  Expect(source).toContain('Navigator SlotNav')
+  Expect(source).not.toContain('StackNav')
+  Expect(source).not.toContain('Title "Tao Studio"')
+  Expect(source).not.toContain('FormButton(')
+  Expect(source).toContain('use Col, Text from @tao/ui')
+  Expect(source).not.toMatch(/\bButton\(/)
+  Expect(source).not.toMatch(/\bPicker\(/)
+  Expect(source).toContain(
+    'view StudioButton(Label text, Press action(), Disabled boolean, Variant text) from '
+      + '../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx',
+  )
+  Expect(source).toContain(
+    'view StudioSegmented(Value text, Change action(text), Options list of text, Label text) from '
+      + '../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx',
+  )
+  Expect(source).toContain('@environment StudioEnvironmentPanel(')
+  Expect(source).toContain('view StudioEnvironmentPanel(FocusedCellId text, CellRevision number, ViewportPresetId text')
+  Expect(source).toContain('view StudioScenarioEnvironment(')
+  Expect(source).not.toContain('view StudioScenarioEnvironmentControls(')
+  Expect(source).toContain('state Drafts = StudioScenarioArgumentDrafts(State)')
+  Expect(source).toContain('loop StudioScenarioArgumentIds(State) / ParameterId')
+  Expect(source).toContain('Appearance: ResolvedAppearance')
+  Expect(source).not.toContain('StudioInspectorContextSurface(')
+  Expect(source).toContain('view StudioInspectorLayout(')
+  Expect(source).toContain('view StudioInspectorStyle(')
+  Expect(source).toContain('view StudioInspectorData(')
+  Expect(source).toContain('view StudioInspectorActions(')
+  Expect(source).toContain('view StudioDrawerPanel(Tab text, Compile StudioCompilePanel')
+  Expect(source).toContain('view StudioCompilePanelView(')
+  Expect(source).toContain('view StudioProblemsPanelView(')
+  Expect(source).toContain('view StudioDataPanelView(')
+  Expect(source).toContain('view StudioDataRailPanel(Data StudioDataPanel)')
+  Expect(source).toContain('Text [ink ink]')
+  Expect(source).toContain('TextInput [background panel, border line, ink ink]')
+  Expect(source).toContain('do OpenScreen(View.StableId)')
+  Expect(source).toContain('do OpenSource(Path: DesignToken.SourcePath')
+  Expect(source).toContain('where Kind == TokenKind')
+  Expect(source).toContain('DesignTokenKindGroup(TokenKind: "color", Title: "colors")')
+  Expect(source).toContain('DesignTokenKindGroup(TokenKind: "bundle", Title: "bundles")')
+  Expect(source).toContain('view StudioTestsPanelView(')
+  Expect(source).toContain('view StudioLogsPanelView(')
+  Expect(source).toContain('view StudioSearchPanel(Rows list of StudioSearchPanelRow)')
+  Expect(source).toContain('do Dispatch(Command.Name, Command.Payload)')
+  Expect(source).not.toContain('StudioDrawerPanelSurface')
+  Expect(source).not.toContain('StudioSearchPanelSurface')
+  Expect(source).toContain('ServerOrigin text is ""')
+  Expect(source).toContain('action SyncDraft(Path text, SourceVersion text, Content text) runs latest')
+  Expect(source).toContain('@editor StudioCodeEditor()')
+  Expect(source).toContain('@inspector StudioContextPanel(')
+  Expect(source).toContain('view StudioContextPanel(Revision number, ProjectRoot text, ActiveFilePath text')
+  Expect(source).toContain('FilePath: ActiveFilePath')
+  Expect(source).toContain(
+    'accepts content slots @files, @components, @projectViews, @screens, @tokens, @data, @search, @drawer, @scenario, @environment, @editor, @inspector',
+  )
+  Expect(source).toContain(
+    '@scenario StudioScenarioPanel(State: "null", JourneyRecording: "null", JourneyRecordable: false, ResolvedAppearance: "light")',
+  )
+  Expect(source).toContain(
+    'view StudioScenarioPanel(State text, JourneyRecording text, JourneyRecordable boolean, ResolvedAppearance text)',
+  )
+  Expect(source).toContain('StudioScenarioControlGroup("Record interaction")')
+  Expect(source).toContain('Name: StudioScenarioJourneyCommand(JourneyRecording)')
+  Expect(source).toContain('Name: "scenario-save-journey"')
+  Expect(source).toContain('query Children = Files')
+  Expect(source).toContain('FileTree(FolderPath: File.Path')
+  Expect(source).toContain('do CreateFile(NewPath)')
+  Expect(source).toContain('do RenameFile(Path: File.Path, SourceVersion: File.Version, TargetPath: RenamePath)')
+  Expect(source).toContain('do DeleteFile(Path: File.Path, SourceVersion: File.Version)')
+})
+
 Test('Tao Studio ProductHost injects structured panel values without section-level render adapters', async () => {
   const source = await FS.readText(FS.resolvePath('../studio-src/TaoStudioProductHost.tsx', import.meta.dir))
 
@@ -609,31 +690,42 @@ Test('Tao-owned inspector Data and Actions expose only the published active sele
   Expect(lines).toContain('Datasource context: cell cell-phone revision 4.')
   Expect(lines).toContain('Entity tables are available in the Data panel.')
   Expect(StudioInspectorActionIds(inspection, selection)).toEqual([
+    'move-up',
+    'move-down',
     'wrap-row',
     'wrap-col',
     'wrap-stack',
     'make-view',
     'remove-element',
   ])
-  Expect(JSON.parse(StudioInspectorAction(selection, 'make-view'))).toEqual({
+  Expect(JSON.parse(StudioInspectorAction(inspection, selection, 'make-view'))).toEqual({
     kind: 'extract-view',
     renderIds: ['/workspace/Garden.tao:20:42'],
   })
   Expect(StudioInspectorActionLabel('wrap-col')).toBe('Wrap in Col')
-  Expect(JSON.parse(StudioInspectorAction(selection, 'wrap-row'))).toEqual({
+  Expect(JSON.parse(StudioInspectorAction(inspection, selection, 'wrap-row'))).toEqual({
     kind: 'wrap-render',
     renderId: '/workspace/Garden.tao:20:42',
     wrapper: 'Row',
   })
-  Expect(JSON.parse(StudioInspectorAction(selection, 'remove-element'))).toEqual({
+  Expect(JSON.parse(StudioInspectorAction(inspection, selection, 'remove-element'))).toEqual({
     kind: 'remove-render',
     renderId: '/workspace/Garden.tao:20:42',
   })
   Expect(StudioInspectorActionValid('source-1', inspection, selection, false, 'remove-element')).toBe(true)
   Expect(StudioInspectorActionValid('source-1', inspection, selection, false, 'unknown')).toBe(false)
+  Expect(StudioInspectorActionLabel('move-up')).toBe('Move up')
+  Expect(StudioInspectorActionValid('source-1', inspection, selection, false, 'move-up')).toBe(true)
+  Expect(StudioInspectorActionValid('source-1', inspection, selection, false, 'move-down')).toBe(false)
+  Expect(JSON.parse(StudioInspectorAction(inspection, selection, 'move-up'))).toEqual({
+    beforeId: '/workspace/Garden.tao:8:18',
+    draggedId: '/workspace/Garden.tao:20:42',
+    kind: 'move-render',
+  })
+  Expect(() => StudioInspectorAction(inspection, selection, 'move-down')).toThrow('nowhere to move down')
   Expect(StudioInspectorTextAvailable(inspection, selection)).toBe(false)
   Expect(StudioInspectorTextStatus(inspection, selection)).toContain('not a Text leaf')
-  Expect(JSON.parse(StudioInspectorAction(selection, 'wrap-stack'))).toEqual({
+  Expect(JSON.parse(StudioInspectorAction(inspection, selection, 'wrap-stack'))).toEqual({
     kind: 'wrap-render',
     renderId: '/workspace/Garden.tao:20:42',
     wrapper: 'Stack',
@@ -774,6 +866,8 @@ function inspectorInspection(): string {
       ['aligned', 'left'],
       ['content', 'spread', 'stretch'],
     ],
+    // The last of its siblings: it can step up, before the one above it, but not down.
+    moves: { up: { beforeId: '/workspace/Garden.tao:8:18', draggedId: '/workspace/Garden.tao:20:42' } },
     renderId: '/workspace/Garden.tao:20:42',
     styleEntries: [['background', 'canvas']],
     styleProvenance: [{

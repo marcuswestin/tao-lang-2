@@ -149,6 +149,21 @@ const associatedOperatorNames = new Set(['+', '-', '*', '/', '==', '!=', '<', '<
 
 type AnyTypeReference = AST.TypeReference | AST.ConstructablePrimitiveTypeReference
 
+const inferenceMemoBrand = Symbol('TypeInferenceMemo')
+type TypeInferenceMemo = { readonly [inferenceMemoBrand]: true }
+type InferenceMethod =
+  | 'reference'
+  | 'typeExpression'
+  | 'definition'
+  | 'parameter'
+  | 'expression'
+  | 'valueDeclaration'
+  | 'functionReturn'
+type InferenceResult = { value?: TaoType; contextual: WeakMap<AST.Node, TaoType> }
+type InferenceCache = Map<InferenceMethod, WeakMap<AST.Node, InferenceResult>>
+const inferenceCaches = new WeakMap<TypeInferenceMemo, InferenceCache>()
+let activeInferenceMemo: TypeInferenceMemo | undefined
+
 /** Type exposes static Tao type resolution and compatibility helpers. */
 export class Type {
   static ofAssociatedOwner(owner: AssociatedCallableOwner): TaoType {
@@ -249,6 +264,31 @@ export class Type {
       : undefined
   }
 
+  /**
+   * createInferenceMemo creates an opaque, caller-owned memo for one completed linked-AST validation
+   * batch. Discard it before any source, link, workspace, or AST change; never persist it across builds.
+   */
+  static createInferenceMemo(): TypeInferenceMemo {
+    const memo: TypeInferenceMemo = { [inferenceMemoBrand]: true }
+    inferenceCaches.set(memo, new Map())
+    return memo
+  }
+
+  /**
+   * withInferenceMemo shares public inference results only on this synchronous JavaScript stack.
+   * Inputs and their loaded workspace must stay unmodified for the memo's lifetime. An async action
+   * gains no memo after its first await; nested scopes and thrown actions restore the preceding scope.
+   */
+  static withInferenceMemo<T>(memo: TypeInferenceMemo, action: () => T): T {
+    const preceding = activeInferenceMemo
+    activeInferenceMemo = memo
+    try {
+      return action()
+    } finally {
+      activeInferenceMemo = preceding
+    }
+  }
+
   /** parameterName returns the value alias introduced by a parameter declaration. */
   static parameterName(parameter: AST.ParameterDeclaration): string {
     if (parameter.inlineType) {
@@ -329,17 +369,17 @@ export class Type {
 
   /** ofReference resolves a type reference to the Tao type it denotes. */
   static ofReference(type: AST.TypeReference): TaoType {
-    return new TypeResolutionContext().ofReference(type)
+    return inferType('reference', type, () => new TypeResolutionContext().ofReference(type))
   }
 
   /** ofTypeExpression resolves any type expression, including inline item and case-set types. */
   static ofTypeExpression(type: AST.TypeExpression): TaoType {
-    return new TypeResolutionContext().ofTypeExpression(type)
+    return inferType('typeExpression', type, () => new TypeResolutionContext().ofTypeExpression(type))
   }
 
   /** ofDefinition resolves a type definition to the Tao type it denotes. */
   static ofDefinition(type: AST.TypeDefinition): TaoType {
-    return new TypeResolutionContext().ofDefinition(type)
+    return inferType('definition', type, () => new TypeResolutionContext().ofDefinition(type))
   }
 
   /** Abstractness belongs to the resolved declaration, never its nominal ancestors. */
@@ -579,7 +619,7 @@ export class Type {
 
   /** ofParameter resolves a parameter declaration's accepted Tao type. */
   static ofParameter(parameter: AST.ParameterDeclaration): TaoType {
-    return new TypeResolutionContext().ofParameter(parameter)
+    return inferType('parameter', parameter, () => new TypeResolutionContext().ofParameter(parameter))
   }
 
   /** ofRenderSlotInputBinding resolves a real inline binding against its receiving occurrence. */
@@ -592,15 +632,19 @@ export class Type {
 
   /** ofExpression resolves the static Tao type of a value expression. */
   static ofExpression(expression: AST.Expression | AST.ConfiguredValue): TaoType {
-    return AST.isConfiguredValue(expression)
-      ? Type.ofConfiguredValue(expression)
-      : new TypeResolutionContext().ofExpression(expression)
+    return inferType('expression', expression, () =>
+      AST.isConfiguredValue(expression)
+        ? Type.ofConfiguredValue(expression)
+        : new TypeResolutionContext().ofExpression(expression))
   }
 
   /** ofValueDeclaration resolves the runtime value type introduced by one linked value declaration. */
   static ofValueDeclaration(declaration: AST.ValueDeclaration | undefined, context?: AST.Node): TaoType {
-    const resolution = new TypeResolutionContext()
-    return context ? resolution.ofContextualValue(declaration, context) : resolution.ofValueDeclaration(declaration)
+    const resolve = (): TaoType => {
+      const resolution = new TypeResolutionContext()
+      return context ? resolution.ofContextualValue(declaration, context) : resolution.ofValueDeclaration(declaration)
+    }
+    return declaration ? inferType('valueDeclaration', declaration, resolve, context) : resolve()
   }
 
   /** ofActionResult resolves a declared or lexical source-action result, including nullable results. */
@@ -610,7 +654,7 @@ export class Type {
 
   /** ofFunctionReturn resolves an explicit function result or infers it from every return statement. */
   static ofFunctionReturn(declaration: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration): TaoType {
-    return new TypeResolutionContext().ofFunctionReturn(declaration)
+    return inferType('functionReturn', declaration, () => new TypeResolutionContext().ofFunctionReturn(declaration))
   }
 
   /** atMemberPath resolves a member suffix from an already-resolved root type. */
@@ -1804,6 +1848,81 @@ function associatedCallableInContext(
   })
 }
 
+/** Cache only completed public queries; recursive contexts retain their own cycle guards. */
+function inferType(method: InferenceMethod, node: AST.Node, resolve: () => TaoType, context?: AST.Node): TaoType {
+  const cache = activeInferenceMemo && inferenceCaches.get(activeInferenceMemo)
+  if (!cache) {
+    return resolve()
+  }
+  let methodCache = cache.get(method)
+  const previous = methodCache?.get(node)
+  const cached = context ? previous?.contextual.get(context) : previous?.value
+  if (cached) {
+    return cloneInferenceType(cached)
+  }
+  const result = resolve()
+  if (inferenceIsComplete(result)) {
+    const snapshot = cloneInferenceType(result)
+    if (!methodCache) {
+      methodCache = new WeakMap()
+      cache.set(method, methodCache)
+    }
+    const entry: InferenceResult = previous ?? { contextual: new WeakMap<AST.Node, TaoType>() }
+    if (context) {
+      entry.contextual.set(context, snapshot)
+    } else {
+      entry.value = snapshot
+    }
+    methodCache.set(node, entry)
+  }
+  return result
+}
+
+function inferenceIsComplete(type: TaoType): boolean {
+  return Switch.kind(type, {
+    unresolved: () => false,
+    primitive: type =>
+      type.primitive !== 'action' || type.parameters.every(parameter => inferenceIsComplete(parameter.type)),
+    list: type => !type.element || inferenceIsComplete(type.element),
+    union: type => type.members.every(inferenceIsComplete),
+    item: () => true,
+    entity: () => true,
+    enum: () => true,
+    capability: () => true,
+  })
+}
+
+/** Clone mutable semantic containers, retaining every linked AST reference and AST-backed shape. */
+function cloneInferenceType(type: TaoType): TaoType {
+  return Switch.kind<TaoType, TaoType>(type, {
+    unresolved: type => ({ ...type }),
+    primitive: type =>
+      type.primitive === 'action'
+        ? {
+          ...type,
+          parameters: type.parameters.map(parameter => ({ ...parameter, type: cloneInferenceType(parameter.type) })),
+        }
+        : { ...type, ...(type.slots ? { slots: cloneInferenceShape(type.slots) } : {}) },
+    list: type => ({ ...type, ...(type.element ? { element: cloneInferenceType(type.element) } : {}) }),
+    item: type => ({ ...type, ...(type.item ? { item: cloneInferenceShape(type.item) } : {}) }),
+    entity: type => ({ ...type }),
+    enum: type => ({ ...type }),
+    capability: type => ({ ...type }),
+    union: type => ({ ...type, members: type.members.map(cloneInferenceType) }),
+  })
+}
+
+function cloneInferenceShape(shape: ItemShape): ItemShape {
+  if (AST.isItemTypeExpression(shape)) {
+    return shape
+  }
+  return {
+    ...shape,
+    properties: [...shape.properties],
+    ...(shape.dataFields ? { dataFields: [...shape.dataFields] } : {}),
+  }
+}
+
 class TypeResolutionContext {
   /** resolving holds what this context is already resolving, so a declaration that reaches itself
    * resolves to unresolved instead of recursing forever. */
@@ -2516,7 +2635,8 @@ class TypeResolutionContext {
     const name = Type.parameterName(parameter)
     for (let node: AST.Node | undefined = context; node && node !== owner; node = node.$container) {
       if (
-        AST.isBlock(node) && node.statements.some(candidate =>
+        AST.isBlock(node)
+        && node.statements.some(candidate =>
           (AST.isAliasDeclaration(candidate) || AST.isEntityQueryDeclaration(candidate))
           && Type.declarationName(candidate) === name
         )

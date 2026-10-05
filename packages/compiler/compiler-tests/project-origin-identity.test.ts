@@ -25,7 +25,7 @@ Describe('compiled project origin identity', () => {
       Expect(secondId).toBeDefined()
       Expect(firstId).not.toBe(secondId)
       // This marked project is indexed, but the selected app does not require its publication.
-      await FS.remove(FS.resolvePath('Unused/.tao/project.json', root))
+      await FS.remove(FS.resolvePath('Unused/.tao/store/project.json', root))
 
       const declaration = (id: string) =>
         JSON.stringify([
@@ -45,8 +45,8 @@ Describe('compiled project origin identity', () => {
       Expect(independent).not.toContain(declaration(firstId!))
 
       await FS.writeText(
-        FS.resolvePath('.tao/project.json', secondRoot),
-        await FS.readText(FS.resolvePath('.tao/project.json', firstRoot)),
+        FS.resolvePath('.tao/store/project.json', secondRoot),
+        await FS.readText(FS.resolvePath('.tao/store/project.json', firstRoot)),
       )
       const copied = await compile(paths['Second/App.tao'])
       Expect(copied).toContain(declaration(firstId!))

@@ -349,7 +349,9 @@ function declarationTaoPropsBinding(
     return gen.noop()
   }
   const spec = options.studio === true
-    ? gen`TR.Design.Source(${Compile.DesignSpec(view.layoutClause)}, ${Compile.DesignSpecSource(view.layoutClause)})`
+    ? gen`TR.Design.Source(${Compile.DesignSpec(view.layoutClause)}, ${
+      Compile.DesignSpecSource(view.layoutClause, options)
+    })`
     : Compile.DesignSpec(view.layoutClause)
   return gen`const _DeclarationProps = TR.DeclarationTaoProps(_ViewProps.__tao, ${spec})`
 }

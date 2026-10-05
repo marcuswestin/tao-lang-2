@@ -1,6 +1,6 @@
 import { ASTUtils, Packages, Type } from '@ast-utils'
 import { AST } from '@parser'
-import type { ValidationContext } from '../validation'
+import type { AppValidationMemo, ValidationContext } from '../validation'
 import { validateAgentCommands } from './agent-commands-validator'
 import { validateReferenceBlock } from './configured-values-validator'
 import { reportPresentationBindingDiagnostic } from './navigation-validator'
@@ -44,14 +44,60 @@ const appValidationMessages = {
 /** AppValidator validates Tao app placement and Prelude-owned supplied slots. */
 export const AppValidator = {
   messages: appValidationMessages,
+  createBatchMemo,
   validate,
+}
+
+/** createBatchMemo owns private app caches; callers discard them before any build or relink. */
+function createBatchMemo(): AppValidationMemo {
+  const values = new Map<AST.TaoFile, readonly AST.AppValueDeclaration[]>()
+  const identities = new Map<Packages.Context, {
+    files: readonly AST.TaoFile[]
+    first: ReadonlyMap<string, AST.AppValueDeclaration>
+  }[]>()
+  return {
+    values(file, compute) {
+      let apps = values.get(file)
+      if (!apps) {
+        apps = Object.freeze([...compute()])
+        values.set(file, apps)
+      }
+      return apps
+    },
+    identities(packagesContext, files, compute) {
+      // App ordering sorts by document path and offset. Preserve input order for distinct
+      // same-path ASTs because stable ties choose which app owns the first identity.
+      const ordered = files.toSorted((left, right) =>
+        AST.getDocument(left).uri.path.localeCompare(AST.getDocument(right).uri.path)
+      )
+      let entries = identities.get(packagesContext)
+      if (!entries) {
+        entries = []
+        identities.set(packagesContext, entries)
+      }
+      const existing = entries.find(entry =>
+        entry.files.length === ordered.length && entry.files.every((file, index) => file === ordered[index])
+      )
+      if (existing) {
+        return existing.first
+      }
+      const first = compute()
+      entries.push({ files: ordered, first })
+      return first
+    },
+  }
+}
+
+function appValues(file: AST.TaoFile, ctx: ValidationContext): readonly AST.AppValueDeclaration[] {
+  const compute = () => AST.appValueDeclarationsInFile(file)
+  return ctx.appMemo ? ctx.appMemo.values(file, compute) : compute()
 }
 
 function validate(file: AST.TaoFile, ctx: ValidationContext): void {
   validateTopLevelStatements(file, ctx)
   const apps = [
     ...file.statements.filter(AST.isAppDeclaration),
-    ...AST.appValueDeclarationsInFile(file).filter(app => !AST.isAppDeclaration(app)),
+    ...appValues(file, ctx).filter(app => !AST.isAppDeclaration(app)),
   ]
   for (const app of apps) {
     validateAgentCommands(app, ctx)
@@ -64,10 +110,11 @@ function validate(file: AST.TaoFile, ctx: ValidationContext): void {
     validateAppIdentity(app, ctx)
     validateAppRequirementOwnership(app, ctx)
   }
-  for (const root of [...AST.streamAllContents(file)].filter(AST.isAppView)) {
+  const nodes = ctx.nodesInFile?.(file) ?? AST.streamAllContents(file)
+  for (const root of nodes.filter(AST.isAppView)) {
     validateRootViewPlacement(root, ctx)
   }
-  for (const guard of [...AST.streamAllContents(file)].filter(AST.isAppGuardStatement)) {
+  for (const guard of nodes.filter(AST.isAppGuardStatement)) {
     validateAppGuardPlacement(guard, ctx)
   }
 }
@@ -109,9 +156,9 @@ function validateAppIdentity(app: AST.AppValueDeclaration, ctx: ValidationContex
     return
   }
   const root = Packages.projectRootForPath(ctx.packagesContext.index, AST.getDocument(app).uri.path)
-  const firstByIdentity = ctx.memo('app-validator.firstByIdentity', () => {
+  const computeIdentities = () => {
     const first = new Map<string, AST.AppValueDeclaration>()
-    const apps = ctx.workspaceFiles.flatMap(file => AST.appValueDeclarationsInFile(file))
+    const apps = ctx.workspaceFiles.flatMap(file => appValues(file, ctx))
       .toSorted((left, right) => {
         const pathOrder = AST.getDocument(left).uri.path.localeCompare(AST.getDocument(right).uri.path)
         return pathOrder || (left.$cstNode?.offset ?? 0) - (right.$cstNode?.offset ?? 0)
@@ -130,7 +177,11 @@ function validateAppIdentity(app: AST.AppValueDeclaration, ctx: ValidationContex
       }
     }
     return first
-  })
+  }
+  const firstByIdentity = ctx.memo('app-validator.firstByIdentity', () =>
+    ctx.appMemo
+      ? ctx.appMemo.identities(ctx.packagesContext, ctx.workspaceFiles, computeIdentities)
+      : computeIdentities())
   if (firstByIdentity.get(`${root ?? ''}#${id}@${version}`) !== app) {
     ctx.error(app, appValidationMessages.duplicateIdentity(id, version))
   }

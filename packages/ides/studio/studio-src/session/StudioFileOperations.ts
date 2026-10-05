@@ -1,5 +1,5 @@
 import type { Workspace } from '@compiler/workspace'
-import { AST, Langium } from '@parser'
+import { AST, Langium, Parser } from '@parser'
 import { Assert, Diagnostics, Errors, FS } from '@shared'
 import SourceActions from '@source-actions'
 import type { StudioCompileCoordinator } from '../StudioCompileCoordinator'
@@ -137,11 +137,21 @@ export class StudioFileOperations {
   }
 
   async syncDraft(request: StudioDraftWriteRequest): Promise<StudioDraftWriteResult> {
-    const { coordinator, files, workspace } = this.#context
+    const { coordinator, files } = this.#context
     const current = await files.readFile(request.path)
     requireSourceVersion(current, request.sourceVersion)
     const resolved = await files.resolveTaoFile(request.path)
-    const parsed = await workspace.parseSource(request.content, Langium.URI.file(resolved))
+    if (request.content === current.content) {
+      // The editor went back to the saved text after a refused save. Nothing is written, which also
+      // leaves a read-only generated view untouched; only the refused draft is dropped.
+      files.clearDraft(current.path)
+      const file = { ...current, ...files.projectFile(current.path, current.sourceVersion) }
+      this.#context.onFileChanged(file)
+      return { diagnostics: [], file, saved: true }
+    }
+    // The full preview compile validates the saved graph. Draft admission needs only syntax errors
+    // in the edited file, so avoid reading and linking the whole graph before that compile.
+    const parsed = Parser.parseSyntax(request.content)
     const diagnostics = Diagnostics.errorMessages(parsed.diagnostics, 'lexer', 'parser')
     if (diagnostics.length > 0) {
       files.setDraft(current.path, diagnostics)
@@ -218,10 +228,12 @@ export class StudioFileOperations {
       const scenariosBefore = relocate
         ? otherRewrites.find(rewrite => rewrite.path === scenariosPath)?.content ?? existingScenarios?.content ?? ''
         : ''
-      const scenariosParsed = await this.#context.workspace.parseSource(
-        scenariosBefore,
-        Langium.URI.file(scenariosPath),
-      )
+      // Destination declarations need only authored syntax. Keep this independent of the linked
+      // source workspace, whose references relocation still consumes below.
+      const scenariosParsed = await Parser.parseCode(scenariosBefore, {
+        uri: Langium.URI.file(scenariosPath),
+        validation: false,
+      })
       Assert.input(
         !Diagnostics.hasError(scenariosParsed.diagnostics, 'lexer', 'parser'),
         `Cannot relocate scenarios until ${scenariosRelativePath} parses.`,

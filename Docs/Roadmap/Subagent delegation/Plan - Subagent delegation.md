@@ -11,8 +11,8 @@ The operative guidance lives in the `delegation` skill and the `Delegation` sect
 
 Delegation was undocumented, so it happened by instinct. Three things were consistently missed: that
 the strongest reason to delegate is keeping a large input out of the caller's context rather than
-running work in parallel; that a subagent inherits the caller's model unless told otherwise, which
-makes the most expensive model the accidental default for mechanical work; and that a subagent's
+running work in parallel; that an omitted model leaves selection to a role, personal or harness
+default, or parent inheritance, making routing accidental; and that a subagent's
 report is a claim about work, not evidence of it.
 
 The research behind the decision rule is summarised in the sources below. The two findings that
@@ -122,6 +122,11 @@ Nothing asked yet. Each entry: the date, the choice, what the Developer decided,
 Slice A landed: Codex takes `[agents]` defaults generated from the standard row of the routing
 table, and Cursor takes the profiles through rulesync into `.cursor/agents/`, so all three harnesses
 read one source. Cursor's own permission and worktree files stay hand-maintained.
+
+On 2026-10-04 the Developer chose explicit model and effort selection for every spawn instead of
+relying on defaults. The skill owns the selection rule; generated defaults remain fallback
+safeguards. The model audit no longer compares personal defaults or reads personal configuration;
+its repository routing, installed-model, and transcript checks remain active.
 
 Two of the Cursor model identifiers are inferred rather than quoted. Cursor's subagent documentation
 spells ids as `claude-opus-5`, `gpt-5.6-sol`, and `composer-2.5`, and its model list offers Claude

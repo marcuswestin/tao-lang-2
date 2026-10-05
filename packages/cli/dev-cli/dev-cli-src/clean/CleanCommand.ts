@@ -1,5 +1,7 @@
 import { OutputText } from '@cli-kit'
-import { CLI, HCI, Repo } from '@shared'
+import { CLI, Errors, FS, HCI, Repo } from '@shared'
+
+const WORD_FLOWER_GENERATED = 'Apps/WordFlower/1 - Current/.tao/cache/_gen_tao-app'
 
 /**
  * `just clean` and `just clean-all`, as steps a reader can watch rather than one silent block.
@@ -49,6 +51,7 @@ const CHECKOUT_STEPS: readonly CleanStep[] = [
       'packages/apps/expo-host/.expo',
       'packages/apps/expo-host/_gen_tao-app',
       'packages/apps/expo-host/_gen_tao-app-test',
+      WORD_FLOWER_GENERATED,
     ],
     command: 'rm',
     name: 'Removing build and dev artifacts',
@@ -81,6 +84,7 @@ async function stepsFor(scope: CleanScope): Promise<readonly CleanStep[]> {
  */
 async function run(options: RunCleanOptions = {}): Promise<number> {
   const cwd = options.repositoryRoot ?? Repo.getRoot()
+  await assertProjectCacheWithinCheckout(cwd)
   const now = options.now ?? Date.now
   const runStep = options.runStep ?? defaultRunStep
 
@@ -98,6 +102,17 @@ async function run(options: RunCleanOptions = {}): Promise<number> {
     HCI.writeLine(` Done (${elapsed})`)
   }
   return 0
+}
+
+/** A linked ancestor would redirect `rm` into a project state tree outside this checkout. */
+async function assertProjectCacheWithinCheckout(repositoryRoot: string): Promise<void> {
+  let path = repositoryRoot
+  for (const segment of WORD_FLOWER_GENERATED.split('/')) {
+    path = FS.resolvePath(segment, path)
+    if (await FS.isSymbolicLink(path)) {
+      Errors.throwHostEnvironment(`Cannot clean generated project cache through linked path ${path}.`)
+    }
+  }
 }
 
 /** defaultRunStep runs one step's own command, letting anything it says reach the terminal. */

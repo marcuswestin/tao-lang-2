@@ -36,7 +36,7 @@ import { type WorkAdmission, type WorkCommand, WorkGraph, type WorkNode } from '
  * is written by at most one node, which is what makes the derived edges unambiguous.
  */
 export type SourceClass =
-  /** `packages/apps/expo-host/_gen_tao-app*`, filled by the WordFlower compile. */
+  /** WordFlower's `.tao/cache/_gen_tao-app`, filled by the repository compile. */
   | 'gen-app'
   /** The extension bundles and syntax tree filled by the IDE extension build. */
   | 'gen-ide'
@@ -107,6 +107,8 @@ export type GateMetadata =
      * reports it skipped rather than running it, so it proves nothing there and is never green.
      */
     requiresMacOS?: boolean
+    /** True when the node starts Studio, whose Metro refuses to run without the shared Watchman daemon. */
+    usesWatchman?: boolean
     /**
      * The process the node runs, or a builder over what the graph admitted; absent, the node is
      * `just <name>`. A public recipe and a catalog command may share a name: the recipe is the
@@ -322,8 +324,6 @@ const GUI_PRIORITY = 6
 const GUI_RESOURCE = 'gui'
 /** Graph GUI children inherit the lease held by GateRunner instead of taking it again. */
 const GUI_LEASE_HELD_ENV_KEY = 'TAO_GUI_LEASE_HELD'
-/** Both gates open the checked-in HNReader project, which permits one dev-session owner. */
-const HNREADER_PROJECT_RESOURCE = 'studio-hnreader-project'
 
 /** studioLane is the shape every browser or native UI node shares. */
 function studioLane(resources?: readonly string[]): GateMetadata {
@@ -335,6 +335,7 @@ function studioLane(resources?: readonly string[]): GateMetadata {
     reads: ['gen-app', 'gen-parser', 'tao', 'ts'],
     requiresUnsandboxed: true,
     resources,
+    usesWatchman: true,
   }
 }
 
@@ -431,9 +432,8 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
       { priority: PREPARE_PRIORITY, reads: ['gen-parser', 'tao', 'ts'], writes: ['gen-ide'] },
     ],
     ['_tao-check', { cost: TAO_CHECK_COST, reads: ['gen-parser', 'tao', 'ts'] }],
-    // `packages/language/parser/tsconfig.json` compiles `parser-src/**`, where Langium writes, and
-    // `packages/apps/expo-host/tsconfig.json` compiles `_gen_tao-app/**`, where the WordFlower
-    // compile writes, so the typechecker reads both generated trees.
+    // The parser tsconfig includes Langium's generated tree. Typecheck retains its conservative
+    // ordering after the app compile moved into the WordFlower project's cache.
     ['_typecheck', { cost: TYPECHECK_COST, reads: ['gen-app', 'gen-parser', 'ts'] }],
     [
       'ship-bundle-proof',
@@ -447,14 +447,12 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
       },
     ],
 
-    // Browser smokes have separate ports and artifacts, but the launch smoke and canary both open
-    // HNReader and must share its project resource. The native shell and canary also contend on
-    // the window server, which is what `gui` names. Each smoke gate is named for its public recipe.
+    // Browser smokes have separate ports, artifacts and disposable launch projects. The native
+    // shell and canary contend on the window server, which is what `gui` names. Each smoke gate
+    // is named for its public recipe.
     [
       'studio-smoke',
-      studioSmoke('studio-smoke', 'packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts', {
-        resources: [HNREADER_PROJECT_RESOURCE],
-      }),
+      studioSmoke('studio-smoke', 'packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts'),
     ],
     [
       'studio-proof-real-app',
@@ -515,7 +513,7 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     [
       'studio-canary',
       {
-        ...studioLane([GUI_RESOURCE, HNREADER_PROJECT_RESOURCE]),
+        ...studioLane([GUI_RESOURCE]),
         optionalVisibleSurface: 'studio',
         priority: GUI_PRIORITY,
         requiresMacOS: true,
@@ -625,6 +623,7 @@ function node(name: string, repositoryRoot: string): WorkNode {
     requiresMacOS: _requiresMacOS,
     requiresUnsandboxed: _requiresUnsandboxed,
     run,
+    usesWatchman: _usesWatchman,
     writes: _writes,
     ...scheduling
   } = metadata(name)

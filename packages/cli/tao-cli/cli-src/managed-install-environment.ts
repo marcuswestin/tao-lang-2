@@ -5,11 +5,11 @@ export const ManagedInstallEnvironment = {
   modulesRoot(consumerRoot: string, originRoot: string, namespace: string): string {
     return FS.resolvePath(originRoot) === FS.resolvePath(consumerRoot)
       ? FS.resolvePath('node_modules', consumerRoot)
-      : FS.resolvePath(`.tao/install/origins/${namespace}/node_modules`, consumerRoot)
+      : FS.resolvePath(`.tao/cache/install/origins/${namespace}/node_modules`, consumerRoot)
   },
   packageRoot(consumerRoot: string, namespace: string, alias: string): string {
     return FS.resolvePath(
-      `.tao/install/packages/${namespace}/${Platform.sha256Hex([alias]).slice(0, 16)}`,
+      `.tao/cache/install/packages/${namespace}/${Platform.sha256Hex([alias]).slice(0, 16)}`,
       consumerRoot,
     )
   },

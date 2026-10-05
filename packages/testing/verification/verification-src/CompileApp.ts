@@ -1,8 +1,8 @@
-import { CLI, Errors, FS, HCI, Platform, Repo, TaoStdlib } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, ProjectLocal, Repo, TaoStdlib } from '@shared'
 
 /**
  * `just test`, `just test-file`, `just test-changed`, `just test-retry`, and both verify lanes all
- * depend on the WordFlower app being compiled into `packages/apps/expo-host/_gen_tao-app`. That
+ * depend on the WordFlower app being compiled into its own `.tao/cache/_gen_tao-app`. That
  * compile costs ~2.7s of single-threaded work and used to be paid unconditionally, so running one
  * dev test that never reads the generated app still waited three seconds for it, and every verify
  * lane carried it on the serial floor.
@@ -31,10 +31,10 @@ const STAMP_PATH = '.artifacts/compile-app-stamp.json'
  * stale, never as an error. Raise this whenever the set of inputs or the way they are hashed
  * changes, or a stamp written under the old scheme is honoured against inputs it never covered.
  */
-const STAMP_VERSION = 5
+const STAMP_VERSION = 7
 
 /** Where `./tao compile` writes the generated app, relative to the repository root. */
-const DEFAULT_OUTPUT_ROOT = 'packages/apps/expo-host/_gen_tao-app'
+export const WORD_FLOWER_OUTPUT_ROOT = 'Apps/WordFlower/1 - Current/.tao/cache/_gen_tao-app'
 
 /**
  * Every repository-owned directory whose content can change what a compile produces. Getting this
@@ -142,7 +142,7 @@ export type CompileAppOptions = {
 export async function runCompileApp(options: CompileAppOptions): Promise<number> {
   const repositoryRoot = options.repositoryRoot ?? Repo.getRoot()
   const appPath = FS.resolvePath(options.appPath, repositoryRoot)
-  const outputRoot = FS.resolvePath(options.outputRoot ?? DEFAULT_OUTPUT_ROOT, repositoryRoot)
+  const outputRoot = FS.resolvePath(options.outputRoot ?? WORD_FLOWER_OUTPUT_ROOT, repositoryRoot)
   const stampPath = FS.resolvePath(STAMP_PATH, repositoryRoot)
   if (!await FS.isFile(appPath)) {
     Errors.throwUserInput(`No Tao app file found at ${appPath}`)
@@ -257,8 +257,8 @@ async function ancestorProjectEntries(repositoryRoot: string, appRoot: string): 
   while (FS.pathIsWithin(current, repositoryRoot)) {
     const marker = FS.resolvePath('.tao', current)
     entries.push(`${FS.relativePath(repositoryRoot, marker)}\n${await FS.isDirectory(marker) ? 'project' : ABSENT}`)
-    entries.push(await fileEntry(repositoryRoot, FS.resolvePath('lock.jsonc', marker)))
-    entries.push(await fileEntry(repositoryRoot, FS.resolvePath('project.json', marker)))
+    entries.push(await fileEntry(repositoryRoot, ProjectLocal.storeResolve('lock.jsonc', current)))
+    entries.push(await fileEntry(repositoryRoot, ProjectLocal.storeResolve('project.json', current)))
     const parent = FS.dirname(current)
     if (parent === current) {
       break
@@ -280,7 +280,7 @@ async function treeEntry(repositoryRoot: string, root: string): Promise<string> 
   }
   return `${relativeRoot}\n${Platform.sha256Hex(lines.join('\n'))}\n${await fileEntry(
     repositoryRoot,
-    FS.resolvePath('.tao/project.json', root),
+    ProjectLocal.storeResolve('project.json', root),
   )}`
 }
 
@@ -302,7 +302,10 @@ async function inputFilePaths(root: string): Promise<string[]> {
       includeHidden: true,
     })
   ) {
-    if (!EXCLUDED_INPUT_DIRECTORIES.has(FS.basename(path)) && !path.endsWith(EXCLUDED_INPUT_SUFFIX)) {
+    if (
+      !EXCLUDED_INPUT_DIRECTORIES.has(FS.basename(path)) && !path.endsWith(EXCLUDED_INPUT_SUFFIX)
+      && !path.endsWith('.tao.ts')
+    ) {
       paths.push(path)
     }
   }
@@ -311,9 +314,8 @@ async function inputFilePaths(root: string): Promise<string[]> {
 
 /**
  * compileAppIsUpToDate answers whether the compile can be skipped. The stamp alone is not enough.
- * The generated tree is one shared directory that `./tao compile` on another app, `./tao run`, a
- * reclaimed scratch root, or an interrupted write can all leave absent, partial, or holding somebody
- * else's app while this app's inputs are untouched — so the output is hashed, not merely counted.
+ * A reclaimed cache or interrupted write can leave the generated tree absent or partial while the
+ * app's inputs are untouched, so the output is hashed, not merely counted.
  */
 async function compileAppIsUpToDate(
   repositoryRoot: string,

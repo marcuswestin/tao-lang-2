@@ -14,7 +14,11 @@ import {
   writeDevLoopConnection,
   writeDevLoopReceipt,
 } from '../dev-cli-src/dev-loop/DevLoopStore'
-import type { ManagedChildCapture, runAgentAppDev } from '../dev-cli-src/simulators/AgentAppDev'
+import type {
+  AgentAppDevReservation,
+  ManagedChildCapture,
+  runAgentAppDev,
+} from '../dev-cli-src/simulators/AgentAppDev'
 
 Test(
   'status waits behind finite interaction, refreshes inline, and the next grant uses the committed Android generation',
@@ -876,6 +880,232 @@ Test('managed gated capture publication failure rejects acknowledgement and reta
     await Expect(f.finish()).rejects.toThrow('Source receipt publication failed')
   }
 })
+
+async function ownedCleanupTarget(f: Awaited<ReturnType<typeof capturedController>>, recordResourceStart = true) {
+  const owner = f.record.controller!
+  const device = {
+    platform: 'ios' as const,
+    id: 'OWNED',
+    owned: true,
+    state: 'booted' as const,
+    holder: owner,
+    resources: [{
+      name: 'ios-simulator:OWNED',
+      id: 'physical-reservation',
+      pid: owner.pid,
+      ...(recordResourceStart ? { processStartedAt: owner.startedAt } : {}),
+      repositoryRoot: f.record.checkout,
+      startedAt: 'acquired',
+      command: 'source simulator reservation',
+    }],
+  }
+  const reservation: AgentAppDevReservation = {
+    platform: 'ios',
+    id: device.id,
+    resources: structuredClone(device.resources),
+    assertCurrent: async () => {},
+  }
+  await f.managed.onReservation!(reservation)
+  await f.managed.onDevice!(device)
+  return { device, reservation }
+}
+
+for (const phase of ['stop', 'startup-failed', 'stop-during-save', 'restart-then-stop'] as const) {
+  Test(`managed shutdown capture publishes and releases its owned target after ${phase}`, async () => {
+    const saving = Deferred<void>()
+    const release = Deferred<void>()
+    const f = await capturedController(async record => {
+      if (phase === 'stop-during-save' && record.children.length === 2) {
+        saving.resolve()
+        await release.promise
+      }
+      await writeDevLoopReceipt(record)
+    })
+    let closing: Promise<unknown> | undefined
+    let hooks: Awaited<ReturnType<typeof connectDevLoopWorker>> | undefined
+    try {
+      const { device, reservation } = await ownedCleanupTarget(f, phase !== 'stop')
+      const initialGeneration = f.record.generation
+      if (phase === 'startup-failed' || phase === 'restart-then-stop') {
+        hooks = await connectDevLoopWorker(f.managed.childEnv['TAO_DEV_LOOP_WORKER_CREDENTIALS']!)
+        hooks.bind({ stop: async () => {}, reload: async () => {}, restart: async () => {} })
+        await hooks.emit({ type: 'starting' })
+        if (phase === 'startup-failed') {
+          await hooks.emit({ type: 'failed', message: 'Source startup failed before target dispatch.' })
+          Expect((await readDevLoopReceipt(f.record.session)).state).toBe('failed')
+        } else {
+          await hooks.emit({ type: 'starting' })
+          Expect(f.record.generation).not.toBe(initialGeneration)
+        }
+      }
+      const requestStop = async () => {
+        closing = devLoopRequest(await readDevLoopConnection(f.record.session), '/command', { action: 'stop' })
+          .catch(() => {})
+        await until(() => f.managed.shouldStop() ? true : undefined, {
+          description: 'shutdown capture stop request',
+        })
+      }
+      if (phase === 'stop' || phase === 'restart-then-stop') {
+        await requestStop()
+        if (phase === 'stop') {
+          await f.managed.onDevice!({ ...device, state: 'retained' })
+        }
+      }
+      const pending = f.managed.onCleanupChild!(f.child, f.capture, reservation)
+      if (phase === 'stop-during-save') {
+        await saving.promise
+        Expect((await readDevLoopReceipt(f.record.session)).children).toEqual([])
+        await requestStop()
+        release.resolve()
+      }
+      await pending
+      const published = await readDevLoopReceipt(f.record.session)
+      Expect(published.children).toEqual([f.root, f.worker])
+      Expect(published.processGroups).toEqual([f.root])
+      Expect(published.ownershipRefusal).toBeUndefined()
+      f.observation.live.clear()
+      f.observation.members = []
+      f.observation.descendants = []
+      await f.managed.beforeTargetCleanup!()
+      await f.managed.onDevice!({ ...device, state: 'released' })
+      await hooks?.close()
+      hooks = undefined
+      f.end(phase === 'startup-failed' ? 1 : 0)
+      await f.controller.waitForDisposal()
+      await closing
+      const closed = await readDevLoopReceipt(f.record.session)
+      Expect(closed.devices![0]!.state).toBe('released')
+      Expect(closed.children).toEqual([f.root, f.worker])
+      Expect(closed.ownershipRefusal).toBeUndefined()
+      Expect(closed.state).toBe(phase === 'startup-failed' ? 'failed' : 'stopped')
+      if (phase === 'startup-failed') {
+        Expect(closed.message).toBe('Source startup failed before target dispatch.')
+      } else {
+        Expect(closed.cleanupOutcome).toBe('proved')
+      }
+    } finally {
+      release.resolve()
+      await hooks?.close()
+      await f.finish()
+      await closing
+    }
+  })
+}
+
+for (
+  const fault of [
+    'superseded-before',
+    'superseded-during',
+    'borrowed',
+    'foreign-target',
+    'resource-changed',
+    'current-owner-changed',
+    'controller-replaced',
+    'process-replaced',
+    'prior-refusal',
+    'publication-failed',
+  ] as const
+) {
+  Test(`managed shutdown capture retains its target and refusal after ${fault}`, async () => {
+    const during = ['superseded-during', 'resource-changed', 'controller-replaced', 'process-replaced'].includes(fault)
+    const saving = Deferred<void>()
+    const release = Deferred<void>()
+    let publicationFailed = false
+    const f = await capturedController(async record => {
+      if (record.children.length === 2 && !record.ownershipRefusal) {
+        if (fault === 'publication-failed' && !publicationFailed) {
+          publicationFailed = true
+          return Errors.throwHostEnvironment('Source shutdown receipt publication failed.')
+        }
+        if (during) {
+          saving.resolve()
+          await release.promise
+        }
+      }
+      await writeDevLoopReceipt(record)
+    })
+    try {
+      const { device, reservation } = await ownedCleanupTarget(f)
+      const generation = f.record.generation
+      let target = reservation
+      let replaceDurableAuthority = false
+      if (fault === 'resource-changed' || fault === 'controller-replaced') {
+        target = {
+          ...reservation,
+          assertCurrent: async () => {
+            if (!replaceDurableAuthority) {
+              return
+            }
+            const saved = await readDevLoopReceipt(f.record.session)
+            if (fault === 'resource-changed') {
+              saved.devices![0]!.resources = [{ ...device.resources[0]!, id: 'successor-reservation' }]
+            } else {
+              saved.controller = { ...saved.controller!, startedAt: 'successor controller' }
+            }
+            await writeDevLoopReceipt(saved)
+          },
+        }
+      }
+      if (fault === 'superseded-before') {
+        f.record.generation = Platform.randomUUID()
+      }
+      if (fault === 'borrowed') {
+        await f.managed.onDevice!({ ...device, owned: false })
+      }
+      if (fault === 'foreign-target') {
+        target = { ...reservation, id: 'FOREIGN' }
+      }
+      if (fault === 'current-owner-changed') {
+        target = {
+          ...reservation,
+          assertCurrent: async () => Errors.throwHostEnvironment('Source physical reservation was replaced.'),
+        }
+      }
+      if (fault === 'prior-refusal') {
+        f.record.ownershipRefusal = { version: 1, generation, reason: 'Original native capture was refused.' }
+        await writeDevLoopReceipt(f.record)
+      }
+      const pending = f.managed.onCleanupChild!(f.child, f.capture, target).catch(error => error)
+      if (during) {
+        await saving.promise
+        if (fault === 'superseded-during') {
+          f.record.generation = Platform.randomUUID()
+        }
+        if (fault === 'process-replaced') {
+          f.observation.live.set(f.root.pid, { ...f.root, startedAt: 'replacement cleanup supervisor' })
+        }
+        // The reservation assertion changes only the durable authority on the recheck.
+        replaceDurableAuthority = true
+        release.resolve()
+      }
+      const failure = await pending
+      Expect(failure).toBeInstanceOf(Errors.HostEnvironmentError)
+      Expect((failure as Errors.HostEnvironmentError).details?.['retainsTargetLease']).toBe(true)
+      const refused = await readDevLoopReceipt(f.record.session)
+      Expect(refused.ownershipRefusal?.generation).toBe(generation)
+      Expect(refused.cleanupOutcome).toBe('retained')
+      Expect(refused.children).toEqual(during || fault === 'publication-failed' ? [f.root, f.worker] : [])
+      if (fault === 'prior-refusal') {
+        Expect(refused.ownershipRefusal?.reason).toBe('Original native capture was refused.')
+      }
+      await f.managed.onDevice!({ ...device, state: 'retained' })
+      f.end(0)
+      await f.controller.waitForDisposal()
+      const closed = await readDevLoopReceipt(f.record.session)
+      Expect(closed.state).toBe('cleanup-failed')
+      Expect(closed.cleanupOutcome).toBe('retained')
+      Expect(closed.devices![0]!.state).toBe('retained')
+      Expect(closed.ownershipRefusal?.terminal).toEqual({ exitCode: 0, signal: null })
+      if (fault === 'publication-failed') {
+        Expect(await FS.readText(FS.resolvePath('loop.log', devLoopDirectory(f.record.session))))
+          .toContain('Source shutdown receipt publication failed.')
+      }
+    } finally {
+      release.resolve()
+      await f.finish()
+    }
+  })
+}
 
 for (
   const fault of [

@@ -1,5 +1,14 @@
 export type HostCommandTarget = {
-  argsPolicy?: 'none' | 'notify' | 'pid' | 'standalone-vm' | 'studio-list' | 'studio-stop' | 'dev-loop' | 'studio-proof'
+  argsPolicy?:
+    | 'none'
+    | 'notify'
+    | 'pid'
+    | 'standalone-vm'
+    | 'studio-list'
+    | 'studio-stop'
+    | 'dev-loop'
+    | 'studio-proof'
+    | 'inventory'
   command: string
   /** Environment the tool needs whatever shell dispatches it, merged over the inherited one. */
   env?: Readonly<Record<string, string>>
@@ -20,6 +29,8 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   'merge-recover': { command: './dev', fixedArgs: ['merge-recover'] },
   // Keep read-only reclaim sandboxed; only its guarded removal action needs host filesystem access.
   'reclaim --execute': { command: './dev', fixedArgs: ['reclaim', '--execute'], argsPolicy: 'none' },
+  // Full discovery needs read-only process visibility. Registration and cleanup stay outside this route.
+  'resources': { command: './dev', fixedArgs: ['resources'], argsPolicy: 'inventory' },
   'prepare-release studio': { command: './dev', fixedArgs: ['prepare-release', 'studio'] },
   'prepare-release ide-extension': { command: './dev', fixedArgs: ['prepare-release', 'ide-extension'] },
   'ide-extension-acceptance': { command: './dev', fixedArgs: ['ide-extension-acceptance'], argsPolicy: 'none' },

@@ -454,7 +454,7 @@ from the development loop, which no virtualization approach can do.
 ### A10 — Publication hygiene audit — **done**
 
 Whatever becomes public carries the agent instructions, the Developer's roadmap notes, machine-specific files,
-and a committed `secrets/secrets.jsonc`.
+and the repository tooling's committed `secrets/secrets.jsonc`.
 
 - Landed: `Report - Publication audit.md` beside this file, and on 2026-09-22 the fixes `R2` left
   mandatory — the WordFlower ship lock untracked and ignored (`P15`; rotating the App Store Connect
@@ -760,7 +760,7 @@ conversation but must inform a pre-MVP decision; they do not authorize implement
       published app instead needs a placeholder template in Git, a per-developer untracked file or
       one per environment, and a clear first-run message when the IDs are missing.
 - The Firebase web API key and app ID are public client identifiers, not secrets. Appwrite's setup
-  key already lives in the ignored `.tao/connect-secrets.json`. The concern is that every clone
+  key already lives in the ignored `.tao/local/connect-secrets.json`. The concern is that every clone
   points at one person's project and its quotas, and the IDs churn in unrelated diffs.
 - Context: `Docs/Roadmap/Hosted provider continuation.md`, `Apps/Hosted CRUD/README.md`, and `A19`
   for the CLI secret store.

@@ -17,6 +17,7 @@ function node(document?: EventTarget) {
     children: [],
     querySelector: (_selector: string): unknown => null,
     querySelectorAll: () => [],
+    setAttribute() {},
     toggleAttribute() {},
   })
 }
@@ -119,7 +120,7 @@ await mockClient('StudioMatrixView', () => ({
   disconnectPreviews: () => current.disposed.push('previews'),
   configureInteractionMode() {},
   mountCanvasViewport: () => ({ cancelPan() {}, dispose: () => current.disposed.push('viewport') }),
-  StudioActivePreview: class {
+  StudioFocusedPreview: class {
     current() {
       return undefined
     }

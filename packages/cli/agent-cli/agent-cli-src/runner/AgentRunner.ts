@@ -59,6 +59,8 @@ export type RunAgentCommandOptions = {
    * guess are all keyed on. */
   command: string
   cwd?: string
+  /** Test seam: the environment whose `CI` makes output stream by default; the process's own otherwise. */
+  env?: Readonly<Record<string, string | undefined>>
   /** Test seam: overrides `HCI.isInteractive`, which otherwise decides whether a prompting command
    * runs in passthrough mode. */
   isInteractive?: () => boolean
@@ -76,7 +78,7 @@ export type RunAgentCommandOptions = {
 /** runAgentCommand runs one command through the front door and returns its faithful exit status. */
 export async function runAgentCommand(options: RunAgentCommandOptions): Promise<number> {
   const repositoryRoot = options.cwd ?? Repo.getRoot()
-  const flags = parseAgentFlags(options.args)
+  const flags = parseAgentFlags(options.args, options.env ?? Platform.runtimeProcess.env)
   const initialWarnings = UiVisibility.warningsForCommand(options.command, flags.rest)
   const start = options.start ?? CLI.start
   const now = options.now ?? Date.now
@@ -129,6 +131,15 @@ export async function runAgentCommand(options: RunAgentCommandOptions): Promise<
   }
 
   const runStdio = resolveRunStdio(options.command, flags, isInteractive)
+  // Subscribe before spawning: a signal between the two would otherwise kill this process by default
+  // and orphan the child it was meant to stop. Listeners run on the event loop, after `child` is set.
+  let cancelledBy: Platform.ProcessSignal | undefined
+  const unsubscribes = TERMINATION_SIGNALS.map(signal =>
+    onProcessSignal(signal, () => {
+      cancelledBy ??= signal
+      child.kill(signal)
+    })
+  )
   const child = start(options.spawnCommand, {
     args: [...options.spawnArgs, ...flags.rest],
     cwd: repositoryRoot,
@@ -144,13 +155,6 @@ export async function runAgentCommand(options: RunAgentCommandOptions): Promise<
     appendOutput(Buffer.from(runStdio.note, 'utf8'))
   }
 
-  let cancelledBy: Platform.ProcessSignal | undefined
-  const unsubscribes = TERMINATION_SIGNALS.map(signal =>
-    onProcessSignal(signal, () => {
-      cancelledBy ??= signal
-      child.kill(signal)
-    })
-  )
   const closeResult = await child.waitForClose()
   for (const unsubscribe of unsubscribes) {
     unsubscribe()

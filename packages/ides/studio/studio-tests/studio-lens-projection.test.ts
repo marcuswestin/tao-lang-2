@@ -42,7 +42,7 @@ Test('Lens joins timing and provider wait only to the selected source revision',
 
 Test('Lens labels missing measurements instead of attributing another node or revision', () => {
   const lines = projectStudioLensLines(selected, [sample(99, 'old')], undefined)
-  Expect(lines).toContainEqual('Render timing: no observation for this source revision in the active preview.')
+  Expect(lines).toContainEqual('Render timing: no observation for this source revision in the focused preview.')
   Expect(lines).toContainEqual('Covering journey: no execution observation.')
   Expect(lines.join('\n')).not.toContain('99.0 ms')
 })

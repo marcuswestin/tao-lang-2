@@ -11,7 +11,7 @@ if (
 ) {
   Errors.throwUserInput('The source barrier supervisor requires its owned test scratch directory.')
 }
-const worker = CLI.start('/bin/sh', {
+const worker = CLI.start('/bin/bash', {
   args: [Repo.resolvePath('packages/cli/dev-cli/dev-cli-tests/managed-loop-command-barrier-worker.sh'), mode!, root],
   cwd: Repo.getRoot(),
   stdio: ['pipe', 'pipe', 'pipe'],

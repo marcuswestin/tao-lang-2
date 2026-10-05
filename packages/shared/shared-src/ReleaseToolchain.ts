@@ -2,6 +2,7 @@ import * as Errors from './core/Errors'
 import * as Json from './core/Json'
 import * as Text from './core/Text'
 import * as FS from './FS'
+import { ProjectLocal } from './ProjectLocal'
 import { ReleaseCapabilities, type ReleaseProfile } from './ReleaseCapabilities'
 
 declare const TAO_RELEASE_VERSION: string | undefined
@@ -26,7 +27,7 @@ async function readLock(path: string, surface: 'editor' | 'Studio'): Promise<unk
         `The Tao project lock at ${path} is not valid JSONC (${problem}), so this ${surface} cannot tell which Tao release the project pins.`,
         'To recover, either:',
         '  1. Fix the syntax in the file. Nothing is lost.',
-        '  2. If the project is in Git, run `git restore .tao/lock.jsonc` to return to the last committed lock. Changes since that commit are lost, such as a newer shipped build number or package resolution.',
+        '  2. If the project is in Git, run `git restore .tao/store/lock.jsonc` to return to the last committed lock. Changes since that commit are lost, such as a newer shipped build number or package resolution.',
         '  3. Move the file aside, for example to lock.jsonc.broken. The project then pins no Tao release, packages resolve again on the next run, and `tao ship` forgets the app identity and last build it recorded; copy those back by hand from the moved file.',
       ].join('\n'),
     )
@@ -44,7 +45,20 @@ async function requireMatchingProjectRelease(
     directory = FS.dirname(directory)
   }
   while (true) {
-    const path = FS.resolvePath('.tao/lock.jsonc', directory)
+    const isProjectRoot = await FS.isDirectory(ProjectLocal.root(directory))
+    if (isProjectRoot) {
+      const lockPaths = [
+        ProjectLocal.storeResolve('lock.jsonc', directory),
+        FS.resolvePath('.tao/lock.jsonc', directory),
+        FS.resolvePath('.tao-project/lock.jsonc', directory),
+      ]
+      // An unpinned boundary needs no migration; a home state directory can be read-only.
+      if (!(await Promise.all(lockPaths.map(path => FS.isFile(path)))).some(Boolean)) {
+        return
+      }
+      await ProjectLocal.prepare(directory)
+    }
+    const path = ProjectLocal.storeResolve('lock.jsonc', directory)
     if (await FS.isFile(path)) {
       const lock = await readLock(path, surface)
       const toolchain = Json.isRecord(lock) ? lock['toolchain'] : undefined
@@ -66,6 +80,10 @@ async function requireMatchingProjectRelease(
           }, but this ${surface} bundles Tao ${own.version} phase ${own.profile.phase}. Install the matching Tao ${surface} release before validating this project.`,
         )
       }
+      return
+    }
+    // A project without a release pin does not inherit a containing project's lock or home state.
+    if (isProjectRoot) {
       return
     }
     const parent = FS.dirname(directory)

@@ -1,10 +1,17 @@
 import {
+  closeSync as nodeCloseSync,
   type Dirent,
   existsSync as nodeExistsSync,
+  fsyncSync as nodeFsyncSync,
+  lstatSync as nodeLstatSync,
+  mkdirSync as nodeMkdirSync,
+  openSync as nodeOpenSync,
   readdirSync as nodeReaddirSync,
   readFileSync as nodeReadFileSync,
   realpathSync as nodeRealpathSync,
+  renameSync as nodeRenameSync,
   rmSync as nodeRmSync,
+  writeFileSync as nodeWriteFileSync,
 } from 'node:fs'
 import * as nodeFs from 'node:fs/promises'
 import * as nodeOs from 'node:os'
@@ -199,6 +206,53 @@ export async function entryMetadata(inputPath: string): Promise<{
   }
 }
 
+/** entryMetadataSync inspects a synchronous ownership record without following symlinks. */
+export function entryMetadataSync(inputPath: string): {
+  device: number
+  inode: number
+  kind: 'directory' | 'file' | 'other' | 'symlink'
+  mode: number
+  modifiedMs: number
+  size: number
+  uid: number
+} {
+  const stats = nodeLstatSync(inputPath)
+  return {
+    device: stats.dev,
+    inode: stats.ino,
+    kind: stats.isDirectory() ? 'directory' : stats.isFile() ? 'file' : stats.isSymbolicLink() ? 'symlink' : 'other',
+    mode: stats.mode,
+    modifiedMs: stats.mtimeMs,
+    size: stats.size,
+    uid: stats.uid,
+  }
+}
+
+/** ensureDirSync creates parents for synchronous resource registration. */
+export function ensureDirSync(inputPath: string, options: { mode?: number } = {}): void {
+  nodeMkdirSync(inputPath, { recursive: true, mode: options.mode })
+}
+
+/** writeTextSync flushes a resource record before the caller publishes its child process. */
+export function writeTextSync(
+  inputPath: string,
+  content: string,
+  options: WriteOptions & { exclusive?: boolean } = {},
+): void {
+  const descriptor = nodeOpenSync(inputPath, options.exclusive ? 'wx' : 'w', options.mode)
+  try {
+    nodeWriteFileSync(descriptor, content, { encoding: 'utf8' })
+    nodeFsyncSync(descriptor)
+  } finally {
+    nodeCloseSync(descriptor)
+  }
+}
+
+/** renameSync publishes a completely written resource record in its existing directory. */
+export function renameSync(fromPath: string, toPath: string): void {
+  nodeRenameSync(fromPath, toPath)
+}
+
 /** realPath resolves symlinks and filesystem indirections for an existing path. */
 export async function realPath(inputPath: string): Promise<string> {
   return nodeFs.realpath(inputPath)
@@ -360,6 +414,17 @@ export async function mkdir(inputPath: string): Promise<void> {
 /** remove deletes a path recursively if it exists. */
 export async function remove(inputPath: string): Promise<void> {
   await nodeFs.rm(inputPath, { force: true, recursive: true })
+}
+
+/** Remove a directory only while it is empty; retain a concurrently added entry. */
+export async function removeEmptyDirectory(inputPath: string): Promise<void> {
+  try {
+    await nodeFs.rmdir(inputPath)
+  } catch (error) {
+    if (!['ENOENT', 'ENOTEMPTY', 'EEXIST'].includes(fileErrorCode(error) ?? '')) {
+      throw error
+    }
+  }
 }
 
 /** copyFile copies a file, creating the destination parent directory. */
@@ -882,6 +947,8 @@ type FileMutationProcessIdentity = {
 }
 
 type FileMutationLockOptions = {
+  /** Keep lock, owner, and reclaim files in this directory instead of beside the target. */
+  lockDirectory?: string
   beforeClaimPublish?: (lockPath: string, ownerPath: string) => Promise<void>
   beforeRelease?: () => Promise<void>
   beforeStaleReclaim?: (lockPath: string) => Promise<void>
@@ -903,7 +970,10 @@ export async function withFileMutationLock<Value>(
   await assertNoSymbolicLinkComponents(resolvedBoundary, resolvedTarget, 'mutation target')
   const canonicalBoundary = await realPath(resolvedBoundary)
   const canonicalTarget = resolvePath(relativePath(resolvedBoundary, resolvedTarget), canonicalBoundary)
-  const lockPath = `${canonicalTarget}.tao-file-mutation.lock`
+  const lockPath = options.lockDirectory === undefined
+    ? `${canonicalTarget}.tao-file-mutation.lock`
+    : resolvePath(`${sha256Hex(canonicalTarget)}.tao-file-mutation.lock`, options.lockDirectory)
+  await assertNoSymbolicLinkComponents(canonicalBoundary, lockPath, 'mutation lock')
   await mkdirWithinBoundary(dirname(lockPath), canonicalBoundary)
   return await withMutationLockFile(lockPath, work, options)
 }

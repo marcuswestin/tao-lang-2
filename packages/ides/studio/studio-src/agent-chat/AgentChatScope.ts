@@ -20,8 +20,6 @@ type DeclarationChange = {
 
 type DeclarationOccurrence = { key: string; source: string }
 
-let context: ReturnType<typeof Parser.createContext> | undefined
-
 function kindOf(node: AST.Node): string | undefined {
   if (AST.isFixtureDeclaration(node)) {
     return 'fixture'
@@ -82,19 +80,18 @@ function kindOf(node: AST.Node): string | undefined {
 
 /** declarations lists every top-level declaration occurrence. An array preserves duplicate names. */
 async function declarations(source: string): Promise<DeclarationOccurrence[]> {
-  context ??= Parser.createContext()
-  const parsed = await Parser.parseSource(context, source, { validation: false })
+  // Scope compares authored syntax, not linked imports. Each call needs its own tree: two
+  // concurrent builds of one mutable document store can otherwise return the same canonical AST.
+  const parsed = Parser.parseSyntax(source)
   const found: DeclarationOccurrence[] = []
-  for (const file of parsed.files) {
-    for (const node of AST.streamAllContents(file.ast)) {
-      const kind = kindOf(node)
-      // Only top level: a view declared inside another declaration is that declaration's business.
-      if (kind === undefined || node.$container?.$type !== 'TaoFile') {
-        continue
-      }
-      const name = (node as { name?: string }).name ?? '(unnamed)'
-      found.push({ key: `${kind} ${name}`, source: node.$cstNode?.text ?? '' })
+  for (const node of AST.streamAllContents(parsed.ast)) {
+    const kind = kindOf(node)
+    // Only top level: a view declared inside another declaration is that declaration's business.
+    if (kind === undefined || node.$container?.$type !== 'TaoFile') {
+      continue
     }
+    const name = (node as { name?: string }).name ?? '(unnamed)'
+    found.push({ key: `${kind} ${name}`, source: node.$cstNode?.text ?? '' })
   }
   return found
 }

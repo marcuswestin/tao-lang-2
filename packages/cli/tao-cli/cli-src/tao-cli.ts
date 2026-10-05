@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 import tab from '@bomb.sh/tab/commander'
+import { registerResourceCommands } from '@cli-kit/ResourceCommands'
 import { Command } from '@commander-js/extra-typings'
-import { Diagnostic, Errors, FS, HCI, Platform, ReleaseCapabilities } from '@shared'
+import { Diagnostic, Errors, FS, HCI, Platform, ReleaseCapabilities, Repo, ResourceInventory } from '@shared'
 import type { Command as BaseCommand } from 'commander'
 import * as DiagnosticReport from './diagnostic-report'
 import type { InPlace } from './in-place-files'
@@ -36,6 +37,7 @@ if (import.meta.main) {
 
 /** runTaoCli runs the Tao CLI for the provided argv. */
 export async function runTaoCli(argv = Platform.runtimeProcess.argv): Promise<void> {
+  await ResourceInventory.notifyStartup({ checkout: Repo.tryGetRoot() ?? Platform.runtimeProcess.cwd() })
   await createCommands().parseAsync(argv, { from: 'node' })
 }
 
@@ -44,6 +46,8 @@ export function createCommands(): Command {
     .name('tao')
     .description('Tao language CLI.')
     .version(TaoVersion.current(), '-v, --version', 'Print the Tao release this is, or `development` from source.')
+
+  registerResourceCommands(commands)
 
   commands
     .command('doctor')
@@ -330,7 +334,7 @@ export function createCommands(): Command {
     .option('--visionos', 'Export an experimental visionOS Xcode project with bundled web UI.')
     .option('--watchos', 'Export an experimental native SwiftUI watchOS Xcode project.')
     .option('--agents', 'Build a background app service and bundled client executable (defaults to desktop).')
-    .option('--output <directory>', 'Retain builds in this directory instead of the project’s .tao/builds.')
+    .option('--output <directory>', 'Retain builds in this directory instead of the project’s .tao/local/builds.')
     .option('--ios', 'Show the status of local iOS builds.')
     .option('--android', 'Show the status of local Android builds.')
     .option('--compile-only', 'Retain generated source without exporting or packaging.')
@@ -614,9 +618,9 @@ export function createCommands(): Command {
 
   commands
     .command('compile')
-    .argument('<appPath>', 'Tao app path to compile into the local runtime package.')
+    .argument('<appPath>', 'Tao app path to compile into its project cache.')
     .option('--app <name>', 'Select a named app when the file declares multiple apps.')
-    .description('Compile a Tao app into the local runtime package.')
+    .description('Compile a Tao app into its project .tao/cache/_gen_tao-app directory.')
     .action(async (appPath: string, options: { app?: string }) => {
       try {
         await (await import('./install-offer')).offerMissingInstalls([appPath])

@@ -103,6 +103,10 @@ const BUN_INSTALL_REFUSAL =
   '`bun install` skips repository adapter generation. Run `./agent setup` for routine installs. '
   + 'Ask the Developer before adding or updating packages, then edit the manifest and run `./agent setup --refresh-lockfile`.'
 
+const GH_PR_MERGE_REFUSAL = "Agents never run `gh pr merge` (AGENTS.md): through the Developer's login it can "
+  + 'bypass the required Verify check. `./agent unsandboxed open-pr` turns on auto-merge, and '
+  + '`./agent unsandboxed merge-pr` merges only once Verify passed on the pushed head.'
+
 const GIT_ADD_WIDE_REFUSAL =
   'Stage exact reviewed paths — `git add -- <path>…` — never `.`, `-A`, or `-u` (AGENTS.md). The Developer and '
   + "this session's own subagents write this worktree while you work, and generators drop untracked "
@@ -452,6 +456,15 @@ function bunDenial(stage: Stage): string | undefined {
   return targets.some(target => !target.startsWith('/')) ? BUN_TEST_REFUSAL : undefined
 }
 
+/** ghPrMergeDenial catches a direct merge, which only `open-pr` and `merge-pr` may make. */
+function ghPrMergeDenial(stage: Stage): string | undefined {
+  const [command, ...rest] = commandAfterWrappers(stage.words)
+  // `gh -R owner/repo pr merge` puts a flag's value before the group, so find `pr` rather than index it.
+  const group = rest.indexOf('pr')
+  const subcommand = group === -1 ? undefined : rest.slice(group + 1).find(word => !isFlag(word))
+  return command === 'gh' && subcommand === 'merge' ? GH_PR_MERGE_REFUSAL : undefined
+}
+
 /**
  * gitIndexDenial catches the index operations AGENTS.md forbids. Both are destructive to work this
  * agent did not make: a wide add commits it, and a bare stash pop moves it out of another worktree.
@@ -510,7 +523,8 @@ function gitDumpDenial(stage: Stage): string | undefined {
  * and a list invites it to argue with the rule instead.
  */
 export function outputDisciplineRefusal(command: string): string | undefined {
-  return hookOverrideReason(command) === undefined ? refusalIgnoringOverride(command) : undefined
+  const forbidden = splitStages(command).map(ghPrMergeDenial).find(denial => denial !== undefined)
+  return forbidden ?? (hookOverrideReason(command) === undefined ? refusalIgnoringOverride(command) : undefined)
 }
 
 /**

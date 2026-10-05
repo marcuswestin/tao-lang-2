@@ -1,4 +1,4 @@
-import { Assert, FS, ReleaseCapabilities, type ReleaseProfile, Switch } from '@shared'
+import { Assert, FS, ProjectLocal, ReleaseCapabilities, type ReleaseProfile, Switch } from '@shared'
 import { PROJECT_TSCONFIG } from '../app-modules'
 import { deriveSchemeColors, type DesignColors } from './creation-colors'
 import {
@@ -27,6 +27,31 @@ export type LowerCreationPlanOptions = {
 
 const TAB_ICONS = ['list.bullet', 'book', 'tray.full', 'star', 'tag', 'folder']
 const COMMENT_WIDTH = 100
+const PROJECT_GITIGNORE = [
+  '# Operating system and editor files',
+  '.DS_Store',
+  '.idea/',
+  '.vscode/',
+  '',
+  '# Tao generated sidecars',
+  '*.tao.ts',
+  '/.tao-ts/',
+  '',
+  '# Tao local state and cache',
+  '/.tao/local/',
+  '/.tao/cache/',
+  '',
+  '# Tooling output',
+  'node_modules/',
+  '.expo/',
+  '*.tsbuildinfo',
+  '*.log',
+  '',
+  '# Plain-text secrets',
+  '.env',
+  '.env.*',
+  '',
+].join('\n')
 
 /**
  * lowerCreationPlan writes the canonical project layout for a validated plan: App, Data, Chrome, Design,
@@ -55,9 +80,7 @@ export function lowerCreationPlan(plan: CreationPlan, options: LowerCreationPlan
     'Scenarios.tao': firebase ? firebaseScenariosFile(names) : scenariosFile(plan, names),
     [`${names.app}.test.tao`]: testFile(plan, names, firebase, options.validationTools === true),
     'tsconfig.json': PROJECT_TSCONFIG,
-    '.gitignore':
-      '/.tao-ts/\n/.tao/*\n!/.tao/.gitkeep\n!/.tao/project.json\n!/.tao/lock.jsonc\n!/.tao/skills.version\nnode_modules/\n',
-    '.tao/.gitkeep': '',
+    '.gitignore': PROJECT_GITIGNORE,
     // The reserved root generated package exists from day one, committed empty, so Studio and the
     // compiler have their folder before the first generated file lands.
     '@/.gitkeep': '',
@@ -97,6 +120,7 @@ export async function writeCreationFiles(directory: string, files: CreationFiles
   for (const [relativePath, source] of Object.entries(files)) {
     await FS.writeText(FS.resolvePath(relativePath, directory), source)
   }
+  await ProjectLocal.prepare(directory)
 }
 
 /** ProjectNames derives every generated declaration name once, so the files agree with each other. */

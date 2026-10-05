@@ -4,7 +4,7 @@ import type { StudioProjectFileContent } from './StudioProtocol'
 import type { StudioSketchCatalogSnapshot } from './StudioSketchCatalog'
 
 export type StudioFeedBrowseRequest = Readonly<{
-  activeScenarioId?: string
+  focusedScenarioId?: string
   liveRows?: Readonly<Record<string, readonly StudioFeedInventoryRow[]>>
   seed: string
 }>

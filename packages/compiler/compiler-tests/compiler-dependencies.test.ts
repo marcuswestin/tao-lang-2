@@ -288,7 +288,7 @@ view Unrelated() from ./Missing.tsx`)
   Test('copies a relative TypeScript helper reached through a literal template import', async () => {
     const tick = String.fromCharCode(96)
     await withTaoFiles('tao-compiler-template-import-', {
-      '.tao/project.json': '{"id":"3c80c44c-0774-4a27-85ce-cb4453ca9d87"}',
+      '.tao/store/project.json': '{"id":"3c80c44c-0774-4a27-85ce-cb4453ca9d87"}',
       'Main.tao': `
         app Demo { id "com.tao.demo" version "1.0.0" name "Demo" view Main }
         view Main() { render Native() }

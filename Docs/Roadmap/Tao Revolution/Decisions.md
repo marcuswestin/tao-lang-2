@@ -3182,7 +3182,7 @@ module aliases. Explicit `requires ts npm:...` declares npm dependencies. Remote
 workspace-wide visibility remain deferred.
 
 Generated TypeScript lives in `.tao-ts`, authored sidecars retain relative Tao type imports, and root
-`tsconfig.json` extends `.tao/typescript/tsconfig.json`. Native `node_modules` stays at the root; the
+`tsconfig.json` extends `.tao/cache/typescript/tsconfig.json`. Native `node_modules` stays at the root; the
 extension may hide both tooling entries while preserving Explorer overrides. The shared saved-file
 watcher powers `tao run`, `tao watch`, the language server, and hosts. See the
 [implementation plan](../Plan%20-%20Tao%20projects%20modules%20and%20packages.md) for migration and

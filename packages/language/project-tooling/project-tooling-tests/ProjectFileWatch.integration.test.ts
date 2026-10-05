@@ -13,7 +13,8 @@ import { ProjectTooling } from '../project-tooling-src/ProjectToolingService'
 function watchProjectWithPolling(
   root: string,
   options: ProjectToolingOptions,
-  refresh = () => ProjectTooling.refresh(root, options),
+  refresh: (options?: { force?: boolean }) => Promise<ProjectToolingResult> = () =>
+    ProjectTooling.refresh(root, options),
 ): Promise<ProjectToolingWatch> {
   return startProjectFileWatch(
     root,
@@ -289,7 +290,7 @@ package { version 0.1.0 requires "Widget Package" from ../Library version ^2.0.0
       await ProjectTooling.refresh(root, {})
       await FS.writeText(
         FS.resolvePath('tsconfig.json', root),
-        '{"extends":["./.tao/typescript/tsconfig.json","../Shared/config.json"]}\n',
+        '{"extends":["./.tao/cache/typescript/tsconfig.json","../Shared/config.json"]}\n',
       )
 
       const results: ProjectToolingResult[] = []
@@ -430,18 +431,25 @@ view Widget() from ../Host/Widget.tsx
       const helper = FS.resolvePath('Host/Helper.ts', fixture)
       const results: ProjectToolingResult[] = []
       let calls = 0
-      const watcher = await watchProjectWithPolling(root, { onResult: result => results.push(result) }, async () => {
-        const refreshed = await ProjectTooling.refresh(root, {})
-        calls += 1
-        if (calls === 1) {
-          Expect(refreshed.status).toBe('stale')
-          Expect(refreshed.externalSidecarInputPaths).toContain(helper)
-          await FS.writeText(helper, 'export const value: number = 1\n')
-        }
-        return refreshed
-      })
+      const forced: boolean[] = []
+      const watcher = await watchProjectWithPolling(
+        root,
+        { onResult: result => results.push(result) },
+        async request => {
+          forced.push(request?.force === true)
+          const refreshed = await ProjectTooling.refresh(root, {})
+          calls += 1
+          if (calls === 1) {
+            Expect(refreshed.status).toBe('stale')
+            Expect(refreshed.externalSidecarInputPaths).toContain(helper)
+            await FS.writeText(helper, 'export const value: number = 1\n')
+          }
+          return refreshed
+        },
+      )
       try {
         Expect(calls).toBe(2)
+        Expect(forced).toEqual([false, true])
         Expect(results).toHaveLength(1)
         Expect(watcher.lastResult.status).toBe('fresh')
       } finally {
@@ -499,14 +507,16 @@ view Widget() from ../Host/Widget.tsx
       await ProjectTooling.refresh(root, {})
       await FS.writeText(
         FS.resolvePath('tsconfig.json', root),
-        '{"extends":["./.tao/typescript/tsconfig.json","../Shared/config.json"]}\n',
+        '{"extends":["./.tao/cache/typescript/tsconfig.json","../Shared/config.json"]}\n',
       )
 
       const results: ProjectToolingResult[] = []
       let calls = 0
+      const forced: boolean[] = []
       const watcher = await watchProjectWithPolling(root, {
         onResult: result => results.push(result),
-      }, async () => {
+      }, async request => {
+        forced.push(request?.force === true)
         const result = await ProjectTooling.refresh(root, {})
         calls += 1
         if (calls === 1) {
@@ -518,6 +528,7 @@ view Widget() from ../Host/Widget.tsx
       })
       try {
         Expect(calls).toBe(2)
+        Expect(forced).toEqual([false, true])
         Expect(results).toHaveLength(1)
         Expect(watcher.lastResult.status).toBe('fresh')
       } finally {
@@ -561,6 +572,107 @@ view Widget() from ../Host/Widget.tsx
           ), { description: 'the queued refresh after an edit during active work' })
         Expect(calls).toBeGreaterThanOrEqual(3)
         Expect(results[1]?.status).toBe('fresh')
+      } finally {
+        release.resolve()
+        await watcher?.dispose()
+      }
+    }, { location: 'host' })
+  }, 90_000)
+
+  Test('an explicit refresh consumes a watcher debounce already pending for the saved input', async () => {
+    await withTaoFiles('tao-tooling-watch-explicit-consumes-debounce-', {
+      'Main.ts': 'export const value: number = 1\n',
+    }, async (paths, root) => {
+      const results: ProjectToolingResult[] = []
+      let calls = 0
+      let projectWatcher: ReturnType<typeof watch> | undefined
+      let watcher: ProjectToolingWatch | undefined
+      try {
+        watcher = await startProjectFileWatch(
+          root,
+          { onResult: result => results.push(result) },
+          async () => {
+            calls += 1
+            return await ProjectTooling.refresh(root, {})
+          },
+          (watchPath, watcherOptions) => {
+            const fileWatcher = watch(watchPath, { ...watcherOptions, usePolling: true, interval: 100 })
+            if (watchPath === FS.resolvePath(root)) {
+              projectWatcher = fileWatcher
+            }
+            return fileWatcher
+          },
+        )
+        Expect(results).toHaveLength(1)
+        Expect(projectWatcher).toBeDefined()
+
+        projectWatcher!.emit('all', 'change', paths['Main.ts']!)
+        const explicit = await watcher.requestRefresh({ force: true })
+        Expect(calls).toBe(2)
+        Expect(results).toEqual([results[0], explicit])
+
+        // Observe the full debounce window: its already-pending timer must have been consumed.
+        await Time.sleep(350)
+        Expect(calls).toBe(2)
+        Expect(results).toHaveLength(2)
+      } finally {
+        await watcher?.dispose()
+      }
+    }, { location: 'host' })
+  }, 90_000)
+
+  Test('a watcher event during an explicit refresh still queues and publishes a follow-up', async () => {
+    await withTaoFiles('tao-tooling-watch-explicit-follow-up-', {
+      'Main.ts': 'export const value: number = 1\n',
+    }, async (paths, root) => {
+      const results: ProjectToolingResult[] = []
+      const started = Deferred()
+      const release = Deferred()
+      const forceOptions: boolean[] = []
+      let calls = 0
+      let projectWatcher: ReturnType<typeof watch> | undefined
+      let watcher: ProjectToolingWatch | undefined
+      try {
+        watcher = await startProjectFileWatch(
+          root,
+          { onResult: result => results.push(result) },
+          async request => {
+            forceOptions.push(request?.force === true)
+            calls += 1
+            const result = await ProjectTooling.refresh(root, {})
+            if (calls === 2) {
+              started.resolve()
+              await release.promise
+            }
+            return result
+          },
+          (watchPath, watcherOptions) => {
+            const fileWatcher = watch(watchPath, { ...watcherOptions, usePolling: true, interval: 100 })
+            if (watchPath === FS.resolvePath(root)) {
+              projectWatcher = fileWatcher
+            }
+            return fileWatcher
+          },
+        )
+        Expect(results).toHaveLength(1)
+        Expect(projectWatcher).toBeDefined()
+
+        const explicitRefresh = watcher.requestRefresh({ force: true })
+        await started.promise
+        projectWatcher!.emit('all', 'change', paths['Main.ts']!)
+        // Let the new event's debounce expire while the explicit refresh remains blocked.
+        await Time.sleep(350)
+        release.resolve()
+
+        const explicit = await explicitRefresh
+        await until(() => results.length === 3, {
+          description: 'the follow-up publication queued during an explicit refresh',
+        })
+        Expect(calls).toBe(3)
+        Expect(forceOptions).toEqual([false, true, false])
+        Expect(results[1]).toEqual(explicit)
+        Expect(results[2]!.revision).toBeGreaterThan(explicit.revision)
+        Expect(watcher.lastResult).toEqual(results[2])
       } finally {
         release.resolve()
         await watcher?.dispose()

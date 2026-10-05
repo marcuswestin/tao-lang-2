@@ -41,7 +41,7 @@ Describe('private dependency environments', () => {
       await FS.writeText(FS.resolvePath('package.json', managedPackage), '{"name":"real-util","version":"2.1.0"}\n')
       Expect(await validateManagedDependencyEnvironments(requester, [environment])).toEqual([])
       await FS.writeText(
-        FS.resolvePath('.tao/lock.jsonc', requester),
+        FS.resolvePath('.tao/store/lock.jsonc', requester),
         JSON.stringify({
           schemaVersion: 1,
           installs: {
@@ -82,7 +82,7 @@ Describe('private dependency environments', () => {
         publications: [],
       }
       const manifest = FS.resolvePath('node_modules/util/package.json', requester)
-      const lockPath = FS.resolvePath('.tao/lock.jsonc', requester)
+      const lockPath = FS.resolvePath('.tao/store/lock.jsonc', requester)
       const missing = (await validateManagedDependencyEnvironments(requester, [environment]))[0]
       Expect(missing?.message).toContain('not installed')
       Expect(missing?.message).toEndWith(installRemedy(requester))
@@ -148,7 +148,7 @@ Describe('private dependency environments', () => {
         publications: [],
       }
       const manifest = FS.resolvePath('node_modules/util/package.json', moduleLinkRoot)
-      const lockPath = FS.resolvePath('.tao/lock.jsonc', snapshotRoot)
+      const lockPath = FS.resolvePath('.tao/store/lock.jsonc', snapshotRoot)
       await FS.writeText(manifest, '{"name":"real-util","version":"2.1.0"}\n')
       await FS.writeText(
         lockPath,
@@ -205,7 +205,7 @@ Describe('private dependency environments', () => {
       const manifest = FS.resolvePath('util/package.json', managedDependencyModulesRoot(moduleLinkRoot, namespace))
       await FS.writeText(manifest, '{"name":"real-util","version":"2.1.0"}\n')
       await FS.writeText(
-        FS.resolvePath('.tao/lock.jsonc', snapshotRoot),
+        FS.resolvePath('.tao/store/lock.jsonc', snapshotRoot),
         JSON.stringify({
           schemaVersion: 1,
           installs: {
@@ -232,7 +232,7 @@ Describe('private dependency environments', () => {
     const requester = await mkTestDir('tao-tooling-uninstalled-pins-', { location: 'host' })
     try {
       const pin = (version: string) => ({ name: 'real-util', requested: '^2.0.0', version })
-      await FS.writeJson(FS.resolvePath('.tao/lock.jsonc', requester), {
+      await FS.writeJson(FS.resolvePath('.tao/store/lock.jsonc', requester), {
         schemaVersion: 1,
         installs: {
           environments: {

@@ -1,4 +1,4 @@
-import { Assert, CLI, Errors, FS, Json } from '@shared'
+import { Assert, CLI, Errors, FS, Json, Platform } from '@shared'
 import { createHash, randomUUID } from 'node:crypto'
 import {
   GeneratedEvidence,
@@ -53,6 +53,16 @@ import {
  * gates to treat as never matching. That is the seam for evidence the tree cannot carry either: a
  * gate covering a test whose outcome has flipped without its file changing must run rather than
  * skip. Computing that set belongs to the caller; this module knows nothing about tests.
+ *
+ * Per-gate records are also shared beyond one checkout, through a directory named by the key
+ * itself (`sharedRoot()`): every worktree on the machine by default, and any set of machines that
+ * hand each other that directory — CI jobs restoring it from their cache — when `TAO_GREEN_STORE`
+ * points elsewhere. A gate record already says everything its verdict depended on, so whose
+ * checkout earned it does not matter; a whole-lane record does not travel, because its generated
+ * evidence describes one checkout's ignored state. Sharing is opt-in per call, never a default
+ * inside this module, so a test that records into a scratch checkout cannot reach another test, or
+ * the machine's real store, through it. The shared store is an optimization and nothing more:
+ * every failure to read or write it is the absence of a record.
  */
 
 export type GreenTreeRecord = {
@@ -94,6 +104,8 @@ export type GreenTreeGates = {
 export type FindGatesOptions = {
   /** Gate names to treat as never matching, however green their record is. */
   excluded?: ReadonlySet<string>
+  /** The shared store to consult for a gate this checkout has no record of; see `sharedRoot`. */
+  sharedRoot?: string
 }
 
 export type RecordOptions = {
@@ -101,6 +113,8 @@ export type RecordOptions = {
   laneGenerated?: GeneratedEvidenceRecord
   /** Gate names it is a defect to record; `record` fails rather than writing one. */
   neverRecord?: ReadonlySet<string>
+  /** The shared store to publish each gate record to as well; see `sharedRoot`. */
+  sharedRoot?: string
 }
 
 export type FindOptions = {
@@ -127,6 +141,15 @@ const LEGACY_STORE_PATH = '.artifacts/verify/green-trees.json'
 const TOOLCHAIN_LINK = '.devenv/profile'
 /** The toolchain of a checkout with no pinned profile: a distinct value that never matches one. */
 const NO_TOOLCHAIN = '<none>'
+/** Names a shared store other than the machine-wide default, such as a directory CI jobs exchange. */
+const SHARED_STORE_ENV_KEY = 'TAO_GREEN_STORE'
+const SHARED_STORE_DIRECTORY = 'tao/green'
+/**
+ * A shared key directory untouched this long is removed when the next record is published. Its tree
+ * is a branch tip long since merged or abandoned; a record is never stale by age, it is only no
+ * longer worth the disk.
+ */
+const SHARED_RETENTION_MS = 14 * 24 * 60 * 60 * 1_000
 
 /**
  * hashTree identifies the visible working-tree content, independent of which bytes happen to be
@@ -314,8 +337,45 @@ function fileName(kind: RecordKind, name: string): string {
   return `${kind}-${name.replace(/[^\w.-]/g, '_')}.json`
 }
 
-function recordPath(repositoryRoot: string, kind: RecordKind, name: string): string {
-  return FS.resolvePath(fileName(kind, name), storeDir(repositoryRoot))
+function recordPath(directory: string, kind: RecordKind, name: string): string {
+  return FS.resolvePath(fileName(kind, name), directory)
+}
+
+/**
+ * sharedRoot is the machine-wide shared store: `TAO_GREEN_STORE` when set, otherwise beside the
+ * machine-lane registry in the user cache, so every worktree on this machine reads one store.
+ */
+function sharedRoot(): string {
+  const env = Platform.runtimeProcess.env
+  const named = env[SHARED_STORE_ENV_KEY]
+  if (named !== undefined && named.length > 0) {
+    return FS.resolvePath(named)
+  }
+  const cacheHome = env['XDG_CACHE_HOME']
+  return FS.resolvePath(
+    SHARED_STORE_DIRECTORY,
+    cacheHome !== undefined && cacheHome.length > 0 ? cacheHome : FS.resolvePath('.cache', FS.homeDir()),
+  )
+}
+
+/**
+ * sharedKeyDir holds every gate record for one key. The key is the directory name, so a reader opens
+ * exactly the files that could match and two toolchains at one tree never overwrite each other.
+ */
+function sharedKeyDir(root: string, key: GreenTreeKey): string {
+  const toolchainHash = createHash('sha256').update(key.toolchain).digest('hex').slice(0, 16)
+  return FS.resolvePath(`${toolchainHash}-${key.treeHash}`, root)
+}
+
+/** pruneShared removes key directories nothing has published to within the retention window. */
+async function pruneShared(root: string, nowMs: number): Promise<void> {
+  for (const name of await FS.listDir(root).catch(() => [] as string[])) {
+    const directory = FS.resolvePath(name, root)
+    const modifiedMs = await FS.modifiedTimeMs(directory).catch(() => undefined)
+    if (modifiedMs !== undefined && nowMs - modifiedMs > SHARED_RETENTION_MS) {
+      await FS.remove(directory).catch(() => {})
+    }
+  }
 }
 
 function plainRecord(stored: StoredRecord): GreenTreeRecord {
@@ -342,12 +402,12 @@ function isStoredRecord(value: unknown): value is StoredRecord {
 
 /** readRecord treats every damaged, missing, or mislabelled file as the absence of a record. */
 async function readRecord(
-  repositoryRoot: string,
+  directory: string,
   kind: RecordKind,
   name: string,
 ): Promise<GreenTreeRecord | undefined> {
   try {
-    const value = await FS.readJson<unknown>(recordPath(repositoryRoot, kind, name))
+    const value = await FS.readJson<unknown>(recordPath(directory, kind, name))
     return isStoredRecord(value) && value.kind === kind && value.name === name ? plainRecord(value) : undefined
   } catch {
     return undefined
@@ -360,12 +420,12 @@ async function readRecord(
  * directory keeps the rename within one filesystem.
  */
 async function writeRecord(
-  repositoryRoot: string,
+  directory: string,
   kind: RecordKind,
   name: string,
   entry: GreenTreeRecord,
 ): Promise<void> {
-  const path = recordPath(repositoryRoot, kind, name)
+  const path = recordPath(directory, kind, name)
   const temporaryPath = `${path}.${randomUUID()}.tmp`
   const stored: StoredRecord = {
     at: entry.at,
@@ -427,7 +487,7 @@ async function find(
     return undefined
   }
   for (const lane of acceptedLanes) {
-    const found = await readRecord(repositoryRoot, 'lane', lane)
+    const found = await readRecord(storeDir(repositoryRoot), 'lane', lane)
     if (
       found !== undefined
       && matches(found, wanted)
@@ -451,9 +511,14 @@ async function findGates(
   gates: readonly string[],
   options: FindGatesOptions = {},
 ): Promise<GreenTreeGates> {
-  const found = await Promise.all(
-    gates.map(async gate => [gate, await readRecord(repositoryRoot, 'gate', gate)] as const),
-  )
+  const sharedDir = options.sharedRoot === undefined ? undefined : sharedKeyDir(options.sharedRoot, wanted)
+  const found = await Promise.all(gates.map(async gate => {
+    const local = await readRecord(storeDir(repositoryRoot), 'gate', gate)
+    if (local !== undefined && matches(local, wanted)) {
+      return [gate, local] as const
+    }
+    return [gate, sharedDir === undefined ? undefined : await readRecord(sharedDir, 'gate', gate)] as const
+  }))
   const excluded: string[] = []
   const proved = new Map<string, GreenTreeRecord>()
   for (const [gate, candidate] of found) {
@@ -499,12 +564,26 @@ async function record(
   await Promise.all([
     ...(lane === undefined
       ? []
-      : [writeRecord(repositoryRoot, 'lane', lane, {
+      : [writeRecord(storeDir(repositoryRoot), 'lane', lane, {
         ...entry,
         ...(options.laneGenerated === undefined ? {} : { generated: options.laneGenerated }),
       })]),
-    ...gates.map(async gate => writeRecord(repositoryRoot, 'gate', gate, entry)),
+    ...gates.map(async gate => writeRecord(storeDir(repositoryRoot), 'gate', gate, entry)),
   ])
+  if (options.sharedRoot !== undefined && gates.length > 0) {
+    await publishShared(options.sharedRoot, entry, gates)
+  }
+}
+
+/** publishShared copies gate records into the shared store; a failure loses sharing, never the lane. */
+async function publishShared(root: string, entry: GreenTreeRecord, gates: readonly string[]): Promise<void> {
+  try {
+    const directory = sharedKeyDir(root, entry)
+    await Promise.all(gates.map(async gate => writeRecord(directory, 'gate', gate, entry)))
+    await pruneShared(root, Date.now())
+  } catch {
+    // The checkout's own records are already written; the shared copy is an optimization.
+  }
 }
 
 /** describe is the one line a skipped lane prints in place of its run. */
@@ -527,6 +606,7 @@ function describeExclusion(gate: string): string {
 /** GreenTree owns the per-checkout record of trees each verification lane has already proved. */
 export const GreenTree = {
   NO_TOOLCHAIN,
+  SHARED_STORE_ENV_KEY,
   STORE_DIR,
   changedPaths,
   describe,
@@ -539,5 +619,6 @@ export const GreenTree = {
   key,
   load,
   record,
+  sharedRoot,
   toolchain,
 } as const

@@ -13,6 +13,7 @@ import {
   HCI,
   Platform,
   ProjectIdentity,
+  ProjectLocal,
   readFirebaseConnections,
   ReleaseCapabilities,
   Repo,
@@ -80,7 +81,9 @@ export async function runTaoBuild(path: string, options: BuildOptions): Promise<
   if (refreshed.status !== 'fresh') {
     Errors.throwUserInput(refreshed.diagnostics.map(diagnostic => diagnostic.message).join('\n'))
   }
-  const buildsRoot = options.output ? FS.resolvePath(options.output) : FS.resolvePath('.tao/builds', app.projectRoot)
+  const buildsRoot = options.output
+    ? FS.resolvePath(options.output)
+    : ProjectLocal.localResolve('builds', app.projectRoot)
   if (
     FS.pathIsWithin(buildsRoot, app.projectRoot)
     && !['.tao', '.artifacts'].includes(FS.relativePath(app.projectRoot, buildsRoot).split('/')[0]!)
@@ -110,14 +113,16 @@ export async function runTaoBuild(path: string, options: BuildOptions): Promise<
         .version,
   }
   if (!options.output) {
-    await ensureBuildsIgnored(app.projectRoot)
+    await ProjectLocal.prepare(app.projectRoot)
   }
   const progress = new BuildProgress(selectedTargets, id)
   // External host sidecars must remain outside any containing Tao project after snapshotting.
   // Ordinary snapshots still use Git-aware, explicitly requested worktree scratch projects.
-  const workRoot = externalSidecars.length > 0
-    ? await FS.mkTmpDir('tao-build-')
-    : await Repo.mkScratchDirOrHost('tao-build-')
+  const workRoot = await FS.realPath(
+    externalSidecars.length > 0
+      ? await FS.mkTmpDir('tao-build-')
+      : await Repo.mkScratchDirOrHost('tao-build-'),
+  )
   try {
     const snapshotBase = FS.resolvePath('source', workRoot)
     const snapshotRootFor = (root: string) => FS.resolvePath(FS.relativePath(commonRoot, root), snapshotBase)
@@ -362,14 +367,6 @@ function parseTargetSelection(value: string): BuildTarget[] | undefined {
   return targets.filter((_, index) => parts.includes(String(index + 1)))
 }
 
-async function ensureBuildsIgnored(projectRoot: string): Promise<void> {
-  const ignorePath = FS.resolvePath('.tao/.gitignore', projectRoot)
-  const existing = await FS.exists(ignorePath) ? await FS.readText(ignorePath) : ''
-  if (!existing.split(/\r?\n/).includes('builds/')) {
-    await FS.writeText(ignorePath, `${existing}${existing && !existing.endsWith('\n') ? '\n' : ''}builds/\n`)
-  }
-}
-
 /** Select the same physical dependency closure compilation will use for this app. */
 async function selectedDependencyEnvironments(
   projectRoot: string,
@@ -584,15 +581,15 @@ async function snapshotProject(projectRoot: string, snapshotRoot: string): Promi
     digests.push(`${FS.relativePath(projectRoot, source)}:${Platform.sha256Hex(content)}`)
     await FS.writeFile(FS.resolvePath(FS.relativePath(projectRoot, source), snapshotRoot), content)
   }
-  const lockPath = FS.resolvePath('.tao/lock.jsonc', projectRoot)
-  const identityPath = FS.resolvePath('.tao/project.json', projectRoot)
+  const lockPath = FS.resolvePath('.tao/store/lock.jsonc', projectRoot)
+  const identityPath = FS.resolvePath('.tao/store/project.json', projectRoot)
   const identity = await FS.readFile(identityPath)
-  digests.push(`.tao/project.json:${Platform.sha256Hex(identity)}`)
-  await FS.writeFile(FS.resolvePath('.tao/project.json', snapshotRoot), identity)
+  digests.push(`.tao/store/project.json:${Platform.sha256Hex(identity)}`)
+  await FS.writeFile(FS.resolvePath('.tao/store/project.json', snapshotRoot), identity)
   const lock = await FS.isFile(lockPath) ? await FS.readFile(lockPath) : undefined
   if (lock !== undefined) {
-    digests.push(`.tao/lock.jsonc:${Platform.sha256Hex(lock)}`)
-    await FS.writeFile(FS.resolvePath('.tao/lock.jsonc', snapshotRoot), lock)
+    digests.push(`.tao/store/lock.jsonc:${Platform.sha256Hex(lock)}`)
+    await FS.writeFile(FS.resolvePath('.tao/store/lock.jsonc', snapshotRoot), lock)
   }
   if (firebase !== undefined) {
     digests.push(`.tao/local/connections.json:${Platform.sha256Hex(firebase)}`)

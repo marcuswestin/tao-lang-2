@@ -67,7 +67,7 @@ Describe('Tao local build and clean CLI', () => {
 
       const first = await runTao(['build', '--web', FS.resolvePath('Clockwork.tao', root)])
       Expect(first).toMatchObject({ exitCode: 0 })
-      const buildsRoot = FS.resolvePath('.tao/builds', root)
+      const buildsRoot = FS.resolvePath('.tao/local/builds', root)
       const firstId = (await FS.listDir(buildsRoot)).find(name => !name.startsWith('.'))
       Expect(firstId).toBeDefined()
       const firstRoot = FS.resolvePath(firstId!, buildsRoot)
@@ -79,7 +79,7 @@ Describe('Tao local build and clean CLI', () => {
       Expect(firstRecord.results.web?.status).toBe('succeeded')
       Expect(await FS.readText(FS.resolvePath('web/site/index.html', firstRoot))).toContain('/_expo/static/js/web/')
       Expect(await FS.fileMode(FS.resolvePath('web/run', firstRoot)) & 0o111).toBeGreaterThan(0)
-      Expect(await FS.readText(FS.resolvePath('.tao/.gitignore', root))).toContain('builds/')
+      Expect(await FS.readText(FS.resolvePath('.tao/.gitignore', root))).toContain('local/')
       await FS.writeText(FS.resolvePath('web/secret.txt', firstRoot), 'private')
       await FS.symlink(FS.resolvePath('web/secret.txt', firstRoot), FS.resolvePath('web/site/escape', firstRoot))
       await servesOnlyContainedFiles(firstRoot)

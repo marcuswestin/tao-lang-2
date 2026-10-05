@@ -4,6 +4,14 @@
 node_modules/
 *.tsbuildinfo
 .tao-ts/
+# Ignore sidecars left by the previous generated-contract layout.
+*.tao.ts
+# Preserve ignored local state left by the previous project-local layout.
+# Current committed project state in .tao/store remains visible.
+**/.tao/dev/
+**/.tao/typescript/
+**/.tao/sessions/
+**/.tao/bridge-check.tsconfig.json
 
 .devenv/
 .direnv/
@@ -24,16 +32,7 @@ local.properties
 .artifacts/*
 !.artifacts/.gitkeep
 _gen_*/
-# Project markers and reproducible locks are tracked; generated tooling and runtime state are not.
-**/.tao/*
-!**/.tao/.gitkeep
-!**/.tao/project.json
-!**/.tao/lock.jsonc
-!**/.tao/skills.version
-# Existing authored Studio sketches stay portable across clones.
-!**/.tao/studio/
-**/.tao/studio/*
-!**/.tao/studio/sketches.jsonc
+# Project-local state uses .tao/.gitignore; store/ is committed.
 
 # Disposable package diagnostics. Scripts here inherit their package tsconfig and workspace context.
 packages/*/.scratch/
@@ -46,7 +45,7 @@ packages/apps/expo-host/android/
 packages/ides/studio-companion-app/ios/
 packages/ides/studio-companion-app/android/
 
-# Decrypted secrets, written by `just secrets`. The encrypted originals live in secrets/secrets.jsonc.
+# Decrypted repository-tool secrets, written by `just secrets`; encrypted originals live in secrets/.
 .env.secrets
 # Local overrides kept by hand. Nothing generates this, so nothing can overwrite it.
 .env.local

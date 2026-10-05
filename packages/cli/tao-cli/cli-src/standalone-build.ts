@@ -46,7 +46,7 @@ const COPIED_TREES = [
   // The identity is authored; generated `.tao` state and TypeScript contracts are refreshed after install.
   {
     source: 'packages/apps/stdlib',
-    within: ['@tao', 'Package.tao', '.tao/project.json'],
+    within: ['@tao', 'Package.tao', '.tao/store/project.json'],
     target: TaoResources.STDLIB_DIRECTORY,
   },
   { source: 'packages/apps/expo-host', within: ['.'], target: TaoResources.HOST_DIRECTORY },
@@ -173,6 +173,9 @@ async function buildBinary(
     }
   }
   await TaoAppModules.packageRuntime(staging, FS.resolvePath('packages/apps/runtime', repoRoot))
+  for (const name of StandaloneResources.LICENSE_FILES) {
+    await FS.copyFile(FS.resolvePath(name, repoRoot), FS.resolvePath(name, staging))
+  }
   await FS.writeText(
     FS.resolvePath(`${TaoResources.HOST_DIRECTORY}/expo-host-src/desktop-agent-host.js`, staging),
     await DesktopHost.agentHostSource(),

@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, Platform, Time } from '@shared'
+import { CLI, Errors, FS, Platform, ProjectLocal, TaoHome, Time } from '@shared'
 import { shipContentHash } from './ship-model'
 
 type LockOwner = {
@@ -23,13 +23,17 @@ export async function withShipTransaction<T>(projectRoot: string, work: () => Pr
 
 /** withShipLockWrite serializes atomic fresh-state lock merges, including callers outside a ship run. */
 export async function withShipLockWrite<T>(projectRoot: string, work: () => Promise<T>): Promise<T> {
-  return await withProjectLock(projectRoot, 'ship-lock-write', work)
+  await ProjectLocal.prepare(projectRoot)
+  const root = await FS.realPath(projectRoot)
+  return await FS.withFileMutationLock(ProjectLocal.storeResolve('lock.jsonc', root), root, work, {
+    lockDirectory: ProjectLocal.cacheResolve('locks', root),
+  })
 }
 
 async function withProjectLock<T>(projectRoot: string, name: string, work: () => Promise<T>): Promise<T> {
   const serializationRoot = await shipSerializationRoot(projectRoot)
   const repositoryKey = shipContentHash([serializationRoot])
-  const coordinationRoot = FS.resolvePath(`tao-ship-coordination/${repositoryKey}`, FS.tmpdir())
+  const coordinationRoot = TaoHome.cacheResolve(`ship/locks/${repositoryKey}`)
   await FS.mkdir(coordinationRoot)
   const token = `${Platform.runtimeProcess.pid}-${Platform.randomUUID()}`
   const ownerPath = FS.resolvePath(`${name}-${token}.json`, coordinationRoot)

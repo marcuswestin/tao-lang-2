@@ -1,6 +1,7 @@
 import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
-import { NodeValidation, type NodeValidationChecks } from './node-validation'
+import { HCI, Platform } from '@shared'
+import { NodeValidation, type NodeValidationChecks, type NodeValidationReuse } from './node-validation'
 import type { ValidationContext } from './validation'
 import { accessValidationChecks } from './validators/access-validator'
 import { ActionsValidator } from './validators/ActionsValidator'
@@ -33,13 +34,13 @@ import { LayoutValidator } from './validators/layout-validator'
 import { navigationValidationChecks } from './validators/navigation-validator'
 import { numericUnitReadingsValidationChecks } from './validators/numeric-unit-readings-validator'
 import { numericUnitsValidationChecks } from './validators/numeric-units-validator'
-import { rendererSlotsValidationChecks } from './validators/renderer-slots-validator'
 import { packageValidationChecks, validatePackageFile } from './validators/package-validator'
 import { pairingValidationChecks, validateAppPairing } from './validators/pairing-validator'
 import { PhrasesValidator } from './validators/phrases-validator'
 import { preludeValidationChecks, validatePreludeFile } from './validators/prelude-validator'
 import { ReactiveParametersValidator } from './validators/ReactiveParametersValidator'
 import { validateReleaseCapabilities } from './validators/release-capabilities-validator'
+import { rendererSlotsValidationChecks } from './validators/renderer-slots-validator'
 import { ResponsesValidator } from './validators/responses-validator'
 import {
   scenarioValidationChecks,
@@ -107,34 +108,105 @@ const typeInferenceChecks = NodeValidation.compile(
   ] satisfies readonly NodeValidationChecks[],
 )
 
+// These handlers read local containment and linked dependencies and only report through ctx.
+// Registration is deliberately separate from the complete dispatch: a new validator stays cold.
+// Configured/inferred constructors and member access retain their implicit lookup checks each run.
+const reusableNodeChecks = new Set([
+  ...NodeValidation.compile([
+    AliasesValidator.checks,
+    ActionsValidator.checks,
+    StateValidator.checks,
+    ReactiveParametersValidator.checks,
+    FunctionalCoreValidator.checks,
+    unitsValidationChecks,
+    {
+      [AST.TypeDeclaration.$type]: typeValidationChecks[AST.TypeDeclaration.$type],
+      [AST.ItemTypeExpression.$type]: typeValidationChecks[AST.ItemTypeExpression.$type],
+      [AST.ParameterDeclaration.$type]: typeValidationChecks[AST.ParameterDeclaration.$type],
+      [AST.ParameterizedDeclaration.$type]: typeValidationChecks[AST.ParameterizedDeclaration.$type],
+    },
+  ]).values(),
+].flat())
+
 function validateTaoFile(
   file: AST.TaoFile,
   ctx: ValidationContext,
   effects?: ASTUtils.AssociatedEffectsContext,
+  documentReuse?: Pick<NodeValidationReuse, 'run'>,
 ): readonly AST.Node[] {
   if (effects) {
-    return ASTUtils.withAssociatedEffects(effects, () => validateTaoFile(file, ctx))
+    return ASTUtils.withAssociatedEffects(effects, () => validateTaoFile(file, ctx, undefined, documentReuse))
   }
-  validateReleaseCapabilities(file, ctx)
-  AppValidator.validate(file, ctx)
-  validatePackageFile(file, ctx)
-  AliasesValidator.validateFile(file, ctx)
-  validateDataFile(file, ctx)
-  validateDatasourceMembership(file, ctx)
-  validateAppPairing(file, ctx)
-  validateScenarioFile(file, ctx)
-  validatePreludeFile(file, ctx)
-  const nodes = AST.streamAllContents(file)
-  NodeValidation.validate(nodes, file, ctx, nodeValidationChecks)
-  validateConfiguredValuesFile(file, ctx)
+  const nodeReuse = documentReuse ? { ...documentReuse, checks: reusableNodeChecks } : undefined
+  const profileEnabled = Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_PROFILE'] === 'true'
+  if (!profileEnabled) {
+    validateReleaseCapabilities(file, ctx)
+    AppValidator.validate(file, ctx)
+    validatePackageFile(file, ctx)
+    AliasesValidator.validateFile(file, ctx)
+    validateDataFile(file, ctx)
+    validateDatasourceMembership(file, ctx)
+    validateAppPairing(file, ctx)
+    validateScenarioFile(file, ctx)
+    validatePreludeFile(file, ctx)
+    const nodes = ctx.nodesInFile?.(file) ?? AST.streamAllContents(file)
+    NodeValidation.validate(nodes, file, ctx, nodeValidationChecks, undefined, nodeReuse)
+    validateConfiguredValuesFile(file, ctx)
 
-  const document = AST.getDocument(file)
-  if (document.uri.scheme === 'file') {
-    validateVisibleDeclarations(ctx, file)
-    validateUseStatements(file, ctx)
-    validatePackageUseStatements(file, ctx)
+    const document = AST.getDocument(file)
+    if (document.uri.scheme === 'file') {
+      validateVisibleDeclarations(ctx, file)
+      validateUseStatements(file, ctx)
+      validatePackageUseStatements(file, ctx)
+    }
+    return nodes
   }
-  return nodes
+
+  const fileChecks: Record<string, number> = {}
+  const nodeHandlers: Record<string, number> = {}
+  const time = (name: string, action: () => void): void => {
+    const startedAt = performance.now()
+    try {
+      action()
+    } finally {
+      fileChecks[name] = (fileChecks[name] ?? 0) + performance.now() - startedAt
+    }
+  }
+  let nodes: readonly AST.Node[] = []
+  try {
+    time('release-capabilities', () => validateReleaseCapabilities(file, ctx))
+    time('app', () => AppValidator.validate(file, ctx))
+    time('package', () => validatePackageFile(file, ctx))
+    time('aliases', () => AliasesValidator.validateFile(file, ctx))
+    time('data', () => validateDataFile(file, ctx))
+    time('datasource-membership', () => validateDatasourceMembership(file, ctx))
+    time('app-pairing', () => validateAppPairing(file, ctx))
+    time('scenario', () => validateScenarioFile(file, ctx))
+    time('prelude', () => validatePreludeFile(file, ctx))
+    nodes = ctx.nodesInFile?.(file) ?? AST.streamAllContents(file)
+    NodeValidation.validate(nodes, file, ctx, nodeValidationChecks, (name, duration) => {
+      nodeHandlers[name] = (nodeHandlers[name] ?? 0) + duration
+    }, nodeReuse)
+    time('configured-values', () => validateConfiguredValuesFile(file, ctx))
+
+    const document = AST.getDocument(file)
+    if (document.uri.scheme === 'file') {
+      time('visible-declarations', () => validateVisibleDeclarations(ctx, file))
+      time('use-statements', () => validateUseStatements(file, ctx))
+      time('package-use-statements', () => validatePackageUseStatements(file, ctx))
+    }
+    return nodes
+  } finally {
+    HCI.logProcessInfo(
+      'validator',
+      JSON.stringify({
+        type: 'studio-validation-checks-profile',
+        file: AST.getDocument(file).uri.toString(),
+        fileChecks,
+        nodeHandlers,
+      }),
+    )
+  }
 }
 
 function validateTypes(

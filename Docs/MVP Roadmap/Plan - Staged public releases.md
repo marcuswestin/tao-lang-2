@@ -58,7 +58,7 @@ default.
 - AI assistance — `tao create --ai` and Studio's Agent panel — becomes a deferred `ai-assist`
   capability. Public builds create without it and hide both until a phase proves them.
 
-A malformed `.tao-project/lock.jsonc` keeps refusing editors and Studio; its message names the file,
+A malformed `.tao/store/lock.jsonc` keeps refusing editors and Studio; its message names the file,
 the parse problem, and the recovery paths and what each would lose (decided and implemented
 2026-10-02).
 

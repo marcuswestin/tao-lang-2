@@ -22,21 +22,24 @@ Describe('project development session ownership', () => {
       })
       await Expect(ProjectDevSession.acquire(root, 'studio'))
         .rejects.toThrow('already owned by cli session')
-      const owner = await FS.readJson<{ id: string }>(FS.resolvePath('.tao/sessions/owner.json', root))
+      const owner = await FS.readJson<{ id: string }>(FS.resolvePath('.tao/local/sessions/owner.json', root))
       child.kill('SIGKILL')
       await child.waitForClose()
       const recovered = await ProjectDevSession.acquire(root, 'studio')
       await recovered.release()
-      const interrupted = await FS.readJson<{ status: string }>(FS.resolvePath(`.tao/sessions/${owner.id}.json`, root))
+      const interrupted = await FS.readJson<{ status: string }>(
+        FS.resolvePath(`.tao/local/sessions/${owner.id}.json`, root),
+      )
       const completed = await FS.readJson<{ status: string }>(
-        FS.resolvePath(`.tao/sessions/${recovered.record.id}.json`, root),
+        FS.resolvePath(`.tao/local/sessions/${recovered.record.id}.json`, root),
       )
       Expect(interrupted.status).toBe('interrupted')
       Expect(completed.status).toBe('completed')
-      Expect(await FS.isFile(FS.resolvePath('.tao/sessions/owner.json', root))).toBe(false)
-      const recordText = await FS.readText(FS.resolvePath(`.tao/sessions/${recovered.record.id}.json`, root))
+      Expect(await FS.isFile(FS.resolvePath('.tao/local/sessions/owner.json', root))).toBe(false)
+      const recordText = await FS.readText(FS.resolvePath(`.tao/local/sessions/${recovered.record.id}.json`, root))
       Expect(recordText).not.toContain('capability')
       Expect(recordText).not.toContain('token')
+      Expect(await FS.listDir(FS.resolvePath('.tao/cache/locks', root))).toEqual([])
     } finally {
       child.kill('SIGKILL')
       await child.waitForClose()

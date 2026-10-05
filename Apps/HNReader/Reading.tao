@@ -1,0 +1,53 @@
+use ReadingEntries, ReadingEntry from @model
+use Col, ScrollView, Text from @tao/ui
+
+// Every story opened on this device, most recent first. These rows survive feed replacement and
+// relaunches; each Story reference still reports honestly when its remote row is unavailable.
+folder
+scene ReadingPage() {
+   Title "Reading"
+   query ReadingEntries = ReadingEntries with {
+      order by OpenedAt desc
+   }
+   render Col() [screen] {
+      when ReadingEntries {
+         empty -> { Col() [stateBox, gap 6] {
+            Text("Nothing opened yet") [problemTitle]
+            Text("Stories you open from Top appear here.") [meta]
+         } }
+         otherwise -> { ScrollView() {
+            Col() [feed] {
+               Text("{ ReadingEntries.Count } opened") [notice]
+
+               #reading
+               loop ReadingEntries / ReadingEntry {
+                  ReadingHistoryRow(ReadingEntry)
+            }  }
+         } }
+}  }  }
+
+// Missing feed data never erases the local history row. It renders the reference state instead of
+// an empty card; when the adapter can resolve the story again, the same row becomes selectable.
+folder
+view ReadingHistoryRow(ReadingEntry) {
+   render Col() [content top stretch] {
+      when ReadingEntry.Story {
+         loading -> { Col() [storyCard] {
+            Text("Loading story…") [notice]
+         } }
+         none -> { Col() [storyCard] {
+            Text("This story is not in the feed right now.") [notice]
+         } }
+         error -> Message { Col() [storyCard] {
+            Text(Message) [notice]
+         } }
+         otherwise -> { loop [ReadingEntry] / AvailableEntry {
+            StoryRow(AvailableEntry.Story)
+            on select -> {
+               update AvailableEntry {
+                  OpenedAt: now
+               }
+               present StoryScreen(AvailableEntry.Story)
+            }
+         } }
+}  }  }

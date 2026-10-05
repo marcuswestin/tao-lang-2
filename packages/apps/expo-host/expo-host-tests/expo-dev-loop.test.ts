@@ -680,6 +680,65 @@ Describe('Expo dev-loop port helpers', () => {
     )
   })
 
+  Test('selects another port when a second listener owns the preferred port after release', async () => {
+    const blocker = createServer()
+    blocker.unref()
+    const otherOwner = createServer()
+    otherOwner.unref()
+    let preferredPort: number | undefined
+    try {
+      // An IPv6 ephemeral allocation does not reserve the same IPv4 port. Retry fixture
+      // setup if another process owns that address, then exercise the product exactly once.
+      for (let attempt = 0; attempt < 10; attempt++) {
+        if (!await listenIfSupported(blocker, '::1')) {
+          return
+        }
+        const address = blocker.address()
+        preferredPort = typeof address === 'object' && address !== null ? address.port : undefined
+        if (preferredPort === undefined) {
+          Errors.throwHostEnvironment('Expected the test listener to have a TCP port.')
+        }
+        try {
+          await new Promise<void>((resolve, reject) => {
+            otherOwner.once('error', reject)
+            otherOwner.listen({ host: '127.0.0.1', ipv6Only: true, port: preferredPort }, resolve)
+          })
+          break
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'EADDRINUSE') {
+            throw error
+          }
+          await new Promise<void>((resolve, reject) => blocker.close(error => error ? reject(error) : resolve()))
+          preferredPort = undefined
+        }
+      }
+      if (preferredPort === undefined) {
+        Errors.throwHostEnvironment('Could not reserve both loopback addresses for the port collision fixture.')
+      }
+      await new Promise<void>((resolve, reject) => {
+        blocker.close(error => error ? reject(error) : resolve())
+      })
+      const ownerAddress = otherOwner.address()
+      Expect(otherOwner.listening).toBe(true)
+      Expect(typeof ownerAddress === 'object' && ownerAddress !== null ? ownerAddress.port : undefined)
+        .toBe(preferredPort)
+
+      const session = await createDevLoopExpoSession(preferredPort)
+      try {
+        Expect(session.config.EXPO_PORT).not.toBe(preferredPort)
+      } finally {
+        await session.releasePortReservation()
+      }
+    } finally {
+      if (blocker.listening) {
+        await new Promise<void>((resolve, reject) => blocker.close(error => error ? reject(error) : resolve()))
+      }
+      if (otherOwner.listening) {
+        await new Promise<void>((resolve, reject) => otherOwner.close(error => error ? reject(error) : resolve()))
+      }
+    }
+  })
+
   Test('keeps IPv4 reservations when the runtime reports IPv6 unsupported without an error code', async () => {
     const reserved: string[] = []
     const reservation = await Ports.reserveAvailable(49_152, async (port, host) => {
@@ -690,7 +749,6 @@ Describe('Expo dev-loop port helpers', () => {
       reserved.push(host)
       return { port, release: async () => {} }
     })
-
     Expect(reservation.port).toBe(49_152)
     Expect(reserved).toEqual(Platform.hostPlatform === 'darwin' ? ['0.0.0.0', '127.0.0.1'] : ['0.0.0.0'])
     await reservation.release()

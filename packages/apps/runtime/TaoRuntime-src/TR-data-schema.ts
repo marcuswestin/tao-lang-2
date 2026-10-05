@@ -230,6 +230,7 @@ export class RuntimeDataSchema {
   private failedSaveSequence: number | undefined
   private fills = new Map<string, FillState>()
   private generation = 0
+  private appBindingGeneration = 0
   private sealed = false
   private fixtureActor: string | undefined
   private pendingFills = new Set<Promise<void>>()
@@ -296,6 +297,28 @@ export class RuntimeDataSchema {
     const storageKey = binding.local?.storageKey
       ?? this.validatedStorageKey(binding.declaration.name, binding.configuration, binding.storageName)
     return JSON.stringify([declaration, storageKey, this.name, ...(binding.auth ? [binding.auth.accountId] : [])])
+  }
+
+  /**
+   * boundDeclaration is the datasource declaration this store is connected through. Binding a
+   * different one replaces the connection, so the store's rows start again from that connection's.
+   */
+  boundDeclaration(): TaoDatasourceDeclaration | undefined {
+    return typeof this.providerBinding === 'object' ? this.providerBinding.declaration : undefined
+  }
+
+  /** Changes only when configure installs a new provider connection, including config-only rebinds. */
+  bindingGeneration(): number {
+    return this.generation
+  }
+
+  /** The last connection generation installed by an app binding, excluding auth fixture setup. */
+  configuredAppBindingGeneration(): number {
+    return this.appBindingGeneration
+  }
+
+  recordConfiguredAppBinding(): void {
+    this.appBindingGeneration = this.generation
   }
 
   async resetFromRecovery(): Promise<void> {

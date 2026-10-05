@@ -33,7 +33,7 @@ import {
 import type { StudioFeedBrowseResult, StudioFeedState } from './StudioFeedProtocol'
 import { StudioFeedSession } from './StudioFeedSession'
 import { studioGeneratedSourceHeader, StudioGeneratedSources } from './StudioGeneratedSources'
-import { type StudioCellRuntime, StudioMatrixSession } from './StudioMatrixSession'
+import { type StudioCellBootstrap, type StudioCellRuntime, StudioMatrixSession } from './StudioMatrixSession'
 import type { StudioCellInstanceIdentity, StudioPreviewManifestV2 } from './StudioPreviewManifest'
 import {
   type StudioAppVariant,
@@ -334,6 +334,54 @@ export class StudioProjectSession {
     return viewport
   }
 
+  #availablePreviewCells(): Set<string> | undefined {
+    const cells = this.previewManifest()?.cells
+    if (cells === undefined) {
+      return undefined
+    }
+    return new Set(cells.length === 0 ? ['whole-app'] : cells.map(cell => cell.cellId))
+  }
+
+  async saveStudioSessionField(request: unknown): Promise<void> {
+    Assert.input(Json.isRecord(request), 'Expected a Studio session field update.')
+    const store = this.#canvasViewportStore
+    Assert(store, 'the Studio session store to be installed before field updates')
+    if (request['field'] === 'activatedCellIds') {
+      const ids = request['value']
+      Assert.input(Array.isArray(ids) && ids.every(id => typeof id === 'string'), 'Expected preview cell ids.')
+      const available = this.#availablePreviewCells()
+      await store.saveApp(this.projectRoot, this.appName, {
+        activatedCellIds: [...new Set(ids)].filter(id => available === undefined || available.has(id)),
+      })
+      return
+    }
+    if (request['field'] === 'focusedCellId') {
+      const id = request['value']
+      Assert.input(id === null || typeof id === 'string', 'Expected a focused preview cell id.')
+      const available = this.#availablePreviewCells()
+      await store.saveApp(this.projectRoot, this.appName, {
+        focusedCellId: id !== null && (available === undefined || available.has(id)) ? id : undefined,
+      })
+      return
+    }
+    if (request['field'] === 'editorTabs') {
+      const value = request['value']
+      Assert.input(Json.isRecord(value) && Array.isArray(value['paths']), 'Expected Studio editor tabs.')
+      const available = new Set((await this.files()).map(file => file.path))
+      const paths = [
+        ...new Set(value['paths'].filter((path): path is string => typeof path === 'string' && available.has(path))),
+      ].slice(-20)
+      const activePath = typeof value['activePath'] === 'string' && paths.includes(value['activePath'])
+        ? value['activePath']
+        : paths.at(-1)
+      await store.saveApp(this.projectRoot, this.appName, {
+        editorTabs: { paths, ...(activePath === undefined ? {} : { activePath }) },
+      })
+      return
+    }
+    Errors.throwUserInput('Unknown Studio session field.')
+  }
+
   /**
    * One entry per applied agent change, most recent last. A chat applies several changes in a conversation,
    * and a single slot would make every change but the last one unrecoverable while still offering "undo".
@@ -530,6 +578,10 @@ export class StudioProjectSession {
     return this.#requireMatrix().instance(previewInstanceId)
   }
 
+  previewCellBootstrap(previewInstanceId: string): StudioCellBootstrap {
+    return this.#requireMatrix().bootstrap(previewInstanceId)
+  }
+
   registerCellPreview(input: unknown): StudioCellRuntime {
     return this.#requireMatrix().registerInstance(StudioSessionRequests.cellInstanceIdentity(input))
   }
@@ -616,9 +668,29 @@ export class StudioProjectSession {
     const canvasViewport = this.#canvasViewportStore === undefined
       ? this.#canvasViewport
       : await this.#canvasViewportStore.load(this.projectRoot)
+    const savedSession = await this.#canvasViewportStore?.loadApp(this.projectRoot, this.appName)
+    const availableCells = this.#availablePreviewCells()
+    const activatedCellIds = savedSession?.activatedCellIds.filter(
+      id => availableCells === undefined || availableCells.has(id),
+    ) ?? []
+    if (savedSession !== undefined && activatedCellIds.length !== savedSession.activatedCellIds.length) {
+      await this.#canvasViewportStore?.saveApp(this.projectRoot, this.appName, { activatedCellIds })
+    }
+    const focusedCellId = savedSession?.focusedCellId !== undefined
+        && (availableCells === undefined || availableCells.has(savedSession.focusedCellId))
+      ? savedSession.focusedCellId
+      : undefined
+    if (savedSession?.focusedCellId !== undefined && focusedCellId === undefined) {
+      await this.#canvasViewportStore?.saveApp(this.projectRoot, this.appName, { focusedCellId: undefined })
+    }
     return {
       apps: this.apps,
       ...(canvasViewport === undefined ? {} : { canvasViewport }),
+      studioSession: {
+        activatedCellIds,
+        ...(focusedCellId === undefined ? {} : { focusedCellId }),
+        ...(savedSession?.editorTabs === undefined ? {} : { editorTabs: savedSession.editorTabs }),
+      },
       capabilities: {
         drafts: 'disk-synced-parsable',
         language: ['lsp', 'textmate'],
@@ -2019,12 +2091,18 @@ export class StudioProjectSession {
       }
       if (request.kind === 'wrap-render' || request.kind === 'group-renders' || request.kind === 'extract-view') {
         const directory = FS.dirname(path)
-        for (const siblingPath of this.#files.absolutePaths()) {
-          if (siblingPath === path || FS.dirname(siblingPath) !== directory) {
-            continue
-          }
-          const sibling = await this.#workspace.parse(siblingPath)
-          workspaceFiles.push(sibling.entry.ast)
+        const siblingPaths = this.#files.absolutePaths().filter(siblingPath =>
+          siblingPath !== path && FS.dirname(siblingPath) === directory
+        )
+        if (siblingPaths.length > 0) {
+          const entries = await this.#workspace.parseFiles([path, ...siblingPaths])
+          parsed = entries[0]!
+          workspaceFiles = [
+            ...new Set([
+              ...parsed.files.map(file => file.ast),
+              ...entries.slice(1).map(sibling => sibling.entry.ast),
+            ]),
+          ]
         }
       }
       const patch = await SourceActions.applyStudioPatch(

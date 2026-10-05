@@ -247,6 +247,14 @@ evaluating Langium and building the parser, not finding files. It is paid:
   Fast Refresh, the other side of edit-to-preview, have not been measured;
 - several times per `tao test`: the CLI, a Bun worker per test directory, then Node and Jest.
 
+**Studio preview follow-up (2026-09-28):** Ordinary Studio revisions now reuse one preview-owned
+workspace for the session; Feed source overrides still get an isolated workspace. This removes
+repeated workspace setup. Code editor draft admission now uses the syntax-only parser instead of
+building the reachable graph before the full preview compile. `Parser.parseEntries` still reloads and links the reachable documents,
+Tao validation still runs, and the backend still emits every source file. Publication already skips
+byte-identical generated files. The next step for Studio is Langium document invalidation and then
+dependency-aware emission, while retaining the full path for graph-shape changes.
+
 ### 5.5 `tao test` pays Jest, Babel, and React Native on every run
 
 With nothing changed, 29 journeys cost 2.8s inside Jest, almost none of it the journeys. After any

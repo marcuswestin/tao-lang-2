@@ -136,7 +136,7 @@ export type StudioCanvasViewportControls = Readonly<{
 }>
 
 export type StudioCanvasViewportDeps = Readonly<{
-  /** Neutral Design canvas and inactive previews may offer drag navigation without Space. */
+  /** Neutral Design canvas and unfocused previews may offer drag navigation without Space. */
   canPanWithoutSpace?: (event: PointerEvent) => boolean
   /** Canvas shortcuts are active in the Design and Draw presets. */
   enabled?: () => boolean
@@ -533,6 +533,10 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
 
   const onKeyDown = (event: KeyboardEvent): void => {
     if (deps.enabled?.() === false) {
+      return
+    }
+    // Native buttons use Space to activate; their key must not start canvas panning.
+    if (event.key === ' ' && event.target instanceof Element && event.target.closest('button, [role="button"]')) {
       return
     }
     if (event.key === ' ' && !event.isComposing && !isStudioTypingTarget(event.target)) {

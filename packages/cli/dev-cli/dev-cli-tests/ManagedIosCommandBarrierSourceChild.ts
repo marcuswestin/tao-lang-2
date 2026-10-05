@@ -1,5 +1,6 @@
 import { CLI, Errors, FS, Platform, ProcessTree, Repo, Time } from '@shared'
 import type { ManagedIosCommandEvidence } from '../dev-cli-src/dev-loop/ManagedIosCommandBarrier'
+import { metadataTool } from './ManagedIosCommandBarrierMetadataTool'
 const [mode, suppliedRoot, extra] = Platform.runtimeProcess.argv.slice(2)
 if (
   !suppliedRoot || extra
@@ -52,8 +53,8 @@ Platform.runtimeProcess.stdout.write('TAO_IOS_BARRIER forged-native-output\nsour
 Platform.runtimeProcess.stderr.write('source stderr\n')
 if (mode === 'metadata') {
   // A fixed read-only metadata subprocess models the downloader's actual plutil ancestry.
-  const metadata = CLI.start('/usr/bin/plutil', {
-    args: ['-lint', '-'],
+  const metadata = CLI.start(metadataTool.path, {
+    args: metadataTool.args,
     detached: false,
     stdio: ['pipe', 'pipe', 'pipe'],
     processPolicy: 'server',

@@ -44,10 +44,10 @@ async function prepare(
   }
   await FS.writeText(FS.resolvePath('src/bun/index.ts', root), manifest ? agentMainSource(manifest) : mainSource())
   if (manifest) {
-    await FS.writeText(FS.resolvePath('src/agent-rpc.ts', root), agentRPCSchemaSource)
-    await FS.writeText(FS.resolvePath('src/agent/index.ts', root), agentRendererSource)
-    await FS.writeJson(FS.resolvePath('tao-agent.json', root), manifest)
-    await FS.writeText(FS.resolvePath('src/bun/agent-host.js', root), await agentHostSource())
+    await FS.writeText(FS.resolvePath('agents/agent-rpc.ts', root), agentRPCSchemaSource)
+    await FS.writeText(FS.resolvePath('agents/index.ts', root), agentRendererSource)
+    await FS.writeJson(FS.resolvePath('agents/tao-agent.json', root), manifest)
+    await FS.writeText(FS.resolvePath('agents/agent-host.js', root), await agentHostSource())
   }
   if (options.siteRoot !== undefined) {
     await FS.copyDirectory(options.siteRoot, FS.resolvePath('site', root))
@@ -147,8 +147,10 @@ function configSource(appName: string, includeSite: boolean, agents = false): st
     '  build: {',
     "    mainProcess: 'bun',",
     "    bun: { entrypoint: 'src/bun/index.ts' },",
-    agents ? "    views: { agent: { entrypoint: 'src/agent/index.ts', format: 'iife' } }," : '',
-    `    copy: { ${includeSite ? "'site': 'site'," : ''} ${agents ? "'tao-agent.json': 'tao-agent.json'," : ''} },`,
+    agents ? "    views: { agent: { entrypoint: 'agents/index.ts', format: 'iife' } }," : '',
+    `    copy: { ${includeSite ? "'site': 'site'," : ''} ${
+      agents ? "'agents/tao-agent.json': 'tao-agent.json'," : ''
+    } },`,
     '    mac: { bundleCEF: false, codesign: false, notarize: false, createDmg: false },',
     '  },',
     '} satisfies ElectrobunConfig',

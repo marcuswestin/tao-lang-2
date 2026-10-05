@@ -14,7 +14,8 @@ const SOURCE_EXTENSIONS = new Set([
   '.mts',
   '.cts',
 ])
-const MARKER_INPUTS = new Set(['.gitkeep', 'lock.jsonc', 'project.json'])
+const MARKER_INPUTS = new Set(['.gitkeep'])
+const STORE_INPUTS = new Set(['lock.jsonc', 'project.json'])
 
 /** Ignore generated and installed trees, while allowing explicitly selected dependency roots. */
 export function ignoredProjectWatchPath(
@@ -47,6 +48,9 @@ export function ignoredProjectWatchPath(
     return false
   }
   const belowMarker = parts.slice(markerIndex + 1)
+  if (belowMarker[0] === 'store') {
+    return belowMarker.length > 2 || belowMarker.length === 2 && !STORE_INPUTS.has(belowMarker[1]!)
+  }
   return belowMarker.length > 1 || belowMarker.length === 1 && !MARKER_INPUTS.has(belowMarker[0]!)
 }
 
@@ -85,6 +89,7 @@ export function isProjectWatchInput(
     return true
   }
   return SOURCE_EXTENSIONS.has(FS.extname(path))
+    || STORE_INPUTS.has(FS.basename(path)) && FS.basename(FS.dirname(path)) === 'store'
     || FS.basename(path) === '.gitkeep' && FS.basename(FS.dirname(path)) === '.tao'
 }
 
@@ -123,5 +128,5 @@ export function explicitProjectOwnershipWatchPaths(
 function isGeneratedWatchPath(path: string): boolean {
   const parts = FS.resolvePath(path).split('/')
   return parts.includes('.tao-ts')
-    || parts.some((part, index) => part === '.tao' && parts[index + 1] === 'typescript')
+    || parts.some((part, index) => part === '.tao' && parts[index + 1] === 'cache')
 }

@@ -1,4 +1,5 @@
-import { Errors, FS, Repo } from '@shared'
+import { findProjectRoot } from '@project-tooling'
+import { Errors, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import { MachineResourceBusyError } from '@verification/MachineLanes'
 import { REQUIRED_CAPABILITIES } from '../studio-tooling-src/StudioCanary'
@@ -207,6 +208,7 @@ Describe('native Studio test isolation', () => {
   Test('removes the default disposable projection after canary startup fails', async () => {
     const root = await mkTestDir('tao-native-canary-isolation-')
     let sourceRoot: string | undefined
+    let discoveredRoot: string | undefined
     try {
       await withCapturedOutput(async () => {
         Expect(
@@ -221,6 +223,7 @@ Describe('native Studio test isolation', () => {
               Expect(options.projectRoot).not.toContain('Apps/HNReader')
               Expect(await FS.readText(FS.resolvePath('KeyboardNavigation.tao', options.projectRoot)))
                 .toContain('app KeyboardNavigationAcceptance')
+              discoveredRoot = await findProjectRoot(FS.resolvePath('KeyboardNavigation.tao', options.projectRoot))
               Expect(options.nativeIdentity?.bundleIdentifier).toMatch(/\.test-[0-9a-f]{12}$/)
               Expect(options.nativeHutchHome).toBe(Repo.resolvePath('.artifacts/tests/studio-native/hutch-home'))
               Expect(options.devDataRoot).toContain('/invocations/')
@@ -234,6 +237,7 @@ Describe('native Studio test isolation', () => {
         ).toBe(1)
       })
       Expect(sourceRoot).toBeDefined()
+      Expect(discoveredRoot).toBe(sourceRoot)
       Expect(await FS.exists(sourceRoot!)).toBe(false)
       const invocation = (await FS.listDir(FS.resolvePath('invocations', root)))[0]!
       Expect(await FS.readJson(FS.resolvePath(`invocations/${invocation}/external-directories.json`, root)))
@@ -285,6 +289,23 @@ Describe('native Studio test isolation', () => {
       if (projectRoot !== undefined) {
         await FS.remove(projectRoot)
       }
+      await FS.remove(root)
+    }
+  })
+
+  Test('a native source projection retains a live local project owner after resource shutdown', async () => {
+    const root = await mkTestDir('tao-native-projection-owner-')
+    const target = await StudioNativeTestRun.project({}, root)
+    const ownerPath = FS.resolvePath('.tao/local/sessions/owner.json', target.projectRoot)
+    try {
+      await FS.writeJson(ownerPath, { pid: Platform.runtimeProcess.pid })
+      await withCapturedOutput(async () => await target.cleanup({ resourcesStopped: true }, []))
+      Expect(await FS.isFile(FS.resolvePath('KeyboardNavigation.tao', target.projectRoot))).toBe(true)
+      await FS.remove(ownerPath)
+      await target.cleanup({ resourcesStopped: true }, [])
+      Expect(await FS.exists(target.projectRoot)).toBe(false)
+    } finally {
+      await FS.remove(target.projectRoot)
       await FS.remove(root)
     }
   })
@@ -342,7 +363,7 @@ Describe('native Studio test isolation', () => {
       })
       Expect(projectRoot).toBeDefined()
       Expect(await FS.exists(projectRoot!)).toBe(true)
-      Expect(await FS.exists(FS.resolvePath('.tao/sessions/owner.json', projectRoot!))).toBe(false)
+      Expect(await FS.exists(FS.resolvePath('.tao/local/sessions/owner.json', projectRoot!))).toBe(false)
       const invocation = (await FS.listDir(FS.resolvePath('invocations', root)))[0]!
       Expect(await FS.readJson(FS.resolvePath(`invocations/${invocation}/external-directories.json`, root)))
         .toMatchObject({ path: projectRoot, state: 'retained' })

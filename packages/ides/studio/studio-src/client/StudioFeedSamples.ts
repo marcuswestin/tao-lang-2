@@ -16,7 +16,7 @@ export const StudioFeedSamples = {
     inventory: StudioFeedBrowserInventory,
     selection: Pick<StudioFeedState, 'rowId' | 'sketchId'>,
     manifest?: StudioPreviewManifestV2,
-    activeScenarioId?: string,
+    focusedScenarioId?: string,
   ): StudioFeedExampleValues {
     const examples: Record<string, Record<string, StudioFeedSample>> = {}
     const inventoryRows = inventory.entities.flatMap(entity => entity.sources.flatMap(source => source.rows))
@@ -27,7 +27,7 @@ export const StudioFeedSamples = {
     for (const sketch of catalog.sketches) {
       const subject = manifest?.subjects.find(item => item.kind === 'view' && item.viewName === sketch.view)
       const scenarios = manifest?.scenarios.filter(item => item.subjectId === subject?.subjectId) ?? []
-      const scenario = scenarios.find(item => item.scenarioId === activeScenarioId) ?? scenarios[0]
+      const scenario = scenarios.find(item => item.scenarioId === focusedScenarioId) ?? scenarios[0]
       const fixture = manifest?.fixtures.find(item => item.fixtureId === scenario?.fixtureId)
       const creates = fixture?.plan['creates']
       const fixtureRows: Row[] = Array.isArray(creates)
