@@ -60,7 +60,7 @@ export function parameterRequiresWritable(
           const bindings = resolveParameterArgumentBindings(AST.renderSlotParametersOf(contract), AST.argumentsOf(node))
           if (
             bindings.pairs.some(pair =>
-              expressionReferencesParameter(pair.argument.value, parameter)
+              expressionReferencesParameter(reactiveArgumentExpression(pair.argument, pair.parameter), parameter)
               && parameterRequiresWritable(pair.parameter, nextSeen)
             )
           ) {
@@ -79,12 +79,26 @@ export function parameterRequiresWritable(
 }
 
 /** writableExpression reports whether an expression names storage that an action may mutate. */
-export function writableExpression(expression: AST.Expression): boolean {
+export function writableExpression(
+  expressionOrArgument: AST.Expression | AST.Argument,
+  receivingParameter?: AST.ParameterDeclaration,
+): boolean {
+  const expression = AST.isArgument(expressionOrArgument)
+    ? reactiveArgumentExpression(expressionOrArgument, receivingParameter)
+    : expressionOrArgument
   const target = writableExpressionTarget(expression)
   const writableRoot = AST.isStateDeclaration(target)
     || (AST.isParameterDeclaration(target) && (target.copy || parameterRequiresWritable(target)))
   return writableRoot
     && (!AST.isMemberAccessExpression(expression) || ordinaryWritableItemPath(target, expression.members))
+}
+
+function reactiveArgumentExpression(
+  argument: AST.Argument,
+  receivingParameter: AST.ParameterDeclaration | undefined,
+): AST.Expression {
+  const role = Type.genericRoleConstructor(argument)
+  return role && role.parameter === receivingParameter ? role.value : argument.value
 }
 
 /** literalExpression reports values which may receive occurrence-owned writable view storage. */
@@ -168,7 +182,7 @@ function forwardedParametersOf(
   )
   return bindings.pairs
     .filter(pair =>
-      expressionReferencesParameter(pair.argument.value, source)
+      expressionReferencesParameter(reactiveArgumentExpression(pair.argument, pair.parameter), source)
       && !(explicitChange && pair.parameter.mutable && Type.parameterName(pair.parameter) === 'Value')
     )
     .map(pair => pair.parameter)
