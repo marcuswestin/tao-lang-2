@@ -189,7 +189,7 @@ export const Views = {
     },
     runtimeProps: TaoViewRuntimeProps = {},
   ): React.JSX.Element {
-    return createElement(TaoLazyList, { props, runtimeProps })
+    return createElement(TaoLazyList<Args>, { props, runtimeProps })
   },
 
   Panes(props: TaoViewProps, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
