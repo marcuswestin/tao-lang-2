@@ -169,8 +169,8 @@ export type WorkRunContext = WorkAdmission & {
   run: WorkCommand
   /** Env the command runs with, including the worker budget the graph reserved for it. */
   env: Record<string, string>
-  /** Registers how to stop this node early; the graph calls it when the run is interrupted. */
-  onCancel: (cancel: () => void) => void
+  /** Registers how to stop this node early on interruption or a confirmed fail-fast halt. */
+  onCancel: (cancel: (graceMs?: number) => void) => void
   /** Reports incremental output; the graph records it and emits it. */
   onOutput: (output: string) => void
 }
@@ -230,11 +230,14 @@ export type WorkRunResult = {
 }
 
 type RunningNode = {
-  cancel: () => void
+  cancel: (graceMs?: number) => void
+  failFastReason?: string
+  timeoutStarted: boolean
   promise: Promise<void>
 }
 
 const OUTPUT_LINE_LIMIT = 6
+const FAIL_FAST_KILL_GRACE_MS = 3_000
 /**
  * Cold-start duration for a node with no measured history. Scaling by `cost` keeps the hand-tuned
  * reservations meaningful on the first run of a lane, before the timings store has anything to say.
@@ -475,7 +478,8 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
   }
 
   function startNode(state: WorkState, slots: number, machineReservation?: WorkSlotReservation): void {
-    let cancel = () => {}
+    let cancel: (graceMs?: number) => void = () => {}
+    let timeoutStarted = false
     let expiry: WorkTimeoutKind | undefined
     const admission: WorkAdmission = { slots, workerIndex: nextWorkerIndex(state.node.workerPool) }
     const run = typeof state.node.run === 'function' ? state.node.run(admission) : state.node.run
@@ -498,8 +502,9 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
     state.startedAt = Date.now()
     emit({ kind: 'start', state })
     const expire = (kind: WorkTimeoutKind) => {
-      if (expiry === undefined) {
+      if (expiry === undefined && running.get(state)?.failFastReason === undefined) {
         expiry = kind
+        timeoutStarted = true
         cancel()
       }
     }
@@ -541,6 +546,12 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
           appendOutput(state, `${state.fullOutput.length > 0 ? '\n' : ''}${state.reason}\n`)
         }
       }
+      const failFastReason = running.get(state)?.failFastReason
+      if (failFastReason !== undefined && expiry === undefined) {
+        state.status = 'skipped'
+        state.reason = failFastReason
+        state.failure = { kind: 'fail-fast', message: failFastReason }
+      }
       if (interrupted && expiry === undefined && state.status === 'failed') {
         state.status = 'failed'
         state.reason = INTERRUPTED_REASON
@@ -562,6 +573,14 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
         if (classify && stopOnFailure !== undefined) {
           if (await stopOnFailure(state) && !interrupted && haltedBy === undefined) {
             haltedBy = state.name
+            const reason = `canceled after definite failure: ${state.name}`
+            for (const [peer, node] of running) {
+              if (peer.status !== 'running' || node.timeoutStarted) {
+                continue
+              }
+              node.failFastReason = reason
+              node.cancel(FAIL_FAST_KILL_GRACE_MS)
+            }
           }
         }
       } finally {
@@ -578,7 +597,13 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
         }
       }
     })
-    running.set(state, { cancel: () => cancel(), promise })
+    running.set(state, {
+      cancel: graceMs => cancel(graceMs),
+      get timeoutStarted() {
+        return timeoutStarted
+      },
+      promise,
+    })
   }
 
   /** nextWorkerIndex numbers one more member of a pool; indices are never reused within a run. */
@@ -665,7 +690,10 @@ async function runProcess(state: WorkState, context: WorkRunContext): Promise<Wo
   let trackedDescendants: TrackedProcess[] = []
   let cancelled = false
   try {
-    context.onCancel(() => {
+    context.onCancel(graceMs => {
+      if (cancelled) {
+        return
+      }
       cancelled = true
       trackedDescendants = ProcessTree.descendants(child.pid)
       ProcessTree.signalTracked(trackedDescendants, 'SIGTERM')
@@ -673,7 +701,7 @@ async function runProcess(state: WorkState, context: WorkRunContext): Promise<Wo
       forceKill = setTimeout(() => {
         ProcessTree.signalTracked(trackedDescendants, 'SIGKILL')
         ProcessTree.signalGroup(child.pid, 'SIGKILL')
-      }, ProcessTree.FORCE_KILL_GRACE_MS)
+      }, graceMs ?? ProcessTree.FORCE_KILL_GRACE_MS)
     })
     const outcome = await waitForProcess(child, context.onOutput)
     state.cpuMs = directCpuMs(child)

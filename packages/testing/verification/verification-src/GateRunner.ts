@@ -437,7 +437,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
     }
     await liveArtifacts.finish()
     await reporter.finish()
-    if (!graphResult.interrupted) {
+    if (!graphResult.interrupted && graphResult.haltedBy === undefined) {
       // A contended timeout is a claim about this machine, and one isolated re-run is what settles it.
       await ContentionRetry.confirmContendedFailures({
         env: graphEnvironment(machineLane.id, options.greenTree?.noCache === true, options.showStudio === true),
@@ -517,7 +517,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   })
   summary.warnings = [...visibilityWarnings, ...summary.warnings]
   if (result.haltedBy !== undefined) {
-    const notRun = states.filter(state => state.failure?.kind === 'fail-fast').length
+    const notRun = states.filter(state => state.reason?.startsWith('not run after definite failure:')).length
     summary.warnings = [
       ...summary.warnings,
       `verification stopped after definite failure in ${result.haltedBy}; ${notRun} ${

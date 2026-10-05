@@ -62,6 +62,21 @@
   (`2026-10-03T21-26-15-490Z-94546-500736ab`), retaining every assertion and the existing cleanup.
   This corrects a test-owned deadline race; it does not establish a scheduling improvement or
   meet this entry's admission benchmark acceptance.
+- **2026-10-05 admission and failure cleanup:** Studio publication landing verification failed
+  after 1,361.1s with six overlapping lanes and peak load 23.1 on 18 CPUs
+  (`2026-10-05T19-57-40-326Z-23014-464cc242`). The real-app smoke also had a separate invalid
+  revision-equality condition, corrected in `feat/studio-identical-publications`; all four
+  journeys pass. Scoped validator (982 cases), Expo-host (370), and runtime (273) reruns pass
+  in 45.7s, 148.6s, and 129.5s respectively. These recoveries do not make the failed full lane green.
+  Targeted test requests had registered under the broad `dev-test` lane, and landing priority
+  additionally blocked narrow lanes. Collect-all requests now use narrow admission while keeping
+  their artifact paths; deterministic machine-lane tests cover broad waiting and narrow admission.
+  `feat/studio-metro-waits` also cancels running peers after confirmed fail-fast failure, allows
+  three seconds for termination, and force-stops identity-checked owned survivors before releasing
+  reservations. Confirmed halts skip contention retry/resume; uncertain timeout classification
+  is unchanged. Focused graph (32), runner (44), failure-policy (9), gate-runner (42), and
+  machine-lane (32) cases pass. This fixes concrete admission and cleanup defects; the ten-lane
+  benchmark acceptance below remains unmeasured.
 - **Workaround:** Verify when the machine is quiet, or read the `contention` block in
   `summary.json` before treating a slow lane as a regression.
 - **2026-09-26 recurrence:** An iOS development checkout's `verify-changed` recorded three

@@ -463,6 +463,7 @@ function registeredLane(options: {
       if (
         priority === undefined || priority.id === options.landingPriorityToken
         || priority.existingLaneIds.includes(options.id) || priority.ownerLaneIds.includes(options.id)
+        || !isBroadLane(options.record.lane)
       ) {
         return true
       }
@@ -548,6 +549,7 @@ function registeredLane(options: {
           if (
             priority !== undefined && priority.id !== options.landingPriorityToken
             && !priority.existingLaneIds.includes(options.id) && !priority.ownerLaneIds.includes(options.id)
+            && isBroadLane(own.record.lane)
           ) {
             waitReason = `landing verification has priority (PID ${priority.pid})`
             return undefined
@@ -558,6 +560,7 @@ function registeredLane(options: {
             entries
               .filter(entry =>
                 priority === undefined
+                || !isBroadLane(entry.record.lane)
                 || priority.existingLaneIds.includes(entry.record.id)
                 || priority.ownerLaneIds.includes(entry.record.id)
               )

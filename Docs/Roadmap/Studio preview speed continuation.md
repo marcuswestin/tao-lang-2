@@ -951,3 +951,19 @@ With checks off, the corresponding p50 values were 2859 versus 2572ms total, 268
 source-to-publication, and 119 versus 28ms publication-to-HMR. Loads were 4.5–7.2 upstream and
 7.2–9.6 fast on 18 CPUs. This supports a shorter post-publication wait, with compilation still
 dominating. It is not periodic quiet-machine admission or proof of meeting the existing ceilings.
+
+## Confirmed-failure verification cleanup
+
+The Developer approved cancelling running verification peers once a broad lane confirms a
+failure. The failing result remains the cause; pending work is not started and cancelled peers
+remain incomplete even if their cleanup exits successfully. Owned processes receive termination,
+then identity-checked survivors receive a force-stop after three seconds. Verification retains
+its leases and the landing lock until owned process cleanup completes, avoiding overlap with
+another landing. A confirmed fail-fast halt also skips contention retry and resume work.
+Targeted collect-all runs and uncertain-timeout classification retain their existing behavior.
+
+Focused proof passes 32 work-graph cases, 44 test-runner cases, nine failure-policy cases,
+42 gate-runner cases, and 32 machine-lane cases. The process regression verifies termination of
+the owned peer and its descendant while an unrelated detached process stays alive. Targeted
+collect-all requests retain their artifact paths but register as narrow machine lanes; narrow
+lanes remain admissible during landing priority, and broad verification continues to yield.
