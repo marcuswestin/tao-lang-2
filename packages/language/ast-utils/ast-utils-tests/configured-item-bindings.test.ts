@@ -1,6 +1,9 @@
+import { Workspace } from '@compiler/workspace'
 import { AST, Parser } from '@parser'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
+import { ownAssociatedMethods } from '../ast-utils-src/associated-methods'
 import { ASTUtils } from '../ast-utils-src/ast-utils'
+import { Type } from '../ast-utils-src/Type'
 
 Describe('Actual configured item correspondence', () => {
   Test('retains real reference entries, fields and payload domains in declaration order', async () => {
@@ -96,6 +99,68 @@ Describe('Actual configured item correspondence', () => {
     for (const name of ['Abstract', 'Configurable', 'Unlinked']) {
       Expect(ASTUtils.resolveConfiguredItemConstruction(constructor(file, name)).kind).toBe('unresolved')
     }
+  })
+
+  Test('binds the exact nominal field before a compatible optional capability field', async () => {
+    const file = await parse(`
+      can Display { ToText() fails never -> text }
+      type GroupHeader is { func ToText() fails never -> text { return "header" } }
+      type Row is { Concrete GroupHeader, Content Display? }
+      func Build() -> Row { return Row { GroupHeader {} } }
+    `)
+    const site = constructor(file, 'Build')
+    const plan = ASTUtils.resolveConfiguredItemConstruction(site)
+    Expect(plan.kind).toBe('complete')
+    Expect(plan.pairs.length).toBe(1)
+    Expect(plan.pairs[0]?.field.name).toBe('Concrete')
+    Expect(plan.pairs[0]?.entry).toBe(site.block?.entries[0])
+  })
+
+  Test('retains imported singular entity identities without admitting incompatible capabilities', async () => {
+    await withTaoFiles('configured-entity-binding-', {
+      'Library.tao': `
+        public data Books / Book {
+          Title text,
+          func Book.Label() fails never -> number { return 1 }
+        }
+      `,
+      'Example.tao': `
+        use Book from ./Library
+        can Display { Label() fails never -> text }
+        type Envelope is { Value Book }
+        type Row is { Content Display }
+        func Exact(Value Book) -> Envelope { return Envelope { Value } }
+        func Mismatch(Value Book) -> Row { return Row { Content: Value } }
+      `,
+    }, async paths => {
+      const parsed = await Workspace.parse(paths['Example.tao'])
+      Expect(parsed.entry.document.parseResult.lexerErrors).toEqual([])
+      Expect(parsed.entry.document.parseResult.parserErrors).toEqual([])
+      const file = parsed.entry.ast
+      const exact = ASTUtils.resolveConfiguredItemConstruction(constructor(file, 'Exact'))
+      Expect(exact.kind).toBe('complete')
+      const pair = exact.pairs[0]
+      Expect(pair?.actual.kind).toBe('entity')
+      if (pair?.actual.kind !== 'entity') {
+        return
+      }
+      const entity = pair.actual.entity
+      Expect(pair.expected.kind === 'entity' && pair.expected.entity).toBe(entity)
+      Expect(entity.singularName).toBe('Book')
+      const visible = AST.visibleFileDeclarations(constructor(file, 'Exact'), AST.isEntityDataDeclaration)
+      Expect(visible.includes(entity)).toBe(true)
+      const method = ownAssociatedMethods(entity)[0]
+      Expect.Is(method, AST.isAssociatedFunctionDeclaration)
+      const descriptor = Type.associatedCallable(method, entity)
+      Expect(descriptor.kind).toBe('ready')
+      if (descriptor.kind === 'ready') {
+        Expect(descriptor.descriptor.owner).toBe(entity)
+        Expect(descriptor.descriptor.declaration).toBe(method)
+      }
+      const mismatch = ASTUtils.resolveConfiguredItemConstruction(constructor(file, 'Mismatch'))
+      Expect(mismatch.kind).toBe('invalid')
+      Expect(mismatch.diagnostics.some(diagnostic => diagnostic.kind === 'named-type')).toBe(true)
+    }, { location: 'worktree' })
   })
 })
 

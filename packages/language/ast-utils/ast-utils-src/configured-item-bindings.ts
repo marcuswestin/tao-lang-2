@@ -181,10 +181,18 @@ function seal(plan: ConfiguredItemConstruction): ConfiguredItemConstruction {
 }
 
 function constructionResolution(site: AST.Node): ConstructionResolution {
-  const owners = AST.visibleFileDeclarations(site, AST.isTypeDeclaration, declaration => declaration.name)
+  const owners = [
+    ...AST.visibleFileDeclarations(site, AST.isTypeDeclaration, declaration => declaration.name),
+    // Resolved imports retain both the authored singular and collection names of a real entity.
+    ...AST.visibleFileDeclarations(site, AST.isEntityDataDeclaration),
+  ]
   const descriptors = new Map(
     owners.flatMap(owner =>
-      [...ownAssociatedMethods(owner), ...ownAssociatedViews(owner), ...capabilityRequirements(owner)]
+      [
+        ...ownAssociatedMethods(owner),
+        ...ownAssociatedViews(owner),
+        ...(AST.isTypeDeclaration(owner) ? capabilityRequirements(owner) : []),
+      ]
         .map(declaration => [declaration, Type.associatedCallable(declaration, owner)] as const)
     ),
   )
