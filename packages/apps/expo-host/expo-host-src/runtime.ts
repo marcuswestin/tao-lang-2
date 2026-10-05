@@ -204,7 +204,7 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
         preview === undefined ? undefined : studioPublicationPath,
         opts.publicationHooks,
       )
-    }, opts.moduleLinkRoot ?? requesterRoot)
+    }, opts.moduleLinkRoot ?? requesterRoot, { preserveUnchangedLinks: preview !== undefined })
     if (preview === undefined) {
       previewPublications.delete(generatedAppRoot)
     } else {
