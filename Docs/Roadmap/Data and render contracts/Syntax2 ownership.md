@@ -196,6 +196,12 @@ InvocationsCompiler, FunctionalCoreCompiler, Backend, bridge publication and all
 consumers. A requests a bounded consumer hook when needed, rather than changing another owner's
 file. C's two retained compiler paths remain untouched by A.
 
+A additionally owns formatter-src/formatting.ts and formatter-src/langium-formatting.ts for the
+associated-method vertical only. Preserve the existing numeric-unit formatting exemption; add the
+associated-body closing-brace boundary and canonical function keyword/return-arrow formatting
+hooks. This release does not authorize unrelated formatter normalization. Return both exact paths
+with the frontend cut and keep the agreed readable method layout in regression expectations.
+
 D now owns exactly new ast-utils-src/callable-effect-facts.ts and
 ast-utils-tests/callable-effect-facts.test.ts. This discovery leaf consumes immutable, already
 published target, correspondence, read and native-contract rows keyed by real AST identity. It
