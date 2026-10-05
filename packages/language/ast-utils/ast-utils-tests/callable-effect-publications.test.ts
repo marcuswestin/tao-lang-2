@@ -787,11 +787,14 @@ Describe('Canonical callable effect projection', () => {
     Assert.defined(suppliedCall, 'the supplied call has a real canonical row')
 
     const parameters = method.parameterList.parameters
+    const methodCallSite = methodCall.site
+    Expect.Is(methodCallSite, AST.isMethodCallExpression)
+    const methodArguments = AST.argumentsOf(methodCallSite)
     Expect(methodCall.pairs.find(pair => pair.parameter === parameters[0])?.argument).toBe(
-      AST.argumentsOf(methodCall.site)[1],
+      methodArguments[1],
     )
     Expect(methodCall.pairs.find(pair => pair.parameter === parameters[1])?.argument).toBe(
-      AST.argumentsOf(methodCall.site)[0],
+      methodArguments[0],
     )
     const defaultParameter = read.parameterList.parameters[0]
     Assert.defined(defaultParameter, 'Read declares its defaulted parameter')
@@ -817,7 +820,7 @@ Describe('Canonical callable effect projection', () => {
       showProjection.inputs.calls.find(value => value.site === methodCall.site)?.pairs.find(pair =>
         pair.parameter === parameters[0]
       )?.argument,
-    ).toBe(AST.argumentsOf(methodCall.site)[1])
+    ).toBe(methodArguments[1])
   })
 
   Test('seeds an uncalled associated method default and excludes it for a supplied call', async () => {
@@ -885,7 +888,9 @@ Describe('Canonical callable effect projection', () => {
     const analysis = analyzeCallableEffects(broken, facts)
 
     Expect(call.kind).toBe('unknown')
-    Expect(call.pairs[0]?.argument).toBe(AST.argumentsOf(canonical.site)[0])
+    const canonicalSite = canonical.site
+    Expect.Is(canonicalSite, AST.isMethodCallExpression)
+    Expect(call.pairs[0]?.argument).toBe(AST.argumentsOf(canonicalSite)[0])
     Expect(call.defaults.some(value =>
       value.parameter === method.parameterList.parameters[1]
       && value.expression === method.parameterList.parameters[1]?.defaultValue

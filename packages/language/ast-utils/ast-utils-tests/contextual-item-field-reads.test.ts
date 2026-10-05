@@ -25,6 +25,9 @@ Describe('Contextual item field read publication', () => {
     Expect(AST.associatedReceiverOwner(selection)).toBe(row)
     const domain = Type.ofReferenceRoot(selection)
     Expect(domain.kind).toBe('item')
+    if (domain.kind !== 'item') {
+      return
+    }
     Expect(domain.nominal).toBe(row)
     const selected = Type.atMemberPath(domain, ['Content'])
     Expect(selected.kind).toBe('capability')
