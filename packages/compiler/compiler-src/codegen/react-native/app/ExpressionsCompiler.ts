@@ -367,7 +367,13 @@ export const ExpressionsCompiler = {
       ${
       gen.list(
         pairs,
-        pair => gen`[${gen.nameLiteral(pair.expected)}]: ${Compile.Expression(pair.property.value)}.jsValue,`,
+        pair =>
+          gen`[${gen.nameLiteral(pair.expected)}]: ${
+            itemFieldStorage(
+              compileArgumentForType(pair.property.value, Type.itemFieldType(pair.expected)),
+              pair.expected,
+            )
+          },`,
       )
     }
     })`
@@ -635,28 +641,37 @@ function compileConfiguredItemBlock(
     .filter(Type.itemFieldIsFilled)
     .map(expected => {
       Assert.defined(expected.value, 'filled item slot has a value')
-      return { expected, compiled: Compile.Expression(expected.value) }
+      return { expected, compiled: compileArgumentForType(expected.value, Type.itemFieldType(expected)) }
     })
   for (const entry of block.entries) {
     if (entry.label && entry.expression) {
       const expected = fields.find(property => property.name === entry.label)
       Assert.defined(expected, 'validated configured item label resolves one field')
       remaining.delete(expected)
-      pairs.push({ expected, compiled: Compile.Expression(entry.expression) })
+      pairs.push({ expected, compiled: compileArgumentForType(entry.expression, Type.itemFieldType(expected)) })
       continue
     }
     const candidate = compileConfiguredItemEntry(entry, itemType)
     Assert.defined(candidate, 'validated configured item entry has a constructable value')
     const expected = bindSingleSlot(remaining, candidate.type, 'validated configured item entry binds one field')
     remaining.delete(expected)
-    pairs.push({ expected, compiled: candidate.compiled })
+    pairs.push({
+      expected,
+      compiled: compileValueForType(
+        ASTUtils.containsCapability(Type.itemFieldType(expected))
+          ? gen`TR.Alias(() => ${candidate.compiled})`
+          : candidate.compiled,
+        candidate.type,
+        Type.itemFieldType(expected),
+      ),
+    })
   }
   for (const expected of [...remaining]) {
     if (!AST.isTypeProperty(expected) || !Type.propertyHasDefault(expected)) {
       continue
     }
     Assert.defined(expected.value, 'defaulted item slot has a value')
-    pairs.push({ expected, compiled: Compile.Expression(expected.value) })
+    pairs.push({ expected, compiled: compileArgumentForType(expected.value, Type.itemFieldType(expected)) })
     remaining.delete(expected)
   }
   Assert(
@@ -665,8 +680,19 @@ function compileConfiguredItemBlock(
   )
   pairs.sort((left, right) => fields.indexOf(left.expected) - fields.indexOf(right.expected))
   return gen`TR.Value({
-    ${gen.list(pairs, pair => gen`[${gen.nameLiteral(pair.expected)}]: ${pair.compiled}.jsValue,`)}
+    ${
+    gen.list(
+      pairs,
+      pair => gen`[${gen.nameLiteral(pair.expected)}]: ${itemFieldStorage(pair.compiled, pair.expected)},`,
+    )
+  }
   })`
+}
+
+function itemFieldStorage(value: Compiled, field: ASTUtils.ItemShapeField): Compiled {
+  return ASTUtils.containsCapability(Type.itemFieldType(field))
+    ? gen`TR.Capability.storedValue(${value})`
+    : gen`${value}.jsValue`
 }
 
 function compileConfiguredItemEntry(

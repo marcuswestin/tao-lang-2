@@ -56,6 +56,16 @@ export function referencedAssociatedWitnessOwners(
       if (AST.isParameterDeclaration(node) && node.defaultValue) {
         transport(node.defaultValue, Type.ofParameter(node))
       }
+      if (AST.isTypedConstructor(node) && AST.isItemLiteral(node.value)) {
+        const shape = Type.constructorReferenceItemType(node.type)
+        if (shape) {
+          const bindings = ASTUtils.resolveItemPropertyBindings(shape.properties, node.value.properties)
+          Assert(bindings.diagnostics.length === 0, 'Expected validated item field correspondence.')
+          for (const pair of bindings.pairs) {
+            transport(pair.property.value, Type.itemFieldType(pair.expected))
+          }
+        }
+      }
       if (AST.isRender(node)) {
         const target = ASTUtils.resolveRenderTarget(node)
         if (target?.kind === 'ui') {
