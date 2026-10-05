@@ -162,6 +162,47 @@ Describe('Actual configured item correspondence', () => {
       Expect(mismatch.diagnostics.some(diagnostic => diagnostic.kind === 'named-type')).toBe(true)
     }, { location: 'worktree' })
   })
+
+  Test('retains an imported entity implementation when admitting a matching capability field', async () => {
+    await withTaoFiles('configured-entity-capability-', {
+      'Library.tao': `
+        public data Books / Book {
+          Title text,
+          func Book.Label() fails never -> text { return Book.Id }
+        }
+      `,
+      'Example.tao': `
+        use Book from ./Library
+        can Display { Label() fails never -> text }
+        type Row is { Content Display }
+        func Build(Value Book) -> Row { return Row { Content: Value } }
+      `,
+    }, async paths => {
+      const parsed = await Workspace.parse(paths['Example.tao'])
+      Expect(parsed.entry.document.parseResult.lexerErrors).toEqual([])
+      Expect(parsed.entry.document.parseResult.parserErrors).toEqual([])
+      const site = constructor(parsed.entry.ast, 'Build')
+      const plan = ASTUtils.resolveConfiguredItemConstruction(site)
+      Expect(plan.kind).toBe('complete')
+      Expect(plan.pairs.length).toBe(1)
+      const pair = plan.pairs[0]!
+      Expect(pair.entry).toBe(site.block?.entries[0])
+      Expect(pair.actual.kind).toBe('entity')
+      Expect(pair.expected.kind).toBe('capability')
+      if (pair.actual.kind !== 'entity') {
+        return
+      }
+      const entity = pair.actual.entity
+      const method = ownAssociatedMethods(entity)[0]
+      Expect.Is(method, AST.isAssociatedFunctionDeclaration)
+      const descriptor = Type.associatedCallable(method, entity)
+      Expect(descriptor.kind).toBe('ready')
+      if (descriptor.kind === 'ready') {
+        Expect(descriptor.descriptor.owner).toBe(entity)
+        Expect(descriptor.descriptor.declaration).toBe(method)
+      }
+    }, { location: 'worktree' })
+  })
 })
 
 async function parse(source: string, diagnostics: readonly string[] = []): Promise<AST.TaoFile> {
