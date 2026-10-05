@@ -124,6 +124,10 @@
     validation of all nineteen cases remains pending. Build/clean and Firebase creation passed on isolated retry after
     their initial timeouts; retain those observations without claiming stable
     first-attempt timing.
+  - Local fallback verification on October5 stopped at a live source-mutation lock wait after
+    120seconds; compiler and source-action processes also reached the300second wall bound.
+    The Developer approved larger bounded waits while retaining assertions and lock ownership
+    checks. This is timeout recovery, not evidence of faster execution or completed acceptance.
 - **Proposed change:** The requested file partition and initial scheduling adjustment are implemented.
   Keep this observation open until fresh-checkout complete-lane measurements establish how much
   end-to-end tail remains; a cached skip is not a repeat measurement.

@@ -947,8 +947,10 @@ export function contentIdentity(identities: readonly string[]): string {
   return sha256Hex(identities.join('\n'))
 }
 
-const FILE_MUTATION_LOCK_POLL_MS = 10
-const FILE_MUTATION_LOCK_TIMEOUT_MS = 120_000
+const FILE_MUTATION_LOCK_POLL_MS = 50
+// Large publications can queue behind a live mutation on a busy host. Keep a bounded wait
+// with margin for publication; owner identity and stale reclamation remain mandatory.
+const FILE_MUTATION_LOCK_TIMEOUT_MS = 300_000
 const FILE_MUTATION_RECLAIM_GRACE_MS = 2_000
 
 type FileMutationProcessIdentity = {
@@ -1007,32 +1009,33 @@ async function withMutationLockFile<Value>(
   let acquired: FileMutationLockSnapshot | undefined
   let claimCleanupError: unknown
   while (true) {
-    try {
-      claimCleanupError = await publishFileMutationClaim(lockPath, owner, options)
-      acquired = await readFileMutationLockSnapshot(lockPath)
-      if (acquired?.token !== token) {
-        throwUnexpected(`The file mutation lock changed while ${lockPath} was being acquired.`)
+    let existing = await readFileMutationLockSnapshot(lockPath)
+    // A known claim needs an ownership check, not another fsynced claim file. The atomic
+    // hard-link publication still arbitrates acquisition if the lock changes after this read.
+    if (existing === undefined) {
+      try {
+        claimCleanupError = await publishFileMutationClaim(lockPath, owner, options)
+        acquired = await readFileMutationLockSnapshot(lockPath)
+        if (acquired?.token !== token) {
+          throwUnexpected(`The file mutation lock changed while ${lockPath} was being acquired.`)
+        }
+        break
+      } catch (error) {
+        if (fileErrorCode(error) !== 'EEXIST') {
+          throw error
+        }
+        existing = await readFileMutationLockSnapshot(lockPath)
       }
-      break
-    } catch (error) {
-      if (fileErrorCode(error) !== 'EEXIST') {
-        throw error
-      }
-      const existing = await readFileMutationLockSnapshot(lockPath)
-      if (Date.now() >= deadline) {
-        throwUnexpected(`Timed out waiting for the file mutation lock ${lockPath}.`)
-      }
-      if (existing === undefined) {
-        await sleep(FILE_MUTATION_LOCK_POLL_MS)
-        continue
-      }
-      if (await fileMutationLockOwnerIsLive(existing, inspect)) {
-        await sleep(FILE_MUTATION_LOCK_POLL_MS)
-        continue
-      }
-      await options.beforeStaleReclaim?.(lockPath)
-      await reclaimFileMutationLock(lockPath, existing)
     }
+    if (Date.now() >= deadline) {
+      throwUnexpected(`Timed out waiting for the file mutation lock ${lockPath}.`)
+    }
+    if (existing === undefined || await fileMutationLockOwnerIsLive(existing, inspect)) {
+      await sleep(FILE_MUTATION_LOCK_POLL_MS)
+      continue
+    }
+    await options.beforeStaleReclaim?.(lockPath)
+    await reclaimFileMutationLock(lockPath, existing)
   }
   let value: Value | undefined
   let primaryError: unknown

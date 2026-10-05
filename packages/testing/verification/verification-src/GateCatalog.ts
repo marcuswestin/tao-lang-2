@@ -178,7 +178,7 @@ const BUDGET_KEY_TAO_TEST = WorkGraph.BUDGET_ENV_KEYS.taoTest
  * measurements have a fallback width for a new worktree without local timing history.
  */
 const SUITE_TUNING = new Map<string, SuiteTuning>([
-  ['compiler', { args: ['--concurrent'], reads: ['gen-parser', 'tao', 'ts'] }],
+  ['compiler', { reads: ['gen-parser', 'tao', 'ts'] }],
   // Developer and verification tests deliberately run concurrently and many of them spawn child
   // processes. During full verification, a healthy child can wait behind the other CPU-heavy
   // suites long enough to exceed Bun's generic five-second test timeout even though it completes
@@ -214,7 +214,8 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
   // scheduler spread the work within its existing CPU budget until measured costs take over.
   ['cli/tao-cli', { coldShardCount: 12 }],
   ['language/validator', {
-    args: ['--concurrent'],
+    // Validation shares the maintained-source publication lock. Keep test work sequential
+    // within each batch rather than starting every lock waiter and timeout window together.
     preflightFiles: ['packages/language/validator/validator-tests/phrases.test.ts'],
     reads: ['gen-parser', 'tao', 'ts'],
   }],

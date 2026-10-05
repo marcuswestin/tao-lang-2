@@ -42,6 +42,10 @@ function currentPeers(state: MatrixState): StudioPreviewConnection[] {
   return state.connections.filter(preview => preview.activated === true && preview.startupPending !== true)
 }
 
+function publishedRevision(state: MatrixState): number {
+  return state.compile.publishedRevision ?? state.compile.compileRevision
+}
+
 function notify(state: MatrixState): void {
   for (const wake of state.wake) {
     wake()
@@ -50,7 +54,7 @@ function notify(state: MatrixState): void {
   const manifest = state.manifest
   if (
     manifest === undefined || state.compile.status === 'compiling'
-    || state.compile.status !== 'error' && manifest.compileRevision !== state.compile.compileRevision
+    || state.compile.status !== 'error' && manifest.compileRevision !== publishedRevision(state)
   ) {
     for (const peer of currentPeers(state)) {
       StudioPreviewPublication.cancel(peer)
@@ -77,7 +81,7 @@ function ready(state: MatrixState): boolean {
   if (manifest === undefined) {
     return false
   }
-  if (state.compile.status !== 'error' && manifest.compileRevision !== state.compile.compileRevision) {
+  if (state.compile.status !== 'error' && manifest.compileRevision !== publishedRevision(state)) {
     return false
   }
   return currentPeers(state).every(peer => sameExpected(peer, manifest))

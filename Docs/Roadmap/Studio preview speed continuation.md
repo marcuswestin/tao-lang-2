@@ -967,3 +967,50 @@ Focused proof passes 32 work-graph cases, 44 test-runner cases, nine failure-pol
 the owned peer and its descendant while an unrelated detached process stays alive. Targeted
 collect-all requests retain their artifact paths but register as narrow machine lanes; narrow
 lanes remain admissible during landing priority, and broad verification continues to yield.
+## Identical-publication production slice, 2026-10-05
+
+Preview generation compares the exact non-marker path-to-code map and publication metadata with
+its last successful output. The metadata includes source versions, the full Studio manifest,
+dependency environments, app/project identity, and publication-check mode. A successful identical
+compile retains the published revision while its compile-attempt revision still advances.
+Generated-file repair and dependency-link audits still run; equality is not permission to skip
+checking or repairing the output tree. Reset, session close/reopen, and non-preview generation
+clear reuse state. Managed mobile publications retain their per-attempt nonce behavior.
+
+Studio activation, phone save acknowledgements, and device freshness use the published revision
+when a compile retains it. Diagnostics and compile completion still report the attempt. Focused
+lifecycle regressions pass, including 30 runtime cases after integrating stable links, 12 session
+cases, and 28 device-gateway cases. The integrated HNReader padding smoke completed sixteen saves
+without iframe reloads. Save-to-paint p50 was 2690/2750ms (publication checks on/off), with
+source-to-publication p50 2553/2579ms at load 5.5–7.6 on 18 CPUs. These results do not meet
+the existing speed ceilings or establish a gain against the earlier experimental pipeline.
+Full portable verification remains required; no ceiling was changed.
+
+Landing-gate diagnosis corrected the HNReader feed smoke to compare the applied publication
+revision with the published revision exposed on the status element, rather than with the latest
+compile attempt. All four real HNReader journeys pass. The simulated-user journey passes 102
+assertions. The Developer subsequently approved increasing all timing-out execution budgets:
+Studio smoke tests now allow ten minutes, server readiness five minutes, and activation waits two
+minutes. Runtime journeys have a two-minute base and five-minute cap; Bun tests have a four-minute
+base and ten-minute cap. Suite processes allow twenty to thirty minutes, and source-mutation lock
+waits five minutes. Assertions and performance ceilings remain unchanged. Scoped reruns pass all
+982 validator cases, 370 Expo-host cases, and 273 runtime
+cases after the initial full run timed out under contention.
+
+Targeted checks had registered as broad test lanes and were also blocked by the landing-priority
+window. Collect-all requests now use narrow admission while retaining their artifact paths;
+narrow developer lanes can proceed during landing priority. Broad verification still yields,
+and resource leases are unchanged. The deterministic machine-lane regression covers both sides.
+
+A subsequent changed-scope gate still failed despite the larger execution budgets: validator
+cases waited five minutes on the shared maintained-source mutation lock, while Studio and skills
+processes reached twenty minutes. The failed run also reported a process-identity inspection
+error during timeout cleanup. It was stopped after failure and is not verification evidence.
+Mutation waiters now inspect an existing owner before creating another fsynced claim file and
+poll at 50ms; atomic acquisition and identity-safe stale reclamation remain unchanged. Compiler
+and validator batches no longer use Bun's blanket concurrency flag, while independent suites
+retain scheduler parallelism. The focused shared scope passes 108 cases, the gate catalog passes
+27 cases, and all 982 validator cases pass in 96 seconds at load up to 13.8 on 18 CPUs.
+The receipt repair scope passes three cases in 55 seconds, the skills scope thirteen in 49
+seconds, and Studio edit-to-preview seven in 87 seconds. These recoveries do not replace the
+required broad landing gate.
