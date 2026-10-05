@@ -13,6 +13,11 @@ export const TaoPropsCompiler = {
 
   /** RenderTaoProps compiles the __tao prop fragment for a render invocation. */
   RenderTaoProps(render: AST.Render, options: CodegenOptions = {}): Compiled {
+    return gen` __tao={${TaoPropsCompiler.RenderTaoPropsValue(render, options)}}`
+  },
+
+  /** RenderTaoPropsValue shares occurrence metadata with mounts that consume a props object. */
+  RenderTaoPropsValue(render: AST.Render, options: CodegenOptions = {}): Compiled {
     const designSpec = render.layoutClause ? Compile.DesignSpec(render.layoutClause) : gen`undefined`
     const designSource = options.studio === true && render.layoutClause
       ? Compile.DesignSpecSource(render.layoutClause)
@@ -90,11 +95,11 @@ function compileTaoPropsForRenderStatement(fields: TaoPropsFields, render: AST.R
   // Nested `render` statements must still advance the generated-view depth. They intentionally
   // omit the full caller-props chain, matching ViewRender, because only a view's root inherits it.
   const callerProps = gen`, ${callerChain}${inheritsCallerProps ? gen`` : gen`, false`}`
-  return gen` __tao={TR.ViewTaoProps(${compileTaoPropsObject(fields)}${callerProps})}`
+  return gen`TR.ViewTaoProps(${compileTaoPropsObject(fields)}${callerProps})`
 }
 
 function compileTaoPropsForViewRender(fields: TaoPropsFields): Compiled {
-  return gen` __tao={TR.ViewTaoProps(${compileTaoPropsObject(fields)}, _ViewProps.__tao, false)}`
+  return gen`TR.ViewTaoProps(${compileTaoPropsObject(fields)}, _ViewProps.__tao, false)`
 }
 
 function compileTaoPropsObject(fields: TaoPropsFields): Compiled {
