@@ -24,7 +24,9 @@ const fetchEveryPage = async (backend: BookBackend, maximum: number): Promise<Bo
   const books: BookRecord[] = []
   let continuation: object | null = null
   do {
-    const page = value(await backend.fetchPage({ Maximum: maximum, Continuation: continuation }))
+    const page: { Books: readonly BookRecord[]; Continuation: object | null } = value(
+      await backend.fetchPage({ Maximum: maximum, Continuation: continuation }),
+    )
     books.push(...page.Books)
     continuation = page.Continuation
   } while (continuation)

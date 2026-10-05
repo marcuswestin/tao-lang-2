@@ -67,7 +67,7 @@ async function ready(schema: BookSchema): Promise<void> {
 
 function snapshotWithBook(bookID: string, title: string): string {
   const snapshot = TR.Data.NativeSnapshots.empty(bookDefinition)
-  snapshot.rows.Book!.push({
+  snapshot.rows['Book']!.push({
     Id: bookID,
     Title: title,
     Note: '',
@@ -79,7 +79,7 @@ function snapshotWithBook(bookID: string, title: string): string {
 
 Describe('Syntax2 BookStore runtime provider', () => {
   Test('projects 83 books through bounded pages without truncating accumulated rows', async () => {
-    const { connection, schema } = connect()
+    const { schema } = connect()
     await ready(schema)
 
     schema.activateQuery(bookPlan())
