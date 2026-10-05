@@ -22,12 +22,12 @@ Describe('compiler: action when', () => {
 
   Test('returns from a matching body after its cleanup and preserves nonmatching fallthrough', async () => {
     await withCompiledFixture(async ({ actions, events }) => {
-      const chosen = await TR.DoResult(actions.Choose, TR.Value(true))
+      const chosen = await TR.DoResult(actions['Choose'], TR.Value(true))
       Expect(chosen.evaluate().jsValue).toBe('chosen')
       Expect(events).toEqual(['return-cleanup'])
 
       events.length = 0
-      const fallthrough = await TR.DoResult(actions.Choose, TR.Value(false))
+      const fallthrough = await TR.DoResult(actions['Choose'], TR.Value(false))
       Expect(fallthrough.evaluate().jsValue).toBe('fallthrough')
       Expect(events).toEqual(['after-when', 'return-cleanup'])
     })
@@ -35,7 +35,7 @@ Describe('compiler: action when', () => {
 
   Test('cleans up after a source failure following an unmatched case', async () => {
     await withCompiledFixture(async ({ actions, events }) => {
-      await actions.FailThroughWhen.jsValue.invoke(TR.Value(false))
+      await actions['FailThroughWhen'].jsValue.invoke(TR.Value(false))
       Expect(events).toEqual(['failure-cleanup', 'handled-failure', 'caller-tail'])
     })
   })
@@ -51,7 +51,7 @@ Describe('compiler: action when', () => {
           return releaseBranch.promise
         },
       })
-      const pending = Promise.resolve(actions.HandleBranchFailure.jsValue.invoke())
+      const pending = Promise.resolve(actions['HandleBranchFailure'].jsValue.invoke())
       try {
         await started(branchStarted, pending)
         Expect(events).toEqual(['suspend-start'])
