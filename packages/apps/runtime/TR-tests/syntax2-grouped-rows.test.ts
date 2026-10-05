@@ -1,11 +1,11 @@
 import TR from '@runtime/TR'
-import { Repo } from '@shared'
+import { FS } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import type { GroupedRowsModule } from './syntax2-app-contracts'
-import './syntax2-app-runtime'
+import { syntax2Library } from './syntax2-app-runtime'
 
-// Load the real app module after registering its installed runtime package name.
-const { GroupedRows }: GroupedRowsModule = await import(Repo.resolvePath('Apps/Syntax2/library/GroupedRows.ts'))
+// Load the unchanged authored module through the isolated runtime fixture.
+const { GroupedRows }: GroupedRowsModule = await import(FS.resolvePath('GroupedRows.ts', syntax2Library))
 
 Describe('Syntax2 grouped row projection', () => {
   Test('groups live handles by author identity and keeps book keys across regrouping', async () => {

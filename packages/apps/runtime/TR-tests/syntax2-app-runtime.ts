@@ -1,6 +1,17 @@
-import { MockModule } from '@shared/test'
-import * as runtime from '../TaoRuntime-src/TR'
+import { FS, Repo } from '@shared'
+import { mkTestDir } from '@shared/test'
 
-// App sidecars use the installed package name. Forward it to this checkout's real runtime
-// without depending on an app-dev installation or its generated TypeScript configuration.
-MockModule('@tao/runtime', () => runtime)
+// Import unchanged authored sidecars outside the app's installed dependencies and generated
+// configuration. The fixture maps the public package name to this checkout's real runtime.
+export const syntax2Library = await mkTestDir('syntax2-runtime-sidecars')
+await FS.writeJson(FS.resolvePath('tsconfig.json', syntax2Library), {
+  compilerOptions: {
+    paths: { '@tao/runtime': [Repo.resolvePath('packages/apps/runtime/TaoRuntime-src/TR.ts')] },
+  },
+})
+for (const name of ['BookBackend.ts', 'BookStoreProvider.ts', 'BookIO.ts', 'GroupedRows.ts']) {
+  await FS.writeText(
+    FS.resolvePath(name, syntax2Library),
+    await FS.readText(Repo.resolvePath(`Apps/Syntax2/library/${name}`)),
+  )
+}

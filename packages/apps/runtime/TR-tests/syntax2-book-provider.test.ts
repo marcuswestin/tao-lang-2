@@ -1,14 +1,14 @@
 import TR from '@runtime/TR'
-import { FS, Repo } from '@shared'
+import { FS } from '@shared'
 import { Deferred, Describe, Expect, Test } from '@shared/test'
 import type { TaoDataConnection, TaoDataSchemaDefinition, TaoQueryDescriptor } from '../TaoRuntime-src/TR-data'
 import { testDataConnection } from '../TaoRuntime-src/TR-data-provider'
 import { HostEnvironmentError } from '../TaoRuntime-src/TR-errors'
 import type { BookInput, ProviderModule } from './syntax2-app-contracts'
-import './syntax2-app-runtime'
+import { syntax2Library } from './syntax2-app-runtime'
 
-// Load the real app modules after registering their installed runtime package name.
-const library = Repo.resolvePath('Apps/Syntax2/library')
+// Load unchanged authored modules through the isolated runtime fixture.
+const library = syntax2Library
 const { BookProvider, bookStoreSession }: ProviderModule = await import(FS.resolvePath('BookStoreProvider.ts', library))
 
 const bookDefinition: TaoDataSchemaDefinition = {

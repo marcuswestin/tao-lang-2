@@ -9,44 +9,52 @@ import { TestCompiler as Compiler } from './test-compile'
 const runtimeModule = import(FS.resolvePath('packages/apps/runtime/TaoRuntime-src/TR.ts', Repo.getRoot()))
 
 Describe('compiler: generic view arguments', () => {
-  Test('transports the actual role payload through its specialized capability domain', async () => {
-    const validated = await Validator.validateCode(`
+  for (const supplied of ['Display', 'Full'] as const) {
+    Test(`transports the actual ${supplied} role payload through its specialized capability domain`, async () => {
+      const validated = await Validator.validateCode(`
       can Display { ToText() fails never -> text }
+      can Full { ToText() fails never -> text, ToDebug() fails never -> text }
       view Native where type T is Display (Value T) {
         render inject Value ${tsFence} return null ${fence}
       }
-      view Main(Provided Display) { render Native(.Value Provided) }
+      view Main(Provided ${supplied}) { render Native(.Value Provided) }
     `)
-    Expect(Diagnostics.errorMessages(validated.diagnostics)).toEqual([])
-    const effects = validated.associatedEffects
-    Assert.defined(effects, 'real generic source contracts are sealed before argument emission')
-    const main = validated.entry.ast.statements.find(node => AST.isViewDeclaration(node) && node.name === 'Main')
-    Assert.defined(main, 'the caller view exists')
-    Assert(AST.isViewDeclaration(main), 'the caller is a view declaration')
-    Assert.defined(main.block, 'the caller view has a body')
-    const render = main.block.statements.find(AST.isRenderStatement)!
-    const prop = ASTUtils.withAssociatedEffects(
-      effects,
-      () => Langium.toString(Compile.RenderArguments(ASTUtils.resolveRenderInvocation(render))).trim(),
-    )
-    Expect(prop).toContain('TR.Capability.reproject(')
-    Assert(prop.startsWith('Value={') && prop.endsWith('}'), 'the render has one transported Value prop')
-    const expression = prop.slice('Value={'.length, -1)
-    const { default: TR } = await runtimeModule
-    const original = TR.Cell(TR.Value('before'))
-    const carrier = TR.Capability.attach(original, {
-      ToText: TR.Function((receiver: any) => {
-        Expect(receiver === original).toBe(true)
-        return TR.Value(receiver.getJSValue())
-      }),
+      Expect(Diagnostics.errorMessages(validated.diagnostics)).toEqual([])
+      const effects = validated.associatedEffects
+      Assert.defined(effects, 'real generic source contracts are sealed before argument emission')
+      const main = validated.entry.ast.statements.find(node => AST.isViewDeclaration(node) && node.name === 'Main')
+      Assert.defined(main, 'the caller view exists')
+      Assert(AST.isViewDeclaration(main), 'the caller is a view declaration')
+      Assert.defined(main.block, 'the caller view has a body')
+      const render = main.block.statements.find(AST.isRenderStatement)!
+      const prop = ASTUtils.withAssociatedEffects(
+        effects,
+        () => Langium.toString(Compile.RenderArguments(ASTUtils.resolveRenderInvocation(render))).trim(),
+      )
+      if (supplied === 'Full') {
+        Expect(prop).toContain('TR.Capability.reproject(')
+      } else {
+        Expect(prop).toBe('Value={TR.Alias(() => _Scope.Provided.evaluate())}')
+      }
+      Assert(prop.startsWith('Value={') && prop.endsWith('}'), 'the render has one transported Value prop')
+      const expression = prop.slice('Value={'.length, -1)
+      const { default: TR } = await runtimeModule
+      const original = TR.Cell(TR.Value('before'))
+      const carrier = TR.Capability.attach(original, {
+        ToText: TR.Function((receiver: any) => {
+          Expect(receiver === original).toBe(true)
+          return TR.Value(receiver.getJSValue())
+        }),
+        ToDebug: TR.Function(() => TR.Value('original witness')),
+      })
+      const javascript = new Bun.Transpiler({ loader: 'ts' }).transformSync(`return ${expression}`)
+      const received = new Function('TR', '_Scope', javascript)(TR, { Provided: carrier })
+      const call = () => TR.Call(TR.Capability.method(received.evaluate(), 'ToText')).getJSValue()
+      Expect(call()).toBe('before')
+      original.set(TR.Value('after'))
+      Expect(call()).toBe('after')
     })
-    const javascript = new Bun.Transpiler({ loader: 'ts' }).transformSync(`return ${expression}`)
-    const received = new Function('TR', '_Scope', javascript)(TR, { Provided: carrier })
-    const call = () => TR.Call(TR.Capability.method(received.evaluate(), 'ToText')).getJSValue()
-    Expect(call()).toBe('before')
-    original.set(TR.Value('after'))
-    Expect(call()).toBe('after')
-  })
+  }
 
   Test('preserves a nominal field lens through native view binding and required validation', async () => {
     const compiled = await Compiler.compileCode(`
