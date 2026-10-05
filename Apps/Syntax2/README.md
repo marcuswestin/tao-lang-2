@@ -11,7 +11,8 @@ remains undiscovered.
 - [Main.tao](Main.tao): active shell with a quoted Library header, bare zero-argument render calls,
   signature-scoped private types, reversed role-bound arguments for number and text pairs, and a Group button switching
   ordinary boolean state between two quoted labels. Bare Person and Feedback placement use the
-  standard Text view; compact handlers show and clear feedback. A named list supplies two readers.
+  standard Text view; compact handlers show and clear feedback. The show handler joins an inferred
+  source action result through `then { done Message -> ... }`. A named list supplies two readers.
 - [library/Library.tao](library/Library.tao): graduated Name/GivenName/FamilyName, PersonName and
   Subtract declarations. The app renders Ada Lovelace and 3 using the actual signature projections
   and argument matcher. ComparedNames constructs a list with contextual Name elements.
@@ -47,7 +48,7 @@ The active shell is intentionally dependency-complete and small. It compiles and
 checks; the runtime journey verdict is recorded by the integration owner. The original future Main,
 library modules, adapter sketch, standard-library target and future journey remain intact.
 The shell demonstrates quotation, reachable grouping and feedback transitions, bare text-value
-placement, contextual named lists and graduated nominal signature/role matching. It does not yet
+placement, contextual named lists, joined source action results and graduated nominal signature/role matching. It does not yet
 implement the future book collection, capability, quantity, parameterized-slot, failure/cleanup
 or adapter contracts. Mounted feature proof verifies that empty bare text values emit no node;
 a quoted empty string and explicit Text("") still retain their Text nodes.
