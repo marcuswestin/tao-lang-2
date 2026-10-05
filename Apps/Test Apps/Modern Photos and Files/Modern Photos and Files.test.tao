@@ -1,0 +1,24 @@
+use ModernPhotosFiles from ./
+
+test "Modern Photos and Files shell" {
+   test "opens Files without performing native effects" {
+      run ModernPhotosFiles
+      press #files
+      expect navigation title "Files acceptance"
+      expect {
+         text "Status: Ready"
+         text "Text: Not read"
+         text "Abort check: Not checked"
+         text "Stream chunk received: false"
+         text "Stream end reached: false"
+   }  }
+   test "opens Photos without requesting permission" {
+      run ModernPhotosFiles
+      press #photos
+      expect navigation title "Photos acceptance"
+      expect {
+         text "Status: Ready"
+         text "Permission: Not checked"
+         text "Access: Not checked"
+         text "Returned photos: 0"
+}  }  }

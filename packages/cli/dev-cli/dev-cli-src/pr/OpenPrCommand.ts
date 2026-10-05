@@ -28,7 +28,7 @@ import { type ReviewedMergeMessage, reviewedMergeMessage } from './ReviewedMerge
  * behind the injected `run` seam below rather than a direct `CLI.run` call — the house pattern
  * `android.ts`'s `compatibility.requireAdb ?? requireAdb` uses for the same reason: a test can script
  * every answer without a real remote or a real `gh`. It never force-pushes, and it never merges
- * directly: once the checks pass it names `merge-pr`, which merges unless auto-merge already did.
+ * directly: with `--auto-merge` it names `merge-pr` once the checks pass; without it, landing waits.
  */
 
 const REMOTE = 'origin'
@@ -102,7 +102,9 @@ export const OpenPrCommand = {
     await refuseMergedBranch(github, branch)
 
     const headSha = (await git(dependencies, root, ['rev-parse', 'HEAD'])).stdout.trim()
+    report(`Pushing ${branch} to ${REMOTE}...`)
     await pushBranch(dependencies, root, branch, report)
+    report('Opening or updating the pull request...')
     const pr = await ensurePullRequest(github, branch, message, report)
     if (!await awaitChecksOnHead(dependencies, github, pr.number, headSha, report)) {
       return { exitCode: 1, lines }
@@ -112,7 +114,10 @@ export const OpenPrCommand = {
     } else {
       await disableAutoMerge(dependencies, root, github, pr.number, report)
     }
+    report(`Following CI checks for #${pr.number}...`)
     const checks = await dependencies.followChecks({
+      expectedHead: options.autoMerge === true ? undefined : headSha,
+      ghAuth: true,
       intervalMs: options.pollIntervalMs,
       pr: pr.number,
       repositoryRoot: root,

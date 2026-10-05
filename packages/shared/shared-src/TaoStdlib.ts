@@ -115,8 +115,20 @@ async function treeIdentity(root: string): Promise<string> {
       includeHidden: true,
     })
   ) {
-    if (!EXCLUDED_DIRECTORY_NAMES.has(FS.basename(path)) && !path.endsWith(EXCLUDED_SUFFIX)) {
+    if (
+      !EXCLUDED_DIRECTORY_NAMES.has(FS.basename(path)) && !path.endsWith(EXCLUDED_SUFFIX)
+      && !FS.isFileMutationAuxiliaryPath(path)
+    ) {
       entries.push([FS.relativePath(root, path), path])
+    }
+  }
+  // Native bindings own this subtree; ordinary project contracts remain excluded.
+  const nativeRoot = FS.resolvePath('.tao-ts/native-bindings', root)
+  if (await FS.isDirectory(nativeRoot)) {
+    for await (const path of FS.walk(nativeRoot, { includeHidden: true })) {
+      if (!path.endsWith(EXCLUDED_SUFFIX) && !FS.isFileMutationAuxiliaryPath(path)) {
+        entries.push([FS.relativePath(root, path), path])
+      }
     }
   }
   return await FS.filesIdentity(entries)

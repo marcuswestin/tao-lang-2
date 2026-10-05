@@ -1,5 +1,6 @@
+import type { MaintainedBindingOptions } from '@native-bindings'
 import { Errors, FS, Platform, ProjectIdentity, ReleaseCapabilities, Repo, TaoFiles, TaoStdlib } from '@shared'
-import { verdictPackageFiles } from './toolchain-packages'
+import { maintainedNativeBindingIdentity, verdictPackageFiles } from './toolchain-packages'
 
 /**
  * `tao check` checks canonical source and asks ProjectTooling to refresh each marked project. A
@@ -51,7 +52,7 @@ import { verdictPackageFiles } from './toolchain-packages'
 const STAMP_PATH = '.artifacts/tao-check-stamp.json'
 
 /** The stamp layout and the composition above. An older or unreadable stamp is no stamp. */
-const STAMP_VERSION = 5
+const STAMP_VERSION = 6
 
 /**
  * The opt-outs. `TAO_CHECK_NO_CACHE` is this command's own, spelled the way `TAO_TEST_NO_CACHE` is
@@ -105,6 +106,7 @@ type CheckCacheReplay = {
 
 /** CheckCacheOptions configures the stamp; `tao check` uses the defaults and tests pass a root. */
 export type CheckCacheOptions = {
+  nativeBindings?: MaintainedBindingOptions
   /** The worktree whose `.artifacts` holds the stamp and which bounds what may be stamped. */
   repositoryRoot?: string
 }
@@ -160,18 +162,30 @@ async function open(options: CheckCacheOptions = {}): Promise<CheckCacheSession 
   if (repositoryRoot === undefined) {
     return undefined
   }
-  const toolchain = await toolchainIdentity(repositoryRoot)
+  const nativeIdentity = await maintainedNativeBindingIdentity(options.nativeBindings)
+  if (nativeIdentity === undefined) {
+    return undefined
+  }
+  const toolchain = await toolchainIdentity(repositoryRoot, options.nativeBindings)
   if (toolchain === undefined) {
     return undefined
   }
-  return createSession(FS.resolvePath(repositoryRoot), toolchain)
+  return createSession(FS.resolvePath(repositoryRoot), toolchain, nativeIdentity, options.nativeBindings)
 }
 
-function createSession(repositoryRoot: string, toolchain: string): CheckCacheSession {
+function createSession(
+  repositoryRoot: string,
+  toolchain: string,
+  nativeIdentity: string,
+  nativeBindings?: MaintainedBindingOptions,
+): CheckCacheSession {
   const stampPath = FS.resolvePath(STAMP_PATH, repositoryRoot)
   const pending = new Map<string, PendingWorkspace>()
   return {
     async commit(records: readonly CheckCacheRecord[]): Promise<void> {
+      if (await maintainedNativeBindingIdentity(nativeBindings) !== nativeIdentity) {
+        return
+      }
       const candidates = records.filter(record =>
         record.dependencyRoots.length === 0 && record.externalSidecarInputPaths.length === 0
         && pending.has(FS.resolvePath(record.workspaceRoot))
@@ -208,6 +222,9 @@ function createSession(repositoryRoot: string, toolchain: string): CheckCacheSes
             status: 'fresh',
           }
         }
+        if (await maintainedNativeBindingIdentity(nativeBindings) !== nativeIdentity) {
+          return
+        }
         await writeStamp(stampPath, repositoryRoot, { entries: capEntries(entries), version: STAMP_VERSION })
       })
     },
@@ -216,6 +233,9 @@ function createSession(repositoryRoot: string, toolchain: string): CheckCacheSes
       workspaceRoot: string,
       entryFiles: readonly string[],
     ): Promise<CheckCacheReplay | undefined> {
+      if (await maintainedNativeBindingIdentity(nativeBindings) !== nativeIdentity) {
+        return undefined
+      }
       const resolvedRoot = FS.resolvePath(workspaceRoot)
       if (!FS.pathIsWithin(resolvedRoot, repositoryRoot)) {
         return undefined
@@ -255,7 +275,9 @@ function createSession(repositoryRoot: string, toolchain: string): CheckCacheSes
       ) {
         return undefined
       }
-      return { diagnostics: entry.diagnostics }
+      return await maintainedNativeBindingIdentity(nativeBindings) === nativeIdentity
+        ? { diagnostics: entry.diagnostics }
+        : undefined
     },
   }
 }
@@ -348,7 +370,10 @@ async function moduleLinkIdentity(workspaceRoot: string): Promise<string> {
  * a payload tree outside `packages/` — the packaged Studio runner does exactly that — and stdlib
  * sources nothing hashes are sources that can change underneath a skip.
  */
-async function toolchainIdentity(repositoryRoot: string): Promise<string | undefined> {
+async function toolchainIdentity(
+  repositoryRoot: string,
+  nativeBindings?: MaintainedBindingOptions,
+): Promise<string | undefined> {
   const root = FS.resolvePath(repositoryRoot)
   const packagesRoot = FS.resolvePath('packages', root)
   // Read through the owner rather than the environment, so this scheme refuses a relative value on
@@ -357,10 +382,15 @@ async function toolchainIdentity(repositoryRoot: string): Promise<string | undef
   if (declaredStdlibRoot !== undefined && !await stdlibIsHashed(declaredStdlibRoot, packagesRoot)) {
     return undefined
   }
+  const nativeIdentity = await maintainedNativeBindingIdentity(nativeBindings)
+  if (nativeIdentity === undefined) {
+    return undefined
+  }
   const packageFiles = await verdictPackageFiles(packagesRoot)
   return FS.contentIdentity([
     `packages\n${await FS.filesIdentity(packageFiles.map(path => [FS.relativePath(root, path), path]))}`,
     `generated-parser\n${await generatedParserIdentity(root)}`,
+    `native-bindings\n${nativeIdentity}`,
     await fileEntry(root, FS.resolvePath('bun.lock', root)),
     await fileEntry(root, FS.resolvePath('package.json', root)),
     `${TaoStdlib.DECLARED_ROOT_ENV}\n${declaredStdlibRoot ?? TaoStdlib.ABSENT}`,

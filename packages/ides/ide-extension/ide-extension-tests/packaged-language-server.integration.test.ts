@@ -39,6 +39,7 @@ Test('packaged language server serves hover, definition, and Tao diagnostics ove
       let protocolError: string | undefined
       const env: Platform.ProcessEnv = { ...Platform.runtimeProcess.env, TAO_WORKSPACE_ROOT: root }
       delete env['TAO_STDLIB_ROOT']
+      delete env['TAO_RESOURCES']
       const child = CLI.start(node!, {
         args: [bundle, '--stdio'],
         cwd: root,

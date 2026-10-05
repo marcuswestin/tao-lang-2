@@ -279,7 +279,7 @@ function assignRef(ref: unknown, value: TaoMeasurableNode | null): void {
 
 /** TaoOutlineLiveEntry is private mounted capability state and never enters a public snapshot. */
 export type TaoOutlineLiveEntry = {
-  activate?(): unknown
+  activate?(rawEvent?: unknown): unknown
   active?: () => boolean
   blur?(): void
   commandPolicy?: TaoEntityCommandPolicy

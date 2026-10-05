@@ -1,8 +1,9 @@
 import type TRType from '@runtime/TR'
-import { Describe, Expect, setReactNativeDevModeForTest, Test } from '@shared/test'
+import { Describe, Expect, setReactNativeDevModeForTest, settle, Test } from '@shared/test'
 import { mock } from 'bun:test'
 import React from 'react'
 import { UnexpectedBehaviorError } from '../TaoRuntime-src/TR-errors'
+import { invokeNativeEvent, nativeEventControls } from '../TaoRuntime-src/TR-native-events'
 import { studioInspectRef } from '../TaoRuntime-src/TR-studio-device-inspect'
 
 const reactNativeRuntime = {
@@ -26,6 +27,37 @@ const { NavigationSurface } = await import('../TaoRuntime-src/TR-navigation-surf
 type RuntimeElement = React.ReactElement<Record<string, unknown>>
 
 Describe('TR.Views explicit visual props', () => {
+  Test('forwards native press and submit events to synchronous policy before queued action bodies', async () => {
+    const seen: string[] = []
+    const action = nativeEventControls(
+      TR.Action(() => {
+        seen.push('body')
+      }).jsValue,
+      { preventDefault: true },
+    )
+    const event = {
+      preventDefault() {
+        seen.push('preventDefault')
+      },
+    }
+    const button = renderRuntimeElement(TR.Views.Pressable({ title: 'Save', action }))
+    ;(button.props['onPress'] as (event: unknown) => void)(event)
+    Expect(seen).toEqual(['preventDefault'])
+    await settle()
+    Expect(seen).toEqual(['preventDefault', 'body'])
+    const wrapper = renderRuntimeElement(TR.Views.TextInput({
+      label: 'Title',
+      value: 'draft',
+      onSubmit: raw => invokeNativeEvent(action, raw),
+    }))
+    const row = wrapper.props['children'] as RuntimeElement
+    const input = (row.props['children'] as RuntimeElement[])[1]!
+    ;(input.props['onSubmitEditing'] as (event: unknown) => void)(event)
+    Expect(seen).toEqual(['preventDefault', 'body', 'preventDefault'])
+    await settle()
+    Expect(seen).toEqual(['preventDefault', 'body', 'preventDefault', 'body'])
+  })
+
   Test('carries Studio identity privately through the injected visual layout boundary', () => {
     const occurrence = {
       end: 91,

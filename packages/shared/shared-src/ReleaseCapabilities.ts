@@ -172,6 +172,8 @@ const commands = new Map<string, ReleaseCapability>([
     'release-profile',
     'project id',
     'completion install',
+    'bindings',
+    'bindings generate',
   ].map(name => [name, 'core'] as const),
   ['review', 'studio'],
   ['studio', 'studio'],
@@ -269,6 +271,10 @@ const options = new Map<string, ReleaseCapability>([
   ].map(name => [name, 'core'] as const),
   ['install --publication', 'core'],
   ['install --default-publication', 'core'],
+  ['bindings generate --maintained', 'core'],
+  ...['--source', '--export', '--exclude', '--out'].map(flag =>
+    [`bindings generate ${flag}`, 'native-bindings'] as const
+  ),
   ...[...targets].map(([name, capability]) => [`--${name}`, capability] as const),
   ['--device', 'companion'],
   ['_preview qa --device', 'studio'],

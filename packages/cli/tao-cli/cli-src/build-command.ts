@@ -510,7 +510,7 @@ type InstallSide = { modules: string; namespace: string; root: string }
 function installedTreeCandidates(side: InstallSide, alias: string): string[] {
   return [
     FS.resolvePath('node_modules', ManagedInstallEnvironment.environmentRoot(side.root, side.namespace)),
-    FS.resolvePath('node_modules', ManagedInstallEnvironment.legacyPackageRoot(side.root, side.namespace, alias)),
+    FS.resolvePath('node_modules', ManagedInstallEnvironment.aliasPackageRoot(side.root, side.namespace, alias)),
   ]
 }
 

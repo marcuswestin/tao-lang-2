@@ -305,6 +305,7 @@ async function inputFilePaths(root: string): Promise<string[]> {
     if (
       !EXCLUDED_INPUT_DIRECTORIES.has(FS.basename(path)) && !path.endsWith(EXCLUDED_INPUT_SUFFIX)
       && !path.endsWith('.tao.ts')
+      && !FS.isFileMutationAuxiliaryPath(path)
     ) {
       paths.push(path)
     }

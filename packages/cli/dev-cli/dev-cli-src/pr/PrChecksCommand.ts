@@ -43,6 +43,10 @@ export const defaultDependencies: PrChecksDependencies = {
 
 /** PrChecksOptions is the flags-ready input accepted by the development CLI command. */
 export type PrChecksOptions = {
+  /** Refuse to observe checks if the pull request's head differs from this caller's pushed commit. */
+  expectedHead?: string
+  /** Reuse the GitHub CLI login when no environment token is set; internal to authenticated callers. */
+  ghAuth?: boolean
   intervalMs?: number
   /** The pull request; by default, the open one whose head is this worktree's branch. */
   pr?: number
@@ -82,12 +86,20 @@ export const PrChecksCommand = {
       lines.push(line)
       dependencies.writeLine(line)
     }
-    const github = gitHub(dependencies)
+    const token = options.ghAuth === true ? await ghAuthToken(dependencies, root) : undefined
+    const github = gitHub(dependencies, token)
     const slug = await repositorySlug(dependencies, root)
     const pr = options.pr === undefined
       ? await pullRequestForBranch(dependencies, github, root, slug)
       : await github.json<PullRequest>(`/repos/${slug}/pulls/${options.pr}`)
     const sha = pr.head.sha
+    if (options.expectedHead !== undefined && options.expectedHead !== sha) {
+      report(
+        `FAIL  Pull request #${pr.number} changed head: expected ${options.expectedHead}, actual ${sha};`
+          + ' refusing to follow checks for a different commit.',
+      )
+      return { exitCode: 1, lines } satisfies PrChecksResult
+    }
     report(`Pull request #${pr.number} (${pr.head.ref}) at ${sha.slice(0, 8)}: ${pr.html_url}`)
     const local = (await dependencies.run('git', { args: ['rev-parse', 'HEAD'], cwd: root, stdio: 'pipe' })).stdout
       .trim()
@@ -187,12 +199,29 @@ function fromStatus(status: CommitStatus): Check {
 
 type GitHub = ReturnType<typeof gitHub>
 
+/** Keep the existing login token in memory and never expose credential-command output on failure. */
+async function ghAuthToken(dependencies: PrChecksDependencies, root: string): Promise<string> {
+  const configured = dependencies.env['GH_TOKEN'] || dependencies.env['GITHUB_TOKEN']
+  if (configured !== undefined && configured !== '') {
+    return configured
+  }
+  const result = await dependencies.run('gh', { args: ['auth', 'token'], cwd: root, stdio: 'pipe' })
+    .catch(() => undefined)
+  if (
+    result === undefined || result.exitCode !== 0 || result.error !== undefined || result.signal !== null
+    || result.stdout.trim() === ''
+  ) {
+    return Errors.throwUserInput('GitHub CLI authentication is unavailable. Run `gh auth login` and retry.')
+  }
+  return result.stdout.trim()
+}
+
 /**
  * gitHub wraps the REST calls this command makes. Check runs are read conditionally: GitHub does not
  * count a 304 against the rate limit, which is what lets an anonymous `--wait` poll for an hour.
  */
-export function gitHub(dependencies: PrChecksDependencies) {
-  const token = dependencies.env['GH_TOKEN'] ?? dependencies.env['GITHUB_TOKEN']
+export function gitHub(dependencies: PrChecksDependencies, authToken?: string) {
+  const token = authToken ?? dependencies.env['GH_TOKEN'] ?? dependencies.env['GITHUB_TOKEN']
   const headers = (extra: Record<string, string> = {}): Record<string, string> => ({
     Accept: 'application/vnd.github+json',
     'X-GitHub-Api-Version': '2022-11-28',

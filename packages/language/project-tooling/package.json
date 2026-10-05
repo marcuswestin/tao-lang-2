@@ -10,6 +10,7 @@
     "typescript": "5.9.3",
     "tao-ast-utils": "workspace:*",
     "tao-compiler": "workspace:*",
+    "tao-native-bindings": "workspace:*",
     "tao-parser": "workspace:*",
     "tao-shared": "workspace:*"
   }

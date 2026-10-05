@@ -119,6 +119,15 @@ otherwise. Format: a summary of at most 72 characters, a blank line, then one or
 `- ...` bullets free to wrap onto indented continuation lines. Do not add Git's squash appendix or
 author attribution; the command appends the generated appendix itself.
 
+## The pull-request route
+
+`open-pr` sets auto-merge's squash headline and body to the merge message verbatim, because GitHub's
+default appends ` (#N)` to the title and wraps bullets at 72 columns. `open-pr` and `merge-pr` take a
+`feat/<name>` branch, or the one `claude/<name>` or `codex/<name>` branch a cloud agent session may
+push, archived at `merged/claude/<name>` or `merged/codex/<name>`. They talk to GitHub over REST, so
+they work where a cloud host's proxy refuses `gh pr`'s GraphQL; there `open-pr` turns auto-merge on
+through the proxy's own REST route, and where that is refused too `merge-pr` merges.
+
 ## Reading a red lane
 
 Read `.artifacts/logs/<lane>/latest/summary.json` first — it names each node's failure cause. A

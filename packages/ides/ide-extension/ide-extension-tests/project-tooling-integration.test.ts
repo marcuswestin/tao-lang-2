@@ -3,6 +3,7 @@ import { FS } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import {
   hideToolingPatterns,
+  nativeOriginMappings,
   originCommandUri,
   originMappingsForPath,
   showToolingPatterns,
@@ -11,6 +12,29 @@ import {
 import { createProjectToolingSession } from '../ide-extension-src/extension/project-tooling-session'
 
 Describe('editor project tooling integration', () => {
+  Test('links native origins to inspected pinned declarations at exact positions', () => {
+    const generated = '/stdlib/.tao-ts/native-bindings/files/Bindings.ts'
+    const declaration = '/stdlib/.tao-ts/native-bindings/files/inputs/node_modules/expo-file-system/build/File.d.ts'
+    const mappings = nativeOriginMappings(
+      generated,
+      [
+        '// Source: expo-file-system/build/File.d.ts:44:3',
+        '// Native origin: ./inputs/node_modules/expo-file-system/build/File.d.ts:44:3',
+        '// Native origin: ../../../../unrelated.ts:1:1',
+        '// Native origin: ./inputs/node_modules/expo-file-system/build/File.d.ts:0:3',
+      ].join('\n'),
+      [generated, declaration],
+    )
+    Expect(mappings).toHaveLength(1)
+    Expect(mappings[0]?.sourcePath).toBe(declaration)
+    Expect(mappings[0]?.sourceRange).toEqual({ start: { line: 43, character: 2 }, end: { line: 43, character: 2 } })
+    Expect(mappings[0]?.generatedRange.start.line).toBe(1)
+    Expect(
+      nativeOriginMappings(generated, '// Native origin: ./inputs/node_modules/expo-file-system/build/File.d.ts:44:3', [
+        declaration,
+      ]),
+    ).toEqual([])
+  })
   Test('watches independent roots, reports stale errors, and disposes removed and remaining roots', async () => {
     const watches = new Map<
       string,
@@ -142,6 +166,8 @@ function toolingResult(root: string, status: ProjectToolingResult['status'], rev
     configInputPaths: [],
     externalSidecarInputPaths: [],
     sidecarOwnershipInputPaths: [],
+    nativeBindingInputPaths: [],
+    nativeBindingOutputPaths: [],
     changedOutputPaths: [],
   }
 }

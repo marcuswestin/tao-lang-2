@@ -45,6 +45,7 @@ export const JUST_COMMANDS = [
   // check on its pushed head, Verify among them, has passed, then archives it like a landing.
   'merge-pr',
   'model-audit',
+  'native-bindings',
   'native-module-check',
   'notify-developer',
   // Pushes the branch, opens or reuses its pull request, and stays attached to stream the checks a

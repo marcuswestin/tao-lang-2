@@ -41,6 +41,22 @@
   scoped holds use `Platform.processIsAlive` rather than a `ps` subprocess — see `DEVENV-114`.
 - **Dependencies:** `.rulesync/permissions.jsonc` owns the sandbox policy. DEVENV-030 and DEVENV-060 own
   the adjacent host process-visibility constraints.
+- **Related observation (2026-10-05):** An isolated `verify-full` host run on
+  `feat/native-photos-files` failed `ProcessTree.stopTree` while checking an already-signalled
+  process group: `Platform.signalProcess(-pid, 0)` reported `EPERM`. The unchanged focused
+  process-supervision suite subsequently passed all 15 tests; the next full run passed the shared
+  suite too. These results do not establish the intermittent denial's cause. Retain the failure
+  rather than interpreting denied inspection as successful cleanup. The failed run is
+  `2026-10-05T10-50-49-443Z-16725-33770580`; its shared log identifies the exact teardown.
+  A source audit found a separate error-versus-empty risk in the Darwin enumeration path:
+  Apple's [`proc_listpids` wrapper](https://github.com/apple-oss-distributions/xnu/blob/main/libsyscall/wrappers/libproc/libproc.c)
+  returns zero on syscall failure, while `ProcessTreeDarwin` rejects only negative results.
+  Before replacing group signal-zero probes with enumeration, prove that zero means an empty
+  group rather than a failed inspection. A native wrapper that resets and captures thread-local
+  errno immediately around the libproc call is the recommended investigation; separate JavaScript
+  FFI calls have no documented saved-errno guarantee. Preserve zombie identities, uncertain-identity
+  errors and bundled Node-helper behavior. No fallback, permission change or inspection weakening
+  was introduced in the native bridge work.
 - **Acceptance:** Either a sandboxed lane's `processTable()` returns the real table, or the code and its
   tests state that the non-Darwin branch is out of scope on this host and nothing in a lane relies on it.
 - **Source:** 2026-09-17 process-teardown implementation.

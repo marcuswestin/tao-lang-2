@@ -187,6 +187,44 @@ function fakeDependencies(
 }
 
 Describe('open-pr', () => {
+  Test('without --auto-merge, follows CI on the pushed head through the gh login', async () => {
+    const routes = openedPullRequestRoutes(2)
+    delete routes[enableAutoMergeKey(2)]
+    const { calls, dependencies, followed } = fakeDependencies(routes)
+    let expectedHead: string | undefined
+    let ghAuth: boolean | undefined
+    const follow = dependencies.followChecks
+    dependencies.followChecks = async options => {
+      expectedHead = options.expectedHead
+      ghAuth = options.ghAuth
+      return await follow(options)
+    }
+
+    const result = await OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)
+
+    Expect(result.exitCode).toBe(0)
+    Expect(calls).toContain(createKey())
+    Expect(calls.some(call => call.startsWith('gh pr merge') || call.includes('/ccr/auto_merge'))).toBe(false)
+    Expect(followed).toEqual([2])
+    Expect(expectedHead).toBe(HEAD_SHA)
+    Expect(ghAuth).toBe(true)
+  })
+
+  Test('reports a failed CI-only check without a landing instruction', async () => {
+    const routes = openedPullRequestRoutes(2)
+    delete routes[enableAutoMergeKey(2)]
+    const { calls, dependencies } = fakeDependencies(routes, {
+      followChecks: async () => ({ exitCode: 1 }),
+    })
+
+    const result = await OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)
+
+    Expect(result.exitCode).toBe(1)
+    Expect(calls).toContain(createKey())
+    Expect(calls.some(call => call.startsWith('gh pr merge') || call.includes('/ccr/auto_merge'))).toBe(false)
+    Expect(result.lines.some(line => line.startsWith('NEXT'))).toBe(false)
+  })
+
   Test('waits for the opened pull request’s checks before following any', async () => {
     // What the first real runs met: checks asked for straight after the push, before GitHub had
     // created the workflow run, answered "no checks reported". The run appeared seconds later.

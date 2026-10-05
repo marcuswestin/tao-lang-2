@@ -721,17 +721,24 @@ export const InteractionControls = {
   Attention: interactionAttention,
   Catalog: commandCatalog,
   Outline: interactionOutline,
-  Activate(occurrence: TaoInteractionOccurrence | undefined, invoke: () => unknown): () => unknown {
+  Activate(
+    occurrence: TaoInteractionOccurrence | undefined,
+    invoke: (rawEvent?: unknown) => unknown,
+  ): (rawEvent?: unknown) => unknown {
     if (occurrence?.control) {
       occurrence.capabilities.activate = invoke
     }
-    return () =>
+    return (rawEvent?: unknown) =>
       occurrence?.control
-        ? interactionAttention.targetAndActivate(occurrence.control, invoke)
-        : invoke()
+        ? interactionAttention.targetAndActivate(occurrence.control, invoke, rawEvent)
+        : invoke(rawEvent)
   },
-  ActivateIdentity(identity: string | undefined, invoke: () => unknown): () => unknown {
-    return () => identity === undefined ? invoke() : interactionAttention.targetAndActivate(identity, invoke)
+  ActivateIdentity(
+    identity: string | undefined,
+    invoke: (rawEvent?: unknown) => unknown,
+  ): (rawEvent?: unknown) => unknown {
+    return (rawEvent?: unknown) =>
+      identity === undefined ? invoke(rawEvent) : interactionAttention.targetAndActivate(identity, invoke, rawEvent)
   },
   ChoosePendingSearchResult(value: Evaluable): boolean {
     return interactionAttention.choosePendingSearchResult(value)

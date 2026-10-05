@@ -136,8 +136,24 @@ function build(options: BuildTestNodesOptions): TestNodePlan {
         preflightNames.push(name)
       }
     }
-    const remaining = (suite.shardUnits ?? suite.files).filter(file => !preflightFiles.includes(file))
-    if (remaining.length === 0 && preflightFiles.length > 0) {
+    const partitionedFiles = new Set(preflightFiles)
+    for (const partition of tuning.filePartitions ?? []) {
+      const files = suite.shardUnits === undefined
+        ? suite.files.filter(file => partition.files.includes(file) && !partitionedFiles.has(file))
+        : []
+      if (files.length === 0) {
+        continue
+      }
+      for (const file of files) {
+        partitionedFiles.add(file)
+      }
+      const name = `${suite.name}:${partition.name}`
+      if (options.proved?.has(name) !== true) {
+        states.push(nodeState(suite, name, files, 1, options.timings))
+      }
+    }
+    const remaining = (suite.shardUnits ?? suite.files).filter(file => !partitionedFiles.has(file))
+    if (remaining.length === 0 && (partitionedFiles.size > 0 || suite.shardUnits === undefined)) {
       continue
     }
     // A suite whose runner cannot attribute time to a single test has nothing trustworthy to say
@@ -171,7 +187,7 @@ function build(options: BuildTestNodesOptions): TestNodePlan {
     plan.shards.forEach((files, index) => {
       // The ordinary remainder is a shard even when it needs only one process: keeping
       // the bare suite name would make reporting count both the rollup and the remainder.
-      const name = TestShards.shardName(suite.name, index, preflightFiles.length > 0 ? Math.max(2, count) : count)
+      const name = TestShards.shardName(suite.name, index, partitionedFiles.size > 0 ? Math.max(2, count) : count)
       if (options.proved?.has(name) === true) {
         return
       }

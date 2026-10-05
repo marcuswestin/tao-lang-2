@@ -196,7 +196,7 @@ view TextInput(mutable Value text, Change action(text), Submit action(), Label t
           disabled: Disabled,
           secure: Secure,
           onChange: value => Value.change(value),
-          onSubmit: () => Submit.invoke(),
+          onSubmit: event => TR.InvokeNativeEvent(Submit, event),
         },
       )
    ```

@@ -1,9 +1,12 @@
+import type { BridgeModule } from '@compiler/bridge-metadata'
 import { type Diagnostic, type DiagnosticRange, FS } from '@shared'
+import type { inspectMaintainedNativeBindings } from 'tao-native-bindings'
 import * as ts from 'typescript'
+import { checkProjectNativeTypeScript } from './ProjectNativeTypeScript'
 import { belongsToProject, nestedProjectRoots } from './ProjectSourceOwnership'
 import type { ProjectToolingOptions, ProjectToolingSourceMapping } from './ProjectTooling'
 import { ProjectConfigValidationMessages } from './ProjectTypeScriptConfig'
-import { ProjectTypeScriptProgramSession } from './ProjectTypeScriptProgram'
+import { createProjectTypeScriptProgram, ProjectTypeScriptProgramSession } from './ProjectTypeScriptProgram'
 
 export { ProjectTypeScriptProgramSession } from './ProjectTypeScriptProgram'
 
@@ -34,7 +37,18 @@ export async function checkProjectTypeScriptWithConfigInputs(
   sourceMappings: readonly ProjectToolingSourceMapping[],
   _options: ProjectToolingOptions,
   session?: ProjectTypeScriptProgramSession,
+  nativeBindings?: Awaited<ReturnType<typeof inspectMaintainedNativeBindings>>,
+  nativeContracts: readonly BridgeModule[] = [],
 ): Promise<ProjectTypeScriptCheckResult> {
+  const nativeMappings = nativeContracts.flatMap(module =>
+    module.sourceMappings.map(mapping => ({
+      generatedPath: module.path,
+      generatedRange: mapping.generated,
+      sourcePath: module.sourcePath,
+      sourceRange: mapping.source,
+    }))
+  )
+  const allMappings = [...sourceMappings, ...nativeMappings]
   const projectRoot = FS.resolvePath(root)
   const configPath = FS.resolvePath('tsconfig.json', projectRoot)
   const configurationSources = new Map<string, string | undefined>()
@@ -105,7 +119,13 @@ export async function checkProjectTypeScriptWithConfigInputs(
     }
   }
   const nativeFiles = new Set(parsed.fileNames.map(path => FS.resolvePath(path)))
-  const missingGenerated = contractPaths.filter(path => !nativeFiles.has(FS.resolvePath(path)))
+  const nativeOutputs = new Set(nativeBindings?.status === 'fresh' ? nativeBindings.outputPaths : [])
+  const isolatedContracts = new Set(
+    nativeContracts.filter(module => nativeOutputs.has(module.sourcePath)).map(module => module.path),
+  )
+  const missingGenerated = contractPaths.filter(path =>
+    !nativeFiles.has(FS.resolvePath(path)) && !isolatedContracts.has(FS.resolvePath(path))
+  )
   if (missingGenerated.length > 0) {
     diagnostics.push(configDiagnostic(
       configPath,
@@ -137,7 +157,33 @@ export async function checkProjectTypeScriptWithConfigInputs(
   const { program, cacheHit, programAuditMs } =
     session?.program(projectRoot, [...files], parsed.options, [...configurationSources])
       ?? { program: ts.createProgram([...files], parsed.options), cacheHit: false, programAuditMs: 0 }
-  diagnostics.push(...ts.getPreEmitDiagnostics(program).map(error => typescriptDiagnostic(error, sourceMappings)))
+  const native = nativeBindings === undefined ? undefined : await checkProjectNativeTypeScript(
+    projectRoot,
+    program,
+    contractPaths,
+    sourceMappings,
+    _options,
+    nativeBindings,
+    nativeContracts,
+  )
+  if (native !== undefined && native.declarations.size > 0) {
+    session?.clear()
+    // A custom runtime root can overlap authored sources. Their bodies still belong to this check.
+    const declarations = new Map(
+      [...native.declarations].filter(([path]) =>
+        !FS.pathIsWithin(path, projectRoot) || FS.pathIsWithin(path, generatedRoot)
+      ),
+    )
+    const ordinary = createProjectTypeScriptProgram([...files], {
+      ...parsed.options,
+      paths: { ...native.paths, ...parsed.options.paths },
+    }, declarations)
+    diagnostics.push(...[...native.diagnostics, ...ts.getPreEmitDiagnostics(ordinary)]
+      .map(error => typescriptDiagnostic(error, allMappings)))
+    return { diagnostics, configInputPaths, cacheHit: false, programAuditMs }
+  }
+  diagnostics.push(...[...(native?.diagnostics ?? []), ...ts.getPreEmitDiagnostics(program)]
+    .map(error => typescriptDiagnostic(error, allMappings)))
   return { diagnostics, configInputPaths, cacheHit, programAuditMs }
 }
 
