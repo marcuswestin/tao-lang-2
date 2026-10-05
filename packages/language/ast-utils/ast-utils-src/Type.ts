@@ -2212,6 +2212,10 @@ class TypeResolutionContext {
           : unresolvedType(),
       CasePayload: payload => {
         const branch = payload.$container
+        // The shared subject rules admit ordinary when payloads only for error messages.
+        if (AST.isWhenActionBranch(branch) || AST.isWhenRenderBranch(branch)) {
+          return primitiveType('text')
+        }
         if (AST.isWhenDoOutcome(branch) && AST.isDoStatement(branch.$container) && branch.$container.then) {
           if (branch.case === 'done') {
             return this.ofInvocationResult(branch.$container)

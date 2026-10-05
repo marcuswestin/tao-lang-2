@@ -101,14 +101,16 @@ function sourceDomains(source: TaoType, resolution: ConverterTypeResolution): Ta
   let current: TaoType | undefined = source
   while (current) {
     domains.push(current)
-    const nominal = 'nominal' in current ? current.nominal : undefined
+    const nominal: AST.TypeDefinition | undefined = 'nominal' in current ? current.nominal : undefined
     if (!nominal || !AST.isTypeDeclaration(nominal) || seen.has(nominal)) {
       break
     }
     seen.add(nominal)
-    const expression = nominal.type
-    const base = AST.isDerivedTypeExpression(expression) ? expression.base : AST.isNamedTypeReference(expression)
-        || AST.isPrimitiveTypeReference(expression)
+    const expression: AST.TypeExpression | undefined = nominal.type
+    const base: AST.TypeReference | undefined = AST.isDerivedTypeExpression(expression)
+      ? expression.base
+      : AST.isNamedTypeReference(expression)
+          || AST.isPrimitiveTypeReference(expression)
       ? expression
       : undefined
     current = base ? resolution.ofTypeExpression(base) : undefined

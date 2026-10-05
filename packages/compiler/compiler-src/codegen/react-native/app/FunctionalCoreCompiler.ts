@@ -182,9 +182,13 @@ export const FunctionalCoreCompiler = {
           })],`,
       )
     }
-      ], () => TR.BlockScope(_Scope, _Scope => {
+      ], ${
+      statement.otherwise
+        ? gen`() => TR.BlockScope(_Scope, _Scope => {
         ${Compile.RenderBlockBody(statement.otherwise.block, options)}
-      })${availability ? gen`, _ViewProps.__tao` : gen.noop()})}
+      })`
+        : gen`undefined`
+    }${availability ? gen`, _ViewProps.__tao` : gen.noop()})}
     `
   },
 
