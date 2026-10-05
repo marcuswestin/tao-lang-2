@@ -1,4 +1,45 @@
-public abstract type Scalar is numeric
+public abstract type Scalar is numeric with {
+   func ToText() fails never -> text {
+      return ScalarToText(Scalar) from ./Quantity.ts
+   }
+
+   static func +(Left Self, Right Self) -> Self {
+      return ScalarAdd(Left, Right) from ./Quantity.ts
+   }
+   static func -(Left Self, Right Self) -> Self {
+      return ScalarSubtract(Left, Right) from ./Quantity.ts
+   }
+   static func -(Value Self) -> Self {
+      return ScalarNegate(Value) from ./Quantity.ts
+   }
+   static func *(Left Self, Right number) -> Self {
+      return ScalarMultiplyNumber(Left, Right) from ./Quantity.ts
+   }
+   static func *(Left number, Right Self) -> Self {
+      return NumberMultiplyScalar(Left, Right) from ./Quantity.ts
+   }
+   static func /(Left Self, Right number) -> Self {
+      return ScalarDivideNumber(Left, Right) from ./Quantity.ts
+   }
+   static func ==(Left Self, Right Self) -> boolean {
+      return ScalarEqual(Left, Right) from ./Quantity.ts
+   }
+   static func !=(Left Self, Right Self) -> boolean {
+      return ScalarNotEqual(Left, Right) from ./Quantity.ts
+   }
+   static func <(Left Self, Right Self) -> boolean {
+      return ScalarLess(Left, Right) from ./Quantity.ts
+   }
+   static func <=(Left Self, Right Self) -> boolean {
+      return ScalarLessEqual(Left, Right) from ./Quantity.ts
+   }
+   static func >(Left Self, Right Self) -> boolean {
+      return ScalarGreater(Left, Right) from ./Quantity.ts
+   }
+   static func >=(Left Self, Right Self) -> boolean {
+      return ScalarGreaterEqual(Left, Right) from ./Quantity.ts
+   }
+}
 
 public type Duration is Scalar with {
    units { seconds 1 (default), milliseconds 0.001, minutes 60, hours 3600 }

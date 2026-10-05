@@ -1,4 +1,5 @@
 import TR from '@runtime/TR'
+import { quantityToText } from '@runtime/TR-quantity-values'
 import { type Duration, type Ratio, types } from './Quantity.tao'
 
 const duration = (value: Duration) => TR.quantityOperand(types.Duration.Factory, value)
@@ -112,3 +113,100 @@ export const RatioLessEqual = (left: Ratio, right: Ratio): boolean => compareRat
 export const RatioGreater = (left: Ratio, right: Ratio): boolean => compareRatios(left, right) > 0
 
 export const RatioGreaterEqual = (left: Ratio, right: Ratio): boolean => compareRatios(left, right) >= 0
+
+type ScalarValue = TR.Value<TR.QuantityPayload>
+type ScalarFactory = TR.QuantityFactory
+const scalarSnapshot = (value: ScalarValue): ScalarValue => TR.Value(value.evaluate().jsValue)
+
+export const ScalarToText = (value: ScalarValue): string => quantityToText(value)
+
+export const ScalarAdd = (left: ScalarValue, right: ScalarValue, factory: ScalarFactory): ScalarValue => {
+  const first = scalarSnapshot(left)
+  const second = scalarSnapshot(right)
+  return TR.QuantityArithmetic.add(
+    factory,
+    TR.quantityOperand(factory, first),
+    TR.quantityOperand(factory, second),
+  )
+}
+
+export const ScalarSubtract = (left: ScalarValue, right: ScalarValue, factory: ScalarFactory): ScalarValue => {
+  const first = scalarSnapshot(left)
+  const second = scalarSnapshot(right)
+  return TR.QuantityArithmetic.subtract(
+    factory,
+    TR.quantityOperand(factory, first),
+    TR.quantityOperand(factory, second),
+  )
+}
+
+export const ScalarNegate = (value: ScalarValue, factory: ScalarFactory): ScalarValue => {
+  const snapshot = scalarSnapshot(value)
+  return TR.QuantityArithmetic.negate(factory, TR.quantityOperand(factory, snapshot))
+}
+
+export const ScalarMultiplyNumber = (
+  value: ScalarValue,
+  multiplier: number,
+  factory: ScalarFactory,
+): ScalarValue => {
+  const snapshot = scalarSnapshot(value)
+  return TR.QuantityArithmetic.multiply(
+    factory,
+    TR.quantityOperand(factory, snapshot),
+    TR.scalarOperand(multiplier),
+  )
+}
+
+export const NumberMultiplyScalar = (
+  multiplier: number,
+  value: ScalarValue,
+  factory: ScalarFactory,
+): ScalarValue => {
+  const snapshot = scalarSnapshot(value)
+  return TR.QuantityArithmetic.multiply(
+    factory,
+    TR.scalarOperand(multiplier),
+    TR.quantityOperand(factory, snapshot),
+  )
+}
+
+export const ScalarDivideNumber = (
+  value: ScalarValue,
+  divisor: number,
+  factory: ScalarFactory,
+): ScalarValue => {
+  const snapshot = scalarSnapshot(value)
+  return TR.QuantityArithmetic.divide(
+    factory,
+    TR.quantityOperand(factory, snapshot),
+    TR.scalarOperand(divisor),
+  )
+}
+
+const compareScalars = (left: ScalarValue, right: ScalarValue, factory: ScalarFactory): -1 | 0 | 1 => {
+  const first = scalarSnapshot(left)
+  const second = scalarSnapshot(right)
+  return TR.QuantityArithmetic.compare(factory, first, second)
+}
+
+export const ScalarEqual = (left: ScalarValue, right: ScalarValue, factory: ScalarFactory): boolean =>
+  compareScalars(left, right, factory) === 0
+
+export const ScalarNotEqual = (left: ScalarValue, right: ScalarValue, factory: ScalarFactory): boolean =>
+  compareScalars(left, right, factory) !== 0
+
+export const ScalarLess = (left: ScalarValue, right: ScalarValue, factory: ScalarFactory): boolean =>
+  compareScalars(left, right, factory) < 0
+
+export const ScalarLessEqual = (left: ScalarValue, right: ScalarValue, factory: ScalarFactory): boolean =>
+  compareScalars(left, right, factory) <= 0
+
+export const ScalarGreater = (left: ScalarValue, right: ScalarValue, factory: ScalarFactory): boolean =>
+  compareScalars(left, right, factory) > 0
+
+export const ScalarGreaterEqual = (
+  left: ScalarValue,
+  right: ScalarValue,
+  factory: ScalarFactory,
+): boolean => compareScalars(left, right, factory) >= 0
