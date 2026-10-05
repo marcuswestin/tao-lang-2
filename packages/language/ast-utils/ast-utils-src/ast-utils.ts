@@ -31,6 +31,7 @@ import {
   parseShortcut,
   reservedCommandShortcuts,
 } from './commands'
+import { resolveConfiguredItemConstruction } from './configured-item-bindings'
 import {
   datasourceCollectionNames,
   datasourceCollections,
@@ -152,6 +153,7 @@ export const ASTUtils = {
   reservedCommandShortcuts,
   mentionFills,
   colorValues,
+  resolveConfiguredItemConstruction,
   bindCallableArguments,
   callableSignatureOf,
   compareCallableSignatures,
@@ -260,6 +262,8 @@ export namespace ASTUtils {
   export type ItemPropertyBindingDiagnostic = import('./item-property-bindings').ItemPropertyBindingDiagnostic
   export type ItemPropertyBindingPair = import('./item-property-bindings').ItemPropertyBindingPair
   export type ItemPropertyBindingResult = import('./item-property-bindings').ItemPropertyBindingResult
+  export type ConfiguredItemConstruction = import('./configured-item-bindings').ConfiguredItemConstruction
+  export type ConfiguredItemOperand = import('./configured-item-bindings').ConfiguredItemOperand
   export type ItemShape = import('./Type').ItemShape
   export type ItemShapeField = import('./Type').ItemShapeField
   export type ImplicitChangeBinding = import('./invocations').ImplicitChangeBinding
