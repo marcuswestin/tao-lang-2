@@ -1,6 +1,7 @@
 import { ASTUtils, Type, Units } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
+import { resolveNumericUnitReading } from '../../../../../language/ast-utils/ast-utils-src/numeric-unit-readings'
 import { BridgeMetadata } from '../../../bridge-metadata'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
@@ -11,7 +12,7 @@ import { configurationRuntimeBindingName } from './ConfigurationCompiler'
 import { activeDataStorePlan } from './data-store-context'
 import { compileDeclarationIdentity } from './declaration-identity'
 import { bridgeBindingName } from './injection-plan'
-import { checkedNumericValue, quantityFactoryBinding } from './NumericUnitsCompiler'
+import { checkedNumericValue, compileNumericUnitReading, quantityFactoryBinding } from './NumericUnitsCompiler'
 import { compileReactiveArgument } from './reactive-parameters'
 
 const shapelessItemConstructorMessage = 'validated shapeless item constructor is empty'
@@ -271,23 +272,18 @@ export const ExpressionsCompiler = {
 
   /** Method calls use the canonical selected descriptor and its parameter correspondence. */
   MethodCallExpression(expression: AST.MethodCallExpression): Compiled {
+    const reading = resolveNumericUnitReading(expression)
+    if (reading.kind !== 'not-unit-reading') {
+      Assert(reading.kind === 'unit-reading', 'validated unit reading has no argument or method collision')
+      return compileNumericUnitReading(reading.reading, compileMethodReceiver(reading.reading.receiverAnchor))
+    }
     const resolved = ASTUtils.resolveAssociatedMethodInvocation(expression)
     Assert(resolved.problem === undefined, 'validated associated call resolves its receiver and contract')
     Assert.defined(resolved.descriptor, 'validated associated call has a selected descriptor')
     Assert(resolved.diagnostics.length === 0, 'validated associated call has no binding diagnostics')
     const target = ASTUtils.associatedMethodCallTarget(expression)
     Assert.defined(target, 'validated associated call retains its actual receiver anchor')
-    let receiver: Compiled
-    if (target.receiver.kind === 'expression') {
-      receiver = compileReactiveArgument(target.receiver.expression)
-    } else {
-      const site = target.receiver.site
-      const declaration = resolveRef(site.target)
-      const root = AST.isTypeDeclaration(declaration)
-        ? gen.scopeName(declaration)
-        : gen`TR.Alias(() => ${Compile.ValueDeclarationReference(declaration)})`
-      receiver = compileMemberPath(root, Type.ofReferenceRoot(site), target.receiver.members)
-    }
+    const receiver = compileMethodReceiver(target.receiver)
     const capability = resolved.receiver?.kind === 'capability'
     const callable = capability
       ? gen`TR.Capability.method(${receiver}.evaluate(), ${gen.jsLiteral(target.name)})`
@@ -982,6 +978,21 @@ export function configuredDeclarationOfValue(
     return inferred && AST.isConfigurableDeclaration(inferred) ? inferred : undefined
   }
   return undefined
+}
+
+/** Method receivers retain the same live expression or authored member-path storage. */
+function compileMethodReceiver(receiver: ASTUtils.AssociatedMethodReceiver): Compiled {
+  return Switch.kind(receiver, {
+    expression: value => compileReactiveArgument(value.expression),
+    'member-path': value => {
+      const site = value.site
+      const declaration = resolveRef(site.target)
+      const root = AST.isTypeDeclaration(declaration)
+        ? gen.scopeName(declaration)
+        : gen`TR.Alias(() => ${Compile.ValueDeclarationReference(declaration)})`
+      return compileMemberPath(root, Type.ofReferenceRoot(site), value.members)
+    },
+  })
 }
 
 /**

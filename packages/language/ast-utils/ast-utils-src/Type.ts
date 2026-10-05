@@ -18,6 +18,7 @@ import { puritySatisfiesFunction } from './callable-effects'
 import { type CallableSignatureComparison, callableSignatureOf, compareCallableSignatures } from './callable-signatures'
 import { failureContractSatisfiesBound } from './failure-contracts'
 import { resolveActionInvocation, resolveActionTarget } from './invocations'
+import { resolveNumericUnitReading } from './numeric-unit-readings'
 import { NumericUnits } from './NumericUnits'
 import { parameterRequiresWritable } from './reactive-parameters'
 import { type UnitFamily, Units } from './Units'
@@ -1900,6 +1901,13 @@ class TypeResolutionContext {
   }
 
   private methodCallExpressionType(call: AST.MethodCallExpression): TaoType {
+    const reading = resolveNumericUnitReading(call, { receiverType: receiver => this.receiverType(receiver) })
+    if (reading.kind !== 'not-unit-reading') {
+      return Switch.kind(reading, {
+        'unit-reading': value => value.reading.resultType,
+        'invalid-unit-reading': unresolvedType,
+      })
+    }
     const target = associatedMethodCallTarget(call)
     if (!target) {
       return unresolvedType()
