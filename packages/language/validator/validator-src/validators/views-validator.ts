@@ -349,7 +349,9 @@ function validateRenderBlock(block: AST.Block, ctx: ValidationContext): void {
     }
     if (AST.isForStatement(statement)) {
       hasChildInvocation = true
-      validateRenderBlock(statement.block, ctx)
+      if (AST.isBlock(statement.block)) {
+        validateRenderBlock(statement.block, ctx)
+      }
       continue
     }
     ctx.error(statement, viewValidationMessages.renderBlock)

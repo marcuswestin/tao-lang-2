@@ -73,7 +73,9 @@ export function outlineLoopDescriptor(loop: AST.ForStatement): OutlineLoopDescri
   const rowType = Type.ofValueDeclaration(loop)
   const entity = rowType.kind === 'entity' ? rowType.entity : undefined
   const texts: OutlineTextPath[] = []
-  walkStatements(AST.statementsOf(loop.block), loop, [], true, texts)
+  if (AST.isBlock(loop.block)) {
+    walkStatements(loop.block.statements, loop, [], true, texts)
+  }
   const collection = collectionName(loop.collection)
   return {
     ...(collection === undefined ? {} : { collection }),
@@ -197,7 +199,9 @@ function siblingRootRenders(statements: readonly AST.Statement[], renderedNav: A
       for (const branch of guardBranches(statement)) {
         roots.push(...siblingRootRenders(branch.block?.statements ?? [], renderedNav))
       }
-    } else if (AST.isIfRenderStatement(statement) || AST.isForStatement(statement)) {
+    } else if (AST.isIfRenderStatement(statement)) {
+      roots.push(...siblingRootRenders(statement.block.statements, renderedNav))
+    } else if (AST.isForStatement(statement) && AST.isBlock(statement.block)) {
       roots.push(...siblingRootRenders(statement.block.statements, renderedNav))
     }
   }

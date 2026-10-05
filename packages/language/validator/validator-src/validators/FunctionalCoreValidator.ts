@@ -132,7 +132,9 @@ export const FunctionalCoreValidator = {
       if (collection.kind !== 'unresolved' && collection.kind !== 'list') {
         ctx.error(statement.collection, messages.forCollection)
       }
-      validateRenderControlPlacement(statement, ctx)
+      if (AST.isBlock(statement.block)) {
+        validateRenderControlPlacement(statement, ctx)
+      }
     },
   } satisfies NodeValidationChecks,
   messages,

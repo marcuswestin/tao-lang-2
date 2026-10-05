@@ -257,7 +257,7 @@ function collectRenderChildBlocks(block: ViewOwnedBlock, blocks: ViewOwnedBlock[
     if (AST.isIfRenderStatement(statement)) {
       collectRenderChildBlocks(statement.block, blocks)
     }
-    if (AST.isForStatement(statement)) {
+    if (AST.isForStatement(statement) && AST.isBlock(statement.block)) {
       collectRenderChildBlocks(statement.block, blocks)
     }
   }

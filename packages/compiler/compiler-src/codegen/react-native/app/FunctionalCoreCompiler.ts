@@ -257,6 +257,7 @@ export const FunctionalCoreCompiler = {
 
   /** ForStatement compiles repeated rendering with an iteration-local Tao value binding. */
   ForStatement(statement: AST.ForStatement, options: CodegenOptions = {}): Compiled {
+    Assert.is(statement.block, AST.isBlock, 'render loop owns a render block')
     const selectHandler = AST.loopSelectHandlers(statement)[0]
     const cst = statement.$cstNode
     Assert.defined(cst, 'compiled loop has source coordinates')
