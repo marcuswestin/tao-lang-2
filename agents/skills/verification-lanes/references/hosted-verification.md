@@ -49,16 +49,18 @@ local per-commit and readiness gates. Until that result exists, describe the bra
 CI, not verified. Do not require local `finalize` as a prerequisite for the hosted route.
 
 Authorization to publish or merge remains separate from route selection. When pushing for CI is
-authorized but landing is not, use `./agent unsandboxed open-pr --no-auto-merge`: it pushes, opens
-or reuses the PR, follows CI, and requires auto-merge to stay off. It refuses a PR whose auto-merge
-is already enabled; do not change another task's setting to make it proceed. This mode also allows
-portable CI while required host acceptance is pending. Without push authorization, inspect an
-existing PR read-only or finish local preparation and report that starting hosted CI awaits it.
+authorized, use `./agent unsandboxed open-pr`: it pushes, opens or reuses the PR, follows CI, and
+leaves auto-merge off by default. It refuses a PR whose auto-merge is already enabled; do not change
+another task's setting to make it proceed. This also allows portable CI while required host
+acceptance is pending. Without push authorization, inspect an existing PR read-only or finish
+local preparation and report that starting hosted CI awaits it.
 
-Default `open-pr` enables auto-merge before checks finish, so use that mode only after the
-Developer authorizes landing the slice and every required host acceptance check has passed.
-GitHub can merge independently of a later `merge-pr` call. A green existing PR may be proposed as
-ready without rerunning local verification; authorization to merge is still required.
+Only explicit `open-pr --auto-merge` enables automatic merging before checks finish. Use that
+option only after the Developer authorizes landing the slice and every required host acceptance
+check has passed; GitHub can merge independently of a later `merge-pr` call. A green existing PR
+may be proposed as ready without rerunning local verification; authorization to merge is still
+required. For ordinary CI-based landing, leave auto-merge off, wait for complete proof, and run
+`merge-pr` on that verified result.
 
 Always poll ongoing CI through completion. Start diagnosing and fixing failures as they appear
 while polling the remaining jobs; a run link is not completion. Retain logs and a run/commit-scoped
@@ -81,12 +83,13 @@ the local commit to the pushed head, checks the latest verdict, and pins the squ
 head. It archives `merged/<name>` and reports the merge, including when auto-merge already did it.
 Do not change the head simply to obtain a local readiness record.
 
-For a new authorized hosted landing, `./agent unsandboxed open-pr` pushes, opens or reuses the PR,
-uses the reviewed message as its title and description and squash message, enables auto-merge,
-and follows checks. When they pass, use `merge-pr`. To update the message, edit it and run `open-pr`
-again. GitHub deletes the merged feature branch; the archive workflow also records `merged/<name>`
-for a PR merged another way. The commands use REST where a cloud proxy refuses GraphQL; when
-auto-merge cannot be enabled, `merge-pr` performs the verified merge.
+For new hosted verification, `./agent unsandboxed open-pr` pushes, opens or reuses the PR, uses the
+reviewed message as its title and description, and follows checks without enabling auto-merge.
+When the complete current-head verdict passes and landing is authorized, use `merge-pr` with the
+reviewed squash message. To update the message, edit it and run `open-pr` again; updating an
+intentionally armed PR requires the explicit `--auto-merge` option. GitHub deletes the merged
+feature branch; the archive workflow also records `merged/<name>` for a PR merged another way.
+The commands use REST where a cloud proxy refuses GraphQL.
 
 Use `./agent pr-checks --wait` to follow checks and read failures from their annotations; failed
 partitions upload `verify-partition-<k>` logs. Diagnose with focused local checks when practical,
