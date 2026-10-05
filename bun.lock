@@ -77,8 +77,10 @@
         "expo-build-properties": "~57.0.22",
         "expo-clipboard": "~57.0.2",
         "expo-constants": "~57.0.20",
+        "expo-file-system": "57.0.7",
         "expo-glass-effect": "~57.0.4",
         "expo-haptics": "~57.0.3",
+        "expo-media-library": "57.0.5",
         "expo-secure-store": "~57.0.4",
         "expo-updates": "~57.0.24",
         "jazz-rn": "2.0.0-alpha.57",
@@ -113,6 +115,8 @@
     "packages/apps/native-bindings": {
       "name": "tao-native-bindings",
       "dependencies": {
+        "expo-file-system": "57.0.7",
+        "expo-media-library": "57.0.5",
         "tao-shared": "workspace:*",
       },
     },
@@ -323,6 +327,7 @@
       "dependencies": {
         "tao-ast-utils": "workspace:*",
         "tao-generation": "workspace:*",
+        "tao-native-bindings": "workspace:*",
         "tao-parser": "workspace:*",
         "tao-shared": "workspace:*",
         "tao-validator": "workspace:*",
@@ -401,8 +406,10 @@
         "expo-clipboard": "~57.0.2",
         "expo-constants": "~57.0.20",
         "expo-dev-client": "~57.0.19",
+        "expo-file-system": "57.0.7",
         "expo-glass-effect": "~57.0.4",
         "expo-haptics": "~57.0.3",
+        "expo-media-library": "57.0.5",
         "expo-secure-store": "~57.0.4",
         "expo-updates": "~57.0.24",
         "jazz-rn": "2.0.0-alpha.57",
@@ -471,6 +478,7 @@
         "chokidar": "^5.0.0",
         "tao-ast-utils": "workspace:*",
         "tao-compiler": "workspace:*",
+        "tao-native-bindings": "workspace:*",
         "tao-parser": "workspace:*",
         "tao-shared": "workspace:*",
         "typescript": "5.9.3",
@@ -2513,6 +2521,8 @@
     "expo-keep-awake": ["expo-keep-awake@57.0.2", "", { "peerDependencies": { "expo": "*", "react": "*" } }, "sha512-GqgH746wtJImmsbyHmCQoi7cOslKuWQBbJHXr53S35Bpf5UvxCAztvnitUEd7D0QvFN2rvkOhylbZpgZZfBLlQ=="],
 
     "expo-manifests": ["expo-manifests@57.0.2", "", { "dependencies": { "expo-json-utils": "~57.0.2" }, "peerDependencies": { "expo": "*" } }, "sha512-pPIIcKR73OShwlWMg8H90WRzKUd2krDdKlKAwuQV1FtUwE7H3hQEFw0ePFQY9yFoGMF/77ryYwNKfI5umMcCog=="],
+
+    "expo-media-library": ["expo-media-library@57.0.5", "", { "peerDependencies": { "expo": "*", "react-native": "*" } }, "sha512-amSLrLsS7Gl4nCqbc2PlVbHj5jK9kQLsSOQgJ2QasHCSHzYXw6Ui7aolxX5APg9P4TgYPE0yWn46ndifh52bRw=="],
 
     "expo-modules-autolinking": ["expo-modules-autolinking@57.0.13", "", { "dependencies": { "@expo/require-utils": "^57.0.5", "@expo/spawn-async": "^1.8.0", "chalk": "^4.1.0", "commander": "^7.2.0" }, "bin": { "expo-modules-autolinking": "bin/expo-modules-autolinking.js" } }, "sha512-Hj5NjZRlfccazhKab+wK19leRVUr1Y/PUERaRvegIbUSkq4GVxKq6lU9QHlKQyC16MdD/VS4iwsiLivB4o7lvQ=="],
 

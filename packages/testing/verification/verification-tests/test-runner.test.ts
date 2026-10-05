@@ -15,6 +15,17 @@ const jestConfig = require('../../../apps/expo-host/jest.shared.config.cjs') as 
 /** An empty history: no recorded duration means no suite is sharded, so a node is named for its suite. */
 const NO_HISTORY = { ledger: { tests: {}, version: 1 } as const, timings: { nodes: {}, version: 1 } as const }
 
+const NATIVE_PROJECT_TEST_FILES = [
+  'packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingInventory.test.ts',
+  'packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingModules.test.ts',
+  'packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingsService.test.ts',
+  'packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingsWatch.integration.test.ts',
+  'packages/language/project-tooling/project-tooling-tests/ProjectNativeRefreshReceipt.test.ts',
+  'packages/language/project-tooling/project-tooling-tests/ProjectNativeTypeScript.test.ts',
+] as const
+const PROJECT_RECEIPT_TEST = 'packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceipt.test.ts'
+const PROJECT_TOOLING_TEST = 'packages/language/project-tooling/project-tooling-tests/ProjectToolingService.test.ts'
+
 type Suites = ReadonlyMap<string, SelectedSuite>
 
 /** discover answers one selection from the real registry and returns the selected suites by name. */
@@ -61,6 +72,203 @@ function suiteState(name: string): SuiteState {
 }
 
 Describe('test runner suite registry', () => {
+  Test(
+    'partitions complete native and receipt cohorts exactly once while preserving parent report identities',
+    async () => {
+      const { byName } = await discover({}, { reportRoot: '/tmp/test-reports' })
+      const suite = byName.get('language/project-tooling')!
+      Expect(suite).toBeDefined()
+      const { states } = TestNodes.build({ ...NO_HISTORY, selected: [suite] })
+      Expect(states.map(state => state.name)).toEqual([
+        'language/project-tooling:native',
+        'language/project-tooling:receipts',
+        'language/project-tooling#1',
+      ])
+      Expect(states[0]?.selectedTestFiles).toEqual(NATIVE_PROJECT_TEST_FILES)
+      Expect(states[1]?.selectedTestFiles).toEqual([PROJECT_RECEIPT_TEST])
+      const executed = states.flatMap(state => state.selectedTestFiles ?? [])
+      Expect(executed.toSorted()).toEqual(suite.files.toSorted())
+      Expect(new Set(executed).size).toBe(suite.files.length)
+      for (const state of states) {
+        Expect(state.suite).toBe('language/project-tooling')
+        Expect(state.testReport?.suite).toBe('language/project-tooling')
+      }
+      Expect(states.map(state => state.testReport?.path)).toEqual([
+        '/tmp/test-reports/language_project-tooling_native.xml',
+        '/tmp/test-reports/language_project-tooling_receipts.xml',
+        '/tmp/test-reports/language_project-tooling_1.xml',
+      ])
+    },
+  )
+
+  Test('named cohorts intersect exact and changed selections without adding unselected files', async () => {
+    const files = [NATIVE_PROJECT_TEST_FILES[0], PROJECT_RECEIPT_TEST, PROJECT_TOOLING_TEST]
+    for (const kind of ['file', 'changed'] as const) {
+      const { selected } = await discover({
+        files: new Map([['language/project-tooling', files]]),
+        kind,
+        suites: new Set(['language/project-tooling']),
+      })
+      const { states } = TestNodes.build({ ...NO_HISTORY, selected })
+      Expect(states.map(state => state.name)).toEqual([
+        'language/project-tooling:native',
+        'language/project-tooling:receipts',
+        'language/project-tooling#1',
+      ])
+      Expect(states.map(state => state.selectedTestFiles)).toEqual([
+        [NATIVE_PROJECT_TEST_FILES[0]],
+        [PROJECT_RECEIPT_TEST],
+        [PROJECT_TOOLING_TEST],
+      ])
+    }
+    const buildProcess: SelectedSuite['buildProcess'] = (_name, files) => ({ args: [], command: 'true', files })
+    for (const files of [[NATIVE_PROJECT_TEST_FILES[0]], [PROJECT_RECEIPT_TEST], [PROJECT_TOOLING_TEST], []]) {
+      const { states } = TestNodes.build({
+        ...NO_HISTORY,
+        selected: [{ buildProcess, files, name: 'language/project-tooling' }],
+      })
+      Expect(states.flatMap(state => state.selectedTestFiles ?? [])).toEqual(files)
+      Expect(states.some(state => state.name.endsWith(':native'))).toBe(files.includes(NATIVE_PROJECT_TEST_FILES[0]))
+      Expect(states.some(state => state.name.endsWith(':receipts'))).toBe(files.includes(PROJECT_RECEIPT_TEST))
+      Expect(states.every(state => (state.selectedTestFiles?.length ?? 0) > 0)).toBe(true)
+    }
+  })
+
+  Test('named cohorts add no core ordering barrier and keep parser preflight dependencies unchanged', () => {
+    const buildProcess: SelectedSuite['buildProcess'] = (_name, files) => ({ args: [], command: 'true', files })
+    const selected = [
+      { buildProcess, files: ['packages/language/parser/parser-tests/lexer.test.ts'], name: 'language/parser' },
+      {
+        buildProcess,
+        files: [NATIVE_PROJECT_TEST_FILES[0], PROJECT_RECEIPT_TEST, PROJECT_TOOLING_TEST],
+        name: 'language/project-tooling',
+      },
+      { buildProcess, files: ['host.test.ts'], name: 'apps/expo-host' },
+    ]
+    for (const preflight of [false, true]) {
+      const { states } = TestNodes.build({ ...NO_HISTORY, preflight, selected })
+      const byName = new Map(states.map(state => [state.name, state]))
+      Expect(byName.get('language/project-tooling:native')?.node.after).toBeUndefined()
+      Expect(byName.get('language/project-tooling:receipts')?.node.after).toBeUndefined()
+      Expect(byName.get('language/project-tooling#1')?.node.after).toBeUndefined()
+      Expect(byName.get('apps/expo-host')?.node.after).toEqual(preflight ? ['language/parser:core'] : [])
+      Expect(byName.has('language/parser:core')).toBe(preflight)
+    }
+    for (
+      const provedNames of [
+        ['language/project-tooling:native'],
+        ['language/project-tooling:receipts'],
+        ['language/project-tooling:native', 'language/project-tooling:receipts'],
+      ]
+    ) {
+      const { states } = TestNodes.build({ ...NO_HISTORY, proved: new Set(provedNames), selected: [selected[1]!] })
+      Expect(states.map(state => state.name)).toEqual([
+        'language/project-tooling:native',
+        'language/project-tooling:receipts',
+        'language/project-tooling#1',
+      ].filter(name => !provedNames.includes(name)))
+      Expect(states.at(-1)?.selectedTestFiles).toEqual([PROJECT_TOOLING_TEST])
+    }
+  })
+
+  Test('keeps automatic recorded-duration sharding for the ordinary named-cohort remainder', () => {
+    const ordinaryFiles = [PROJECT_TOOLING_TEST, 'a.test.ts', 'b.test.ts', 'c.test.ts']
+    const buildProcess: SelectedSuite['buildProcess'] = (_name, files) => ({ args: [], command: 'true', files })
+    const plan = TestNodes.build({
+      ledger: NO_HISTORY.ledger,
+      selected: [{
+        buildProcess,
+        files: [...NATIVE_PROJECT_TEST_FILES, PROJECT_RECEIPT_TEST, ...ordinaryFiles],
+        name: 'language/project-tooling',
+      }],
+      timings: {
+        nodes: {
+          'language/project-tooling': {
+            emaMs: 8_600,
+            lastMs: 8_600,
+            lastRunAt: '2026-01-01T00:00:00.000Z',
+            samples: 1,
+            source: 'wall',
+          },
+        },
+        version: 1,
+      },
+    })
+    Expect(plan.states.map(state => state.name)).toEqual([
+      'language/project-tooling:native',
+      'language/project-tooling:receipts',
+      'language/project-tooling#1',
+      'language/project-tooling#2',
+    ])
+    Expect(plan.plans[0]?.shards.flat().toSorted()).toEqual(ordinaryFiles.toSorted())
+    Expect(plan.states.flatMap(state => state.selectedTestFiles ?? []).toSorted())
+      .toEqual([...NATIVE_PROJECT_TEST_FILES, PROJECT_RECEIPT_TEST, ...ordinaryFiles].toSorted())
+  })
+
+  Test('reconstructs cohort timing and ledger summaries only under the complete parent suite', async () => {
+    const root = await mkTestDir('tao-native-cohort-report-')
+    const buildProcess: SelectedSuite['buildProcess'] = (_name, files) => ({ args: [], command: 'true', files })
+    const plan = TestNodes.build({
+      ...NO_HISTORY,
+      selected: [{
+        buildProcess,
+        files: [NATIVE_PROJECT_TEST_FILES[0], PROJECT_RECEIPT_TEST, PROJECT_TOOLING_TEST],
+        name: 'language/project-tooling',
+      }],
+    })
+    const states = plan.states as SuiteState[]
+    try {
+      for (const [index, state] of states.entries()) {
+        state.status = 'passed'
+        state.elapsedMs = (index + 1) * 10_000
+        const file = state.selectedTestFiles![0]!
+        await FS.writeText(FS.resolvePath(file, root), 'fixture')
+        const report = FS.resolvePath(`report-${index}.xml`, root)
+        await FS.writeText(
+          report,
+          '<testsuites tests="1"><testsuite>'
+            + `<testcase file="${file}" name="cohort result" time="1"></testcase>`
+            + '</testsuite></testsuites>',
+        )
+        state.testReport = { format: 'bun-junit', path: report, suite: state.suite }
+      }
+      const durations = TestNodes.suiteDurations(states)
+      Expect([...durations.keys()]).toEqual(['language/project-tooling'])
+      Expect(durations.get('language/project-tooling')).toMatchObject({ concurrency: 3, wallMs: 58_800 })
+      for (const state of states) {
+        for (const status of ['failed', 'skipped'] as const) {
+          state.status = status
+          Expect(TestNodes.suiteDurations(states).has('language/project-tooling')).toBe(false)
+        }
+        state.status = 'passed'
+      }
+      const observations = await TestRunner.observationsFor(states, root)
+      const ledger = await TestLedger.recordRun({
+        fullRun: true,
+        observations,
+        repositoryRoot: root,
+        startedAt: Date.now(),
+      })
+      Expect(Object.values(ledger.tests).map(record => record.suite)).toEqual([
+        'language/project-tooling',
+        'language/project-tooling',
+        'language/project-tooling',
+      ])
+      Expect(Object.keys(ledger.tests).every(key => key.startsWith('language/project-tooling::'))).toBe(true)
+      const captured = await withCapturedOutput(() => TestResultSummary.printResultSummary(states, 30_000))
+      Expect(captured.stdout).toContain('- language/project-tooling: passed; tests 3; pass 3; fail 0;')
+      Expect(captured.stdout).not.toContain('language/project-tooling:native:')
+      Expect(captured.stdout).not.toContain('language/project-tooling:receipts:')
+      Expect(captured.stdout).not.toContain('language/project-tooling#1:')
+      // Green-tree proof consumes this parent identity, never a mutable node composition.
+      Expect([...new Set(states.map(state => state.suite))]).toEqual(['language/project-tooling'])
+      Expect(TestRunner.completeRun({ kind: 'full', pattern: '' })).toBe(true)
+      Expect(TestRunner.completeRun({ kind: 'changed', pattern: '' })).toBe(false)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('a name pattern filters every suite, including the Tao behavior suite', async () => {
     const { byName } = await discover({ pattern: 'one package only' })
 

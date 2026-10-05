@@ -1,0 +1,198 @@
+use AbortControllerAbort, AbortControllerConstruct, AbortControllerSignalGet, AbortSignalAbortedGet, AbortSignalReasonGet, AbortSignalThrowIfAborted, DirectoryConstruct, DirectoryCreate, DirectoryCreateOptions, DirectoryDelete, DirectoryExistsGet, DirectoryUriGet, FileBytes, FileConstruct, FileCopy, FileCreate, FileCreateOptions, FileHandleClose, FileHandleOffsetSet, FileHandleReadBytes, FileHandleWriteBytes, FileJson, FileNameGet, FileOpen, FileReadableStream, FileRename, FileSizeGet, FileText, FileWrite, NativeValueKind, NativeValueNumber, PathInfoIsDirectoryTrue, PathsCacheGet, ReadableStreamBYOBReaderReadForUint8ArrayArrayBufferResultAsReadableStreamReadDoneResultUint8ArrayArrayBuffer, ReadableStreamBYOBReaderReadForUint8ArrayArrayBufferResultAsReadableStreamReadValueResultUint8ArrayArrayBuffer, ReadableStreamBYOBReaderReadForUint8ArrayArrayBufferResultIsReadableStreamReadDoneResultUint8ArrayArrayBuffer, ReadableStreamBYOBReaderReadForUint8ArrayArrayBufferResultIsReadableStreamReadValueResultUint8ArrayArrayBuffer, ReadableStreamDefaultReaderUint8ArrayArrayBufferCancel, ReadableStreamDefaultReaderUint8ArrayArrayBufferRead, ReadableStreamDefaultReaderUint8ArrayArrayBufferReleaseLock, ReadableStreamUint8ArrayArrayBufferGetReaderWithNoArguments, ReadableStreamUint8ArrayArrayBufferLockedGet, ReleaseAbortController, ReleaseAbortSignal, ReleaseDirectory, ReleaseFile, ReleaseFileHandle, ReleaseNativeValue, ReleaseReadableStreamDefaultReaderUint8ArrayArrayBuffer, ReleaseReadableStreamUint8ArrayArrayBuffer, RelocationOptions from @tao/device/files
+use Button, Col, ScrollView, Text, TextMultiline from @tao/ui
+
+public
+scene FilesAcceptance() {
+   Title "Files acceptance"
+   state Status = "Ready"
+   state ReadText = "Not read"
+   state ByteSize = 0
+   state Bytes is list of number = []
+   state HandleBytes is list of number = []
+   state CopyName = "Not copied"
+   state StreamLocked = false
+   state StreamLockedBefore = false
+   state StreamBytes is list of number = []
+   state StreamChunk = false
+   state StreamEnd = false
+   state AbortedBefore = false
+   state AbortedAfter = false
+   state ReasonKind = "Not read"
+   state ReasonNumber = 0
+   state AbortCheck = "Not checked"
+   action Roundtrip() {
+      set StreamBytes = []
+      set StreamChunk = false
+      set StreamEnd = false
+      do Cleanup()
+      let Cache = do PathsCacheGet()
+      let CacheUri = do DirectoryUriGet(Cache)
+      let Root = do DirectoryConstruct(Uris: [CacheUri, "tao-modern-photos-files-acceptance"])
+      do DirectoryCreate(Root, Options: DirectoryCreateOptions {
+         Idempotent: true
+      })
+      let RootUri = do DirectoryUriGet(Root)
+      let Document = do FileConstruct(Uris: [RootUri, "text.txt"])
+      do FileCreate(Document, Options: FileCreateOptions {
+         Overwrite: true
+      })
+      do FileWrite(Document, Content: "Hello native")
+      let TextResult = do FileText(Document)
+      set ReadText = TextResult
+      let Copy = do FileConstruct(Uris: [RootUri, "copy.txt"])
+      do FileCopy(Document, Destination: Copy, Options: RelocationOptions {
+         Overwrite: true
+      })
+      do FileRename(Copy, NewName: "renamed.txt")
+      let Name = do FileNameGet(Copy)
+      set CopyName = Name
+      let ByteFile = do FileConstruct(Uris: [RootUri, "bytes.bin"])
+      do FileCreate(ByteFile, Options: FileCreateOptions {
+         Overwrite: true
+      })
+      do FileWrite(ByteFile, Content: [0, 1, 127, 128, 255])
+      let ByteResult = do FileBytes(ByteFile)
+      let Size = do FileSizeGet(ByteFile)
+      set Bytes = ByteResult
+      set ByteSize = Size
+      let Handle = do FileOpen(ByteFile)
+      do FileHandleOffsetSet(Handle, Value: 0)
+      do FileHandleWriteBytes(Handle, Bytes: [0, 1, 127, 128, 255])
+      do FileHandleOffsetSet(Handle, Value: 0)
+      let HandleResult = do FileHandleReadBytes(Handle, Length: 5)
+      set HandleBytes = HandleResult
+      do FileHandleClose(Handle)
+      do ReleaseFileHandle(Handle)
+      let Stream = do FileReadableStream(ByteFile)
+      let Reader = do ReadableStreamUint8ArrayArrayBufferGetReaderWithNoArguments(Stream)
+      let LockedBefore = do ReadableStreamUint8ArrayArrayBufferLockedGet(Stream)
+      set StreamLockedBefore = LockedBefore
+      let Result = do ReadableStreamDefaultReaderUint8ArrayArrayBufferRead(Receiver: Reader)
+      let IsChunk = do ReadableStreamBYOBReaderReadForUint8ArrayArrayBufferResultIsReadableStreamReadValueResultUint8ArrayArrayBuffer(Result)
+      set StreamChunk = IsChunk
+      if IsChunk {
+         let Chunk = do ReadableStreamBYOBReaderReadForUint8ArrayArrayBufferResultAsReadableStreamReadValueResultUint8ArrayArrayBuffer(Result)
+         set StreamBytes = Chunk.Value
+      }
+      let EndResult = do ReadableStreamDefaultReaderUint8ArrayArrayBufferRead(Receiver: Reader)
+      let IsEnd = do ReadableStreamBYOBReaderReadForUint8ArrayArrayBufferResultIsReadableStreamReadDoneResultUint8ArrayArrayBuffer(EndResult)
+      if IsEnd {
+         let End = do ReadableStreamBYOBReaderReadForUint8ArrayArrayBufferResultAsReadableStreamReadDoneResultUint8ArrayArrayBuffer(EndResult)
+         set StreamEnd = End.Done is True
+      }
+      do ReadableStreamDefaultReaderUint8ArrayArrayBufferCancel(Reader)
+      do ReadableStreamDefaultReaderUint8ArrayArrayBufferReleaseLock(Reader)
+      let Locked = do ReadableStreamUint8ArrayArrayBufferLockedGet(Stream)
+      set StreamLocked = Locked
+      do ReleaseReadableStreamDefaultReaderUint8ArrayArrayBuffer(Reader)
+      do ReleaseReadableStreamUint8ArrayArrayBuffer(Stream)
+      do ReleaseFile(ByteFile)
+      do ReleaseFile(Copy)
+      do ReleaseFile(Document)
+      do ReleaseDirectory(Root)
+      do ReleaseDirectory(Cache)
+   }
+   action RunRoundtrip() {
+      when do Roundtrip() {
+         saved -> { set Status = "File roundtrip complete" }
+         error -> Message { set Status = "File roundtrip failed: { Message }" }
+   }  }
+   action CancelResource() {
+      let Cache = do PathsCacheGet()
+      let CacheUri = do DirectoryUriGet(Cache)
+      let Root = do DirectoryConstruct(Uris: [CacheUri, "tao-modern-photos-files-acceptance"])
+      do DirectoryCreate(Root, Options: DirectoryCreateOptions {
+         Idempotent: true
+      })
+      let RootUri = do DirectoryUriGet(Root)
+      let ReasonFile = do FileConstruct(Uris: [RootUri, "reason.json"])
+      do FileCreate(ReasonFile, Options: FileCreateOptions {
+         Overwrite: true
+      })
+      do FileWrite(ReasonFile, Content: "7")
+      let Reason = do FileJson(ReasonFile)
+      let Controller = do AbortControllerConstruct()
+      let Signal = do AbortControllerSignalGet(Controller)
+      let Before = do AbortSignalAbortedGet(Signal)
+      set AbortedBefore = Before
+      do AbortControllerAbort(Controller, Reason: Reason)
+      let After = do AbortSignalAbortedGet(Signal)
+      let ReturnedReason = do AbortSignalReasonGet(Signal)
+      let Kind = do NativeValueKind(ReturnedReason)
+      let Number = do NativeValueNumber(ReturnedReason)
+      set AbortedAfter = After
+      set ReasonKind = Kind
+      set ReasonNumber = Number
+      when do AbortSignalThrowIfAborted(Signal) {
+         saved -> { set AbortCheck = "Unexpectedly accepted" }
+         error -> Message { set AbortCheck = "Abort rejected" }
+      }
+      do ReleaseNativeValue(ReturnedReason)
+      do ReleaseNativeValue(Reason)
+      do ReleaseAbortSignal(Signal)
+      do ReleaseAbortController(Controller)
+      do ReleaseFile(ReasonFile)
+      do ReleaseDirectory(Root)
+      do ReleaseDirectory(Cache)
+   }
+   action RunCancellation() {
+      when do CancelResource() {
+         saved -> { set Status = "Cancellation complete" }
+         error -> Message { set Status = "Cancellation failed: { Message }" }
+   }  }
+   action Cleanup() {
+      let Cache = do PathsCacheGet()
+      let CacheUri = do DirectoryUriGet(Cache)
+      let Root = do DirectoryConstruct(Uris: [CacheUri, "tao-modern-photos-files-acceptance"])
+      let Exists = do DirectoryExistsGet(Root)
+      if Exists {
+         do DirectoryDelete(Root)
+      }
+      do ReleaseDirectory(Root)
+      do ReleaseDirectory(Cache)
+   }
+   action RunCleanup() {
+      when do Cleanup() {
+         saved -> { set Status = "Owned files removed" }
+         error -> Message { set Status = "Cleanup failed: { Message }" }
+   }  }
+   render ScrollView() {
+      Col() {
+         TextMultiline("Only the tao-modern-photos-files-acceptance directory inside this app's cache is written or removed.")
+         TextMultiline("Status: { Status }")
+
+         #roundtrip
+         Button("Run file roundtrip") {
+            on press RunRoundtrip
+         }
+         Text("Text: { ReadText }")
+         Text("Copy name: { CopyName }")
+         Text("Byte size: { ByteSize }")
+         loop Bytes / Byte {
+            Text("Byte: { Byte }")
+         }
+         loop HandleBytes / Byte {
+            Text("Handle byte: { Byte }")
+         }
+         Text("Stream locked before release: { StreamLockedBefore }")
+         Text("Stream chunk received: { StreamChunk }")
+         loop StreamBytes / Byte {
+            Text("Stream byte: { Byte }")
+         }
+         Text("Stream end reached: { StreamEnd }")
+         Text("Stream locked after release: { StreamLocked }")
+
+         #cancel
+         Button("Run cancellation resource") {
+            on press RunCancellation
+         }
+         Text("Aborted before: { AbortedBefore }")
+         Text("Aborted after: { AbortedAfter }")
+         Text("Reason kind: { ReasonKind }")
+         Text("Reason number: { ReasonNumber }")
+         Text("Abort check: { AbortCheck }")
+
+         #cleanup
+         Button("Remove owned files") {
+            on press RunCleanup
+}  }  }  }

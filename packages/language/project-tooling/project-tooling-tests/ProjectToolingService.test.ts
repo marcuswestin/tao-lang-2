@@ -7,6 +7,52 @@ import { Describe, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
 import { ProjectTooling } from '../project-tooling-src/ProjectToolingService'
 
 Describe('project tooling disk refresh', () => {
+  Test('reports missing maintained bindings before discovering even an empty project', async () => {
+    const root = await mkTestDir('tao-tooling-native-empty-')
+    try {
+      await FS.mkdir(FS.resolvePath('.tao', root))
+      const stdlibRoot = FS.resolvePath('missing-stdlib', root)
+      const stale = await ProjectTooling.refresh(root, { nativeBindings: { stdlibRoot } })
+      Expect(stale.status).toBe('stale')
+      Expect(stale.diagnostics.some(diagnostic => diagnostic.code === 'maintained-native-bindings-stale')).toBe(true)
+      Expect(stale.nativeBindingOutputPaths).toContain(
+        FS.resolvePath('.tao-ts/native-bindings/files/maintained.json', stdlibRoot),
+      )
+      Expect(await FS.exists(FS.resolvePath('tsconfig.json', root))).toBe(false)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test(
+    'keeps last good contract bytes when native inspection becomes stale before source deletion cleanup',
+    async () => {
+      await withTaoFiles(
+        'tao-tooling-native-retain-',
+        {
+          'Main.tao': 'function CountWords(Value text) returns number { return CountWords(Value) from ./Words.ts }',
+          'Words.ts': 'export function CountWords(value: string): number { return value.length }\n',
+        },
+        async (paths, root) => {
+          const fresh = await ProjectTooling.refresh(root, {})
+          Expect(fresh.diagnostics).toEqual([])
+          Expect(fresh.status).toBe('fresh')
+          const contract = FS.resolvePath('.tao-ts/Main.tao.ts', root)
+          Expect(fresh.contractPaths).toContain(contract)
+          const saved = await FS.readText(contract)
+          await FS.remove(paths['Main.tao'])
+          const stale = await ProjectTooling.refresh(root, {
+            nativeBindings: { stdlibRoot: FS.resolvePath('missing-stdlib', root) },
+          })
+          Expect(stale.status).toBe('stale')
+          Expect(stale.contractPaths).toContain(contract)
+          Expect(stale.changedOutputPaths).toEqual([])
+          Expect(await FS.readText(contract)).toBe(saved)
+        },
+      )
+    },
+  )
+
   Test('keeps current diagnostics across overlapping watches and a reopened watch', async () => {
     const root = await mkTestDir('tao-tooling-watched-program-', { location: 'host' })
     const watches: Awaited<ReturnType<typeof ProjectTooling.watch>>[] = []

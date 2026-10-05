@@ -351,6 +351,78 @@ Describe('FS', () => {
     Expect(await FS.isDirectory(FS.resolvePath('empty-after-sync', targetDir))).toBe(true)
   })
 
+  Test('ignores changing mutation coordination files on both sides of synchronization', async () => {
+    const root = await tmpDir()
+    const sourceDir = FS.resolvePath('source', root)
+    const targetDir = FS.resolvePath('target', root)
+    const disappearingOwner = FS.resolvePath('nested/output.tao-file-mutation.lock.owner-old', sourceDir)
+    const createdSourceOwner = FS.resolvePath('nested/output.tao-file-mutation.lock.owner-new', sourceDir)
+    const createdTargetOwner = FS.resolvePath('nested/other.tao-file-mutation.lock.owner-new', targetDir)
+    const stableCoordination = [
+      'nested/output.tao-file-mutation.lock',
+      'nested/output.tao-file-mutation.lock.reclaim',
+      'nested/output.tao-file-mutation.lock.owner-stable',
+      'nested/output.tao-file-mutation.lock.stale-stable',
+      'nested/output.tao-file-mutation.lock.release-stable',
+      'nested/output.0f9b5a2c-1d3e-4f5a-8b7c-6d5e4f3a2b1c.0.tmp',
+      'nested/output.0f9b5a2c-1d3e-4f5a-8b7c-6d5e4f3a2b1c.1.restore',
+    ]
+    const legitimate = [
+      'nested/output.tao-file-mutation.locked.owner-not-reserved',
+      'nested/output.0f9b5a2c-1d3e-4f5a-8b7c-6d5e4f3a2b1c.notes.tmp',
+    ]
+    for (const relative of stableCoordination) {
+      Expect(FS.isFileMutationAuxiliaryPath(relative)).toBe(true)
+      await FS.writeText(FS.resolvePath(relative, sourceDir), 'source coordination')
+      await FS.writeText(FS.resolvePath(relative, targetDir), 'target coordination')
+    }
+    for (const relative of legitimate) {
+      Expect(FS.isFileMutationAuxiliaryPath(relative)).toBe(false)
+      await FS.writeText(FS.resolvePath(relative, sourceDir), 'ordinary source bytes')
+    }
+    const targetOnly = FS.resolvePath('nested/other.tao-file-mutation.lock.owner-stable', targetDir)
+    await FS.writeText(targetOnly, 'target-only coordination')
+    await FS.writeText(disappearingOwner, 'disappearing source coordination')
+    await FS.writeText(FS.resolvePath('value.txt', sourceDir), 'current bytes')
+    await FS.writeText(FS.resolvePath('value.txt', targetDir), 'old bytes')
+    await FS.writeText(FS.resolvePath('stale.txt', targetDir), 'ordinary stale bytes')
+
+    await FS.synchronizeDirectoryFileSets([{ fromPath: sourceDir, toPath: targetDir }], {
+      boundaryPath: root,
+      sourceBoundaryPath: root,
+      beforeCommit: async () => {
+        await FS.remove(disappearingOwner)
+        await FS.writeText(createdSourceOwner, 'new source coordination')
+        await FS.writeText(createdTargetOwner, 'new target coordination')
+      },
+    })
+
+    Expect(await FS.readText(FS.resolvePath('value.txt', targetDir))).toBe('current bytes')
+    Expect(await FS.exists(FS.resolvePath('stale.txt', targetDir))).toBe(false)
+    Expect(await FS.exists(FS.resolvePath('nested/output.tao-file-mutation.lock.owner-old', targetDir))).toBe(false)
+    Expect(await FS.exists(FS.resolvePath('nested/output.tao-file-mutation.lock.owner-new', targetDir))).toBe(false)
+    Expect(await FS.readText(createdSourceOwner)).toBe('new source coordination')
+    Expect(await FS.readText(createdTargetOwner)).toBe('new target coordination')
+    Expect(await FS.readText(targetOnly)).toBe('target-only coordination')
+    for (const relative of stableCoordination) {
+      Expect(await FS.readText(FS.resolvePath(relative, sourceDir))).toBe('source coordination')
+      Expect(await FS.readText(FS.resolvePath(relative, targetDir))).toBe('target coordination')
+    }
+    for (const relative of legitimate) {
+      Expect(await FS.readText(FS.resolvePath(relative, targetDir))).toBe('ordinary source bytes')
+    }
+  })
+
+  Test('hashes staged auxiliary paths when explicitly included in a file identity', async () => {
+    const root = await tmpDir()
+    const stagedPath = FS.resolvePath('output.0f9b5a2c-1d3e-4f5a-8b7c-6d5e4f3a2b1c.0.tmp', root)
+    Expect(FS.isFileMutationAuxiliaryPath(stagedPath)).toBe(true)
+    await FS.writeText(stagedPath, 'staged before')
+    const before = await FS.filesIdentity([['data.txt', stagedPath]])
+    await FS.writeText(stagedPath, 'staged after')
+    Expect(await FS.filesIdentity([['data.txt', stagedPath]])).not.toBe(before)
+  })
+
   Test('restores every persistent root after an injected multi-root publication failure', async () => {
     const root = await tmpDir()
     const firstSource = FS.resolvePath('staging/first', root)
@@ -394,6 +466,11 @@ Describe('FS', () => {
     const orphanedStaging = FS.resolvePath(`target.${uuid}.0.tmp`, root)
     const orphanedRollback = FS.resolvePath(`target.${uuid}.3.restore`, root)
     const unrelated = FS.resolvePath('target-notes.tmp', root)
+
+    Expect(FS.isFileMutationAuxiliaryPath(orphanedStaging)).toBe(true)
+    Expect(FS.isFileMutationAuxiliaryPath(orphanedRollback)).toBe(true)
+    Expect(FS.isFileMutationAuxiliaryPath(unrelated)).toBe(false)
+    Expect(FS.isFileMutationAuxiliaryPath(FS.resolvePath(`target.${uuid}.notes.tmp`, root))).toBe(false)
 
     await FS.writeText(FS.resolvePath('value.txt', sourceDir), 'current')
     await FS.mkdir(targetDir)
@@ -449,6 +526,49 @@ Describe('FS', () => {
 
     Expect(await FS.readText(targetFile)).toBe('concurrent bytes')
   })
+
+  for (const side of ['source', 'destination'] as const) {
+    for (const change of ['content', 'added', 'removed'] as const) {
+      if (side === 'destination' && change === 'content') {
+        continue // The destination-content case above also proves concurrent bytes survive rejection.
+      }
+      Test(`rejects ${side} ${change} drift immediately before synchronization commits`, async () => {
+        const root = await tmpDir()
+        const sourceDir = FS.resolvePath('source', root)
+        const targetDir = FS.resolvePath('target', root)
+        const sourceFile = FS.resolvePath('value.txt', sourceDir)
+        const targetFile = FS.resolvePath('value.txt', targetDir)
+        await FS.writeText(sourceFile, 'source bytes')
+        await FS.writeText(targetFile, 'target bytes')
+        const changedDir = side === 'source' ? sourceDir : targetDir
+        const changedFile = FS.resolvePath('value.txt', changedDir)
+        const addedFile = FS.resolvePath('added.txt', changedDir)
+
+        await Expect(FS.synchronizeDirectoryFiles(sourceDir, targetDir, {
+          boundaryPath: root,
+          beforeCommit: async () => {
+            await Switch(change, {
+              added: () => FS.writeText(addedFile, 'concurrent addition'),
+              removed: () => FS.remove(changedFile),
+              content: () => FS.writeText(changedFile, 'concurrent content'),
+            })
+          },
+        })).rejects.toThrow(
+          side === 'source'
+            ? 'Source files changed while synchronizing'
+            : 'Destination files changed while synchronizing',
+        )
+
+        Expect(await FS.readText(side === 'source' ? targetFile : sourceFile))
+          .toBe(side === 'source' ? 'target bytes' : 'source bytes')
+        await Switch(change, {
+          added: async () => Expect(await FS.readText(addedFile)).toBe('concurrent addition'),
+          removed: async () => Expect(await FS.exists(changedFile)).toBe(false),
+          content: async () => Expect(await FS.readText(changedFile)).toBe('concurrent content'),
+        })
+      })
+    }
+  }
 
   Test('refuses symbolic-link ancestors between the trusted boundary and either synchronized tree', async () => {
     const root = await tmpDir()
@@ -1482,6 +1602,38 @@ Describe('TaoStdlib', () => {
       Expect(await TaoStdlib.declaredRootIdentity()).toBe(before)
 
       await FS.writeText(authored, 'export const authored = 2\n')
+      Expect(await TaoStdlib.declaredRootIdentity()).not.toBe(before)
+    })
+  })
+
+  Test('includes native-owned generated implementations while excluding ordinary contracts', async () => {
+    const payload = await tmpDir()
+    const native = FS.resolvePath('.tao-ts/native-bindings/files/Bindings.ts', payload)
+    await FS.writeText(native, 'export const native = 1\n')
+    await withDeclaredStdlibRoot(payload, async () => {
+      const before = await TaoStdlib.declaredRootIdentity()
+      await FS.writeText(FS.resolvePath('.tao-ts/@tao/device/files/Bindings.tao.ts', payload), 'ordinary contract\n')
+      Expect(await TaoStdlib.declaredRootIdentity()).toBe(before)
+      await FS.writeText(native, 'export const native = 2\n')
+      Expect(await TaoStdlib.declaredRootIdentity()).not.toBe(before)
+    })
+  })
+
+  Test('keeps stdlib identity stable while native files have real mutation ownership sidecars', async () => {
+    const payload = await tmpDir()
+    const native = FS.resolvePath('.tao-ts/native-bindings/files/Bindings.ts', payload)
+    await FS.writeText(native, 'export const native = 1\n')
+    await withDeclaredStdlibRoot(payload, async () => {
+      const before = await TaoStdlib.declaredRootIdentity()
+      await FS.withFileMutationLock(native, payload, async () => {
+        Expect(await TaoStdlib.declaredRootIdentity()).toBe(before)
+      }, {
+        beforeClaimPublish: async (_lock, owner) => {
+          Expect(await FS.isFile(owner)).toBe(true)
+          Expect(await TaoStdlib.declaredRootIdentity()).toBe(before)
+        },
+      })
+      await FS.writeText(native, 'export const native = 2\n')
       Expect(await TaoStdlib.declaredRootIdentity()).not.toBe(before)
     })
   })

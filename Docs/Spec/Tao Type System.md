@@ -324,6 +324,23 @@ Static methods retain their declared result identity. Associated converters decl
 source-to-target transformation inside the source type; merely sharing backing data does not
 permit implicit sibling conversion. Method visibility follows the visible owning type.
 
+### Native event controls
+
+Native press and submit bindings can declare controls before their action:
+
+```tao
+on press (preventDefault) -> do Save()
+on submit (preventDefault, stopPropagation) -> { do Save() }
+```
+
+The host applies these controls synchronously to the native event, then schedules
+the ordinary Tao action. The binding preserves the action's signature and mounted
+ownership; another use of `Save` does not inherit these controls. Duplicate or
+unknown controls are errors. Press and submit support `preventDefault` and
+`stopPropagation`; React Native's synthetic event protocol does not provide
+`stopImmediatePropagation`. Scalar change callbacks cannot carry native controls.
+Controls cannot depend on results computed inside the queued Tao body.
+
 ### Reactive parameters and copies
 
 View and action arguments keep live reads. Mutating a parameter with `set` or `toggle`, or
@@ -741,6 +758,49 @@ omitted rather than overriding upstream defaults. Listener callback payloads use
 their subscription's `Remove` member is an action. Subscription ownership and disposal follow
 [Tao Actions](Tao%20Actions.md#native-listener-ownership).
 Configuration implementation factories are checked against the declared nav or datasource protocol.
+
+The maintained `@tao/device/photos` and `@tao/device/files` modules are generated
+from pinned modern native declarations. Constructors, methods and property reads
+are result-bearing foreign actions; property writes are foreign actions. Operation
+names include their owning type, and property reads observe the current native
+value rather than a construction-time snapshot. React convenience hooks are not
+native operations and are explicitly deferred.
+
+Native objects have distinct nominal reference types. Repeated wrapping preserves
+native object identity and method receivers; nested records and lists retain those
+typed references. Native references remain in memory and cannot enter persisted
+state or serialized restoration descriptors. A generated `Release<Type>` action
+releases the Tao wrapper reference only. Closing a file handle, cancelling a
+transfer and deleting a file or photo require their explicit upstream operations.
+Native side effects retain upstream behavior and do not gain rollback guarantees.
+
+Generated TypeScript contracts retain these nominal identities through receivers,
+results, callbacks and nested records or lists. Verified generation metadata maps
+each Tao native type to its descriptor-derived TypeScript reference type; an empty
+object or a reference from another native family cannot satisfy that contract.
+The same mapping follows copied implementations in compiled app output. Pure Tao
+consumers also check the reached native implementation bodies and signatures.
+
+Copied bytes use numeric lists, with each element checked as an integer from 0 to
+255. Buffers, blobs, streams and readers or writers retain native references and
+expose generated operations. Arbitrary JSON and EXIF values use `NativeValue`:
+kind inspection, object keys, key or index lookup, and checked primitive reads.
+Present null and undefined remain distinguishable from an absent key or element.
+
+Generated structural record unions expose `Is<Member>` actions returning boolean
+and `As<Member>` actions returning the selected record type. Both check the
+complete member shape. A projection checks again and reports invalid input rather
+than returning an unchecked record. Bind the boolean result before branching, then
+call the projection to access member fields. This uses ordinary action and type
+semantics; it does not add implicit union narrowing.
+
+The native generator owns `.tao-ts/native-bindings/`; compiler-generated sidecar
+contracts retain separate ownership. Actual native implementation bodies and their
+Tao contracts are checked in the pinned native type environment before ordinary
+sidecars consume declaration views. Generation retains the last valid output on
+failure, but stale declarations or outputs cannot justify a successful check or
+build. `tao bindings generate --maintained` regenerates both maintained modules;
+repository setup performs the same generation.
 
 A view may publish the same typed boundary directly:
 

@@ -6,6 +6,7 @@ description: >-
   `delegation` parallel-implementation fan-out. Not for exploratory or coupled changes.
 targets: [codexcli, claudecode, cursor]
 codexcli:
+  model: gpt-6-luna
   model_reasoning_effort: high
   sandbox_mode: workspace-write
   nickname_candidates: [Slice, Workstream, Owner, Build, Seam, Increment]

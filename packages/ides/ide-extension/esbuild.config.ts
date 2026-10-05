@@ -1,4 +1,5 @@
-import { Errors, FS, Platform, ReleaseCapabilities, type ReleasePhase } from '@shared'
+import { generateMaintainedNativeBindings, stageNativeBindingResources } from '@native-bindings'
+import { Errors, FS, HCI, Platform, ReleaseCapabilities, type ReleasePhase } from '@shared'
 import { context } from 'esbuild'
 import { stageProjectToolingResources } from './ide-extension-src/resources/project-tooling-resources'
 import { writeMergedTaoTextMateGrammar } from './ide-extension-src/syntax/textmate-grammar'
@@ -79,7 +80,7 @@ export async function buildIdeExtension(options: BuildIdeExtensionOptions = {}):
   const formatterPackageRoot = FS.resolvePath('..', Bun.resolveSync('tao-formatter/package.json', packageRoot))
   const dprintTypescriptWasm = Bun.resolveSync('@dprint/typescript/plugin.wasm', formatterPackageRoot)
   const stdlibSourceRoot = FS.resolvePath('../../apps/stdlib/@tao', packageRoot)
-  const stagingBundledStdlibRoot = FS.resolvePath('_gen_ide-extension/@tao', stagingPackageRoot)
+  const stagingBundledStdlibRoot = FS.resolvePath('_gen_ide-extension/stdlib/@tao', stagingPackageRoot)
   const runtimeRoot = FS.resolvePath('../../apps/runtime', packageRoot)
   const typescriptPackageRoot = FS.dirname(Bun.resolveSync('typescript/package.json', packageRoot))
 
@@ -110,6 +111,8 @@ export async function buildIdeExtension(options: BuildIdeExtensionOptions = {}):
       name: 'bundle-ide-extension-assets',
       setup(build) {
         build.onStart(async () => {
+          HCI.logProcessInfo('editor', 'Generating maintained native bindings...')
+          await generateMaintainedNativeBindings({ mode: 'write' })
           await FS.remove(stagingGeneratedRoot)
         })
         build.onEnd(async result => {
@@ -148,6 +151,16 @@ export async function buildIdeExtension(options: BuildIdeExtensionOptions = {}):
             typescriptLibRoot: FS.resolvePath('lib', typescriptPackageRoot),
             outputRoot: stagingGeneratedRoot,
           })
+          HCI.logProcessInfo('editor', 'Staging native binding implementations and pinned compiler inputs...')
+          await stageNativeBindingResources({ outputRoot: stagingGeneratedRoot })
+          await FS.copyFile(
+            FS.resolvePath('../Package.tao', stdlibSourceRoot),
+            FS.resolvePath('stdlib/Package.tao', stagingGeneratedRoot),
+          )
+          await FS.copyFile(
+            FS.resolvePath('../.tao/store/project.json', stdlibSourceRoot),
+            FS.resolvePath('stdlib/.tao/store/project.json', stagingGeneratedRoot),
+          )
           await publishIdeExtensionOutputs(stagingPackageRoot, packageRoot, { boundaryPath: repositoryRoot })
         })
       },

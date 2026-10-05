@@ -11,6 +11,7 @@ import {
   actionInstrumentationEnabled,
   actionInvocationRequiresAsync,
 } from './action-control-flow'
+import { actionResultBridgeTypeOptions } from './action-result-bridge-types'
 import { authLibraryExport, needsAuthContext, withAuthContextFactory } from './auth-context'
 import { compileArgumentForType } from './capability-projection'
 import { compileDeclarationIdentity, declarationModuleName } from './declaration-identity'
@@ -345,7 +346,7 @@ export const ActionsCompiler = {
 
   ActionResultStatement(statement: AST.ActionResultStatement): Compiled {
     const invocation = statement.invocation
-    const type = BridgeMetadata.resultType(Type.ofValueDeclaration(statement))
+    const type = BridgeMetadata.resultType(Type.ofValueDeclaration(statement), actionResultBridgeTypeOptions())
     if (invocation.then) {
       return Compile.JoinedDoStatement(
         invocation,

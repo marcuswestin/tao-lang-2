@@ -41,17 +41,20 @@ tool accepts them. If a history-fork mode forbids overrides, use a self-containe
 that allows them; if a role fixes its model or effort, choose a role whose pins match the work.
 Report unavailable choices rather than silently falling back to defaults.
 
-Prefer the newest GPT-6 Luna available for bounded implementation with settled requirements, focused tests, fixture migrations, inventories and routine validation. The brief names expected behavior and requires escalation on surprises, semantic uncertainty or plan changes. The assigning agent checks the exact diff and evidence before integration. Use the newest GPT-6 Sol for unsettled design, delicate shared seams, diagnosis, research and independent review; workers may escalate such questions. Keep useful running work. This policy overrides broader tier labels below for GPT. For Claude Code and Cursor, use the newest available release within the table's selected Claude family; preserve each tier's family. Table IDs are concrete generated defaults, not a version ceiling. Keep supported rolling aliases where offered; never invent a latest alias.
+Use medium for most work; high only for deep analysis/research, except already planned code writing uses newest GPT-6 Luna at high. Newest GPT-6 Sol determines implementation approaches and writes code only for intricate processes whose implementation is unsettled; hand settled work to Luna. Routine mechanical work may use Luna at low.
 
-| Work                                                                       | Tier                             | Effort |
-| -------------------------------------------------------------------------- | -------------------------------- | ------ |
-| Mechanical sweeps, file inventories, single-fact lookups across many paths | fast                             | low    |
-| Codebase exploration, tracing behavior, web research, comparing call sites | standard                         | medium |
-| Running a verify lane and distilling the failures                          | standard                         | low    |
-| Implementing a bounded slice with settled requirements                     | fast for GPT, standard otherwise | high   |
-| Implementation involving delicate shared seams or unresolved judgments     | standard or deep                 | high   |
-| Adversarial review, architectural judgment, root-cause dead ends           | deep                             | xhigh  |
-| Language semantics, decisions that are expensive to reverse                | frontier                         | xhigh  |
+All subagent reviews, including architecture, use medium or low. Sol extra-high (`xhigh`) is exceptionally rare, never for reviews; record why high is insufficient in the brief. These rules govern primary agents and subagents where selectable; avoid incompatible fixed roles. Light means `low`. GPT family choices override tier labels. Other harnesses retain the table's newest available family and the review ceiling; concrete IDs are defaults, not version ceilings. Preserve supported rolling aliases; never invent one.
+
+| Work                                                    | Tier                             | Effort        |
+| ------------------------------------------------------- | -------------------------------- | ------------- |
+| Mechanical sweeps and inventories                       | fast                             | low           |
+| Exploration, implementation decisions, routine research | standard                         | medium        |
+| Running verification and distilling failures            | standard                         | low           |
+| Writing already planned code                            | fast for GPT; standard otherwise | high          |
+| All subagent reviews                                    | deep                             | medium or low |
+| Deep analysis or research                               | deep                             | high          |
+| Unsettled intricate implementation                      | standard                         | medium        |
+| Language semantics and expensive decisions              | frontier                         | medium        |
 
 | Tier     | Claude Code `model` | Codex CLI `model` | Cursor `model`     |
 | -------- | ------------------- | ----------------- | ------------------ |
@@ -62,7 +65,7 @@ Prefer the newest GPT-6 Luna available for bounded implementation with settled r
 
 `repo-lint` checks profile pins against this table; Codex `[agents]` defaults come from the standard row. See [model routing](references/model-routing.md) for precedence, availability, effort syntax, and completed-task measurement.
 
-Upward, a standard or deep orchestrator escalates one hard question to `oracle` — a root cause that survived two attempts, a costly design fork, a diagnosis you keep circling — read-only, no mandate to fix; choose its model and effort under the same routing policy. Effort is separate from tier: a stronger model at low effort beats a weaker one at high effort for judgment, and loses for breadth.
+Use `oracle` for one hard question — a root cause that survived two attempts, a costly design fork, a diagnosis you keep circling — read-only, no mandate to fix. Choose effort under the same policy; this role does not authorize extra-high or bypass the review ceiling. Tier and effort are separate choices.
 
 ## Choosing the tier
 

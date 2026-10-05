@@ -196,6 +196,17 @@ export const InvocationsCompiler = {
 
   /** EventHandlerAction compiles a named or inline Tao event callback. */
   EventHandlerAction(pair: ASTUtils.RenderEventBindingPair): Compiled {
+    const action = Compile.EventHandlerBodyAction(pair)
+    const controls = Object.entries(pair.controls)
+    return controls.length > 0
+      ? gen`TR.NativeEventControls(${action}, { ${
+        gen.join(controls, ([name]) => gen`${name}: true`, { separator: ', ' })
+      } }, _TaoActionOwner)`
+      : action
+  },
+
+  /** EventHandlerBodyAction preserves the ordinary named or inline action and its owner. */
+  EventHandlerBodyAction(pair: ASTUtils.RenderEventBindingPair): Compiled {
     const handler = pair.handler
     if (handler.action) {
       return gen`TR.BindEventAction(${Compile.Expression(handler.action)}, _TaoActionOwner)`

@@ -157,15 +157,25 @@ export const StatementsFormatter = {
     }
   },
 
-  /** EventHandler formats control configuration as `on event Action` or an inline handler. */
+  /** EventHandler spaces named or inline handlers and an optional binding-local native policy. */
   EventHandler(f) {
     f.oneSpaceAfter('on')
     f.oneSpaceBefore('->')
-    f.oneSpaceBeforeProperty('action')
+    f.oneSpaceBeforeProperty('controls', 'action')
     if (f.node.payload !== undefined || (f.node.block && !f.node.block.$cstNode?.text.startsWith('{'))) {
       f.oneSpaceAfter('->')
     }
   },
+
+  /** NativeEventControls keeps policy parentheses tight and control names comma-spaced. */
+  NativeEventControls(f) {
+    f.noSpaceAfter('(')
+    f.noSpaceBefore(')')
+    f.commaSpacedList()
+  },
+
+  /** NativeEventControl is an identifier with no internal whitespace. */
+  NativeEventControl() {},
 
   /** LoopSelectHandler formats loop-owned inline selection actions without widening ordinary events. */
   LoopSelectHandler(f) {

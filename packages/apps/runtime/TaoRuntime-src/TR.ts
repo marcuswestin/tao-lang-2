@@ -123,9 +123,22 @@ import { getJSValue, type TaoJSValue } from './TR-js-value'
 import { LayoutControls } from './TR-layout'
 import { openUrl } from './TR-linking'
 import { runMultiOutcome } from './TR-multi-outcome'
+import { installNativeAbortSupport } from './TR-native-abort'
+import { nativeAsyncCallbacks } from './TR-native-async-callbacks'
+import { nativeByteControls } from './TR-native-bytes'
+import { nativeCallCallbacks } from './TR-native-call-callbacks'
+import { createNativeEventListenerType, invokeNativeEvent, nativeEventControls } from './TR-native-events'
 import { NativeHosts } from './TR-native-hosts'
 import { NativeModules } from './TR-native-modules'
+import { createNativePendingType } from './TR-native-pending'
+import { nativeReceiverCallbacks } from './TR-native-receiver-callbacks'
+import {
+  createNativeReferenceGroup,
+  createNativeReferenceType,
+  type NativeReference as TaoNativeReference,
+} from './TR-native-references'
 import { nativeSubscription, type TaoActionOwner, useActionOwner } from './TR-native-subscription'
+import { nativeValueControls } from './TR-native-values'
 import {
   NavigationControls,
   NavKindControls,
@@ -685,6 +698,21 @@ class TR {
   static CaptureActionReceiver = captureActionReceiver
 
   static NativeSubscription = nativeSubscription
+  static NativeAbortSupport = installNativeAbortSupport
+  static NativeAssert: typeof RuntimeAssert = RuntimeAssert
+  static NativeCallCallbacks = nativeCallCallbacks
+  static NativeAsyncCallbacks = nativeAsyncCallbacks
+  static NativePendingType = createNativePendingType
+  static NativeReceiverCallbacks = nativeReceiverCallbacks
+  static NativeEventControls = nativeEventControls
+  static InvokeNativeEvent = invokeNativeEvent
+  static NativeEventListenerType = createNativeEventListenerType
+
+  /** Generated bindings own each checked native type and preserve its object identity. */
+  static NativeReferenceType = createNativeReferenceType
+  static NativeReferenceGroup = createNativeReferenceGroup
+  static NativeValues = nativeValueControls
+  static NativeBytes = nativeByteControls
 
   /** Action creates runtime Tao actions from generated callbacks. */
   static Action<Args extends any[]>(
@@ -1055,7 +1083,7 @@ class TR {
   private static readonly native = NativeModules
 
   /** Clock exposes the runtime clock a check holds, advances, and releases. */
-  static Clock = Clock
+  static Clock: typeof Clock = Clock
 
   /** Hosts resolves the optional platform components `@tao/ui/native` implementations reach for. */
   static Hosts = NativeHosts
@@ -1186,7 +1214,13 @@ class TR {
   static readonly Dev = DevControls
 
   /** Studio exposes opt-in preview-only runtime behavior for generated Studio apps. */
-  static readonly Studio = {
+  static readonly Studio: typeof StudioPreview & {
+    readonly DeviceHost: typeof StudioDeviceHost
+    readonly Environment: typeof StudioEnvironmentControls
+    readonly LensRender: typeof StudioLensRender
+    readonly State: typeof StudioStateControls
+    readonly SubjectHost: typeof StudioSubjectHost
+  } = {
     ...StudioPreview,
     DeviceHost: StudioDeviceHost,
     Environment: StudioEnvironmentControls,
@@ -1401,6 +1435,16 @@ class RuntimeActionValue<Args extends any[] = any[]> {
     private readonly original?: RuntimeActionValue<Args>,
   ) {
     this.#latest = runs === 'latest' ? new LatestActionInvocations<Args>() : undefined
+  }
+
+  nativeEventActive(): boolean {
+    return this.owner?.active !== false
+  }
+
+  invokeNativeEvent(...args: Args): void | Promise<void> {
+    return this.owner === undefined
+      ? this.invoke(...args)
+      : this.invokeOwned(this.owner, () => this.nativeEventActive(), ...args)
   }
 
   invoke(...args: Args): void | Promise<void> {
@@ -1653,6 +1697,8 @@ namespace TR {
   export type RuntimeFailure = TaoRuntimeFailure
   export type RuntimeFailureFrame = TaoRuntimeFailureFrame
   export type RuntimeJson = TaoRuntimeJson
+  /** NativeReference is an in-memory bridge value, never a serialized restoration value. */
+  export type NativeReference<T> = TaoNativeReference<T>
   /** Appearance is a Scheme request; System follows the live host only where the capability is reactive. */
   export type Appearance = TaoAppearance
   /** Scheme is the resolved Light or Dark value consumed by Tao design conditions. */

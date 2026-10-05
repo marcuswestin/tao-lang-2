@@ -192,6 +192,13 @@ available to following statements in its action block. Completion is awaited bef
 run, with the same joined transaction and failure behavior as ordinary `do`. A failed call does not
 produce a value or continue the block. Ordinary `do` may discard a declared result.
 
+Native event modifiers such as `on press (preventDefault) -> Save` apply the
+declared control before invoking the ordinary queued action. Native cancellation
+and propagation effects are external effects: a later Tao rollback cannot undo
+them. The raw event is not an extra argument to `Save`, and an unmounted binding
+does not apply controls or deliver its queued action. Cancellation decisions
+computed by an ordinary Tao body are not synchronous native event policies.
+
 Clipboard actions inside a view, using generated imports:
 
 ```tao

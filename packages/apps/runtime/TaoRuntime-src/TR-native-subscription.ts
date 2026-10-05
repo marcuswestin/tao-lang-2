@@ -7,6 +7,7 @@ import {
 import { actionOwner, registerActionCleanup } from './TR-action-transactions'
 import { RuntimeAssert } from './TR-assert'
 import { reportUnownedFailure } from './TR-errors'
+import { invokeNativeAction, type NativeActionInput } from './TR-native-action'
 
 /** One mounted view owns its explicitly registered native subscriptions. */
 export class TaoActionOwner {
@@ -104,11 +105,11 @@ export function nativeSubscription() {
       }
     },
     invoke<Args extends any[]>(
-      action: { invokeOwned(owner: TaoActionOwner, active: () => boolean, ...args: Args): void | Promise<void> },
+      action: NativeActionInput<Args>,
       ...args: Args
     ): void {
       if (!removed && owner.active) {
-        void action.invokeOwned(owner, () => !removed && owner.active, ...args)
+        void invokeNativeAction(action, owner, () => !removed && owner.active, ...args)
       }
     },
     remove,

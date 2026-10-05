@@ -1,4 +1,15 @@
+import { inspectMaintainedNativeBindings, type MaintainedBindingOptions } from '@native-bindings'
 import { FS, Repo } from '@shared'
+
+/** A stale or unreadable maintained payload can never identify reusable output. */
+export async function maintainedNativeBindingIdentity(options?: MaintainedBindingOptions): Promise<string | undefined> {
+  try {
+    const inspection = await inspectMaintainedNativeBindings(options)
+    return inspection.status === 'fresh' ? inspection.identity : undefined
+  } catch {
+    return undefined
+  }
+}
 
 /**
  * The package groups whose sources cannot change what `tao check` reports or what a Tao app

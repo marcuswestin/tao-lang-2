@@ -1,4 +1,10 @@
 import { ASTUtils, Packages } from '@ast-utils'
+import {
+  inspectMaintainedNativeBindings,
+  type MaintainedBindingOptions,
+  type NativeBridgeTypeOrigin,
+  readMaintainedNativeBridgeTypeOrigins,
+} from '@native-bindings'
 import { AST, codeProjectRoot } from '@parser'
 import { Assert, Diagnostics, ReleaseCapabilities, type ReleaseProfile } from '@shared'
 import Validator, { type ValidationResult } from '@validator'
@@ -74,6 +80,8 @@ export type CompilerContext = {
   packagesContext: Packages.Context
   sourceRoot: string
   releaseProfile: ReleaseProfile
+  nativeBindings?: MaintainedBindingOptions
+  nativeBridgeTypeOrigins?: readonly NativeBridgeTypeOrigin[]
 }
 
 /** createContext creates compiler invocation state. */
@@ -81,8 +89,9 @@ function createContext(
   packagesContext: Packages.Context,
   sourceRoot: string,
   releaseProfile: ReleaseProfile = ReleaseCapabilities.current(),
+  nativeBindings?: MaintainedBindingOptions,
 ): CompilerContext {
-  return { packagesContext, sourceRoot, releaseProfile }
+  return { packagesContext, sourceRoot, releaseProfile, nativeBindings }
 }
 
 /**
@@ -116,11 +125,12 @@ async function compileCode(code: string, options: CompileOptions = {}): Promise<
 }
 
 /** compileValidated selects an app and dispatches an already validated graph to its target backend. */
-function compileValidated(
+async function compileValidated(
   validationResult: ValidationResult,
   context: CompilerContext,
   options: CompileOptions = {},
-): CompileResult {
+): Promise<CompileResult> {
+  const nativeBindings = await inspectMaintainedNativeBindings(context.nativeBindings)
   const releaseDiagnostics = Validator.releaseDiagnostics(Validator.createContext(
     context.packagesContext,
     validationResult.files.map(file => file.ast),
@@ -130,7 +140,11 @@ function compileValidated(
   ))
   validationResult = {
     ...validationResult,
-    diagnostics: Diagnostics.unique([...validationResult.diagnostics, ...releaseDiagnostics]),
+    diagnostics: Diagnostics.unique([
+      ...nativeBindings.diagnostics,
+      ...validationResult.diagnostics,
+      ...releaseDiagnostics,
+    ]),
   }
   if (options.studio) {
     ReleaseCapabilities.require('studio', context.releaseProfile)
@@ -162,17 +176,27 @@ function compileValidated(
       ? `Cannot compile ambiguous app '${options.appName}'. Select its declaring Tao file as the entry.`
       : `Cannot compile unknown app '${options.appName}'. Available apps: ${appNames.join(', ')}.`,
   )
-  const emit = () =>
-    Backends[options.target ?? 'react-native'].compile({
-      validation: validationResult,
-      context,
-      app: selected.app,
-      appPath: selected.path,
-      options,
-    })
-  return validationResult.associatedEffects
+  const nativeBridgeTypeOrigins = await readMaintainedNativeBridgeTypeOrigins({
+    ...context.nativeBindings,
+    inspection: nativeBindings,
+  })
+  const emit = () => Backends[options.target ?? 'react-native'].compile({
+    validation: validationResult,
+    context: { ...context, nativeBridgeTypeOrigins },
+    app: selected.app,
+    appPath: selected.path,
+    options,
+  })
+  const compiled = validationResult.associatedEffects
     ? ASTUtils.withAssociatedEffects(validationResult.associatedEffects, emit)
     : emit()
+  const afterNativeBindings = await inspectMaintainedNativeBindings(context.nativeBindings)
+  Assert.input(
+    afterNativeBindings.status === 'fresh' && afterNativeBindings.identity === nativeBindings.identity,
+    Diagnostics.errorMessages(afterNativeBindings.diagnostics).join('; ')
+      || 'Native binding inputs changed during compilation. Regenerate maintained bindings and retry.',
+  )
+  return compiled
 }
 
 function validationForCompileMode(

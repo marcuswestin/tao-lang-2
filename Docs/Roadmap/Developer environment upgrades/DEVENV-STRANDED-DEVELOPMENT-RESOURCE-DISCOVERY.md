@@ -61,3 +61,15 @@ with no inspection warnings. Discovery reads metadata rather than legacy content
 The Developer authorized committing and landing this source slice after its focused checks and
 independent review. No dependency, machine setting, or broad asset cleanup is included. Live crash,
 mobile/native, visible and human acceptance stays deferred.
+
+## Directory registration follow-up — October 5, 2026
+
+During native bridge validation, registering a task-owned Xcode result bundle through
+`./agent resources --register-directory` failed while writing
+`~/.cache/tao/resource-inventory/*.tmp` with `EPERM`. The named host route intentionally
+accepts only read-only report forms and refuses registration flags. The bundle's
+canonical `/private/var/...` path was verified first; `/var/...` is rejected by the
+registry's existing symlink guard. Retained task-local directory notes preserve
+ownership and cleanup conditions, but they do not constitute a successful registry
+write. A future decision can add a narrowly scoped registration route or a writable
+registration location; do not expand the current host report permission implicitly.

@@ -25,7 +25,7 @@ help:
 # The private setup recipe is what every harness reaches through `./agent setup`: Worktrunk's pre-start hook
 # (.config/wt.toml), the harness SessionStart hooks (.rulesync/hooks.jsonc), and
 # Cursor's worktree setup (.cursor/worktrees.json). Changing what setup does changes them all.
-_setup: _deps _tao-project-deps _agent-config _git-hooks _initial-dev-branch _shell-completion
+_setup: _deps native-bindings _tao-project-deps _agent-config _git-hooks _initial-dev-branch _shell-completion
     ./dev shell-setup --prepare
 
 # Configure optional automatic development environments for this repository and its worktrees
@@ -608,7 +608,7 @@ reclaim *ARGS:
 worktree-status:
     ./dev worktree-status
 
-# Push this feature branch, open or reuse its pull request with auto-merge on, then stream its checks
+# Push this feature branch and stream pull-request checks; --no-auto-merge runs CI without automatic landing
 [group('Dev')]
 open-pr *ARGS:
     ./dev open-pr {{ ARGS }}
@@ -736,12 +736,13 @@ verify-changed no_cache='false': _deps
 # host — the native shell and the canary, which contend on the window server — declare `gui` in the
 # catalog and take a machine-wide lease for exactly as long as they run. Everything else here is
 # headless and parallel-safe, so refusing the whole lane priced six gates at the cost of two.
-# Verify everything plus browser, native and bundle lanes; stop starting checks after a definite failure. --no-cache ignores a recorded green tree
+# Verify everything plus browser, native and bundle lanes; stop starting checks after a definite failure. --no-cache ignores a recorded green tree; --jobs limits simultaneous work
+[arg('jobs', long='jobs')]
 [arg('no_cache', long='no-cache', value='true')]
 [arg('show_studio', long='show-studio', value='true')]
 [group('Dev')]
-verify-full no_cache='false' show_studio='false': _deps
-    ./dev gates {{ VERIFY_FULL_GATES }} --lane verify-full {{ if show_studio == "true" { "--show-studio" } else { "" } }} {{ if VERIFY_FULL_SKIPPED == "" { "" } else { "--skipped \"" + VERIFY_FULL_SKIPPED + "\"" } }} --green-tree verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
+verify-full no_cache='false' show_studio='false' jobs='': _deps
+    ./dev gates {{ VERIFY_FULL_GATES }} --lane verify-full {{ if show_studio == "true" { "--show-studio" } else { "" } }} {{ if VERIFY_FULL_SKIPPED == "" { "" } else { "--skipped \"" + VERIFY_FULL_SKIPPED + "\"" } }} --green-tree verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }} {{ if jobs == "" { "" } else { "--jobs " + quote(jobs) } }}
 
 # Run verify-full's gate membership in a managed shell, skipping the host-only lanes and claiming nothing about them. --no-cache ignores a recorded green tree; --partition k/n runs one CI machine's share
 [arg('no_cache', long='no-cache', value='true')]
@@ -796,8 +797,13 @@ _shell-completion: _deps
 
 # Tracked Tao projects keep their npm pins in .tao/lock.jsonc; their node_modules is installed here.
 # `tao install` loads the parser, which a fresh checkout has not generated yet.
-_tao-project-deps: _deps _parser-gen
+_tao-project-deps: _deps _parser-gen native-bindings
     "{{ BUN }}" run packages/cli/dev-cli/dev-cli-src/setup/TaoProjectDependencies.ts
+
+# Regenerate maintained Photos and Files bindings from the pinned native declarations
+[group('Setup')]
+native-bindings: _deps
+    "{{ BUN }}" run packages/apps/native-bindings/native-bindings-src/generate-maintained.ts
 
 _git-hooks:
     ./packages/cli/agent-cli/agent-cli-src/cli/agent-git-hooks.zsh install

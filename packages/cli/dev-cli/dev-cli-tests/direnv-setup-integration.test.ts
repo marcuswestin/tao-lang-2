@@ -10,6 +10,7 @@ Describe('developer shell setup ordering', () => {
       Assert.defined(setup, 'The setup recipe exists')
       const prerequisites = [
         '_deps',
+        'native-bindings',
         '_tao-project-deps',
         '_agent-config',
         '_git-hooks',
