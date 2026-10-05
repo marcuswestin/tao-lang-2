@@ -35,6 +35,7 @@ export const configuredItemValidationChecks = {
     if (
       (AST.isTypeDeclaration(configured.type.ref) && !AST.isConfigurableDeclaration(configured.type.ref))
       || AST.isParameterizedDeclaration(configured.type.ref)
+      || AST.isParameterTypeDeclaration(configured.type.ref)
     ) {
       validateConfiguredItemConstructor(configured, ctx)
     }
@@ -60,7 +61,10 @@ function validateConfiguredItemConstructor(
   ctx: ValidationContext,
 ): void {
   const constructed = Type.ofConfiguredValue(value)
-  if (!AST.isTypeDeclaration(value.type.ref) && !AST.isParameterizedDeclaration(value.type.ref)) {
+  if (
+    !AST.isTypeDeclaration(value.type.ref) && !AST.isParameterizedDeclaration(value.type.ref)
+    && !AST.isParameterTypeDeclaration(value.type.ref)
+  ) {
     return
   }
   if (!validateConfiguredConstructorMembers(value, ctx)) {
@@ -411,13 +415,11 @@ function validateConfiguredConstructorMembers(
   let members = value.members ?? []
   let ownerName = declaration?.name ?? value.type.$refText
   let current: ASTUtils.TaoType
-  if (AST.isTypeDeclaration(declaration)) {
+  if (AST.isTypeDeclaration(declaration) || AST.isParameterTypeDeclaration(declaration)) {
     current = Type.ofDefinition(declaration)
   } else if (AST.isParameterizedDeclaration(declaration)) {
     const [parameterName, ...remaining] = members
-    const parameterType = parameterName
-      ? AST.parametersOf(declaration).find(parameter => parameter.inlineType?.name === parameterName)?.inlineType
-      : undefined
+    const parameterType = parameterName ? Type.signatureParameterDefinition(declaration, parameterName) : undefined
     if (!parameterName || !parameterType) {
       if (parameterName) {
         ctx.error(value, configuredItemValidationMessages.unknownMember(ownerName, parameterName))

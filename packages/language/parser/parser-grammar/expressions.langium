@@ -176,7 +176,7 @@ CopyExpression:
 // A bare configuration block instantiates a declared type. `with` is reserved for copying and
 // patching an existing configured value.
 ConfigurationConstructor:
-    type=[ConstructorDeclaration:ID] ('.' members+=ID)* (block=ConfigurationBlock | value=DeclaredConstructorValue);
+    relative?='.'? type=[ConstructorDeclaration:ID] ('.' members+=ID)* (block=ConfigurationBlock | value=DeclaredConstructorValue);
 
 // A typed block is a directive boundary without admitting adjacent scalar values.
 ConfigurationBlockConstructor infers ConfigurationConstructor:
@@ -195,7 +195,7 @@ InferredConfigurationConstructor:
     block=ConfigurationBlock;
 
 type ConfiguredValue = ConfigurationConstructor;
-type ConstructorDeclaration = TypeDeclaration | ParameterizedDeclaration;
+type ConstructorDeclaration = TypeDeclaration | ParameterizedDeclaration | ParameterTypeDeclaration;
 
 ConfigurationBlock:
     '{' (entries+=ConfigurationDirective ','?)*

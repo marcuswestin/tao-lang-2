@@ -452,6 +452,11 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
   }
 
   private createConstructorDeclarationScope(node: AST.ConfiguredValue): Langium.Scope {
+    const signature = immediateConstructorSignature(node)
+    const signatureScope = signature ? this.createSignatureTypeScope(signature) : this.createScope([])
+    if (node.relative) {
+      return signatureScope
+    }
     const root = AST.findRoot(node)
     if (!AST.isTaoFile(root)) {
       return this.createScopeForNodes([])
@@ -461,9 +466,20 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       node,
       this.importedDeclarations(node, AST.isConstructorDeclaration),
     )
-    let scope = this.createScopeForNodes(local)
+    let scope = this.createScopeForNodes(local, signatureScope)
     scope = this.createScopeForNodes(imported, scope)
     return scope
+  }
+
+  private createSignatureTypeScope(owner: AST.ParameterizedDeclaration): Langium.Scope {
+    const descriptions = AST.parametersOf(owner).flatMap(parameter => {
+      const name = parameterValueName(parameter)
+      const definition = constructorParameterDefinition(parameter)
+      return name && definition
+        ? [this.descriptions.createDescription(definition, name, AST.getDocument(definition))]
+        : []
+    })
+    return this.createScope(descriptions)
   }
 
   private createConfigurationDeclarationScope(node: AST.Node): Langium.Scope {
@@ -987,6 +1003,37 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     this.useTargets.set(useStatement, declarations)
     return declarations
   }
+}
+
+/** Only the nearest argument owner supplies contextual constructor names. */
+function immediateConstructorSignature(node: AST.ConfiguredValue): AST.ParameterizedDeclaration | undefined {
+  let current: AST.Node | undefined = node.$container
+  while (current) {
+    if (AST.isArgumentList(current)) {
+      const owner = current.$container
+      if (AST.isFunctionCallExpression(owner)) {
+        return owner.function.ref
+      }
+      if (AST.isRender(owner)) {
+        return owner.view.ref
+      }
+      return undefined
+    }
+    current = current.$container
+  }
+  return undefined
+}
+
+/** Scope publishes authored definitions; a named signature type retains its declaring file. */
+function constructorParameterDefinition(parameter: AST.ParameterDeclaration): AST.TypeDefinition | undefined {
+  if (parameter.inlineType) {
+    return parameter.inlineType
+  }
+  const reference = parameter.type
+  if (!reference || reference.members.length > 0) {
+    return undefined
+  }
+  return ASTStruct.visibleFileDeclarations(reference, AST.isTypeDeclaration).find(type => type.name === reference.root)
 }
 
 function canonicalNumericUnitDeclaration(

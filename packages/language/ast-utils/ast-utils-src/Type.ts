@@ -136,6 +136,14 @@ export class Type {
     return parameter.type ? inferredParameterNameFromNamedType(parameter.type) : 'Value'
   }
 
+  /** signatureParameterDefinition projects a signature role to its original type declaration. */
+  static signatureParameterDefinition(
+    owner: AST.ParameterizedDeclaration,
+    name: string,
+  ): AST.TypeDefinition | undefined {
+    return new TypeResolutionContext().signatureParameterDefinition(owner, name)
+  }
+
   /** declarationName returns the source-facing name of a named declaration. */
   static declarationName(declaration: AST.NamedDeclaration): string {
     if (AST.isParameterDeclaration(declaration)) {
@@ -902,12 +910,16 @@ export class Type {
   static rootOfReference(
     reference: AST.NamedTypeReference,
     constructorItemType: (reference: AnyTypeReference) => ItemShape | undefined = Type.constructorReferenceItemType,
+    signatureParameterDefinition: (
+      owner: AST.ParameterizedDeclaration,
+      name: string,
+    ) => AST.TypeDefinition | undefined = Type.signatureParameterDefinition,
   ): TypeReferenceRoot {
     const owner = visibleParameterizedDeclaration(reference, reference.root)
     if (owner) {
       const [member, ...remainingMembers] = reference.members
       if (member) {
-        const parameterType = parameterTypeDeclarationNamed(owner, member)
+        const parameterType = signatureParameterDefinition(owner, member)
         if (parameterType) {
           return { definition: parameterType, remainingMembers }
         }
@@ -1559,7 +1571,7 @@ class TypeResolutionContext {
         AST.isConstructablePrimitiveTypeReference(reference)
           ? primitiveType(reference.primitive)
           : this.ofReference(reference),
-      ))
+      ), (owner, name) => this.signatureParameterDefinition(owner, name))
     return root.definition
       ? definitionAtMemberPath(root.definition, root.remainingMembers, definition => this.ofDefinition(definition))
       : undefined
@@ -1611,17 +1623,32 @@ class TypeResolutionContext {
       : declared
   }
 
+  signatureParameterDefinition(owner: AST.ParameterizedDeclaration, name: string): AST.TypeDefinition | undefined {
+    const parameter = AST.parametersOf(owner).find(parameter => Type.parameterName(parameter) === name)
+    if (!parameter || this.resolving.has(parameter)) {
+      return undefined
+    }
+    this.resolving.add(parameter)
+    try {
+      return parameter.inlineType
+        ?? (parameter.type ? this.definitionOfReference(parameter.type) : undefined)
+    } finally {
+      this.resolving.delete(parameter)
+    }
+  }
+
   ofConfiguredValue(value: AST.ConfiguredValue): TaoType {
     const declaration = value.type.ref
     const typeOfParameterizedDeclaration = (declaration: AST.ParameterizedDeclaration): TaoType => {
       const [member, ...remainingMembers] = value.members ?? []
-      const parameterType = member ? parameterTypeDeclarationNamed(declaration, member) : undefined
+      const parameterType = member ? this.signatureParameterDefinition(declaration, member) : undefined
       return parameterType
         ? this.atMemberPath(this.ofDefinition(parameterType), remainingMembers)
         : unresolvedType()
     }
     return Switch.typeMaybe<typeof declaration, TaoType>(declaration, {
       TypeDeclaration: declaration => this.atMemberPath(this.ofDefinition(declaration), value.members ?? []),
+      ParameterTypeDeclaration: declaration => this.atMemberPath(this.ofDefinition(declaration), value.members ?? []),
       ActionDeclaration: typeOfParameterizedDeclaration,
       CommandDeclaration: typeOfParameterizedDeclaration,
       FunctionDeclaration: typeOfParameterizedDeclaration,
@@ -2220,13 +2247,6 @@ function definitionAtMemberPath(
     }
   }
   return current
-}
-
-function parameterTypeDeclarationNamed(
-  declaration: AST.ParameterizedDeclaration,
-  name: string,
-): AST.ParameterTypeDeclaration | undefined {
-  return AST.parametersOf(declaration).find(parameter => parameter.inlineType?.name === name)?.inlineType
 }
 
 function itemConstructorProperty(
