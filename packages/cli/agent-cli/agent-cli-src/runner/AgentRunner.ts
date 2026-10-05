@@ -59,6 +59,8 @@ export type RunAgentCommandOptions = {
    * guess are all keyed on. */
   command: string
   cwd?: string
+  /** Test seam: the environment whose `CI` makes output stream by default; the process's own otherwise. */
+  env?: Readonly<Record<string, string | undefined>>
   /** Test seam: overrides `HCI.isInteractive`, which otherwise decides whether a prompting command
    * runs in passthrough mode. */
   isInteractive?: () => boolean
@@ -76,7 +78,7 @@ export type RunAgentCommandOptions = {
 /** runAgentCommand runs one command through the front door and returns its faithful exit status. */
 export async function runAgentCommand(options: RunAgentCommandOptions): Promise<number> {
   const repositoryRoot = options.cwd ?? Repo.getRoot()
-  const flags = parseAgentFlags(options.args, Platform.runtimeProcess.env)
+  const flags = parseAgentFlags(options.args, options.env ?? Platform.runtimeProcess.env)
   const initialWarnings = UiVisibility.warningsForCommand(options.command, flags.rest)
   const start = options.start ?? CLI.start
   const now = options.now ?? Date.now
