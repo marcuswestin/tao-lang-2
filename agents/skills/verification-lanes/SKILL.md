@@ -3,8 +3,8 @@ name: verification-lanes
 description: >-
   Choose and interpret Tao verification workflows. Use when selecting or running test and
   verification lanes, diagnosing failures, retrying, choosing sandbox or host execution,
-  assessing cache or test selection, reporting long gates, preparing finalize, or evaluating
-  landing evidence and merge readiness.
+  assessing cache or test selection, comparing machine and CI contention, reporting long gates,
+  preparing finalize, or evaluating landing evidence and merge readiness.
 ---
 
 # Verification Lanes
@@ -44,7 +44,7 @@ For a Developer-directed edit or commit in the primary `dev/<name>` checkout, do
 Use available focused checks, commit the exact reviewed paths when asked, and leave full verification
 to authorized landing. Other work may be in progress in that shared checkout.
 
-It is the iteration-time readiness command when landing is not yet authorized, not a step of an
+For the local route, it is the iteration-time readiness command when landing is not yet authorized, not a step of an
 already authorized landing — `./agent unsandboxed land` does
 its own preparation, integration and verification in one process. It brings a branch to ready:
 asserts the branch and a clean tree, integrates `main`, runs a verification lane only when no green
@@ -77,6 +77,11 @@ on its size.
 
 ## Working inside a busy machine
 
+- GitHub CI is the default for final portable verification and hosted landing; local checks remain
+  useful for iteration, diagnosis, faster appropriate proof, and host-only acceptance. Read
+  [hosted verification](references/hosted-verification.md) for route selection, offline limits,
+  auto-merge readiness, and direct merging of a fully verified PR. Reuse current green PR evidence;
+  do not repeat covered verification through local `land`.
 - Never background a gate and then poll for its output in a sleep loop: run it in the foreground with
   a timeout, since the gate is no faster for being backgrounded. **Reporting while a lane runs**,
   below, is the one exception — a lane too long to wait out, with the Developer waiting on it.
@@ -93,40 +98,12 @@ on its size.
 
 ## Hosted verification
 
-`.github/workflows/verify.yml` runs `verify-full-sandbox` split across twelve free Linux runners
-(`--partition k/12`) on every pull request push, merge-queue entry, and push to `main`; its `Verify`
-job is the single verdict. It proves the portable gates only — never the host-only lanes.
-`./agent pr-checks --wait` follows a pull request's checks and prints each failure's reason from its
-annotations; a failed partition uploads its logs as the `verify-partition-<k>` artifact. Reproduce
-with `./agent test-file` locally, push the fix, and read the next verdict.
+Read [hosted verification](references/hosted-verification.md) for CI-default routing, contention,
+CI coverage, offline limits, readiness, and merging an already verified pull request. It owns the
+choice between `open-pr` / `merge-pr` and local `land`, including evidence and authorization.
 
-Always poll ongoing CI through completion. Start diagnosing and fixing failures as they appear
-while polling the remaining jobs; a run link is not completion. Retain logs and a run/commit-scoped
-failure list, then address every issue after all jobs finish, including failures from superseded
-runs. Follow replacement runs to a complete verdict or a concrete external blocker. Test-only
-authorization does not permit auto-merge or landing.
-
-An authorized landing takes one of two routes, both squash-merging the reviewed merge message and
-archiving the branch at `merged/<name>`:
-
-- **A pull request with auto-merge** when the green `Verify` verdict proves the change: the cases
-  "Propose it as ready to land" lists below, short of anything only a host lane exercises. Write and
-  review the message at `.artifacts/merge/<branch>.msg`, then run `./agent unsandboxed open-pr`: it
-  pushes, makes the message the pull request's title and description, turns on auto-merge with the
-  message verbatim as the squash commit's (GitHub's default appends ` (#N)` and wraps bullets at 72
-  columns), and follows the checks. It refuses a branch that already merged. When they pass, run `./agent unsandboxed merge-pr`: it
-  confirms `Verify` passed on the pushed head, squash-merges unless auto-merge already did, archives
-  `merged/<name>`, and reports the merge. GitHub deletes the branch, and the archive workflow writes the
-  same `merged/<name>` for a pull request merged any other way. To change the message, edit it and run
-  `open-pr` again. When a check fails, read `./agent pr-checks`, fix, commit, and run `open-pr` again.
-  Both take a `feat/<name>` branch, or the one `claude/<name>` or `codex/<name>` branch a cloud agent
-  session may push, archived at `merged/claude/<name>` or `merged/codex/<name>`. They talk to GitHub
-  over REST, so they work where a cloud host's proxy refuses `gh pr`'s GraphQL; there `open-pr` turns
-  auto-merge on through the proxy's own REST route, and where that is refused too `merge-pr` merges.
-  Never run `gh pr merge` directly: the Developer's login can bypass `Verify`, and the harness refuses it.
-- **`./agent unsandboxed land`** when the change reaches a host-only lane (Studio, browser, native
-  shell, simulator, canary), or when CI is unavailable: it verifies on this machine under the landing
-  lock, including what the hosted runners cannot.
+A change meant to make CI faster carries its own `./agent ci-timings` before-and-after
+(`references/ci-speed.md`).
 
 ## Periodic performance proof
 

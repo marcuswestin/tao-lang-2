@@ -125,7 +125,7 @@ Read `.artifacts/logs/<lane>/latest/summary.json` first — it names each node's
 separately recorded retry, not concatenated output, owns the final classification: a node failing
 again on its isolated retry is `repository`, not `machine-contention`.
 
-For an authorized agent landing, let `./agent unsandboxed land` run the broad lanes under its lock; do not run
+For an authorized local landing, let `./agent unsandboxed land` run the broad lanes under its lock; do not run
 them immediately beforehand unless diagnosing a failure. `verify-full-sandbox` is a useful managed
 shell diagnostic but never proves host-only browser and native UI gates passed. Human landing
 workflows may still run `verify-full` separately from an unsandboxed terminal.
