@@ -34,7 +34,7 @@ import {
 } from './associated-operators'
 import { puritySatisfiesFunction } from './callable-effects'
 import { type CallableSignatureComparison, callableSignatureOf, compareCallableSignatures } from './callable-signatures'
-import { failureContractSatisfiesBound } from './failure-contracts'
+import { declaredCallableFailureContract, failureContractSatisfiesBound } from './failure-contracts'
 import { instantiateGenericInvocation, substituteGenericType } from './generic-bindings'
 import { resolveActionInvocation, resolveActionTarget } from './invocations'
 import { resolveNumericUnitReading } from './numeric-unit-readings'
@@ -1750,10 +1750,9 @@ function associatedCallableInContext(
   return materializeAssociatedCallable(declaration, owner, {
     receiver: receiverOwner => resolution.ofAssociatedOwner(receiverOwner),
     signature: callable =>
-      callableSignatureOf(AST.parametersOf(callable), {
-        cases: [],
-        open: AST.isAssociatedViewDeclaration(callable) || callable.failureBound !== 'never',
-      }, {
+      callableSignatureOf(AST.parametersOf(callable), AST.isAssociatedViewDeclaration(callable)
+        ? { cases: [], open: true }
+        : declaredCallableFailureContract(callable), {
         inputDomain: parameter => associatedInputDomain(parameter, resolution),
         accepts: (actual, expected) => isPrimitiveNamed(actual, 'none') && containsNoneDomain(expected),
       }),
