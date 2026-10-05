@@ -115,9 +115,32 @@ function validateRendererBody(
     }
     return
   }
+  if (body.kind === 'forwarded') {
+    if (AST.isRenderSlotUse(anchor)) {
+      const comparison = ASTUtils.compareRendererSlotForwarding(anchor)
+      if (comparison) {
+        validateRendererComparison(comparison, anchor, ctx)
+      }
+    }
+    return
+  }
   const inlineAnchor = body.kind === 'render' ? body.render : body.block
-  if (ASTUtils.rendererSlotSignatureOf(contract).inputs.length > 0) {
+  const use = AST.isRenderSlotUse(anchor) ? anchor : undefined
+  const count = ASTUtils.rendererSlotSignatureOf(contract, use).inputs.length
+  if (count > 0 && !use?.inputBindings.length) {
     ctx.error(inlineAnchor, messages.inlineInputs(name))
+  }
+  if (use) {
+    if (use.inputBindings.length > count) {
+      ctx.error(use, messages.inlineInputCount(name, count))
+    }
+    const seen = new Set<string>()
+    for (const binding of use.inputBindings) {
+      if (seen.has(binding.name)) {
+        ctx.error(binding, messages.duplicateInlineInput(binding.name))
+      }
+      seen.add(binding.name)
+    }
   }
 }
 
@@ -127,7 +150,19 @@ function validateNamedRenderer(
   reference: AST.Node,
   ctx: ValidationContext,
 ): void {
-  const comparison = ASTUtils.compareRendererSlotRenderer(contract, renderer)
+  const comparison = ASTUtils.compareRendererSlotRenderer(
+    contract,
+    renderer,
+    AST.isRenderSlotUse(reference) ? reference : undefined,
+  )
+  validateRendererComparison(comparison, reference, ctx)
+}
+
+function validateRendererComparison(
+  comparison: ReturnType<typeof ASTUtils.compareRendererSlotRenderer>,
+  reference: AST.Node,
+  ctx: ValidationContext,
+): void {
   for (const diagnostic of comparison.diagnostics) {
     Switch.on(diagnostic, 'kind', {
       'duplicate-target-type': item =>

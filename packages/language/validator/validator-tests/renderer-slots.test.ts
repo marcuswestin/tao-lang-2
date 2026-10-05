@@ -210,18 +210,73 @@ Describe('validator: renderer slots', () => {
     })
   })
 
+  Test('checks explicit inline names against the receiving input list', async () => {
+    const source = `
+      view Owner() {
+        @item(Value text, Count number): empty
+        render "owner"
+      }
+      view Main() {
+        render Owner() { @item Row, Position -> "{Row}:{Position}" }
+        render Owner() { @item Row, Row -> "{Row}" }
+        render Owner() { @item Row, Position, Extra -> "row" }
+      }
+    `
+    const diagnostics = await validateRendererSlots(source)
+    Expect(diagnostics.map(diagnostic => diagnostic.message)).toEqual([
+      messages.duplicateInlineInput('Row'),
+      messages.inlineInputCount('@item', 2),
+    ])
+    Expect(diagnostics.find(diagnostic => diagnostic.message === messages.duplicateInlineInput('Row'))?.nodeType).toBe(
+      'RenderSlotInputBinding',
+    )
+  })
+
+  Test('checks forwarded renderer domains and writable storage using actual slot inputs', async () => {
+    const diagnostics = await validateRendererSlots(`
+      type Base is text
+      type Leaf is Base
+      view Receiver() {
+        @item(Value Base): empty
+        render "receiver"
+      }
+      view Safe() {
+        @row(Value Base): empty
+        render Receiver() { @item: @row }
+      }
+      view Narrow() {
+        @row(Value Leaf): empty
+        render Receiver() { @item: @row }
+      }
+      view Writer() {
+        @row(mutable Value Base): empty
+        render Receiver() { @item: @row }
+      }
+    `)
+    Expect(diagnostics.map(diagnostic => diagnostic.message)).toEqual([
+      messages.rendererInputDomain('Value'),
+      messages.rendererStorage('Value'),
+    ])
+    Expect(diagnostics.map(diagnostic => diagnostic.nodeType)).toEqual([
+      'ParameterDeclaration',
+      'ParameterDeclaration',
+    ])
+  })
+
   Test('rejects absent and typed inline replacement bodies while preserving empty suppression', async () => {
     const found = (await validateRendererSlots(`
       view Host() { render "host" }
       view Owner() {
         @item(Value text): empty
-        @unfinished:
         @zero: empty
+        @unfinished:
         render Host() { }
       }
       view Main() {
         render Owner() {
           @item:
+        }
+        render Owner() {
           @item: { render "replacement" }
           @zero: empty
         }

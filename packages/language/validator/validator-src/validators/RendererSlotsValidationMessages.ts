@@ -20,7 +20,8 @@ export const RendererSlotsValidationMessages = {
   argumentAmbiguous: 'Renderer slot argument could bind to more than one parameter.',
   argumentUnmatched: 'Renderer slot argument does not match a parameter.',
   argumentMissing: (name: string) => `Renderer slot placement is missing required parameter '${name}'.`,
-  rendererDuplicateInput: (name: string) => `Renderer has multiple inputs for slot role '${name}' that cannot be distinguished.`,
+  rendererDuplicateInput: (name: string) =>
+    `Renderer has multiple inputs for slot role '${name}' that cannot be distinguished.`,
   rendererUnknownRole: (name: string) => `Renderer has no input matching slot role '${name}'.`,
   rendererDuplicateRole: (name: string) => `Renderer supplies slot role '${name}' more than once.`,
   rendererRoleType: (name: string) => `Renderer input for slot role '${name}' has an incompatible type.`,
@@ -29,14 +30,17 @@ export const RendererSlotsValidationMessages = {
   rendererMissing: (name: string) => `Renderer is missing required slot input '${name}'.`,
   rendererRequiresInput: (name: string) =>
     `Renderer requires input '${name}', but the render slot contract does not provide it.`,
-  rendererInputDomain: (name: string) => `Renderer input '${name}' accepts a narrower type than its render slot contract.`,
+  rendererInputDomain: (name: string) =>
+    `Renderer input '${name}' accepts a narrower type than its render slot contract.`,
   rendererOmission: (name: string) =>
     `Renderer input '${name}' is required, but its render slot contract allows omission.`,
-  rendererStorage: (name: string) =>
-    `Renderer input '${name}' is writable, but its render slot contract is readonly.`,
+  rendererStorage: (name: string) => `Renderer input '${name}' is writable, but its render slot contract is readonly.`,
   rendererWriteDomain: (name: string) =>
     `Renderer input '${name}' can write values outside its render slot contract domain.`,
   rendererFailureBound: 'Renderer does not satisfy the render slot failure contract.',
   inlineInputs: (name: string) =>
     `Inline content for render slot '${name}' takes no inputs, but its contract declares typed inputs.`,
+  inlineInputCount: (name: string, available: number) =>
+    `Inline renderer for slot '${name}' accepts at most ${available} input names.`,
+  duplicateInlineInput: (name: string) => `Inline renderer input '${name}' is declared more than once.`,
 } as const
