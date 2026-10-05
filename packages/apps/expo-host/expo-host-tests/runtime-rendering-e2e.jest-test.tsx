@@ -1,3 +1,4 @@
+import { DevControls } from '@runtime/dev-runtime/TR-dev'
 import TR from '@runtime/TR'
 import { Describe, Expect, setReactNativeDevModeForTest, Test } from '@shared/test'
 import { act, fireEvent, render } from '@testing-library/react-native'
@@ -128,6 +129,32 @@ Describe('Expo runtime', () => {
 
     fireEvent.press(screen.getByLabelText('Tao dev overlay'))
     Expect(screen.queryByLabelText('Tao dev overlay')).toBeNull()
+  })
+
+  Test('offers host tools only when available and closes Tao overlay before opening them', () => {
+    TR.setDevMode({ enabled: true })
+    const screen = render(createElement(TR.AppShell, null, createElement(TR.Views.Text, null, 'Host tools')))
+    fireEvent.press(screen.getByLabelText('Tao dev menu'))
+    Expect(screen.queryByLabelText('Expo developer tools')).toBeNull()
+    let opens = 0
+    try {
+      act(() =>
+        DevControls.setHostDeveloperTools({
+          label: 'Expo developer tools',
+          open: () => {
+            opens += 1
+          },
+        })
+      )
+      fireEvent.press(screen.getByLabelText('Expo developer tools'))
+      Expect(opens).toBe(1)
+      Expect(screen.queryByLabelText('Tao dev overlay')).toBeNull()
+      fireEvent.press(screen.getByLabelText('Tao dev menu'))
+      act(() => DevControls.setHostDeveloperTools(undefined))
+      Expect(screen.queryByLabelText('Expo developer tools')).toBeNull()
+    } finally {
+      act(() => DevControls.setHostDeveloperTools(undefined))
+    }
   })
 
   Test('withholds the floating dev menu for a host that already offers its options', () => {

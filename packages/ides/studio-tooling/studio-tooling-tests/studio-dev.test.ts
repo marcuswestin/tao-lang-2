@@ -1493,6 +1493,7 @@ Describe('Studio smoke resource isolation', () => {
 
       // The dev data fact arrives once the session has resolved its app, and keeps the gateway fact.
       await runtime.configure({
+        displayName: 'Notes — sample-project',
         devData: {
           app: 'Notes-0123abcd',
           capability: 'test_capability_0123456789abcdef0123456789abcdef',
@@ -1501,6 +1502,7 @@ Describe('Studio smoke resource isolation', () => {
         },
       })
       const configured = await FS.readJson<{ expo: Record<string, unknown> }>(FS.resolvePath('app.json', runtime.root))
+      Expect(configured.expo['name']).toBe('Notes — sample-project')
       Expect(configured.expo['extra']).toEqual({
         taoDevData: {
           app: 'Notes-0123abcd',

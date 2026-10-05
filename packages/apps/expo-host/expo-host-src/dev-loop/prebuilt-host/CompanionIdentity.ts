@@ -20,5 +20,20 @@ export const CompanionIdentity = {
  */
 export function companionDevClientUrl(input: { host: string; port: number; scheme?: string }): string {
   const origin = `http://${input.host}:${input.port}`
-  return `${input.scheme ?? CompanionIdentity.scheme}://expo-development-client/?url=${encodeURIComponent(origin)}`
+  return companionLaunchUrl(
+    `${input.scheme ?? CompanionIdentity.scheme}://expo-development-client/?url=${encodeURIComponent(origin)}`,
+  )
+}
+
+/** Keep Expo tools available on demand through Tao's menu, without launch-time chrome. */
+export function companionLaunchUrl(link: string): string {
+  const url = new URL(link)
+  if (url.hostname !== 'expo-development-client') {
+    return link
+  }
+  // These are the outer launcher flags supported by our pinned Expo SDK 57 on both platforms.
+  url.searchParams.set('disableOnboarding', '1')
+  url.searchParams.set('disableAutoLaunch', '1')
+  url.searchParams.set('disableFab', '1')
+  return url.toString()
 }

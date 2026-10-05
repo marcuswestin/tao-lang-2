@@ -306,10 +306,11 @@ Describe('Expo dev-loop command helpers', () => {
         shouldStop: () => stopped,
         stopServices: async () => {},
       }
-      await withCapturedOutput(async () => {
+      const captured = await withCapturedOutput(async () => {
         const opening = handleCommandKey('p', context)
         try {
           await probeStarted.promise
+          await handleCommandKey('r', context)
           await handleCommandKey('\u0003', context)
         } finally {
           finishProbe.resolve(installed)
@@ -317,6 +318,9 @@ Describe('Expo dev-loop command helpers', () => {
         }
       })
       Expect(phone.commands).toHaveLength(1)
+      Expect(captured.stdout + captured.stderr).toContain(
+        'Command already running: open physical device; ignored key r.',
+      )
     })
   })
 
@@ -1024,11 +1028,14 @@ en7: flags=8863
           'PHONE-1',
           '--terminate-existing',
           '--payload-url',
-          'taostudiocompanion://expo-development-client/?url=http%3A%2F%2F192.168.1.20%3A8099',
+          'taostudiocompanion://expo-development-client/?url=http%3A%2F%2F192.168.1.20%3A8099&disableOnboarding=1&disableAutoLaunch=1&disableFab=1',
           'com.devtao.studio.companion',
         ],
       ])
       Expect(captured.stdout + captured.stderr).toContain('opened roPhone (Tao Companion)')
+      Expect(captured.stdout + captured.stderr).toContain('Finding connected physical devices…')
+      Expect(captured.stdout + captured.stderr).toContain('Checking whether Tao Companion is installed on roPhone…')
+      Expect(captured.stdout + captured.stderr).toContain('Opening Tao Companion on roPhone…')
     })
   })
 
@@ -1464,7 +1471,9 @@ Describe('Expo Metro runtime link helpers', () => {
 
     const link = await expoRuntimeLink('http://127.0.0.1:8081', { devClient: true, fetch: fetchImpl, platform: 'ios' })
 
-    Expect(link).toBe('taostudiocompanion://expo-development-client/?url=http%3A%2F%2F192.168.1.20%3A8081')
+    Expect(link).toBe(
+      'taostudiocompanion://expo-development-client/?url=http%3A%2F%2F192.168.1.20%3A8081&disableOnboarding=1&disableAutoLaunch=1&disableFab=1',
+    )
     Expect(requests).toEqual(['http://127.0.0.1:8081/_expo/link?platform=ios&choice=expo-dev-client'])
   })
 

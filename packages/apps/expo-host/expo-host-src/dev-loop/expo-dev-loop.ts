@@ -177,7 +177,12 @@ async function runDevLoopWithActiveReporter(
   const installedLauncher = RuntimeToolchainPaths.installedExpoLauncher(runtime.root)
   const expoServer = expo.createServer(runtime.root, {
     command: installedLauncher,
-    env: { ...installedLauncher?.env, ...devDataEnvironment(devData.port, devDataApp, devData.capability) },
+    env: {
+      ...installedLauncher?.env,
+      ...devDataEnvironment(devData.port, devDataApp, devData.capability),
+      TAO_DEV_APP_NAME: appName,
+      TAO_DEV_PROJECT_NAME: FS.basename(selection.projectRoot),
+    },
     logRoot: ProjectLocal.cacheResolve('logs', selection.projectRoot),
     runtimeToolchainSourceRoot: runtime.sourceRoot,
   })

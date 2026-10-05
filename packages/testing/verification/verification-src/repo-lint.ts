@@ -522,13 +522,18 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/apps/providers/icloud/plugins/with-tao-icloud.cjs:32',
   'packages/apps/expo-host/plugins/with-ios-fmt-compat.cjs:14',
   // The shared leaf builds the Web-standard cancellation error itself.
+  // Companion's standalone Expo loader cannot import TypeScript error wrappers.
+  'packages/ides/studio-companion-app/plugins/with-launcher-history.cjs:14',
+  'packages/ides/studio-companion-app/plugins/with-launcher-history.cjs:58',
+  'packages/ides/studio-companion-app/plugins/with-launcher-history.cjs:62',
+  'packages/ides/studio-companion-app/plugins/with-launcher-history.cjs:117',
   'packages/shared/shared-src/core/Errors.ts:160',
   // Tests hand raw unknown failures to production boundaries to prove their classification.
   'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:40',
   'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:80',
   'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:103',
   'packages/cli/agent-cli/agent-cli-tests/claude-profiles-generation.test.ts:87',
-  'packages/ides/studio-tooling/studio-tooling-tests/studio-companion-device.test.ts:595',
+  'packages/ides/studio-tooling/studio-tooling-tests/studio-companion-device.test.ts:598',
   'packages/ides/studio/studio-src/StudioWelcome.ts:83',
   'packages/ides/studio/studio-tests/studio-server-datasource.test.ts:196',
   'packages/shared/shared-src/core/Errors.ts:160',
@@ -598,6 +603,9 @@ const NODE_IMPORT_ALLOWLIST = [
   'packages/apps/expo-host/metro.config.cjs:3',
   'packages/apps/expo-host/plugins/with-ios-fmt-compat.cjs:1',
   'packages/apps/expo-host/plugins/with-ios-fmt-compat.cjs:2',
+  // Standalone Expo prebuild loader: shared TypeScript aliases are unavailable.
+  'packages/ides/studio-companion-app/plugins/with-launcher-history.cjs:1',
+  'packages/ides/studio-companion-app/plugins/with-launcher-history.cjs:2',
   // A test proves the packaged CommonJS entry can resolve its generated dependency.
   'packages/apps/providers/icloud/icloud-tests/icloud-native.test.ts:167',
 ]

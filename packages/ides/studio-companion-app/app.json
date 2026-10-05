@@ -55,7 +55,8 @@
         }
       ],
       "./plugins/with-ios-fmt-compat.cjs",
-      "./plugins/with-jazz-podfile-properties.cjs"
+      "./plugins/with-jazz-podfile-properties.cjs",
+      "./plugins/with-launcher-history.cjs"
     ],
     "experiments": {
       "autolinkingModuleResolution": true
