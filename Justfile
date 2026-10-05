@@ -731,12 +731,13 @@ verify-changed no_cache='false': _deps
 # host — the native shell and the canary, which contend on the window server — declare `gui` in the
 # catalog and take a machine-wide lease for exactly as long as they run. Everything else here is
 # headless and parallel-safe, so refusing the whole lane priced six gates at the cost of two.
-# Verify everything plus browser, native and bundle lanes; stop starting checks after a definite failure. --no-cache ignores a recorded green tree
+# Verify everything plus browser, native and bundle lanes; stop starting checks after a definite failure. --no-cache ignores a recorded green tree; --jobs limits simultaneous work
+[arg('jobs', long='jobs')]
 [arg('no_cache', long='no-cache', value='true')]
 [arg('show_studio', long='show-studio', value='true')]
 [group('Dev')]
-verify-full no_cache='false' show_studio='false': _deps
-    ./dev gates {{ VERIFY_FULL_GATES }} --lane verify-full {{ if show_studio == "true" { "--show-studio" } else { "" } }} {{ if VERIFY_FULL_SKIPPED == "" { "" } else { "--skipped \"" + VERIFY_FULL_SKIPPED + "\"" } }} --green-tree verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
+verify-full no_cache='false' show_studio='false' jobs='': _deps
+    ./dev gates {{ VERIFY_FULL_GATES }} --lane verify-full {{ if show_studio == "true" { "--show-studio" } else { "" } }} {{ if VERIFY_FULL_SKIPPED == "" { "" } else { "--skipped \"" + VERIFY_FULL_SKIPPED + "\"" } }} --green-tree verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }} {{ if jobs == "" { "" } else { "--jobs " + quote(jobs) } }}
 
 # Run verify-full's gate membership in a managed shell, skipping the host-only lanes and claiming nothing about them. --no-cache ignores a recorded green tree; --partition k/n runs one CI machine's share
 [arg('no_cache', long='no-cache', value='true')]
