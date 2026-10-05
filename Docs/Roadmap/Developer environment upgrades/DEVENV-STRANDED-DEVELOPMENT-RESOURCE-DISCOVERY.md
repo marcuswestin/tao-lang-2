@@ -61,3 +61,41 @@ with no inspection warnings. Discovery reads metadata rather than legacy content
 The Developer authorized committing and landing this source slice after its focused checks and
 independent review. No dependency, machine setting, or broad asset cleanup is included. Live crash,
 mobile/native, visible and human acceptance stays deferred.
+
+## Controlled Firebase acceptance recovery — October 5, 2026
+
+The task-owned loop19b718b0-3227-4048-89df-d2a2835128d8 stranded shutdown after a timed-out
+worker control long poll. Source now uses bounded heartbeats/retry and abandoned-poll cleanup.
+The stop-only controller recovery rechecks exact process, receipt, private control, and resource
+custody before signalling and again before child cleanup; changed custody persists a durable
+refusal. Independent review and36 recovery regressions passed. The live recovery stopped only
+recorded services. A redundant Simulator shutdown initially retained its fence despite the exact
+Simulator already being Shutdown. Authoritative exact-device inventory now proves closure;
+41 source regressions cover successful closure and retained failures. The ordinary stop retry
+proved cleanup and released that loop's Simulator.
+
+A subsequent native Firebase attempt in loop645bfecb-f6bf-473c-b3e2-3e12dae7f557 retained
+Appium server descendants after driver close. Its original runtime-marker failure preceded
+Firebase interaction. Ordinary stop preserves the driver and target fences; recovery and
+foreground diagnostics remain under investigation. This does not accept general mobile fault
+cleanup or authorize removal of historical owner-unknown resources.
+
+## Further bounded recovery evidence — October 5, 2026
+
+The recorded645 driver retirement completed with a proved private audit and independent Simulator
+Shutdown confirmation. A later e94a driver retirement likewise proved its recorded process/group
+closure, listeners, three Appium port releases and target release. Both app journeys remain failed;
+these recovery results supersede the investigation-only state above for those sessions alone.
+
+A temporary exception for the exact before-driver3bae failure was independently reviewed and then
+removed after TERM triggered that controller's ordinary cleanup. Its audit stays retained because
+retirement observed a transient unreadable process; ordinary exit, target release and later normal
+admission are separate evidence. No session-specific production exception remains.
+
+The Appium close path now waits through a transient unreadable captured identity only in bounded
+read-only observations after a signal. Capture, pre-signal, PID reuse, new group membership and
+final-release checks remain strict. An actual iOS26.5 attempt then proved driver/server/resource
+cleanup and ordinary stop without retirement. It still failed the application marker before Auth.
+Historical owner-unknown resources and broad mobile fault acceptance remain outside this evidence.
+
+The owned Firebase retry at 10:40UTC also closed its driver and server, but final process-group liveness publication returned `kill() failed: EPERM: Operation not permitted` for a recorded group, preserving reservations. Its initial retirement encountered a transient unreadable recorded Chrome child. Automatic approval review refused an immediate signaling retry; subsequent named read-only process queries established absence and the controller had disposed. The existing audited retry then proved closure, released all four reservations, and independently confirmed Simulator Shutdown. Preserve the original failed acceptance receipt separately from this recovery proof. This is not authority to ignore unreadable or permission-denied live identities, kill unrelated processes, or clear historical fences by directory matching.

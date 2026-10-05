@@ -20,6 +20,70 @@ import type {
   runAgentAppDev,
 } from '../dev-cli-src/simulators/AgentAppDev'
 
+Test('managed poll heartbeats and abandoned-request cleanup keep stop deliverable exactly once', async () => {
+  const record = receipt()
+  const attach = Deferred<void>()
+  const ended = Deferred<number>()
+  let stopCalls = 0
+  let cancelled = 0
+  const heartbeats: (() => void)[] = []
+  const controller = await runDevLoopController(record, {
+    schedulePollHeartbeat: expire => {
+      heartbeats.push(expire)
+      return () => {
+        cancelled++
+      }
+    },
+    runAppDev: async (_args, _operations, managed) => {
+      await attach.promise
+      const hooks = await connectDevLoopWorker(managed!.childEnv['TAO_DEV_LOOP_WORKER_CREDENTIALS']!)
+      hooks.bind({
+        stop: async () => {
+          stopCalls++
+          ended.resolve(0)
+        },
+        restart: async () => {},
+        reload: async () => {},
+      })
+      await hooks.emit({ type: 'ready', url: 'fixture', targets: [] })
+      const code = await ended.promise
+      await hooks.close()
+      return code
+    },
+  })
+  try {
+    const connection = await readDevLoopConnection(record.session)
+    const idle = devLoopRequest(connection, '/worker/poll')
+    await until(() => heartbeats.length === 1, { description: 'the idle poll heartbeat' })
+    heartbeats[0]!()
+    Expect(await idle).toBe(null)
+    const abort = new AbortController()
+    const abandoned = devLoopRequest(connection, '/worker/poll', undefined, { signal: abort.signal })
+    const rejected = abandoned.then(() => false, () => true)
+    await until(() => heartbeats.length === 2, { description: 'the abandoned worker poll' })
+    abort.abort()
+    Expect(await rejected).toBe(true)
+    await until(() => cancelled === 2, { description: 'the abandoned poll resolver to clear' })
+    attach.resolve()
+    await until(async () => (await readDevLoopReceipt(record.session)).state === 'ready', {
+      description: 'the reattached managed worker',
+    })
+    const stopped = await Promise.all([
+      devLoopRequest<DevLoopReceipt>(connection, '/command', { action: 'stop' }),
+      devLoopRequest<DevLoopReceipt>(connection, '/command', { action: 'stop' }),
+    ])
+    Expect(stopped.map(value => value.state)).toEqual(['stopped', 'stopped'])
+    Expect(stopCalls).toBe(1)
+    await controller.waitForDisposal()
+    Expect((await readDevLoopReceipt(record.session)).cleanupOutcome).toBe('proved')
+  } finally {
+    attach.resolve()
+    ended.resolve(0)
+    await controller.close()
+    await FS.remove(devLoopDirectory(record.session))
+  }
+})
+
 Test(
   'status waits behind finite interaction, refreshes inline, and the next grant uses the committed Android generation',
   async () => {
@@ -140,6 +204,11 @@ Test(
         description: 'Android generation ordering fixture ready',
       })
       const connection = await readDevLoopConnection(record.session)
+      await Expect(devLoopRequest(connection, '/firebase-sync', {
+        target: 'ios',
+        artifactRoot: Repo.resolvePath('.artifacts/refresh-generation-fixture'),
+      })).rejects.toThrow('restricted to Apps/Firebase Live Acceptance')
+      Expect(grants.length).toBe(0)
       const interaction = devLoopRequest(connection, '/mobile-acceptance', {
         target: 'android',
         artifactRoot: Repo.resolvePath('.artifacts/refresh-generation-fixture'),
@@ -514,6 +583,212 @@ async function capturedController(writeReceipt: typeof writeDevLoopReceipt = wri
     },
   }
 }
+
+for (const stage of ['android', 'save'] as const) {
+  Test(`ownership refresh keeps the ${stage} cause in its private log and refuses later commands`, async () => {
+    let failSave = false
+    const f = await capturedController(async record => {
+      if (failSave && !record.ownershipRefusal && record.state === 'ready') {
+        failSave = false
+        Errors.throwHostEnvironment('Injected receipt publication failure.')
+      }
+      await writeDevLoopReceipt(record)
+    })
+    const hooks = await connectDevLoopWorker(f.managed.childEnv['TAO_DEV_LOOP_WORKER_CREDENTIALS']!)
+    try {
+      await hooks.emit({ type: 'ready', url: 'fixture', targets: [] })
+      await f.managed.onAndroidOwnershipRefresh!(async () => {
+        if (stage === 'android') {
+          Errors.throwHostEnvironment('Injected Darwin inspection failure.', {
+            details: { darwinInspection: { inspection: 'identities', failureKind: 'helper-exit' } },
+          })
+        }
+      })
+      failSave = stage === 'save'
+      const connection = await readDevLoopConnection(f.record.session)
+      await Expect(devLoopRequest(connection, '/status')).rejects.toThrow(
+        'Managed ownership publication was refused; fences remain retained.',
+      )
+      const logPath = FS.resolvePath('loop.log', devLoopDirectory(f.record.session))
+      const log = await FS.readText(logPath)
+      Expect(await FS.fileMode(logPath)).toBe(0o600)
+      Expect(log).toContain(`Managed ownership refresh failed at ${stage}:`)
+      Expect(log).toContain(
+        stage === 'android'
+          ? 'Injected Darwin inspection failure.'
+          : 'Injected receipt publication failure.',
+      )
+      if (stage === 'android') {
+        Expect(log).toContain('"darwinInspection":{"inspection":"identities","failureKind":"helper-exit"}')
+      }
+      const refused = await readDevLoopReceipt(f.record.session)
+      Expect(refused.ownershipRefusal?.generation).toBe(f.record.generation)
+      Expect(refused.provenance).toBe('uncertain')
+      Expect(refused.cleanupOutcome).toBe('retained')
+      Expect(JSON.stringify(refused)).not.toContain('Injected')
+      await Expect(devLoopRequest(connection, '/command', { action: 'reload' })).rejects.toThrow(
+        'Managed ownership publication was refused; fences remain retained.',
+      )
+    } finally {
+      await hooks.close()
+      await f.finish().catch(() => {})
+    }
+  })
+}
+
+Test(
+  'Firebase startup guard rejects durable simulator, runtime, controller, and selection drift before POST',
+  async () => {
+    const record = receipt()
+    const projectRoot = Repo.resolvePath('Apps/Firebase Live Acceptance')
+    record.selection = {
+      appName: 'FirebaseLiveAcceptance',
+      appPath: FS.resolvePath('App.tao', projectRoot),
+      projectRoot,
+    }
+    const ended = Deferred<number>()
+    let hooks: Awaited<ReturnType<typeof connectDevLoopWorker>> | undefined
+    let posts = 0
+    const controller = await runDevLoopController(record, {
+      runAppDev: async (_args, _operations, managed) => {
+        hooks = await connectDevLoopWorker(managed!.childEnv['TAO_DEV_LOOP_WORKER_CREDENTIALS']!)
+        hooks.bind({
+          stop: async () => {
+            ended.resolve(0)
+          },
+          reload: async () => {},
+          restart: async () => {},
+        })
+        await hooks.emit({ type: 'starting' })
+        const owner = record.controller!
+        const resource = {
+          name: 'ios-simulator:SIM-FIREBASE',
+          id: 'owned-generation',
+          pid: owner.pid,
+          processStartedAt: owner.startedAt,
+          repositoryRoot: record.checkout,
+          startedAt: 'acquired',
+          command: 'source simulator reservation',
+        }
+        await managed!.onReservation!({
+          platform: 'ios',
+          id: 'SIM-FIREBASE',
+          resources: [resource],
+          assertCurrent: async () => {},
+        })
+        const device = {
+          platform: 'ios' as const,
+          id: 'SIM-FIREBASE',
+          owned: true,
+          state: 'booted' as const,
+          holder: owner,
+          resources: [resource],
+        }
+        await managed!.onDevice!(device)
+        await hooks.emit({
+          type: 'ready',
+          url: 'http://127.0.0.1:8081',
+          targets: [{
+            target: 'ios',
+            dispatched: true,
+            mobile: {
+              session: record.session,
+              checkout: record.checkout,
+              loopGeneration: hooks.identity!().generation,
+              kind: 'companion',
+              appId: 'com.devtao.studio.companion',
+              devUrl: 'taostudiocompanion://dev',
+              projectRoot,
+              appName: 'FirebaseLiveAcceptance',
+              sourceRevision: 'source',
+              compiledRevision: 'compiled',
+              nonce: 'nonce',
+            },
+          }],
+        })
+        const code = await ended.promise
+        await managed!.onDevice!({ ...device, state: 'released' })
+        await hooks.close()
+        return code
+      },
+      mobileFixture: async options => {
+        const guard = options.assertFirebaseStartupCurrent
+        Expect(guard).toBeDefined()
+        Expect(options.assertOwnedDiagnosticTargetCurrent).toBeDefined()
+        await guard!()
+        posts++
+        const original = await readDevLoopReceipt(record.session)
+        const mutations: Array<(value: DevLoopReceipt) => void> = [
+          value => {
+            value.controller!.startedAt = 'replacement-controller'
+          },
+          value => {
+            value.devices![0]!.resources![0]!.id = 'successor-resource'
+          },
+          value => {
+            value.targets = [{
+              ...value.targets![0]!,
+              mobile: { ...value.targets![0]!.mobile!, nonce: 'successor-nonce' },
+            }]
+          },
+          value => {
+            value.targets = [{
+              ...value.targets![0]!,
+              mobile: { ...value.targets![0]!.mobile!, appId: 'unrelated.app' },
+            }]
+          },
+          value => {
+            value.targets = [{
+              ...value.targets![0]!,
+              mobile: { ...value.targets![0]!.mobile!, sourceRevision: 'changed-source' },
+            }]
+          },
+          value => {
+            value.targets = [{
+              ...value.targets![0]!,
+              mobile: { ...value.targets![0]!.mobile!, compiledRevision: 'changed-build' },
+            }]
+          },
+          value => {
+            value.selection!.projectRoot = '/unrelated/project'
+          },
+        ]
+        for (const mutate of mutations) {
+          const changed = structuredClone(original)
+          mutate(changed)
+          await writeDevLoopReceipt(changed)
+          await Expect(guard!()).rejects.toThrow()
+          Expect(posts).toBe(1)
+          await writeDevLoopReceipt(original)
+        }
+        await options.onCleanup(true)
+        return {
+          identity: options.grant.identity,
+          workspaceName: 'guarded Firebase fixture',
+          screenshots: [],
+          driverClosed: true,
+          targetReservationPreserved: true,
+        }
+      },
+    })
+    try {
+      await until(() => record.state === 'ready' ? true : undefined, { description: 'Firebase simulator ready' })
+      const connection = await readDevLoopConnection(record.session)
+      await devLoopRequest(connection, '/firebase-sync', {
+        target: 'ios',
+        artifactRoot: Repo.resolvePath('.artifacts/firebase-startup-guard-test'),
+      })
+      Expect(posts).toBe(1)
+      await devLoopRequest(connection, '/command', { action: 'stop' })
+      await controller.waitForDisposal()
+    } finally {
+      ended.resolve(0)
+      await hooks?.close()
+      await controller.close()
+      await FS.remove(devLoopDirectory(record.session))
+    }
+  },
+)
 
 Test('explicit capture refusal survives later stable capture and a clean wrapper exit', async () => {
   const f = await capturedController()

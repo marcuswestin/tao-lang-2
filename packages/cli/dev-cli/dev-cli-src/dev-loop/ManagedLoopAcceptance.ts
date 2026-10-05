@@ -50,6 +50,7 @@ type ManagedLoopMobileInteraction = (context: {
   artifactRoot: string
   phase: string
   assertCurrent: () => Promise<void>
+  fixture?: 'firebase-sync'
 }) => Promise<unknown>
 
 type AcceptanceOperations = {
@@ -87,7 +88,12 @@ const liveOperations: AcceptanceOperations = {
   mobileInteraction: async context => {
     await context.assertCurrent()
     const { executeManagedMobileAcceptance } = await import('./ManagedMobileAcceptance')
-    const evidence = await executeManagedMobileAcceptance(context.receipt.session, context.target, context.artifactRoot)
+    const evidence = await executeManagedMobileAcceptance(
+      context.receipt.session,
+      context.target,
+      context.artifactRoot,
+      context.fixture,
+    )
     await context.assertCurrent()
     return evidence
   },
@@ -296,6 +302,7 @@ export async function runManagedLoopAcceptance(
       'ios-visible': () => visible('ios', '--show-simulator'),
       'android-visible': () => visible('android', '--show-emulator'),
       'mobile-interaction': mobile,
+      'firebase-sync': firebaseSync,
       'mobile-interaction-faults': mobileFaults,
       'android-lifecycle': async () => {
         await lifecycle(['android'])
@@ -617,7 +624,10 @@ export async function runManagedLoopAcceptance(
     })
   }
 
-  async function assertCurrent(receipt: DevLoopReceipt): Promise<void> {
+  async function assertCurrent(
+    receipt: DevLoopReceipt,
+    fixture: 'mobile-interaction' | 'firebase-sync' = 'mobile-interaction',
+  ): Promise<void> {
     const current = await operations.receipt(receipt.session)
     if (
       current.state !== 'ready' || current.generation !== receipt.generation || current.checkout !== receipt.checkout
@@ -632,6 +642,11 @@ export async function runManagedLoopAcceptance(
     }
     if (receipt.selection === undefined || !await FS.isFile(receipt.selection.appPath)) {
       Errors.throwHostEnvironment('The managed source identity is unavailable.')
+    }
+    if (fixture === 'firebase-sync') {
+      const { assertManagedFirebaseSubject } = await import('./ManagedFirebaseAcceptance')
+      await assertManagedFirebaseSubject(receipt)
+      return
     }
     if (
       receipt.selection.appName !== 'DataMVPApp'
@@ -865,6 +880,29 @@ export async function runManagedLoopAcceptance(
         artifactRoot: root,
         phase: 'borrowed',
         assertCurrent: () => assertCurrent(receipt),
+      }),
+    )
+  }
+
+  async function firebaseSync(): Promise<void> {
+    if (operations.mobileInteraction === undefined) {
+      blocked('Firebase sync', 'The bounded managed mobile driver bridge is unavailable.')
+      return
+    }
+    const receipt = await operations.receipt(request.session!)
+    await assertCurrent(receipt, 'firebase-sync')
+    if (!['web', 'ios'].every(target => receipt.targets?.some(value => value.target === target && value.dispatched))) {
+      Errors.throwHostEnvironment('Firebase sync requires both web and iOS dispatched by this managed generation.')
+    }
+    pass(
+      'Firebase account creation and bidirectional item sync',
+      await operations.mobileInteraction({
+        receipt,
+        target: 'ios',
+        artifactRoot: root,
+        phase: 'firebase-sync',
+        fixture: 'firebase-sync',
+        assertCurrent: () => assertCurrent(receipt, 'firebase-sync'),
       }),
     )
   }

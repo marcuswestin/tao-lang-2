@@ -24,6 +24,10 @@ Describe('managed development loop public boundary', () => {
       json: false,
     })
     Expect(parseDevLoopArgs(['restart', '--session', session])).toEqual({ kind: 'restart', session, json: false })
+    Expect(parseDevLoopArgs(['stop', '--session', session, '--recover-controller', '--json']))
+      .toEqual({ kind: 'stop', session, json: true, recoverController: true })
+    Expect(parseDevLoopArgs(['retire-retained-mobile', '--session', session, '--json']))
+      .toEqual({ kind: 'retire-retained-mobile', session, json: true })
   })
 
   Test('refuses private workers, arbitrary targets, unscoped visibility and ambiguous mutation selectors', () => {
@@ -38,6 +42,15 @@ Describe('managed development loop public boundary', () => {
         ['start', '--simulator', session],
         ['stop'],
         ['stop', '--pid', '123'],
+        ['retire-retained-mobile'],
+        ['retire-retained-mobile', '--session', '../outside'],
+        ['retire-retained-mobile', '--session', session, '--pid', '123'],
+        ['retire-retained-mobile', '--session', session, '--recover-controller'],
+        ['reload', '--session', session, '--recover-controller'],
+        ['restart', '--session', session, '--recover-controller'],
+        ['status', '--session', session, '--recover-controller'],
+        ['start', '--recover-controller'],
+        ['stop', '--session', session, '--recover-controller', '--recover-controller'],
         ['stop', '--session', '../outside'],
         ['reload', '--session', session, '--show-browser'],
         ['stop', '--session', session, '--session', session],

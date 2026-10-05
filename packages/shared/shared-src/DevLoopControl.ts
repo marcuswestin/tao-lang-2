@@ -1,4 +1,5 @@
 import * as Errors from './core/Errors'
+import { Time } from './core/shared-core'
 import * as FS from './FS'
 import type { TrackedProcess } from './ProcessTree'
 
@@ -64,7 +65,12 @@ export type DevLoopConnection = {
 export type DevLoopAction = keyof DevLoopActions
 export type DevLoopWorkerCommand = { id: string; generation: string; action: DevLoopAction }
 
-export async function devLoopRequest<T>(connection: DevLoopConnection, path: string, body?: unknown): Promise<T> {
+export async function devLoopRequest<T>(
+  connection: DevLoopConnection,
+  path: string,
+  body?: unknown,
+  options: { signal?: AbortSignal } = {},
+): Promise<T> {
   if (!/^http:\/\/127\.0\.0\.1:\d+$/u.test(connection.origin)) {
     Errors.throwHostEnvironment('Managed dev-loop control must use the loopback interface.')
   }
@@ -72,6 +78,8 @@ export async function devLoopRequest<T>(connection: DevLoopConnection, path: str
     body: body === undefined ? undefined : JSON.stringify(body),
     headers: { authorization: `Bearer ${connection.token}`, 'content-type': 'application/json' },
     method: body === undefined ? 'GET' : 'POST',
+    // Bun and DOM declarations differ on onabort; both describe this same native signal.
+    signal: options.signal as unknown as RequestInit['signal'],
   })
   if (!response.ok) {
     const failure = await response.json().catch(() => undefined) as { error?: string } | undefined
@@ -83,6 +91,7 @@ export async function devLoopRequest<T>(connection: DevLoopConnection, path: str
 /** One long-poll transport carries typed lifecycle events and command acknowledgements. */
 export async function connectDevLoopWorker(
   credentialsPath: string,
+  operations: { request?: typeof devLoopRequest; sleep?: typeof Time.sleep } = {},
 ): Promise<DevLoopControlHooks & { close: () => Promise<void> }> {
   if (await FS.fileMode(credentialsPath) !== 0o600 || await FS.fileMode(FS.dirname(credentialsPath)) !== 0o700) {
     Errors.throwHostEnvironment('Managed dev-loop credentials must be private.')
@@ -90,24 +99,39 @@ export async function connectDevLoopWorker(
   const connection = await FS.readJson<DevLoopConnection>(credentialsPath)
   let actions: DevLoopActions | undefined
   let closed = false
+  let closing: Promise<void> | undefined
   let generation = ''
   let stopRequested = false
+  const requests = new AbortController()
+  const request = operations.request ?? devLoopRequest
+  const sleep = operations.sleep ?? Time.sleep
+  const retry = async <T>(path: string, body?: unknown): Promise<T | undefined> => {
+    while (!closed) {
+      try {
+        return await request<T>(connection, path, body, { signal: requests.signal })
+      } catch {
+        if (!closed) {
+          await sleep(250)
+        }
+      }
+    }
+    return undefined
+  }
   const waitingForBinding: DevLoopWorkerCommand[] = []
   const dispatch = (command: DevLoopWorkerCommand, active: DevLoopActions): void => {
     void active[command.action]().then(
-      () => devLoopRequest(connection, '/worker/ack', { id: command.id, ok: true }),
-      error =>
-        devLoopRequest(connection, '/worker/ack', { id: command.id, ok: false, message: Errors.formatForUser(error) }),
-    ).catch(() => {
-      closed = true
-    })
+      () => retry('/worker/ack', { id: command.id, ok: true }),
+      error => retry('/worker/ack', { id: command.id, ok: false, message: Errors.formatForUser(error) }),
+    ).catch(() => {})
   }
-  const attached = await devLoopRequest<{ generation: string }>(connection, '/worker/attach', {})
+  const attached = await request<{ generation: string }>(connection, '/worker/attach', {}, {
+    signal: AbortSignal.timeout(30_000),
+  })
   generation = attached.generation
   const polling = (async () => {
     while (!closed) {
-      const command = await devLoopRequest<DevLoopWorkerCommand | null>(connection, '/worker/poll')
-      if (closed || command === null) {
+      const command = await retry<DevLoopWorkerCommand | null>('/worker/poll')
+      if (closed || command === null || command === undefined) {
         continue
       }
       if (command.action === 'stop') {
@@ -118,7 +142,7 @@ export async function connectDevLoopWorker(
         continue
       }
       if (command.generation !== generation && command.action !== 'stop' || actions === undefined) {
-        await devLoopRequest(connection, '/worker/ack', {
+        await retry('/worker/ack', {
           id: command.id,
           ok: false,
           message: 'Loop is changing generation.',
@@ -144,13 +168,20 @@ export async function connectDevLoopWorker(
       }
     },
     emit: async event => {
-      const reply = await devLoopRequest<{ generation: string }>(connection, '/worker/event', { generation, event })
+      const reply = await request<{ generation: string }>(connection, '/worker/event', { generation, event }, {
+        signal: AbortSignal.timeout(30_000),
+      })
       generation = reply.generation
     },
-    close: async () => {
-      closed = true
-      await devLoopRequest(connection, '/worker/detach', {})
-      await polling
-    },
+    close: () =>
+      closing ??= (async () => {
+        closed = true
+        requests.abort()
+        try {
+          await request(connection, '/worker/detach', {}, { signal: AbortSignal.timeout(30_000) })
+        } finally {
+          await polling
+        }
+      })(),
   }
 }

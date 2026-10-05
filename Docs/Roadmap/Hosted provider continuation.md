@@ -601,7 +601,7 @@ Independent review found no remaining findings after project-alias, endpoint, au
 StorageKey, JSON-login, and exact environment-restoration repairs. Focused management
 and provisioning tests passed. Source/fixture checks passed. Live default-account project list/info and Web app listing
 subsequently passed for `tao-autocreate-test`; no reset operation was run. The Account-default repair, native diagnostics, label centering and exact promotion filter
-are implemented in the subsequent authorized source follow-up; live acceptance remains pending. This follow-up is not authorized to land.
+are implemented in the subsequent authorized source follow-up; live acceptance remains pending. The later completion goal authorizes landing after working web/Simulator proof.
 
 Management commands and their flags use the existing `hosted-data` release capability.
 The immutable public-release surface regression passed after adding these classifications;
@@ -631,3 +631,135 @@ focused regressions and independent review are required before final source gate
 
 The completion goal requests landing after the working web/Simulator flow is proven. That condition
 is not yet met, so source finalize must not be presented as landing or hosted acceptance.
+
+### Authenticated generated-app acceptance — 2026-10-05
+
+The completion goal specifically authorizes the two supplied sample Firebase validation accounts
+and landing after web/Simulator synchronization works. This supersedes the earlier blanket
+account-entry restriction only for those two Firebase test accounts; Google and Appwrite sign-ins
+remain local Developer actions. No password resets or additional cloud projects are authorized.
+
+A fresh CLI-created Firebase Live Acceptance app passed its five starter journeys. API connect reused
+existing project tao-autocreate-test and its Web registration; generated rules matched the deployed
+rules exactly, and remote readback passed. The existing Developer-owned Hosted Firebase loop was
+preserved. On the fresh web app, signup reported the sample account already exists. A later sign-in
+returned HTTP200 and rendered the signed-in account gate, followed by “You do not have access”.
+Firestore streaming HTTP200 responses alone do not establish query authorization or CRUD.
+
+The compiled Account and Item schemas have no authored grants. Firebase deliberately supports
+a private account namespace without authored grants, but the authenticated runtime still invokes
+the generic empty-grant default-deny gate. The earlier real replica/provider/runtime test passed
+a connection directly to Data.Schema without the authenticated provider binding and therefore
+did not exercise that gate. This integration defect is separate from the previously accepted
+handwritten CRUD prototype and from the Account default-value repair. The required correction
+is an explicit Firebase private-account provider policy, retaining grant-based default deny for
+other providers and enforcing account identity, cancellation, and supported owner relations.
+Actual authenticated binding, both-way UI synchronization, and native storage remain open.
+
+A bounded managed-loop Firebase UI case is being added because the existing native interaction
+case supports only Data MVP. It retains generation, process, target, and foreground identity
+checks, records creation versus existing-account sign-in, and captures scoped diagnostic artifacts.
+The owned loop also exposed a timed-out control long poll that strands shutdown; its transport
+and identity-checked recovery require correction before a new controller can run the UI case.
+
+The private-account policy now has focused authenticated binding, retained-row account-switch,
+and fixture-actor denial coverage and independent source review. The fresh web app signed in
+as the approved CRUD account and rendered its Item list, then created a uniquely labelled
+acceptance Item. This is live web UI evidence; it does not prove native storage or synchronization.
+The main sample account already exists in the selected project, but the supplied password was
+rejected; no reset or extra account/project was attempted.
+
+The Firebase host case's first real dispatch exposed a leftover Data MVP source guard, now
+corrected with initial and per-action Firebase guards and9 focused dispatcher regressions.
+The next attempt failed its native runtime-marker lookup before Firebase interaction, then
+retained Appium server descendants. The original stopped loop's controller, services and
+Simulator cleanup are now proved. The second loop remains fenced during driver recovery.
+
+The ordinary Firebase probe wrapper previously pulled repository aliases into the app's
+TypeScript program. It now runs the CLI implementation in a separate process with the original
+wrapper URL and arguments; the app source check passes without excluding the wrapper.
+The real --help wrapper regression passes with the other11 probe tests.
+
+The bounded Firebase case now first signs the CRUD sample account into web and Simulator,
+requires each surface to render the other's exact new Item, and writes private sync evidence only
+after both observations. It then checks the second required sample account; a second-account
+failure leaves the whole case failed while preserving the independently proved sync evidence.
+Seven source fixtures and review cover these evidence boundaries, not actual hosted delivery.
+
+Native attempts remain incomplete. A later owned session failed before Appium because process
+ownership publication was refused. Its original cause was discarded; the controller now writes a
+bounded, stage-labelled cause to the owner-only loop log while keeping the durable refusal and
+public response generic. Controller tests cover failure publication and refusal of later commands.
+A separate owned loop's retained driver cleanup is being recovered through an audited, exact-session
+retirement operation. It preserves the original failed acceptance and proves recorded process/group,
+listener, port, and Simulator closure before releasing reservations. The live attempts exposed
+controller-disposal retry and real lsof field-format defects; source repairs do not imply completed
+cleanup or a passing Firebase journey.
+
+Read-only inspection ruled out a stale native payload on both owned Simulators: their installed
+TaoCompanion.debug.dylib hashes match the cached build. The SDK57 factory/scene wiring matches the
+installed Expo implementation. No speculative AppDelegate change was made; actual native startup,
+SQLite, and web/Simulator synchronization are still unproved.
+
+The driver-retained session645 retirement completed on 2026-10-05 at09:21UTC. Its private audit is
+proved, all three recorded Appium port reservations were released, and the exact iPhone18ProMax
+is independently confirmed Shutdown. The original failed acceptance/refusal remains recorded;
+this cleanup result does not turn it into a passing app test. A later before-driver publication
+refusal still holds the fresh app lock. A generic retirement extension was rejected by automatic
+approval review before edits or signals; a narrower single-session proposal is under review.
+
+The single-session before-driver recovery was reviewed, used only for the recorded3bae session,
+and then removed from production source. Its first TERM allowed that controller's ordinary cleanup
+to finish: the controller exited, its reservation was released, the Simulator was independently
+confirmed Shutdown, and normal admission started a fresh session. Its retirement audit remains
+retained because the operation encountered an unreadable Chrome process; no audit success was
+fabricated. No source exception for a particular session or PID remains.
+
+The fresh e94a Firebase host case again failed before Auth or Item interaction. The native marker
+was absent, and the guarded diagnostic refused pixels at the foreground-bundle stage. The WDA
+log reports SpringBoard foreground in the same second, suggesting a launch-handoff problem;
+that is corroboration rather than the exact guarded foreground-query result. Private diagnostics
+are being narrowed to record a finite foreground category while retaining all capture/input guards.
+The e94a driver-retirement audit completed with proved recorded process/group/listener closure
+and released its three Appium ports and Simulator reservation. Failed app acceptance remains failed.
+
+A comparison attempt on an explicitly reserved iOS26.5 iPhone17Pro also failed the native marker
+before Auth. It did not request diagnostic pixels because explicit targets are treated as borrowed.
+Its driver, server, reservations and ordinary loop stop all have proved cleanup; that policy leaves
+the explicit Simulator booted. The Developer's active iPhone17 was not used.
+
+Installed XCUITest code confirms autoLaunch=false removes the WDA application bundle from session
+startup. The previous loop launch therefore does not guarantee the app remains foreground after
+WebDriver startup. The selected repair gives only the owned-Simulator Firebase host case explicit
+startup authority for its pinned application, with no reset or termination, alert-aware foreground
+detection, and unchanged full runtime-marker proof before UI actions. Generic managed attachment,
+borrowed targets and Android retain their current startup policy. The repair still needs source
+review and actual native acceptance.
+
+### Owned Firebase startup retry — 2026-10-05 10:40 UTC
+
+The scoped startup guard passed independent review and focused controller (64), mobile fixture (5), iOS opener (4), and Firebase subject (9) tests; the broad source check also passed. It permits startup only for the fixed Firebase case on a durably owned, booted iOS target, and rechecks the pinned source/config, runtime, controller and resource identities before and after session creation. Borrowed attachment keeps auto-launch disabled. Opening receipts record the startup operation before it runs. Full mounted runtime identity still gates all app interaction.
+
+Actual session `9016a54d-f540-4cd4-95b8-2934c387494d` failed before sign-in. The private failure diagnostic now identifies `foregroundCategory: springboard`; its refusal captured no XML/pixels and performed no app input. Saved native test logs establish that Companion launched and reached Running Foreground, then a SpringBoard `Alert` caused the alert-aware foreground query to select Springboard. The startup repair worked for this launch; the alert's subject remains unknown. Do not assume local-network permission or automatically accept it. A bounded, owned-target-only read of alert text is being prepared to identify the needed action.
+
+The driver and server closed, but final cleanup publication encountered a process-group liveness permission error. The first recorded retirement attempt retained its audit when a Chrome child had unreadable identity. Automatic approval review refused an immediate retry; subsequent read-only process queries showed the recorded processes absent and the controller disposed. The existing audited retry then completed with `retirementAudit.outcome: proved`, released the three driver ports and owned target, and independent Simulator inventory confirmed the F9 target Shutdown. The failed acceptance receipt remains failed; this cleanup evidence proves no app behavior. Artifact root: `.artifacts/host-acceptance/managed-loops/9966a643-d2ce-4cf9-b86d-5b455fca12f9`.
+
+Native storage, web/Simulator synchronization and the required main-account sign-in remain unproved. The previously supplied main-account password was rejected; no reset or extra account was attempted. Landing remains conditional on the requested actual behavior.
+
+### Source gates and blocked alert measurement — 2026-10-05 11:24 UTC
+
+The bounded SpringBoard alert diagnostic passed driver (41) and artifact (40) tests, formatting, typecheck, lint and independent review. It permits only a guarded, session-scoped read of alert text after observing Springboard on the durably owned target. Text is limited to 4KiB and retained privately with mode0600; public failure metadata contains only a finite status. It never accepts or dismisses an alert and does not capture XML/pixels or interact with an unrelated foreground app.
+
+The next real case on session `ee8a76aa-10d6-4258-a061-c1cb7af5d467` stopped before opening a driver: ownership capture returned a process-group `EPERM` for the recorded GoogleUpdater group9427. The normal stop command preserves this ownership refusal, so this loop and its owned F9 target remain retained. The alert's subject is still unmeasured. Do not call this acceptance, clear the refusal, or use the driver-retirement command: no mobile driver was opened for this session.
+
+A new named read-only host diagnostic, `./agent unsandboxed processes group <pgid>`, uses fixed process-list arguments, validates a complete bounded snapshot and returns only the requested group's process IDs, user IDs and states. It accepts no arbitrary arguments and sends no signals. Focused dispatch (13) and permission (8) tests, setup, formatting, typecheck, lint and independent review passed. Actual group9427 inspection returned an empty group in a successful current snapshot. This establishes no member was reported now; it does not classify the earlier permission error. Apple kernel source permits such errors for all-zombie groups as well as inaccessible live members; the historical cause remains underdetermined. No command-name or UID exclusion was added to ownership checks.
+
+Final integration review found no new source blocker. `verify-changed` passed48 suites, failed0 and skipped1; `verify` reused the matching green suite evidence and ran the remaining five gates successfully. The machine reported contention without timeouts. These are source gates, not native UI, SQLite, account-switch, hostile-server or synchronization evidence. No landing has occurred. A reviewable recovery confined to the exact stranded loop is being prepared; it must require fresh agreeing group/process/custody proofs before any signal, keep a durable cleanup audit and preserve the failed acceptance receipt.
+
+### Exact retained-loop recovery blocked by approval review — 2026-10-05 11:38 UTC
+
+The exact-session recovery proposal for `ee8a76aa-10d6-4258-a061-c1cb7af5d467` was prepared with the original 16-child/3-group manifest, controller identity, private control, canonical Firebase subject and singleton owned Simulator pinned. It required agreeing complete process-table, kernel-membership and group-liveness absence checks before any signal. A fresh bounded process-table snapshot again reported no member of group9427; this alone does not prove the required absence or classify the earlier `EPERM`.
+
+Automatic approval review rejected the implementation that would admit this exception: it would terminate the recorded process scope and release a booted Simulator without explicit approval for that exact scope. No recovery invocation or signal followed the rejection. Temporary preparatory edits were removed; the production retirement path continues to admit only its retained-driver refusal. The original failed receipt, loop/project reservation and owned F9 target remain retained. Do not bypass this through raw process signals, receipt edits, another cleanup path or a relaxed ownership guard.
+
+The remaining local intervention is approval of the concrete exact-session recovery proposal, followed by independent review and fresh custody/absence checks. The private proposal is `.artifacts/hosted-provider/ee8a-recovery-proposal.md`; it contains the full process manifest and cleanup boundaries. Native alert identification, app data loading and both-way web/Simulator synchronization remain unproved. The main sample account also rejected the supplied validation password in this selected project; changing or resetting that account is not authorized. Finish source review, exact-path commits and finalize independently, but do not land before the requested actual acceptance.

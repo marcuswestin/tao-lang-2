@@ -83,6 +83,28 @@ function mockFirebase(foreignGet: 'denied' | 'missing' | 'generic' = 'denied', a
 }
 
 Describe('Firebase Notes hostile probe', () => {
+  Test('app-local entry runs repository tooling in a separate program context', async () => {
+    const child = Bun.spawn([
+      process.execPath,
+      Repo.resolvePath('Apps/Hosted Firebase/scripts/hostile-probe.ts'),
+      '--help',
+    ], {
+      cwd: Repo.getRoot(),
+      stdin: 'ignore',
+      stdout: 'pipe',
+      stderr: 'pipe',
+    })
+    const [exit, output, errors] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ])
+    Expect(exit).toBe(0)
+    Expect(errors).toBe('')
+    Expect(output).toContain('Prompts for two existing accounts.')
+    Expect(output).not.toContain('Existing account A password')
+  })
+
   Test('derives the authored store and Item shape through compilation without a cloud call', async () => {
     const shape = await compiledProbeShape(FS.resolvePath('Apps/Hosted Firebase/App.tao', Repo.getRoot()))
     Expect(shape.storageKey).toBe('hosted-firebase-notes')

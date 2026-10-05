@@ -11,7 +11,11 @@ const DEXIE_PROMOTION = [
   'If you already purchased premium access you can disable this log by calling the setPremiumFlag() function from rxdb-premium/plugins/shared.',
   '---------------------------------------------------------------------',
 ]
-const EXPO_PREFIXES = ['', 'WARN ', 'LOG ', 'INFO ', '(NOBRIDGE) WARN ', '(NOBRIDGE) LOG ', '(NOBRIDGE) INFO ']
+const EXPO_LOG_PREFIXES = ['', 'WARN ', 'LOG ', 'INFO ', '(NOBRIDGE) WARN ', '(NOBRIDGE) LOG ', '(NOBRIDGE) INFO ']
+
+const EXPO_PREFIXES = ['', 'Web ', 'Android ', 'iOS '].flatMap(platform =>
+  EXPO_LOG_PREFIXES.map(prefix => `${platform}${prefix}`)
+)
 
 /** DevAppLogFilter suppresses only the known complete advertisement in displayed app logs. */
 export class DevAppLogFilter {
@@ -92,7 +96,7 @@ export class DevAppLogFilter {
 
 function normalizedLine(line: string, first: boolean): string {
   const plain = Text.stripAnsi(line).trim()
-  return first ? plain.replace(/^(?:\(NOBRIDGE\)\s+)?(?:WARN|LOG|INFO)\s+/, '') : plain
+  return first ? plain.replace(/^(?:(?:Web|Android|iOS)\s+)?(?:\(NOBRIDGE\)\s+)?(?:WARN|LOG|INFO)\s+/, '') : plain
 }
 
 function couldStartPromotion(pending: string): boolean {

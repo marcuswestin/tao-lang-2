@@ -55,6 +55,7 @@ export function FirebaseProvider(
   loadClient: (config: ReturnType<typeof firebaseConfig>) => FirebaseClient = firebaseClient,
 ): TR.DataProvider {
   return {
+    authenticatedAccess: 'private-account',
     testNetwork: 'remote',
     async authenticate(context) {
       Assert.input(context.provider === 'FirebaseAuth', 'Firebase accepts Session proofs from FirebaseAuth.')

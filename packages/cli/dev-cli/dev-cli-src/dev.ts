@@ -178,7 +178,10 @@ await runWithCommands(commands => {
   commands
     .command('dev-loop')
     .description('Manage recorded background app development loops without a runtime timer.')
-    .argument('[args...]', 'start, status, logs, stop, restart, or reload; use --help for options.')
+    .argument(
+      '[args...]',
+      'start, status, logs, stop, restart, reload, or retire-retained-mobile; use --help for options.',
+    )
     .allowUnknownOption()
     .action(async (args: string[]) => {
       await runExitCommand(async () => {

@@ -1,0 +1,20 @@
+use Memory from @tao/data/providers/memory
+use FirebaseLiveAcceptanceNavigator from ./Chrome
+use FirebaseLiveAcceptanceDesign from ./Design
+
+app FirebaseLiveAcceptancePreview {
+   id "firebase-live-acceptance-preview"
+   version "0.1.0"
+   name "Firebase Live Acceptance Preview"
+   Datasource Memory { }
+   Navigator FirebaseLiveAcceptanceNavigator
+   Design FirebaseLiveAcceptanceDesign
+}
+
+scenarios FirebaseLiveAcceptancePreview "devices" {
+   scenario "phone" {
+      device phone
+      appearance light
+      network online
+      locale "en"
+}  }

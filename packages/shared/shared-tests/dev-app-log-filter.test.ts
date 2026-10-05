@@ -3,6 +3,19 @@ import { Describe, Expect, Test } from '@shared/test'
 import { dexiePromotion } from './fixtures/dexie-promotion'
 
 Describe('developer app-log display filter', () => {
+  Test('handles known Expo platform prefixes without hiding errors', () => {
+    for (const platform of ['Web', 'Android', 'iOS']) {
+      const text = `${platform}  WARN  ${dexiePromotion}\n`
+      for (let split = 0; split <= text.length; split++) {
+        const filter = new DevAppLogFilter()
+        Expect(filter.write(text.slice(0, split)) + filter.write(text.slice(split)) + filter.flush()).toBe('')
+      }
+      const diagnostic = `${platform}  ERROR  ${dexiePromotion}\n`
+      const filter = new DevAppLogFilter()
+      Expect(filter.write(diagnostic) + filter.flush()).toBe(diagnostic)
+    }
+  })
+
   Test('suppresses the exact complete Dexie promotion across every process chunk split', () => {
     const text = `before\n\u001b[33m WARN \u001b[39m ${dexiePromotion}\nafter\n`
     for (let split = 0; split <= text.length; split++) {

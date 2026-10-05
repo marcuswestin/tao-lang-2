@@ -105,6 +105,8 @@ function fixture() {
   return {
     auth,
     client,
+    projectId,
+    provider,
     collections,
     open,
     path,
@@ -185,24 +187,117 @@ Describe('Firebase signed-in Account lifecycle', () => {
     }
   })
 
-  Test('fresh required Account defaults load through the real replica, provider, and runtime', async () => {
-    const fake = fixture()
-    const connection = fake.connect()
-    try {
-      const catalog = TR.Data.Schema(definition, connection)
-      await TR.Data.Settle(catalog)
-      const account = catalog.query({ entity: 'Account', filters: [] })[0]!
-      Expect(TR.Data.Read(account, 'DisplayName')).toBe('')
-      TR.Data.Create(catalog, 'Note', { Body: TR.Value('kept'), Done: TR.Value(false) })
-      await TR.Data.Settle(catalog)
-      Expect(TR.Data.Read(catalog.query({ entity: 'Note', filters: [] })[0]!, 'Body')).toBe('kept')
-      await until(() => fake.pushes.some(push => push.row['Body'] === 'kept'), {
-        description: 'runtime note pushed through the real replica',
+  Test(
+    'authenticated runtime binding reads Account and writes private Note CRUD through the real replica',
+    async () => {
+      const fake = fixture()
+      const catalog = TR.Data.Schema(definition)
+      const source = TR.Data.Configure(TR.Data.Declaration('Firebase', fake.provider), {
+        ApiKey: 'public-key',
+        ProjectId: fake.projectId,
+        StorageKey: 'notes',
       })
-    } finally {
-      await connection.invalidateAuth?.()
-    }
-  })
+      let controller = new AbortController()
+      try {
+        catalog.bindConfigured(source, undefined, {
+          accountId: 'alice',
+          generation: 1,
+          signal: controller.signal,
+          credential: async () => '',
+        })
+        await TR.Data.Settle(catalog)
+        const account = catalog.query({ entity: 'Account', filters: [] })[0]!
+        Expect(TR.Data.Read(account, 'DisplayName')).toBe('')
+        TR.Data.Update(TR.Value(account), { DisplayName: TR.Value('Alice') })
+        await TR.Data.Settle(catalog)
+        Expect(TR.Data.Read(account, 'DisplayName')).toBe('Alice')
+        await until(
+          () =>
+            fake.pushes.some(push =>
+              push.path === fake.path('alice', 'Account') && push.row['DisplayName'] === 'Alice'
+            ),
+          { description: 'account update reaches the real replica' },
+        )
+        TR.Data.Create(catalog, 'Note', { Body: TR.Value('kept'), Done: TR.Value(false) })
+        Expect(catalog.captureSnapshot()).toContain('kept')
+        await TR.Data.Settle(catalog)
+        Expect(catalog.captureSnapshot()).toContain('kept')
+        await until(() => catalog.query({ entity: 'Note', filters: [] }).length === 1, {
+          description: 'authenticated runtime note becomes readable',
+        })
+        const note = catalog.query({ entity: 'Note', filters: [] })[0]!
+        Expect(TR.Data.Read(note, 'Body')).toBe('kept')
+        TR.Data.Update(TR.Value(note), { Body: TR.Value('updated') })
+        await TR.Data.Settle(catalog)
+        Expect(TR.Data.Read(note, 'Body')).toBe('updated')
+        await until(
+          () => fake.pushes.some(push => push.path === fake.path('alice', 'Note') && push.row['Body'] === 'updated'),
+          { description: 'updated Alice note reaches the real replica' },
+        )
+        TR.Data.Create(catalog, 'Note', { Body: TR.Value('delete me'), Done: TR.Value(false) })
+        await TR.Data.Settle(catalog)
+        const deleted = catalog.query({ entity: 'Note', filters: [] }).find(row =>
+          TR.Data.Read(row, 'Body') === 'delete me'
+        )!
+        await until(
+          () => fake.pushes.some(push => push.path === fake.path('alice', 'Note') && push.row['Body'] === 'delete me'),
+          { description: 'second Alice note reaches the real replica' },
+        )
+        TR.Data.Delete(TR.Value(deleted))
+        await TR.Data.Settle(catalog)
+        Expect(catalog.query({ entity: 'Note', filters: [] })).toHaveLength(1)
+        await until(
+          () => fake.pushes.some(push => push.path === fake.path('alice', 'Note') && push.row['_deleted'] === true),
+          {
+            description: 'runtime note deletion reaches the real replica',
+          },
+        )
+
+        controller.abort()
+        Expect(catalog.query({ entity: 'Account', filters: [] })).toHaveLength(0)
+        Expect(() => TR.Data.Create(catalog, 'Note', { Body: TR.Value('late'), Done: TR.Value(false) })).toThrow(
+          'permission',
+        )
+        await catalog.invalidateAuth()
+        fake.auth.currentUser = { uid: 'bob' } as Auth['currentUser']
+        controller = new AbortController()
+        catalog.bindConfigured(source, undefined, {
+          accountId: 'bob',
+          generation: 2,
+          signal: controller.signal,
+          credential: async () => '',
+        })
+        await TR.Data.Settle(catalog)
+        Expect(catalog.query({ entity: 'Note', filters: [] })).toHaveLength(0)
+        const bob = catalog.query({ entity: 'Account', filters: [] })[0]!
+        Expect(TR.Data.Read(bob, 'DisplayName')).toBe('')
+        TR.Data.Create(catalog, 'Note', { Body: TR.Value('Bob only'), Done: TR.Value(false) })
+        await TR.Data.Settle(catalog)
+        await until(() =>
+          fake.pushes.some(push => push.path === fake.path('bob', 'Note') && push.row['Body'] === 'Bob only')
+        )
+        Expect(catalog.query({ entity: 'Note', filters: [] })).toHaveLength(1)
+        controller.abort()
+        await catalog.invalidateAuth()
+        fake.auth.currentUser = { uid: 'alice' } as Auth['currentUser']
+        controller = new AbortController()
+        catalog.bindConfigured(source, undefined, {
+          accountId: 'alice',
+          generation: 3,
+          signal: controller.signal,
+          credential: async () => '',
+        })
+        await TR.Data.Settle(catalog)
+        const returned = catalog.query({ entity: 'Note', filters: [] })
+        Expect(returned).toHaveLength(1)
+        Expect(TR.Data.Read(returned[0]!, 'Body')).toBe('updated')
+        Expect(TR.Data.Read(catalog.query({ entity: 'Account', filters: [] })[0]!, 'DisplayName')).toBe('Alice')
+      } finally {
+        controller.abort()
+        await catalog.invalidateAuth()
+      }
+    },
+  )
 
   Test(
     'repairs persisted legacy nulls and missing literals before publication, retaining note IDs across reopen',

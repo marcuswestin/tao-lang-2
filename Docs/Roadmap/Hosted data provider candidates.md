@@ -413,3 +413,12 @@ made required Account.DisplayName text nonnullable; deployment readback verified
 Email/Password Auth and generated rules, preserving indexes and billing. No accounts or passwords
 were entered by the agent. Client bootstrap, native reopen, two-client sync and direct hostile
 responses remain separate open gates. Conditional landing follows working web/Simulator proof.
+
+Generated-app live check2026-10-05: fresh app creation and existing-resource API connection passed.
+The sample account already exists; sign-in succeeded on retry, then local Account resolution
+reported unauthorized. Its compiled Account/Item schemas lack authored grants, while Firebase
+expects a private owner namespace and the authenticated runtime applies grant-based default deny.
+The prior real-provider/runtime fixture omitted the authenticated binding, so it missed this
+conformance seam. An explicit provider-scoped private-account policy and a real web/Simulator
+journey are required before accepting the ordinary app. This does not invalidate the standalone
+Firebase prototype evidence. Appwrite, Jazz, Convex and Pylon dispositions remain separate.
