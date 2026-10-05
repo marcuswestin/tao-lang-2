@@ -335,7 +335,8 @@ async function installNpmEnvironment(
       `Linking npm alias ${item.alias}`,
       async () => {
         const manifest = await FS.readJson<{ version: string }>(FS.resolvePath('package.json', installed(item.alias)))
-        if (await linkTarget(linkPath(item.alias), [installed(item.alias)]) === undefined) {
+        const currentTarget = await verifyNpmAliasOwnership(consumerRoot, modulesRoot, namespace, item.alias, recorded)
+        if (currentTarget !== installed(item.alias)) {
           await FS.replaceSymlink(installed(item.alias), linkPath(item.alias))
         }
         return manifest.version
@@ -349,6 +350,29 @@ async function installNpmEnvironment(
   // earlier layout installed are unreferenced.
   await FS.remove(ManagedInstallEnvironment.aliasNamespaceRoot(consumerRoot, namespace))
   return pins
+}
+
+/** Rechecks ownership after npm because another process can replace an alias while it runs. */
+async function verifyNpmAliasOwnership(
+  consumerRoot: string,
+  modulesRoot: string,
+  namespace: string,
+  alias: string,
+  recorded: Readonly<Record<string, NpmPin>>,
+): Promise<string | undefined> {
+  const link = FS.resolvePath(alias, modulesRoot)
+  if (!await FS.exists(link) && !await FS.isSymbolicLink(link)) {
+    return undefined
+  }
+  if (recorded[alias] === undefined) {
+    Errors.throwUserInput(`Cannot install npm alias '${alias}': ${link} is not Tao-managed.`)
+  }
+  const targets = ManagedInstallEnvironment.aliasLinkTargets(consumerRoot, namespace, alias)
+  const target = await linkTarget(link, targets)
+  if (target === undefined) {
+    Errors.throwUserInput(`Cannot update npm alias '${alias}': ${link} is no longer Tao-managed.`)
+  }
+  return target
 }
 
 /**

@@ -20,7 +20,7 @@ export async function warmReceipt(
   watch: ProjectToolingWatch,
   previous?: ProjectToolingResult,
 ): Promise<ProjectToolingResult> {
-  previous ??= await watch.requestRefresh()
+  previous ??= watch.lastResult
   for (let index = 0; index < 4; index += 1) {
     const current = await watch.requestRefresh()
     if (current.revision === previous.revision) {
@@ -41,6 +41,7 @@ export function registerReceiptMutationTest(
   target: (paths: Readonly<Record<string, string>>, root: string) => string,
   content: string,
   expectedStatus: 'fresh' | 'stale',
+  generatedOutput = false,
 ): void {
   Test(title, async () => {
     await withTaoFiles('tao-refresh-receipt-inputs-', fixture, async (paths, root) => {
@@ -55,10 +56,17 @@ export function registerReceiptMutationTest(
         const changed = await watch.requestRefresh()
         Expect(changed.revision).toBeGreaterThan(previous.revision)
         Expect(changed.status).toBe(expectedStatus)
-        Expect(semanticResult(changed)).toEqual(semanticResult(await watch.requestRefresh({ force: true })))
+        const parity = await watch.requestRefresh({ force: true })
+        Expect(semanticResult(changed)).toEqual(semanticResult(parity))
         if (path === contract) {
           Expect(changed.changedOutputPaths).toContain(contract)
           Expect(await FS.readText(contract)).toBe(savedContract)
+        }
+        if (generatedOutput) {
+          // Publication already repaired this output; cold parity proves its authoritative bytes.
+          Expect(parity.status).toBe('fresh')
+          await warmReceipt(watch, parity)
+          return
         }
         if (saved === undefined) {
           await FS.remove(path)

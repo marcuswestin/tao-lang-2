@@ -16,8 +16,9 @@ the evidence and message format; this reference owns only the mid-task cut.
 
 ## When a slice is worth proposing
 
-Local landing uses a machine-wide lock and can wait behind other lanes; hosted merging follows
-`verification-lanes` instead. Compare current machine and CI contention. Propose a landing only when
+GitHub CI is the default for final portable proof and hosted landing; local landing uses a
+machine-wide lock and remains the `dev/<name>` path. `verification-lanes` owns the route and
+offline fallback. Propose a landing only when
 all four hold, and it is then the Developer's to accept or defer:
 
 - The finished side is independently complete by the cut rule below.

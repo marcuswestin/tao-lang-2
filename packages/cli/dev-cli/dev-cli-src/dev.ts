@@ -855,7 +855,7 @@ await runWithCommands(commands => {
     )
     .option(
       '--auto-merge',
-      'Enable GitHub auto-merge after checks start; by default, refuse an already enabled pull request.',
+      'Enable GitHub auto-merge after checks start for authorized ready landing; omitted keeps it off and refuses an already enabled pull request.',
     )
     .option('--poll-interval-ms <ms>', 'How often to poll the checks while they run (default 60000).')
     .action(async (options: { autoMerge?: boolean; pollIntervalMs?: string } = {}) => {

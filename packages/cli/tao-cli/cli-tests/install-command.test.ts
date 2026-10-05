@@ -338,6 +338,38 @@ view Main() { render inject \`\`\`ts return null \`\`\` }
     }
   })
 
+  Test('preserves an alias replaced by an unrelated symlink while npm is running', async () => {
+    const root = await mkTestDir('tao-install-alias-race-')
+    const unrelated = FS.resolvePath('unrelated-package', root)
+    try {
+      await writeNpmApp(root)
+      const namespace = BridgeMetadata.dependencyNamespace(root)
+      const directory = ManagedInstallEnvironment.environmentRoot(root, namespace)
+      const linkPath = FS.resolvePath('util', ManagedInstallEnvironment.modulesRoot(root, root, namespace))
+      let npmCalls = 0
+      let replacedLink: Awaited<ReturnType<typeof FS.entryMetadata>> | undefined
+      const installNpm = async (path: string) => {
+        npmCalls++
+        await writeInstalled(path, 'util', 'date-fns', '4.1.0')
+        if (npmCalls === 2) {
+          await FS.mkdir(unrelated)
+          await FS.remove(linkPath)
+          await FS.symlink(unrelated, linkPath)
+          replacedLink = await FS.entryMetadata(linkPath)
+        }
+      }
+      await runTaoInstall(root, { appName: 'Reader' }, { installNpm })
+
+      await Expect(runTaoInstall(root, { appName: 'Reader' }, { installNpm })).rejects.toThrow('no longer Tao-managed')
+      Expect(replacedLink?.kind).toBe('symlink')
+      Expect(await FS.entryMetadata(linkPath)).toEqual(replacedLink)
+      Expect(await FS.realPath(linkPath)).toBe(unrelated)
+      Expect(await FS.realPath(FS.resolvePath('node_modules/util', directory))).not.toBe(unrelated)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('reports phase and command elapsed time and npm count on success and failure', async () => {
     const root = await mkTestDir('tao-install-timings-')
     try {
