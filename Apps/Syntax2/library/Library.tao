@@ -1,4 +1,6 @@
 use Comparison, Ordered, UpperCase from @tao/core
+use RenderKey from @tao/ui
+use BookRow from ./BookViews
 
 // 1. Private semantic roles remain accessible through the exported signature.
 public
@@ -82,5 +84,22 @@ data Books / Book {
    Title (required "Enter a title"),
    Note text (default ""),
    Author Person?,
-   LoanedOut yes / Returned no
-}
+   LoanedOut yes / Returned no,
+
+   func Book.Key() fails never -> RenderKey {
+      return RenderKey "book:{ Book.Id }"
+   },
+
+   action Book.Return() {
+      update Book {
+         Returned: yes
+      }
+   },
+   action Books.Return() {
+      loop Books / Book {
+         do Book.Return()
+      }
+   },
+   view Book.Render() {
+      render BookRow(Book)
+}  }

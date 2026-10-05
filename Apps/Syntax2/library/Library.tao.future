@@ -1,8 +1,6 @@
-use Col, Row, Button, RenderKey from @tao/ui
-use Ordered, UpperCase from @tao/core
-use Time, Wait, seconds from @tao/time
-use CreateTemporaryPDF, DeleteTemporaryFile, UploadFile,
-    ObservedRevision, MarkSeen, NotifyExport from ./BookIO
+use UpperCase from @tao/core
+use Time from @tao/time
+use CreateTemporaryPDF, DeleteTemporaryFile, UploadFile from ./BookIO
 
 // 1. Name, private signature types and PersonName graduated to Library.tao.
 // ComparedNames graduated to Library.tao.
@@ -25,40 +23,6 @@ public data Books / Book {
    Note text (default "")
    Author Person?
    LoanedOut yes / Returned no
-   // Standard-library LazyList's structural contract, not an entity magic method.
-   func Book.Key() fails never { return RenderKey "book:{Book.Id}" }
-   action Book.Return() { update Book { Returned yes } }
-   action Books.Return() { loop Books / Book { do Book.Return() } }
-   view Book.Render() {
-      let Revision = ObservedRevision(Book)
-      render Col {
-         Book.Title
-         AuthorName(Book.Author)
-         if Book.Returned { "Available" }
-         Book.Note
-         Row {
-            if Revision.Unseen { "●" }
-            Button("Seen") { on press -> do MarkSeen(Revision) }
-            Button("Return") { on press -> do Book.Return() }
-            Button("Export") {
-               on press -> do Export(Book) then {
-                  done Duration -> async {
-                     do Wait(2 seconds)
-                     do NotifyExport(Book, Duration)
-                  }
-               }
-            }
-         }
-      }
-   }
-}
-
-// 3.1 A matched guard stops this helper, not the enclosing Book row.
-view AuthorName(Person?) {
-   render Col {
-      guard Person { none -> "Unknown author" }
-      "{Person.Name}"
-   }
 }
 
 // 4. Sequential actions; completion joins cleanup; notification is detached.
