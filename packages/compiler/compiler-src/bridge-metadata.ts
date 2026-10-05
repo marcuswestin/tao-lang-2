@@ -6,6 +6,7 @@ import {
   ConfigurationCompiler,
   isRuntimeConfigurableDeclaration,
 } from './codegen/react-native/app/ConfigurationCompiler'
+import { nativeNumericSelfContext } from './numeric-self-context'
 import {
   type QuantityNativeLinkage,
   QuantityNativeModule,
@@ -627,11 +628,15 @@ function contractsOf(
     if (result === undefined) {
       continue
     }
+    const selfContext = AST.isFunctionCallExpression(expression) && nativeNumericSelfContext(bridge)
     const type = namesOnly ? '' : AST.isFunctionCallExpression(expression)
       ? `(${contextual ? 'scope: TR.AuthScope, ' : ''}${
-        expression.argumentList?.arguments.map((argument, index) =>
-          `arg${index}: ${foreignActionParameterType(Type.ofArgument(argument))}`
-        ).join(', ') ?? ''
+        [
+          ...(expression.argumentList?.arguments.map((argument, index) =>
+            `arg${index}: ${foreignActionParameterType(Type.ofArgument(argument))}`
+          ) ?? []),
+          ...(selfContext ? ['argSelfFactory: TR.QuantityFactory'] : []),
+        ].join(', ')
       }) => ${typescriptType(result)}`
       : result.kind === 'primitive' && result.primitive === 'action'
       ? `(${
@@ -643,7 +648,11 @@ function contractsOf(
     const actionValue = result.kind === 'primitive' && result.primitive === 'action'
     contracts.push({
       ...(AST.isFunctionCallExpression(expression)
-        ? { arity: String((expression.argumentList?.arguments.length ?? 0) + (contextual ? 1 : 0)) }
+        ? {
+          arity: String(
+            (expression.argumentList?.arguments.length ?? 0) + (contextual ? 1 : 0) + (selfContext ? 1 : 0),
+          ),
+        }
         : actionValue
         ? { arity: String(result.parameters.length), result: 'void | Promise<void>' }
         : {}),

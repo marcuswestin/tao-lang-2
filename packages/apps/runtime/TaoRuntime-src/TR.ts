@@ -1631,6 +1631,8 @@ namespace TR {
   export type Rendered = TaoRendered
   /** QuantityPayload retains authentic opaque storage across ordinary quantity and abstract-family parameters. */
   export type QuantityPayload = TaoQuantityPayload<string, string, object>
+  /** The compiler passes the exact selected quantity contract to native Self implementations. */
+  export type QuantityFactory = ReturnType<typeof factoryOfQuantityInput>
   /** Ticker declares the reactive value `@tao/time`'s `Interval` returns. */
   export type Ticker = TaoTicker
   /** Pasteboard declares the reactive value `@tao/device/clipboard`'s `Clipboard()` returns. */

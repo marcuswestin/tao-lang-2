@@ -1,10 +1,12 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert } from '@shared'
+import { hasNumericSelfContext } from '../../../numeric-self-context'
 import { type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 import { compileAssociatedConverterDeclaration } from './associated-converters'
 import { compileArgumentForType } from './capability-projection'
+import { quantityFactoryBinding } from './NumericUnitsCompiler'
 import { compileRuntimeType } from './runtime-type-compiler'
 
 type AssociatedOwner = ASTUtils.AssociatedCallableDescriptor['owner']
@@ -150,7 +152,7 @@ export function AssociatedFunctionDeclaration(method: AST.AssociatedFunctionDecl
   const owner = AST.associatedFunctionOwner(method)
   Assert(owner, 'Expected an associated implementation to have a named type owner.')
   const parameters = AST.parametersOf(method).map((parameter, index) => ({ index, parameter }))
-  return gen`TR.Function((${
+  return gen`TR.Function((${hasNumericSelfContext(method) ? gen`_TaoSelfFactory: TR.QuantityFactory, ` : gen.noop()}${
     method.static
       ? gen.join(parameters, Compile.FunctionRuntimeParameter)
       : gen`_TaoAssociatedReceiver: ${compileRuntimeType(Type.ofAssociatedOwner(owner))}${
@@ -182,9 +184,23 @@ export function compileAssociatedWitness(
       descriptor.declaration,
     )
     Assert(index >= 0, 'the selected operator belongs to its actual publication owner')
-    return gen`${associatedWitnessBinding(descriptor.owner)}["$operators"][${index}]`
+    const implementation = gen`${associatedWitnessBinding(descriptor.owner)}["$operators"][${index}]`
+    return bindNumericSelfContext(descriptor, implementation)
   }
-  return gen`${associatedWitnessBinding(descriptor.owner)}[${gen.jsLiteral(descriptor.declaration.name)}]`
+  return bindNumericSelfContext(
+    descriptor,
+    gen`${associatedWitnessBinding(descriptor.owner)}[${gen.jsLiteral(descriptor.declaration.name)}]`,
+  )
+}
+
+function bindNumericSelfContext(descriptor: ASTUtils.AssociatedCallableDescriptor, implementation: Compiled): Compiled {
+  if (!AST.isAssociatedFunctionDeclaration(descriptor.declaration) || !hasNumericSelfContext(descriptor.declaration)) {
+    return implementation
+  }
+  const owner = Type.quantityOwner(descriptor.receiver)
+  Assert.defined(owner, 'the selected numeric Self contract has a concrete quantity factory')
+  return gen`TR.Function((..._TaoSelfArguments: TR.Evaluable[]) =>
+    TR.Call(${implementation}, ${quantityFactoryBinding(owner)}, ..._TaoSelfArguments))`
 }
 
 function isAssociatedOperator(method: AST.AssociatedFunctionDeclaration): boolean {

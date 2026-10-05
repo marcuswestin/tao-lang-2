@@ -2,6 +2,7 @@ import { ASTUtils, Type, Units } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
 import { BridgeMetadata } from '../../../bridge-metadata'
+import { nativeNumericSelfContext } from '../../../numeric-self-context'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 import { compileAssociatedConversion } from './associated-converters'
@@ -412,6 +413,9 @@ export const ExpressionsCompiler = {
       : undefined
     const binding = gen.Name({ name: bridgeBindingName(bridge) })
     const contextual = AST.getDocument(bridge).uri.path.endsWith('/@tao/auth/Auth.tao')
+    if (values && nativeNumericSelfContext(bridge)) {
+      values.push(gen`_TaoSelfFactory`)
+    }
     const nativeValue = contextual
       ? gen`${binding}(_TaoAuthScope!${values?.length ? gen`, ${gen.join(values, value => value)}` : gen.noop()})`
       : values
@@ -420,9 +424,7 @@ export const ExpressionsCompiler = {
     const resultType = BridgeMetadata.bridgeResultType(bridge)
     if (resultType) {
       if (resultType.kind === 'primitive' && resultType.primitive === 'numeric' && resultType.selfOwner) {
-        const anchor = nativeSelfResultAnchor(bridge, resultType.selfOwner)
         return gen`(() => {
-          const _TaoSelfFactory = TR.factoryOfQuantityInput(${anchor});
           const result = ${nativeValue};
           TR.admitQuantityUnion(result, [_TaoSelfFactory], "Self");
           return result;
@@ -562,21 +564,6 @@ function compileAssociatedOperation(expression: AST.BinaryExpression | AST.Unary
       return TR.Capability.rebind(_TaoGenericReceiver, ${call})
     })()`
     : call
-}
-
-/** Native Self output is anchored in a real supplied quantity, never an abstract owner factory. */
-function nativeSelfResultAnchor(
-  bridge: AST.FromExpression,
-  owner: ASTUtils.AssociatedCallableDescriptor['owner'],
-): Compiled {
-  const method = AST.findOwningAssociatedFunction(bridge)
-  Assert(method && AST.associatedFunctionOwner(method) === owner, 'native Self output belongs to its real method')
-  if (!method.static) {
-    return gen.scopeName({ name: owner.name })
-  }
-  const input = AST.parametersOf(method).find(parameter => Type.ofParameter(parameter).selfOwner === owner)
-  Assert.defined(input, 'a static native Self output has a supplied Self input')
-  return gen.scopeName({ name: Type.parameterName(input) })
 }
 
 /**
