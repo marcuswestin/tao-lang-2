@@ -10,6 +10,7 @@ export function compileBareTextRender(
     | AST.StateDeclaration
     | AST.ParameterDeclaration
     | AST.RenderSlotInputBinding
+    | AST.ForStatement
     | AST.Expression,
   options: CodegenOptions,
 ): Compiled {

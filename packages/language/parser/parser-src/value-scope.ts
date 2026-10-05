@@ -641,6 +641,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       AST.StateDeclaration.$type,
       AST.ParameterDeclaration.$type,
       AST.RenderSlotInputBinding.$type,
+      AST.ForStatement.$type,
     ])
     const seen = new Set<string>()
     return this.createScope(

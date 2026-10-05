@@ -1,7 +1,13 @@
 import { AST } from '@parser'
 import { type AssociatedCapabilityWitness, type TaoType, Type } from './Type'
 
-type RenderValueSource = AST.AliasDeclaration | AST.StateDeclaration | AST.ParameterDeclaration | AST.RenderSlotInputBinding | AST.Expression
+type RenderValueSource =
+  | AST.AliasDeclaration
+  | AST.StateDeclaration
+  | AST.ParameterDeclaration
+  | AST.RenderSlotInputBinding
+  | AST.ForStatement
+  | AST.Expression
 
 /**
  * RenderTarget classifies what a render site names. A view declaration is invoked with arguments;
@@ -13,7 +19,12 @@ export type RenderTarget =
   | { kind: 'nav'; declaration: AST.NavDeclaration }
   | {
     kind: 'text'
-    declaration: AST.AliasDeclaration | AST.StateDeclaration | AST.ParameterDeclaration | AST.RenderSlotInputBinding
+    declaration:
+      | AST.AliasDeclaration
+      | AST.StateDeclaration
+      | AST.ParameterDeclaration
+      | AST.RenderSlotInputBinding
+      | AST.ForStatement
     expression?: undefined
   }
   | { kind: 'text'; expression: AST.Expression; declaration?: undefined }
@@ -111,6 +122,8 @@ export function renderTargetName(target: RenderTarget): string {
   if (target.kind === 'ui' || target.kind === 'rendered') {
     return AST.isExpression(target.source)
       ? target.source.$cstNode?.text ?? 'expression'
+      : AST.isRenderSlotInputBinding(target.source)
+      ? target.source.name
       : Type.declarationName(target.source)
   }
   return target.kind === 'view'

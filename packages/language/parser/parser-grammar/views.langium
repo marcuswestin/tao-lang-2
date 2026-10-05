@@ -108,7 +108,7 @@ CallerContentStatement:
 // A render site names a view, nav, or a value declaration in the owning lexical scope. Text-valued
 // aliases, states, and parameters render as text; view-, scene-, and nav-typed parameters retain
 // their value-rendering behavior. A value render takes no arguments, content, or events of its own.
-type RenderTarget = ViewDeclaration | NavDeclaration | AliasDeclaration | StateDeclaration | ParameterDeclaration | RenderSlotInputBinding;
+type RenderTarget = ViewDeclaration | NavDeclaration | AliasDeclaration | StateDeclaration | ParameterDeclaration | RenderSlotInputBinding | ForStatement;
 
 RenderStatement:
     'render' (injection=Injection layoutClause=LayoutClause?
