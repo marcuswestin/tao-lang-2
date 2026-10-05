@@ -4,8 +4,8 @@ import type {
   AssociatedCallableOwner,
   AssociatedDescriptorMaterialization,
 } from './associated-methods'
+import type { CallableInput } from './callable-signatures'
 import type { TaoType } from './Type'
-import { Type } from './Type'
 
 export type AssociatedOperation = AST.BinaryExpression | AST.UnaryExpression
 
@@ -24,18 +24,16 @@ export type AssociatedOperatorCandidate = Readonly<{
   operandDomains: readonly TaoType[]
 }>
 
-export type AssociatedOperationResolution = Readonly<{
-  expression: AssociatedOperation
+export type AssociatedOperatorContractResolution = Readonly<{
   operator: string
-  operands: readonly AST.Expression[]
   operandTypes: readonly TaoType[]
   candidates: readonly AssociatedOperatorCandidate[]
   descriptor?: AssociatedCallableDescriptor
   dispatch?: 'instance' | 'static'
-  receiver?: AST.Expression
   operandDomains?: readonly TaoType[]
-  /** Explicit inputs stay in declaration order; receiver anchors never become fake parameters. */
-  pairs: readonly Readonly<{ parameter: AST.ParameterDeclaration; operand: AST.Expression; type: TaoType }>[]
+  receiverPlacement?: Readonly<
+    { kind: 'implicit' } | { kind: 'parameter'; input: CallableInput; parameter: AST.ParameterDeclaration }
+  >
   result: TaoType
   problem?:
     | 'unsupported-operator'
@@ -45,11 +43,27 @@ export type AssociatedOperationResolution = Readonly<{
     | 'pending-contract'
 }>
 
-export type AssociatedOperationTypeResolution = Readonly<{
-  ofExpression(expression: AST.Expression): TaoType
+export type AssociatedOperationResolution =
+  & AssociatedOperatorContractResolution
+  & Readonly<{
+    expression: AssociatedOperation
+    operands: readonly AST.Expression[]
+    receiver?: AST.Expression
+    /** Explicit inputs stay in declaration order; receiver anchors never become fake parameters. */
+    pairs: readonly Readonly<{ parameter: AST.ParameterDeclaration; operand: AST.Expression; type: TaoType }>[]
+  }>
+
+export type AssociatedOperatorTypeResolution = Readonly<{
   contracts(operands: readonly TaoType[], operator: string): readonly AssociatedOperatorContract[]
   accepts(actual: TaoType, expected: TaoType): boolean
+  specialize(descriptor: AssociatedCallableDescriptor, receiver: TaoType): AssociatedCallableDescriptor
 }>
+
+export type AssociatedOperationTypeResolution =
+  & AssociatedOperatorTypeResolution
+  & Readonly<{
+    ofExpression(expression: AST.Expression): TaoType
+  }>
 
 const authoredOperators = new Set(['+', '-', '*', '/', '==', '!=', '<', '<=', '>', '>='])
 const comparisonOperators = new Set(['==', '!=', '<', '<=', '>', '>='])
@@ -61,23 +75,41 @@ export function resolveAssociatedOperation(
 ): AssociatedOperationResolution {
   const operands = AST.isBinaryExpression(expression) ? [expression.left, expression.right] : [expression.operand]
   const operandTypes = operands.map(operand => resolution.ofExpression(operand))
-  const base = {
+  const selected = resolveAssociatedOperatorContract(expression.operator, operandTypes, resolution)
+  const offset = selected.dispatch === 'instance' ? 1 : 0
+  return {
+    ...selected,
     expression,
-    operator: expression.operator,
     operands,
+    ...(selected.descriptor && offset ? { receiver: operands[0] } : {}),
+    pairs: selected.descriptor?.signature.inputs.map((input, index) => ({
+      parameter: input.declaration,
+      operand: operands[index + offset]!,
+      type: input.type,
+    })) ?? [],
+  }
+}
+
+/** Type-only selection shares the exact authored contracts and ordered operand matcher. */
+export function resolveAssociatedOperatorContract(
+  operator: string,
+  operandTypes: readonly TaoType[],
+  resolution: AssociatedOperatorTypeResolution,
+): AssociatedOperatorContractResolution {
+  const base = {
+    operator,
     operandTypes,
-    pairs: [],
     candidates: [],
     result: { kind: 'unresolved' } as TaoType,
   }
-  if (!authoredOperators.has(expression.operator)) {
+  if (!authoredOperators.has(operator)) {
     return { ...base, problem: 'unsupported-operator' }
   }
-  if (operandTypes.some(type => type.kind === 'unresolved')) {
+  if (operandTypes.length === 0 || operandTypes.some(type => type.kind === 'unresolved')) {
     return { ...base, problem: 'unresolved-operand' }
   }
   const receiver = operandTypes[0]!
-  const contracts = resolution.contracts(operandTypes, expression.operator)
+  const contracts = resolution.contracts(operandTypes, operator)
   const candidates: AssociatedOperatorCandidate[] = []
   const declarations = new Set<AssociatedOperatorContract['declaration']>()
   let pending = false
@@ -92,7 +124,7 @@ export function resolveAssociatedOperation(
       continue
     }
     const arity = AST.parametersOf(declaration).length + (staticDeclaration ? 0 : 1)
-    if (arity !== operands.length) {
+    if (arity !== operandTypes.length) {
       continue
     }
     if (
@@ -124,10 +156,10 @@ export function resolveAssociatedOperation(
       continue
     }
     const contextualReceiver = candidate.receiverEligible !== false
-      && (comparisonOperators.has(expression.operator) || (!staticDeclaration
+      && (comparisonOperators.has(operator) || (!staticDeclaration
         && (receiver.kind === 'capability' || receiver.genericParameter !== undefined)))
     const descriptor = contextualReceiver
-      ? Type.specializeAssociatedDescriptor(candidate.contract.descriptor, receiver.genericReceiver ?? receiver)
+      ? resolution.specialize(candidate.contract.descriptor, receiver.genericReceiver ?? receiver)
       : candidate.contract.descriptor
     const operandDomains = [
       ...(staticDeclaration
@@ -153,19 +185,16 @@ export function resolveAssociatedOperation(
     return { ...base, candidates, problem: applicable.length === 0 ? 'missing-operator' : 'ambiguous-operator' }
   }
   const selected = mostSpecific[0]!
-  const offset = selected.dispatch === 'instance' ? 1 : 0
+  const receiverInput = selected.descriptor.signature.inputs[0]
   return {
     ...base,
     candidates,
     descriptor: selected.descriptor,
     dispatch: selected.dispatch,
-    ...(offset ? { receiver: operands[0] } : {}),
     operandDomains: selected.operandDomains,
-    pairs: selected.descriptor.signature.inputs.map((input, index) => ({
-      parameter: input.declaration,
-      operand: operands[index + offset]!,
-      type: input.type,
-    })),
+    receiverPlacement: selected.dispatch === 'instance'
+      ? { kind: 'implicit' }
+      : { kind: 'parameter', input: receiverInput!, parameter: receiverInput!.declaration },
     result: selected.descriptor.result,
   }
 }

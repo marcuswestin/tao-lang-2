@@ -2,6 +2,33 @@ import { AST, Parser } from '@parser'
 import { Describe, Expect, Test } from '@shared/test'
 import { Type } from '../ast-utils-src/Type'
 
+function assertContractAgreement(expression: AST.BinaryExpression | AST.UnaryExpression) {
+  const operation = Type.associatedOperation(expression)
+  const contract = Type.associatedOperatorContract(expression.operator, operation.operandTypes, expression)
+  Expect(contract.problem).toBe(operation.problem)
+  Expect(contract.dispatch).toBe(operation.dispatch)
+  Expect(contract.descriptor?.declaration === operation.descriptor?.declaration).toBe(true)
+  Expect(contract.candidates.length).toBe(operation.candidates.length)
+  Expect(
+    contract.candidates.every((candidate, index) =>
+      candidate.descriptor.declaration === operation.candidates[index]?.descriptor.declaration
+    ),
+  ).toBe(true)
+  Expect(contract.operandDomains?.map(Type.identityKey)).toEqual(operation.operandDomains?.map(Type.identityKey))
+  Expect(Type.identityKey(contract.result)).toBe(Type.identityKey(operation.result))
+  if (contract.receiverPlacement?.kind === 'parameter') {
+    Expect(contract.receiverPlacement.input === contract.descriptor?.signature.inputs[0]).toBe(true)
+    Expect(contract.receiverPlacement.parameter === AST.parametersOf(contract.descriptor!.declaration)[0]).toBe(true)
+    Expect(operation.pairs[0]?.parameter === contract.receiverPlacement.parameter).toBe(true)
+    Expect(operation.pairs[0]?.operand === operation.operands[0]).toBe(true)
+    Expect(operation.receiver).toBeUndefined()
+  } else if (contract.receiverPlacement?.kind === 'implicit') {
+    Expect(operation.receiver === operation.operands[0]).toBe(true)
+    Expect(operation.pairs[0]?.operand === operation.operands[1]).toBe(true)
+  }
+  return contract
+}
+
 Describe('Authored operator resolution', () => {
   Test(
     'discovers right operand and result owners while retaining authored order and declaration conflicts',
@@ -40,6 +67,7 @@ Describe('Authored operator resolution', () => {
       const resolve = (name: string) => {
         const expression = AST.returnStatementsOf(functions.find(fn => fn.name === name)!)[0]!.value
         Expect.Is(expression, AST.isBinaryExpression)
+        assertContractAgreement(expression)
         return Type.associatedOperation(expression)
       }
       const right = resolve('RightOwner')
@@ -84,6 +112,7 @@ Describe('Authored operator resolution', () => {
           AST.isBinaryExpression(value) || AST.isUnaryExpression(value),
       )
       if (expression.operator !== 'not' && expression.operator !== 'and') {
+        assertContractAgreement(expression)
         Expect(Type.associatedOperation(expression).problem).toBe('unresolved-operand')
       }
       Expect(Type.ofExpression(expression).kind).toBe('unresolved')
@@ -115,6 +144,10 @@ Describe('Authored operator resolution', () => {
         (value): value is AST.BinaryExpression | AST.UnaryExpression =>
           AST.isBinaryExpression(value) || AST.isUnaryExpression(value),
       )
+      const contract = assertContractAgreement(expression)
+      Expect(contract.receiverPlacement?.kind).toBe('parameter')
+      const fromOwner = Type.associatedOperatorContract(expression.operator, contract.operandTypes, owner)
+      Expect(fromOwner.descriptor?.declaration === contract.descriptor?.declaration).toBe(true)
       return Type.associatedOperation(expression)
     })
     Expect(operations.map(operation => operation.problem)).toEqual([undefined, undefined, undefined, undefined])
@@ -162,6 +195,7 @@ Describe('Authored operator resolution', () => {
         (value): value is AST.BinaryExpression | AST.UnaryExpression =>
           AST.isBinaryExpression(value) || AST.isUnaryExpression(value),
       )
+      assertContractAgreement(expression)
       return { expression, resolved: Type.associatedOperation(expression) }
     }
     const addition = operation('Add')
@@ -205,6 +239,10 @@ Describe('Authored operator resolution', () => {
     const operations = parsed.entry.ast.statements.filter(AST.isFunctionDeclaration).map(fn => {
       const expression = AST.returnStatementsOf(fn)[0]!.value
       Expect.Is(expression, AST.isBinaryExpression)
+      const contract = assertContractAgreement(expression)
+      if (!contract.problem) {
+        Expect(contract.receiverPlacement?.kind).toBe('implicit')
+      }
       return Type.associatedOperation(expression)
     })
     Expect(operations[0]!.problem).toBeUndefined()
@@ -214,6 +252,15 @@ Describe('Authored operator resolution', () => {
     Expect(operations[1]!.problem).toBe('missing-operator')
     Expect(operations[2]!.problem).toBeUndefined()
     Expect(Type.identityKey(operations[2]!.result)).toBe(Type.identityKey(operations[2]!.operandTypes[0]!))
+    const owner = parsed.entry.ast.statements.find(node => AST.isTypeDeclaration(node) && node.name === 'Ordered')
+    Expect.Is(owner, AST.isTypeDeclaration)
+    Expect.Is(owner.type, AST.isCapabilityTypeExpression)
+    const fromRequirement = Type.associatedOperatorContract('<', operations[0]!.operandTypes, owner.type.methods[0]!)
+    Expect(fromRequirement.problem).toBeUndefined()
+    Expect(fromRequirement.receiverPlacement?.kind).toBe('implicit')
+    Expect(fromRequirement.operandDomains?.map(Type.identityKey)).toEqual(
+      operations[0]!.operandDomains?.map(Type.identityKey),
+    )
   })
 
   Test('leaves method-level generic inference pending and never invents numeric storage operators', async () => {
@@ -232,6 +279,7 @@ Describe('Authored operator resolution', () => {
     const operations = parsed.entry.ast.statements.filter(AST.isFunctionDeclaration).map(fn => {
       const expression = AST.returnStatementsOf(fn)[0]!.value
       Expect.Is(expression, AST.isBinaryExpression)
+      assertContractAgreement(expression)
       return { expression, resolved: Type.associatedOperation(expression) }
     })
     Expect(operations[0]!.resolved.problem).toBe('pending-contract')

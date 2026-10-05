@@ -30,6 +30,7 @@ import {
   type AssociatedOperatorContract,
   type AssociatedOperatorContractResolution,
   resolveAssociatedOperation,
+  resolveAssociatedOperatorContract,
 } from './associated-operators'
 import { puritySatisfiesFunction } from './callable-effects'
 import { type CallableSignatureComparison, callableSignatureOf, compareCallableSignatures } from './callable-signatures'
@@ -428,6 +429,8 @@ export class Type {
       atMemberPath: (root: TaoType, members: readonly string[]) => resolution.atMemberPath(root, members),
       receiverType: (receiver: AssociatedMethodReceiver) => resolution.receiverType(receiver),
       associatedOperation: (expression: AssociatedOperation) => resolution.associatedOperation(expression),
+      associatedOperatorContract: (operator: string, orderedDomains: readonly TaoType[], site: AST.Node) =>
+        resolution.associatedOperatorContract(operator, orderedDomains, site),
       ofAssociatedOwner: (owner: AssociatedCallableOwner) => resolution.ofAssociatedOwner(owner),
       associatedMethodDeclaration: (receiver: TaoType, name: string, dispatch?: AssociatedMethodDispatch) =>
         Type.associatedMethodDeclaration(
@@ -1784,9 +1787,8 @@ class TypeResolutionContext {
 
   associatedOperation(expression: AssociatedOperation) {
     return resolveAssociatedOperation(expression, {
+      ...this.operatorResolution(expression),
       ofExpression: operand => this.ofExpression(operand),
-      contracts: (operands, operator) => this.associatedOperatorContracts(operands, operator, expression),
-      accepts: (actual, expected) => this.compareDomains(actual, expected, false) === 'compatible',
     })
   }
 
