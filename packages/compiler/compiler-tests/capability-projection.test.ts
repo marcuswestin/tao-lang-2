@@ -29,6 +29,8 @@ async function fixture() {
     func OptionalSource(Value Child?) { return Value }
     func OptionalTarget(Value Display?) { return Value }
     func OptionalInvoke(Value Child?) { return OptionalSource(Value) }
+    func OptionalProjected(Value Supplied?) { return Value }
+    func OptionalProjectionInvoke(Value Supplied?) { return OptionalProjected(Value) }
     func Projected(Value Supplied) -> Supplied { return Value }
     func Accept(Value Display) -> text { return Value.Format(Count: 2) }
     func Invoke(Value Child) -> text { return Accept(Value) }
@@ -245,6 +247,70 @@ Describe('compiler: capability projection correspondence', () => {
       Expect(calls).toBe(6)
     },
   )
+
+  Test('samples an optional capability once per projection while retained methods stay live', async () => {
+    const { owner, expression, functionNamed, context } = await fixture()
+    const target = AST.parametersOf(functionNamed('OptionalTarget'))[0]
+    Assert.defined(target, 'Expected an optional receiving parameter.')
+    const code = ASTUtils.withAssociatedEffects(context, () =>
+      withAssociatedWitnessBindings(
+        new Map(['Token', 'Display', 'Supplied'].map(name => [owner(name), `_${name}Witness`])),
+        () => ({
+          declarations: ['Token', 'Display', 'Supplied'].map(name =>
+            Langium.toString(Compile.AssociatedMethodsDeclaration(owner(name)))
+          ).join('\n'),
+          concrete: Langium.toString(
+            compileArgumentForType(expression('Source'), Type.ofDefinition(owner('Supplied'))),
+          ),
+          projected: Langium.toString(
+            compileArgumentForType(expression('OptionalProjectionInvoke'), Type.ofParameter(target)),
+          ),
+        }),
+      ))
+    const { default: TR } = await runtimeModule
+    const transpiler = new Bun.Transpiler({ loader: 'ts' })
+    const receiver = TR.Cell(TR.Value('Before'))
+    const supplied = new Function(
+      'TR',
+      '_Scope',
+      transpiler.transformSync(`${code.declarations}\nreturn ${code.concrete}`),
+    )(
+      TR,
+      { Value: receiver, DisplayPrefix: TR.Value('display') },
+    )
+    let current = supplied.evaluate()
+    const source = TR.Alias(() => current)
+    let calls = 0
+    const projected = new Function(
+      'TR',
+      '_Scope',
+      transpiler.transformSync(`${code.declarations}\nreturn ${code.projected}`),
+    )(
+      TR,
+      {
+        Value: source,
+        DisplayPrefix: TR.Value('display'),
+        OptionalProjected: TR.Function((input: typeof source) => {
+          calls++
+          return input
+        }),
+      },
+    )
+    const held = TR.Capability.method(projected.evaluate(), 'Format')
+    Expect(calls).toBe(1)
+    Expect(TR.Call(held, undefined, TR.Value(2)).getJSValue()).toBe('display:2:Before:!')
+    receiver.set(TR.Value('After'))
+    Expect(TR.Call(held, undefined, TR.Value(2)).getJSValue()).toBe('display:2:After:!')
+    Expect(calls).toBe(1)
+    current = TR.Value(null)
+    Expect(projected.getJSValue()).toBeNull()
+    Expect(calls).toBe(2)
+    current = supplied.evaluate()
+    Expect(TR.Call(TR.Capability.method(projected.evaluate(), 'Format'), undefined, TR.Value(2)).getJSValue()).toBe(
+      'display:2:After:!',
+    )
+    Expect(calls).toBe(3)
+  })
 
   Test('projects nested result and contravariant input wrappers into their receiving contracts', async () => {
     const { owner, expression, context } = await fixture()

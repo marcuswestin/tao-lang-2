@@ -23,7 +23,11 @@ function validatedPlan(actual: ASTUtils.TaoType, expected: ASTUtils.TaoType): AS
 }
 
 /** Adapt bound wrappers without rediscovering admission or repeating the originating call. */
-function compileTransport(source: Compiled, plan: ASTUtils.CapabilityTransportPlan): Compiled {
+function compileTransport(
+  source: Compiled,
+  plan: ASTUtils.CapabilityTransportPlan,
+  evaluated?: Compiled,
+): Compiled {
   return Switch.kind(plan, {
     identity: () => source,
     optional: optional =>
@@ -33,7 +37,7 @@ function compileTransport(source: Compiled, plan: ASTUtils.CapabilityTransportPl
         const _TaoOptionalValue = _TaoOptionalSource.evaluate();
         return _TaoOptionalValue.jsValue == null
           ? _TaoOptionalValue
-          : ${compileTransport(gen`_TaoOptionalSource`, optional.present)}.evaluate();
+          : ${compileTransport(gen`_TaoOptionalSource`, optional.present, gen`_TaoOptionalValue`)}.evaluate();
       });
     })()`,
     attach: attach =>
@@ -46,7 +50,7 @@ function compileTransport(source: Compiled, plan: ASTUtils.CapabilityTransportPl
       }
     })`,
     reproject: reproject =>
-      gen`TR.Alias(() => TR.Capability.reproject(${source}.evaluate(), {
+      gen`TR.Alias(() => TR.Capability.reproject(${evaluated ?? gen`${source}.evaluate()`}, {
       ${
         gen.list(
           reproject.methods,
