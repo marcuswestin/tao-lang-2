@@ -457,6 +457,9 @@ export const ExpressionsCompiler = {
       : binding
     const resultType = BridgeMetadata.bridgeResultType(bridge)
     if (resultType) {
+      if (resultType.kind === 'enum') {
+        return gen`TR.EnumFromJS(${gen.scopeName(resultType.declaration)}, ${nativeValue})`
+      }
       if (resultType.kind === 'primitive' && resultType.primitive === 'numeric' && resultType.selfOwner) {
         return gen`(() => {
           const result = ${nativeValue};
@@ -815,7 +818,9 @@ function configureCall(declaration: AST.ConfigurableDeclaration, config: Compile
     return gen`TR.Navigation.Configure(${runtimeDeclaration}, ${config})`
   }
   if (primitive === 'auth') {
-    return gen`TR.Auth.Configure(${gen.scopeName(declaration, configurationRuntimeBindingName(declaration))}, ${config})`
+    return gen`TR.Auth.Configure(${
+      gen.scopeName(declaration, configurationRuntimeBindingName(declaration))
+    }, ${config})`
   }
   return primitive === 'datasource' ? dataConfigureCall(declaration, config) : undefined
 }

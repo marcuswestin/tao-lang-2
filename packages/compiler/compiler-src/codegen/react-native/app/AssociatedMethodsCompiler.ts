@@ -96,16 +96,16 @@ export function AssociatedMethodsDeclaration(owner: AssociatedOwner): Compiled {
         hostSlots: gen.noop(),
       })
     })
-  }],
+  }] as const,
       "$converters": [${
     gen.join(
       AST.isTypeDeclaration(owner) ? Type.ownAssociatedConverters(owner) : [],
       compileAssociatedConverterDeclaration,
     )
-  }],
+  }] as const,
       "$operators": [${
     gen.join(ASTUtils.ownAssociatedMethods(owner).filter(isAssociatedOperator), Compile.AssociatedFunctionDeclaration)
-  }],
+  }] as const,
       ${
     gen.list(
       ASTUtils.ownAssociatedMethods(owner).filter(method => !isAssociatedOperator(method)),
@@ -117,7 +117,7 @@ export function AssociatedMethodsDeclaration(owner: AssociatedOwner): Compiled {
       const parameters = AST.parametersOf(view).map((parameter, index) => ({ index, parameter }))
       return gen`[${gen.jsLiteral(view.name)}]: TR.Function((_TaoAssociatedReceiver: ${compileRuntimeType(type)}${
         gen.join(parameters, parameter => gen`, ${Compile.FunctionRuntimeParameter(parameter)}`, { separator: '' })
-      }) => TR.RenderView(${associatedViewComponent(owner, views.indexOf(view))}, {
+      }): TR.Value<TR.Rendered> => TR.RenderView(${associatedViewComponent(owner, views.indexOf(view))}, {
         __taoReceiver: _TaoAssociatedReceiver,
         ${
         gen.list(parameters, parameter =>
@@ -170,6 +170,10 @@ export function compileCapabilityDefault(descriptor: ASTUtils.AssociatedCallable
 export function AssociatedFunctionDeclaration(method: AST.AssociatedFunctionDeclaration): Compiled {
   const owner = AST.associatedFunctionOwner(method)
   Assert(owner, 'Expected an associated implementation to have a named type owner.')
+  const published = ASTUtils.associatedCallableDescriptor(method)
+  const materialized = published === undefined ? Type.associatedCallable(method, owner) : undefined
+  const descriptor = published ?? (materialized?.kind === 'ready' ? materialized.descriptor : undefined)
+  Assert.defined(descriptor, 'an associated implementation has its resolved result domain')
   const parameters = AST.parametersOf(method).map((parameter, index) => ({ index, parameter }))
   return gen`TR.Function((${hasNumericSelfContext(method) ? gen`_TaoSelfFactory: TR.QuantityFactory, ` : gen.noop()}${
     method.static
@@ -177,7 +181,7 @@ export function AssociatedFunctionDeclaration(method: AST.AssociatedFunctionDecl
       : gen`_TaoAssociatedReceiver: ${compileRuntimeType(Type.ofAssociatedOwner(owner))}${
         parameters.length ? gen`, ${gen.join(parameters, Compile.FunctionRuntimeParameter)}` : gen.noop()
       }`
-  }) => {
+  }): ${compileRuntimeType(descriptor.result)} => {
       return TR.BlockScope(_Scope, _Scope => {
         ${method.static ? gen.noop() : gen`${receiverScope(owner)} = _TaoAssociatedReceiver`}
         ${gen.list(parameters, Compile.FunctionParameterBinding)}

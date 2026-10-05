@@ -11,7 +11,9 @@ export function compileAssociatedConverterDeclaration(declaration: AST.Associate
   const descriptor = Type.associatedConverterDescriptor(declaration)
   Assert.defined(descriptor, 'a converter has its real attached owner and declared domains')
   const source = AST.associatedConverterSourceOwner(declaration)
-  return gen`TR.Function((_TaoConverterReceiver: ${compileRuntimeType(descriptor.receiver)}) => {
+  return gen`TR.Function((_TaoConverterReceiver: ${compileRuntimeType(descriptor.receiver)}): ${
+    compileRuntimeType(descriptor.result)
+  } => {
     return TR.BlockScope(_Scope, _Scope => {
       ${AST.isTypeDeclaration(source) ? gen`${gen.scopeName(source)} = _TaoConverterReceiver` : gen.noop()}
       ${Compile.FunctionBlockBody(declaration.block)}

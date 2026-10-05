@@ -7,6 +7,33 @@ function identity(name: string): TR.DeclarationIdentity {
 }
 
 Describe('TR functional core', () => {
+  Test('admits native enum names into the selected declaration and rejects unknown names', () => {
+    const cases = TR.Enum(identity('NativeComparison'), ['less', 'equal', 'greater'])
+    const other = TR.Enum(identity('OtherComparison'), ['less', 'equal', 'greater'])
+    const selected = TR.EnumFromJS(cases, 'less')
+    Expect(selected).toBe(cases['less'])
+    Expect(selected).not.toBe(other['less'])
+    Expect(TR.IsCase(selected, cases['less']!).getJSValue()).toBe(true)
+    Expect(TR.IsCase(selected, other['less']!).getJSValue()).toBe(false)
+    Expect(() => TR.EnumFromJS(cases, 'unknown')).toThrow('native result must name a declared case')
+    Expect(() => TR.EnumFromJS(cases, 'toString')).toThrow('native result must name a declared case')
+  })
+
+  Test('retains inferred callable payload types through text and action factories', async () => {
+    const text = TR.Function(() => TR.Value('Typed text'))
+    const result: TR.Value<string> = TR.Call(text)
+    Expect(result.getJSValue()).toBe('Typed text')
+    let calls = 0
+    const factory = TR.Function(() =>
+      TR.Action(() => {
+        calls += 1
+      })
+    )
+    const action: TR.Value<TR.Action['jsValue']> = TR.Call(factory)
+    await TR.Do(action.evaluate())
+    Expect(calls).toBe(1)
+  })
+
   Test('render when captures every predicate before bodies and preserves source branch keys', () => {
     let current = true
     let reads = 0
@@ -46,25 +73,29 @@ Describe('TR functional core', () => {
       reads += 1
       return TR.Value(current)
     })
-    const running = TR.Action(() => TR.WhenAll(subject, [
-      ['true', async () => {
-        current = false
-        seen.push('start')
-        started.resolve()
-        await gate.promise
-        seen.push('finish')
-      }],
-      ['false', () => seen.push('unexpected changed match')],
-    ], () => seen.push('unexpected fallback'))).jsValue.invoke()
+    const running = TR.Action(() =>
+      TR.WhenAll(subject, [
+        ['true', async () => {
+          current = false
+          seen.push('start')
+          started.resolve()
+          await gate.promise
+          seen.push('finish')
+        }],
+        ['false', () => seen.push('unexpected changed match')],
+      ], () => seen.push('unexpected fallback'))
+    ).jsValue.invoke()
     await started.promise
     Expect(reads).toBe(1)
     Expect(seen).toEqual(['start'])
     gate.resolve()
     await running
     Expect(seen).toEqual(['start', 'finish'])
-    await TR.Action(() => TR.WhenAll(subject, [['true', () => seen.push('unexpected true')]], () => {
-      seen.push('fallback')
-    })).jsValue.invoke()
+    await TR.Action(() =>
+      TR.WhenAll(subject, [['true', () => seen.push('unexpected true')]], () => {
+        seen.push('fallback')
+      })
+    ).jsValue.invoke()
     Expect(reads).toBe(2)
     Expect(seen).toEqual(['start', 'finish', 'fallback'])
   })

@@ -30,7 +30,8 @@ Describe('Capability witnesses', () => {
     const replacement = capabilities.attach(TR.Value('Replacement'), {
       text: TR.Function((receiver: TaoEvaluable<string>) => TR.Value(`New:${getJSValue(receiver)}`)),
     })
-    writable.at(['Content']).set(replacement)
+    const writableContent = TR.Member(writable, ['Content']) as TR.Writable<TR.Capability>
+    writableContent.set(replacement)
     Expect(TR.Call<string>(capabilities.method(TR.Member(writable, ['Content']).evaluate(), 'text')).getJSValue())
       .toBe('New:Replacement')
     Expect(TR.Call<string>(capabilities.method(TR.Member(row, ['Content']).evaluate(), 'text')).getJSValue())

@@ -330,6 +330,22 @@ class TR {
     })))
   }
 
+  /** Native case names acquire the selected declaration's actual case identity at the boundary. */
+  static EnumFromJS(
+    cases: Readonly<Record<string, TR.Value<TR.EnumCaseIdentity>>>,
+    caseName: unknown,
+  ): TR.Value<TR.EnumCaseIdentity> {
+    const selected = typeof caseName === 'string' && Object.prototype.hasOwnProperty.call(cases, caseName)
+      ? cases[caseName]
+      : undefined
+    RuntimeAssert.input(selected, 'The native result must name a declared case of its Tao return type.')
+    RuntimeAssert(
+      declaredEnumCases.has(selected.evaluate().jsValue),
+      'a native enum return uses declared case identities',
+    )
+    return selected
+  }
+
   /** IsCase tests built-in subject states, declared boolean cases, and enum identity values. */
   static IsCase(subject: TR.Evaluable, expected: TR.SubjectCaseName | TR.Evaluable): TR.Value<boolean> {
     const evaluated = subject.evaluate()
@@ -594,7 +610,7 @@ class TR {
   }
 
   /** Function creates a Tao pure-function value. */
-  static Function(body: (...args: any[]) => TR.Evaluable | TR.Function): TR.Function {
+  static Function<T>(body: (...args: any[]) => TaoEvaluable<T> | TR.Function): TR.Function<T> {
     return new RuntimeFunction(body)
   }
 
@@ -618,7 +634,7 @@ class TR {
   static MountRendered = mountRenderedView
 
   /** Call preserves raw omission holes separately from a wrapped none value. */
-  static Call<T>(fn: TR.Function, ...args: (TR.Evaluable | undefined)[]): TR.Value<T> {
+  static Call<T>(fn: TR.Function<T>, ...args: (TR.Evaluable | undefined)[]): TR.Value<T> {
     return fn.invoke(...args) as TR.Value<T>
   }
 
@@ -1524,10 +1540,10 @@ class RuntimeAction<Args extends any[] = any[]> {
   }
 }
 
-class RuntimeFunction {
-  constructor(private readonly body: (...args: any[]) => TR.Evaluable | TR.Function) {}
+class RuntimeFunction<T = any> {
+  constructor(private readonly body: (...args: any[]) => TaoEvaluable<T> | TR.Function) {}
 
-  invoke(...args: (TR.Evaluable | undefined)[]): TR.Value<any> | TR.Function {
+  invoke(...args: (TR.Evaluable | undefined)[]): TR.Value<T> | TR.Function {
     const result = this.body(...args)
     return result instanceof RuntimeFunction ? result : completeRuntimeValue(result)
   }
@@ -1666,7 +1682,7 @@ namespace TR {
   /** CaseBranch maps one source case name to a payload-aware lazy body. */
   export type CaseBranch<ResultT> = readonly [string, (payload: TR.Value<any>) => ResultT]
   /** Function declares a runtime Tao pure function. */
-  export type Function = RuntimeFunction
+  export type Function<T = any> = RuntimeFunction<T>
   /** Capability preserves a concrete receiver behind compile-time selected structural methods. */
   export type Capability<T = unknown> = TaoCapability<T>
   export type SlotRenderer<Args> = TaoSlotRenderer<Args>
