@@ -1,7 +1,94 @@
+import { Workspace } from '@compiler/workspace'
 import { AST, Parser } from '@parser'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 
 Describe('parser: declared constructor expression values', () => {
+  Test('links shorthand parameters through nested constructor blocks', async () => {
+    const parsed = await Parser.parseCode(`
+      type RowKey is text
+      type HeaderLabel is text
+      type GroupHeader is { HeaderLabel }
+      type GroupedRow is { RowKey, Content GroupHeader }
+      type RowFactory is { } with {
+        func Header(RowKey, HeaderLabel) fails never {
+          return GroupedRow { RowKey, Content: GroupHeader { HeaderLabel } }
+        }
+      }
+    `, { validation: false })
+
+    Expect(parsed.diagnostics).toEqual([])
+    const method = [...AST.streamAllContents(parsed.entry.ast)].find(AST.isAssociatedFunctionDeclaration)
+    Expect.Is(method, AST.isAssociatedFunctionDeclaration)
+    const parameters = method.parameterList.parameters
+    const entries = [...AST.streamAllContents(method)].filter(AST.isConfigurationEntry)
+    const key = entries.find(entry => entry.reference?.$refText === 'RowKey')
+    const label = entries.find(entry => entry.reference?.$refText === 'HeaderLabel')
+    Expect(key?.reference?.ref).toBe(parameters[0])
+    Expect(label?.reference?.ref).toBe(parameters[1])
+  })
+
+  Test('links the imported grouped-row Header builder to its actual parameters', async () => {
+    await withTaoFiles('tao-grouped-row-header-links-', {
+      'Main.tao': `
+        use Book from ./Library
+        use RenderKey, ui from @tao/ui
+        public type RowKey is RenderKey
+        public type HeaderLabel is text
+        public type GroupHeader is { HeaderLabel } with {
+          view Render() { render "{GroupHeader.HeaderLabel}" [caption] }
+        }
+        public type GroupedRow is { RowKey, Content ui } with {
+          func Key() fails never -> RenderKey { return GroupedRow.RowKey }
+          view Render() { render GroupedRow.Content }
+        }
+        can RowBuilders {
+          Header(RowKey, HeaderLabel) fails never -> GroupedRow
+          BookRow(RowKey, Book) fails never -> GroupedRow
+        }
+        type RowFactory is { } with {
+          func Header(RowKey, HeaderLabel) fails never {
+            return GroupedRow { RowKey, Content: GroupHeader { HeaderLabel } }
+          }
+          func BookRow(RowKey, Book) fails never {
+            return GroupedRow { RowKey, Content: Book }
+          }
+        }
+        public func GroupedRows(Items list of Book) fails never -> list of GroupedRow {
+          return BuildRows(Items, RowFactory { })
+        }
+        func BuildRows(Items list of Book, Builders RowBuilders) fails never -> list of GroupedRow {
+          return GroupedRows(Items, Builders) from ./GroupedRows.ts
+        }
+      `,
+      'Library.tao': `
+        public data People / Person { Name text }
+        public data Books / Book {
+          Title text,
+          Author Person?,
+          view Book.Render() { render BookCard(Book.Title) }
+        }
+        view BookCard(Title text) from ./BookCard.tsx
+      `,
+      'BookCard.tsx': 'export function BookCard() { return null }',
+      'GroupedRows.ts': 'export default function GroupedRows() { return [] }',
+    }, async paths => {
+      const parsed = await Workspace.parse(paths['Main.tao']!)
+      Expect(parsed.diagnostics).toEqual([])
+      const factory = parsed.entry.ast.statements.find(statement =>
+        AST.isTypeDeclaration(statement) && statement.name === 'RowFactory'
+      )
+      Expect.Is(factory, AST.isTypeDeclaration)
+      const header = factory.associated?.methods.find(method => method.name === 'Header')
+      Expect.Is(header, AST.isAssociatedFunctionDeclaration)
+      Expect(AST.associatedFunctionOwner(header)).toBe(factory)
+      const shorthand = [...AST.streamAllContents(header)].filter(AST.isConfigurationEntry)
+        .find(entry => entry.reference?.$refText === 'HeaderLabel')
+      Expect.Is(shorthand, AST.isConfigurationEntry)
+      Expect(shorthand.reference?.ref).toBe(header.parameterList.parameters[1])
+      Expect(shorthand.reference?.error).toBeUndefined()
+    })
+  })
+
   Test(
     'links value, member, interpolation and grouped-expression payloads without consuming call delimiters',
     async () => {
