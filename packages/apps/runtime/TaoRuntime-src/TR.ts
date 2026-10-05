@@ -700,12 +700,13 @@ class TR {
     return action.evaluate().jsValue.invokeJoined(...args)
   }
 
-  /** DoResult awaits a foreign value without releasing the caller's transaction. */
+  /** DoResult awaits a source or foreign value without releasing the caller's transaction. */
   static async DoResult<ResultT>(
     action: { evaluate(): { jsValue: { invokeJoinedResult(...args: any[]): Promise<unknown> } } },
     ...args: any[]
   ): Promise<TR.Value<ResultT>> {
-    return TR.Value(await action.evaluate().jsValue.invokeJoinedResult(...args) as ResultT)
+    const result = await action.evaluate().jsValue.invokeJoinedResult(...args)
+    return isRuntimeValue(result) ? completeRuntimeValue<ResultT>(result) : TR.Value(result as ResultT)
   }
 
   /**

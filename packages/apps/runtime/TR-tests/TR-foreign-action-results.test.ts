@@ -3,6 +3,20 @@ import { Describe, Expect, Test } from '@shared/test'
 import { beginActionLaunch } from '../TaoRuntime-src/TR-action-transactions'
 
 Describe('foreign action results', () => {
+  Test('preserves evaluated source values and treats native lookalikes as data', async () => {
+    const value = TR.Value('ready').evaluate()
+    const source = TR.Action(() => value)
+    const lookalike = { jsValue: 'native', evaluate: () => 'native method' }
+    const native = TR.ForeignAction(() => lookalike, 'Read', [])
+    await TR.Action(async () => {
+      const sourceResult = await TR.DoResult<string>(source)
+      Expect(sourceResult.jsValue).toBe('ready')
+      Expect(sourceResult.evaluate().jsValue).toBe('ready')
+      const nativeResult = await TR.DoResult<typeof lookalike>(native)
+      Expect(nativeResult.jsValue).toBe(lookalike)
+    }).jsValue.invoke()
+  })
+
   Test('preserves false, zero, nullable and structured native results', async () => {
     const results: unknown[] = []
     for (const value of [false, 0, null, { Message: 'ready' }]) {
