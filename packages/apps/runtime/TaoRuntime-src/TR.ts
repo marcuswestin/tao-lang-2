@@ -7,6 +7,7 @@ import {
   actionFailureCaseName,
   actionTestStubContext,
   captureActionContinuation,
+  captureActionDispatch,
   deferDetached,
   existingTransactionResource,
   markExternalEffect,
@@ -675,6 +676,18 @@ class TR {
     metadata: RuntimeActionMetadata = {},
   ): TR.Action<Args> {
     return new RuntimeAction(body, metadata)
+  }
+
+  /** BindEventAction supplies a mounted event owner without replacing the selected action. */
+  static BindEventAction<Args extends any[]>(
+    selected: { evaluate(): { jsValue: RuntimeActionValue<Args> } },
+    owner: TaoActionOwner,
+  ): TR.Action<Args>
+  static BindEventAction(selected: TR.Evaluable, owner: TaoActionOwner): TR.Action
+  static BindEventAction(selected: TR.Evaluable, owner: TaoActionOwner): TR.Action {
+    const payload = selected.evaluate().jsValue
+    RuntimeAssert.input(payload instanceof RuntimeActionValue, 'A named event handler selects a runtime action.')
+    return new RuntimeAction(payload.withOwner(owner))
   }
 
   /** ActionContinuation captures the transaction generated async segments resume into. */
@@ -1369,66 +1382,70 @@ class RuntimeActionValue<Args extends any[] = any[]> {
     runs?: 'latest',
     private readonly interrupt = false,
     private readonly owner?: TaoActionOwner,
+    private readonly original?: RuntimeActionValue<Args>,
   ) {
     this.#latest = runs === 'latest' ? new LatestActionInvocations<Args>() : undefined
   }
 
   invoke(...args: Args): void | Promise<void> {
-    const run = (latestArgs: Args) =>
-      runAction(
-        this.name,
-        latestArgs,
-        () => this.body(...latestArgs),
-        false,
-        this.interrupt,
-        undefined,
-        undefined,
-        this.owner,
-      )
-    return this.#latest?.invoke(args, run) ?? run(args)
+    return this.dispatch(args, this.owner)
   }
 
   invokeJoined(...args: Args): void | Promise<void> {
-    const run = (latestArgs: Args) =>
-      runAction(this.name, latestArgs, () => this.body(...latestArgs), true, false, undefined, undefined, this.owner)
-    return this.#latest?.invoke(args, run) ?? run(args)
+    return this.dispatch(args, this.owner, true)
   }
 
   invokeOwned(owner: TaoActionOwner, active: () => boolean, ...args: Args): void | Promise<void> {
+    return this.dispatch(args, owner, false, active)
+  }
+
+  invokeJoinedResult(...args: Args): Promise<unknown> {
+    return this.result(args, this.owner)
+  }
+
+  /** A bound view shares the original payload's scheduler and every dispatch mode. */
+  withOwner(owner: TaoActionOwner): RuntimeActionValue<Args> {
+    return new RuntimeActionValue(this.body, this.name, undefined, this.interrupt, owner, this.original ?? this)
+  }
+
+  private result(args: Args, owner?: TaoActionOwner): Promise<unknown> {
+    if (this.original) {
+      return this.original.result(args, owner)
+    }
+    RuntimeAssert.input(!this.#latest, 'An action that returns a value cannot use runs latest.')
+    return runActionResult(this.name, args, () => this.body(...args), owner)
+  }
+
+  private dispatch(
+    args: Args,
+    owner?: TaoActionOwner,
+    joined = false,
+    active: () => boolean = () => true,
+    receipt?: (receipt: TaoActionReceipt) => void,
+  ): void | Promise<void> {
+    if (this.original) {
+      return this.original.dispatch(args, owner, joined, active, receipt)
+    }
+    const dispatchCapture = captureActionDispatch(this.name, owner)
     const run = (latestArgs: Args) =>
       runAction(
         this.name,
         latestArgs,
         () => active() ? this.body(...latestArgs) : undefined,
-        false,
-        this.interrupt,
+        joined,
+        joined ? false : this.interrupt,
         undefined,
-        undefined,
+        receipt,
         owner,
+        dispatchCapture,
       )
     return this.#latest?.invoke(args, run) ?? run(args)
   }
 
-  invokeJoinedResult(...args: Args): Promise<unknown> {
-    RuntimeAssert.input(!this.#latest, 'An action that returns a value cannot use runs latest.')
-    return runActionResult(this.name, args, () => this.body(...args), this.owner)
-  }
-
   invokeReceipt(...args: Args): Promise<TaoActionReceipt> {
     return new Promise((resolve, reject) => {
-      const run = (latestArgs: Args) =>
-        runAction(
-          this.name,
-          latestArgs,
-          () => this.body(...latestArgs),
-          false,
-          this.interrupt,
-          undefined,
-          resolve,
-          this.owner,
-        )
       try {
-        const pending = this.#latest ? this.#latest.invoke(args, run) : run(args)
+        const pending = this.dispatch(args, this.owner, false, undefined, resolve)
         // A latest-only invocation can be replaced before it gets its own transaction.
         void Promise.resolve(pending).then(() => resolve({ outcome: 'abandoned' }), reject)
       } catch (error) {
@@ -1493,11 +1510,13 @@ class RuntimeAction<Args extends any[] = any[]> {
   readonly jsValue: RuntimeActionValue<Args>
 
   constructor(
-    body: (...args: Args) => unknown,
+    body: ((...args: Args) => unknown) | RuntimeActionValue<Args>,
     metadata: RuntimeActionMetadata = {},
     runs?: 'latest',
   ) {
-    this.jsValue = new RuntimeActionValue(body, metadata.name ?? 'action', runs, metadata.interrupt, metadata.owner)
+    this.jsValue = body instanceof RuntimeActionValue
+      ? body
+      : new RuntimeActionValue(body, metadata.name ?? 'action', runs, metadata.interrupt, metadata.owner)
   }
 
   evaluate(): RuntimeAction<Args> {

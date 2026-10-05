@@ -198,7 +198,7 @@ export const InvocationsCompiler = {
   EventHandlerAction(pair: ASTUtils.RenderEventBindingPair): Compiled {
     const handler = pair.handler
     if (handler.action) {
-      return Compile.Expression(handler.action)
+      return gen`TR.BindEventAction(${Compile.Expression(handler.action)}, _TaoActionOwner)`
     }
     Assert.defined(handler.block, 'inline event handler has an action block')
     const parameterType = Type.ofParameter(pair.parameter)

@@ -18,6 +18,17 @@ export type TaoActionReceipt = Readonly<{
   outcome: 'committed' | 'failed' | 'abandoned'
   failure?: TaoActionFailureReport
 }>
+
+/** A dispatch capture distinguishes an absent sink from ownership not yet sampled. */
+export type TaoActionDispatchCapture = Readonly<{
+  failureSink?: (failure: TaoActionFailureReport) => boolean
+}>
+
+/** Pin failure delivery before any scheduler can defer this invocation's root creation. */
+export function captureActionDispatch(name: string, owner?: TaoActionOwner): TaoActionDispatchCapture {
+  return Object.freeze({ failureSink: name === 'async' ? undefined : owner?.captureFailureSink() })
+}
+
 const actionReceipts = new Map<(receipt: TaoActionReceipt) => void, number>()
 
 export type TaoDeclaredFailure = Readonly<{
@@ -485,6 +496,7 @@ export function runAction(
   testStubs = TestActionStubs.capture(),
   onReceipt?: (receipt: TaoActionReceipt) => void,
   owner?: TaoActionOwner,
+  dispatchCapture?: TaoActionDispatchCapture,
 ): void | Promise<void> {
   if (join && activeTransaction) {
     return runJoinedAction(activeTransaction, name, body)
@@ -493,7 +505,9 @@ export function runAction(
   const suspendedScope = suspendedTransaction?.scope
   const launch = launchGeneration
   // Pin the mounted occurrence before queueing, rather than borrowing a later render's owner.
-  const failureSink = name === 'async' ? undefined : owner?.captureFailureSink()
+  const failureSink = name === 'async'
+    ? undefined
+    : (dispatchCapture ?? captureActionDispatch(name, owner)).failureSink
   const receipt = onReceipt === undefined ? undefined : (value: TaoActionReceipt) => {
     if (actionReceipts.delete(receipt!)) {
       onReceipt(value)
