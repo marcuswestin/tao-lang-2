@@ -136,6 +136,12 @@ Current exclusive assignments:
   proof. To parallelize its publisher integration, B now owns bridge-metadata.ts,
   ProjectToolingService.ts and new project-tooling-tests/QuantityPublication.test.ts, limited to
   source quantity leaf/companion publication, mapped owner types and existing manifest lifecycle.
+  Its reviewed alias-publication amendment additionally owns quantity-native-module.ts and its
+  existing compiler test, limited to extracting the existing deterministic surface allocation and
+  sharing that plan with direct emission and canonical alias forwarding. Explicit local declaration,
+  canonical owner and native import-name metadata replace guessed exports. Forwarding modules retain
+  canonical factories and constructor objects across multiple source leaves; they allocate no owner
+  symbol or factory. Keep erased-contract collisions and full-source reservations consistent.
   Preserve current erased contracts and dependency discovery. Supply explicit output/type-binding
   and reexport APIs before coordinator Backend consumption; C owns NumericUnits/Type discovery.
   The coordinator retains Backend/compiled output/DTS/native import rewriting, ProjectOutputPublisher
