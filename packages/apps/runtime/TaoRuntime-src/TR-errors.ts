@@ -372,7 +372,7 @@ function actionFailureReport(
       ? [...(actionFailureFrames.get(error) ?? transaction.frames)]
       : [...transaction.frames],
     message: actionFailureMessage(failure, action, actionExitOf(error)?.stage),
-    publicMessage: actionFailureMessage(publicFailure, action, exit?.stage),
+    publicMessage: actionFailureMessage(publicFailure, action, exit?.stage, transaction.externalEffects),
     retryEligible: !transaction.externalEffects,
     timestamp: Date.now(),
   })
@@ -380,7 +380,8 @@ function actionFailureReport(
 
 /** A public action surface never falls back to the diagnostic message of an older capture. */
 export function actionFailurePublicMessage(failure: TaoActionFailureReport): string {
-  return failure.publicMessage ?? actionFailureMessage(new TaoActionFailure('Unexpected', ''), failure.action)
+  return failure.publicMessage
+    ?? actionFailureMessage(new TaoActionFailure('Unexpected', ''), failure.action, undefined, !failure.retryEligible)
 }
 
 /** asActionFailure reads any thrown value as an action failure; an undeclared throw is `Unexpected`. */
@@ -403,12 +404,13 @@ export function actionFailureMessage(
   failure: TaoActionFailure,
   action: string,
   stage?: TaoActionExit['stage'],
+  externalEffects = false,
 ): string {
   return failure.providerSentence
     || failure.declaredSentence
     || (stage === 'cleanup'
       ? `Couldn't finish cleanup for '${action}.'`
-      : `Couldn't finish '${action}.' Nothing was changed.`)
+      : `Couldn't finish '${action}.'${externalEffects ? '' : ' Nothing was changed.'}`)
 }
 
 function sanitize(value: unknown, seen = new WeakSet<object>()): unknown {
