@@ -5,7 +5,8 @@ import { type ReviewedMergeMessage, reviewedMergeMessage } from './ReviewedMerge
 
 /*
  * `open-pr` is the one command that pushes a branch, opens (or reuses) its pull request against
- * `main`, turns on auto-merge, and stays attached to watch the checks the push starts. The reviewed
+ * `main`, and stays attached to watch the checks the push starts. Auto-merge stays off unless the
+ * caller explicitly enables it. The reviewed
  * merge message is the pull request's title and description and, verbatim, auto-merge's commit
  * headline and body, all rewritten from it on every run, so editing the message and running this
  * again is how a changed message reaches `main`. The headline and body are set explicitly because
@@ -15,8 +16,8 @@ import { type ReviewedMergeMessage, reviewedMergeMessage } from './ReviewedMerge
  * GitHub reads it. Verify runs on every push, so a reused pull request is watched the same way as a
  * new one. A branch that already merged is refused before any push, because pushing it again would
  * open a second, empty pull request that auto-merge also lands.
- * With auto-merge explicitly off, it refuses an already enabled pull request before pushing,
- * checks that auto-merge is still off before following CI, and leaves landing to a later decision.
+ * By default, it refuses an already enabled pull request before pushing, checks that auto-merge is
+ * still off before following CI, and leaves landing to a later decision.
  *
  * Every read and write goes through REST (`GitHubPulls`), and the checks are followed by `pr-checks`,
  * so it works where a cloud agent host's proxy refuses `gh pr`'s GraphQL. Auto-merge has no GitHub
@@ -28,7 +29,8 @@ import { type ReviewedMergeMessage, reviewedMergeMessage } from './ReviewedMerge
  * behind the injected `run` seam below rather than a direct `CLI.run` call — the house pattern
  * `android.ts`'s `compatibility.requireAdb ?? requireAdb` uses for the same reason: a test can script
  * every answer without a real remote or a real `gh`. It never force-pushes, and it never merges
- * directly: the default mode names `merge-pr` after checks pass; CI-only mode leaves landing alone.
+ * directly: the default mode names `merge-pr` after checks pass; explicitly enabled auto-merge
+ * lands through GitHub once Verify passes.
  */
 
 const REMOTE = 'origin'
@@ -61,7 +63,7 @@ const defaultDependencies: OpenPrDependencies = {
 
 /** OpenPrOptions is the flags-ready input accepted by the development CLI command. */
 export type OpenPrOptions = {
-  /** Enable auto-merge by default; false observes CI with auto-merge required to stay off. */
+  /** Enable auto-merge explicitly; by default, observe CI with auto-merge required to stay off. */
   autoMerge?: boolean
   /** How often to poll the checks while they run; `pr-checks` sizes the default to GitHub's rate limit. */
   pollIntervalMs?: number
@@ -100,7 +102,7 @@ export const OpenPrCommand = {
     await requireGh(dependencies, root)
     const github = gitHubPulls(dependencies.run, root, dependencies.writeLine)
     await refuseMergedBranch(github, branch)
-    if (options.autoMerge === false) {
+    if (options.autoMerge !== true) {
       const existing = (await github.forBranch(branch, 'open'))[0]
       if (existing !== undefined) {
         await requireAutoMergeOff(github, existing.number)
@@ -115,7 +117,7 @@ export const OpenPrCommand = {
     if (!await awaitChecksOnHead(dependencies, github, pr.number, headSha, report)) {
       return { exitCode: 1, lines }
     }
-    if (options.autoMerge === false) {
+    if (options.autoMerge !== true) {
       await requireAutoMergeOff(github, pr.number)
       report(`PASS  Auto-merge is off for #${pr.number}; following CI without enabling it.`)
     } else {
@@ -123,18 +125,21 @@ export const OpenPrCommand = {
     }
     report(`Following CI checks for #${pr.number}...`)
     const checks = await dependencies.followChecks({
-      expectedHead: options.autoMerge === false ? headSha : undefined,
+      expectedHead: headSha,
       ghAuth: true,
       intervalMs: options.pollIntervalMs,
       pr: pr.number,
       repositoryRoot: root,
       wait: true,
     })
+    if (options.autoMerge !== true) {
+      await requireAutoMergeOff(github, pr.number)
+    }
     const exitCode = checks.exitCode === 0 ? 0 : 1
     if (exitCode === 0) {
-      if (options.autoMerge === false) {
-        await requireAutoMergeOff(github, pr.number)
+      if (options.autoMerge !== true) {
         report(`PASS  CI succeeded on ${headSha.slice(0, 8)} for #${pr.number}; auto-merge is off.`)
+        report(`NEXT  After authorization, run merge-pr to confirm Verify and merge #${pr.number}.`)
       } else {
         report(
           `NEXT  Run merge-pr: it confirms Verify on this head, merges #${pr.number} unless auto-merge did, and archives it.`,
@@ -225,7 +230,7 @@ async function ensurePullRequest(
 async function requireAutoMergeOff(github: GitHub, prNumber: number): Promise<void> {
   if ((await github.view(prNumber)).auto_merge !== null) {
     Errors.throwUserInput(
-      `Auto-merge is enabled for #${prNumber}; open-pr --no-auto-merge refuses to continue.`
+      `Auto-merge is enabled for #${prNumber}; open-pr refuses to continue without --auto-merge.`
         + ' Resolve its auto-merge setting before running CI without landing.',
     )
   }

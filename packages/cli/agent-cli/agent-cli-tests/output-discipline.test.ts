@@ -133,6 +133,7 @@ Describe('output discipline', () => {
 
   Test('refuses a direct pull request merge, even with an override, and leaves the rest of gh', () => {
     // Through the Developer's admin login, a plain merge can bypass the required Verify check.
+    Expect(refusalFor('gh pr merge 3 --squash')).toContain('--auto-merge')
     Expect(refusalFor('gh pr merge 3 --squash').includes('open-pr')).toEqual(true)
     Expect(refusalFor('gh -R owner/repo pr merge 3 --auto').includes('merge-pr')).toEqual(true)
     Expect(refusalFor('env GH_PAGER= gh pr merge 3')).not.toEqual('')

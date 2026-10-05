@@ -13,6 +13,16 @@
   only change since the previous green run was one roadmap paragraph. The deadline is
   `FILE_MUTATION_LOCK_TIMEOUT_MS = 120_000` in `packages/shared/shared-src/FS.ts:856`. The run before
   it failed `tao-apps#1` on the lane's 240-second silence limit under a load of 122.
+- **Additional evidence (2026-10-05):** Instruction-only `feat/contention-aware-ci-guidance`
+  at `c5860acc2`, after integrating `b4c88165d`, failed local finalize on the mutation lock for
+  `packages/apps/stdlib/@tao/device/files.tao`. Its verification report recorded two overlapping
+  Tao lanes and peak load 15.7 on 18 CPUs; compiler shards 1–3 passed on isolated retry, while
+  other compiler, parser, and validator timeouts lacked exclusive confirmation. Log:
+  `.artifacts/logs/verify/2026-10-05T16-50-07-518Z-33632-72c97338/compile-word-flower-app.log`.
+  After that lane released, the focused `validation-dependencies.test.ts` run compiled WordFlower
+  and passed all 12 tests in 7 seconds overall. This does not replace the aborted broad proof or
+  establish that every timeout had the same cause; retain the lock failure alongside the existing
+  fixed-deadline evidence. No lock was removed and no runtime code was changed.
 - **Workaround:** Re-run once the load average falls.
 - **Proposed change:** Judge the lock by its holder rather than by the clock, as the archived
   per-test wall-time entry did for test timeouts: keep waiting while the holder is alive and making

@@ -295,6 +295,18 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
     }, {
       name: 'receipts',
       files: ['packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceipt.test.ts'],
+    }, {
+      name: 'receipt-inputs',
+      files: ['packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptInputs.test.ts'],
+    }, {
+      name: 'receipt-resolution',
+      files: ['packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptResolution.test.ts'],
+    }, {
+      name: 'receipt-host',
+      files: ['packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptHost.test.ts'],
+    }, {
+      name: 'receipt-races',
+      files: ['packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptRaces.test.ts'],
     }],
   }],
   ['language/source-actions', { reads: ['gen-parser', 'tao', 'ts'] }],

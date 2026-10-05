@@ -99,6 +99,31 @@
     those three titles are renamed; local lint passes. The complete hosted verdict
     for that correction remains pending. This recheck also completed authenticated
     check following without the anonymous quota failure.
+  - Hosted run #33 at `9db8b07a5` passed all twelve partitions and aggregate
+    Verify; pull request #9 merged as `b4c88165`. The subsequent main run #34
+    timed out the native wrapper-signature receipt scenario in both the initial
+    run (51.2 seconds with a 48.4-second budget) and isolated retry (45 seconds).
+    No assertion mismatch appeared. Watch initialization already refreshes, but
+    the test warm-up starts from another full refresh before proving replay.
+    Seeding that comparison from the watcher's completed result removes one
+    redundant full native check without altering budgets or product behavior;
+    both focused receipt tests pass locally in 31.2 seconds total, and lint passes.
+    Main run #34 completed with eleven partitions passing and this sole failing
+    partition. Hosted validation of the correction remains pending. These observations do not
+    establish contention as the cause or a stable complete-lane tail.
+  - Hosted follow-up #36 passed eleven partitions, including native refresh.
+    Ordinary receipts completed all fifteen cases twice: initial606.6 seconds
+    with a source/config case deadline, isolated482.5 seconds with a publication
+    case deadline. The combined gate elapsed1,089.2 seconds; queue waits are
+    separate. A file-only split cannot address that individual publication
+    deadline. Separate the independent source/config and publication mutations,
+    then partition the coverage into five singleton file cohorts with all cold
+    parity, repair, race and lifecycle checks retained. The ten restructured
+    reuse/publication and input cases pass locally in113.1 and102.0 seconds;
+    43 registry checks, lint and independent review pass. Complete hosted
+    validation of all nineteen cases remains pending. Build/clean and Firebase creation passed on isolated retry after
+    their initial timeouts; retain those observations without claiming stable
+    first-attempt timing.
 - **Proposed change:** The requested file partition and initial scheduling adjustment are implemented.
   Keep this observation open until fresh-checkout complete-lane measurements establish how much
   end-to-end tail remains; a cached skip is not a repeat measurement.

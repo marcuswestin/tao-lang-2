@@ -603,7 +603,7 @@ reclaim *ARGS:
 worktree-status:
     ./dev worktree-status
 
-# Push this feature branch and stream pull-request checks; --no-auto-merge runs CI without automatic landing
+# Push this feature branch and stream pull-request checks; --auto-merge explicitly enables automatic landing
 [group('Dev')]
 open-pr *ARGS:
     ./dev open-pr {{ ARGS }}
@@ -617,6 +617,11 @@ merge-pr *ARGS:
 [group('Dev')]
 pr-checks *ARGS:
     ./dev pr-checks {{ ARGS }}
+
+# Compare two Verify runs step by step; by default this branch's newest against main's newest green push
+[group('Report')]
+ci-timings *ARGS:
+    ./dev ci-timings {{ ARGS }}
 
 # Report host capabilities
 [group('Report')]
