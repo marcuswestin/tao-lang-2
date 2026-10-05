@@ -146,7 +146,7 @@ Describe('bounded generic invocation domains', () => {
         earlier,
         AST.argumentsOf(returnCall(namedFunction(file, 'Siblings'))),
       )
-      Expect(result.genericDiagnostics.map(diagnostic => diagnostic.kind)).toEqual(['incompatible-generic'])
+      Expect(result.genericDiagnostics?.map(diagnostic => diagnostic.kind)).toEqual(['incompatible-generic'])
       Expect(result.bindings.size).toBe(0)
       Expect(result.result.kind).toBe('unresolved')
     })

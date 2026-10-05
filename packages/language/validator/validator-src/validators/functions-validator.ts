@@ -144,10 +144,12 @@ function validateFunctionCall(call: AST.FunctionCallExpression, ctx: ValidationC
     parameter => resolved.parameterTypes?.get(parameter) ?? Type.ofParameter(parameter),
   )
   for (const diagnostic of resolved.genericDiagnostics ?? []) {
-    Switch.kind(diagnostic, {
-      'uninferred-generic': value => ctx.error(call, messages.uninferredGeneric(fn.name, value.parameter.name)),
-      'incompatible-generic': value => ctx.error(call, messages.incompatibleGeneric(fn.name, value.parameter.name)),
-    })
+    ctx.error(
+      call,
+      diagnostic.kind === 'uninferred-generic'
+        ? messages.uninferredGeneric(fn.name, diagnostic.parameter.name)
+        : messages.incompatibleGeneric(fn.name, diagnostic.parameter.name),
+    )
   }
 }
 

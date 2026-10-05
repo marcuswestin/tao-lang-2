@@ -51,7 +51,9 @@ Describe('parser: declared constructor expression values', () => {
       Expect.Is(firstBannerArgument, AST.isConfigurationConstructor)
       Expect(firstBannerArgument.type.ref?.name).toBe('Subtitle')
       Expect.Is(firstBannerArgument.value, AST.isValueReference)
-      Expect(firstBannerArgument.value.target.ref?.name).toBe('Person')
+      const personTarget = firstBannerArgument.value.target.ref
+      Expect.Is(personTarget, AST.isAliasDeclaration)
+      Expect(personTarget.name).toBe('Person')
       const secondBannerArgument = bannerValues.argumentList?.arguments[1]?.value
       Expect.Is(secondBannerArgument, AST.isConfigurationConstructor)
       Expect(secondBannerArgument.type.ref?.name).toBe('Title')
@@ -71,7 +73,9 @@ Describe('parser: declared constructor expression values', () => {
       Expect(groupedArgument.type.$refText).toBe('Subtitle')
       Expect.Is(groupedArgument.value, AST.isBinaryExpression)
       Expect.Is(groupedArgument.value.left, AST.isValueReference)
-      Expect(groupedArgument.value.left.target.ref?.name).toBe('Person')
+      const groupedPersonTarget = groupedArgument.value.left.target.ref
+      Expect.Is(groupedPersonTarget, AST.isAliasDeclaration)
+      Expect(groupedPersonTarget.name).toBe('Person')
 
       const unwrapped = alias('BannerUnwrapped').value
       Expect.Is(unwrapped, AST.isFunctionCallExpression)
@@ -79,7 +83,9 @@ Describe('parser: declared constructor expression values', () => {
       Expect.Is(unwrappedArgument, AST.isBinaryExpression)
       Expect.Is(unwrappedArgument.left, AST.isConfigurationConstructor)
       Expect.Is(unwrappedArgument.left.value, AST.isValueReference)
-      Expect(unwrappedArgument.left.value.target.ref?.name).toBe('Person')
+      const unwrappedPersonTarget = unwrappedArgument.left.value.target.ref
+      Expect.Is(unwrappedPersonTarget, AST.isAliasDeclaration)
+      Expect(unwrappedPersonTarget.name).toBe('Person')
       Expect(unwrapped.argumentList?.arguments).toHaveLength(2)
 
       const earlier = alias('EarlierValue').value
@@ -90,13 +96,17 @@ Describe('parser: declared constructor expression values', () => {
       Expect(relativeConstructor.relative).toBe(true)
       Expect(relativeConstructor.type.$refText).toBe('Right')
       Expect.Is(relativeConstructor.value, AST.isValueReference)
-      Expect(relativeConstructor.value.target.ref?.name).toBe('Cool')
+      const coolTarget = relativeConstructor.value.target.ref
+      Expect.Is(coolTarget, AST.isAliasDeclaration)
+      Expect(coolTarget.name).toBe('Cool')
 
       const returned = alias('ReturnedValue').value
       Expect.Is(returned, AST.isConfigurationConstructor)
       Expect(returned.type.ref?.name).toBe('IsReturned')
       Expect.Is(returned.value, AST.isMemberAccessExpression)
-      Expect(returned.value.target.ref?.name).toBe('Book')
+      const bookTarget = returned.value.target.ref
+      Expect.Is(bookTarget, AST.isAliasDeclaration)
+      Expect(bookTarget.name).toBe('Book')
       Expect(returned.value.members).toEqual(['Returned'])
 
       const identity = alias('IdentityValue').value
@@ -104,7 +114,10 @@ Describe('parser: declared constructor expression values', () => {
       Expect(identity.function.ref?.name).toBe('Identity')
       const method = alias('MethodValue').value
       Expect.Is(method, AST.isMethodCallExpression)
-      Expect(method.callee.target.ref?.name).toBe('Value')
+      Expect.Is(method.callee, AST.isMemberAccessExpression)
+      const methodTarget = method.callee.target.ref
+      Expect.Is(methodTarget, AST.isAliasDeclaration)
+      Expect(methodTarget.name).toBe('Value')
       Expect(method.argumentList?.arguments).toHaveLength(1)
 
       const ordered = ast.statements.find(statement => AST.isTypeDeclaration(statement) && statement.name === 'Ordered')

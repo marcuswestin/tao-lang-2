@@ -143,7 +143,7 @@ Describe('compiler: bounded generic function calls', () => {
           calls.forEach(call => {
             const invocation = ASTUtils.resolveFunctionInvocation(call)
             Expect(invocation.diagnostics.map(diagnostic => diagnostic.kind)).toEqual([])
-            Expect(invocation.genericDiagnostics.map(diagnostic => diagnostic.kind)).toEqual([])
+            Expect(invocation.genericDiagnostics?.map(diagnostic => diagnostic.kind)).toEqual([])
           })
           const emitted = [
             ...[...witnessBindings.keys()].map(owner => Langium.toString(Compile.AssociatedMethodsDeclaration(owner))),
@@ -233,11 +233,11 @@ Describe('compiler: bounded generic function calls', () => {
         Expect(actualValue).toBe(expectedValue)
       })
     }
-    scope.Left = left
-    scope.Right = right
-    scope.ParentValue = parent
-    scope.ChildValue = child
-    scope.Value = TR.Value(12)
+    scope['Left'] = left
+    scope['Right'] = right
+    scope['ParentValue'] = parent
+    scope['ChildValue'] = child
+    scope['Value'] = TR.Value(12)
     Expect(module.direct().getJSValue()).toBe('left')
     expectSingleCall(compareCalls, [left, right])
     expectSingleCall(displayCalls, [left])

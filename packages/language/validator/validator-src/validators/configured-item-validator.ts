@@ -96,7 +96,7 @@ function validateConfiguredItemConstructor(
       ctx.error(value, configuredItemValidationMessages.constructorShape(typeName, expectedKind))
       return
     }
-    if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, constructed)) {
+    if (!Type.isAssignable(actual, constructed)) {
       ctx.error(
         value.value,
         configuredItemValidationMessages.constructorValueType(
