@@ -106,12 +106,16 @@ async function emit(source: AST.TaoFile, runtime: unknown): Promise<Record<strin
       bindings.set(owner, `_Witness${index}`)
     }
   })
-  const code = withAssociatedWitnessBindings(bindings, () => {
-    const owners = [...bindings.keys()].map(owner => Langium.toString(Compile.AssociatedMethodsDeclaration(owner)))
-    const functions = source.statements.filter(AST.isFunctionDeclaration)
-      .map(fn => Langium.toString(Compile.FunctionDeclaration(fn)))
-    return [...owners, ...functions].join('\n')
-  })
+  const code = ASTUtils.withAssociatedEffects(
+    ASTUtils.createAssociatedEffects([source]),
+    () =>
+      withAssociatedWitnessBindings(bindings, () => {
+        const owners = [...bindings.keys()].map(owner => Langium.toString(Compile.AssociatedMethodsDeclaration(owner)))
+        const functions = source.statements.filter(AST.isFunctionDeclaration)
+          .map(fn => Langium.toString(Compile.FunctionDeclaration(fn)))
+        return [...owners, ...functions].join('\n')
+      }),
+  )
   const scope = {}
   const javascript = new Bun.Transpiler({ loader: 'ts' }).transformSync(code)
   new Function('TR', '_Scope', javascript)(runtime, scope)

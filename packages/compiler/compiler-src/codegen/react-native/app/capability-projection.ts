@@ -28,7 +28,13 @@ export function compileValueForType(source: Compiled, actual: ASTUtils.TaoType, 
 
 function validatedPlan(actual: ASTUtils.TaoType, expected: ASTUtils.TaoType): ASTUtils.CapabilityTransportPlan {
   const result = ASTUtils.planCapabilityTransport(actual, expected)
-  Assert(result.kind === 'ready', 'Expected validated capability transport proof.')
+  if (result.kind !== 'ready') {
+    Assert(false, 'Expected validated capability transport proof.', {
+      result: `${result.kind}:${result.reason}`,
+      actual: Type.identityKey(actual),
+      expected: Type.identityKey(expected),
+    })
+  }
   return result.plan
 }
 

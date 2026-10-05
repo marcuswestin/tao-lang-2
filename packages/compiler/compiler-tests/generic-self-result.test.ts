@@ -2,6 +2,7 @@ import { ASTUtils } from '@ast-utils'
 import { AST, Langium, Parser } from '@parser'
 import { FS, Repo } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
+import { associatedOperatorWitnessKeys } from '../compiler-src/codegen/react-native/app/associated-witness-plan'
 import { withAssociatedWitnessBindings } from '../compiler-src/codegen/react-native/app/AssociatedMethodsCompiler'
 import { Compile } from '../compiler-src/codegen/react-native/Compile'
 
@@ -21,13 +22,25 @@ Describe('compiler: generic Self result contracts', () => {
     const fn = parsed.entry.ast.statements.find(AST.isFunctionDeclaration)
     Expect.Is(fn, AST.isFunctionDeclaration)
     const effects = ASTUtils.createAssociatedEffects([parsed.entry.ast])
-    const code = ASTUtils.withAssociatedEffects(effects, () => Langium.toString(Compile.FunctionDeclaration(fn)))
+    const keys = associatedOperatorWitnessKeys([parsed.entry.ast])
+    const arithmetic = parsed.entry.ast.statements.find(statement =>
+      AST.isTypeDeclaration(statement) && statement.name === 'Arithmetic'
+    )
+    Expect.Is(arithmetic, AST.isTypeDeclaration)
+    const operator = ASTUtils.capabilityRequirements(arithmetic)[0]!
+    Expect.Is(operator, AST.isCapabilityMethodDeclaration)
+    const operatorKey = keys.get(operator)!
+    Expect(operatorKey).toBeDefined()
+    const code = ASTUtils.withAssociatedEffects(
+      effects,
+      () => withAssociatedWitnessBindings(new Map(), () => Langium.toString(Compile.FunctionDeclaration(fn)), keys),
+    )
     const { default: TR } = await import(FS.resolvePath('packages/apps/runtime/TaoRuntime-src/TR.ts', Repo.getRoot()))
     const scope: Record<string, any> = {}
     new Function('TR', '_Scope', new Bun.Transpiler({ loader: 'ts' }).transformSync(code))(TR, scope)
     let calls = 0
     const methods = {
-      '+': TR.Function((left: any, right: any) => {
+      [operatorKey]: TR.Function((left: any, right: any) => {
         calls++
         return TR.Value(`${left.getJSValue()}:${right.getJSValue()}`)
       }),
