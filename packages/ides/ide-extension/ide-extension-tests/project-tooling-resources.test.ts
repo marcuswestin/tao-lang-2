@@ -37,6 +37,7 @@ Describe('installed editor project resources', () => {
       await stageProjectToolingResources({
         runtimeRoot: runtime,
         moduleRoots: [modules],
+        nativeBindings: { stdlibRoot: FS.resolvePath('stdlib', root) },
         typescriptLibRoot: lib,
         outputRoot: output,
       })
@@ -95,6 +96,7 @@ Describe('installed editor project resources', () => {
       await Expect(stageProjectToolingResources({
         runtimeRoot: runtime,
         moduleRoots: [modules],
+        nativeBindings: { stdlibRoot: FS.resolvePath('stdlib', root) },
         typescriptLibRoot: lib,
         outputRoot: FS.resolvePath('extension/_gen_ide-extension', root),
       })).rejects.toThrow('outside the supplied install roots')
@@ -130,6 +132,7 @@ Describe('installed editor project resources', () => {
       await stageProjectToolingResources({
         runtimeRoot: runtime,
         moduleRoots: [modules],
+        nativeBindings: { stdlibRoot: FS.resolvePath('stdlib', root) },
         typescriptLibRoot: lib,
         outputRoot: output,
       })
@@ -167,6 +170,45 @@ view Main() { render inject \`\`\`ts return null \`\`\` }
       const invalid = await ProjectTooling.refresh(project, options)
       Expect(invalid.status).toBe('stale')
       Expect(invalid.diagnostics.some(diagnostic => diagnostic.message.includes('not assignable'))).toBe(true)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('rejects distinct type installs reached through native bindings', async () => {
+    const root = await mkTestDir('tao-ide-resource-duplicate-')
+    try {
+      const runtime = FS.resolvePath('runtime', root)
+      const modules = FS.resolvePath('node_modules', root)
+      const stdlib = FS.resolvePath('stdlib', root)
+      const nativeModules = FS.resolvePath('.tao-ts/native-bindings/photos/inputs/node_modules', stdlib)
+      const lib = FS.resolvePath('typescript/lib', root)
+      await FS.writeText(FS.resolvePath('TaoRuntime-src/TR.ts', runtime), 'export type Runtime = string\n')
+      await FS.writeJson(FS.resolvePath('package.json', runtime), {
+        peerDependencies: { 'native-fixture': '1.0.0' },
+      })
+      await packageFixture(modules, '@types/react')
+      await packageFixture(modules, '@types/node')
+      await packageFixture(nativeModules, 'native-fixture')
+      await packageFixture(nativeModules, '@types/react')
+      await FS.writeJson(FS.resolvePath('@types/react/package.json', nativeModules), {
+        name: '@types/react',
+        version: '2.0.0',
+        types: 'index.d.ts',
+      })
+      await FS.writeText(
+        FS.resolvePath('native-fixture/index.d.ts', nativeModules),
+        "export type Native = import('../@types/react').typesreact\n",
+      )
+      await FS.writeText(FS.resolvePath('lib.es2022.full.d.ts', lib), 'interface Array<T> {}\n')
+
+      await Expect(stageProjectToolingResources({
+        runtimeRoot: runtime,
+        moduleRoots: [modules],
+        nativeBindings: { stdlibRoot: stdlib },
+        typescriptLibRoot: lib,
+        outputRoot: FS.resolvePath('extension/_gen_ide-extension', root),
+      })).rejects.toThrow('multiple installs of @types/react')
     } finally {
       await FS.remove(root)
     }
@@ -268,6 +310,7 @@ view Main() { render inject \`\`\`ts return null \`\`\` }
       await stageProjectToolingResources({
         runtimeRoot: runtime,
         moduleRoots: [modules],
+        nativeBindings: { stdlibRoot: FS.resolvePath('stdlib', root) },
         typescriptLibRoot: lib,
         outputRoot: output,
       })
@@ -301,6 +344,7 @@ view Main() { render inject \`\`\`ts return null \`\`\` }
       await Expect(stageProjectToolingResources({
         runtimeRoot: runtime,
         moduleRoots: [modules],
+        nativeBindings: { stdlibRoot: FS.resolvePath('stdlib', root) },
         typescriptLibRoot: lib,
         outputRoot: FS.resolvePath('extension/_gen_ide-extension', root),
       })).rejects.toThrow('resolved an unowned file')

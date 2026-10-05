@@ -1,6 +1,7 @@
 import { FS } from '@shared'
 import * as ts from 'typescript'
-import { hostModulePaths } from './ProjectHostModules'
+import { hostModulePaths, nativeBindingModuleRoots } from './ProjectHostModules'
+import type { ProjectToolingOptions } from './ProjectTooling'
 
 export type ProjectTypeScriptResource = {
   sourcePath: string
@@ -18,6 +19,7 @@ type ResourceInputs = {
   runtimeRoot: string
   moduleRoots: readonly string[]
   typescriptLibRoot: string
+  nativeBindings?: ProjectToolingOptions['nativeBindings']
 }
 
 type RuntimeManifest = {
@@ -31,12 +33,17 @@ export async function collectProjectTypeScriptResources(
 ): Promise<ProjectTypeScriptResourceResult> {
   const runtimeRoot = FS.resolvePath(inputs.runtimeRoot)
   const runtimeEntry = FS.resolvePath('TaoRuntime-src/TR.ts', runtimeRoot)
-  const typeRoots = inputs.moduleRoots.map(root => FS.resolvePath('@types', root))
+  const moduleRoots = [
+    ...inputs.moduleRoots,
+    ...await nativeBindingModuleRoots({ nativeBindings: inputs.nativeBindings }),
+  ]
+  const typeRoots = moduleRoots.map(root => FS.resolvePath('@types', root))
     .filter(root => FS.existsSync(root))
-  const available = await installedNames(inputs.moduleRoots)
-  const allowedInstallRoots = await installRoots(inputs.moduleRoots, available)
+  const available = await installedNames(moduleRoots)
+  const allowedInstallRoots = await installRoots(moduleRoots, available)
   const hostPaths = await hostModulePaths(FS.resolvePath('__editor_resource_project__', runtimeRoot), {
     hostModuleRoots: inputs.moduleRoots,
+    nativeBindings: inputs.nativeBindings,
   })
   const paths = Object.fromEntries(
     Object.entries(hostPaths).filter(([name]) =>

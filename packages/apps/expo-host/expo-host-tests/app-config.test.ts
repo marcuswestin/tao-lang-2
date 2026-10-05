@@ -9,6 +9,7 @@ type ExpoAppConfig = {
     buildNumber?: string
     bundleIdentifier?: string
     config?: { usesNonExemptEncryption?: boolean }
+    infoPlist?: Record<string, unknown>
     userInterfaceStyle?: 'automatic' | 'dark' | 'light'
   }
   name: string
@@ -32,10 +33,25 @@ const { createExpoAppConfig } = require('../app-config.cjs') as {
   ): ExpoAppConfig
 }
 
+const { getConfig } = require('expo/config') as {
+  getConfig(projectRoot: string): { exp: ExpoAppConfig }
+}
+const { compileModsAsync, withPlugins } = require('expo/config-plugins') as {
+  compileModsAsync(
+    config: ExpoAppConfig,
+    options: { projectRoot: string; platforms: string[]; introspect: boolean; ignoreExistingNativeFiles: boolean },
+  ): Promise<ExpoAppConfig>
+  withPlugins(
+    config: ExpoAppConfig & { _internal: { projectRoot: string } },
+    plugins: NonNullable<ExpoAppConfig['plugins']>,
+  ): ExpoAppConfig
+}
+
 const fallbackConfig: ExpoAppConfig = {
   name: 'Tao Runtime',
   slug: 'tao-runtime',
   version: '1.0.0',
+  plugins: ['expo-media-library', 'expo-file-system'],
 }
 
 const sceneLifecyclePlugin: [string, unknown] = [
@@ -62,6 +78,117 @@ const shipManifest: ShipManifest = {
 }
 
 Describe('Expo ship host configuration', () => {
+  Test('includes Photos and Files plugins in development and shipped native hosts', async () => {
+    const projectRoot = await mkTestDir('tao-app-config-native-')
+    const config: ExpoAppConfig = { name: 'Native App', slug: 'native-app', version: '1.0.0' }
+    try {
+      Expect(createExpoAppConfig(config, projectRoot, {}).plugins).toEqual(['expo-media-library', 'expo-file-system'])
+      await FS.writeJson(FS.resolvePath('_gen_tao-app/ship.json', projectRoot), shipManifest)
+      Expect(createExpoAppConfig(config, projectRoot, {}).plugins).toEqual([
+        'expo-media-library',
+        'expo-file-system',
+        './plugins/with-ios-fmt-compat.cjs',
+      ])
+      Expect(config.plugins).toBeUndefined()
+    } finally {
+      await FS.remove(projectRoot)
+    }
+  })
+
+  Test('preserves custom native plugin options without duplicating their registration', async () => {
+    const projectRoot = await mkTestDir('tao-app-config-native-options-')
+    const config: ExpoAppConfig = {
+      ...fallbackConfig,
+      ios: { infoPlist: { NSPhotoLibraryUsageDescription: 'Read selected project photos.' } },
+      plugins: [
+        sceneLifecyclePlugin,
+        ['expo-media-library', {
+          granularPermissions: ['photo'],
+          photosPermission: false,
+          savePhotosPermission: 'Save project photos.',
+        }],
+        ['expo-file-system', { enableFileSharing: true, supportsOpeningDocumentsInPlace: false }],
+      ],
+    }
+    try {
+      Expect(createExpoAppConfig(config, projectRoot, {})).toBe(config)
+      await FS.writeJson(FS.resolvePath('_gen_tao-app/ship.json', projectRoot), shipManifest)
+      const shipped = createExpoAppConfig(config, projectRoot, {})
+      Expect(shipped.plugins).toEqual([...config.plugins!, './plugins/with-ios-fmt-compat.cjs'])
+      Expect(shipped.ios?.infoPlist).toEqual({ NSPhotoLibraryUsageDescription: 'Read selected project photos.' })
+    } finally {
+      await FS.remove(projectRoot)
+    }
+  })
+
+  Test('resolves the copied host build configuration and native permission settings through Expo', async () => {
+    const projectRoot = await mkTestDir('tao-app-config-expo-native-')
+    try {
+      for (const file of ['app.config.js', 'app-config.cjs', 'package.json']) {
+        await FS.copyFile(Repo.resolvePath(`packages/apps/expo-host/${file}`), FS.resolvePath(file, projectRoot))
+      }
+      await FS.replaceSymlink(
+        Repo.resolvePath('packages/apps/expo-host/node_modules'),
+        FS.resolvePath('node_modules', projectRoot),
+      )
+      await FS.writeJson(FS.resolvePath('app.json', projectRoot), {
+        expo: {
+          name: 'Native App',
+          slug: 'native-app',
+          version: '1.0.0',
+          ios: { infoPlist: { NSPhotoLibraryUsageDescription: 'Read project photos.', UIFileSharingEnabled: false } },
+          plugins: [['expo-file-system', { supportsOpeningDocumentsInPlace: true }]],
+        },
+      })
+      const config = getConfig(projectRoot).exp
+      Expect(config.plugins).toEqual([
+        ['expo-file-system', { supportsOpeningDocumentsInPlace: true }],
+        'expo-media-library',
+      ])
+      // getConfig returns serializable build JSON with its mods removed. Prebuild evaluates plugins
+      // again before compiling native mods; introspection follows that path without writing a project.
+      const prebuild = withPlugins({ ...config, _internal: { projectRoot } }, config.plugins ?? [])
+      const native = await compileModsAsync(prebuild, {
+        projectRoot,
+        platforms: ['ios'],
+        introspect: true,
+        ignoreExistingNativeFiles: true,
+      })
+      Expect(native.ios?.infoPlist).toMatchObject({
+        NSPhotoLibraryUsageDescription: 'Read project photos.',
+        NSPhotoLibraryAddUsageDescription: 'Allow $(PRODUCT_NAME) to save photos',
+        LSSupportsOpeningDocumentsInPlace: true,
+        UIFileSharingEnabled: false,
+      })
+      Expect(native.ios?.infoPlist?.['PHPhotoLibraryPreventAutomaticLimitedAccessAlert']).toBeUndefined()
+      Expect(await FS.isDirectory(FS.resolvePath('ios', projectRoot))).toBe(false)
+    } finally {
+      await FS.remove(projectRoot)
+    }
+  })
+
+  Test('includes Photos and Files in the Companion native build without enabling document sharing', async () => {
+    const projectRoot = Repo.resolvePath('packages/ides/studio-companion-app')
+    const config = getConfig(projectRoot).exp
+    Expect(config.plugins).toContain('expo-media-library')
+    Expect(config.plugins).toContain('expo-file-system')
+    const prebuild = withPlugins({ ...config, _internal: { projectRoot } }, config.plugins ?? [])
+    const native = await compileModsAsync(prebuild, {
+      projectRoot,
+      platforms: ['ios'],
+      introspect: true,
+      ignoreExistingNativeFiles: true,
+    })
+    Expect(native.ios?.infoPlist).toMatchObject({
+      NSPhotoLibraryUsageDescription: 'Allow $(PRODUCT_NAME) to access your photos',
+      NSPhotoLibraryAddUsageDescription: 'Allow $(PRODUCT_NAME) to save photos',
+    })
+    Expect(native.ios?.infoPlist?.['NSLocalNetworkUsageDescription']).toContain('Tao Studio')
+    Expect(native.ios?.infoPlist?.['PHPhotoLibraryPreventAutomaticLimitedAccessAlert']).toBeUndefined()
+    Expect(native.ios?.infoPlist?.['LSSupportsOpeningDocumentsInPlace']).toBeUndefined()
+    Expect(native.ios?.infoPlist?.['UIFileSharingEnabled']).toBeUndefined()
+  })
+
   Test('keeps automatic iOS appearance for development and shipped apps', async () => {
     const checkedIn = await FS.readJson(Repo.resolvePath('packages/apps/expo-host/app.json')) as { expo: ExpoAppConfig }
     const projectRoot = await mkTestDir('tao-app-config-appearance-')
@@ -118,7 +245,7 @@ Describe('Expo ship host configuration', () => {
       slug: 'wordflower-instantdb',
       version: '1.2.3',
       icon: './assets/tao-app-icon-badged.png',
-      plugins: [sceneLifecyclePlugin, './plugins/with-ios-fmt-compat.cjs'],
+      plugins: [sceneLifecyclePlugin, 'expo-media-library', 'expo-file-system', './plugins/with-ios-fmt-compat.cjs'],
       splash: {
         backgroundColor: '#171b2d',
         image: './assets/tao-app-icon.png',
@@ -200,6 +327,8 @@ Describe('Expo ship host configuration', () => {
     const config = createExpoAppConfig(fallbackConfig, projectRoot)
 
     Expect(config.plugins).toEqual([
+      'expo-media-library',
+      'expo-file-system',
       './plugins/with-ios-fmt-compat.cjs',
       [
         'tao-icloud',

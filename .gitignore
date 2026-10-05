@@ -1,6 +1,12 @@
 .DS_Store
 # Watchman creates disposable query-synchronization files in watched roots.
 .watchman-cookie-*
+# Filesystem mutation leases are transient coordination state beside their targets.
+*.tao-file-mutation.lock
+*.tao-file-mutation.lock.reclaim
+*.tao-file-mutation.lock.owner-*
+*.tao-file-mutation.lock.stale-*
+*.tao-file-mutation.lock.release-*
 node_modules/
 *.tsbuildinfo
 .tao-ts/

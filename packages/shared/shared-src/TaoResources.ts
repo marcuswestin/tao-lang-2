@@ -44,6 +44,8 @@ const COMPLETION_STAMP = '.tao-resources'
  * scheme that has to hash it.
  */
 const STDLIB_DIRECTORY = 'stdlib'
+const NATIVE_BINDINGS_GENERATOR_DIRECTORY = 'native-bindings-generator'
+const NATIVE_BINDINGS_ENGINE_DIRECTORY = 'native-bindings-engine'
 
 /** HOST_DIRECTORY is where the Expo host's toolchain files sit inside the resource root. */
 const HOST_DIRECTORY = 'host'
@@ -102,6 +104,8 @@ export const TaoResources = {
   INSTALLED_DIRECTORY,
   MANAGED_NODE_DIRECTORY,
   MANAGED_NODE_MANIFEST,
+  NATIVE_BINDINGS_ENGINE_DIRECTORY,
+  NATIVE_BINDINGS_GENERATOR_DIRECTORY,
   RUNTIME_DIRECTORY,
   SHARED_CORE_DIRECTORY,
   SHARED_SOURCE_DIRECTORY,

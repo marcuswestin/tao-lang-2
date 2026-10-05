@@ -1,3 +1,4 @@
+import { inspectMaintainedNativeBindings, type MaintainedBindingOptions } from '@native-bindings'
 import { type AST, Langium, Parser, type ParseResult } from '@parser'
 import {
   Assert,
@@ -26,12 +27,13 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
   protected constructor(
     protected readonly project: ProjectContext<ServicesT>,
     readonly releaseProfile: ReleaseProfile = ReleaseCapabilities.current(),
+    private readonly nativeBindings?: MaintainedBindingOptions,
   ) {}
 
   /** open creates a Workspace rooted at `directoryPath`. */
   static async open(
     directoryPath: string,
-    options: { sourceOverrides?: Readonly<Record<string, string>> } = {},
+    options: { sourceOverrides?: Readonly<Record<string, string>>; nativeBindings?: MaintainedBindingOptions } = {},
   ): Promise<Workspace> {
     return Workspace.openProfile(directoryPath, ReleaseCapabilities.current(), options)
   }
@@ -40,7 +42,7 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
   static async openProfile(
     directoryPath: string,
     releaseProfile: ReleaseProfile,
-    options: { sourceOverrides?: Readonly<Record<string, string>> } = {},
+    options: { sourceOverrides?: Readonly<Record<string, string>>; nativeBindings?: MaintainedBindingOptions } = {},
   ): Promise<Workspace> {
     const root = FS.resolvePath(directoryPath)
     const snapshot = await sourceOverrideSnapshot(root, options.sourceOverrides ?? {})
@@ -49,8 +51,10 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
         root,
         context => createWorkspaceServices(context, snapshot),
         Object.keys(snapshot),
+        options.nativeBindings?.stdlibRoot,
       ),
       releaseProfile,
+      options.nativeBindings,
     )
   }
 
@@ -142,10 +146,15 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
 
   /** validate validates an entry Tao file and all reachable Tao documents. */
   async validate(entryFile: string): Promise<ValidationResult> {
+    const nativeBindings = await inspectMaintainedNativeBindings(this.nativeBindings)
     const parseResult = await this.parse(entryFile)
-    return (await Validator.validateParseResults([
+    const validation = (await Validator.validateParseResults([
       { parseResult, context: this.validatorContext(parseResult) },
     ], this.documentValidationReuse))[0]!
+    return {
+      ...validation,
+      diagnostics: Diagnostics.unique([...nativeBindings.diagnostics, ...validation.diagnostics]),
+    }
   }
 
   /**
@@ -227,6 +236,7 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
     }
     const batchFiles = [...filesByPath.values()]
 
+    const nativeBindings = await inspectMaintainedNativeBindings(this.nativeBindings)
     const projectFiles = batchFiles.map(file => file.ast)
     const validations = await Validator.validateParseResults(
       parsedEntries.map(parsed => ({
@@ -235,7 +245,7 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
       })),
       this.documentValidationReuse,
     )
-    const diagnostics: Diagnostic[] = []
+    const diagnostics: Diagnostic[] = [...nativeBindings.diagnostics]
     for (const validation of validations) {
       diagnostics.push(...validation.diagnostics)
     }
@@ -279,6 +289,11 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
   /** compileTestPlan compiles v0 Tao tests for an entry file. */
   async compileTestPlan(entryFile: string, options: CompileTestPlanOptions = {}): Promise<Compiler.TestPlan> {
     const result = options.skipValidation ? await this.parse(entryFile) : await this.validate(entryFile)
+    const nativeBindings = await inspectMaintainedNativeBindings(this.nativeBindings)
+    Assert.input(
+      !Diagnostics.hasError(nativeBindings.diagnostics),
+      Diagnostics.errorMessages(nativeBindings.diagnostics).join('; '),
+    )
     return this.withValidationReuse(() => Compiler.compileTestPlan(result, this.compilerContext()))
   }
 
@@ -320,7 +335,12 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
   }
 
   private compilerContext(): Compiler.Context {
-    return Compiler.createContext(this.project.packagesContext, this.project.root, this.releaseProfile)
+    return Compiler.createContext(
+      this.project.packagesContext,
+      this.project.root,
+      this.releaseProfile,
+      this.nativeBindings,
+    )
   }
 
   private resolveEntryFile(entryFile: string): string {

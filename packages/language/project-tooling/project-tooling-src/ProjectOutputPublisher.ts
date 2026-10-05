@@ -14,6 +14,8 @@ export type ProjectPlannedOutput = {
   content: string
   kind: 'contract' | 'snapshot'
   sourceMappings: readonly ProjectToolingSourceMapping[]
+  /** Verified maintained input bytes and the inspection identity that authorized this snapshot. */
+  nativeBindingProvenance?: { identity: string; hash: string }
 }
 
 type OwnedOutput = {
@@ -22,6 +24,7 @@ type OwnedOutput = {
   hash: string
   kind: ProjectPlannedOutput['kind']
   sourceMappings: readonly ProjectToolingSourceMapping[]
+  nativeBindingProvenance?: ProjectPlannedOutput['nativeBindingProvenance']
 }
 
 type OutputManifest = { version: 1; outputs: OwnedOutput[] }
@@ -51,6 +54,7 @@ export async function removeLegacyAdjacentContracts(root: string): Promise<strin
   ) {
     if (
       !path.endsWith('.tao.ts')
+      || isNativeBindingPath(path, FS.resolvePath('.tao-ts', projectRoot))
       || !belongsToProject(path, projectRoot, nestedRoots)
       || await FS.isSymbolicLink(path)
     ) {
@@ -73,7 +77,12 @@ export async function publishProjectOutputs(
   const projectRoot = FS.resolvePath(root)
   const generatedRoot = FS.resolvePath('.tao-ts', projectRoot)
   const manifestPath = FS.resolvePath(MANIFEST_PATH, projectRoot)
-  const previous = await readManifest(manifestPath)
+  const manifestBefore = await readManifest(manifestPath)
+  // Old manifests cannot transfer native generation's ownership to this publisher.
+  const previous = {
+    ...manifestBefore,
+    outputs: manifestBefore.outputs.filter(output => !isNativeBindingPath(output.path, generatedRoot)),
+  }
   const next = planned === undefined
     ? previous.outputs.filter(output => FS.existsSync(output.sourcePath))
     : planned.map(output => ownedOutput(output, generatedRoot))
@@ -137,13 +146,23 @@ function ownedOutput(output: ProjectPlannedOutput, generatedRoot: string): Owned
     hash: Platform.sha256Hex(output.content),
     kind: output.kind,
     sourceMappings: output.sourceMappings,
+    ...(output.nativeBindingProvenance === undefined
+      ? {}
+      : { nativeBindingProvenance: output.nativeBindingProvenance }),
   }
 }
 
 function assertGeneratedPath(path: string, generatedRoot: string): void {
+  if (isNativeBindingPath(path, generatedRoot)) {
+    Errors.throwUnexpected(`Expected: native binding output is owned by native generation: ${path}.`)
+  }
   if (!FS.pathIsWithin(path, generatedRoot) || path === generatedRoot) {
     Errors.throwUnexpected(`Expected: generated project output inside ${generatedRoot}; received ${path}.`)
   }
+}
+
+function isNativeBindingPath(path: string, generatedRoot: string): boolean {
+  return FS.pathIsWithin(FS.resolvePath(path), FS.resolvePath('native-bindings', generatedRoot))
 }
 
 async function hasGeneratedMarker(path: string): Promise<boolean> {

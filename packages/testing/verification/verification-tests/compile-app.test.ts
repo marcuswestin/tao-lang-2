@@ -245,6 +245,30 @@ Describe('app compilation staleness stamp', () => {
     }
   })
 
+  Test('keeps compile stamps valid while real source mutation locks are acquired', async () => {
+    const root = await repository()
+    const tao = compiler()
+    const source = FS.resolvePath('packages/stdlib/@tao/Prelude.tao', root)
+    try {
+      await run(root, tao.compile)
+      await FS.withFileMutationLock(source, root, async () => {
+        Expect(await run(root, tao.compile)).toBe(0)
+        Expect(tao.calls).toHaveLength(1)
+      }, {
+        beforeClaimPublish: async (_lock, owner) => {
+          Expect(await FS.isFile(owner)).toBe(true)
+          Expect(await run(root, tao.compile)).toBe(0)
+          Expect(tao.calls).toHaveLength(1)
+        },
+      })
+      await FS.writeText(source, 'package Prelude\nview Extra\n')
+      Expect(await run(root, tao.compile)).toBe(0)
+      Expect(tao.calls).toHaveLength(2)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('recompiles when the dependency lock changes', async () => {
     const root = await repository()
     const tao = compiler()

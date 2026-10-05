@@ -545,21 +545,23 @@ view Widget() from ../Host/Widget.tsx
       const started = Deferred()
       const release = Deferred()
       let calls = 0
+      let blockedCall: number | undefined
       let watcher: ProjectToolingWatch | undefined
       try {
         watcher = await watchProjectWithPolling(root, { onResult: result => results.push(result) }, async () => {
           calls += 1
           const result = await ProjectTooling.refresh(root, {})
-          if (calls === 2) {
+          if (calls === blockedCall) {
             started.resolve()
             await release.promise
           }
           return result
         })
         Expect(results).toHaveLength(1)
+        blockedCall = calls + 1
 
         await FS.writeText(paths['Main.ts'], 'export const value: number = 2\n')
-        await until(() => calls === 2, { description: 'the first watched edit to start refreshing' })
+        await until(() => calls === blockedCall, { description: 'the first watched edit to start refreshing' })
         await started.promise
         await FS.writeText(paths['Main.ts'], 'export const value: number = "wrong"\n')
         await Time.sleep(500)
@@ -570,7 +572,7 @@ view Widget() from ../Host/Widget.tsx
             result.revision > results[0]!.revision && result.status === 'stale'
             && result.diagnostics.some(diagnostic => diagnostic.code === 'TS2322')
           ), { description: 'the queued refresh after an edit during active work' })
-        Expect(calls).toBeGreaterThanOrEqual(3)
+        Expect(calls).toBeGreaterThanOrEqual(blockedCall + 1)
         Expect(results[1]?.status).toBe('fresh')
       } finally {
         release.resolve()
@@ -605,15 +607,16 @@ view Widget() from ../Host/Widget.tsx
         )
         Expect(results).toHaveLength(1)
         Expect(projectWatcher).toBeDefined()
+        const initialCalls = calls
 
         projectWatcher!.emit('all', 'change', paths['Main.ts']!)
         const explicit = await watcher.requestRefresh({ force: true })
-        Expect(calls).toBe(2)
+        Expect(calls).toBe(initialCalls + 1)
         Expect(results).toEqual([results[0], explicit])
 
         // Observe the full debounce window: its already-pending timer must have been consumed.
         await Time.sleep(350)
-        Expect(calls).toBe(2)
+        Expect(calls).toBe(initialCalls + 1)
         Expect(results).toHaveLength(2)
       } finally {
         await watcher?.dispose()
@@ -630,6 +633,7 @@ view Widget() from ../Host/Widget.tsx
       const release = Deferred()
       const forceOptions: boolean[] = []
       let calls = 0
+      let blockedCall: number | undefined
       let projectWatcher: ReturnType<typeof watch> | undefined
       let watcher: ProjectToolingWatch | undefined
       try {
@@ -640,7 +644,7 @@ view Widget() from ../Host/Widget.tsx
             forceOptions.push(request?.force === true)
             calls += 1
             const result = await ProjectTooling.refresh(root, {})
-            if (calls === 2) {
+            if (calls === blockedCall) {
               started.resolve()
               await release.promise
             }
@@ -656,6 +660,8 @@ view Widget() from ../Host/Widget.tsx
         )
         Expect(results).toHaveLength(1)
         Expect(projectWatcher).toBeDefined()
+        const initialCalls = calls
+        blockedCall = initialCalls + 1
 
         const explicitRefresh = watcher.requestRefresh({ force: true })
         await started.promise
@@ -668,8 +674,8 @@ view Widget() from ../Host/Widget.tsx
         await until(() => results.length === 3, {
           description: 'the follow-up publication queued during an explicit refresh',
         })
-        Expect(calls).toBe(3)
-        Expect(forceOptions).toEqual([false, true, false])
+        Expect(calls).toBe(initialCalls + 2)
+        Expect(forceOptions.slice(initialCalls)).toEqual([true, false])
         Expect(results[1]).toEqual(explicit)
         Expect(results[2]!.revision).toBeGreaterThan(explicit.revision)
         Expect(watcher.lastResult).toEqual(results[2])

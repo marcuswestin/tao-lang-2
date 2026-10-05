@@ -99,3 +99,15 @@ cleanup and ordinary stop without retirement. It still failed the application ma
 Historical owner-unknown resources and broad mobile fault acceptance remain outside this evidence.
 
 The owned Firebase retry at 10:40UTC also closed its driver and server, but final process-group liveness publication returned `kill() failed: EPERM: Operation not permitted` for a recorded group, preserving reservations. Its initial retirement encountered a transient unreadable recorded Chrome child. Automatic approval review refused an immediate signaling retry; subsequent named read-only process queries established absence and the controller had disposed. The existing audited retry then proved closure, released all four reservations, and independently confirmed Simulator Shutdown. Preserve the original failed acceptance receipt separately from this recovery proof. This is not authority to ignore unreadable or permission-denied live identities, kill unrelated processes, or clear historical fences by directory matching.
+
+## Directory registration follow-up — October 5, 2026
+
+During native bridge validation, registering a task-owned Xcode result bundle through
+`./agent resources --register-directory` failed while writing
+`~/.cache/tao/resource-inventory/*.tmp` with `EPERM`. The named host route intentionally
+accepts only read-only report forms and refuses registration flags. The bundle's
+canonical `/private/var/...` path was verified first; `/var/...` is rejected by the
+registry's existing symlink guard. Retained task-local directory notes preserve
+ownership and cleanup conditions, but they do not constitute a successful registry
+write. A future decision can add a narrowly scoped registration route or a writable
+registration location; do not expand the current host report permission implicitly.

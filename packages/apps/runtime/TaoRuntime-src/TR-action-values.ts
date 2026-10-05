@@ -15,6 +15,8 @@ export type TaoEvaluable<ValueT> = {
 /** TaoActionValue is the invokable payload held by an action-valued Tao member. */
 export type TaoActionValue<Args extends any[] = any[]> = {
   invoke(...args: Args): void | Promise<void>
+  nativeEventActive?(): boolean
+  invokeNativeEvent?(...args: Args): void | Promise<void>
 }
 
 /** TaoActionFactory turns a runtime action body into the value generated `do` statements invoke. */

@@ -185,6 +185,128 @@ function fakeDependencies(
 }
 
 Describe('open-pr', () => {
+  Test('opens and follows CI with auto-merge off by default', async () => {
+    const routes = openedPullRequestRoutes(2)
+    delete routes[enableAutoMergeKey(2)]
+    const { calls, dependencies, followed } = fakeDependencies(routes)
+    let expectedHead: string | undefined
+    let ghAuth: boolean | undefined
+    const follow = dependencies.followChecks
+    dependencies.followChecks = async options => {
+      expectedHead = options.expectedHead
+      ghAuth = options.ghAuth
+      return await follow(options)
+    }
+
+    const result = await OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)
+
+    Expect(result.exitCode).toBe(0)
+    Expect(calls).toContain(routeKey('git', ['push', '--set-upstream', 'origin', BRANCH], ROOT))
+    Expect(calls).toContain(createKey())
+    Expect(calls.lastIndexOf(viewKey(2))).toBeGreaterThan(calls.lastIndexOf(checkCountKey()))
+    Expect(calls.indexOf(viewKey(2), calls.lastIndexOf(checkCountKey()))).toBeLessThan(calls.indexOf('followChecks'))
+    Expect(calls.lastIndexOf(viewKey(2))).toBeGreaterThan(calls.indexOf('followChecks'))
+    Expect(calls.some(call => call.startsWith('gh pr merge') || call.includes('/ccr/auto_merge'))).toBe(false)
+    Expect(followed).toEqual([2])
+    Expect(expectedHead).toBe('headsha1111aaaa')
+    Expect(ghAuth).toBe(true)
+    Expect(result.lines).toContain('PASS  CI succeeded on headsha1 for #2; auto-merge is off.')
+    Expect(result.lines.at(-1)).toBe('NEXT  After authorization, run merge-pr to confirm Verify and merge #2.')
+  })
+
+  Test('reuses an auto-merge-off pull request when autoMerge is false', async () => {
+    const routes = cleanFeatureBranchRoutes()
+    routes[listKey('open')] = { stdout: JSON.stringify([pull(7)]) }
+    routes[editKey(7)] = {}
+    routes[viewKey(7)] = { stdout: JSON.stringify(pull(7)) }
+    routes[checkCountKey()] = { stdout: '{"total_count":1}' }
+    const { calls, dependencies, followed } = fakeDependencies(routes)
+
+    const result = await OpenPrCommand.run({ autoMerge: false, repositoryRoot: ROOT }, dependencies)
+
+    Expect(result.exitCode).toBe(0)
+    Expect(calls.indexOf(viewKey(7))).toBeLessThan(
+      calls.indexOf(routeKey('git', ['push', '--set-upstream', 'origin', BRANCH], ROOT)),
+    )
+    Expect(calls).toContain(editKey(7))
+    Expect(calls.some(call => call.includes('--method POST') || call.startsWith('gh pr merge'))).toBe(false)
+    Expect(calls.some(call => call.includes('/ccr/auto_merge'))).toBe(false)
+    Expect(followed).toEqual([7])
+    Expect(result.lines).toContain('PASS  CI succeeded on headsha1 for #7; auto-merge is off.')
+    Expect(result.lines.at(-1)).toContain('After authorization, run merge-pr')
+  })
+
+  Test('refuses an existing auto-merge-enabled pull request by default before pushing', async () => {
+    const routes = cleanFeatureBranchRoutes()
+    // Read the current setting rather than trusting the earlier list response.
+    routes[listKey('open')] = { stdout: JSON.stringify([pull(7)]) }
+    routes[viewKey(7)] = {
+      stdout: JSON.stringify(pull(7, { auto_merge: { commit_message: BODY, commit_title: SUBJECT } })),
+    }
+    // Let an incorrectly ordered implementation reach its later guard so the assertions expose the push itself.
+    routes[editKey(7)] = {}
+    routes[checkCountKey()] = { stdout: '{"total_count":1}' }
+    const { calls, dependencies, followed } = fakeDependencies(routes)
+
+    await Expect(OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies))
+      .rejects.toThrow('Auto-merge is enabled for #7')
+
+    Expect(calls.some(call => call.startsWith('git push'))).toBe(false)
+    Expect(calls.some(call => call.startsWith('gh pr merge') || call.includes('/ccr/auto_merge'))).toBe(false)
+    Expect(calls).not.toContain(editKey(7))
+    Expect(followed).toEqual([])
+  })
+
+  Test('refuses unexpectedly enabled auto-merge before following CI', async () => {
+    const routes = openedPullRequestRoutes(2)
+    delete routes[enableAutoMergeKey(2)]
+    const { calls, dependencies, followed } = fakeDependencies(routes)
+    answerViewsInTurn(dependencies, 2, [
+      pull(2),
+      pull(2, { auto_merge: { commit_message: BODY, commit_title: SUBJECT } }),
+    ])
+
+    await Expect(OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies))
+      .rejects.toThrow('Auto-merge is enabled for #2')
+
+    Expect(calls).toContain(checkCountKey())
+    Expect(calls.some(call => call.startsWith('gh pr merge') || call.includes('/ccr/auto_merge'))).toBe(false)
+    Expect(followed).toEqual([])
+  })
+
+  Test('reports a failed default CI check without a success or landing instruction', async () => {
+    const routes = openedPullRequestRoutes(2)
+    delete routes[enableAutoMergeKey(2)]
+    const { calls, dependencies } = fakeDependencies(routes, {
+      followChecks: async () => ({ exitCode: 1 }),
+    })
+
+    const result = await OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)
+
+    Expect(result.exitCode).toBe(1)
+    Expect(calls).toContain(createKey())
+    Expect(calls.some(call => call.startsWith('gh pr merge') || call.includes('/ccr/auto_merge'))).toBe(false)
+    Expect(result.lines.some(line => line.includes('CI succeeded') || line.startsWith('NEXT'))).toBe(false)
+  })
+
+  Test('does not report auto-merge off if its setting changes while following CI', async () => {
+    const routes = openedPullRequestRoutes(2)
+    delete routes[enableAutoMergeKey(2)]
+    const { calls, dependencies, followed } = fakeDependencies(routes)
+    answerViewsInTurn(dependencies, 2, [
+      pull(2),
+      pull(2),
+      pull(2, { auto_merge: { commit_message: BODY, commit_title: SUBJECT } }),
+    ])
+
+    await Expect(OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies))
+      .rejects.toThrow('Auto-merge is enabled for #2')
+
+    Expect(followed).toEqual([2])
+    Expect(calls.lastIndexOf(viewKey(2))).toBeGreaterThan(calls.indexOf('followChecks'))
+    Expect(calls.some(call => call.startsWith('gh pr merge') || call.includes('/ccr/auto_merge'))).toBe(false)
+  })
+
   Test('waits for the opened pull request’s checks before following any', async () => {
     // What the first real runs met: checks asked for straight after the push, before GitHub had
     // created the workflow run, answered "no checks reported". The run appeared seconds later.
@@ -203,14 +325,14 @@ Describe('open-pr', () => {
       return await run(command, spec)
     }) as OpenPrRunner
 
-    const result = await OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)
+    const result = await OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, dependencies)
 
     Expect(result.exitCode).toBe(0)
     Expect(counts).toEqual([])
     Expect(sleeps).toEqual([5_000, 5_000])
     Expect(followed).toEqual([2])
     Expect(result.lines.at(-1)).toStartWith('NEXT  Run merge-pr')
-    // Auto-merge goes on once checks exist on the head, so Verify is pending when GitHub reads it.
+    // Auto-merge is requested once checks exist on the head, so Verify is pending when GitHub reads it.
     const autoMerge = calls.indexOf(enableAutoMergeKey(2))
     Expect(autoMerge).toBeGreaterThan(calls.lastIndexOf(checkCountKey()))
     Expect(autoMerge).toBeLessThan(calls.indexOf('followChecks'))
@@ -221,7 +343,7 @@ Describe('open-pr', () => {
     routes[checkCountKey()] = { stdout: '{"total_count":0}' }
     const { calls, dependencies } = fakeDependencies(routes)
 
-    const result = await OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)
+    const result = await OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, dependencies)
 
     Expect(result.exitCode).toBe(1)
     Expect(result.lines.some(line => line.startsWith('FAIL  No checks appeared on headsha1'))).toBe(true)
@@ -237,7 +359,7 @@ Describe('open-pr', () => {
     routes[checkCountKey()] = { stdout: '{"total_count":0}' }
     const { dependencies } = fakeDependencies(routes)
 
-    const result = await OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)
+    const result = await OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, dependencies)
 
     Expect(result.exitCode).toBe(1)
     // Verify runs on every push, so the push that resolves the conflict starts the checks itself.
@@ -252,14 +374,16 @@ Describe('open-pr', () => {
     const { dependencies } = fakeDependencies({
       [routeKey('git', ['symbolic-ref', '--quiet', '--short', 'HEAD'], ROOT)]: { exitCode: 1, stdout: '' },
     })
-    await Expect(OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)).rejects.toThrow('HEAD is detached')
+    await Expect(OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, dependencies)).rejects.toThrow(
+      'HEAD is detached',
+    )
   })
 
   Test('refuses a branch that is not feat/, claude/, or codex/', async () => {
     const { dependencies } = fakeDependencies({
       [routeKey('git', ['symbolic-ref', '--quiet', '--short', 'HEAD'], ROOT)]: { stdout: 'chore/tidy\n' },
     })
-    await Expect(OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies))
+    await Expect(OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, dependencies))
       .rejects.toThrow('not a feat/<name>, claude/<name>, codex/<name> branch')
   })
 
@@ -267,7 +391,7 @@ Describe('open-pr', () => {
     const branch = 'claude/example-x1'
     const { calls, dependencies } = fakeDependencies(openedPullRequestRoutes(5, branch), {}, branch)
 
-    const result = await OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)
+    const result = await OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, dependencies)
 
     Expect(result.exitCode).toBe(0)
     Expect(calls).toContain(routeKey('git', ['push', '--set-upstream', 'origin', branch], ROOT))
@@ -279,7 +403,7 @@ Describe('open-pr', () => {
       [routeKey('git', ['symbolic-ref', '--quiet', '--short', 'HEAD'], ROOT)]: { stdout: `${BRANCH}\n` },
       [routeKey('git', ['status', '--porcelain=v1', '--untracked-files=all'], ROOT)]: { stdout: ' M dirty.ts\n' },
     })
-    await Expect(OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies))
+    await Expect(OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, dependencies))
       .rejects.toThrow('uncommitted changes')
   })
 
@@ -290,7 +414,7 @@ Describe('open-pr', () => {
       [routeKey('git', ['merge-base', 'main', 'HEAD'], ROOT)]: { stdout: 'basesha0000\n' },
       [routeKey('git', ['rev-list', '--count', 'basesha0000..HEAD'], ROOT)]: { stdout: '0\n' },
     })
-    await Expect(OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies))
+    await Expect(OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, dependencies))
       .rejects.toThrow('no commits beyond its main merge base')
   })
 
@@ -301,7 +425,7 @@ Describe('open-pr', () => {
       exitCode: null,
     }
     const { dependencies } = fakeDependencies(routes)
-    await Expect(OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies))
+    await Expect(OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, dependencies))
       .rejects.toThrow('gh is not installed')
   })
 
@@ -309,7 +433,7 @@ Describe('open-pr', () => {
     const routes = cleanFeatureBranchRoutes()
     routes[routeKey('gh', ['api', 'user', '--jq', '.login'], ROOT)] = { exitCode: 4, stderr: 'gh auth login' }
     const { dependencies } = fakeDependencies(routes)
-    await Expect(OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies))
+    await Expect(OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, dependencies))
       .rejects.toThrow('gh auth login')
   })
 
@@ -323,7 +447,7 @@ Describe('open-pr', () => {
     routes[checkCountKey()] = { stdout: '{"total_count":1}' }
     const { calls, dependencies, followed } = fakeDependencies(routes)
 
-    const result = await OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)
+    const result = await OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, dependencies)
 
     Expect(result.exitCode).toBe(0)
     Expect(result.lines.some(line => line.startsWith('PASS  Reusing #7'))).toBe(true)
@@ -348,7 +472,7 @@ Describe('open-pr', () => {
     routes[enableAutoMergeKey(7)] = {}
     const { calls, dependencies } = fakeDependencies(routes)
 
-    const result = await OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)
+    const result = await OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, dependencies)
 
     Expect(result.exitCode).toBe(0)
     Expect(calls.indexOf(routeKey('gh', ['pr', 'merge', '7', '--disable-auto'], ROOT)))
@@ -367,7 +491,7 @@ Describe('open-pr', () => {
     routes[enableAutoMergeKey(7)] = {}
     const { calls, dependencies } = fakeDependencies(routes)
 
-    const result = await OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)
+    const result = await OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, dependencies)
 
     Expect(result.exitCode).toBe(0)
     Expect(calls.indexOf(hostAutoMergeKey(7, 'DELETE'))).toBeLessThan(calls.indexOf(enableAutoMergeKey(7)))
@@ -384,7 +508,7 @@ Describe('open-pr', () => {
     // Two reads see auto-merge off (waiting for checks, then deciding); the read-back sees it on.
     answerViewsInTurn(dependencies, 2, [pull(2), pull(2), enabled])
 
-    const result = await OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)
+    const result = await OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, dependencies)
 
     Expect(result.exitCode).toBe(0)
     Expect(calls).toContain(hostAutoMergeKey(2, 'PUT'))
@@ -405,7 +529,7 @@ Describe('open-pr', () => {
     const defaulted = { commit_message: '* one detail', commit_title: `${SUBJECT} (#2)`, merge_method: 'squash' }
     answerViewsInTurn(dependencies, 2, [pull(2), pull(2), pull(2, { auto_merge: defaulted })])
 
-    const result = await OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)
+    const result = await OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, dependencies)
 
     Expect(result.exitCode).toBe(0)
     Expect(calls.indexOf(hostAutoMergeKey(2, 'DELETE'))).toBeGreaterThan(calls.indexOf(hostAutoMergeKey(2, 'PUT')))
@@ -423,7 +547,7 @@ Describe('open-pr', () => {
     routes[hostAutoMergeKey(2, 'PUT')] = { exitCode: 1, stderr: 'gh: Not Found (HTTP 404)' }
     const { dependencies, followed } = fakeDependencies(routes)
 
-    const result = await OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)
+    const result = await OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, dependencies)
 
     Expect(result.exitCode).toBe(0)
     Expect(result.lines).toContain(
@@ -441,7 +565,9 @@ Describe('open-pr', () => {
     }
     const { calls, dependencies } = fakeDependencies(routes)
 
-    await Expect(OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)).rejects.toThrow('already merged as #4')
+    await Expect(OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, dependencies)).rejects.toThrow(
+      'already merged as #4',
+    )
     Expect(calls.some(call => call.startsWith('git push'))).toBe(false)
   })
 
@@ -450,7 +576,7 @@ Describe('open-pr', () => {
       followChecks: async () => ({ exitCode: 1 }),
     })
 
-    const result = await OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)
+    const result = await OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, dependencies)
 
     Expect(result.exitCode).toBe(1)
     Expect(result.lines.some(line => line.includes('Opened pull request #42'))).toBe(true)
@@ -465,7 +591,7 @@ Describe('open-pr', () => {
       ] satisfies [Partial<OpenPrDependencies>, string][]
     ) {
       const { calls, dependencies } = fakeDependencies(cleanFeatureBranchRoutes(), overrides)
-      await Expect(OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)).rejects.toThrow(reason)
+      await Expect(OpenPrCommand.run({ autoMerge: true, repositoryRoot: ROOT }, dependencies)).rejects.toThrow(reason)
       Expect(calls.some(call => call.startsWith('git push'))).toBe(false)
     }
   })

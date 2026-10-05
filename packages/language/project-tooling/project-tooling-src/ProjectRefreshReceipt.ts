@@ -1,5 +1,6 @@
 import { Packages } from '@ast-utils'
 import type { DependencyEnvironment } from '@compiler'
+import type { BridgeModule } from '@compiler/bridge-metadata'
 import type { SidecarSourceGraphInspection } from '@compiler/sidecar-source-graph'
 import { discoverProjectTaoFiles } from '@compiler/workspace'
 import { type Diagnostic, FS, Platform, ReleaseCapabilities } from '@shared'
@@ -23,6 +24,8 @@ type Audit = {
 export type ProjectRefreshReceiptData = {
   result: ProjectToolingResult
   nativeDiagnostics: readonly Diagnostic[]
+  nativeIdentity: string
+  nativeContracts: readonly BridgeModule[]
   published: ProjectPublishedOutputs
   planned: readonly ProjectPlannedOutput[]
   environments: readonly DependencyEnvironment[]
@@ -54,7 +57,7 @@ export class ProjectRefreshReceipt {
   private probes: string[] = []
   private saved?: { audit: Audit; outputs: string; data: ProjectRefreshReceiptData }
 
-  constructor(private readonly root: string, stdlibRoot: string) {
+  constructor(private readonly root: string, private readonly stdlibRoot: string) {
     this.roots = [...new Set([root, FS.resolvePath(stdlibRoot)])]
   }
 
@@ -71,7 +74,7 @@ export class ProjectRefreshReceipt {
     ])
   }
 
-  async audit(options: ProjectToolingOptions, force = false): Promise<Audit | undefined> {
+  async audit(options: ProjectToolingOptions, force = false, nativeIdentity?: string): Promise<Audit | undefined> {
     if (force) {
       this.clear()
     }
@@ -79,9 +82,10 @@ export class ProjectRefreshReceipt {
       const records: string[] = []
       const texts = new Map<string, string>()
       const discoveries = new Map<string, Discovery>()
+      const stdlibRoot = FS.resolvePath(options.nativeBindings?.stdlibRoot ?? this.stdlibRoot)
       let complete = true
       const observe = async (path: string): Promise<void> => {
-        if (forbiddenInput(path)) {
+        if (forbiddenInput(path) || FS.isFileMutationAuxiliaryPath(path)) {
           return
         }
         // Symlinked authored trees require a physical discovery audit, which this receipt
@@ -100,7 +104,7 @@ export class ProjectRefreshReceipt {
           records.push(JSON.stringify([path, await FS.realPath(path), Platform.sha256Hex(text)]))
         }
       }
-      for (const root of this.roots) {
+      for (const root of new Set([this.root, ...this.roots.filter(root => root !== this.stdlibRoot), stdlibRoot])) {
         await observe(root)
         if (!await FS.isDirectory(root)) {
           continue
@@ -114,7 +118,7 @@ export class ProjectRefreshReceipt {
           sourceOwners,
           entryPaths: sourcePaths.filter((_, index) => sourceOwners[index] === root),
           contextFingerprint: root === this.root
-            ? ProjectRefreshReceipt.contextFingerprint(await Packages.createContext(root))
+            ? ProjectRefreshReceipt.contextFingerprint(await Packages.createContext(root, { stdlibRoot }))
             : undefined,
         }
         discoveries.set(root, discovery)
@@ -149,6 +153,9 @@ export class ProjectRefreshReceipt {
         key: JSON.stringify([
           this.root,
           options.runtimeRoot,
+          stdlibRoot,
+          options.nativeBindings?.sourceRoots?.map(path => FS.resolvePath(path)),
+          nativeIdentity,
           options.hostModulesRoot,
           options.hostModuleRoots,
           ReleaseCapabilities.fingerprint(),
@@ -177,7 +184,13 @@ export class ProjectRefreshReceipt {
     data: ProjectRefreshReceiptData,
   ): Promise<void> {
     this.clear()
-    const roots = [...new Set([...this.roots, ...data.result.dependencyRoots])].sort()
+    const roots = [
+      ...new Set([
+        this.root,
+        FS.resolvePath(options.nativeBindings?.stdlibRoot ?? this.stdlibRoot),
+        ...data.result.dependencyRoots,
+      ]),
+    ].sort()
     const probes = [
       ...new Set([
         ...data.result.configInputPaths,
@@ -197,7 +210,7 @@ export class ProjectRefreshReceipt {
     ) {
       return
     }
-    const after = await this.audit(options)
+    const after = await this.audit(options, false, data.nativeIdentity)
     if (!after || !sameAudit(before, after)) {
       return
     }
@@ -274,7 +287,7 @@ export class ProjectRefreshReceipt {
             excludeDirectory: name => name === 'node_modules',
           })
         ) {
-          if (FS.basename(path) !== 'node_modules') {
+          if (FS.basename(path) !== 'node_modules' && !FS.isFileMutationAuxiliaryPath(path)) {
             paths.push(path)
           }
         }

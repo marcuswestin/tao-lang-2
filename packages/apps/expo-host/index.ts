@@ -1,9 +1,11 @@
 import { warnContainedFailure } from '@runtime/TR-errors'
+import { installNativeAbortSupport } from '@runtime/TR-native-abort'
 import { registerRootComponent, requireOptionalNativeModule } from 'expo'
 import { type ComponentType, createElement, Fragment, useEffect, useMemo } from 'react'
 import { NativeModules, Platform, View } from 'react-native'
 import { createManagedRuntimePreparation, managedLoopIdentityMarker } from './expo-host-src/ManagedLoopIdentityMarker'
 
+installNativeAbortSupport()
 const generatedApp = require('./_gen_tao-app/App') as { default: ComponentType }
 
 const identity = require('./_gen_tao-app/ManagedLoopIdentity').default as unknown

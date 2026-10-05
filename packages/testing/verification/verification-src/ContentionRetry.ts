@@ -1,6 +1,6 @@
 import { FS } from '@shared'
 import type { ContentionReport, MachineLane } from './MachineLanes'
-import type { RunLocation } from './RunArtifacts'
+import { RunArtifacts, type RunLocation } from './RunArtifacts'
 import { describesTimeout } from './RunSummary'
 import { WorkGraph, type WorkRunOptions, type WorkState } from './WorkGraph'
 
@@ -96,7 +96,10 @@ async function confirmContendedFailures(options: RetryOptions): Promise<RetryOut
       continue
     }
     const attempt = WorkGraph.createState(original.node)
-    attempt.logPath = FS.resolvePath(`${WorkGraph.nodeLabel(attempt.node)}.retry.log`, options.location.logRoot)
+    attempt.logPath = FS.resolvePath(
+      `${RunArtifacts.logFileName(WorkGraph.nodeLabel(attempt.node))}.retry.log`,
+      options.location.logRoot,
+    )
     try {
       options.onProgress?.(`${original.name}: running an isolated retry ...`)
       await WorkGraph.run([attempt], {
@@ -122,7 +125,10 @@ async function confirmContendedFailures(options: RetryOptions): Promise<RetryOut
       options.onProgress?.(`Resuming ${attempts.length} checks after successful retries ...`)
     }
     for (const attempt of attempts) {
-      attempt.logPath = FS.resolvePath(`${WorkGraph.nodeLabel(attempt.node)}.resume.log`, options.location.logRoot)
+      attempt.logPath = FS.resolvePath(
+        `${RunArtifacts.logFileName(WorkGraph.nodeLabel(attempt.node))}.resume.log`,
+        options.location.logRoot,
+      )
     }
     await WorkGraph.run(attempts, {
       env: options.env,

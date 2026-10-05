@@ -830,9 +830,17 @@ export function reviewUnusedExports(
   return { facadeReached, nativeImported, reported, staleness: [...staleness].sort(), taoBound, typeImported }
 }
 
-/** DeadExportsOptions lets a test substitute knip; the workflow always runs the installed one. */
+type NativeBindingInspection = {
+  status: 'fresh' | 'stale'
+  diagnostics: readonly { message: string }[]
+  outputPaths: readonly string[]
+  identity: string
+}
+
+/** DeadExportsOptions lets tests substitute external inspections; the workflow uses repository-owned readers. */
 export type DeadExportsOptions = {
   readKnipReport?: (repositoryRoot: string) => Promise<unknown>
+  readNativeBindings?: (repositoryRoot: string) => Promise<NativeBindingInspection>
   repositoryRoot?: string
 }
 
@@ -840,9 +848,49 @@ export type DeadExportsOptions = {
 export async function runDeadExports(options: DeadExportsOptions = {}): Promise<number> {
   const repositoryRoot = options.repositoryRoot ?? Repo.getRoot()
   const readKnipReport = options.readKnipReport ?? runKnip
+  const stdlibRoot = FS.resolvePath('packages/apps/stdlib', repositoryRoot)
+  const nativeModule = FS.resolvePath(
+    'packages/apps/native-bindings/native-bindings-src/native-bindings.ts',
+    repositoryRoot,
+  )
+  const readNativeBindings = options.readNativeBindings
+    ?? (await FS.isFile(nativeModule) || await FS.isDirectory(stdlibRoot) ? inspectNativeBindings : undefined)
+  const before = readNativeBindings === undefined ? undefined : await readNativeBindings(repositoryRoot)
+  if (before?.status === 'stale') {
+    reportNativeBindingStaleness(before)
+    return 1
+  }
   const unused = unusedExportsOf(await readKnipReport(repositoryRoot))
   const taoFiles = await readSourceFiles(repositoryRoot, TAO_EXTENSIONS)
   const typescriptFiles = await readSourceFiles(repositoryRoot, ['.ts', '.tsx'])
+  if (before !== undefined && readNativeBindings !== undefined) {
+    const nativeRoot = FS.resolvePath('.tao-ts/native-bindings', stdlibRoot)
+    for (const output of before.outputPaths) {
+      const path = FS.resolvePath(output)
+      const relative = FS.relativePath(nativeRoot, path)
+      if (!FS.pathIsWithin(path, nativeRoot) || !/^[^/.][^/]*\/Bindings\.ts$/.test(relative)) {
+        continue
+      }
+      if (!await FS.isFile(path)) {
+        HCI.writeErrorLine(
+          `dead exports: Maintained native implementation is missing: ${path}. Regenerate native bindings.`,
+        )
+        return 1
+      }
+      typescriptFiles.push({ path: FS.relativePath(repositoryRoot, path), source: await FS.readText(path) })
+    }
+    const after = await readNativeBindings(repositoryRoot)
+    if (after.status === 'stale') {
+      reportNativeBindingStaleness(after)
+      return 1
+    }
+    if (after.identity !== before.identity) {
+      HCI.writeErrorLine(
+        'dead exports: Maintained native bindings changed during export inspection. Run the check again.',
+      )
+      return 1
+    }
+  }
   const bound = resolveTaoBindings(taoFiles, typescriptFiles)
   const review = reviewUnusedExports(
     unused,
@@ -882,6 +930,33 @@ export async function runDeadExports(options: DeadExportsOptions = {}): Promise<
     )
   }
   return review.reported.length > 0 || review.staleness.length > 0 ? 1 : 0
+}
+
+/** Read only maintained implementations proven fresh by the owning generator, never their copied SDK declarations. */
+async function inspectNativeBindings(repositoryRoot: string): Promise<NativeBindingInspection> {
+  const modulePath = FS.resolvePath(
+    'packages/apps/native-bindings/native-bindings-src/native-bindings.ts',
+    repositoryRoot,
+  )
+  const api = await import(FS.fileUrl(modulePath)) as {
+    inspectMaintainedNativeBindings(options: {
+      stdlibRoot: string
+      sourceRoots: readonly string[]
+    }): Promise<NativeBindingInspection>
+  }
+  return await api.inspectMaintainedNativeBindings({
+    stdlibRoot: FS.resolvePath('packages/apps/stdlib', repositoryRoot),
+    sourceRoots: [FS.resolvePath('packages/apps/expo-host', repositoryRoot), repositoryRoot],
+  })
+}
+
+function reportNativeBindingStaleness(inspection: NativeBindingInspection): void {
+  for (const diagnostic of inspection.diagnostics) {
+    HCI.writeErrorLine(`dead exports: ${diagnostic.message}`)
+  }
+  if (inspection.diagnostics.length === 0) {
+    HCI.writeErrorLine('dead exports: Maintained native bindings are stale. Regenerate them before checking exports.')
+  }
 }
 
 /**

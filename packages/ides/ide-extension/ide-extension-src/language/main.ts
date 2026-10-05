@@ -1,3 +1,4 @@
+import '../resources/packaged-resource-root'
 import { Platform } from '@shared'
 import { LSPWorkspace } from 'tao-compiler/workspace'
 import { TaoFormatter } from 'tao-formatter'

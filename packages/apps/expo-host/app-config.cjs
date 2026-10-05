@@ -6,6 +6,7 @@ const nodePath = require('node:path')
  * or from the dev data facts `tao run` places in the environment (`env` defaults to the process's).
  */
 function createExpoAppConfig(config, projectRoot, env = process.env) {
+  config = withNativeCapabilities(config)
   const shipManifestPath = nodePath.resolve(projectRoot, '_gen_tao-app', 'ship.json')
   if (!nodeFs.existsSync(shipManifestPath)) {
     return withDevData(config, env)
@@ -79,6 +80,15 @@ function createExpoAppConfig(config, projectRoot, env = process.env) {
       },
     },
   }
+}
+
+/** Keep application plugin options intact, including permission descriptions and opt-in sharing. */
+function withNativeCapabilities(config) {
+  const plugins = config.plugins ?? []
+  const missing = ['expo-media-library', 'expo-file-system'].filter(name =>
+    !plugins.some(plugin => (Array.isArray(plugin) ? plugin[0] : plugin) === name)
+  )
+  return missing.length === 0 ? config : { ...config, plugins: [...plugins, ...missing] }
 }
 
 /**

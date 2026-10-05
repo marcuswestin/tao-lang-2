@@ -713,6 +713,159 @@ Describe('dead export run', () => {
     ],
   }
 
+  async function nativeRepository() {
+    const root = await repository()
+    const module = 'packages/apps/stdlib/.tao-ts/native-bindings/photos/Bindings.ts'
+    await FS.writeText(
+      FS.resolvePath('packages/apps/stdlib/@tao/device/photos/Bindings.tao', root),
+      'action NativeRead() from ../../../.tao-ts/native-bindings/photos/Bindings.ts\n',
+    )
+    await FS.writeText(
+      FS.resolvePath(module, root),
+      'export function NativeRead() {}\nexport function NativeUnused() {}\n',
+    )
+    const inspection = {
+      status: 'fresh' as const,
+      diagnostics: [],
+      outputPaths: [FS.resolvePath(module, root)],
+      identity: 'fixture-native-content',
+    }
+    return { root, module, inspection }
+  }
+
+  Test('admits only the exact maintained implementation and bound operation', async () => {
+    const { root, module, inspection } = await nativeRepository()
+    try {
+      const hiddenSDK = 'packages/apps/stdlib/.tao-ts/native-bindings/photos/declarations/sdk/Bindings.ts'
+      await FS.writeText(FS.resolvePath(hiddenSDK, root), 'export function NativeRead() {}\n')
+      const captured = await withCapturedOutput(async () =>
+        await runDeadExports({
+          repositoryRoot: root,
+          readNativeBindings: async () => ({
+            ...inspection,
+            outputPaths: [...inspection.outputPaths, FS.resolvePath(hiddenSDK, root)],
+          }),
+          readKnipReport: async () => ({
+            issues: [
+              { file: module, exports: [{ line: 1, name: 'NativeRead' }, { line: 2, name: 'NativeUnused' }] },
+              { file: hiddenSDK, exports: [{ line: 1, name: 'NativeRead' }] },
+              ...report.issues,
+            ],
+          }),
+        })
+      )
+
+      Expect(captured.result).toBe(1)
+      Expect(captured.stderr).toContain(`${module}:2 NativeUnused`)
+      Expect(captured.stderr).not.toContain(`${module}:1 NativeRead`)
+      Expect(captured.stderr).toContain(`${hiddenSDK}:1 NativeRead`)
+      Expect(captured.stderr).toContain('Host.tsx:1 SyncDraft')
+      Expect(captured.stdout).toContain('3 unused, 2 bound from .tao sources')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('refuses stale native inputs before reading the export report', async () => {
+    const { root, inspection } = await nativeRepository()
+    try {
+      let reports = 0
+      const captured = await withCapturedOutput(async () =>
+        await runDeadExports({
+          repositoryRoot: root,
+          readNativeBindings: async () => ({
+            ...inspection,
+            status: 'stale',
+            diagnostics: [{ message: 'Native declaration input changed.' }],
+          }),
+          readKnipReport: async () => {
+            reports++
+            return { issues: [] }
+          },
+        })
+      )
+
+      Expect(captured.result).toBe(1)
+      Expect(captured.stderr).toContain('Native declaration input changed.')
+      Expect(reports).toBe(0)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('refuses a missing maintained implementation despite a fresh inspection result', async () => {
+    const { root, module, inspection } = await nativeRepository()
+    try {
+      await FS.remove(FS.resolvePath(module, root))
+      const captured = await withCapturedOutput(async () =>
+        await runDeadExports({
+          repositoryRoot: root,
+          readNativeBindings: async () => inspection,
+          readKnipReport: async () => ({ issues: [] }),
+        })
+      )
+
+      Expect(captured.result).toBe(1)
+      Expect(captured.stderr).toContain('Maintained native implementation is missing:')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('refuses native outputs outside the maintained root', async () => {
+    const { root, inspection } = await nativeRepository()
+    try {
+      const outside = FS.resolvePath('outside/photos/Bindings.ts', root)
+      await FS.writeText(outside, 'export function NativeRead() {}\n')
+      const captured = await withCapturedOutput(async () =>
+        await runDeadExports({
+          repositoryRoot: root,
+          readNativeBindings: async () => ({ ...inspection, outputPaths: [outside] }),
+          readKnipReport: async () => ({ issues: [] }),
+        })
+      )
+
+      Expect(captured.result).toBe(1)
+      Expect(captured.stderr).toContain('packages/apps/stdlib/@tao/device/photos/Bindings.tao')
+      Expect(captured.stderr).toContain('not a scanned module')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('refuses native content changing or becoming stale while source files are read', async () => {
+    const { root, inspection } = await nativeRepository()
+    try {
+      for (
+        const after of [
+          { ...inspection, identity: 'changed-native-content' },
+          {
+            ...inspection,
+            status: 'stale' as const,
+            diagnostics: [{ message: 'Native output changed during inspection.' }],
+          },
+        ]
+      ) {
+        let inspections = 0
+        const captured = await withCapturedOutput(async () =>
+          await runDeadExports({
+            repositoryRoot: root,
+            readNativeBindings: async () => ++inspections === 1 ? inspection : after,
+            readKnipReport: async () => ({ issues: [] }),
+          })
+        )
+
+        Expect(inspections).toBe(2)
+        Expect(captured.result).toBe(1)
+        Expect(captured.stderr).toContain(
+          after.status === 'stale' ? after.diagnostics[0]!.message : 'changed during export inspection',
+        )
+      }
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('fails on the namesake in the unbound module while hiding the bound export', async () => {
     const root = await repository()
     try {

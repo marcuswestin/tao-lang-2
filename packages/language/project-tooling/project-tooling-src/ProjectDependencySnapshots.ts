@@ -2,7 +2,8 @@ import { Packages } from '@ast-utils'
 import { CompilerDependencies } from '@compiler'
 import { BridgeMetadata, type BridgeModule } from '@compiler/bridge-metadata'
 import type { ModuleOrigin } from '@parser'
-import { type Diagnostic, FS } from '@shared'
+import { type Diagnostic, FS, Platform } from '@shared'
+import type { inspectMaintainedNativeBindings } from 'tao-native-bindings'
 import { type ProjectPlannedOutput, snapshotContent } from './ProjectOutputPublisher'
 import type { ProjectToolingSourceMapping } from './ProjectTooling'
 
@@ -14,6 +15,8 @@ const ProjectSnapshotValidationMessages = {
     `The dependency TypeScript import ${JSON.stringify(specifier)} from ${path} could not be found.`,
   outsideDependency: (specifier: string, path: string) =>
     `The dependency TypeScript import ${JSON.stringify(specifier)} from ${path} leaves its project root.`,
+  unverifiedNativeBinding: (path: string) =>
+    `The maintained native TypeScript source ${path} does not match a fresh native binding inspection. Regenerate maintained native bindings.`,
 } as const
 
 export type ProjectDependencySnapshots = {
@@ -38,6 +41,7 @@ export async function collectProjectDependencySnapshots(
   projectRoot: string,
   modules: readonly BridgeModule[],
   origins: ReadonlyMap<string, ModuleOrigin>,
+  nativeBindings?: Awaited<ReturnType<typeof inspectMaintainedNativeBindings>>,
 ): Promise<ProjectDependencySnapshots> {
   const outputs = new Map<string, ProjectPlannedOutput>()
   const diagnostics: Diagnostic[] = []
@@ -46,6 +50,23 @@ export async function collectProjectDependencySnapshots(
   const taoTypeSources = new Map<string, ModuleOrigin>()
   const taoEdges = new Map<string, readonly TaoSidecarEdge[]>()
   const queue: SnapshotQueueEntry[] = []
+  const nativeHashes = new Map<string, string>()
+  if (nativeBindings?.status === 'fresh') {
+    for (const path of nativeBindings.outputPaths.filter(path => FS.basename(path) === 'maintained.json')) {
+      try {
+        const manifest = await FS.readJson<{ outputs: { path: string; hash: string }[] }>(path)
+        for (const output of manifest.outputs) {
+          if (output.path.startsWith('typescript/')) {
+            nativeHashes.set(FS.resolvePath(output.path.slice('typescript/'.length), FS.dirname(path)), output.hash)
+          }
+        }
+      } catch {
+        // The file can disappear or change after inspection; the service reinspects
+        // before publication, and an unreadable manifest never authorizes bytes here.
+        diagnostics.push(error(path, ProjectSnapshotValidationMessages.unverifiedNativeBinding(path)))
+      }
+    }
+  }
   for (const module of modules) {
     const origin = origins.get(module.sourcePath)
     if (origin === undefined) {
@@ -89,6 +110,20 @@ export async function collectProjectDependencySnapshots(
       continue
     }
     const original = await FS.readText(sourcePath)
+    const isNativeBinding = FS.pathIsWithin(
+      sourcePath,
+      FS.resolvePath('.tao-ts/native-bindings', entry.origin.projectRoot),
+    )
+    const nativeHash = Platform.sha256Hex(original)
+    if (
+      isNativeBinding && (
+        nativeBindings?.status !== 'fresh' || !nativeBindings.outputPaths.includes(sourcePath)
+        || nativeHashes.get(sourcePath) !== nativeHash
+      )
+    ) {
+      diagnostics.push(error(sourcePath, ProjectSnapshotValidationMessages.unverifiedNativeBinding(sourcePath)))
+      continue
+    }
     sourceTexts.set(sourcePath, original)
     const content = snapshotContent(sourcePath, original)
     outputs.set(destination, {
@@ -97,6 +132,7 @@ export async function collectProjectDependencySnapshots(
       content,
       kind: 'snapshot',
       sourceMappings: [fullFileMapping(sourcePath, destination, original)],
+      ...(isNativeBinding ? { nativeBindingProvenance: { identity: nativeBindings!.identity, hash: nativeHash } } : {}),
     })
     if (FS.extname(sourcePath) === '.json') {
       relativeEdges.set(sourcePath, [])
