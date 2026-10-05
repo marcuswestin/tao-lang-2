@@ -105,43 +105,45 @@ function validateRendererBody(
   anchor: AST.Node,
   ctx: ValidationContext,
 ): void {
-  if (body.kind === 'empty' || body.kind === 'absent') {
-    return
-  }
-  if (body.kind === 'named') {
-    const renderer = body.renderer.ref
-    if (AST.isViewDeclaration(renderer)) {
-      validateNamedRenderer(contract, renderer, anchor, ctx)
+  const validateInlineBody = (inlineAnchor: AST.Node): void => {
+    const use = AST.isRenderSlotUse(anchor) ? anchor : undefined
+    const count = ASTUtils.rendererSlotSignatureOf(contract, use).inputs.length
+    if (count > 0 && !use?.inputBindings.length) {
+      ctx.error(inlineAnchor, messages.inlineInputs(name))
     }
-    return
-  }
-  if (body.kind === 'forwarded') {
-    if (AST.isRenderSlotUse(anchor)) {
-      const comparison = ASTUtils.compareRendererSlotForwarding(anchor)
-      if (comparison) {
-        validateRendererComparison(comparison, anchor, ctx)
+    if (use) {
+      if (use.inputBindings.length > count) {
+        ctx.error(use, messages.inlineInputCount(name, count))
+      }
+      const seen = new Set<string>()
+      for (const binding of use.inputBindings) {
+        if (seen.has(binding.name)) {
+          ctx.error(binding, messages.duplicateInlineInput(binding.name))
+        }
+        seen.add(binding.name)
       }
     }
-    return
   }
-  const inlineAnchor = body.kind === 'render' ? body.render : body.block
-  const use = AST.isRenderSlotUse(anchor) ? anchor : undefined
-  const count = ASTUtils.rendererSlotSignatureOf(contract, use).inputs.length
-  if (count > 0 && !use?.inputBindings.length) {
-    ctx.error(inlineAnchor, messages.inlineInputs(name))
-  }
-  if (use) {
-    if (use.inputBindings.length > count) {
-      ctx.error(use, messages.inlineInputCount(name, count))
-    }
-    const seen = new Set<string>()
-    for (const binding of use.inputBindings) {
-      if (seen.has(binding.name)) {
-        ctx.error(binding, messages.duplicateInlineInput(binding.name))
+  Switch.on(body, 'kind', {
+    empty: Switch.nothing,
+    absent: Switch.nothing,
+    named: body => {
+      const renderer = body.renderer.ref
+      if (AST.isViewDeclaration(renderer)) {
+        validateNamedRenderer(contract, renderer, anchor, ctx)
       }
-      seen.add(binding.name)
-    }
-  }
+    },
+    forwarded: () => {
+      if (AST.isRenderSlotUse(anchor)) {
+        const comparison = ASTUtils.compareRendererSlotForwarding(anchor)
+        if (comparison) {
+          validateRendererComparison(comparison, anchor, ctx)
+        }
+      }
+    },
+    render: body => validateInlineBody(body.render),
+    block: body => validateInlineBody(body.block),
+  })
 }
 
 function validateNamedRenderer(

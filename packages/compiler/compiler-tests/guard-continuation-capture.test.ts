@@ -15,7 +15,7 @@ type ReadAvailabilityModule = Readonly<{
   withReadAvailability<ValueT extends object>(value: ValueT, state: ReadAvailabilityState): ValueT
 }>
 const readAvailabilityModule: Promise<ReadAvailabilityModule> = import(
-  FS.resolvePath('packages/apps/runtime/TaoRuntime-src/TR-read-availability.ts', Repo.getRoot()),
+  FS.resolvePath('packages/apps/runtime/TaoRuntime-src/TR-read-availability.ts', Repo.getRoot())
 )
 const declarations = `
   data Authors / Author { Name text }

@@ -180,13 +180,14 @@ async function compileValidated(
     ...context.nativeBindings,
     inspection: nativeBindings,
   })
-  const emit = () => Backends[options.target ?? 'react-native'].compile({
-    validation: validationResult,
-    context: { ...context, nativeBridgeTypeOrigins },
-    app: selected.app,
-    appPath: selected.path,
-    options,
-  })
+  const emit = () =>
+    Backends[options.target ?? 'react-native'].compile({
+      validation: validationResult,
+      context: { ...context, nativeBridgeTypeOrigins },
+      app: selected.app,
+      appPath: selected.path,
+      options,
+    })
   const compiled = validationResult.associatedEffects
     ? ASTUtils.withAssociatedEffects(validationResult.associatedEffects, emit)
     : emit()

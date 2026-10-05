@@ -1,16 +1,12 @@
-import { NumericUnits, Type } from '@ast-utils'
+import { ASTUtils, NumericUnits, Type } from '@ast-utils'
 import { AST } from '@parser'
-import {
-  numericUnitReadingCollisions,
-  resolveNumericUnitReading,
-} from '../../../ast-utils/ast-utils-src/numeric-unit-readings'
 import type { NodeValidationChecks } from '../node-validation'
 import { NumericUnitReadingsValidationMessages as messages } from './NumericUnitReadingsValidationMessages'
 
 /** numericUnitReadingsValidationChecks checks real generated readings and inherited table boundaries. */
 export const numericUnitReadingsValidationChecks = {
   [AST.MethodCallExpression.$type]: (invocation, ctx) => {
-    const resolution = resolveNumericUnitReading(invocation)
+    const resolution = ASTUtils.resolveNumericUnitReading(invocation)
     if (resolution.kind !== 'invalid-unit-reading') {
       return
     }
@@ -22,7 +18,7 @@ export const numericUnitReadingsValidationChecks = {
     )
   },
   [AST.TypeDeclaration.$type]: (owner, ctx) => {
-    for (const { unit, method } of numericUnitReadingCollisions(owner)) {
+    for (const { unit, method } of ASTUtils.numericUnitReadingCollisions(owner)) {
       // Diagnose the authored implementation once, rather than each inheriting declaration.
       if (
         owner.type && AST.isDerivedTypeExpression(owner.type)

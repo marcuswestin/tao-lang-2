@@ -1,7 +1,7 @@
+import { ASTUtils } from '@ast-utils'
 import { AST, Langium, Parser } from '@parser'
 import { FS, Repo } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
-import { resolveNumericUnitReading } from '../../language/ast-utils/ast-utils-src/numeric-unit-readings'
 import {
   compileNumericUnitReading,
   withQuantityFactoryBindings,
@@ -27,7 +27,7 @@ async function emitted(ownerName: string, unit: string, receiver: Compiled = gen
   Expect(parsed.entry.document.parseResult.parserErrors).toEqual([])
   const call = AST.streamAllContents(parsed.entry.ast).find(AST.isMethodCallExpression)
   Expect.Is(call, AST.isMethodCallExpression)
-  const resolution = resolveNumericUnitReading(call)
+  const resolution = ASTUtils.resolveNumericUnitReading(call)
   Expect(resolution.kind).toBe('unit-reading')
   if (resolution.kind !== 'unit-reading') {
     return ''

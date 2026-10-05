@@ -18,19 +18,27 @@ async function executeModules(compiled: CompileResult, root: string, sourcePath:
       file.code.replaceAll("'@runtime/TR'", JSON.stringify(runtime)),
     )
   }
-  await FS.writeText(FS.resolvePath('Consumer.ts', root), `
+  await FS.writeText(
+    FS.resolvePath('Consumer.ts', root),
+    `
     import * as Consumer from ${JSON.stringify(FS.resolvePath(entry.relativePath, output))};
     import TR from ${JSON.stringify(runtime)};
     import * as Platform from ${JSON.stringify(Repo.resolvePath('packages/shared/shared-src/Platform.ts'))};
     Platform.runtimeConsole.info(JSON.stringify(${expression}));
-  `)
+  `,
+  )
   const launcher = FS.resolvePath('Launcher.ts', root)
-  await FS.writeText(launcher, `
-    import { mock } from 'bun:test';
-    import { reactNativeStubs } from ${JSON.stringify(Repo.resolvePath('packages/shared/shared-src/testing/TestReactNative.ts'))};
-    mock.module('react-native', () => reactNativeStubs({ Platform: { OS: 'ios' } }));
+  await FS.writeText(
+    launcher,
+    `
+    import { MockModule } from ${JSON.stringify(Repo.resolvePath('packages/shared/shared-src/testing/Test-Bun.ts'))};
+    import { reactNativeStubs } from ${
+      JSON.stringify(Repo.resolvePath('packages/shared/shared-src/testing/TestReactNative.ts'))
+    };
+    MockModule('react-native', () => reactNativeStubs({ Platform: { OS: 'ios' } }));
     await import('./Consumer.ts');
-  `)
+  `,
+  )
   const run = await CLI.run(Platform.runtimeProcess.execPath, {
     cwd: root,
     args: [launcher],
@@ -75,12 +83,19 @@ Describe('compiler: named import aliases', () => {
       `,
     }, async (paths, root) => {
       const compiled = await (await Workspace.open(root)).compile(paths['Main.tao'], { appName: 'Variant' })
-      Expect(await executeModules(compiled, root, paths['Main.tao'], `({
+      Expect(
+        await executeModules(
+          compiled,
+          root,
+          paths['Main.tao'],
+          `({
         name: Consumer.Variant.definition.name,
         id: Consumer.Variant.definition.id,
         reboundName: Consumer.Variant.definition.bindApp('com.tao.alias.rebound').name(),
         local: TR.Call(Consumer.Read).getJSValue(),
-      })`)).toEqual({ name: 'Inherited', id: 'com.tao.alias.variant', reboundName: 'Inherited', local: 'local' })
+      })`,
+        ),
+      ).toEqual({ name: 'Inherited', id: 'com.tao.alias.variant', reboundName: 'Inherited', local: 'local' })
     })
   })
 
@@ -102,7 +117,12 @@ Describe('compiler: named import aliases', () => {
       'nav/Impl.ts': "import TR from '@runtime/TR'; export function Impl() { return TR.NavKind.Stack() }",
     }, async (paths, root) => {
       const compiled = await (await Workspace.open(root)).compile(paths['Main.tao'])
-      Expect(await executeModules(compiled, root, paths['Main.tao'], `(() => {
+      Expect(
+        await executeModules(
+          compiled,
+          root,
+          paths['Main.tao'],
+          `(() => {
         const made = Consumer.FromType.evaluate();
         const imported = Consumer.FromValue.evaluate();
         return {
@@ -110,7 +130,9 @@ Describe('compiler: named import aliases', () => {
           sameOwner: made.declaration === imported.declaration,
           sameInitial: made.config.Initial === imported.config.Initial,
         };
-      })()`)).toEqual({ owner: 'CustomStack', sameOwner: true, sameInitial: false })
+      })()`,
+        ),
+      ).toEqual({ owner: 'CustomStack', sameOwner: true, sameInitial: false })
     })
   })
 
@@ -125,8 +147,9 @@ Describe('compiler: named import aliases', () => {
           view Home { render inject \`\`\`ts return null \`\`\` }
         `,
         'other/Values.tao': 'public let Value = "aliased"',
-        [mode === 'wildcard' ? 'prefix/Values.tao' : 'Folder.tao']:
-          `${mode === 'wildcard' ? 'public' : 'folder'} let __tao_imported_1__ = "ordinary"`,
+        [mode === 'wildcard' ? 'prefix/Values.tao' : 'Folder.tao']: `${
+          mode === 'wildcard' ? 'public' : 'folder'
+        } let __tao_imported_1__ = "ordinary"`,
       }, async (paths, root) => {
         const compiled = await (await Workspace.open(root)).compile(paths['Main.tao'])
         Expect(await executeModules(compiled, root, paths['Main.tao'], 'TR.Call(Consumer.Read).getJSValue()'))

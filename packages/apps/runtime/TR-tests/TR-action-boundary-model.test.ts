@@ -8,6 +8,8 @@ Describe('action boundary model packaging', () => {
       await FS.writeText(
         program,
         `
+        import * as Errors from ${JSON.stringify(Repo.resolvePath('packages/shared/shared-src/core/Errors.ts'))}
+        import * as Platform from ${JSON.stringify(Repo.resolvePath('packages/shared/shared-src/Platform.ts'))}
         import { MountedActionBoundary, ActionBoundaryContext, type TaoActionFailureSink } from ${
           JSON.stringify(Repo.resolvePath('packages/apps/runtime/TaoRuntime-src/TR-action-boundary-model.ts'))
         }
@@ -31,20 +33,20 @@ Describe('action boundary model packaging', () => {
           await runAction('Model', [], () => { throw new TaoActionFailure('InvalidInput', 'Model rejected.') },
             false, false, undefined, undefined, owner)
           const failure = first.failure!
-          if (failure.message !== 'Model rejected.' || second.failure !== undefined) throw new Error('host isolation')
+          if (failure.message !== 'Model rejected.' || second.failure !== undefined) Errors.throwUnexpected('host isolation')
           first.recover()
-          if (initial(failure)) throw new Error('recovered generation accepted')
+          if (initial(failure)) Errors.throwUnexpected('recovered generation accepted')
           const current: TaoActionFailureSink = owner.captureFailureSink()!
           owner.dispose(); owner.active = true
-          if (current(failure)) throw new Error('disposed generation accepted')
-          if (!owner.captureFailureSink()!(failure)) throw new Error('reactivated generation rejected')
+          if (current(failure)) Errors.throwUnexpected('disposed generation accepted')
+          if (!owner.captureFailureSink()!(failure)) Errors.throwUnexpected('reactivated generation rejected')
           const staleMount: TaoActionFailureSink = first.capture()!
           unmountFirst()
           const disposeRemount = first.mount()
-          if (staleMount(failure)) throw new Error('old mount accepted')
+          if (staleMount(failure)) Errors.throwUnexpected('old mount accepted')
           disposeRemount()
-          if (first.capture() !== undefined) throw new Error('unmounted boundary capture')
-          console.log(JSON.stringify({ context: ActionBoundaryContext.Provider !== undefined, changes,
+          if (first.capture() !== undefined) Errors.throwUnexpected('unmounted boundary capture')
+          Platform.runtimeConsole.info(JSON.stringify({ context: ActionBoundaryContext.Provider !== undefined, changes,
             secondHealthy: second.failure === undefined }))
         } finally { unsubscribe(); owner.dispose(); unmountFirst(); unmountSecond() }
       `,

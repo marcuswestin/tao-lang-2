@@ -1,4 +1,5 @@
 import { AST } from '@parser'
+import { Switch } from '@shared'
 import type { CallableSignature } from './callable-signatures'
 import type { TaoType } from './Type'
 import { Type } from './Type'
@@ -129,14 +130,14 @@ function sameDomain(left: TaoType, right: TaoType): boolean {
       return leftNominal !== undefined && leftNominal === rightNominal
     }
   }
-  if (left.kind === 'primitive' && right.kind === 'primitive') {
-    return left.primitive === right.primitive
-  }
-  if (left.kind === 'entity' && right.kind === 'entity') {
-    return left.entity === right.entity
-  }
-  if (left.kind === 'capability' && right.kind === 'capability' || left.kind === 'enum' && right.kind === 'enum') {
-    return left.declaration === right.declaration
-  }
-  return left === right
+  return Switch.on(left, 'kind', {
+    primitive: left => right.kind === 'primitive' && left.primitive === right.primitive,
+    entity: left => right.kind === 'entity' && left.entity === right.entity,
+    capability: left => right.kind === 'capability' && left.declaration === right.declaration,
+    enum: left => right.kind === 'enum' && left.declaration === right.declaration,
+    list: () => left === right,
+    item: () => left === right,
+    union: () => left === right,
+    unresolved: () => left === right,
+  })
 }

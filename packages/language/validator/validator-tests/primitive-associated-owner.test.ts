@@ -1,7 +1,6 @@
+import { ASTUtils } from '@ast-utils'
 import { AST, Parser } from '@parser'
 import { Describe, Expect, Test } from '@shared/test'
-import { ownAssociatedMethods } from '../../ast-utils/ast-utils-src/associated-methods'
-import { publishCanonicalEffectSnapshot } from '../../ast-utils/ast-utils-src/canonical-effect-snapshot'
 import { testValidateCodeWithErrors, validationErrorMessages } from './test-validate'
 
 const source = `
@@ -23,9 +22,9 @@ Describe('Primitive associated callable owners', () => {
 
     const owner = parsed.entry.ast.statements.find(AST.isPrimitiveDeclaration)
     Expect.Is(owner, AST.isPrimitiveDeclaration)
-    const methods = ownAssociatedMethods(owner)
+    const methods = ASTUtils.ownAssociatedMethods(owner)
     Expect(methods).toHaveLength(6)
-    const snapshot = publishCanonicalEffectSnapshot([parsed.entry.ast])
+    const snapshot = ASTUtils.publishCanonicalEffectSnapshot([parsed.entry.ast])
     for (const method of methods) {
       Expect(snapshot.descriptors.get(method)?.owner).toBe(owner)
       Expect(snapshot.associatedDescriptors.has(method)).toBe(true)

@@ -72,7 +72,9 @@ async function parse(source: string): Promise<AssociatedOperatorWitnessDeclarati
   Expect(result.entry.document.parseResult.lexerErrors).toEqual([])
   Expect(result.entry.document.parseResult.parserErrors).toEqual([])
   Expect(result.diagnostics).toEqual([])
-  const declarations = AST.streamAllContents(result.entry.ast).filter((node): node is AssociatedOperatorWitnessDeclaration =>
+  const declarations = AST.streamAllContents(result.entry.ast).filter((
+    node,
+  ): node is AssociatedOperatorWitnessDeclaration =>
     AST.isAssociatedFunctionDeclaration(node) || AST.isCapabilityMethodDeclaration(node)
   )
   Assert(declarations.length > 0, 'parsed fixture has actual callable declarations')

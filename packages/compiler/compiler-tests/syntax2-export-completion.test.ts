@@ -40,6 +40,7 @@ Describe('compiler: Syntax2 Export completion', () => {
       await FS.writeText(
         FS.resolvePath('Clock.ts', root),
         `
+        import * as Errors from ${JSON.stringify(Repo.resolvePath('packages/shared/shared-src/core/Errors.ts'))}
         import { createContinuousClockNowMilliseconds } from ${
           JSON.stringify(FS.resolvePath('TR-continuous-clock.ts', runtimeRoot))
         }
@@ -49,7 +50,7 @@ Describe('compiler: Syntax2 Export completion', () => {
         export const nowMilliseconds = createContinuousClockNowMilliseconds(createNativeModules({
           'react-native': () => ({ Platform: { OS: 'ios' } }),
           'expo-modules-core': () => ({ requireNativeModule: (name: string) => {
-            if (name !== 'TaoContinuousClock') throw new Error('wrong native clock module')
+            if (name !== 'TaoContinuousClock') Errors.throwUnexpected('wrong native clock module')
             return { nowMilliseconds: () => samples[reads++] ?? samples[samples.length - 1]! }
           } }),
         }))
@@ -81,9 +82,12 @@ Describe('compiler: Syntax2 Export completion', () => {
       await FS.writeText(
         runner,
         `
-        import { expect, mock } from 'bun:test'
+        import * as Platform from ${JSON.stringify(Repo.resolvePath('packages/shared/shared-src/Platform.ts'))}
+        import { Expect as expect, MockModule } from ${
+          JSON.stringify(Repo.resolvePath('packages/shared/shared-src/testing/Test-Bun.ts'))
+        }
         ;(globalThis as any).expect = expect
-        mock.module('react-native', () => ({
+        MockModule('react-native', () => ({
           ActivityIndicator: 'ActivityIndicator', Image: 'Image', KeyboardAvoidingView: 'KeyboardAvoidingView',
           Platform: { OS: 'ios' }, Pressable: 'Pressable', ScrollView: 'ScrollView', Switch: 'Switch',
           Text: 'Text', TextInput: 'TextInput', View: 'View', Button: 'Button',
@@ -145,7 +149,7 @@ Describe('compiler: Syntax2 Export completion', () => {
           await settleActionRoots()
           after2000 = ioModule.ExportNotice(book)
           const finalNotifications = notifications
-          console.log(JSON.stringify({
+          Platform.runtimeConsole.info(JSON.stringify({
             before, at1999, after2000, uploads, notificationsAt1999, finalNotifications,
           }))
         } finally {

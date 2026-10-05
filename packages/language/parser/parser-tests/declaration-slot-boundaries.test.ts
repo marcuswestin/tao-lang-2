@@ -20,21 +20,24 @@ function sceneOf(file: AST.TaoFile): AST.ViewDeclaration {
 
 Describe('parser: declaration slot expression boundaries', () => {
   for (const separator of [' ', '\n']) {
-    Test(`keeps a member-valued fill separate from an adjacent reference block (${JSON.stringify(separator)})`, async () => {
-      const parsed = await testParseCode(`${declarations}
+    Test(
+      `keeps a member-valued fill separate from an adjacent reference block (${JSON.stringify(separator)})`,
+      async () => {
+        const parsed = await testParseCode(`${declarations}
         scene DocumentScreen(Document) { Title Document.Title${separator}Toolbar { Finish, Export } }
       `)
-      const scene = sceneOf(parsed.entry.ast)
-      const fills = AST.declarationSlotFillsOf(scene)
-      Expect(fills.map(fill => fill.name)).toEqual(['Title', 'Toolbar'])
-      const title = fills[0]?.value
-      Expect.Is(title, AST.isMemberAccessExpression)
-      Expect(title.target.ref).toBe(AST.parametersOf(scene)[0])
-      Expect(title.members).toEqual(['Title'])
-      const toolbar = fills[1]?.block
-      Expect.Is(toolbar, AST.isDeclarationSlotReferenceBlock)
-      Expect(toolbar.references.map(reference => reference.ref?.name)).toEqual(['Finish', 'Export'])
-    })
+        const scene = sceneOf(parsed.entry.ast)
+        const fills = AST.declarationSlotFillsOf(scene)
+        Expect(fills.map(fill => fill.name)).toEqual(['Title', 'Toolbar'])
+        const title = fills[0]?.value
+        Expect.Is(title, AST.isMemberAccessExpression)
+        Expect(title.target.ref).toBe(AST.parametersOf(scene)[0])
+        Expect(title.members).toEqual(['Title'])
+        const toolbar = fills[1]?.block
+        Expect.Is(toolbar, AST.isDeclarationSlotReferenceBlock)
+        Expect(toolbar.references.map(reference => reference.ref?.name)).toEqual(['Finish', 'Export'])
+      },
+    )
   }
 
   Test('keeps a bare value fill separate from an adjacent reference block', async () => {
@@ -113,11 +116,14 @@ Describe('parser: declaration slot expression boundaries', () => {
     Expect.Is(argument.value, AST.isMemberAccessExpression)
   })
 
-  Test('does not admit a declaration reference block inside an unterminated call argument', rejectsParser(`
+  Test(
+    'does not admit a declaration reference block inside an unterminated call argument',
+    rejectsParser(`
     ${declarations}
     func Echo(Value text) fails never -> text { return Value }
     scene DocumentScreen(Document) { Title Echo(Document.Title Toolbar { Finish }) }
-  `))
+  `),
+  )
 
   Test('preserves a constructor condition before an action callback body', async () => {
     const parsed = await testParseCode(`

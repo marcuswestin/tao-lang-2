@@ -67,7 +67,8 @@ function validateConfiguredItemConstructor(
     const owner = role?.parameter.$container?.$container
     if (
       role
-      && (AST.isFunctionDeclaration(owner) || AST.isAssociatedFunctionDeclaration(owner) || AST.isViewDeclaration(owner))
+      && (AST.isFunctionDeclaration(owner) || AST.isAssociatedFunctionDeclaration(owner)
+        || AST.isViewDeclaration(owner))
     ) {
       const arguments_ = value.$container.$container
       if (AST.isArgumentList(arguments_)) {

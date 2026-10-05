@@ -702,7 +702,8 @@ class NumericContinuationParser extends Langium.LangiumParser {
           position === constructor
             ? {
               ...choice,
-              GATE: () => (!choice.GATE || choice.GATE())
+              GATE: () =>
+                (!choice.GATE || choice.GATE())
                 && (name !== 'PrimaryExpression' || this.allowAppConstructorInput())
                 && this.allowDeclarationSlotConstructorInput(),
             }
@@ -786,10 +787,13 @@ class NumericContinuationParser extends Langium.LangiumParser {
       return true
     }
     const slot = this.frames.findLastIndex(frame => frame.name === 'DeclarationSlotExpression')
-    if (slot < 0 || this.frames.slice(slot + 1).some(frame =>
-      frame.name === 'ActionBlock' || frame.name === 'AtomicActionBlock'
-      || frame.name === 'FunctionBlock' || frame.name === 'Block'
-    )) {
+    if (
+      slot < 0
+      || this.frames.slice(slot + 1).some(frame =>
+        frame.name === 'ActionBlock' || frame.name === 'AtomicActionBlock'
+        || frame.name === 'FunctionBlock' || frame.name === 'Block'
+      )
+    ) {
       return true
     }
     let payload = this.lookahead(1).image === '.' ? 3 : 2

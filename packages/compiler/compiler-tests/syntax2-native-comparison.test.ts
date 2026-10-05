@@ -61,7 +61,7 @@ Describe('compiler: Syntax2 native comparison result', () => {
       await FS.writeText(
         program,
         `
-        import { mock } from 'bun:test'
+        import { MockModule } from ${JSON.stringify(Repo.resolvePath('packages/shared/shared-src/testing/Test-Bun.ts'))}
         import TR from ${JSON.stringify(Repo.resolvePath('packages/apps/runtime/TaoRuntime-src/TR.ts'))}
         import { runtimeConsole } from ${JSON.stringify(Repo.resolvePath('packages/shared/shared-src/Platform.ts'))}
         const native = await import(${JSON.stringify(nativeImport)})
@@ -69,14 +69,14 @@ Describe('compiler: Syntax2 native comparison result', () => {
         const actualAddScores = native.AddScores
         let invalidName: string | undefined
         let nativeCalls = 0
-        mock.module(${JSON.stringify(nativeImport)}, () => ({
+        MockModule(${JSON.stringify(nativeImport)}, () => ({
           AddScores: actualAddScores,
           CompareTitles: (left: string, right: string) => {
             nativeCalls++
             return invalidName ?? actualCompareTitles(left, right)
           },
         }))
-        mock.module('react-native', () => ({
+        MockModule('react-native', () => ({
           ActivityIndicator: 'ActivityIndicator', Image: 'Image', KeyboardAvoidingView: 'KeyboardAvoidingView',
           Platform: { OS: 'ios' }, Pressable: 'Pressable', ScrollView: 'ScrollView', Switch: 'Switch',
           Text: 'Text', TextInput: 'TextInput', View: 'View', Button: 'Button',

@@ -1618,7 +1618,9 @@ Describe('Studio source-action patch bus', () => {
     Expect(stringLiteralValues(updated)).toContain('Captured {draft}')
   })
 
-  for (const scope of ['plural-import', 'singular-import', 'singular-alias', 'plural-alias', 'folder', 'local'] as const) {
+  for (
+    const scope of ['plural-import', 'singular-import', 'singular-alias', 'plural-alias', 'folder', 'local'] as const
+  ) {
     Test(`resolves captured entity rows with ${scope} scope`, async () => {
       const imported = scope === 'plural-import'
         ? 'use Notes from ./Data.tao'

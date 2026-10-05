@@ -4,7 +4,12 @@ import { Assert, Errors, FS, Platform, ProjectIdentity, Time } from '@shared'
 import type { ValidationResult } from '@validator'
 import { appMetadata } from '../../app-metadata'
 import { authPolicy } from '../../auth-policy'
-import { BridgeMetadata, type BridgeTypeOriginResolver, type QuantityCanonicalLeaf, type QuantityPublicationModule } from '../../bridge-metadata'
+import {
+  BridgeMetadata,
+  type BridgeTypeOriginResolver,
+  type QuantityCanonicalLeaf,
+  type QuantityPublicationModule,
+} from '../../bridge-metadata'
 import { CompilerDependencies } from '../../compiler-dependencies'
 import { rewriteQuantityNativeImports } from '../../quantity-native-imports'
 import { sidecarModuleSpecifiers } from '../../sidecar-module-specifiers'
@@ -908,34 +913,38 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
                         () =>
                           withActionResultBridgeTypes(bridgeTypeOptions, () =>
                             withActionInstrumentation(debug, () =>
-                            RuntimeGen.TaoFile(file.ast, {
-                              bridgeTypes: BridgeMetadata.typesFor(file.ast, selectedStatements, bridgeTypeOptions),
-                              configurationTypes: planned.declarationsPath === undefined
-                                ? undefined
-                                : RuntimeGen.ConfigurationTypes(file.ast, typeStatements),
-                              dataEntities: ownsDataCatalog ? dataCatalog.entities : [],
-                              dataAccess: ownsDataCatalog ? dataCatalog.access : [],
-                              emitDataCatalog: ownsDataCatalog,
-                              importLines,
-                              localDataCatalog: usesLocalDataCatalog,
-                              journeyObservations,
-                              scopeBindings,
-                              exportedBindings,
-                              selectedAppDatasourceConfiguration,
-                              selectedAppFirebaseConfiguration,
-                              selectedAppAuthConfiguration,
-                              selectedAppName,
-                              projectRoot,
-                              studioDataCatalog: studio && dataCatalog !== undefined
-                                && (ownsDataCatalog || needsStudioDataCatalog),
-                              studio,
-                              debug,
-                              studioViews: studio && selectedAppName !== undefined ? studioViews : [],
-                              studioSourceEpochs,
-                              studioDesignEpochs,
-                              viewRegistrations: RuntimeGen.ViewRegistrations(file.ast, { studio }, selectedStatements),
-                              selectedStatements,
-                            }))),
+                              RuntimeGen.TaoFile(file.ast, {
+                                bridgeTypes: BridgeMetadata.typesFor(file.ast, selectedStatements, bridgeTypeOptions),
+                                configurationTypes: planned.declarationsPath === undefined
+                                  ? undefined
+                                  : RuntimeGen.ConfigurationTypes(file.ast, typeStatements),
+                                dataEntities: ownsDataCatalog ? dataCatalog.entities : [],
+                                dataAccess: ownsDataCatalog ? dataCatalog.access : [],
+                                emitDataCatalog: ownsDataCatalog,
+                                importLines,
+                                localDataCatalog: usesLocalDataCatalog,
+                                journeyObservations,
+                                scopeBindings,
+                                exportedBindings,
+                                selectedAppDatasourceConfiguration,
+                                selectedAppFirebaseConfiguration,
+                                selectedAppAuthConfiguration,
+                                selectedAppName,
+                                projectRoot,
+                                studioDataCatalog: studio && dataCatalog !== undefined
+                                  && (ownsDataCatalog || needsStudioDataCatalog),
+                                studio,
+                                debug,
+                                studioViews: studio && selectedAppName !== undefined ? studioViews : [],
+                                studioSourceEpochs,
+                                studioDesignEpochs,
+                                viewRegistrations: RuntimeGen.ViewRegistrations(
+                                  file.ast,
+                                  { studio },
+                                  selectedStatements,
+                                ),
+                                selectedStatements,
+                              }))),
                       )),
                 )),
           ), operatorWitnessKeys),

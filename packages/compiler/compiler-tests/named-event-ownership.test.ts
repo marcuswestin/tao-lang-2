@@ -67,7 +67,9 @@ Describe('compiler: named event ownership', () => {
         import { reactNativeStubs } from ${
             JSON.stringify(Repo.resolvePath('packages/shared/shared-src/testing/TestReactNative.ts'))
           }
-        import { runtimeConsole } from ${JSON.stringify(Repo.resolvePath('packages/shared/shared-src/Platform.ts'))}
+        import { overrideRuntimeConsole, runtimeConsole } from ${
+            JSON.stringify(Repo.resolvePath('packages/shared/shared-src/Platform.ts'))
+          }
         MockModule('react-native', () => reactNativeStubs())
         MockModule('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, left: 0, right: 0, bottom: 0 }) }))
         const { First, Replacement, Shared } = await import(${
@@ -87,8 +89,7 @@ Describe('compiler: named event ownership', () => {
           })
         const Renderer = require('react-test-renderer')
         ;(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true
-        const originalError = console.error, originalWarn = console.warn
-        console.error = () => {}; console.warn = () => {}
+        const restoreConsole = overrideRuntimeConsole({ error: () => {}, warn: () => {} })
         const unowned: unknown[] = []
         const stop = TR.Errors.onUnowned(error => unowned.push(error))
         let first: any, replacement: any, consumer: any
@@ -120,7 +121,7 @@ Describe('compiler: named event ownership', () => {
         } finally {
           Release()
           await Renderer.act(async () => { first?.unmount(); replacement?.unmount(); consumer?.unmount() })
-          stop(); console.error = originalError; console.warn = originalWarn
+          stop(); restoreConsole()
         }
       `,
         )
@@ -240,7 +241,9 @@ Describe('compiler: named event ownership', () => {
         import { reactNativeStubs } from ${
           JSON.stringify(Repo.resolvePath('packages/shared/shared-src/testing/TestReactNative.ts'))
         }
-        import { runtimeConsole } from ${JSON.stringify(Repo.resolvePath('packages/shared/shared-src/Platform.ts'))}
+        import { overrideRuntimeConsole, runtimeConsole } from ${
+          JSON.stringify(Repo.resolvePath('packages/shared/shared-src/Platform.ts'))
+        }
         MockModule('react-native', () => reactNativeStubs())
         MockModule('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, left: 0, right: 0, bottom: 0 }) }))
         const { Demo, Initial, AsyncInitial, InlineInitial } = await import(${
@@ -256,8 +259,7 @@ Describe('compiler: named event ownership', () => {
         })
         const Renderer = require('react-test-renderer')
         ;(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true
-        const originalError = console.error, originalWarn = console.warn
-        console.error = () => {}; console.warn = () => {}
+        const restoreConsole = overrideRuntimeConsole({ error: () => {}, warn: () => {} })
         const unowned: unknown[] = []
         const stop = TR.Errors.onUnowned(error => unowned.push(error))
         const firstScope = TR.Auth.CreateScope(), secondScope = TR.Auth.CreateScope()
@@ -314,7 +316,7 @@ Describe('compiler: named event ownership', () => {
             inlineInitialMessages: inlineInitial.root.findAllByType('label').map((node: any) => node.children[0]) }))
         } finally {
           await Renderer.act(async () => { first?.unmount(); second?.unmount(); strict?.unmount(); initial?.unmount(); asyncInitial?.unmount(); inlineInitial?.unmount() })
-          firstScope.dispose(); secondScope.dispose(); stop(); console.error = originalError; console.warn = originalWarn
+          firstScope.dispose(); secondScope.dispose(); stop(); restoreConsole()
         }
       `,
       )

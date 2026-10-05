@@ -118,12 +118,12 @@ Describe('compiler: grouped row builders across a native boundary', () => {
       await FS.writeText(
         program,
         `
-        import { mock } from 'bun:test'
+        import { MockModule } from ${JSON.stringify(Repo.resolvePath('packages/shared/shared-src/testing/Test-Bun.ts'))}
         import TR from ${JSON.stringify(FS.resolvePath('packages/apps/runtime/TaoRuntime-src/TR.ts', Repo.getRoot()))}
         import { runtimeConsole } from ${
           JSON.stringify(FS.resolvePath('packages/shared/shared-src/Platform.ts', Repo.getRoot()))
         }
-        mock.module('react-native', () => ({
+        MockModule('react-native', () => ({
           ActivityIndicator: 'ActivityIndicator', Image: 'Image', KeyboardAvoidingView: 'KeyboardAvoidingView',
           Platform: { OS: 'ios' }, Pressable: 'Pressable', ScrollView: 'ScrollView', Switch: 'Switch',
           Text: 'Text', TextInput: 'TextInput', View: 'View', Button: 'Button',

@@ -1,5 +1,5 @@
-import { AST } from '@parser'
 import { Workspace } from '@compiler/workspace'
+import { AST } from '@parser'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { testParseCode, testParseSyntax } from './test-parse'
 
@@ -28,11 +28,15 @@ Describe('parser: signature projections', () => {
       type LeftRole is Subtract.Left
     `)
     const file = result.entry.ast
-    const subtract = file.statements.find(statement => AST.isFunctionDeclaration(statement) && statement.name === 'Subtract')
+    const subtract = file.statements.find(statement =>
+      AST.isFunctionDeclaration(statement) && statement.name === 'Subtract'
+    )
     Expect.Is(subtract, AST.isFunctionDeclaration)
     const left = parameterType(parameter(subtract, 'Left'))
     const right = parameterType(parameter(subtract, 'Right'))
-    const leftRole = file.statements.find(statement => AST.isTypeDeclaration(statement) && statement.name === 'LeftRole')
+    const leftRole = file.statements.find(statement =>
+      AST.isTypeDeclaration(statement) && statement.name === 'LeftRole'
+    )
     Expect.Is(leftRole, AST.isTypeDeclaration)
     Expect.Is(leftRole.type, AST.isNamedTypeReference)
     Expect(leftRole.type.root).toBe('Subtract')
@@ -59,38 +63,45 @@ Describe('parser: signature projections', () => {
     Expect(references[1]?.target.ref).toBe(parameter(subtract, 'Right'))
   })
 
-  Test('keeps relative projection distinct from a colliding visible type and preserves full function paths', async () => {
-    const result = await testParseCode(`
+  Test(
+    'keeps relative projection distinct from a colliding visible type and preserves full function paths',
+    async () => {
+      const result = await testParseCode(`
       type Right is text
       func Subtract(Left number, Right number) { return Left - Right }
       let Bare = Subtract(Right 2, Left 5)
       let Relative = Subtract(.Right 2, .Left 5)
       let Full = Subtract.Right 2
     `)
-    const file = result.entry.ast
-    const type = file.statements.find(statement => AST.isTypeDeclaration(statement) && statement.name === 'Right')
-    const subtract = file.statements.find(statement => AST.isFunctionDeclaration(statement) && statement.name === 'Subtract')
-    Expect.Is(type, AST.isTypeDeclaration)
-    Expect.Is(subtract, AST.isFunctionDeclaration)
-    const right = parameterType(parameter(subtract, 'Right'))
-    const bare = file.statements.find(statement => AST.isAliasDeclaration(statement) && statement.name === 'Bare')
-    const relative = file.statements.find(statement => AST.isAliasDeclaration(statement) && statement.name === 'Relative')
-    const full = file.statements.find(statement => AST.isAliasDeclaration(statement) && statement.name === 'Full')
-    Expect.Is(bare, AST.isAliasDeclaration)
-    Expect.Is(relative, AST.isAliasDeclaration)
-    Expect.Is(full, AST.isAliasDeclaration)
-    Expect.Is(bare.value, AST.isFunctionCallExpression)
-    Expect.Is(relative.value, AST.isFunctionCallExpression)
-    const bareRight = argumentConstructor(AST.argumentsOf(bare.value)[0]?.value)
-    const relativeRight = argumentConstructor(AST.argumentsOf(relative.value)[0]?.value)
-    Expect(bareRight.relative).toBe(false)
-    Expect(relativeRight.relative).toBe(true)
-    Expect(bareRight.type.ref).toBe(type)
-    Expect(relativeRight.type.ref).toBe(right)
-    Expect.Is(full.value, AST.isConfigurationConstructor)
-    Expect(full.value.type.ref).toBe(subtract)
-    Expect(full.value.members).toEqual(['Right'])
-  })
+      const file = result.entry.ast
+      const type = file.statements.find(statement => AST.isTypeDeclaration(statement) && statement.name === 'Right')
+      const subtract = file.statements.find(statement =>
+        AST.isFunctionDeclaration(statement) && statement.name === 'Subtract'
+      )
+      Expect.Is(type, AST.isTypeDeclaration)
+      Expect.Is(subtract, AST.isFunctionDeclaration)
+      const right = parameterType(parameter(subtract, 'Right'))
+      const bare = file.statements.find(statement => AST.isAliasDeclaration(statement) && statement.name === 'Bare')
+      const relative = file.statements.find(statement =>
+        AST.isAliasDeclaration(statement) && statement.name === 'Relative'
+      )
+      const full = file.statements.find(statement => AST.isAliasDeclaration(statement) && statement.name === 'Full')
+      Expect.Is(bare, AST.isAliasDeclaration)
+      Expect.Is(relative, AST.isAliasDeclaration)
+      Expect.Is(full, AST.isAliasDeclaration)
+      Expect.Is(bare.value, AST.isFunctionCallExpression)
+      Expect.Is(relative.value, AST.isFunctionCallExpression)
+      const bareRight = argumentConstructor(AST.argumentsOf(bare.value)[0]?.value)
+      const relativeRight = argumentConstructor(AST.argumentsOf(relative.value)[0]?.value)
+      Expect(bareRight.relative).toBe(false)
+      Expect(relativeRight.relative).toBe(true)
+      Expect(bareRight.type.ref).toBe(type)
+      Expect(relativeRight.type.ref).toBe(right)
+      Expect.Is(full.value, AST.isConfigurationConstructor)
+      Expect(full.value.type.ref).toBe(subtract)
+      Expect(full.value.members).toEqual(['Right'])
+    },
+  )
 
   Test('does not resolve a relative argument through an enclosing signature', async () => {
     const result = await testParseSyntax(`

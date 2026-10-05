@@ -21,8 +21,11 @@ import {
   ownAssociatedViews,
   withAssociatedEffects,
 } from './associated-methods'
+import { discoverCallableEffectFacts } from './callable-effect-facts'
+import { projectCallableEffectPublications } from './callable-effect-publications'
 import { analyzeCallableEffects } from './callable-effects'
 import { bindCallableArguments, callableSignatureOf, compareCallableSignatures } from './callable-signatures'
+import { publishCanonicalEffectSnapshot } from './canonical-effect-snapshot'
 import { containsCapability, planCapabilityTransport } from './capability-transport'
 import { colorValues } from './color-values'
 import {
@@ -123,6 +126,9 @@ export const ASTUtils = {
   resolveNumericUnitReading,
   numericUnitReadingCollisions,
   createAssociatedEffects,
+  discoverCallableEffectFacts,
+  projectCallableEffectPublications,
+  publishCanonicalEffectSnapshot,
   resolveAssociatedMethodInvocation,
   associatedCallableWitnessKey,
   associatedCallableAnalysis,
@@ -225,6 +231,7 @@ export const ASTUtils = {
 } as const
 
 export namespace ASTUtils {
+  export type CallableAnalysis = import('./callable-effects').CallableAnalysis
   export type NumericUnitReading = import('./numeric-unit-readings').NumericUnitReading
   export type AssociatedCallableDescriptor = import('./associated-methods').AssociatedCallableDescriptor
   export type AssociatedOperatorWitnessDeclaration =

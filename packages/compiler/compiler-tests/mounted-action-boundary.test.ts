@@ -102,7 +102,9 @@ Describe('compiler: mounted app action failure boundary', () => {
         import { reactNativeStubs } from ${
             JSON.stringify(Repo.resolvePath('packages/shared/shared-src/testing/TestReactNative.ts'))
           }
-        import { runtimeConsole } from ${JSON.stringify(Repo.resolvePath('packages/shared/shared-src/Platform.ts'))}
+        import { overrideRuntimeConsole, runtimeConsole } from ${
+            JSON.stringify(Repo.resolvePath('packages/shared/shared-src/Platform.ts'))
+          }
         MockModule('react-native', () => reactNativeStubs())
         MockModule('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, left: 0, right: 0, bottom: 0 }) }))
         const { Demo, Plain, Slow, Initial, InitialSync, Raw, RawPlain } = await import(${
@@ -126,10 +128,10 @@ Describe('compiler: mounted app action failure boundary', () => {
         const Renderer = require('react-test-renderer')
         ;(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true
         const warnings: unknown[] = []
-        const originalError = console.error
-        const originalWarn = console.warn
-        console.error = (...values) => warnings.push(values)
-        console.warn = (...values) => warnings.push(values)
+        const restoreConsole = overrideRuntimeConsole({
+          error: (...values) => { warnings.push(values) },
+          warn: (...values) => { warnings.push(values) },
+        })
         const unowned: unknown[] = []
         const stop = TR.Errors.onUnowned(error => unowned.push(error))
         const scope = TR.Auth.CreateScope()
@@ -233,7 +235,7 @@ Describe('compiler: mounted app action failure boundary', () => {
           await Renderer.act(async () => { first?.unmount(); second?.unmount(); plain?.unmount(); nested?.unmount();
             strict?.unmount(); initial?.unmount(); initialSync?.unmount(); authFirst?.unmount(); authSecond?.unmount(); replacement?.unmount(); raw?.unmount(); rawPlain?.unmount(); suspending?.unmount(); aborting?.unmount() })
           scope.dispose()
-          stop(); console.error = originalError; console.warn = originalWarn
+          stop(); restoreConsole()
         }
       `,
         )

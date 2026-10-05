@@ -1,11 +1,7 @@
+import { ASTUtils } from '@ast-utils'
 import { AST, Parser } from '@parser'
 import { Assert } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
-import { createAssociatedEffects } from '../../ast-utils/ast-utils-src/associated-effect-context'
-import { discoverCallableEffectFacts } from '../../ast-utils/ast-utils-src/callable-effect-facts'
-import { projectCallableEffectPublications } from '../../ast-utils/ast-utils-src/callable-effect-publications'
-import { analyzeCallableEffects } from '../../ast-utils/ast-utils-src/callable-effects'
-import { publishCanonicalEffectSnapshot } from '../../ast-utils/ast-utils-src/canonical-effect-snapshot'
 
 const display = 'can Display { ToText() fails never -> text }'
 
@@ -40,7 +36,7 @@ Describe('validator: item member method effect publications', () => {
     Expect(analysis.effects.purity).toEqual({ violations: [], open: false })
     Expect(materialize(file, namedFunction(file, 'Field')).analysis.effects.purity)
       .toEqual({ violations: [], open: false })
-    Expect(createAssociatedEffects([file]).analyses.get(read)?.effects.purity)
+    Expect(ASTUtils.createAssociatedEffects([file]).analyses.get(read)?.effects.purity)
       .toEqual({ violations: [], open: false })
   })
 
@@ -181,13 +177,13 @@ function namedFunction(file: AST.TaoFile, name: string): AST.FunctionDeclaration
 
 function materialize(file: AST.TaoFile, owner: AST.Node) {
   const requirements = AST.streamAllContents(file).filter(AST.isCapabilityMethodDeclaration)
-  const snapshot = publishCanonicalEffectSnapshot([file], {
+  const snapshot = ASTUtils.publishCanonicalEffectSnapshot([file], {
     requirements: new Map(requirements.map(requirement => [requirement, {
       purity: { violations: [], open: false },
       failures: { cases: [], open: false },
     }])),
   })
-  const projected = projectCallableEffectPublications(snapshot, owner)
-  const facts = discoverCallableEffectFacts(owner, projected.inputs, projected.context)
-  return { snapshot, facts, analysis: analyzeCallableEffects(owner, facts) }
+  const projected = ASTUtils.projectCallableEffectPublications(snapshot, owner)
+  const facts = ASTUtils.discoverCallableEffectFacts(owner, projected.inputs, projected.context)
+  return { snapshot, facts, analysis: ASTUtils.analyzeCallableEffects(owner, facts) }
 }

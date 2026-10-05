@@ -149,12 +149,13 @@ Describe('compiler: native associated actions', () => {
         }
       `,
       'Native.ts': `
+        import * as Errors from ${JSON.stringify(Repo.resolvePath('packages/shared/shared-src/core/Errors.ts'))}
         const calls: string[] = []
         export function File_Construct(path: string) { calls.push("construct:" + path); return { Path: path } }
         export function File_Open(file: { Path: string }) { calls.push("open:" + file.Path); return file }
         export function Handle_Read(handle: { Path: string }) {
           calls.push("read:" + handle.Path)
-          if (handle.Path === "fail") throw new Error("Read failed")
+          if (handle.Path === "fail") Errors.throwHostEnvironment("Read failed")
           return handle.Path
         }
         export function Handle_Close(handle: { Path: string }) { calls.push("close:" + handle.Path) }

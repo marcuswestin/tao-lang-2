@@ -96,8 +96,10 @@ Describe('parser: named import aliases', () => {
       Expect.Is(local.target.ref, AST.isAliasDeclaration)
       Expect(original.target.ref).toBeUndefined()
       Expect(
-        AST.visibleValueBindings(local, (candidate): candidate is AST.ImportableValueDeclaration =>
-          AST.isDeclaration(candidate) && AST.isImportableValueDeclaration(candidate)
+        AST.visibleValueBindings(
+          local,
+          (candidate): candidate is AST.ImportableValueDeclaration =>
+            AST.isDeclaration(candidate) && AST.isImportableValueDeclaration(candidate),
         )
           .map(binding => binding.localName),
       ).toEqual(['Welcome', 'Local', 'Missing'])

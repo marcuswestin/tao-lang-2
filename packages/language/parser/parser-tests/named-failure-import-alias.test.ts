@@ -1,6 +1,6 @@
 import { Workspace } from '@compiler/workspace'
-import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { AST } from '@parser'
+import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 
 Describe('parser: named failure import aliases', () => {
   Test('links a renamed record failure and its callable bound to the original declaration', async () => {

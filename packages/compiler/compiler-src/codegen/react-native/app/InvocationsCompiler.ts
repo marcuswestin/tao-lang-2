@@ -1,6 +1,6 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
-import { Assert } from '@shared'
+import { Assert, Switch } from '@shared'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 import { actionBlockInterruptsAsk, actionBlockRequiresAsync } from './action-control-flow'
@@ -29,59 +29,61 @@ export const InvocationsCompiler = {
   Render(render: AST.Render, options: CodegenOptions = {}): Compiled {
     const target = ASTUtils.resolveRenderTarget(render)
     Assert.defined(target, 'validated render names a supported visual or text value', { render: render.view?.$refText })
-    if (target.kind === 'ui' || target.kind === 'rendered') {
-      return studioLensRender(render, compileStructuralUiRender(render, target, options), options)
-    }
-    if (target.kind === 'text') {
-      return studioLensRender(
-        render,
-        compileBareTextRender(
+    return Switch.on(target, 'kind', {
+      ui: target => studioLensRender(render, compileStructuralUiRender(render, target, options), options),
+      rendered: target => studioLensRender(render, compileStructuralUiRender(render, target, options), options),
+      text: target => {
+        return studioLensRender(
           render,
-          target.expression !== undefined ? target.expression : target.declaration,
+          compileBareTextRender(
+            render,
+            target.expression !== undefined ? target.expression : target.declaration,
+            options,
+          ),
           options,
-        ),
-        options,
-      )
-    }
-    if (target.kind !== 'view') {
-      return Compile.RenderOccurrence(render, target, options)
-    }
-    const invocation = ASTUtils.resolveRenderInvocation(render)
-    const view = invocation.view
-    Assert.defined(view, 'validated render targets a view declaration', { render: render.view?.$refText })
-    Assert(invocation.diagnostics.length === 0, 'validated render invocation has no binding diagnostics')
-    Assert(!invocation.genericDiagnostics?.length, 'validated generic render has one bounded specialization')
-    Assert(invocation.eventDiagnostics.length === 0, 'validated render events have no binding diagnostics')
+        )
+      },
+      nav: target => Compile.RenderOccurrence(render, target, options),
+      parameter: target => Compile.RenderOccurrence(render, target, options),
+      view: () => {
+        const invocation = ASTUtils.resolveRenderInvocation(render)
+        const view = invocation.view
+        Assert.defined(view, 'validated render targets a view declaration', { render: render.view?.$refText })
+        Assert(invocation.diagnostics.length === 0, 'validated render invocation has no binding diagnostics')
+        Assert(!invocation.genericDiagnostics?.length, 'validated generic render has one bounded specialization')
+        Assert(invocation.eventDiagnostics.length === 0, 'validated render events have no binding diagnostics')
 
-    const renderArguments = Compile.RenderArguments(invocation)
-    const viewName = AST.isQuotedRender(render) ? gen`__tao_quoted_Text$` : gen.scopeName(view)
-    const taoProps = Compile.RenderTaoProps(render, options)
-    const block = render.block
-    const slotFills = AST.renderSlotUsesOf(block).filter(AST.isRenderSlotFill)
-    if (block && slotFills.length > 0) {
-      return Compile.RenderWithSlots(render, view, renderArguments, taoProps, block, slotFills, options)
-    }
-    const children = AST.statementsOf(block).filter(statement =>
-      !AST.isEventHandler(statement)
-      && !(AST.isTagStatement(statement) && AST.isSlotFillRootTag(statement))
-      && !(AST.isRenderSlotUse(statement) && statement.render)
-    )
-    if (children.length === 0) {
-      return studioLensRender(render, gen`<${viewName}${renderArguments}${taoProps} />`, options)
-    }
-    Assert.defined(block, 'render with child statements has a child block')
+        const renderArguments = Compile.RenderArguments(invocation)
+        const viewName = AST.isQuotedRender(render) ? gen`__tao_quoted_Text$` : gen.scopeName(view)
+        const taoProps = Compile.RenderTaoProps(render, options)
+        const block = render.block
+        const slotFills = AST.renderSlotUsesOf(block).filter(AST.isRenderSlotFill)
+        if (block && slotFills.length > 0) {
+          return Compile.RenderWithSlots(render, view, renderArguments, taoProps, block, slotFills, options)
+        }
+        const children = AST.statementsOf(block).filter(statement =>
+          !AST.isEventHandler(statement)
+          && !(AST.isTagStatement(statement) && AST.isSlotFillRootTag(statement))
+          && !(AST.isRenderSlotUse(statement) && statement.render)
+        )
+        if (children.length === 0) {
+          return studioLensRender(render, gen`<${viewName}${renderArguments}${taoProps} />`, options)
+        }
+        Assert.defined(block, 'render with child statements has a child block')
 
-    return studioLensRender(
-      render,
-      gen`
-      <${viewName}${renderArguments}${taoProps}>
-        {TR.BlockScope(_Scope, _Scope => {
-          ${Compile.RenderBlockBody(block, options)}
-        })}
-      </${viewName}>
-    `,
-      options,
-    )
+        return studioLensRender(
+          render,
+          gen`
+          <${viewName}${renderArguments}${taoProps}>
+            {TR.BlockScope(_Scope, _Scope => {
+              ${Compile.RenderBlockBody(block, options)}
+            })}
+          </${viewName}>
+        `,
+          options,
+        )
+      },
+    })
   },
 
   /**

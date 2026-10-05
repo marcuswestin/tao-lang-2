@@ -1,6 +1,6 @@
 import TR from '@runtime/TR'
+import { TaoActionFailure, UnexpectedBehaviorError } from '@runtime/TR-errors'
 import { Describe, Expect, Test } from '@shared/test'
-import { TaoActionFailure, UnexpectedBehaviorError } from '../../runtime/TaoRuntime-src/TR-errors'
 import { KeyedList } from '../@tao/ui/LazyList'
 
 const failure = TR.Enum(

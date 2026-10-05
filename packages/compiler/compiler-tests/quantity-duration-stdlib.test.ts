@@ -173,12 +173,13 @@ Describe('compiler: quantity and duration standard library', () => {
         import { createNativeModules } from ${
           JSON.stringify(FS.resolvePath('packages/apps/runtime/TaoRuntime-src/TR-native-modules.ts', Repo.getRoot()))
         }
+        import * as Errors from ${JSON.stringify(Repo.resolvePath('packages/shared/shared-src/core/Errors.ts'))}
         let reading = 1000
         export function setClock(value: number) { reading = value }
         export const nowMilliseconds = createContinuousClockNowMilliseconds(createNativeModules({
           'react-native': () => ({ Platform: { OS: 'ios' } }),
           'expo-modules-core': () => ({ requireNativeModule: (name: string) => {
-            if (name !== 'TaoContinuousClock') throw new Error('wrong native clock module')
+            if (name !== 'TaoContinuousClock') Errors.throwUnexpected('wrong native clock module')
             return { nowMilliseconds: () => reading }
           } }),
         }))
@@ -258,7 +259,7 @@ Describe('compiler: quantity and duration standard library', () => {
                 continuation = captureActionContinuation()
                 const pending = TR.Do(App.Pause, Duration.fromUnit(60, 'seconds'))
                 await Promise.resolve()
-                if (!cancelActionContinuation(continuation)) throw new Error('no active continuation')
+                if (!cancelActionContinuation(continuation)) TR.Errors.throwUnexpected('no active continuation')
                 await pending
               })
             } catch (error) { cancellation = error.caseName; throw error }

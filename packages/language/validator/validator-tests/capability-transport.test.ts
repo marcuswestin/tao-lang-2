@@ -2,7 +2,6 @@ import { ASTUtils, Type } from '@ast-utils'
 import { AST, Parser } from '@parser'
 import { Assert, Diagnostics } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
-import { analyzeCallableEffects, type CallableAnalysis } from '../../ast-utils/ast-utils-src/callable-effects'
 import { NodeValidation } from '../validator-src/node-validation'
 import { Validation } from '../validator-src/validation'
 import {
@@ -31,7 +30,7 @@ async function fixture(source: string) {
     AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration,
     ASTUtils.AssociatedCallableDescriptor
   >()
-  const analyses = new Map<AST.Node, CallableAnalysis>()
+  const analyses = new Map<AST.Node, ASTUtils.CallableAnalysis>()
   for (const owner of owners) {
     for (const method of [...ASTUtils.ownAssociatedMethods(owner), ...ASTUtils.capabilityRequirements(owner)]) {
       const callable = Type.associatedCallable(method, owner)
@@ -41,7 +40,7 @@ async function fixture(source: string) {
         // Unit evidence exercises transport over sealed contracts; production discovery belongs to its producer.
         analyses.set(
           method,
-          analyzeCallableEffects(method, [{
+          ASTUtils.analyzeCallableEffects(method, [{
             node: method,
             kind: 'complete',
             purity: { open: false, violations: [] },

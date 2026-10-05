@@ -444,6 +444,29 @@ export const runtimeConsole = {
   warn: console.warn.bind(console),
 }
 
+/** Override the raw console used by third-party code; restore only replacements still owned by this scope. */
+export function overrideRuntimeConsole(overrides: Partial<typeof runtimeConsole>): () => void {
+  const restores: (() => void)[] = []
+  for (const key of ['debug', 'error', 'info', 'warn'] as const) {
+    const replacement = overrides[key]
+    if (replacement === undefined) {
+      continue
+    }
+    const previous = console[key]
+    console[key] = replacement
+    restores.push(() => {
+      if (console[key] === replacement) {
+        console[key] = previous
+      }
+    })
+  }
+  return () => {
+    for (const restore of restores.toReversed()) {
+      restore()
+    }
+  }
+}
+
 /** runtimeProcess exposes low-level process state and streams through the shared runtime boundary; use HCI for user-facing I/O. */
 export const runtimeProcess = {
   argv: process.argv,

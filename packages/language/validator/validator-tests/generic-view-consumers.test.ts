@@ -115,7 +115,9 @@ Describe('generic view invocation consumers', () => {
     Expect(diagnostic).toBeDefined()
     Expect(diagnostic?.source).toBe('validator')
     Expect(diagnostic?.range).toEqual(argument.value.$cstNode!.range)
-    Expect(validationErrorMessages(result)).toContain(configuredItemValidationMessages.constructorShape('Right', 'text'))
+    Expect(validationErrorMessages(result)).toContain(
+      configuredItemValidationMessages.constructorShape('Right', 'text'),
+    )
   })
 
   Test('keeps raw role payloads from manufacturing generic inference anchors', async () => {

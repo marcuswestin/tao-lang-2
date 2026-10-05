@@ -9,7 +9,8 @@ import {
 
 Describe('compiler: private associated witness bindings', () => {
   Test('publishes actual primitive operators and discovers defining converter owners', async () => {
-    const parsed = await Parser.parseCode(`
+    const parsed = await Parser.parseCode(
+      `
       primitive number with {
         static func +(Left number, Right number) fails never -> number { return Left }
       }
@@ -19,7 +20,9 @@ Describe('compiler: private associated witness bindings', () => {
       }
       func Add(Left number, Right number) -> number { return Left + Right }
       func Label(Reading) -> Caption { return Reading as Caption }
-    `, { validation: false })
+    `,
+      { validation: false },
+    )
     Expect(parsed.entry.document.parseResult.parserErrors).toEqual([])
     const primitive = parsed.entry.ast.statements.find(AST.isPrimitiveDeclaration)
     const reading = parsed.entry.ast.statements.find(node => AST.isTypeDeclaration(node) && node.name === 'Reading')

@@ -40,13 +40,13 @@ Describe('compiler: live list capability publication', () => {
       const scope: Record<string, any> = {}
       new Function('TR', '_Scope', new Bun.Transpiler({ loader: 'ts' }).transformSync(source))(TR, scope)
       const input = TR.Cell(TR.Value(['before']))
-    const projected = TR.Call(scope['Project'], input)
-    const captioned = TR.Call(scope['Reproject'], projected)
+      const projected = TR.Call(scope['Project'], input)
+      const captioned = TR.Call(scope['Reproject'], projected)
       const read = (value: any) => TR.Call(TR.Capability.method(value, 'ToText')).getJSValue()
       Expect(read(captioned.getJSValue()[0])).toBe('before')
       input.set(TR.Value(['after', 'added']))
       Expect(captioned.getJSValue().map(read)).toEqual(['after', 'added'])
-    const nested = TR.Call(scope['Nested'], TR.Value([['one'], ['two']])).getJSValue()
+      const nested = TR.Call(scope['Nested'], TR.Value([['one'], ['two']])).getJSValue()
       Expect(Array.isArray(nested[0])).toBe(true)
       Expect(nested.map((row: any[]) => row.map(read))).toEqual([['one'], ['two']])
     },

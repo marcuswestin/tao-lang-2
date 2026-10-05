@@ -4,7 +4,8 @@ import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 
 Describe('parser: declared constructor expression values', () => {
   Test('links shorthand parameters through nested constructor blocks', async () => {
-    const parsed = await Parser.parseCode(`
+    const parsed = await Parser.parseCode(
+      `
       type RowKey is text
       type HeaderLabel is text
       type GroupHeader is { HeaderLabel }
@@ -14,7 +15,9 @@ Describe('parser: declared constructor expression values', () => {
           return GroupedRow { RowKey, Content: GroupHeader { HeaderLabel } }
         }
       }
-    `, { validation: false })
+    `,
+      { validation: false },
+    )
 
     Expect(parsed.diagnostics).toEqual([])
     const method = [...AST.streamAllContents(parsed.entry.ast)].find(AST.isAssociatedFunctionDeclaration)

@@ -42,6 +42,7 @@ Describe('compiler: Syntax2 Export action', () => {
       await FS.writeText(
         FS.resolvePath('Clock.ts', root),
         `
+        import * as Errors from ${JSON.stringify(Repo.resolvePath('packages/shared/shared-src/core/Errors.ts'))}
         import { createContinuousClockNowMilliseconds } from ${
           JSON.stringify(
             FS.resolvePath('packages/apps/runtime/TaoRuntime-src/TR-continuous-clock.ts', Repo.getRoot()),
@@ -59,7 +60,7 @@ Describe('compiler: Syntax2 Export action', () => {
         export const nowMilliseconds = createContinuousClockNowMilliseconds(createNativeModules({
           'react-native': () => ({ Platform: { OS: 'ios' } }),
           'expo-modules-core': () => ({ requireNativeModule: (name: string) => {
-            if (name !== 'TaoContinuousClock') throw new Error('wrong native clock module')
+            if (name !== 'TaoContinuousClock') Errors.throwUnexpected('wrong native clock module')
             return { nowMilliseconds: () => samples[reads++] ?? samples[samples.length - 1]! }
           } }),
         }))
@@ -94,11 +95,12 @@ Describe('compiler: Syntax2 Export action', () => {
       await FS.writeText(
         runner,
         `
+        import * as Errors from ${JSON.stringify(Repo.resolvePath('packages/shared/shared-src/core/Errors.ts'))}
         import TR from ${JSON.stringify(runtimeTR)}
         import { TaoActionFailure } from ${
           JSON.stringify(FS.resolvePath('packages/apps/runtime/TaoRuntime-src/TR-errors.ts', Repo.getRoot()))
         }
-        import { mock } from 'bun:test'
+        import { MockModule } from ${JSON.stringify(Repo.resolvePath('packages/shared/shared-src/testing/Test-Bun.ts'))}
         import { BookProvider, bookStoreSession } from ${JSON.stringify(bookStoreProvider)}
         import { BookBackend } from ${JSON.stringify(bookBackend)}
         import { clockReads, resetClock } from './Clock.ts'
@@ -106,7 +108,7 @@ Describe('compiler: Syntax2 Export action', () => {
           JSON.stringify(FS.resolvePath('packages/shared/shared-src/Platform.ts', Repo.getRoot()))
         }
 
-        mock.module('react-native', () => ({
+        MockModule('react-native', () => ({
           ActivityIndicator: 'ActivityIndicator', Image: 'Image', KeyboardAvoidingView: 'KeyboardAvoidingView',
           Platform: { OS: 'ios' }, Pressable: 'Pressable', ScrollView: 'ScrollView', Switch: 'Switch',
           Text: 'Text', TextInput: 'TextInput', View: 'View',
@@ -155,7 +157,7 @@ Describe('compiler: Syntax2 Export action', () => {
           return cleanup.call(this, file)
         }
         const exportAction = Actions.Export
-        if (!exportAction) throw new Error('compiled Export action was not exported')
+        if (!exportAction) Errors.throwUnexpected('compiled Export action was not exported')
         resetClock()
         const completed = await TR.DoResult(exportAction, TR.Value(book))
         const sampleAtCleanup = cleanupReads[0]

@@ -81,6 +81,7 @@ async function withCompiledFixture(
         }
       `,
       'Native.ts': `
+        import * as Errors from ${JSON.stringify(Repo.resolvePath('packages/shared/shared-src/core/Errors.ts'))}
         type Book = { Title: string }
         let books: Book[] = []
         let reads = 0
@@ -94,7 +95,7 @@ async function withCompiledFixture(
           events.push(...items.map(item => item.Title))
           events.push(label + ":" + limit)
           if (items.length !== books.length || items.some((item, index) => item !== books[index])) {
-            throw new Error("associated receiver changed the returned entity identities")
+            Errors.throwUnexpected("associated receiver changed the returned entity identities")
           }
         }
         export function ObserveResult(result: string): void { events.push("result:" + result) }

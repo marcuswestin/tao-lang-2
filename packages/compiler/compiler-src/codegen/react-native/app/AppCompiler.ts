@@ -120,7 +120,9 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
     function ${gen.Name(bindApp)}(_TaoAppId: string) {
       ${
     crossModuleBase
-      ? gen`const _TaoBaseBinding = ${gen.Name(moduleScope)}.${scopeBindingName(crossModuleBase)}.definition.bindApp!(_TaoAppId)
+      ? gen`const _TaoBaseBinding = ${gen.Name(moduleScope)}.${
+        scopeBindingName(crossModuleBase)
+      }.definition.bindApp!(_TaoAppId)
           const _Scope = Object.create(${gen.Name(moduleScope)})`
       : base
       ? gen`const _TaoBaseBinding = ${gen.Name({ name: `_TaoBindApp_${base.name}` })}(_TaoAppId)

@@ -394,9 +394,11 @@ function validatePickCompleteness(expression: AST.WhenExpression, ctx: Validatio
     return
   }
   if (!expression.subject) {
-    if (expression.branches.some(branch =>
-      AST.isBooleanLiteral(branch.condition) && AST.canonicalSubjectCase(branch.condition.value) === 'true'
-    )) {
+    if (
+      expression.branches.some(branch =>
+        AST.isBooleanLiteral(branch.condition) && AST.canonicalSubjectCase(branch.condition.value) === 'true'
+      )
+    ) {
       return
     }
   } else {
@@ -406,9 +408,9 @@ function validatePickCompleteness(expression: AST.WhenExpression, ctx: Validatio
       : type.kind === 'primitive' && type.primitive === 'boolean'
       ? ['true', 'false']
       : []
-    const covered = new Set(expression.branches.flatMap(branch =>
-      branch.case === undefined ? [] : [AST.canonicalSubjectCase(branch.case)]
-    ))
+    const covered = new Set(
+      expression.branches.flatMap(branch => branch.case === undefined ? [] : [AST.canonicalSubjectCase(branch.case)]),
+    )
     if (expected.length > 0 && expected.every(name => covered.has(name))) {
       return
     }

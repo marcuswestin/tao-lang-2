@@ -112,7 +112,9 @@ export namespace Packages {
         const readContext = FS.resolvePath('@tao/data/ReadContext.tao', context.stdlibRoot)
         const actionFailureContext = FS.resolvePath('@tao/actions/ActionFailureContext.tao', context.stdlibRoot)
         return await Promise.all(
-          [prelude, readContext, actionFailureContext].map(async path => path && await FS.isFile(path) ? path : undefined),
+          [prelude, readContext, actionFailureContext].map(async path =>
+            path && await FS.isFile(path) ? path : undefined
+          ),
         )
           .then(paths => paths.filter((path): path is string => path !== undefined))
       },

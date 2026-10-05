@@ -1,10 +1,7 @@
+import { ASTUtils } from '@ast-utils'
 import { AST, Parser } from '@parser'
 import { Assert } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
-import { discoverCallableEffectFacts } from '../../ast-utils/ast-utils-src/callable-effect-facts'
-import { projectCallableEffectPublications } from '../../ast-utils/ast-utils-src/callable-effect-publications'
-import { analyzeCallableEffects } from '../../ast-utils/ast-utils-src/callable-effects'
-import { publishCanonicalEffectSnapshot } from '../../ast-utils/ast-utils-src/canonical-effect-snapshot'
 import { AssociatedMethodsValidationMessages as messages } from '../validator-src/validators/AssociatedMethodsValidationMessages'
 import { testValidateCode, testValidateCodeWithErrors, validationErrorMessages } from './test-validate'
 
@@ -115,7 +112,7 @@ Describe('validator: named constructor effect publications', () => {
     Expect(snapshot.constructors.has(reference)).toBe(false)
     Expect(snapshot.reads.get(reference)?.kind).toBe('unknown')
     Expect(facts.find(row => row.node === reference)?.kind).toBe('unknown')
-    Expect(analyzeCallableEffects(method, facts).effects.purity.open).toBe(true)
+    Expect(ASTUtils.analyzeCallableEffects(method, facts).effects.purity.open).toBe(true)
   })
 
   Test('keeps numeric checks and block construction conservatively unpublished for execution', async () => {
@@ -132,7 +129,7 @@ Describe('validator: named constructor effect publications', () => {
     Expect(parsed.diagnostics).toEqual([])
     const constructors = AST.streamAllContents(parsed.entry.ast).filter(AST.isConfigurationConstructor)
     Expect(constructors.length).toBe(2)
-    const snapshot = publishCanonicalEffectSnapshot([parsed.entry.ast])
+    const snapshot = ASTUtils.publishCanonicalEffectSnapshot([parsed.entry.ast])
     Expect(constructors.map(constructor => snapshot.constructors.get(constructor)?.kind)).toEqual([
       'unknown',
       'unknown',
@@ -172,7 +169,7 @@ Describe('validator: named constructor effect publications', () => {
     Expect(publication?.kind).toBe('unknown')
     Expect(facts.find(row => row.node === constructor)?.kind).toBe('unknown')
     Expect(facts.find(row => row.node === constructor.value)?.kind).toBe('complete')
-    Expect(analyzeCallableEffects(fn, facts).effects).toEqual({
+    Expect(ASTUtils.analyzeCallableEffects(fn, facts).effects).toEqual({
       purity: { violations: [], open: true },
       failures: { cases: [], open: true },
     })
@@ -180,8 +177,8 @@ Describe('validator: named constructor effect publications', () => {
 })
 
 function materialize(file: AST.TaoFile, owner: AST.Node) {
-  const snapshot = publishCanonicalEffectSnapshot([file])
-  const projected = projectCallableEffectPublications(snapshot, owner)
-  const facts = discoverCallableEffectFacts(owner, projected.inputs, projected.context)
+  const snapshot = ASTUtils.publishCanonicalEffectSnapshot([file])
+  const projected = ASTUtils.projectCallableEffectPublications(snapshot, owner)
+  const facts = ASTUtils.discoverCallableEffectFacts(owner, projected.inputs, projected.context)
   return { snapshot, projected, facts }
 }

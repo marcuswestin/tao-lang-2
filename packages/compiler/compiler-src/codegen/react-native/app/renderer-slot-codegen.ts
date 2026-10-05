@@ -1,6 +1,6 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
-import { Assert } from '@shared'
+import { Assert, Switch } from '@shared'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 import { compileValueForType } from './capability-projection'
@@ -208,45 +208,44 @@ function compileSlotBody(
   options: CodegenOptions,
 ): Compiled {
   const shape = AST.renderSlotBodyOf(body)
-  if (shape.kind === 'empty' || shape.kind === 'absent') {
-    return gen`return null`
-  }
-  if (shape.kind === 'named') {
-    Assert(AST.isRenderSlotUse(body) || AST.isRenderSlotDeclaration(body), 'named slot body belongs to slot syntax')
-    const renderer = shape.renderer.ref
-    Assert(AST.isViewDeclaration(renderer), 'validated named slot body resolves a view')
-    const args = gen`_Scope`
-    const element = AST.isRenderSlotUse(body)
-      ? compileNamedSlotRenderer(contract, renderer, args, gen`taoProps`, body)
-      : compileDefaultSlotRenderer(contract, renderer, args, gen`taoProps`)
-    return gen`return ${element}`
-  }
-  if (shape.kind === 'render') {
-    return gen`return ${Compile.Render(shape.render, options)}`
-  }
-  if (shape.kind === 'forwarded') {
-    Assert(AST.isRenderSlotUse(body), 'forwarding belongs to a slot fill')
-    const comparison = ASTUtils.compareRendererSlotForwarding(body)
-    Assert(comparison?.compatible, 'validated forwarding retains its safe input correspondence')
-    const argumentType = slotArgumentType(ASTUtils.rendererSlotSignatureOf(shape.slot.ref!))
-    return gen`return React.createElement(TR.RenderSlots.Frame<${argumentType}>, {
-      renderer: ${compileForwardedSlotSelection(body)},
-      args: {
-        ${
-      gen.list(comparison.correspondence, pair =>
-        gen`${gen.jsLiteral(pair.supplied.labelName)}: ${
-          compileValueForType(
-            gen`_Scope[${gen.jsLiteral(pair.required.labelName)}]`,
-            pair.required.type,
-            pair.supplied.type,
-          )
-        },`)
-    }
-      },
-      taoProps,
-    })`
-  }
-  return Compile.RenderBlockBody(shape.block, options)
+  return Switch.on(shape, 'kind', {
+    empty: () => gen`return null`,
+    absent: () => gen`return null`,
+    named: shape => {
+      Assert(AST.isRenderSlotUse(body) || AST.isRenderSlotDeclaration(body), 'named slot body belongs to slot syntax')
+      const renderer = shape.renderer.ref
+      Assert(AST.isViewDeclaration(renderer), 'validated named slot body resolves a view')
+      const args = gen`_Scope`
+      const element = AST.isRenderSlotUse(body)
+        ? compileNamedSlotRenderer(contract, renderer, args, gen`taoProps`, body)
+        : compileDefaultSlotRenderer(contract, renderer, args, gen`taoProps`)
+      return gen`return ${element}`
+    },
+    render: shape => gen`return ${Compile.Render(shape.render, options)}`,
+    forwarded: shape => {
+      Assert(AST.isRenderSlotUse(body), 'forwarding belongs to a slot fill')
+      const comparison = ASTUtils.compareRendererSlotForwarding(body)
+      Assert(comparison?.compatible, 'validated forwarding retains its safe input correspondence')
+      const argumentType = slotArgumentType(ASTUtils.rendererSlotSignatureOf(shape.slot.ref!))
+      return gen`return React.createElement(TR.RenderSlots.Frame<${argumentType}>, {
+        renderer: ${compileForwardedSlotSelection(body)},
+        args: {
+          ${
+        gen.list(comparison.correspondence, pair =>
+          gen`${gen.jsLiteral(pair.supplied.labelName)}: ${
+            compileValueForType(
+              gen`_Scope[${gen.jsLiteral(pair.required.labelName)}]`,
+              pair.required.type,
+              pair.supplied.type,
+            )
+          },`)
+      }
+        },
+        taoProps,
+      })`
+    },
+    block: shape => Compile.RenderBlockBody(shape.block, options),
+  })
 }
 
 export function compileForwardedSlotSelection(fill: AST.RenderSlotUse): Compiled {

@@ -9,7 +9,7 @@ description: >-
 
 # Delegation
 
-Optimize wall-clock time to finish the whole task. A subagent pays a startup cost and needs a self-contained brief; delegate when it saves more than it costs. This skill owns delegation, tier selection, briefs, and return checks. `references/parallel-implementation.md` owns concurrent writers; `references/review-fanout.md` owns dividing a large review.
+Delegate when it saves more time than startup and briefing cost. This skill owns delegation, tiers, briefs, and return checks. `references/parallel-implementation.md` owns concurrent writers; `references/review-fanout.md` owns dividing a large review.
 
 ## Delegate when
 
@@ -75,7 +75,7 @@ Apply the GPT policy first, then the table; say the chosen tier in one line with
 
 The agent sees the brief and nothing else. Every brief carries: **goal** and why it matters; **what is already known** — paths, findings, things ruled out; **decisions already made**, so it does not silently re-decide them; **boundaries** — paths it owns, must not touch, and whether it may write; **return format** and length; and a **stop condition** — what "done" is and what to do when the answer is not there.
 
-Resume an agent when its earlier context helps the next question; start fresh when its history is large and unrelated. Review each parallel implementation wave's diff before the next wave or integration, and keep whole-diff review before landing.
+Resume when earlier context helps; start fresh for unrelated work. Review each implementation wave's diff before integration, and the whole diff before landing.
 
 For an agent you launch into this worktree, the `subagentStart` hook gives every Claude Code and Codex subagent the repository's standing rules (worktree root, `rg`, no Git index changes, no ledger edits, no agent identity), so a brief does not repeat them; a Cursor brief still does.
 

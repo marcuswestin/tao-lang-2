@@ -39,7 +39,9 @@ export function compileWritableTarget(
   members: readonly string[],
   receiverName?: string,
 ): Compiled {
-  const name = { name: receiverName ?? (AST.isRenderSlotInputBinding(target) ? target.name : Type.declarationName(target)) }
+  const name = {
+    name: receiverName ?? (AST.isRenderSlotInputBinding(target) ? target.name : Type.declarationName(target)),
+  }
   let value = gen`${gen.scopeName(name)}`
   for (const member of members) {
     value = gen`(TR.Member(${value}, ${gen.jsLiteral([member])}) as TR.Writable<any>)`
