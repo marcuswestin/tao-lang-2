@@ -263,14 +263,14 @@ class CapabilityTransportPlanner {
     }
     if (
       actual.kind === 'primitive' && !actual.nominal && !actual.genericParameter
-      && Type.aggregateCapabilityRequirements(expected).some(method =>
+      && Type.aggregateCapabilityCallableRequirements(expected).some(method =>
         !['+', '-', '*', '/', '==', '!=', '<', '<=', '>', '>='].includes(method.name)
       )
     ) {
       return unsupported('incompatible-types')
     }
     const receiver = expected.genericReceiver ?? actual
-    const requirements = Type.aggregateCapabilityRequirements(expected)
+    const requirements = Type.aggregateCapabilityCallableRequirements(expected)
     const requiredDescriptors = requirements.map(requirement => {
       const descriptor = associatedCallableDescriptor(requirement)
       return descriptor ? Type.specializeAssociatedDescriptor(descriptor, receiver) : undefined
@@ -285,7 +285,7 @@ class CapabilityTransportPlanner {
     if (
       (actual.kind === 'capability' || actual.genericParameter)
       && Type.identityKey(actual) === Type.identityKey(expected.genericReceiver ?? expected)
-      && requirements.every(requirement => Type.aggregateCapabilityRequirements(actual).includes(requirement))
+      && requirements.every(requirement => Type.aggregateCapabilityCallableRequirements(actual).includes(requirement))
     ) {
       return ready(identity)
     }
@@ -307,7 +307,7 @@ class CapabilityTransportPlanner {
       }
       if (actual.kind !== 'capability' && !actual.genericParameter) {
         const analysis = associatedCallableAdmissionAnalysis(declaration)
-        if (!analysis || analysis.effects.purity.open) {
+        if (!analysis || (!AST.isActionDeclaration(declaration) && analysis.effects.purity.open)) {
           return unknown('missing-proof')
         }
       }

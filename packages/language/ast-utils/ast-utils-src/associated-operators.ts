@@ -217,9 +217,10 @@ export function resolveAssociatedOperatorContract(
     !contextualStaticCandidates.has(candidate)
     || !matching.some(other => {
       const declaration = other.descriptor.declaration
-      const contract = AST.isAssociatedViewDeclaration(declaration)
-        ? undefined
-        : contractsByDeclaration.get(declaration)
+      const contract =
+        AST.isAssociatedFunctionDeclaration(declaration) || AST.isCapabilityMethodDeclaration(declaration)
+          ? contractsByDeclaration.get(declaration)
+          : undefined
       return other.dispatch === candidate.dispatch
         && contract?.ownerAncestors?.includes(candidate.descriptor.owner)
         && candidate.operandDomains.every((domain, index) =>

@@ -43,6 +43,7 @@ import {
   bridgeBindingName,
   bridgeExportName,
   foreignActionBindingName,
+  foreignActionExportName,
   foreignViewBindingName,
   type InlineInjection,
   withInlineInjectionBindings,
@@ -656,7 +657,7 @@ function planOutputPaths(
       ...nodes.filter(AST.isActionDeclaration).filter(action => action.foreign !== undefined).map(action => {
         const foreign = action.foreign
         Assert.defined(foreign, 'planned foreign action has a sidecar implementation')
-        return planSidecar(action, foreign.path, action.name, foreignActionBindingName(action))
+        return planSidecar(action, foreign.path, foreignActionExportName(action), foreignActionBindingName(action))
       }),
       ...(options.localDataProvider?.ownerPath === file.path
         ? [planSidecar(

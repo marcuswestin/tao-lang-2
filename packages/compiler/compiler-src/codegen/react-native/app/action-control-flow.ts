@@ -62,7 +62,7 @@ export function actionInvocationRequiresAsync(
   seen: ReadonlySet<AST.ActionDeclaration> = new Set(),
 ): boolean {
   const action = ASTUtils.resolveActionInvocation(invocation).action
-  if (!action) {
+  if (!action || AST.isCapabilityActionDeclaration(action)) {
     return true
   }
   // A command runs the one action its `do` clause names, so it needs whatever that action needs.
@@ -141,6 +141,9 @@ function actionInvocationInterruptsAsk(
   seen: ReadonlySet<AST.ActionDeclaration>,
 ): boolean {
   const action = ASTUtils.resolveActionInvocation(invocation).action
+  if (AST.isCapabilityActionDeclaration(action)) {
+    return false
+  }
   const target = AST.isCommandDeclaration(action) ? commandActionTarget(action) : action
   if (!target) {
     return false

@@ -11,8 +11,10 @@ import {
   associatedMethodCallTarget,
   type AssociatedMethodReceiver,
   associatedMethodTypeRoot,
+  capabilityCallableRequirements,
   capabilityRequirements,
   hasAssociatedEffects,
+  ownAssociatedActions,
   ownAssociatedMethods,
   ownAssociatedViews,
 } from './associated-methods'
@@ -59,8 +61,12 @@ export type CanonicalDefaultEligibility = Readonly<{
 export type CanonicalCallPublication =
   & PublicationStatus
   & Readonly<{
-    site: AST.FunctionCallExpression | AST.MethodCallExpression | AST.ConversionExpression
-      | AST.BinaryExpression | AST.UnaryExpression
+    site:
+      | AST.FunctionCallExpression
+      | AST.MethodCallExpression
+      | AST.ConversionExpression
+      | AST.BinaryExpression
+      | AST.UnaryExpression
     operation: 'function'
     target?: SourceCallable
     descriptor?: CanonicalCallableDescriptor
@@ -172,7 +178,7 @@ export type CanonicalEffectIndependentSnapshot = Readonly<{
 
 /** Evidence is independently owned; absence leaves requirements and native contracts open. */
 export type CanonicalEffectEvidence = Readonly<{
-  requirements?: ReadonlyMap<AST.CapabilityMethodDeclaration, EffectContract>
+  requirements?: ReadonlyMap<AST.CapabilityMethodDeclaration | AST.CapabilityActionDeclaration, EffectContract>
   natives?: readonly NativeEffectPublication[]
 }>
 
@@ -198,8 +204,17 @@ export function publishCanonicalEffectSnapshot(
       continue
     }
     const declarations = AST.isTypeDeclaration(node)
-      ? [...ownAssociatedMethods(node), ...ownAssociatedViews(node), ...capabilityRequirements(node)]
-      : [...ownAssociatedMethods(node), ...ownAssociatedViews(node)]
+      ? [
+        ...ownAssociatedMethods(node),
+        ...ownAssociatedViews(node),
+        ...ownAssociatedActions(node),
+        ...capabilityCallableRequirements(node),
+      ]
+      : [
+        ...ownAssociatedMethods(node),
+        ...ownAssociatedViews(node),
+        ...AST.isEntityDataDeclaration(node) ? ownAssociatedActions(node) : [],
+      ]
     for (const declaration of declarations) {
       associated.set(declaration, sealAssociated(Type.associatedCallable(declaration, node)))
       associatedOwners.set(declaration, node)
@@ -211,13 +226,19 @@ export function publishCanonicalEffectSnapshot(
   for (const node of nodes) {
     if (
       AST.isAssociatedFunctionDeclaration(node) || AST.isCapabilityMethodDeclaration(node)
-      || AST.isAssociatedViewDeclaration(node)
+      || AST.isAssociatedViewDeclaration(node) || AST.isCapabilityActionDeclaration(node)
+      || (AST.isActionDeclaration(node) && associated.has(node))
     ) {
       const contract = associated.get(node)
       const ready = contract?.kind === 'ready' ? contract.descriptor : undefined
       const owner = associatedOwners.get(node)
-      const requirement = AST.isCapabilityMethodDeclaration(node)
-      const effects = requirement ? evidence.requirements?.get(node) : undefined
+      const requirement = AST.isCapabilityMethodDeclaration(node) || AST.isCapabilityActionDeclaration(node)
+      const foreignAction = AST.isActionDeclaration(node) && !!node.foreign
+      const effects = requirement
+        ? evidence.requirements?.get(node)
+        : foreignAction
+        ? evidence.natives?.find(native => native.declaration === node && native.phase === 'invocation')
+        : undefined
       descriptors.set(
         node,
         Object.freeze({
@@ -226,9 +247,10 @@ export function publishCanonicalEffectSnapshot(
           ...(ready ? { signature: ready.signature, result: ready.result } : {}),
           parameters: Object.freeze([...AST.parametersOf(node)]),
           ...(AST.isAssociatedFunctionDeclaration(node) || AST.isAssociatedViewDeclaration(node)
+              || AST.isActionDeclaration(node)
             ? { body: node.block }
             : {}),
-          kind: requirement ? 'requirement' : 'source',
+          kind: requirement ? 'requirement' : foreignAction ? 'opaque' : 'source',
           pending: Object.freeze(contract?.kind === 'pending' ? [...contract.dependencies] : ready ? [] : [node]),
           convention: AST.isAssociatedViewDeclaration(node) ? 'mounted' : 'wrapped',
           ...(effects ? { contract: sealEffectContract(effects) } : {}),

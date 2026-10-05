@@ -29,7 +29,7 @@ export function needsAuthContext(node: AST.Node, seen = new Set<AST.Node>()): bo
     }
     if (AST.isMemberAccessExpression(child) || AST.isPostfixMemberAccess(child)) {
       const selected = ASTUtils.resolveAssociatedActionTarget(child)
-      if (selected && needsAuthContext(selected.action, seen)) {
+      if (selected?.kind === 'named' && needsAuthContext(selected.action, seen)) {
         return true
       }
     }

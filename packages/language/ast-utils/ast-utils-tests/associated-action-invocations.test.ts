@@ -1,5 +1,6 @@
 import { ASTUtils } from '@ast-utils'
 import { AST, Parser } from '@parser'
+import { Assert } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { invocationFailureContract } from '../ast-utils-src/effect-outcomes'
 import {
@@ -10,6 +11,60 @@ import {
 import { Type } from '../ast-utils-src/Type'
 
 Describe('Associated data action invocations', () => {
+  Test('transports only action contracts and preserves failure, writable and Self domains', async () => {
+    const file = await parse(`
+      can Readable { action Read() -> text }
+      can PureReadable { Read() -> text }
+      can Closed { action Read() fails never -> text }
+      can OrdinaryInput { action Read(Value text) -> text }
+      can Reusable { action Read(Value type) -> type }
+      type Handle is { Path text } with { action Read() returns text from ./Native.ts }
+      type Pure is { Path text } with { func Read() -> text { return "ok" } }
+      type Clean is { Path text } with { action Read() -> text { return "ok" } }
+      type MutableInput is { Path text } with { action Read(mutable Value text) returns text from ./Native.ts }
+      type ReusableHandle is { Path text } with { action Read(Value type) returns type from ./Native.ts }
+      view ReadView where type T is Reusable (Value T) {
+        action Run() { let Again = do Value.Read(Value) return Again }
+        render inject \`\`\`ts return null \`\`\`
+      }
+    `)
+    const types = new Map(file.statements.filter(AST.isTypeDeclaration).map(type => [type.name, type]))
+    const domain = (name: string) => Type.ofDefinition(types.get(name)!)
+    const effects = ASTUtils.createAssociatedEffects([file])
+    ASTUtils.withAssociatedEffects(effects, () => {
+      Expect(ASTUtils.planCapabilityTransport(domain('Handle'), domain('Readable')).kind).toBe('ready')
+      Expect(ASTUtils.planCapabilityTransport(domain('Pure'), domain('Readable')).kind).toBe('unsupported')
+      Expect(ASTUtils.planCapabilityTransport(domain('Handle'), domain('PureReadable')).kind).toBe('unsupported')
+      Expect(ASTUtils.planCapabilityTransport(domain('Handle'), domain('Closed')).kind).toBe('unsupported')
+      Expect(ASTUtils.planCapabilityTransport(domain('Clean'), domain('Closed')).kind).toBe('ready')
+      Expect(ASTUtils.planCapabilityTransport(domain('MutableInput'), domain('OrdinaryInput')).kind).toBe('unsupported')
+      const reusable = ASTUtils.planCapabilityTransport(domain('ReusableHandle'), domain('Reusable'))
+      Expect(reusable.kind).toBe('ready')
+      if (reusable.kind === 'ready' && reusable.plan.kind === 'attach') {
+        const witness = reusable.plan.methods[0]!
+        Expect(Type.identityKey(witness.required.result)).toBe(Type.identityKey(domain('ReusableHandle')))
+        Expect(Type.identityKey(witness.required.signature.inputs[0]!.type)).toBe(
+          Type.identityKey(domain('ReusableHandle')),
+        )
+      }
+      const view = file.statements.find(AST.isViewDeclaration)
+      Expect.Is(view, AST.isViewDeclaration)
+      Assert.defined(view.block, 'the generic view has an authored block')
+      const run = view.block.statements.find(AST.isActionDeclaration)
+      Expect.Is(run, AST.isActionDeclaration)
+      const invocation = invocations(run)[0]!
+      const target = resolveAssociatedActionTarget(invocation.action)
+      Expect(target?.kind).toBe('capability')
+      if (target?.kind === 'capability') {
+        Expect(target.result.genericParameter).toBe(view.genericParameters[0])
+        Expect(target.signature.inputs[0]!.type.genericParameter).toBe(view.genericParameters[0])
+      }
+      const alias = run.block?.statements.find(AST.isActionResultStatement)
+      Expect.Is(alias, AST.isActionResultStatement)
+      Expect(Type.ofValueDeclaration(alias).genericParameter).toBe(view.genericParameters[0])
+      Expect(resolveActionInvocation(invocation).diagnostics).toEqual([])
+    })
+  })
   Test('selects same-named row and collection declarations and binds only their authored parameters', async () => {
     const file = await parse(`
       data Books / Book {
@@ -38,7 +93,7 @@ Describe('Associated data action invocations', () => {
     ) {
       const target = resolveActionTarget(call.action)
       Expect(target.kind).toBe('named')
-      const selected = ASTUtils.resolveAssociatedActionTarget(call.action)
+      const selected = nominalTarget(ASTUtils.resolveAssociatedActionTarget(call.action))
       Expect(selected?.action).toBe(declaration)
       Expect(selected?.associated.cardinality).toBe(cardinality)
       const resolved = resolveActionInvocation(call)
@@ -58,6 +113,65 @@ Describe('Associated data action invocations', () => {
       )
       Expect(resolved.diagnostics).toEqual([])
     }
+  })
+
+  Test('selects nominal instance and static actions with distinct dispatch metadata', async () => {
+    const file = await parse(`
+      type File is item with {
+        action Read(Length number) { },
+        static action Construct(Path text) { }
+      }
+      action Caller(Handle File, Path text) {
+        do Handle.Read(3)
+        do File.Construct(Path)
+      }
+    `)
+    const owner = file.statements.find(statement => AST.isTypeDeclaration(statement) && statement.name === 'File')
+    Expect.Is(owner, AST.isTypeDeclaration)
+    const actions = ASTUtils.ownAssociatedActions(owner)
+    const [read, construct] = actions
+    Expect.Is(read, AST.isActionDeclaration)
+    Expect.Is(construct, AST.isActionDeclaration)
+    const calls = invocations(action(file, 'Caller'))
+    const selected = calls.map(call => nominalTarget(ASTUtils.resolveAssociatedActionTarget(call.action)))
+    Expect(selected.map(value => value?.action.name)).toEqual([read.name, construct.name])
+    Expect(selected.map(value => value?.associated.owner.name)).toEqual([owner.name, owner.name])
+    Expect(selected.map(value => value?.associated.dispatch)).toEqual(['instance', 'static'])
+    Expect(selected.map(value => value?.associated.cardinality)).toEqual(['one', 'one'])
+  })
+
+  Test('resolves capability actions separately while preserving their failure and result contracts', async () => {
+    const file = await parse(`
+      can Readable { action Read(Length number) fails ReadError -> text }
+      view ReadView where type T is Readable (Value T) {
+        action Run() { do Value.Read(3) }
+        render inject \`\`\`ts return null \`\`\`
+      }
+    `)
+    const view = file.statements.find(AST.isViewDeclaration)
+    Expect.Is(view, AST.isViewDeclaration)
+    Assert.defined(view.block, 'the generic view has an authored block')
+    const run = view.block.statements.find(AST.isActionDeclaration)
+    Expect.Is(run, AST.isActionDeclaration)
+    const call = run.block?.statements.find(AST.isDoStatement)
+    Expect.Is(call, AST.isDoStatement)
+
+    const target = resolveAssociatedActionTarget(call.action)
+    Expect(target?.kind).toBe('capability')
+    if (target?.kind !== 'capability') {
+      return
+    }
+    Expect(target.requirement.name).toBe('Read')
+    Expect(target.associated.owner.name).toBe('Readable')
+    Expect(target.associated.dispatch).toBe('instance')
+    Expect(target.associated.domain.genericParameter?.name).toBe('T')
+    Expect(target.signature.failures).toEqual({ cases: ['ReadError'], open: false })
+    Expect(target.result).toEqual({ kind: 'primitive', primitive: 'text' })
+
+    const invocation = resolveActionInvocation(call)
+    Expect(invocation.capability?.requirement).toBe(target.requirement)
+    Expect(invocation.pairs.map(pair => Type.parameterName(pair.parameter))).toEqual(['Length'])
+    Expect(invocation.diagnostics).toEqual([])
   })
 
   Test('retains nested real member paths through repeated action aliases', async () => {
@@ -82,7 +196,7 @@ Describe('Associated data action invocations', () => {
     const receiver = resolved.associated?.receiver
     Expect(receiver?.kind === 'member-path' && receiver.site).toBe(selected.value)
     Expect(receiver?.kind === 'member-path' && receiver.members).toEqual(['Book'])
-    const selectedTarget = resolveAssociatedActionTarget(selected.value)
+    const selectedTarget = nominalTarget(resolveAssociatedActionTarget(selected.value))
     Expect(selectedTarget?.action).toBe(resolved.action)
     Expect(selectedTarget?.associated.receiver.kind === 'member-path' && selectedTarget.associated.receiver.site).toBe(
       selected.value,
@@ -114,11 +228,11 @@ Describe('Associated data action invocations', () => {
     Expect(receiver?.kind === 'expression' && receiver.expression).toBe(selected.value.receiver)
     const context = Type.correspondenceResolver(new Map())
     let inspected = 0
-    const selectedTarget = resolveAssociatedActionTarget(selected.value, receiver => {
+    const selectedTarget = nominalTarget(resolveAssociatedActionTarget(selected.value, receiver => {
       inspected++
       Expect(receiver.kind === 'expression' && receiver.expression).toBe(receiverExpression)
       return context.receiverType(receiver)
-    })
+    }))
     Expect(inspected).toBe(1)
     Expect(selectedTarget?.action).toBe(resolved.action)
     Expect(resolved.diagnostics).toEqual([])
@@ -171,13 +285,13 @@ Describe('Associated data action invocations', () => {
       const calls = invocations(action(file, 'Caller'))
       const context = Type.correspondenceResolver(new Map())
       let inspected = 0
-      const selected = resolveAssociatedActionTarget(calls[0]!.action, receiver => {
+      const selected = nominalTarget(resolveAssociatedActionTarget(calls[0]!.action, receiver => {
         inspected++
         Expect(receiver.kind).toBe('member-path')
         Expect(receiver.kind === 'member-path' && receiver.site).toBe(calls[0]!.action)
         Expect(receiver.kind === 'member-path' && receiver.members).toEqual(['Book'])
         return context.receiverType(receiver)
-      })
+      }))
       Expect(inspected).toBe(1)
       Expect(selected?.associated.domain.kind).toBe('entity')
       Expect(selected?.action.name).toBe('Return')
@@ -256,6 +370,11 @@ async function parse(code: string): Promise<AST.TaoFile> {
   Expect(parsed.entry.document.parseResult.parserErrors).toEqual([])
   Expect(parsed.diagnostics).toEqual([])
   return parsed.entry.ast
+}
+
+function nominalTarget(target: ReturnType<typeof resolveAssociatedActionTarget>) {
+  Assert(target?.kind === 'named' && target.associated, 'the selected nominal action retains its receiver')
+  return { ...target, associated: target.associated }
 }
 
 function action(file: AST.TaoFile, name: string): AST.ActionDeclaration {

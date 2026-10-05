@@ -49,6 +49,7 @@ const actionValidationMessages = {
     `Source action '${name}' can complete without returning a value.`,
   duplicateResult: (name: string) => `Action result '${name}' is declared more than once in this action block.`,
   runsLatestNative: '`runs latest` is allowed only on a foreign action.',
+  staticActionOwner: "'static action' must belong to a named type body.",
 }
 
 /** ActionsValidator groups action validation and diagnostics. */
@@ -56,6 +57,9 @@ export const ActionsValidator = {
   checks: {
     [AST.ActionDeclaration.$type]: (action, ctx) => {
       validateParameters(action, ctx)
+      if (action.static && !AST.isTypeDeclaration(AST.associatedNominalActionOwner(action))) {
+        ctx.error(action, actionValidationMessages.staticActionOwner)
+      }
       const usesReturnsKeyword = action.returnType !== undefined && AST.keywordRange(action, 'returns') !== undefined
       if (usesReturnsKeyword && !action.foreign) {
         ctx.error(action, actionValidationMessages.returnNative)

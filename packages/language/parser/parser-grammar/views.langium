@@ -133,7 +133,7 @@ ViewRender returns ViewRender:
 
 EventHandler:
     'on' event=EventName
-    (controls=NativeEventControls '->' (action=ValueReference | payload=CasePayload? block=ActionBlock)
+    (controls=NativeEventControls '->' (action=ValueReference | payload=CasePayload? block=(ActionBlock | AtomicActionBlock))
      | action=ValueReference | '->' payload=CasePayload? block=(ActionBlock | AtomicActionBlock));
 
 // Control names remain identifiers so misspellings receive positioned semantic diagnostics.

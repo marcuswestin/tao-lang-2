@@ -7,9 +7,15 @@ import { FunctionsValidator } from './functions-validator'
 import { ReactiveParametersValidator } from './ReactiveParametersValidator'
 
 export const associatedMethodsValidationChecks = {
-  [AST.TypeDeclaration.$type]: validateAssociatedOwner,
+  [AST.TypeDeclaration.$type]: (owner, ctx) => {
+    validateAssociatedOwner(owner, ctx)
+    validateAssociatedActions(owner, ctx)
+  },
   [AST.PrimitiveDeclaration.$type]: validateAssociatedOwner,
-  [AST.EntityDataDeclaration.$type]: validateAssociatedOwner,
+  [AST.EntityDataDeclaration.$type]: (owner, ctx) => {
+    validateAssociatedOwner(owner, ctx)
+    validateAssociatedActions(owner, ctx)
+  },
   [AST.AssociatedFunctionDeclaration.$type]: (method, ctx) => {
     validateFailureBound(method, ctx)
     const owner = AST.associatedFunctionOwner(method)
@@ -211,6 +217,20 @@ function validateAssociatedOwner(
       }
       operatorContracts.push(contract.descriptor)
     }
+  }
+}
+
+function validateAssociatedActions(
+  owner: AST.TypeDeclaration | AST.EntityDataDeclaration,
+  ctx: ValidationContext,
+): void {
+  const declared = new Set<string>()
+  for (const action of ASTUtils.ownAssociatedActions(owner)) {
+    const key = `${action.static}:${action.receiverName ?? ''}:${action.name}`
+    if (declared.has(key)) {
+      ctx.error(action, messages.duplicateActionImplementation(owner.name, action.name))
+    }
+    declared.add(key)
   }
 }
 

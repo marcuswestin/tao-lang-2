@@ -25,7 +25,7 @@ Describe('compiler: slot witness imports', () => {
       `,
     }, async (paths, root) => {
       const validation = await Workspace.validate(paths['Main.tao'])
-      const compiled = Compiler.compileValidated(
+      const compiled = await Compiler.compileValidated(
         validation,
         Compiler.createContext(await Packages.createContext(root), root),
       )

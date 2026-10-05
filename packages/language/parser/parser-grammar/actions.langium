@@ -13,7 +13,7 @@ StateDeclaration:
     'state' name=ID (('is' type=TypeReference)? '=' value=Expression | value=BooleanLiteral) ('(' persist?='persist' ')')?;
 
 ActionDeclaration:
-    visibility=DeclarationVisibility? 'action' (receiverName=ID '.')? name=ID parameterList=ParameterList
+    visibility=DeclarationVisibility? static?='static'? 'action' (receiverName=ID '.')? name=ID parameterList=ParameterList
     ('returns' returnType=TypeExpression optionalResult?='?'? | '->' returnType=TypeExpression)? (runsLatest?='runs' 'latest')? (block=ActionBlock | foreign=ForeignActionImplementation);
 
 // A foreign action publishes the failures its TypeScript implementation may deliberately raise.

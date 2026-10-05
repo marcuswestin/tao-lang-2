@@ -23,8 +23,10 @@ export function emitSlotBody(
   const occurrence = AST.isRenderSlotUse(input.body) ? input.body : undefined
   const signature = ASTUtils.rendererSlotSignatureOf(input.contract, occurrence)
   const argumentType = slotArgumentType(signature)
+  // The hoisted environment transports the declaring view's lexical members and props.
+  // Its scope remains dynamically shaped, including captured component names used in JSX.
   const environmentType = gen`Readonly<{
-    _Scope: TR.Scope
+    _Scope: any
     _ViewProps: any
     _TaoActionOwner: any
     _TaoAuthScope: TR.AuthScope | undefined
@@ -34,7 +36,9 @@ export function emitSlotBody(
     const bodyOptions = input.options
     const viewBody = compileSlotBody(input.body, input.contract, bodyOptions)
     return gen`
-      function ${name}({ args, environment, taoProps }: TR.SlotBodyProps<${argumentType}, ${environmentType}>) {
+      function ${name}({ ${
+      signature.inputs.length > 0 ? gen`args, ` : gen.noop()
+    }environment, taoProps }: TR.SlotBodyProps<${argumentType}, ${environmentType}>) {
         const {
           _Scope,
           _ViewProps: _SlotParentViewProps,

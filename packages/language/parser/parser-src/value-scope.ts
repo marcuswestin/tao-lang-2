@@ -393,6 +393,14 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
           : entityActionReceiver.owner.name,
       )
     }
+    const nominalActionOwner = action && AST.associatedNominalActionOwner(action)
+    if (
+      action && AST.isTypeDeclaration(nominalActionOwner)
+      && AST.associatedActionDispatch(action) === 'instance'
+      && isWithinAssociatedActionBody(reference, action)
+    ) {
+      scope = this.createScopeForNodes([nominalActionOwner], scope)
+    }
     const converter = AST.findOwningAssociatedConverter(reference)
     const converterSource = converter && AST.associatedConverterSourceOwner(converter)
     if (converterSource) {
@@ -1090,10 +1098,11 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
   }
 }
 
-/** Only an actual method receiver may fall back from lexical values to a type root. */
+/** Only an actual associated-call or action receiver may fall back to a type root. */
 function isAssociatedTypeRootReference(reference: AST.Node): boolean {
   if (AST.isMemberAccessExpression(reference)) {
-    return AST.isMethodCallExpression(reference.$container) && reference.$container.callee === reference
+    return (AST.isMethodCallExpression(reference.$container) && reference.$container.callee === reference)
+      || (AST.isDoStatement(reference.$container) && reference.$container.action === reference)
   }
   if (AST.isValueReference(reference) && AST.isPostfixMemberAccess(reference.$container)) {
     const callee = reference.$container

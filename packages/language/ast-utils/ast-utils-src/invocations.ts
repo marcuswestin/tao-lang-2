@@ -4,8 +4,12 @@ import {
   type ArgumentBindingMetadata,
   type RenderInvocationPair,
   resolveArgumentBindings,
+  resolveParameterArgumentBindings,
 } from './argument-bindings'
 import type { AssociatedMethodReceiver } from './associated-methods'
+import { capabilityActionRequirements } from './associated-methods'
+import { callableSignatureOf } from './callable-signatures'
+import { declaredCallableFailureContract } from './failure-contracts'
 import {
   type NativeEventControlDiagnostic,
   type NativeEventControls,
@@ -75,15 +79,17 @@ export type ResolvedActionInvocation = {
   invocation: AST.DoStatement
   action?: AST.ActionDeclaration | AST.CommandDeclaration
   associated?: AssociatedActionReceiver
+  capability?: ResolvedCapabilityActionTarget
   pairs: ActionInvocationPair[]
   diagnostics: ArgumentBindingDiagnostic[]
 }
 
 /** Associated action dispatch retains the authored receiver and its actual entity domain. */
-type AssociatedActionReceiver = Readonly<{
+export type AssociatedActionReceiver = Readonly<{
   receiver: AssociatedMethodReceiver
   domain: TaoType
-  owner: AST.EntityDataDeclaration
+  owner: AST.TypeDeclaration | AST.EntityDataDeclaration
+  dispatch: 'instance' | 'static'
   cardinality: 'one' | 'many'
 }>
 
@@ -106,8 +112,17 @@ export type ResolvedFunctionInvocation = {
 /** ResolvedActionTarget declares how an expression resolves as an action target. */
 export type ResolvedActionTarget =
   | { kind: 'named'; action: AST.ActionDeclaration | AST.CommandDeclaration; associated?: AssociatedActionReceiver }
+  | ResolvedCapabilityActionTarget
   | { kind: 'dynamic' }
   | { kind: 'unresolved' }
+
+export type ResolvedCapabilityActionTarget = Readonly<{
+  kind: 'capability'
+  requirement: AST.CapabilityActionDeclaration
+  associated: AssociatedActionReceiver
+  signature: ReturnType<typeof callableSignatureOf>
+  result: TaoType
+}>
 
 /**
  * resolveRenderInvocation resolves a render target and type-based argument bindings. Only a view
@@ -319,6 +334,23 @@ function parameterSupportsEvent(parameter: AST.ParameterDeclaration, event: AST.
 /** resolveActionInvocation resolves a named action call and type-based argument bindings. */
 export function resolveActionInvocation(invocation: AST.DoStatement): ResolvedActionInvocation {
   const target = resolveActionTarget(invocation.action)
+  if (target.kind === 'capability') {
+    const bindings = resolveParameterArgumentBindings(
+      AST.parametersOf(target.requirement),
+      AST.argumentsOf(invocation),
+      {
+        parameterType: parameter =>
+          target.signature.inputs.find(input => input.declaration === parameter)?.type ?? Type.ofParameter(parameter),
+      },
+    )
+    return {
+      invocation,
+      capability: target,
+      associated: target.associated,
+      pairs: bindings.pairs,
+      diagnostics: bindings.diagnostics,
+    }
+  }
   if (target.kind !== 'named') {
     return {
       invocation,
@@ -401,7 +433,7 @@ function resolveActionTargetWithSeenAliases(
 export function resolveAssociatedActionTarget(
   expression: AST.Expression,
   receiverType: (receiver: AssociatedMethodReceiver) => TaoType = associatedActionReceiverType,
-): { kind: 'named'; action: AST.ActionDeclaration; associated: AssociatedActionReceiver } | undefined {
+): Extract<ResolvedActionTarget, { kind: 'named' | 'capability' }> | undefined {
   let name: string
   let receiver: AssociatedMethodReceiver
   if (AST.isMemberAccessExpression(expression) && expression.shade === undefined && expression.members.length > 0) {
@@ -413,20 +445,88 @@ export function resolveAssociatedActionTarget(
   } else {
     return undefined
   }
-  const domain = receiverType(receiver)
-  const entity = domain.kind === 'entity' ? domain : domain.kind === 'list' ? domain.element : undefined
-  if (entity?.kind !== 'entity' || !AST.isEntityDataDeclaration(entity.entity)) {
-    return undefined
+  const staticOwner = associatedStaticActionOwner(receiver)
+  const domain = staticOwner ? Type.ofDefinition(staticOwner) : receiverType(receiver)
+  const entityDomain = domain.kind === 'entity' ? domain : domain.kind === 'list' ? domain.element : undefined
+  if (entityDomain?.kind === 'entity' && AST.isEntityDataDeclaration(entityDomain.entity)) {
+    const owner = entityDomain.entity
+    const cardinality = domain.kind === 'list' ? 'many' : 'one'
+    const action = associatedEntityAction(owner, name, cardinality)
+    return action
+      ? { kind: 'named', action, associated: { receiver, domain, owner, dispatch: 'instance', cardinality } }
+      : undefined
   }
-  const owner = entity.entity
-  const cardinality = domain.kind === 'list' ? 'many' : 'one'
-  const action = owner.block.entries.filter(AST.isActionDeclaration).find(declaration => {
+  const dispatch = staticOwner ? 'static' : 'instance'
+  const selected = Type.associatedActionDeclaration(domain, name, undefined, dispatch)
+  if (selected) {
+    return {
+      kind: 'named',
+      action: selected.declaration,
+      associated: { receiver, domain, owner: selected.owner, dispatch, cardinality: 'one' },
+    }
+  }
+  const required = capabilityActionRequirement(domain, name, dispatch)
+  const materialized = required ? Type.associatedCallable(required.requirement, required.owner) : undefined
+  const contract = materialized?.kind === 'ready'
+    ? Type.specializeAssociatedDescriptor(materialized.descriptor, domain)
+    : undefined
+  return required
+    ? {
+      kind: 'capability',
+      requirement: required.requirement,
+      associated: { receiver, domain, owner: required.owner, dispatch, cardinality: 'one' },
+      signature: contract?.signature ?? callableSignatureOf(
+        AST.parametersOf(required.requirement),
+        declaredCallableFailureContract(required.requirement),
+      ),
+      result: contract?.result ?? (required.requirement.returnType
+        ? Type.ofTypeExpression(required.requirement.returnType)
+        : Type.ofNone()),
+    }
+    : undefined
+}
+
+function capabilityActionRequirement(
+  receiver: TaoType,
+  name: string,
+  dispatch: 'instance' | 'static',
+): { requirement: AST.CapabilityActionDeclaration; owner: AST.TypeDeclaration } | undefined {
+  const bounds = receiver.genericParameter ? receiver.genericBounds ?? [] : [receiver]
+  for (const bound of bounds) {
+    if (bound.kind !== 'capability') {
+      continue
+    }
+    const owner = bound.declaration
+    const requirement = capabilityActionRequirements(owner).find(action =>
+      action.name === name && (!!action.static === (dispatch === 'static'))
+    )
+    if (requirement) {
+      return { requirement, owner }
+    }
+  }
+  return undefined
+}
+
+function associatedEntityAction(
+  owner: AST.EntityDataDeclaration,
+  name: string,
+  cardinality: 'one' | 'many',
+): AST.ActionDeclaration | undefined {
+  return owner.block.entries.filter(AST.isActionDeclaration).find(declaration => {
     const declared = AST.associatedEntityActionReceiver(declaration)
     return declaration.name === name && declared?.owner === owner && declared.cardinality === cardinality
   })
-  return action
-    ? { kind: 'named', action, associated: { receiver, domain, owner, cardinality } }
+}
+
+function associatedStaticActionOwner(receiver: AssociatedMethodReceiver): AST.TypeDeclaration | undefined {
+  const target = receiver.kind === 'member-path'
+    ? receiver.members.length === 0 ? receiver.site.target.ref : undefined
+    : AST.isValueReference(receiver.expression)
+    ? receiver.expression.target.ref
+    : AST.isMemberAccessExpression(receiver.expression)
+    ? receiver.expression.target.ref
     : undefined
+  return AST.isTypeDeclaration(target) ? target : undefined
 }
 
 function associatedActionReceiverType(receiver: AssociatedMethodReceiver): TaoType {

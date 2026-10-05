@@ -1,5 +1,8 @@
 import { AST } from '@parser'
-import type { AssociatedCallableDeclaration, AssociatedCallableDescriptor } from './associated-methods'
+import type {
+  AssociatedCallableDescriptor,
+  AssociatedCallableRequirement,
+} from './associated-methods'
 
 export type AssociatedOperatorWitnessDeclaration =
   | AST.AssociatedFunctionDeclaration
@@ -21,14 +24,17 @@ const operators = new Set(['+', '-', '*', '/', '==', '!=', '<', '<=', '>', '>=']
  * explicit allocation proof; this helper never infers contract equality or falls back to names.
  */
 export function associatedCallableWitnessKey(
-  callable: AssociatedCallableDeclaration | Pick<AssociatedCallableDescriptor, 'declaration'>,
+  callable: AssociatedCallableRequirement | Pick<AssociatedCallableDescriptor, 'declaration'>,
   context?: AssociatedCallableWitnessKeyContext,
 ): string | undefined {
   const declaration = 'declaration' in callable ? callable.declaration : callable
   if (!operators.has(declaration.name)) {
     return declaration.name
   }
-  if (AST.isAssociatedViewDeclaration(declaration)) {
+  if (
+    AST.isAssociatedViewDeclaration(declaration) || AST.isCapabilityActionDeclaration(declaration)
+    || AST.isActionDeclaration(declaration)
+  ) {
     return undefined
   }
   return context?.operatorKey(declaration)

@@ -5,6 +5,7 @@ import { hasNumericSelfContext } from '../../../numeric-self-context'
 import { type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 import { compileAssociatedConverterDeclaration } from './associated-converters'
+import { needsAuthContext } from './auth-context'
 import { compileArgumentForType } from './capability-projection'
 import { quantityFactoryBinding } from './NumericUnitsCompiler'
 import { compileRuntimeType } from './runtime-type-compiler'
@@ -33,7 +34,10 @@ export function withAssociatedWitnessBindings<T>(
 
 /** The app graph assigns private keys to actual contracts, never to operator spelling alone. */
 export function compileCallableWitnessKey(
-  callable: ASTUtils.AssociatedCallableDescriptor | ASTUtils.AssociatedOperatorWitnessDeclaration,
+  callable:
+    | ASTUtils.AssociatedCallableDescriptor
+    | ASTUtils.AssociatedOperatorWitnessDeclaration
+    | AST.CapabilityActionDeclaration,
 ): string {
   const key = ASTUtils.associatedCallableWitnessKey(callable, {
     operatorKey: declaration => operatorKeys.get(declaration),
@@ -145,18 +149,16 @@ export function hasAssociatedWitnessPublication(owner: AssociatedOwner): boolean
 
 /** Slots distinguish singular and collection actions that share the same authored name. */
 export function compileAssociatedActionWitness(action: AST.ActionDeclaration): Compiled {
-  const receiver = AST.associatedEntityActionReceiver(action)
-  Assert.defined(receiver, 'the selected associated action has its actual entity owner')
-  const index = associatedActions(receiver.owner).indexOf(action)
+  const owner = AST.associatedNominalActionOwner(action)
+  Assert.defined(owner, 'the selected associated action has its actual nominal owner')
+  const index = associatedActions(owner).indexOf(action)
   Assert(index >= 0, 'the selected associated action belongs to its actual publication owner')
-  return gen`${associatedWitnessBinding(receiver.owner)}["$actions"][${index}]`
+  return gen`${associatedWitnessBinding(owner)}["$actions"][${index}]`
 }
 
 function associatedActions(owner: AssociatedOwner): AST.ActionDeclaration[] {
-  return AST.isEntityDataDeclaration(owner)
-    ? owner.block.entries.filter(AST.isActionDeclaration).filter(action =>
-      AST.associatedEntityActionReceiver(action) !== undefined
-    )
+  return AST.isEntityDataDeclaration(owner) || AST.isTypeDeclaration(owner)
+    ? [...AST.ownAssociatedActions(owner)]
     : []
 }
 
@@ -202,6 +204,17 @@ function associatedViewComponent(owner: AssociatedOwner, index: number): Compile
 export function compileAssociatedWitness(
   descriptor: ASTUtils.AssociatedCallableDescriptor,
 ): Compiled {
+  if (AST.isActionDeclaration(descriptor.declaration)) {
+    const action = descriptor.declaration
+    return gen`TR.Function((_TaoCapabilityReceiver: TR.Evaluable) =>
+      ${compileAssociatedActionWitness(action)}(${
+      AST.associatedActionDispatch(action) === 'static'
+        ? gen`undefined`
+        : gen`TR.CaptureActionReceiver(_TaoCapabilityReceiver, ${
+          gen.jsLiteral(AST.associatedEntityActionReceiver(action)?.cardinality ?? 'one')
+        })`
+    }${needsAuthContext(action) ? gen`, {}, _TaoAuthScope` : gen.noop()}))`
+  }
   if (AST.isAssociatedFunctionDeclaration(descriptor.declaration) && isAssociatedOperator(descriptor.declaration)) {
     const index = ASTUtils.ownAssociatedMethods(descriptor.owner).filter(isAssociatedOperator).indexOf(
       descriptor.declaration,

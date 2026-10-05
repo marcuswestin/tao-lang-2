@@ -6,9 +6,9 @@ contracts. Requested 2026-10-04. The selected nondeferred language families are 
 passes. Focused tests cover language, compiler, runtime and adapter contracts.
 
 This is the language-review checkpoint, not completed app/platform acceptance. The active app now
-uses the standard-library LazyList and grouped row projection; its final combined journeys and
-native/platform acceptance remain to be proved. Further implementation is paused for the
-Developer's review. Landing this independently functioning language baseline does not close the
+uses the standard-library LazyList and grouped row projection; its final combined journeys pass,
+while remaining native/platform acceptance has separate proof boundaries. The Developer resumed implementation on 2026-10-05,
+including native binding adaptation and landing. Landing this functioning language baseline does not close the
 remaining acceptance work. `.tao.future` files remain undiscovered and are retained for reconciliation.
 
 ## Source and authority
@@ -57,7 +57,8 @@ remaining acceptance work. `.tao.future` files remain undiscovered and are retai
   authenticated builder methods and original live Book handles. A focused runtime check proves
   distinct equal-name authors, absent authors, header renaming and stable book keys after regrouping.
   A compiled-source check also proves the ordinary builders and strict generated TypeScript.
-  Full grouped app journeys remain pending. The retained GroupedRows.ts.future algorithm sketch
+  The final combined app journeys pass for grouping transitions, live revision acknowledgment and
+  singular/collection returns; header renaming and stable regrouped keys have focused runtime proof. The retained GroupedRows.ts.future algorithm sketch
   is not a separate implementation contract.
 - [library/BookIO.tao](library/BookIO.tao): active owned file/revision/query adapter contracts.
   BookIO.ts and BookStoreProvider.ts implement actual bounded acquisition, PDF creation, upload,
@@ -79,23 +80,24 @@ they do not authorize an implementer to silently settle remaining language judgm
 
 The implementation plan's language waves are complete. The remaining slice is combined app/native
 acceptance, future-source and documentation reconciliation, final verification and landing.
-The Developer requested a pause at this language checkpoint; do not resume the remaining feature
-or acceptance work merely because the baseline becomes available on main.
+The Developer resumed the remaining implementation and acceptance work, including native binding
+adaptation, verification and landing.
 
 ## Graduation
 
 The active modules compile and pass source checks. The app demonstrates quotation, grouping and
 feedback state, bare values, contextual named lists, role matching, structural capabilities,
 generic/Self checking, explicit conversions and operators, signed quantities, parameterized slots,
-bounded acquisition, inverse writes, failure ownership and joined cleanup. Runtime journeys passed
-before final lazy/grouped activation; do not attribute that older verdict to the newly combined app.
+bounded acquisition, inverse writes, failure ownership and joined cleanup. All four active runtime journeys passed on 2026-10-05 after final lazy/grouped activation,
+covering 40/80/83 acquired counts, grouping transitions, revision acknowledgment and live writes.
 Mounted feature proof verifies that empty bare text values emit no node;
 a quoted empty string and explicit Text("") still retain their Text nodes.
 
 ### Remaining acceptance
 
-1. Run the actual Library journeys with Shelf and GroupedShelf active. Prove 40/80/83 acquired
-   counts, virtualized rows, grouping changes, author updates, stable keys, seen revisions and writes.
+1. The actual Library journeys with Shelf and GroupedShelf active pass for 40/80/83 acquired
+   counts, grouping changes, seen revisions and writes. Retain the focused virtualization and
+   author/key proofs; finish reconciliation of the retained empty-collection fixture.
 2. Prove the applicable native timing/export/cancellation/cleanup boundaries. iOS build evidence
    exists; installed-device, suspend/resume and Android acceptance are not claimed.
 3. Reconcile retained future Main/test/algorithm fixtures, documentation and coverage records.
@@ -103,7 +105,7 @@ a quoted empty string and explicit Text("") still retain their Text nodes.
 4. Run the final integrated verification and authorized landing. Record the actual verdict and
    limitations rather than treating source validation as complete app acceptance.
 
-These items continue in the implementation task after the Developer resumes the project. General
+These items continue in the authorized implementation task. General
 query-state redesign, localized text, broad static proofs, general never/conversion bans and the
 remaining time/date APIs retain their separate deferred roadmap entries.
 
@@ -139,7 +141,7 @@ These are deliberately narrow integration requirements, not the final A29 query-
   RenderKey and returns upward through the declared contract. The compiler checks ordinary signatures,
   not these names. Library runtime enforces uniqueness without index repair. Other list components
   choose their own identity contracts; loops are unaffected. The implementation is active; combined
-  app acceptance remains pending.
+  the combined grouping, revision and live-write app journeys pass.
 - GroupedRows rebuilds a projection when grouping dependencies change. Content retains Book handles;
   mounted row rendering subscribes to their fields. It never stores JSX, mounted nodes or a frozen
   Book snapshot. Keys preserve occurrence state across reorder; removal unmounts. A moved book keeps

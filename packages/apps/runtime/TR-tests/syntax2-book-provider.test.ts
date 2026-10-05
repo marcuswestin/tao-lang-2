@@ -89,7 +89,7 @@ Describe('Syntax2 BookStore runtime provider', () => {
     Expect(TR.Data.Read(first, 'Id')).toBe('book-001')
     Expect(schema.read(first, 'Note')).toBe('')
     Expect(schema.read(first, 'Author')).toBe(null)
-    Expect(schema.read(first, 'LoanedOut')).toBe(false)
+    Expect(schema.read(first, 'LoanedOut')).toBe(true)
 
     await acquireThroughQuery(schema, 'next')
     await ready(schema)

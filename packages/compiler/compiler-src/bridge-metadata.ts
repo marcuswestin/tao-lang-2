@@ -696,7 +696,7 @@ function contractsOf(
     if (authLibraryExport(action)) {
       contracts.push({
         arity: '1',
-        exportName: action.name,
+        exportName: foreignActionBridgeExportName(action),
         path: action.foreign.path,
         sourceRange: action.$cstNode?.range,
         result: 'TR.Action<[]>',
@@ -705,15 +705,24 @@ function contractsOf(
       continue
     }
     // The compiler fills Tao defaults before invoking the handwritten implementation.
-    const parameters = namesOnly
-      ? []
-      : AST.parametersOf(action).map((parameter, index) =>
-        `arg${index}: ${foreignActionParameterType(Type.ofParameter(parameter), options)}`
-      )
+    const owner = AST.associatedNominalActionOwner(action)
+    const receiver = owner && AST.associatedActionDispatch(action) === 'instance'
+    const ownerType = owner && Type.ofAssociatedOwner(owner)
+    const receiverType = ownerType && AST.associatedEntityActionReceiver(action)?.cardinality === 'many'
+      ? { kind: 'list' as const, element: ownerType }
+      : ownerType
+    const parameters = [
+      ...(receiver && receiverType ? [namesOnly ? '' : `receiver: ${typescriptType(receiverType, options)}`] : []),
+      ...(namesOnly
+        ? AST.parametersOf(action).map(() => '')
+        : AST.parametersOf(action).map((parameter, index) =>
+          `arg${index}: ${foreignActionParameterType(Type.ofParameter(parameter), options)}`
+        )),
+    ]
     const result = namesOnly ? '' : action.returnType ? typescriptType(Type.ofActionResult(action), options) : 'void'
     contracts.push({
       arity: String(parameters.length),
-      exportName: action.name,
+      exportName: foreignActionBridgeExportName(action),
       path: action.foreign.path,
       sourceRange: action.$cstNode?.range,
       result: `${result} | Promise<${result}>`,
@@ -769,6 +778,12 @@ function contractsOf(
     })
   }
   return contracts
+}
+
+/** Nominal action implementations publish under the stable owner-qualified sidecar alias. */
+function foreignActionBridgeExportName(action: AST.ActionDeclaration): string {
+  const owner = AST.associatedNominalActionOwner(action)
+  return owner ? `${owner.name}_${action.name}` : action.name
 }
 
 function directConfigurationImplementation(
@@ -886,9 +901,9 @@ function typescriptType(
       }
       seen.add(type.entity)
       const fields = Type.dataFields(type.entity).map(field =>
-        `${JSON.stringify(field.name)}${field.optional ? '?' : ''}: ${typescriptType(Type.dataFieldType(field), options, seen)}${
-          field.optional ? ' | null' : ''
-        }`
+        `${JSON.stringify(field.name)}${field.optional ? '?' : ''}: ${
+          typescriptType(Type.dataFieldType(field), options, seen)
+        }${field.optional ? ' | null' : ''}`
       )
       seen.delete(type.entity)
       return `{ ${fields.join('; ')} }`

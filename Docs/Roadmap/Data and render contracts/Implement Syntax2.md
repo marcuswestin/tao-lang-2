@@ -16,9 +16,9 @@ passed at that tree; lint, typecheck and runtime packaging reused exact-tree gre
 
 The accepted nondeferred language families are implemented on the integration branch. This is an
 independently functioning baseline for other branches to consume, not completion of the full
-forcing-app/platform acceptance program. Further implementation is paused for the Developer's
-language-design review; the Developer separately authorized documentation reconciliation and
-landing this baseline subject to its verification gates.
+forcing-app/platform acceptance program. On 2026-10-05 the Developer resumed implementation,
+authorized adapting the incoming Photos/Files bindings to these contracts, and authorized landing
+the combined baseline before completing the remaining acceptance work.
 
 Implemented:
 
@@ -41,18 +41,19 @@ Latest pre-landing evidence: Syntax2 source validation (9 files, no errors/nonca
 WordFlower source validation (13 files, no errors/noncanonical issues; four existing style warnings),
 combined package typechecking, the declaration-slot boundary suite (12 tests) and formatter suite
 (52 tests). Focused compiled-source grouped-row and renderer-slot composition checks pass.
-Four actual Library journeys passed before the final lazy/grouped activation. That earlier app
-verdict is not evidence for the newly combined app. Final integrated landing gates own the baseline's
+Four actual Library journeys passed again on 2026-10-05 after final lazy/grouped activation,
+using the supported checkout-local TAO_HOME for test cache ownership. Final integrated landing gates own the baseline's
 merge verdict; preserve separate host/device limits below even when those gates pass.
 
 ## Handing over the rest
 
-The follow-up slice is `feat/syntax2-acceptance`, to start from the landed baseline when the Developer
-resumes. A baseline landing does not resume implementation or authorize a new semantic decision.
+The follow-up slice is `feat/syntax2-acceptance`, to start from the landed combined baseline. The
+Developer authorized continuing through completion; deferred semantic investigations remain outside
+that authorization's implementation scope.
 
 1. **Combined lazy/grouped Library journeys.** Run `./agent tao test Apps/Syntax2` against active
-   Shelf/GroupedShelf. The final source composes and typechecks; app journeys have not been replayed
-   since lazy/grouped activation. The tests now distinguish 40/80/83 acquired counts from mounted
+   Shelf/GroupedShelf. The final source composes and typechecks; all four app journeys passed
+   after lazy/grouped activation on 2026-10-05. The tests now distinguish 40/80/83 acquired counts from mounted
    viewport rows. Verify stable keys, regrouping/author changes, live row updates, seen revisions,
    writes, continuation/refresh failures and cancellation. Do not restore eager all-row assumptions.
 2. **Native acceptance.** Compiled Export tests prove PDF bytes, checked Duration and cleanup on

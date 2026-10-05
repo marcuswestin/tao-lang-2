@@ -25,6 +25,7 @@ import { compileDeclarationIdentity } from './declaration-identity'
 import { bridgeBindingName } from './injection-plan'
 import { checkedNumericValue, compileNumericUnitReading, quantityFactoryBinding } from './NumericUnitsCompiler'
 import { compileReactiveArgument } from './reactive-parameters'
+import { compileRuntimeType } from './runtime-type-compiler'
 
 const shapelessItemConstructorMessage = 'validated shapeless item constructor is empty'
 
@@ -580,22 +581,43 @@ function compileAssociatedActionSelection(
   expression: AST.MemberAccessExpression | AST.PostfixMemberAccess,
 ): Compiled | undefined {
   const selected = ASTUtils.resolveActionTarget(expression)
+  if (selected.kind === 'capability') {
+    const receiver = compileMethodReceiver(selected.associated.receiver)
+    const key = gen.jsLiteral(compileCallableWitnessKey(selected.requirement))
+    const rebindSelf = selected.associated.domain.genericParameter
+      && selected.result.genericParameter === selected.associated.domain.genericParameter
+    if (rebindSelf) {
+      return gen`(() => {
+        const _TaoGenericReceiver = ${receiver}.evaluate()
+        const _TaoSelectedAction = TR.Call(TR.Capability.method(_TaoGenericReceiver, ${key}))
+        return TR.Action(async (..._TaoActionArguments: TR.Evaluable[]) =>
+          TR.Capability.rebind(_TaoGenericReceiver,
+            await TR.DoResult<${
+        compileRuntimeType(selected.result)
+      }["jsValue"]>(_TaoSelectedAction, ..._TaoActionArguments)))
+      })()`
+    }
+    return gen`TR.Call(TR.Capability.method(${receiver}.evaluate(), ${key}))`
+  }
   if (selected.kind !== 'named' || !selected.associated) {
     return undefined
   }
   Assert(AST.isActionDeclaration(selected.action), 'an associated action selection names a source action')
   const receiver = selected.associated
-  const declared = AST.associatedEntityActionReceiver(selected.action)
+  const declared = AST.associatedNominalActionOwner(selected.action)
   Assert(
-    declared?.owner === receiver.owner && declared.cardinality === receiver.cardinality,
+    declared === receiver.owner && AST.associatedActionDispatch(selected.action) === receiver.dispatch,
     'the validated associated action retains its actual receiver owner and cardinality',
   )
   const hasOwner = AST.findOwningView(expression) || AST.findOwningAssociatedView(expression)
   const needsAuth = needsAuthContext(selected.action)
   const options = hasOwner ? gen`, { owner: _TaoActionOwner }` : needsAuth ? gen`, {}` : gen.noop()
-  return gen`${compileAssociatedActionWitness(selected.action)}(TR.CaptureActionReceiver(${
-    compileMethodReceiver(receiver.receiver)
-  }, ${gen.jsLiteral(receiver.cardinality)})${options}${needsAuth ? gen`, _TaoAuthScope` : gen.noop()})`
+  const captured = receiver.dispatch === 'static'
+    ? gen`undefined`
+    : gen`TR.CaptureActionReceiver(${compileMethodReceiver(receiver.receiver)}, ${gen.jsLiteral(receiver.cardinality)})`
+  return gen`${compileAssociatedActionWitness(selected.action)}(${captured}${options}${
+    needsAuth ? gen`, _TaoAuthScope` : gen.noop()
+  })`
 }
 
 /** Selected operators call the real ordered contract before any built-in runtime leaf. */
@@ -1233,7 +1255,10 @@ function compileMethodReceiver(receiver: ASTUtils.AssociatedMethodReceiver): Com
     'member-path': value => {
       const site = value.site
       const declaration = resolveRef(site.target)
-      const root = AST.isTypeDeclaration(declaration) || AST.isEntityDataDeclaration(declaration)
+      const contextualOwner = AST.associatedReceiverOwner(site)
+      const root = contextualOwner
+        ? contextualReceiverReference(site, contextualOwner)
+        : AST.isTypeDeclaration(declaration) || AST.isEntityDataDeclaration(declaration)
         ? gen.scopeName(declaration)
         : gen`TR.Alias(() => ${Compile.ValueDeclarationReference(declaration)})`
       return compileMemberPath(root, Type.ofReferenceRoot(site), value.members)

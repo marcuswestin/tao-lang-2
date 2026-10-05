@@ -78,12 +78,16 @@ export function referencedAssociatedWitnessOwners(
     for (const node of [statement, ...AST.streamAllContents(statement)]) {
       if (AST.isMemberAccessExpression(node) || AST.isPostfixMemberAccess(node)) {
         const selected = ASTUtils.resolveActionTarget(node)
-        if (selected.kind === 'named' && selected.associated) {
+        if (selected.kind === 'named' && selected.associated && AST.isActionDeclaration(selected.action)) {
           owners.add(selected.associated.owner)
         }
       }
       if (AST.isParameterDeclaration(node) && node.defaultValue) {
         transport(node.defaultValue, Type.ofParameter(node))
+      }
+      if (AST.isDoStatement(node)) {
+        const invocation = ASTUtils.resolveActionInvocation(node)
+        invocation.pairs.forEach(pair => transport(pair.argument.value, Type.ofParameter(pair.parameter)))
       }
       if (AST.isTypedConstructor(node) && AST.isItemLiteral(node.value)) {
         const shape = Type.constructorReferenceItemType(node.type)

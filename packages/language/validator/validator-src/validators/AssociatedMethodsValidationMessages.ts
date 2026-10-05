@@ -23,6 +23,8 @@ export const AssociatedMethodsValidationMessages = {
   failures: (name: string) => `Associated method '${name}' does not satisfy its declared failure bound.`,
   duplicateImplementation: (owner: string, name: string) =>
     `Associated method '${name}' is declared more than once on '${owner}'.`,
+  duplicateActionImplementation: (owner: string, name: string) =>
+    `Associated action '${name}' is declared more than once on '${owner}'.`,
   failureBound: "'fails never' cannot be combined with named failures.",
   duplicateRequirement: (name: string) => `Capability method '${name}' is declared more than once.`,
   duplicateParameter: (name: string) => `Capability parameter '${name}' is declared more than once.`,

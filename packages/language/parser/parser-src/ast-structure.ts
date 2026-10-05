@@ -1185,7 +1185,8 @@ export function parametersOf(
     | AST.ParameterizedDeclaration
     | AST.AssociatedFunctionDeclaration
     | AST.AssociatedViewDeclaration
-    | AST.CapabilityMethodDeclaration,
+    | AST.CapabilityMethodDeclaration
+    | AST.CapabilityActionDeclaration,
 ): AST.ParameterDeclaration[] {
   // A view alias has no parameter list of its own; its interface is its target's.
   if (AST.isViewDeclaration(declaration) && declaration.aliasTarget) {
@@ -1600,10 +1601,57 @@ export function associatedActionOwner(declaration: AST.ActionDeclaration): AST.E
   return AST.isEntityDataDeclaration(owner) && owner.block === block ? owner : undefined
 }
 
+/** associatedNominalActionOwner returns the nominal declaration whose own body stores an action. */
+export function associatedNominalActionOwner(
+  declaration: AST.ActionDeclaration,
+): AST.TypeDeclaration | AST.EntityDataDeclaration | undefined {
+  const container = declaration.$container
+  if (AST.isEntityDataDeclarationBlock(container) && container.entries.includes(declaration)) {
+    const owner = container.$container
+    return AST.isEntityDataDeclaration(owner) && owner.block === container ? owner : undefined
+  }
+  if (!AST.isItemTypeExpression(container) || !container.actions.includes(declaration)) {
+    return undefined
+  }
+  const parent = container.$container
+  if (AST.isTypeDeclaration(parent)) {
+    return parent.type === container || parent.associated === container ? parent : undefined
+  }
+  if (!AST.isDerivedTypeExpression(parent) || parent.slots !== container) {
+    return undefined
+  }
+  const owner = parent.$container
+  return AST.isTypeDeclaration(owner) && owner.type === parent ? owner : undefined
+}
+
+/** Dispatch follows the authored action marker; entity actions remain instance actions. */
+export function associatedActionDispatch(declaration: AST.ActionDeclaration): 'instance' | 'static' {
+  return declaration.static && AST.isTypeDeclaration(associatedNominalActionOwner(declaration)) ? 'static' : 'instance'
+}
+
+/** Own actions stay separate from functions, preserving their command effects and witness identity. */
+export function ownAssociatedActions(
+  owner: AST.TypeDeclaration | AST.EntityDataDeclaration,
+): readonly AST.ActionDeclaration[] {
+  if (AST.isEntityDataDeclaration(owner)) {
+    return owner.block.entries.filter(AST.isActionDeclaration)
+  }
+  const type = owner.type
+  const slots = type && AST.isDerivedTypeExpression(type)
+    ? type.slots
+    : type && AST.isItemTypeExpression(type)
+    ? type
+    : undefined
+  return [...(slots?.actions ?? []), ...(owner.associated?.actions ?? [])]
+}
+
 /** An action's actual receiver qualifier selects one row or that entity's collection. */
 export function associatedEntityActionReceiver(
   declaration: AST.ActionDeclaration,
 ): Readonly<{ owner: AST.EntityDataDeclaration; cardinality: 'one' | 'many' }> | undefined {
+  if (declaration.static) {
+    return undefined
+  }
   const owner = associatedActionOwner(declaration)
   if (!owner) {
     return undefined
@@ -1640,6 +1688,18 @@ export function associatedReceiverOwner(
   const callable = method ?? view
   if (!callable) {
     const action = findOwningAction(reference)
+    const nominalActionOwner = action && associatedNominalActionOwner(action)
+    if (
+      action && AST.isTypeDeclaration(nominalActionOwner)
+      && associatedActionDispatch(action) === 'instance'
+      && reference.target.ref === nominalActionOwner
+    ) {
+      let current: AST.Node | undefined = reference
+      while (current && current !== action.block) {
+        current = current.$container
+      }
+      return current ? nominalActionOwner : undefined
+    }
     const receiver = action && associatedEntityActionReceiver(action)
     if (action && receiver && reference.target.ref === receiver.owner) {
       let current: AST.Node | undefined = reference

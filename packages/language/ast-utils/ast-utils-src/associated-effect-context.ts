@@ -3,7 +3,8 @@ import {
   type AssociatedCallableDeclaration,
   type AssociatedCallableDescriptor,
   type AssociatedEffectsContext,
-  capabilityRequirements,
+  capabilityCallableRequirements,
+  ownAssociatedActions,
   ownAssociatedMethods,
   ownAssociatedViews,
 } from './associated-methods'
@@ -11,6 +12,7 @@ import { discoverCallableEffectFacts, type NativeEffectPublication } from './cal
 import { projectCallableEffectPublications } from './callable-effect-publications'
 import { analyzeCallableEffects, type CallableAnalysis, type PurityContract } from './callable-effects'
 import { publishCanonicalEffectSnapshot } from './canonical-effect-snapshot'
+import { effectFailureContract } from './effect-outcomes'
 import { declaredCallableFailureContract, type FailureContract } from './failure-contracts'
 import { mountedViewCreationAnalysis } from './mounted-view-creation'
 import { Type } from './Type'
@@ -24,7 +26,8 @@ export function createAssociatedEffects(files: readonly AST.TaoFile[]): Associat
       AST.isTypeDeclaration(node) || AST.isPrimitiveDeclaration(node) || AST.isEntityDataDeclaration(node)
     ).filter(owner =>
       ownAssociatedMethods(owner).length > 0 || ownAssociatedViews(owner).length > 0
-      || (AST.isTypeDeclaration(owner) && capabilityRequirements(owner).length > 0)
+      || (!AST.isPrimitiveDeclaration(owner) && ownAssociatedActions(owner).length > 0)
+      || (AST.isTypeDeclaration(owner) && capabilityCallableRequirements(owner).length > 0)
     )
   )
   const descriptors = new Map<
@@ -34,18 +37,18 @@ export function createAssociatedEffects(files: readonly AST.TaoFile[]): Associat
   const analyses = new Map<AST.Node, CallableAnalysis>()
   const creatorAnalyses = new Map<AST.AssociatedViewDeclaration, CallableAnalysis>()
   const requirements = new Map<
-    AST.CapabilityMethodDeclaration,
+    AST.CapabilityMethodDeclaration | AST.CapabilityActionDeclaration,
     Readonly<{ purity: PurityContract; failures: FailureContract }>
   >()
   for (const owner of owners) {
     if (!AST.isTypeDeclaration(owner)) {
       continue
     }
-    for (const method of capabilityRequirements(owner)) {
+    for (const method of capabilityCallableRequirements(owner)) {
       const contract = Type.associatedCallable(method, owner)
       requirements.set(method, {
         // A function requirement excludes actions, I/O, suspension and reactive-state reads.
-        purity: { open: false, violations: [] },
+        purity: { open: false, violations: AST.isCapabilityActionDeclaration(method) ? ['action'] : [] },
         failures: contract.kind === 'ready' ? contract.descriptor.signature.failures : { open: true, cases: [] },
       })
     }
@@ -53,6 +56,17 @@ export function createAssociatedEffects(files: readonly AST.TaoFile[]): Associat
   const natives: NativeEffectPublication[] = []
   for (const file of files) {
     for (const declaration of AST.streamAllContents(file)) {
+      if (AST.isActionDeclaration(declaration) && declaration.foreign) {
+        natives.push({
+          declaration,
+          exportSource: declaration,
+          phase: 'invocation',
+          kind: 'complete',
+          purity: { violations: ['action', 'io', 'suspend'], open: false },
+          failures: effectFailureContract(declaration),
+        })
+        continue
+      }
       if (
         !AST.isFunctionDeclaration(declaration) && !AST.isAssociatedFunctionDeclaration(declaration)
         && !AST.isAssociatedConverterDeclaration(declaration)
@@ -98,10 +112,22 @@ export function createAssociatedEffects(files: readonly AST.TaoFile[]): Associat
     if (
       AST.isAssociatedFunctionDeclaration(declaration) || AST.isAssociatedConverterDeclaration(declaration)
       || AST.isFunctionDeclaration(declaration) || AST.isAssociatedViewDeclaration(declaration)
+      || AST.isActionDeclaration(declaration)
     ) {
       const publication = projectCallableEffectPublications(snapshot, declaration)
       const facts = discoverCallableEffectFacts(declaration, publication.inputs, publication.context)
-      analyses.set(declaration, analyzeCallableEffects(declaration, facts))
+      const analysis = analyzeCallableEffects(declaration, facts)
+      // Action failure discovery owns joined outcomes, deferred cleanup and detached execution.
+      // Seal its effective contract alongside the independent purity discovery before admission.
+      analyses.set(
+        declaration,
+        AST.isActionDeclaration(declaration)
+          ? Object.freeze({
+            ...analysis,
+            effects: Object.freeze({ ...analysis.effects, failures: effectFailureContract(declaration) }),
+          })
+          : analysis,
+      )
     }
   }
   return Object.freeze({ descriptors, analyses, creatorAnalyses })

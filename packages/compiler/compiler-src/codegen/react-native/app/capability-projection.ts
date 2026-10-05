@@ -10,6 +10,7 @@ import {
 } from './AssociatedMethodsCompiler'
 import { compileFunctionParameterBinding } from './FunctionalCoreCompiler'
 import { compileReactiveArgument } from './reactive-parameters'
+import { compileRuntimeType } from './runtime-type-compiler'
 
 /** Source admission, nested correspondence and union selection share one sealed semantic plan. */
 export function compileArgumentForType(expression: AST.Expression, expected: ASTUtils.TaoType): Compiled {
@@ -100,6 +101,7 @@ export function capabilityTransportOwners(
         if (
           AST.isAssociatedFunctionDeclaration(method.supplied.declaration)
           || AST.isAssociatedViewDeclaration(method.supplied.declaration)
+          || AST.isActionDeclaration(method.supplied.declaration)
         ) {
           owners.add(method.supplied.owner)
         }
@@ -125,6 +127,9 @@ export function capabilityTransportOwners(
 
 /** Required input order and implementation input order are independent; defaults retain raw holes. */
 function adaptWitness(witness: ASTUtils.CapabilityTransportMethod, implementation: Compiled): Compiled {
+  if (AST.isCapabilityActionDeclaration(witness.required.declaration)) {
+    return adaptActionWitness(witness, implementation)
+  }
   const required = witness.required.signature.inputs
   const supplied = witness.supplied.signature.inputs
   const parameters = required.map((input, index) => ({ index, parameter: input.declaration }))
@@ -174,4 +179,49 @@ function adaptWitness(witness: ASTUtils.CapabilityTransportMethod, implementatio
       return ${compileTransport(gen`_TaoCapabilityResult`, witness.result)}
     })
   )`
+}
+
+/** Action witnesses capture factories during selection; only the returned action performs work. */
+function adaptActionWitness(witness: ASTUtils.CapabilityTransportMethod, implementation: Compiled): Compiled {
+  const required = witness.required.signature.inputs
+  const supplied = witness.supplied.signature.inputs
+  const parameters = required.map((input, index) => ({ index, parameter: input.declaration }))
+  const inputs = new Map(witness.inputs.map(input => [input.supplied.declaration, input]))
+  return gen`TR.Function((_TaoCapabilityReceiver: TR.Evaluable) => {
+    const _TaoSelectedAction = TR.Call(${implementation}, ${
+    compileTransport(gen`_TaoCapabilityReceiver`, witness.receiver)
+  })
+    return TR.Action(async (${gen.join(parameters, Compile.FunctionRuntimeParameter)}) =>
+      TR.BlockScope(_Scope, async _Scope => {
+        ${
+    gen.list(parameters, parameter => {
+      const fallback = parameter.parameter.defaultValue === undefined
+        ? undefined
+        : gen`TR.Call(${compileCapabilityDefault(witness.required, parameter.index)}${
+          gen.join(parameters.slice(0, parameter.index), preceding =>
+            gen`, ${gen.scopeName({ name: Type.parameterName(preceding.parameter) })}`, { separator: '' })
+        })`
+      return compileFunctionParameterBinding(parameter, fallback)
+    })
+  }
+        const _TaoCapabilityResult = await TR.DoResult<${
+    compileRuntimeType(witness.supplied.result)
+  }["jsValue"]>(_TaoSelectedAction${
+    gen.join(supplied, input => {
+      const transport = inputs.get(input.declaration)
+      if (!transport) {
+        Assert(input.omissible, 'unmatched action implementation inputs have defaults')
+        return gen`, undefined`
+      }
+      return gen`, ${
+        compileTransport(
+          gen.scopeName({ name: Type.parameterName(transport.required.declaration) }),
+          transport.plan,
+        )
+      }`
+    }, { separator: '' })
+  })
+        return ${compileTransport(gen`_TaoCapabilityResult`, witness.result)}
+      }))
+  })`
 }

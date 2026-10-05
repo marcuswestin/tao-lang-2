@@ -9,6 +9,10 @@ export type AssociatedCallableDeclaration =
   | AST.AssociatedFunctionDeclaration
   | AST.CapabilityMethodDeclaration
   | AST.AssociatedViewDeclaration
+  | AST.ActionDeclaration
+  | AST.CapabilityActionDeclaration
+
+export type AssociatedCallableRequirement = AssociatedCallableDeclaration | AST.CapabilityActionDeclaration
 
 /** Declared callable contracts are resolved before effect discovery or structural admission. */
 export type AssociatedCallableDescriptor = Readonly<{
@@ -211,6 +215,22 @@ export function ownAssociatedMethods(owner: AssociatedCallableOwner): readonly A
   return [...(slots?.methods ?? []), ...(owner.associated?.methods ?? [])]
 }
 
+/** Own associated actions retain their action identity and are selectable by nominal dispatch. */
+export function ownAssociatedActions(
+  owner: AST.TypeDeclaration | AST.EntityDataDeclaration,
+): readonly AST.ActionDeclaration[] {
+  if (AST.isEntityDataDeclaration(owner)) {
+    return owner.block.entries.filter(AST.isActionDeclaration)
+  }
+  const type = owner.type
+  const slots = type && AST.isDerivedTypeExpression(type)
+    ? type.slots
+    : type && AST.isItemTypeExpression(type)
+    ? type
+    : undefined
+  return [...(slots?.actions ?? []), ...(owner.associated?.actions ?? [])]
+}
+
 /** Mounted views retain their own declaration kind rather than impersonating functions. */
 export function ownAssociatedViews(owner: AssociatedCallableOwner): readonly AST.AssociatedViewDeclaration[] {
   if (AST.isEntityDataDeclaration(owner)) {
@@ -230,4 +250,15 @@ export function ownAssociatedViews(owner: AssociatedCallableOwner): readonly AST
 
 export function capabilityRequirements(owner: AST.TypeDeclaration): readonly AST.CapabilityMethodDeclaration[] {
   return owner.type && AST.isCapabilityTypeExpression(owner.type) ? owner.type.methods : []
+}
+
+export function capabilityActionRequirements(owner: AST.TypeDeclaration): readonly AST.CapabilityActionDeclaration[] {
+  return owner.type && AST.isCapabilityTypeExpression(owner.type) ? owner.type.actions : []
+}
+
+/** Structural contracts retain the authored callable kind for both functions and actions. */
+export function capabilityCallableRequirements(
+  owner: AST.TypeDeclaration,
+): readonly (AST.CapabilityMethodDeclaration | AST.CapabilityActionDeclaration)[] {
+  return [...capabilityRequirements(owner), ...capabilityActionRequirements(owner)]
 }

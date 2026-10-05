@@ -15,7 +15,8 @@ Describe('compiler: associated action witness publication', () => {
       ${stubView('Main')}
     `)
     Expect(compiled.code).toContain('"$actions": [')
-    Expect(compiled.code.match(/_Scope.Books = _TaoAssociatedReceiver/g)).toHaveLength(2)
+    Expect(compiled.code.match(/_Scope.Book = _TaoAssociatedReceiver/g)).toHaveLength(1)
+    Expect(compiled.code.match(/_Scope.Books = _TaoAssociatedReceiver/g)).toHaveLength(1)
     Expect(compiled.code).toContain('export { __tao_associated_witness_1__ }')
   })
 
@@ -36,9 +37,9 @@ Describe('compiler: associated action witness publication', () => {
       ${stubView('Main')}
     `)
     Expect(compiled.code).toMatch(
-      /_Scope.Saved = TR.Alias\(__tao_associated_witness_1__\["\$actions"\]\[0\]\(TR.CaptureActionReceiver/,
+      /_Scope.Saved = TR.Readonly\(TR.Alias\(\(\) => __tao_associated_witness_1__\["\$actions"\]\[0\]\(TR.CaptureActionReceiver/,
     )
-    Expect(compiled.code).toContain('_Scope.Again = TR.Alias(_Scope.Saved.evaluate())')
+    Expect(compiled.code).toContain('_Scope.Again = TR.Readonly(TR.Alias(() => _Scope.Saved.evaluate()).evaluate())')
     Expect(compiled.code).toMatch(
       /__tao_associated_witness_1__\["\$actions"\]\[1\]\(TR.CaptureActionReceiver\([^]*?"many"/,
     )
@@ -60,8 +61,12 @@ Describe('compiler: associated action witness publication', () => {
       ${stubView('Empty')}
       app Demo { id "com.tao.action.receiver" version "1.0.0" name "Receiver" view Main }
     `)
-    Expect(compiled.code).toMatch(/_Scope.Nested = TR.Alias\(__tao_associated_witness_1__\["\$actions"\]\[0\]/)
-    Expect(compiled.code).toMatch(/_Scope.Postfix = TR.Alias\(__tao_associated_witness_1__\["\$actions"\]\[0\]/)
+    Expect(compiled.code).toMatch(
+      /_Scope.Nested = TR.Readonly\(TR.Alias\(\(\) => __tao_associated_witness_1__\["\$actions"\]\[0\]/,
+    )
+    Expect(compiled.code).toMatch(
+      /_Scope.Postfix = TR.Readonly\(TR.Alias\(\(\) => __tao_associated_witness_1__\["\$actions"\]\[0\]/,
+    )
     Expect(compiled.code.match(/\{ owner: _TaoActionOwner \}/g)).toHaveLength(2)
     Expect(compiled.code).toContain('["Book"]')
   })

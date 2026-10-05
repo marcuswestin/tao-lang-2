@@ -215,6 +215,21 @@ function validateDerivedType(derived: AST.DerivedTypeExpression, ctx: Validation
   ) {
     return
   }
+  if (
+    base.kind === 'item'
+    && derived.slots.properties.length === 0
+    && (derived.slots.actions.length > 0 || derived.slots.methods.length > 0
+      || derived.slots.views.length > 0 || derived.slots.converters.length > 0)
+  ) {
+    return
+  }
+  if (
+    base.kind === 'item' && !base.item && derived.slots.properties.length === 0
+    && (derived.slots.actions.length > 0 || derived.slots.methods.length > 0
+      || derived.slots.views.length > 0 || derived.slots.converters.length > 0)
+  ) {
+    return
+  }
   if (base.kind !== 'item' || !base.item) {
     ctx.error(derived.base, typeValidationMessages.derivedBaseShape(Type.referenceName(derived.base)))
     return

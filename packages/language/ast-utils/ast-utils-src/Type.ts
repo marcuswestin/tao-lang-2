@@ -18,9 +18,11 @@ import {
   type AssociatedMethodReceiver,
   type AssociatedMethodSelection,
   associatedMethodTypeRoot,
+  capabilityCallableRequirements,
   capabilityRequirements,
   hasAssociatedEffects,
   materializeAssociatedCallable,
+  ownAssociatedActions,
   ownAssociatedMethods,
   ownAssociatedViews,
   withAssociatedAdmissionPair,
@@ -35,6 +37,7 @@ import {
 import { puritySatisfiesFunction } from './callable-effects'
 import { type CallableSignatureComparison, callableSignatureOf, compareCallableSignatures } from './callable-signatures'
 import { resolveInvocationFailureDeclaration } from './effect-outcomes'
+import { effectFailureContract } from './effect-outcomes'
 import { declaredCallableFailureContract, failureContractSatisfiesBound } from './failure-contracts'
 import { instantiateGenericInvocation, substituteGenericType } from './generic-bindings'
 import { resolveActionInvocation, resolveActionTarget, resolveAssociatedActionTarget } from './invocations'
@@ -207,6 +210,8 @@ export class Type {
       return identity !== undefined && identity === Type.identityKey(right)
     }
     return left.declaration.name === right.declaration.name
+      && (AST.isActionDeclaration(left.declaration) || AST.isCapabilityActionDeclaration(left.declaration))
+        === (AST.isActionDeclaration(right.declaration) || AST.isCapabilityActionDeclaration(right.declaration))
       && (AST.isAssociatedFunctionDeclaration(left.declaration) && !!left.declaration.static)
         === (AST.isAssociatedFunctionDeclaration(right.declaration) && !!right.declaration.static)
       && sameDomain(left.receiver, right.receiver) && sameDomain(left.result, right.result)
@@ -429,6 +434,15 @@ export class Type {
     return type.kind === 'capability' ? capabilityRequirements(type.declaration) : []
   }
 
+  static aggregateCapabilityCallableRequirements(
+    type: TaoType,
+  ): readonly (AST.CapabilityMethodDeclaration | AST.CapabilityActionDeclaration)[] {
+    if (type.genericParameter) {
+      return (type.genericBounds ?? []).flatMap(bound => Type.aggregateCapabilityCallableRequirements(bound))
+    }
+    return type.kind === 'capability' ? capabilityCallableRequirements(type.declaration) : []
+  }
+
   /** Specialization changes contextual domains, retaining the defining implementation owner. */
   static specializeAssociatedDescriptor(
     descriptor: AssociatedCallableDescriptor,
@@ -528,6 +542,38 @@ export class Type {
         if (declaration) {
           return { declaration, owner }
         }
+      }
+    }
+    return undefined
+  }
+
+  /** Associated action lookup keeps nominal instance and static dispatch separate from functions. */
+  static associatedActionDeclaration(
+    receiver: TaoType,
+    name: string,
+    definitionOfReference: (reference: AST.NamedTypeReference) => AST.TypeDefinition | undefined =
+      Type.definitionOfReference,
+    dispatch: 'instance' | 'static' = 'instance',
+  ):
+    | Readonly<{ declaration: AST.ActionDeclaration; owner: AST.TypeDeclaration | AST.EntityDataDeclaration }>
+    | undefined
+  {
+    const nominal = nominalOf(receiver)
+    const owners = receiver.kind === 'entity'
+      ? dispatch === 'instance' ? [receiver.entity] : []
+      : nominal
+      ? nominalChain(nominal, definitionOfReference).filter(AST.isTypeDeclaration)
+      : []
+    for (const owner of owners) {
+      if (!AST.isTypeDeclaration(owner) && !AST.isEntityDataDeclaration(owner)) {
+        continue
+      }
+      const declaration = ownAssociatedActions(owner).find(action =>
+        action.name === name && AST.associatedActionDispatch(action) === dispatch
+        && AST.associatedNominalActionOwner(action) === owner
+      )
+      if (declaration) {
+        return { declaration, owner }
       }
     }
     return undefined
@@ -841,7 +887,9 @@ export class Type {
     }
     const projection = dispatchReceiver.kind === 'capability' || dispatchReceiver.genericParameter !== undefined
     const resolution = new TypeResolutionContext()
-    const definingRequirements = Type.aggregateCapabilityRequirements(expected).map(associatedCallableDescriptor)
+    const definingRequirements = Type.aggregateCapabilityCallableRequirements(expected).map(
+      associatedCallableDescriptor,
+    )
     const required = definingRequirements.map(descriptor =>
       descriptor && Type.specializeAssociatedDescriptor(descriptor, dispatchReceiver)
     )
@@ -860,7 +908,7 @@ export class Type {
     const first = implementations[0] as Extract<AssociatedCapabilityImplementation, { kind: 'ready' }> | undefined
     const actualOwner = dispatchReceiver.genericParameter
       ? contextualTypeOwner(
-        Type.aggregateCapabilityRequirements(dispatchReceiver)[0]?.returnType ?? dispatchReceiver.genericParameter,
+        Type.aggregateCapabilityCallableRequirements(dispatchReceiver)[0] ?? dispatchReceiver.genericParameter,
       )
       : dispatchReceiver.kind === 'capability'
       ? dispatchReceiver.declaration
@@ -868,10 +916,10 @@ export class Type {
       ? dispatchReceiver.entity
       : associatedNominalOwner(dispatchReceiver)
         ?? (AST.isPrimitiveDeclaration(first?.supplied.owner) ? first.supplied.owner : undefined)
-    const expectedRequirement = Type.aggregateCapabilityRequirements(expected)[0]
+    const expectedRequirement = Type.aggregateCapabilityCallableRequirements(expected)[0]
     const expectedOwner = expected.kind === 'capability'
       ? expected.declaration
-      : expectedRequirement && contextualTypeOwner(expectedRequirement.returnType)
+      : expectedRequirement && contextualTypeOwner(expectedRequirement)
     if (
       (!AST.isTypeDeclaration(actualOwner) && !AST.isEntityDataDeclaration(actualOwner)
         && !AST.isPrimitiveDeclaration(actualOwner)) || !AST.isTypeDeclaration(expectedOwner)
@@ -886,7 +934,9 @@ export class Type {
         const supplied = implementation.supplied
         const analysis = projection ? undefined : associatedCallableAdmissionAnalysis(supplied.declaration)
         if (
-          !projection && (!analysis || !puritySatisfiesFunction(analysis.effects.purity)
+          !projection
+          && (!analysis
+            || (!AST.isActionDeclaration(supplied.declaration) && !puritySatisfiesFunction(analysis.effects.purity))
             || !failureContractSatisfiesBound(analysis.effects.failures, supplied.signature.failures))
         ) {
           return false
@@ -1417,7 +1467,7 @@ function admitsType(
     if ((actual.genericBounds ?? []).some(bound => accepts(bound, expected))) {
       return true
     }
-    if (expected.kind === 'capability' && Type.aggregateCapabilityRequirements(actual).length > 0) {
+    if (expected.kind === 'capability' && Type.aggregateCapabilityCallableRequirements(actual).length > 0) {
       return capabilityAccepts(actual, expected)
     }
     return false
@@ -1787,7 +1837,7 @@ function contextualGenericParameter(node: AST.Node, name: string): AST.GenericTy
 }
 
 function contextualTypeOwner(node: AST.Node): AssociatedCallableOwner | undefined {
-  let current: AST.Node | undefined = node.$container
+  let current: AST.Node | undefined = node
   while (current) {
     if (AST.isAssociatedFunctionDeclaration(current)) {
       return AST.associatedFunctionOwner(current)
@@ -1795,9 +1845,12 @@ function contextualTypeOwner(node: AST.Node): AssociatedCallableOwner | undefine
     if (AST.isAssociatedViewDeclaration(current)) {
       return AST.associatedViewOwner(current)
     }
-    if (AST.isCapabilityMethodDeclaration(current)) {
+    if (AST.isCapabilityMethodDeclaration(current) || AST.isCapabilityActionDeclaration(current)) {
       const owner = current.$container?.$container
       return AST.isTypeDeclaration(owner) ? owner : undefined
+    }
+    if (AST.isActionDeclaration(current)) {
+      return AST.associatedNominalActionOwner(current)
     }
     current = current.$container
   }
@@ -1822,7 +1875,10 @@ function associatedCallableInContext(
 ): AssociatedDescriptorMaterialization {
   if (
     AST.isEntityDataDeclaration(owner)
-    && (AST.isCapabilityMethodDeclaration(declaration) || AST.associatedEntityReceiverOwner(declaration) !== owner)
+    && (AST.isCapabilityMethodDeclaration(declaration) || AST.isCapabilityActionDeclaration(declaration)
+      || (AST.isActionDeclaration(declaration)
+          ? AST.associatedNominalActionOwner(declaration)
+          : AST.associatedEntityReceiverOwner(declaration)) !== owner)
   ) {
     return Object.freeze({ kind: 'pending', dependencies: Object.freeze([declaration]) })
   }
@@ -1833,6 +1889,8 @@ function associatedCallableInContext(
         AST.parametersOf(callable),
         AST.isAssociatedViewDeclaration(callable)
           ? { cases: [], open: true }
+          : AST.isActionDeclaration(callable)
+          ? effectFailureContract(callable)
           : declaredCallableFailureContract(callable),
         {
           inputDomain: parameter => associatedInputDomain(parameter, resolution),
@@ -1842,8 +1900,12 @@ function associatedCallableInContext(
     result: callable =>
       AST.isAssociatedViewDeclaration(callable)
         ? primitiveType('rendered')
-        : AST.isCapabilityMethodDeclaration(callable)
-        ? resolution.ofTypeExpression(callable.returnType)
+        : AST.isCapabilityMethodDeclaration(callable) || AST.isCapabilityActionDeclaration(callable)
+        ? callable.returnType ? resolution.ofTypeExpression(callable.returnType) : primitiveType('none')
+        : AST.isActionDeclaration(callable)
+        ? callable.returnType || sourceActionResult(callable, value => value).length > 0
+          ? resolution.ofActionResult(callable)
+          : primitiveType('none')
         : resolution.ofFunctionReturn(callable),
   })
 }
@@ -1977,8 +2039,21 @@ class TypeResolutionContext {
             : 'missing',
         }
     }
+    const actionRequirement = AST.isCapabilityActionDeclaration(required.declaration)
     const declaration = receiver.kind === 'capability' || receiver.genericParameter
-      ? Type.aggregateCapabilityRequirements(receiver).find(method => method.name === required.declaration.name)
+      ? Type.aggregateCapabilityCallableRequirements(receiver).find(method =>
+        method.name === required.declaration.name
+        && AST.isCapabilityActionDeclaration(method) === actionRequirement
+        && (!AST.isCapabilityActionDeclaration(required.declaration)
+          || (AST.isCapabilityActionDeclaration(method) && !!method.static === !!required.declaration.static))
+      )
+      : actionRequirement
+      ? Type.associatedActionDeclaration(
+        receiver,
+        required.declaration.name,
+        reference => this.definitionOfReference(reference),
+        AST.isCapabilityActionDeclaration(required.declaration) && required.declaration.static ? 'static' : 'instance',
+      )?.declaration
       : Type.associatedMethodDeclaration(
         receiver,
         required.declaration.name,
@@ -2128,13 +2203,13 @@ class TypeResolutionContext {
     expected: Extract<TaoType, { kind: 'capability' }>,
   ): 'compatible' | 'incompatible' | 'pending' {
     const projection = actual.kind === 'capability' || actual.genericParameter !== undefined
-    const firstRequirement = capabilityRequirements(expected.declaration)[0]
+    const firstRequirement = capabilityCallableRequirements(expected.declaration)[0]
     const firstContract = firstRequirement && this.descriptors?.get(firstRequirement)
     const firstImplementation = firstContract?.kind === 'ready'
       ? this.capabilityImplementation(actual, Type.specializeAssociatedDescriptor(firstContract.descriptor, actual))
       : undefined
     const actualOwner = actual.genericParameter
-      ? contextualTypeOwner(Type.aggregateCapabilityRequirements(actual)[0]?.returnType ?? actual.genericParameter)
+      ? contextualTypeOwner(Type.aggregateCapabilityCallableRequirements(actual)[0] ?? actual.genericParameter)
       : actual.kind === 'capability'
       ? actual.declaration
       : actual.kind === 'entity'
@@ -2156,7 +2231,7 @@ class TypeResolutionContext {
     this.comparing.set(actualOwner, expectedOwners)
     expectedOwners.add(expected.declaration)
     try {
-      const requirements = capabilityRequirements(expected.declaration)
+      const requirements = capabilityCallableRequirements(expected.declaration)
       const contracts = requirements.map(method => this.descriptors?.get(method))
       if (
         contracts.every(contract => contract?.kind === 'ready')
@@ -2464,7 +2539,7 @@ class TypeResolutionContext {
   private postfixMemberAccessType(access: AST.PostfixMemberAccess): TaoType {
     const associated = resolveAssociatedActionTarget(access, receiver => this.receiverType(receiver))
     if (associated) {
-      return this.ofAction(associated.action)
+      return this.ofAction(associated.kind === 'named' ? associated.action : associated.requirement)
     }
     const receiver = this.ofExpression(access.receiver)
     if (!isPrimitiveKind(receiver)) {
@@ -2584,7 +2659,7 @@ class TypeResolutionContext {
     }
     const associated = resolveAssociatedActionTarget(expression, receiver => this.receiverType(receiver))
     if (associated) {
-      return this.ofAction(associated.action)
+      return this.ofAction(associated.kind === 'named' ? associated.action : associated.requirement)
     }
     return this.atMemberPath(this.ofContextualValue(target, expression), expression.members)
   }
@@ -2603,8 +2678,11 @@ class TypeResolutionContext {
     }
     if (AST.isTypeDeclaration(declaration)) {
       const view = AST.findOwningAssociatedView(context)
+      const action = AST.findOwningAction(context)
       return AST.associatedReceiverOwner(context) === declaration
           || (view && AST.associatedViewOwner(view) === declaration)
+          || (action && AST.associatedNominalActionOwner(action) === declaration
+            && AST.associatedActionDispatch(action) === 'instance')
         ? this.ofDefinition(declaration)
         : unresolvedType()
     }
@@ -2760,7 +2838,7 @@ class TypeResolutionContext {
   }
 
   /** A command invokes exactly as an action does: its parameters are its slots. */
-  ofAction(declaration: AST.ActionDeclaration | AST.CommandDeclaration): TaoType {
+  ofAction(declaration: AST.ActionDeclaration | AST.CommandDeclaration | AST.CapabilityActionDeclaration): TaoType {
     return this.actionTypeOfParameters(AST.parametersOf(declaration))
   }
 
@@ -2779,7 +2857,10 @@ class TypeResolutionContext {
   private ofInvocationResult(invocation: AST.DoStatement): TaoType {
     const target = this.descriptors
       ? resolveActionTarget(invocation.action, expression => this.ofExpression(expression))
-      : undefined
+      : resolveActionTarget(invocation.action)
+    if (target.kind === 'capability') {
+      return target.result
+    }
     const action = target
       ? target.kind === 'named' ? target.action : undefined
       : resolveActionInvocation(invocation).action
@@ -3063,7 +3144,7 @@ class TypeResolutionContext {
       }
     }
     return Switch.kind(base, {
-      item: base => ({ ...base, item: { properties } }),
+      item: base => !baseShape && properties.length === 0 ? base : ({ ...base, item: { properties } }),
       primitive: base => base.primitive === 'action' ? base : { ...base, slots: { properties } },
       list: base => base,
       entity: base => base,

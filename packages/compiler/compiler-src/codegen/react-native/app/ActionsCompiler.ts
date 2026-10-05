@@ -52,29 +52,61 @@ export const ActionsCompiler = {
     )
   },
 
-  /** AssociatedActionDeclaration publishes one entity-bound factory for a source action. */
+  /** AssociatedActionDeclaration publishes a nominal factory with explicit instance or static dispatch. */
   AssociatedActionDeclaration(action: AST.ActionDeclaration): Compiled {
+    const owner = AST.associatedNominalActionOwner(action)
+    Assert.defined(owner, 'associated action factory has a nominal receiver declaration')
     const associated = AST.associatedEntityActionReceiver(action)
-    Assert.defined(associated, 'associated action factory has an entity receiver declaration')
-    Assert(!action.foreign, 'associated action factory handles source actions only')
-    Assert.defined(action.block, 'source associated action has a body')
-
-    const ownerType = Type.ofAssociatedOwner(associated.owner)
-    const domainType = associated.cardinality === 'many'
+    const dispatch = AST.associatedActionDispatch(action)
+    const ownerType = Type.ofAssociatedOwner(owner)
+    const domainType = associated?.cardinality === 'many'
       ? { kind: 'list' as const, element: ownerType }
       : ownerType
+    if (action.foreign) {
+      return gen`(
+        _TaoAssociatedReceiver: ${
+        dispatch === 'static'
+          ? gen`undefined`
+          : gen`TR.Value<${BridgeMetadata.resultType(domainType, actionResultBridgeTypeOptions())}>`
+      },
+        options: NonNullable<Parameters<typeof TR.Action>[1]> = {},
+        ${needsAuthContext(action) ? gen`_TaoAuthScope: TR.AuthScope | undefined = undefined,` : gen.noop()}
+      ) => TR.BlockScope(_Scope, _Scope => {
+        ${
+        dispatch === 'instance'
+          ? gen`${
+            gen.scopeName({
+              name: AST.isEntityDataDeclaration(owner)
+                ? associated?.cardinality === 'many' ? owner.name : owner.singularName
+                : owner.name,
+            })
+          } = _TaoAssociatedReceiver`
+          : gen.noop()
+      }
+        ${compileForeignAction(action, dispatch === 'instance', true)}
+        return ${gen.scopeName(action)}
+      })`
+    }
+    Assert.defined(action.block, 'source associated action has a body')
+
     const parameters = actionParameters(action)
     const asyncKeyword = actionBlockRequiresAsync(action.block) ? gen`async ` : gen``
     const interrupt = actionBlockInterruptsAsk(action.block)
     const bindings = gen`
       ${
-      gen.scopeName({ name: associated.cardinality === 'many' ? associated.owner.name : associated.owner.singularName })
-    } = _TaoAssociatedReceiver
+      dispatch === 'static' ? gen.noop() : gen`${
+        gen.scopeName({
+          name: AST.isEntityDataDeclaration(owner)
+            ? associated?.cardinality === 'many' ? owner.name : owner.singularName
+            : owner.name,
+        })
+      } = _TaoAssociatedReceiver`
+    }
       ${gen.list(parameters, Compile.ActionParameterBinding)}
     `
 
     return gen`(
-      _TaoAssociatedReceiver: ${compileRuntimeType(domainType)},
+      _TaoAssociatedReceiver: ${dispatch === 'static' ? gen`undefined` : compileRuntimeType(domainType)},
       options: NonNullable<Parameters<typeof TR.Action>[1]> = {},
       ${needsAuthContext(action) ? gen`_TaoAuthScope: TR.AuthScope | undefined = undefined,` : gen.noop()}
     ) => TR.Action(${asyncKeyword}(${gen.join(parameters, Compile.ActionRuntimeParameter)}) => {
@@ -603,7 +635,13 @@ function positionalArguments(
   const lastProvidedIndex = Math.max(...pairs.map(pair => parameters.indexOf(pair.parameter)), -1)
   return parameters.slice(0, lastProvidedIndex + 1).map(parameter => {
     const argument = argumentsByParameter.get(parameter)
-    return argument ? Compile.Argument(argument) : gen`undefined`
+    if (!argument) {
+      return gen`undefined`
+    }
+    const expected = Type.ofParameter(parameter)
+    return ASTUtils.containsCapability(expected)
+      ? compileArgumentForType(argument.value, expected)
+      : Compile.Argument(argument)
   })
 }
 
@@ -646,9 +684,14 @@ function isWithinStatement(statement: AST.ReturnStatement, parent: AST.ActionSta
 
 /** Result-bearing done arms receive the same Tao value produced by a bound action result. */
 function compileDoResultInvocation(invocation: AST.DoStatement): Compiled {
-  const action = ASTUtils.resolveActionInvocation(invocation).action
-  Assert.is(action, AST.isActionDeclaration, 'validated result-bearing invocation resolves an action')
-  const resultType = BridgeMetadata.resultType(Type.ofActionResult(action))
+  const resolved = ASTUtils.resolveActionInvocation(invocation)
+  const action = resolved.action
+  Assert(
+    resolved.capability || AST.isActionDeclaration(action),
+    'validated result-bearing invocation resolves an action',
+  )
+  const result = resolved.capability?.result ?? Type.ofActionResult(action as AST.ActionDeclaration)
+  const resultType = BridgeMetadata.resultType(result, actionResultBridgeTypeOptions())
   return gen`() => TR.DoResult<${resultType}>(${Compile.Expression(invocation.action)}${
     Compile.ActionArguments(invocation)
   })`
@@ -688,6 +731,10 @@ function effectOutcomeName(statement: AST.WhenDoStatement | AST.DoStatement): st
 
 function actionInvocationArguments(invocation: AST.DoStatement): Compiled[] {
   const resolved = ASTUtils.resolveActionInvocation(invocation)
+  if (resolved.capability) {
+    Assert(resolved.diagnostics.length === 0, 'validated capability action invocation has no binding diagnostics')
+    return positionalArguments(AST.parametersOf(resolved.capability.requirement), resolved.pairs)
+  }
   if (!resolved.action) {
     // Dynamic callbacks declare positional action(...) signatures, so preserve the
     // caller's source order instead of applying named-action type binding.
@@ -698,17 +745,19 @@ function actionInvocationArguments(invocation: AST.DoStatement): Compiled[] {
   return positionalArguments(AST.parametersOf(resolved.action), resolved.pairs)
 }
 
-function compileForeignAction(action: AST.ActionDeclaration): Compiled {
+function compileForeignAction(action: AST.ActionDeclaration, receiver = false, associated = false): Compiled {
   const foreign = action.foreign
   Assert.defined(foreign, 'foreign action has an implementation')
   const implementation = { name: foreignActionBindingName(action) }
   const parameters = actionParameters(action)
   const requiredArguments = parameters.filter(({ parameter }) => parameter.defaultValue === undefined).length
-  const adaptedImplementation = parameters.some(({ parameter }) => parameter.defaultValue !== undefined)
+  const adaptedImplementation = receiver || parameters.some(({ parameter }) => parameter.defaultValue !== undefined)
     ? gen`(${gen.join(parameters, parameter => actionRuntimeParameterName(parameter.index))}) =>
       TR.BlockScope(_Scope, _Scope => {
         ${gen.list(parameters, compileForeignActionParameterBinding)}
         return ${gen.Name(implementation)}(${
+      receiver ? gen`_TaoAssociatedReceiver.evaluate().jsValue${parameters.length ? ',' : ''}` : gen.noop()
+    }${
       gen.join(parameters, ({ parameter }) => {
         const name = { name: Type.parameterName(parameter) }
         return gen`${gen.scopeName(name)}.evaluate().jsValue`
@@ -726,7 +775,9 @@ function compileForeignAction(action: AST.ActionDeclaration): Compiled {
       sentence: ${gen.jsLiteral(failure.sentence)},
     }`)
   }],
-    { ${action.runsLatest ? gen`runs: "latest", ` : gen``}requiredArguments: ${requiredArguments},
+    { ${associated ? gen`...options,` : gen.noop()}${
+    action.runsLatest ? gen`runs: "latest", ` : gen``
+  }requiredArguments: ${requiredArguments},
       testStubKey: ${gen.jsLiteral(foreignActionTestStubKey(action))},
       ${AST.findOwningView(action) ? gen`owner: _TaoActionOwner,` : gen``} },
   )`

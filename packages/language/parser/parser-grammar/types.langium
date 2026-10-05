@@ -24,15 +24,20 @@ TypeDeclaration:
     ('with' associated=RecordAssociatedBody)?;
 
 RecordAssociatedBody infers ItemTypeExpression:
-    '{' ((methods+=AssociatedFunctionDeclaration | views+=AssociatedViewDeclaration
+    '{' ((actions+=ActionDeclaration | methods+=AssociatedFunctionDeclaration | views+=AssociatedViewDeclaration
       | converters+=AssociatedConverterDeclaration) ','?)* '}';
 
 CapabilityTypeExpression:
-    '{' (methods+=CapabilityMethodDeclaration ','?)* '}';
+    '{' ((methods+=CapabilityMethodDeclaration | actions+=CapabilityActionDeclaration) ','?)* '}';
 
 // Failure bounds are contextual names; `never` remains available as an ordinary identifier.
 CapabilityMethodDeclaration:
     name=AssociatedFunctionName parameterList=ParameterList ('fails' failureBound=ID (',' additionalFailureBounds+=ID)*)? '->' returnType=TypeExpression;
+
+// Action requirements remain actions so matching cannot satisfy a command contract with a pure function.
+CapabilityActionDeclaration:
+    static?='static'? 'action' name=ID parameterList=ParameterList
+    ('fails' failureBound=ID (',' additionalFailureBounds+=ID)*)? ('->' returnType=TypeExpression)?;
 
 // Explicit converters are function bodies with source/target contracts and no value slots.
 AssociatedConverterDeclaration:
@@ -69,7 +74,7 @@ ItemTypeExpression:
     '{' ((properties+=TypeProperty | keys+=ConfigurationKeyDeclaration | implementations+=ConfigurationImplementation
       | issues+=ConfigurationIssues | accepts+=ConfigurationAccepts | supports+=ConfigurationSupports
       | unitBlocks+=NumericUnitBlock | methods+=AssociatedFunctionDeclaration | views+=AssociatedViewDeclaration
-      | converters+=AssociatedConverterDeclaration) ','?)* '}';
+      | actions+=ActionDeclaration | converters+=AssociatedConverterDeclaration) ','?)* '}';
 
 // A postfix `?` carries optionality. Item fields take no trait list.
 TypeProperty:

@@ -748,7 +748,8 @@ The generated bridge contract checks its plain JavaScript parameter types and `v
 `void` completion when no result is declared. A named foreign action with `returns T` instead checks
 `T` or `Promise<T>` completion. `let Name = do Action(...)` awaits that result and binds an immutable
 local value of the declared type for the following statements. Nullable results use `returns T?`.
-Only foreign actions declare results; result-bearing actions cannot use `runs latest`.
+Source actions infer results from their returns and may declare a result contract explicitly.
+Result-bearing foreign actions cannot use `runs latest`.
 The ordinary `from` expression remains synchronous and does not unwrap promises.
 Entity parameters are structural records of their declared fields.
 
@@ -761,18 +762,50 @@ Configuration implementation factories are checked against the declared nav or d
 
 The maintained `@tao/device/photos` and `@tao/device/files` modules are generated
 from pinned modern native declarations. Constructors, methods and property reads
-are result-bearing foreign actions; property writes are foreign actions. Operation
-names include their owning type, and property reads observe the current native
+are result-bearing foreign actions; property writes are foreign actions. Reference-owned operations
+are associated actions, with constructors and native static operations selected through their type.
+The earlier flat operation names remain available for compatibility. Property reads observe the current native
 value rather than a construction-time snapshot. React convenience hooks are not
 native operations and are explicitly deferred.
 
 Native objects have distinct nominal reference types. Repeated wrapping preserves
 native object identity and method receivers; nested records and lists retain those
 typed references. Native references remain in memory and cannot enter persisted
-state or serialized restoration descriptors. A generated `Release<Type>` action
-releases the Tao wrapper reference only. Closing a file handle, cancelling a
+state or serialized restoration descriptors. A generated `ReleaseReference()` associated action
+(or its flat `Release<Type>` equivalent) releases the Tao wrapper reference only. Closing a file handle, cancelling a
 transfer and deleting a file or photo require their explicit upstream operations.
 Native side effects retain upstream behavior and do not gain rollback guarantees.
+
+```tao
+let Document = do File.Construct(.Uris ["owned-path"])
+defer Document.ReleaseReference()
+let Handle = do Document.Open()
+defer Handle.ReleaseReference()
+defer Handle.Close()
+let Bytes = do Handle.ReadBytes(.Length 5)
+```
+
+Deferred actions run in reverse registration order on success and failure, so the handle closes
+before its wrapper is released. A native operation named `Release` remains distinct from
+`ReleaseReference`. Foreign associated implementations export `Owner_Member`; instance actions
+receive their captured nominal receiver before the authored arguments, while static actions do not.
+Ordinary native promises join through `do` and `then`; independently observed progress or callback
+lifetimes retain their explicit handles.
+
+Structural capabilities can require actions without turning them into pure functions:
+
+```tao
+can ByteReader {
+   action ReadBytes(Length number) -> list of number
+}
+action ReadFive(Reader ByteReader) {
+   return do Reader.ReadBytes(.Length 5)
+}
+```
+
+A matching native `FileHandle` satisfies this contract structurally. Action requirements retain
+their failure bounds and use `do` for execution; a same-named pure function does not satisfy an
+action requirement, and a native action does not satisfy a pure-function requirement.
 
 Generated TypeScript contracts retain these nominal identities through receivers,
 results, callbacks and nested records or lists. Verified generation metadata maps

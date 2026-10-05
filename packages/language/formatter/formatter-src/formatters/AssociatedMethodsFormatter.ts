@@ -5,13 +5,24 @@ export const AssociatedMethodsFormatter = {
   /** CapabilityTypeExpression puts each required signature on its own indented line. */
   CapabilityTypeExpression(f) {
     f.oneSpaceBefore('{')
-    f.indentedBraceBlock(f.node.methods)
-    f.lineSeparatedList(f.node.methods)
+    const members = [...f.node.methods, ...f.node.actions].sort((left, right) =>
+      (left.$cstNode?.offset ?? 0) - (right.$cstNode?.offset ?? 0)
+    )
+    f.indentedBraceBlock(members)
+    f.lineSeparatedList(members)
     f.commaLineList()
   },
 
   /** CapabilityMethodDeclaration formats one bodyless signature with its required result. */
   CapabilityMethodDeclaration(f) {
+    f.noSpaceBefore('(')
+    f.oneSpaceAround('fails')
+    f.oneSpaceAround('->')
+    f.commaSpacedList()
+  },
+
+  CapabilityActionDeclaration(f) {
+    f.oneSpaceAfter('action')
     f.noSpaceBefore('(')
     f.oneSpaceAround('fails')
     f.oneSpaceAround('->')

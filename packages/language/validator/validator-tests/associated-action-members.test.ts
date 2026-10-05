@@ -26,6 +26,20 @@ Describe('validator: associated action members', () => {
   )
 
   Test(
+    'accepts nominal item instance and static actions on an otherwise opaque item base',
+    accepts(`
+      type File is item with {
+        action Read(Length number) { },
+        static action Construct(Path text) { }
+      }
+      action Caller(Handle File, Path text) {
+        do Handle.Read(3)
+        do File.Construct(Path)
+      }
+    `),
+  )
+
+  Test(
     'rejects an unknown row action member',
     rejects(
       `
