@@ -6,7 +6,7 @@ import { discoverTaoDevProjects } from './dev-app-discovery'
 import { printFirebaseConsoleSetup } from './firebase-console-guidance'
 import type { FirebaseInspector } from './firebase-inspection'
 import { type FirebaseRunner, provisionFirebase } from './firebase-provision'
-import { hostedCrudRunCommand } from './hosted-crud-run'
+import { hostedCrudRunCommand, taoAppRunCommand } from './hosted-crud-run'
 import { readHostedProviderInputs } from './hosted-provider-inputs'
 
 export type ConnectProvider = 'firebase' | 'appwrite'
@@ -17,7 +17,7 @@ type ConnectPrompts = {
     choices: readonly { value: string; label: string }[],
     defaultValue?: string,
   ) => Promise<string>
-  text: (message: string) => Promise<string>
+  text: (message: string, defaultValue?: string) => Promise<string>
   paste: (message: string) => Promise<string>
   secret: (message: string) => Promise<string>
 }
@@ -67,7 +67,7 @@ export async function runTaoConnect(
   const prompts = options.prompts ?? {
     choice: (message: string, choices: readonly { value: string; label: string }[], defaultValue?: string) =>
       HCI.askChoice({ ...terminal, message, choices, defaultValue }),
-    text: (message: string) => HCI.askText({ ...terminal, message }),
+    text: (message: string, defaultValue?: string) => HCI.askText({ ...terminal, message, defaultValue }),
     paste: async (message: string) => (await HCI.askSecret({ ...terminal, message })).value,
     secret: async (message: string) => (await HCI.askSecret({ ...terminal, message })).value,
   }
@@ -102,6 +102,7 @@ export async function runTaoConnect(
   }
 
   let publicFields: Record<string, string> = {}
+  let firebaseAppName: string | undefined
   let firebaseAutomated = false
   let appwriteAutomated = false
   const appwriteResources = { platform: 'dev.tao.hostedcrudspike', databaseId: 'tao_notes', tableId: 'notes' }
@@ -163,6 +164,7 @@ export async function runTaoConnect(
         runner: options.firebaseRunner,
         sleep: options.firebaseSleep,
       })
+      firebaseAppName = backend?.displayName
       firebaseAutomated = true
     } else {
       printFirebaseConfigInstructions(pilot, out)
@@ -298,6 +300,10 @@ export async function runTaoConnect(
     HCI.writeLine('Publishing replaces project-wide rules; preserve rules for any other apps using this project.', out)
   } else {
     HCI.writeLine(`${service} connect completed.`, out)
+  }
+  if (firebaseAutomated && firebaseAppName) {
+    HCI.writeLine('To run the app:', out)
+    HCI.writeLine(`    ${await taoAppRunCommand(project, firebaseAppName)}`, out)
   }
   if (provider === 'appwrite' || pilot) {
     HCI.writeLine(`To open Hosted CRUD in Expo Go and choose ${service} on its first screen, run:`, out)

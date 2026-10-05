@@ -6,13 +6,21 @@ exports.Client = class {
     const calls = fs.existsSync(callsPath) ? JSON.parse(fs.readFileSync(callsPath, 'utf8')) : [];
     calls.push({ path, options, account: require('./auth.js').active });
     fs.writeFileSync(callsPath, JSON.stringify(calls));
-    if (state.denied) return Promise.reject({ status: 403 });
+    const stage = path.endsWith('/databases') ? 'databases' : path.endsWith('/config') ? 'auth-config' : 'auth-providers';
+    function reject(status, code, reason, messageCode = code) {
+      throw { status, context: { body: { error: { code: status, status: code, message: messageCode + ': RAW_ERROR_SECRET_CANARY', details: reason ? [{ reason, metadata: { secret: 'DETAIL_SECRET_CANARY' } }] : [] } }, response: { statusCode: status } } };
+    }
+    if (state.failureStage === stage) reject(state.failureStatus, state.failureCode);
+    if (state.denied) reject(403, 'PERMISSION_DENIED');
+    if (stage === 'databases' && state.disabledDatabase) reject(403, 'PERMISSION_DENIED', 'SERVICE_DISABLED');
     if (path.endsWith('/databases')) return { body: { databases: [{ name: 'projects/test-project/databases/(default)', type: 'FIRESTORE_NATIVE', databaseEdition: 'STANDARD', locationId: 'nam5' }] } };
     if (path.endsWith('/config')) {
-      if (state.absent) return Promise.reject({ status: 404 });
+      if (state.absent) reject(state.absentStatus, state.absentStatus === 400 ? 'INVALID_ARGUMENT' : 'NOT_FOUND', undefined, 'CONFIGURATION_NOT_FOUND');
+      if (state.emptyAuth) return { body: { name: 'projects/test-project/config', subtype: 'FIREBASE_AUTH', signIn: { email: { enabled: state.enabled, passwordRequired: state.passwordRequired }, anonymous: { enabled: false }, phoneNumber: { enabled: false }, hashConfig: { signerKey: 'HASH_SECRET_CANARY' } }, notification: {}, multiTenant: { allowTenants: false } } };
       return { body: { name: 'projects/test-project/config', signIn: { email: { enabled: state.enabled, passwordRequired: state.passwordRequired }, hashConfig: { signerKey: 'HASH_SECRET_CANARY', saltSeparator: 'SALT_SECRET_CANARY' } }, authorizedDomains: ['localhost'], notification: { sendEmail: { smtp: { password: 'SMTP_SECRET_CANARY' } } } } };
     }
     const resource = path.split('/').pop();
+    if (state.emptyAuth) return { body: { [resource]: [] } };
     if (resource === 'defaultSupportedIdpConfigs' && !options.queryParams.pageToken) return { body: { defaultSupportedIdpConfigs: [{ name: 'google.com', enabled: true, clientSecret: state.oauthSecret }], nextPageToken: 'next' } };
     if (resource === 'defaultSupportedIdpConfigs') return { body: { defaultSupportedIdpConfigs: [{ name: 'github.com', enabled: true, clientSecret: 'OTHER_SECRET_CANARY' }] } };
     return { body: { [resource]: [] } };

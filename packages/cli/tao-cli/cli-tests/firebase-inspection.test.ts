@@ -1,6 +1,6 @@
 import { CLI, FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
-import { inspectFirebase, listFirebaseAccounts } from '../cli-src/firebase-inspection'
+import { firebaseInspectionFailure, inspectFirebase, listFirebaseAccounts } from '../cli-src/firebase-inspection'
 import VENDOR_API_V2 from './fixtures/firebase-inspection/api-v2.cjs.txt'
 import VENDOR_API from './fixtures/firebase-inspection/api.cjs.txt'
 import VENDOR_AUTH from './fixtures/firebase-inspection/auth.cjs.txt'
@@ -17,6 +17,13 @@ async function vendorFixture() {
     passwordRequired: false,
     denied: false,
     absent: false,
+    absentStatus: 404,
+    disabledDatabase: false,
+    disabledRules: false,
+    emptyAuth: false,
+    failureStage: '',
+    failureStatus: 403,
+    failureCode: 'PERMISSION_DENIED',
     oauthSecret: 'OAUTH_SECRET_CANARY',
   }
   await FS.writeJson(statePath, state)
@@ -97,7 +104,9 @@ Describe('Firebase public inspection bridge', () => {
     f.state.denied = true
     await FS.writeJson(f.statePath, f.state)
     await Expect(inspectFirebase(f.request, f.runner)).rejects.toThrow('Firebase inspection failed')
-    Expect(f.captures.join('')).toBe('')
+    Expect(f.captures.join('')).toBe(
+      JSON.stringify({ failure: { stage: 'databases', status: 403, code: 'PERMISSION_DENIED' } }),
+    )
   })
 
   Test(
@@ -111,8 +120,73 @@ Describe('Firebase public inspection bridge', () => {
       f.state.absent = false
       f.state.enabled = true
       f.state.passwordRequired = true
+      f.state.emptyAuth = true
       await FS.writeJson(f.statePath, f.state)
-      Expect((await inspectFirebase(f.request, f.runner)).auth.emailPasswordEnabled).toBe(true)
+      Expect((await inspectFirebase(f.request, f.runner)).auth).toEqual({
+        emailPasswordEnabled: true,
+        emailPasswordRequired: true,
+        preserved: null,
+      })
     },
   )
+
+  Test('fresh-project disabled APIs and exact HTTP 400 missing Auth configuration are inspectable', async () => {
+    const f = await vendorFixture()
+    f.state.disabledDatabase = true
+    f.state.disabledRules = true
+    f.state.absent = true
+    f.state.absentStatus = 400
+    await FS.writeJson(f.statePath, f.state)
+    const before = await inspectFirebase(f.request, f.runner)
+    Expect(before).toEqual({ auth: { emailPasswordEnabled: false, preserved: null } })
+    const calls = await FS.readJson<{ path: string }[]>(FS.resolvePath('calls.json', f.root))
+    Expect(calls.map(call => call.path)).toEqual([
+      '/projects/test-project/databases',
+      '/admin/v2/projects/test-project/config',
+    ])
+    Expect(f.captures.join('')).not.toContain('SECRET_CANARY')
+  })
+
+  Test('public failures retain the owning API stage and status while all raw errors remain inside Node', async () => {
+    const cases = [
+      ['databases', 403, 'PERMISSION_DENIED'],
+      ['auth-config', 403, 'PERMISSION_DENIED'],
+      ['auth-config', 400, 'INVALID_ARGUMENT'],
+      ['auth-config', 404, 'NOT_FOUND'],
+      ['auth-providers', 403, 'PERMISSION_DENIED'],
+      ['rules-release', 403, 'PERMISSION_DENIED'],
+      ['rules-source', 503, 'UNAVAILABLE'],
+      ['auth-config', 403, 'CONFIGURATION_NOT_FOUND'],
+      ['databases', 400, 'SERVICE_DISABLED'],
+      ['auth-config', 403, 'UNRECOGNIZED_SECRET_CANARY'],
+    ] as const
+    for (const [stage, status, code] of cases) {
+      const f = await vendorFixture()
+      f.state.failureStage = stage
+      f.state.failureStatus = status
+      f.state.failureCode = code
+      await FS.writeJson(f.statePath, f.state)
+      let caught: unknown
+      try {
+        await inspectFirebase(f.request, f.runner)
+      } catch (error) {
+        caught = error
+      }
+      const expected = { stage, status, code: code === 'UNRECOGNIZED_SECRET_CANARY' ? 'UNKNOWN' : code }
+      Expect(firebaseInspectionFailure(caught)).toEqual(expected)
+      Expect(String(caught)).toContain(`HTTP ${status}, ${expected.code}`)
+      Expect(f.captures.join('')).toBe(JSON.stringify({ failure: expected }))
+      Expect(String(caught)).not.toContain('SECRET_CANARY')
+    }
+  })
+
+  Test('rules inspection permission denial cannot be mistaken for absent rules on a fresh project', async () => {
+    const f = await vendorFixture()
+    f.state.disabledDatabase = true
+    f.state.absent = true
+    f.state.failureStage = 'rules-release'
+    await FS.writeJson(f.statePath, f.state)
+    await Expect(inspectFirebase(f.request, f.runner)).rejects.toThrow('rules-release (HTTP 403, PERMISSION_DENIED)')
+    Expect(f.captures.join('')).not.toContain('SECRET_CANARY')
+  })
 })

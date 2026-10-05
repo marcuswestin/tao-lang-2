@@ -476,5 +476,23 @@ Focused tests cover resource reuse, deployment cancellation, rule preservation o
 concurrent-change detection, and partial failure. Isolated vendor fixtures also execute the real
 Node inspection bridge, covering account selection, paginated provider configuration, first-time
 Auth initialization, email-link preservation, and exclusion of secret values from process output.
-These tests do not establish live cloud provisioning, Google browser sign-in, or device acceptance. Run the API-default command locally in the existing
-project, then continue the hosted Tao app checks above. This follow-up is not authorized to land.
+The Developer reported successful API connection to an existing project, including database,
+Auth, deployed rules verification and local config saving. This is cloud setup evidence, not
+new generated-store device or hostile-request acceptance. A newly created project subsequently
+failed at initial inspection; the original inspector hid the failing API stage, so its exact
+live cause was not established.
+
+The follow-up accepts only the explicit `CONFIGURATION_NOT_FOUND` Auth response (HTTP 400/404)
+as uninitialized Auth, and prints sanitized API stage/status/code for other inspection errors.
+Immediately after project creation, transient permission/rate-limit/server responses are rechecked
+up to ten times with ten-second waits; an unsuccessful inspection never authorizes deployment.
+Existing-project permission failures stop immediately. Creation progress follows the official
+CLI's actual Google Cloud project and Firebase resource stages; retries announce actual rechecks.
+
+Continue is first and is the Enter default for every Firebase setup confirmation. Project creation
+proposes a valid ID with a random suffix; Enter accepts it and a typed ID overrides it. Resource
+selection still defaults to reusing an existing project/app. Successful ordinary app setup prints
+the next run command with the selected app and a wrapper/path appropriate to the current folder.
+The fresh-project repair has source and fixture coverage; its live rerun remains pending. Reuse
+`tao-autocreate-test` on that rerun rather than creating another project. This follow-up is not
+authorized to land.

@@ -555,7 +555,11 @@ data Notes / Note { Body text }
         'match /Note/{id}',
       )
       Expect(await FS.exists(FS.resolvePath('tao.connections.json', root))).toBe(false)
-      Expect(terminal.outputText()).toContain('Firebase connect completed.')
+      Expect(terminal.outputText()).toContain(
+        `Firebase connect completed.\nTo run the app:\n    ./tao run ${
+          FS.relativePath(FS.resolvePath('.'), root)
+        } --app Hosted`,
+      )
       Expect(terminal.outputText()).not.toContain('Get your Firebase config')
     } finally {
       await FS.remove(root)
@@ -675,12 +679,14 @@ data Notes / Note { Body text }
         return { exitCode: 0, stdout: JSON.stringify({ status: 'success', result }), stderr: '' }
       }
       const questions: string[] = []
+      let proposedId = ''
       const { terminal, options } = scripted([])
       const prompts = {
         ...options.prompts,
-        text: async (message: string) => {
+        text: async (message: string, defaultValue?: string) => {
           questions.push(message)
-          return 'tao-hosted-crud-test'
+          proposedId = defaultValue ?? ''
+          return ''
         },
         choice: async (
           message: string,
@@ -694,7 +700,14 @@ data Notes / Note { Body text }
             Expect(terminal.outputText()).toContain('storage location is permanent')
             Expect(terminal.outputText()).toContain('https://firebase.google.com/docs/firestore/locations')
           }
-          return choices.find(choice => choice.value === 'continue')?.value ?? defaultValue ?? choices[0]!.value
+          if (
+            message.startsWith('Create Firebase project') || message.startsWith('Register')
+            || message === 'Apply this Firebase deployment plan?'
+          ) {
+            Expect(defaultValue).toBe('continue')
+            Expect(choices[0]?.value).toBe('continue')
+          }
+          return defaultValue ?? choices[0]!.value
         },
       }
       const pauses: number[] = []
@@ -714,13 +727,13 @@ data Notes / Note { Body text }
             ...(deployed
               ? {
                 database: {
-                  name: 'projects/tao-hosted-crud-test/databases/(default)',
+                  name: `projects/${proposedId}/databases/(default)`,
                   type: 'FIRESTORE_NATIVE',
                   databaseEdition: 'STANDARD',
                   locationId: 'nam5',
                 },
                 rules: {
-                  releaseName: 'projects/tao-hosted-crud-test/releases/cloud.firestore',
+                  releaseName: `projects/${proposedId}/releases/cloud.firestore`,
                   rulesetName: 'rulesets/done',
                   source: "rules_version = '2';\n",
                 },
@@ -730,7 +743,8 @@ data Notes / Note { Body text }
         },
       })
       const created = calls.find(call => call[0] === 'projects:create')?.[1] ?? ''
-      Expect(created).toBe('tao-hosted-crud-test')
+      Expect(created).toBe(proposedId)
+      Expect(created).toMatch(/^tao-hosted-crud-[0-9a-f]{8}$/u)
       Expect(questions[0]).toContain('Enter a globally unique Firebase project ID')
       Expect(questions.some(question => question.includes('Type yes'))).toBe(false)
       Expect(await FS.readJson(FS.resolvePath('.tao/local/connections.json', root))).toEqual({
@@ -803,7 +817,7 @@ data Notes / Note { Body text }
         return { exitCode: 0, stdout: JSON.stringify({ status: 'success', result }), stderr: '' }
       }
       await Expect(runTaoConnect('firebase', root, {
-        ...scripted(['2', 'tao-hosted-typo', '1']).options,
+        ...scripted(['2', 'tao-hosted-typo', '2']).options,
         manual: false,
         firebaseRunner: runner,
       })).rejects.toThrow('setup was cancelled')
@@ -873,7 +887,7 @@ data Notes / Note { Body text }
         return { exitCode: 0, stdout: JSON.stringify({ status: 'success', result }), stderr: '' }
       }
       await Expect(runTaoConnect('firebase', root, {
-        ...scripted(['', '', '']).options,
+        ...scripted(['', '', '2']).options,
         manual: false,
         firebaseRunner: runner,
         firebaseInspector: async () => ({

@@ -5,29 +5,50 @@ const { Client } = require(root + '/apiv2.js');
 const api = require(root + '/api.js');
 const rulesApi = require(root + '/gcp/rules.js');
 const { createHash } = require('node:crypto');
+let stage = 'account';
+const publicCodes = new Set(['CONFIGURATION_NOT_FOUND', 'SERVICE_DISABLED', 'PERMISSION_DENIED',
+  'NOT_FOUND', 'UNAUTHENTICATED', 'INVALID_ARGUMENT', 'RESOURCE_EXHAUSTED', 'UNAVAILABLE',
+  'DEADLINE_EXCEEDED', 'INTERNAL', 'UNKNOWN', 'ACCOUNT_MISMATCH', 'INVALID_RESPONSE',
+  'CONSUMER_INVALID', 'PROJECT_NOT_FOUND', 'IAM_PERMISSION_DENIED']);
+function failure(error) {
+  const body = error?.context?.body?.error;
+  const rawStatus = error?.status ?? body?.code ?? error?.context?.response?.statusCode;
+  const status = Number.isInteger(rawStatus) && rawStatus >= 100 && rawStatus <= 599 ? rawStatus : null;
+  const messageCode = typeof body?.message === 'string' ? body.message.split(':', 1)[0].trim() : undefined;
+  const reasons = Array.isArray(body?.details) ? body.details.map(detail => detail?.reason) : [];
+  const code = [error?.publicCode, ...reasons, messageCode, body?.status].find(value => publicCodes.has(value)) || 'UNKNOWN';
+  return { stage, status, code };
+}
 async function main() {
   const fallback = auth.getGlobalDefaultAccount();
   const account = email ? auth.selectAccount(email, process.cwd()) : fallback;
-  if (!account || account.user.email !== email) process.exit(1);
+  if (!account || account.user.email !== email) throw { publicCode: 'ACCOUNT_MISMATCH' };
   const options = { project: projectId, projectRoot: process.cwd(), nonInteractive: true };
   auth.setActiveAccount(options, account);
-  if (await requireAuth(options, true) !== email) process.exit(1);
+  if (await requireAuth(options, true) !== email) throw { publicCode: 'ACCOUNT_MISMATCH' };
   const firestore = new Client({ urlPrefix: api.firestoreOrigin(), apiVersion: 'v1' });
   const identity = new Client({ urlPrefix: api.identityOrigin(), auth: true });
   function disabled(error) {
-    const details = error.context?.body?.error?.details;
-    return Array.isArray(details) && details.some(d => d.reason === 'SERVICE_DISABLED');
+    const result = failure(error);
+    return result.status === 403 && result.code === 'SERVICE_DISABLED';
   }
   let databases;
+  stage = 'databases';
   try { databases = (await firestore.get('/projects/' + projectId + '/databases')).body.databases || []; }
   catch (error) { if (!disabled(error)) throw error; databases = []; }
   const database = databases.find(d => d.name === 'projects/' + projectId + '/databases/(default)');
   let config;
   let authExists = true;
+  stage = 'auth-config';
   try { config = (await identity.get('/admin/v2/projects/' + projectId + '/config', {
     headers: { 'x-goog-user-project': projectId }, skipLog: { resBody: true }
   })).body; }
-  catch (error) { if (error.status !== 404 && !disabled(error)) throw error; config = {}; authExists = false; }
+  catch (error) {
+    const result = failure(error);
+    const missing = (result.status === 400 || result.status === 404) && result.code === 'CONFIGURATION_NOT_FOUND';
+    if (!missing && !disabled(error)) throw error;
+    config = {}; authExists = false;
+  }
   const signIn = structuredClone(config.signIn || {});
   const emailPasswordEnabled = signIn.email?.enabled === true;
   const emailPasswordRequired = signIn.email?.passwordRequired;
@@ -40,6 +61,7 @@ async function main() {
   // These documented output-only fields describe provisioning, rather than retained settings.
   delete config.name; delete config.subtype; delete config.defaultHostingSite;
   const providerConfigs = [];
+  stage = 'auth-providers';
   if (authExists) {
     for (const resource of ['defaultSupportedIdpConfigs', 'oauthIdpConfigs', 'inboundSamlConfigs']) {
       let pageToken;
@@ -70,17 +92,22 @@ async function main() {
   const retained = normalize({ config, providers: providerConfigs.sort((a, b) => String(a.name).localeCompare(String(b.name))) });
   const preserved = authExists && retained ? createHash('sha256').update(stable(retained)).digest('hex') : null;
   let releases;
+  stage = 'rules-release';
   try { releases = await rulesApi.listAllReleases(projectId); }
   catch (error) { if (database || !disabled(error)) throw error; releases = []; }
   const release = releases.find(r => r.name === 'projects/' + projectId + '/releases/cloud.firestore');
   let rules;
   if (release) {
+    stage = 'rules-source';
     const files = await rulesApi.getRulesetContent(release.rulesetName);
-    if (files.length !== 1 || typeof files[0].content !== 'string') process.exit(1);
+    if (files.length !== 1 || typeof files[0].content !== 'string') throw { publicCode: 'INVALID_RESPONSE' };
     rules = { releaseName: release.name, rulesetName: release.rulesetName, source: files[0].content };
   }
   process.stdout.write(JSON.stringify({ database: database && {
     name: database.name, type: database.type, databaseEdition: database.databaseEdition,
     locationId: database.locationId }, auth: { emailPasswordEnabled, emailPasswordRequired, preserved }, rules }));
 }
-main().catch(() => process.exit(1));
+main().catch(error => {
+  process.stdout.write(JSON.stringify({ failure: failure(error) }));
+  process.exitCode = 1;
+});

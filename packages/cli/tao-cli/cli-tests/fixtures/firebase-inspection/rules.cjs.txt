@@ -1,2 +1,17 @@
-exports.listAllReleases = async projectId => [{ name: 'projects/' + projectId + '/releases/cloud.firestore', rulesetName: 'projects/' + projectId + '/rulesets/original' }];
-exports.getRulesetContent = async () => [{ content: 'deployed rules source' }];
+const fs = require('node:fs');
+function check(stage) {
+  const state = JSON.parse(fs.readFileSync(__dirname + '/../state.json', 'utf8'));
+  if (state.failureStage === stage || (stage === 'rules-release' && state.disabledRules)) {
+    const status = state.disabledRules ? 403 : state.failureStatus;
+    const code = state.disabledRules ? 'SERVICE_DISABLED' : state.failureCode;
+    throw { status, context: { body: { error: { code: status, status: code, message: code + ': RAW_RULES_SECRET_CANARY' } }, response: { statusCode: status } } };
+  }
+}
+exports.listAllReleases = async projectId => {
+  check('rules-release');
+  return [{ name: 'projects/' + projectId + '/releases/cloud.firestore', rulesetName: 'projects/' + projectId + '/rulesets/original' }];
+};
+exports.getRulesetContent = async () => {
+  check('rules-source');
+  return [{ content: 'deployed rules source' }];
+};

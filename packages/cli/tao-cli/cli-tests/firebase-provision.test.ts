@@ -1,7 +1,7 @@
 import { Errors, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, fakeTerminal, mkTestDir, Test, testOverrideSlot } from '@shared/test'
 import type { FirebaseInspection, FirebaseInspector } from '../cli-src/firebase-inspection'
-import { type FirebaseRunner, provisionFirebase } from '../cli-src/firebase-provision'
+import { firebaseCreationProgress, type FirebaseRunner, provisionFirebase } from '../cli-src/firebase-provision'
 import { composeFirebasePilotRules } from '../cli-src/firebase-rules'
 
 const bootstrap =
@@ -139,6 +139,24 @@ async function fixture() {
 }
 
 Describe('Firebase API provisioning', () => {
+  Test('streams only fixed Firebase creation phases across output chunks', () => {
+    const terminal = fakeTerminal()
+    const output = firebaseCreationProgress(terminal.output)
+    output('stdout', Buffer.from('- Creating Google Cloud Platform project\n'))
+    output('stderr', Buffer.from('- Creating Google Cloud'))
+    Expect(terminal.outputText()).toBe('')
+    output(
+      'stderr',
+      Buffer.from(
+        ' Platform project\nraw secret-canary\n- Adding Firebase resources to Google Cloud Platform project\n',
+      ),
+    )
+    output('stderr', Buffer.from('- Creating Google Cloud Platform project\n'))
+    Expect(terminal.outputText()).toBe(
+      'Creating the Google Cloud project…\nAdding Firebase resources to the Google Cloud project…\n',
+    )
+  })
+
   Test('inherited token authentication stops before any CLI or cloud call', async () => {
     const f = await fixture()
     Expect(Object.hasOwn(Platform.runtimeProcess.env, 'FIREBASE_TOKEN')).toBe(false)
@@ -158,7 +176,7 @@ Describe('Firebase API provisioning', () => {
       const config = await provisionFirebase(f.options)
       Expect(config.appId).toBe('saved-app')
       Expect(config.projectId).toBe('saved-project')
-      Expect(f.menus.map(menu => menu.choices[0]!.value)).toEqual(['saved-project', 'saved-app', 'stop'])
+      Expect(f.menus.map(menu => menu.choices[0]!.value)).toEqual(['saved-project', 'saved-app', 'continue'])
       Expect(f.calls.some(args => args[0] === 'projects:create' || args[0] === 'apps:create')).toBe(false)
       for (const args of f.calls.slice(1)) {
         Expect(args).toContain('local@example.test')
@@ -252,7 +270,7 @@ Describe('Firebase API provisioning', () => {
     delete f.state.database
     delete f.state.rules
     await provisionFirebase(f.options)
-    Expect(f.menus.map(menu => menu.defaultValue)).toEqual(['saved-project', 'nam5', 'saved-app', 'stop'])
+    Expect(f.menus.map(menu => menu.defaultValue)).toEqual(['saved-project', 'nam5', 'saved-app', 'continue'])
     Expect(await FS.readJson(FS.resolvePath('firebase.json', f.work))).toEqual({
       auth: { providers: { emailPassword: true } },
       firestore: { database: '(default)', edition: 'standard', rules: 'firestore.rules', location: 'nam5' },
@@ -275,7 +293,7 @@ Describe('Firebase API provisioning', () => {
 
   Test('invalid numeric selection redraws default first and Enter reuses saved resources', async () => {
     const f = await fixture()
-    const answers = ['incorrect', '', '', '2']
+    const answers = ['incorrect', '', '', '']
     await provisionFirebase({ ...f.options, prompts: { text: async () => answers.shift() ?? '' } })
     Expect(f.terminal.outputText()).toContain('ctrl+c to quit')
     Expect(f.terminal.outputText()).toContain('1. Reuse saved-project (saved-project) (default)')
@@ -346,18 +364,76 @@ Describe('Firebase API provisioning', () => {
     Expect(f.calls.filter(args => args[0] === 'deploy')).toHaveLength(deploys)
   })
 
-  Test('the complete deployment plan defaults to stop before any deploy', async () => {
+  Test(
+    'rechecks a newly created project after a transient inspection failure and never accepts failed inspection',
+    async () => {
+      for (const recover of [true, false]) {
+        const f = await fixture()
+        let reads = 0
+        const pauses: number[] = []
+        const inspect = f.options.inspector
+        const run = f.options.runner
+        const action = provisionFirebase({
+          ...f.options,
+          runner: async (args, cwd, interactive) =>
+            args[0] === 'projects:create' || args[0] === 'projects:list'
+              ? { exitCode: 0, stdout: JSON.stringify({ status: 'success', result: [] }), stderr: '' }
+              : run(args, cwd, interactive),
+          prompts: {
+            text: async () => 'saved-project',
+            choice: async (message, _choices, defaultValue) =>
+              message === 'Choose the Firebase project' ? '__create__' : defaultValue!,
+          },
+          inspector: async request => {
+            if (++reads === 1 || !recover) {
+              Errors.throwHostEnvironment('Firebase inspection failed at auth-config (HTTP 403, PERMISSION_DENIED).', {
+                details: { firebaseInspection: { stage: 'auth-config', status: 403, code: 'PERMISSION_DENIED' } },
+              })
+            }
+            return inspect(request)
+          },
+          sleep: async milliseconds => {
+            pauses.push(milliseconds)
+          },
+        })
+        if (recover) {
+          await action
+          Expect(f.calls.some(args => args[0] === 'deploy')).toBe(true)
+          Expect(pauses).toEqual([10_000])
+        } else {
+          await Expect(action).rejects.toThrow('HTTP 403')
+          Expect(f.calls.some(args => args[0] === 'deploy')).toBe(false)
+          Expect(reads).toBe(10)
+          Expect(pauses).toHaveLength(9)
+        }
+        Expect(f.terminal.outputText()).toContain(
+          'Rechecking the default database, Auth settings, and deployed Firestore rules',
+        )
+      }
+    },
+  )
+
+  Test('a permission failure on an existing project stops immediately without deployment', async () => {
     const f = await fixture()
-    await Expect(
-      provisionFirebase({
-        ...f.options,
-        prompts: {
-          ...f.options.prompts,
-          choice: async (_message, _choices, defaultValue) => defaultValue!,
-        },
-      }),
-    ).rejects.toThrow('cancelled')
+    let reads = 0
+    await Expect(provisionFirebase({
+      ...f.options,
+      inspector: async () => {
+        reads++
+        Errors.throwHostEnvironment('Firebase inspection failed at auth-config (HTTP 403, PERMISSION_DENIED).', {
+          details: { firebaseInspection: { stage: 'auth-config', status: 403, code: 'PERMISSION_DENIED' } },
+        })
+      },
+    })).rejects.toThrow('HTTP 403')
+    Expect(reads).toBe(1)
     Expect(f.calls.some(args => args[0] === 'deploy')).toBe(false)
+  })
+
+  Test('Enter accepts the complete deployment plan with Continue first', async () => {
+    const f = await fixture()
+    await provisionFirebase({ ...f.options, prompts: { text: async () => '' } })
+    Expect(f.calls.some(args => args[0] === 'deploy')).toBe(true)
+    Expect(f.terminal.outputText()).toContain('1. Continue (default)\n2. Stop setup')
     Expect(f.terminal.outputText()).toContain('Project: saved-project; web app: saved-app')
     Expect(f.terminal.outputText()).toContain('location: nam5')
     Expect(f.terminal.outputText()).toContain('enable Email/Password; preserve other providers and settings')

@@ -15,6 +15,38 @@ export type FirebaseInspector = (request: {
   cwd: string
 }) => Promise<FirebaseInspection>
 
+/** A public API classification, never a raw provider error or response. */
+export type FirebaseInspectionFailure = {
+  stage: 'account' | 'databases' | 'auth-config' | 'auth-providers' | 'rules-release' | 'rules-source'
+  status: number | null
+  code: string
+}
+
+const FAILURE_STAGES = ['account', 'databases', 'auth-config', 'auth-providers', 'rules-release', 'rules-source']
+const FAILURE_CODES = [
+  'CONFIGURATION_NOT_FOUND',
+  'SERVICE_DISABLED',
+  'PERMISSION_DENIED',
+  'NOT_FOUND',
+  'UNAUTHENTICATED',
+  'INVALID_ARGUMENT',
+  'RESOURCE_EXHAUSTED',
+  'UNAVAILABLE',
+  'DEADLINE_EXCEEDED',
+  'INTERNAL',
+  'UNKNOWN',
+  'ACCOUNT_MISMATCH',
+  'INVALID_RESPONSE',
+  'CONSUMER_INVALID',
+  'PROJECT_NOT_FOUND',
+  'IAM_PERMISSION_DENIED',
+]
+
+/** Read the inspection boundary's sanitized diagnostic for bounded creation retries. */
+export function firebaseInspectionFailure(error: unknown): FirebaseInspectionFailure | undefined {
+  return error instanceof Errors.HostEnvironmentError ? publicFailure(error.details?.['firebaseInspection']) : undefined
+}
+
 type BridgeRunner = (
   script: string,
   args: readonly string[],
@@ -62,16 +94,25 @@ export async function inspectFirebase(
   const authPath = FS.fileUrlToPath(import.meta.resolve('firebase-tools/lib/auth.js'))
   const vendorRoot = FS.dirname(authPath)
   const result = await runner(INSPECTION_BRIDGE, [vendorRoot, request.projectId, request.account], request.cwd)
-  if (result.exitCode !== 0) {
-    Errors.throwHostEnvironment(
-      'Firebase inspection failed. Check the selected account and project permissions before resuming setup.',
-    )
-  }
   let value: unknown
   try {
     value = JSON.parse(result.stdout)
   } catch {
     Errors.throwHostEnvironment('Firebase inspection returned no public state; setup could not be verified.')
+  }
+  if (result.exitCode !== 0) {
+    const details = record(value) ? publicFailure(value['failure']) : undefined
+    if (details) {
+      Errors.throwHostEnvironment(
+        `Firebase inspection failed at ${details.stage} (${
+          details.status === null ? 'no HTTP status' : `HTTP ${details.status}`
+        }, ${details.code}). Check local sign-in and project access before resuming setup.`,
+        { details: { firebaseInspection: details } },
+      )
+    }
+    Errors.throwHostEnvironment(
+      'Firebase inspection failed without a public API classification; setup could not be verified.',
+    )
   }
   if (!record(value) || !record(value['auth']) || typeof value['auth']['emailPasswordEnabled'] !== 'boolean') {
     Errors.throwHostEnvironment('Firebase inspection returned invalid public state; setup could not be verified.')
@@ -111,6 +152,23 @@ export async function inspectFirebase(
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function publicFailure(value: unknown): FirebaseInspectionFailure | undefined {
+  if (
+    !record(value) || typeof value['stage'] !== 'string' || !FAILURE_STAGES.includes(value['stage'])
+    || typeof value['code'] !== 'string' || !FAILURE_CODES.includes(value['code'])
+    || (value['status'] !== null
+      && (typeof value['status'] !== 'number' || !Number.isInteger(value['status']) || value['status'] < 100
+        || value['status'] > 599))
+  ) {
+    return undefined
+  }
+  return {
+    stage: value['stage'] as FirebaseInspectionFailure['stage'],
+    status: value['status'] as number | null,
+    code: value['code'],
+  }
 }
 
 // Keep the pinned firebase-tools internals behind this process boundary. Never serialize an account,

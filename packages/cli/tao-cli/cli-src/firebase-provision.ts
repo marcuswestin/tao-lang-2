@@ -1,7 +1,8 @@
-import { CLI, Errors, FS, HCI, Platform, Time } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, Text, Time } from '@shared'
 import type { Writable } from 'node:stream'
 import {
   type FirebaseInspection,
+  firebaseInspectionFailure,
   type FirebaseInspector,
   inspectFirebase,
   listFirebaseAccounts,
@@ -12,7 +13,7 @@ type FirebaseResult = { exitCode: number | null; stdout: string; stderr: string 
 export type FirebaseRunner = (args: readonly string[], cwd: string, interactive: boolean) => Promise<FirebaseResult>
 type Choice = { value: string; label: string }
 type FirebasePrompts = {
-  text: (message: string) => Promise<string>
+  text: (message: string, defaultValue?: string) => Promise<string>
   choice?: (message: string, choices: readonly Choice[], defaultValue?: string) => Promise<string>
 }
 type FirebaseConfig =
@@ -56,7 +57,8 @@ export async function provisionFirebase(options: FirebaseProvisionOptions): Prom
   let stage = 'local setup validation'
   let mutationAttempted = false
   try {
-    const rawRun = options.runner ?? runFirebaseCli
+    const rawRun = options.runner
+      ?? ((args, cwd, interactive) => runFirebaseCli(args, cwd, interactive, options.output))
     HCI.writeLine('Checking local Firebase CLI sign-in…', out)
     const readAccounts = () =>
       options.runner ? firebaseJson(rawRun, work, ['login:list'], 'check Firebase sign-in') : listFirebaseAccounts(work)
@@ -124,10 +126,18 @@ export async function provisionFirebase(options: FirebaseProvisionOptions): Prom
     if (projectId === '__cancel__') {
       Errors.throwUserInput('Firebase setup stopped; no cloud changes were made.')
     }
-    if (projectId === '__create__') {
+    const createdProject = projectId === '__create__'
+    if (createdProject) {
+      const slug = (options.backend?.displayName ?? 'hosted-crud').toLowerCase().replace(/[^a-z0-9]+/gu, '-').replace(
+        /^-+|-+$/gu,
+        '',
+      ).slice(0, 17).replace(/-+$/u, '') || 'project'
+      const proposedId = 'tao-' + slug + '-' + Platform.randomUUID().slice(0, 8)
+      HCI.writeLine('Press Enter to use the proposed project ID, or type another ID.', out)
       projectId = (await options.prompts.text(
         'Enter a globally unique Firebase project ID (6–30 lowercase letters, digits, or hyphens)',
-      )).trim()
+        proposedId,
+      )).trim() || proposedId
       if (!/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/u.test(projectId)) {
         Errors.throwUserInput(
           'Firebase project ID must be 6–30 lowercase letters, digits, or hyphens, starting with a letter and ending with a letter or digit.',
@@ -135,6 +145,7 @@ export async function provisionFirebase(options: FirebaseProvisionOptions): Prom
       }
       await confirm(options, 'Create Firebase project ' + projectId + '?')
       HCI.writeLine('Creating Firebase project ' + projectId + '… This usually takes about a minute.', out)
+      HCI.writeLine('Firebase CLI is creating the Google Cloud project, then adding Firebase resources…', out)
       mutationAttempted = true
       await firebaseJson(run, work, [
         'projects:create',
@@ -142,12 +153,36 @@ export async function provisionFirebase(options: FirebaseProvisionOptions): Prom
         '--display-name',
         options.backend?.displayName ?? 'Tao Hosted CRUD Demo',
       ], 'create Firebase project')
+      HCI.writeLine('Google Cloud project created and Firebase resources added.', out)
     }
     stage = 'project selection (' + projectId + ')'
     const inspect = options.inspector ?? inspectFirebase
     const request = { projectId, account, cwd: work }
     HCI.writeLine('Inspecting the default database, Auth settings, and deployed Firestore rules before changes…', out)
-    const before = await inspect(request)
+    const before = await inspectNewProject()
+    async function inspectNewProject(): Promise<FirebaseInspection> {
+      for (let attempt = 1;; attempt++) {
+        try {
+          return await inspect(request)
+        } catch (error) {
+          const failure = firebaseInspectionFailure(error)
+          const transient = failure?.status === 429
+            || (failure?.status !== null && failure?.status !== undefined && failure.status >= 500)
+            || (failure?.status === 403 && ['PERMISSION_DENIED', 'IAM_PERMISSION_DENIED'].includes(failure.code))
+          if (!createdProject || !transient || attempt >= DEPLOY_ATTEMPTS || failure?.stage === 'account') {
+            throw error
+          }
+          HCI.writeLine(
+            'Waiting for the new Firebase project to become available after ' + failure!.stage + ' returned HTTP '
+              + failure!.status + ' (' + failure!.code + '). Rechecking in 10 seconds (attempt ' + (attempt + 1)
+              + ' of ' + DEPLOY_ATTEMPTS + ')…',
+            out,
+          )
+          await (options.sleep ?? Time.sleep)(DEPLOY_RETRY_MILLISECONDS)
+          HCI.writeLine('Rechecking the default database, Auth settings, and deployed Firestore rules…', out)
+        }
+      }
+    }
     validateDatabase(before)
     const backup = FS.resolvePath(projectId + '.current.rules', work)
     const candidatePath = FS.resolvePath(projectId + '.candidate.rules', work)
@@ -446,7 +481,7 @@ async function confirm(options: FirebaseProvisionOptions, message: string): Prom
   const answer = await choose(options, message, [{ value: 'stop', label: 'Stop setup' }, {
     value: 'continue',
     label: 'Continue',
-  }], 'stop')
+  }], 'continue')
   if (answer !== 'continue') {
     Errors.throwUserInput('Firebase setup was cancelled; no connection was saved.')
   }
@@ -569,10 +604,48 @@ async function firebaseJson(
   }
   return response['result']
 }
-async function runFirebaseCli(args: readonly string[], cwd: string, interactive: boolean): Promise<FirebaseResult> {
+async function runFirebaseCli(
+  args: readonly string[],
+  cwd: string,
+  interactive: boolean,
+  output?: Writable,
+): Promise<FirebaseResult> {
   const binary = FS.fileUrlToPath(import.meta.resolve('firebase-tools/lib/bin/firebase.js'))
-  return CLI.run('node', { args: [binary, ...args], cwd, stdio: interactive ? 'inherit' : 'pipe' })
+  return CLI.run('node', {
+    args: [binary, ...args],
+    cwd,
+    stdio: interactive ? 'inherit' : 'pipe',
+    ...(args[0] === 'projects:create' ? { onOutput: firebaseCreationProgress(output) } : {}),
+  })
 }
+/** Forward only the official CLI's fixed creation stage markers, keeping provider responses private. */
+export function firebaseCreationProgress(output?: Writable): (stream: 'stderr' | 'stdout', chunk: Buffer) => void {
+  let pending = ''
+  const seen = new Set<string>()
+  const phases: Record<string, string> = {
+    'Creating Google Cloud Platform project': 'Creating the Google Cloud project…',
+    'Adding Firebase resources to Google Cloud Platform project':
+      'Adding Firebase resources to the Google Cloud project…',
+  }
+  return (stream, chunk) => {
+    if (stream !== 'stderr') {
+      return
+    }
+    pending += chunk.toString('utf8')
+    const lines = pending.split(/\r?\n/u)
+    pending = lines.pop()!.slice(-512)
+    for (const raw of lines) {
+      const line = Text.stripAnsi(raw).trim()
+      const text = line.startsWith('- ') ? line.slice(2) : undefined
+      const message = text ? phases[text] : undefined
+      if (message && !seen.has(message)) {
+        seen.add(message)
+        HCI.writeLine(message, { output })
+      }
+    }
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

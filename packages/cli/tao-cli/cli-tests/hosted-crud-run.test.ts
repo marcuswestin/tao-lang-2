@@ -1,7 +1,7 @@
 import { Errors, FS, Time } from '@shared'
 import { Describe, Expect, fakeTerminal, mkTestDir, Test } from '@shared/test'
 import type { MetroStarter } from '../cli-src/hosted-crud-metro'
-import { hostedCrudRunCommand, runHostedCrud } from '../cli-src/hosted-crud-run'
+import { hostedCrudRunCommand, runHostedCrud, taoAppRunCommand } from '../cli-src/hosted-crud-run'
 
 async function expoProject(root: string): Promise<string> {
   const project = FS.resolvePath('Apps/Hosted CRUD', root)
@@ -93,6 +93,22 @@ const bundleEvents = [
 ]
 
 Describe('tao connect run', () => {
+  Test('prints the ordinary app run command from its app folder with the local repository wrapper', async () => {
+    const root = await mkTestDir('tao-app-run-command-')
+    try {
+      await FS.writeText(FS.resolvePath('tao', root), '')
+      await FS.writeText(FS.resolvePath('packages/cli/tao-cli/cli-src/tao-cli.ts', root), '')
+      const project = FS.resolvePath('Apps/Hosted Firebase', root)
+      await FS.mkdir(project)
+      Expect(await taoAppRunCommand(project, 'FirebaseNotes', project)).toBe('../../tao run . --app FirebaseNotes')
+      Expect(await taoAppRunCommand(project, 'FirebaseNotes', root)).toBe(
+        "./tao run 'Apps/Hosted Firebase' --app FirebaseNotes",
+      )
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('shows the compact action line, contextual device guidance, bundling, errors and logs', async () => {
     const root = await mkTestDir('tao-connect-run-login-')
     try {
