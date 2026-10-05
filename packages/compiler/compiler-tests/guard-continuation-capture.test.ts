@@ -229,7 +229,7 @@ Describe('compiler: optional entity guard continuation capture', () => {
     const result = TR.GuardRender(
       value,
       [],
-      sampled => {
+      (sampled: unknown) => {
         captured = sampled
         return 'tail'
       },
