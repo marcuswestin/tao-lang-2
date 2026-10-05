@@ -1,8 +1,9 @@
 import { Describe, Expect, Test } from '@shared/test'
 import { fireEventAsync } from '@testing-library/react-native'
 import * as RN from 'react-native'
-import type { ReactTestInstance } from 'react-test-renderer'
 import { registerRuntimeE2ELifecycle, testCompileApp } from './test-compile-app'
+
+type NativeHostNode = Readonly<{ type: unknown; props: Readonly<{ testID?: unknown }> }>
 
 registerRuntimeE2ELifecycle()
 
@@ -49,16 +50,16 @@ Describe('bare text-valued render targets', () => {
       `,
       async screen => {
         const surface = screen.getByTestId('surface')
-        const nativeHostNodes = () => surface.findAll((node: ReactTestInstance) => typeof node.type === 'string')
+        const nativeHostNodes = () => surface.findAll((node: NativeHostNode) => typeof node.type === 'string')
         const nativeHostPath = () =>
           nativeHostNodes()
-            .map((node: ReactTestInstance) => `${node.type}#${String(node.props.testID ?? '')}`)
+            .map((node: NativeHostNode) => `${String(node.type)}#${String(node.props.testID ?? '')}`)
         const emptyHostPath = nativeHostPath()
         const emptyHostCount = nativeHostNodes().length
         const visibleNativeTextTags = () =>
           surface
-            .findAll((node: ReactTestInstance) => node.type === 'Text')
-            .map((node: ReactTestInstance) => node.props.testID)
+            .findAll((node: NativeHostNode) => node.type === 'Text')
+            .map((node: NativeHostNode) => node.props.testID)
 
         Expect(screen.queryByTestId('bareState')).toBeNull()
         Expect(screen.queryByTestId('bareAlias')).toBeNull()
