@@ -5,7 +5,6 @@ import { runAction, type TaoActionReceipt } from '../TaoRuntime-src/TR-action-tr
 import { runEffectOutcome } from '../TaoRuntime-src/TR-effect-outcomes'
 import { TaoActionFailure, UserInputError } from '../TaoRuntime-src/TR-errors'
 import {
-  isQuantityPayload,
   makeQuantityType,
   QuantityFailureCases,
   quantityPayloadJSValue,
@@ -91,7 +90,7 @@ Describe('checked quantity values', () => {
     Expect(copy.jsValue).toBe(cell.evaluate().jsValue)
     const nested = TR.Copy(TR.Value({ Amount: cell.evaluate().jsValue }))
     Expect(Duration.read(TR.Value(nested.jsValue.Amount))).toEqual({ canonical: 120, unit: 'Milliseconds' })
-    Expect(isQuantityPayload(nested.jsValue.Amount)).toBe(true)
+    Expect(TR.isQuantityPayload(nested.jsValue.Amount)).toBe(true)
   })
 
   Test('serializes extracted canonical data and restores the declared default when decoding', () => {
@@ -117,7 +116,7 @@ Describe('checked quantity values', () => {
       Expect(Object.is(copied.getJSValue(), canonical)).toBe(true)
       Expect(Object.is(cell.getJSValue(), canonical)).toBe(true)
       Expect(Object.is(alias.getJSValue(), canonical)).toBe(true)
-      Expect(isQuantityPayload(readonly.jsValue)).toBe(true)
+      Expect(TR.isQuantityPayload(readonly.jsValue)).toBe(true)
       Expect(readonly.jsValue).toBe(value.jsValue)
       Expect(Duration.read(readonly).unit).toBe('Minutes')
       cell.set(Duration.fromUnit(3, 'Hours'))
@@ -146,7 +145,7 @@ Describe('checked quantity values', () => {
       expectFailure(() => Duration.fromJSValue(input), QuantityFailureCases.BadShape)
     }
     const forged = Object.create(Object.getPrototypeOf(Duration.fromJSValue(1).jsValue))
-    Expect(isQuantityPayload(forged)).toBe(false)
+    Expect(TR.isQuantityPayload(forged)).toBe(false)
     Expect(quantityPayloadJSValue(forged)).toBeUndefined()
     expectFailure(() => Duration.read(TR.Value(forged)), QuantityFailureCases.BadShape)
     expectFailure(() => Duration.read(TR.Value({ canonical: 120, unit: 'Seconds' })), QuantityFailureCases.BadShape)

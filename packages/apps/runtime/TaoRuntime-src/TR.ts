@@ -144,6 +144,7 @@ import {
 } from './TR-navigation'
 import type { TaoDeclarationIdentity } from './TR-navigation-identity'
 import { checkedNumericBacking } from './TR-numeric-units'
+import { isQuantityPayload } from './TR-quantity-values'
 import type {
   TaoAuthPairing,
   TaoAuthProofKind,
@@ -475,6 +476,9 @@ class TR {
 
   /** checkedNumericBacking checks raw native/computed numeric storage before wrapping it. */
   static checkedNumericBacking = checkedNumericBacking
+
+  /** Distinguish checked quantity payloads at explicitly typed native union boundaries. */
+  static isQuantityPayload = isQuantityPayload
 
   /** Function creates a Tao pure-function value. */
   static Function(body: (...args: any[]) => TR.Evaluable | TR.Function): TR.Function {
