@@ -43,6 +43,8 @@ const actionValidationMessages = {
   returnLatest: 'A foreign action with a result cannot use `runs latest`.',
   resultRequired:
     'A result binding requires a foreign action that declares `returns` or a source action with a return value.',
+  sourceReturnTypeMismatch: (name: string, expected: string, actual: string) =>
+    `Source action '${name}' returns ${actual}, but its result type is ${expected}.`,
   sourceActionMayCompleteWithoutResult: (name: string) =>
     `Source action '${name}' can complete without returning a value.`,
   duplicateResult: (name: string) => `Action result '${name}' is declared more than once in this action block.`,
@@ -54,7 +56,8 @@ export const ActionsValidator = {
   checks: {
     [AST.ActionDeclaration.$type]: (action, ctx) => {
       validateParameters(action, ctx)
-      if (action.returnType && !action.foreign) {
+      const usesReturnsKeyword = action.returnType !== undefined && AST.keywordRange(action, 'returns') !== undefined
+      if (usesReturnsKeyword && !action.foreign) {
         ctx.error(action, actionValidationMessages.returnNative)
       }
       if (action.returnType && action.runsLatest) {
@@ -67,8 +70,11 @@ export const ActionsValidator = {
         if (!/^\.\.?\/.+\.tsx?$/.test(action.foreign.path)) {
           ctx.error(action.foreign, actionValidationMessages.foreignActionPath)
         }
-      } else if (action.block) {
-        validateSourceActionCompletion(action, ctx)
+      } else if (action.block && !usesReturnsKeyword) {
+        if (action.returnType) {
+          validateSourceActionReturnTypes(action, ctx)
+        }
+        validateSourceActionCompletion(action, ctx, Boolean(action.returnType))
       }
     },
     [AST.ActionResultStatement.$type]: (statement, ctx) => {
@@ -112,15 +118,42 @@ interface SourceActionCompletion {
 }
 
 /** validateSourceActionCompletion rejects successful source-result paths that complete without a value. */
-function validateSourceActionCompletion(action: AST.ActionDeclaration, ctx: ValidationContext): void {
+function validateSourceActionCompletion(
+  action: AST.ActionDeclaration,
+  ctx: ValidationContext,
+  requiresResult: boolean,
+): void {
   const returns = ASTUtils.sourceActionResult(action, value => value)
-  if (returns.length === 0) {
+  if (returns.length === 0 && !requiresResult) {
     return
   }
   const ownedReturns = new Set(returns.map(result => result.statement))
   const completion = sourceActionCompletion(action.block!.statements, ownedReturns)
   if (completion.mayFallThrough || completion.mayStopAtCheck) {
     ctx.error(action, actionValidationMessages.sourceActionMayCompleteWithoutResult(action.name))
+  }
+}
+
+/** validateSourceActionReturnTypes checks source arrow annotations against actual owned returns. */
+function validateSourceActionReturnTypes(action: AST.ActionDeclaration, ctx: ValidationContext): void {
+  if (!action.returnType) {
+    return
+  }
+  const expected = Type.ofTypeExpression(action.returnType)
+  if (expected.kind === 'unresolved') {
+    return
+  }
+  for (const result of ASTUtils.sourceActionResult(action, value => Type.ofExpression(value))) {
+    if (result.type.kind !== 'unresolved' && !Type.isAssignable(result.type, expected)) {
+      ctx.error(
+        result.value,
+        actionValidationMessages.sourceReturnTypeMismatch(
+          action.name,
+          Type.displayName(expected),
+          Type.displayName(result.type),
+        ),
+      )
+    }
   }
 }
 

@@ -55,6 +55,21 @@ Describe('validator: action results', () => {
     Expect.Is(read, AST.isActionDeclaration)
     Expect(Type.displayName(Type.ofActionResult(read))).toBe('text')
   })
+  Test('accepts a compatible source action arrow result annotation', accepts('action Correct() -> number { return 1 }'))
+  Test(
+    'rejects a source action return that conflicts with its arrow result annotation',
+    rejects(
+      'action Wrong() -> number { return "x" }',
+      ActionsValidator.messages.sourceReturnTypeMismatch('Wrong', 'number', 'text'),
+    ),
+  )
+  Test(
+    'requires an annotated source action to return a value on every successful path',
+    rejects(
+      'action Empty() -> number { }',
+      ActionsValidator.messages.sourceActionMayCompleteWithoutResult('Empty'),
+    ),
+  )
   Test(
     'rejects source action result paths that can fall through',
     rejects(
