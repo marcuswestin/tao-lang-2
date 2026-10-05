@@ -1212,6 +1212,17 @@ function compileMemberPath(root: Compiled, rootType: ASTUtils.TaoType, members: 
       current = completenessType
       continue
     }
+    const negativeField = current.kind === 'entity'
+      ? Type.dataFieldForMember(current.entity, member)
+      : current.kind === 'item' && current.item
+      ? Type.itemFields(current.item).find(field => AST.isEntityDataField(field) && field.negativeName === member)
+      : undefined
+    if (negativeField?.negativeName === member) {
+      flushPlainMembers()
+      compiled = gen`TR.Unary('not', TR.Member(${compiled}, [${gen.jsLiteral(negativeField.name)}]))`
+      current = Type.dataFieldValueType(negativeField)
+      continue
+    }
     plainMembers.push(member)
     current = Type.atMemberPath(current, [member])
   }

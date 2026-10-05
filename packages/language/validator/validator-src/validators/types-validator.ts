@@ -582,7 +582,7 @@ function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: Val
         typeName = Type.displayName(current)
         continue
       }
-      const field = Type.dataFields(current.entity).find(candidate => candidate.name === member)
+      const field = Type.dataFieldForMember(current.entity, member)
       if (!field) {
         ctx.error(memberAccess, typeValidationMessages.unknownMember(typeName, member))
         return
@@ -595,7 +595,9 @@ function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: Val
       ctx.error(memberAccess, typeValidationMessages.memberNotItem(member))
       return
     }
-    const property = Type.itemFields(current.item).find(candidate => candidate.name === member)
+    const property = Type.itemFields(current.item).find(candidate =>
+      candidate.name === member || (AST.isEntityDataField(candidate) && candidate.negativeName === member)
+    )
     if (!property) {
       ctx.error(memberAccess, typeValidationMessages.unknownMember(typeName, member))
       return

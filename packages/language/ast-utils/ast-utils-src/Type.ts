@@ -1046,7 +1046,7 @@ export class Type {
     let current = Type.ofReferenceRoot(expression)
     let reached: DataFieldDefinition | undefined
     for (const member of expression.members) {
-      reached = current.kind === 'entity' ? dataFieldNamed(current.entity, member) : undefined
+      reached = current.kind === 'entity' ? Type.dataFieldForMember(current.entity, member) : undefined
       if (!reached) {
         return undefined
       }
@@ -1074,6 +1074,11 @@ export class Type {
   /** dataFields returns the stored and inferred field declarations of one entity. */
   static dataFields(entity: DataEntityDefinition): DataFieldDefinition[] {
     return entity.block.entries.filter(AST.isEntityDataField)
+  }
+
+  /** dataFieldForMember resolves a stored field or its negative boolean case on an entity read. */
+  static dataFieldForMember(entity: DataEntityDefinition, member: string): DataFieldDefinition | undefined {
+    return Type.dataFields(entity).find(field => field.name === member || field.negativeName === member)
   }
 
   /**
@@ -1655,7 +1660,9 @@ function nominalsAreCastCompatible(from: AST.TypeDefinition, target: AST.TypeDef
 }
 
 function propertyNamed(itemType: ItemShape, name: string): ItemShapeField | undefined {
-  return Type.itemFields(itemType).find(property => property.name === name)
+  return Type.itemFields(itemType).find(property =>
+    property.name === name || (AST.isEntityDataField(property) && property.negativeName === name)
+  )
 }
 
 function typePropertyNamed(itemType: ItemShape, name: string): AST.TypeProperty | undefined {
@@ -1674,10 +1681,6 @@ function writtenEntityDomain(node: AST.Node, name: string): TaoType | undefined 
   }
   const single: TaoType = { kind: 'entity', entity }
   return entity.name === name ? { kind: 'list', element: single } : single
-}
-
-function dataFieldNamed(entity: DataEntityDefinition, name: string): DataFieldDefinition | undefined {
-  return Type.dataFields(entity).find(field => field.name === name)
 }
 
 /**
@@ -1709,7 +1712,7 @@ function memberType(
     if (builtin) {
       return builtin
     }
-    const field = dataFieldNamed(current.entity, member)
+    const field = Type.dataFieldForMember(current.entity, member)
     return field && dataFieldType(field)
   }
   const property = isItemKind(current) && current.item ? propertyNamed(current.item, member) : undefined
