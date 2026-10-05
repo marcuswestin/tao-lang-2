@@ -48,6 +48,8 @@ Describe('Operator capability admission', () => {
       type Base is number with { static func +(Left Base, Other Base) -> Base { return Left } }
       type Child is Base
       can Arithmetic { +(Other Self) -> Self }
+      func Parent(Value Base) -> Arithmetic { return Value }
+      func Descendant(Value Child) -> Arithmetic { return Value }
     `)
     withParsedAssociatedEvidence(file, () => {
       Expect(
@@ -56,6 +58,16 @@ Describe('Operator capability admission', () => {
           Type.ofDefinition(namedType(file, 'Arithmetic')),
         ),
       ).toBeUndefined()
+      const parent = file.statements.find(node => AST.isFunctionDeclaration(node) && node.name === 'Parent')
+      const descendant = file.statements.find(node => AST.isFunctionDeclaration(node) && node.name === 'Descendant')
+      Expect.Is(parent, AST.isFunctionDeclaration)
+      Expect.Is(descendant, AST.isFunctionDeclaration)
+      const capability = Type.ofDefinition(namedType(file, 'Arithmetic'))
+      const parentValue = Type.ofExpression(AST.returnStatementsOf(parent)[0]!.value)
+      const descendantValue = Type.ofExpression(AST.returnStatementsOf(descendant)[0]!.value)
+      Expect(Type.capabilityWitnesses(parentValue, capability)?.[0]?.supplied.owner).toBe(namedType(file, 'Base'))
+      Expect(Type.capabilityWitnesses(descendantValue, capability)).toBeUndefined()
+      Expect(Type.isCallableAssignable(descendantValue, capability)).toBe(false)
     })
   })
 
