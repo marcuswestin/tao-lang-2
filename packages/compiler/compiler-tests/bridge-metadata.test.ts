@@ -1,11 +1,37 @@
 import { Packages, Type } from '@ast-utils'
-import { AST, type ModuleOrigin, Parser } from '@parser'
+import { AST, Langium, type ModuleOrigin, Parser } from '@parser'
 import { FS } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { BridgeMetadata } from '../compiler-src/bridge-metadata'
+import { compileRuntimeType } from '../compiler-src/codegen/react-native/app/runtime-type-compiler'
 import { Workspace } from '../compiler-src/workspace'
 
 Describe('compiler: generated TypeScript contracts', () => {
+  Test('keeps abstract numeric families opaque and publishes factories only for concrete descendants', async () => {
+    const parsed = await Parser.parseCode(
+      `
+      public abstract type Family is numeric
+      public type Span is Family with { units { seconds 1 (default), minutes 60 } }
+      func Inspect(Value Family) fails never -> text { return NativeInspect(Value) from ./Native.ts }
+      func NativeInspect(Value Family) fails never -> text { return "" }
+    `,
+      { validation: false },
+    )
+    Expect(parsed.entry.document.parseResult.parserErrors).toEqual([])
+    const family = parsed.entry.ast.statements.find(node => AST.isTypeDeclaration(node) && node.name === 'Family')
+    const span = parsed.entry.ast.statements.find(node => AST.isTypeDeclaration(node) && node.name === 'Span')
+    Expect.Is(family, AST.isTypeDeclaration)
+    Expect.Is(span, AST.isTypeDeclaration)
+    Expect(Langium.toString(compileRuntimeType(Type.ofDefinition(family)))).toBe('TR.Value<TR.QuantityPayload>')
+    Expect(Langium.toString(compileRuntimeType(Type.ofDefinition(span)))).toBe('TR.Value<TR.QuantityPayload>')
+    const surface = BridgeMetadata.quantitySurfaceFor(parsed.entry.ast)
+    Expect(surface?.declarations.map(row => row.declaration.name)).toEqual(['Span'])
+    const module = BridgeMetadata.collect([parsed.entry], FS.dirname(parsed.entry.path))[0]!
+    Expect(module.code).toContain('(arg0: TR.Value<TR.QuantityPayload>) => string')
+    Expect(module.quantityModule?.code).toContain('export const Span')
+    Expect(module.quantityModule?.code).not.toContain('export const Family')
+  })
+
   Test('checks native associated methods and converters against their actual return contracts', async () => {
     const parsed = await Parser.parseCode(
       `

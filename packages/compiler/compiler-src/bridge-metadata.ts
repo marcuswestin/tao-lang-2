@@ -367,6 +367,9 @@ function directQuantityModuleFor(
 
 function quantitySurfaceFor(file: AST.TaoFile): QuantityPublicationSurface | undefined {
   const resolved = AST.streamAllContents(file).filter(AST.isTypeDeclaration).flatMap(declaration => {
+    if (Type.isAbstractDomain(Type.ofDefinition(declaration))) {
+      return []
+    }
     const owner = declaration.aliasTarget === undefined
       ? NumericUnits.declarationPlan(declaration)?.owner
       : Type.quantityOwner(Type.ofDefinition(declaration))
@@ -421,7 +424,9 @@ function quantityParentOwner(owner: AST.TypeDeclaration): AST.TypeDeclaration | 
     Assert(AST.isTypeDeclaration(target), `quantity parent alias ${parent.name} resolves to a type declaration`)
     parent = target
   }
-  return NumericUnits.declarationPlan(parent) === undefined ? undefined : parent
+  return Type.isAbstractDomain(Type.ofDefinition(parent)) || NumericUnits.declarationPlan(parent) === undefined
+    ? undefined
+    : parent
 }
 
 function canonicalQuantityLink(owner: AST.TypeDeclaration, leaves: QuantityCanonicalLeaves): {
@@ -459,7 +464,10 @@ function physicalQuantityOwnerKey(owner: AST.TypeDeclaration): string {
 function quantityReferencedOwnersOf(file: AST.TaoFile): readonly AST.TypeDeclaration[] {
   const owners = new Set<AST.TypeDeclaration>()
   const addOwnerAndParents = (owner: AST.TypeDeclaration): void => {
-    if (owners.has(owner) || NumericUnits.declarationPlan(owner) === undefined) {
+    if (
+      owners.has(owner) || Type.isAbstractDomain(Type.ofDefinition(owner))
+      || NumericUnits.declarationPlan(owner) === undefined
+    ) {
       return
     }
     owners.add(owner)
@@ -785,6 +793,9 @@ function nativeReturnOwner(
 }
 
 function typescriptType(type: ASTUtils.TaoType, seen = new Set<AST.EntityDataDeclaration>()): string {
+  if (type.kind === 'primitive' && type.primitive === 'numeric' && Type.isAbstractDomain(type)) {
+    return 'TR.Value<TR.QuantityPayload>'
+  }
   const owner = Type.quantityOwner(type)
   if (owner !== undefined) {
     const binding = quantityTypeBindings.get(owner)
@@ -800,7 +811,10 @@ function typescriptType(type: ASTUtils.TaoType, seen = new Set<AST.EntityDataDec
       if (type.primitive === 'text' || type.primitive === 'color' || type.primitive === 'shortcut') {
         return 'string'
       }
-      if (type.primitive === 'number' || type.primitive === 'time' || type.primitive === 'duration') {
+      if (
+        type.primitive === 'number' || type.primitive === 'numeric' || type.primitive === 'time'
+        || type.primitive === 'duration'
+      ) {
         return 'number'
       }
       if (type.primitive === 'boolean') {

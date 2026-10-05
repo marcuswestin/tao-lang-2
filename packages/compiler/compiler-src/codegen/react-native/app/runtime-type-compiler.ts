@@ -1,9 +1,15 @@
-import { ASTUtils } from '@ast-utils'
+import { ASTUtils, Type } from '@ast-utils'
 import { Switch } from '@shared'
 import { type Compiled, gen } from '../codegen-util'
 
 /** compileRuntimeType returns the generated wrapper type for one statically resolved Tao value. */
 export function compileRuntimeType(type: ASTUtils.TaoType): Compiled {
+  if (
+    Type.quantityOwner(type)
+    || (type.kind === 'primitive' && type.primitive === 'numeric' && Type.isAbstractDomain(type))
+  ) {
+    return gen`TR.Value<TR.QuantityPayload>`
+  }
   return Switch.kind(type, {
     primitive: type =>
       Switch(type.primitive, {

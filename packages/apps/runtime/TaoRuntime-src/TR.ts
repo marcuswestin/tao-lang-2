@@ -1,10 +1,9 @@
 import React from 'react'
 import { Dev, DevControls, type TaoDevModeOptions } from './dev-runtime/TR-dev'
 import { TestActionStubs } from './TR-action-test-stubs'
-import type { TaoEvaluable } from './TR-action-values'
 import {
-  actionFailureCaseName,
   actionCancellationSignal,
+  actionFailureCaseName,
   actionTestStubContext,
   captureActionContinuation,
   deferDetached,
@@ -21,6 +20,7 @@ import {
   type TaoDeclaredFailure,
   transactionResource,
 } from './TR-action-transactions'
+import type { TaoEvaluable } from './TR-action-values'
 import { AgentControls } from './TR-agent'
 import { AppShell, AppSurfaceFrame } from './TR-app-shell'
 import { RuntimeAssert } from './TR-assert'
@@ -120,6 +120,7 @@ import {
 import { getJSValue, type TaoJSValue } from './TR-js-value'
 import { LayoutControls } from './TR-layout'
 import { openUrl } from './TR-linking'
+import { runMultiOutcome } from './TR-multi-outcome'
 import { NativeHosts } from './TR-native-hosts'
 import { NativeModules } from './TR-native-modules'
 import { nativeSubscription, type TaoActionOwner, useActionOwner } from './TR-native-subscription'
@@ -167,9 +168,7 @@ import {
 import { selectPluralForm, type TaoPluralCategory, type TaoPluralForms } from './TR-phrases'
 import { admitQuantityUnion, nativeQuantityResult } from './TR-quantity-admission'
 import { QuantityArithmetic, quantityOperand, scalarOperand } from './TR-quantity-arithmetic'
-import { isQuantityPayload } from './TR-quantity-values'
-import { runMultiOutcome } from './TR-multi-outcome'
-import { type TaoDurationReader, wait } from './TR-wait'
+import { isQuantityPayload, type TaoQuantityPayload } from './TR-quantity-values'
 import { requireReactNativeRuntime } from './TR-react-native'
 import { isReactiveValue, markReactiveValue } from './TR-reactive'
 import {
@@ -245,6 +244,7 @@ import * as TRTaoProps from './TR-TaoProps'
 import { renderTextValue } from './TR-ui-render'
 import { Clock, createTicker, makeUnitControls, type TaoTicker } from './TR-units'
 import * as TRViews from './TR-views'
+import { type TaoDurationReader, wait } from './TR-wait'
 
 const warnedUnhonoredLayouts = new Set<string>()
 
@@ -1609,6 +1609,8 @@ namespace TR {
   export type NativeMutationLease<T> = import('./TR-reactive-values').NativeMutationLease<T>
   /** Value declares a runtime Tao value wrapper. */
   export type Value<T> = TaoRuntimeValue<T>
+  /** QuantityPayload retains authentic opaque storage across ordinary quantity and abstract-family parameters. */
+  export type QuantityPayload = TaoQuantityPayload<string, string, object>
   /** Ticker declares the reactive value `@tao/time`'s `Interval` returns. */
   export type Ticker = TaoTicker
   /** Pasteboard declares the reactive value `@tao/device/clipboard`'s `Clipboard()` returns. */
