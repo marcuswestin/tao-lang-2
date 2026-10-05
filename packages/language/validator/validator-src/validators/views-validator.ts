@@ -328,7 +328,9 @@ function validateRenderBlock(block: AST.Block, ctx: ValidationContext): void {
       for (const branch of statement.branches) {
         validateRenderBlock(branch.block, ctx)
       }
-      validateRenderBlock(statement.otherwise.block, ctx)
+      if (statement.otherwise) {
+        validateRenderBlock(statement.otherwise.block, ctx)
+      }
       continue
     }
     if (AST.isGuardRenderStatement(statement)) {

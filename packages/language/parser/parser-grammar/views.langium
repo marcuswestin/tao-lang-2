@@ -131,18 +131,18 @@ EventName returns string:
 
 type Render = RenderStatement | ViewRender;
 
-// `otherwise` makes every subject render conditional total and terminates the branch list unambiguously.
+// A render conditional may omit its fallback; a subject with no matching branches then renders nothing.
 WhenRenderStatement:
     'when' (subject=SubjectExpression
-      ('{' branches+=WhenRenderBranch* otherwise=WhenRenderOtherwise '}'
-       | branches+=BarWhenRenderBranch* otherwise=BarWhenRenderOtherwise)
-      | branches+=PredicateWhenRenderBranch* otherwise=BarWhenRenderOtherwise);
+      ('{' branches+=WhenRenderBranch* otherwise=WhenRenderOtherwise? '}'
+       | branches+=BarWhenRenderBranch* otherwise=BarWhenRenderOtherwise?)
+      | branches+=PredicateWhenRenderBranch* otherwise=BarWhenRenderOtherwise?);
 
 WhenRenderBranch:
-    case=SubjectCaseName '->' payload=CasePayload? block=(Block | AtomicRenderBlock);
+    case=SubjectCaseName payload=CasePayload? '->' block=(Block | AtomicRenderBlock);
 
 BarWhenRenderBranch infers WhenRenderBranch:
-    barSyntax?='|' case=SubjectCaseName '->' payload=CasePayload? block=(Block | AtomicRenderBlock);
+    barSyntax?='|' case=SubjectCaseName payload=CasePayload? '->' block=(Block | AtomicRenderBlock);
 
 PredicateWhenRenderBranch infers WhenRenderBranch:
     barSyntax?='|' condition=OrExpression '->' block=(Block | AtomicRenderBlock);
