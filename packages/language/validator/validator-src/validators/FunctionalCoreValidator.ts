@@ -100,6 +100,9 @@ export const FunctionalCoreValidator = {
       // §8 keeps `guard` for views; an action stops with `check`. Retired with a warning for now.
       ctx.warning(statement, messages.actionGuardRetired)
     },
+    [AST.WhenActionStatement.$type]: (statement, ctx) => {
+      validateSubjectCases(statement.subject, statement.branches, ctx)
+    },
     [AST.IfActionStatement.$type]: (statement, ctx) => {
       validateIfCondition(statement.condition, ctx)
     },
@@ -256,7 +259,12 @@ function isZeroLiteral(expression: AST.Expression): boolean {
   return AST.isNumberLiteral(expression) && expression.value === 0
 }
 
-type SubjectCaseBranch = AST.WhenBranch | AST.WhenRenderBranch | AST.GuardActionBranch | AST.GuardRenderBranch
+type SubjectCaseBranch =
+  | AST.WhenBranch
+  | AST.WhenRenderBranch
+  | AST.WhenActionBranch
+  | AST.GuardActionBranch
+  | AST.GuardRenderBranch
 
 function validateEnum(declaration: AST.TypeDeclaration, ctx: ValidationContext): void {
   if (!AST.isTaoFile(declaration.$container)) {
