@@ -1,8 +1,10 @@
 import React from 'react'
 import { Dev, DevControls, type TaoDevModeOptions } from './dev-runtime/TR-dev'
 import { TestActionStubs } from './TR-action-test-stubs'
+import type { TaoEvaluable } from './TR-action-values'
 import {
   actionFailureCaseName,
+  actionCancellationSignal,
   actionTestStubContext,
   captureActionContinuation,
   deferDetached,
@@ -166,6 +168,7 @@ import { selectPluralForm, type TaoPluralCategory, type TaoPluralForms } from '.
 import { admitQuantityUnion, nativeQuantityResult } from './TR-quantity-admission'
 import { QuantityArithmetic, quantityOperand, scalarOperand } from './TR-quantity-arithmetic'
 import { isQuantityPayload } from './TR-quantity-values'
+import { type TaoDurationReader, wait } from './TR-wait'
 import { requireReactNativeRuntime } from './TR-react-native'
 import { isReactiveValue, markReactiveValue } from './TR-reactive'
 import {
@@ -499,6 +502,14 @@ class TR {
   static QuantityArithmetic = QuantityArithmetic
   static quantityOperand = quantityOperand
   static scalarOperand = scalarOperand
+
+  /** Wait joins its caller and inherits cancellation, while lexical cleanup remains shielded. */
+  static Wait<Value extends TaoEvaluable<unknown>>(
+    readDuration: TaoDurationReader<Value>,
+    duration: Value,
+  ): Promise<void> {
+    return wait(readDuration, duration, actionCancellationSignal())
+  }
 
   /** Function creates a Tao pure-function value. */
   static Function(body: (...args: any[]) => TR.Evaluable | TR.Function): TR.Function {

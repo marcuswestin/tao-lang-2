@@ -26,7 +26,7 @@ export async function wait<Value extends TaoEvaluable<unknown>>(
 ): Promise<void> {
   const { canonical: seconds } = readDuration(duration)
   if (signal?.aborted) {
-    throw cancelledFailure()
+    throw cancelledFailure(signal)
   }
   if (seconds <= 0) {
     return
@@ -57,7 +57,7 @@ export async function wait<Value extends TaoEvaluable<unknown>>(
       }
     }
 
-    const onAbort = () => finish(cancelledFailure(), true)
+    const onAbort = () => finish(cancelledFailure(signal), true)
 
     const scheduleNext = () => {
       if (settled) {
@@ -98,6 +98,9 @@ export async function wait<Value extends TaoEvaluable<unknown>>(
   })
 }
 
-function cancelledFailure(): TaoActionFailure {
+function cancelledFailure(signal?: AbortSignal): TaoActionFailure {
+  if (signal?.reason instanceof TaoActionFailure) {
+    return signal.reason
+  }
   return new TaoActionFailure('cancelled', 'The action was cancelled while waiting.')
 }

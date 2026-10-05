@@ -1,5 +1,13 @@
 import TR from '@runtime/TR'
-import { Describe, Expect, Test } from '@shared/test'
+import { Deferred, Describe, Expect, Test } from '@shared/test'
+import {
+  actionCancellationSignal,
+  cancelActionContinuation,
+  captureActionContinuation,
+  registerDeferredAction,
+  runActionScope,
+  type TaoActionContinuation,
+} from '../TaoRuntime-src/TR-action-transactions'
 import { actionExitOf, createActionExit, TaoActionFailure } from '../TaoRuntime-src/TR-errors'
 import { makeQuantityType } from '../TaoRuntime-src/TR-quantity-values'
 import { type TaoWaitScheduler, wait } from '../TaoRuntime-src/TR-wait'
@@ -27,6 +35,48 @@ function manualScheduler(): Readonly<{ schedule: TaoWaitScheduler; scheduled: Sc
 }
 
 Describe('checked Wait', () => {
+  Test('inherits actual root cancellation and lets deferred checked waits finish under the cleanup shield', async () => {
+    const started = Deferred()
+    const seen: string[] = []
+    let continuation: TaoActionContinuation = {}
+    let signal: AbortSignal | undefined
+    let failure: unknown
+    const stop = TR.Errors.onFailure(() => undefined)
+    try {
+      const running = TR.Action(async () => {
+        try {
+          await runActionScope(async () => {
+            continuation = captureActionContinuation()
+            signal = actionCancellationSignal()
+            registerDeferredAction(async () => {
+              Expect(actionCancellationSignal()).toBeUndefined()
+              seen.push('cleanup started')
+              await TR.Wait(Duration.read, Duration.fromUnit(0.001, 'Seconds'))
+              seen.push('cleanup finished')
+            })
+            const waiting = TR.Wait(Duration.read, Duration.fromUnit(3600, 'Seconds'))
+            started.resolve()
+            await waiting
+            seen.push('unexpected tail')
+          })
+        } catch (error) {
+          failure = error
+          throw error
+        }
+      }).jsValue.invoke()
+      await started.promise
+      Expect(cancelActionContinuation(continuation)).toBe(true)
+      await running
+      Expect(seen).toEqual(['cleanup started', 'cleanup finished'])
+      Expect(failure).toBeInstanceOf(TaoActionFailure)
+      Expect((failure as TaoActionFailure).caseName).toBe('cancelled')
+      Expect(failure).toBe(signal?.reason)
+      Expect(actionCancellationSignal()).toBeUndefined()
+    } finally {
+      stop()
+    }
+  })
+
   Test('reads one authenticated duration and resolves signed nonpositive values without scheduling', async () => {
     const scheduler = manualScheduler()
     let reads = 0
