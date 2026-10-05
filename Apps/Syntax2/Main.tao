@@ -1,7 +1,8 @@
 use Duration, Length, Ratio, UpperCase from @tao/core
 use all from @tao/ui
+use Add from ./library/BookActions
 use BookStore, LoadAfter, Refresh from ./library/BookIO
-use Books, ComparedNames, EarlierLabel, GroupMode, PersonName, Score, Subtract, Title from ./library/Library
+use Books, ComparedNames, EarlierLabel, GroupMode, NewBook, PersonName, Score, Subtract, Title from ./library/Library
 
 app LibraryApp {
    id "com.tao.syntax2"
@@ -9,7 +10,9 @@ app LibraryApp {
    version "0.1.0"
    Datasource BookStore
    view Library
-}
+   guard {
+      error Problem -> { "{ Problem.Message }" }
+}  }
 
 // 1. The projection preserves GivenName identity; this named descendant admits upward.
 type ProfileName is PersonName.GivenName
@@ -24,6 +27,9 @@ view Banner(Title text, Subtitle text) {
 view Library {
    state GroupMode no
    state Feedback = ""
+   state Draft = NewBook {
+      Title: Title ""
+   }
    let Person = PersonName(ProfileName "Ada", .FamilyName "Lovelace")
    let Readers = ComparedNames ["Ada", "Lovelace"]
    let Shout = UpperCase(ProfileName "Ada")
@@ -56,6 +62,16 @@ view Library {
       ScoreLabel
       "{ Length(Readers) } readers"
       Feedback
+      Row {
+         #draft
+         TextField(.Value Draft.Title)
+         Button("Add") {
+            on press -> do Add(Draft) then {
+               InvalidInput Problem -> { set Feedback = Problem.Message }
+               done -> { set Draft = NewBook {
+                  Title: Title ""
+               } }
+      }  }  }
       Row {
          Button("Show feedback") {
             on press -> do ReadyMessage() then {

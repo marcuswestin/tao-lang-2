@@ -20,6 +20,9 @@ remains undiscovered.
   same selected renderer, producing uppercase labels.
   EarlierLabel uses one generic Ordered/Display domain and a total first-match pick;
   Score demonstrates checked native addition and an explicit Title conversion.
+  A typed NewBook draft preserves its writable Title lens. Add consumes InvalidInput locally,
+  clears feedback, and resets the draft only after successful creation. The app declares an error
+  rendering boundary; delivery of unhandled action failures to that boundary remains pending.
 - [library/Library.tao](library/Library.tao): graduated Name/GivenName/FamilyName, PersonName and
   Subtract declarations. The app renders Ada Lovelace and 3 using the actual signature projections
   and argument matcher. ComparedNames constructs a list with contextual Name elements.
@@ -27,7 +30,7 @@ remains undiscovered.
   Library.ts supplies pure text ordering and numeric addition at the checked native boundary.
 - [Library.test.tao](Library.test.tao): active journey asserting the header and both directions of
   the grouping display transition, signature-role results, and bounded book acquisition,
-  continuation and refresh.
+  continuation and refresh, local typed rejection, input editing and successful creation.
 - [Main.tao.future](Main.tao.future): project/app boundary, controls, slots, units and bounded list UI.
 - [library/Library.tao.future](library/Library.tao.future): nominal signatures, structural capabilities,
   generics, native operator, entities, associated actions/rendering and cleanup.

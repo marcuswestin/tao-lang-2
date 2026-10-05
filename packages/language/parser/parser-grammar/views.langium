@@ -200,7 +200,9 @@ GuardDefaultStatement:
     'guard' 'default' '{' branches+=GuardDefaultBranch+ '}';
 
 AppGuardBranch:
-    case=SubjectCaseName '->' (payload=CasePayload? block=Block | render=ViewRender);
+    case=SubjectCaseName (
+      payload=CasePayload '->' (block=Block | render=ViewRender)
+      | '->' (payload=CasePayload? block=Block | render=ViewRender));
 
 GuardDefaultBranch:
     case=SubjectCaseName '->' (payload=CasePayload? block=Block | render=ViewRender);

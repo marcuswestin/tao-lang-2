@@ -2,7 +2,9 @@ use Duration from @tao/core
 use Book, Books, People from ./Library
 
 public
-type InputFailure is one of InvalidInput
+type InvalidInput is {
+   Message text
+}
 
 // 1. Bounded server acquisition is supplied by this app's adapter.
 type BookProvider is datasource with {

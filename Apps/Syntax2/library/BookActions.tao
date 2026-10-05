@@ -1,5 +1,5 @@
 use Time from @tao/time
-use CreateTemporaryPDF, DeleteTemporaryFile, InputFailure, UploadFile from ./BookIO
+use CreateTemporaryPDF, DeleteTemporaryFile, InvalidInput, UploadFile from ./BookIO
 use Book, NewBook from ./Library
 
 // Validation rejection is handled locally; storage failures retain the app boundary.

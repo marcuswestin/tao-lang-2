@@ -17,6 +17,10 @@ test "Syntax2 Library" {
       expect text "Signed offset ready."
       expect text "All books."
       expect missing text "Ready"
+      press "Add"
+      expect text "Enter a title"
+      press "Clear feedback"
+      expect missing text "Enter a title"
       press "Show feedback"
       expect text "Ready"
       press "Clear feedback"
@@ -39,5 +43,9 @@ test "Syntax2 Library" {
       press "Group"
       expect text "All books."
       expect missing text "Grouped books."
+      enter "A new book" into #draft
+      expect #draft input value "A new book"
+      press "Add"
+      expect #draft input value ""
    }
 }
