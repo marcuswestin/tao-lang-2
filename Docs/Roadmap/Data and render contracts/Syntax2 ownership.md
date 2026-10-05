@@ -168,6 +168,21 @@ second matcher. The coordinator owns facade exports, validator registration, sou
 compiler integration and app graduation. No value-scope, Type or compiler ownership is transferred.
 Authored-source migrations require a separate exact-path release after inventory.
 
+### Next bare text-value rendering batch
+
+B may implement bare text-value references and omission of empty text before general `ui` dispatch.
+It owns views.langium, render-targets.ts, views-validator.ts and InvocationsCompiler.ts for this
+batch, plus a new ui-render-codegen.ts helper, TR-ui-render.tsx runtime helper and focused parser,
+validator, compiler and mounted tests. Real alias/state/parameter declarations must retain source
+identity; do not manufacture a view or rewrite a value into an unlinked view declaration. Use the
+existing text view and reactive read tracking so styling/accessibility and value updates behave
+consistently. Bare empty text returns no node; quotation and explicit Text("") retain their nodes.
+Preserve argument-bearing view calls and parameterized/repeated slots. Publish the exact AST and
+scope hook needed from A before editing A-owned files. A retains value-scope, Type and expressions/
+types grammar; root retains facades, the quoted text import, intrinsic declarations and app
+graduation. Associated views and general structural `ui` rendering require the subsequent shared
+contract amendment; this release does not permit unrelated generic or associated-method edits.
+
 ### Current slot compiler integration batch
 
 B also owns ViewsCompiler.ts, InvocationsCompiler.ts and FilesCompiler.ts solely for production
