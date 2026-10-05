@@ -58,7 +58,7 @@ Describe('compiler: structural ui renders', () => {
       return null
     }
     const carrier = TR.Capability.attach(original, {
-      Render: TR.Function((receiver, ...args) => {
+      Render: TR.Function((receiver: typeof original, ...args: unknown[]) => {
         calls += 1
         Expect(receiver === original).toBe(true)
         Expect(args).toEqual([])

@@ -22,7 +22,9 @@ Describe('compiler: generic view arguments', () => {
     Assert.defined(effects, 'real generic source contracts are sealed before argument emission')
     const main = validated.entry.ast.statements.find(node => AST.isViewDeclaration(node) && node.name === 'Main')
     Assert.defined(main, 'the caller view exists')
-    const render = main.block!.statements.find(AST.isRenderStatement)!
+    Assert(AST.isViewDeclaration(main), 'the caller is a view declaration')
+    Assert.defined(main.block, 'the caller view has a body')
+    const render = main.block.statements.find(AST.isRenderStatement)!
     const prop = ASTUtils.withAssociatedEffects(
       effects,
       () => Langium.toString(Compile.RenderArguments(ASTUtils.resolveRenderInvocation(render))).trim(),
