@@ -5,7 +5,7 @@ The routing table in `../SKILL.md` owns tier names. The repository sets Claude C
 install resolves it to the newest Opus that install knows. [Claude Code's documented order](https://code.claude.com/docs/en/sub-agents)
 is an explicit spawn model, the subagent definition's model, the subagent default, then the
 parent's model. Do not set `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`: it overrides profile pins, including
-deep reviewers. Claude Code 2.1.280 or later is
+reviewer pins. Claude Code 2.1.280 or later is
 [required for Opus 5.5](https://code.claude.com/docs/en/model-config); an older install resolves
 `opus` to an older model, and `./agent model-audit` names the install that did.
 Claude Code and Codex accept `low`/`medium`/`high`/`xhigh` effort in `effort` and
@@ -13,10 +13,12 @@ Claude Code and Codex accept `low`/`medium`/`high`/`xhigh` effort in `effort` an
 
 [Codex subagent precedence](https://developers.openai.com/codex/subagents) gives an explicit spawn
 model priority over `agents.default_subagent_model`; a custom agent file can pin its own model.
-The repository generates `[agents]` from the standard row. Every GPT task follows the skill's newest
-GPT-6 Sol policy, including frontier work; only routine execution of fully determined steps uses
-newest GPT-6 Luna. Inventories, research, failure interpretation, implementation judgment, and reviews
-use Sol. Explicit spawn arguments or deliberately selected role pins implement the skill's model
+The repository generates `[agents]` from the standard row with medium effort. The skill routes
+implementation decisions to Sol and already planned code writing to Luna at high effort. Sol code
+writing is confined to intricate processes whose implementation is unsettled. Medium is the default;
+high is for deep analysis/research and the planned-code exception, while reviews stay medium or low.
+Extra-high is an exceptional non-review selection with a reason in the brief, never a profile default.
+Explicit spawn arguments or deliberately selected role pins implement the skill's model
 and effort choices; personal and harness defaults are not inputs to that choice. Generated defaults
 and role files still require concrete IDs. `model-audit` reports when those
 defaults lag; refreshing them is a separate repository change, not an automatic catalog rewrite.

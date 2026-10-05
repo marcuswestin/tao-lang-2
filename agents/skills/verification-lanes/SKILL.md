@@ -100,6 +100,12 @@ job is the single verdict. It proves the portable gates only — never the host-
 annotations; a failed partition uploads its logs as the `verify-partition-<k>` artifact. Reproduce
 with `./agent test-file` locally, push the fix, and read the next verdict.
 
+Always poll ongoing CI through completion. Start diagnosing and fixing failures as they appear
+while polling the remaining jobs; a run link is not completion. Retain logs and a run/commit-scoped
+failure list, then address every issue after all jobs finish, including failures from superseded
+runs. Follow replacement runs to a complete verdict or a concrete external blocker. Test-only
+authorization does not permit auto-merge or landing.
+
 An authorized landing takes one of two routes, both squash-merging the reviewed merge message and
 archiving the branch at `merged/<name>`:
 
