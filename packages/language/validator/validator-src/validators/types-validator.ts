@@ -539,7 +539,10 @@ function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: Val
   }
   let typeName = Type.displayName(current)
   const parent = memberAccess.$container
-  const members = AST.isMethodCallExpression(parent) && parent.callee === memberAccess
+  const action = ASTUtils.resolveAssociatedActionTarget(memberAccess)
+  const members = action?.associated?.receiver.kind === 'member-path'
+    ? action.associated.receiver.members
+    : AST.isMethodCallExpression(parent) && parent.callee === memberAccess
     ? memberAccess.members.slice(0, -1)
     : memberAccess.members
   for (const member of members) {

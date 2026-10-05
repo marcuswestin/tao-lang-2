@@ -373,7 +373,11 @@ function resolveActionTargetWithSeenAliases(
   if (AST.isValueReference(expression)) {
     return resolveActionTargetReference(expression, seenAliases, typeOfExpression)
   }
-  const associated = resolveAssociatedActionTarget(expression, typeOfExpression)
+  const associated = resolveAssociatedActionTarget(
+    expression,
+    receiver =>
+      receiver.kind === 'expression' ? typeOfExpression(receiver.expression) : associatedActionReceiverType(receiver),
+  )
   if (associated) {
     return associated
   }
@@ -384,10 +388,11 @@ function resolveActionTargetWithSeenAliases(
   return UnresolvedActionTarget
 }
 
-function resolveAssociatedActionTarget(
+/** Select a real associated action using the consumer's context, with no dynamic type fallback. */
+export function resolveAssociatedActionTarget(
   expression: AST.Expression,
-  typeOfExpression: (expression: AST.Expression) => TaoType,
-): ResolvedActionTarget | undefined {
+  receiverType: (receiver: AssociatedMethodReceiver) => TaoType = associatedActionReceiverType,
+): { kind: 'named'; action: AST.ActionDeclaration; associated: AssociatedActionReceiver } | undefined {
   let name: string
   let receiver: AssociatedMethodReceiver
   if (AST.isMemberAccessExpression(expression) && expression.shade === undefined && expression.members.length > 0) {
@@ -399,9 +404,7 @@ function resolveAssociatedActionTarget(
   } else {
     return undefined
   }
-  const domain = receiver.kind === 'expression'
-    ? typeOfExpression(receiver.expression)
-    : Type.atMemberPath(Type.ofReferenceRoot(receiver.site), receiver.members)
+  const domain = receiverType(receiver)
   const entity = domain.kind === 'entity' ? domain : domain.kind === 'list' ? domain.element : undefined
   if (entity?.kind !== 'entity' || !AST.isEntityDataDeclaration(entity.entity)) {
     return undefined
@@ -415,6 +418,12 @@ function resolveAssociatedActionTarget(
   return action
     ? { kind: 'named', action, associated: { receiver, domain, owner, cardinality } }
     : undefined
+}
+
+function associatedActionReceiverType(receiver: AssociatedMethodReceiver): TaoType {
+  return receiver.kind === 'expression'
+    ? Type.ofExpression(receiver.expression)
+    : Type.atMemberPath(Type.ofReferenceRoot(receiver.site), receiver.members)
 }
 
 function resolveActionTargetReference(

@@ -1,7 +1,12 @@
+import { ASTUtils } from '@ast-utils'
 import { AST, Parser } from '@parser'
 import { Describe, Expect, Test } from '@shared/test'
 import { invocationFailureContract } from '../ast-utils-src/effect-outcomes'
-import { resolveActionInvocation, resolveActionTarget } from '../ast-utils-src/invocations'
+import {
+  resolveActionInvocation,
+  resolveActionTarget,
+  resolveAssociatedActionTarget,
+} from '../ast-utils-src/invocations'
 import { Type } from '../ast-utils-src/Type'
 
 Describe('Associated data action invocations', () => {
@@ -33,6 +38,9 @@ Describe('Associated data action invocations', () => {
     ) {
       const target = resolveActionTarget(call.action)
       Expect(target.kind).toBe('named')
+      const selected = ASTUtils.resolveAssociatedActionTarget(call.action)
+      Expect(selected?.action).toBe(declaration)
+      Expect(selected?.associated.cardinality).toBe(cardinality)
       const resolved = resolveActionInvocation(call)
       Expect(resolved.action).toBe(declaration)
       Expect(resolved.associated?.owner).toBe(entity)
@@ -74,6 +82,11 @@ Describe('Associated data action invocations', () => {
     const receiver = resolved.associated?.receiver
     Expect(receiver?.kind === 'member-path' && receiver.site).toBe(selected.value)
     Expect(receiver?.kind === 'member-path' && receiver.members).toEqual(['Book'])
+    const selectedTarget = resolveAssociatedActionTarget(selected.value)
+    Expect(selectedTarget?.action).toBe(resolved.action)
+    Expect(selectedTarget?.associated.receiver.kind === 'member-path' && selectedTarget.associated.receiver.site).toBe(
+      selected.value,
+    )
     Expect(resolved.pairs.map(pair => Type.parameterName(pair.parameter))).toEqual(['Label'])
     Expect(resolved.diagnostics).toEqual([])
   })
@@ -91,6 +104,7 @@ Describe('Associated data action invocations', () => {
     const selected = caller.block?.statements.find(AST.isAliasDeclaration)
     Expect.Is(selected, AST.isAliasDeclaration)
     Expect.Is(selected.value, AST.isPostfixMemberAccess)
+    const receiverExpression = selected.value.receiver
     const call = invocations(caller)[0]
     Expect.Is(call, AST.isDoStatement)
     const resolved = resolveActionInvocation(call)
@@ -98,6 +112,15 @@ Describe('Associated data action invocations', () => {
     Expect(resolved.associated?.domain.kind).toBe('entity')
     const receiver = resolved.associated?.receiver
     Expect(receiver?.kind === 'expression' && receiver.expression).toBe(selected.value.receiver)
+    const context = Type.correspondenceResolver(new Map())
+    let inspected = 0
+    const selectedTarget = resolveAssociatedActionTarget(selected.value, receiver => {
+      inspected++
+      Expect(receiver.kind === 'expression' && receiver.expression).toBe(receiverExpression)
+      return context.receiverType(receiver)
+    })
+    Expect(inspected).toBe(1)
+    Expect(selectedTarget?.action).toBe(resolved.action)
     Expect(resolved.diagnostics).toEqual([])
   })
 
@@ -121,6 +144,7 @@ Describe('Associated data action invocations', () => {
     const calls = invocations(action(file, 'Caller'))
     Expect(calls).toHaveLength(5)
     for (const call of calls.slice(0, 4)) {
+      Expect(resolveAssociatedActionTarget(call.action)).toBeUndefined()
       Expect(resolveActionTarget(call.action).kind).toBe('unresolved')
       Expect(resolveActionInvocation(call).action).toBeUndefined()
       Expect(resolveActionInvocation(call).associated).toBeUndefined()
@@ -131,6 +155,41 @@ Describe('Associated data action invocations', () => {
     Expect(selected.action).toBe(other.block.entries.find(AST.isActionDeclaration))
     Expect(selected.associated?.owner).toBe(other)
   })
+
+  Test(
+    'selection-only contextual lookup preserves real nested anchors and leaves pending domains unresolved',
+    async () => {
+      const file = await parse(`
+      data Books / Book { Title text, action Book.Return() { } }
+      type Revision is { Book }
+      action Caller(Value Revision, Pending MissingType) {
+        do Value.Book.Return()
+        do Pending.Return()
+        do Value.Book.Missing()
+      }
+    `)
+      const calls = invocations(action(file, 'Caller'))
+      const context = Type.correspondenceResolver(new Map())
+      let inspected = 0
+      const selected = resolveAssociatedActionTarget(calls[0]!.action, receiver => {
+        inspected++
+        Expect(receiver.kind).toBe('member-path')
+        Expect(receiver.kind === 'member-path' && receiver.site).toBe(calls[0]!.action)
+        Expect(receiver.kind === 'member-path' && receiver.members).toEqual(['Book'])
+        return context.receiverType(receiver)
+      })
+      Expect(inspected).toBe(1)
+      Expect(selected?.associated.domain.kind).toBe('entity')
+      Expect(selected?.action.name).toBe('Return')
+      for (const call of calls.slice(1)) {
+        Expect(resolveAssociatedActionTarget(call.action, receiver => context.receiverType(receiver))).toBeUndefined()
+      }
+      Expect(resolveAssociatedActionTarget(calls[0]!.action, receiver => {
+        const domain = context.receiverType(receiver)
+        return Type.atMemberPath(domain, ['Missing'])
+      })).toBeUndefined()
+    },
+  )
 
   Test('preserves source action results, failure contracts and argument mismatch diagnostics', async () => {
     const file = await parse(`
@@ -183,6 +242,7 @@ Describe('Associated data action invocations', () => {
       }
     `)
       const calls = invocations(action(file, 'Caller'))
+      Expect(calls.map(call => resolveAssociatedActionTarget(call.action))).toEqual([undefined, undefined, undefined])
       Expect(calls.map(call => resolveActionTarget(call.action).kind)).toEqual(['named', 'dynamic', 'unresolved'])
       Expect(resolveActionInvocation(calls[0]!).action).toBe(action(file, 'Save'))
       Expect(resolveActionInvocation(calls[0]!).associated).toBeUndefined()

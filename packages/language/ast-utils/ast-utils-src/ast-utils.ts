@@ -71,6 +71,7 @@ import {
 import {
   resolveActionInvocation,
   resolveActionTarget,
+  resolveAssociatedActionTarget,
   resolveFunctionInvocation,
   resolveRenderInvocation,
 } from './invocations'
@@ -187,6 +188,7 @@ export const ASTUtils = {
   renderTargetIsNav,
   renderTargetName,
   resolveActionInvocation,
+  resolveAssociatedActionTarget,
   resolveArgumentBindings,
   resolveActionTarget,
   resolveDataWriteBindings,
