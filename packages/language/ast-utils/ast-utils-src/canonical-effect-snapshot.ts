@@ -10,6 +10,7 @@ import {
   type AssociatedDescriptorMaterialization,
   associatedMethodCallTarget,
   type AssociatedMethodReceiver,
+  associatedMethodTypeRoot,
   capabilityRequirements,
   hasAssociatedEffects,
   ownAssociatedMethods,
@@ -81,6 +82,12 @@ export type CanonicalReadPublication =
         owner: AssociatedCallableOwner
         declaration: AssociatedDeclaration
         receiver: AST.Expression
+      }>
+      | Readonly<{
+        kind: 'named-method-selection'
+        owner: AssociatedCallableOwner
+        declaration: AssociatedDeclaration
+        receiver: AssociatedMethodReceiver
       }>
     initializer?: AST.Expression
   }>
@@ -337,12 +344,17 @@ export function publishCanonicalEffectSnapshot(
         }),
       )
     }
+  }
+  for (const node of nodes) {
     if (AST.isValueReference(node) || AST.isMemberAccessExpression(node)) {
       const domain = resolution.ofReferenceRoot(node)
       const selectedDomain = AST.isMemberAccessExpression(node) && domain.kind === 'item' && node.members.length === 1
         ? resolution.atMemberPath(domain, node.members)
         : domain
-      reads.set(node, publishRead(node, domain, selectedDomain, nativeForwardOwners))
+      const selection = AST.isMemberAccessExpression(node)
+        ? publishNamedMethodSelection(node, calls.get(node.$container))
+        : undefined
+      reads.set(node, selection ?? publishRead(node, domain, selectedDomain, nativeForwardOwners))
     }
     if (
       AST.isPostfixMemberAccess(node) && AST.isMethodCallExpression(node.$container)
@@ -395,6 +407,42 @@ function sealReceiver(receiver: AssociatedMethodReceiver): AssociatedMethodRecei
   return Switch.kind(receiver, {
     expression: receiver => Object.freeze({ ...receiver }),
     'member-path': receiver => Object.freeze({ ...receiver, members: Object.freeze([...receiver.members]) }),
+  })
+}
+
+/** Direct named selection retains its real receiver; field paths still need ordinary read evidence. */
+function publishNamedMethodSelection(
+  reference: AST.MemberAccessExpression,
+  call: CanonicalCallPublication | undefined,
+): CanonicalReadPublication | undefined {
+  if (
+    !AST.isMethodCallExpression(reference.$container) || reference.$container.callee !== reference
+    || call?.kind !== 'complete' || !call.descriptor?.owner || !call.target
+    || (!AST.isAssociatedFunctionDeclaration(call.target) && !AST.isCapabilityMethodDeclaration(call.target)
+      && !AST.isAssociatedViewDeclaration(call.target))
+    || call.receiver?.kind !== 'member-path' || call.receiver.members.length !== 0
+  ) {
+    return undefined
+  }
+  const declaration = reference.target.ref
+  const owner = AST.findOwningAssociatedFunction(reference) ?? AST.findOwningFunction(reference)
+    ?? AST.findOwningPhrase(reference)
+  const ownParameter = AST.isParameterDeclaration(declaration) && !declaration.mutable && !declaration.copy
+    && !!owner && AST.parametersOf(owner).includes(declaration)
+  if (!associatedMethodTypeRoot(call.receiver) && !ownParameter) {
+    return undefined
+  }
+  return Object.freeze({
+    reference,
+    declaration: call.target,
+    classification: 'immutable',
+    kind: 'complete',
+    proof: Object.freeze({
+      kind: 'named-method-selection',
+      owner: call.descriptor.owner,
+      declaration: call.target,
+      receiver: call.receiver,
+    }),
   })
 }
 
@@ -477,23 +525,35 @@ function nativeHandleTransport(
     AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration
   >,
 ): boolean {
-  if (!AST.isValueReference(reference)) {
-    return false
-  }
-  const argument = reference.$container
-  if (!AST.isArgument(argument) || argument.value !== reference) {
-    return false
-  }
-  const call = argument.$container?.$container
-  if (
-    !AST.isFunctionCallExpression(call) || call.argumentList !== argument.$container
-    || nativeForwardOwners.get(call) !== owner
-  ) {
+  if (nativeArgumentOwner(reference, nativeForwardOwners) !== owner) {
     return false
   }
   return domain.kind === 'entity'
     ? AST.isEntityDataDeclaration(domain.entity)
     : domain.kind === 'list' && domain.element?.kind === 'entity' && AST.isEntityDataDeclaration(domain.element.entity)
+}
+
+function nativeArgumentOwner(
+  reference: AST.ValueReference | AST.MemberAccessExpression,
+  nativeForwardOwners: ReadonlyMap<
+    AST.FunctionCallExpression,
+    AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration
+  >,
+): AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration | undefined {
+  if (!AST.isValueReference(reference)) {
+    return undefined
+  }
+  const argument = reference.$container
+  if (!AST.isArgument(argument) || argument.value !== reference) {
+    return undefined
+  }
+  const call = argument.$container?.$container
+  if (
+    !AST.isFunctionCallExpression(call) || call.argumentList !== argument.$container
+  ) {
+    return undefined
+  }
+  return nativeForwardOwners.get(call)
 }
 
 function publishRead(
@@ -507,7 +567,11 @@ function publishRead(
 ): CanonicalReadPublication {
   const declaration = reference.target.ref
   const owner = AST.associatedReceiverOwner(reference)
-  if (owner && declaration === owner && immutableReadDomain(domain)) {
+  const forwardingMethod = nativeArgumentOwner(reference, nativeForwardOwners)
+  const contextualTransport = forwardingMethod && AST.isAssociatedFunctionDeclaration(forwardingMethod)
+    && !forwardingMethod.static && AST.findOwningAssociatedFunction(reference) === forwardingMethod
+    && 'nominal' in domain && domain.nominal === owner
+  if (owner && declaration === owner && (immutableReadDomain(domain) || contextualTransport)) {
     return Object.freeze({
       reference,
       declaration,
