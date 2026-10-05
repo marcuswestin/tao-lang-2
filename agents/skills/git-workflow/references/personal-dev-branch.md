@@ -6,6 +6,11 @@ lands, disappears, and comes back under the same name pointing at the new `main`
 
 ## Land, then create the same name from `main`
 
+`dev/<name>` is the supported local exception to the CI-default feature-branch route;
+`open-pr` and `merge-pr` reject this branch shape. `land` still needs a successful remote fetch and
+push, so offline local verification cannot claim integration or landing. `verification-lanes` owns
+the full route and proof requirements.
+
 `./agent unsandboxed land` squashes `dev/<name>` onto `main`, deletes the local and remote branch,
 and leaves this worktree detached at the pre-squash tip. The archive of that tip is
 `merged/<name>/<utc>`. `verification-lanes` owns the ref spelling and the landing gates.

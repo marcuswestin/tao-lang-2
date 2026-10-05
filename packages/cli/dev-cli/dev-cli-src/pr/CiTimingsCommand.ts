@@ -127,9 +127,12 @@ function rowsOf(run: WorkflowRun, jobs: readonly Job[]): Map<string, Timing> {
   const rows = new Map<string, Timing>()
   for (const [name, { durations, skipped }] of samples) {
     const sorted = [...durations].sort((a, b) => a - b)
+    const middle = Math.floor(sorted.length / 2)
     rows.set(name, {
       max: sorted.at(-1) ?? 0,
-      median: sorted[Math.floor(sorted.length / 2)] ?? 0,
+      median: sorted.length % 2 === 0
+        ? ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2
+        : sorted[middle] ?? 0,
       ran: sorted.length,
       skipped,
     })

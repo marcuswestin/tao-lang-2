@@ -12,9 +12,10 @@ import { type ReviewedMergeMessage, reviewedMergeMessage } from './ReviewedMerge
  * again is how a changed message reaches `main`. The headline and body are set explicitly because
  * GitHub's own squash message appends ` (#N)` to the title and wraps the description at 72 columns,
  * which breaks the repository's one-bullet-per-line format. Auto-merge waits for the required Verify
- * check; it is turned on only once checks exist on the pushed head, so Verify is already pending when
- * GitHub reads it. Verify runs on every push, so a reused pull request is watched the same way as a
- * new one. A branch that already merged is refused before any push, because pushing it again would
+ * check; it is turned on once any check exists on the pushed head, while `pr-checks` keeps following
+ * the Verify workflow itself through its literal successful check run. Verify runs on every push,
+ * so a reused pull request is watched the same way as a new one. A branch that already merged is
+ * refused before any push, because pushing it again would
  * open a second, empty pull request that auto-merge also lands.
  * By default, it refuses an already enabled pull request before pushing, checks that auto-merge is
  * still off before following CI, and leaves landing to a later decision.

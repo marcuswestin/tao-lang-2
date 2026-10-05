@@ -1,9 +1,10 @@
 # Hosted verification and contention
 
-Choose where to verify before starting a costly local lane, and reassess before merging. Prefer
-GitHub CI when this computer has high contention and CI has little or none, provided the hosted
-gates prove the change. Keep focused local checks useful for iteration; do not run broad local
-verification or `finalize` merely to duplicate sufficient CI proof.
+Use GitHub CI by default for final portable verification and hosted landing when its gates cover the
+change. Use local checks for focused iteration, diagnosis, a clearly faster appropriate proof, and
+host-only acceptance. When CI is unavailable, local verification is a fallback; offline proof does
+not establish remote integration or landing, and local `land` still requires a successful fetch and
+push. Reassess machine and CI contention before choosing an optional broad local lane.
 
 ## Compare current contention
 
@@ -28,10 +29,10 @@ verification or `finalize` merely to duplicate sufficient CI proof.
   CI evidence, coverage, and chosen route briefly. Compare expected queue plus execution time,
   rather than preferring CI after any slow local check.
 
-When local contention is high and CI contention is low, send the portable verification to CI
-instead of queueing another full local run. If both are busy, wait or continue focused work and
-reassess. If CI is unavailable, use the local route when capacity permits. A failed check still
-needs diagnosis; switching machines is not permission to ignore a failure.
+For final portable proof, use CI unless a local lane is clearly faster and appropriate or CI is
+unavailable. If both local and CI capacity are constrained, wait or continue focused work and
+reassess. A failed check still needs diagnosis; switching machines is not permission to ignore a
+failure.
 
 ## Coverage and readiness
 
@@ -48,19 +49,20 @@ verification first. A fully successful CI run covering the current PR head repla
 local per-commit and readiness gates. Until that result exists, describe the branch as awaiting
 CI, not verified. Do not require local `finalize` as a prerequisite for the hosted route.
 
-Authorization to publish or merge remains separate from route selection. When pushing for CI is
-authorized, use `./agent unsandboxed open-pr`: it pushes, opens or reuses the PR, follows CI, and
-leaves auto-merge off by default. It refuses a PR whose auto-merge is already enabled; do not change
-another task's setting to make it proceed. This also allows portable CI while required host
-acceptance is pending. Without push authorization, inspect an existing PR read-only or finish
-local preparation and report that starting hosted CI awaits it.
+Authorization to push and authorization to land remain separate. When pushing for CI is authorized,
+use plain `./agent unsandboxed open-pr` for push-only work, while required host acceptance is
+pending, or while the slice is otherwise not ready to land. It pushes, opens or reuses the PR,
+follows CI, and leaves auto-merge off. It refuses a PR whose auto-merge is already enabled; do not
+change another task's setting to make it proceed. Without push authorization, inspect an existing
+PR read-only or finish local preparation and report that starting hosted CI awaits it.
 
-Only explicit `open-pr --auto-merge` enables automatic merging before checks finish. Use that
-option only after the Developer authorizes landing the slice and every required host acceptance
-check has passed; GitHub can merge independently of a later `merge-pr` call. A green existing PR
-may be proposed as ready without rerunning local verification; authorization to merge is still
-required. For ordinary CI-based landing, leave auto-merge off, wait for complete proof, and run
-`merge-pr` on that verified result.
+When the slice is ready to land, meaning the Developer explicitly authorized landing and every
+required host acceptance check has passed, prefer `./agent unsandboxed open-pr --auto-merge` for
+new hosted verification. GitHub waits for required checks and may merge independently of a later
+`merge-pr` call; continue following CI to completion, diagnose every failure, and use `merge-pr`
+after GitHub has merged to confirm and archive it. Do not enable or rearm auto-merge before that
+ready-to-land point. A green existing PR may be proposed as ready without rerunning local
+verification; merge authorization is still required.
 
 Always poll ongoing CI through completion. Start diagnosing and fixing failures as they appear
 while polling the remaining jobs; a run link is not completion. Retain logs and a run/commit-scoped
@@ -77,16 +79,15 @@ superseded run, skipped or cancelled required check, pending check, or failed ch
 Commits added since the green run require new CI proof.
 
 After landing is authorized, run `./agent unsandboxed merge-pr` directly for an existing fully
-verified PR. Do not reopen it or run local `land`, `verify`, `verify-full`, or `finalize` merely
-because it is time to merge. `merge-pr` confirms the clean branch and reviewed message, matches
+verified PR. Do not reopen it, rearm auto-merge, or run local `land`, `verify`, `verify-full`, or
+`finalize` merely because it is time to merge. `merge-pr` confirms the clean branch and reviewed message, matches
 the local commit to the pushed head, checks the latest verdict, and pins the squash merge to that
 head. It archives `merged/<name>` and reports the merge, including when auto-merge already did it.
 Do not change the head simply to obtain a local readiness record.
 
-For new hosted verification, `./agent unsandboxed open-pr` pushes, opens or reuses the PR, uses the
-reviewed message as its title and description, and follows checks without enabling auto-merge.
-When the complete current-head verdict passes and landing is authorized, use `merge-pr` with the
-reviewed squash message. To update the message, edit it and run `open-pr` again; updating an
+Both `open-pr` modes push, open or reuse the PR, use the reviewed message as its title and
+description, and follow checks. Choose `--auto-merge` at readiness as described above. To update
+the message, edit it and run `open-pr` again; updating an
 intentionally armed PR requires the explicit `--auto-merge` option. GitHub deletes the merged
 feature branch; the archive workflow also records `merged/<name>` for a PR merged another way.
 The commands use REST where a cloud proxy refuses GraphQL.
@@ -98,7 +99,9 @@ commit the fix, push through `open-pr`, and wait for fresh proof. If GitHub repo
 the changed head needs CI again. Never bypass checks with `gh pr merge` or switch to local landing
 just to evade a CI or queued-merge failure.
 
-Use `./agent unsandboxed land` for the local route when needed proof is unavailable through CI;
-it integrates and verifies under the machine-wide landing lock. An already-green portable run
-does not claim the host-only lanes passed. Both routes retain the reviewed squash message and
-branch archive, and `git-workflow` owns the post-merge resource review.
+Personal `dev/<name>` branches remain on the supported local `land` lifecycle; `open-pr` and
+`merge-pr` do not support that branch shape. Use `./agent unsandboxed land` for that exception, or
+when the hosted route is unavailable; it integrates and verifies under the machine-wide landing
+lock and still requires a successful fetch and push. An already-green portable run does not claim
+the host-only lanes passed. Both routes retain the reviewed squash message and branch archive, and
+`git-workflow` owns the post-merge resource review.
