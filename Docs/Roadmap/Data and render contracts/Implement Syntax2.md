@@ -14,14 +14,15 @@ passed at that tree; lint, typecheck and runtime packaging reused exact-tree gre
 Reviewed second-wave renderer descriptors provide independently mounted placements, fresh captures
 and own-property default selection. Lexical cleanup runtime joins admitted work, drains serial
 LIFO cleanup and preserves primary failures; scoped foreign thenables are adopted once. These
-runtime leaves do not yet expose the selected slot/defer source grammar or compiler lowering.
+runtime leaves initially lacked the selected slot/defer source grammar and compiler lowering;
+the production integrations described below now exercise those connections.
 Concrete callable signatures now cover required inputs before preferring exact matches, preserving
 ambiguity and ordinary argument binding. The separately reviewed uniform native accessor chain is
 now integrated on `feat/syntax2-numeric-construction`; complete returned wrapper identities survive
 selection, callable results and persisted snapshots. Focused accessor, quantity and cleanup tests
 pass together; combined proof for this follow-up remains pending.
-Checked native factory publication, capabilities, full slots, units, cleanup lowering and app
-adapter/list graduation remain. No language stream is complete.
+General capabilities, operators/converters, bare values and app adapter/list graduation remain.
+No language stream is complete.
 The associated-method frontend, private defining-module witness publication and concrete
 capability transport now have focused source/execution proof. Required defaults retain their
 defining-module scope, nested inputs/results retain their receiving contracts, and raw omitted
@@ -36,18 +37,24 @@ The app now graduates Name, its private GivenName/FamilyName roles, PersonName a
 `library/Library.tao`, and ProfileName plus its construction into `Main.tao`. The actual Tao journey
 asserts Ada Lovelace and 3 alongside both grouping transitions; it passes with a supported
 workspace-local Tao test home. Source check is canonical after the leading-role-dot formatter
-repair. Unit-reading dispatch is integrated and descendant factory publication is in progress.
-Action then/defer grammar is incremental; canonical payload and production codegen connections
-remain in progress. A batched typecheck found specific scope, unit-reference and test-import
-typing repairs, plus the expected in-progress defer dispatcher; combined verification is pending.
+repair. Unit-reading dispatch and authenticated descendant factory publication are integrated.
+Generated cross-file factories preserve private ancestors and identity across aliases. Production
+renderer slots compile defaults, fills and repeated placements; mounted checks prove independent
+state, fresh captures and skipped empty-renderer arguments. Canonical payload-before-arrow action
+syntax, joined cleanup codegen and canonical result/failure runtime delivery are integrated. Real
+source action result inference uses lexical returns, and failure payloads use the source-backed
+public ActionFailureContext contract. The runnable app also graduates Banner's two text roles and
+reversed arguments; its journey passes alongside names, arithmetic and grouping. Source-return
+lowering, generic/concrete Self, arithmetic leaves and bare text rendering continue in bounded
+ownership batches. Latest combined typing still requires the source compiler's action/command
+narrowing; combined verification and full app graduation are pending.
 Existing function examples now use
 the formatter's selected `func` and arrow return spelling. Broad follow-up verification is pending.
 The parameter-array signature adapter is reviewed and integrated at `0ac15b312`.
 Numeric/unit construction, the isolated capability carrier runtime, generated native unit leaf
 and existing-block cleanup compiler lowering progress in separate worktrees.
-The coordinator retains native factory
-publication, shared compiler callers, app graduation and combined proof; slot and associated
-capability frontend work waits for numeric grammar/type ownership to return.
+The coordinator retains shared compiler callers, app graduation and combined proof; the current
+ownership manifest releases independent implementation batches and their required shared seams.
 Reconciled with the 2026-10-04 project/module migration before baseline landing.
 
 Planning readiness: **100% for the high-level implementation plan**, reviewed 2026-10-04.
