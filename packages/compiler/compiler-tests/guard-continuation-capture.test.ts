@@ -1,12 +1,22 @@
 import { AST, Langium, Parser } from '@parser'
 import { Assert, CLI, FS, Repo } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
-import { readAvailability, withReadAvailability } from '../../apps/runtime/TaoRuntime-src/TR-read-availability'
 import { compileReactiveArgument } from '../compiler-src/codegen/react-native/app/reactive-parameters'
 import { Compile } from '../compiler-src/codegen/react-native/Compile'
 import { Workspace } from '../compiler-src/workspace'
 
 const runtimeModule = import(FS.resolvePath('packages/apps/runtime/TaoRuntime-src/TR.ts', Repo.getRoot()))
+type ReadAvailabilityState =
+  | { status: 'available' | 'loading' | 'missing' }
+  | { reason?: 'signed-out' | 'access-denied'; status: 'unauthorized' }
+  | { message: string; status: 'error' }
+type ReadAvailabilityModule = Readonly<{
+  readAvailability(value: unknown): ReadAvailabilityState | undefined
+  withReadAvailability<ValueT extends object>(value: ValueT, state: ReadAvailabilityState): ValueT
+}>
+const readAvailabilityModule: Promise<ReadAvailabilityModule> = import(
+  FS.resolvePath('packages/apps/runtime/TaoRuntime-src/TR-read-availability.ts', Repo.getRoot()),
+)
 const declarations = `
   data Authors / Author { Name text }
   func DescribeOptional(Person Author?) -> text { return DescribeOptional(Person) from ./Native.ts }
@@ -224,6 +234,7 @@ Describe('compiler: optional entity guard continuation capture', () => {
 
   Test('passes a completed sampled wrapper to the guard remainder and preserves ordinary when callbacks', async () => {
     const { default: TR } = await runtimeModule
+    const { readAvailability, withReadAvailability } = await readAvailabilityModule
     const value = withReadAvailability(TR.Value({ Name: 'Before' }), { status: 'available' })
     let captured: unknown
     const result = TR.GuardRender(
