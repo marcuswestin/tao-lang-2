@@ -119,16 +119,8 @@ Describe('Studio compile coordinator', () => {
     }])
     Expect(coordinator.snapshot()).toMatchObject({ compileRevision: 2, publishedRevision: 1 })
 
-    const message = (revision: number) => ({
-      appliedRevision: revision,
-      channel: studioProtocolChannel,
-      compileRevision: revision,
-      identity: { appName: 'Garden', project: '/workspace/garden' },
-      protocolVersion: studioProtocolVersion,
-      type: 'studio.appliedAck' as const,
-    })
-    Expect(coordinator.acknowledgeCompiledRevision(message(2))).toBe(false)
-    Expect(coordinator.acknowledgeCompiledRevision(message(1))).toBe(true)
+    Expect(coordinator.acknowledgeCompiledRevision(appliedMessage('preview-1', 2))).toBe(false)
+    Expect(coordinator.acknowledgeCompiledRevision(appliedMessage('preview-1', 1))).toBe(true)
   })
 
   Test('does not let an obsolete Studio acknowledgement swallow a later external revert', async () => {
