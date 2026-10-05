@@ -78,22 +78,29 @@ jobs:
             exit 1
           fi
 
-      - name: Collect the run's logs and summary
+      # The Verify job reads every partition's summary; the gate logs matter only when one failed, so a
+      # green partition uploads its summary alone.
+      - name: Collect the run's summary, and its logs when it failed
         if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
         run: |
           mkdir -p "$RUNNER_TEMP/verify-logs"
-          if [ -e .artifacts/logs/verify-full-sandbox/latest ]; then
-            cp -RL .artifacts/logs/verify-full-sandbox/latest/. "$RUNNER_TEMP/verify-logs/"
+          latest=.artifacts/logs/verify-full-sandbox/latest
+          if [ "$JOB_STATUS" = success ] && [ -e "$latest/summary.json" ]; then
+            cp -L "$latest/summary.json" "$RUNNER_TEMP/verify-logs/"
+          elif [ -e "$latest" ]; then
+            cp -RL "$latest/." "$RUNNER_TEMP/verify-logs/"
           fi
 
-      - name: Upload the run's logs and summary
+      - name: Upload the run's summary and logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: verify-partition-${{ matrix.partition }}
           path: ${{ runner.temp }}/verify-logs
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 7
 
       - name: Save green records for this tree
         if: always()
@@ -120,6 +127,17 @@ jobs:
         env:
           PARTITION_RESULT: ${{ needs.partition.result }}
         run: |
+          # One annotation per extracted failure, and one for each failed gate whose log matched no
+          # recognized format, escaped as workflow commands require.
+          cat > "$RUNNER_TEMP/annotate.jq" <<'JQ'
+          def escape: gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A") | .[0:2000];
+          (.partition.index // "?") as $k
+          | (.failures // []) as $failures
+          | ($failures[] | "::error title=Partition \($k): \(.gate)::\((.test + (if .error then ": " + .error else "" end)) | escape)"),
+            (.gates[] | select(.status == "failed") | .name as $gate
+              | select([$failures[] | select(.gate == $gate)] | length == 0)
+              | "::error title=Partition \($k): \($gate)::Failed with no recognized test failure; the partition's log artifact holds its output.")
+          JQ
           status=0
           summaries=$(find partitions -name summary.json | sort)
           count=$(printf '%s\n' "$summaries" | grep -c . || true)
@@ -136,6 +154,9 @@ jobs:
           for summary in $summaries; do
             jq -r '"partition \(.partition.index // "?")/\(.partition.count // "?"): \(.status), \([.gates[] | select(.status == "passed")] | length) passed, \([.gates[] | select(.status == "failed")] | length) failed in \(.elapsedMs / 1000 | floor)s"' "$summary"
             jq -r '.gates[] | select(.status == "failed") | "  failed: \(.name)"' "$summary"
+            # Annotations carry each failure's reason to the checks API, where `./agent pr-checks`
+            # reads them without downloading a log.
+            jq -r -f "$RUNNER_TEMP/annotate.jq" "$summary"
           done
           if [ "$PARTITION_RESULT" != success ]; then
             echo "At least one partition did not succeed ($PARTITION_RESULT); its artifact holds the logs."
