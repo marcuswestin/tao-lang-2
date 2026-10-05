@@ -403,7 +403,9 @@ function quantityParentOwner(owner: AST.TypeDeclaration): AST.TypeDeclaration | 
     return undefined
   }
   const referenceTarget = AST.isDerivedTypeExpression(type)
-    ? type.slots.unitBlocks.length > 0 ? undefined : Type.definitionOfReference(type.base)
+    ? type.slots.unitBlocks.length > 0 || !AST.isNamedTypeReference(type.base)
+      ? undefined
+      : Type.definitionOfReference(type.base)
     : AST.isNamedTypeReference(type)
     ? Type.definitionOfReference(type)
     : undefined
