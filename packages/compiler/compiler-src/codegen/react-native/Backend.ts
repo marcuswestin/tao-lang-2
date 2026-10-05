@@ -15,7 +15,11 @@ import {
   studioPreviewManifestModule,
 } from '../../studio-preview-manifest'
 import { withActionInstrumentation } from './app/action-control-flow'
-import { associatedWitnessExports } from './app/associated-witness-plan'
+import {
+  associatedWitnessExports,
+  planAssociatedWitnessBindings,
+  referencedAssociatedWitnessOwners,
+} from './app/associated-witness-plan'
 import { withAssociatedWitnessBindings } from './app/AssociatedMethodsCompiler'
 import {
   configurationAliasTargetTypeBindingName,
@@ -739,7 +743,30 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
     const target = statement.aliasTarget?.member.ref
     return target !== undefined && outputPaths.modulePathBySourcePath.has(AST.getDocument(target).uri.path)
   })
+  const witnessPlan = planAssociatedWitnessBindings(
+    file.ast,
+    associatedExports,
+    referencedAssociatedWitnessOwners(selectedStatements),
+    new Map(
+      [...sourceByPath.values()].flatMap(source =>
+        [...associatedWitnessExports(source.ast)].filter(([owner]) => selectedStatementsFor(source).includes(owner))
+      ),
+    ),
+    [
+      ...factoryBindings.values(),
+      ...imports.scopeBindings.values(),
+      ...planned.injections.map(injection => injection.binding),
+      ...planned.sidecars.map(sidecar => sidecar.binding),
+    ],
+  )
   const importLines = [
+    ...witnessPlan.imports.map(witness => {
+      const sourcePath = outputPaths.modulePathBySourcePath.get(witness.sourcePath)
+      Assert.defined(sourcePath, 'referenced associated owner has a selected emitted source module')
+      return `import { ${witness.exported} as ${witness.binding} } from ${
+        JSON.stringify(relativeImportPath(planned.modulePath, sourcePath))
+      }`
+    }),
     ...quantityImports,
     ...importLinesForCompiledFile(imports, planned.modulePath, outputPaths.modulePathBySourcePath),
     ...configurationAliasImportLines(file, planned.modulePath, outputPaths, typeStatements),
@@ -770,7 +797,7 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
   const emitted = (relativePath: string, code: string): CompiledFile => ({ code, relativePath, sourcePath: file.path })
   const module = emitted(
     planned.modulePath,
-    withAssociatedWitnessBindings(associatedExports, () =>
+    withAssociatedWitnessBindings(witnessPlan.bindings, () =>
       withQuantityFactoryBindings(
         factoryBindings,
         () =>

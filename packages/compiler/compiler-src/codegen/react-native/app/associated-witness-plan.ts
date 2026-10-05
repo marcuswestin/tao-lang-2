@@ -14,6 +14,30 @@ export function associatedWitnessExports(file: AST.TaoFile): ReadonlyMap<AST.Typ
   return exports
 }
 
+/** Method references use the canonical selected defining owner, independent of receiver spelling. */
+export function referencedAssociatedWitnessOwners(
+  statements: readonly AST.Statement[],
+): ReadonlySet<AST.TypeDeclaration> {
+  const owners = new Set<AST.TypeDeclaration>()
+  for (const statement of statements) {
+    for (const node of [statement, ...AST.streamAllContents(statement)]) {
+      if (!AST.isMethodCallExpression(node)) {
+        continue
+      }
+      const invocation = ASTUtils.resolveAssociatedMethodInvocation(node)
+      Assert(
+        invocation.problem === undefined && invocation.diagnostics.length === 0,
+        'Expected a validated associated call to retain its canonical correspondence.',
+      )
+      Assert.defined(invocation.descriptor, 'Expected a validated associated call to select its descriptor.')
+      if (AST.isAssociatedFunctionDeclaration(invocation.descriptor.declaration)) {
+        owners.add(invocation.descriptor.owner)
+      }
+    }
+  }
+  return owners
+}
+
 /** Imports address the actual defining owner, even when the receiver is a descendant or an alias. */
 export function planAssociatedWitnessBindings(
   file: AST.TaoFile,
@@ -40,7 +64,7 @@ export function planAssociatedWitnessBindings(
 }
 
 function authoredNames(file: AST.TaoFile): Set<string> {
-  const names = new Set<string>()
+  const names = new Set(ASTUtils.referencedNames(file))
   for (const node of AST.streamAllContents(file)) {
     if ('name' in node && typeof node.name === 'string') {
       names.add(node.name)
