@@ -457,6 +457,21 @@ Describe('Tao formatter tests', () => {
   )
 
   Test(
+    'formats the ID-headed missing marker in grouped expectations',
+    formats(
+      `test "Suite"{test "check"{expect {missing   label "Loading" text   "Ready"}}}`,
+      `
+        test "Suite" {
+           test "check" {
+              expect {
+                 missing label "Loading"
+                 text "Ready"
+        }  }  }
+      `,
+    ),
+  )
+
+  Test(
     'keeps test closing braces separate after trailing step comments',
     formats(
       `test "Smoke"{test "renders"{run MyApp\nexpect text "Hello"\n// last step note\n}}`,

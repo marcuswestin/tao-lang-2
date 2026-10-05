@@ -2613,7 +2613,7 @@ class TypeResolutionContext {
           }
         }
         const exceptionalReadCase = AST.isGuardRenderBranch(branch)
-          && ['loading', 'missing', 'none', 'unauthorized', 'error'].includes(AST.canonicalSubjectCase(branch.case))
+          && ['loading', 'none', 'unauthorized', 'error'].includes(AST.canonicalSubjectCase(branch.case))
         if (!AST.isAppGuardBranch(branch) && !exceptionalReadCase) {
           return primitiveType('text')
         }

@@ -110,7 +110,7 @@ Describe('parser: functional core', () => {
         render Stack() {
           guard Document {
             loading -> { Text("Loading") }
-            missing -> { Text("Missing") }
+            none -> { Text("No longer present") }
             unauthorized -> { Text("Unauthorized") }
             error -> Context { Text(Context.Message) }
           }
@@ -145,7 +145,7 @@ Describe('parser: functional core', () => {
     Expect.Is(availabilityGuard, AST.isGuardRenderStatement)
     Expect(availabilityGuard.caseBlock?.branches.map(branch => branch.case)).toEqual([
       'loading',
-      'missing',
+      'none',
       'unauthorized',
       'error',
     ])
@@ -198,7 +198,7 @@ Describe('parser: functional core', () => {
         view Home
         guard {
         loading -> Spinner()
-        missing -> { Text("This is gone") }
+        none -> { Text("This is gone") }
         error -> Context { Text(Context.Message) }
         }
       }
@@ -211,13 +211,13 @@ Describe('parser: functional core', () => {
     Expect.Is(app, AST.isAppDeclaration)
     const net = app.block?.statements.find(AST.isAppGuardStatement)
     Expect.Is(net, AST.isAppGuardStatement)
-    Expect(net.branches.map(branch => branch.case)).toEqual(['loading', 'missing', 'error'])
-    const [loading, missing, error] = net.branches
+    Expect(net.branches.map(branch => branch.case)).toEqual(['loading', 'none', 'error'])
+    const [loading, none, error] = net.branches
     Assert.defined(loading, 'the loading branch exists')
     Expect.Is(loading.render, AST.isViewRender)
     Assert.defined(loading.render.view, 'the loading render has a view reference')
     Expect(loading.render.view.$refText).toBe('Spinner')
-    Expect(missing?.block?.statements).toHaveLength(1)
+    Expect(none?.block?.statements).toHaveLength(1)
     const errorText = error?.block?.statements[0]
     Expect.Is(errorText, AST.isViewRender)
     const errorMessage = AST.argumentsOf(errorText)[0]?.value
@@ -310,5 +310,42 @@ Describe('parser: functional core', () => {
       const result = await parseCodeWithErrors(source)
       Expect(result.entry.document.parseResult.parserErrors.length).toBeGreaterThan(0)
     }
+  })
+
+  Test('parses missing as an ordinary declared enum identifier', async () => {
+    const result = await testParseCode(`
+      type Availability is one of missing, Available
+      view Main(Current Availability) {
+        action Check() { check Current is missing }
+        render Stack() {
+          when Current {
+            missing -> { Text("Unavailable") }
+            Available -> { Text("Ready") }
+            otherwise -> { Text("Other") }
+          }
+        }
+      }
+      view Stack() { render inject Content @@content \`\`\`ts\nreturn Content\n\`\`\` }
+      view Text(Value text) { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
+    `)
+
+    const availability = result.entry.ast.statements.find(statement =>
+      AST.isTypeDeclaration(statement) && statement.name === 'Availability'
+    )
+    const main = result.entry.ast.statements.find(statement =>
+      AST.isViewDeclaration(statement) && statement.name === 'Main'
+    )
+    Expect.Is(availability, AST.isTypeDeclaration)
+    Expect.Is(main, AST.isViewDeclaration)
+    const missingCase = AST.caseSetCasesOf(availability)[0]
+    const check = AST.blockStatementOf(main, { find: AST.isActionDeclaration })
+      .block!.statements.find(AST.isCheckStatement)
+    Expect.Is(check, AST.isCheckStatement)
+    Expect.Is(check.condition, AST.isCaseTestExpression)
+    Expect(check.condition.declaredCase?.ref).toBe(missingCase)
+    const render = AST.blockStatementOf(main, { find: AST.isRenderStatement })
+    const when = AST.statementsOf(render.block).find(AST.isWhenRenderStatement)
+    Expect.Is(when, AST.isWhenRenderStatement)
+    Expect(when.branches[0]?.case).toBe('missing')
   })
 })
