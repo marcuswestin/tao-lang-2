@@ -6,6 +6,9 @@ Read the [candidate roadmap](<Hosted data provider candidates.md>), the
 [Hosted CRUD guide](../../Apps/Hosted%20CRUD/README.md), and `A21`/`A22` in the
 [Agent MVP Roadmap](<../MVP Roadmap/Agent MVP Roadmap.md>) before changing code.
 
+Current acceptance state is in [Simulator storage and live synchronization](#simulator-storage-and-live-synchronization--2026-10-05-1721-utc).
+Earlier failure and recovery entries below are historical evidence, not the current ownership state.
+
 ## State at handoff — 2026-10-03
 
 ### Done and committed
@@ -763,3 +766,17 @@ The exact-session recovery proposal for `ee8a76aa-10d6-4258-a061-c1cb7af5d467` w
 Automatic approval review rejected the implementation that would admit this exception: it would terminate the recorded process scope and release a booted Simulator without explicit approval for that exact scope. No recovery invocation or signal followed the rejection. Temporary preparatory edits were removed; the production retirement path continues to admit only its retained-driver refusal. The original failed receipt, loop/project reservation and owned F9 target remain retained. Do not bypass this through raw process signals, receipt edits, another cleanup path or a relaxed ownership guard.
 
 The remaining local intervention is approval of the concrete exact-session recovery proposal, followed by independent review and fresh custody/absence checks. The private proposal is `.artifacts/hosted-provider/ee8a-recovery-proposal.md`; it contains the full process manifest and cleanup boundaries. Native alert identification, app data loading and both-way web/Simulator synchronization remain unproved. The main sample account also rejected the supplied validation password in this selected project; changing or resetting that account is not authorized. Finish source review, exact-path commits and finalize independently, but do not land before the requested actual acceptance.
+
+### Simulator storage and live synchronization — 2026-10-05 17:21 UTC
+
+The approved exact-session recovery completed, and its temporary exception was removed. Subsequent owned loops stopped normally with proved driver cleanup and released reservations. The earlier recovery-approval block is superseded; no broader retirement permission was added. The Developer requested no further reviewer subagents, so subsequent changes are reviewed directly.
+
+The misleading `expo-sqlite is not installed` error came from the adapter's deferred ESM import. SQLite57.0.3 was present in the native build. Capturing the asynchronous loader's original cause showed Metro trying to resolve an async module path relative to the disposable runtime directory. The Firebase native entry now selects the adapter's supported CommonJS export, whose deferred SQLite load uses `require`. This avoids the broken dynamic chunk path without changing vendor files or dependencies. Storage-instance failures retain their original cause, stage and a one-line warning that survives native logging of only the first argument.
+
+Real UI acceptance now proves the CRUD sample account signs in, native account data loads, the Simulator creates a note observed in the browser, and the browser creates a note observed on the Simulator without reload. This was repeated in two attempts: `9f4ed1b3-9223-4474-94de-7ee40717251d` and `d93fe540-dec1-4cb0-9cc1-b8bf8fe1c42c` under `.artifacts/host-acceptance/managed-loops/`. Each keeps private `firebase-crud-sync.json` evidence with both exact row observations and screenshots. These observations prove creation and live propagation; they do not prove edit/delete, offline restart/replay, account isolation or direct hostile requests for the ordinary provider.
+
+Test navigation also needed repairs. The exact Expo introduction is followed by a separate developer menu; both are now dismissed under the existing runtime identity and lease. Auth input stops on a visible data-load error. `#items` tags repeat per loop row, so the browser searches all item scopes; the native test finds its unique exact marker and scrolls within the leased app. Before switching accounts it scrolls back to the visible sign-out control. Missing controls are distinguished from transport and ambiguous-target failures. Focused tests cover menu handling, original causes, scrolling and custody revocation.
+
+The latest complete attempt reached `native-main-signin` and failed with the visible message `The email or password is incorrect.` for the main sample account. The CRUD-sync evidence remains proved, while the overall two-account case remains failed. Driver cleanup and peer identity checks passed. The Developer must validate this account's current credentials locally; do not request a password in chat or reset the account. Earlier instructions pointing to stopped-loop URLs are superseded. The current owned session is `f964a8b3-f624-40e9-90be-5043524373bc`; consult its receipt for the current URL before giving a human step.
+
+Conditional landing remains held while the required main-account gate is unresolved. Appwrite remains deferred until the Firebase ordinary flow is accepted; its live subscription fix still needs device/reconnect, offline restart/replay, account isolation and direct hostile owner/permission checks. Jazz, Convex and Pylon retain their separate gates.

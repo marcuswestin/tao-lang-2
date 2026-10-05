@@ -422,3 +422,9 @@ The prior real-provider/runtime fixture omitted the authenticated binding, so it
 conformance seam. An explicit provider-scoped private-account policy and a real web/Simulator
 journey are required before accepting the ordinary app. This does not invalidate the standalone
 Firebase prototype evidence. Appwrite, Jazz, Convex and Pylon dispositions remain separate.
+
+### Ordinary Firebase Simulator proof — 2026-10-05 17:21 UTC
+
+The private-account runtime policy repair now has real web/Simulator evidence. Native storage's remaining failure was a Metro dynamic-import path error, masked by the SQLite adapter as a missing installation. Selecting its supported CommonJS native entry fixed actual data loading without a vendor patch. Two repeated real UI attempts proved CRUD-account sign-in and newly created notes propagating in both directions without reload; exact marker observations and screenshots are retained under `.artifacts/host-acceptance/managed-loops/9f4ed1b3-9223-4474-94de-7ee40717251d` and `d93fe540-dec1-4cb0-9cc1-b8bf8fe1c42c`.
+
+The full two-account case remains failed because Firebase rejects the main sample account's configured password. This needs a local credential check, not an inferred password reset. Ordinary-provider edit/delete, offline restart/replay, account isolation and direct hostile requests remain separate acceptance gates; prototype results do not close them. Firebase remains the selected first stack and now has live native creation/sync proof. Appwrite's realtime/device acceptance remains deferred, and Jazz, Convex and Pylon gates are unchanged.

@@ -196,8 +196,8 @@ export async function openManagedFirebaseWeb(options: {
       const text = await Time.pollUntil(async () => {
         await guard()
         return await cdp.evaluate<string | undefined>(`(() => {
-          const scope = document.querySelector('[data-testid="items"]')
-          const row = [...(scope?.querySelectorAll('*') ?? [])].find(node => node.textContent === ${
+          const scopes = [...document.querySelectorAll('[data-testid="items"]')]
+          const row = scopes.flatMap(scope => [scope, ...scope.querySelectorAll('*')]).find(node => node.textContent === ${
           JSON.stringify(marker)
         })
           return row?.textContent ?? undefined
