@@ -23,6 +23,24 @@ function renders(declaration: AST.ViewDeclaration): AST.RenderStatement[] {
 }
 
 Describe('ordinary generic view binding', () => {
+  Test('resolves native item slot domains against the actual enclosing generic view', async () => {
+    const file = await parse(`
+      can Keyed { Key() fails never -> text }
+      can Displayed { Render() fails never -> rendered }
+      view NativeRows where type T is Keyed and Displayed, type U is Keyed (Items list of T, Footer U)
+        accepts slots @item(Value T, Ordinal number) from ./NativeRows.tsx
+    `)
+    const native = view(file, 'NativeRows')
+    const input = native.foreign!.slots[0]!.parameterList!.parameters[0]!
+    const type = Type.ofParameter(input)
+    Expect(type.genericParameter).toBe(native.genericParameters[0])
+    Expect(Type.aggregateCapabilityRequirements(type).map(requirement => requirement.name)).toEqual(['Key', 'Render'])
+    const items = Type.ofParameter(AST.parametersOf(native)[0]!)
+    Expect(items.kind).toBe('list')
+    if (items.kind === 'list') {
+      Expect(items.element?.genericParameter).toBe(type.genericParameter)
+    }
+  })
   Test('specializes actual view parameters while retaining event and source witnesses', async () => {
     const file = await parse(`
       type Name is text
