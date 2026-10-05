@@ -107,6 +107,66 @@ export class TaoActionFailure extends Error {
   }
 }
 
+/** TaoActionExit retains the primary throw and each fault from lexical cleanup. */
+export type TaoActionExit = Readonly<{
+  kind: 'failure' | 'cancelled'
+  primary: unknown
+  cleanupFailures: readonly unknown[]
+  stage: 'body' | 'cleanup'
+  result?: unknown
+}>
+
+const actionExits = new WeakMap<object, TaoActionExit>()
+
+/** actionExitOf recognizes only carriers created by lexical action cleanup. */
+export function actionExitOf(error: unknown): TaoActionExit | undefined {
+  return typeof error === 'object' && error !== null ? actionExits.get(error) : undefined
+}
+
+/** createActionExit combines a body's exit with faults in cleanup execution order. */
+export function createActionExit(
+  failed: boolean,
+  error: unknown,
+  result: unknown,
+  cleanupErrors: readonly unknown[],
+): unknown {
+  const previous = failed ? actionExitOf(error) : undefined
+  const cleanupFailures = [...(previous?.cleanupFailures ?? [])]
+  for (const fault of cleanupErrors) {
+    const nested = actionExitOf(fault)
+    if (!nested) {
+      cleanupFailures.push(fault)
+    } else {
+      if (nested.stage === 'body') {
+        cleanupFailures.push(nested.primary)
+      }
+      cleanupFailures.push(...nested.cleanupFailures)
+    }
+  }
+  const primary = failed ? previous ? previous.primary : error : cleanupFailures[0]
+  const carrier = Object.freeze({})
+  actionExits.set(
+    carrier,
+    Object.freeze({
+      kind: previous?.kind ?? (primary instanceof TaoActionFailure && primary.caseName === 'cancelled'
+        ? 'cancelled'
+        : 'failure'),
+      primary,
+      cleanupFailures: Object.freeze(cleanupFailures),
+      stage: previous?.stage ?? (failed ? 'body' : 'cleanup'),
+      ...(!failed ? { result } : previous?.stage === 'cleanup' ? { result: previous.result } : {}),
+    }),
+  )
+  const source = failed ? error : cleanupErrors[0]
+  if (typeof source === 'object' && source !== null) {
+    const frames = actionFailureFrames.get(source)
+    if (frames) {
+      actionFailureFrames.set(carrier, frames)
+    }
+  }
+  return carrier
+}
+
 /** ErrorControls is the runtime's one error-handling surface: the three throwing categories generated
  * code can reach, contained action reports, bounded redacted diagnostic history, and the escape hatch
  * for failures no caller can observe.
@@ -296,7 +356,7 @@ function actionFailureReport(
     frames: typeof error === 'object' && error !== null
       ? [...(actionFailureFrames.get(error) ?? transaction.frames)]
       : [...transaction.frames],
-    message: actionFailureMessage(failure, action),
+    message: actionFailureMessage(failure, action, actionExitOf(error)?.stage),
     retryEligible: !transaction.externalEffects,
     timestamp: Date.now(),
   })
@@ -304,6 +364,10 @@ function actionFailureReport(
 
 /** asActionFailure reads any thrown value as an action failure; an undeclared throw is `Unexpected`. */
 export function asActionFailure(error: unknown): TaoActionFailure {
+  const exit = actionExitOf(error)
+  if (exit) {
+    error = exit.primary
+  }
   return error instanceof TaoActionFailure
     ? error
     : new TaoActionFailure('Unexpected', '', error instanceof Error ? error.message : '')
@@ -314,10 +378,16 @@ export function asActionFailure(error: unknown): TaoActionFailure {
  * declared sentence, then a fallback naming the action. A failure report and a `when do` outcome
  * read the same ladder, so a person sees one sentence whichever of them surfaces it.
  */
-export function actionFailureMessage(failure: TaoActionFailure, action: string): string {
+export function actionFailureMessage(
+  failure: TaoActionFailure,
+  action: string,
+  stage?: TaoActionExit['stage'],
+): string {
   return failure.providerSentence
     || failure.declaredSentence
-    || `Couldn't finish '${action}.' Nothing was changed.`
+    || (stage === 'cleanup'
+      ? `Couldn't finish cleanup for '${action}.'`
+      : `Couldn't finish '${action}.' Nothing was changed.`)
 }
 
 function sanitize(value: unknown, seen = new WeakSet<object>()): unknown {

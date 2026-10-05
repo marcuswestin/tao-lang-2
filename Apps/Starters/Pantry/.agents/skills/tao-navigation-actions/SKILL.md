@@ -47,10 +47,10 @@ nav SkillStack = StackNav {
 }
 
 nav SkillNavigator = SelectionNav {
-   Initial @home
-   Display "automatic"
+   Initial @home,
+   Display "automatic",
    @home {
-      Label "Home"
+      Label "Home",
       Content SkillStack
 }  }
 ```

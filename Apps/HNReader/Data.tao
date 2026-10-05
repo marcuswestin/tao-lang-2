@@ -33,7 +33,7 @@ datasource StubNews = StubSource {
 // the missing native side shows as a sync error. Checks replace it with an in-memory store.
 folder
 datasource Personal = CloudKit {
-   StorageKey "HNReaderBookmarksDev"
+   StorageKey "HNReaderBookmarksDev",
    Data {
       Bookmarks
 }  }
@@ -42,7 +42,7 @@ datasource Personal = CloudKit {
 // variants bind this same declaration, so a feed refill cannot erase what this device opened.
 folder
 datasource ReadingHistory = Local {
-   StorageKey "HNReaderReadingHistory"
+   StorageKey "HNReaderReadingHistory",
    Data {
       ReadingEntries
 }  }

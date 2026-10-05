@@ -119,6 +119,7 @@ change that addressed it.
 - [DEVENV-SECRET-MATERIALIZATION-MISSING-FROM-AGENT-COMMANDS — Secret materialization is missing from agent commands](<Developer environment upgrades/DEVENV-SECRET-MATERIALIZATION-MISSING-FROM-AGENT-COMMANDS.md>) — Candidate
 - [DEVENV-STUDIO-LEGACY-LOCK-TEST-IS-INTERMITTENT — Studio legacy-lock test is intermittent](<Developer environment upgrades/DEVENV-STUDIO-LEGACY-LOCK-TEST-IS-INTERMITTENT.md>) — Candidate
 - [DEVENV-STUDIO-REAL-APP-PROOF-FAILS-INTERMITTENTLY-UNDER-LOAD — The Studio real-app proof fails intermittently under load](<Developer environment upgrades/DEVENV-STUDIO-REAL-APP-PROOF-FAILS-INTERMITTENTLY-UNDER-LOAD.md>) — In progress
+- [DEVENV-STUDIO-SMOKE-GENERATED-SOURCE-FRESHNESS-RACE — Studio smoke generated-source freshness race](<Developer environment upgrades/DEVENV-STUDIO-SMOKE-GENERATED-SOURCE-FRESHNESS-RACE.md>) — Candidate
 - [DEVENV-TAO-BUILD-SNAPSHOT-LOSES-PROJECT-PACKAGES — Tao build snapshot loses project packages](<Developer environment upgrades/DEVENV-TAO-BUILD-SNAPSHOT-LOSES-PROJECT-PACKAGES.md>) — Candidate
 - [DEVENV-TAO-DEV-IGNORES-PROVIDER-PACKAGE-EDITS — A running `tao run` ignores provider package edits](<Developer environment upgrades/DEVENV-TAO-DEV-IGNORES-PROVIDER-PACKAGE-EDITS.md>) — Candidate
 - [DEVENV-TAO-FIX-NEVER-REUSES-THE-CHECK-MEMO — Tao fix never reuses the check memo, so every verify lane refixes the whole repository](<Developer environment upgrades/DEVENV-TAO-FIX-NEVER-REUSES-THE-CHECK-MEMO.md>) — Candidate

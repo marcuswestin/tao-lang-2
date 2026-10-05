@@ -16,14 +16,14 @@ app ReadNetApp {
 
 // This app replaces only `missing`; every other exceptional case keeps the runtime's.
 app ReadNetMissingVariant = ReadNetApp with {
-   id "read-net-missing"
+   id "read-net-missing",
    name "Read Net Missing Variant"
    guard {
       missing -> { Text("Variant: this note is gone") }
 }  }
 
 app ReadNetErrorVariant = ReadNetApp with {
-   id "read-net-error"
+   id "read-net-error",
    name "Read Net Error Variant"
    guard {
       error -> Context { Text("Read Net error: { Context.Message }") }

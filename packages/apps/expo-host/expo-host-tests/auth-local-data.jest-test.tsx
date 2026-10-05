@@ -31,7 +31,7 @@ Describe('compiled authenticated local-only app', () => {
         use TestAuth from @tao/auth/testing
         use Col, FormButton, Text from @tao/ui
         data Drafts / Draft { Body text, local only }
-        app DraftsApp { id "draftsapp" version "1.0.0" name "DraftsApp" Auth TestAuth { State "SignedIn" AccountId "alice" } view Main }
+        app DraftsApp { id "draftsapp" version "1.0.0" name "DraftsApp" Auth TestAuth { State "SignedIn", AccountId "alice" } view Main }
         view Main() {
           query Drafts = Drafts with { }
           action Add() { create Draft { Body: "Persisted local draft" } }

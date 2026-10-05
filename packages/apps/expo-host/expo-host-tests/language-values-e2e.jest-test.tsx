@@ -18,14 +18,14 @@ Describe('Expo runtime', () => {
       {
         'Main.tao': `
           use MiddleApp from ./Middle.tao
-          app FinalApp = MiddleApp with { id "finalapp" name "Final app" }
+          app FinalApp = MiddleApp with { id "finalapp", name "Final app" }
         `,
         'Middle.tao': `
           use Memory from @tao/data/providers/memory
           use PackageApp from @feature
           project app MiddleApp = PackageApp with {
-            id "middleapp"
-            name "Middle app"
+            id "middleapp",
+            name "Middle app",
             Datasource Memory { }
           }
         `,
@@ -55,12 +55,12 @@ Describe('Expo runtime', () => {
       {
         'Main.tao': `
           use MiddleApp from ./Middle.tao
-          app PatchedApp = MiddleApp with { id "patchedapp" Datasource with { StorageKey "patched" } }
+          app PatchedApp = MiddleApp with { id "patchedapp", Datasource with { StorageKey "patched" } }
         `,
         'Middle.tao': `
           use Memory from @tao/data/providers/memory
           use PackageApp from @feature
-          project app MiddleApp = PackageApp with { id "middleapp" Datasource Memory { } }
+          project app MiddleApp = PackageApp with { id "middleapp", Datasource Memory { } }
         `,
         'packages/@feature/App.tao': `
           use Text from @tao/ui
@@ -283,9 +283,9 @@ Describe('Expo runtime', () => {
         }
 
         let Product = ReusableApp {
-          id "reusableapp"
-          version "1.0.0"
-          name "Reusable optional values"
+          id "reusableapp",
+          version "1.0.0",
+          name "Reusable optional values",
           Navigator StackNav { Initial Home }
         }
 

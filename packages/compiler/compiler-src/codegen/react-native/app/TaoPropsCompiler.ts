@@ -22,11 +22,14 @@ export const TaoPropsCompiler = {
     // Every view occurrence takes the same defaults; layout comes only from the call site's clauses.
     const layout = gen`undefined`
     const testTag = publicTestTagForRender(render)
+    const label = AST.renderPrefixCluster(render).find(AST.isRenderAccessibilityStatement)
+    const accessibilityLabel = label ? gen`${Compile.Expression(label.value)}.evaluate().jsValue` : undefined
     const studio = options.studio === true
       ? TaoPropsCompiler.StudioRenderIdentity(render, options.projectRoot)
       : undefined
     const journeyObservation = options.journeyObservations === true ? compileJourneyRenderOccurrence(render) : undefined
     const fields: TaoPropsFields = {
+      accessibilityLabel,
       designDefault,
       designSource,
       designSpec,
@@ -44,6 +47,7 @@ export const TaoPropsCompiler = {
 } as const
 
 type TaoPropsFields = {
+  accessibilityLabel: Compiled | undefined
   designDefault: Compiled | undefined
   designSource: Compiled | undefined
   designSpec: Compiled
@@ -82,7 +86,9 @@ function compileTaoPropsObject(fields: TaoPropsFields): Compiled {
     fields.testTag ? gen`, testTag: ${gen.jsLiteral(fields.testTag)}` : ''
   }${fields.studio ? gen`, studio: ${fields.studio}` : ''}${
     fields.journeyObservation ? gen`, journeyObservation: ${fields.journeyObservation}` : ''
-  }${fields.interaction ? gen`, interaction: ${fields.interaction}` : ''} }`
+  }${fields.interaction ? gen`, interaction: ${fields.interaction}` : ''}${
+    fields.accessibilityLabel ? gen`, accessibilityLabel: ${fields.accessibilityLabel}` : ''
+  } }`
 }
 
 /** compileJourneyRenderOccurrence carries source identity through test props without Studio runtime instrumentation. */

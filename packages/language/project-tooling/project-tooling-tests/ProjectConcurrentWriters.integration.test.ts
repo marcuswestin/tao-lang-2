@@ -85,7 +85,7 @@ Describe('project tooling concurrent process publication', () => {
             Expect(results.every(result =>
               result.status === 'stale'
               && result.diagnostics.some(diagnostic =>
-                diagnostic.filePath === paths['Main.tao'] && diagnostic.code === 'TS1360'
+                diagnostic.filePath === paths['Main.tao'] && diagnostic.code === 'TS2344'
               )
             )).toBe(true)
           } else {

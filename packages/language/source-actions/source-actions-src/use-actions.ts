@@ -9,14 +9,39 @@ export function synthesizeImportSection(
   usePackageSlices: readonly StatementSlice<AST.UsePackageStatement>[] = [],
 ): string {
   const usedNames = ASTUtils.referencedNames(file)
-  const groups = new Map<string, { names: Set<string>; leading: string[] }>()
+  const wildcardTargets = new Map<string, Set<AST.Declaration>>()
   for (const slice of useSlices) {
-    const source = importSource(slice.statement)
-    const keptReferences = keptImportedReferences(slice.statement, usedNames)
-    if (keptReferences.length === 0) {
+    if (!slice.statement.all) {
       continue
     }
-    const group = groups.get(source) ?? { names: new Set<string>(), leading: [] }
+    const source = importSource(slice.statement)
+    const targets = wildcardTargets.get(source) ?? new Set<AST.Declaration>()
+    for (const declaration of AST.resolvedImportedDeclarations(slice.statement)) {
+      targets.add(declaration)
+    }
+    wildcardTargets.set(source, targets)
+  }
+  const groups = new Map<string, { all: boolean; names: Set<string>; leading: string[] }>()
+  for (const slice of useSlices) {
+    const source = importSource(slice.statement)
+    const targets = wildcardTargets.get(source)
+    const declarations = targets === undefined ? [] : AST.resolvedImportedDeclarations(slice.statement)
+    const keptReferences = keptImportedReferences(slice.statement, usedNames).filter(reference => {
+      if (targets === undefined) {
+        return true
+      }
+      const requested = declarations.filter(declaration =>
+        declaration.name === reference.$refText
+        || (AST.isEntityDataDeclaration(declaration) && declaration.singularName === reference.$refText)
+      )
+      // A named spelling can expose both namespaces; keep it when the wildcard leaves an identity out.
+      return requested.length === 0 || requested.some(declaration => !targets.has(declaration))
+    })
+    if (!slice.statement.all && keptReferences.length === 0) {
+      continue
+    }
+    const group = groups.get(source) ?? { all: false, names: new Set<string>(), leading: [] }
+    group.all ||= slice.statement.all
     for (const reference of keptReferences) {
       group.names.add(reference.$refText)
     }
@@ -28,7 +53,11 @@ export function synthesizeImportSection(
 
   const lines = new Map<string, { text: string; leading: string[] }>()
   for (const [source, group] of groups) {
-    lines.set(source, { text: useStatementText([...group.names].sort(), source), leading: group.leading })
+    const text = [
+      ...(group.all ? [useStatementText(['all'], source)] : []),
+      ...(group.names.size > 0 ? [useStatementText([...group.names].sort(), source)] : []),
+    ].join('\n')
+    lines.set(source, { text, leading: group.leading })
   }
   // A namespace import sorts by the same source ranking; its text is its own canonical rendering.
   for (const slice of usePackageSlices) {
@@ -61,6 +90,14 @@ export function removeUnusedImportNames(
     const blankBefore = slice.leading !== ''
     if (!AST.isUseStatement(slice.statement)) {
       pieces.push({ text: sliceText(slice), blankBefore })
+      continue
+    }
+    if (slice.statement.all) {
+      const statementText = useStatementText(['all'], importSource(slice.statement))
+      pieces.push({
+        text: slice.leading === '' ? statementText : `${slice.leading}\n${statementText}`,
+        blankBefore,
+      })
       continue
     }
     const keptReferences = keptImportedReferences(slice.statement, usedNames)

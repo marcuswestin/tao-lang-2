@@ -616,7 +616,7 @@ app WordFlower {
 }  }
 
 app WordFlowerDrawer = WordFlower with {
-   id "wordflower-drawer"
+   id "wordflower-drawer",
    name "WordFlower - Drawer Preview"
    view WordFlowerShell(WordFlowerDrawerNavigator) // the same shell, a different navigator in it
 }
@@ -624,21 +624,21 @@ app WordFlowerDrawer = WordFlower with {
 // The explicit dark preview mounts a complete dark design and keeps the portable tab surface on
 // every target, so the preview does not depend on the host operating system's current appearance.
 app WordFlowerDark = WordFlower with {
-   id "wordflower-dark"
-   name "WordFlower - Dark"
+   id "wordflower-dark",
+   name "WordFlower - Dark",
    Design WordFlowerDarkDesign
    view WordFlowerShell(WordFlowerTabsNavigator)
 }
 
 app WordFlowerInstantDB = WordFlower with {
-   id "wordflower-instantdb"
-   name "WordFlower - InstantDB"
+   id "wordflower-instantdb",
+   name "WordFlower - InstantDB",
    Datasource WordFlowerInstantDBStore
 }
 
 app WordFlowerLocalInstantDB = WordFlower with {
-   id "wordflower-local-instantdb"
-   name "WordFlower - Local InstantDB"
+   id "wordflower-local-instantdb",
+   name "WordFlower - Local InstantDB",
    Datasource WordFlowerLocalInstantDBStore
 }
 
@@ -719,14 +719,14 @@ datasource DeviceStore = Local {
 
 // The public sync demo uses the hosted app. InstantDB's default endpoints reach Instant Cloud.
 datasource WordFlowerInstantDBStore = InstantDB {
-   StorageKey "WordFlowerData"
+   StorageKey "WordFlowerData",
    AppId "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f"
 }
 
 // Local development keeps the same app ID in the repository's self-hosted fixture.
 datasource WordFlowerLocalInstantDBStore = InstantDB {
-   StorageKey "WordFlowerData"
-   AppId "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f"
-   ApiURI "http://localhost:9020"
+   StorageKey "WordFlowerData",
+   AppId "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f",
+   ApiURI "http://localhost:9020",
    WebsocketURI "ws://localhost:9020/runtime/session"
 }

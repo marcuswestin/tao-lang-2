@@ -14,7 +14,7 @@ app ShellApp {
 // A variant rebinds the root: the same shell, a different navigator inside it. The label the
 // variant passes is what proves the arguments reach the view.
 app OtherShellApp = ShellApp with {
-   id "navigation-other-shell-app"
+   id "navigation-other-shell-app",
    name "Shell - Other"
    view Shell(OtherStack, "Other shell")
 }
@@ -37,14 +37,14 @@ nav OtherStack = StackNav {
 }
 
 nav ShellTabs = SelectionNav {
-   Initial @first
-   Display "tabs"
+   Initial @first,
+   Display "tabs",
    @first {
-      Label "First"
+      Label "First",
       Content FirstTab
-   }
+   },
    @second {
-      Label "Second"
+      Label "Second",
       Content SecondTab
 }  }
 

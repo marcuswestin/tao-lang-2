@@ -1,4 +1,4 @@
-use Button, Col, Spacer from @tao/ui
+use all from @tao/ui
 
 app LibraryApp {
    id "com.tao.syntax2"
@@ -15,6 +15,7 @@ view Banner(Heading text) {
 view Library {
    state GroupMode is boolean = false
    render Col {
+      #heading accessible label "Library"
       Banner("Library")
       Spacer
       Button("Group") {

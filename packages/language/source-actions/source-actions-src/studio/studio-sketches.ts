@@ -442,7 +442,12 @@ export async function snapSketchToFlow(
   }
   const required = [...components].toSorted()
   const uses = document.parseResult.value.statements.filter(AST.isUseStatement)
-  const uiUse = uses.find(statement => statement.importPath === '@tao/ui')
+  const wildcardNames = new Set(
+    uses.filter(statement => statement.importPath === '@tao/ui' && statement.all)
+      .flatMap(AST.resolvedImportedDeclarations)
+      .filter(declaration => AST.declarationNamespace(declaration) === 'value').map(declaration => declaration.name),
+  )
+  const uiUse = uses.find(statement => statement.importPath === '@tao/ui' && !statement.all)
   const imported = new Set(uiUse?.importedDeclarations.map(reference => reference.$refText) ?? [])
   // A first snap (existing.length === 0, above) discards the whole prior render -- Placeholder and
   // whatever it drew with -- so a straight union with the old import list would leave that behind as
@@ -451,7 +456,8 @@ export async function snapSketchToFlow(
   // keeps this file the `tao fix`-idempotent shape StudioGeneratedSources relies on.
   const renderedSource = applySourceEdits(source, edits)
   const stillCalled = (name: string): boolean => new RegExp(`\\b${name}\\s*\\(`).test(renderedSource)
-  const finalImports = new Set([...imported].filter(stillCalled).concat(required))
+  const missing = required.filter(name => !wildcardNames.has(name))
+  const finalImports = new Set([...imported].filter(stillCalled).concat(missing))
   if (finalImports.size !== imported.size || [...finalImports].some(name => !imported.has(name))) {
     if (uiUse?.$cstNode !== undefined) {
       edits.push({
@@ -461,7 +467,7 @@ export async function snapSketchToFlow(
       })
     } else {
       const offset = document.parseResult.value.statements[0]?.$cstNode?.offset ?? 0
-      edits.push({ end: offset, replacement: `use ${required.join(', ')} from @tao/ui\n\n`, start: offset })
+      edits.push({ end: offset, replacement: `use ${missing.join(', ')} from @tao/ui\n\n`, start: offset })
     }
   }
   return await Formatter.formatCode(applySourceEdits(source, edits))

@@ -1,5 +1,7 @@
-import { FS } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { BridgeMetadata } from '@compiler/bridge-metadata'
+import { Workspace } from '@compiler/workspace'
+import { Assert, FS } from '@shared'
+import { Describe, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
 import * as ts from 'typescript'
 import {
   checkProjectTypeScript,
@@ -352,19 +354,20 @@ Describe('project TypeScript host resolution', () => {
       await FS.writeText(
         contract,
         [
-          "import * as Sidecar from '../Words'",
+          "import type * as Sidecar from '../Words'",
           'type Expected = (value: string) => number',
-          'Sidecar.CountWords satisfies Expected',
+          'export type Check<Actual extends Expected> = Actual',
+          'export type CountWordsCheck = Check<typeof Sidecar.CountWords>',
           '',
         ].join('\n'),
       )
       await ensureProjectTypeScriptConfig(root)
 
       Expect(nativeFileNames(root)).toContain(contract)
-      Expect(nativeDiagnostics(root).some(diagnostic => diagnostic.code === 1360)).toBe(true)
+      Expect(nativeDiagnostics(root).some(diagnostic => diagnostic.code === 2344)).toBe(true)
       Expect(
         (await checkProjectTypeScript(root, [contract], [], [], {})).some(diagnostic =>
-          diagnostic.filePath === contract && diagnostic.code === 'TS1360'
+          diagnostic.filePath === contract && diagnostic.code === 'TS2344'
         ),
       ).toBe(true)
 
@@ -378,6 +381,68 @@ Describe('project TypeScript host resolution', () => {
     } finally {
       await FS.remove(root)
     }
+  })
+
+  Test('maps erased native signature, arity, and return checks to their Tao declarations', async () => {
+    await withTaoFiles('tao-tooling-erased-contract-mapping-', {
+      'Main.tao': 'action Read(Value text) returns text from ./Native.ts\naction Write(Value text) from ./Native.ts',
+      'Native.ts': '',
+    }, async (paths, root) => {
+      const validation = await (await Workspace.open(root)).validate(paths['Main.tao'])
+      Expect(validation.diagnostics.filter(diagnostic => diagnostic.severity === 'error')).toEqual([])
+      const companion = BridgeMetadata.collect(validation.files, root).find(item =>
+        item.sourcePath === paths['Main.tao']
+      )
+      Assert.defined(companion, 'native bridge companion is generated')
+      await FS.writeText(companion.path, companion.code)
+      await ensureProjectTypeScriptConfig(root)
+      await FS.writeText(
+        FS.resolvePath('tsconfig.json', root),
+        '{"extends":"./.tao/cache/typescript/tsconfig.json","compilerOptions":{"noUnusedLocals":true,"noUnusedParameters":true}}\n',
+      )
+      const mappings = companion.sourceMappings.map(mapping => ({
+        generatedPath: companion.path,
+        generatedRange: mapping.generated,
+        sourcePath: companion.sourcePath,
+        sourceRange: mapping.source,
+      }))
+      const readRange = { start: { line: 0, character: 0 }, end: { line: 0, character: 53 } }
+      const writeRange = { start: { line: 1, character: 0 }, end: { line: 1, character: 41 } }
+      const fixtures = [
+        { read: 'export function Read(value: number): string { return String(value) }', ranges: [readRange] },
+        { read: 'export function Read(value: string): number { return value.length }', ranges: [readRange, readRange] },
+        { read: 'export function Read(): string { return "ok" }', ranges: [readRange] },
+        {
+          read: 'export function Read(value: string): string { return value }',
+          write: 'export function Write(value: string): number { return value.length }',
+          ranges: [writeRange, writeRange],
+        },
+        {
+          read: [
+            'export function Read(value: string): string',
+            'export function Read(value: number): number',
+            'export function Read(value: string | number): string | number { return value }',
+          ].join('\n'),
+          ranges: [readRange],
+        },
+        { read: 'export async function Read(value: unknown): Promise<"ok"> { void value; return "ok" }', ranges: [] },
+      ]
+      for (const fixture of fixtures) {
+        await FS.writeText(
+          paths['Native.ts'],
+          `${fixture.read}\n${fixture.write ?? 'export function Write(value: string): void { void value }'}\n`,
+        )
+        const diagnostics = await checkProjectTypeScript(root, [companion.path], [], mappings, {})
+        Expect(
+          diagnostics.map(diagnostic => ({
+            code: diagnostic.code,
+            filePath: diagnostic.filePath,
+            range: diagnostic.range,
+          })),
+        )
+          .toEqual(fixture.ranges.map(range => ({ code: 'TS2344', filePath: paths['Main.tao'], range })))
+      }
+    })
   })
 })
 

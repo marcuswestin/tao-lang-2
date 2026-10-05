@@ -13,15 +13,15 @@ nav ReadingStack = StackNav {
 
 folder
 nav HNNavigator = SelectionNav {
-   Initial @top
-   Display "toggle"
+   Initial @top,
+   Display "toggle",
    @top {
-      Label "Top"
-      Icon "newspaper"
+      Label "Top",
+      Icon "newspaper",
       Content TopStack
-   }
+   },
    @reading {
-      Label "Reading"
-      Icon "book"
+      Label "Reading",
+      Icon "book",
       Content ReadingStack
 }  }

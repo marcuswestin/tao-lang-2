@@ -259,8 +259,8 @@ Describe('Tao runtime app generation', () => {
         data Notes / Note { Title text }
         app NotesApp {
           id "com.tao.test.notesapp" version "1.0.0" name "NotesApp"
-          Auth FirebaseAuth { ApiKey "source-key" ProjectId "source-project" }
-          Datasource Firebase { ApiKey "source-key" ProjectId "source-project" }
+          Auth FirebaseAuth { ApiKey "source-key", ProjectId "source-project" }
+          Datasource Firebase { ApiKey "source-key", ProjectId "source-project" }
           view Main
         }
         view Main() { render Label("Ready") }

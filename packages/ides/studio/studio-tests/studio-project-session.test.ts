@@ -602,7 +602,7 @@ Test('Move to package requests a different destination only when the target pack
 Test('Studio project session publishes every project app variant with a safe relative entry path', async () => {
   await withTaoFiles('tao-studio-app-variants-', {
     'First.tao':
-      'app First { id "first" version "1.0.0" name "First" view Main }\napp FirstCompact = First with { id "first-compact" name "Compact" }\nview Main() { }\n',
+      'app First { id "first" version "1.0.0" name "First" view Main }\napp FirstCompact = First with { id "first-compact", name "Compact" }\nview Main() { }\n',
     'Nested/Second.tao': 'app Second { id "second" version "1.0.0" name "Second" view Main }\nview Main() { }\n',
   }, async (_paths, root) => {
     const session = await StudioProjectSession.open({

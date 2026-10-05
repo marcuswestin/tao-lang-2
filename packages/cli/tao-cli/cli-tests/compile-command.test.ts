@@ -36,7 +36,7 @@ export const CountWords: CountWordsContract = (value) => value.length
       const runtimePackageRoot = FS.resolvePath('.artifacts/runtime', FS.dirname(sourcePath))
       const compiled = await runCompile(sourcePath, { runtimePackageRoot })
       const metadataPath = FS.resolvePath('.tao-ts/Main.tao.ts', FS.dirname(sourcePath))
-      Expect(await FS.readText(metadataPath)).toContain('Sidecar.CountWords satisfies CountWords')
+      Expect(await FS.readText(metadataPath)).toContain('__TaoBridgeCheck<CountWords, typeof Sidecar.CountWords>')
       Expect(await FS.readText(compiled.outputPath)).toContain('export type CountWords = (arg0: string) => number')
       const copiedSidecar = FS.resolvePath('Words.ts', FS.dirname(compiled.outputPath))
       Expect(await FS.readText(copiedSidecar)).toContain("from './App'")

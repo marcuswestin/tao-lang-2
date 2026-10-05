@@ -67,6 +67,7 @@ export const StatementsCompiler = {
       SelectStep: Compile.SelectStep,
       ExpectInteractionStep: Compile.ExpectInteractionStep,
       TagStatement: Compile.TagStatement,
+      RenderAccessibilityStatement: Compile.RenderAccessibilityStatement,
       TestDeclaration: Compile.TestDeclaration,
       TypeDeclaration: Compile.TypeDeclaration,
       UsePackageStatement: Compile.UsePackageStatement,
@@ -112,6 +113,11 @@ export const StatementsCompiler = {
 
   /** TagStatement is consumed as private metadata by the following render or loop row root. */
   TagStatement(): Compiled {
+    return gen.noop()
+  },
+
+  /** RenderAccessibilityStatement is consumed by the attached occurrence's Tao props. */
+  RenderAccessibilityStatement(): Compiled {
     return gen.noop()
   },
 

@@ -1411,16 +1411,24 @@ function resolveImports(
     ? ASTUtils.referencedNames(file, { runtimeOnly: true, statements })
     : referencedNames
   for (const useStatement of file.statements.filter(AST.isUseStatement)) {
-    for (const reference of useStatement.importedDeclarations) {
-      const importedName = reference.$refText
-      if (statements !== file.statements && !referencedNames.has(importedName)) {
+    const declarations = AST.resolvedImportedDeclarations(useStatement)
+    const importedNames = new Set(
+      useStatement.all
+        ? declarations.map(declaration => declaration.name)
+        : useStatement.importedDeclarations.map(reference => reference.$refText),
+    )
+    for (const declaration of declarations) {
+      const importedName = declaration.name
+      if (!importedNames.has(importedName)) {
+        continue
+      }
+      if ((useStatement.all || statements !== file.statements) && !referencedNames.has(importedName)) {
         continue
       }
       if (pairingIssuers.has(importedName) && !runtimeNames.has(importedName)) {
         continue
       }
-      const declaration = reference.ref
-      if (!declaration || !declarationEmitsRuntimeBinding(declaration)) {
+      if (!declarationEmitsRuntimeBinding(declaration)) {
         continue
       }
       const targetPath = AST.getDocument(declaration).uri.path

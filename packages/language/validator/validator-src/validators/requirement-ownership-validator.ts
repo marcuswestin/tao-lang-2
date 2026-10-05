@@ -133,6 +133,6 @@ function importAlias(source: AST.Node, declaration: AST.Declaration): string | u
     return undefined
   }
   return file.statements.filter(AST.isUseStatement)
-    .find(use => use.importedDeclarations.some(reference => reference.ref === declaration))
+    .find(use => AST.resolvedImportedDeclarations(use).includes(declaration))
     ?.importPath?.split('/')[0]
 }

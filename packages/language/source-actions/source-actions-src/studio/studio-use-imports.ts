@@ -9,7 +9,11 @@ export function ensureNamedImport(
   declarationName: string,
   importPath: string,
 ): string {
-  const use = file.statements.filter(AST.isUseStatement).find(statement => statement.importPath === importPath)
+  const uses = file.statements.filter(AST.isUseStatement).filter(statement => statement.importPath === importPath)
+  if (uses.some(use => use.all && importedNameSupplied(use, declarationName))) {
+    return source
+  }
+  const use = uses.find(statement => !statement.all) ?? uses[0]
   if (use?.$cstNode !== undefined) {
     const edit = namedImportEdit(use, declarationName)
     return edit === undefined ? source : applySourceEdits(source, [edit])
@@ -25,16 +29,28 @@ export function ensureNamedImport(
 /** namedImportEdit adds one name to an existing `use` statement in canonical order, or nothing when it already imports it. */
 export function namedImportEdit(use: AST.UseStatement, declarationName: string): SourceEdit | undefined {
   const imported = use.importedDeclarations.map(reference => reference.$refText)
-  if (use.$cstNode === undefined || imported.includes(declarationName)) {
+  if (
+    use.$cstNode === undefined || imported.includes(declarationName)
+    || (use.all && importedNameSupplied(use, declarationName))
+  ) {
     return undefined
   }
   return {
     end: use.$cstNode.end,
-    replacement: `use ${[...new Set([...imported, declarationName])].toSorted().join(', ')}${
-      use.importPath ? ` from ${use.importPath}` : ''
-    }`,
+    replacement: use.all
+      ? `${use.$cstNode.text}\nuse ${declarationName}${use.importPath ? ` from ${use.importPath}` : ''}`
+      : `use ${[...new Set([...imported, declarationName])].toSorted().join(', ')}${
+        use.importPath ? ` from ${use.importPath}` : ''
+      }`,
     start: use.$cstNode.offset,
   }
+}
+
+function importedNameSupplied(use: AST.UseStatement, name: string): boolean {
+  return AST.resolvedImportedDeclarations(use).some(declaration =>
+    AST.declarationNamespace(declaration) === 'value'
+    && (declaration.name === name || (AST.isEntityDataDeclaration(declaration) && declaration.singularName === name))
+  )
 }
 
 /** ensureUiNamesImported adds the named `@tao/ui` declarations to the file's import when missing. */
@@ -47,7 +63,10 @@ export function ensureUiNamesImported(
   const uses = file.statements.filter(AST.isUseStatement)
   const imported = new Set(uses.flatMap(statement =>
     statement.importPath === '@tao/ui'
-      ? statement.importedDeclarations.map(reference => reference.$refText)
+      ? statement.all
+        ? AST.resolvedImportedDeclarations(statement)
+          .filter(declaration => AST.declarationNamespace(declaration) === 'value').map(declaration => declaration.name)
+        : statement.importedDeclarations.map(reference => reference.$refText)
       : []
   ))
   if (required.every(name => imported.has(name))) {
@@ -75,8 +94,16 @@ export function ensureUiNamesImported(
     if (use.importPath === '@tao/ui') {
       continue
     }
-    for (const declaration of use.importedDeclarations) {
-      foreignImports.set(declaration.$refText, use.importPath ?? 'a bare use statement')
+    const resolved = AST.resolvedImportedDeclarations(use)
+    for (const declaration of resolved) {
+      if (AST.declarationNamespace(declaration) === 'value') {
+        foreignImports.set(declaration.name, use.importPath ?? 'a bare use statement')
+      }
+    }
+    for (const reference of use.importedDeclarations) {
+      if (!resolved.some(declaration => declaration.name === reference.$refText)) {
+        foreignImports.set(reference.$refText, use.importPath ?? 'a bare use statement')
+      }
     }
   }
   for (const name of required) {
@@ -90,10 +117,11 @@ export function ensureUiNamesImported(
       )
     }
   }
-  const uiUse = uses.find(statement => statement.importPath === '@tao/ui')
+  const missing = required.filter(name => !imported.has(name))
+  const uiUse = uses.find(statement => statement.importPath === '@tao/ui' && !statement.all)
   if (uiUse?.$cstNode !== undefined) {
     const names = new Set(uiUse.importedDeclarations.map(reference => reference.$refText))
-    for (const name of required) {
+    for (const name of missing) {
       names.add(name)
     }
     return applySourceEdits(source, [{
@@ -105,7 +133,7 @@ export function ensureUiNamesImported(
   const insertionOffset = file.statements[0]?.$cstNode?.offset ?? 0
   return applySourceEdits(source, [{
     end: insertionOffset,
-    replacement: `use ${required.join(', ')} from @tao/ui\n\n`,
+    replacement: `use ${missing.join(', ')} from @tao/ui\n\n`,
     start: insertionOffset,
   }])
 }

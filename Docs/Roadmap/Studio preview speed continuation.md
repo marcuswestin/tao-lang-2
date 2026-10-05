@@ -22,6 +22,9 @@ and `verify-changed` across source, compiler, runtime, CLI, and app checks. The 
 and integration state are recorded in the task checkpoint.
 The landing integration with main `3bcd71647` retains bare render support and moves the incoming
 Syntax2 app's project identity and TypeScript base configuration to the decided store/cache layout.
+The later integration with main `580f88cc5` preserves HNReader's split source modules while applying
+incoming configured-value separators in their datasource and navigation owners. Its new bridge
+diagnostic fixture extends `.tao/cache/typescript/tsconfig.json`, retaining the decided layout.
 The first full host landing lane exposed obsolete smoke assumptions. The agent-panel smoke now
 keeps its intentional zero-preview setup and waits for its expanding cloud control to receive input;
 the network smoke selects the named cell without pressing its activation bolt; the simulated-user
