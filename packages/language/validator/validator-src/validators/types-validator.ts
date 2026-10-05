@@ -193,6 +193,12 @@ function validateDerivedType(derived: AST.DerivedTypeExpression, ctx: Validation
   if (base.kind === 'primitive' && base.primitive === 'numeric') {
     return
   }
+  if (
+    base.kind === 'primitive' && base.primitive === 'text'
+    && derived.slots.properties.length === 0 && derived.slots.methods.length > 0
+  ) {
+    return
+  }
   if (base.kind !== 'item' || !base.item) {
     ctx.error(derived.base, typeValidationMessages.derivedBaseShape(Type.referenceName(derived.base)))
     return
@@ -500,12 +506,16 @@ function typePropertyOwner(property: AST.TypeProperty): AST.TypeDefinition | und
 }
 
 function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: ValidationContext): void {
-  let current = Type.ofValueDeclaration(memberAccess.target.ref, memberAccess)
+  let current = Type.ofReferenceRoot(memberAccess)
   if (current.kind === 'unresolved') {
     return
   }
   let typeName = Type.displayName(current)
-  for (const member of memberAccess.members) {
+  const parent = memberAccess.$container
+  const members = AST.isMethodCallExpression(parent) && parent.callee === memberAccess
+    ? memberAccess.members.slice(0, -1)
+    : memberAccess.members
+  for (const member of members) {
     if (
       (current.kind === 'list' || (current.kind === 'primitive' && current.primitive === 'text')) && member === 'Count'
     ) {

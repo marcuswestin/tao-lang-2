@@ -30,6 +30,7 @@ function valueReferences(value: AST.Expression | AST.ConfiguredValue): ValueRefe
     CopyExpression: expressionValueReferences,
     WhenExpression: expressionValueReferences,
     FunctionCallExpression: expressionValueReferences,
+    MethodCallExpression: expressionValueReferences,
     InterpolatedString: expressionValueReferences,
     InferredConfigurationConstructor: expressionValueReferences,
     ListLiteral: expressionValueReferences,

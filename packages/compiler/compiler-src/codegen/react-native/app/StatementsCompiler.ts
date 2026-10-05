@@ -1,3 +1,4 @@
+import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
@@ -85,6 +86,9 @@ export const StatementsCompiler = {
     }
     if (AST.isCaseSetTypeExpression(declaration.type)) {
       return Compile.CaseSetDeclaration(declaration)
+    }
+    if (ASTUtils.ownAssociatedMethods(declaration).length > 0) {
+      return Compile.AssociatedMethodsDeclaration(declaration)
     }
     return isRuntimeConfigurableDeclaration(declaration)
       ? Compile.ConfigurableDeclaration(declaration)

@@ -1,3 +1,4 @@
+import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert } from '@shared'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
@@ -34,8 +35,9 @@ export const FilesCompiler = {
     const moduleCommands = statements.filter(AST.isCommandDeclaration)
     const dataEntities = opts.dataEntities ?? statements.filter(AST.isEntityDataDeclaration)
     const hasRuntimeStatements = statements.some(statement =>
-      AST.isEmittingRuntimeBinding(statement)
-      && (!AST.isTypeDeclaration(statement) || isRuntimeConfigurableDeclaration(statement))
+      (AST.isTypeDeclaration(statement) && ASTUtils.ownAssociatedMethods(statement).length > 0)
+      || (AST.isEmittingRuntimeBinding(statement)
+        && (!AST.isTypeDeclaration(statement) || isRuntimeConfigurableDeclaration(statement)))
     )
     if (!hasRuntimeStatements && !importLines && !scopeBindings && !exportLines && !bridgeTypes) {
       return gen`export {}`
@@ -95,8 +97,11 @@ export const FilesCompiler = {
  * moving a base ahead of them could make its eager configuration read an uninitialized value.
  */
 function inDeclarationOrder(statements: readonly AST.Statement[]): AST.Statement[] {
-  const types = statements.filter(isRuntimeConfigurableDeclaration)
-  const rest = statements.filter(statement => !isRuntimeConfigurableDeclaration(statement))
+  const reusableType = (statement: AST.Statement) =>
+    isRuntimeConfigurableDeclaration(statement)
+    || (AST.isTypeDeclaration(statement) && ASTUtils.ownAssociatedMethods(statement).length > 0)
+  const types = statements.filter(reusableType)
+  const rest = statements.filter(statement => !reusableType(statement))
   const apps = new Set(rest.filter(AST.isAppValueDeclaration))
   const emitted = new Set<AST.AppValueDeclaration>()
   const waiting: AST.AppValueDeclaration[] = []

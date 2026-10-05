@@ -14,6 +14,9 @@ export function compileReactiveArgument(expression: AST.Expression): Compiled {
     }
   }
   const type = Type.ofExpression(expression)
+  if (type.kind === 'capability') {
+    return gen`TR.Alias(() => ${Compile.Expression(expression)})`
+  }
   // Presentable and callable values carry behavior on their evaluated wrapper, rather than
   // solely in jsValue. Preserve that wrapper while keeping the argument's read live.
   if (

@@ -1,6 +1,7 @@
 import { ActionsCompiler } from './app/ActionsCompiler'
 import { AliasesCompiler } from './app/AliasesCompiler'
 import { AppCompiler } from './app/AppCompiler'
+import { AssociatedFunctionDeclaration, AssociatedMethodsDeclaration } from './app/AssociatedMethodsCompiler'
 import { ConfigurationCompiler } from './app/ConfigurationCompiler'
 import { DataCompiler } from './app/DataCompiler'
 import { DesignCompiler } from './app/DesignCompiler'
@@ -39,6 +40,8 @@ export const Compile = {
   ...NavigationCompiler,
   NumericUnitConstruction,
   ...FunctionalCoreCompiler,
+  AssociatedFunctionDeclaration,
+  AssociatedMethodsDeclaration,
   ...DataCompiler,
   ...DesignCompiler,
   ...ExpressionsCompiler,

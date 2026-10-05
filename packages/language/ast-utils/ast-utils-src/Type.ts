@@ -668,9 +668,14 @@ export class Type {
     return new TypeResolutionContext().ofMemberAccess(expression)
   }
 
+  /** Resolve a real value root, including the context-only associated receiver. */
+  static ofReferenceRoot(reference: AST.ValueReference | AST.MemberAccessExpression): TaoType {
+    return new TypeResolutionContext().ofContextualValue(reference.target.ref, reference)
+  }
+
   /** dataFieldOfMemberAccess returns the declaration reached by an entity member path. */
   static dataFieldOfMemberAccess(expression: AST.MemberAccessExpression): DataFieldDefinition | undefined {
-    let current = Type.ofValueDeclaration(expression.target.ref)
+    let current = Type.ofReferenceRoot(expression)
     let reached: DataFieldDefinition | undefined
     for (const member of expression.members) {
       reached = current.kind === 'entity' ? dataFieldNamed(current.entity, member) : undefined

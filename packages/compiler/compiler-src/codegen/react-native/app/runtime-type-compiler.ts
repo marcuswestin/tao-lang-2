@@ -40,6 +40,7 @@ export function compileRuntimeType(type: ASTUtils.TaoType): Compiled {
     item: () => gen`TR.Value<Record<string, any>>`,
     entity: () => gen`TR.Value<Record<string, any>>`,
     enum: () => gen`TR.Value<TR.EnumCaseIdentity>`,
+    capability: () => gen`TR.Capability`,
     unresolved: () => gen`TR.Value<Record<string, any>>`,
     union: () => gen`TR.Evaluable`,
   })

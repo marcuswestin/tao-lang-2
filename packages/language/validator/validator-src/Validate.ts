@@ -5,6 +5,7 @@ import { accessValidationChecks } from './validators/access-validator'
 import { ActionsValidator } from './validators/ActionsValidator'
 import { AliasesValidator } from './validators/aliases-validator'
 import { AppValidator } from './validators/app-validator'
+import { associatedMethodsValidationChecks } from './validators/associated-methods-validator'
 import { bridgeValidationChecks, validateBridgedSidecarFiles } from './validators/bridge-validator'
 import { colorValueValidationChecks } from './validators/color-values-validator'
 import { commandValidationChecks } from './validators/commands-validator'
@@ -65,6 +66,7 @@ const nodeValidationChecks = NodeValidation.compile(
     InteractionValidator.checks,
     testValidationChecks,
     typeValidationChecks,
+    associatedMethodsValidationChecks,
     InvocationsValidator.checks,
     FunctionalCoreValidator.checks,
     PhrasesValidator.checks,
