@@ -168,6 +168,7 @@ import { selectPluralForm, type TaoPluralCategory, type TaoPluralForms } from '.
 import { admitQuantityUnion, nativeQuantityResult } from './TR-quantity-admission'
 import { QuantityArithmetic, quantityOperand, scalarOperand } from './TR-quantity-arithmetic'
 import { isQuantityPayload } from './TR-quantity-values'
+import { runMultiOutcome } from './TR-multi-outcome'
 import { type TaoDurationReader, wait } from './TR-wait'
 import { requireReactNativeRuntime } from './TR-react-native'
 import { isReactiveValue, markReactiveValue } from './TR-reactive'
@@ -380,6 +381,20 @@ class TR {
   ): React.ReactNode {
     const matched = firstMatchedBranch(subject.evaluate().jsValue, branches)
     return matched ? matched.result : otherwise()
+  }
+
+  /** WhenAll captures one observation and every match before joining all selected action bodies. */
+  static WhenAll(
+    subject: TR.Evaluable,
+    branches: readonly TR.CaseBranch<unknown>[],
+    otherwise?: () => unknown,
+  ): unknown {
+    return runMultiOutcome(
+      () => subject.evaluate().jsValue,
+      matchSubjectCase,
+      branches.map(([caseName, body]) => [caseName, (payload: unknown) => body(TR.Value(payload))] as const),
+      otherwise,
+    )
   }
 
   /** GuardAction runs a matching handler and reports whether the enclosing block must stop. */

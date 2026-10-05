@@ -1,11 +1,44 @@
 import TR from '@runtime/TR'
-import { Describe, Expect, Test } from '@shared/test'
+import { Deferred, Describe, Expect, Test } from '@shared/test'
 
 function identity(name: string): TR.DeclarationIdentity {
   return TR.Navigation.Identity(['tao.declaration', 1, 'tests', '@workspace', 'FunctionalCore', 'enum', name])
 }
 
 Describe('TR functional core', () => {
+  Test('action when captures the subject before effects and joins a suspended selected body', async () => {
+    const gate = Deferred()
+    const started = Deferred()
+    const seen: string[] = []
+    let current = true
+    let reads = 0
+    const subject = TR.Alias(() => {
+      reads += 1
+      return TR.Value(current)
+    })
+    const running = TR.Action(() => TR.WhenAll(subject, [
+      ['true', async () => {
+        current = false
+        seen.push('start')
+        started.resolve()
+        await gate.promise
+        seen.push('finish')
+      }],
+      ['false', () => seen.push('unexpected changed match')],
+    ], () => seen.push('unexpected fallback'))).jsValue.invoke()
+    await started.promise
+    Expect(reads).toBe(1)
+    Expect(seen).toEqual(['start'])
+    gate.resolve()
+    await running
+    Expect(seen).toEqual(['start', 'finish'])
+    await TR.Action(() => TR.WhenAll(subject, [['true', () => seen.push('unexpected true')]], () => {
+      seen.push('fallback')
+    })).jsValue.invoke()
+    Expect(reads).toBe(2)
+    Expect(seen).toEqual(['start', 'finish', 'fallback'])
+  })
+
   Test('preserves omitted leading slots while a wrapped none suppresses the default', () => {
     let defaults = 0
     const format = TR.Function((prefix: TR.Value<string | null> | undefined, count: TR.Value<number>) => {
