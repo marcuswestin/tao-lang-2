@@ -47,21 +47,23 @@ export function instantiateGenericInvocation(
   const preliminary = resolveParameterArgumentBindings(parameters, arguments_, {
     ...resolution,
     parameterType: parameter => declared.get(parameter)!,
-    accepts: (actual, expected) =>
-      expected.genericParameter
-        ? (expected.genericBounds ?? []).every(bound => accepts(actual, bound))
-        : accepts(actual, expected),
+    accepts: (actual, expected) => {
+      const inferred = inferenceDomain(actual, expected, accepts)
+      return inferred !== undefined && accepts(actual, inferred)
+    },
   })
   const bindings = new Map<AST.GenericTypeParameter, TaoType>()
   const genericDiagnostics: GenericInvocationDiagnostic[] = []
   for (const generic of declaration.genericParameters) {
-    const pairs = preliminary.pairs.filter(pair => declared.get(pair.parameter)?.genericParameter === generic)
+    const pairs = preliminary.pairs.filter(pair => genericInputs(declared.get(pair.parameter)!, generic).length > 0)
     const supplied = pairs.filter(pair =>
       !rawContextualLiteral(Type.genericRoleConstructor(pair.argument)?.value ?? pair.argument.value)
     )
-    const domains = supplied.map(pair => argumentType(pair.argument))
+    const domains = supplied.flatMap(pair =>
+      suppliedGenericInputs(argumentType(pair.argument), declared.get(pair.parameter)!, generic)
+    )
       .filter(type => type.kind !== 'unresolved')
-    const bounds = pairs.map(pair => declared.get(pair.parameter)!).find(type => type.genericBounds)?.genericBounds
+    const bounds = pairs.flatMap(pair => genericInputs(declared.get(pair.parameter)!, generic))[0]?.genericBounds
       ?? []
     const candidates = domains.filter(candidate =>
       bounds.every(bound => accepts(candidate, bound))
@@ -102,6 +104,43 @@ export function instantiateGenericInvocation(
     genericDiagnostics: Object.freeze(genericDiagnostics),
     result: substituteGenericType(resolution.resultType(declaration), bindings),
   }
+}
+
+/** The ordinary binder still checks the full list contract after relaxing bounded elements. */
+function inferenceDomain(
+  actual: TaoType,
+  expected: TaoType,
+  accepts: (actual: TaoType, expected: TaoType) => boolean,
+): TaoType | undefined {
+  if (expected.genericParameter) {
+    return (expected.genericBounds ?? []).every(bound => accepts(actual, bound)) ? actual : undefined
+  }
+  if (expected.kind === 'list' && actual.kind === 'list' && expected.element && actual.element) {
+    const element = inferenceDomain(actual.element, expected.element, accepts)
+    return element ? { ...expected, element } : undefined
+  }
+  return expected
+}
+
+function genericInputs(type: TaoType, generic: AST.GenericTypeParameter): readonly TaoType[] {
+  if (type.genericParameter === generic) {
+    return [type]
+  }
+  return type.kind === 'list' && type.element ? genericInputs(type.element, generic) : []
+}
+
+/** Extract supplied element domains only from the real pairs selected by the binder. */
+function suppliedGenericInputs(
+  actual: TaoType,
+  expected: TaoType,
+  generic: AST.GenericTypeParameter,
+): readonly TaoType[] {
+  if (expected.genericParameter === generic) {
+    return [actual]
+  }
+  return expected.kind === 'list' && actual.kind === 'list' && expected.element && actual.element
+    ? suppliedGenericInputs(actual.element, expected.element, generic)
+    : []
 }
 
 /** Substitution retains existing carriers and traverses only their ordinary domain children. */
@@ -159,6 +198,9 @@ export function substituteGenericType(
 }
 
 function transportDomain(type: TaoType, bindings: ReadonlyMap<AST.GenericTypeParameter, TaoType>): TaoType {
+  if (type.kind === 'list' && type.element && !type.genericParameter) {
+    return Object.freeze({ ...type, element: transportDomain(type.element, bindings) })
+  }
   if (!type.genericParameter) {
     return substituteGenericType(type, bindings)
   }
@@ -177,5 +219,5 @@ function rawContextualLiteral(expression: AST.Expression | AST.ConfiguredValue):
     return rawContextualLiteral(expression.operand)
   }
   return AST.isNumberLiteral(expression) || AST.isStringLiteral(expression) || AST.isInterpolatedString(expression)
-    || AST.isBooleanLiteral(expression) || AST.isNoneLiteral(expression)
+    || AST.isBooleanLiteral(expression) || AST.isNoneLiteral(expression) || AST.isListLiteral(expression)
 }
