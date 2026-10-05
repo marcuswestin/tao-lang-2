@@ -31,7 +31,7 @@ FunctionDeclaration:
 
 // Associated methods inherit their owner's visibility and keep their own callable identity.
 AssociatedFunctionDeclaration:
-    static?='static'? 'func' name=AssociatedFunctionName ('where' genericParameters+=GenericTypeParameter (',' genericParameters+=GenericTypeParameter)*)?
+    static?='static'? 'func' (receiverName=ID '.')? name=AssociatedFunctionName ('where' genericParameters+=GenericTypeParameter (',' genericParameters+=GenericTypeParameter)*)?
     parameterList=ParameterList ('fails' failureBound=ID)?
     ('->' returnType=TypeExpression)? block=FunctionBlock;
 
@@ -444,7 +444,7 @@ ValueReference:
     target=[ValueReferenceTarget:ID];
 
 // A type is a value only for its contextual receiver inside an associated method body.
-type ValueReferenceTarget = ValueDeclaration | TypeDeclaration;
+type ValueReferenceTarget = ValueDeclaration | TypeDeclaration | EntityDataDeclaration;
 
 RefinementExpression:
     target=[RefinementBaseDeclaration:ID] 'with' patchBlock=ConfigurationBlock;

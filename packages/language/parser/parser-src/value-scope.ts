@@ -350,6 +350,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     const visible = (declaration: AST.Node) => declaration !== owner
     const method = AST.findOwningAssociatedFunction(reference)
     const methodOwner = method ? AST.associatedFunctionOwner(method) : undefined
+    const entityMethodOwner = method && AST.associatedEntityReceiverOwner(method)
     let scope = outer
     if (isAssociatedTypeRootReference(reference)) {
       scope = this.createScopeForNodes(this.importedDeclarations(reference, AST.isTypeDeclaration), scope)
@@ -358,13 +359,20 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (method && !method.static && methodOwner && isWithinAssociatedBody(reference, method)) {
       scope = this.createScopeForNodes([methodOwner], scope)
     }
+    if (method && entityMethodOwner && isWithinAssociatedBody(reference, method)) {
+      scope = this.createEntityReceiverScope(entityMethodOwner, scope)
+    }
     const associatedView = AST.findOwningAssociatedView(reference)
     const associatedViewOwner = associatedView && AST.associatedViewOwner(associatedView)
+    const entityViewOwner = associatedView && AST.associatedEntityReceiverOwner(associatedView)
     if (
       associatedView && associatedViewOwner && AST.isTypeDeclaration(associatedViewOwner)
       && isWithinAssociatedViewBody(reference, associatedView)
     ) {
       scope = this.createScopeForNodes([associatedViewOwner], scope)
+    }
+    if (associatedView && entityViewOwner && isWithinAssociatedViewBody(reference, associatedView)) {
+      scope = this.createEntityReceiverScope(entityViewOwner, scope)
     }
     const converter = AST.findOwningAssociatedConverter(reference)
     const converterSource = converter && AST.associatedConverterSourceOwner(converter)
@@ -946,6 +954,16 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       return name ? [this.descriptions.createDescription(parameter, name, document)] : []
     })
     return this.createScope(descriptions, outerScope)
+  }
+
+  private createEntityReceiverScope(
+    entity: AST.EntityDataDeclaration,
+    outerScope?: Langium.Scope,
+  ): Langium.Scope {
+    return this.createScope(
+      [this.descriptions.createDescription(entity, entity.singularName, AST.getDocument(entity))],
+      outerScope,
+    )
   }
 
   private importedDeclarations<DeclarationT extends AST.Declaration>(

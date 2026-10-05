@@ -1,6 +1,8 @@
 grammar TaoData
 
 import "./expressions"
+import "./views"
+import "./actions"
 import "./visibility"
 import "./terminals"
 
@@ -14,7 +16,8 @@ EntityDataDeclarationBlock:
     '{' (entries+=EntityDataEntry (',' entries+=EntityDataEntry)* ','?)? '}';
 
 EntityDataEntry:
-    EntityDataField | DataIndex | DataUnique | DataDefaultOrder | DataLocalOnly | EntityCommandPolicy;
+    EntityDataField | DataIndex | DataUnique | DataDefaultOrder | DataLocalOnly | EntityCommandPolicy
+    | AssociatedFunctionDeclaration | AssociatedViewDeclaration | ActionDeclaration;
 
 EntityDataField:
     name=ID (primitive=DataPrimitiveType | boolean?='yes' '/' negativeName=ID? 'no' | typeName=ID)?

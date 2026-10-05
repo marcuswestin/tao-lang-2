@@ -1450,6 +1450,23 @@ export function associatedViewOwner(
   return AST.isTypeDeclaration(owner) && owner.type === container ? owner : undefined
 }
 
+/** An entity receiver exists only for a qualified method/view directly stored in that entity. */
+export function associatedEntityReceiverOwner(
+  declaration: AST.AssociatedFunctionDeclaration | AST.AssociatedViewDeclaration,
+): AST.EntityDataDeclaration | undefined {
+  const block = declaration.$container
+  if (!AST.isEntityDataDeclarationBlock(block) || !block.entries.includes(declaration)) {
+    return undefined
+  }
+  if (AST.isAssociatedFunctionDeclaration(declaration) && declaration.static) {
+    return undefined
+  }
+  const owner = block.$container
+  return AST.isEntityDataDeclaration(owner) && owner.block === block && declaration.receiverName === owner.singularName
+    ? owner
+    : undefined
+}
+
 /** associatedReceiverOwner recognizes only references linked to the enclosing method's real type. */
 export function associatedReceiverOwner(
   reference: AST.Node,
