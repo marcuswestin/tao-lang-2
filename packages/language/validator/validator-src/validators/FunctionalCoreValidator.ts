@@ -370,8 +370,8 @@ function validateIfCondition(condition: AST.Expression, ctx: ValidationContext):
 }
 
 /**
- * A false check returns from the callback that owns its block. An `if` block, a `guard` case, or a
- * `when do` outcome compiles to a nested callback, so a check there would skip only that sub-block
+ * A false check returns from the callback that owns its block. Conditional blocks, outcomes and
+ * loop iterations compile to nested callbacks, so a check there would skip only that sub-block
  * while the action carried on.
  */
 function validateCheck(statement: AST.CheckStatement, ctx: ValidationContext): void {
@@ -380,7 +380,10 @@ function validateCheck(statement: AST.CheckStatement, ctx: ValidationContext): v
     ctx.error(statement.condition, messages.checkCondition)
   }
   const owner = statement.$container.$container
-  if (AST.isIfActionStatement(owner) || AST.isGuardActionBranch(owner) || AST.isWhenDoOutcome(owner)) {
+  if (
+    AST.isIfActionStatement(owner) || AST.isGuardActionBranch(owner) || AST.isWhenDoOutcome(owner)
+    || AST.isForStatement(owner)
+  ) {
     ctx.error(statement, messages.checkPlacement)
   }
 }
