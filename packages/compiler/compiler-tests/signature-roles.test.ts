@@ -33,7 +33,7 @@ Describe('compiler: signature role constructors', () => {
       'Names.tao': `
         file type GivenName is text
         file type Surname is text
-        public func PersonName(GivenName, Surname) -> text { return GivenName + Surname }
+        public func PersonName(GivenName, Surname) -> text { return "{GivenName}{Surname}" }
       `,
       'Main.tao': `
         use PersonName from ./Names

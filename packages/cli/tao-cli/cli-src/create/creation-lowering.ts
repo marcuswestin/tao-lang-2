@@ -398,8 +398,8 @@ nav ${names.navigator} = StackNav {
   ).join('\n\n')
   const tabs = plan.entities.map((entity, index) =>
     `   ${tabKey(entity)} {
-      Label ${taoString(humanize(entity.plural))}
-      Icon ${taoString(TAB_ICONS[index % TAB_ICONS.length]!)}
+      Label ${taoString(humanize(entity.plural))},
+      Icon ${taoString(TAB_ICONS[index % TAB_ICONS.length]!)},
       Content ${stackNav(entity)}
    }`
   ).join('\n')
@@ -411,8 +411,8 @@ ${stacks}
 
 folder
 nav ${names.navigator} = SelectionNav {
-   Initial ${tabKey(plan.entities[0]!)}
-   Display "automatic"
+   Initial ${tabKey(plan.entities[0]!)},
+   Display "automatic",
 ${tabs}
 }
 `
@@ -613,7 +613,7 @@ ${draftStates.join('\n')}
    action Save${singular}() {
       check ${title.name}Draft is not empty
       update ${singular} {
-${saveUpdates.join('\n')}
+${saveUpdates.join(',\n')}
       }
    }
 ${flagActions.map(action => `${action}\n`).join('')}   action Delete${singular}() {
@@ -661,7 +661,7 @@ function scenariosFile(plan: CreationPlan, names: ProjectNames): string {
   const bindings = plan.entities.flatMap(entity => {
     const handles = names.handles.get(entity.plural) ?? []
     return (plan.samples[entity.plural] ?? []).map((row, index) => {
-      const fields = fixtureFields(entity, row).map(field => `      ${field}`).join('\n')
+      const fields = fixtureFields(entity, row).map(field => `      ${field}`).join(',\n')
       return `   ${handles[index]!} = create ${entity.singular} {
 ${fields}
    }`
