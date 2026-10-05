@@ -84,7 +84,7 @@ type TopLevelStatement = Declaration | AccessDeclaration | PackageDeclaration | 
 ViewStatement returns Statement:
     DeclarationSlotFill | RenderSlotDeclaration | ParsedStatement;
 type Statement = AppBlockDiagnosticStatement | ViewRender | RenderSlotUse | RenderSlotDeclaration | CallerContentStatement | CommandDeclaration | DeclarationSlotFill | ViewCommandExclusion | InteractionWordStep;
-type NamedDeclaration = Declaration | ParameterDeclaration | StateDeclaration | EntityQueryDeclaration | ForStatement | CasePayload | EntityDataField | CaseSetCase | AskStatement | ActionResultStatement | DesignColor;
+type NamedDeclaration = Declaration | ParameterDeclaration | RenderSlotInputBinding | StateDeclaration | EntityQueryDeclaration | ForStatement | CasePayload | EntityDataField | CaseSetCase | AskStatement | ActionResultStatement | DesignColor;
 type MutableDeclaration = StateDeclaration | ParameterDeclaration;
 type ExportableDeclaration = AliasDeclaration | AppDeclaration | PrimitiveValueDeclaration | ViewDeclaration | TypeDeclaration | ActionDeclaration | CommandDeclaration | FunctionDeclaration | PhraseDeclaration | EntityDataDeclaration | DesignDeclaration | FixtureDeclaration;
 type EmittingRuntimeBinding = AliasDeclaration | AppDeclaration | PrimitiveValueDeclaration | ViewDeclaration | TypeDeclaration | ActionDeclaration | CommandDeclaration | FunctionDeclaration | PhraseDeclaration | EntityDataDeclaration | DesignDeclaration;

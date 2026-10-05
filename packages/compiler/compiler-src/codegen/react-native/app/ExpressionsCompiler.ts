@@ -415,7 +415,11 @@ export const ExpressionsCompiler = {
         AST.associatedReceiverOwner(reference) === target,
         'validated type reference names the contextual receiver',
       )
-      return compileMemberPath(contextualReceiverReference(reference, target), Type.ofReferenceRoot(reference), reference.members)
+      return compileMemberPath(
+        contextualReceiverReference(reference, target),
+        Type.ofReferenceRoot(reference),
+        reference.members,
+      )
     }
     const root = Compile.ValueDeclarationReference(target)
     return compileMemberPath(root, Type.ofValueDeclaration(target), reference.members)
@@ -1228,7 +1232,9 @@ function compileMemberPath(root: Compiled, rootType: ASTUtils.TaoType, members: 
     const negativeField = current.kind === 'entity'
       ? Type.dataFieldForMember(current.entity, member)
       : current.kind === 'item' && current.item
-      ? Type.itemFields(current.item).find(field => AST.isEntityDataField(field) && field.negativeName === member)
+      ? Type.itemFields(current.item).find((field): field is AST.EntityDataField =>
+        AST.isEntityDataField(field) && field.negativeName === member
+      )
       : undefined
     if (negativeField?.negativeName === member) {
       flushPlainMembers()

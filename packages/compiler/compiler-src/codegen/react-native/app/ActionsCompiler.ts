@@ -734,7 +734,7 @@ function compileForeignAction(action: AST.ActionDeclaration): Compiled {
 /** Named record failures use their source declaration name; enum failure values stay nominal. */
 function compileFailureCase(failureCase: AST.FailureDeclaration): Compiled {
   return AST.isTypeDeclaration(failureCase)
-    ? gen.jsLiteral(failureCase.name)
+    ? gen`${gen.jsLiteral(failureCase.name)}`
     : Compile.ValueDeclarationReference(failureCase)
 }
 

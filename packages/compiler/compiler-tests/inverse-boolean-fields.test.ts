@@ -59,6 +59,6 @@ Describe('compiler: inverse boolean fields', () => {
       { evaluate(): { jsValue: unknown } }
     >
     Expect(Object.keys(updateFields)).toEqual(['LoanedOut'])
-    Expect(updateFields.LoanedOut?.evaluate().jsValue).toBe(false)
+    Expect(updateFields['LoanedOut']?.evaluate().jsValue).toBe(false)
   })
 })
