@@ -8,8 +8,9 @@ import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
  * credentials to read its checks. A `GH_TOKEN` or `GITHUB_TOKEN` in the environment is sent when
  * present, which also lifts the anonymous limit of 60 requests an hour.
  *
- * Polling is sized to that limit: one conditional request per poll, which costs nothing when GitHub
- * answers 304, and the statuses and failure annotations only once, at the end. A failed check's
+ * Polling reads check runs, the matching Verify workflow, and commit statuses. Check and workflow
+ * reads use conditional requests; authenticated 304 responses do not spend the primary limit.
+ * Hosted callers reuse the CLI login, and standalone callers may configure a token. A failed check's
  * reason comes from its annotations, which the `Verify` job writes from each partition's summary,
  * so an agent learns which gate failed and why without downloading any log.
  */
@@ -32,7 +33,7 @@ export type PrChecksDependencies = {
   writeLine: (line: string) => void
 }
 
-const defaultDependencies: PrChecksDependencies = {
+export const defaultDependencies: PrChecksDependencies = {
   env: Platform.runtimeProcess.env,
   fetch: (url, init) => fetch(url, init),
   now: () => Date.now(),
@@ -76,6 +77,12 @@ type PullRequest = {
 
 type CheckRun = { conclusion: string | null; html_url: string; id: number; name: string; status: string }
 type CommitStatus = { context: string; state: string; target_url: string | null }
+type VerifyWorkflowRun = {
+  conclusion: string | null
+  head_sha: string
+  html_url: string
+  status: string
+}
 
 /** PrChecksCommand is the CLI wiring surface consumed by `dev.ts`. */
 export const PrChecksCommand = {
@@ -111,15 +118,45 @@ export const PrChecksCommand = {
     const announced = new Set<string>()
     for (;;) {
       const runs = await github.checkRuns(slug, sha)
+      const workflows = await github.verifyWorkflowRuns(slug, sha)
       const statuses = await github.json<{ statuses: CommitStatus[] }>(`/repos/${slug}/commits/${sha}/status`)
       const checks = [...runs.map(fromCheckRun), ...statuses.statuses.map(fromStatus)]
+      const verify = runs.find(run => run.name === 'Verify')
+      const activeWorkflow = workflows.find(run => run.status !== 'completed')
+      const completedWorkflow = workflows.find(run => run.status === 'completed')
       for (const check of checks.filter(check => check.state !== 'pending' && !announced.has(check.name))) {
         announced.add(check.name)
         report(`${check.state === 'success' ? 'PASS' : 'FAIL'}  ${check.name}`)
       }
       const pending = checks.filter(check => check.state === 'pending')
 
-      if (checks.length === 0) {
+      if (!options.wait && checks.some(check => check.state === 'failure')) {
+        return { exitCode: await conclude(github, slug, checks, report), lines } satisfies PrChecksResult
+      }
+      if (activeWorkflow !== undefined) {
+        report(`WAIT  Verify workflow is ${activeWorkflow.status}: ${activeWorkflow.html_url}`)
+      } else if (completedWorkflow !== undefined && verify === undefined) {
+        report(`FAIL  Verify workflow completed without a Verify check: ${completedWorkflow.html_url}`)
+        return { exitCode: 1, lines } satisfies PrChecksResult
+      } else if (
+        checks.length > 0 && verify === undefined && dependencies.now() - startedAt >= CHECKS_APPEAR_WITHIN_MS
+      ) {
+        const conflicted = (await github.json<PullRequest>(`/repos/${slug}/pulls/${pr.number}`)).mergeable_state
+          === 'dirty'
+        report(
+          conflicted
+            ? 'FAIL  No Verify workflow or check appeared: the pull request conflicts with its base, and GitHub'
+              + ' runs no pull_request workflow until it merges cleanly. Merge main into the branch and push.'
+            : `FAIL  No Verify workflow or check on ${
+              sha.slice(0, 8)
+            }. Actions may be disabled, or no workflow matches this event.`,
+        )
+        return { exitCode: 1, lines } satisfies PrChecksResult
+      } else if (
+        checks.some(check => check.state === 'failure') && (!options.wait || pending.length === 0)
+      ) {
+        return { exitCode: await conclude(github, slug, checks, report), lines } satisfies PrChecksResult
+      } else if (checks.length === 0) {
         const conflicted = (await github.json<PullRequest>(`/repos/${slug}/pulls/${pr.number}`)).mergeable_state
           === 'dirty'
         if (conflicted) {
@@ -134,14 +171,20 @@ export const PrChecksCommand = {
           return { exitCode: 1, lines } satisfies PrChecksResult
         }
         report('WAIT  No checks yet; GitHub starts them a few seconds after a push.')
-      } else if (pending.length === 0 || !options.wait) {
+      } else if (pending.length === 0 && verify?.status === 'completed' && verify.conclusion === 'success') {
         return { exitCode: await conclude(github, slug, checks, report), lines } satisfies PrChecksResult
+      } else if (!options.wait) {
+        report('WAIT  Verify has not completed successfully on this head yet.')
+        return { exitCode: 2, lines } satisfies PrChecksResult
       } else {
         report(
           `WAIT  ${checks.length - pending.length}/${checks.length} concluded; running: ${
             pending.map(check => check.name).join(', ')
           }`,
         )
+      }
+      if (!options.wait) {
+        return { exitCode: 2, lines } satisfies PrChecksResult
       }
       await dependencies.sleep(options.intervalMs ?? DEFAULT_INTERVAL_MS)
     }
@@ -186,6 +229,8 @@ async function conclude(
 function fromCheckRun(run: CheckRun): Check {
   const state = run.status !== 'completed'
     ? 'pending'
+    : run.name === 'Verify' && run.conclusion !== 'success'
+    ? 'failure'
     : run.conclusion === 'success' || run.conclusion === 'skipped' || run.conclusion === 'neutral'
     ? 'success'
     : 'failure'
@@ -220,7 +265,7 @@ async function ghAuthToken(dependencies: PrChecksDependencies, root: string): Pr
  * gitHub wraps the REST calls this command makes. Check runs are read conditionally: GitHub does not
  * count a 304 against the rate limit, which is what lets an anonymous `--wait` poll for an hour.
  */
-function gitHub(dependencies: PrChecksDependencies, authToken?: string) {
+export function gitHub(dependencies: PrChecksDependencies, authToken?: string) {
   const token = authToken ?? dependencies.env['GH_TOKEN'] ?? dependencies.env['GITHUB_TOKEN']
   const headers = (extra: Record<string, string> = {}): Record<string, string> => ({
     Accept: 'application/vnd.github+json',
@@ -265,13 +310,20 @@ function gitHub(dependencies: PrChecksDependencies, authToken?: string) {
       }
       return body.check_runs
     },
+    async verifyWorkflowRuns(slug: string, sha: string): Promise<VerifyWorkflowRun[]> {
+      const body = await request(
+        `/repos/${slug}/actions/workflows/verify.yml/runs?head_sha=${sha}&per_page=100`,
+        true,
+      ) as { workflow_runs: VerifyWorkflowRun[] }
+      return body.workflow_runs.filter(run => run.head_sha === sha)
+    },
     async json<ValueT>(path: string): Promise<ValueT> {
       return await request(path, false) as ValueT
     },
   }
 }
 
-async function repositorySlug(dependencies: PrChecksDependencies, root: string): Promise<string> {
+export async function repositorySlug(dependencies: PrChecksDependencies, root: string): Promise<string> {
   const url = (await dependencies.run('git', { args: ['remote', 'get-url', 'origin'], cwd: root, stdio: 'pipe' }))
     .stdout.trim()
   const match = /github\.com[:/]([^/]+\/[^/]+?)(?:\.git)?$/u.exec(url)

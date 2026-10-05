@@ -410,7 +410,7 @@ report-test-stats limit="20":
     echo
     ./dev test-slowest --limit "{{ limit }}"
 
-# Bring a feature branch to ready while iterating; `land` does its own preparation. Safe to re-run
+# Prepare local readiness when useful or CI is unreachable; hosted CI is the default final proof
 [arg('check', long='check', value='true')]
 [arg('fresh', long='fresh', value='true')]
 [arg('redraft', long='redraft', value='true')]
@@ -442,7 +442,7 @@ my-resolve agent='claude' *ARGS:
     if [ -z "$(git diff --name-only --diff-filter=U)" ]; then printf 'No conflicted files: there is nothing to resolve.\n'; exit 1; fi
     {{ if agent == "claude" { "claude" } else if agent == "codex" { "codex" } else { error("my-resolve takes claude or codex") } }} {{ ARGS }} "Finish the merge that is in progress in this checkout, on branch $(git symbolic-ref --quiet --short HEAD). Resolve every conflicted file on its merits, keeping both sides' intent rather than taking one side wholesale, and preserving work you did not write. Read AGENTS.md first. Run available focused checks on the resolved files, report checks that concurrent work prevents, and commit the merge with \`git commit --no-edit\`. Leave full verification to landing. Do not land anything on main, do not push, and do not touch other worktrees. Report what you resolved in each file and what checks ran."
 
-# Squash-merge your dev/* branch into main; the same landing agents use, with the same gates
+# Locally squash-merge your dev/* branch into main under the landing lock
 [group('Mine')]
 my-land *ARGS:
     ./dev land {{ ARGS }}
@@ -603,12 +603,12 @@ reclaim *ARGS:
 worktree-status:
     ./dev worktree-status
 
-# Push this feature branch and stream pull-request checks; --auto-merge explicitly enables automatic landing
+# Default hosted proof; use --auto-merge for authorized ready landing, otherwise auto-merge stays off
 [group('Dev')]
 open-pr *ARGS:
     ./dev open-pr {{ ARGS }}
 
-# Wait for this branch's checks, Verify among them, then squash-merge unless auto-merge already did
+# Merge an already verified PR directly, or confirm and archive after auto-merge completes
 [group('Dev')]
 merge-pr *ARGS:
     ./dev merge-pr {{ ARGS }}
@@ -617,6 +617,11 @@ merge-pr *ARGS:
 [group('Dev')]
 pr-checks *ARGS:
     ./dev pr-checks {{ ARGS }}
+
+# Compare two Verify runs step by step; by default this branch's newest against main's newest green push
+[group('Report')]
+ci-timings *ARGS:
+    ./dev ci-timings {{ ARGS }}
 
 # Report host capabilities
 [group('Report')]

@@ -332,7 +332,7 @@ Describe('open-pr', () => {
     Expect(sleeps).toEqual([5_000, 5_000])
     Expect(followed).toEqual([2])
     Expect(result.lines.at(-1)).toStartWith('NEXT  Run merge-pr')
-    // Auto-merge is requested once checks exist on the head, so Verify is pending when GitHub reads it.
+    // Any check can arm auto-merge; the required Verify check remains the merge gate.
     const autoMerge = calls.indexOf(enableAutoMergeKey(2))
     Expect(autoMerge).toBeGreaterThan(calls.lastIndexOf(checkCountKey()))
     Expect(autoMerge).toBeLessThan(calls.indexOf('followChecks'))
