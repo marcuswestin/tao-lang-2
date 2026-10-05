@@ -921,5 +921,9 @@ clear reuse state. Managed mobile publications retain their per-attempt nonce be
 
 Studio activation, phone save acknowledgements, and device freshness use the published revision
 when a compile retains it. Diagnostics and compile completion still report the attempt. Focused
-lifecycle proof, full portable verification, and real Metro measurements for the final integrated
-slice remain required; the earlier proof-of-concept timings do not establish this slice's gain.
+lifecycle regressions pass, including 30 runtime cases after integrating stable links, 12 session
+cases, and 28 device-gateway cases. The integrated HNReader padding smoke completed sixteen saves
+without iframe reloads. Save-to-paint p50 was 2690/2750ms (publication checks on/off), with
+source-to-publication p50 2553/2579ms at load 5.5–7.6 on 18 CPUs. These results do not meet
+the existing speed ceilings or establish a gain against the earlier experimental pipeline.
+Full portable verification remains required; no ceiling was changed.
