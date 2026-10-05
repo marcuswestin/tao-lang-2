@@ -16,6 +16,6 @@ type Ticker is {
 // an interval timer plus a state update per tick — reached through the expression-position `from`
 // mechanism any package uses, so the language carries no timer grammar at all.
 public
-function Interval(Every duration) returns Ticker {
+func Interval(Every duration) -> Ticker {
    return Interval(Every) from ./Time.ts
 }

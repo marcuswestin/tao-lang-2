@@ -142,178 +142,178 @@ view StudioInspectorActionCommand(CurrentSourceVersion text, Inspection text, Se
    render StudioButton(Label: StudioInspectorActionLabel(ActionId), Press: Invoke, Disabled: not StudioInspectorActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, ActionId: ActionId), Variant: "secondary")
 }
 
-function StudioInspectorReady(Inspection text, Selection text) returns boolean {
+func StudioInspectorReady(Inspection text, Selection text) -> boolean {
    return StudioInspectorReady(Inspection: Inspection, Selection: Selection) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorStatus(Inspection text, Selection text) returns text {
+func StudioInspectorStatus(Inspection text, Selection text) -> text {
    return StudioInspectorStatus(Inspection: Inspection, Selection: Selection) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorSummaryLines(CurrentSourceVersion text, Inspection text, Selection text, Content text, Path text) returns list of text {
+func StudioInspectorSummaryLines(CurrentSourceVersion text, Inspection text, Selection text, Content text, Path text) -> list of text {
    return StudioInspectorSummaryLines(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Content: Content, Path: Path) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorUndoAvailable(Busy boolean, CanUndo boolean) returns boolean {
+func StudioInspectorUndoAvailable(Busy boolean, CanUndo boolean) -> boolean {
    return StudioInspectorUndoAvailable(Busy: Busy, CanUndo: CanUndo) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorLayoutDrafts(Inspection text) returns text {
+func StudioInspectorLayoutDrafts(Inspection text) -> text {
    return StudioInspectorLayoutDrafts(Inspection) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorLayoutFieldIds() returns list of text {
+func StudioInspectorLayoutFieldIds() -> list of text {
    return StudioInspectorLayoutFieldIds() from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorLayoutFieldLabel(FieldId text) returns text {
+func StudioInspectorLayoutFieldLabel(FieldId text) -> text {
    return StudioInspectorLayoutFieldLabel(FieldId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorLayoutFieldUsesPicker(FieldId text) returns boolean {
+func StudioInspectorLayoutFieldUsesPicker(FieldId text) -> boolean {
    return StudioInspectorLayoutFieldUsesPicker(FieldId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorLayoutFieldOptions(FieldId text) returns list of text {
+func StudioInspectorLayoutFieldOptions(FieldId text) -> list of text {
    return StudioInspectorLayoutFieldOptions(FieldId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorDraft(Drafts text, FieldId text) returns text {
+func StudioInspectorDraft(Drafts text, FieldId text) -> text {
    return StudioInspectorDraft(Drafts: Drafts, FieldId: FieldId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorUpdateDraft(Drafts text, FieldId text, Value text) returns text {
+func StudioInspectorUpdateDraft(Drafts text, FieldId text, Value text) -> text {
    return StudioInspectorUpdateDraft(Drafts: Drafts, FieldId: FieldId, Value: Value) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorLayoutActionIds() returns list of text {
+func StudioInspectorLayoutActionIds() -> list of text {
    return StudioInspectorLayoutActionIds() from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorLayoutActionLabel(ActionId text) returns text {
+func StudioInspectorLayoutActionLabel(ActionId text) -> text {
    return StudioInspectorLayoutActionLabel(ActionId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorLayoutActionValid(CurrentSourceVersion text, Inspection text, Selection text, Drafts text, Busy boolean, ActionId text) returns boolean {
+func StudioInspectorLayoutActionValid(CurrentSourceVersion text, Inspection text, Selection text, Drafts text, Busy boolean, ActionId text) -> boolean {
    return StudioInspectorLayoutActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Drafts: Drafts, Busy: Busy, ActionId: ActionId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorLayoutAction(Inspection text, Selection text, Drafts text, ActionId text) returns text {
+func StudioInspectorLayoutAction(Inspection text, Selection text, Drafts text, ActionId text) -> text {
    return StudioInspectorLayoutAction(Inspection: Inspection, Selection: Selection, Drafts: Drafts, ActionId: ActionId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorStyleDrafts(Inspection text) returns text {
+func StudioInspectorStyleDrafts(Inspection text) -> text {
    return StudioInspectorStyleDrafts(Inspection) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorStyleFieldIds() returns list of text {
+func StudioInspectorStyleFieldIds() -> list of text {
    return StudioInspectorStyleFieldIds() from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorStyleFieldLabel(FieldId text) returns text {
+func StudioInspectorStyleFieldLabel(FieldId text) -> text {
    return StudioInspectorStyleFieldLabel(FieldId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorStyleFieldUsesPicker(FieldId text) returns boolean {
+func StudioInspectorStyleFieldUsesPicker(FieldId text) -> boolean {
    return StudioInspectorStyleFieldUsesPicker(FieldId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorStyleFieldOptions(Inspection text, FieldId text) returns list of text {
+func StudioInspectorStyleFieldOptions(Inspection text, FieldId text) -> list of text {
    return StudioInspectorStyleFieldOptions(Inspection: Inspection, FieldId: FieldId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorStyleActionValid(CurrentSourceVersion text, Inspection text, Selection text, Drafts text, Busy boolean) returns boolean {
+func StudioInspectorStyleActionValid(CurrentSourceVersion text, Inspection text, Selection text, Drafts text, Busy boolean) -> boolean {
    return StudioInspectorStyleActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Drafts: Drafts, Busy: Busy) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorStyleAction(Inspection text, Selection text, Drafts text) returns text {
+func StudioInspectorStyleAction(Inspection text, Selection text, Drafts text) -> text {
    return StudioInspectorStyleAction(Inspection: Inspection, Selection: Selection, Drafts: Drafts) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorStylePromotionIds(Inspection text) returns list of text {
+func StudioInspectorStylePromotionIds(Inspection text) -> list of text {
    return StudioInspectorStylePromotionIds(Inspection) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorStylePromotionLabel(Inspection text, PromotionId text) returns text {
+func StudioInspectorStylePromotionLabel(Inspection text, PromotionId text) -> text {
    return StudioInspectorStylePromotionLabel(Inspection: Inspection, PromotionId: PromotionId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorStylePromotionValid(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean, PromotionId text) returns boolean {
+func StudioInspectorStylePromotionValid(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean, PromotionId text) -> boolean {
    return StudioInspectorStylePromotionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, PromotionId: PromotionId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorStylePromotionAction(Inspection text, Selection text, PromotionId text) returns text {
+func StudioInspectorStylePromotionAction(Inspection text, Selection text, PromotionId text) -> text {
    return StudioInspectorStylePromotionAction(Inspection: Inspection, Selection: Selection, PromotionId: PromotionId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorStyleNotes(Inspection text) returns list of text {
+func StudioInspectorStyleNotes(Inspection text) -> list of text {
    return StudioInspectorStyleNotes(Inspection) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorDataLines(Inspection text, Selection text, ActiveCellId text, ActiveCellRevision number, ActiveScenarioId text) returns list of text {
+func StudioInspectorDataLines(Inspection text, Selection text, ActiveCellId text, ActiveCellRevision number, ActiveScenarioId text) -> list of text {
    return StudioInspectorDataLines(Inspection: Inspection, Selection: Selection, ActiveCellId: ActiveCellId, ActiveCellRevision: ActiveCellRevision, ActiveScenarioId: ActiveScenarioId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorTextAvailable(Inspection text, Selection text) returns boolean {
+func StudioInspectorTextAvailable(Inspection text, Selection text) -> boolean {
    return StudioInspectorTextAvailable(Inspection: Inspection, Selection: Selection) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorTextStatus(Inspection text, Selection text) returns text {
+func StudioInspectorTextStatus(Inspection text, Selection text) -> text {
    return StudioInspectorTextStatus(Inspection: Inspection, Selection: Selection) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorTextLiteral(Inspection text) returns text {
+func StudioInspectorTextLiteral(Inspection text) -> text {
    return StudioInspectorTextLiteral(Inspection: Inspection) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorDraftsFor(Section text, Inspection text, Drafts text) returns text {
+func StudioInspectorDraftsFor(Section text, Inspection text, Drafts text) -> text {
    return StudioInspectorDraftsFor(Section: Section, Inspection: Inspection, Drafts: Drafts) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorTextDraft(Inspection text, Draft text) returns text {
+func StudioInspectorTextDraft(Inspection text, Draft text) -> text {
    return StudioInspectorTextDraft(Inspection: Inspection, Draft: Draft) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorTextUpdateDraft(Inspection text, Value text) returns text {
+func StudioInspectorTextUpdateDraft(Inspection text, Value text) -> text {
    return StudioInspectorTextUpdateDraft(Inspection: Inspection, Value: Value) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorSetTextValid(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean, Draft text) returns boolean {
+func StudioInspectorSetTextValid(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean, Draft text) -> boolean {
    return StudioInspectorSetTextValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, Draft: Draft) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorTextCandidates(Inspection text) returns list of text {
+func StudioInspectorTextCandidates(Inspection text) -> list of text {
    return StudioInspectorTextCandidates(Inspection: Inspection) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorTextBindingLabel(Inspection text, Expression text) returns text {
+func StudioInspectorTextBindingLabel(Inspection text, Expression text) -> text {
    return StudioInspectorTextBindingLabel(Inspection: Inspection, Expression: Expression) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorTextActionValid(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean) returns boolean {
+func StudioInspectorTextActionValid(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean) -> boolean {
    return StudioInspectorTextActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorSetTextAction(Selection text, Content text) returns text {
+func StudioInspectorSetTextAction(Selection text, Content text) -> text {
    return StudioInspectorSetTextAction(Selection: Selection, Content: Content) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorBindTextAction(Selection text, Expression text) returns text {
+func StudioInspectorBindTextAction(Selection text, Expression text) -> text {
    return StudioInspectorBindTextAction(Selection: Selection, Expression: Expression) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorActionIds(Inspection text, Selection text) returns list of text {
+func StudioInspectorActionIds(Inspection text, Selection text) -> list of text {
    return StudioInspectorActionIds(Inspection: Inspection, Selection: Selection) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorActionLabel(ActionId text) returns text {
+func StudioInspectorActionLabel(ActionId text) -> text {
    return StudioInspectorActionLabel(ActionId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorActionValid(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean, ActionId text) returns boolean {
+func StudioInspectorActionValid(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean, ActionId text) -> boolean {
    return StudioInspectorActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, ActionId: ActionId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorAction(Selection text, ActionId text) returns text {
+func StudioInspectorAction(Selection text, ActionId text) -> text {
    return StudioInspectorAction(Selection: Selection, ActionId: ActionId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }

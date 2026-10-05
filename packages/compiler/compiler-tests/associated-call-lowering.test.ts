@@ -26,7 +26,9 @@ Describe('compiler: actual associated call lowering', () => {
     for (const fn of source.statements.filter(AST.isFunctionDeclaration)) {
       const call = AST.returnStatementsOf(fn)[0]?.value
       Expect.Is(call, AST.isMethodCallExpression)
-      Expect(ASTUtils.resolveAssociatedMethodInvocation(call).diagnostics.map(diagnostic => diagnostic.kind)).toEqual([])
+      Expect(ASTUtils.resolveAssociatedMethodInvocation(call).diagnostics.map(diagnostic => diagnostic.kind)).toEqual(
+        [],
+      )
     }
     const scope = await emit(source, TR)
     const sourceValue = TR.Cell(TR.Value('before'))

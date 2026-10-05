@@ -11,12 +11,12 @@ app UnitValues {
 
 // `.unit` on a number constructs a value of that unit's family, and `.unit` on a value of the family
 // reads it back as a number, so the two round-trip through the family's fixed ratios.
-function ReadBack(Wait duration) returns number {
+func ReadBack(Wait duration) -> number {
    return Wait.s
 }
 
 // Scaling by a bare number keeps the family, so this returns a duration rather than a number.
-function Doubled(Length duration) returns duration {
+func Doubled(Length duration) -> duration {
    return Length * 2
 }
 

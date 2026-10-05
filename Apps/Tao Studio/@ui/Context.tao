@@ -98,19 +98,19 @@ view StudioContextPanelSurface() accepts content from ../../../packages/ides/stu
 
 view StudioContextSummary(FilePath text, ScenarioId text, CellId text, RenderId text, ViewportWidth number, ViewportHeight number) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-function StudioViewportPresetWidth(Preset text, Fallback number) returns number {
+func StudioViewportPresetWidth(Preset text, Fallback number) -> number {
    return StudioViewportPresetWidth(Preset, Fallback) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioViewportPresetHeight(Preset text, Fallback number) returns number {
+func StudioViewportPresetHeight(Preset text, Fallback number) -> number {
    return StudioViewportPresetHeight(Preset, Fallback) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioEnvironmentValid(WidthValid boolean, HeightValid boolean, LatencyValid boolean, ErrorStatusValid boolean, Network text, ErrorMessage text) returns boolean {
+func StudioEnvironmentValid(WidthValid boolean, HeightValid boolean, LatencyValid boolean, ErrorStatusValid boolean, Network text, ErrorMessage text) -> boolean {
    return StudioEnvironmentValid(WidthValid: WidthValid, HeightValid: HeightValid, LatencyValid: LatencyValid, ErrorStatusValid: ErrorStatusValid, Network: Network, ErrorMessage: ErrorMessage) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioNetworkShowsError(Network text) returns boolean {
+func StudioNetworkShowsError(Network text) -> boolean {
    return StudioNetworkShowsError(Network) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 

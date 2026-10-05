@@ -1,12 +1,12 @@
 use DesignToken, DesignTokens, File, Files, Screen, Screens, View, Views from @data
 use Col, Text from @tao/ui
 
-function StudioFolderIsExpanded(CollapsedFolders list of text, FolderPath text) returns boolean {
+func StudioFolderIsExpanded(CollapsedFolders list of text, FolderPath text) -> boolean {
    return StudioFolderIsExpanded(CollapsedFolders, FolderPath) from ../../../packages/ides/studio/studio-src/StudioFolderExpansion.ts
 }
 
 project
-function StudioToggleFolder(CollapsedFolders list of text, FolderPath text) returns list of text {
+func StudioToggleFolder(CollapsedFolders list of text, FolderPath text) -> list of text {
    return StudioToggleFolder(CollapsedFolders, FolderPath) from ../../../packages/ides/studio/studio-src/StudioFolderExpansion.ts
 }
 
