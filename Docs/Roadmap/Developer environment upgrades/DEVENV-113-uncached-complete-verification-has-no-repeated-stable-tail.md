@@ -133,6 +133,10 @@
     splits independent native files, reserves nested-build capacity, and refreshes suite/file
     seeds from these runs. Derived file weights and one inferred isolated CLI retry are documented
     in `.github/verify/README.md`; they are scheduling estimates, not a stable-tail speed verdict.
+  - Local fallback verification on October5 stopped at a live source-mutation lock wait after
+    120seconds; compiler and source-action processes also reached the300second wall bound.
+    The Developer approved larger bounded waits while retaining assertions and lock ownership
+    checks. This is timeout recovery, not evidence of faster execution or completed acceptance.
 - **Proposed change:** The requested file partition and initial scheduling adjustment are implemented.
   Keep this observation open until fresh-checkout complete-lane measurements establish how much
   end-to-end tail remains; a cached skip is not a repeat measurement.

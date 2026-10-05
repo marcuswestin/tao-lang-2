@@ -325,7 +325,7 @@ Describe('test runner suite registry', () => {
     // The heavy and light files own 90% of the suite's variable work. Each dynamic shard uses its
     // current membership despite old #1/#2 samples carrying unrelated costs.
     Expect(plan.states.map(state => state.expectedMs)).toEqual([16_600, 2_600])
-    Expect(plan.states.map(state => state.node.timeoutMs)).toEqual([300_000, 300_000])
+    Expect(plan.states.map(state => state.node.timeoutMs)).toEqual([1_200_000, 1_200_000])
   })
 
   Test('reconstructs cohort timing and ledger summaries only under the complete parent suite', async () => {
@@ -524,7 +524,10 @@ Describe('test runner suite registry', () => {
     // sits strictly above the one it contains, so whatever hangs is named by the nearest bound and
     // not swallowed by the one around it; the wall bound is armed before the process even spawns.
     Expect(jestConfig.MAX_JOURNEY_DEADLINE_MS).toBeLessThan(TestRunner.MAX_TEST_DEADLINE_MS)
-    Expect(TestNodes.WALL_TIMEOUT_FLOOR_MS).toBeGreaterThan(TestNodes.IDLE_TIMEOUT_FLOOR_MS)
+    Expect(TestNodes.WALL_TIMEOUT_FLOOR_MS).toBeGreaterThanOrEqual(TestNodes.IDLE_TIMEOUT_FLOOR_MS)
+    Expect(TestNodes.wallTimeoutMs(TestRunner.MAX_TEST_DEADLINE_MS)).toBeGreaterThan(
+      TestNodes.IDLE_TIMEOUT_FLOOR_MS,
+    )
   })
 
   Test('weighs Tao app shards by the source they compile, not by how many journeys they hold', async () => {
@@ -742,12 +745,14 @@ Describe('test runner suite registry', () => {
     const { starvationAdjustedTimeoutMs } = TestRunner
 
     // A machine this run has to itself keeps the fixed budget, so a test that genuinely regresses
-    // is still caught. This is the case a flat two-minute bound gives up.
+    // is still caught even though a loaded machine may stretch the deadline.
     Expect(starvationAdjustedTimeoutMs(9, 18)).toBe(45_000)
     // The run that motivated this: load 41.1 on 18 CPUs, where the killed test had run 3.7x slower
-    // than in isolation. The raised floor times that multiple is past the ceiling, so what the suite
-    // actually gets here is the ceiling itself rather than the scaled multiple.
-    Expect(starvationAdjustedTimeoutMs(41.1, 18)).toBe(TestRunner.MAX_TEST_DEADLINE_MS)
+    // than in isolation. The load adjustment gives this test 205.5s while preserving the fixed
+    // uncontended budget above.
+    Expect(starvationAdjustedTimeoutMs(41.1, 18)).toBe(205_500)
+    // A more extreme load reaches the shared ten-minute ceiling.
+    Expect(starvationAdjustedTimeoutMs(1_000, 18)).toBe(TestRunner.MAX_TEST_DEADLINE_MS)
   })
 
   Test('names every Bun test file absolutely, so the runner never walks the repository to find it', async () => {
