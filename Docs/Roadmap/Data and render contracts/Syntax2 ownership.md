@@ -226,6 +226,12 @@ without unit-name guessing, newline significance or field-name reservations. Pre
 regression fixture and verify the whole source-actions scope after repair. The coordinator's
 reference-app comma migration and one-off comma-helper retirement are separate source paths.
 
+B additionally owns validator-tests/structural-contracts.test.ts for authored configuration comma
+migration only. Preserve all diagnostic and behavior assertions, including rejected examples; add
+only the delimiters required by the accepted configuration/item syntax. Parser diagnostic wording
+and the `(persist)` call boundary remain A-owned. This fixture-only grant does not release slot
+frontend or shared validator source. Return the exact test file after its focused proof.
+
 Managers implement against supplied frozen inputs in isolated worktrees and reconcile the landed
 base before frozen return. This manifest transfers no unlisted shared file implicitly.
 
