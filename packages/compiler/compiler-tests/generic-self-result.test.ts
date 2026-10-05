@@ -6,6 +6,40 @@ import { withAssociatedWitnessBindings } from '../compiler-src/codegen/react-nat
 import { Compile } from '../compiler-src/codegen/react-native/Compile'
 
 Describe('compiler: generic Self result contracts', () => {
+  Test('retains another bound after an authored generic operator returns a new Self', async () => {
+    const parsed = await Parser.parseCode(
+      `
+      can Arithmetic { +(Right Self) fails never -> Self }
+      can Display { ToText() fails never -> text }
+      func SumText where type T is Arithmetic and Display (Left T, Right T) -> text {
+        return (Left + Right).ToText()
+      }
+    `,
+      { validation: false },
+    )
+    Expect(parsed.entry.document.parseResult.parserErrors.map(error => error.message)).toEqual([])
+    const fn = parsed.entry.ast.statements.find(AST.isFunctionDeclaration)
+    Expect.Is(fn, AST.isFunctionDeclaration)
+    const effects = ASTUtils.createAssociatedEffects([parsed.entry.ast])
+    const code = ASTUtils.withAssociatedEffects(effects, () => Langium.toString(Compile.FunctionDeclaration(fn)))
+    const { default: TR } = await import(FS.resolvePath('packages/apps/runtime/TaoRuntime-src/TR.ts', Repo.getRoot()))
+    const scope: Record<string, any> = {}
+    new Function('TR', '_Scope', new Bun.Transpiler({ loader: 'ts' }).transformSync(code))(TR, scope)
+    let calls = 0
+    const methods = {
+      '+': TR.Function((left: any, right: any) => {
+        calls++
+        return TR.Value(`${left.getJSValue()}:${right.getJSValue()}`)
+      }),
+      ToText: TR.Function((receiver: any) => TR.Value(receiver.getJSValue())),
+    }
+    const left = TR.Capability.attach(TR.Value('left'), methods)
+    const right = TR.Capability.attach(TR.Value('right'), methods)
+    Expect(TR.Call(scope['SumText'], left, right).getJSValue()).toBe('left:right')
+    Expect(calls).toBe(1)
+    Expect(TR.Call(TR.Capability.method(left, 'ToText')).getJSValue()).toBe('left')
+  })
+
   Test('dispatches both bounds on a new Self result while retaining the original donor', async () => {
     const parsed = await Parser.parseCode(
       `

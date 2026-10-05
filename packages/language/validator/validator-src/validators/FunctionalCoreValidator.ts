@@ -54,6 +54,9 @@ export const FunctionalCoreValidator = {
     ...FunctionsValidator.checks,
     [AST.BinaryExpression.$type]: validateBinary,
     [AST.UnaryExpression.$type]: (expression, ctx) => {
+      if (expression.operator !== 'not' && validateAssociatedOperation(expression, ctx)) {
+        return
+      }
       const operand = Type.ofExpression(expression.operand)
       if (containsNumeric(operand)) {
         ctx.error(expression, NumericUnitsValidationMessages.operator(expression.operator))
@@ -126,6 +129,9 @@ export const FunctionalCoreValidator = {
 } as const
 
 function validateBinary(expression: AST.BinaryExpression, ctx: ValidationContext): void {
+  if (expression.operator !== 'and' && expression.operator !== 'or' && validateAssociatedOperation(expression, ctx)) {
+    return
+  }
   const left = Type.ofExpression(expression.left)
   const right = Type.ofExpression(expression.right)
   if (containsNumeric(left) || containsNumeric(right)) {
@@ -179,6 +185,37 @@ function validateBinary(expression: AST.BinaryExpression, ctx: ValidationContext
   if (!isPrimitive(left, 'number') || !isPrimitive(right, 'number')) {
     ctx.error(expression, messages.binaryNumeric(expression.operator))
   }
+}
+
+/** Authored arithmetic is selected from the ordered first operand's real owner ancestry. */
+function validateAssociatedOperation(
+  expression: AST.BinaryExpression | AST.UnaryExpression,
+  ctx: ValidationContext,
+): boolean {
+  const resolved = Type.associatedOperation(expression)
+  if (!resolved.problem) {
+    return true
+  }
+  if (resolved.problem === 'unresolved-operand' || resolved.problem === 'unsupported-operator') {
+    return false
+  }
+  if (
+    resolved.candidates.length === 0 && resolved.problem === 'missing-operator'
+    && !resolved.operandTypes.some(type => type.genericParameter || type.kind === 'capability' || containsNumeric(type))
+  ) {
+    return false
+  }
+  ctx.error(
+    expression,
+    `Operator '${expression.operator}' has ${
+      resolved.problem === 'ambiguous-operator'
+        ? 'more than one applicable authored contract'
+        : resolved.problem === 'pending-contract'
+        ? 'an unresolved authored contract'
+        : 'no applicable authored contract for these ordered operands'
+    }.`,
+  )
+  return true
 }
 
 function isSupportedInterpolationType(type: ASTUtils.TaoType): boolean {

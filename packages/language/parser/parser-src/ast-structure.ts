@@ -1400,12 +1400,15 @@ export function associatedConverterSourceOwner(
 /** associatedFunctionOwner returns only the declared type whose own body contains this method. */
 export function associatedFunctionOwner(
   declaration: AST.AssociatedFunctionDeclaration,
-): AST.TypeDeclaration | undefined {
+): AST.TypeDeclaration | AST.PrimitiveDeclaration | undefined {
   const item = declaration.$container
   if (!AST.isItemTypeExpression(item) || !item.methods.includes(declaration)) {
     return undefined
   }
   const container = item.$container
+  if (AST.isPrimitiveDeclaration(container)) {
+    return container.slots === item ? container : undefined
+  }
   if (AST.isTypeDeclaration(container)) {
     return container.type === item ? container : undefined
   }
@@ -1440,7 +1443,7 @@ export function associatedReceiverOwner(
     return undefined
   }
   const owner = associatedFunctionOwner(method)
-  return owner && reference.target.ref === owner ? owner : undefined
+  return owner && AST.isTypeDeclaration(owner) && reference.target.ref === owner ? owner : undefined
 }
 
 /** findOwningPhrase returns the phrase declaration that owns `node`, if any. */

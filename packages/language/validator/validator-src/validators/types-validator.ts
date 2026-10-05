@@ -209,8 +209,9 @@ function validateDerivedType(derived: AST.DerivedTypeExpression, ctx: Validation
     return
   }
   if (
-    base.kind === 'primitive' && base.primitive === 'text'
-    && derived.slots.properties.length === 0 && derived.slots.methods.length > 0
+    base.kind === 'primitive' && ['text', 'number'].includes(base.primitive)
+    && derived.slots.properties.length === 0
+    && (derived.slots.methods.length > 0 || derived.slots.converters.length > 0)
   ) {
     return
   }

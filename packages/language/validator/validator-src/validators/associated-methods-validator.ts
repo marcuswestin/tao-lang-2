@@ -7,15 +7,8 @@ import { FunctionsValidator } from './functions-validator'
 import { ReactiveParametersValidator } from './ReactiveParametersValidator'
 
 export const associatedMethodsValidationChecks = {
-  [AST.TypeDeclaration.$type]: (owner, ctx) => {
-    const names = new Set<string>()
-    for (const method of ASTUtils.ownAssociatedMethods(owner)) {
-      if (names.has(method.name)) {
-        ctx.error(method, messages.duplicateImplementation(owner.name, method.name))
-      }
-      names.add(method.name)
-    }
-  },
+  [AST.TypeDeclaration.$type]: validateAssociatedOwner,
+  [AST.PrimitiveDeclaration.$type]: validateAssociatedOwner,
   [AST.AssociatedFunctionDeclaration.$type]: (method, ctx) => {
     validateFailureBound(method, ctx)
     const owner = AST.associatedFunctionOwner(method)
@@ -26,7 +19,7 @@ export const associatedMethodsValidationChecks = {
     if (!AST.isTaoFile(owner.$container)) {
       ctx.error(owner, messages.placement)
     }
-    const type = Type.ofDefinition(owner)
+    const type = Type.ofAssociatedOwner(owner)
     if (
       type.kind !== 'entity' && type.kind !== 'item'
       && (type.kind !== 'primitive' || !['text', 'number', 'numeric'].includes(type.primitive))
@@ -164,6 +157,61 @@ function containsCapability(type: ASTUtils.TaoType): boolean {
   return type.kind === 'capability'
     || (type.kind === 'union' && type.members.some(containsCapability))
     || (type.kind === 'list' && type.element !== undefined && containsCapability(type.element))
+}
+
+const operatorNames = new Set(['+', '-', '*', '/', '==', '!=', '<', '<=', '>', '>='])
+
+function validateAssociatedOwner(owner: AST.TypeDeclaration | AST.PrimitiveDeclaration, ctx: ValidationContext): void {
+  const ordinaryNames = new Set<string>()
+  const operatorContracts = new Set<string>()
+  for (const method of ASTUtils.ownAssociatedMethods(owner)) {
+    if (!operatorNames.has(method.name)) {
+      if (ordinaryNames.has(method.name)) {
+        ctx.error(method, messages.duplicateImplementation(owner.name, method.name))
+      }
+      ordinaryNames.add(method.name)
+      continue
+    }
+    const identity = associatedOperatorContractIdentity(method, owner)
+    if (identity && operatorContracts.has(identity)) {
+      ctx.error(method, messages.duplicateImplementation(owner.name, method.name))
+    }
+    if (identity) {
+      operatorContracts.add(identity)
+    }
+  }
+}
+
+function associatedOperatorContractIdentity(
+  method: AST.AssociatedFunctionDeclaration,
+  owner: AST.TypeDeclaration | AST.PrimitiveDeclaration,
+): string | undefined {
+  const materialized = Type.associatedCallable(method, owner)
+  if (materialized.kind !== 'ready') {
+    return undefined
+  }
+  const { descriptor } = materialized
+  const receiver = Type.identityKey(descriptor.receiver)
+  const result = Type.identityKey(descriptor.result)
+  const inputs = descriptor.signature.inputs.map(input => {
+    const type = Type.identityKey(input.type)
+    return type
+      ? [input.role ?? input.labelName, input.labelName, type, input.acceptsNone, input.omissible, input.callerWritable]
+      : undefined
+  })
+  if (!receiver || !result || inputs.some(input => !input)) {
+    return undefined
+  }
+  const signature = descriptor.signature
+  return JSON.stringify([
+    method.name,
+    !!method.static,
+    receiver,
+    inputs,
+    result,
+    [...signature.failures.cases].sort(),
+    signature.failures.open,
+  ])
 }
 
 function validateFailureBound(

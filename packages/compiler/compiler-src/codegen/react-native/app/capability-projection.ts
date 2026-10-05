@@ -79,8 +79,8 @@ function compileTransport(
 export function capabilityTransportOwners(
   actual: ASTUtils.TaoType,
   expected: ASTUtils.TaoType,
-): ReadonlySet<AST.TypeDeclaration> {
-  const owners = new Set<AST.TypeDeclaration>()
+): ReadonlySet<ASTUtils.AssociatedCallableDescriptor['owner']> {
+  const owners = new Set<ASTUtils.AssociatedCallableDescriptor['owner']>()
   if (!ASTUtils.containsCapability(expected)) {
     return owners
   }

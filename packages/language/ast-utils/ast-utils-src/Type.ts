@@ -10,6 +10,7 @@ import {
   associatedCallableAnalysis,
   type AssociatedCallableDescriptor,
   associatedCallableDescriptor,
+  type AssociatedCallableOwner,
   type AssociatedDescriptorMaterialization,
   associatedMethodCallTarget,
   type AssociatedMethodDispatch,
@@ -22,6 +23,11 @@ import {
   ownAssociatedMethods,
   withAssociatedAdmissionPair,
 } from './associated-methods'
+import {
+  type AssociatedOperation,
+  type AssociatedOperatorContract,
+  resolveAssociatedOperation,
+} from './associated-operators'
 import { puritySatisfiesFunction } from './callable-effects'
 import { type CallableSignatureComparison, callableSignatureOf, compareCallableSignatures } from './callable-signatures'
 import { failureContractSatisfiesBound } from './failure-contracts'
@@ -42,7 +48,7 @@ export type TaoType =
     /** A transported bounded contract specializes Self to this supplied invocation domain. */
     genericReceiver?: TaoType
     /** Contextual Self retains the real defining owner until receiver specialization. */
-    selfOwner?: AST.TypeDeclaration
+    selfOwner?: AssociatedCallableOwner
   }>
   & (
     | {
@@ -124,6 +130,12 @@ type AnyTypeReference = AST.TypeReference | AST.ConstructablePrimitiveTypeRefere
 
 /** Type exposes static Tao type resolution and compatibility helpers. */
 export class Type {
+  static ofAssociatedOwner(owner: AssociatedCallableOwner): TaoType {
+    return AST.isPrimitiveDeclaration(owner) ? primitiveType(owner.name) : Type.ofDefinition(owner)
+  }
+  static associatedOperation(expression: AssociatedOperation) {
+    return new TypeResolutionContext().associatedOperation(expression)
+  }
   static ownAssociatedConverters(owner: AST.TypeDeclaration) {
     return ownAssociatedConverters(owner)
   }
@@ -202,8 +214,9 @@ export class Type {
     })
   }
 
-  static definitionName(type: AST.TypeDefinition): string {
+  static definitionName(type: AST.TypeDefinition | AST.PrimitiveDeclaration): string {
     return Switch.type(type, {
+      PrimitiveDeclaration: declaration => declaration.name,
       TypeDeclaration: declaration => declaration.name,
       TypeProperty: property => {
         const owner = owningTypePropertyDefinition(property)
@@ -341,6 +354,8 @@ export class Type {
         resolution.ofContextualValue(reference.target.ref, reference),
       atMemberPath: (root: TaoType, members: readonly string[]) => resolution.atMemberPath(root, members),
       receiverType: (receiver: AssociatedMethodReceiver) => resolution.receiverType(receiver),
+      associatedOperation: (expression: AssociatedOperation) => resolution.associatedOperation(expression),
+      ofAssociatedOwner: (owner: AssociatedCallableOwner) => resolution.ofAssociatedOwner(owner),
       associatedMethodDeclaration: (receiver: TaoType, name: string, dispatch?: AssociatedMethodDispatch) =>
         Type.associatedMethodDeclaration(
           receiver,
@@ -446,34 +461,9 @@ export class Type {
   /** Declared materialization precedes effect-dependent admission and never selects a witness. */
   static associatedCallable(
     declaration: AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration,
-    owner: AST.TypeDeclaration,
+    owner: AssociatedCallableOwner,
   ): AssociatedDescriptorMaterialization {
-    const resolution = new TypeResolutionContext()
-    return materializeAssociatedCallable(declaration, owner, {
-      receiver: receiverOwner => resolution.ofDefinition(receiverOwner),
-      signature: callable =>
-        callableSignatureOf(
-          callable.parameterList.parameters,
-          { cases: [], open: callable.failureBound !== 'never' },
-          {
-            inputDomain: parameter => {
-              const inline = parameter.inlineType
-              if (inline && !AST.isNamedTypeReference(inline.type)) {
-                const underlying = resolution.ofTypeExpression(inline.type)
-                if (underlying.kind === 'primitive' || underlying.kind === 'list') {
-                  return inline.optional ? { kind: 'union', members: [underlying, Type.ofNone()] } : underlying
-                }
-              }
-              return resolution.ofParameter(parameter)
-            },
-            accepts: (actual, expected) => isPrimitiveNamed(actual, 'none') && containsNoneDomain(expected),
-          },
-        ),
-      result: callable =>
-        AST.isCapabilityMethodDeclaration(callable)
-          ? resolution.ofTypeExpression(callable.returnType)
-          : resolution.ofFunctionReturn(callable),
-    })
+    return associatedCallableInContext(declaration, owner, new TypeResolutionContext())
   }
 
   /** ofConstructorReference resolves a typed constructor's type prefix. */
@@ -1594,7 +1584,7 @@ function contextualGenericParameter(node: AST.Node, name: string): AST.GenericTy
   return undefined
 }
 
-function contextualTypeOwner(node: AST.Node): AST.TypeDeclaration | undefined {
+function contextualTypeOwner(node: AST.Node): AssociatedCallableOwner | undefined {
   let current: AST.Node | undefined = node.$container
   while (current) {
     if (AST.isAssociatedFunctionDeclaration(current)) {
@@ -1609,6 +1599,36 @@ function contextualTypeOwner(node: AST.Node): AST.TypeDeclaration | undefined {
   return undefined
 }
 
+function associatedInputDomain(parameter: AST.ParameterDeclaration, resolution: TypeResolutionContext): TaoType {
+  const inline = parameter.inlineType
+  if (inline && !AST.isNamedTypeReference(inline.type)) {
+    const underlying = resolution.ofTypeExpression(inline.type)
+    if (underlying.kind === 'primitive' || underlying.kind === 'list') {
+      return inline.optional ? { kind: 'union', members: [underlying, Type.ofNone()] } : underlying
+    }
+  }
+  return resolution.ofParameter(parameter)
+}
+
+function associatedCallableInContext(
+  declaration: AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration,
+  owner: AssociatedCallableOwner,
+  resolution: TypeResolutionContext,
+): AssociatedDescriptorMaterialization {
+  return materializeAssociatedCallable(declaration, owner, {
+    receiver: receiverOwner => resolution.ofAssociatedOwner(receiverOwner),
+    signature: callable =>
+      callableSignatureOf(callable.parameterList.parameters, { cases: [], open: callable.failureBound !== 'never' }, {
+        inputDomain: parameter => associatedInputDomain(parameter, resolution),
+        accepts: (actual, expected) => isPrimitiveNamed(actual, 'none') && containsNoneDomain(expected),
+      }),
+    result: callable =>
+      AST.isCapabilityMethodDeclaration(callable)
+        ? resolution.ofTypeExpression(callable.returnType)
+        : resolution.ofFunctionReturn(callable),
+  })
+}
+
 class TypeResolutionContext {
   /** resolving holds what this context is already resolving, so a declaration that reaches itself
    * resolves to unresolved instead of recursing forever. */
@@ -1621,6 +1641,81 @@ class TypeResolutionContext {
       AssociatedDescriptorMaterialization
     >,
   ) {}
+
+  ofAssociatedOwner(owner: AssociatedCallableOwner): TaoType {
+    return AST.isPrimitiveDeclaration(owner) ? primitiveType(owner.name) : this.ofDefinition(owner)
+  }
+
+  associatedOperation(expression: AssociatedOperation) {
+    return resolveAssociatedOperation(expression, {
+      ofExpression: operand => this.ofExpression(operand),
+      contracts: (operands, operator) => this.associatedOperatorContracts(operands, operator, expression),
+      accepts: (actual, expected) => this.compareDomains(actual, expected, false) === 'compatible',
+    })
+  }
+
+  private associatedOperatorContracts(
+    operands: readonly TaoType[],
+    operator: string,
+    site: AST.Node,
+  ): readonly AssociatedOperatorContract[] {
+    const primitives = AST.visibleFileDeclarations(site, AST.isPrimitiveDeclaration, declaration => declaration.name)
+    const receiverDeclarations = new Set<AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration>()
+    const declarations = operands.flatMap((receiver, index) => {
+      const nominal = nominalOf(receiver)
+      const discovered: (AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration)[] = [
+        ...(receiver.kind === 'capability' || receiver.genericParameter
+          ? Type.aggregateCapabilityRequirements(receiver)
+          : []),
+        ...(nominal
+          ? nominalChain(nominal, reference => this.definitionOfReference(reference))
+            .flatMap(owner => AST.isTypeDeclaration(owner) ? ownAssociatedMethods(owner) : [])
+          : []),
+      ]
+      if (!receiver.genericParameter && receiver.kind === 'primitive') {
+        let primitive = primitives.find(declaration => declaration.name === receiver.primitive)
+        const seen = new Set<AST.PrimitiveDeclaration>()
+        while (primitive && !seen.has(primitive)) {
+          seen.add(primitive)
+          discovered.push(...ownAssociatedMethods(primitive))
+          const parent = primitive.base
+          primitive = parent ? primitives.find(declaration => declaration.name === parent) : undefined
+        }
+      }
+      if (index === 0) {
+        discovered.forEach(declaration => receiverDeclarations.add(declaration))
+      }
+      return discovered
+    })
+    const visibleOwners = [
+      ...AST.visibleFileDeclarations(site, AST.isTypeDeclaration, declaration => declaration.name),
+      ...primitives,
+    ]
+    declarations.push(...visibleOwners.flatMap(owner => ownAssociatedMethods(owner).filter(method => method.static)))
+    return [...new Set(declarations)].filter(declaration => declaration.name === operator).flatMap(declaration => {
+      const owner = AST.isAssociatedFunctionDeclaration(declaration)
+        ? AST.associatedFunctionOwner(declaration)
+        : contextualTypeOwner(declaration.returnType)
+      if (!owner) {
+        return []
+      }
+      const descriptor = associatedCallableDescriptor(declaration)
+      const contract: AssociatedDescriptorMaterialization = this.descriptors
+        ? this.descriptors.get(declaration) ?? { kind: 'pending', dependencies: [declaration] }
+        : hasAssociatedEffects()
+        ? descriptor ? { kind: 'ready', descriptor } : { kind: 'pending', dependencies: [declaration] }
+        : associatedCallableInContext(declaration, owner, this)
+      return [{
+        declaration,
+        owner,
+        contract,
+        receiverEligible: receiverDeclarations.has(declaration),
+        inputTypes: contract.kind === 'pending'
+          ? AST.parametersOf(declaration).map(parameter => associatedInputDomain(parameter, this))
+          : undefined,
+      }]
+    })
+  }
 
   compare(actual: TaoType, expected: TaoType): 'compatible' | 'incompatible' | 'pending' {
     return this.compareDomains(actual, expected, true)
@@ -1831,7 +1926,10 @@ class TypeResolutionContext {
         if (reference.root === 'Self' || reference.root === 'type') {
           const owner = contextualTypeOwner(reference)
           return owner
-            ? this.atMemberPath(Object.freeze({ ...this.ofDefinition(owner), selfOwner: owner }), reference.members)
+            ? this.atMemberPath(
+              Object.freeze({ ...this.ofAssociatedOwner(owner), selfOwner: owner }),
+              reference.members,
+            )
             : unresolvedType()
         }
         const generic = contextualGenericParameter(reference, reference.root)
@@ -1985,7 +2083,23 @@ class TypeResolutionContext {
 
   /** Negating a unit value keeps its family; every other unary result is fixed by its operator. */
   private unaryExpressionType(expression: AST.UnaryExpression): TaoType {
+    if (expression.operator !== 'not') {
+      const operation = this.associatedOperation(expression)
+      if (!operation.problem) {
+        return operation.result
+      }
+      if (
+        operation.problem === 'pending-contract' || operation.problem === 'ambiguous-operator'
+        || operation.problem === 'unresolved-operand'
+        || operation.operandTypes.some(type => nominalOf(type) || type.genericParameter || type.kind === 'capability')
+      ) {
+        return unresolvedType()
+      }
+    }
     const operand = this.ofExpression(expression.operand)
+    if (operand.kind === 'unresolved') {
+      return unresolvedType()
+    }
     if (containsNumericStorage(operand)) {
       return unresolvedType()
     }
@@ -1996,8 +2110,24 @@ class TypeResolutionContext {
   }
 
   private binaryExpressionType(expression: AST.BinaryExpression): TaoType {
+    if (expression.operator !== 'and' && expression.operator !== 'or') {
+      const operation = this.associatedOperation(expression)
+      if (!operation.problem) {
+        return operation.result
+      }
+      if (
+        operation.problem === 'pending-contract' || operation.problem === 'ambiguous-operator'
+        || operation.problem === 'unresolved-operand'
+        || operation.operandTypes.some(type => nominalOf(type) || type.genericParameter || type.kind === 'capability')
+      ) {
+        return unresolvedType()
+      }
+    }
     const left = this.ofExpression(expression.left)
     const right = this.ofExpression(expression.right)
+    if (left.kind === 'unresolved' || right.kind === 'unresolved') {
+      return unresolvedType()
+    }
     if (containsNumericStorage(left) || containsNumericStorage(right)) {
       return unresolvedType()
     }
@@ -2452,7 +2582,7 @@ function actionType(parameters: readonly TaoActionParameter[]): TaoType {
   return { kind: 'primitive', primitive: 'action', parameters }
 }
 
-function definitionIdentityName(type: AST.TypeDefinition): string {
+function definitionIdentityName(type: AST.TypeDefinition | AST.PrimitiveDeclaration): string {
   return `${AST.getDocument(type).uri.path}#${Type.definitionName(type)}`
 }
 

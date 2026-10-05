@@ -164,6 +164,10 @@ export const ExpressionsCompiler = {
 
   /** BinaryExpression delegates Tao operator semantics to the runtime. */
   BinaryExpression(expression: AST.BinaryExpression): Compiled {
+    const associated = compileAssociatedOperation(expression)
+    if (associated) {
+      return associated
+    }
     const calendar = compileCalendarArithmetic(expression)
     if (calendar) {
       return calendar
@@ -175,6 +179,10 @@ export const ExpressionsCompiler = {
 
   /** UnaryExpression delegates Tao unary semantics to the runtime. */
   UnaryExpression(expression: AST.UnaryExpression): Compiled {
+    const associated = compileAssociatedOperation(expression)
+    if (associated) {
+      return associated
+    }
     return gen`TR.Unary(${gen.jsLiteral(expression.operator)}, ${Compile.Expression(expression.operand)})`
   },
 
@@ -509,6 +517,39 @@ export const ExpressionsCompiler = {
     return compileNavigationDescriptor(view)
   },
 } as const
+
+/** Selected operators call the real ordered contract before any built-in runtime leaf. */
+function compileAssociatedOperation(expression: AST.BinaryExpression | AST.UnaryExpression): Compiled | undefined {
+  const resolved = Type.associatedOperation(expression)
+  if (resolved.problem) {
+    const builtIn = resolved.problem === 'unsupported-operator'
+      || (resolved.problem === 'missing-operator' && Type.ofExpression(expression).kind !== 'unresolved')
+    Assert(builtIn, 'a validated operation has one authored contract or a resolved built-in domain')
+    return undefined
+  }
+  Assert.defined(resolved.descriptor, 'a selected operation retains its defining callable')
+  const descriptor = resolved.descriptor
+  const receiverType = resolved.operandTypes[0]!
+  const capability = resolved.dispatch === 'instance'
+    && (receiverType.kind === 'capability' || !!receiverType.genericParameter)
+  const rebindSelf = capability && !!receiverType.genericParameter
+    && descriptor.result.genericParameter === receiverType.genericParameter
+  const receiver = resolved.receiver ? Compile.Expression(resolved.receiver) : undefined
+  const callable = capability
+    ? gen`TR.Capability.method(${rebindSelf ? gen`_TaoGenericReceiver` : gen`${receiver}.evaluate()`}, ${
+      gen.jsLiteral(descriptor.declaration.name)
+    })`
+    : compileAssociatedWitness(descriptor)
+  const call = gen`TR.Call(${callable}${
+    resolved.dispatch === 'instance' && !capability ? gen`, ${receiver}` : gen.noop()
+  }${gen.join(resolved.pairs, pair => gen`, ${compileArgumentForType(pair.operand, pair.type)}`, { separator: '' })})`
+  return rebindSelf
+    ? gen`(() => {
+      const _TaoGenericReceiver = ${receiver}.evaluate()
+      return TR.Capability.rebind(_TaoGenericReceiver, ${call})
+    })()`
+    : call
+}
 
 /**
  * A `color` value is the design color's name, never its hex: the mounted design resolves it at render,

@@ -7,11 +7,12 @@ import { compileAssociatedConverterDeclaration } from './associated-converters'
 import { compileArgumentForType } from './capability-projection'
 import { compileRuntimeType } from './runtime-type-compiler'
 
-let witnessBindings: ReadonlyMap<AST.TypeDeclaration, string> = new Map()
+type AssociatedOwner = ASTUtils.AssociatedCallableDescriptor['owner']
+let witnessBindings: ReadonlyMap<AssociatedOwner, string> = new Map()
 
 /** The module planner supplies collision-safe declaration bindings, including imported aliases. */
 export function withAssociatedWitnessBindings<T>(
-  bindings: ReadonlyMap<AST.TypeDeclaration, string>,
+  bindings: ReadonlyMap<AssociatedOwner, string>,
   compile: () => T,
 ): T {
   const previous = witnessBindings
@@ -23,16 +24,17 @@ export function withAssociatedWitnessBindings<T>(
   }
 }
 
-export function associatedWitnessBinding(owner: AST.TypeDeclaration): Compiled {
+export function associatedWitnessBinding(owner: AssociatedOwner): Compiled {
   const binding = witnessBindings.get(owner)
   Assert(binding, 'Expected a module-planned associated method witness binding.')
   return gen.Name({ name: binding })
 }
 
 /** Each owner exports one module-local method witness; there is no runtime nominal registry. */
-export function AssociatedMethodsDeclaration(owner: AST.TypeDeclaration): Compiled {
-  const type = Type.ofDefinition(owner)
+export function AssociatedMethodsDeclaration(owner: AssociatedOwner): Compiled {
+  const type = Type.ofAssociatedOwner(owner)
   if (type.kind === 'capability') {
+    Assert(AST.isTypeDeclaration(owner), 'capability requirements have a real type declaration owner')
     return gen`const ${associatedWitnessBinding(owner)} = {
       defaults: {
         ${
@@ -57,21 +59,32 @@ export function AssociatedMethodsDeclaration(owner: AST.TypeDeclaration): Compil
   }
   Assert(type.kind !== 'unresolved', 'Expected a resolved concrete associated owner.')
   return gen`const ${associatedWitnessBinding(owner)} = {
-      "$converters": [${gen.join(Type.ownAssociatedConverters(owner), compileAssociatedConverterDeclaration)}],
+      "$converters": [${
+    gen.join(
+      AST.isTypeDeclaration(owner) ? Type.ownAssociatedConverters(owner) : [],
+      compileAssociatedConverterDeclaration,
+    )
+  }],
+      "$operators": [${
+    gen.join(ASTUtils.ownAssociatedMethods(owner).filter(isAssociatedOperator), Compile.AssociatedFunctionDeclaration)
+  }],
       ${
-    gen.list(ASTUtils.ownAssociatedMethods(owner), method =>
-      gen`[${gen.jsLiteral(method.name)}]: ${Compile.AssociatedFunctionDeclaration(method)},`)
+    gen.list(
+      ASTUtils.ownAssociatedMethods(owner).filter(method => !isAssociatedOperator(method)),
+      method => gen`[${gen.jsLiteral(method.name)}]: ${Compile.AssociatedFunctionDeclaration(method)},`,
+    )
   }
     }`
 }
 
 /** Requirements publish only lexical default thunks; implementation owners publish method witnesses. */
-export function hasAssociatedWitnessPublication(owner: AST.TypeDeclaration): boolean {
+export function hasAssociatedWitnessPublication(owner: AssociatedOwner): boolean {
   return ASTUtils.ownAssociatedMethods(owner).length > 0
-    || Type.ownAssociatedConverters(owner).length > 0
-    || ASTUtils.capabilityRequirements(owner).some(method =>
-      AST.parametersOf(method).some(parameter => parameter.defaultValue !== undefined)
-    )
+    || (AST.isTypeDeclaration(owner) && Type.ownAssociatedConverters(owner).length > 0)
+    || (AST.isTypeDeclaration(owner)
+      && ASTUtils.capabilityRequirements(owner).some(method =>
+        AST.parametersOf(method).some(parameter => parameter.defaultValue !== undefined)
+      ))
 }
 
 export function compileCapabilityDefault(descriptor: ASTUtils.AssociatedCallableDescriptor, index: number): Compiled {
@@ -88,7 +101,7 @@ export function AssociatedFunctionDeclaration(method: AST.AssociatedFunctionDecl
   return gen`TR.Function((${
     method.static
       ? gen.join(parameters, Compile.FunctionRuntimeParameter)
-      : gen`_TaoAssociatedReceiver: ${compileRuntimeType(Type.ofDefinition(owner))}${
+      : gen`_TaoAssociatedReceiver: ${compileRuntimeType(Type.ofAssociatedOwner(owner))}${
         parameters.length ? gen`, ${gen.join(parameters, Compile.FunctionRuntimeParameter)}` : gen.noop()
       }`
   }) => {
@@ -104,5 +117,16 @@ export function AssociatedFunctionDeclaration(method: AST.AssociatedFunctionDecl
 export function compileAssociatedWitness(
   descriptor: ASTUtils.AssociatedCallableDescriptor,
 ): Compiled {
+  if (AST.isAssociatedFunctionDeclaration(descriptor.declaration) && isAssociatedOperator(descriptor.declaration)) {
+    const index = ASTUtils.ownAssociatedMethods(descriptor.owner).filter(isAssociatedOperator).indexOf(
+      descriptor.declaration,
+    )
+    Assert(index >= 0, 'the selected operator belongs to its actual publication owner')
+    return gen`${associatedWitnessBinding(descriptor.owner)}["$operators"][${index}]`
+  }
   return gen`${associatedWitnessBinding(descriptor.owner)}[${gen.jsLiteral(descriptor.declaration.name)}]`
+}
+
+function isAssociatedOperator(method: AST.AssociatedFunctionDeclaration): boolean {
+  return ['+', '-', '*', '/', '==', '!=', '<', '<=', '>', '>='].includes(method.name)
 }

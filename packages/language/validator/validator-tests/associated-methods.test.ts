@@ -150,12 +150,11 @@ Describe('validator: associated declaration boundaries', () => {
   )
 
   Test(
-    'rejects unsupported owner families before replacing an existing runtime surface',
-    rejects(
+    'accepts associated methods on a numeric owner',
+    accepts(
       `
     type Count is number with { func ToText() -> text { return "count" } }
   `,
-      messages.family,
     ),
   )
 

@@ -4,10 +4,12 @@ import type { CallableAnalysis } from './callable-effects'
 import type { CallableSignature } from './callable-signatures'
 import type { TaoType } from './Type'
 
+export type AssociatedCallableOwner = AST.TypeDeclaration | AST.PrimitiveDeclaration
+
 /** Declared callable contracts are resolved before effect discovery or structural admission. */
 export type AssociatedCallableDescriptor = Readonly<{
   declaration: AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration
-  owner: AST.TypeDeclaration
+  owner: AssociatedCallableOwner
   /** The owner body sees this domain; an inherited method retains its original owner. */
   receiver: TaoType
   signature: CallableSignature
@@ -143,7 +145,7 @@ export function associatedMethodCallTarget(call: AST.MethodCallExpression): Asso
 }
 
 export type AssociatedDescriptorResolver = Readonly<{
-  receiver(owner: AST.TypeDeclaration): TaoType
+  receiver(owner: AssociatedCallableOwner): TaoType
   signature(declaration: AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration): CallableSignature
   result(declaration: AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration): TaoType
 }>
@@ -155,7 +157,7 @@ export type AssociatedDescriptorMaterialization =
 /** Materialization does no matching, effect analysis, or provisional structural admission. */
 export function materializeAssociatedCallable(
   declaration: AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration,
-  owner: AST.TypeDeclaration,
+  owner: AssociatedCallableOwner,
   resolver: AssociatedDescriptorResolver,
 ): AssociatedDescriptorMaterialization {
   const descriptor: AssociatedCallableDescriptor = Object.freeze({
@@ -175,7 +177,10 @@ export function materializeAssociatedCallable(
 }
 
 /** Own members remain separate from record properties and numeric construction members. */
-export function ownAssociatedMethods(owner: AST.TypeDeclaration): readonly AST.AssociatedFunctionDeclaration[] {
+export function ownAssociatedMethods(owner: AssociatedCallableOwner): readonly AST.AssociatedFunctionDeclaration[] {
+  if (AST.isPrimitiveDeclaration(owner)) {
+    return owner.slots?.methods ?? []
+  }
   const type = owner.type
   const slots = type && AST.isDerivedTypeExpression(type)
     ? type.slots

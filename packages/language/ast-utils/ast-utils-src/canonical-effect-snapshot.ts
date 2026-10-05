@@ -5,6 +5,7 @@ import { associatedConverterDescriptor, resolveAssociatedConversion } from './as
 import { resolveAssociatedMethodInvocation } from './associated-invocations'
 import {
   type AssociatedCallableDescriptor,
+  type AssociatedCallableOwner,
   type AssociatedDescriptorMaterialization,
   associatedMethodCallTarget,
   type AssociatedMethodReceiver,
@@ -27,7 +28,7 @@ type PublicationStatus =
 /** Source bodies remain real execution witnesses; their contracts are not purity promises. */
 export type CanonicalCallableDescriptor = Readonly<{
   declaration: SourceCallable
-  owner?: AST.TypeDeclaration
+  owner?: AssociatedCallableOwner
   parameters: readonly AST.ParameterDeclaration[]
   body?: AST.Node
   kind: 'source' | 'requirement' | 'opaque'
@@ -75,7 +76,7 @@ export type CanonicalReadPublication =
       }>
       | Readonly<{
         kind: 'static-method-selection'
-        owner: AST.TypeDeclaration
+        owner: AssociatedCallableOwner
         declaration: AssociatedDeclaration
         receiver: AST.Expression
       }>
@@ -120,12 +121,15 @@ export function publishCanonicalEffectSnapshot(
   Assert(!hasAssociatedEffects(), 'canonical source publication precedes final admission')
   const nodes = inventoryNodes(files, evidence)
   const associated = new Map<AssociatedDeclaration, AssociatedDescriptorMaterialization>()
-  const associatedOwners = new Map<AssociatedDeclaration, AST.TypeDeclaration>()
+  const associatedOwners = new Map<AssociatedDeclaration, AssociatedCallableOwner>()
   for (const node of nodes) {
-    if (!AST.isTypeDeclaration(node)) {
+    if (!AST.isTypeDeclaration(node) && !AST.isPrimitiveDeclaration(node)) {
       continue
     }
-    for (const declaration of [...ownAssociatedMethods(node), ...capabilityRequirements(node)]) {
+    const declarations = AST.isTypeDeclaration(node)
+      ? [...ownAssociatedMethods(node), ...capabilityRequirements(node)]
+      : ownAssociatedMethods(node)
+    for (const declaration of declarations) {
       associated.set(declaration, sealAssociated(Type.associatedCallable(declaration, node)))
       associatedOwners.set(declaration, node)
     }
