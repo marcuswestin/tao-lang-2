@@ -383,6 +383,28 @@ class TR {
     return matched ? matched.result : otherwise()
   }
 
+  /** Render when captures all matches before bodies; case keys preserve each branch's occurrence. */
+  static WhenAllRender(
+    subject: TR.Evaluable,
+    branches: readonly TR.CaseBranch<React.ReactNode>[],
+    otherwise?: () => React.ReactNode,
+  ): React.ReactNode {
+    return renderMatchedBranches(subject.evaluate().jsValue, branches, otherwise)
+  }
+
+  /** Predicate render when evaluates every condition before rendering any selected body. */
+  static WhenPredicatesRender(
+    branches: readonly (readonly [() => TR.Evaluable, () => React.ReactNode])[],
+    otherwise?: () => React.ReactNode,
+  ): React.ReactNode {
+    const selected = branches.flatMap(([condition, body], index) =>
+      condition().evaluate().jsValue === true ? [{ index, body }] : []
+    )
+    return selected.length === 0
+      ? otherwise?.()
+      : selected.map(({ index, body }) => createElement(React.Fragment, { key: index }, body()))
+  }
+
   /** WhenAll captures one observation and every match before joining all selected action bodies. */
   static WhenAll(
     subject: TR.Evaluable,
@@ -471,6 +493,9 @@ class TR {
         )
         : context
       return handler ? handler(payload) : renderReadNet(status, context, siteProps)
+    }
+    if (legacyPayload) {
+      return renderMatchedBranches(value, branches, remaining)
     }
     const matched = firstMatchedBranch(value, branches)
     if (matched) {
@@ -1823,6 +1848,20 @@ function firstMatchedBranch<ResultT>(
     }
   }
   return undefined
+}
+
+function renderMatchedBranches(
+  value: unknown,
+  branches: readonly TR.CaseBranch<React.ReactNode>[],
+  otherwise?: () => React.ReactNode,
+): React.ReactNode {
+  const selected = branches.flatMap(([caseName, body]) => {
+    const match = matchSubjectCase(value, caseName)
+    return match.matched ? [{ caseName, body, payload: TR.Value(match.payload) }] : []
+  })
+  return selected.length === 0
+    ? otherwise?.()
+    : selected.map(({ caseName, body, payload }) => createElement(React.Fragment, { key: caseName }, body(payload)))
 }
 
 type SubjectCaseMatch = { matched: boolean; payload: unknown }

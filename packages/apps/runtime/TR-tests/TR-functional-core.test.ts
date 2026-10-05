@@ -1,11 +1,41 @@
 import TR from '@runtime/TR'
 import { Deferred, Describe, Expect, Test } from '@shared/test'
+import React from 'react'
 
 function identity(name: string): TR.DeclarationIdentity {
   return TR.Navigation.Identity(['tao.declaration', 1, 'tests', '@workspace', 'FunctionalCore', 'enum', name])
 }
 
 Describe('TR functional core', () => {
+  Test('render when captures every predicate before bodies and preserves source branch keys', () => {
+    let current = true
+    let reads = 0
+    const condition = () => {
+      reads += 1
+      return TR.Value(current)
+    }
+    const rendered = TR.WhenPredicatesRender([
+      [condition, () => {
+        current = false
+        return 'first'
+      }],
+      [condition, () => 'second'],
+    ], () => 'unexpected fallback')
+    const children = React.Children.toArray(rendered)
+    Expect(reads).toBe(2)
+    Expect(children.map(child => React.isValidElement<{ children: string }>(child) ? child.props.children : child))
+      .toEqual(['first', 'second'])
+    Expect(children.map(child => React.isValidElement(child) ? child.key : undefined)).toEqual(['.$0', '.$1'])
+    Expect(TR.WhenPredicatesRender([[condition, () => 'unexpected body']], () => 'fallback')).toBe('fallback')
+    const subject = TR.Value(false)
+    const selected = React.Children.toArray(TR.WhenAllRender(subject, [
+      ['true', () => 'unexpected true'],
+      ['false', () => 'false body'],
+    ]))
+    Expect(selected).toHaveLength(1)
+    Expect(React.isValidElement(selected[0]) ? selected[0].key : undefined).toBe('.$false')
+  })
+
   Test('action when captures the subject before effects and joins a suspended selected body', async () => {
     const gate = Deferred()
     const started = Deferred()
