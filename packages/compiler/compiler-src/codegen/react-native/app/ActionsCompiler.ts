@@ -16,6 +16,7 @@ import { compileArgumentForType } from './capability-projection'
 import { compileDeclarationIdentity, declarationModuleName } from './declaration-identity'
 import { foreignActionBindingName } from './injection-plan'
 import { compileReactiveArgument, compileWritableTarget } from './reactive-parameters'
+import { compileRuntimeType } from './runtime-type-compiler'
 
 type ActionParameter = {
   index: number
@@ -48,6 +49,37 @@ export const ActionsCompiler = {
       })
     `,
     )
+  },
+
+  /** AssociatedActionDeclaration publishes one entity-bound factory for a source action. */
+  AssociatedActionDeclaration(action: AST.ActionDeclaration): Compiled {
+    const associated = AST.associatedEntityActionReceiver(action)
+    Assert.defined(associated, 'associated action factory has an entity receiver declaration')
+    Assert(!action.foreign, 'associated action factory handles source actions only')
+    Assert.defined(action.block, 'source associated action has a body')
+
+    const ownerType = Type.ofAssociatedOwner(associated.owner)
+    const domainType = associated.cardinality === 'many'
+      ? { kind: 'list' as const, element: ownerType }
+      : ownerType
+    const parameters = actionParameters(action)
+    const asyncKeyword = actionBlockRequiresAsync(action.block) ? gen`async ` : gen``
+    const interrupt = actionBlockInterruptsAsk(action.block)
+    const bindings = gen`
+      ${gen.scopeName(associated.owner)} = _TaoAssociatedReceiver
+      ${gen.list(parameters, Compile.ActionParameterBinding)}
+    `
+
+    return gen`(
+      _TaoAssociatedReceiver: ${compileRuntimeType(domainType)},
+      options: NonNullable<Parameters<typeof TR.Action>[1]> = {},
+    ) => TR.Action(${asyncKeyword}(${gen.join(parameters, Compile.ActionRuntimeParameter)}) => {
+      return ${Compile.ActionScopedBlock(action.block, bindings)}
+    }, {
+      ...options,
+      name: ${gen.jsLiteral(action.name)},
+      interrupt: ${interrupt},
+    })`
   },
 
   /**
@@ -196,7 +228,38 @@ export const ActionsCompiler = {
       ToggleStatement: Compile.ToggleStatement,
       UpdateStatement: Compile.UpdateStatement,
       FailStatement: Compile.FailStatement,
+      ForStatement: Compile.ActionForStatement,
     })
+  },
+
+  /** ActionForStatement snapshots collection membership and joins each lexical iteration frame. */
+  ActionForStatement(statement: AST.ForStatement): Compiled {
+    Assert.is(statement.block, AST.isActionBlock, 'action loop owns an action block')
+    const block = statement.block
+    const owner = AST.findOwningAction(statement)
+    const hasSourceReturn = owner && AST.isActionDeclaration(owner)
+      ? ASTUtils.sourceActionResult(owner, value => value).some(({ statement: result }) =>
+        isWithinStatement(result, statement)
+      )
+      : false
+    const returnGuard = hasSourceReturn
+      ? gen`if (_TaoSourceReturn.returned) return _TaoSourceReturn.value;`
+      : gen.noop()
+    const awaitBlock = actionBlockRequiresAsync(block) ? gen`await ` : gen``
+    return gen`{
+      const _TaoActionLoopCollection = ${Compile.Expression(statement.collection)}.evaluate().jsValue
+      if (Array.isArray(_TaoActionLoopCollection)) {
+        for (const _TaoActionLoopItem of [..._TaoActionLoopCollection]) {
+          ${awaitBlock}${
+      Compile.ActionScopedBlock(
+        block,
+        gen`${gen.scopeName(statement)} = TR.Value(_TaoActionLoopItem)`,
+      )
+    }
+          ${returnGuard}
+        }
+      }
+    }`
   },
 
   /** ActionScopedBlock returns the completion of one lexical action frame and its local bindings. */

@@ -48,6 +48,9 @@ export function actionBlockRequiresAsync(
         ? actionBlockRequiresAsync(statement.block, seen)
         : statement.invocation === undefined || actionInvocationRequiresAsync(statement.invocation, seen)
     }
+    if (AST.isForStatement(statement)) {
+      return AST.isActionBlock(statement.block) && actionBlockRequiresAsync(statement.block, seen)
+    }
     return AST.isDoStatement(statement)
       && (statement.then || actionInvocationRequiresAsync(statement, seen))
   }) ?? false
@@ -125,6 +128,9 @@ export function actionBlockInterruptsAsk(
     if (AST.isWhenActionStatement(statement)) {
       return statement.branches.some(branch => actionBlockInterruptsAsk(branch.block, seen))
         || (statement.otherwise !== undefined && actionBlockInterruptsAsk(statement.otherwise.block, seen))
+    }
+    if (AST.isForStatement(statement)) {
+      return AST.isActionBlock(statement.block) && actionBlockInterruptsAsk(statement.block, seen)
     }
     return false
   }) ?? false
