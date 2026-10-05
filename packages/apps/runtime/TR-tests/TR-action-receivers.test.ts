@@ -87,7 +87,6 @@ Describe('associated action receiver capture', () => {
         reads += 1
         return evaluated
       },
-      jsValue: item,
     }, 'one')
     Expect(one.getJSValue()).toEqual(item)
     Expect(one.evaluate()).toBe(one)

@@ -62,7 +62,7 @@ export function createCapabilityRuntime(functionFactory: typeof TR.Function) {
     return carrier
   }
 
-  function metadata(carrier: TaoCapability): CapabilityMetadata {
+  function metadata(carrier: object): CapabilityMetadata {
     const selected = ownedCapabilities.get(carrier)
     RuntimeAssert.defined(selected, 'a capability constructed by the runtime')
     return selected
@@ -138,9 +138,9 @@ export function createCapabilityRuntime(functionFactory: typeof TR.Function) {
       return create(selected.source as TaoEvaluable<ValueT>, witnesses)
     },
 
-    /** Binding performs no reads; invocation supplies the exact original receiver before caller arguments. */
-    method(carrier: TaoCapability, requiredKey: string): TR.Function {
-      const selected = metadata(carrier)
+    /** Selects a wrapper once; direct carriers bind without reads and retain their exact concrete receiver. */
+    method(carrier: TaoEvaluable<unknown>, requiredKey: string): TR.Function {
+      const selected = ownedCapabilities.get(carrier) ?? metadata(carrier.evaluate())
       const implementation = witness(selected, requiredKey)
       return functionFactory((...args: TR.Evaluable[]) =>
         implementation.invoke(selected.source as TR.Evaluable, ...args)

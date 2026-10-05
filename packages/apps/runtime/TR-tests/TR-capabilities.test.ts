@@ -1,5 +1,6 @@
 import TR from '@runtime/TR'
-import { Describe, Expect, Test } from '@shared/test'
+import { CLI, FS, Platform, Repo } from '@shared'
+import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import type { TaoEvaluable } from '../TaoRuntime-src/TR-action-values'
 import { RuntimeAssert } from '../TaoRuntime-src/TR-assert'
 import type { TaoCapability } from '../TaoRuntime-src/TR-capabilities'
@@ -126,6 +127,124 @@ Describe('Capability witnesses', () => {
     Expect(() => capabilities.rebind(donor, counterfeit)).toThrow(UnexpectedBehaviorError)
     Expect(probes).toBe(0)
   })
+  Test('selects legitimate receiver facades once and retains the selected live concrete source', () => {
+    let current = 'Before'
+    let sourceReads = 0
+    const source: TaoEvaluable<string> = {
+      evaluate() {
+        sourceReads += 1
+        return TR.Value(current)
+      },
+    }
+    const carrier = capabilities.attach(source, {
+      display: TR.Function((receiver: TaoEvaluable<string>) => {
+        Expect(receiver).toBe(source)
+        return TR.Value(`Original:${getJSValue(receiver)}`)
+      }),
+    })
+    const replacement = capabilities.attach(TR.Value('Replacement'), {
+      display: TR.Function(() => TR.Value('Replacement')),
+    })
+    let selected = carrier
+    let selections = 0
+    let evaluationAccesses = 0
+    const receiver: TaoEvaluable<string> = {
+      get evaluate() {
+        evaluationAccesses += 1
+        return () => {
+          selections += 1
+          return selected
+        }
+      },
+    }
+    const legacy = capabilities.method(receiver, 'display')
+    const completed = capabilities.method(completeRuntimeValue(receiver), 'display')
+    const alias = capabilities.method(
+      TR.Alias(() => {
+        selections += 1
+        return selected
+      }),
+      'display',
+    )
+    Expect([sourceReads, selections, evaluationAccesses]).toEqual([0, 3, 2])
+    selected = replacement
+    current = 'After'
+    for (const held of [legacy, completed, alias]) {
+      Expect(TR.Call<string>(held).getJSValue()).toBe('Original:After')
+    }
+    Expect([sourceReads, selections, evaluationAccesses]).toEqual([3, 3, 2])
+    Expect(TR.Call<string>(capabilities.method(receiver, 'display')).getJSValue()).toBe('Replacement')
+    Expect(() => capabilities.method(TR.Value(carrier), 'display')).toThrow(UnexpectedBehaviorError)
+    Expect(() => capabilities.method({ evaluate: () => TR.Value('Wrong') }, 'display'))
+      .toThrow(UnexpectedBehaviorError)
+  })
+
+  Test('typechecks ordinary and complete receiver inputs through the real runtime graph', async () => {
+    await withTaoFiles('capability-receiver-inputs', {}, async (_, root) => {
+      const program = FS.resolvePath('Check.ts', root)
+      await FS.writeText(
+        program,
+        `
+        import TR from ${JSON.stringify(Repo.resolvePath('packages/apps/runtime/TaoRuntime-src/TR.ts'))}
+        import type { TaoEvaluable } from ${
+          JSON.stringify(Repo.resolvePath('packages/apps/runtime/TaoRuntime-src/TR-action-values.ts'))
+        }
+        import { completeRuntimeValue } from ${
+          JSON.stringify(Repo.resolvePath('packages/apps/runtime/TaoRuntime-src/TR-reactive-values.ts'))
+        }
+        import { RuntimeAssert } from ${
+          JSON.stringify(Repo.resolvePath('packages/apps/runtime/TaoRuntime-src/TR-assert.ts'))
+        }
+        const source = TR.Cell(TR.Value('Before'))
+        const carrier = TR.Capability.attach(source, {
+          display: TR.Function((receiver: TaoEvaluable<string>) => TR.Value(receiver.evaluate().jsValue))
+        })
+        const ordinary: TaoEvaluable<string> = { evaluate: () => carrier }
+        const complete = completeRuntimeValue(ordinary)
+        const held = [ordinary, complete, TR.Alias(() => carrier)]
+          .map(receiver => TR.Capability.method(receiver, 'display'))
+        source.set(TR.Value('After'))
+        if (held.some(method => TR.Call<string>(method).getJSValue() !== 'After')) throw new Error('live receiver lost')
+        const row = TR.Cell(TR.Value({ Content: 'Before' }))
+        const field = TR.Member(row, ['Content'])
+        RuntimeAssert.defined(field.set, 'a writable content field')
+        field.set(TR.Value('After'))
+        if (field.getJSValue() !== 'After') throw new Error('writable member lost')
+      `,
+      )
+      const config = FS.resolvePath('tsconfig.json', root)
+      await FS.writeJson(config, {
+        extends: Repo.resolvePath('packages/tsconfig.base.json'),
+        compilerOptions: {
+          allowImportingTsExtensions: true,
+          composite: false,
+          declaration: false,
+          incremental: false,
+          jsx: 'react-jsx',
+          lib: ['ES2023', 'DOM'],
+          noEmit: true,
+          rootDir: '/',
+          typeRoots: [Repo.resolvePath('node_modules/@types')],
+          types: ['bun', 'node'],
+        },
+        files: [program],
+        include: [],
+      })
+      const checked = await CLI.run(Platform.runtimeProcess.execPath, {
+        args: [Repo.resolvePath('node_modules/typescript-native/bin/tsc'), '--project', config],
+        processPolicy: 'test',
+      })
+      Expect({ exitCode: checked.exitCode, stdout: checked.stdout, stderr: checked.stderr })
+        .toEqual({ exitCode: 0, stdout: '', stderr: '' })
+      const executed = await CLI.run(Platform.runtimeProcess.execPath, {
+        args: [program],
+        cwd: root,
+        processPolicy: 'test',
+      })
+      Expect({ exitCode: executed.exitCode, stdout: executed.stdout, stderr: executed.stderr })
+        .toEqual({ exitCode: 0, stdout: '', stderr: '' })
+    })
+  })
 
   Test('keeps receiver backing private so public property writes cannot diverge from selected witnesses', () => {
     const source = TR.Cell(TR.Value('Original'))
@@ -219,7 +338,7 @@ Describe('Capability witnesses', () => {
     Expect(completeRuntimeValue(projected)).toBe(projected)
     Expect(TR.Call<string>(relay, carrier)).toBe(carrier)
     Expect(returned).toBe(projected)
-    const held = capabilities.method(returned as TaoCapability<string>, 'text')
+    const held = capabilities.method(returned, 'text')
     Expect(TR.Call<string>(held, TR.Value('!')).getJSValue()).toBe('Token:Before!')
     source.set(TR.Value('After'))
     Expect(TR.Call<string>(held, TR.Value('?')).getJSValue()).toBe('Token:After?')
@@ -267,7 +386,7 @@ Describe('Capability witnesses', () => {
     Expect(TR.Call<string>(returnedFunction as TR.Function).getJSValue()).toBe('Nested')
     const returnedCapability = TR.Call<string>(capabilities.method(outer, 'capability'))
     Expect(returnedCapability).toBe(inner)
-    Expect(TR.Call<string>(capabilities.method(returnedCapability as TaoCapability<string>, 'display')).getJSValue())
+    Expect(TR.Call<string>(capabilities.method(returnedCapability, 'display')).getJSValue())
       .toBe('Inner')
   })
 
@@ -317,14 +436,18 @@ Describe('Capability witnesses', () => {
   Test('rejects unowned values and invalid selections without inspecting hostile value getters', () => {
     let probes = 0
     const unowned = {
-      get evaluate() {
-        probes += 1
-        RuntimeAssert(false, 'no unowned value probe')
-        return () => TR.Value('Unused')
+      evaluate() {
+        return this
       },
-    } as unknown as TaoCapability<string>
+      get jsValue() {
+        probes += 1
+        RuntimeAssert(false, 'no unowned payload probe')
+        return ''
+      },
+    }
     Expect(() => capabilities.method(unowned, 'display')).toThrow(UnexpectedBehaviorError)
-    Expect(() => capabilities.reproject(unowned, {})).toThrow(UnexpectedBehaviorError)
+    Expect(() => capabilities.reproject(unowned as unknown as TaoCapability<string>, {}))
+      .toThrow(UnexpectedBehaviorError)
     Expect(probes).toBe(0)
     const carrier = capabilities.attach(TR.Value('Same'), {})
     Expect(() => capabilities.method(carrier, 'missing')).toThrow(UnexpectedBehaviorError)
