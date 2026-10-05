@@ -675,7 +675,10 @@ class TR {
             RuntimeAssert(declared !== undefined, 'validated foreign action test stub names a declared failure')
             throw new TaoActionFailure(stubbedCase, declared.sentence)
           }
-          return await implementation(...arguments_.map(argument => argument?.evaluate().jsValue))
+          return await implementation(...arguments_.map(argument => {
+            const value = argument?.evaluate()
+            return value && isQuantityPayload(value.jsValue) ? value : value?.jsValue
+          }))
         } catch (error) {
           if (error instanceof TaoActionFailure) {
             throw error

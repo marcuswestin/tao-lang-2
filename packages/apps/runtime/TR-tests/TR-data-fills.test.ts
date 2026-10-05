@@ -61,7 +61,7 @@ Describe('TR.Data query fills', () => {
     await schema.settle()
     const row = schema.create('Story', { HnId: 7, Title: 'Seven', Rank: 7 })
     const context = TR.Data.NativeEntityContext(row)
-    Expect(context).toEqual({ connection, entity: 'Story', id: TR.Data.Read(row, 'Id') })
+    Expect(context).toMatchObject({ connection, entity: 'Story', id: TR.Data.Read(row, 'Id') })
     Expect(() => TR.Data.NativeEntityContext({ Id: context.id })).toThrow('live data item')
     const snapshot = TR.Data.NativeSnapshots.decode(schema.captureSnapshot(), feedDefinition)
     const encoded = TR.Data.NativeSnapshots.encode(snapshot, feedDefinition)
@@ -69,9 +69,17 @@ Describe('TR.Data query fills', () => {
     Expect(() => TR.Data.NativeSnapshots.encode({ ...snapshot, rows: {} }, feedDefinition)).toThrow(
       'entity collections',
     )
+    const before = schema.captureSnapshot()
+    let notifications = 0
+    const stop = schema.subscribe(() => notifications++)
+    context.notifyMetadataChanged()
+    stop()
+    Expect(notifications).toBe(1)
+    Expect(schema.captureSnapshot()).toBe(before)
     schema.configure(testDataConnection())
     await schema.settle()
     Expect(() => TR.Data.NativeEntityContext(row)).toThrow('inactive provider generation')
+    Expect(() => context.notifyMetadataChanged()).toThrow('inactive provider generation')
   })
 
   Test('fences a suspended native acquisition from a replacement datasource connection', async () => {

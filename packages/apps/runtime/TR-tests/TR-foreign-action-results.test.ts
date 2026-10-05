@@ -1,8 +1,33 @@
 import TR from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
 import { beginActionLaunch } from '../TaoRuntime-src/TR-action-transactions'
+import { makeQuantityType } from '../TaoRuntime-src/TR-quantity-values'
 
 Describe('foreign action results', () => {
+  Test('retains checked quantity wrappers while ordinary native arguments remain data', async () => {
+    const duration = makeQuantityType({
+      domain: 'Duration',
+      units: { seconds: 1, minutes: 60 },
+      defaultUnit: 'seconds',
+    }, TR.Value)
+    const supplied = duration.fromUnit(2, 'minutes')
+    const lookalike = { canonical: 120, unit: 'minutes', domain: 'Duration' }
+    const received: unknown[] = []
+    const native = TR.ForeignAction(
+      (quantity, plain) => {
+        received.push(quantity, plain)
+        Expect(quantity).toBe(supplied)
+        Expect(duration.read(quantity)).toEqual({ canonical: 120, unit: 'minutes' })
+      },
+      'Read',
+      [],
+    )
+    await TR.Action(async () => {
+      await TR.Do(native, supplied, TR.Value(lookalike))
+    }).jsValue.invoke()
+    Expect(received).toEqual([supplied, lookalike])
+  })
+
   Test('preserves evaluated source values and treats native lookalikes as data', async () => {
     const value = TR.Value('ready').evaluate()
     const source = TR.Action(() => value)

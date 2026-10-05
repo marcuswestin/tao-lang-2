@@ -1276,6 +1276,7 @@ export class RuntimeDataSchema {
     connection: TaoDataConnection
     entity: string
     id: string
+    notifyMetadataChanged(): void
   }> {
     const metadata = this.requireOwnedHandle(handle)
     this.requireReady('access')
@@ -1283,7 +1284,16 @@ export class RuntimeDataSchema {
       this.storedRow(metadata.entity, metadata.id),
       `This operation refers to unavailable ${metadata.entity} '${metadata.id}'.`,
     )
-    return { connection: this.connection, entity: metadata.entity, id: metadata.id }
+    return {
+      connection: this.connection,
+      entity: metadata.entity,
+      id: metadata.id,
+      notifyMetadataChanged: () => {
+        // Reauthenticate retained native contexts before notifying mounted data consumers.
+        this.nativeEntityContext(handle)
+        this.emit()
+      },
+    }
   }
 
   availability(handle: RuntimeEntityHandle): TaoEntityAvailability {

@@ -2,9 +2,9 @@ import React from 'react'
 import { RuntimeAssert } from './TR-assert'
 import type { TaoAuthPrincipal, TaoAuthProof, TaoDataAuthBinding } from './TR-auth'
 import { entityHandle, metadataOf } from './TR-data-entity'
+import { emptyData, envelope, parseEnvelope, type StoredData } from './TR-data-persistence'
 import { UnboundConnection } from './TR-data-provider'
 import { nativeQueryContext } from './TR-data-query-context'
-import { emptyData, envelope, parseEnvelope, type StoredData } from './TR-data-persistence'
 import {
   beginTest as beginDataTest,
   bindConfiguredDataSchema,
@@ -375,7 +375,12 @@ export const DataControls = {
   /** NativeQueryContext preserves query ownership without reserving public field names. */
   NativeQueryContext: nativeQueryContext,
   /** NativeEntityContext authenticates a live row before an adapter accesses its connection. */
-  NativeEntityContext(value: unknown): Readonly<{ connection: TaoDataConnection; entity: string; id: string }> {
+  NativeEntityContext(value: unknown): Readonly<{
+    connection: TaoDataConnection
+    entity: string
+    id: string
+    notifyMetadataChanged(): void
+  }> {
     const handle = entityHandle(value)
     RuntimeAssert.input(handle, 'This operation expects a live data item.')
     return metadataOf(handle).schema.nativeEntityContext(handle)
