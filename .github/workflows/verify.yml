@@ -11,7 +11,7 @@ name: Verify
 #
 # PARTITIONS and the matrix list below must change together. Never cache `.artifacts`: the plan
 # reads recorded timings, and partitions that restored different ones would place nodes differently.
-# Each partition instead seeds them from `.github/verify/durations.json`.
+# Each partition instead seeds them from `.github/verify/durations.json` and `ledger.json`.
 
 on:
   pull_request:
@@ -30,7 +30,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  PARTITIONS: 8
+  PARTITIONS: 12
   # Per-gate green records travel between runs of the same tree through the Actions cache, which
   # accepts only an absolute path with no `..` in it.
   TAO_GREEN_STORE: /home/runner/tao-green
@@ -40,14 +40,14 @@ env:
 
 jobs:
   partition:
-    name: Partition ${{ matrix.partition }}/8
+    name: Partition ${{ matrix.partition }}/12
     # x86-64, not ARM: the Hermes compiler `ship-bundle-proof` runs ships no Linux ARM binary.
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        partition: [1, 2, 3, 4, 5, 6, 7, 8]
+        partition: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     steps:
       - uses: actions/checkout@v4
 
@@ -91,11 +91,13 @@ jobs:
 
       # Every partition plans from this one committed snapshot of measured durations, so all of them
       # compute the same plan, and suites split into shards sized by cost rather than running whole.
-      # Refresh it from a checkout whose recent full runs measured the current suite names.
+      # The durations are CI's own suite and gate totals; the ledger holds only per-file relative
+      # costs, under an identity no real file hashes to, so it shapes shards without skipping tests.
       - name: Seed the plan with the committed durations
         run: |
-          mkdir -p .artifacts/timings
+          mkdir -p .artifacts/timings .artifacts/testing
           cp .github/verify/durations.json .artifacts/timings/durations.json
+          cp .github/verify/ledger.json .artifacts/testing/ledger.json
 
       - name: Verify partition ${{ matrix.partition }}/${{ env.PARTITIONS }}
         run: ./agent verify-full-sandbox --partition ${{ matrix.partition }}/${{ env.PARTITIONS }}
