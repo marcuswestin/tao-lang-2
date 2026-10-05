@@ -6,13 +6,34 @@ import { capabilityTransportOwners } from './capability-projection'
 
 type AssociatedOwner = ASTUtils.AssociatedCallableDescriptor['owner']
 
+/** One allocation is shared by every module in the app graph; no source paths enter runtime keys. */
+export function associatedOperatorWitnessKeys(
+  files: Iterable<AST.TaoFile>,
+): ReadonlyMap<ASTUtils.AssociatedOperatorWitnessDeclaration, string> {
+  const keys = new Map<ASTUtils.AssociatedOperatorWitnessDeclaration, string>()
+  for (const file of files) {
+    for (const node of AST.streamAllContents(file)) {
+      if (
+        (AST.isAssociatedFunctionDeclaration(node) || AST.isCapabilityMethodDeclaration(node))
+        && ['+', '-', '*', '/', '==', '!=', '<', '<=', '>', '>='].includes(node.name)
+      ) {
+        keys.set(node, `$operator:${keys.size + 1}`)
+      }
+    }
+  }
+  return keys
+}
+
 /** Private export names are stable for a source module, independent of the selected app graph. */
 export function associatedWitnessExports(file: AST.TaoFile): ReadonlyMap<AssociatedOwner, string> {
   const reserved = authoredNames(file)
   const exports = new Map<AssociatedOwner, string>()
-  for (const owner of file.statements.filter((statement): statement is AssociatedOwner =>
-    AST.isTypeDeclaration(statement) || AST.isPrimitiveDeclaration(statement)
-  )) {
+  for (
+    const owner of file.statements.filter((statement): statement is AssociatedOwner =>
+      AST.isTypeDeclaration(statement) || AST.isPrimitiveDeclaration(statement)
+      || AST.isEntityDataDeclaration(statement)
+    )
+  ) {
     if (hasAssociatedWitnessPublication(owner)) {
       exports.set(owner, allocate('__tao_associated_witness_', exports.size + 1, reserved))
     }
@@ -90,7 +111,10 @@ export function referencedAssociatedWitnessOwners(
         'Expected a validated associated call to retain its canonical correspondence.',
       )
       Assert.defined(invocation.descriptor, 'Expected a validated associated call to select its descriptor.')
-      if (AST.isAssociatedFunctionDeclaration(invocation.descriptor.declaration)) {
+      if (
+        AST.isAssociatedFunctionDeclaration(invocation.descriptor.declaration)
+        || AST.isAssociatedViewDeclaration(invocation.descriptor.declaration)
+      ) {
         owners.add(invocation.descriptor.owner)
       }
       invocation.pairs.forEach(pair => transport(pair.argument.value, Type.ofParameter(pair.parameter)))

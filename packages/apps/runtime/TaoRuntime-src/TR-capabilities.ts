@@ -2,7 +2,7 @@ import type TR from './TR'
 import type { TaoEvaluable } from './TR-action-values'
 import { RuntimeAssert } from './TR-assert'
 import { getJSValue } from './TR-js-value'
-import { isRuntimeValue, registerCompleteRuntimeValue, type TaoRuntimeValue } from './TR-reactive-values'
+import { isRuntimeValue, reactiveValue, registerCompleteRuntimeValue, type TaoRuntimeValue } from './TR-reactive-values'
 
 declare const capabilityBrand: unique symbol
 
@@ -68,6 +68,20 @@ export function createCapabilityRuntime(functionFactory: typeof TR.Function) {
   }
 
   return {
+    /** List storage retains authenticated behavior wrappers and otherwise preserves original payloads. */
+    listElements<StoredT>(
+      source: TaoEvaluable<readonly unknown[]>,
+      project: (element: TaoEvaluable<any>) => TaoEvaluable<any>,
+    ): TaoRuntimeValue<StoredT[]> {
+      const values = source.evaluate().jsValue
+      RuntimeAssert(Array.isArray(values), 'the admitted list has an array payload')
+      return reactiveValue(values.map(value => {
+        const element = isRuntimeValue(value) ? value : reactiveValue(value)
+        const projected = project(element).evaluate()
+        return (ownedCapabilities.has(projected) ? projected : projected.jsValue) as StoredT
+      }))
+    },
+
     /** Witnesses are validated ordinary functions whose first argument is the concrete receiver. */
     attach<ValueT>(
       originalSource: TaoEvaluable<ValueT>,

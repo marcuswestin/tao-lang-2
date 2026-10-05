@@ -5,7 +5,7 @@ import { BridgeMetadata } from '../../../bridge-metadata'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 import { compileAssociatedConversion } from './associated-converters'
-import { compileAssociatedWitness } from './AssociatedMethodsCompiler'
+import { compileAssociatedWitness, compileCallableWitnessKey } from './AssociatedMethodsCompiler'
 import { authLibraryExport, compileCurrentAccount, contextualCommand, contextualReference } from './auth-context'
 import { compileArgumentForType, compileValueForType } from './capability-projection'
 import { configurationRuntimeBindingName } from './ConfigurationCompiler'
@@ -308,7 +308,7 @@ export const ExpressionsCompiler = {
       && resolved.descriptor.result.genericParameter === resolved.receiver.genericParameter
     const callable = capability
       ? gen`TR.Capability.method(${rebindSelf ? gen`_TaoGenericReceiver` : gen`${receiver}.evaluate()`}, ${
-        gen.jsLiteral(target.name)
+        gen.jsLiteral(compileCallableWitnessKey(resolved.descriptor))
       })`
       : compileAssociatedWitness(resolved.descriptor)
     const parameters = AST.parametersOf(resolved.descriptor.declaration)
@@ -419,6 +419,15 @@ export const ExpressionsCompiler = {
       : binding
     const resultType = BridgeMetadata.bridgeResultType(bridge)
     if (resultType) {
+      if (resultType.kind === 'primitive' && resultType.primitive === 'numeric' && resultType.selfOwner) {
+        const anchor = nativeSelfResultAnchor(bridge, resultType.selfOwner)
+        return gen`(() => {
+          const _TaoSelfFactory = TR.factoryOfQuantityInput(${anchor});
+          const result = ${nativeValue};
+          TR.admitQuantityUnion(result, [_TaoSelfFactory], "Self");
+          return result;
+        })()`
+      }
       const members = nativeResultMembers(resultType)
       Assert(
         !members.some(abstractNumericDomain),
@@ -541,7 +550,7 @@ function compileAssociatedOperation(expression: AST.BinaryExpression | AST.Unary
   const receiver = resolved.receiver ? Compile.Expression(resolved.receiver) : undefined
   const callable = capability
     ? gen`TR.Capability.method(${rebindSelf ? gen`_TaoGenericReceiver` : gen`${receiver}.evaluate()`}, ${
-      gen.jsLiteral(descriptor.declaration.name)
+      gen.jsLiteral(compileCallableWitnessKey(descriptor))
     })`
     : compileAssociatedWitness(descriptor)
   const call = gen`TR.Call(${callable}${
@@ -553,6 +562,21 @@ function compileAssociatedOperation(expression: AST.BinaryExpression | AST.Unary
       return TR.Capability.rebind(_TaoGenericReceiver, ${call})
     })()`
     : call
+}
+
+/** Native Self output is anchored in a real supplied quantity, never an abstract owner factory. */
+function nativeSelfResultAnchor(
+  bridge: AST.FromExpression,
+  owner: ASTUtils.AssociatedCallableDescriptor['owner'],
+): Compiled {
+  const method = AST.findOwningAssociatedFunction(bridge)
+  Assert(method && AST.associatedFunctionOwner(method) === owner, 'native Self output belongs to its real method')
+  if (!method.static) {
+    return gen.scopeName({ name: owner.name })
+  }
+  const input = AST.parametersOf(method).find(parameter => Type.ofParameter(parameter).selfOwner === owner)
+  Assert.defined(input, 'a static native Self output has a supplied Self input')
+  return gen.scopeName({ name: Type.parameterName(input) })
 }
 
 /**

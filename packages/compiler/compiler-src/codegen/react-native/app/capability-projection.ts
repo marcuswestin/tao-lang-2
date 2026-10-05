@@ -3,7 +3,11 @@ import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
 import { type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
-import { compileAssociatedWitness, compileCapabilityDefault } from './AssociatedMethodsCompiler'
+import {
+  compileAssociatedWitness,
+  compileCallableWitnessKey,
+  compileCapabilityDefault,
+} from './AssociatedMethodsCompiler'
 import { compileFunctionParameterBinding } from './FunctionalCoreCompiler'
 import { compileReactiveArgument } from './reactive-parameters'
 
@@ -35,6 +39,12 @@ function compileTransport(
 ): Compiled {
   return Switch.kind(plan, {
     identity: () => source,
+    list: list =>
+      gen`(() => {
+      const _TaoListSource = ${source};
+      return TR.Alias(() => TR.Capability.listElements<any>(_TaoListSource,
+        _TaoListElement => ${compileTransport(gen`_TaoListElement`, list.element)}));
+    })()`,
     optional: optional =>
       gen`(() => {
       const _TaoOptionalSource = ${source};
@@ -49,7 +59,7 @@ function compileTransport(
       gen`TR.Capability.attach(${source}, {
       ${
         gen.list(attach.methods, method =>
-          gen`[${gen.jsLiteral(method.required.declaration.name)}]: ${
+          gen`[${gen.jsLiteral(compileCallableWitnessKey(method.required))}]: ${
             adaptWitness(method, compileAssociatedWitness(method.supplied))
           },`)
       }
@@ -60,15 +70,15 @@ function compileTransport(
         gen.list(
           reproject.methods,
           method =>
-            gen`[${gen.jsLiteral(method.required.declaration.name)}]: ${
-              gen.jsLiteral(method.supplied.declaration.name)
+            gen`[${gen.jsLiteral(compileCallableWitnessKey(method.required))}]: ${
+              gen.jsLiteral(compileCallableWitnessKey(method.supplied))
             },`,
         )
       }
     }, {
       ${
         gen.list(reproject.methods, method =>
-          gen`[${gen.jsLiteral(method.required.declaration.name)}]:
+          gen`[${gen.jsLiteral(compileCallableWitnessKey(method.required))}]:
         (_TaoSelectedWitness: TR.Function) => ${adaptWitness(method, gen`_TaoSelectedWitness`)},`)
       }
     }))`,
@@ -87,18 +97,23 @@ export function capabilityTransportOwners(
   const collect = (plan: ASTUtils.CapabilityTransportPlan): void => {
     const methods = (methods: readonly ASTUtils.CapabilityTransportMethod[]) => {
       for (const method of methods) {
-        if (AST.isAssociatedFunctionDeclaration(method.supplied.declaration)) {
+        if (
+          AST.isAssociatedFunctionDeclaration(method.supplied.declaration)
+          || AST.isAssociatedViewDeclaration(method.supplied.declaration)
+        ) {
           owners.add(method.supplied.owner)
         }
         if (method.required.signature.inputs.some(input => input.declaration.defaultValue !== undefined)) {
           owners.add(method.required.owner)
         }
         method.inputs.forEach(input => collect(input.plan))
+        collect(method.receiver)
         collect(method.result)
       }
     }
     Switch.kind(plan, {
       identity: Switch.nothing,
+      list: list => collect(list.element),
       optional: optional => collect(optional.present),
       attach: attach => methods(attach.methods),
       reproject: reproject => methods(reproject.methods),
@@ -131,8 +146,18 @@ function adaptWitness(witness: ASTUtils.CapabilityTransportMethod, implementatio
       return compileFunctionParameterBinding(parameter, fallback)
     })
   }
-      const _TaoCapabilityResult = TR.Call(${implementation}, _TaoCapabilityReceiver${
+      const _TaoCapabilityResult = TR.Call(${implementation}${
+    witness.receiverPlacement.kind === 'implicit'
+      ? gen`, ${compileTransport(gen`_TaoCapabilityReceiver`, witness.receiver)}`
+      : gen.noop()
+  }${
     gen.join(supplied, input => {
+      if (
+        witness.receiverPlacement.kind === 'parameter'
+        && input.declaration === witness.receiverPlacement.parameter
+      ) {
+        return gen`, ${compileTransport(gen`_TaoCapabilityReceiver`, witness.receiver)}`
+      }
       const transport = inputs.get(input.declaration)
       if (!transport) {
         Assert(input.omissible, 'Expected unmatched implementation inputs to have defaults.')

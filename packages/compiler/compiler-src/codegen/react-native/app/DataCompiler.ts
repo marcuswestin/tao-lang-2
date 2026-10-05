@@ -5,6 +5,7 @@ import { authGrants } from '../../../auth-policy'
 import { storedDataEntity, type StoredDataField } from '../../../stored-data-schema'
 import { type Compiled, gen, LocalDataBindings, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
+import { hasAssociatedWitnessPublication } from './AssociatedMethodsCompiler'
 import { activeDataStorePlan } from './data-store-context'
 import { compileDeclarationIdentity } from './declaration-identity'
 
@@ -77,8 +78,8 @@ export const DataCompiler = {
   },
 
   /** EntityDataDeclaration contributes to its file catalog and emits no standalone schema. */
-  EntityDataDeclaration(): Compiled {
-    return gen.noop()
+  EntityDataDeclaration(entity: AST.EntityDataDeclaration): Compiled {
+    return hasAssociatedWitnessPublication(entity) ? Compile.AssociatedMethodsDeclaration(entity) : gen.noop()
   },
 
   EntityDataDefinition(entity: AST.EntityDataDeclaration, access: readonly AST.AccessDeclaration[] = []): Compiled {

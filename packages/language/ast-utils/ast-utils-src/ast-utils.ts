@@ -5,8 +5,8 @@ import {
   referenceBlockOf,
 } from './app-configuration'
 import { rootAppValue } from './apps'
-import { sourceActionResult } from './source-action-results'
 import { resolveArgumentBindings } from './argument-bindings'
+import { associatedCallableWitnessKey } from './associated-callable-witness-key'
 import { createAssociatedEffects } from './associated-effect-context'
 import { resolveAssociatedMethodInvocation } from './associated-invocations'
 import {
@@ -98,10 +98,15 @@ import {
   rendererSlotDefaultParameterCorrespondence,
   rendererSlotSignatureOf,
 } from './renderer-slots'
+import { sourceActionResult } from './source-action-results'
 import { Type } from './Type'
 import { literalDurationOf, Units } from './Units'
 
 export { design, NumericUnits, Packages, Type, Units }
+export type {
+  AssociatedCallableWitnessKeyContext,
+  AssociatedOperatorWitnessDeclaration,
+} from './associated-callable-witness-key'
 export type { NumericUnitsDeclarationPlan, NumericUnitsSuffixResolution } from './NumericUnits'
 
 /** ASTUtils groups shared semantic helpers for Tao AST consumers. */
@@ -110,6 +115,7 @@ export const ASTUtils = {
   numericUnitReadingCollisions,
   createAssociatedEffects,
   resolveAssociatedMethodInvocation,
+  associatedCallableWitnessKey,
   associatedCallableAnalysis,
   associatedCallableDescriptor,
   associatedMethodCallTarget,
@@ -205,6 +211,8 @@ export const ASTUtils = {
 export namespace ASTUtils {
   export type NumericUnitReading = import('./numeric-unit-readings').NumericUnitReading
   export type AssociatedCallableDescriptor = import('./associated-methods').AssociatedCallableDescriptor
+  export type AssociatedOperatorWitnessDeclaration =
+    import('./associated-callable-witness-key').AssociatedOperatorWitnessDeclaration
   export type AssociatedCallableOwner = import('./associated-methods').AssociatedCallableOwner
   export type AssociatedEffectsContext = import('./associated-methods').AssociatedEffectsContext
   export type CapabilityTransportPlan = import('./capability-transport').CapabilityTransportPlan

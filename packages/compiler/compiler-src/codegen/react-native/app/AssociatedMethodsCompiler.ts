@@ -9,19 +9,35 @@ import { compileRuntimeType } from './runtime-type-compiler'
 
 type AssociatedOwner = ASTUtils.AssociatedCallableDescriptor['owner']
 let witnessBindings: ReadonlyMap<AssociatedOwner, string> = new Map()
+let operatorKeys: ReadonlyMap<ASTUtils.AssociatedOperatorWitnessDeclaration, string> = new Map()
 
 /** The module planner supplies collision-safe declaration bindings, including imported aliases. */
 export function withAssociatedWitnessBindings<T>(
   bindings: ReadonlyMap<AssociatedOwner, string>,
   compile: () => T,
+  keys: ReadonlyMap<ASTUtils.AssociatedOperatorWitnessDeclaration, string> = new Map(),
 ): T {
   const previous = witnessBindings
+  const previousKeys = operatorKeys
   witnessBindings = bindings
+  operatorKeys = keys
   try {
     return compile()
   } finally {
     witnessBindings = previous
+    operatorKeys = previousKeys
   }
+}
+
+/** The app graph assigns private keys to actual contracts, never to operator spelling alone. */
+export function compileCallableWitnessKey(
+  callable: ASTUtils.AssociatedCallableDescriptor | ASTUtils.AssociatedOperatorWitnessDeclaration,
+): string {
+  const key = ASTUtils.associatedCallableWitnessKey(callable, {
+    operatorKey: declaration => operatorKeys.get(declaration),
+  })
+  Assert.defined(key, 'the selected operator contract has a planned private witness key')
+  return key
 }
 
 export function associatedWitnessBinding(owner: AssociatedOwner): Compiled {
@@ -40,7 +56,7 @@ export function AssociatedMethodsDeclaration(owner: AssociatedOwner): Compiled {
         ${
       gen.list(ASTUtils.capabilityRequirements(owner), method => {
         const parameters = AST.parametersOf(method).map((parameter, index) => ({ index, parameter }))
-        return gen`[${gen.jsLiteral(method.name)}]: {
+        return gen`[${gen.jsLiteral(compileCallableWitnessKey(method))}]: {
             ${
           gen.list(parameters.filter(input => input.parameter.defaultValue !== undefined), input => {
             const preceding = parameters.slice(0, input.index)
@@ -58,7 +74,26 @@ export function AssociatedMethodsDeclaration(owner: AssociatedOwner): Compiled {
     }`
   }
   Assert(type.kind !== 'unresolved', 'Expected a resolved concrete associated owner.')
+  const views = ASTUtils.ownAssociatedViews(owner)
   return gen`const ${associatedWitnessBinding(owner)} = {
+    "$views": [${
+    gen.join(views, (view) => {
+      return Compile.AssociatedViewDeclaration(view, {
+        component: gen.Name({ name: '_TaoAssociatedView' }),
+        propsType: gen`{
+        __taoReceiver: ${compileRuntimeType(type)}
+        ${gen.list(AST.parametersOf(view), Compile.ParameterDeclaration)}
+        __tao?: TR.TaoProps
+        __taoHost?: TR.HostReadChannel
+        __taoSlots?: Readonly<Record<string, TR.SlotRenderer<any> | null>>
+        children?: React.ReactNode
+      }`,
+        receiverBinding: gen`${receiverScope(owner)} = _ViewProps.__taoReceiver`,
+        commandSurface: gen.noop(),
+        hostSlots: gen.noop(),
+      })
+    })
+  }],
       "$converters": [${
     gen.join(
       AST.isTypeDeclaration(owner) ? Type.ownAssociatedConverters(owner) : [],
@@ -74,12 +109,29 @@ export function AssociatedMethodsDeclaration(owner: AssociatedOwner): Compiled {
       method => gen`[${gen.jsLiteral(method.name)}]: ${Compile.AssociatedFunctionDeclaration(method)},`,
     )
   }
+    ${
+    gen.list(views, (view) => {
+      const parameters = AST.parametersOf(view).map((parameter, index) => ({ index, parameter }))
+      return gen`[${gen.jsLiteral(view.name)}]: TR.Function((_TaoAssociatedReceiver: ${compileRuntimeType(type)}${
+        gen.join(parameters, parameter => gen`, ${Compile.FunctionRuntimeParameter(parameter)}`, { separator: '' })
+      }) => TR.RenderView(${associatedViewComponent(owner, views.indexOf(view))}, {
+        __taoReceiver: _TaoAssociatedReceiver,
+        ${
+        gen.list(parameters, parameter =>
+          gen`${gen.Name({ name: Type.parameterName(parameter.parameter) })}: ${
+            gen.Name({ name: `_TaoFunctionArg${parameter.index}` })
+          },`)
+      }
+      })),`
+    })
+  }
     }`
 }
 
 /** Requirements publish only lexical default thunks; implementation owners publish method witnesses. */
 export function hasAssociatedWitnessPublication(owner: AssociatedOwner): boolean {
   return ASTUtils.ownAssociatedMethods(owner).length > 0
+    || ASTUtils.ownAssociatedViews(owner).length > 0
     || (AST.isTypeDeclaration(owner) && Type.ownAssociatedConverters(owner).length > 0)
     || (AST.isTypeDeclaration(owner)
       && ASTUtils.capabilityRequirements(owner).some(method =>
@@ -89,7 +141,7 @@ export function hasAssociatedWitnessPublication(owner: AssociatedOwner): boolean
 
 export function compileCapabilityDefault(descriptor: ASTUtils.AssociatedCallableDescriptor, index: number): Compiled {
   return gen`${associatedWitnessBinding(descriptor.owner)}.defaults[${
-    gen.jsLiteral(descriptor.declaration.name)
+    gen.jsLiteral(compileCallableWitnessKey(descriptor))
   }][${index}]`
 }
 
@@ -106,11 +158,19 @@ export function AssociatedFunctionDeclaration(method: AST.AssociatedFunctionDecl
       }`
   }) => {
       return TR.BlockScope(_Scope, _Scope => {
-        ${method.static ? gen.noop() : gen`${gen.scopeName(owner)} = _TaoAssociatedReceiver`}
+        ${method.static ? gen.noop() : gen`${receiverScope(owner)} = _TaoAssociatedReceiver`}
         ${gen.list(parameters, Compile.FunctionParameterBinding)}
         ${Compile.FunctionBlockBody(method.block)}
       })
     })`
+}
+
+function receiverScope(owner: AssociatedOwner): Compiled {
+  return gen.scopeName({ name: AST.isEntityDataDeclaration(owner) ? owner.singularName : owner.name })
+}
+
+function associatedViewComponent(owner: AssociatedOwner, index: number): Compiled {
+  return gen`${associatedWitnessBinding(owner)}["$views"][${index}]`
 }
 
 /** Witness selection addresses its actual defining declaration through the normal module scope. */

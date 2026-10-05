@@ -20,6 +20,7 @@ import {
 } from '../../studio-preview-manifest'
 import { withActionInstrumentation } from './app/action-control-flow'
 import {
+  associatedOperatorWitnessKeys,
   associatedWitnessExports,
   planAssociatedWitnessBindings,
   referencedAssociatedWitnessOwners,
@@ -221,6 +222,7 @@ function compileReactNative(
     dependencyOwnerBySourcePath,
   )
   const sourceByPath = new Map(sourceFiles.map(file => [file.path, file]))
+  const operatorWitnessKeys = associatedOperatorWitnessKeys(sourceFiles.map(file => file.ast))
   const selectedStatements = (file: ParsedFile): readonly AST.Statement[] =>
     selectedPublications.declarationsBySourcePath.has(file.path) || accessBySourcePath.has(file.path)
       || sidecarTaoSources.projectRootBySourcePath.has(file.path)
@@ -261,6 +263,7 @@ function compileReactNative(
     compileSourceFile(file, {
       dataCatalog,
       sourceByPath,
+      operatorWitnessKeys,
       selectedStatements: selectedStatements(file),
       selectedStatementsFor: selectedStatements,
       sidecarRuntimeExports: sidecarTaoSources.runtimeExportsBySourcePath.get(file.path),
@@ -648,6 +651,7 @@ function planOutputPaths(
 type CompileSourceFileOptions = {
   dataCatalog: DataCatalogPlan | undefined
   sourceByPath: Map<string, ParsedFile>
+  operatorWitnessKeys: ReadonlyMap<ASTUtils.AssociatedOperatorWitnessDeclaration, string>
   selectedStatements: readonly AST.Statement[]
   selectedStatementsFor: (file: ParsedFile) => readonly AST.Statement[]
   sidecarRuntimeExports: ReadonlySet<AST.Declaration> | undefined
@@ -669,6 +673,7 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
   const {
     dataCatalog,
     sourceByPath,
+    operatorWitnessKeys,
     selectedStatements,
     selectedStatementsFor,
     sidecarRuntimeExports,
@@ -846,7 +851,7 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
                         })),
                   )),
             )),
-      )),
+      ), operatorWitnessKeys),
   )
   if (associatedExports.size > 0) {
     module.code += `\nexport { ${[...associatedExports.values()].join(', ')} }\n`
