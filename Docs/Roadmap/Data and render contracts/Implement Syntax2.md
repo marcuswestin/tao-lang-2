@@ -97,8 +97,9 @@ the Developer or explicitly omit the demonstration; do not invent a universal mo
 Keyed/RenderKey and uniqueness policy belong to the standard-library LazyList implementation.
 The compiler supplies ordinary capability/generic checking, not list-name or field-name magic.
 Do not inject Key methods into all entities or impose this policy on loops/custom list components;
-use ordinary associated/library adapters. stdlib/Keyed.tao.future graduates into its standard-library
-owner, not an app-local competing declaration. Scalar is an abstract operation family; unit ambiguity
+use ordinary associated/library adapters. The former stdlib/Keyed.tao.future target graduated into
+its standard-library owner and is retired, rather than creating an app-local competing declaration.
+Scalar is an abstract operation family; unit ambiguity
 requires qualification; inverse alias double fills are rejected even if consistent.
 
 Preserve existing effect-outcome machinery: transitive failure inference, contained-call savepoints,

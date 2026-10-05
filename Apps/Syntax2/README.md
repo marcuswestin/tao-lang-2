@@ -42,8 +42,6 @@ remains undiscovered.
   continuation and refresh, local typed rejection, input editing and successful creation. A fresh
   second journey creates a book and then exercises stale-cursor recovery through the app guard.
 - [Main.tao.future](Main.tao.future): project/app boundary, controls, slots, units and bounded list UI.
-- [library/Library.tao.future](library/Library.tao.future): nominal signatures, structural capabilities,
-  generics, native operator, entities, associated actions/rendering and cleanup.
 - [library/GroupedRows.tao.future](library/GroupedRows.tao.future) and
   [library/GroupedRows.ts.future](library/GroupedRows.ts.future): typed keyed rows and a pure algorithm.
   [library/GroupedRows.ts](library/GroupedRows.ts) now implements the native projection through
@@ -52,15 +50,15 @@ remains undiscovered.
   Its ordinary Tao builders and complete UI integration still await graduation.
 - [library/BookIO.tao](library/BookIO.tao): active owned file/revision/query adapter contracts.
   BookIO.ts and BookStoreProvider.ts implement actual bounded acquisition, PDF creation, upload,
-  cleanup and cached revision acknowledgment. Remaining adapter contracts stay in the future file.
+  cleanup and cached revision acknowledgment. Its former future contracts are fully graduated.
 - [library/BookActions.tao](library/BookActions.tao): Add validates its typed input, while Export
   samples a monotonic timer before creating/uploading an owned PDF and joins deferred deletion
   before completing. A compiled-source acceptance test proves real PDF bytes, checked elapsed
   Duration, and cleanup on success and upload failure; it does not claim installed-device proof.
 - [Library.test.tao.future](Library.test.tao.future): initial user-visible journey to activate with
   the entry slice; it is not current acceptance evidence.
-- [stdlib/Keyed.tao.future](stdlib/Keyed.tao.future): target ordinary declarations for @tao/ui,
-  to implement in the standard library rather than graduate into a second app-local definition.
+- The former library/adapter/Keyed future targets are retired after their executable definitions
+  graduated. RenderKey, Keyed, ui and Occurrence belong to the ordinary @tao/ui standard library.
 
 [Decisions](../../Docs/Roadmap/Tao%20Revolution/Decisions.md) owns accepted semantics.
 [Code preferences](../../Docs/Roadmap/Tao%20Revolution/Code%20preferences.md) owns preferred forms.

@@ -4370,7 +4370,8 @@ localization, time API or complete-proof investigations. The round does not auth
 2026-10-04. All five A selected. Keyed is specifically an ordinary capability used by the exported
 standard-library LazyList implementation. It is not a compiler intrinsic, magical RowKey field,
 universal loop identity rule or automatic method injected onto every entity. Book.Key and
-GroupedRow.Key now expose the contract explicitly; stdlib/Keyed.tao.future records target definitions.
+GroupedRow.Key now expose the contract explicitly; the former stdlib/Keyed.tao.future target is
+implemented by the ordinary @tao/ui declarations and retired.
 Runtime uniqueness enforcement belongs to the library; structural signature checking belongs to the
 ordinary compiler mechanisms. Other components can use different policies. Missing providers and
 duplicate identities are rejected, with no index repair.
