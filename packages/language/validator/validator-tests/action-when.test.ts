@@ -34,7 +34,7 @@ Describe('validator: action when', () => {
   Test(
     'rejects payloads on cases other than error',
     rejects(
-      `action Choose(Ready boolean) { when Ready { yes -> Problem { } no -> { } } }`,
+      `action Choose(Ready boolean) { when Ready { yes Problem -> { } no -> { } } }`,
       FunctionalCoreValidator.messages.invalidCasePayload,
     ),
   )

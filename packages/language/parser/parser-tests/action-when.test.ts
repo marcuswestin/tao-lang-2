@@ -1,6 +1,6 @@
 import { AST } from '@parser'
 import { Describe, Expect, Test } from '@shared/test'
-import { testParseSyntax } from './test-parse'
+import { parseCodeWithErrors, testParseSyntax } from './test-parse'
 
 Describe('parser: action when', () => {
   Test('parses action when as an atomic event handler', async () => {
@@ -26,7 +26,7 @@ Describe('parser: action when', () => {
           on press -> {
             when GroupMode {
               yes -> { do Enable() }
-              Offline -> Problem { do Report(Problem) }
+              Offline Problem -> { do Report(Problem) }
               no -> { do Disable() }
               otherwise -> { do Reset() }
             }
@@ -43,5 +43,16 @@ Describe('parser: action when', () => {
     ])
     Expect(statement.otherwise).toBeDefined()
     Expect(statement.branches[1]?.payload?.$container).toBe(statement.branches[1])
+  })
+
+  Test('rejects right-bound action when payloads', async () => {
+    const parsed = await parseCodeWithErrors(`
+      action Run() {
+        when Status {
+          error -> Problem { do Report(Problem) }
+        }
+      }
+    `)
+    Expect(parsed.entry.document.parseResult.parserErrors.length).toBeGreaterThan(0)
   })
 })

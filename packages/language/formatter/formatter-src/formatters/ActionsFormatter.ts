@@ -136,9 +136,7 @@ export const ActionsFormatter = {
   /** WhenActionBranch separates its case, optional payload, and branch body. */
   WhenActionBranch(f) {
     f.oneSpaceBefore('->')
-    if (f.node.payload !== undefined) {
-      f.oneSpaceAfter('->')
-    }
+    f.oneSpaceBeforeProperty('payload')
   },
 
   /** WhenActionOtherwise formats the no-match fallback body. */

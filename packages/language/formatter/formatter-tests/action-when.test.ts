@@ -23,7 +23,7 @@ Describe('formatter: action when', () => {
   Test(
     'formats braced action when inside an event handler',
     formats(
-      'view Main{Button("Group"){on press->{when GroupMode{yes->{do Enable()}Offline->Problem{do Report(Problem)}no->{do Disable()}otherwise->{do Reset()}}}}}',
+      'view Main{Button("Group"){on press->{when GroupMode{yes->{do Enable()}Offline Problem->{do Report(Problem)}no->{do Disable()}otherwise->{do Reset()}}}}}',
       `
       view Main {
          Button("Group") {
@@ -32,7 +32,7 @@ Describe('formatter: action when', () => {
                   yes -> {
                      do Enable()
                   }
-                  Offline -> Problem {
+                  Offline Problem -> {
                      do Report(Problem)
                   }
                   no -> {

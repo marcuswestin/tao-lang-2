@@ -70,7 +70,7 @@ WhenActionStatement:
     'when' subject=SubjectExpression '{' branches+=WhenActionBranch+ otherwise=WhenActionOtherwise? '}';
 
 WhenActionBranch:
-    case=SubjectCaseName '->' payload=CasePayload? block=ActionBlock;
+    case=SubjectCaseName (payload=CasePayload '->' | '->') block=ActionBlock;
 
 WhenActionOtherwise:
     'otherwise' '->' block=ActionBlock;
