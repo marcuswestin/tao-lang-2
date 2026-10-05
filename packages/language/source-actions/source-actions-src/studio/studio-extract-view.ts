@@ -377,6 +377,7 @@ function sourceTypeName(type: ASTUtils.TaoType): string | undefined {
   }
   return Switch.kind(type, {
     entity: plain,
+    capability: plain,
     enum: plain,
     item: item => item.nominal === undefined ? undefined : plain(),
     list: list => list.element === undefined || sourceTypeName(list.element) === undefined ? undefined : plain(),

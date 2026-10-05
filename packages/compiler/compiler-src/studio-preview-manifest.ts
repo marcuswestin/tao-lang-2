@@ -528,6 +528,7 @@ function parameterSchema(parameter: AST.ParameterDeclaration): StudioPreviewPara
   }
   return Switch.kind(type, {
     entity: type => ({ ...base, entity: Type.dataEntityName(type.entity), kind: 'entity' }),
+    capability: () => ({ ...base, kind: 'unsupported' }),
     item: () => ({ ...base, kind: 'unsupported' }),
     list: () => ({ ...base, kind: 'unsupported' }),
     unresolved: () => ({ ...base, kind: 'unsupported' }),

@@ -309,6 +309,13 @@ export const ExpressionsCompiler = {
       Assert(AST.isDesignColorEntry(target), 'validated shade names a design color family member')
       return compileDesignColorValue(AST.designColorPath(target, reference.shade))
     }
+    if (AST.isTypeDeclaration(target)) {
+      Assert(
+        AST.associatedReceiverOwner(reference) === target,
+        'validated type reference names the contextual receiver',
+      )
+      return compileMemberPath(gen.scopeName(target), Type.ofDefinition(target), reference.members)
+    }
     const root = Compile.ValueDeclarationReference(target)
     return compileMemberPath(root, Type.ofValueDeclaration(target), reference.members)
   },
@@ -322,6 +329,9 @@ export const ExpressionsCompiler = {
       ? (call.argumentList?.arguments ?? []).map(argument => {
         const value = Compile.Expression(argument.value)
         const type = Type.ofExpression(argument.value)
+        if (type.kind === 'capability') {
+          return gen`${value}.evaluate()`
+        }
         if (Type.quantityOwner(type)) {
           return value
         }
@@ -388,6 +398,13 @@ export const ExpressionsCompiler = {
     const target = resolveRef(reference.target)
     if (AST.isEntityDataField(target)) {
       return gen`TR.Value(${reference.target.$refText === target.name ? 'true' : 'false'})`
+    }
+    if (AST.isTypeDeclaration(target)) {
+      Assert(
+        AST.associatedReceiverOwner(reference) === target,
+        'validated type reference names the contextual receiver',
+      )
+      return gen`${gen.scopeName(target)}.evaluate()`
     }
     return Compile.ValueDeclarationReference(target)
   },

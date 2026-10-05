@@ -189,6 +189,7 @@ function validateEntityField(
     Extract<ASTUtils.TaoType, { kind: 'primitive' }>['primitive'] | undefined
   >(fieldType, {
     primitive: type => type.primitive,
+    capability: () => undefined,
     enum: () => undefined,
     entity: () => undefined,
     unresolved: () => undefined,

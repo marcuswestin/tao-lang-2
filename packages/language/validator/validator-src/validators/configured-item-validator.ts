@@ -44,6 +44,7 @@ export const configuredItemValidationChecks = {
 
 export function constructorLiteralKind(type: ASTUtils.TaoType): string {
   return Switch.kind(type, {
+    capability: type => type.declaration.name,
     primitive: type => type.primitive === 'numeric' ? 'number' : type.primitive,
     list: () => 'list',
     item: () => 'item',

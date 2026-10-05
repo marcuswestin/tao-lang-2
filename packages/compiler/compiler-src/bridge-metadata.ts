@@ -695,6 +695,7 @@ function typescriptType(type: ASTUtils.TaoType, seen = new Set<AST.EntityDataDec
     return binding
   }
   return Switch.kind(type, {
+    capability: () => 'TR.Capability',
     primitive: type => {
       if (type.primitive === 'action') {
         return runtimeActionType(type)
@@ -744,6 +745,9 @@ function typescriptType(type: ASTUtils.TaoType, seen = new Set<AST.EntityDataDec
 
 /** View action parameters retain the runtime's invokable action and reactive argument wrappers. */
 function viewParameterType(type: ASTUtils.TaoType): string {
+  if (type.kind === 'capability') {
+    return typescriptType(type)
+  }
   if (type.kind === 'primitive' && type.primitive === 'action') {
     return runtimeActionType(type)
   }
@@ -762,6 +766,9 @@ function runtimeActionType(type: Extract<ASTUtils.TaoType, { kind: 'primitive'; 
 }
 
 function runtimeActionArgumentType(type: ASTUtils.TaoType): string {
+  if (type.kind === 'capability') {
+    return typescriptType(type)
+  }
   if (Type.quantityOwner(type) !== undefined) {
     return typescriptType(type)
   }

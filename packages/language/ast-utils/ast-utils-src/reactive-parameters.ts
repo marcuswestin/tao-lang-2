@@ -67,7 +67,8 @@ function parameterOwner(parameter: AST.ParameterDeclaration): AST.ParameterizedD
 
 function writableExpressionTarget(expression: AST.Expression): AST.ValueDeclaration | undefined {
   if (AST.isValueReference(expression) || AST.isMemberAccessExpression(expression)) {
-    return expression.target.ref
+    const target = expression.target.ref
+    return AST.isValueDeclaration(target) ? target : undefined
   }
   return undefined
 }

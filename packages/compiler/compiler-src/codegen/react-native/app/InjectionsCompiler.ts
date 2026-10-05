@@ -80,9 +80,13 @@ function CompileInjectionValue(argument: AST.InjectionArgument, ambientProps: Co
   const expression = argument.value
   Assert.defined(expression, 'validated ordinary injection argument has a Tao expression')
   const parameter = AST.isValueReference(expression) ? expression.target.ref : undefined
-  return AST.isParameterDeclaration(parameter) && parameter.mutable
-    ? compileNativeParameter(parameter)
-    : gen`${Compile.Expression(expression)}.jsValue`
+  if (AST.isParameterDeclaration(parameter) && parameter.mutable) {
+    return compileNativeParameter(parameter)
+  }
+  const value = Compile.Expression(expression)
+  return Type.ofExpression(expression).kind === 'capability'
+    ? gen`${value}.evaluate()`
+    : gen`${value}.jsValue`
 }
 
 function CompileAmbientParameterType(ambient: AST.RenderAmbientChannel): Compiled {
@@ -107,6 +111,7 @@ function CompileExpressionJsType(expression: AST.Expression): Compiled {
 
 function CompileTaoJsType(type: ASTUtils.TaoType): Compiled {
   return Switch.kind(type, {
+    capability: () => gen`TR.Capability`,
     primitive: type =>
       Switch(type.primitive, {
         action: () => {

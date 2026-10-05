@@ -275,7 +275,9 @@ function compileRelationSourceFilter(
   source: AST.MemberAccessExpression,
   entity: ASTUtils.DataEntityDefinition,
 ): Compiled {
-  const ownerType = Type.atMemberPath(Type.ofValueDeclaration(source.target.ref), source.members.slice(0, -1))
+  const target = source.target.ref
+  Assert(AST.isValueDeclaration(target), 'validated relation query source names a value declaration')
+  const ownerType = Type.atMemberPath(Type.ofValueDeclaration(target), source.members.slice(0, -1))
   if (ownerType.kind !== 'entity') {
     return Assert.never(ownerType as never, 'validated relation query source has an entity owner')
   }
@@ -286,8 +288,8 @@ function compileRelationSourceFilter(
   })
   Assert.defined(inverseField, 'validated relation query source resolves its inverse stored field')
   const owner = source.members.length === 1
-    ? Compile.ValueDeclarationReference(resolveRef(source.target))
-    : gen`TR.Member(${Compile.ValueDeclarationReference(resolveRef(source.target))}, [${
+    ? Compile.ValueDeclarationReference(target)
+    : gen`TR.Member(${Compile.ValueDeclarationReference(target)}, [${
       gen.join(
         source.members.slice(0, -1),
         member => gen`${gen.jsLiteral(member)}`,
