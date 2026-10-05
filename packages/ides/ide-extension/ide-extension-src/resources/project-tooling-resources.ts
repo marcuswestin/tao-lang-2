@@ -1,4 +1,4 @@
-import { collectProjectTypeScriptResources } from '@project-tooling'
+import { collectProjectTypeScriptResources, type ProjectToolingOptions } from '@project-tooling'
 import { Errors, FS } from '@shared'
 
 type ResourceInputs = {
@@ -6,6 +6,7 @@ type ResourceInputs = {
   moduleRoots: readonly string[]
   typescriptLibRoot: string
   outputRoot: string
+  nativeBindings?: ProjectToolingOptions['nativeBindings']
 }
 
 const RESOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs', '.json'])

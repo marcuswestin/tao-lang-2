@@ -52,9 +52,21 @@ normalize import-type module references to package-relative declaration paths;
 two relocated fixtures produce identical catalogs and generated files. Shared
 directory synchronization excludes reserved mutation coordination entries from
 both inventories, retaining exact byte hashes, symlink rejection and data-drift
-checks. Focused regressions pass. The initial host gate remains failed: compiler,
-source-action and validator timeouts passed its isolated retries, while runtime
-Jest still needs an isolated confirmation and complete gate retry.
+checks. Focused regressions and independent review pass. The relocated checkout's
+frozen setup leaves tracked files unchanged. Broad validation still has no green
+verdict: compiler and Studio contention confirmations passed, and both timed-out
+Jest files subsequently passed separately. A synthetic editor-resource fixture
+mixed fake React declarations with the maintained native roots; staging now
+accepts the collector's explicit native root so these fixtures remain isolated.
+The real SDK case retains native roots, and genuinely conflicting installs remain
+rejected. Current main's incremental compiler and project-tooling changes require
+integration, review of refresh replay against native freshness, and final gates.
+
+One host run also reported an intermittent denied process-group signal-zero probe;
+the unchanged focused suite and subsequent shared full-run suite passed. Inspection
+failures remain fatal. The related libproc error-versus-empty audit is recorded in
+the existing developer-environment process-visibility entry; this bridge work
+introduces no process-inspection fallback or permission change.
 
 Setup, VSIX packaging, standalone packaging and all 21 installed CLI acceptance
 scenarios pass, including recovery from a deleted binding using only installed
