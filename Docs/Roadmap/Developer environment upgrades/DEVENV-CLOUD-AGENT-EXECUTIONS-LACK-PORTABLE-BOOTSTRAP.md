@@ -645,3 +645,59 @@ the exact cold and cached containers and run-specific Ubuntu base image; read-on
 `20260928T074946Z-21148` confirmed absence. Shared tools and builder caches remain for reuse.
 This closes local native ARM64 cold/cached contributor acceptance at `eaea244f`. It does not prove
 native amd64, hosted-cloud execution, host-only native/UI lanes, or the slow Studio smoke lane.
+
+## October 4 Claude cloud session
+
+A hosted Claude cloud session ran the repository's own lanes from main `fef60a5` on branch
+`feat/cloud-workflow-verify`. The container was Linux on 4 CPUs, running as root, with no IPv6 stack
+(no `/proc/net/if_inet6`). `./agent setup` left `.codex/config.toml` unmodified. The session title
+did not carry the `CLOUD: ` prefix until it was set by hand, even though the SessionStart rename
+note was present. A session started from the app is untitled at SessionStart, so a
+UserPromptSubmit hook (`agent-prompt-submit.zsh`) now prefixes the custom title on the next prompt;
+the harness passes only a custom title, never a generated one, to that hook. Port-reservation
+suites passed without IPv6.
+
+The per-commit gate exposed Linux and root defects, each fixed on the branch and proved by a failing
+case before the fix:
+
+- `e673f49`: as root, the unreadable-connection regression is injected rather than relying on file
+  modes.
+- `c3c27b1`: command-barrier workers run under Bash for `read -t`.
+- `501e91a`: the board-lock fixture reads its clock once.
+- `d7ccea5`: Android recovery reads settlement once more after its deadline.
+- `8eed7dc`: the iOS barrier tests use `cat` off macOS, where `/usr/bin/plutil` is absent, and give
+  the finite deadline a 2-second budget, because worker readiness alone took over 400 ms under load.
+- `539f75e`: the agent runner subscribes to termination signals before spawning. A signal in the
+  former gap killed the runner by default and orphaned its child, which `cli/agent-cli` caught as
+  `Expected: 143 Received: null`; a 300 ms stall reproduced it.
+
+The final `verify-changed` passed 48, failed 0 and skipped 1.
+
+`verify-full` stopped at its first definite failure four times:
+
+- Run 2 hit the agent-runner race above.
+- Runs 3 and 4 failed `studio-smoke` on the Watchman preflight. `d62a1a2` made the error show
+  Watchman's own report: `Watchman is running at a lower than normal priority. (nice_value=10,
+  min_acceptable_nice_value=0) ... refusing to start`. verify lowers its own priority to nice 10. On
+  macOS launchd starts the daemon, but on Linux the first client forks it at the lane's priority.
+  `c956236` starts the shared daemon at inherited priority before that lowering, only off macOS and
+  only when the lane includes a Studio gate.
+- Run 5 then started every browser Studio gate. It passed 44, failed 2 and skipped 13 in 1,512.8s,
+  with load peaking at 15.2. `studio-smoke-native` and `studio-canary` were skipped with
+  `requires macOS; not run on linux`, and `ship-bundle-proof` passed on Linux.
+- Run 5's `studio-smoke-simulated-user` failed at 134.8s waiting for a sketch catalog transition. It
+  passed alone in 91.2s, so it is classified as host capability: CPU starvation on 4 CPUs.
+- Run 5's `studio-proof-real-app` failed in the lane and alone, at different steps:
+  - In the lane, it waited 15s for the new sketch board.
+  - Alone, it waited for the `StoryTypical` feed row after Undo Keep. The row was present but
+    disabled while a compile cascade was still applying.
+  - Diagnosis: the journey waits for files on disk, then gives the default 15-second browser budget
+    to UI that updates only after a compile. On this host the whole journey also nears bun's
+    300-second per-test limit.
+  - Fixed on the branch: the board wait gets 30s, each bind waits for the compile and an enabled
+    `StoryTypical` row, and the test limit is 480s. Run alone afterwards it passed in 370.4s, past
+    the old limit; a full lane run with it is still unproved. Aborted runs also left Expo servers behind;
+    see [DEVENV-STUDIO-SMOKE-LEAVES-EXPO-SERVERS-RUNNING](DEVENV-STUDIO-SMOKE-LEAVES-EXPO-SERVERS-RUNNING.md).
+
+Hosted Claude proof is therefore partial: the per-commit gate passes, and full verification reaches
+every Linux lane but does not yet finish green. Codex cloud proof was not attempted and remains open.

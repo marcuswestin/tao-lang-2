@@ -107,15 +107,20 @@ Describe('Studio test process output', () => {
       format: 'tao-journey-observations',
       version: 1,
     }
+    const root = await mkTestDir('studio-test-journey-artifact-')
     const runner = new StudioTestProcessRunner({
       args: ['-c', `printf '%s' '${JSON.stringify(artifact)}' > "$2"`, 'journey-artifact'],
       command: '/bin/sh',
-      cwd: FS.tmpdir(),
+      cwd: root,
+      resourceIndexRoot: FS.resolvePath('resource-index', root),
     })
-
-    await runner.run()
-
-    Expect(runner.journeyObservations()).toEqual(artifact)
+    try {
+      await runner.run()
+      Expect(runner.journeyObservations()).toEqual(artifact)
+    } finally {
+      await runner.close()
+      await FS.remove(root)
+    }
   })
 })
 
@@ -534,7 +539,8 @@ Describe('Studio native wrapper foundation', () => {
   Test('stops Electrobun gracefully and closes process resources', async () => {
     const fake = fakeCommand(true)
 
-    await StudioNative.testing.stopCommand(fake.command, async () => {})
+    // A timer turn allows authoritative asynchronous output closure to settle before timeout.
+    await StudioNative.testing.stopCommand(fake.command, () => Time.sleep(0))
 
     Expect(fake.events).toEqual(['kill SIGTERM', 'close-output', 'dispose'])
   })
@@ -542,7 +548,10 @@ Describe('Studio native wrapper foundation', () => {
   Test('forces Electrobun closed after the graceful timeout and closes process resources', async () => {
     const fake = fakeCommand(false)
 
-    await StudioNative.testing.stopCommand(fake.command, async () => {})
+    // Polls pass at once and the output-close bound never elapses, so the fake reaches SIGKILL and
+    // closes without real timers, which a loaded runner once stretched past the 5000ms stop bound.
+    const neverElapses = new Promise<void>(() => {})
+    await StudioNative.testing.stopCommand(fake.command, async ms => ms > 25 ? await neverElapses : undefined)
 
     Expect(fake.events).toEqual(['kill SIGTERM', 'kill SIGKILL', 'close-output', 'dispose'])
   })
@@ -891,6 +900,25 @@ Describe('Studio smoke resource isolation', () => {
           : '{"version":"2026.01.19.00","capabilities":["field-content.sha1hex","relative_root","suffix-set","wildmatch"]}',
       }),
     })).rejects.toThrow('Check Watchman access to ~/Library/LaunchAgents')
+  })
+
+  Test('names what Watchman reported when it cannot establish a watch', async () => {
+    await Expect(StudioDev.testing.studioWatchmanEnvironment({
+      isFile: async () => true,
+      repositoryRoot: '/repo',
+      run: async (command, spec) => ({
+        args: ['watch-project', '/repo'],
+        command,
+        exitCode: spec.args?.[0] === 'watch-project' ? 1 : 0,
+        signal: null,
+        stderr: spec.args?.[0] === 'watch-project' ? 'inotify_init: Too many open files' : '',
+        stdout: spec.args?.[0] === 'watch-project'
+          ? ''
+          : spec.args?.includes('get-sockname')
+          ? '{"sockname":"/repo/.watchman.sock"}'
+          : '{"version":"2026.01.19.00","capabilities":["field-content.sha1hex","relative_root","suffix-set","wildmatch"]}',
+      }),
+    })).rejects.toThrow('Watchman reported: inotify_init: Too many open files')
   })
 
   Test("stops before Metro when Watchman cannot pass Metro's no-spawn capability check", async () => {

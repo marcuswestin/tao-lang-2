@@ -117,9 +117,12 @@ change that addressed it.
 - [DEVENV-SANDBOXED-GIT-XCRUN-CACHE-WARNING-FAILS-STDERR-ASSERTIONS — Sandboxed git's xcrun cache warning fails stderr assertions](<Developer environment upgrades/DEVENV-SANDBOXED-GIT-XCRUN-CACHE-WARNING-FAILS-STDERR-ASSERTIONS.md>) — Candidate
 - [DEVENV-SANDBOXED-VERIFY-FAILS-DEV-CLI-SHELL-TESTS — Sandboxed verification fails the dev-cli shell tests](<Developer environment upgrades/DEVENV-SANDBOXED-VERIFY-FAILS-DEV-CLI-SHELL-TESTS.md>) — Candidate
 - [DEVENV-SECRET-MATERIALIZATION-MISSING-FROM-AGENT-COMMANDS — Secret materialization is missing from agent commands](<Developer environment upgrades/DEVENV-SECRET-MATERIALIZATION-MISSING-FROM-AGENT-COMMANDS.md>) — Candidate
+- [DEVENV-SETUP-SUCCEEDS-WHEN-RULESYNC-REJECTS-HOOKS — Setup succeeds when rulesync rejects the hooks file](<Developer environment upgrades/DEVENV-SETUP-SUCCEEDS-WHEN-RULESYNC-REJECTS-HOOKS.md>) — Candidate
+- [DEVENV-STRANDED-DEVELOPMENT-RESOURCE-DISCOVERY — Stranded development resource discovery](<Developer environment upgrades/DEVENV-STRANDED-DEVELOPMENT-RESOURCE-DISCOVERY.md>) — In progress
 - [DEVENV-STUDIO-LEGACY-LOCK-TEST-IS-INTERMITTENT — Studio legacy-lock test is intermittent](<Developer environment upgrades/DEVENV-STUDIO-LEGACY-LOCK-TEST-IS-INTERMITTENT.md>) — Candidate
 - [DEVENV-STUDIO-REAL-APP-PROOF-FAILS-INTERMITTENTLY-UNDER-LOAD — The Studio real-app proof fails intermittently under load](<Developer environment upgrades/DEVENV-STUDIO-REAL-APP-PROOF-FAILS-INTERMITTENTLY-UNDER-LOAD.md>) — In progress
 - [DEVENV-STUDIO-SMOKE-GENERATED-SOURCE-FRESHNESS-RACE — Studio smoke generated-source freshness race](<Developer environment upgrades/DEVENV-STUDIO-SMOKE-GENERATED-SOURCE-FRESHNESS-RACE.md>) — Candidate
+- [DEVENV-STUDIO-SMOKE-LEAVES-EXPO-SERVERS-RUNNING — Studio smoke leaves Expo servers running](<Developer environment upgrades/DEVENV-STUDIO-SMOKE-LEAVES-EXPO-SERVERS-RUNNING.md>) — Candidate
 - [DEVENV-TAO-BUILD-SNAPSHOT-LOSES-PROJECT-PACKAGES — Tao build snapshot loses project packages](<Developer environment upgrades/DEVENV-TAO-BUILD-SNAPSHOT-LOSES-PROJECT-PACKAGES.md>) — Candidate
 - [DEVENV-TAO-DEV-IGNORES-PROVIDER-PACKAGE-EDITS — A running `tao run` ignores provider package edits](<Developer environment upgrades/DEVENV-TAO-DEV-IGNORES-PROVIDER-PACKAGE-EDITS.md>) — Candidate
 - [DEVENV-TAO-FIX-NEVER-REUSES-THE-CHECK-MEMO — Tao fix never reuses the check memo, so every verify lane refixes the whole repository](<Developer environment upgrades/DEVENV-TAO-FIX-NEVER-REUSES-THE-CHECK-MEMO.md>) — Candidate

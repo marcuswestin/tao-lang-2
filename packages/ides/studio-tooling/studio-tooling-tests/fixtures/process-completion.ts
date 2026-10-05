@@ -6,6 +6,7 @@ const original = { ...Platform }
 const nativeSpawn = Platform.spawn
 const mode = Platform.runtimeProcess.argv[2]!
 const root = Platform.runtimeProcess.argv[3]!
+const resourceIndexRoot = FS.resolvePath('resource-index', root)
 const releasePath = FS.resolvePath('release', root)
 const artifacts: string[] = []
 const children: { child: ReturnType<typeof nativeSpawn>; exited: boolean; suppressed: number }[] = []
@@ -53,6 +54,7 @@ function cleanup(): void {
   for (const path of [releasePath, ...artifacts]) {
     FS.removeSync(path)
   }
+  FS.removeSync(resourceIndexRoot)
 }
 const deadline = setTimeout(() => {
   cleanup()
@@ -95,6 +97,7 @@ try {
         args: ['-c', `printf '%s' '${JSON.stringify(artifact)}' > "$3"; ${shell}`, 'completion-fixture', releasePath],
         command: '/bin/sh',
         cwd: root,
+        resourceIndexRoot,
       })
       let settled = false
       const pending = runner.run().then(result => {
@@ -117,9 +120,10 @@ try {
     },
     async exit() {
       const output: string[] = []
-      const tree = startStudioProcessTree('/bin/sh', {
+      const tree = await startStudioProcessTree('/bin/sh', {
         args,
         settleOnExit: true,
+        resourceIndexRoot,
         onOutput: (_stream, chunk) => output.push(chunk.toString()),
       })
       const closed = new Promise(resolve => tree.onceClose(resolve))

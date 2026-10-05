@@ -5,6 +5,33 @@ import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 const DISPATCHER = Repo.resolvePath('packages/cli/agent-cli/agent-cli-src/cli/agent-host-dispatch.ts')
 
 Describe('named host command dispatch', () => {
+  Test('resource discovery admits only its read-only report forms', async () => {
+    const root = await mkTestDir('tao-resource-host-')
+    try {
+      const source = FS.resolvePath('permissions.jsonc', root)
+      const log = FS.resolvePath('dev.log', root)
+      await FS.writeText(source, '{ "agentHostCommands": ["resources"] }')
+      await FS.writeText(FS.resolvePath('dev', root), '#!/bin/sh\nprintf "%s\\n" "$@" > "$TAO_HOST_LOG"\n')
+      await FS.chmod(FS.resolvePath('dev', root), 0o755)
+      const run = (args: string[]) =>
+        CLI.run(Platform.runtimeProcess.execPath, {
+          args: [DISPATCHER, source, 'resources', ...args],
+          cwd: root,
+          env: { TAO_HOST_LOG: log },
+        })
+      for (const args of [['--register-directory', root], ['--task', 'other'], ['--json', '--json'], ['--execute']]) {
+        Expect((await run(args)).exitCode).toBe(2)
+        Expect(await FS.exists(log)).toBe(false)
+      }
+      Expect((await run(['--json'])).exitCode).toBe(0)
+      Expect((await FS.readText(log)).trim().split('\n')).toEqual(['resources', '--json'])
+      Expect((await run([])).exitCode).toBe(0)
+      Expect((await FS.readText(log)).trim()).toBe('resources')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('routes app-dev visibility through the owned-device wrapper', async () => {
     const root = await mkTestDir('tao-app-dev-host-')
     try {

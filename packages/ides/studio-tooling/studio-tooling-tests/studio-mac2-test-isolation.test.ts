@@ -571,6 +571,9 @@ async function fixture() {
       let identityReads = 0
       let kernelUnknown = false
       let listener: ReturnType<typeof Bun.serve> | undefined
+      // A real runner holds its reserved port until signalled. Unheld, any socket in a busy lane
+      // can take the ephemeral port and fail teardown's rebind proof.
+      let runnerPort: ReturnType<typeof Bun.serve> | undefined
       let port: number | undefined
       let holdStatus = false
       let replaced = false
@@ -671,6 +674,9 @@ async function fixture() {
             }
             registered = true
             bound = options.registrationOnly === undefined
+            if (bound && scenario === 'normal') {
+              runnerPort = Bun.serve({ hostname: '127.0.0.1', port: options.port, fetch: () => new Response('{}') })
+            }
           }
           return {
             acknowledged: () => registered,
@@ -733,6 +739,8 @@ async function fixture() {
           }
           if (scenario !== 'survivor' && scenario !== 'reused-pid') {
             alive = false
+            runnerPort?.stop(true)
+            runnerPort = undefined
             if (scenario === 'startup-redirect') {
               listener?.stop(true)
             }
@@ -857,6 +865,8 @@ async function fixture() {
         },
         replaceWda: () => {
           replaced = true
+          runnerPort?.stop(true)
+          runnerPort = undefined
           listener ??= Bun.serve({
             hostname: '127.0.0.1',
             port: run.systemPort,

@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Fixed source-only command adapter; never executes simctl or the SDK downloader.
 [ "$#" -eq 5 ] || exit 71
 generation=$1

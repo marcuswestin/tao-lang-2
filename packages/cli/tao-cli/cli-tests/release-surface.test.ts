@@ -93,6 +93,7 @@ Describe('Immutable public release surfaces', () => {
           ship?: string[]
         }
         Expect(value.phase).toBe(phase)
+        Expect(value.commands).toContain('resources')
         Expect(value.commands).not.toContain('agents')
         Expect(value.commands).not.toContain('review')
         for (const deferred of ['bridge', 'secrets', 'instantdb', 'connect', 'jazz', 'convex', 'pylon', 'firebase']) {

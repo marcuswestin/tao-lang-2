@@ -19,6 +19,7 @@ const MANAGED_LOOP_ACCEPTANCE_CASES = [
   'android-recovery',
   'android-parallel',
   'ios-lifecycle',
+  'ios-cleanup',
   'ios-visible',
   'ios-parallel',
   'ios-recovery',

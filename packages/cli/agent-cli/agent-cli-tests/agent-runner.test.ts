@@ -36,7 +36,7 @@ Describe('agent runner', () => {
       ])
 
       const captured = await withCapturedOutput(() =>
-        runAgentCommand({ args: [], command: 'probe', cwd: scratch, spawnArgs: [script], spawnCommand: 'bun' })
+        runAgentCommand({ env: {}, args: [], command: 'probe', cwd: scratch, spawnArgs: [script], spawnCommand: 'bun' })
       )
 
       Expect(captured.result).toBe(3)
@@ -56,7 +56,7 @@ Describe('agent runner', () => {
       ])
 
       await withCapturedOutput(() =>
-        runAgentCommand({ args: [], command: 'probe', cwd: scratch, spawnArgs: [script], spawnCommand: 'bun' })
+        runAgentCommand({ env: {}, args: [], command: 'probe', cwd: scratch, spawnArgs: [script], spawnCommand: 'bun' })
       )
 
       const logDir = FS.resolvePath('.artifacts/logs/agent/probe', scratch)
@@ -90,7 +90,7 @@ Describe('agent runner', () => {
       ])
 
       const captured = await withCapturedOutput(() =>
-        runAgentCommand({ args: [], command: 'probe', cwd: scratch, spawnArgs: [script], spawnCommand: 'bun' })
+        runAgentCommand({ env: {}, args: [], command: 'probe', cwd: scratch, spawnArgs: [script], spawnCommand: 'bun' })
       )
 
       Expect(captured.result).toBe(1)
@@ -117,7 +117,7 @@ Describe('agent runner', () => {
       ])
 
       const captured = await withCapturedOutput(() =>
-        runAgentCommand({ args: [], command: 'probe', cwd: scratch, spawnArgs: [script], spawnCommand: 'bun' })
+        runAgentCommand({ env: {}, args: [], command: 'probe', cwd: scratch, spawnArgs: [script], spawnCommand: 'bun' })
       )
 
       Expect(captured.result).toBe(1)
@@ -137,7 +137,7 @@ Describe('agent runner', () => {
       ])
 
       const captured = await withCapturedOutput(() =>
-        runAgentCommand({ args: [], command: 'probe', cwd: scratch, spawnArgs: [script], spawnCommand: 'bun' })
+        runAgentCommand({ env: {}, args: [], command: 'probe', cwd: scratch, spawnArgs: [script], spawnCommand: 'bun' })
       )
 
       Expect(captured.result).toBe(1)
@@ -167,6 +167,7 @@ Describe('agent runner', () => {
         ])
         const captured = await withCapturedOutput(async () => {
           const running = runAgentCommand({
+            env: {},
             args: ['--json'],
             command: 'test-host',
             cwd: scratch,
@@ -202,6 +203,7 @@ Describe('agent runner', () => {
     try {
       const captured = await withCapturedOutput(() =>
         runAgentCommand({
+          env: {},
           args: [],
           command: 'probe',
           cwd: scratch,
@@ -246,6 +248,7 @@ Describe('agent runner', () => {
         const latestPath = FS.resolvePath('.artifacts/logs/agent/probe/latest.log', scratch)
         const runPromise = withCapturedOutput(() =>
           runAgentCommand({
+            env: {},
             args: [],
             command: 'probe',
             cwd: scratch,
@@ -294,7 +297,7 @@ Describe('agent runner', () => {
       const script = await writeProbeScript(scratch, [`${LOG}('still reported')`, `${EXIT}(1)`])
 
       const captured = await withCapturedOutput(() =>
-        runAgentCommand({ args: [], command: 'probe', cwd: scratch, spawnArgs: [script], spawnCommand: 'bun' })
+        runAgentCommand({ env: {}, args: [], command: 'probe', cwd: scratch, spawnArgs: [script], spawnCommand: 'bun' })
       )
 
       Expect(captured.result).toBe(1)
@@ -313,6 +316,7 @@ Describe('agent runner', () => {
 
       const captured = await withCapturedOutput(() =>
         runAgentCommand({
+          env: {},
           args: ['--json'],
           command: 'probe',
           cwd: scratch,
@@ -356,6 +360,7 @@ Describe('agent runner', () => {
       ])
       const captured = await withCapturedOutput(() =>
         runAgentCommand({
+          env: {},
           args: ['--json', '--max-lines', '1'],
           command: 'probe',
           cwd: scratch,
@@ -389,6 +394,7 @@ Describe('agent runner', () => {
       ])
       const captured = await withCapturedOutput(() =>
         runAgentCommand({
+          env: {},
           args: ['--show-studio', '--json', '--verbose'],
           command: 'verify-full',
           cwd: scratch,
@@ -416,6 +422,7 @@ Describe('agent runner', () => {
       const script = await writeProbeScript(scratch, [`await Bun.write(${JSON.stringify(marker)}, 'spawned')`])
       const captured = await withCapturedOutput(() =>
         runAgentCommand({
+          env: {},
           args: ['--json'],
           command: 'studio-host-control-smoke',
           cwd: scratch,
@@ -445,6 +452,7 @@ Describe('agent runner', () => {
       const script = await writeProbeScript(scratch, [`${LOG}('quiet child ran')`, `${EXIT}(0)`])
       const captured = await withCapturedOutput(() =>
         runAgentCommand({
+          env: {},
           args: ['--json'],
           command: 'verify-full',
           cwd: scratch,
@@ -470,6 +478,7 @@ Describe('agent runner', () => {
       const script = await writeProbeScript(scratch, [`${LOG}('child started')`, `${EXIT}(0)`])
       const captured = await withCapturedOutput(() =>
         runAgentCommand({
+          env: {},
           args: ['--show-studio', '--verbose'],
           command: 'verify-full',
           cwd: scratch,
