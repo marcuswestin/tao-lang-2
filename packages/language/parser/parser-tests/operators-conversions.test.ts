@@ -98,10 +98,12 @@ Describe('parser: operator methods and conversions', () => {
       return alias
     }
 
-    Expect.Is(declaration('Affirmative').value, AST.isBooleanLiteral)
-    Expect(declaration('Affirmative').value.value).toBe('yes')
-    Expect.Is(declaration('Negative').value, AST.isBooleanLiteral)
-    Expect(declaration('Negative').value.value).toBe('no')
+    const affirmative = declaration('Affirmative').value
+    Expect.Is(affirmative, AST.isBooleanLiteral)
+    Expect(affirmative.value).toBe('yes')
+    const negative = declaration('Negative').value
+    Expect.Is(negative, AST.isBooleanLiteral)
+    Expect(negative.value).toBe('no')
     const constructed = declaration('Constructed').value
     Expect.Is(constructed, AST.isConfigurationConstructor)
     Expect.Is(constructed.value, AST.isBooleanLiteral)

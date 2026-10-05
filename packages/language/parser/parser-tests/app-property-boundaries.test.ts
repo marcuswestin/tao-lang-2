@@ -20,7 +20,9 @@ Describe('parser: app property expression boundaries', () => {
         for (const [index, expected] of ['BookStore', 'LibraryDesign'].entries()) {
           const value = properties[index]!.value
           Expect.Is(value, AST.isValueReference)
-          Expect(value.target.ref?.name).toBe(expected)
+          const declaration = value.target.ref
+          Expect.Is(declaration, AST.isAliasDeclaration)
+          Expect(declaration.name).toBe(expected)
         }
         const root = AST.blockStatements(app).find(AST.isAppView)
         Expect.Is(root, AST.isAppView)
@@ -42,7 +44,9 @@ Describe('parser: app property expression boundaries', () => {
     Expect.Is(app, AST.isAppDeclaration)
     const [navigator, datasource] = AST.blockStatements(app).filter(AST.isAppProperty)
     Expect.Is(navigator?.value, AST.isValueReference)
-    Expect(navigator.value.target.ref?.name).toBe('MainNav')
+    const mainNav = navigator.value.target.ref
+    Expect.Is(mainNav, AST.isAliasDeclaration)
+    Expect(mainNav.name).toBe('MainNav')
     Expect.Is(datasource?.value, AST.isConfigurationConstructor)
     Expect(datasource.value.type.ref?.name).toBe('CustomData')
   })
@@ -63,7 +67,9 @@ Describe('parser: app property expression boundaries', () => {
     }
     Expect.Is(properties[1]!.value, AST.isConfigurationConstructor)
     Expect.Is(properties[1]!.value.value, AST.isValueReference)
-    Expect(properties[1]!.value.value.target.ref?.name).toBe('Current')
+    const current = properties[1]!.value.value.target.ref
+    Expect.Is(current, AST.isAliasDeclaration)
+    Expect(current.name).toBe('Current')
   })
 
   Test('keeps identifier construction in nested arguments and member payloads', async () => {
