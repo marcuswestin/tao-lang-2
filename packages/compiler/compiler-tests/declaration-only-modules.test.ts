@@ -24,4 +24,14 @@ Describe('compiler: declaration-only modules', () => {
     Expect(code).toContain('export type ContextValue = TR.Value<string>')
     Expect(code).not.toContain('_Scope')
   })
+
+  Test('retains configuration-only declarations without a runtime prelude', async () => {
+    const parsed = await Parser.parseCode('public type Context is { Message text }', { validation: false })
+    const code = RuntimeGen.TaoFile(parsed.entry.ast, {
+      configurationTypes: 'export type ContextConfig = { Message: string }',
+    })
+    Expect(code).toContain('export type ContextConfig = { Message: string }')
+    Expect(code).not.toContain('@runtime/TR')
+    Expect(code).not.toContain('_Scope')
+  })
 })

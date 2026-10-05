@@ -49,9 +49,7 @@ export const FilesCompiler = {
     const needsRuntimePrelude = hasRuntimeStatements || emitsDataCatalog || slotBodies.length > 0
       || Boolean(scopeBindings || viewRegistrations || exportLines)
     const typesUseRuntime = configurationTypes.includes('TR.') || bridgeTypes.includes('TR.')
-    if (
-      !hasRuntimeStatements && !importLines && !scopeBindings && !exportLines && !bridgeTypes && slotBodies.length === 0
-    ) {
+    if (!needsRuntimePrelude && !importLines && !bridgeTypes && !configurationTypes) {
       return gen`export {}`
     }
     const registry = apps.length === 0 ? gen.noop() : gen`
