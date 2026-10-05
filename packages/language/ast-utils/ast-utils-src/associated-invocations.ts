@@ -1,0 +1,88 @@
+import { AST } from '@parser'
+import { Assert } from '@shared'
+import {
+  type ArgumentBindingDiagnostic,
+  type RenderInvocationPair,
+  resolveParameterArgumentBindings,
+} from './argument-bindings'
+import {
+  type AssociatedCallableDescriptor,
+  associatedMethodCallTarget,
+  capabilityRequirements,
+} from './associated-methods'
+import { type TaoType, Type } from './Type'
+
+/** Associated calls retain their real receiver, selected owner and shared argument-binding witnesses. */
+export type ResolvedAssociatedMethodInvocation = {
+  invocation: AST.MethodCallExpression
+  receiver?: TaoType
+  descriptor?: AssociatedCallableDescriptor
+  pairs: RenderInvocationPair[]
+  diagnostics: ArgumentBindingDiagnostic[]
+  problem?: 'unresolved-receiver' | 'unknown-method' | 'pending-contract' | 'unsupported-callee'
+}
+
+/** Resolve a real postfix call without fabricating a receiver expression or rebinding its root. */
+export function resolveAssociatedMethodInvocation(
+  invocation: AST.MethodCallExpression,
+): ResolvedAssociatedMethodInvocation {
+  const target = associatedMethodCallTarget(invocation)
+  if (!target) {
+    return { invocation, pairs: [], diagnostics: [], problem: 'unsupported-callee' }
+  }
+  const receiver = target.receiver.kind === 'expression'
+    ? Type.ofExpression(target.receiver.expression)
+    : Type.atMemberPath(Type.ofReferenceRoot(target.receiver.site), target.receiver.members)
+  if (receiver.kind === 'unresolved') {
+    return { invocation, receiver, pairs: [], diagnostics: [], problem: 'unresolved-receiver' }
+  }
+
+  let descriptor: AssociatedCallableDescriptor | undefined
+  if (receiver.kind === 'capability') {
+    const requirements = capabilityRequirements(receiver.declaration)
+    const index = requirements.findIndex(requirement => requirement.name === target.name)
+    if (index === -1) {
+      return { invocation, receiver, pairs: [], diagnostics: [], problem: 'unknown-method' }
+    }
+    const contract = Type.capabilityMethods(receiver)[index]
+    Assert.defined(contract, 'a materialized contract for every capability requirement')
+    if (contract.kind === 'pending') {
+      return { invocation, receiver, pairs: [], diagnostics: [], problem: 'pending-contract' }
+    }
+    descriptor = contract.descriptor
+  } else {
+    descriptor = Type.associatedMethods(receiver).find(selection =>
+      selection.descriptor.declaration.name === target.name
+    )
+      ?.descriptor
+    if (!descriptor) {
+      const declaration = Type.associatedMethodDeclaration(receiver, target.name)
+      return {
+        invocation,
+        receiver,
+        pairs: [],
+        diagnostics: [],
+        problem: declaration ? 'pending-contract' : 'unknown-method',
+      }
+    }
+  }
+
+  const inputs = new Map(descriptor.signature.inputs.map(input => [input.declaration, input]))
+  const inputOf = (parameter: AST.ParameterDeclaration) => {
+    const input = inputs.get(parameter)
+    Assert.defined(input, 'a signature input for every associated method parameter')
+    return input
+  }
+  const bindings = resolveParameterArgumentBindings(
+    descriptor.declaration.parameterList.parameters,
+    AST.argumentsOf(invocation),
+    {
+      parameterType: parameter => inputOf(parameter).type,
+      parameterName: Type.parameterName,
+      parameterOmissible: parameter => inputOf(parameter).omissible,
+      argumentType: Type.ofArgument,
+      accepts: Type.isAssignable,
+    },
+  )
+  return { invocation, receiver, descriptor, pairs: bindings.pairs, diagnostics: bindings.diagnostics }
+}

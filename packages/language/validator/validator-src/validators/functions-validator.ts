@@ -41,6 +41,7 @@ export const FunctionsValidator = {
     [AST.FunctionCallExpression.$type]: validateFunctionCall,
   } satisfies NodeValidationChecks,
   messages,
+  reportBindingDiagnostics,
 } as const
 
 function validateFunction(
@@ -123,42 +124,53 @@ function validateFunctionCall(call: AST.FunctionCallExpression, ctx: ValidationC
   if (!fn || !AST.isFunctionDeclaration(fn)) {
     return
   }
-  for (const diagnostic of resolved.diagnostics) {
+  reportBindingDiagnostics(call, fn.name, resolved.diagnostics, ctx)
+}
+
+/** Ordinary and associated calls report the same shared argument binder's diagnostics. */
+function reportBindingDiagnostics(
+  call: AST.FunctionCallExpression | AST.MethodCallExpression,
+  name: string,
+  diagnostics: readonly ASTUtils.ArgumentBindingDiagnostic[],
+  ctx: ValidationContext,
+  expectedType: (parameter: AST.ParameterDeclaration) => ASTUtils.TaoType = Type.ofParameter,
+): void {
+  for (const diagnostic of diagnostics) {
     Switch.kind(diagnostic, {
       'missing-argument': diagnostic => {
-        ctx.error(call, messages.functionMissingArgument(fn.name, Type.parameterName(diagnostic.parameter)))
+        ctx.error(call, messages.functionMissingArgument(name, Type.parameterName(diagnostic.parameter)))
       },
       'unmatched-argument': diagnostic => {
-        ctx.error(diagnostic.argument, messages.functionUnmatchedArgument(fn.name))
+        ctx.error(diagnostic.argument, messages.functionUnmatchedArgument(name))
       },
       'ambiguous-argument': diagnostic => {
-        ctx.error(diagnostic.argument, messages.functionAmbiguousArgument(fn.name, diagnostic.parameters))
+        ctx.error(diagnostic.argument, messages.functionAmbiguousArgument(name, diagnostic.parameters))
       },
       'ambiguous-parameter': diagnostic => {
-        ctx.error(call, messages.functionAmbiguousParameter(fn.name, Type.parameterName(diagnostic.parameter)))
+        ctx.error(call, messages.functionAmbiguousParameter(name, Type.parameterName(diagnostic.parameter)))
       },
       'duplicate-argument-type': diagnostic => {
-        ctx.error(diagnostic.argument, messages.functionDuplicateArgumentType(fn.name))
+        ctx.error(diagnostic.argument, messages.functionDuplicateArgumentType(name))
       },
       'duplicate-parameter-type': diagnostic => {
-        ctx.error(call, messages.functionDuplicateParameterType(fn.name, Type.parameterName(diagnostic.parameter)))
+        ctx.error(call, messages.functionDuplicateParameterType(name, Type.parameterName(diagnostic.parameter)))
       },
       'unknown-named-argument': diagnostic => {
-        ctx.error(diagnostic.argument, messages.functionUnknownLabel(fn.name, diagnostic.name))
+        ctx.error(diagnostic.argument, messages.functionUnknownLabel(name, diagnostic.name))
       },
       'duplicate-named-argument': diagnostic => {
         ctx.error(
           diagnostic.argument,
-          messages.functionDuplicateLabel(fn.name, Type.parameterName(diagnostic.parameter)),
+          messages.functionDuplicateLabel(name, Type.parameterName(diagnostic.parameter)),
         )
       },
       'named-argument-type': diagnostic => {
         ctx.error(
           diagnostic.argument,
           messages.functionLabelType(
-            fn.name,
+            name,
             Type.parameterName(diagnostic.parameter),
-            Type.displayName(Type.ofParameter(diagnostic.parameter)),
+            Type.displayName(expectedType(diagnostic.parameter)),
             Type.displayName(Type.ofArgument(diagnostic.argument)),
           ),
         )

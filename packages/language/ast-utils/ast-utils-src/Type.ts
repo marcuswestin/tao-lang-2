@@ -1,14 +1,21 @@
 import { AST } from '@parser'
 import { Switch } from '@shared'
 import {
+  associatedCallableAnalysis,
+  type AssociatedCallableDescriptor,
+  associatedCallableDescriptor,
   type AssociatedDescriptorMaterialization,
   associatedMethodCallTarget,
   type AssociatedMethodSelection,
   capabilityRequirements,
+  hasAssociatedEffects,
   materializeAssociatedCallable,
   ownAssociatedMethods,
+  withAssociatedAdmissionPair,
 } from './associated-methods'
-import { callableSignatureOf } from './callable-signatures'
+import { puritySatisfiesFunction } from './callable-effects'
+import { type CallableSignatureComparison, callableSignatureOf, compareCallableSignatures } from './callable-signatures'
+import { failureContractSatisfiesBound } from './failure-contracts'
 import { resolveActionInvocation } from './invocations'
 import { NumericUnits } from './NumericUnits'
 import { parameterRequiresWritable } from './reactive-parameters'
@@ -54,6 +61,15 @@ export type TaoType =
   | { kind: 'unresolved' }
 
 export type ItemShapeField = AST.TypeProperty | AST.EntityDataField
+
+/** Admission retains the exact required/supplied contracts and ordered parameter correspondence. */
+export type AssociatedCapabilityWitness = Readonly<{
+  kind: 'concrete' | 'projection'
+  receiver: TaoType
+  required: AssociatedCallableDescriptor
+  supplied: AssociatedCallableDescriptor
+  correspondence: CallableSignatureComparison['correspondence']
+}>
 
 /** ItemShape is the effective slot surface of an item type, including projected data fields. */
 export type ItemShape = {
@@ -189,6 +205,25 @@ export class Type {
   }
 
   /** Discovery retains nominal identity and chooses the nearest inherited implementation. */
+  static associatedMethodDeclaration(
+    receiver: TaoType,
+    name: string,
+  ): Readonly<{ declaration: AST.AssociatedFunctionDeclaration; owner: AST.TypeDeclaration }> | undefined {
+    const nominal = nominalOf(receiver)
+    if (nominal) {
+      for (const owner of nominalChain(nominal)) {
+        if (AST.isTypeDeclaration(owner)) {
+          const declaration = ownAssociatedMethods(owner).find(method => method.name === name)
+          if (declaration) {
+            return { declaration, owner }
+          }
+        }
+      }
+    }
+    return undefined
+  }
+
+  /** Discovery retains nominal identity and chooses the nearest inherited implementation. */
   static associatedMethods(receiver: TaoType): readonly AssociatedMethodSelection[] {
     const nominal = nominalOf(receiver)
     if (!nominal) {
@@ -203,7 +238,12 @@ export class Type {
       for (const declaration of ownAssociatedMethods(owner)) {
         if (!names.has(declaration.name)) {
           names.add(declaration.name)
-          const materialized = Type.associatedCallable(declaration, owner)
+          const descriptor = associatedCallableDescriptor(declaration)
+          const materialized: AssociatedDescriptorMaterialization = hasAssociatedEffects()
+            ? descriptor
+              ? { kind: 'ready', descriptor }
+              : { kind: 'pending', dependencies: [declaration] }
+            : Type.associatedCallable(declaration, owner)
           if (materialized.kind === 'ready') {
             selected.set(declaration.name, { receiver, descriptor: materialized.descriptor })
           }
@@ -216,9 +256,13 @@ export class Type {
   static capabilityMethods(
     type: Extract<TaoType, { kind: 'capability' }>,
   ): readonly AssociatedDescriptorMaterialization[] {
-    return capabilityRequirements(type.declaration).map(declaration =>
-      Type.associatedCallable(declaration, type.declaration)
-    )
+    return capabilityRequirements(type.declaration).map(declaration => {
+      if (!hasAssociatedEffects()) {
+        return Type.associatedCallable(declaration, type.declaration)
+      }
+      const descriptor = associatedCallableDescriptor(declaration)
+      return descriptor ? { kind: 'ready', descriptor } : { kind: 'pending', dependencies: [declaration] }
+    })
   }
 
   /** Declared materialization precedes effect-dependent admission and never selects a witness. */
@@ -233,6 +277,19 @@ export class Type {
         callableSignatureOf(
           callable.parameterList.parameters,
           { cases: [], open: callable.failureBound !== 'never' },
+          {
+            inputDomain: parameter => {
+              const inline = parameter.inlineType
+              if (inline && !AST.isNamedTypeReference(inline.type)) {
+                const underlying = resolution.ofTypeExpression(inline.type)
+                if (underlying.kind === 'primitive' || underlying.kind === 'list') {
+                  return inline.optional ? { kind: 'union', members: [underlying, Type.ofNone()] } : underlying
+                }
+              }
+              return resolution.ofParameter(parameter)
+            },
+            accepts: (actual, expected) => isPrimitiveNamed(actual, 'none') && containsNoneDomain(expected),
+          },
         ),
       result: callable =>
         AST.isCapabilityMethodDeclaration(callable)
@@ -453,23 +510,33 @@ export class Type {
 
   /** isAssignable returns whether an actual value type can satisfy an expected parameter/property type. */
   static isAssignable(actual: TaoType, expected: TaoType): boolean {
+    return Type.admitsType(actual, expected, true)
+  }
+
+  /** Callable substitution cannot construct a nominal value promised by the receiving contract. */
+  static isCallableAssignable(actual: TaoType, expected: TaoType): boolean {
+    return Type.admitsType(actual, expected, false)
+  }
+
+  private static admitsType(actual: TaoType, expected: TaoType, constructsNominal: boolean): boolean {
+    const accepts = constructsNominal ? Type.isAssignable : Type.isCallableAssignable
     // A bare key is written as text and read as the shortcut it names, the way a bare number in
     // size position is read as a size. The reverse is not true: a shortcut is not text.
     if (isPrimitiveNamed(expected, 'shortcut') && isPrimitiveNamed(actual, 'text')) {
-      return true
+      return constructsNominal
     }
     // Every value the actual can be must be one the expected accepts. Distributing the actual side
     // first is what lets an optional satisfy an optional: asking instead whether the whole actual
     // union fits one member of the expected union would reject it.
     if (actual.kind === 'union') {
-      return actual.members.every(member => Type.isAssignable(member, expected))
+      return actual.members.every(member => accepts(member, expected))
     }
     if (expected.kind === 'union') {
-      return expected.members.some(member => Type.isAssignable(actual, member))
+      return expected.members.some(member => accepts(actual, member))
     }
-    // Until a proved structural witness is available, only an existing identical carrier fits.
     if (expected.kind === 'capability') {
-      return actual.kind === 'capability' && actual.declaration === expected.declaration
+      return (actual.kind === 'capability' && actual.declaration === expected.declaration)
+        || Type.capabilityWitnesses(actual, expected) !== undefined
     }
     if (actual.kind === 'capability') {
       return false
@@ -477,13 +544,90 @@ export class Type {
     if (!quantityOwnersAgree(actual, expected)) {
       return false
     }
-    if (!typesHaveCompatibleBase(actual, expected)) {
+    if (!typesHaveCompatibleBase(actual, expected, accepts)) {
       return false
     }
-    if (actual.kind === 'list' && expected.kind === 'list' && !listTypeIsAssignable(actual, expected)) {
+    if (actual.kind === 'list' && expected.kind === 'list' && !listTypeIsAssignable(actual, expected, accepts)) {
       return false
     }
-    return nominalOf(expected) ? actualSatisfiesExpectedNominal(actual, expected) : true
+    if (
+      !constructsNominal && actual.kind === 'item' && expected.kind === 'item'
+      && !nominalOf(expected) && !itemContractHasSameFieldWitnesses(actual.item, expected.item)
+    ) {
+      return false
+    }
+    return nominalOf(expected) ? actualSatisfiesExpectedNominal(actual, expected, constructsNominal) : true
+  }
+
+  /** Final admission consumes sealed contracts/effects and never invokes a resolver or analyzer. */
+  static capabilityWitnesses(
+    actual: TaoType,
+    expected: Extract<TaoType, { kind: 'capability' }>,
+  ): readonly AssociatedCapabilityWitness[] | undefined {
+    if (!hasAssociatedEffects()) {
+      return undefined
+    }
+    const actualOwner = actual.kind === 'capability' ? actual.declaration : nominalOf(actual)
+    if (
+      !AST.isTypeDeclaration(actualOwner)
+      || (actual.kind !== 'capability' && !isPrimitiveNamed(actual, 'text'))
+    ) {
+      return undefined
+    }
+    let witnesses: readonly AssociatedCapabilityWitness[] | undefined
+    const accepted = withAssociatedAdmissionPair(actualOwner, expected.declaration, () => {
+      const supplied = new Map<string, AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration>()
+      const owners = actual.kind === 'capability' ? [actual.declaration] : nominalChain(actualOwner)
+      for (const owner of owners) {
+        if (!AST.isTypeDeclaration(owner)) {
+          continue
+        }
+        const methods = actual.kind === 'capability' ? capabilityRequirements(owner) : ownAssociatedMethods(owner)
+        for (const method of methods) {
+          if (!supplied.has(method.name)) {
+            supplied.set(method.name, method)
+          }
+        }
+      }
+      const selected: AssociatedCapabilityWitness[] = []
+      const requiredMethods = capabilityRequirements(expected.declaration)
+      if (new Set(requiredMethods.map(method => method.name)).size !== requiredMethods.length) {
+        return false
+      }
+      for (const requirement of requiredMethods) {
+        const required = associatedCallableDescriptor(requirement)
+        const implementation = supplied.get(requirement.name)
+        const implementationDescriptor = implementation && associatedCallableDescriptor(implementation)
+        if (!required || !implementation || !implementationDescriptor) {
+          return false
+        }
+        const analysis = actual.kind === 'capability' ? undefined : associatedCallableAnalysis(implementation)
+        if (
+          actual.kind !== 'capability'
+          && (!analysis || !puritySatisfiesFunction(analysis.effects.purity)
+            || !failureContractSatisfiesBound(analysis.effects.failures, implementationDescriptor.signature.failures))
+        ) {
+          return false
+        }
+        const signature = analysis
+          ? { ...implementationDescriptor.signature, failures: analysis.effects.failures }
+          : implementationDescriptor.signature
+        const comparison = compareCallableSignatures(signature, required.signature, Type.isCallableAssignable)
+        if (!comparison.compatible || !Type.isCallableAssignable(implementationDescriptor.result, required.result)) {
+          return false
+        }
+        selected.push({
+          kind: actual.kind === 'capability' ? 'projection' : 'concrete',
+          receiver: actual,
+          required,
+          supplied: implementationDescriptor,
+          correspondence: comparison.correspondence,
+        })
+      }
+      witnesses = Object.freeze(selected.map(selection => Object.freeze(selection)))
+      return true
+    })
+    return accepted ? witnesses : undefined
   }
 
   /**
@@ -911,7 +1055,11 @@ function slotShape(type: TaoType): ItemShape | undefined {
 
 /** typesHaveCompatibleBase is the agreement on kind, declaration, and callback signature that both
  * assignability and casting require before either applies its own rules. */
-function typesHaveCompatibleBase(actual: TaoType, expected: TaoType): boolean {
+function typesHaveCompatibleBase(
+  actual: TaoType,
+  expected: TaoType,
+  accepts: (actual: TaoType, expected: TaoType) => boolean = Type.isAssignable,
+): boolean {
   const bothTypesAreResolved = !isUnresolvedType(actual) && !isUnresolvedType(expected)
   const typesShareKind = actual.kind === expected.kind
   if (!bothTypesAreResolved || !typesShareKind || !primitiveFamilyIsAssignable(actual, expected)) {
@@ -924,7 +1072,7 @@ function typesHaveCompatibleBase(actual: TaoType, expected: TaoType): boolean {
     return actual.declaration === expected.declaration
   }
   if (isActionType(actual) && isActionType(expected)) {
-    return actionTypeIsAssignable(actual, expected)
+    return actionTypeIsAssignable(actual, expected, accepts)
   }
   return true
 }
@@ -932,11 +1080,22 @@ function typesHaveCompatibleBase(actual: TaoType, expected: TaoType): boolean {
 function listTypeIsAssignable(
   actual: Extract<TaoType, { kind: 'list' }>,
   expected: Extract<TaoType, { kind: 'list' }>,
+  accepts: (actual: TaoType, expected: TaoType) => boolean,
 ): boolean {
   if (!actual.element || !expected.element) {
     return true
   }
-  return Type.isAssignable(actual.element, expected.element)
+  return accepts(actual.element, expected.element)
+}
+
+/** Anonymous field domains have no sealed structural comparison in this slice. */
+function itemContractHasSameFieldWitnesses(actual: ItemShape | undefined, expected: ItemShape | undefined): boolean {
+  if (!expected) {
+    return true
+  }
+  return actual !== undefined
+    && expected.properties.every(field => actual.properties.includes(field))
+    && (expected.dataFields ?? []).every(field => actual.dataFields?.includes(field))
 }
 
 function commonTypeCandidateIsPreferred(candidate: TaoType, current: TaoType): boolean {
@@ -969,6 +1128,7 @@ function commonTypeCandidateKey(type: TaoType): string {
 function actionTypeIsAssignable(
   actual: Extract<TaoType, { kind: 'primitive'; primitive: 'action' }>,
   expected: Extract<TaoType, { kind: 'primitive'; primitive: 'action' }>,
+  accepts: (actual: TaoType, expected: TaoType) => boolean,
 ): boolean {
   const actualRequired = actual.parameters.filter(parameter => !parameter.optional).length
   const expectedRequired = expected.parameters.filter(parameter => !parameter.optional).length
@@ -981,7 +1141,7 @@ function actionTypeIsAssignable(
     // its declared callback contract permits the caller to provide.
     return actualParameter !== undefined
       && (!actualParameter.writable || parameter.writable)
-      && Type.isAssignable(parameter.type, actualParameter.type)
+      && accepts(parameter.type, actualParameter.type)
   })
 }
 
@@ -1036,6 +1196,11 @@ function nominalOf(type: TaoType): AST.TypeDefinition | undefined {
   return canCarryNominal(type) ? type.nominal : undefined
 }
 
+/** Contract discovery needs only membership of none, with no structural type admission. */
+function containsNoneDomain(type: TaoType): boolean {
+  return isPrimitiveNamed(type, 'none') || (type.kind === 'union' && type.members.some(containsNoneDomain))
+}
+
 function quantityOwnersAgree(actual: TaoType, expected: TaoType): boolean {
   if (actual.kind === 'union') {
     return actual.members.every(member => quantityOwnersAgree(member, expected))
@@ -1070,11 +1235,11 @@ function containsNumericStorage(type: TaoType): boolean {
   return type.kind === 'union' ? type.members.some(containsNumericStorage) : isPrimitiveNamed(type, 'numeric')
 }
 
-function actualSatisfiesExpectedNominal(actual: TaoType, expected: TaoType): boolean {
+function actualSatisfiesExpectedNominal(actual: TaoType, expected: TaoType, constructsNominal: boolean): boolean {
   const actualNominal = nominalOf(actual)
   const expectedNominal = nominalOf(expected)
   if (!actualNominal && expectedNominal) {
-    return true
+    return constructsNominal
   }
   if (
     actualNominal
@@ -1432,6 +1597,9 @@ class TypeResolutionContext {
     const declaration = declarations.find(method => method.name === target.name)
     if (!declaration) {
       return unresolvedType()
+    }
+    if (hasAssociatedEffects()) {
+      return associatedCallableDescriptor(declaration)?.result ?? unresolvedType()
     }
     return AST.isCapabilityMethodDeclaration(declaration)
       ? this.ofTypeExpression(declaration.returnType)

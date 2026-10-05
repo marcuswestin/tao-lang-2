@@ -6,11 +6,15 @@ import {
 } from './app-configuration'
 import { rootAppValue } from './apps'
 import { resolveArgumentBindings } from './argument-bindings'
+import { resolveAssociatedMethodInvocation } from './associated-invocations'
 import {
+  associatedCallableAnalysis,
+  associatedCallableDescriptor,
   associatedMethodCallTarget,
   capabilityRequirements,
   materializeAssociatedCallable,
   ownAssociatedMethods,
+  withAssociatedEffects,
 } from './associated-methods'
 import { bindCallableArguments, callableSignatureOf, compareCallableSignatures } from './callable-signatures'
 import { colorValues } from './color-values'
@@ -90,10 +94,14 @@ export type { NumericUnitsDeclarationPlan, NumericUnitsSuffixResolution } from '
 
 /** ASTUtils groups shared semantic helpers for Tao AST consumers. */
 export const ASTUtils = {
+  resolveAssociatedMethodInvocation,
+  associatedCallableAnalysis,
+  associatedCallableDescriptor,
   associatedMethodCallTarget,
   capabilityRequirements,
   materializeAssociatedCallable,
   ownAssociatedMethods,
+  withAssociatedEffects,
   parameterRequiresWritable,
   writableExpression,
   literalExpression,
@@ -172,6 +180,8 @@ export const ASTUtils = {
 
 export namespace ASTUtils {
   export type AssociatedCallableDescriptor = import('./associated-methods').AssociatedCallableDescriptor
+  export type AssociatedEffectsContext = import('./associated-methods').AssociatedEffectsContext
+  export type AssociatedCapabilityWitness = import('./Type').AssociatedCapabilityWitness
   export type AssociatedDescriptorMaterialization = import('./associated-methods').AssociatedDescriptorMaterialization
   export type AssociatedMethodReceiver = import('./associated-methods').AssociatedMethodReceiver
   export type AssociatedMethodSelection = import('./associated-methods').AssociatedMethodSelection
@@ -224,6 +234,7 @@ export namespace ASTUtils {
   export type ResolvedActionTarget = import('./invocations').ResolvedActionTarget
   export type PluralCategory = import('./phrases').PluralCategory
   export type ResolvedFunctionInvocation = import('./invocations').ResolvedFunctionInvocation
+  export type ResolvedAssociatedMethodInvocation = import('./associated-invocations').ResolvedAssociatedMethodInvocation
   export type ResolvedRenderInvocation = import('./invocations').ResolvedRenderInvocation
   export type TaoType = import('./Type').TaoType
   export type UnitFamily = import('./Units').UnitFamily

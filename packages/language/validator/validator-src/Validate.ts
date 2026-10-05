@@ -1,3 +1,4 @@
+import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 import { NodeValidation, type NodeValidationChecks } from './node-validation'
 import type { ValidationContext } from './validation'
@@ -100,7 +101,14 @@ const typeInferenceChecks = NodeValidation.compile(
   ] satisfies readonly NodeValidationChecks[],
 )
 
-function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): readonly AST.Node[] {
+function validateTaoFile(
+  file: AST.TaoFile,
+  ctx: ValidationContext,
+  effects?: ASTUtils.AssociatedEffectsContext,
+): readonly AST.Node[] {
+  if (effects) {
+    return ASTUtils.withAssociatedEffects(effects, () => validateTaoFile(file, ctx))
+  }
   validateReleaseCapabilities(file, ctx)
   AppValidator.validate(file, ctx)
   validatePackageFile(file, ctx)
@@ -123,7 +131,15 @@ function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): readonly AS
   return nodes
 }
 
-function validateTypes(file: AST.TaoFile, nodes: readonly AST.Node[], ctx: ValidationContext): void {
+function validateTypes(
+  file: AST.TaoFile,
+  nodes: readonly AST.Node[],
+  ctx: ValidationContext,
+  effects?: ASTUtils.AssociatedEffectsContext,
+): void {
+  if (effects) {
+    return ASTUtils.withAssociatedEffects(effects, () => validateTypes(file, nodes, ctx))
+  }
   NodeValidation.validate(nodes, file, ctx, typeInferenceChecks)
 }
 
