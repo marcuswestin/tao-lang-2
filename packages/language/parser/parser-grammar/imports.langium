@@ -6,7 +6,7 @@ entry ImportsGrammarEntrypoint:
     UseStatement | UsePackageStatement;
 
 UseStatement:
-    'use' importedDeclarations+=[Declaration:ID] (',' importedDeclarations+=[Declaration:ID])* ('from' importPath=USE_IMPORT_PATH)?;
+    'use' (all?='all' 'from' importPath=USE_IMPORT_PATH | importedDeclarations+=[Declaration:ID] (',' importedDeclarations+=[Declaration:ID])* ('from' importPath=USE_IMPORT_PATH)?);
 
 // `use package <path> [as name]` imports a package as a namespace. Without `as`, the namespace
 // takes the path's last segment; `as` renames, which also covers segments that collide with

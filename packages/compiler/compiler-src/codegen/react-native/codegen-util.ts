@@ -24,11 +24,17 @@ export type CodegenOptions = {
   /** localDataCatalog is whether this project emits the companion catalog for `local only` entities. */
   localDataCatalog?: boolean
   selectedAppDatasourceConfiguration?: Readonly<Record<string, string>>
+  selectedAppFirebaseConfiguration?: Readonly<Record<string, string>>
+  selectedAppAuthConfiguration?: Readonly<Record<string, string>>
   selectedAppName?: string
   /** journeyObservations emits test-harness-only render source locators without Studio preview behavior. */
   journeyObservations?: boolean
   studioDataCatalog?: boolean
   studio?: boolean
+  /** Absolute AST document paths and their last changed Studio compile revision. */
+  studioSourceEpochs?: Readonly<Record<string, number>>
+  /** Absolute source paths of all visible designs and their Studio revisions. */
+  studioDesignEpochs?: Readonly<Record<string, number>>
   /** debug emits a debugger gate before every action statement. */
   debug?: boolean
   studioViews?: ReadonlyArray<{ id: string; view: AST.ViewDeclaration }>

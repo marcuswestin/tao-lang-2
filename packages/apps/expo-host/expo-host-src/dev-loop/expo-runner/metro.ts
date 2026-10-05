@@ -39,7 +39,7 @@ export function createExpoMetro(config: ExpoSessionConfig) {
     expoLink: (platform: Exclude<ExpoPlatform, 'web'>) => expoLink(config, platform),
     expoOpenEndpoint: (platform: ExpoPlatform) => expoOpenEndpoint(config, platform),
     formatOpenedRuntime,
-    reloadExpoApps: () => reloadExpoApps(config),
+    reloadExpoApps: (shouldStop?: () => boolean) => reloadExpoApps(config, shouldStop),
     waitForMetro: (shouldStop?: () => boolean) => waitForMetro(config, shouldStop),
   }
 }
@@ -48,13 +48,15 @@ export function createExpoMetro(config: ExpoSessionConfig) {
 export const ExpoMetro = createExpoMetro(ExpoConfig)
 
 /** reloadExpoApps asks Metro to reload connected Expo runtimes. */
-async function reloadExpoApps(config: ExpoSessionConfig): Promise<void> {
-  await waitForMetro(config)
+async function reloadExpoApps(config: ExpoSessionConfig, shouldStop: () => boolean = () => false): Promise<void> {
+  if (!await waitForMetro(config, shouldStop) || shouldStop()) {
+    Errors.throwUserInput('Expo reload was cancelled because the dev loop is stopping.')
+  }
   const response = await fetch(`${config.EXPO_ORIGIN}/message?method=reload`)
   if (response.ok) {
     DevLoopOutput.logDevLoop('dev', 'sent Expo reload')
   } else {
-    DevLoopOutput.logDevLoop('dev', `Expo reload failed: ${response.status} ${await response.text()}`, 'warn')
+    Errors.throwHostEnvironment(`Expo reload failed: ${response.status} ${await response.text()}`)
   }
 }
 

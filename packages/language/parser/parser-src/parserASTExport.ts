@@ -5,6 +5,7 @@ import { Langium } from './langium-exports'
 export * from './_gen_tao-parser/ast'
 export * from './ast-structure'
 export * from './color-values'
+export { isQuotedRender } from './quoted-render'
 export * from './syntax-ranges'
 
 /** Document declares a Langium document whose root is a Tao file AST. */

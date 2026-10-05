@@ -57,7 +57,7 @@ Describe('tao test compiled-output fingerprint', () => {
   Test('refuses reuse when a sibling dependency identity changes outside the hashed roots', async () => {
     await withTaoFixture({
       ...fixture,
-      'Library/.tao/project.json': '{"id":"00000000-0000-4000-8000-000000000001"}\n',
+      'Library/.tao/store/project.json': '{"id":"00000000-0000-4000-8000-000000000001"}\n',
       'Library/Package.tao': 'package { name "Widget Package" version 2.0.0 includes @widgets }\n',
       'Library/@widgets/Widget.tao': 'public view Widget() { }\n',
       'Nested/Package.tao':
@@ -66,7 +66,7 @@ Describe('tao test compiled-output fingerprint', () => {
       const request = requestFor(rootDir)
       Expect(await TestCache.fingerprint(request)).toBeUndefined()
       await FS.writeText(
-        FS.resolvePath('Library/.tao/project.json', rootDir),
+        FS.resolvePath('Library/.tao/store/project.json', rootDir),
         '{"id":"00000000-0000-4000-8000-000000000002"}\n',
       )
       Expect(await TestCache.fingerprint(request)).toBeUndefined()
@@ -78,7 +78,7 @@ Describe('tao test compiled-output fingerprint', () => {
       const request = requestFor(rootDir)
       await FS.writeText(
         FS.resolvePath('Nested/tsconfig.json', rootDir),
-        '{"extends":"./.tao/typescript/tsconfig.json"}\n',
+        '{"extends":"./.tao/cache/typescript/tsconfig.json"}\n',
       )
       Expect(await fingerprintOf(request)).toBeDefined()
 
@@ -86,7 +86,7 @@ Describe('tao test compiled-output fingerprint', () => {
       await FS.writeText(sharedConfig, '{"compilerOptions":{"strict":true}}\n')
       await FS.writeText(
         FS.resolvePath('Nested/tsconfig.json', rootDir),
-        '{"extends":["./.tao/typescript/tsconfig.json","../shared/tsconfig.json"]}\n',
+        '{"extends":["./.tao/cache/typescript/tsconfig.json","../shared/tsconfig.json"]}\n',
       )
       Expect(await TestCache.fingerprint(request)).toBeUndefined()
 
@@ -147,7 +147,7 @@ Describe('tao test compiled-output fingerprint', () => {
     await withTaoFixture({ ...fixture }, async rootDir => {
       const before = await fingerprintOf(requestFor(rootDir))
       await FS.writeText(
-        FS.resolvePath('Nested/.tao/lock.jsonc', rootDir),
+        FS.resolvePath('Nested/.tao/store/lock.jsonc', rootDir),
         '{"schemaVersion":1}\n',
       )
 

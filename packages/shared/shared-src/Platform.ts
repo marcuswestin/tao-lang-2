@@ -63,16 +63,23 @@ export function lowerProcessPriority(): void {
 }
 
 /** processIsAlive reports whether a process id still exists, without signalling it. */
-export function processIsAlive(pid: number): boolean {
+export function processIsAlive(pid: number, probe: (pid: number) => boolean = pid => process.kill(pid, 0)): boolean {
   if (!Number.isInteger(pid) || pid <= 0) {
     return false
   }
   try {
-    process.kill(pid, 0)
+    probe(pid)
     return true
   } catch (error) {
     // EPERM means the process exists and belongs to somebody else; only ESRCH means it is gone.
-    return (error as NodeJS.ErrnoException).code === 'EPERM'
+    const code = (error as NodeJS.ErrnoException | null | undefined)?.code
+    if (code === 'EPERM') {
+      return true
+    }
+    if (code === 'ESRCH') {
+      return false
+    }
+    throwHostEnvironment('Could not determine whether the process is alive.', { cause: error, details: { pid, code } })
   }
 }
 
@@ -277,8 +284,11 @@ function spawnBuffered(
     child.stdin = new Writable({
       write(chunk, _encoding, callback) {
         try {
-          sink.write(chunk)
-          Promise.resolve(sink.flush()).then(() => callback(), error => callback(asError(error)))
+          // A write the pipe cannot take at once returns a pending promise, which rejects with EPIPE
+          // when the child closes its stdin first; it must reach the callback, not go unhandled.
+          Promise.resolve(sink.write(chunk))
+            .then(() => sink.flush())
+            .then(() => callback(), error => callback(asError(error)))
         } catch (error) {
           callback(asError(error))
         }
@@ -441,6 +451,10 @@ export const runtimeProcess = {
   /** The current process id, for recording which process owns a resource. */
   get pid(): number {
     return process.pid
+  },
+  /** The user id on POSIX hosts, or undefined where the platform has none. */
+  get uid(): number | undefined {
+    return process.getuid?.()
   },
   exit(exitCode?: number | string | null): never {
     process.exit(exitCode)

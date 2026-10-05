@@ -1,4 +1,4 @@
-import { FS, HCI, Text } from '@shared'
+import { CLI, FS, HCI, Repo, Text } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { PassThrough } from 'node:stream'
 import { discoverTaoDevProjects, type TaoDevProject } from '../cli-src/dev-app-discovery'
@@ -13,6 +13,31 @@ import { runTaoDev } from '../cli-src/dev-command'
 const viewSource = 'view MainView() { render inject ```ts return null ``` }'
 
 Describe('Tao run app discovery and selection', () => {
+  Test('private managed selection returns one app before claiming a project or starting the loop', async () => {
+    const root = await mkTestDir('tao-dev-managed-selection-')
+    try {
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', root), '')
+      await FS.writeText(
+        FS.resolvePath('App.tao', root),
+        `app Chosen { id "chosen" version "1.0.0" name "Chosen" view MainView } ${viewSource}`,
+      )
+      const selected = await CLI.run(Repo.resolvePath('tao'), {
+        args: ['run', root, '--app', 'Chosen'],
+        env: { TAO_DEV_LOOP_SELECTION_ONLY: '1', TAO_DEV_LOOP_WORKER_CREDENTIALS: '' },
+      })
+      Expect(selected.exitCode).toBe(0)
+      const app = JSON.parse(selected.stdout.trim()) as { appName: string; projectRoot: string }
+      Expect(app.appName).toBe('Chosen')
+      Expect(app.projectRoot).toBe(await FS.realPath(root))
+      const statePaths: string[] = []
+      for await (const path of FS.walk(FS.resolvePath('.tao', root), { includeHidden: true })) {
+        statePaths.push(FS.relativePath(FS.resolvePath('.tao', root), path))
+      }
+      Expect(statePaths).toEqual(['.gitkeep'])
+    } finally {
+      await FS.remove(root)
+    }
+  })
   Test('discovers every runnable app recursively and groups it by project', async () => {
     const root = await mkTestDir('tao-dev-discovery-', { location: 'host' })
     try {
@@ -192,6 +217,35 @@ Describe('Tao run app discovery and selection', () => {
       // Quitting closes the dashboard's alternate screen, which restores the stale selector;
       // the exit line is what tells the user the CLI actually finished.
       Expect(stripAnsi(written)).toContain('Exited Tao run.')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('an observed managed stop prevents a restart outcome from creating another generation', async () => {
+    const root = await mkTestDir('tao-dev-stop-restart-')
+    let stopRequested = false
+    let runs = 0
+    try {
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', root), '')
+      await FS.writeText(
+        FS.resolvePath('App.tao', root),
+        `app Chosen { id "chosen" version "1.0.0" name "Chosen" view MainView } ${viewSource}`,
+      )
+      Expect(
+        await runTaoDev(root, {
+          appName: 'Chosen',
+          output: new PassThrough(),
+          control: { bind: () => () => {}, emit: async () => {}, stopRequested: () => stopRequested },
+          runLoop: async () => {
+            runs++
+            stopRequested = true
+            return runs === 1 ? { kind: 'restart' } : { kind: 'exit', exitCode: 0 }
+          },
+        }),
+      ).toBe(0)
+      Expect(runs).toBe(1)
+      Expect(await FS.isFile(FS.resolvePath('.tao/local/sessions/owner.json', root))).toBe(false)
     } finally {
       await FS.remove(root)
     }

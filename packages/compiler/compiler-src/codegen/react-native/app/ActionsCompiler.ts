@@ -270,7 +270,7 @@ export const ActionsCompiler = {
     }), {
       name: ${gen.jsLiteral(effectOutcomeName(statement))},
       ${isAuthEffect(statement) ? gen`success: 'completed',` : gen.noop()}
-      declared: ${compileEffectContract(statement)},
+      ${compileEffectContract(statement)}
     }, [
       ${
       gen.list(
@@ -419,17 +419,15 @@ function positionalArguments(
 }
 
 /**
- * compileEffectContract lists the verb's effective failure cases, or `null` when the verb is dynamic
- * and its contract is unknown here; the runtime then reads any declared failure as `rejected`.
+ * compileEffectContract preserves both known cases and an unknown remainder through named callers.
  */
 function compileEffectContract(statement: AST.WhenDoStatement): Compiled {
   if (isAuthEffect(statement)) {
-    return gen`['cancelled', 'rejected']`
+    return gen`declared: ['cancelled', 'rejected'],`
   }
-  if (!ASTUtils.invokedEffect(statement)) {
-    return gen`null`
-  }
-  return gen`[${gen.join(ASTUtils.invocationFailureCases(statement), failureCase => gen.jsLiteral(failureCase))}]`
+  const contract = ASTUtils.invocationFailureContract(statement)
+  return gen`declared: [${gen.join(contract.cases, failureCase => gen.jsLiteral(failureCase))}],
+    ${contract.open ? gen`open: true,` : gen.noop()}`
 }
 
 /** effectOutcomeName is the verb name a failure message falls back to when nothing says more. */

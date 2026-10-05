@@ -264,7 +264,7 @@ function TaoInteractiveCheckbox({ merged, occurrence, props, runtime }: {
   const host = React.useRef<TaoAccessibilityHost | null>(null)
   if (occurrence.control) {
     occurrence.capabilities.focus = () => focusAccessibilityHost(runtime, host.current)
-    occurrence.capabilities.label = () => props.label
+    occurrence.capabilities.label = () => merged.accessibilityLabel ?? props.label
   }
   return renderTaoCheckbox(props, runtime, merged, occurrence, host)
 }
@@ -295,7 +295,7 @@ function renderTaoCheckbox(
     runtime.Pressable,
     {
       ...wrapperProps,
-      accessibilityLabel: props.label,
+      accessibilityLabel: merged.accessibilityLabel ?? props.label,
       ...(props.description === undefined ? {} : { accessibilityHint: props.description }),
       accessibilityRole: 'checkbox',
       ...accessibilityStateProps({ checked: props.value, disabled }),
@@ -499,7 +499,7 @@ function TaoProgress({ props, runtimeProps }: {
     runtime.View,
     {
       ...wrapperProps,
-      accessibilityLabel: props.label ?? 'Progress',
+      accessibilityLabel: merged.accessibilityLabel ?? props.label ?? 'Progress',
       accessibilityRole: 'progressbar',
       accessibilityValue: { max: 1, min: 0, now: value },
       style: [
@@ -600,7 +600,7 @@ function TaoInteractiveTextInput({ merged, occurrence, props, runtime }: {
     occurrence.capabilities.blur = () => inputRef.current?.blur?.()
     occurrence.capabilities.enabled = () => props.disabled !== true
     occurrence.capabilities.engage = () => inputRef.current?.focus?.()
-    occurrence.capabilities.label = () => props.label
+    occurrence.capabilities.label = () => merged.accessibilityLabel ?? props.label
   }
   return renderTaoTextInput(props, runtime, merged, occurrence, inputRef)
 }
@@ -617,7 +617,7 @@ function renderTaoTextInput(
     ? undefined
     : InteractionControls.Activate(occurrence, props.onSubmit)
   const inputNativeProps = {
-    accessibilityLabel: props.label,
+    accessibilityLabel: merged.accessibilityLabel ?? props.label,
     ...(props.description === undefined ? {} : { accessibilityHint: props.description }),
     ...accessibilityStateProps({ disabled: props.disabled === true }),
     editable: !props.disabled,
@@ -651,7 +651,9 @@ function renderTaoTextInput(
     props.label,
   )
   const children = createElement(React.Fragment, null, label, input)
-  const wrapperProps = TaoPropsControls.nativePropsWithStyle(withoutVisualStyle(merged))
+  const { accessibilityLabel: _accessibilityLabel, ...wrapperProps } = TaoPropsControls.nativePropsWithStyle(
+    withoutVisualStyle(merged),
+  )
   return createElement(
     runtime.View,
     {
@@ -715,7 +717,7 @@ function TaoInteractivePrimitiveElement({ merged, occurrence, props, runtime }: 
     row.capabilities.scrollIntoView = () => reveal?.(host.current)
   }
   if (occurrence?.control) {
-    occurrence.capabilities.label = () => props.pressableTitle
+    occurrence.capabilities.label = () => merged.accessibilityLabel ?? props.pressableTitle
     if (props.kind === 'Pressable') {
       const disabled = props.nativePropOverrides?.['disabled'] === true || merged.nativeProps['disabled'] === true
       occurrence.capabilities.enabled = () => !disabled
@@ -736,7 +738,7 @@ function TaoSemanticPrimitiveElement({ merged, props, runtime }: {
     {
       identity: props.semanticIdentity!,
       kind: 'action',
-      label: () => props.pressableTitle,
+      label: () => merged.accessibilityLabel ?? props.pressableTitle,
       live: handwrittenCapabilities,
       provenance: { control: props.semanticIdentity! },
     },
@@ -746,7 +748,7 @@ function TaoSemanticPrimitiveElement({ merged, props, runtime }: {
       ? undefined
       : { capabilities: handwrittenCapabilities, control: handwrittenIdentity, scope: handwrittenIdentity })
   if (handwrittenIdentity !== undefined) {
-    handwrittenCapabilities.label = () => props.pressableTitle
+    handwrittenCapabilities.label = () => merged.accessibilityLabel ?? props.pressableTitle
     handwrittenCapabilities.measure = () => interactionMeasurements.read(handwrittenIdentity)
   }
   return renderTaoPrimitiveElement(props, runtime, merged, occurrence, host)
@@ -766,6 +768,7 @@ function renderTaoPrimitiveElement(
   const unmeasuredElementProps: Record<string, unknown> = {
     ...TaoPropsControls.nativePropsWithStyle(merged),
     ...props.nativePropOverrides,
+    ...(merged.accessibilityLabel === undefined ? {} : { accessibilityLabel: merged.accessibilityLabel }),
     ...(host ? { ref: host } : {}),
   }
   const rowIdentity = merged.interaction?.row?.identity
@@ -984,6 +987,9 @@ const placeholderDevelopmentStyle = {
   position: 'relative',
 } as const
 
+/** Wider than any placeholder, so a hatch line never wraps; the dashed frame clips it to the placeholder. */
+const placeholderHatchWidth = 4_096
+
 const placeholderHatchStyle = {
   bottom: 0,
   color: '#aeb3ae',
@@ -992,8 +998,8 @@ const placeholderHatchStyle = {
   lineHeight: 12,
   opacity: 0.55,
   position: 'absolute',
-  right: 0,
   top: 0,
+  width: placeholderHatchWidth,
 } as const
 
 const placeholderLabelStyle = {
@@ -1010,7 +1016,14 @@ function placeholderHatch(style: unknown): string {
   const lineCount = typeof height === 'number' && Number.isFinite(height) && height > 0
     ? Math.max(12, Math.ceil(height / placeholderHatchStyle.lineHeight) + 1)
     : 12
-  return Array.from({ length: lineCount }, () => '╱   ╱   ╱   ╱   ╱   ╱').join('\n')
+  // One stroke and three spaces is about 20 points at this size; a placeholder that fills its parent
+  // has no width here, so it is hatched across the widest frame a device shows.
+  const width = styleProperty(style, 'width')
+  const strokes = typeof width === 'number' && Number.isFinite(width) && width > 0
+    ? Math.max(6, Math.ceil(width / 20) + 1)
+    : 70
+  const line = '╱   '.repeat(strokes).trimEnd()
+  return Array.from({ length: lineCount }, () => line).join('\n')
 }
 
 function styleProperty(style: unknown, property: string): unknown {

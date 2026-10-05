@@ -1,0 +1,40 @@
+use Bookmark, Bookmarks from @model
+use Col, FormButton, ScrollView, Text, TextMultiline from @tao/ui
+
+// The reader's own screen, reading the other datasource. Its query, its rows, and its writes never
+// touch the feed; only the story each bookmark names comes from there.
+folder
+scene BookmarkList() {
+   Title "Bookmarks"
+   query Bookmarks = Bookmarks with { }
+   render Col() [screen] {
+      when Bookmarks {
+         empty -> { Col() [pad 10] {
+            Text("Nothing kept yet") [notice]
+         } }
+         otherwise -> { ScrollView() {
+            Col() [feed] {
+               #bookmarks
+               loop Bookmarks / Bookmark {
+                  BookmarkRow(Bookmark)
+            }  }
+         } }
+}  }  }
+
+// A reference is a handle with availability, so the row says plainly when the feed no longer holds
+// the story it names rather than rendering an empty card. The bookmark itself is untouched: nothing
+// deletes across a datasource boundary, and the story returns as soon as the feed serves it again.
+view BookmarkRow(Bookmark) {
+   render Col() [storyCard, gap 4] {
+      guard Bookmark.Story {
+         loading -> { Text("Loading story…") [notice] }
+         missing -> { Text("This story is not in the feed right now.") [notice] }
+         error -> Context { Text(Context.Message) [notice] }
+      }
+      TextMultiline(Bookmark.Story.Title) [storyTitle]
+      Text("{ Bookmark.Story.Score } points by { Bookmark.Story.Author }") [meta]
+
+      #removeBookmark
+      FormButton("Remove") {
+         on press -> { delete Bookmark }
+}  }  }

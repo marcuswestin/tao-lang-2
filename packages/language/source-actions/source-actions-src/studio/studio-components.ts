@@ -187,14 +187,24 @@ async function projectViewImport(
     Errors.throwUserInput(`Studio can only import a public project view: ${view.name}`)
   }
   const existing = file.statements.filter(AST.isUseStatement)
-    .filter(use => use.importedDeclarations.some(reference => reference.$refText === view.name))
+    .filter(use =>
+      AST.resolvedImportedDeclarations(use).some(declaration =>
+        AST.declarationNamespace(declaration) === 'value'
+        && (declaration.name === view.name
+          || (AST.isEntityDataDeclaration(declaration) && declaration.singularName === view.name))
+      ) || use.importedDeclarations.some(reference => reference.$refText === view.name && reference.ref === undefined)
+    )
   if (existing.length > 0) {
     if (existing.every(use => AST.resolvedImportedDeclarations(use).includes(view))) {
       return undefined
     }
     Errors.throwUserInput(`Studio project-view import conflicts for ${view.name}.`)
   }
-  if (file.statements.some(statement => AST.isDeclaration(statement) && statement.name === view.name)) {
+  if (
+    file.statements.some(statement =>
+      AST.isDeclaration(statement) && AST.declarationNamespace(statement) === 'value' && statement.name === view.name
+    )
+  ) {
     Errors.throwUserInput(`Studio project-view import conflicts for ${view.name}.`)
   }
   const fromFilePath = AST.getDocument(file).uri.fsPath

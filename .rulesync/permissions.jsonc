@@ -103,11 +103,15 @@
   "agentHostCommands": [
     "notify-developer",
     "stop",
+    // `setup` reinstalls on the host what a sandboxed install cannot write: a package shipping a
+    // file every agent sandbox protects, such as `.gitmodules`. The SessionStart hook already runs
+    // the same entry outside the sandbox; this reaches it mid-session.
+    "setup",
     "land", "finalize", "merge-main", "merge-recover", "landed", "capabilities", "open-pr", "fix-agent-config", "verify-full",
     "test-host", "qa-capture", "studio-smoke", "studio-proof-real-app", "admission-experiment",
     "native-module-check", "reclaim --execute",
     "prepare-release studio", "prepare-release ide-extension", "ide-extension-acceptance",
-    "app-dev", "test-watch", "standalone-cli-acceptance", "studio", "studio-native", "studio-ps", "studio-stop",
+    "app-dev", "dev-loop", "test-watch", "standalone-cli-acceptance", "studio", "studio-native", "studio-ps", "studio-stop", "studio-canary", "studio-manual-checks",
     "docker-desktop start",
     "watchman start", "watchman status", "watchman stop",
     "local-instantdb start", "local-instantdb stop",
@@ -121,9 +125,9 @@
     "xcode version", "xcode setup-status", "xcode sdks", "xcode build-project",
     "xcode build-workspace", "xcode export-archive",
     "pods install", "pods spec",
-    "android devices", "android state", "android emulators", "android boot", "android ensure",
+    "android devices", "android state", "android emulators", "android boot", "android ensure", "android recover",
     "remote fetch", "remote refs", "remote heads", "remote exists",
-    "processes list", "processes started", "start-branch",
+    "processes list", "processes started", "start-branch", "take-branch",
     "storage sync", "storage qa", "storage push",
   ],
   "claudecode": {

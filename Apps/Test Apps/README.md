@@ -382,7 +382,10 @@ atomic backend rejection. Those need provider and device evidence.
 ## Auth Review
 
 Provider-neutral sessions, custom and supplied sign-in UI, current account reads, profile editing,
-and owner-scoped notes. AuthReview uses the deterministic adapter; AuthReviewLocal binds the same
+owner-scoped notes, and confirmed account deletion. The Tao journey verifies a Note's owned detail
+is removed while its Account remains visible, and that deleting the current Account makes its notes
+inaccessible. Direct provider tests must inspect stored rows to prove the Account cascade and other
+accounts' isolation. AuthReview uses the deterministic adapter; AuthReviewLocal binds the same
 UI to the localhost reference service at port4738. Backend policy, durable offline data and identity
 isolation are verified separately by the reference server/provider tests; only completed Tao
 journeys establish the user-facing behavior. AuthReviewClerk selects the managed adapter with a
@@ -395,6 +398,12 @@ credentials, starts its local InstantDB gateway, and opens Studio for manual iPh
 Tao Companion with `just studio-companion-install roPhone`, keep the phone and Mac on the same
 network, then choose the phone in Studio and open the app. Select the "Clerk and InstantDB / iPhone"
 scenario to send the app to Companion. Clerk sign-in requires Internet access.
+
+The Convex/Clerk and Pylon/PylonAuth variants select hosted-provider pilots with placeholder project
+configuration. The Jazz/Clerk Auth Review variant is pending provider capability conformance; its
+current datasource declaration cannot bind the app's relations and field update rules. The existing
+Tao journeys check the provider-neutral UI; hosted policy, native transport, and Jazz/Pylon offline
+behavior require separate live acceptance.
 The custom password input is masked and authentication problems wrap on a phone. Known Clerk
 configuration failures, including disabled native API access, are distinguished from rejected
 credentials without exposing provider response text.

@@ -8,6 +8,7 @@ import {
 } from './MachineLanes'
 import { RunHistory } from './RunHistory'
 import { extractLaneReport } from './RunSummary'
+import { UiVisibility } from './UiVisibility'
 
 const SNAPSHOT_VERSION = 1
 const LANDING_RESOURCE_NAME = 'merge-with-main-landing'
@@ -63,6 +64,7 @@ const MERGE_PHASES: readonly MergePhase[] = [
  * Every other option only removes work, apart from `--abort`, `--dry-run`, and `--message-file`.
  */
 export type MergeWithMainOptions = {
+  showStudio?: boolean
   /** Restore command-owned state from a snapshot instead of starting a merge. */
   abortSnapshot?: string
   /** Report the plan and change nothing. The only way to see the plan without landing. */
@@ -568,6 +570,12 @@ export const MergeWithMainCommand = {
     options: MergeWithMainOptions = {},
     dependencies: MergeWithMainDependencies = defaultDependencies,
   ): Promise<MergeWithMainResult> {
+    if (
+      options.showStudio === true && options.abortSnapshot === undefined && options.dryRun !== true
+      && fullVerifySkippedBy(options) === undefined
+    ) {
+      writeLines(dependencies, UiVisibility.studioWarnings.map(warning => `WARNING: ${warning}`))
+    }
     if (options.abortSnapshot !== undefined) {
       if (
         options.dryRun === true
@@ -1046,7 +1054,12 @@ async function stabilizeAndVerify(
       // in two as soon as `GateRunner` can say when it does.
       await beginPhase(snapshot.featureRoot, 'repository tests', dependencies)
       const verifiedHead = (await git(dependencies, snapshot.featureRoot, ['rev-parse', 'HEAD'])).stdout.trim()
-      await runVerificationLane(snapshot, ['verify-full'], 'feature-verified', dependencies)
+      await runVerificationLane(
+        snapshot,
+        ['verify-full', ...(options.showStudio === true ? ['--show-studio'] : [])],
+        'feature-verified',
+        dependencies,
+      )
       if (
         snapshot.currentFeatureHead !== verifiedHead
         || snapshot.currentFeatureStatus !== ''

@@ -36,7 +36,7 @@ import { type WorkAdmission, type WorkCommand, WorkGraph, type WorkNode } from '
  * is written by at most one node, which is what makes the derived edges unambiguous.
  */
 export type SourceClass =
-  /** `packages/apps/expo-host/_gen_tao-app*`, filled by the WordFlower compile. */
+  /** WordFlower's `.tao/cache/_gen_tao-app`, filled by the repository compile. */
   | 'gen-app'
   /** The extension bundles and syntax tree filled by the IDE extension build. */
   | 'gen-ide'
@@ -83,6 +83,10 @@ export type GateMetadata =
      * false green, which is why it is a declared property of the node rather than a heuristic.
      */
     hostDependent?: boolean
+    /** Inherently visible test surface; its workflow requires the matching show option. */
+    visibleSurface?: 'studio'
+    /** Quiet by default, but the scoped show option selects visible windows. */
+    optionalVisibleSurface?: 'studio'
     /**
      * Declares that this node rewrites tracked source into its canonical form and derives nothing:
      * its whole output is the tree, which a tree hash does describe. Only such a writer can be
@@ -318,8 +322,6 @@ const GUI_PRIORITY = 6
 const GUI_RESOURCE = 'gui'
 /** Graph GUI children inherit the lease held by GateRunner instead of taking it again. */
 const GUI_LEASE_HELD_ENV_KEY = 'TAO_GUI_LEASE_HELD'
-/** Both gates open the checked-in HNReader project, which permits one dev-session owner. */
-const HNREADER_PROJECT_RESOURCE = 'studio-hnreader-project'
 
 /** studioLane is the shape every browser or native UI node shares. */
 function studioLane(resources?: readonly string[]): GateMetadata {
@@ -366,6 +368,22 @@ function studioSmoke(
 
 function buildCatalog(): ReadonlyMap<string, GateMetadata> {
   return new Map<string, GateMetadata>([
+    ['studio-host-control-smoke', {
+      ...studioSmoke(
+        'studio-host-control-smoke',
+        'packages/ides/studio-tooling/studio-smoke/studio-host-control.test.ts',
+        { native: true, resources: [GUI_RESOURCE] },
+      ),
+      visibleSurface: 'studio',
+    }],
+    ['studio-mac2-acceptance', {
+      ...studioSmoke(
+        'studio-mac2-acceptance',
+        'packages/ides/studio-tooling/studio-smoke/studio-mac2-acceptance.test.ts',
+        { native: true, resources: [GUI_RESOURCE] },
+      ),
+      visibleSurface: 'studio',
+    }],
     // The prepare phase, in the order its declared classes imply: the Justfile first because every
     // recipe parses it, then the parser generator and dprint in parallel, then `./tao fix`, then the
     // WordFlower compile, which reads the `.tao` sources `./tao fix` has just canonicalized.
@@ -411,9 +429,8 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
       { priority: PREPARE_PRIORITY, reads: ['gen-parser', 'tao', 'ts'], writes: ['gen-ide'] },
     ],
     ['_tao-check', { cost: TAO_CHECK_COST, reads: ['gen-parser', 'tao', 'ts'] }],
-    // `packages/language/parser/tsconfig.json` compiles `parser-src/**`, where Langium writes, and
-    // `packages/apps/expo-host/tsconfig.json` compiles `_gen_tao-app/**`, where the WordFlower
-    // compile writes, so the typechecker reads both generated trees.
+    // The parser tsconfig includes Langium's generated tree. Typecheck retains its conservative
+    // ordering after the app compile moved into the WordFlower project's cache.
     ['_typecheck', { cost: TYPECHECK_COST, reads: ['gen-app', 'gen-parser', 'ts'] }],
     [
       'ship-bundle-proof',
@@ -427,14 +444,12 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
       },
     ],
 
-    // Browser smokes have separate ports and artifacts, but the launch smoke and canary both open
-    // HNReader and must share its project resource. The native shell and canary also contend on
-    // the window server, which is what `gui` names. Each smoke gate is named for its public recipe.
+    // Browser smokes have separate ports, artifacts and disposable launch projects. The native
+    // shell and canary contend on the window server, which is what `gui` names. Each smoke gate
+    // is named for its public recipe.
     [
       'studio-smoke',
-      studioSmoke('studio-smoke', 'packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts', {
-        resources: [HNREADER_PROJECT_RESOURCE],
-      }),
+      studioSmoke('studio-smoke', 'packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts'),
     ],
     [
       'studio-proof-real-app',
@@ -495,7 +510,8 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     [
       'studio-canary',
       {
-        ...studioLane([GUI_RESOURCE, HNREADER_PROJECT_RESOURCE]),
+        ...studioLane([GUI_RESOURCE]),
+        optionalVisibleSurface: 'studio',
         priority: GUI_PRIORITY,
         requiresMacOS: true,
         timeoutMs: STUDIO_CANARY_TIMEOUT_MS,

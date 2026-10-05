@@ -128,13 +128,13 @@ Describe('Expo runtime: nested window-owning navigators', () => {
           app PlainSplitApp { id "plainsplitapp" version "1.0.0" name "Plain Split"
             Navigator SplitNav {
               @sidebar {
-                Content Sidebar
-                Width 240
+                Content Sidebar,
+                Width 240,
                 Resizable false
-              }
+              },
               @main {
-                Content Main
-                Width 640
+                Content Main,
+                Width 640,
                 Resizable false
               }
             }
@@ -190,13 +190,13 @@ Describe('Expo runtime: nested window-owning navigators', () => {
 
           nav InnerSplit = SplitNav {
             @left {
-              Content InnerLeft
-              Width 200
+              Content InnerLeft,
+              Width 200,
               Resizable false
-            }
+            },
             @right {
-              Content InnerRight
-              Width 300
+              Content InnerRight,
+              Width 300,
               Resizable false
             }
           }
@@ -204,13 +204,13 @@ Describe('Expo runtime: nested window-owning navigators', () => {
           app NestedSplitApp { id "nestedsplitapp" version "1.0.0" name "Nested Split"
             Navigator SplitNav {
               @sidebar {
-                Content Sidebar
-                Width 240
+                Content Sidebar,
+                Width 240,
                 Resizable false
-              }
+              },
               @main {
-                Content InnerSplit
-                Width 640
+                Content InnerSplit,
+                Width 640,
                 Resizable false
               }
             }
@@ -260,13 +260,13 @@ Describe('Expo runtime: nested window-owning navigators', () => {
           app SplitPaneApp { id "splitpaneapp" version "1.0.0" name "Split Pane"
             Navigator SplitNav {
               @sidebar {
-                Content Sidebar
-                Width 240
+                Content Sidebar,
+                Width 240,
                 Resizable false
-              }
+              },
               @main {
-                Content MainStack
-                Width 640
+                Content MainStack,
+                Width 640,
                 Resizable false
               }
             }
@@ -374,16 +374,16 @@ Describe('Expo runtime: nested window-owning navigators', () => {
           use Text from @tao/ui
 
           nav InnerStack = StackNav {
-            Initial InnerHome
+            Initial InnerHome,
             Title "Inner Stack"
           }
 
           let ItemStack = StackNav { Initial InnerStack }
 
           let MainSelection = SelectionNav {
-            Initial @home
-            Display "toggle"
-            @home { Label "Home" Content ItemStack }
+            Initial @home,
+            Display "toggle",
+            @home { Label "Home", Content ItemStack }
           }
 
           app ToggleNestedApp { id "togglenestedapp" version "1.0.0" name "Toggle Nested"

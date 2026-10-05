@@ -602,7 +602,7 @@ Test('Move to package requests a different destination only when the target pack
 Test('Studio project session publishes every project app variant with a safe relative entry path', async () => {
   await withTaoFiles('tao-studio-app-variants-', {
     'First.tao':
-      'app First { id "first" version "1.0.0" name "First" view Main }\napp FirstCompact = First with { id "first-compact" name "Compact" }\nview Main() { }\n',
+      'app First { id "first" version "1.0.0" name "First" view Main }\napp FirstCompact = First with { id "first-compact", name "Compact" }\nview Main() { }\n',
     'Nested/Second.tao': 'app Second { id "second" version "1.0.0" name "Second" view Main }\nview Main() { }\n',
   }, async (_paths, root) => {
     const session = await StudioProjectSession.open({
@@ -1069,6 +1069,23 @@ Test('Studio draft writes keep invalid source off disk and acknowledge their exa
     Expect(invalid.saved).toBe(false)
     Expect(invalid.diagnostics.length).toBeGreaterThan(0)
     Expect(await FS.readText(paths['Garden.tao'])).toBe(initial.content)
+    Expect(compileRevisions).toEqual([])
+    Expect(session.fileDraftState(initial.path).dirty).toBe(true)
+
+    // Going back to the saved text drops the refused draft without writing, so a read-only file
+    // (a generated Studio view) is never touched and the preview does not recompile.
+    await FS.chmod(paths['Garden.tao'], 0o444)
+    const reverted = await session.syncDraft({
+      content: initial.content,
+      path: initial.path,
+      sourceVersion: initial.sourceVersion,
+      writeId: 'draft-reverted',
+    })
+    await FS.chmod(paths['Garden.tao'], 0o644)
+    Expect(reverted.saved).toBe(true)
+    Expect(reverted.file.dirty).toBe(false)
+    Expect(reverted.file.sourceVersion).toBe(initial.sourceVersion)
+    Expect(session.fileDraftState(initial.path).dirty).toBe(false)
     Expect(compileRevisions).toEqual([])
 
     const content = initial.content.replace('Before', 'After')

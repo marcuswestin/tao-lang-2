@@ -51,6 +51,11 @@ export class StudioPreviewNotice {
     if (this.#deps.previewUrl === undefined) {
       return
     }
+    // Without an applied-revision acknowledgement, this probe would run after every edit and
+    // could consume Metro's hot update before the retained frame receives it.
+    if (new URL(this.#deps.previewUrl).searchParams.get('taoStudioPublication') === 'off') {
+      return
+    }
     clearTimeout(this.#pendingCheck)
     this.#pendingCheck = setTimeout(() => {
       this.#pendingCheck = undefined

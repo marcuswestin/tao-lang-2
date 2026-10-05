@@ -33,7 +33,11 @@ async function printAgentHelp(justCommands: readonly string[]): Promise<number> 
       fallbackLine('tao [args...]', 'Run the Tao CLI inside the sandbox'),
       fallbackLine(
         'start-branch <name>',
-        'Start a feat/* branch from fetched origin/main after checking checkout writes',
+        'Start a feat/* branch from fetched origin/main after checking checkout writes, then run setup',
+      ),
+      fallbackLine(
+        'take-branch <name>',
+        'Take over a pushed feat/* branch with tracking after checking checkout writes, then run setup',
       ),
     ],
     hostOperations,
@@ -116,11 +120,27 @@ Examples:
   ./agent unsandboxed simulators run <device-udid>
   ./agent unsandboxed simulators launch <device-udid> <bundle-id>
   ./agent unsandboxed app-dev Apps/HNReader --app HNReaderStub --ios
+  ./agent unsandboxed app-dev Apps/HNReader --app HNReaderStub --ios --show-simulator
+  ./agent unsandboxed app-dev Apps/HNReader --app HNReaderStub --android
+  ./agent unsandboxed app-dev Apps/HNReader --app HNReaderStub --web
+  ./agent unsandboxed dev-loop start Apps/HNReader --app HNReaderStub --web --json
+  ./agent unsandboxed dev-loop status --json
+  ./agent unsandboxed dev-loop logs --session <session-id>
+  ./agent unsandboxed dev-loop reload --session <session-id>
+  ./agent unsandboxed dev-loop restart --session <session-id>
+  ./agent unsandboxed dev-loop stop --session <session-id>
   ./agent unsandboxed test-watch Apps/HNReader
   ./agent unsandboxed standalone-cli-acceptance
   ./agent unsandboxed studio Apps/HNReader
   ./agent unsandboxed studio-ps --json
   ./agent unsandboxed studio-stop --launch <launch-id>
+  ./agent unsandboxed studio-canary
+  ./agent unsandboxed studio-manual-checks --show-studio
+  ./agent unsandboxed test-host managed-loop --case lifecycle
+  ./agent unsandboxed test-host managed-loop-recover --invocation <uuid>
+  ./agent unsandboxed studio-smoke --native packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts
+  ./agent unsandboxed studio-smoke --native --show-studio packages/ides/studio-tooling/studio-smoke/studio-host-control.test.ts
+  ./agent unsandboxed studio-smoke --native --show-studio packages/ides/studio-tooling/studio-smoke/studio-mac2-acceptance.test.ts
   ./agent unsandboxed local-instantdb start
   ./agent unsandboxed pods install <ios-directory>
   ./agent setup --refresh-lockfile
@@ -129,6 +149,36 @@ unsandboxed accepts only named argv prefixes in .rulesync/permissions.jsonc's ag
 Each name runs its fixed host implementation with following arguments forwarded as argv, without
 a shell. It fails before dispatch if still sandboxed. Other host operations need the Developer's
 explicit approval; plain commands remain sandboxed.
+
+dev-loop manages background app loops through start, status, logs, stop, restart, and reload.
+Start returns a session ID in starting state; status reports readiness, target URLs, devices,
+warnings, and cleanup outcomes. Loops have no default runtime or idle timer. Agents decide
+when to keep a useful loop running and report its session ID and stop command at handoff.
+Select recorded sessions explicitly for logs and control; restart preserves configuration,
+while reload asks the current Metro server to reload connected apps. Stop waits for owned
+cleanup. Server-only, web, iOS, and Android targets are supported. app-dev remains foreground.
+
+Agent app-dev --ios reserves a reusable simulator across worktrees, boots it without a viewer,
+and shuts down only a device it selected and booted. Add --show-simulator for an inactive viewer,
+or --simulator <udid> to reserve a specific available device. A dev loop started without --ios
+must be restarted with --ios before its interactive i shortcut can open a simulator.
+Agent app-dev --android reserves a reusable AVD across worktrees, boots it without a window,
+and stops only the emulator it started. Add --show-emulator for a visible window, or
+--emulator <serial> to reserve a specific booted device without stopping it afterward.
+Agent app-dev web opens Google Chrome with an isolated profile and no window. Add
+--show-browser when a visible Chrome window is requested. Attach a CDP-capable client to the
+printed DevTools URL for automation/screenshots of that Chrome session. For interactive in-app
+review, open the printed app URL; it uses a separate browser session. Chrome closes with the loop.
+Native Studio uses Electrobun and opens windows. Its --no-browser option is not a hidden mode.
+The three native smoke examples above exercise simulated-user behavior, semantic host control,
+and external accessibility/physical input respectively; Mac2 may activate the app and needs
+native automation/accessibility consent. Obtain permission for visible native testing, then pass
+--show-studio. Hidden canary and simulated-user probes remain quiet without that option.
+Verification and landing accept --show-studio and forward it only to scoped test children.
+Visible workflow warnings appear before execution and remain in final text/JSON reports.
+After failed Android cleanup, retained fences name a generation. Recover only stopped owned
+processes with ./agent unsandboxed android recover --avd <name> --generation <id>; uncertain
+descendant ownership stays quarantined for investigation.
 
 Watchman is one shared daemon per user. status does not start it; start is idempotent;
 watchman stop disconnects subscriptions in every worktree. Startup uses the primary checkout's

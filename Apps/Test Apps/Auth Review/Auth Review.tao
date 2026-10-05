@@ -2,9 +2,12 @@ use Account, AccountView, LoginFlow, Session, SignIn, SignInFlow, SignInView, Si
 use Clerk from @tao/auth/clerk
 use InstantAuth from @tao/auth/instantdb
 use LocalAuth from @tao/auth/local
+use PylonAuth from @tao/auth/pylon
 use TestAuth from @tao/auth/testing
+use Convex from @tao/data/providers/convex
 use InstantDB from @tao/data/providers/instantdb
 use Memory from @tao/data/providers/memory
+use Pylon from @tao/data/providers/pylon
 use Reference from @tao/data/providers/reference
 use StackNav from @tao/nav
 use Col, FormButton, Row, ScrollView, Text, TextInput, TextMultiline from @tao/ui
@@ -29,14 +32,14 @@ app AuthReview {
 }  }
 
 app AuthReviewLocal = AuthReview with {
-   id "auth-review-auth-review-local"
+   id "auth-review-auth-review-local",
    Auth LocalAuth {
-      Endpoint "http://127.0.0.1:4738"
+      Endpoint "http://127.0.0.1:4738",
       Resource "auth-review"
-   }
+   },
    Datasource Reference {
-      ServerURL "http://127.0.0.1:4738"
-      Resource "auth-review"
+      ServerURL "http://127.0.0.1:4738",
+      Resource "auth-review",
       Offline {
          Me,
          Me.Notes
@@ -44,17 +47,17 @@ app AuthReviewLocal = AuthReview with {
 
 // Configure a Clerk development instance and a trusted gateway before running this variant.
 app AuthReviewClerk = AuthReviewLocal with {
-   id "auth-review-auth-review-clerk"
+   id "auth-review-auth-review-clerk",
    Auth Clerk {
       PublishableKey "pk_test_REPLACE_WITH_YOUR_KEY"
 }  }
 
 // Replace the App ID with your Instant Cloud app's and push its schema and rules before running.
 app AuthReviewInstant = AuthReview with {
-   id "auth-review-auth-review-instant"
+   id "auth-review-auth-review-instant",
    Auth InstantAuth {
       AppId "REPLACE_WITH_INSTANT_APP_ID"
-   }
+   },
    Datasource InstantDB {
       AppId "REPLACE_WITH_INSTANT_APP_ID"
 }  }
@@ -62,12 +65,32 @@ app AuthReviewInstant = AuthReview with {
 // Register the Clerk instance with the Instant app as a Clerk client named "clerk", and add the
 // email and email_verified claims to Clerk's session token, before running this variant.
 app AuthReviewInstantClerk = AuthReviewInstant with {
-   id "auth-review-auth-review-instant-clerk"
+   id "auth-review-auth-review-instant-clerk",
    Auth Clerk {
       PublishableKey "pk_test_REPLACE_WITH_YOUR_KEY"
-   }
+   },
    Datasource with {
       ClerkClientName "clerk"
+}  }
+
+// Activate Clerk's Convex integration so its ordinary session token has aud "convex".
+app AuthReviewConvexClerk = AuthReview with {
+   id "auth-review-auth-review-convex-clerk",
+   Auth Clerk {
+      PublishableKey "pk_test_REPLACE_WITH_YOUR_KEY"
+   },
+   Datasource Convex {
+      DeploymentURL "https://REPLACE_WITH_CONVEX_DEPLOYMENT.convex.cloud"
+}  }
+
+// Use the same hosted Pylon URL for native magic-code auth and row data.
+app AuthReviewPylon = AuthReview with {
+   id "auth-review-auth-review-pylon",
+   Auth PylonAuth {
+      BaseURL "https://REPLACE_WITH_PYLON_HOST"
+   },
+   Datasource Pylon {
+      BaseURL "https://REPLACE_WITH_PYLON_HOST"
 }  }
 
 let Me = Account
@@ -82,29 +105,59 @@ scenarios AuthReviewClerk "Clerk and InstantDB" {
       locale "en"
 }  }
 
+scenarios AuthReviewConvexClerk "Clerk and Convex" {
+   scenario "iPhone" {
+      device phone
+      appearance light
+      network online
+      locale "en"
+}  }
+
+scenarios AuthReviewPylon "Pylon auth and data" {
+   scenario "iPhone" {
+      device phone
+      appearance light
+      network online
+      locale "en"
+}  }
+
 folder
 data Accounts / Account {
    DisplayName text (required "Enter your name"),
    Notes (owned),
+   NoteDetails (owned),
 }
 
 folder
 data Notes / Note {
    Owner Account,
+   NoteDetails (owned),
    Body text (required "Write something"),
    CreatedAt time (default now),
 
    index CreatedAt,
 }
 
+folder
+data NoteDetails / NoteDetail {
+   Owner Account,
+   Parent Note,
+   Body text,
+}
+
 access Account {
    Account can read
    Account can update DisplayName
+   Account can delete
 }
 
 access Note {
    Owner can read, create, delete
    Owner can update Body
+}
+
+access NoteDetail {
+   Owner can read, create, delete
 }
 
 // Authenticated does not imply that the application profile has finished loading.
@@ -273,9 +326,11 @@ view CodeLogin(Flow LoginFlow, Supplied boolean) {
 
 view NotesHome() {
    state Body = ""
+   state ConfirmDeleteAccount = false
    query Mine = Me.Notes with {
       order by CreatedAt desc
    }
+   query VisibleDetails = NoteDetails with { }
    action Add() {
       check Body is not empty
       create Note {
@@ -283,6 +338,9 @@ view NotesHome() {
          Body: Body
       }
       set Body = ""
+   }
+   action RemoveAccount() {
+      delete Me
    }
    render Col() {
       Text("Hello { Me.DisplayName }")
@@ -301,5 +359,39 @@ view NotesHome() {
          on press Add
       }
       loop Mine / Note {
-         Text(Note.Body)
-}  }  }
+         Col() {
+            Text(Note.Body)
+
+            #addNoteDetail
+            FormButton(Title: "Add note detail") {
+               on press -> { create NoteDetail {
+                  Owner: Me,
+                  Parent: Note,
+                  Body: "Owned note detail"
+               } }
+            }
+
+            #updateNote
+            FormButton(Title: "Update note") {
+               on press -> { update Note {
+                  Body: "Updated note"
+               } }
+            }
+
+            #deleteNote
+            FormButton(Title: "Delete note") {
+               on press -> { delete Note }
+      }  }  }
+      loop VisibleDetails / NoteDetail {
+         Text(NoteDetail.Body)
+      }
+      if ConfirmDeleteAccount {
+         #confirmDeleteAccount
+         FormButton(Title: "Confirm delete account and notes") {
+            on press RemoveAccount
+      }  }
+      if not ConfirmDeleteAccount {
+         #deleteAccount
+         FormButton(Title: "Delete account and notes") {
+            on press -> { set ConfirmDeleteAccount = true }
+}  }  }  }

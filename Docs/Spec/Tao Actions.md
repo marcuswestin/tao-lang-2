@@ -270,6 +270,18 @@ reports that fact but does not automatically retry an action.
 An `async { ... }` action block is detached from its caller. When encountered inside a transaction, it starts
 as a new serialized root after the caller finishes rather than joining the caller's overlay.
 
+The runtime also provides explicit lexical cleanup frames. Admitted joined work and its outcome
+handlers settle before a frame drains cleanup, serially in reverse registration order. Every
+cleanup runs even when an earlier one fails. A body failure retains its original identity; attached
+cleanup failures are diagnostic metadata. A cleanup-only failure prevents successful completion.
+Generated continuations must capture the active frame and restore it after suspension. Scoped
+foreign thenables are adopted once for both joining and the caller's observation.
+
+The public `TR.ActionScope(body)` and `TR.Defer(cleanup)` runtime APIs are opt-in. A scope preserves
+synchronous completion when its body, joined work and cleanup are synchronous. The selected Tao
+`defer` syntax and automatic compiler frame lowering remain future work; existing action blocks do
+not acquire cleanup merely by using the runtime.
+
 ## Effect outcomes
 
 A call site that must react to a verb's failure runs it with `when do` and names what happens next:
@@ -344,6 +356,14 @@ A verb's effective failure contract is the cases its own `fail` or `fails` decla
 verb it reaches through a plain `do`, transitively and cycle-safe, minus those a `when do` inside it
 handles. A `when do` that names `rejected` handles every declared case. An `async` block is a boundary:
 it runs as its own root after the action returns, so nothing inside it joins the action's contract.
+
+Effective contracts retain known cases and a separate open remainder. Foreign, dynamic, bodyless or
+unresolved recursive calls can remain open; listing known cases does not prove completeness. Handling
+known cases preserves that remainder. In the current `when do` spelling, `otherwise`, or both
+`rejected` and `error`, covers it. Detached actions keep their own contracts. Raw foreign throws retain
+their original error provenance, while deliberately declared/provider failures follow `rejected`.
+Mandatory app-wide coverage and the selected future `then`, `done` and `fails` bounds are not yet
+implemented by this foundation.
 
 An unhandled failure stays silent at runtime, but the compiler warns at a root invocation whose effective
 contract is not covered: a view event handler (`on press Verb` or a `do` in `on press -> { … }`), an

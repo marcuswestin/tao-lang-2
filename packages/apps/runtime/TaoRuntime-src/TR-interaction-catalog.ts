@@ -2,7 +2,7 @@ import React from 'react'
 import { Arrays } from './core/RuntimeCore'
 import { accessibilityVerbProps, focusAccessibilityHost, type TaoAccessibilityHost } from './TR-accessibility'
 import { AuthControls } from './TR-auth'
-import type { TaoDesign, TaoDesignSpec } from './TR-design'
+import { DesignControls, type TaoDesign, type TaoDesignSpec } from './TR-design'
 import { CommandControls, type RuntimeCommand } from './TR-interaction'
 import { InteractionAttention, runtimeInteractionValue, type TaoAttentionKey } from './TR-interaction-attention'
 import { interactionKeyboardPresence, normalizeInteractionKey } from './TR-interaction-keys'
@@ -378,16 +378,16 @@ export class CommandCatalog {
     if (entitySlot && target?.live?.runtimeValue) {
       command = command.with({ [entitySlot.name]: target.live.runtimeValue })
     }
-    const snapshot = command.read()
-    const key = snapshot.key ?? entry.static.key
+    const snapshot = directlyReadable(command, entry.slots) ? command.read() : undefined
+    const key = snapshot?.key ?? entry.static.key
     return {
-      enabled: snapshot.enabled,
+      enabled: snapshot?.enabled ?? true,
       command,
       identity: entry.identity,
       ...(entry.static.description === undefined ? {} : { description: entry.static.description }),
       ...(key === undefined ? {} : { key }),
-      label: snapshot.label || staticLabel(entry),
-      invoke: snapshot.invoke,
+      label: snapshot?.label || staticLabel(entry),
+      invoke: snapshot?.invoke ?? (() => undefined),
       slots: entry.slots,
       source,
     }
@@ -531,6 +531,7 @@ registerRuntimeCaptureDomain({
       outline: interactionOutline.read(),
     }) as unknown as TaoRuntimeJson,
   domain: 'interaction',
+  module: 'TR-interaction-catalog',
   version: 2,
 })
 
@@ -620,20 +621,34 @@ function occurrenceAttentionSnapshot(occurrence: TaoInteractionOccurrence): stri
 
 function usesInteractionDesign(props: TaoProps | undefined): boolean {
   const design = TaoPropsControls.ambientContext(props).app?.design
-  const visitedBundles = new Set<string>()
   let current = props
   while (current) {
+    const occurrenceProps = current
+    const renderDesigns = DesignControls.forSourceCandidates(
+      design,
+      occurrenceProps.designSpec?.source ?? occurrenceProps.designSource,
+    )
+    const headerDesigns = DesignControls.forSourceCandidates(
+      design,
+      occurrenceProps.declarationSpec?.source ?? occurrenceProps.designSource,
+    )
+    const defaultDesigns = DesignControls.forSourceCandidates(design, occurrenceProps.designSource)
     if (
-      designSpecUsesInteraction(current.designSpec, design, visitedBundles)
-      || designSpecUsesInteraction(
-        current.designDefault === undefined ? undefined : design?.bundles[current.designDefault],
-        design,
-        visitedBundles,
+      renderDesigns.some(candidate => designSpecUsesInteraction(occurrenceProps.designSpec, candidate, new Set()))
+      || headerDesigns.some(candidate =>
+        designSpecUsesInteraction(occurrenceProps.declarationSpec, candidate, new Set())
+      )
+      || defaultDesigns.some(candidate =>
+        designSpecUsesInteraction(
+          occurrenceProps.designDefault === undefined ? undefined : candidate?.bundles[occurrenceProps.designDefault],
+          candidate,
+          new Set(),
+        )
       )
     ) {
       return true
     }
-    current = current.callerProps
+    current = occurrenceProps.callerProps
   }
   return false
 }

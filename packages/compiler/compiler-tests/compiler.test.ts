@@ -578,7 +578,7 @@ Describe('compiler: language lowering', () => {
         folder data Stories / Story { Title text }
         folder data Bookmarks / Bookmark { Note text }
         folder datasource Feed = Memory { Data { Stories } }
-        folder datasource Personal = Local { StorageKey "personal" Data { Bookmarks } }
+        folder datasource Personal = Local { StorageKey "personal", Data { Bookmarks } }
       `,
     }, async paths => {
       const result = await Workspace.compile(paths['Main.tao']!)
@@ -871,16 +871,16 @@ Describe('compiler: language lowering', () => {
       'Main.tao': `
         use Memory from @tao/data/providers/memory
         use MiddleApp from ./Middle.tao
-        app FinalApp = MiddleApp with { id "com.tao.test.finalapp"  name "Final app" }
-        app PatchedApp = MiddleApp with { id "com.tao.test.patchedapp"  Datasource with { ApiURI "http://localhost:9999" } }
-        app OwnApp = MiddleApp with { id "com.tao.test.ownapp"  Datasource Memory { } }
+        app FinalApp = MiddleApp with { id "com.tao.test.finalapp",  name "Final app" }
+        app PatchedApp = MiddleApp with { id "com.tao.test.patchedapp",  Datasource with { ApiURI "http://localhost:9999" } }
+        app OwnApp = MiddleApp with { id "com.tao.test.ownapp",  Datasource Memory { } }
       `,
       'Middle.tao': `
         use InstantDB from @tao/data/providers/instantdb
         use PackageApp from @feature
-        project app MiddleApp = PackageApp with { id "com.tao.test.middleapp"
-          name "Middle app"
-          Datasource InstantDB { AppId "local-app" ApiURI "http://localhost:9020" }
+        project app MiddleApp = PackageApp with { id "com.tao.test.middleapp",
+          name "Middle app",
+          Datasource InstantDB { AppId "local-app", ApiURI "http://localhost:9020" }
         }
       `,
       '@feature/App.tao': `

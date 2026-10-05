@@ -1,9 +1,10 @@
-import { Errors, FS } from '@shared'
+import { Errors, FS, ProjectLocal } from '@shared'
 import { HostDependencies } from '../host-dependencies'
 import { RuntimeToolchainPaths } from '../runtime-toolchain-paths'
 
 const runtimeFiles = [
   'index.ts',
+  'expo-host-src/ManagedLoopIdentityMarker.ts',
   'app.json',
   'app.config.js',
   'app-config.cjs',
@@ -16,17 +17,21 @@ export const DevRuntime = { prepare }
 
 async function prepare(projectRoot: string): Promise<{ root: string; sourceRoot: string }> {
   const sourceRoot = RuntimeToolchainPaths.packageRoot
-  const root = FS.resolvePath('.tao/dev/runtime', projectRoot)
-  const ignorePath = FS.resolvePath('.tao/.gitignore', projectRoot)
-  if (!await FS.exists(ignorePath)) {
-    await FS.writeText(ignorePath, 'dev/\n')
-  }
+  const root = ProjectLocal.cacheResolve('dev/runtime', projectRoot)
+  await ProjectLocal.prepare(projectRoot)
   for (const file of runtimeFiles) {
     const source = FS.resolvePath(file, sourceRoot)
     if (!await FS.isFile(source)) {
       Errors.throwHostEnvironment(`Tao's development runtime is missing ${source}.`)
     }
     await FS.copyFile(source, FS.resolvePath(file, root))
+  }
+  for (const directory of ['assets', 'plugins']) {
+    const source = FS.resolvePath(directory, sourceRoot)
+    if (!await FS.isDirectory(source)) {
+      Errors.throwHostEnvironment(`Tao's development runtime is missing ${source}.`)
+    }
+    await FS.copyDirectory(source, FS.resolvePath(directory, root))
   }
   // An installed Tao resolves its host's packages on first use, beside its resource root rather than
   // inside the host's files; inside a checkout this does nothing and they are the host's own.

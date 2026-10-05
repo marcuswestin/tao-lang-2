@@ -29,7 +29,7 @@ export const EffectOutcomesValidator = {
     [AST.WhenDoStatement.$type]: (statement, ctx) => {
       validateOutcomes(statement, ctx)
       if (ASTUtils.isRootEffectInvocation(statement)) {
-        warnUnhandled(statement, ASTUtils.unhandledOutcomeCases(statement), ctx, 'outcome')
+        warnUnhandled(statement, ASTUtils.unhandledOutcomeContract(statement), ctx, 'outcome')
       }
     },
     [AST.DoStatement.$type]: (invocation, ctx) => {
@@ -45,7 +45,7 @@ export const EffectOutcomesValidator = {
 } as const
 
 function validateOutcomes(statement: AST.WhenDoStatement, ctx: ValidationContext): void {
-  const declared = new Set(ASTUtils.invocationFailureCases(statement))
+  const declared = new Set(ASTUtils.invocationFailureContract(statement).cases)
   const effect = ASTUtils.invokedEffect(statement)
   const auth = AST.isAuthLibraryDeclaration(effect, 'SignIn') || AST.isAuthLibraryDeclaration(effect, 'SignOut')
   const words = auth ? ['completed', 'cancelled', 'rejected', 'error'] : ASTUtils.effectOutcomeWords
@@ -77,16 +77,19 @@ function warnRootInvocation(
     return
   }
   if (ASTUtils.isRootEffectInvocation(invocation)) {
-    warnUnhandled(invocation, ASTUtils.invocationFailureCases(invocation), ctx, 'failure')
+    warnUnhandled(invocation, ASTUtils.invocationFailureContract(invocation), ctx, 'failure')
   }
 }
 
 function warnUnhandled(
   invocation: ASTUtils.EffectInvocation,
-  cases: readonly string[],
+  contract: ASTUtils.FailureContract,
   ctx: ValidationContext,
   kind: 'failure' | 'outcome',
 ): void {
+  // D1 retains declared-case root warnings; unknown coverage becomes mandatory at the later
+  // app-guard boundary, rather than rejecting existing applications before that boundary exists.
+  const cases = contract.cases
   if (cases.length === 0) {
     return
   }

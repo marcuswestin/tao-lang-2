@@ -26,12 +26,12 @@ Describe('compiled authenticated local-only app', () => {
       await FS.remove(path(key))
     })
     const files = {
-      '.tao/project.json': '{"id":"9f77de33-02da-4bfd-a527-35496b04dd1b"}',
+      '.tao/store/project.json': '{"id":"9f77de33-02da-4bfd-a527-35496b04dd1b"}',
       'App.tao': `
         use TestAuth from @tao/auth/testing
         use Col, FormButton, Text from @tao/ui
         data Drafts / Draft { Body text, local only }
-        app DraftsApp { id "draftsapp" version "1.0.0" name "DraftsApp" Auth TestAuth { State "SignedIn" AccountId "alice" } view Main }
+        app DraftsApp { id "draftsapp" version "1.0.0" name "DraftsApp" Auth TestAuth { State "SignedIn", AccountId "alice" } view Main }
         view Main() {
           query Drafts = Drafts with { }
           action Add() { create Draft { Body: "Persisted local draft" } }

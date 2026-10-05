@@ -3,7 +3,7 @@
 Status: source implementation written; release acceptance remains a separate requirement.
 The complete migration must pass validation before landing. This records the agreed contract;
 implemented specifications are updated at integration checkpoints.
-Tracked `.tao/project.json` IDs now preserve declaration origins across clones and build snapshots;
+Tracked `.tao/store/project.json` IDs now preserve declaration origins across clones and build snapshots;
 computed TypeScript sidecar paths produce located diagnostics. Selected dependency initialization,
 test-cache safety, external configuration watching, and concurrent contract publication have focused
 regression coverage. Generated app bindings execute the persistence runtime and retain state across
@@ -36,7 +36,7 @@ that use external unmarked TypeScript trees remains separate from this implement
 ## Contract
 
 1. A project is the nearest ancestor containing `.tao/`. A tracked marker preserves discovery after
-   cloning. Its automatically generated `.tao/project.json` ID is retained across clones and builds.
+   cloning. Its automatically generated `.tao/store/project.json` ID is retained across clones and builds.
    Root Tao files are allowed; neither a particular filename nor a `project` declaration is
    required. Nested roots remain isolated.
 2. A module is a named `@<name>` folder and its subfolders. Module names and registered aliases are
@@ -81,7 +81,7 @@ versions require distinct aliases; identical repeated bindings may be deduplicat
 Installation defaults to dependencies of all apps and publications. Explicit selection must preserve
 unrelated installations. Local Tao publication resolution and npm installation are in scope. Managed
 manifests and reproducibility metadata live in dot directories; native npm lookup uses root
-`node_modules`. The shared lock moves from `.tao-project/lock.jsonc` to `.tao/lock.jsonc`, retaining its
+`node_modules`. The shared lock moves from `.tao-project/lock.jsonc` to `.tao/store/lock.jsonc`, retaining its
 shipping/toolchain sections, exact pins, and tracking exception.
 
 ## TypeScript and development
@@ -96,7 +96,7 @@ Module paths must be literal strings (including interpolation-free template lite
 Root `tsconfig.json` initially contains only:
 
 ```json
-{ "extends": "./.tao/typescript/tsconfig.json" }
+{ "extends": "./.tao/cache/typescript/tsconfig.json" }
 ```
 
 The generated base owns the authored/generated overlay and contract checking. Root overrides are

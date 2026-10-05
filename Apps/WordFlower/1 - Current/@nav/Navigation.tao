@@ -18,21 +18,21 @@ nav SettingsStack = StackNav {
 // target-key namespace. The `Icon` property contains a system-icon name; it is not an Icon view.
 project
 nav WordFlowerNavigator = SelectionNav {
-   Initial @home
-   Display "automatic"
+   Initial @home,
+   Display "automatic",
    @home {
-      Label "Home"
-      Icon "house"
+      Label "Home",
+      Icon "house",
       Content HomeStack
-   }
+   },
    @workspace {
-      Label "Workspace"
-      Icon "folder"
+      Label "Workspace",
+      Icon "folder",
       Content WorkspaceNav
-   }
+   },
    @settings {
-      Label "Settings"
-      Icon "gear"
+      Label "Settings",
+      Icon "gear",
       Content SettingsStack
 }  }
 

@@ -1,7 +1,10 @@
 ---
 name: environment-recovery
 description: >-
-  Recover a Tao worktree whose tooling is wrong rather than whose code is wrong: a missing devenv profile, a tool shell without `.devenv/profile/bin` on PATH, a `bun install` the sandbox denied, a sandbox denial you cannot tell from a missing host tool, headless Chrome the host blocks, or a stray process and the port it is holding. Use when a repository command fails for a reason that is not the branch, when `which bun` looks wrong, when an install reports EEXIST or PermissionDenied, or when choosing between a sandboxed and an unsandboxed shell.
+  Recover Tao tooling failures that command output and checkout diagnosis do not resolve. Use for
+  missing devenv profiles, wrong Bun or PATH, denied installs, EEXIST, PermissionDenied,
+  host-blocked browsers, stray processes, or occupied ports; also when choosing sandboxed versus
+  host execution.
 ---
 
 # Environment Recovery
@@ -39,11 +42,12 @@ behind it.
 
 - A few npm packages ship `.idea/` and `.gitmodules`, which an agent sandbox protects inside the
   working directory and no setting exempts. A sandboxed install that must write one fails as
-  `PermissionDenied: …` or `EEXIST: failed to link package`. `./agent` distinguishes both from a
-  denied temporary directory and prints the matching recovery; `./agent doctor` reports the broken
-  install and the same remediation. Only the tempdir case is resumable. For either protected-path
-  failure, report the denied path and exact `./agent setup` retry for the Developer to run from a
-  normal terminal. Do not start `just session-unsandboxed` on your own.
+  `PermissionDenied: …`, `EEXIST: failed to link package`, or — when the package is new to Bun's
+  cache — `failed to download <package>: EPERM`. `./agent` distinguishes these from a denied
+  temporary directory and prints the matching recovery; `./agent doctor` reports the broken install
+  and the same remediation. Only the tempdir case is resumable. For a protected-path failure, run
+  `./agent unsandboxed setup`, the same entry the SessionStart hook runs on the host. Do not start
+  `just session-unsandboxed` on your own.
 - Never name a Bun install backend to work around this. `--backend=copyfile` writes every packaged
   file through its own path, making `bun install` unrunnable sandboxed rather than fixing it.
 

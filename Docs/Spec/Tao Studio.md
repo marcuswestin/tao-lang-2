@@ -4,7 +4,7 @@ Status: authoritative executable contract for the current Tao Studio development
 
 Tao Studio is a local development product over a Tao project. Tao source is the durable authority for
 executable product behavior. The one current exception is unsnapped freehand geometry, whose explicit
-project authority is Studio's committed `.tao/studio/sketches.jsonc` catalog. The editor and
+project authority is Studio's committed `.tao/store/studio/sketches.jsonc` catalog. The editor and
 flowed visual tools submit versioned source actions; Studio keeps no other hidden layout, example, or
 runtime state as project truth. `fixture` and grouped `scenarios` are the shared Tao-owned source for
 examples; there is no `example` declaration or Studio-only cases file.
@@ -159,7 +159,7 @@ Reconfiguring a cell validates its parameters, environment, and state layers, in
 `cellRevision`, and invalidates every live preview instance of that cell. A cell may have several
 live instances at once, such as the browser iframe and a paired physical device. Requests with stale manifest, compile,
 cell, or instance identity fail as conflicts rather than applying to a newer render. The browser
-client creates a separate iframe realm for every cell so ordinary module and runtime singletons are
+client creates a separate iframe realm for every activated cell so ordinary module and runtime singletons are
 not shared between examples.
 
 Across a successful source recompile, stable cell IDs retain compatible explicit argument,
@@ -170,9 +170,13 @@ without replacing their iframe. Added, removed, or renamed cells still require r
 The matrix identity, validation, registration, bootstrap, reconfiguration, grouped-row layout, and
 grid-frame creation are implemented. The browser client uses that grouping in its live preview path:
 it renders source-ordered group rows, left-to-right cells, and keyed reconciliation across manifest
-changes while retaining compatible cell frames. An `IntersectionObserver` blanks cells outside a
-600-pixel canvas margin to `about:blank` and restores their latest preview URL when they return; source
-changes update the retained URL while a cell is suspended. The generated Studio root installs the cell
+changes while retaining compatible activated cell frames. Every preview, including the whole-app
+preview, starts inactive and has no iframe until its header lightning toggle is enabled. The toggle
+is icon-only, has `aria-pressed`, and is labelled "Activate preview" or "Deactivate preview"; its bolt
+is a grey outline while inactive and subtly yellow when active. Deactivation removes the iframe.
+Activated cells remain mounted when scrolled offscreen. The Studio server stores the activated cell
+IDs per app, focused preview, editor tabs, and canvas viewport in `.tao/local/studio/session.json`,
+and drops IDs removed from the manifest. The generated Studio root installs the cell
 host, creates fixture rows in declaration order, applies ordered `prepare` updates after datasource
 binding, resolves fixture handles into view arguments, and mounts the focused `render` subject. The real
 WordFlower `states / novel` scenario generates and typechecks through this path. Fixture setup through an
@@ -207,7 +211,7 @@ Automatic render-failure containment and guarded recovery at loop-item, screen/p
 boundaries are adopted. The versioned semantic capture artifact and restore behavior described here are
 implemented Studio/runtime behavior, but their adoption as a generalized Tao capture/replay contract is
 explicitly deferred. The artifact's registered runtime domains are `action-history`, `data`, `navigation`,
-`persisted-state`, and cell-local `scheme`; Studio also adds the active cell's environment. Item, screen/presentation, and app
+`persisted-state`, and cell-local `scheme`; Studio also adds the focused cell's environment. Item, screen/presentation, and app
 boundaries publish that artifact after a diagnostic render
 pass. Studio activates the failing cell, displays its bounded failure and compiler-owned source range,
 accepts a capture from a JSON file or clipboard, and remounts one cell with the restored semantic domains.
@@ -284,7 +288,7 @@ source but do not rewrite it.
 
 ### Freehand Draw, Snap, and Feed catalog
 
-The Draw slice stores each unsnapped rectangle in `.tao/studio/sketches.jsonc`. The file is
+The Draw slice stores each unsnapped rectangle in `.tao/store/studio/sketches.jsonc`. The file is
 JSONC on input and canonical indented JSON on every Studio write. It is committed project state, not
 an artifact or browser preference. Format version 1 has this shape:
 
@@ -725,12 +729,12 @@ while preserving an explicitly saved layout preference. The toolbar Browser acti
 session's standalone app URL in Chrome; Device launches the companion. Browser
 launch accepts no caller-provided URL and reports an unavailable preview or opener failure in Studio.
 
-In Design, dragging empty canvas or an inactive preview pans without Space; ordinary wheel and
+In Design, dragging empty canvas or an unfocused preview pans without Space; ordinary wheel and
 trackpad scrolling over those surfaces also pans. In Draw, ordinary dragging draws or edits rectangles,
 while Space-drag pans the Draw canvas. Pinch and modifier-wheel zoom remain available without Space.
-Previews start inactive and accept no mouse input. The first click selects a preview without forwarding
-that click to its app; subsequent input reaches it. Only one preview can be active, shown by its accent
-outline. Clicking outside deselects it, and clicking another preview transfers activation. In Design,
+Activated previews initially accept no mouse input. The first click focuses a preview without forwarding
+that click to its app; subsequent input reaches it. Only one preview can be focused, shown by its accent
+outline. Clicking outside removes focus, and clicking another preview transfers focus. In Design,
 ordinary scrolling inside the selected preview belongs to the app. A canvas drag does not select a
 preview, and selection for input is separate from the inspector's retained editing context.
 For the entire time Space is held, a transparent canvas shield makes previews neutral pan surfaces:
@@ -768,16 +772,16 @@ reactive Screen-class selection at use sites, pressed/focused/hovered interactio
 `rules {}` policy engine, and raw typed typography dimensions remain deferred language work. Named size
 references work; the legacy numeric style surface remains compatible.
 
-The Inspector Data context reports the selected view/element and active cell, revision, and scenario.
+The Inspector Data context reports the selected view/element and focused cell, revision, and scenario.
 `StudioRenderInspection` publishes declaration-resolved, scope-checked binding candidates for the Text
 actions described above rather than a second general-purpose binding graph. The runtime publishes no
 general action inventory; Actions exposes only implemented, preflighted source actions and does not
 invent runtime invocation.
 
 Problems provides project diagnostics with click-to-source, and Compile shows live status and revisions.
-Data requests a trusted runtime capture from the active preview, renders its datasource/entity rows, polls
-while selected, and links to active-cell fixture capture. Preview console calls cross the trusted preview
-message channel; Logs renders the active cell's bounded record and can clear it. Tests invokes the Tao test
+Data requests a trusted runtime capture from the focused preview, renders its datasource/entity rows, polls
+while selected, and links to focused-cell fixture capture. Preview console calls cross the trusted preview
+message channel; Logs renders the focused cell's bounded record and can clear it. Tests invokes the Tao test
 runner through session-scoped status/run endpoints, can rerun after a successful compile, retains bounded
 structured failures and output, and jumps to the reported source location. Runs are serialized per project.
 The packaged native payload includes the Node-target test command, Jest/runtime dependencies, and a
@@ -791,7 +795,7 @@ Studio-local `Disclosure` views, mount the stdlib Components and manifest-derive
 inventories, expose parser-owned DesignTokens, mount the code editor foreign view, and compose the
 inspector's live Layout/Style/Data/Actions and scenario-environment contexts. Create, rename, confirmed
 delete, palette insertion, screen opening, inspector actions, and undo call the trusted workbench
-controller. Style changes use server-canonical proposal/review/apply; stale active-cell environment edits
+controller. Style changes use server-canonical proposal/review/apply; stale focused-cell environment edits
 are rejected by cell identity and revision. The editor preserves versioned writes without putting file
 contents into the entity model.
 
@@ -813,9 +817,8 @@ queries, iteration, drafts, branching, and ordinary actions. The editor is a typ
 TypeScript retains primitive numeric/file leaves where Tao has no equivalent, typed serialization and
 trusted controller boundaries, toolbar/rail destinations, preview iframe lifecycle, workbench and file
 controllers, and native window chrome. The ProductHost protocol
-publishes revisioned active-file, selected-render, active-cell,
-and parsed inspector state as transient view parameters. They are browser-local UI state, not StudioServer
-entities or durable project authority. Recursive folder expansion is derived from one top-level persisted
+publishes revisioned active-file, selected-render, focused-cell,
+and parsed inspector state as transient view parameters. These transient parameters reflect workbench UI state. Preview focus is persisted through the Studio server in the project session; it is not a StudioServer entity. Recursive folder expansion is derived from one top-level persisted
 collapsed-path set passed through a bound root view; view-instance persistence is not supported. The action sidecars still use same-origin session routing, so a
 separately hosted cross-origin Tao surface would need corresponding write-origin injection.
 
@@ -834,7 +837,8 @@ generated real WordFlower Studio host typechecks as one integration proof.
 
 The browser client is split into API/event, editor, matrix, shell, visual-editing, file-tree, and
 product-panel modules behind a thin compatibility entry point. Its live preview path renders grouped
-scenario rows and keyed cells, reconciles them across new manifests, and suspends offscreen iframe realms.
+scenario rows and keyed cells, reconciles them across new manifests, and retains activated iframe realms
+while they are offscreen.
 The complete host-browser acceptance pass remains pending. Focused operations are contract-tested, and
 the simulated-user journey runs as an ordinary `verify-full` gate and recorded its ten consecutive
 reliable normal-terminal runs on 2026-09-20. Native and canary acceptance remains a separate

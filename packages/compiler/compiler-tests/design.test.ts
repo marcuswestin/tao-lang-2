@@ -309,6 +309,9 @@ Describe('compiler: minimal design', () => {
       Expect(main?.code).toContain("import { Theme } from './modules/Theme.tao'")
       Expect(main?.code).toContain("TR.Use(_Scope, 'Theme', () => Theme)")
       Expect(theme?.code).toContain('_Scope.Theme = TR.Design.Declaration({')
+      Expect(theme?.code).toContain('}, TR.Navigation.Identity(["tao.declaration",1,')
+      Expect(theme?.code).toContain('"@workspace","Theme","DesignDeclaration')
+      Expect(theme?.code).toContain('"Theme"]).canonical)')
       Expect(theme?.code).toContain('export const Theme = _Scope.Theme')
     })
   })
@@ -322,7 +325,7 @@ Describe('compiler: minimal design', () => {
       scene Main() { Title "Main" render Surface() [screen] }
       view Surface() { render inject \`\`\`ts return null \`\`\` }
       app Demo { id "com.tao.test.demo" version "1.0.0"  name "Demo" Navigator StackNav { Initial Main } Design Light }
-      app DemoDark = Demo with { id "com.tao.test.demodark"  name "Demo Dark" Design Dark }
+      app DemoDark = Demo with { id "com.tao.test.demodark",  name "Demo Dark", Design Dark }
     `,
       { appName: 'DemoDark' },
     )

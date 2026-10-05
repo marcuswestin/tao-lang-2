@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, Platform, Repo } from '@shared'
+import { CLI, Errors, FS, Platform, ProjectLocal, Repo } from '@shared'
 import { Deferred, Expect, Test, testOverrideSlot, until, withTaoFiles } from '@shared/test'
 import {
   StudioSketchCatalog,
@@ -908,8 +908,8 @@ Test(
   async () => {
     await withTaoFiles('tao-studio-sketch-processes-', {}, async (_paths, root) => {
       await FS.writeText(FS.resolvePath('@/studio/View1.tao', root), 'view View1() { }\n')
-      const provider = new StudioSketchCatalog(root)
-      const lockPath = `${provider.path()}.lock`
+      const lockPath = ProjectLocal.cacheResolve('studio/locks/sketches.lock', root)
+      await FS.mkdir(FS.dirname(lockPath))
       const staleOwner = `${lockPath}.owner-stale`
       await FS.writeJson(staleOwner, { pid: 2 ** 30 })
       await FS.symlink(await FS.realPath(staleOwner), lockPath)
@@ -952,7 +952,7 @@ Test(
       Expect(reopened.nextViewNumber).toBe(6)
       Expect(reopened.sketches.map(sketch => sketch.name).toSorted()).toEqual(['View2', 'View3', 'View4', 'View5'])
       Expect(
-        (await FS.listDir(FS.dirname(new StudioSketchCatalog(root).path()))).filter(name => name.includes('.lock')),
+        (await FS.listDir(FS.dirname(lockPath))).filter(name => name.includes('.lock')),
       )
         .toEqual([])
     })
@@ -962,7 +962,8 @@ Test(
 Test('Studio sketch stale reclaim keeps a late claimant from deleting a fresh replacement owner', async () => {
   await withTaoFiles('tao-studio-sketch-reclaim-order-', {}, async (_paths, root) => {
     const provider = new StudioSketchCatalog(root)
-    const lockPath = `${provider.path()}.lock`
+    const lockPath = ProjectLocal.cacheResolve('studio/locks/sketches.lock', root)
+    await FS.mkdir(FS.dirname(lockPath))
     const staleOwner = `${lockPath}.owner-stale`
     await FS.writeJson(staleOwner, { pid: 2 ** 30 })
     await FS.symlink(await FS.realPath(staleOwner), lockPath)
@@ -1083,7 +1084,7 @@ Test(
         requestId: 'failed-delete',
       })).rejects.toThrow('simulated atomic rename failure')
       Expect(await FS.readText(initial.path())).toBe(before)
-      Expect((await FS.listDir(FS.dirname(initial.path()))).filter(name => name.endsWith('.tmp'))).toEqual([])
+      Expect(await FS.listDir(ProjectLocal.cacheResolve('studio/tmp', root))).toEqual([])
 
       const recovered = await failing.read()
       Expect(recovered.revision).toBe(1)

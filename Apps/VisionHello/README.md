@@ -13,7 +13,7 @@ From the repository root:
 ./agent tao build Apps/VisionHello --visionos
 ```
 
-The command prints a retained `TaoApp.xcodeproj` path under this project's `.tao/builds/` directory.
+The command prints a retained `TaoApp.xcodeproj` path under this project's `.tao/local/builds/` directory.
 Open that project in Xcode, choose the `TaoApp` scheme and an Apple Vision Pro simulator, then Run.
 Install the visionOS Simulator runtime in Xcode's Components settings if no simulator is available.
 The project targets visionOS 2 or later and has been built with the visionOS 27 SDK.

@@ -2,6 +2,7 @@ import { type PortReservation, Ports } from '@expo-host/dev-loop/expo-runner/Por
 import { CLI, Errors, FS, Platform, Repo } from '@shared'
 import { GateCatalog } from '@verification/GateCatalog'
 import { MachineLanes, type MachineResourceLease } from '@verification/MachineLanes'
+import { UiVisibility } from '@verification/UiVisibility'
 
 const basePort = 42_000
 const portsPerShard = 128
@@ -19,6 +20,7 @@ type StudioSmokeResources = {
 type StudioSmokeOptions = {
   files: readonly string[]
   native?: boolean
+  showStudio?: boolean
   /** Test registry; production shares the machine-wide resource registry. */
   registryRoot?: string
   /** Test port probe; production checks the actual host ports. */
@@ -81,6 +83,10 @@ function resources(options: Omit<StudioSmokeOptions, 'files'>): StudioSmokeResou
 }
 
 async function run(options: StudioSmokeOptions): Promise<number> {
+  if (UiVisibility.smokeNeedsStudio(options.files, options.native)) {
+    UiVisibility.requireStudio(options.showStudio)
+    UiVisibility.warn(UiVisibility.studioWarnings)
+  }
   if (options.files.length === 0) {
     Errors.throwUserInput('Studio smoke requires at least one explicit test file.')
   }
@@ -102,6 +108,8 @@ async function run(options: StudioSmokeOptions): Promise<number> {
       const result = await CLI.run('bun', {
         args: ['test', ...options.files.map(path => FS.resolvePath(path)), '--timeout=180000'],
         env: {
+          TAO_HOME: FS.resolvePath('home', allocation.artifactRoot),
+          [UiVisibility.STUDIO_ENV_KEY]: options.showStudio === true ? 'true' : 'false',
           TAO_STUDIO_SMOKE_ARTIFACT_ROOT: allocation.artifactRoot,
           TAO_STUDIO_SMOKE_NATIVE: options.native === true ? 'true' : 'false',
           TAO_STUDIO_SMOKE_PREVIEW_PORT: String(allocation.previewPort),

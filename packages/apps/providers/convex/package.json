@@ -1,0 +1,17 @@
+{
+  "name": "tao-convex",
+  "private": true,
+  "version": "1.0.0",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "module": "convex-src/Convex.ts",
+  "exports": {
+    ".": "./convex-src/Convex.ts",
+    "./backend": "./convex-src/backend.ts",
+    "./generate": "./convex-src/generate.ts"
+  },
+  "dependencies": {
+    "convex": "1.46.0",
+    "tao-shared": "workspace:*"
+  }
+}

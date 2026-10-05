@@ -42,7 +42,7 @@ Describe('tao test CLI shared compiled corpus', () => {
     await withTaoFixture({ ...splittableFixture, 'jest-stub.mjs': argvEchoStubSource() }, async rootDir => {
       const runtimeRoot = FS.resolvePath('runtime-root', rootDir)
       const handoffPath = FS.resolvePath('artifacts/shared-tao-run.json', rootDir)
-      const identityPath = FS.resolvePath('.tao/project.json', rootDir)
+      const identityPath = FS.resolvePath('.tao/store/project.json', rootDir)
       await FS.remove(identityPath)
       await withRuntimeRoot(runtimeRoot, async () => {
         await withJestStub(rootDir, async () => {

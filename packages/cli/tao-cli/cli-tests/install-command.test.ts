@@ -1,5 +1,5 @@
 import { BridgeMetadata } from '@compiler/bridge-metadata'
-import { Errors, FS } from '@shared'
+import { Errors, FS, Time } from '@shared'
 import { Describe, Expect, fakeTerminal, mkTestDir, Test } from '@shared/test'
 import { runTaoInstall } from '../cli-src/install-command'
 import { ManagedInstallEnvironment } from '../cli-src/managed-install-environment'
@@ -141,14 +141,15 @@ view Main() { render inject \`\`\`ts return null \`\`\` }
       const installed: string[] = []
       const terminal = fakeTerminal()
       await runTaoInstall(consumer, { appName: 'Consumer', output: terminal.output }, {
-        installNpm: async path => {
+        installNpm: async (path, _root, args) => {
+          Expect(args).toEqual(['install', '--prefix', path, '--no-audit', '--no-fund'])
           const manifest = await FS.readJson<{ dependencies: Record<string, string> }>(
             FS.resolvePath('package.json', path),
           )
           const specifier = manifest.dependencies['util']!
           const version = specifier.slice(specifier.lastIndexOf('@') + 1)
           // The package announcement must arrive before the potentially slow installer runs.
-          Expect(terminal.outputText()).toContain(`Installing npm package date-fns@${version} as util...\n`)
+          Expect(terminal.outputText()).toContain(`Checking/installing npm package date-fns@${version} as util...\n`)
           Expect(terminal.outputText()).not.toContain('Installed dependencies for ')
           installed.push(version)
           await FS.writeJson(FS.resolvePath('node_modules/util/package.json', path), { name: 'date-fns', version })
@@ -159,8 +160,7 @@ view Main() { render inject \`\`\`ts return null \`\`\` }
       const output = terminal.outputText()
       Expect(output).toContain('Discovering Tao source files...\n')
       Expect(output).toContain('Resolving app and package dependencies...\n')
-      Expect(output).toContain('Linking npm alias util (3.6.0)...\n')
-      Expect(output).toContain('Linking npm alias util (4.1.0)...\n')
+      Expect(output).toContain('Linking npm alias util...\n')
       Expect(output.indexOf('Saving dependency lock...')).toBeGreaterThan(
         output.lastIndexOf('Linking npm alias util'),
       )
@@ -168,7 +168,7 @@ view Main() { render inject \`\`\`ts return null \`\`\` }
       const lock = await readProjectLock(consumer)
       for (const [origin, version] of [[older, '3.6.0'], [newer, '4.1.0']] as const) {
         const namespace = BridgeMetadata.dependencyNamespace(origin)
-        const environment = lock.installs?.environments[namespace]
+        const environment = lock.installs?.environments[FS.relativePath(consumer, origin)]
         Expect(environment?.npm['util']).toEqual({ name: 'date-fns', requested: version, version })
         const modulesRoot = ManagedInstallEnvironment.modulesRoot(consumer, origin, namespace)
         Expect(await FS.realPath(FS.resolvePath('util', modulesRoot))).toBe(
@@ -183,6 +183,57 @@ view Main() { render inject \`\`\`ts return null \`\`\` }
     }
   })
 
+  Test('keys environments by project root and reuses a pin recorded under another checkout’s namespace', async () => {
+    const root = await mkTestDir('tao-install-portable-')
+    try {
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', root), '')
+      await FS.writeText(
+        FS.resolvePath('App.tao', root),
+        `app Reader {
+   id "reader"
+   version "1.0.0"
+   name "Reader"
+   requires ts npm:date-fns version ^4.0.0 as util
+   view Main
+}
+view Main() { render inject \`\`\`ts return null \`\`\` }
+`,
+      )
+      const pinned = { name: 'date-fns', requested: '^4.0.0', version: '4.1.0' }
+      await FS.writeJson(FS.resolvePath('.tao/store/lock.jsonc', root), {
+        schemaVersion: 1,
+        installs: {
+          lockfileVersion: 2,
+          local: {},
+          environments: {
+            'namespace-from-another-checkout': { projectRoot: '.', publications: [], npm: { util: pinned } },
+          },
+        },
+      })
+      const specifiers: string[] = []
+
+      await runTaoInstall(root, { appName: 'Reader' }, {
+        installNpm: async path => {
+          const manifest = await FS.readJson<{ dependencies: Record<string, string> }>(
+            FS.resolvePath('package.json', path),
+          )
+          specifiers.push(manifest.dependencies['util']!)
+          await FS.writeJson(FS.resolvePath('node_modules/util/package.json', path), {
+            name: 'date-fns',
+            version: '4.1.0',
+          })
+        },
+      })
+
+      Expect(specifiers).toEqual(['npm:date-fns@4.1.0'])
+      Expect((await readProjectLock(root)).installs?.environments).toEqual({
+        '.': { projectRoot: '.', publications: [], npm: { util: pinned } },
+      })
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('scoped app installs preserve another app’s selected publication', async () => {
     const directory = await mkTestDir('tao-install-scoped-')
     const consumer = FS.resolvePath('consumer', directory)
@@ -193,7 +244,10 @@ view Main() { render inject \`\`\`ts return null \`\`\` }
         await FS.writeText(FS.resolvePath('.tao/.gitkeep', root), '')
       }
       for (const root of [first, second]) {
-        await FS.writeText(FS.resolvePath('Package.tao', root), 'package { version 1.0.0 license MIT includes @ui }\n')
+        await FS.writeText(
+          FS.resolvePath('Package.tao', root),
+          'package { version 1.0.0 license MIT includes @ui requires ts npm:date-fns version 4.1.0 as util }\n',
+        )
         await FS.writeText(
           FS.resolvePath('@ui/Card.tao', root),
           'public view Card() { render inject ```ts return null ``` }\n',
@@ -219,13 +273,109 @@ view Main() { render inject \`\`\`ts return null \`\`\` }
 `,
       )
 
-      await runTaoInstall(consumer, { appName: 'First' })
+      const calls: string[] = []
+      const installNpm = async (path: string) => {
+        calls.push(path)
+        await FS.writeJson(FS.resolvePath('node_modules/util/package.json', path), {
+          name: 'date-fns',
+          version: '4.1.0',
+        })
+      }
+      await runTaoInstall(consumer, { appName: 'First' }, { installNpm })
       Expect(Object.keys((await readProjectLock(consumer)).installs?.local ?? {})).toEqual(['.->../first#'])
-      await runTaoInstall(consumer, { appName: 'Second' })
-      Expect(Object.keys((await readProjectLock(consumer)).installs?.local ?? {}).toSorted())
+      await runTaoInstall(consumer, { appName: 'Second' }, { installNpm })
+      const lock = await readProjectLock(consumer)
+      Expect(Object.keys(lock.installs?.local ?? {}).toSorted())
         .toEqual(['.->../first#', '.->../second#'])
+      Expect(lock.installs?.environments[FS.relativePath(consumer, first)]?.npm['util']?.version).toBe('4.1.0')
+      Expect(lock.installs?.environments[FS.relativePath(consumer, second)]?.npm['util']?.version).toBe(
+        '4.1.0',
+      )
+      Expect(calls.toSorted()).toEqual([
+        ManagedInstallEnvironment.packageRoot(consumer, BridgeMetadata.dependencyNamespace(first), 'util'),
+        ManagedInstallEnvironment.packageRoot(consumer, BridgeMetadata.dependencyNamespace(second), 'util'),
+      ].toSorted())
     } finally {
       await FS.remove(directory)
+    }
+  })
+
+  Test('reruns npm while preserving unchanged managed files and repairing a missing alias link', async () => {
+    const root = await mkTestDir('tao-install-repeat-')
+    try {
+      await writeNpmApp(root)
+      const namespace = BridgeMetadata.dependencyNamespace(root)
+      const directory = ManagedInstallEnvironment.packageRoot(root, namespace, 'util')
+      const manifestPath = FS.resolvePath('package.json', directory)
+      const installed = FS.resolvePath('node_modules/util', directory)
+      const linkPath = FS.resolvePath('util', ManagedInstallEnvironment.modulesRoot(root, root, namespace))
+      const args = ['install', '--prefix', directory, '--no-audit', '--no-fund']
+      const calls: string[][] = []
+      const installNpm = async (path: string, _consumer: string, argv: readonly string[]) => {
+        calls.push([...argv])
+        await FS.writeJson(FS.resolvePath('node_modules/util/package.json', path), {
+          name: 'date-fns',
+          version: '4.1.0',
+        })
+      }
+      const run = () => runTaoInstall(root, { appName: 'Reader' }, { installNpm })
+      await run()
+      Expect(calls).toEqual([args])
+      await FS.setModifiedTimeMs(manifestPath, 1_600_000_000_000)
+      const originalManifest = await FS.entryMetadata(manifestPath)
+      const originalLink = await FS.entryMetadata(linkPath)
+      await Time.sleep(20)
+      await run()
+      Expect(calls).toEqual([args, args])
+      Expect(await FS.entryMetadata(manifestPath)).toEqual(originalManifest)
+      Expect(await FS.entryMetadata(linkPath)).toEqual(originalLink)
+      await FS.remove(linkPath)
+      await run()
+      Expect(calls).toEqual([args, args, args])
+      Expect(await FS.realPath(linkPath)).toBe(installed)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('reports phase and command elapsed time and npm count on success and failure', async () => {
+    const root = await mkTestDir('tao-install-timings-')
+    try {
+      await writeNpmApp(root)
+      let tick = 0
+      const success = fakeTerminal()
+      await runTaoInstall(root, { appName: 'Reader', output: success.output }, {
+        nowMs: () => tick,
+        installNpm: async path => {
+          const output = success.outputText()
+          Expect(output.indexOf('Checking/installing npm package date-fns@4.1.0 as util...'))
+            .toBeGreaterThan(output.indexOf('Finished dependency lock read (0ms).'))
+          Expect(output).not.toContain('Finished npm package date-fns@4.1.0 as util')
+          tick += 250
+          await FS.writeJson(FS.resolvePath('node_modules/util/package.json', path), {
+            name: 'date-fns',
+            version: '4.1.0',
+          })
+        },
+      })
+      const output = success.outputText()
+      Expect(output).toContain('Finished npm package date-fns@4.1.0 as util (250ms).')
+      Expect(output).toContain('Finished dependency lock write (0ms).')
+      Expect(output).toContain('in 250ms (1 npm invocation).')
+      const failure = fakeTerminal()
+      await Expect(runTaoInstall(root, { appName: 'Reader', output: failure.output }, {
+        nowMs: () => tick,
+        installNpm: async () => {
+          tick += 125
+          Errors.throwUnexpected('npm broke')
+        },
+      })).rejects.toThrow('npm broke')
+      const failedOutput = failure.outputText()
+      Expect(failedOutput).toContain('Failed npm package date-fns@4.1.0 as util after 125ms.')
+      Expect(failedOutput).toContain('Install failed after 125ms (1 npm invocation).')
+      Expect(failedOutput).not.toContain('Installed dependencies for ')
+    } finally {
+      await FS.remove(root)
     }
   })
 
@@ -260,3 +410,19 @@ view Main() { render inject \`\`\`ts return null \`\`\` }
     }
   })
 })
+
+async function writeNpmApp(root: string): Promise<void> {
+  await FS.writeText(FS.resolvePath('.tao/.gitkeep', root), '')
+  await FS.writeText(
+    FS.resolvePath('App.tao', root),
+    `app Reader {
+   id "reader"
+   version "1.0.0"
+   name "Reader"
+   requires ts npm:date-fns version 4.1.0 as util
+   view Main
+}
+view Main() { render inject \`\`\`ts return null \`\`\` }
+`,
+  )
+}

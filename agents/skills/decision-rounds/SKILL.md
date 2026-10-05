@@ -1,7 +1,10 @@
 ---
 name: decision-rounds
 description: >-
-  Settle the product, design, roadmap, or language-semantics judgments a task raises with the Developer before planning or implementing: brainstorm the decision inventory wide, narrow it, then decide a handful at a time with marked recommendations. Use when a task has choices the Developer must make, when the Developer asks to brainstorm, weigh options, or decide something, or before writing a plan that rests on unsettled decisions.
+  Settle product, design, roadmap, and language-semantics decisions with the Developer. Use when
+  asked to brainstorm, weigh options, or decide those questions, and before planning or
+  implementing work that depends on unsettled Developer decisions. Routine implementation choices
+  are excluded.
 ---
 
 # Decision Rounds

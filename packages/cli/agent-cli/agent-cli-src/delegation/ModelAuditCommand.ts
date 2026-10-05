@@ -113,4 +113,4 @@ async function run(options: RunModelAuditOptions = {}): Promise<number> {
   return 0
 }
 
-export const ModelAuditCommand = { briefFindings, run, write: writeModelAuditReport }
+export const ModelAuditCommand = { audit: auditModelRouting, briefFindings, run, write: writeModelAuditReport }

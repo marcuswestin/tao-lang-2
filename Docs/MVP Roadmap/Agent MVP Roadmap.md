@@ -13,6 +13,14 @@ own the public sequence. This work inventory spans those releases and later work
 of prerequisites for release 1. Existing implementation records do not establish current QA or
 distribution readiness. The [QA register](../QA/README.md) holds on-demand evidence and findings.
 
+**Managed automation disposition, 2026-10-04:** the completed managed-loop and isolated-native
+implementation is on `main` (`20bbeff06b95`). Remaining special host/human acceptance and unified
+UI control are post-MVP, as decided in the companion Developer roadmap. Scoped ownership-proved
+retained-resource cleanup is immediate housekeeping, with uncertain assets quarantined. This does
+not waive release-1 installed CLI/marketplace/browser-tutorial proof, separate physical Vision Pro
+acceptance, or genuine simulator and native Studio acceptance before releases 2 and 3 respectively.
+The [execution handoff](<../Roadmap/Managed development loops - Execution plan.md>) owns details.
+
 Each entry states what it is, why it blocks or serves the release, where the context lives, and what
 done looks like. None of them is a plan; each is enough to gather context and write one.
 
@@ -446,7 +454,7 @@ from the development loop, which no virtualization approach can do.
 ### A10 — Publication hygiene audit — **done**
 
 Whatever becomes public carries the agent instructions, the Developer's roadmap notes, machine-specific files,
-and a committed `secrets/secrets.jsonc`.
+and the repository tooling's committed `secrets/secrets.jsonc`.
 
 - Landed: `Report - Publication audit.md` beside this file, and on 2026-09-22 the fixes `R2` left
   mandatory — the WordFlower ship lock untracked and ignored (`P15`; rotating the App Store Connect
@@ -634,6 +642,178 @@ Deferred that day, to finish before MVP:
   tests), and `DEVENV-TAO-TEST-WAITS-FOREVER-ON-A-JEST-WORKER-LEFT-OPEN` for why `tao test` cancels a
   journey file's leftover timers.
 - Done: every box above is checked on `main`.
+
+## Pre-MVP language investigations
+
+These investigations were requested on 2026-10-02 and 2026-10-04. They are deferred from the current syntax
+conversation but must inform a pre-MVP decision; they do not authorize implementing these designs.
+
+### A26 — Investigate locale-aware core text
+
+- What: investigate whether Tao should have a locale-aware core display value, whether that value
+  should be `text`, and whether raw, unlocalized character data should be a separate `string` type.
+- Why: settle the boundary before outside developers depend on text storage, interpolation, APIs,
+  or localization behavior. Preserve verbatim user content and locale-independent machine formats.
+- Context: [R17](<Developer MVP Roadmap.md#r17--locale-aware-core-text>),
+  [copy, words, and formatting](<../Roadmap/Tao Revolution/Decisions.md#14-copy-words-and-formatting>),
+  and [code preferences](<../Roadmap/Tao Revolution/Code preferences.md#5-data-metadata-and-localized-presentation>).
+- Done: present concrete alternatives with small Tao examples and verified external precedents;
+  cover literal inference, deferred interpolation, pluralization, percentages/units, user content,
+  persistence, serialization/logging, equality/search, locale changes, and compatibility/migration.
+  Recommend the core representation, boundary operations, and an achievable MVP subset for R17.
+  Investigation completion does not imply implementation completion.
+
+### A27 — Investigate static read and failure-handling proofs
+
+- What: investigate a static system proving availability-safe reads, optional narrowing, and explicit
+  handling or propagation of every modeled fetching/mutation failure at an owned invocation boundary.
+- Why: determine the useful guarantees and their limits before promising complete safety. Static
+  proofs must account for suspension, reactive aliases, and failures arriving after submission.
+- Discussion input: distinguish a practical inferred failure-effect coverage check, with installed
+  typed default root handlers, from a complete availability/handling proof. Include callback and
+  foreign open contracts, later receipts, cleanup, and deliberate quiet policies; never interpret
+  an unknown failure set as empty. The Developer selected mandatory modeled-failure coverage with
+  inferred effects and typed defaults as the design direction; the complete availability/foreign/
+  suspension proof remains investigation, and no implementation is selected by this entry.
+  S59 selects fails never for an empty contract, explicit closed failure lists, inference when
+  provable and unknown/open effects otherwise, including unannotated bodyless can signatures.
+  Investigate coverage and narrowing of unknown contracts without silently treating them as empty.
+  S61 accepts the precision direction but explicitly defers automatic capability-instance/call-site
+  refinement and app-wide points-to/call-target analysis to
+  [post-MVP](<../Roadmap/Capability failure refinement.md>). Ordinary body/callee inference remains
+  the selected direction. This pre-MVP investigation may assess feasibility and limits without
+  pulling advanced refinement implementation into MVP; distinguish sound upper bounds from exact
+  runtime failure enumeration.
+- Context: [R18](<Developer MVP Roadmap.md#r18--static-data-safety-guarantees>),
+  [data and render contracts](<../Roadmap/Data and render contracts/Syntax sketches.md>),
+  `Docs/Spec/Tao Data.md`, and `Docs/Spec/Tao Actions.md`.
+- Done: enumerate positive/negative forcing examples for guards, optional/member chains, captured
+  observations, mutation preconditions, aliases, async/callbacks, foreign adapters, transitive failure
+  inference, exhaustive handlers, and lasting receipt observation. Distinguish compile-time guarantees
+  over closed modeled contracts from runtime validation/containment for foreign or unexpected errors.
+  Present feasible rules, diagnostics, implementation cost, and an MVP subset for R18; do not claim a
+  proof over arbitrary foreign code or implement the system as part of this investigation.
+
+### A28 — Investigate uninhabited types and representation protection
+
+- What: investigate two independent needs previously discussed using `never`: an uninhabited
+  result type, and declarations prohibiting particular conversions or representation extraction.
+  Requested 2026-10-02; remove both from the active syntax fixture pending this investigation.
+  The later selected `fails never` empty failure contract is a contextual annotation, not either
+  deferred feature; keep it in the active design.
+- Why: an uninhabited type can describe nonreturning functions, impossible match remainders, and
+  exhaustive control flow. Conversion restrictions can protect opaque domains or secrets from
+  accidental semantic erasure. A converter that aborts is not a compile-time prohibition.
+- Alternatives: infer exhaustive matches and model nonreturning behavior as a function effect
+  without exposing a bottom type; protect representations by default and export only positive,
+  explicit conversions instead of adding negative conversion declarations.
+- Context: [R19](<Developer MVP Roadmap.md#r19--uninhabited-types-and-representation-protection>)
+  and [S37](<../Roadmap/Data and render contracts/Syntax sketches.md#s37--operation-domains-and-protected-representations>).
+- Done: give small forcing examples, diagnostics, and limits for both needs; examine narrowing,
+  unreachable branches, foreign nonreturning calls, transitive ancestor extraction, internal access,
+  opaque identifiers, and secrets. Recommend separate contracts and an MVP boundary; do not assume
+  one `never` spelling should serve both or promise information-flow security after extraction.
+
+### A29 — Review and reorganize entity handle and query states
+
+- Requested 2026-10-04: investigate before MVP and defer detailed state redesign from this dialogue.
+- What: audit the current state model and propose typed, coherent availability/presence/content,
+  acquisition, freshness and failure contracts with ergonomic predicates and written types.
+- Context and required coverage: [review brief](<Review - Entity handles and query states.md>),
+  [R20](<Developer MVP Roadmap.md#r20--entity-handle-and-query-state-model>), and A27 for proof limits.
+- Selected direction: remove public missing; guards require present usable values but allow empty
+  content. Do not mechanically map schema violations or inaccessible targets to none. Single-value
+  pick and all-match when are selected; detailed matching and freshness rules remain open. No state
+  implementation is authorized by this investigation.
+- Done: return the source audit, type/state truth table, positive/negative minimal app examples,
+  provider obligations, typed failure/default coverage, privacy/narrowing rules, and recommended MVP
+  subset/migration plan specified in the brief. Settle remaining decisions through R20.
+
+### A30 — Review modern date and time library designs
+
+- Requested 2026-10-04: investigate before MVP; defer remaining time API decisions from the current
+  type-system dialogue, including DateTime arithmetic and Time.Live.
+- What: compare current official library designs and propose coherent date/time types,
+  transformations, calendar/elapsed arithmetic, timezone policies and live-clock ownership for Tao.
+- Context and required coverage: [review brief](<Review - Dates and time APIs.md>),
+  [R21](<Developer MVP Roadmap.md#r21--dates-and-remaining-time-apis>), and A26 for localized display.
+- Preserve selected fixed Timer.Duration samples, signed Duration, DateTime absolute instants,
+  runtime-only timers and state-owned mounted-view initialization. Flag evidence-based problems
+  explicitly; do not silently replace those choices or claim supported-host proof.
+- Done: return sourced comparisons, minimal forcing examples, written types, policy/diagnostic and
+  provider/host contracts, and recommended MVP scope specified in the brief. Investigation only;
+  implementation waits for remaining R21 decisions.
+
+### A21 — Keep a developer's hosted project IDs out of shared source
+
+- Decision, 2026-10-04: the Developer approved ignored project-local `.tao/local/connections.json`
+  for the first ordinary Firebase Tao flow. Existing all-provider installation stays for this
+  slice; selective installation is deferred. The original Hosted CRUD/Appwrite pilot compatibility
+  path and removal of its tracked project IDs remain outstanding. The ordinary Firebase
+  configuration reader and CLI-created validation app now implement that local path; hosted
+  acceptance for the new app remains separate.
+
+- [ ] **Before MVP:** decide where `tao connect` records a developer's hosted project identifiers,
+      and move them there. Today `Apps/Hosted CRUD/tao.connections.json` is tracked, and it commits
+      the Developer's own Firebase project `tao-hosted-crud-79c429` and its public web config. The
+      Developer chose this on 2026-09-29 so the pilot runs from a clean checkout. A shared or
+      published app instead needs a placeholder template in Git, a per-developer untracked file or
+      one per environment, and a clear first-run message when the IDs are missing.
+- The Firebase web API key and app ID are public client identifiers, not secrets. Appwrite's setup
+  key already lives in the ignored `.tao/local/connect-secrets.json`. The concern is that every clone
+  points at one person's project and its quotas, and the IDs churn in unrelated diffs.
+- Context: `Docs/Roadmap/Hosted provider continuation.md`, `Apps/Hosted CRUD/README.md`, and `A19`
+  for the CLI secret store.
+
+### A22 — Make the automated CLI setup flows consistent and pleasant
+
+`tao connect firebase`, `tao connect appwrite`, and `tao connect run` each grew their own prompts
+during the 2026-09-29 pilot, and running them showed rough edges. Examples: a prompt printed twice;
+Return meant "create another project" after a failed run had already created one; the Free plan's
+project limit surfaced only as a raw CLI error; the Expo Go account step read as a wall of text; and
+Metro's own UI took over the terminal.
+
+- [ ] **Before MVP:** one shared shape for every automated flow, so a developer can always tell
+      which steps are required, which are optional, and what happens next. That covers a numbered
+      step list up front, the same prompt wording and Return-default conventions, visible progress
+      per step, and one closing summary with the next command.
+- [ ] **Before MVP:** safe defaults that never spend a limited resource without an explicit
+      choice. Examples are reusing what an earlier run created and naming plan limits before
+      hitting them.
+- [ ] **Before MVP:** failures say what was already done, what was not, and the one command that
+      resumes. Provider CLI errors are translated rather than passed through.
+- [x] Replace Expo's terminal screen in `tao connect run` with Tao's own interactive screen: a QR
+      code, per-platform bundling progress, readable build errors, device logs, and Tao's own keys
+      (`r` reload, `i` iOS Simulator, `a` Android emulator, `c` Show connection,
+      `d` Device (Android/iPhone), `q` quit; `?` aliases `c`). Implemented as
+      `hosted-crud-metro.ts` on 2026-09-29; checked against real Metro. On 2026-10-04 the Developer
+      confirmed the larger repaired QR scans on iPhone; the compact replacement needs a new scan.
+- [ ] **Before MVP:** accept Android emulator launch (`a`) in `tao connect run`. The action now
+      calls Expo's Android POST endpoint; prove real launch, reload, logs, and clean stop.
+      The physical-device action (`d`) shows a QR for Expo Go on Android/iPhone; verify both
+      platforms on real devices, including the repaired QR and account requirements. The run
+      screen uses a compact Actions line rather than an initial target menu or action list.
+- [ ] **Before MVP:** a test that starts real Metro and checks the event and address shapes, so an
+      Expo upgrade that moves the internals below fails loudly; and the same screen for the dev
+      loop, which still relays Expo's raw lines.
+- Spike (2026-09-29, Expo CLI 57.0.27, Hosted CRUD): Tao's own screen is feasible.
+  - Expo's `/events` WebSocket never delivers events; it registers clients on one server and
+    serves another. Expo also replaces any `reporter` set in `metro.config`.
+  - Starting Expo as `node --require <preload> node_modules/expo/bin/cli start --go`, with stdout
+    piped and stdin closed, avoids Expo's screen and keeps file watching. The preload wraps
+    `MetroTerminalReporter.prototype.update` and writes each Metro event as a JSON line.
+  - That captured `bundle_build_started` (platform, entry), `bundle_transform_progressed_throttled`
+    (transformed and total files), `bundle_build_done`, and `bundling_error`. The error carries
+    message, filename, line, column, and type. `client_log` needs a connected device and was not
+    exercised.
+  - For the address, Expo's own `GET /_expo/open?platform=ios` (with an `Origin` header) answers
+    the `exp://<LAN IP>:<port>` URL Expo's QR code encodes, over plain HTTP; the dev loop already
+    reads it the same way. Tao does not work out the address itself. `POST` to the same route
+    opens the app in the iOS Simulator.
+  - `CI=1` is unusable: it turns off watching and reloads, and prints only a localhost URL.
+  - The reporter hook uses Expo internals, so pin Expo exactly.
+- Context: `packages/cli/tao-cli/cli-src/connect-command.ts`, `firebase-provision.ts`,
+  `appwrite-provision.ts`, `hosted-crud-run.ts`, and `A21`.
 
 ## Project tracking
 

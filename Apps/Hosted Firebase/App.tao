@@ -1,0 +1,26 @@
+use FirebaseAuth from @tao/auth/firebase
+use Firebase from @tao/data/providers/firebase
+use FirebaseNotesAuthNavigator from ./Auth
+
+// Firebase Notes: Firebase Notes.
+//
+// Created by tao create from: Firebase Notes
+//
+// This file holds the app. The navigation is in Chrome.tao, the entities in
+// Data.tao, the design in Design.tao, and each feature has its own folder.
+app FirebaseNotes {
+   id "hosted-firebase-notes"
+   version "0.1.0"
+   name "Firebase Notes"
+   Navigator FirebaseNotesAuthNavigator
+   Auth FirebaseAuth {
+      ApiKey "REPLACE_WITH_FIREBASE_API_KEY",
+      ProjectId "REPLACE_WITH_FIREBASE_PROJECT_ID"
+   }
+   Datasource Firebase {
+      ApiKey "REPLACE_WITH_FIREBASE_API_KEY",
+      ProjectId "REPLACE_WITH_FIREBASE_PROJECT_ID",
+      StorageKey "hosted-firebase-notes"
+   }
+   Design FirebaseNotesDesign
+}

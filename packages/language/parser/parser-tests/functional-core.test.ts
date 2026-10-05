@@ -292,10 +292,8 @@ Describe('parser: functional core', () => {
     Expect(declarations.every(declaration => AST.parametersOf(declaration).length === 0)).toBe(true)
   })
 
-  Test('requires parenthesized parameter lists on every parameterized declaration', async () => {
+  Test('requires parenthesized parameter lists on actions and functions', async () => {
     const omitted = [
-      'view Main { }',
-      'type Response is one of Done view Confirm responds Response { }',
       'action Save { }',
       'function Label { return "Label" }',
     ]

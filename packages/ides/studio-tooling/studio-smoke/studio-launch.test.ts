@@ -1,6 +1,7 @@
 import { FS, Platform, Repo } from '@shared'
 import { Expect, Test } from '@shared/test'
 import { listLaunches } from '../studio-tooling-src/StudioLifecycle'
+import { StudioNativeTestRun } from '../studio-tooling-src/StudioNativeTestRun'
 import { startStudioSmokeLaunch } from '../studio-tooling-src/StudioSmokeLaunch'
 
 /**
@@ -35,40 +36,52 @@ Test('./dev studio reports a usable session, records what it owns, and gives it 
   }
 
   const repositoryRoot = Repo.getRoot()
-  const launch = await startStudioSmokeLaunch({
-    appName: 'HNReader',
-    projectRoot: FS.resolvePath('Apps/HNReader', repositoryRoot),
-    repositoryRoot,
-  })
+  const artifactBase = Platform.runtimeProcess.env['TAO_STUDIO_SMOKE_ARTIFACT_ROOT']
+    ?? FS.resolvePath('.artifacts/tests/studio-launch', repositoryRoot)
+  const { root: artifactRoot } = await StudioNativeTestRun.create(artifactBase)
+  const target = await StudioNativeTestRun.project({}, artifactRoot, repositoryRoot)
+  let resourcesStopped = true
 
   try {
-    const readiness = launch.readiness
-    Expect(readiness.version).toBe(1)
-    Expect(readiness.mode).toBe('browser')
-    Expect(readiness.appName).toBe('HNReader')
-    // The advertised page is the session page, never the server root.
-    Expect(readiness.sessionUrl.startsWith(`${readiness.studioUrl}/sessions/`)).toBe(true)
-    Expect(readiness.sessionUrl).toContain(readiness.sessionId)
+    resourcesStopped = false
+    const launch = await startStudioSmokeLaunch({
+      appName: target.appName,
+      projectRoot: target.projectRoot,
+      repositoryRoot,
+    })
 
-    // Readiness is a claim about the page: it must already answer by the time it is printed.
-    Expect((await fetch(readiness.sessionUrl)).ok).toBe(true)
-    Expect(await FS.isFile(readiness.manifestPath)).toBe(true)
-    Expect(await FS.isFile(readiness.lifecycleLogPath)).toBe(true)
+    try {
+      const readiness = launch.readiness
+      Expect(readiness.version).toBe(1)
+      Expect(readiness.mode).toBe('browser')
+      Expect(readiness.appName).toBe('KeyboardNavigationAcceptance')
+      // The advertised page is the session page, never the server root.
+      Expect(readiness.sessionUrl.startsWith(`${readiness.studioUrl}/sessions/`)).toBe(true)
+      Expect(readiness.sessionUrl).toContain(readiness.sessionId)
 
-    const listed = await listLaunches({ repositoryRoot })
-    const row = listed.launches.find(candidate => candidate.launchId === readiness.launchId)
-    Expect(row?.status).toBe('live')
-    Expect(row?.state).toBe('ready')
-    Expect(row?.ownedPids.length).toBeGreaterThan(0)
-    Expect(row?.ports.owned).toContain(
-      new URL(readiness.studioUrl).port === '' ? 0 : Number(new URL(readiness.studioUrl).port),
-    )
+      // Readiness is a claim about the page: it must already answer by the time it is printed.
+      Expect((await fetch(readiness.sessionUrl)).ok).toBe(true)
+      Expect(await FS.isFile(readiness.manifestPath)).toBe(true)
+      Expect(await FS.isFile(readiness.lifecycleLogPath)).toBe(true)
+
+      const listed = await listLaunches({ repositoryRoot })
+      const row = listed.launches.find(candidate => candidate.launchId === readiness.launchId)
+      Expect(row?.status).toBe('live')
+      Expect(row?.state).toBe('ready')
+      Expect(row?.ownedPids.length).toBeGreaterThan(0)
+      Expect(row?.ports.owned).toContain(
+        new URL(readiness.studioUrl).port === '' ? 0 : Number(new URL(readiness.studioUrl).port),
+      )
+    } finally {
+      await launch.stop()
+    }
+
+    // Nothing owned survives, and the record is gone because there is nothing left to record.
+    const remaining = await listLaunches({ repositoryRoot })
+    Expect(remaining.launches.map(row => row.launchId)).not.toContain(launch.readiness.launchId)
+    await Expect(fetch(launch.readiness.sessionUrl)).rejects.toThrow()
+    resourcesStopped = true
   } finally {
-    await launch.stop()
+    await target.cleanup(resourcesStopped ? { resourcesStopped: true } : undefined)
   }
-
-  // Nothing owned survives, and the record is gone because there is nothing left to record.
-  const remaining = await listLaunches({ repositoryRoot })
-  Expect(remaining.launches.map(row => row.launchId)).not.toContain(launch.readiness.launchId)
-  await Expect(fetch(launch.readiness.sessionUrl)).rejects.toThrow()
 }, 300_000)

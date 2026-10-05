@@ -31,6 +31,7 @@ import { TestLedger } from './TestLedger'
 import { TestNodes } from './TestNodes'
 import { TestRunner } from './TestRunner'
 import { TestShards } from './TestShards'
+import { UiVisibility } from './UiVisibility'
 import { VerificationLanes } from './VerificationLanes'
 import { type PartitionSpec, VerifyPartition } from './VerifyPartition'
 import {
@@ -72,6 +73,7 @@ export type RunGatesOptions = {
   failurePolicy?: FailurePolicy
   /** Gate recipe names, in the order the Justfile declared them. */
   gates: readonly string[]
+  showStudio?: boolean
   /**
    * Skip the run when this tree is already proved green. The first lane is the name this run
    * records its own green tree under; every lane listed is accepted as proof, so list only this
@@ -170,6 +172,11 @@ const GUI_WAIT_MS = 10 * 60 * 1_000
 
 /** runGates executes every node of a lane through the one work graph and returns the rollup. */
 export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
+  const selectedGates = options.skipUnsandboxed === true
+    ? options.gates.filter(name => GateCatalog.metadata(name).requiresUnsandboxed !== true)
+    : options.gates
+  const visibilityWarnings = UiVisibility.preflightGates(selectedGates, options.showStudio)
+  UiVisibility.warn(visibilityWarnings)
   const location = RunArtifacts.locate({
     lane: options.lane ?? DEFAULT_LANE,
     logRoot: options.logRoot,
@@ -396,7 +403,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
       void releasePrepare()
     }
     const graphResult = await WorkGraph.run(states, {
-      env: graphEnvironment(machineLane.id, options.greenTree?.noCache === true),
+      env: graphEnvironment(machineLane.id, options.greenTree?.noCache === true, options.showStudio === true),
       expectedMs,
       jobs: machineLane.ceiling,
       onEvent: event => {
@@ -433,6 +440,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
     if (!graphResult.interrupted) {
       // A contended timeout is a claim about this machine, and one isolated re-run is what settles it.
       await ContentionRetry.confirmContendedFailures({
+        env: graphEnvironment(machineLane.id, options.greenTree?.noCache === true, options.showStudio === true),
         contention: machineLane.report(),
         location,
         machineLane,
@@ -507,6 +515,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
       node: flake.node,
     })),
   })
+  summary.warnings = [...visibilityWarnings, ...summary.warnings]
   if (result.haltedBy !== undefined) {
     const notRun = states.filter(state => state.failure?.kind === 'fail-fast').length
     summary.warnings = [
@@ -825,8 +834,13 @@ async function acquireGuiLease(repositoryRoot: string, options: RunGatesOptions)
 }
 
 /** graphEnvironment is what every child of one lane's graph inherits beyond its own command's env. */
-function graphEnvironment(laneId: string | undefined, noCache: boolean): Record<string, string> | undefined {
+function graphEnvironment(
+  laneId: string | undefined,
+  noCache: boolean,
+  showStudio: boolean,
+): Record<string, string> | undefined {
   const environment = {
+    [UiVisibility.STUDIO_ENV_KEY]: showStudio ? 'true' : 'false',
     ...(laneId === undefined ? {} : { [MachineLanes.LANE_ID_ENV_KEY]: laneId }),
     ...(noCache ? { [TAO_TEST_NO_CACHE_ENV_KEY]: 'true' } : {}),
   }

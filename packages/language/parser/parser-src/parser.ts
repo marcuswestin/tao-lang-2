@@ -3,6 +3,7 @@ import { Langium } from './langium-exports'
 import { bridgesToATypeScriptExport, unresolvedReferenceMessage } from './linker-diagnostics'
 import { emptyPackageResolver, type PackageResolver } from './package-resolver'
 import * as AST from './parserASTExport'
+import { createQuotedRenderParser, quotedTextImport } from './quoted-render'
 import { ReleaseCompletionProvider } from './release-completion-provider'
 import { TaoLexerErrorMessageProvider, TaoParserErrorMessageProvider } from './syntax-diagnostics'
 import { TaoDocumentValidator } from './tao-document-validator'
@@ -110,6 +111,7 @@ export type ParseResult = {
 export type SyntaxParse = {
   ast: AST.TaoFile
   comments: readonly AST.SyntaxRange[]
+  diagnostics: readonly Diagnostic[]
   errors: number
 }
 
@@ -181,6 +183,10 @@ export const Parser = {
     return {
       ast: result.value,
       comments: AST.commentRanges(result.value),
+      diagnostics: [
+        ...result.lexerErrors.map(error => lexerDiagnostic(error)),
+        ...result.parserErrors.map(error => parserDiagnostic(error)),
+      ],
       errors: result.lexerErrors.length + result.parserErrors.length,
     }
   },
@@ -253,7 +259,7 @@ function createLspServices(options: CreateParserLspContextOptions & { packages: 
   return registerLanguage(shared, language)
 }
 
-/** Relink color reads when an app edit changes which design supplies them. */
+/** Relink implicit dependencies that have no authored Langium reference. */
 class TaoDocumentBuilder extends Langium.DefaultDocumentBuilder {
   constructor(services: Langium.LangiumSharedCoreServices) {
     super(services)
@@ -276,6 +282,12 @@ class TaoDocumentBuilder extends Langium.DefaultDocumentBuilder {
     }
     if (changedUris.size === 0 || !AST.isTaoFile(document.parseResult.value)) {
       return false
+    }
+    // An unused wildcard still depends on the target's complete public name set. Changes can
+    // introduce collisions, remove exports or change publication selection without an old ref.
+    // Conservatively revalidate its owner rather than trusting reference-only dependency indexes.
+    if (document.parseResult.value.statements.some(statement => AST.isUseStatement(statement) && statement.all)) {
+      return true
     }
     return AST.streamAllContents(document.parseResult.value).some(node =>
       (AST.isValueReference(node) || AST.isMemberAccessExpression(node))
@@ -414,9 +426,9 @@ function taoLspSharedModule() {
 function taoLanguageModule(packages: PackageResolver) {
   return {
     parser: {
-      // Tao deliberately resolves token-identical configured constructors and one-field
-      // unlabeled item forms from their linked owner declarations.
-      ParserConfig: () => ({ skipValidations: true }),
+      // Production metadata owns runtime lookahead policy; grammar generation still validates
+      // separately. Reserved payload/fill alternatives must not print into worker JSON streams.
+      LangiumParser: (services: Langium.LangiumCoreServices) => createQuotedRenderParser(services),
       LexerErrorMessageProvider: () => new TaoLexerErrorMessageProvider(),
       ParserErrorMessageProvider: () => new TaoParserErrorMessageProvider(),
       TokenBuilder: () => new TaoTokenBuilder(),
@@ -678,6 +690,15 @@ async function loadReferencedDocuments(
     return []
   }
   const referencedDocuments: AST.Document[] = []
+  if (AST.streamAllContents(ast).some(AST.isQuotedRender)) {
+    for (
+      const path of await context.packages.candidateFilePaths(quotedTextImport(), { fromFilePath: document.uri.path })
+    ) {
+      if (!loadedDocuments.has(path)) {
+        referencedDocuments.push(await documentFromFilePath(context, path, loaded))
+      }
+    }
+  }
   // A sibling may carry `folder` declarations this file reaches without naming them in a `use`,
   // so the whole folder is loaded rather than only what the imports point at.
   for (const siblingPath of await siblingTaoFilePaths(context, document.uri.path, siblingScans)) {

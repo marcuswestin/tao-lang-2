@@ -186,18 +186,18 @@ Describe('Tao formatter configurable declarations', () => {
   Test(
     'formats keyed, labeled, named, nested, and bare constructor entries',
     formats(
-      `let Demo=SelectionNav{Initial @home Display "tabs" @home{Label:"Home" Content HomeStack} Extra{Nested "value"} "bare"}`,
+      `let Demo=SelectionNav{Initial @home, Display "tabs", @home{Label:"Home", Content HomeStack}, Extra{Nested "value"}, "bare"}`,
       `
         let Demo = SelectionNav {
-           Initial @home
-           Display "tabs"
+           Initial @home,
+           Display "tabs",
            @home {
-              Label: "Home"
+              Label: "Home",
               Content HomeStack
-           }
+           },
            Extra {
               Nested "value"
-           }
+           },
            "bare"
         }
       `,

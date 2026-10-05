@@ -30,11 +30,27 @@ Describe('toolchain pin', () => {
     })
   })
 
+  Test('migrates a legacy project lock before choosing its pinned release', async () => {
+    const project = await mkTestDir('tao-toolchain-legacy-')
+    try {
+      await FS.writeText(
+        FS.resolvePath('.tao-project/lock.jsonc', project),
+        '{ "schemaVersion": 1, "toolchain": { "version": "0.4.0" } }\n',
+      )
+      Expect(await ToolchainPin.requestedVersion(['dev'], {}, project))
+        .toEqual({ args: ['dev'], source: 'project', version: '0.4.0' })
+      Expect(await FS.isFile(FS.resolvePath('.tao/store/lock.jsonc', project))).toBe(true)
+      Expect(await FS.exists(FS.resolvePath('.tao-project/lock.jsonc', project))).toBe(false)
+    } finally {
+      await FS.remove(project)
+    }
+  })
+
   // A project nested in another is its own project, pin or no pin.
   Test('a nearer project without a pin does not inherit the outer one', async () => {
     await withProject('0.4.0', async project => {
       const nested = FS.resolvePath('experiments/sketch', project)
-      await FS.writeText(FS.resolvePath('.tao/lock.jsonc', nested), '{ "schemaVersion": 1 }\n')
+      await FS.writeText(FS.resolvePath('.tao/store/lock.jsonc', nested), '{ "schemaVersion": 1 }\n')
 
       Expect(await ToolchainPin.requestedVersion(['run'], {}, nested)).toBeUndefined()
     })
@@ -215,7 +231,7 @@ async function withProject(pin: string, run: (project: string) => Promise<void>)
   try {
     const project = FS.resolvePath('tally', root)
     await FS.writeText(
-      FS.resolvePath('.tao/lock.jsonc', project),
+      FS.resolvePath('.tao/store/lock.jsonc', project),
       `{\n  // written by tao create\n  "schemaVersion": 1,\n  "toolchain": { "version": "${pin}" }\n}\n`,
     )
     await run(project)

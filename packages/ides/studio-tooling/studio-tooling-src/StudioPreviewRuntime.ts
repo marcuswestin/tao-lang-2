@@ -1,9 +1,11 @@
 import { type DevDataManifest, DevDataProtocol } from '@expo-host/dev-loop/dev-data/DevDataBootstrap'
 import { CompanionIdentity } from '@expo-host/dev-loop/prebuilt-host/CompanionIdentity'
-import { Errors, FS, HCI, Json, Repo } from '@shared'
+import { RuntimeToolchainPaths } from '@expo-host/runtime-toolchain-paths'
+import { Errors, FS, HCI, Json, ProjectLocal, Repo } from '@shared'
 
 const runtimeFiles = [
   'index.ts',
+  'expo-host-src/ManagedLoopIdentityMarker.ts',
   'metro.config.cjs',
   'package.json',
 ] as const
@@ -25,6 +27,7 @@ type StudioPreviewBootstrapOptions = {
 
 type StudioPreviewRuntimeOptions = StudioPreviewBootstrapOptions & {
   artifactRoot?: string
+  projectRoot?: string
 }
 
 /** StudioPreviewRuntime creates an isolated Expo project for one Studio process. */
@@ -38,16 +41,28 @@ async function create(
   options: StudioPreviewRuntimeOptions | string = {},
 ): Promise<CreatedStudioPreviewRuntime> {
   const settings = typeof options === 'string' ? { artifactRoot: options } : options
-  // The runtime must stay inside the repository: Expo and Metro resolve hoisted dependencies such
-  // as `typescript` by walking up to the repository's root node_modules, which a host-temp root
-  // cannot reach even with the package node_modules linked in.
-  const artifactRoot = settings.artifactRoot ?? Repo.resolvePath('.artifacts/dev/studio-preview')
-  await FS.mkdir(artifactRoot)
+  const artifactRoot = settings.artifactRoot ?? (settings.projectRoot === undefined
+    ? Repo.resolvePath('.artifacts/dev/studio-preview')
+    : ProjectLocal.cacheResolve('studio/runtimes', settings.projectRoot))
+  if (settings.projectRoot !== undefined && settings.artifactRoot === undefined) {
+    await ProjectLocal.prepare(settings.projectRoot)
+    await FS.mkdirWithinBoundary(artifactRoot, settings.projectRoot)
+    // Expo checks TypeScript from the lexical project root. In a checkout it is hoisted above
+    // the host package; an installed host carries it in the packaged dependency root.
+    const hoistedModules = FS.resolvePath('../../../node_modules', sourceRoot)
+    const dependencies = RuntimeToolchainPaths.hostInstallRoot === undefined && await FS.isDirectory(hoistedModules)
+      ? hoistedModules
+      : RuntimeToolchainPaths.dependencyRoot()
+    await ensureDependencyLink(dependencies, FS.resolvePath('node_modules', artifactRoot))
+  } else {
+    await FS.mkdir(artifactRoot)
+  }
   const root = await FS.mkTmpDir(FS.resolvePath('runtime-', artifactRoot))
   try {
-    await Promise.all(
-      runtimeFiles.map(file => FS.copyFile(FS.resolvePath(file, sourceRoot), FS.resolvePath(file, root))),
-    )
+    await Promise.all([
+      ...runtimeFiles.map(file => FS.copyFile(FS.resolvePath(file, sourceRoot), FS.resolvePath(file, root))),
+      FS.copyDirectory(FS.resolvePath('plugins', sourceRoot), FS.resolvePath('plugins', root)),
+    ])
     const appConfig = await FS.readJson<Record<string, unknown>>(FS.resolvePath('app.json', sourceRoot))
     const writeAppConfig = (bootstrap: StudioPreviewBootstrapOptions) =>
       FS.writeJson(FS.resolvePath('app.json', root), previewAppConfig(appConfig, bootstrap))
@@ -75,6 +90,22 @@ async function create(
       )
     }
     throw error
+  }
+}
+
+async function ensureDependencyLink(target: string, path: string): Promise<void> {
+  if (!await FS.exists(path) && !await FS.isSymbolicLink(path)) {
+    try {
+      await FS.symlink(target, path)
+    } catch (error) {
+      // Two Studio launches may initialize the same cache parent at once.
+      if (!await FS.isSymbolicLink(path)) {
+        throw error
+      }
+    }
+  }
+  if (!await FS.isSymbolicLink(path) || (await FS.entryMetadata(path)).linkTarget !== target) {
+    Errors.throwHostEnvironment(`Studio preview dependency link conflicts with an existing path at ${path}.`)
   }
 }
 

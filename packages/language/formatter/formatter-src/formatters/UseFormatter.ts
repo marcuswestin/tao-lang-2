@@ -1,9 +1,9 @@
 import type { FormatHandlers } from '../formatting'
 
 export const UseFormatter = {
-  /** UseStatement formats `use Name, Name from path` spacing. */
+  /** UseStatement formats named imports and `use all from path`. */
   UseStatement(f) {
-    f.oneSpaceAfter('use')
+    f.oneSpaceAfter('use', 'all')
     f.oneSpaceAround('from')
     f.commaSpacedList()
   },

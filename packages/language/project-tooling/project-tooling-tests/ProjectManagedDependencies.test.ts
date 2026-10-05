@@ -3,7 +3,12 @@ import { BridgeMetadata } from '@compiler/bridge-metadata'
 import { FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { managedDependencyModulesRoot } from '../project-tooling-src/ProjectHostModules'
-import { validateManagedDependencyEnvironments } from '../project-tooling-src/ProjectManagedDependencies'
+import {
+  DEPENDENCY_NOT_INSTALLED,
+  installRemedy,
+  uninstalledLockedDependencies,
+  validateManagedDependencyEnvironments,
+} from '../project-tooling-src/ProjectManagedDependencies'
 
 Describe('private dependency environments', () => {
   Test('requires the pinned managed alias and matching snapshot link', async () => {
@@ -36,7 +41,7 @@ Describe('private dependency environments', () => {
       await FS.writeText(FS.resolvePath('package.json', managedPackage), '{"name":"real-util","version":"2.1.0"}\n')
       Expect(await validateManagedDependencyEnvironments(requester, [environment])).toEqual([])
       await FS.writeText(
-        FS.resolvePath('.tao/lock.jsonc', requester),
+        FS.resolvePath('.tao/store/lock.jsonc', requester),
         JSON.stringify({
           schemaVersion: 1,
           installs: {
@@ -77,9 +82,11 @@ Describe('private dependency environments', () => {
         publications: [],
       }
       const manifest = FS.resolvePath('node_modules/util/package.json', requester)
-      const lockPath = FS.resolvePath('.tao/lock.jsonc', requester)
-      Expect((await validateManagedDependencyEnvironments(requester, [environment]))[0]?.message)
-        .toContain('not installed')
+      const lockPath = FS.resolvePath('.tao/store/lock.jsonc', requester)
+      const missing = (await validateManagedDependencyEnvironments(requester, [environment]))[0]
+      Expect(missing?.message).toContain('not installed')
+      Expect(missing?.message).toEndWith(installRemedy(requester))
+      Expect(missing?.code).toBe(DEPENDENCY_NOT_INSTALLED)
 
       await FS.writeText(manifest, '{"name":"other","version":"1.0.0"}\n')
       const wrongInstall = await validateManagedDependencyEnvironments(requester, [environment])
@@ -141,7 +148,7 @@ Describe('private dependency environments', () => {
         publications: [],
       }
       const manifest = FS.resolvePath('node_modules/util/package.json', moduleLinkRoot)
-      const lockPath = FS.resolvePath('.tao/lock.jsonc', snapshotRoot)
+      const lockPath = FS.resolvePath('.tao/store/lock.jsonc', snapshotRoot)
       await FS.writeText(manifest, '{"name":"real-util","version":"2.1.0"}\n')
       await FS.writeText(
         lockPath,
@@ -198,7 +205,7 @@ Describe('private dependency environments', () => {
       const manifest = FS.resolvePath('util/package.json', managedDependencyModulesRoot(moduleLinkRoot, namespace))
       await FS.writeText(manifest, '{"name":"real-util","version":"2.1.0"}\n')
       await FS.writeText(
-        FS.resolvePath('.tao/lock.jsonc', snapshotRoot),
+        FS.resolvePath('.tao/store/lock.jsonc', snapshotRoot),
         JSON.stringify({
           schemaVersion: 1,
           installs: {
@@ -218,6 +225,38 @@ Describe('private dependency environments', () => {
       Expect(diagnostics.some(diagnostic => diagnostic.message.includes('lock pins 2.2.0'))).toBe(true)
     } finally {
       await FS.remove(fixture)
+    }
+  })
+
+  Test('lists locked aliases whose installed package is missing or at another version', async () => {
+    const requester = await mkTestDir('tao-tooling-uninstalled-pins-', { location: 'host' })
+    try {
+      const pin = (version: string) => ({ name: 'real-util', requested: '^2.0.0', version })
+      await FS.writeJson(FS.resolvePath('.tao/store/lock.jsonc', requester), {
+        schemaVersion: 1,
+        installs: {
+          environments: {
+            '.': { projectRoot: '.', npm: { util: pin('2.2.0') } },
+            Child: { projectRoot: 'Child', npm: { helper: pin('2.1.0') } },
+          },
+        },
+      })
+      const local = FS.resolvePath('node_modules/util/package.json', requester)
+      const child = FS.resolvePath(
+        'helper/package.json',
+        managedDependencyModulesRoot(requester, BridgeMetadata.dependencyNamespace(FS.resolvePath('Child', requester))),
+      )
+      Expect(await uninstalledLockedDependencies(requester)).toEqual(['helper', 'util'])
+
+      await FS.writeJson(local, { name: 'real-util', version: '2.1.0' })
+      await FS.writeJson(child, { name: 'real-util', version: '2.1.0' })
+      Expect(await uninstalledLockedDependencies(requester)).toEqual(['util'])
+
+      await FS.writeJson(local, { name: 'real-util', version: '2.2.0' })
+      Expect(await uninstalledLockedDependencies(requester)).toEqual([])
+      Expect(installRemedy("/Apps/Test Apps/Bob's App")).toContain(`\`tao install '/Apps/Test Apps/Bob'\\''s App'\``)
+    } finally {
+      await FS.remove(requester)
     }
   })
 })

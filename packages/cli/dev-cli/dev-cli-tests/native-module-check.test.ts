@@ -117,6 +117,7 @@ Describe('native module compiler check', () => {
           'app.config.js',
           'app-config.cjs',
           'index.ts',
+          'expo-host-src/ManagedLoopIdentityMarker.ts',
           'metro.config.cjs',
           'package.json',
         ]
@@ -132,6 +133,8 @@ Describe('native module compiler check', () => {
       await NativeModuleCheck.testing.prepareHost(source, host)
 
       Expect(await FS.readText(FS.resolvePath('app.json', host))).toBe('app.json')
+      Expect(await FS.readText(FS.resolvePath('expo-host-src/ManagedLoopIdentityMarker.ts', host)))
+        .toBe('expo-host-src/ManagedLoopIdentityMarker.ts')
       Expect(await FS.readText(FS.resolvePath('assets/icon.png', host))).toBe('icon')
       Expect(await FS.readText(FS.resolvePath('plugins/plugin.cjs', host))).toBe('plugin')
       Expect(await FS.realPath(FS.resolvePath('node_modules', host)))

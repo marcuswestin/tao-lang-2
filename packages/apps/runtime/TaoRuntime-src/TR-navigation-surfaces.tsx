@@ -168,13 +168,9 @@ const askScrimPadding = 24
 const askSurfaceStyle = {
   backgroundColor: '#ffffff',
   borderRadius: 12,
-  elevation: 8,
+  boxShadow: '0px 8px 24px rgba(0, 0, 0, 0.25)',
   maxWidth: 420,
   padding: 20,
-  shadowColor: '#000000',
-  shadowOffset: { height: 8, width: 0 },
-  shadowOpacity: 0.25,
-  shadowRadius: 24,
   width: '100%',
 } as const
 

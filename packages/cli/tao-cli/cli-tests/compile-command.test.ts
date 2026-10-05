@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { FS, ProjectLocal } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { PassThrough } from 'node:stream'
 import { runCompile } from '../cli-src/compile-command'
@@ -10,7 +10,16 @@ const source = `
 `
 
 Describe('tao compile app selection', () => {
-  Test('refreshes project bridge metadata during compilation', async () => {
+  Test('generates into the owning project cache by default', async () => {
+    await withTaoFiles('tao-compile-cache-', { '.tao/.gitkeep': '', 'Main.tao': source }, async paths => {
+      const sourcePath = paths['Main.tao']!
+      const compiled = await runCompile(sourcePath, { appName: 'First' })
+      const projectRoot = FS.dirname(sourcePath)
+      Expect(compiled.outputPath).toBe(ProjectLocal.cacheResolve('_gen_tao-app/App.tsx', projectRoot))
+      Expect(await FS.isFile(compiled.outputPath)).toBe(true)
+    })
+  })
+  Test('refreshes source-adjacent bridge metadata during compilation', async () => {
     await withTaoFiles('tao-compile-bridge-', {
       '.tao/.gitkeep': '',
       'Main.tao': `app Demo { id "com.tao.test.demo" version "1.0.0" name "Demo" view Main }
@@ -27,7 +36,7 @@ export const CountWords: CountWordsContract = (value) => value.length
       const runtimePackageRoot = FS.resolvePath('.artifacts/runtime', FS.dirname(sourcePath))
       const compiled = await runCompile(sourcePath, { runtimePackageRoot })
       const metadataPath = FS.resolvePath('.tao-ts/Main.tao.ts', FS.dirname(sourcePath))
-      Expect(await FS.readText(metadataPath)).toContain('Sidecar.CountWords satisfies CountWords')
+      Expect(await FS.readText(metadataPath)).toContain('__TaoBridgeCheck<CountWords, typeof Sidecar.CountWords>')
       Expect(await FS.readText(compiled.outputPath)).toContain('export type CountWords = (arg0: string) => number')
       const copiedSidecar = FS.resolvePath('Words.ts', FS.dirname(compiled.outputPath))
       Expect(await FS.readText(copiedSidecar)).toContain("from './App'")

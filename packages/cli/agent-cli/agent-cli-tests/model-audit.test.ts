@@ -13,15 +13,15 @@ const SKILL_SOURCE = [
   '| Tier     | Claude Code `model` | Codex CLI `model` | Cursor `model`     |',
   '| -------- | ------------------- | ----------------- | ------------------ |',
   '| fast     | `haiku`             | `gpt-6-luna`      | `composer-2.5`     |',
-  '| standard | `opus`              | `gpt-6-sol`       | `claude-opus-5-5`  |',
-  '| deep     | `opus`              | `gpt-6-sol`       | `claude-opus-5-5`  |',
+  '| standard | `opus`              | `gpt-6.1-sol`     | `claude-opus-5-5`  |',
+  '| deep     | `opus`              | `gpt-6.1-sol`     | `claude-opus-5-5`  |',
   '| frontier | `fable`             | `gpt-6-astra`     | `claude-fable-5-1` |',
 ].join('\n')
 
 const NOW_MS = Date.parse('2026-09-23T12:00:00Z')
 const FRESH = '2026-09-23T08:00:00Z'
 const CHECKOUT = '/work/tao'
-const CATALOG = ['gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna']
+const CATALOG = ['gpt-6-astra', 'gpt-6.1-sol', 'gpt-6-luna']
 
 // Each line gets its own message and request id, so two lines are one response only when a test
 // reuses them on purpose.
@@ -162,7 +162,7 @@ Describe('model audit — codex column', () => {
 
   Test('reports an id superseded by a higher version of the same prefix and name', async () => {
     const report = await auditModelRouting(
-      options(await fixture({ slugs: ['gpt-7-astra', 'gpt-6-sol', 'gpt-6-luna'] })),
+      options(await fixture({ slugs: ['gpt-7-astra', 'gpt-6.1-sol', 'gpt-6-luna'] })),
     )
 
     Expect(report.findings).toEqual([
@@ -171,7 +171,7 @@ Describe('model audit — codex column', () => {
   })
 
   Test('orders a two-digit minor version after a one-digit one', async () => {
-    const paths = await fixture({ slugs: ['gpt-6-astra', 'gpt-6-sol', 'gpt-5.9-luna', 'gpt-5.10-luna'] })
+    const paths = await fixture({ slugs: ['gpt-6-astra', 'gpt-6.1-sol', 'gpt-5.9-luna', 'gpt-5.10-luna'] })
     await FS.writeText(
       FS.resolvePath('agents/skills/delegation/SKILL.md', paths.repoRoot),
       SKILL_SOURCE.replace('`gpt-6-luna`', '`gpt-5.9-luna`'),
@@ -179,6 +179,19 @@ Describe('model audit — codex column', () => {
 
     Expect((await auditModelRouting(options(paths))).findings).toEqual([
       "codex tier fast names 'gpt-5.9-luna', superseded by 'gpt-5.10-luna' in the installed catalog",
+    ])
+  })
+
+  Test('reports concrete Sol defaults that lag the newest GPT-6 Sol release', async () => {
+    const paths = await fixture()
+    await FS.writeText(
+      FS.resolvePath('agents/skills/delegation/SKILL.md', paths.repoRoot),
+      SKILL_SOURCE.replaceAll('`gpt-6.1-sol`', '`gpt-6-sol`'),
+    )
+    const report = await auditModelRouting(options(paths))
+
+    Expect(report.findings).toEqual([
+      "codex tiers standard, deep name 'gpt-6-sol', superseded by 'gpt-6.1-sol' in the installed catalog",
     ])
   })
 
@@ -197,7 +210,7 @@ Describe('model audit — codex column', () => {
 
     Expect(report.findings).toEqual([])
     Expect(report.notes).toEqual([
-      "codex tiers standard, deep name 'gpt-6-sol', missing from the catalog Codex 0.154.0 last fetched, which "
+      "codex tiers standard, deep name 'gpt-6.1-sol', missing from the catalog Codex 0.154.0 last fetched, which "
       + 'every Codex install on this machine rewrites with its own offer',
     ])
   })
@@ -416,6 +429,58 @@ Describe('model audit — checkout measurements', () => {
     Expect(report.sinceIso).toEqual('2026-09-19T00:00:00.000Z')
     Expect(report.untilIso).toEqual('2026-09-21T00:00:00.000Z')
     Expect(report.info?.context.main).toEqual({ count: 1, max: 100, p50: 100, p90: 100 })
+  })
+})
+
+Describe('model audit — explicit selection ignores personal defaults', () => {
+  Test('keeps reports quiet and personal configuration untouched regardless of its defaults or validity', async () => {
+    const paths = await fixture()
+    const configPath = FS.resolvePath('config.toml', paths.codexHome)
+    Expect((await ModelAuditCommand.audit(options(paths))).findings).toEqual([])
+    for (
+      const config of [
+        '[agents]\ndefault_subagent_model = "gpt-5.6-luna"\nprivate_setting = "fixture-private-value"\n',
+        '[agents]\ndefault_subagent_model = "gpt-6.1-sol"\n',
+        '[agents]\nmax_threads = 4\n',
+        'default_subagent_model = "gpt-5.6-luna"\n[other]\ndefault_subagent_model = "gpt-5.6-luna"\n',
+        '[agents]\nprivate_setting = "fixture-private-value',
+        '[agents]\ndefault_subagent_model = 42\n',
+        '[agents]\ndefault_subagent_model = "fixture-private-value\\nother"\n',
+      ]
+    ) {
+      await FS.writeText(configPath, config)
+      for (const brief of [false, true]) {
+        const report = await ModelAuditCommand.audit(options(paths, { brief }))
+        Expect(report.findings).toEqual([])
+        Expect(report.notes).toEqual([])
+        const output = await withCapturedOutput(() => ModelAuditCommand.write(report, { brief, json: !brief }))
+        if (brief) {
+          Expect(output.stdout).toEqual('')
+        }
+        Expect(output.stdout).not.toContain('gpt-5.6-luna')
+        Expect(output.stdout).not.toContain('fixture-private-value')
+        Expect(output.stdout).not.toContain('private_setting')
+      }
+      Expect(await FS.readText(configPath)).toEqual(config)
+    }
+  })
+
+  Test('still reports an outdated repository model independently of the personal default', async () => {
+    const paths = await fixture({ fetchedAt: FRESH, slugs: [...CATALOG, 'gpt-7-astra'] })
+    await FS.writeText(
+      FS.resolvePath('config.toml', paths.codexHome),
+      '[agents]\ndefault_subagent_model = "gpt-5.6-luna"\n',
+    )
+
+    for (const brief of [false, true]) {
+      const report = await ModelAuditCommand.audit(options(paths, { brief }))
+      Expect(report.findings).toEqual([
+        "codex tier frontier names 'gpt-6-astra', superseded by 'gpt-7-astra' in the installed catalog",
+      ])
+      const output = await withCapturedOutput(() => ModelAuditCommand.write(report, { brief, json: !brief }))
+      Expect(output.stdout).toContain('gpt-7-astra')
+      Expect(output.stdout).not.toContain('gpt-5.6-luna')
+    }
   })
 })
 

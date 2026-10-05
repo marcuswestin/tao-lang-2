@@ -4,6 +4,7 @@ import { ContentionRetry } from '../verification-src/ContentionRetry'
 import { type MachineLane, MachineLanes } from '../verification-src/MachineLanes'
 import { RunArtifacts } from '../verification-src/RunArtifacts'
 import { buildSummary, classifyFailure } from '../verification-src/RunSummary'
+import { UiVisibility } from '../verification-src/UiVisibility'
 import { WorkGraph, type WorkState } from '../verification-src/WorkGraph'
 
 /**
@@ -62,6 +63,44 @@ async function runRetry(
 }
 
 Describe('contended failure confirmation', () => {
+  Test('preserves scoped native consent on confirmation and dependent resumption', async () => {
+    const root = await mkTestDir('tao-contention-consent-')
+    const location = RunArtifacts.locate({ lane: 'verify', repositoryRoot: root })
+    const compile = failedState('compile', 'timed out after 5000ms')
+    const native = WorkGraph.createState({ name: 'native', needs: ['compile'], run: { args: [], command: 'true' } })
+    native.status = 'skipped'
+    native.reason = 'dependency failed: compile'
+    const states = [compile, native]
+    await RunArtifacts.assignLogPaths(states, location)
+    const lane = await MachineLanes.acquire({
+      cpuCount: 8,
+      lane: 'verify',
+      registryRoot: FS.resolvePath('registry', root),
+      repositoryRoot: root,
+    })
+    const observed: string[] = []
+    try {
+      await ContentionRetry.confirmContendedFailures({
+        env: { [UiVisibility.STUDIO_ENV_KEY]: 'true', TAO_TEST_NO_CACHE: 'true' },
+        contention: contended,
+        location,
+        machineLane: lane,
+        states,
+        runNode: async (state, context) => {
+          observed.push(state.name)
+          Expect(context.env[UiVisibility.STUDIO_ENV_KEY]).toBe('true')
+          Expect(context.env['TAO_TEST_NO_CACHE']).toBe('true')
+          return { exitCode: 0 }
+        },
+      })
+      Expect(observed).toEqual(['compile', 'native'])
+      Expect(native.status).toBe('passed')
+    } finally {
+      await lane.release()
+      await FS.remove(root)
+    }
+  })
+
   Test('a suite that only timed out because the machine was busy is re-run and recovers', async () => {
     const state = failedState('_test', 'error: Test "renders" timed out after 5000ms')
 

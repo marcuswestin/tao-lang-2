@@ -88,7 +88,7 @@ export class StudioFeedSession {
       'Feed requires a seed of 1–200 characters.',
     )
     Assert.input(
-      input['activeScenarioId'] === undefined || typeof input['activeScenarioId'] === 'string',
+      input['focusedScenarioId'] === undefined || typeof input['focusedScenarioId'] === 'string',
       'Invalid Feed scenario.',
     )
     if (input['liveRows'] !== undefined) {

@@ -1,5 +1,6 @@
 import { CLI, Errors, FS, Json, Platform, Repo, Time } from '@shared'
 import { Buffer } from 'node:buffer'
+import { chromeSandboxArgs, findChromeExecutable } from './ChromeDiscovery'
 
 type CdpResponse = {
   error?: { message: string }
@@ -78,14 +79,6 @@ type StudioCdpKeyOptions = {
   shift?: boolean
 }
 
-const chromeCandidates = [
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  '/Applications/Chromium.app/Contents/MacOS/Chromium',
-  'google-chrome',
-  'chromium',
-  'chromium-browser',
-] as const
-
 /** StudioCdp drives the real Studio browser shell for explicit slow smoke tests. */
 /** BrowserConsoleEntry is one message the page logged, kept so a smoke run can gate on errors. */
 export type BrowserConsoleEntry = {
@@ -140,6 +133,7 @@ export class StudioCdp {
         `--user-data-dir=${userDataRoot}`,
         '--headless=new',
         '--disable-gpu',
+        ...chromeSandboxArgs(),
         '--no-default-browser-check',
         '--no-first-run',
         ...(options.useMockKeychain ? ['--use-mock-keychain'] : []),
@@ -856,7 +850,13 @@ export class StudioCdp {
       | (options.control === true ? 2 : 0)
       | (options.shift === true ? 8 : 0)
     const params = { ...details, modifiers }
-    await this.client.send('Input.dispatchKeyEvent', { ...params, type: 'rawKeyDown' })
+    // Native activation needs the character phase, including Enter's carriage return.
+    const text = modifiers === 0 ? key === 'Enter' ? '\r' : key.length === 1 ? key : undefined : undefined
+    await this.client.send('Input.dispatchKeyEvent', {
+      ...params,
+      ...(text === undefined ? {} : { text }),
+      type: text === undefined ? 'rawKeyDown' : 'keyDown',
+    })
     await this.client.send('Input.dispatchKeyEvent', { ...params, type: 'keyUp' })
   }
 
@@ -1291,17 +1291,8 @@ function withTimestamp(
 }
 
 async function findChromePath(): Promise<string> {
-  const configured = Platform.runtimeProcess.env['TAO_STUDIO_CHROME_PATH']
-    ?? Platform.runtimeProcess.env['CHROME_PATH']
-  if (configured !== undefined && await FS.isFile(configured)) {
-    return configured
-  }
-  for (const candidate of chromeCandidates) {
-    if (candidate.includes('/') ? await FS.isFile(candidate) : await CLI.commandExists(candidate)) {
-      return candidate
-    }
-  }
-  Errors.throwUserInput('Studio smoke requires Chrome or Chromium; set TAO_STUDIO_CHROME_PATH.')
+  return (await findChromeExecutable())?.path
+    ?? Errors.throwUserInput('Studio smoke requires Chrome or Chromium; set TAO_STUDIO_CHROME_PATH.')
 }
 
 async function waitForActivePort(

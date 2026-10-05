@@ -2238,8 +2238,8 @@ Describe('Expo runtime', () => {
         use Text from @tao/ui
 
         nav Nested = SlotNav {
-          Initial Inner
-          Title "Nested slot title"
+          Initial Inner,
+          Title "Nested slot title",
           Toolbar { Refresh }
         }
 

@@ -28,10 +28,10 @@ Describe('Expo runtime: SelectionNav display modes', () => {
           use Text from @tao/ui
 
           let MainSelection = SelectionNav {
-            Initial @home
-            Display "tabs"
-            @home { Label "Home" Content Home }
-            @settings { Label "Settings" Content Settings }
+            Initial @home,
+            Display "tabs",
+            @home { Label "Home", Content Home },
+            @settings { Label "Settings", Content Settings }
           }
 
           app TabsApp { id "tabsapp" version "1.0.0" name "Tabs"
@@ -73,10 +73,10 @@ Describe('Expo runtime: SelectionNav display modes', () => {
           use Text from @tao/ui
 
           let MainSelection = SelectionNav {
-            Initial @home
-            Display "toggle"
-            @home { Label "Home" Content Home }
-            @settings { Label "Settings" Content Settings }
+            Initial @home,
+            Display "toggle",
+            @home { Label "Home", Content Home },
+            @settings { Label "Settings", Content Settings }
           }
 
           app ToggleApp { id "toggleapp" version "1.0.0" name "Toggle"

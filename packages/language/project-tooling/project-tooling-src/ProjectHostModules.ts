@@ -1,4 +1,4 @@
-import { FS, TaoResources } from '@shared'
+import { FS, ProjectLocal, TaoResources } from '@shared'
 import * as ts from 'typescript'
 import type { ProjectToolingOptions } from './ProjectTooling'
 
@@ -37,7 +37,7 @@ export function resolveRuntimeRoot(projectRoot: string, options: ProjectToolingO
 
 /** The requester-owned install root for one physical dependency project. */
 export function managedDependencyModulesRoot(requesterRoot: string, namespace: string): string {
-  return FS.resolvePath(`.tao/install/origins/${namespace}/node_modules`, requesterRoot)
+  return ProjectLocal.cacheResolve(`install/origins/${namespace}/node_modules`, requesterRoot)
 }
 
 export function projectTypeRoots(projectRoot: string): string[] {

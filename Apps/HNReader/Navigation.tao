@@ -1,0 +1,27 @@
+use SelectionNav, StackNav from @tao/nav
+
+// Two stacks behind one bottom bar, the way Safari keeps its controls: the feed and the stories
+// you have opened. The bar carries Back, the visible screen's title and toolbar, and a control that
+// switches to the other stack, so no screen draws a header of its own.
+nav TopStack = StackNav {
+   Initial FrontPage
+}
+
+nav ReadingStack = StackNav {
+   Initial ReadingPage
+}
+
+folder
+nav HNNavigator = SelectionNav {
+   Initial @top,
+   Display "toggle",
+   @top {
+      Label "Top",
+      Icon "newspaper",
+      Content TopStack
+   },
+   @reading {
+      Label "Reading",
+      Icon "book",
+      Content ReadingStack
+}  }

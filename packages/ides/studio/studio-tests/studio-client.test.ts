@@ -64,9 +64,9 @@ import {
   previewMatrixPlan,
   previewNoticeFor,
   runtimeCaptureWithEnvironment,
-  StudioActivePreview,
   StudioFixtureGenerationFeedback,
   StudioFixtureProposal,
+  StudioFocusedPreview,
   StudioJourneyRecorder,
   StudioMatrixLayout,
   studioPreviewCaptureError,
@@ -74,7 +74,6 @@ import {
   StudioPreviewFrameUrl,
   StudioPreviewPublication,
   StudioPreviewSourceSync,
-  StudioPreviewSuspension,
   studioReplayConfiguration,
   StudioRetainedPreview,
   StudioReviewDom,
@@ -115,7 +114,7 @@ import {
   publishStudioProductHostState,
   registerStudioProductHostActions,
   rejectPendingStudioProductHostActions,
-  requestStudioProductHostApplyActiveCellEnvironment,
+  requestStudioProductHostApplyFocusedCellEnvironment,
   requestStudioProductHostChangeActiveFile,
   requestStudioProductHostCreateFile,
   requestStudioProductHostMoveGeneratedSource,
@@ -195,6 +194,92 @@ Test('Studio browser assets bundle the client and escape injected config', async
 
   Expect(bundle).toContain('Tao Studio root is missing')
   Expect(bundle).not.toContain('createHighlighterCore')
+  Expect(bundle).toContain('/api/file/draft')
+  Expect(bundle).toContain('/api/file/create')
+  Expect(bundle).toContain('/api/file/rename')
+  Expect(bundle).toContain('/api/file/delete')
+  Expect(bundle).toContain('New Tao file')
+  Expect(bundle).toContain('/api/source-action/undo')
+  Expect(bundle).toContain('/api/source-action/propose')
+  Expect(bundle).toContain('Validating canonical Tao source')
+  Expect(bundle).toContain('/api/data/fill')
+  Expect(bundle).toContain('Loading Studio files')
+  Expect(bundle).toContain('tao-studio-product-host')
+  Expect(bundle).toContain('/api/ai/availability')
+  Expect(bundle).toContain('/api/ai/fixture')
+  Expect(bundle).toContain('/api/tests/status')
+  Expect(bundle).toContain('/api/tests/run')
+  Expect(bundle).toContain('capture-runtime')
+  Expect(bundle).toContain('No console messages from the focused preview or device.')
+  Expect(bundle).toContain('Refresh data')
+  Expect(bundle).toContain('Capture fixture')
+  Expect(bundle).toContain('Run tests')
+  Expect(bundle).toContain('Enable compile watch')
+  Expect(bundle).toContain('Clear logs')
+  Expect(bundle).toContain('No search results.')
+  Expect(bundle).not.toContain('StudioDrawerPanelSurface')
+  Expect(bundle).not.toContain('StudioSearchPanelSurface')
+  Expect(bundle).toContain('Reload preview')
+  Expect(bundle).toContain('Mode: Edit')
+  Expect(bundle).toContain('Mode: Run')
+  Expect(bundle).toContain('Design tokens')
+  Expect(bundle).toContain('studio-design-token-swatch')
+  Expect(bundle).toContain('studio-design-token-kind')
+  Expect(bundle).toContain('Layout presets')
+  Expect(bundle).toContain('data-preset="draw"')
+  Expect(bundle).toContain('Editor breadcrumbs')
+  Expect(bundle).toContain('Bottom drawer')
+  Expect(bundle).toContain('Control+K')
+  Expect(bundle).toContain('Refreshing live app data')
+  Expect(bundle).toContain('Collapse inspector')
+  Expect(bundle).toContain('Recent projects')
+  Expect(bundle).toContain('Please wait while Studio loads the project and prepares its preview.')
+  Expect(bundle).toContain('Please wait while Studio loads the app and prepares its preview.')
+  Expect(bundle).toContain('studio-global-loading-spinner')
+  Expect(bundle).toContain('studio-inspector-accordion')
+  Expect(bundle).toContain('Collapse bottom drawer')
+  Expect(bundle).toContain('tao-studio:pane-sizes:v4')
+  Expect(bundle).toContain('tao-studio:editor-tabs:v1')
+  Expect(bundle).toContain('/switch')
+  Expect(bundle).toContain('Save or revert unsaved files before switching app variants.')
+  Expect(bundle).toContain('Unsaved changes — press ⌘S to save.')
+  Expect(bundle).toContain('set-interaction-mode')
+  Expect(bundle).toContain('Undo visual edit')
+  Expect(bundle).toContain('/api/preview/cell/reconfigure')
+  Expect(bundle).toContain('/api/preview/cell/instance')
+  Expect(bundle).toContain('Apply & remount')
+  Expect(bundle).not.toContain('Scenario details')
+  Expect(bundle).toContain('Select a scenario preview cell')
+  Expect(bundle).toContain('Search project')
+  Expect(bundle).toContain('Loading compiled screens…')
+  Expect(bundle).not.toContain('No manifest screens are available yet.')
+  Expect(bundle).toContain('Save to scenario')
+  Expect(bundle).toContain('Generate fixture')
+  Expect(bundle).toContain('Generating a realistic fixture')
+  Expect(bundle).toContain('The Tao source changed while generation was running; its result was ignored.')
+  Expect(bundle).toContain('Load failure capture')
+  Expect(bundle).toContain('Paste failure capture')
+  Expect(bundle).toContain('Replay captured state')
+  Expect(bundle).toContain('Record journey')
+  Expect(bundle).toContain('Retain sensitive text')
+  Expect(bundle).toContain('Save steps to scenario')
+  Expect(bundle).toContain('scenario-start-journey')
+  Expect(bundle).toContain('Open failing source')
+  Expect(bundle).toContain('set-scenario-arguments')
+  Expect(bundle).toContain('scenarioGroupName')
+  Expect(bundle).toContain('/api/source-action/inspect')
+  Expect(bundle).toContain('set-style-entry')
+  Expect(bundle).toContain('Fork style')
+  Expect(bundle).toContain('Promote to color token')
+  Expect(bundle).not.toContain('window.location.reload')
+  Expect(bundle).toContain('No editable arguments')
+  Expect(bundle).toContain('Injected Studio network failure')
+  Expect(bundle).toContain('Scenario appearance is authored in Tao')
+  Expect(bundle).not.toContain('Scheme support is not available yet')
+  Expect(bundle).toContain('taoStudioPreviewInstanceId')
+  Expect(bundle).toContain('taoStudioSessionId')
+  Expect(bundle).not.toContain('taoStudioArgs')
+  Expect(bundle).not.toContain('taoStudioState')
   Expect(bundle).not.toContain('sourceMappingURL=data:')
   Expect(html).toContain('<div id="tao-studio-viewport"></div>')
   Expect(html).toContain('rel="icon" href="data:image/svg+xml,')
@@ -505,7 +590,7 @@ Test('Studio ProductHost queues early Tao actions, rejects unsafe paths, and pre
     async applyInspectorAction(action, proposed) {
       calls.push(`inspector:${action.kind}:${proposed}`)
     },
-    async applyActiveCellEnvironment(identity) {
+    async applyFocusedCellEnvironment(identity) {
       calls.push(`environment:${identity.cellId}:${identity.cellRevision}`)
       if (identity.cellId === 'stale') {
         throw new StudioApiError('stale preview', 409, { code: 'stale-cell' })
@@ -578,21 +663,21 @@ Test('Studio ProductHost queues early Tao actions, rejects unsafe paths, and pre
     await Expect(requestStudioProductHostPanelAction('run-tests', 'x'.repeat(1_000_001))).rejects.toThrow(
       'at most one megabyte',
     )
-    await requestStudioProductHostApplyActiveCellEnvironment(
+    await requestStudioProductHostApplyFocusedCellEnvironment(
       { cellId: 'cell:1', cellRevision: 7 },
       {
         network: { latencyMs: 0, outcome: 'normal' },
         viewport: { height: 844, presetId: 'phone', width: 390 },
       },
     )
-    await Expect(requestStudioProductHostApplyActiveCellEnvironment(
+    await Expect(requestStudioProductHostApplyFocusedCellEnvironment(
       { cellId: '', cellRevision: 7 },
       {
         network: { latencyMs: 0, outcome: 'normal' },
         viewport: { height: 844, presetId: 'phone', width: 390 },
       },
     )).rejects.toThrow('current cell identity and revision')
-    await Expect(requestStudioProductHostApplyActiveCellEnvironment(
+    await Expect(requestStudioProductHostApplyFocusedCellEnvironment(
       { cellId: 'stale', cellRevision: 6 },
       {
         network: { latencyMs: 0, outcome: 'normal' },
@@ -689,7 +774,7 @@ Test('Studio Tao scenario actions require exact typed cell-bound payloads', () =
     kind: 'scenario-replay-failure',
   })
   Expect(() => parseScenarioPanelCommand('scenario-save-arguments', '{}')).toThrow(
-    'active cell identity and revision',
+    'focused cell identity and revision',
   )
   Expect(() => parseScenarioPanelCommand('scenario-save-arguments', '{')).toThrow('valid object payload')
   Expect(() =>
@@ -868,8 +953,7 @@ Test(
     }),
 )
 
-Test('Studio preview teardown releases observers and pending capture work', () => {
-  let disconnected = 0
+Test('Studio preview teardown releases pending capture work', () => {
   let rejected = ''
   const preview = {
     iframe: { src: 'http://127.0.0.1:55102/' } as HTMLIFrameElement,
@@ -892,20 +976,13 @@ Test('Studio preview teardown releases observers and pending capture work', () =
       resolve() {},
       timeout: setTimeout(() => {}, 10_000),
     },
-    visibilityObserver: {
-      disconnect() {
-        disconnected += 1
-      },
-    } as IntersectionObserver,
   } satisfies StudioPreviewConnection
 
   disconnectPreviews([preview], 'Studio host unmounted.')
 
-  Expect(disconnected).toBe(1)
   Expect(rejected).toBe('Studio host unmounted.')
   Expect(preview.iframe.src).toBe('about:blank')
   Expect(preview.runtimeCaptureRequest).toBeUndefined()
-  Expect(preview.visibilityObserver).toBeUndefined()
   Expect(preview.journeyRecording?.status).toBe('invalidated')
 })
 
@@ -1131,46 +1208,43 @@ Test(
       const identity = { ...preview.cellIdentity!, compileRevision: 2, manifestRevision: 'manifest-2' }
       StudioPreviewPublication.expect(preview, identity, 10)
       StudioPreviewPublication.acknowledged(preview, preview.cellIdentity!, preview.previewInstanceId)
-      timers.fire()
-      timers.fire()
-      timers.fire()
-
-      Expect(reloads).toBe(2)
-      Expect(frame.dataset['taoReviewStatus']).toBe('failed')
-      Expect(preview.pendingPublication).toBeUndefined()
-    }),
-)
-
-Test(
-  'Studio pauses publication recovery while a preview is suspended and supersedes old revisions',
-  () =>
-    withControlledTimeouts(timers => {
-      const iframe = {} as HTMLIFrameElement
-      let reloads = 0
-      Object.defineProperty(iframe, 'src', {
-        get: () => 'http://127.0.0.1:56102/',
-        set: () => {
-          reloads += 1
-          StudioPreviewPublication.loaded(preview)
-        },
-      })
-      const preview = { ...previewConnection('preview-suspended', 'novel', {}), iframe }
-      const older = { ...preview.cellIdentity!, compileRevision: 2, manifestRevision: 'manifest-2' }
-      const newer = { ...older, compileRevision: 3, manifestRevision: 'manifest-3' }
-      StudioPreviewPublication.expect(preview, older, 10)
-      StudioPreviewPublication.pause(preview)
-      preview.suspended = true
-      Expect(timers.delays()).toEqual([])
-      Expect(reloads).toBe(0)
-      StudioPreviewPublication.expect(preview, newer, 10)
-      StudioPreviewPublication.acknowledged(preview, older, preview.previewInstanceId)
-      preview.suspended = false
-      StudioPreviewPublication.resume(preview)
+      Expect(timers.delays()).toEqual([10])
       timers.fire()
       Expect(reloads).toBe(1)
-      StudioPreviewPublication.cancel(preview)
+      Expect(timers.delays()).toEqual([10])
+      timers.fire()
+
+      Expect(reloads).toBe(1)
+      Expect(frame.dataset['taoReviewStatus']).toBe('failed')
+      Expect(preview.pendingPublication).toBeUndefined()
+      Expect(timers.delays()).toEqual([])
     }),
 )
+
+Test('Studio paused publication recovery supersedes old revisions', async () => {
+  const iframe = {} as HTMLIFrameElement
+  let reloads = 0
+  Object.defineProperty(iframe, 'src', {
+    get: () => 'http://127.0.0.1:56102/',
+    set: () => {
+      reloads += 1
+      StudioPreviewPublication.loaded(preview)
+    },
+  })
+  const preview = { ...previewConnection('preview-paused', 'novel', {}), iframe }
+  const older = { ...preview.cellIdentity!, compileRevision: 2, manifestRevision: 'manifest-2' }
+  const newer = { ...older, compileRevision: 3, manifestRevision: 'manifest-3' }
+  StudioPreviewPublication.expect(preview, older, 10)
+  StudioPreviewPublication.pause(preview)
+  await new Promise(resolve => setTimeout(resolve, 15))
+  Expect(reloads).toBe(0)
+  StudioPreviewPublication.expect(preview, newer, 10)
+  StudioPreviewPublication.acknowledged(preview, older, preview.previewInstanceId)
+  StudioPreviewPublication.resume(preview)
+  await new Promise(resolve => setTimeout(resolve, 15))
+  Expect(reloads).toBe(1)
+  StudioPreviewPublication.cancel(preview)
+})
 
 Test('Studio reloads previews only through the explicit toolbar action', () => {
   const iframe = new EventTarget() as HTMLIFrameElement
@@ -1200,7 +1274,7 @@ Test('Studio reloads previews only through the explicit toolbar action', () => {
   Expect(restored).toBe(1)
 })
 
-Test('Studio Tao fixture capture rejects its pending action when the active preview reports failure', async () => {
+Test('Studio Tao fixture capture rejects its pending action when the focused preview reports failure', async () => {
   const previewWindow = {}
   const preview = previewConnection('preview-capture', 'default', previewWindow)
   let rejected = ''
@@ -1731,13 +1805,6 @@ Test('Studio editor tabs rename onto an existing tab without corrupting order an
   tabs.activate('File1.tao')
   Expect(tabs.evictionCandidate('File21.tao')).toBe('File0.tao')
   Expect(tabs.evictionCandidate('File0.tao')).toBe(undefined)
-})
-
-Test('Studio preview cells suspend outside the canvas viewport and resume on return', () => {
-  Expect(StudioPreviewSuspension.transition(false, false)).toBe('suspend')
-  Expect(StudioPreviewSuspension.transition(true, false)).toBe('unchanged')
-  Expect(StudioPreviewSuspension.transition(true, true)).toBe('resume')
-  Expect(StudioPreviewSuspension.transition(false, true)).toBe('unchanged')
 })
 
 Test('Studio live Data tables decode runtime datasource snapshots without provider access', () => {
@@ -2362,9 +2429,6 @@ Test('Studio journey recording waits for an exact ready preview and its acknowle
   preview.journeyReplayStatus = 'pending'
   Expect(StudioJourneyRecorder.canStart(preview)).toBe(false)
   preview.journeyReplayStatus = 'settled'
-  preview.suspended = true
-  Expect(StudioJourneyRecorder.canStart(preview)).toBe(false)
-  preview.suspended = false
   preview.appliedRevision = 0
   Expect(StudioJourneyRecorder.canStart(preview)).toBe(false)
 
@@ -2676,7 +2740,7 @@ Test('Studio Screens and Search rails derive navigable manifest and project matc
   ])
 })
 
-Test('Studio selection from a second scenario group makes that cell active for the next visual edit', async () => {
+Test('Studio selection from a second scenario group focuses that cell for the next visual edit', async () => {
   const groups = StudioMatrixLayout.groups({
     cells: [cell('first'), cell('second')],
     scenarios: [
@@ -2696,7 +2760,7 @@ Test('Studio selection from a second scenario group makes that cell active for t
     previewConnection('preview-first', 'first', firstWindow),
     previewConnection('preview-second', 'second', secondWindow),
   ]
-  const active = new StudioActivePreview(previews)
+  const focused = new StudioFocusedPreview(previews)
   const handshake = { identity: { appName: 'Garden', project: '/workspace' } } as StudioHandshake
   let selected: unknown
   let dispatches = 0
@@ -2719,7 +2783,7 @@ Test('Studio selection from a second scenario group makes that cell active for t
     source: secondWindow,
   } as MessageEvent
   const actions = {
-    activate: () => active.activate(previews[1]!),
+    focus: () => focused.focus(previews[1]!),
     async applySourceAction() {},
     inspect(selection: unknown) {
       selected = selection
@@ -2755,8 +2819,8 @@ Test('Studio selection from a second scenario group makes that cell active for t
   })
   Expect(dispatches).toBe(2)
   Expect(reveals).toBe(2)
-  Expect(active.current()).toBe(previews[1])
-  Expect(currentSourceIdentity(handshake, active.current(), {
+  Expect(focused.current()).toBe(previews[1])
+  Expect(currentSourceIdentity(handshake, focused.current(), {
     content: 'view Main() {}',
     path: 'Garden.tao',
     sourceVersion: 'source-2',
@@ -2767,7 +2831,7 @@ Test('Studio selection from a second scenario group makes that cell active for t
     scenarioId: 'second',
     sourceVersion: 'source-2',
   })
-  Expect(currentSourceIdentity(handshake, { ...active.current()!, cell: undefined }, {
+  Expect(currentSourceIdentity(handshake, { ...focused.current()!, cell: undefined }, {
     content: 'view Main() {}',
     path: 'Garden.tao',
     sourceVersion: 'source-2',
@@ -2938,7 +3002,7 @@ Test('Studio wires a canvas shortcut to the iframe that sent it', () => {
   const second = previewConnection('preview-second', 'second', {})
   const received: { command: string; iframe: HTMLIFrameElement }[] = []
   const listener = studioPreviewMessageListener({
-    activePreview: new StudioActivePreview([first, second]),
+    focusedPreview: new StudioFocusedPreview([first, second]),
     handshake: { identity: { appName: 'Garden', project: '/workspace' } },
     onCanvasShortcut: (command: string, iframe: HTMLIFrameElement) => received.push({ command, iframe }),
     previews: [first, second],
@@ -2967,7 +3031,7 @@ Test('Studio preview message wiring dispatches one editor selection per incoming
   let dispatches = 0
   let inspections = 0
   const listener = studioPreviewMessageListener({
-    activePreview: new StudioActivePreview([preview]),
+    focusedPreview: new StudioFocusedPreview([preview]),
     canvasGesturesOwned: () => false,
     drawer: { loadDataIfVisible() {}, renderIfLogs() {} },
     handshake,
@@ -3038,7 +3102,7 @@ Test('Studio clears other cells on a fresh preview pick and leaves the canvas fo
   let focuses = 0
   let inspections = 0
   const listener = studioPreviewMessageListener({
-    activePreview: new StudioActivePreview([picked, other]),
+    focusedPreview: new StudioFocusedPreview([picked, other]),
     canvasGesturesOwned: () => false,
     canvasOwnsInput: () => canvasOwnsInput,
     drawer: { loadDataIfVisible() {}, renderIfLogs() {} },
@@ -3115,7 +3179,7 @@ Test('Studio clears other cells on a fresh preview pick and leaves the canvas fo
   await until(() => focuses === 1)
 })
 
-Test('Studio attaches the active cell scenario to preview-originated source actions', async () => {
+Test('Studio attaches the focused cell scenario to preview-originated source actions', async () => {
   const contentWindow = {}
   const preview = previewConnection('preview-second', 'second', contentWindow)
   const handshake = { identity: { appName: 'Garden', project: '/workspace' } } as StudioHandshake
@@ -3160,20 +3224,20 @@ Test('Studio attaches the active cell scenario to preview-originated source acti
   Expect(applied).toMatchObject({ identity: { scenarioId: 'second' } })
 })
 
-Test('Studio passive preview startup and console messages do not steal the active canvas cell', async () => {
+Test('Studio passive preview startup and console messages do not steal the focused canvas cell', async () => {
   const firstWindow = {}
   const secondWindow = {}
   const previews = [
     previewConnection('preview-first', 'first', firstWindow),
     previewConnection('preview-second', 'second', secondWindow),
   ]
-  const active = new StudioActivePreview(previews)
+  const focused = new StudioFocusedPreview(previews)
   const handshake = { identity: { appName: 'Garden', project: '/workspace' } } as StudioHandshake
   let activations = 0
   const actions = {
     activate() {
       activations += 1
-      active.activate(previews[1]!)
+      focused.focus(previews[1]!)
     },
     async applySourceAction() {},
     inspect() {},
@@ -3209,62 +3273,76 @@ Test('Studio passive preview startup and console messages do not steal the activ
   }
 
   Expect(activations).toBe(0)
-  Expect(active.current()).toBe(previews[0])
+  Expect(focused.current()).toBe(previews[0])
   Expect(previews[1]!.runtimeLogs?.map(log => log.arguments)).toEqual([['mounted']])
 })
 
-Test('Studio active preview rewires added cells and falls back when the active cell is removed', () => {
+Test('Studio focused preview rewires added cells and falls back when the focused cell is removed', () => {
   const first = previewConnection('preview-first', 'first', {})
   const second = previewConnection('preview-second', 'second', {})
   const previews = [first, second]
-  const active = new StudioActivePreview(previews)
+  const focused = new StudioFocusedPreview(previews)
   let changes = 0
-  active.subscribe(() => {
+  focused.subscribe(() => {
     changes += 1
   })
-  active.activate(second)
+  focused.focus(second)
 
   const replacement = previewConnection('preview-second-next', 'second', {})
   previews.splice(0, previews.length, first, replacement)
-  active.reconcile()
-  Expect(active.current()).toBe(replacement)
+  focused.reconcile()
+  Expect(focused.current()).toBe(replacement)
 
   const added = previewConnection('preview-added', 'added', {})
   previews.splice(0, previews.length, first, added)
   const wired: string[] = []
-  active.reconcile(preview => wired.push(preview.cell!.cellId))
+  focused.reconcile(preview => wired.push(preview.cell!.cellId))
 
-  Expect(active.current()).toBe(first)
+  Expect(focused.current()).toBe(first)
   Expect(wired).toEqual(['first', 'added'])
-  added.activate?.()
-  Expect(active.current()).toBe(added)
+  added.focus?.()
+  Expect(focused.current()).toBe(added)
   Expect(changes).toBe(4)
 
-  // A manifest refresh replaces the active inspector controls on retained connections and notifies its subscriber.
+  // A manifest refresh replaces the focused inspector controls on retained connections and notifies its subscriber.
   added.scenarioControls = {} as HTMLFormElement
-  active.reconcile()
+  focused.reconcile()
   Expect(changes).toBe(4)
-  active.reconcile(() => {})
+  focused.reconcile(() => {})
   Expect(changes).toBe(5)
 })
 
-Test('Studio active preview restores initial cell id and notifies on activate', () => {
+Test('Studio focused preview restores initial cell id and notifies on focus', () => {
   const first = previewConnection('preview-first', 'first', {})
   const second = previewConnection('preview-second', 'second', {})
   const previews = [first, second]
 
-  let activatedId: string | undefined
-  const active = new StudioActivePreview(previews, {
+  let focusedId: string | undefined
+  const focused = new StudioFocusedPreview(previews, {
     initialCellId: 'second',
-    onActivate: preview => {
-      activatedId = preview.cell?.cellId
+    onFocus: preview => {
+      focusedId = preview.cell?.cellId
     },
   })
 
-  Expect(active.current()).toBe(second)
-  active.activate(first)
-  Expect(active.current()).toBe(first)
-  Expect(activatedId).toBe('first')
+  Expect(focused.current()).toBe(second)
+  focused.focus(first)
+  Expect(focused.current()).toBe(first)
+  Expect(focusedId).toBe('first')
+})
+
+Test('Studio restores saved scenario focus after an unavailable manifest receives its first cells', () => {
+  const wholeApp = previewConnection('preview-whole-app', 'whole-app', {})
+  const previews = [wholeApp]
+  const focused = new StudioFocusedPreview(previews, { initialCellId: 'second' })
+  Expect(focused.current()).toBe(wholeApp)
+  const first = previewConnection('preview-first', 'first', {})
+  const second = previewConnection('preview-second', 'second', {})
+  previews.splice(0, previews.length, first, second)
+  const wired: string[] = []
+  focused.reconcile(preview => wired.push(preview.cell!.cellId), 'second')
+  Expect(focused.current()).toBe(second)
+  Expect(wired).toEqual(['first', 'second'])
 })
 
 Test('Studio source identity synchronizes immediately, after preview reloads, and stops on disconnect', () => {
@@ -3323,6 +3401,7 @@ Test('Studio runtime failures retain a replay with Studio environment state', as
   const previewWindow = {}
   const preview = previewConnection('preview-failure', 'first', previewWindow)
   preview.cell = cell('first')
+  const focused = new StudioFocusedPreview([preview])
   const handshake = {
     files: [{ path: 'Garden.tao', sourceVersion: 'source-2' }],
     identity: { appName: 'Garden', project: '/workspace' },
@@ -3361,12 +3440,13 @@ Test('Studio runtime failures retain a replay with Studio environment state', as
     handshake,
     async () => undefined,
     {
-      activate() {},
+      focus: () => focused.focus(preview),
       async applySourceAction() {},
       inspect() {},
     },
   )
 
+  Expect(focused.current()).toBe(preview)
   Expect(preview.runtimeFailure?.domains.map(domain => domain.domain)).toEqual(['data', 'environment'])
   Expect(preview.runtimeFailure?.domains.find(domain => domain.domain === 'environment')?.value)
     .toEqual(preview.cell.environment)
@@ -3533,6 +3613,7 @@ Test('Studio inspector derives canonical render identity, manifest views, and on
 Test('Studio inspector models the complete parsed layout vocabulary without inventing defaults', () => {
   const inspection = {
     explorations: [],
+    moves: {},
     layoutEntries: [
       ['gap', 8],
       ['pad', 'horizontal', 12, 'vertical', 6],

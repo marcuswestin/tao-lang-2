@@ -6,6 +6,7 @@
     "scheme": "taostudiocompanion",
     "orientation": "default",
     "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "com.devtao.studio.companion",
       "supportsTablet": true,
@@ -51,7 +52,8 @@
           ]
         }
       ],
-      "./plugins/with-ios-fmt-compat.cjs"
+      "./plugins/with-ios-fmt-compat.cjs",
+      "./plugins/with-jazz-podfile-properties.cjs"
     ],
     "experiments": {
       "autolinkingModuleResolution": true

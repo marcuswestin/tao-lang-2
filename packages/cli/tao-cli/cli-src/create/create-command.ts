@@ -1,5 +1,5 @@
 import { ProjectTooling } from '@project-tooling'
-import { Errors, FS, HCI, ProjectIdentity } from '@shared'
+import { Errors, FS, HCI, ProjectIdentity, ReleaseCapabilities } from '@shared'
 import type { Readable, Writable } from 'node:stream'
 import { installTaoSkills } from 'tao-skills'
 import { TaoAppModules } from '../app-modules'
@@ -16,7 +16,7 @@ import {
   type DetectCreationLanesOptions,
   type OpenedLane,
 } from './creation-lanes'
-import { humanize, lowerCreationPlan, writeCreationFiles } from './creation-lowering'
+import { firebaseCreationIssue, humanize, lowerCreationPlan, writeCreationFiles } from './creation-lowering'
 import { planCreation } from './creation-pipeline'
 import { type CreationPlan, deterministicPlan, projectIdIssues, validateCreationPlan } from './creation-plan'
 
@@ -39,6 +39,8 @@ export type CreationPrompts = {
 
 export type CreateCommandOptions = TerminalStreams & {
   ai?: CreateAiOption
+  provider?: 'firebase'
+  validationTools?: boolean
   brief?: Pick<BuildCreationBriefOptions, 'fetch' | 'paletteFromImage' | 'urlTimeoutMs'>
   cwd?: string
   id?: string
@@ -68,6 +70,13 @@ type ShapedPlan = {
  * format, validate, and test the result. Without a model the plain starter is created instead.
  */
 export async function runCreate(description: string, options: CreateCommandOptions = {}): Promise<CreateCommandResult> {
+  if (options.validationTools && options.provider !== 'firebase') {
+    Errors.throwUserInput('--validation-tools requires --provider firebase.')
+  }
+  if (options.provider === 'firebase') {
+    ReleaseCapabilities.require('auth')
+    ReleaseCapabilities.require('hosted-data')
+  }
   const cwd = FS.resolvePath(options.cwd ?? '.')
   const streams = terminalStreams(options)
   const prompts = options.prompts ?? terminalPrompts(streams)
@@ -97,6 +106,12 @@ export async function runCreate(description: string, options: CreateCommandOptio
   if (issues.length > 0) {
     Errors.throwUnexpected(`The creation plan is not valid: ${issues.join(' ')}`)
   }
+  if (options.provider === 'firebase') {
+    const issue = firebaseCreationIssue(plan)
+    if (issue !== undefined) {
+      Errors.throwUserInput(issue)
+    }
+  }
 
   say('')
   say(proposalSummary(plan, shapedBy))
@@ -116,7 +131,11 @@ export async function runCreate(description: string, options: CreateCommandOptio
     }
   }
 
-  const files = lowerCreationPlan(plan, { description: brief.description })
+  const files = lowerCreationPlan(plan, {
+    description: brief.description,
+    provider: options.provider,
+    validationTools: options.validationTools,
+  })
   await writeCreationFiles(directory, files)
   await ProjectIdentity.ensure(directory)
   const installedSkills = await installTaoSkills(directory)
@@ -141,7 +160,7 @@ export async function runCreate(description: string, options: CreateCommandOptio
   }
   say('')
   say(`Wrote ${FS.displayPath(directory)}:`)
-  for (const path of [...Object.keys(files), '.tao/project.json', ...installedSkills.paths].sort()) {
+  for (const path of [...Object.keys(files), '.tao/store/project.json', ...installedSkills.paths].sort()) {
     say(`  ${path}`)
   }
 

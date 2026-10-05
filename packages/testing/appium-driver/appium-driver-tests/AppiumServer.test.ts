@@ -1,9 +1,137 @@
-import { CLI, Errors, Platform } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { CLI, Errors, Platform, ProcessTree } from '@shared'
+import { Deferred, Describe, Expect, Test } from '@shared/test'
 import { mobileAppiumEnvironment, startMobileAppiumServer } from '../appium-driver-src/AppiumMobileServer'
 import { startAppiumServer } from '../appium-driver-src/AppiumServer'
 
 Describe('Appium server ownership', () => {
+  for (const closure of ['proved', 'denied'] as const) {
+    Test(`failed server startup reports ${closure} owned cleanup after its kernel group probe`, async () => {
+      const events: string[] = []
+      const cleanup: boolean[] = []
+      await Expect(startAppiumServer({
+        detached: true,
+        start: () => ({ ...fakeProcess(events), pid: 987 }),
+        onStarted: async () => {
+          Errors.throwHostEnvironment('planned startup failure')
+        },
+        onStartupCleanup: proved => {
+          cleanup.push(proved)
+        },
+        reservations: {
+          reserve: async () => ({
+            port: 47239,
+            release: async () => {
+              events.push('release-port')
+            },
+          }),
+        },
+        processTree: {
+          descendants: () => [],
+          identities: () => new Map(),
+          processGroupOf: () => 987,
+          signalTracked: () => {},
+          groupMembers: () => [],
+          isGroupAlive: group =>
+            ProcessTree.isGroupAlive(
+              group,
+              () => closure === 'denied' ? Errors.throwHostEnvironment('kernel probe denied') : false,
+              { platform: 'darwin' },
+            ),
+        },
+      })).rejects.toThrow(closure === 'proved' ? 'planned startup failure' : 'owned server could not be stopped')
+      Expect(cleanup).toEqual([closure === 'proved'])
+      Expect(events.includes('release-port')).toBe(closure === 'proved')
+    })
+  }
+  for (const evidence of ['denied-probe', 'unreadable-members'] as const) {
+    Test(`server cleanup retains every port after ${evidence} group absence evidence`, async () => {
+      const events: string[] = []
+      const server = await startAppiumServer({
+        detached: true,
+        start: () => ({ ...fakeProcess(events), pid: 987 }),
+        reservations: {
+          reserve: async () => ({
+            port: 47237,
+            release: async () => {
+              events.push('release-port')
+            },
+          }),
+        },
+        fetch: async () => new Response('{}', { status: 200 }),
+        processTree: {
+          descendants: () => [],
+          identities: () => new Map(),
+          processGroupOf: () => 987,
+          signalTracked: () => {},
+          groupMembers: () =>
+            evidence === 'unreadable-members' ? Errors.throwHostEnvironment('unreadable members') : [],
+          isGroupAlive: group =>
+            ProcessTree.isGroupAlive(group, () => Errors.throwHostEnvironment('kernel probe denied'), {
+              platform: 'darwin',
+            }),
+        },
+      })
+      await Expect(server.close()).rejects.toThrow(
+        evidence === 'denied-probe' ? 'kernel probe denied' : 'unreadable members',
+      )
+      Expect(events).toEqual(['kill:SIGTERM', 'wait', 'close-output'])
+    })
+  }
+  Test('startup cancellation interrupts a hung publication callback and still stops its owned server', async () => {
+    const events: string[] = []
+    const abort = new AbortController()
+    const publication = Deferred<void>()
+    const pending = startAppiumServer({
+      signal: abort.signal,
+      startupTimeoutMs: 10,
+      reservations: {
+        reserve: async () => ({
+          port: 47235,
+          release: async () => {
+            events.push('release-port')
+          },
+        }),
+      },
+      start: () => fakeProcess(events),
+      onStarted: async () => {
+        abort.abort()
+        await publication.promise
+      },
+      fetch: async () => Errors.throwUnexpected('Cancellation must prevent readiness polling.'),
+    })
+    try {
+      await Expect(pending).rejects.toThrow('finite budget')
+      Expect(events).toEqual(['kill:SIGTERM', 'wait', 'close-output', 'dispose', 'release-port'])
+    } finally {
+      publication.resolve()
+    }
+  })
+
+  Test('unclosed process output exhausts cleanup budget and keeps the server port reserved', async () => {
+    const events: string[] = []
+    const output = Deferred<void>()
+    const process = { ...fakeProcess(events), closeOutput: () => output.promise }
+    const server = await startAppiumServer({
+      shutdownTimeoutMs: 10,
+      reservations: {
+        reserve: async () => ({
+          port: 47236,
+          release: async () => {
+            events.push('release-port')
+          },
+        }),
+      },
+      start: () => process,
+      fetch: async () => new Response('{}', { status: 200 }),
+    })
+    try {
+      await Expect(server.close()).rejects.toThrow('finite budget')
+      Expect(events).toEqual(['kill:SIGTERM', 'wait'])
+    } finally {
+      output.resolve()
+      await server.close()
+    }
+  })
   Test(
     'forwards scoped Xcode and filtered credentials through mobile driver discovery and server startup',
     async () => {

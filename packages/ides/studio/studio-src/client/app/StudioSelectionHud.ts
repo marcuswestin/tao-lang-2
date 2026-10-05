@@ -1,6 +1,8 @@
 import type { StudioRenderInspection } from '@source-actions'
 import { StudioInspector } from '../../StudioInspector'
 import type { StudioCanonicalSourceAction } from '../../StudioProtocol'
+import { studioRenderActionIds, StudioRenderActions } from '../../StudioRenderActions'
+import { studioIcon } from '../StudioShell'
 import type { StudioSelectionCommand } from './StudioSelectionGrouping'
 
 type Bounds = Readonly<{ bottom: number; left: number; right: number; top: number }>
@@ -128,9 +130,9 @@ export type StudioSelectionHudDeps = Readonly<{
 }>
 
 /**
- * The selection HUD floats beside the element selected in the preview, in Design and Draw: direction,
- * alignment, gap, pad and sizing, each one edit away. With several elements selected it offers ⌘G
- * and ⌥⌘G instead. `render` rebuilds it for a new selection; `place` only follows pan, zoom and
+ * The selection HUD floats beside the element selected in the preview, in Design, Draw, or Edit mode: an
+ * actions menu, then direction, alignment, gap, pad and sizing, each one edit away. With several
+ * elements selected it offers ⌘G and ⌥⌘G instead. `render` rebuilds it for a new selection; `place` only follows pan, zoom and
  * layout.
  */
 export function mountStudioSelectionHud(
@@ -180,7 +182,9 @@ export function mountStudioSelectionHud(
     const current = inspection !== undefined && inspection.renderId === renderId ? inspection : undefined
     root.hidden = !deps.enabled() || renderId === undefined || (groupSize < 2 && current === undefined)
     const busy = deps.busy()
-    const key = root.hidden ? undefined : JSON.stringify([renderId, groupSize, busy, current?.layoutEntries])
+    const key = root.hidden
+      ? undefined
+      : JSON.stringify([renderId, groupSize, busy, current?.layoutEntries, current?.moves])
     // A draft being typed survives the publishes that happen around it; a new selection replaces it.
     const typing = root.contains(document.activeElement) && document.activeElement !== root
     if (key !== shownKey && !(typing && key !== undefined && renderId === shownRenderId)) {
@@ -191,12 +195,15 @@ export function mountStudioSelectionHud(
           ? []
           : groupSize > 1
           ? groupControls(groupSize, deps.command)
-          : layoutControls(studioSelectionHudModel(current!), busy, (control, value) => {
-            const action = studioSelectionHudAction(renderId, control, value)
-            if (action !== undefined) {
-              deps.apply(action)
-            }
-          })),
+          : [
+            actionsMenu(current!, busy, deps.host, deps.apply),
+            ...layoutControls(studioSelectionHudModel(current!), busy, (control, value) => {
+              const action = studioSelectionHudAction(renderId, control, value)
+              if (action !== undefined) {
+                deps.apply(action)
+              }
+            }),
+          ]),
       )
     }
     place()
@@ -216,6 +223,83 @@ export function mountStudioSelectionHud(
     place,
     render,
   }
+}
+
+/**
+ * The inspector's Actions, one click from the selection: move, wrap, make a view, remove. Each item
+ * is disabled where it does not apply, such as Move down on a last child.
+ */
+function actionsMenu(
+  inspection: StudioRenderInspection,
+  busy: boolean,
+  host: HTMLElement,
+  apply: (action: StudioCanonicalSourceAction) => void,
+): HTMLElement {
+  const wrapper = document.createElement('div')
+  wrapper.className = 'studio-selection-hud-actions'
+  const toggle = document.createElement('button')
+  toggle.type = 'button'
+  toggle.className = 'studio-selection-hud-actions-toggle'
+  toggle.title = 'Actions'
+  toggle.setAttribute('aria-label', 'Actions')
+  toggle.setAttribute('aria-haspopup', 'menu')
+  toggle.setAttribute('aria-expanded', 'false')
+  toggle.disabled = busy
+  toggle.innerHTML = studioIcon('more', 'small')
+  const menu = document.createElement('div')
+  menu.className = 'studio-selection-hud-menu'
+  menu.setAttribute('role', 'menu')
+  menu.hidden = true
+  const outside = new AbortController()
+  const close = (): void => {
+    menu.hidden = true
+    toggle.setAttribute('aria-expanded', 'false')
+    outside.abort()
+  }
+  for (const actionId of studioRenderActionIds) {
+    const action = StudioRenderActions.action(inspection, actionId)
+    const item = document.createElement('button')
+    item.type = 'button'
+    item.setAttribute('role', 'menuitem')
+    item.dataset['action'] = actionId
+    item.textContent = StudioRenderActions.label(actionId)
+    item.disabled = action === undefined
+    item.addEventListener('click', () => {
+      close()
+      if (action !== undefined) {
+        apply(action)
+      }
+    })
+    menu.append(item)
+  }
+  toggle.addEventListener('click', () => {
+    if (!menu.hidden) {
+      close()
+      return
+    }
+    // The menu opens away from the host's nearer edge, so it is not cut off under a low selection.
+    const hostRect = host.getBoundingClientRect()
+    const toggleRect = toggle.getBoundingClientRect()
+    menu.dataset['above'] = String(toggleRect.top - hostRect.top > hostRect.bottom - toggleRect.bottom)
+    menu.hidden = false
+    toggle.setAttribute('aria-expanded', 'true')
+    menu.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()
+    // A HUD rebuilt for a new selection drops this menu, so a press elsewhere also has to outlive it.
+    document.addEventListener('pointerdown', event => {
+      if (!wrapper.isConnected || !wrapper.contains(event.target as Node)) {
+        close()
+      }
+    }, { capture: true, signal: outside.signal })
+  })
+  menu.addEventListener('keydown', event => {
+    if (event.key === 'Escape') {
+      event.stopPropagation()
+      close()
+      toggle.focus()
+    }
+  })
+  wrapper.append(toggle, menu)
+  return wrapper
 }
 
 function groupControls(size: number, command: (command: StudioSelectionCommand) => void): HTMLElement[] {

@@ -11,9 +11,10 @@ Every starter follows the canonical layout from `Docs/Roadmap/Tao Revolution/Dec
 restricted to what the toolchain runs today: `App.tao` (app identity and configuration), `Data.tao` (entities),
 `Chrome.tao` (shared navigation), `Design.tao` (always written), one folder per feature with its list
 and detail scenes, `Scenarios.tao` (fixtures and Studio scenarios), `<App>.test.tao` (behavior
-tests), `tsconfig.json` (extending the generated `.tao/typescript/tsconfig.json`),
-the tracked project marker `.tao/.gitkeep`, the generated-Tao scaffold `@/.gitkeep`, and copied Tao
-skills plus `AGENTS.md`, harness guidance, and `.tao/skills.version`. Access, Rules, and Words join as
+tests), `tsconfig.json` (extending the generated `.tao/cache/typescript/tsconfig.json`),
+the tracked identity `.tao/store/project.json`, the generated-Tao scaffold `@/.gitkeep`, and copied Tao
+skills plus `AGENTS.md`, harness guidance, and `skillsVersion` in `.tao/store/lock.jsonc`.
+`.tao/.gitignore` ignores only `local/` and `cache/`; `store/` is committed. Access, Rules, and Words join as
 their tranches land.
 
 To change a starter, change the lowering, reference plan, or

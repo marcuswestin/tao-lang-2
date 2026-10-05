@@ -1,4 +1,5 @@
 import {
+  captureRuntime,
   registerRuntimeCaptureDomain,
   restoreRuntimeCapture,
   type TaoRuntimeCaptureArtifact,
@@ -206,5 +207,30 @@ describe('a replay is a seed, not a subscription', () => {
     // Registering again must pick up the newer seed, not be told it has already had one.
     register()()
     expect(restored).toEqual([{ note: 'first' }, { note: 'second' }])
+  })
+})
+
+/**
+ * Editing runtime source while Studio runs makes a hot reload run a registering module's top level
+ * again, while the registry keeps its first registration. That raised 'registered exactly once'
+ * from the navigation module and broke every open cell.
+ */
+describe('a module registering its domain again', () => {
+  test('replaces its own registration, and another registrant still conflicts', async () => {
+    const domain = 'module-rerun-test'
+    const registerFromModule = (note: string): () => void =>
+      registerRuntimeCaptureDomain({ capture: () => ({ note }), domain, module: 'TR-rerun-test', version: 1 })
+
+    registerFromModule('first run')
+    const unregister = registerFromModule('hot reload')
+    expect((await captureRuntime()).domains.find(entry => entry.domain === domain)?.value)
+      .toEqual({ note: 'hot reload' })
+
+    expect(() =>
+      registerRuntimeCaptureDomain({ capture: () => ({ note: 'other' }), domain, module: 'TR-other', version: 1 })
+    ).toThrow(`runtime capture domain '${domain}' is registered exactly once`)
+    expect(() => registerRuntimeCaptureDomain({ capture: () => ({ note: 'other' }), domain, version: 1 }))
+      .toThrow(`runtime capture domain '${domain}' is registered exactly once`)
+    unregister()
   })
 })

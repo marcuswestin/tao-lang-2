@@ -1,10 +1,11 @@
-import { CLI, Errors, FS, Json, Platform, Time } from '@shared'
-import { DevDataProtocol } from './DevDataBootstrap'
+import { CLI, Errors, FS, Json, Platform, ProjectLocal, Time } from '@shared'
+import { devDataAppKey, DevDataProtocol, devDataSafeAppName } from './DevDataBootstrap'
 
 /** The capability-authenticated, filesystem-serialized authority behind the `Dev` datasource. */
 export type DevDataServerOptions = {
   capability?: string
   hostname?: string
+  legacyRootDirs?: readonly string[]
   log?: (line: string) => void
   port?: number
   rootDir: string
@@ -22,6 +23,7 @@ type SocketData = { app: string; key: string; topic: string }
 type Socket = Bun.ServerWebSocket<SocketData>
 type DurableStream = { revision: number; snapshot: string | undefined }
 type Stream = DurableStream & { data: SocketData; queue: Promise<unknown> }
+type ProjectStorage = { dataDir: string; lockDir: string; temporaryDir: string }
 
 const appNamePattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 const capabilityPattern = /^[A-Za-z0-9_-]{32,256}$/
@@ -29,18 +31,22 @@ const maxSnapshotBytes = 64 * 1024 * 1024
 const externalRefreshMs = 100
 const lockWaitMs = 5_000
 const stateFormat = 'tao-dev-data-state-v1'
+const appRegistryFormat = 'tao-dev-data-apps-v1'
 
 export class DevDataServer {
   readonly capability: string
   readonly port: number
   readonly rootDir: string
   readonly #log: (line: string) => void
+  readonly #legacyRootDirs: readonly string[]
   readonly #server: Bun.Server<SocketData>
   readonly #streams = new Map<string, Stream>()
+  readonly #projects = new Map<string, ProjectStorage>()
   readonly #refreshTimer: ReturnType<typeof setInterval>
 
   private constructor(options: DevDataServerOptions) {
     this.rootDir = options.rootDir
+    this.#legacyRootDirs = [options.rootDir, ...(options.legacyRootDirs ?? [])]
     this.capability = options.capability
       ?? `${Platform.randomUUID().replaceAll('-', '')}${Platform.randomUUID().replaceAll('-', '')}`
     if (!capabilityPattern.test(this.capability)) {
@@ -71,6 +77,98 @@ export class DevDataServer {
   static async start(options: DevDataServerOptions): Promise<DevDataServer> {
     await FS.mkdir(options.rootDir)
     return new DevDataServer(options)
+  }
+
+  /** Register an app before publishing its manifest; its files then stay in that project's .tao. */
+  async registerProject(projectRoot: string, appName: string, appId: string): Promise<string> {
+    await ProjectLocal.prepare(projectRoot)
+    const canonicalProjectRoot = await FS.realPath(projectRoot)
+    const app = projectAppKey(canonicalProjectRoot, appId)
+    const safeName = devDataSafeAppName(appName)
+    const registryPath = ProjectLocal.localResolve('dev-data/apps.json', canonicalProjectRoot)
+    const registryLock = ProjectLocal.cacheResolve('dev-data/locks/apps.lock', canonicalProjectRoot)
+    await withFileLock(registryLock, async () => {
+      const registry = await readAppRegistry(registryPath)
+      const previousName = registry.get(appId)
+      const folderName = await selectProjectFolder(registry, appId, safeName, canonicalProjectRoot)
+      const storage = {
+        dataDir: ProjectLocal.localResolve(`dev-data/${folderName}`, canonicalProjectRoot),
+        lockDir: ProjectLocal.cacheResolve(`dev-data/locks/${folderName}`, canonicalProjectRoot),
+        temporaryDir: ProjectLocal.cacheResolve(`dev-data/tmp/${folderName}`, canonicalProjectRoot),
+      }
+      await Promise.all([FS.mkdir(storage.dataDir), FS.mkdir(storage.lockDir), FS.mkdir(storage.temporaryDir)])
+      if (previousName !== undefined && previousName !== folderName) {
+        const previousDataDir = ProjectLocal.localResolve(`dev-data/${previousName}`, canonicalProjectRoot)
+        const previousLockDir = ProjectLocal.cacheResolve(`dev-data/locks/${previousName}`, canonicalProjectRoot)
+        await FS.mkdir(previousLockDir)
+        await this.#migrateAppDirectory(previousDataDir, previousLockDir, storage)
+      }
+      const previousApps = [
+        devDataAppKey(appId),
+        `${safeName}-${Platform.sha256Hex(projectRoot).slice(0, 8)}`,
+        `${safeName}-${Platform.sha256Hex(canonicalProjectRoot).slice(0, 8)}`,
+      ]
+      await this.#migrateLegacyApp([...new Set(previousApps)], storage)
+      if (previousName !== folderName) {
+        registry.set(appId, folderName)
+        const temporaryPath = ProjectLocal.cacheResolve(
+          `dev-data/tmp/apps-${Platform.randomUUID()}.tmp`,
+          canonicalProjectRoot,
+        )
+        await writeAtomically(
+          registryPath,
+          temporaryPath,
+          JSON.stringify({
+            apps: Object.fromEntries(registry),
+            format: appRegistryFormat,
+          }),
+        )
+      }
+      this.#projects.set(app, storage)
+    })
+    return app
+  }
+
+  async #migrateLegacyApp(apps: readonly string[], storage: ProjectStorage): Promise<void> {
+    for (const root of this.#legacyRootDirs) {
+      for (const app of apps) {
+        await this.#migrateAppDirectory(FS.resolvePath(app, root), undefined, storage)
+      }
+    }
+  }
+
+  async #migrateAppDirectory(
+    oldAppDir: string,
+    oldLockDir: string | undefined,
+    storage: ProjectStorage,
+  ): Promise<void> {
+    if (!await FS.isDirectory(oldAppDir) || await FS.isSymbolicLink(oldAppDir)) {
+      return
+    }
+    for (const entry of await FS.listDir(oldAppDir)) {
+      if (!entry.endsWith('.json') || entry === '.json') {
+        continue
+      }
+      const source = FS.resolvePath(entry, oldAppDir)
+      if (!await FS.isFile(source) || await FS.isSymbolicLink(source)) {
+        continue
+      }
+      const destination = FS.resolvePath(entry, storage.dataDir)
+      const destinationLock = FS.resolvePath(`${entry}.lock`, storage.lockDir)
+      const sourceLock = oldLockDir === undefined
+        ? `${source}.lock`
+        : FS.resolvePath(`${entry}.lock`, oldLockDir)
+      await withFileLock(destinationLock, async () => {
+        await withFileLock(sourceLock, async () => {
+          if (
+            await FS.isFile(source) && !await FS.isSymbolicLink(source)
+            && !await FS.exists(destination) && !await FS.isSymbolicLink(destination)
+          ) {
+            await FS.move(source, destination)
+          }
+        })
+      })
+    }
   }
 
   async stop(): Promise<void> {
@@ -194,6 +292,7 @@ export class DevDataServer {
       const next = { revision: current.revision + 1, snapshot }
       await writeAtomically(
         this.#pathFor(data),
+        this.#temporaryPath(data),
         JSON.stringify({
           format: stateFormat,
           revision: next.revision,
@@ -236,12 +335,95 @@ export class DevDataServer {
   }
 
   #pathFor(data: SocketData): string {
-    return FS.resolvePath(`${data.app}/${encodeURIComponent(data.key)}.json`, this.rootDir)
+    const filename = `${encodeURIComponent(data.key)}.json`
+    const project = this.#projects.get(data.app)
+    return project === undefined
+      ? FS.resolvePath(`${data.app}/${filename}`, this.rootDir)
+      : FS.resolvePath(filename, project.dataDir)
   }
 
   #lockPath(data: SocketData): string {
-    return `${this.#pathFor(data)}.lock`
+    const project = this.#projects.get(data.app)
+    return project === undefined
+      ? `${this.#pathFor(data)}.lock`
+      : FS.resolvePath(`${encodeURIComponent(data.key)}.json.lock`, project.lockDir)
   }
+
+  #temporaryPath(data: SocketData): string {
+    const project = this.#projects.get(data.app)
+    const filename = `${encodeURIComponent(data.key)}.json.${Platform.randomUUID()}.tmp`
+    return project === undefined
+      ? FS.resolvePath(filename, FS.dirname(this.#pathFor(data)))
+      : FS.resolvePath(filename, project.temporaryDir)
+  }
+}
+
+/** One Studio authority may open copies with the same app ID; only the wire key needs project scope. */
+function projectAppKey(projectRoot: string, appId: string): string {
+  const name = devDataSafeAppName(appId).slice(0, 109)
+  const digest = Platform.sha256Hex(JSON.stringify([projectRoot, appId])).slice(0, 16)
+  return `${name}-${digest}`
+}
+
+async function selectProjectFolder(
+  registry: ReadonlyMap<string, string>,
+  appId: string,
+  safeName: string,
+  projectRoot: string,
+): Promise<string> {
+  const previous = registry.get(appId)
+  const claimedByAnother = (name: string) => [...registry].some(([id, folder]) => id !== appId && folder === name)
+  if (previous !== undefined && claimedByAnother(previous)) {
+    Errors.throwHostEnvironment(`Dev data app folder ${previous} is assigned to multiple IDs in this project.`)
+  }
+  const digest = Platform.sha256Hex(appId)
+  // Keep a prior collision suffix stable even if the other app later changes its name.
+  if (previous !== undefined) {
+    if (previous === safeName) {
+      return previous
+    }
+    for (let length = 16; length <= digest.length; length += 8) {
+      if (previous === collisionFolderName(safeName, digest, length)) {
+        return previous
+      }
+    }
+  }
+  const ordinaryFolder = ProjectLocal.localResolve(`dev-data/${safeName}`, projectRoot)
+  if (!claimedByAnother(safeName) && (previous === undefined || !await FS.exists(ordinaryFolder))) {
+    return safeName
+  }
+  for (let length = 16; length <= digest.length; length += 8) {
+    const candidate = collisionFolderName(safeName, digest, length)
+    if (candidate === previous) {
+      return candidate
+    }
+    if (
+      !claimedByAnother(candidate)
+      && !await FS.exists(ProjectLocal.localResolve(`dev-data/${candidate}`, projectRoot))
+    ) {
+      return candidate
+    }
+  }
+  Errors.throwHostEnvironment(`Could not allocate a distinct dev data folder for app ID ${appId}.`)
+}
+
+function collisionFolderName(safeName: string, digest: string, length: number): string {
+  return `${safeName.slice(0, 240 - length)}-${digest.slice(0, length)}`
+}
+
+async function readAppRegistry(path: string): Promise<Map<string, string>> {
+  if (!await FS.exists(path)) {
+    return new Map()
+  }
+  const registry = await FS.readJson<unknown>(path)
+  if (!Json.isRecord(registry) || registry['format'] !== appRegistryFormat || !Json.isRecord(registry['apps'])) {
+    Errors.throwHostEnvironment(`Dev data app registry is invalid: ${FS.displayPath(path)}.`)
+  }
+  const apps = registry['apps'] as Record<string, unknown>
+  if (Object.values(apps).some(name => typeof name !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name))) {
+    Errors.throwHostEnvironment(`Dev data app registry is invalid: ${FS.displayPath(path)}.`)
+  }
+  return new Map(Object.entries(apps) as [string, string][])
 }
 
 async function withFileLock<Value>(lockPath: string, work: () => Promise<Value>): Promise<Value> {
@@ -334,8 +516,7 @@ async function lockTarget(lockPath: string): Promise<string | undefined> {
     : undefined
 }
 
-async function writeAtomically(path: string, content: string): Promise<void> {
-  const temporaryPath = `${path}.${Platform.randomUUID()}.tmp`
+async function writeAtomically(path: string, temporaryPath: string, content: string): Promise<void> {
   try {
     await FS.writeText(temporaryPath, content)
     await FS.move(temporaryPath, path)

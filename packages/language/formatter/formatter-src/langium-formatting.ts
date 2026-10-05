@@ -2,6 +2,7 @@ import { AST, Langium, Parser } from '@parser'
 import { Assert } from '@shared'
 import { type EmbeddedTsFormatter, ensureEmbeddedTsFormatter } from './embedded-ts'
 import { Format } from './Format'
+import { canonicalRenderPrefixSource } from './formatters/ViewsFormatter'
 import {
   applyTextEdits,
   createNodeFormat,
@@ -31,6 +32,39 @@ export class TaoFormatter extends Langium.AbstractFormatter {
       const migratedEdits = await new TaoFormatter().formatDocument(migrated, params)
       return [wholeDocumentEdit(document, applyTextEdits(migrated, migratedEdits))]
     }
+    let prefixed = document.parseResult.parserErrors.length === 0
+      ? canonicalRenderPrefixSource(document as AST.Document)
+      : undefined
+    if (prefixed !== undefined) {
+      let parsed = await Parser.parseCode(prefixed, { validation: false, uri: document.uri })
+      // Moving a tag can remove the token separating an ungrouped label value from a quotation.
+      // Reparse proves the expression boundary; neither a newline nor name resolution can do so.
+      const unsafe = parsed.entry.document.parseResult.parserErrors.length > 0
+        ? AST.streamAllContents(document.parseResult.value).filter(AST.isRenderAccessibilityStatement)
+        : changedRenderPrefixValues(document as AST.Document, parsed.entry.document)
+      if (unsafe.length > 0) {
+        prefixed = canonicalRenderPrefixSource(document as AST.Document, new Set(unsafe))
+        if (prefixed === undefined) {
+          return await this.formatNodes(document, params)
+        }
+        parsed = await Parser.parseCode(prefixed, { validation: false, uri: document.uri })
+      }
+      const canonical = parsed.entry.document
+      Assert(canonical.parseResult.parserErrors.length === 0, 'render prefix normalization preserves valid syntax')
+      Assert(
+        changedRenderPrefixValues(document as AST.Document, canonical).length === 0,
+        'render prefix normalization preserves label expression boundaries',
+      )
+      const canonicalEdits = await this.formatNodes(canonical, params)
+      return [wholeDocumentEdit(document, applyTextEdits(canonical, canonicalEdits))]
+    }
+    return await this.formatNodes(document, params)
+  }
+
+  private async formatNodes(
+    document: Langium.LangiumDocument,
+    params: Langium.DocumentFormattingParams,
+  ): Promise<Langium.TextEdit[]> {
     const taoParams = { ...params, options: { ...params.options, tabSize: taoTabSize, insertSpaces: true } }
     const edits = await super.formatDocument(document, taoParams)
     const formatted = applyTextEdits(document as AST.Document, edits)
@@ -49,6 +83,22 @@ export class TaoFormatter extends Langium.AbstractFormatter {
     // Handlers are keyed by `$type`, so the node is the handler's concrete node type.
     handler(createNodeFormat(node, this.getNodeFormatter(node)) as never)
   }
+}
+
+function changedRenderPrefixValues(before: AST.Document, after: AST.Document): AST.RenderAccessibilityStatement[] {
+  const labels = AST.streamAllContents(before.parseResult.value).filter(AST.isRenderAccessibilityStatement)
+  const values = (document: AST.Document): string[] => {
+    const source = document.textDocument.getText()
+    return AST.streamAllContents(document.parseResult.value).filter(AST.isRenderAccessibilityStatement).map(label => {
+      const range = AST.propertyRange(label, 'value')!
+      return source.slice(range.from, range.to)
+    })
+  }
+  const beforeValues = values(before)
+  const afterValues = values(after)
+  return beforeValues.length === afterValues.length
+    ? labels.filter((_label, index) => beforeValues[index] !== afterValues[index])
+    : labels
 }
 
 async function tryEnsureEmbeddedTsFormatter(): Promise<EmbeddedTsFormatter | undefined> {

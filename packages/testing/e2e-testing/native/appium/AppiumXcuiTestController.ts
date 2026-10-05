@@ -19,6 +19,7 @@ import {
   MachineResources,
 } from '@host-control'
 import { Errors, FS, Repo, Time } from '@shared'
+import type { ManagedMobileGrant } from '../ManagedMobileGrant'
 
 type AppiumPhysicalSigning = Readonly<{
   updatedWDABundleId: string
@@ -151,6 +152,26 @@ export function createAppiumXcuiTestController(options: AppiumXcuiTestController
   return new AppiumXcuiTestController(options)
 }
 
+export function createManagedAppiumXcuiTestController(
+  options: Omit<AppiumXcuiTestControllerOptions, 'preheldTargetLease' | 'publishRevision'> & {
+    grant: ManagedMobileGrant
+    beforeDriverDeletion?: () => Promise<void>
+  },
+): HostController {
+  if (
+    options.target.kind !== 'simulator' || options.grant.identity.target.platform !== 'ios'
+    || options.target.udid !== options.grant.identity.target.id
+    || options.target.appId !== options.grant.identity.runtime.appId
+  ) {
+    Errors.throwUserInput('Managed iOS attachment must use the granted simulator and dispatched runtime.')
+  }
+  return new AppiumXcuiTestController(
+    { ...options, preheldTargetLease: options.grant.lease },
+    options.grant,
+    options.beforeDriverDeletion,
+  )
+}
+
 /** appiumXcuiTestCapabilities keeps simulator and physical-device capability policy inspectable and testable. */
 export function appiumXcuiTestCapabilities(
   target: AppiumTarget,
@@ -179,6 +200,8 @@ export function appiumXcuiTestCapabilities(
 }
 
 class AppiumXcuiTestController implements HostController {
+  readonly #managed?: ManagedMobileGrant
+  readonly #beforeDriverDeletion?: () => Promise<void>
   readonly #client: AppiumXcuiTestClient
   readonly #leases: AppiumLeaseManager
   readonly #receipts: AppiumReceiptSink
@@ -187,7 +210,13 @@ class AppiumXcuiTestController implements HostController {
   readonly #sessions = new Set<AppiumXcuiTestSession>()
   readonly #target: AppiumTarget
 
-  constructor(options: AppiumXcuiTestControllerOptions) {
+  constructor(
+    options: AppiumXcuiTestControllerOptions,
+    managed?: ManagedMobileGrant,
+    beforeDriverDeletion?: () => Promise<void>,
+  ) {
+    this.#managed = managed
+    this.#beforeDriverDeletion = beforeDriverDeletion
     this.#client = options.client
     this.#leases = options.leases ?? machineLeases()
     this.#preheldTargetLease = options.preheldTargetLease
@@ -214,6 +243,7 @@ class AppiumXcuiTestController implements HostController {
     let allocation: { leases: readonly AppiumLease[]; value: AppiumSessionReceipt['allocation'] } | undefined
     let receiptPath: string | undefined
     let session: AppiumWebDriverSession | undefined
+    let creationAttempted = false
     try {
       allocation = await this.#allocate(options.artifactRoot, targetLease)
       receiptPath = FS.resolvePath(
@@ -232,15 +262,32 @@ class AppiumXcuiTestController implements HostController {
         })
       }
       await writeReceipt('opening')
-      session = await this.#client.createSession(appiumXcuiTestCapabilities(this.#target, allocation.value))
-      await session.dismissAlertIfPresent?.()
+      await this.#managed?.assertOwnerCurrent()
+      creationAttempted = true
+      session = await this.#client.createSession({
+        ...appiumXcuiTestCapabilities(this.#target, allocation.value),
+        ...(this.#managed === undefined ? {} : {
+          'appium:noReset': true,
+          'appium:fullReset': false,
+          'appium:autoLaunch': false,
+          'appium:shouldTerminateApp': false,
+          'appium:forceAppLaunch': false,
+        }),
+      })
+      if (this.#managed === undefined) {
+        await session.dismissAlertIfPresent?.()
+      } else {
+        await this.#managed.assertCurrent()
+      }
       await writeReceipt('open')
       const hostSession = new AppiumXcuiTestSession({
         allocationLeases: allocation.leases,
         allocation: allocation.value,
         artifactRoot: options.artifactRoot,
         descriptor: {
-          capabilities: sessionCapabilities(session),
+          capabilities: sessionCapabilities(session).filter(capability =>
+            this.#managed === undefined || capability !== 'relaunchApplication'
+          ),
           driver: 'appium-xcuitest',
           id: session.id,
           lease: { generation: targetLease.generation, name: iosTargetLeaseName(this.#target) },
@@ -256,10 +303,21 @@ class AppiumXcuiTestController implements HostController {
         session,
         target: this.#target,
         targetLease,
+        managed: this.#managed,
+        beforeDriverDeletion: this.#beforeDriverDeletion,
       })
       this.#sessions.add(hostSession)
       return hostSession
     } catch (error) {
+      if (this.#managed !== undefined && creationAttempted && session === undefined) {
+        Errors.throwHostEnvironment(
+          'Managed iOS driver creation ended without a session identity; its target and port fences remain retained.',
+          {
+            cause: error,
+            details: { retainsTargetLease: true },
+          },
+        )
+      }
       if (allocation !== undefined && receiptPath !== undefined) {
         await this.#receipts.write(receiptPath, {
           allocation: allocation.value,
@@ -274,6 +332,7 @@ class AppiumXcuiTestController implements HostController {
       let sessionCleanupFailed = false
       if (session !== undefined) {
         try {
+          await this.#managed?.assertCleanupCurrent()
           await session.deleteSession()
         } catch {
           sessionCleanupFailed = true
@@ -330,6 +389,8 @@ class AppiumXcuiTestController implements HostController {
 }
 
 class AppiumXcuiTestSession implements HostSession {
+  readonly #managed?: ManagedMobileGrant
+  readonly #beforeDriverDeletion?: () => Promise<void>
   readonly #allocationLeases: readonly AppiumLease[]
   readonly #artifactRoot: string
   #closed = false
@@ -363,9 +424,13 @@ class AppiumXcuiTestSession implements HostSession {
       session: AppiumWebDriverSession
       target: AppiumTarget
       targetLease: AppiumLease
+      managed?: ManagedMobileGrant
+      beforeDriverDeletion?: () => Promise<void>
     }>,
   ) {
     this.#allocationLeases = options.allocationLeases
+    this.#managed = options.managed
+    this.#beforeDriverDeletion = options.beforeDriverDeletion
     this.#artifactRoot = options.artifactRoot
     this.#descriptor = frozenDescriptor(options.descriptor)
     this.#onClosed = options.onClosed
@@ -491,6 +556,9 @@ class AppiumXcuiTestSession implements HostSession {
   async openDeepLink(url: string): Promise<void> {
     await this.#serialize(async () => {
       await this.#assertUsable()
+      if (this.#managed !== undefined) {
+        return unsupported('relaunchApplication', 'Managed attachment cannot dispatch another runtime URL.')
+      }
       if (this.#session.openDeepLink === undefined) {
         throw new HostControlError('unsupported', 'The injected Appium client does not expose XCUITest deep links.')
       }
@@ -555,6 +623,9 @@ class AppiumXcuiTestSession implements HostSession {
       } else if (action.kind === 'refreshDocument') {
         return unsupported('refreshDocument', 'Appium/XCUITest has no document-refresh operation.')
       } else if (action.kind === 'relaunchApplication') {
+        if (this.#managed !== undefined) {
+          return unsupported('relaunchApplication', 'Managed attachment cannot relaunch its borrowed runtime.')
+        }
         if (this.#session.terminateApp === undefined || this.#session.activateApp === undefined) {
           return unsupported(
             'relaunchApplication',
@@ -590,6 +661,9 @@ class AppiumXcuiTestSession implements HostSession {
   async publishRevision(request: HostPublishRevisionRequest): Promise<void> {
     await this.#serialize(async () => {
       await this.#assertLease(request.lease)
+      if (this.#managed !== undefined) {
+        return unsupported('refreshDocument', 'Managed attachment cannot publish a runtime revision.')
+      }
       if (!sameRevision(request.expectedCurrentRevision, this.#revision)) {
         return staleRevision(this.#revision, request.expectedCurrentRevision)
       }
@@ -616,7 +690,11 @@ class AppiumXcuiTestSession implements HostSession {
   async #assertCloseLease(lease: HostLeaseIdentity): Promise<void> {
     assertHostLease(this.#descriptor.lease, lease)
     if (!this.#closed && !this.#closedReceiptPersisted) {
-      await this.#targetLease.assertCurrent(lease.generation)
+      if (this.#managed === undefined) {
+        await this.#targetLease.assertCurrent(lease.generation)
+      } else {
+        await this.#managed.assertCleanupCurrent()
+      }
     }
   }
 
@@ -643,6 +721,7 @@ class AppiumXcuiTestSession implements HostSession {
 
   async #closeResources(): Promise<void> {
     if (!this.#sessionDeleted) {
+      await this.#beforeDriverDeletion?.()
       await this.#session.deleteSession()
       this.#sessionDeleted = true
     }

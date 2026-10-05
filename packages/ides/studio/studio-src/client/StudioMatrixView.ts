@@ -19,6 +19,7 @@ export {
   type StudioDebugState,
 } from './matrix/StudioDebugEvents'
 export { StudioFixtureGenerationFeedback, StudioFixtureProposal } from './matrix/StudioFixtureActions'
+export { StudioFocusedPreview } from './matrix/StudioFocusedPreview'
 export {
   awaitPreviewJourneyRecordingAcknowledgement,
   StudioJourneyRecorder,
@@ -43,15 +44,13 @@ export {
 } from './matrix/StudioPreviewBridge'
 export {
   disconnectPreviews,
-  StudioActivePreview,
   type StudioPreviewConnection,
   StudioPreviewFrameUrl,
   StudioPreviewPublication,
   StudioPreviewSourceSync,
-  StudioPreviewSuspension,
   StudioRetainedPreview,
 } from './matrix/StudioPreviewConnection'
-export { connectPreviews, refreshCellPreviews } from './matrix/StudioPreviewMatrix'
+export { connectPreviews, refreshCellPreviews, startRestoredPreviews } from './matrix/StudioPreviewMatrix'
 export { previewBundleNoticeFor, previewNoticeFor, studioPreviewNotice } from './matrix/StudioPreviewNotice'
 export { StudioReviewDom } from './matrix/StudioReviewDom'
 export {

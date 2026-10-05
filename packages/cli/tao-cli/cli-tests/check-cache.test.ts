@@ -44,7 +44,7 @@ async function checkedWorkspaces(
 
 Describe('tao check per-workspace stamp', () => {
   Test('checks a no-project temp file without entering an unreadable sibling', async () => {
-    const rootDir = await mkTestDir('tao-check-unreadable-sibling-')
+    const rootDir = await mkTestDir('tao-check-unreadable-sibling-', { location: 'host' })
     const deniedRoot = FS.resolvePath('denied', rootDir)
     try {
       const appPath = FS.resolvePath('fixture/App.tao', rootDir)
@@ -92,7 +92,7 @@ Describe('tao check per-workspace stamp', () => {
 
   Test('regenerates deleted metadata for an imported bridge on a targeted cached check', async () => {
     await withGitTaoFixture({
-      'App/.gitignore': '/.tao-ts/\n/.tao/*\n!/.tao/.gitkeep\n!/.tao/lock.jsonc\nnode_modules/\n',
+      'App/.gitignore': '/.tao-ts/\n/.tao/local/\n/.tao/cache/\nnode_modules/\n',
       'App/.tao/.gitkeep': '',
       'App/Main.tao': `use CountWords from ./Bridge.tao
 
@@ -138,10 +138,10 @@ function Total() returns number {
       Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'replayed', AppTwo: 'replayed' })
       await FS.writeText(
         FS.resolvePath('AppOne/tsconfig.json', rootDir),
-        '{"extends":"./.tao/typescript/tsconfig.json","compilerOptions":{"strict":false}}\n',
+        '{"extends":"./.tao/cache/typescript/tsconfig.json","compilerOptions":{"strict":false}}\n',
       )
       Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'checked', AppTwo: 'replayed' })
-      await FS.writeText(FS.resolvePath('AppOne/.tao/lock.jsonc', rootDir), '{"schemaVersion":1}\n')
+      await FS.writeText(FS.resolvePath('AppOne/.tao/store/lock.jsonc', rootDir), '{"schemaVersion":1}\n')
       Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'checked', AppTwo: 'replayed' })
     })
   })
@@ -155,7 +155,7 @@ function Total() returns number {
       await FS.writeText(sharedConfig, '{"compilerOptions":{"noUnusedLocals":false}}\n')
       await FS.writeText(
         FS.resolvePath('AppOne/tsconfig.json', rootDir),
-        '{"extends":["./.tao/typescript/tsconfig.json","../shared/tsconfig.json"]}\n',
+        '{"extends":["./.tao/cache/typescript/tsconfig.json","../shared/tsconfig.json"]}\n',
       )
       const cold = await runCheck(FS.resolvePath('AppOne', rootDir), { cache: { repositoryRoot: rootDir } })
       Expect(cold.flatMap(result => result.diagnostics ?? []).filter(Diagnostic.isError)).toEqual([])
@@ -299,7 +299,7 @@ export function Main(_props: unknown) { return value.toUpperCase() ? null : null
     await withTaoFixture(
       {
         ...TWO_WORKSPACES,
-        'AppOne/Main.tao': 'use Column, Text from @tao/ui\n\nview MainView() {\n   render Column {\n   }\n}\n',
+        'AppOne/Main.tao': 'use Column, Text from @tao/ui\n\nview MainView() {\n   render Column(,) {\n   }\n}\n',
       },
       async rootDir => {
         const results = await runCheck(rootDir, { cache: { repositoryRoot: rootDir } })

@@ -28,6 +28,7 @@ Describe('agent worktree profile bootstrap', () => {
           'print -r -- "$ANDROID_HOME"',
           'print -r -- "$ANDROID_SDK_ROOT"',
           'print -r -- "$ANDROID_USER_HOME"',
+          'print -r -- "$ANDROID_AVD_HOME"',
         ].join('\n'),
         fixture,
         profile,
@@ -40,6 +41,7 @@ Describe('agent worktree profile bootstrap', () => {
         FS.resolvePath('libexec/android-sdk', profile),
         FS.resolvePath('libexec/android-sdk', profile),
         FS.resolvePath('.android', fixture.worktree),
+        FS.resolvePath('.android/avd', fixture.worktree),
       ])
       Expect(await FS.realPath(profile)).toBe(await FS.realPath(fixture.primaryProfile))
     } finally {
@@ -357,8 +359,25 @@ Describe('agent worktree profile bootstrap', () => {
         'Denied operation: copy file android/.idea/migrations.xml',
       )
       Expect(outcome.result.stderr).toContain(`Bun temporary directory: ${testRoot}/.artifacts/tmp/`)
-      Expect(outcome.result.stderr).toContain('./agent setup')
-      Expect(outcome.result.stderr).toContain('just session-unsandboxed')
+      Expect(outcome.result.stderr).toContain('Recover with: ./agent unsandboxed setup')
+    } finally {
+      await FS.remove(testRoot)
+    }
+  })
+
+  Test('names the package and a host recovery when the sandbox refuses a cache write', async () => {
+    const testRoot = await mkTestDir('tao-agent-install-cache-denied-')
+    try {
+      const outcome = await runAgentInstall(testRoot, [
+        'error: failed to download url-template@2.0.8: EPERM\n  https://registry.npmjs.org/url-template/-/url-template-2.0.8.tgz',
+        '',
+      ])
+
+      Expect(outcome.attempts).toBe(1)
+      Expect(outcome.result.exitCode).toBe(1)
+      Expect(outcome.result.stderr).toContain("Denied operation: writing url-template@2.0.8 into Bun's package cache.")
+      Expect(outcome.result.stderr).toContain('Recover with: ./agent unsandboxed setup')
+      Expect(outcome.result.stderr).not.toContain('just clean-scratch')
     } finally {
       await FS.remove(testRoot)
     }
@@ -786,16 +805,17 @@ Describe('agent worktree profile bootstrap', () => {
   })
 
   Test('the exhaustive pass composes the recipes it is made of rather than restating their gates', async () => {
-    const commands = await justCommands('verify-repo')
+    const commands = await justCommands('verify-repo', '--show-studio')
 
     // Clean first, then a verification that trusts no recorded evidence, then the checks a person
     // performs. Composing the three means widening `verify-full` widens this too.
-    Expect(commands).toContain('./dev clean')
-    Expect(commands).toContain('--lane verify-full ')
-    Expect(commands).toContain('--no-cache')
-    Expect(commands).toContain('./dev studio-manual-checks')
-    Expect(commands.indexOf('./dev clean')).toBeLessThan(commands.indexOf('--lane verify-full '))
-    Expect(commands.indexOf('--lane verify-full ')).toBeLessThan(commands.indexOf('./dev studio-manual-checks'))
+    Expect(commands).toContain('test "true" = true')
+    Expect(commands).toContain('just clean')
+    Expect(commands).toContain('just verify-full --no-cache --show-studio')
+    Expect(commands).toContain('just studio-manual-checks --show-studio')
+    Expect(commands.indexOf('test "true"')).toBeLessThan(commands.indexOf('just clean'))
+    Expect(commands.indexOf('just clean')).toBeLessThan(commands.indexOf('just verify-full'))
+    Expect(commands.indexOf('just verify-full')).toBeLessThan(commands.indexOf('just studio-manual-checks'))
     // It runs `verify-full`'s gate list because it runs `verify-full`, not because it holds a copy.
     Expect(await justRecipeNames()).toContain('verify-repo')
   })

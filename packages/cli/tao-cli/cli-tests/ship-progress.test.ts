@@ -72,12 +72,12 @@ Describe('tao ship progress', () => {
     const message = shipCommandFailure(
       error,
       'Archive and sign the iOS app',
-      '/repo/.artifacts/logs/ship/build.log',
+      '/repo/.tao/cache/logs/ship/build.log',
     ).message
     Expect(message).toContain(
       'Archive and sign the iOS app failed: App.xcodeproj: error: Signing requires a development team.',
     )
     Expect(message).toContain('Detailed log:')
-    Expect(message).toContain('.artifacts/logs/ship/build.log')
+    Expect(message).toContain('.tao/cache/logs/ship/build.log')
   })
 })

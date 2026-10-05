@@ -76,7 +76,14 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
   )
   const effectiveAuth = effectiveConfiguration.get('Auth')?.value
   const auth = effectiveAuth && !AST.isNoneLiteral(effectiveAuth)
-    ? compileResolvedAppProperty(configuration.get('Auth'), 'Auth', base ? gen`_TaoBaseBinding` : undefined)
+    ? compileResolvedAppProperty(
+      configuration.get('Auth'),
+      'Auth',
+      base ? gen`_TaoBaseBinding` : undefined,
+      false,
+      app.name === options.selectedAppName ? options.selectedAppAuthConfiguration : undefined,
+      effectiveConfiguration.get('Auth'),
+    )
     : undefined
   const restoration = effectiveRestorationPolicy(app)
   const definition = { name: `_TaoAppDefinition_${app.name}` }
@@ -98,7 +105,15 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
   const selectedDatasourceConfiguration = app.name === options.selectedAppName
     ? options.selectedAppDatasourceConfiguration
     : undefined
-  const datasources = compileAppDatasources(app, base, selectedDatasourceConfiguration)
+  const selectedFirebaseConfiguration = app.name === options.selectedAppName
+    ? options.selectedAppFirebaseConfiguration
+    : undefined
+  const datasources = compileAppDatasources(
+    app,
+    base,
+    selectedDatasourceConfiguration,
+    selectedFirebaseConfiguration,
+  )
   const compiledAgentCommands = compileAgentCommands(configuration, base !== undefined)
   return gen`
     const ${gen.Name(moduleScope)} = _Scope
@@ -278,7 +293,9 @@ function compileFixtureSeed(options: CodegenOptions, auth: boolean): Compiled {
  * not compiler code, so the only Tao module in scope is `TR` from `@runtime/TR`, and `TR.Errors` is
  * where the runtime publishes its error taxonomy to a compiled program. A call through that property
  * chain returns `never` without narrowing afterwards, so the guard reads as `??` rather than an
- * `if`, which keeps the entry a defined factory for `TR.Studio.SubjectHost` below.
+ * `if`, which keeps the entry a defined factory for `TR.Studio.SubjectHost` below. The host builds
+ * its app from the arguments once per mount, so it is keyed by the fixture's revision: a reseed
+ * after a hot reload remounts it with the new rows' handles.
  */
 function compileStudioSubject(options: CodegenOptions, app: { name: string }, auth: boolean): Compiled {
   if (!options.studio) {
@@ -298,7 +315,7 @@ function compileStudioSubject(options: CodegenOptions, app: { name: string }, au
       )
       return ${
     auth ? gen`<TR.Auth.Host scope={_TaoAuthScope}>` : gen.noop()
-  }<TR.AppShell><TR.Studio.SubjectHost arguments={_TaoStudioArgs} definition={_TaoStudioSubject} /></TR.AppShell>${
+  }<TR.AppShell><TR.Studio.SubjectHost key={_TaoFixtureSeed.revision} arguments={_TaoStudioArgs} definition={_TaoStudioSubject} /></TR.AppShell>${
     auth ? gen`</TR.Auth.Host>` : gen.noop()
   }
     }
@@ -539,6 +556,8 @@ function compileResolvedAppProperty(
   name: 'name' | 'Navigator' | 'Design' | 'Auth',
   base: Compiled | undefined,
   authNavigation = false,
+  authConfiguration?: Readonly<Record<string, string>>,
+  inheritedProperty?: ASTUtils.EffectiveAppProperty,
 ): Compiled | undefined {
   if (name === 'Auth' && property?.value && AST.isNoneLiteral(property.value)) {
     return undefined
@@ -560,6 +579,16 @@ function compileResolvedAppProperty(
       result = gen`TR.Navigation.Patch(${result}, ${Compile.ConfigurationPatchObject(patch)})`
     } else {
       Assert(false, `validated app ${name} cannot be patched`)
+    }
+  }
+  const authDeclaration = configurableDeclarationOfAppProperty(property?.value ? property : inheritedProperty)
+  if (name === 'Auth' && isFirebaseDeclaration(authDeclaration, 'auth/firebase/FirebaseAuth.tao')) {
+    const override = configurationForSlots(
+      authDeclaration,
+      authConfiguration,
+    )
+    if (Object.keys(override).length > 0) {
+      result = gen`TR.Auth.Patch(${result}, ${compileStringConfigurationPatch(override)})`
     }
   }
   return result
@@ -626,6 +655,7 @@ function compileAppDatasources(
   app: AST.AppValueDeclaration,
   base: AST.AppValueDeclaration | undefined,
   datasourceConfiguration: Readonly<Record<string, string>> | undefined,
+  firebaseConfiguration: Readonly<Record<string, string>> | undefined,
 ): Compiled | undefined {
   const planned = plannedDatasourceBindings(app)
   if (planned.length === 0) {
@@ -636,6 +666,7 @@ function compileAppDatasources(
     const inherited = gen`_TaoBaseBinding.datasources()`
     const patches = planned.map(({ binding }) => [
       ...(own?.patches ?? []).map(patch => Compile.ConfigurationPatchObject(patch)),
+      ...compileFirebaseDatasourcePatch(binding, firebaseConfiguration),
       ...compileReleasePatch(binding, datasourceConfiguration),
     ])
     return patches.every(list => list.length === 0)
@@ -652,7 +683,7 @@ function compileAppDatasources(
       ({ binding, catalog, storageName }) =>
         gen`{
           store: ${gen.scopeName({ name: catalog })},
-          source: ${compileDatasourceSource(binding, datasourceConfiguration)},
+          source: ${compileDatasourceSource(binding, datasourceConfiguration, firebaseConfiguration)},
           ${storageName === undefined ? gen.noop() : gen`storageName: ${gen.jsLiteral(storageName)},`}
         }`,
       { separator: ', ' },
@@ -668,6 +699,7 @@ function compileAppDatasources(
 function compileDatasourceSource(
   binding: ASTUtils.AppDatasourceBinding,
   datasourceConfiguration: Readonly<Record<string, string>> | undefined,
+  firebaseConfiguration: Readonly<Record<string, string>> | undefined,
 ): Compiled {
   const source = binding.value
     ? compileAppPropertySource(binding.value)
@@ -677,6 +709,7 @@ function compileDatasourceSource(
   Assert.defined(source, 'validated datasource binding names a declaration or supplies a value')
   const patches = [
     ...binding.patches.map(patch => Compile.ConfigurationPatchObject(patch)),
+    ...compileFirebaseDatasourcePatch(binding, firebaseConfiguration),
     ...compileReleasePatch(binding, datasourceConfiguration),
   ]
   return patches.reduce<Compiled>((compiled, patch) => gen`TR.Data.Patch(${compiled}, ${patch})`, source)
@@ -690,14 +723,63 @@ function compileReleasePatch(
   if (Object.keys(release).length === 0) {
     return []
   }
-  return [gen`{
+  return [compileStringConfigurationPatch(release)]
+}
+
+function compileFirebaseDatasourcePatch(
+  binding: ASTUtils.AppDatasourceBinding,
+  configuration: Readonly<Record<string, string>> | undefined,
+): readonly Compiled[] {
+  const declaration = configurableDeclarationOf(binding)
+  if (!isFirebaseDeclaration(declaration, 'data/providers/firebase/Firebase.tao')) {
+    return []
+  }
+  const override = configurationForSlots(declaration, configuration)
+  return Object.keys(override).length === 0 ? [] : [compileStringConfigurationPatch(override)]
+}
+
+function compileStringConfigurationPatch(configuration: Readonly<Record<string, string>>): Compiled {
+  return gen`{
     ${
     gen.list(
-      Object.entries(release).toSorted(([left], [right]) => left.localeCompare(right)),
+      Object.entries(configuration).toSorted(([left], [right]) => left.localeCompare(right)),
       ([key, value]) => gen`${gen.jsLiteral(key)}: TR.Value(${gen.jsLiteral(value)}),`,
     )
   }
-  }`]
+  }`
+}
+
+function isFirebaseDeclaration(declaration: AST.ConfigurableDeclaration | undefined, path: string): boolean {
+  return declaration !== undefined && AST.getDocument(declaration).uri.path.endsWith(`/@tao/${path}`)
+}
+
+function configurableDeclarationOfAppProperty(
+  property: ASTUtils.EffectiveAppProperty | undefined,
+): AST.ConfigurableDeclaration | undefined {
+  const value = property?.value
+  if (!value || AST.isAppView(value) || !AST.isExpression(value)) {
+    return undefined
+  }
+  if (AST.isConfigurationConstructor(value)) {
+    const target = value.type.ref
+    return target && AST.isConfigurableDeclaration(target) ? target : undefined
+  }
+  if (AST.isValueReference(value) || AST.isRefinementExpression(value)) {
+    const target = value.target.ref
+    return target && AST.isValueDeclaration(target) ? configuredDeclarationOfValue(target) : undefined
+  }
+  return undefined
+}
+
+function configurationForSlots(
+  declaration: AST.ConfigurableDeclaration | undefined,
+  configuration: Readonly<Record<string, string>> | undefined,
+): Readonly<Record<string, string>> {
+  if (!configuration || !declaration) {
+    return {}
+  }
+  const slots = new Set(AST.configurationPropertiesOf(declaration).map(property => property.name))
+  return Object.fromEntries(Object.entries(configuration).filter(([key]) => slots.has(key)))
 }
 
 /**
@@ -713,8 +795,7 @@ function releaseConfigurationFor(
     return {}
   }
   const declaration = configurableDeclarationOf(binding)
-  const slots = new Set(declaration ? AST.configurationPropertiesOf(declaration).map(property => property.name) : [])
-  return Object.fromEntries(Object.entries(configuration).filter(([key]) => slots.has(key)))
+  return configurationForSlots(declaration, configuration)
 }
 
 function configurableDeclarationOf(binding: ASTUtils.AppDatasourceBinding): AST.ConfigurableDeclaration | undefined {

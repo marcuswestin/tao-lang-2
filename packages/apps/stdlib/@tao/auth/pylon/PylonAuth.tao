@@ -1,0 +1,9 @@
+use AuthProvider from @tao/auth
+
+public
+type PylonAuth is AuthProvider with {
+   BaseURL text
+   issues { Session }
+
+   provider PylonAuthProvider from ./PylonAuth.ts
+}

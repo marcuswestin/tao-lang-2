@@ -125,7 +125,7 @@ export function CodeEditor(props: CodeEditorProps): React.ReactElement {
   const selectionChange = React.useRef(props.SelectionChange)
   const drop = React.useRef(props.Drop)
   const lens = React.useRef(props.Lens)
-  const handledRevealRevision = React.useRef(0)
+  const handledReveal = React.useRef<Readonly<{ revision: number; view: EditorView }> | undefined>(undefined)
   const applyingExternalContent = React.useRef(false)
   change.current = props.Change
   content.current = props.Content
@@ -338,6 +338,8 @@ export function CodeEditor(props: CodeEditorProps): React.ReactElement {
     view.dispatch({ effects: CodeEditorLens.effects.refold.of(null) })
   }, [props.Lens?.refoldRevision])
 
+  // LSP readiness can replace the view without changing the selection props. Check every render
+  // and remember the consuming view so a new editor always receives the pending source reveal.
   React.useEffect(() => {
     const view = editor.current
     if (!view || props.Selection === undefined) {
@@ -349,19 +351,25 @@ export function CodeEditor(props: CodeEditorProps): React.ReactElement {
     if (
       view.state.selection.main.anchor !== anchor
       || view.state.selection.main.head !== head
-      || handledRevealRevision.current !== revealRevision
+      || handledReveal.current?.view !== view
+      || handledReveal.current.revision !== revealRevision
     ) {
       // A selection the host sets is a navigation: a search hit, a screen, a token, a diagnostic, or
       // an element picked in the preview. Bring it on screen; the person's own cursor moves never
       // reach here because they already equal the view's selection.
-      view.dispatch({
-        effects: EditorView.scrollIntoView(anchor, { x: 'start', y: 'center' }),
-        selection: { anchor, head },
-      })
-      handledRevealRevision.current = revealRevision
+      applyingExternalContent.current = true
+      try {
+        view.dispatch({
+          effects: EditorView.scrollIntoView(anchor, { x: 'start', y: 'center' }),
+          selection: { anchor, head },
+        })
+        handledReveal.current = { revision: revealRevision, view }
+      } finally {
+        applyingExternalContent.current = false
+      }
     }
     return undefined
-  }, [props.RevealRevision, props.Selection?.anchor, props.Selection?.head])
+  })
 
   const native = TR.VisualNativeProps(props.Layout, props.Tag)
   const dataSet = native['dataSet']

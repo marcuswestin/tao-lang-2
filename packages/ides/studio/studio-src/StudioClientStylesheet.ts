@@ -665,6 +665,7 @@ kbd {
 .tao-studio-product-host[data-layout-preset="draw"] [data-tao-studio-draw-live] .studio-preview-cell[data-tao-studio-drop-into-target] .studio-preview-cell-viewport {
   box-shadow: 0 0 0 5px var(--studio-bezel), 0 0 0 8px var(--studio-accent);
 }
+.studio-preview { cursor: grab; }
 .studio-preview[data-canvas-pan-ready="true"] { cursor: grab; }
 .studio-preview[data-canvas-panning="true"] { cursor: grabbing; }
 /* Keep one transparent surface above every preview for the entire held-Space gesture, including
@@ -710,7 +711,19 @@ kbd {
   box-shadow: 0 8px 24px #0004; display: none; flex-wrap: wrap; font-size: 11px; gap: 6px; left: 0;
   max-width: calc(100% - 16px); padding: 4px 6px; position: absolute; top: 0; white-space: nowrap; z-index: 6;
 }
-.tao-studio-product-host:is([data-layout-preset="design"], [data-layout-preset="draw"]) .studio-selection-hud:not([hidden]) { display: flex; }
+/* Whether it shows is the HUD's own call: Design, Draw, or the preview's edit mode in any layout. */
+.studio-selection-hud:not([hidden]) { display: flex; }
+.studio-selection-hud-actions { position: relative; }
+.studio-selection-hud-actions-toggle { align-items: center; display: flex; padding: 2px 3px; }
+.studio-selection-hud-menu {
+  background: var(--studio-panel-raised); border: 1px solid var(--studio-stroke); border-radius: 8px;
+  box-shadow: 0 8px 24px #0004; display: flex; flex-direction: column; left: -7px; min-width: 140px; padding: 4px;
+  position: absolute; top: calc(100% + 9px); z-index: 1;
+}
+.studio-selection-hud-menu[hidden] { display: none; }
+.studio-selection-hud-menu[data-above="true"] { bottom: calc(100% + 9px); top: auto; }
+.studio-selection-hud .studio-selection-hud-menu button { border: 0; padding: 4px 8px; text-align: left; }
+.studio-selection-hud .studio-selection-hud-menu button:hover:not(:disabled) { background: var(--studio-surface-hover); }
 .studio-selection-hud-name { color: var(--studio-text-muted); font: 11px var(--studio-mono); padding-right: 2px; }
 .studio-selection-hud label { align-items: center; color: var(--studio-text-muted); display: flex; gap: 4px; }
 .studio-selection-hud :is(button, input, select) {
@@ -733,22 +746,30 @@ kbd {
   overscroll-behavior-x: contain; padding: 4px 8px 14px 4px; scroll-snap-type: x proximity;
 }
 .studio-preview-group-cells > .studio-preview-cell { scroll-snap-align: start; }
-.studio-preview-cell { display: grid; flex: none; gap: 8px; justify-items: start; min-width: 0; }
+.studio-preview-cell { cursor: pointer; display: grid; flex: none; gap: 8px; justify-items: start; min-width: 0; }
+.studio-whole-app-preview { grid-template-rows: auto minmax(0, 1fr); height: 100%; width: 100%; padding: 8px; }
+.studio-whole-app-preview > .studio-preview-cell-viewport { height: 100%; width: 100%; }
 .studio-preview-cell:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 8px; }
 .studio-preview-cell-label {
-  align-items: center; color: var(--studio-text); display: flex; font-size: 12px; font-weight: 600; gap: 8px; justify-content: space-between; width: 100%;
+  align-items: center; color: var(--studio-text); display: flex; font-size: 12px; font-weight: 600; gap: 8px; width: 100%;
 }
-.studio-preview-cell-details { color: var(--studio-text-dim); font: 11px var(--studio-mono); font-weight: 400; }
+.studio-preview-activation-toggle { flex: none; width: 26px; height: 26px; display: inline-grid; place-items: center; border: 0; background: transparent; color: #898d96; cursor: pointer; }
+.studio-preview-activation-toggle svg, .studio-preview-inactive-activate svg { width: 17px; height: 17px; fill: none; }
+.studio-preview-activation-toggle[aria-pressed="true"] { color: #c5a32f; }
+.studio-preview-activation-toggle[aria-pressed="true"] svg { fill: #ead57b; }
+.studio-preview-inactive-activate { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; height: 100%; border: 0; border-radius: inherit; padding: 0; background: transparent; color: var(--studio-text-dim); cursor: pointer; font: inherit; font-size: 12px; }
+.studio-preview-inactive-activate:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: -4px; }
+.studio-preview-cell-details { margin-left: auto; color: var(--studio-text-dim); font: 11px var(--studio-mono); font-weight: 400; }
 .studio-preview-cell[data-preview-interactive="true"] > .studio-preview-cell-label { color: var(--studio-accent-strong); }
 .studio-preview-cell-viewport {
-  background: #fff; border-radius: 26px; box-shadow: 0 0 0 5px var(--studio-bezel), 0 0 0 6px var(--studio-stroke-strong), 0 24px 48px -12px rgba(0, 0, 0, .8);
+  background: var(--studio-panel); border-radius: 26px; box-shadow: 0 0 0 5px var(--studio-bezel), 0 0 0 6px var(--studio-stroke-strong), 0 24px 48px -12px rgba(0, 0, 0, .8);
   flex: none; overflow: hidden; position: relative;
 }
-.studio-preview-activation-shield {
-  appearance: none; background: transparent; border: 0; border-radius: inherit; cursor: grab; inset: 0; padding: 0; position: absolute; z-index: 2;
+.studio-preview-focus-shield {
+  appearance: none; background: transparent; border: 0; border-radius: inherit; cursor: pointer; inset: 0; padding: 0; position: absolute; z-index: 2;
 }
-.studio-preview-activation-shield[hidden] { display: none; }
-.studio-preview-activation-shield:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: -3px; }
+.studio-preview-focus-shield[hidden] { display: none; }
+.studio-preview-focus-shield:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: -3px; }
 .studio-preview > iframe[data-preview-interactive="true"] { outline: 2px solid var(--studio-accent); outline-offset: -2px; }
 .studio-preview-cell[data-preview-interactive="true"] .studio-preview-cell-viewport {
   box-shadow: 0 0 0 5px var(--studio-bezel), 0 0 0 7px var(--studio-accent), 0 24px 48px -12px rgba(0, 0, 0, .8);

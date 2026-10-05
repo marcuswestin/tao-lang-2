@@ -1,4 +1,5 @@
-import { Describe, Expect, Test } from '@shared/test'
+import { Workspace } from '@compiler/workspace'
+import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { BridgeMetadata } from '../compiler-src/bridge-metadata'
 import { TestCompiler as Compiler } from './test-compile'
 
@@ -113,7 +114,7 @@ Describe('compiler: app-scoped auth and account data', () => {
       `
       use TestAuth from @tao/auth/testing
       app Notes { id "com.tao.test.notes" version "1.0.0" name "Notes"  Auth TestAuth { State "SignedOut" } view Main }
-      app Preview = Notes with { id "com.tao.test.preview"  Auth with { State "Restoring" } }
+      app Preview = Notes with { id "com.tao.test.preview",  Auth with { State "Restoring" } }
       view Main() { render Label("Welcome") }
       view Label(Value text) { render inject Value \`\`\`ts return null \`\`\` }
     `,
@@ -121,6 +122,98 @@ Describe('compiler: app-scoped auth and account data', () => {
     )
     Expect(result.code).toContain('TR.Auth.Patch(')
     Expect(result.code).toContain('"Restoring"')
+  })
+
+  Test('patches Firebase auth and datasource settings only on the selected app variant', async () => {
+    const result = await Compiler.compileCode(
+      `
+      use FirebaseAuth from @tao/auth/firebase
+      use Firebase from @tao/data/providers/firebase
+      data Notes / Note { Title text }
+      app Local {
+        id "com.tao.test.local" version "1.0.0" name "Local"
+        Auth FirebaseAuth { ApiKey "local-key", ProjectId "local-project" }
+        Datasource Firebase { ApiKey "local-key", ProjectId "local-project" }
+        view Main
+      }
+      app Hosted = Local with { id "com.tao.test.hosted", name "Hosted" }
+      view Main() { render Label("Ready") }
+      view Label(Value text) { render inject Value \`\`\`ts return null \`\`\` }
+    `,
+      {
+        appName: 'Hosted',
+        appAuthConfiguration: { ApiKey: 'hosted-key', ProjectId: 'hosted-project', AppId: 'hosted-app' },
+        appFirebaseConfiguration: { ApiKey: 'hosted-key', ProjectId: 'hosted-project', AppId: 'hosted-app' },
+      },
+    )
+    const local = result.code.slice(result.code.indexOf('function _TaoBindApp_Local('))
+    const hosted = local.slice(local.indexOf('function _TaoBindApp_Hosted('))
+    const base = local.slice(0, local.indexOf('function _TaoBindApp_Hosted('))
+    Expect(base).toContain('"ApiKey": TR.Value("local-key")')
+    Expect(base).not.toContain('hosted-key')
+    Expect(hosted).toContain('TR.Auth.Patch(')
+    Expect(hosted).toContain('TR.Data.PatchBindings(')
+    Expect(hosted.match(/"ApiKey": TR.Value\("hosted-key"\)/gu)).toHaveLength(2)
+    Expect(hosted.match(/"AppId": TR.Value\("hosted-app"\)/gu)).toHaveLength(2)
+  })
+
+  Test('does not apply Firebase settings to another provider with the same AppId slot', async () => {
+    const result = await Compiler.compileCode(
+      `
+      use InstantAuth from @tao/auth/instantdb
+      use InstantDB from @tao/data/providers/instantdb
+      data Notes / Note { Title text }
+      app NotesApp {
+        id "com.tao.test.notesapp" version "1.0.0" name "NotesApp"
+        Auth InstantAuth { AppId "auth-local" }
+        Datasource InstantDB { AppId "data-local" }
+        view Main
+      }
+      view Main() { render Label("Ready") }
+      view Label(Value text) { render inject Value \`\`\`ts return null \`\`\` }
+    `,
+      {
+        appName: 'NotesApp',
+        appAuthConfiguration: { AppId: 'firebase-auth' },
+        appFirebaseConfiguration: { AppId: 'firebase-data' },
+      },
+    )
+    Expect(result.code).toContain('"AppId": TR.Value("auth-local")')
+    Expect(result.code).toContain('"AppId": TR.Value("data-local")')
+    Expect(result.code).not.toContain('firebase-auth')
+    Expect(result.code).not.toContain('firebase-data')
+  })
+
+  Test('patches inherited Firebase auth across modules after the variant author patch', async () => {
+    await withTaoFiles('tao-firebase-auth-variant-', {
+      'Base.tao': `
+        use FirebaseAuth from @tao/auth/firebase
+        public app Base {
+          id "com.tao.test.base" version "1.0.0" name "Base"
+          Auth FirebaseAuth { ApiKey "source-key", ProjectId "source-project" }
+          view Main
+        }
+        view Main() { render Label("Ready") }
+        view Label(Value text) { render inject Value \`\`\`ts return null \`\`\` }
+      `,
+      'Main.tao': `
+        use Base from ./Base
+        app Hosted = Base with {
+          id "com.tao.test.hosted", name "Hosted",
+          Auth with { AuthDomain "source.firebaseapp.com" }
+        }
+      `,
+    }, async paths => {
+      const result = await Workspace.compile(paths['Main.tao'], {
+        appName: 'Hosted',
+        appAuthConfiguration: { ApiKey: 'hosted-key', ProjectId: 'hosted-project' },
+      })
+      const hosted = result.code.slice(result.code.indexOf('function _TaoBindApp_Hosted('))
+      Expect(hosted).toContain('"AuthDomain": TR.Value("source.firebaseapp.com")')
+      Expect(hosted).toContain('"ApiKey": TR.Value("hosted-key")')
+      Expect(hosted).toContain('"ProjectId": TR.Value("hosted-project")')
+      Expect(hosted.indexOf('source.firebaseapp.com')).toBeLessThan(hosted.indexOf('hosted-key'))
+    })
   })
 
   Test('publishes server policy and symbolic offline scopes without reading a live account', async () => {
@@ -137,8 +230,8 @@ Describe('compiler: app-scoped auth and account data', () => {
       access Note { Owner can read, create, delete; Owner can update Body }
       app NotesApp { id "com.tao.test.notesapp" version "1.0.0" name "NotesApp"
         // Reference pairs with an Auth whose sign-in proof its server accepts.
-        Auth LocalAuth { Endpoint "http://localhost:4738" Resource "test" }
-        Datasource Reference { ServerURL "http://localhost:4738" Resource "test" Offline { Me, Me.Notes } }
+        Auth LocalAuth { Endpoint "http://localhost:4738", Resource "test" }
+        Datasource Reference { ServerURL "http://localhost:4738", Resource "test", Offline { Me, Me.Notes } }
         view Main
       }
       view Main() { render Label("Ready") }

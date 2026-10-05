@@ -1,7 +1,9 @@
 import TR from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
+import React from 'react'
 import { testDataConnection } from '../TaoRuntime-src/TR-data-provider'
 import { DesignControls } from '../TaoRuntime-src/TR-design'
+import { UnexpectedBehaviorError } from '../TaoRuntime-src/TR-errors'
 import { InteractionAttention, runtimeInteractionValue } from '../TaoRuntime-src/TR-interaction-attention'
 import { CommandCatalog } from '../TaoRuntime-src/TR-interaction-catalog'
 import {
@@ -12,6 +14,7 @@ import {
   type TaoOutlineLiveNode,
   visualOrder,
 } from '../TaoRuntime-src/TR-interaction-outline'
+import type { TaoProps } from '../TaoRuntime-src/TR-TaoProps'
 
 function register(outline: InteractionOutline, entry: TaoOutlineEntry): () => void {
   return outline.register(entry)
@@ -45,6 +48,77 @@ function item(
 }
 
 Describe('TR.Interaction attention', () => {
+  Test('keeps an old conditional bundle subscribed through an intermediate rename', () => {
+    const designPath = '/project/PressedTheme.tao'
+    const consumerPath = '/project/PressedView.tao'
+    const identity = 'test.interaction.old-design-cohort'
+    const publish = (epoch: number, bundle: string, consumerEpoch: number) =>
+      DesignControls.Declaration(
+        {
+          bundles: { [bundle]: DesignControls.Spec([['bg', 'paper', 'when', 'pressed']]) },
+          name: 'PressedTheme',
+          tokens: { paper: `#${epoch}${epoch}${epoch}${epoch}${epoch}${epoch}` },
+        },
+        identity,
+        { epoch, path: designPath, sourceEpochs: { [consumerPath]: consumerEpoch } },
+      )
+    const first = publish(1, 'title', 1)
+    const source = { designEpochs: { [designPath]: 1 }, epoch: 1, path: consumerPath }
+    const cohort = DesignControls.Cohort(source)
+    const oldSpec = DesignControls.Spec([['title']], { ...source, cohort, kind: 'style' })
+    publish(2, 'title', 1)
+    publish(3, 'headline', 1)
+    const app = TR.Navigation.App({
+      id: 'pressed-theme',
+      name: 'Pressed theme',
+      auxiliaries: () => ({}),
+      design: () => first,
+      navigator: () => {
+        throw new UnexpectedBehaviorError('Design subscription must not mount navigation.')
+      },
+      version: '1.0.0',
+    })
+    const props: TaoProps = { app, designSpec: oldSpec }
+    const useContext = React.useContext
+    const useRef = React.useRef
+    const useEffect = React.useEffect
+    const useSyncExternalStore = React.useSyncExternalStore
+    let subscribed: unknown
+    React.useContext = (() => undefined) as typeof React.useContext
+    React.useRef = (value => ({ current: value })) as typeof React.useRef
+    React.useEffect = (() => undefined) as typeof React.useEffect
+    React.useSyncExternalStore = ((subscribe, getSnapshot) => {
+      subscribed = subscribe
+      return getSnapshot()
+    }) as typeof React.useSyncExternalStore
+    try {
+      TR.Interaction.UseOccurrence(props)
+      Expect(subscribed).toBe(TR.Interaction.Attention.subscribe)
+      let pressed = false
+      const resolveOld = () =>
+        DesignControls.resolve(first, oldSpec, undefined, 'light', subject => subject === 'pressed' && pressed).style
+      Expect(resolveOld()).toBeUndefined()
+      pressed = true
+      Expect(resolveOld()).toEqual({ backgroundColor: '#222222' })
+      const currentSource = { designEpochs: { [designPath]: 3 }, epoch: 3, path: consumerPath }
+      const currentSpec = DesignControls.Spec([['headline']], {
+        ...currentSource,
+        cohort: DesignControls.Cohort(currentSource),
+        kind: 'style',
+      })
+      TR.Interaction.UseOccurrence({ app, designSpec: currentSpec })
+      Expect(subscribed).toBe(TR.Interaction.Attention.subscribe)
+      Expect(DesignControls.resolve(first, currentSpec, undefined, 'light', () => true).style)
+        .toEqual({ backgroundColor: '#333333' })
+    } finally {
+      React.useContext = useContext
+      React.useRef = useRef
+      React.useEffect = useEffect
+      React.useSyncExternalStore = useSyncExternalStore
+      app.dispose()
+    }
+  })
+
   Test('secondary activation opens row verbs without invoking selection', () => {
     const outline = new InteractionOutline()
     const catalog = new CommandCatalog()
@@ -957,6 +1031,69 @@ Describe('TR.Interaction attention', () => {
     Expect(attention.read().target).toBe('Archive')
     attention.pressKey('Enter')
     Expect(invoked).toEqual(['Archive'])
+  })
+
+  Test('opens the palette beside an unfilled command and waits for its required value', () => {
+    const outline = new InteractionOutline()
+    const catalog = new CommandCatalog()
+    const attention = new InteractionAttention(outline, catalog)
+    const invoked: string[] = []
+    let titleReads = 0
+    const copy = TR.Interaction.Command({
+      action: fills => TR.Action(() => invoked.push(`Copy ${fills['Value']!.evaluate().jsValue}`)),
+      members: {
+        Title: fills => {
+          titleReads += 1
+          return TR.Value(`Copy ${fills['Value']!.evaluate().jsValue}`)
+        },
+      },
+      name: 'Copy',
+      slots: ['Value'],
+    })
+    const open = TR.Interaction.Command({
+      action: () => TR.Action(() => invoked.push('Open')),
+      members: { Key: () => TR.Value('primary+o'), Title: () => TR.Value('Open') },
+      name: 'Open',
+    })
+    catalog.register({
+      commands: [
+        {
+          command: () => copy,
+          identity: 'Copy',
+          name: 'Copy',
+          scope: { kind: 'module' },
+          slots: [{ entity: false, name: 'Value', required: true, scalarType: 'text', type: 'Text' }],
+          static: { key: 'primary+c', title: 'Copy' },
+        },
+        {
+          command: () => open,
+          identity: 'Open',
+          name: 'Open',
+          scope: { kind: 'module' },
+          slots: [],
+          static: { title: 'Open' },
+        },
+      ],
+      module: 'Commands',
+    })
+    register(outline, region('main', { primary: true }))
+    attention.revalidateOutline()
+
+    Expect(attention.pressKey('primary+k')).toBe(true)
+    Expect(attention.read().mode).toBe('palette')
+    Expect(attention.read().palette.map(entry => entry.label)).toEqual(['Copy', 'Open'])
+    Expect(titleReads).toBe(0)
+
+    attention.pressKey('Escape')
+    Expect(attention.pressKey('primary+o')).toBe(true)
+    Expect(invoked).toEqual(['Open'])
+    Expect(attention.pressKey('primary+c')).toBe(true)
+    Expect(attention.read().mode).toBe('verb-pending')
+    Expect(attention.read().verbPending?.slot).toBe('Value')
+    Expect(titleReads).toBe(0)
+    Expect(attention.providePendingValue(TR.Value('draft'))).toBe(true)
+    Expect(invoked).toEqual(['Open', 'Copy draft'])
+    Expect(titleReads).toBeGreaterThan(0)
   })
 
   Test('keeps a mounted shell-sibling command available while navigation owns the focused region', () => {

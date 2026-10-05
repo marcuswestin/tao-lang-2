@@ -52,7 +52,7 @@ export {
   TreeFolder,
 } from './product-host/StudioFilesPanel'
 export {
-  ApplyActiveCellEnvironment,
+  ApplyFocusedCellEnvironment,
   ApplyInspectorAction,
   CreateFile,
   DeleteFile,
@@ -190,7 +190,7 @@ type TaoStudioProductHostProps = Readonly<{
 }>
 
 type StudioContextPanelSlotProps = Readonly<{
-  ActiveCellId?: TR.Value<string>
+  FocusedCellId?: TR.Value<string>
   CellRevision?: TR.Value<number>
   InspectorBusy?: TR.Value<boolean>
   InspectorCanUndo?: TR.Value<boolean>
@@ -201,7 +201,7 @@ type StudioContextPanelSlotProps = Readonly<{
   ActiveFileContent?: TR.Value<string>
   ActiveFilePath?: TR.Value<string>
   ActiveFileVersion?: TR.Value<string>
-  ActiveScenarioId?: TR.Value<string>
+  FocusedScenarioId?: TR.Value<string>
   ProjectRoot?: TR.Value<string>
   Revision?: TR.Value<number>
   SelectedRenderId?: TR.Value<string>
@@ -213,9 +213,9 @@ type StudioContextPanelSlotProps = Readonly<{
   ViewportWidth?: TR.Value<number>
 }>
 
-/** The environment editor lives in the Scenario pane; it receives only what the active cell's environment needs. */
+/** The environment editor lives in the Scenario pane; it receives only what the focused cell's environment needs. */
 type StudioEnvironmentSlotProps = Readonly<{
-  ActiveCellId?: TR.Value<string>
+  FocusedCellId?: TR.Value<string>
   CellRevision?: TR.Value<number>
   NetworkErrorMessage?: TR.Value<string>
   NetworkErrorStatus?: TR.Value<number>
@@ -257,11 +257,11 @@ type StudioSearchSlotProps = Readonly<{
 
 /** Draft-owning panel identities change with the selected scenario, not with either panel's remount. */
 export const StudioProductHostMountIdentity = {
-  environment(activeCell: StudioProductHostState['activeCell']): string {
-    return `studio-environment:${activeCell?.cellId ?? 'none'}`
+  environment(focusedCell: StudioProductHostState['focusedCell']): string {
+    return `studio-environment:${focusedCell?.cellId ?? 'none'}`
   },
-  scenario(activeCell: StudioProductHostState['activeCell']): string {
-    return `studio-scenario:${activeCell?.cellId ?? 'none'}:${activeCell?.scenarioId ?? 'none'}`
+  scenario(focusedCell: StudioProductHostState['focusedCell']): string {
+    return `studio-scenario:${focusedCell?.cellId ?? 'none'}:${focusedCell?.scenarioId ?? 'none'}`
   },
 } as const
 
@@ -293,7 +293,27 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
     let cleanup: (() => void) | undefined
     let unmounted = false
     const cancellation = new AbortController()
-    const mounting = mountStudio({ root, signal: cancellation.signal })
+    const mounting = mountStudio({
+      root,
+      signal: cancellation.signal,
+      onShellReady: () => {
+        if (cancellation.signal.aborted) {
+          return
+        }
+        setFilesTarget(root.querySelector<HTMLElement>('.studio-files') ?? undefined)
+        setEditorTarget(root.querySelector<HTMLElement>('.studio-editor') ?? undefined)
+        setComponentsTarget(root.querySelector<HTMLElement>('.studio-components') ?? undefined)
+        setProjectViewsTarget(root.querySelector<HTMLElement>('.studio-project-views') ?? undefined)
+        setScreensTarget(root.querySelector<HTMLElement>('.studio-screens') ?? undefined)
+        setTokensTarget(root.querySelector<HTMLElement>('.studio-design-values') ?? undefined)
+        setDataTarget(root.querySelector<HTMLElement>('.studio-data') ?? undefined)
+        setDrawerTarget(root.querySelector<HTMLElement>('.studio-drawer-content') ?? undefined)
+        setSearchTarget(root.querySelector<HTMLElement>('.studio-search-results') ?? undefined)
+        setScenarioTarget(root.querySelector<HTMLElement>('.studio-scenario-inspector-content') ?? undefined)
+        setEnvironmentTarget(root.querySelector<HTMLElement>('.studio-inspector-tao-environment') ?? undefined)
+        setInspectorTarget(root.querySelector<HTMLElement>('.studio-inspector-tao-context') ?? undefined)
+      },
+    })
     const reportMountError = (error: unknown): void => {
       if (unmounted && error instanceof Error && error.name === 'AbortError') {
         return
@@ -314,29 +334,6 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
         Errors.abortError('Tao Studio product host unmounted before the requested action could run.'),
       )
       cleanup?.()
-    }
-    const target = root.querySelector<HTMLElement>('.studio-files')
-    if (target === null) {
-      void mounting.catch(reportMountError)
-      return unmount
-    }
-    setFilesTarget(target)
-    const editor = root.querySelector<HTMLElement>('.studio-editor')
-    if (editor !== null) {
-      setEditorTarget(editor)
-    }
-    setComponentsTarget(root.querySelector<HTMLElement>('.studio-components') ?? undefined)
-    setProjectViewsTarget(root.querySelector<HTMLElement>('.studio-project-views') ?? undefined)
-    setScreensTarget(root.querySelector<HTMLElement>('.studio-screens') ?? undefined)
-    setTokensTarget(root.querySelector<HTMLElement>('.studio-design-values') ?? undefined)
-    setDataTarget(root.querySelector<HTMLElement>('.studio-data') ?? undefined)
-    setDrawerTarget(root.querySelector<HTMLElement>('.studio-drawer-content') ?? undefined)
-    setSearchTarget(root.querySelector<HTMLElement>('.studio-search-results') ?? undefined)
-    setScenarioTarget(root.querySelector<HTMLElement>('.studio-scenario-inspector-content') ?? undefined)
-    setEnvironmentTarget(root.querySelector<HTMLElement>('.studio-inspector-tao-environment') ?? undefined)
-    const inspector = root.querySelector<HTMLElement>('.studio-inspector-tao-context')
-    if (inspector !== null) {
-      setInspectorTarget(inspector)
     }
     void mounting.then(dispose => {
       if (unmounted) {
@@ -369,22 +366,22 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
   const editor = props.Slots?.['@editor'] ?? props.Slots?.['editor']
   const inspector = props.Slots?.['@inspector'] ?? props.Slots?.['inspector']
   const activeFile = hostState.activeFile
-  const activeCell = hostState.activeCell
+  const focusedCell = hostState.focusedCell
   const selectedRender = hostState.selectedRender
   const panelValues = hostState.panels ?? StudioPanelProjection.empty()
   const refreshedInspector = React.isValidElement<StudioContextPanelSlotProps>(inspector)
     ? React.cloneElement(inspector, {
       key: [
         'studio-context',
-        activeCell?.cellId ?? 'none',
-        activeCell?.cellRevision ?? 0,
+        focusedCell?.cellId ?? 'none',
+        focusedCell?.cellRevision ?? 0,
         selectedRender?.renderId ?? 'none',
         selectedRender?.sourceVersion ?? 'none',
         JSON.stringify(hostState.inspector?.selection ?? null),
         JSON.stringify(hostState.inspector?.inspection ?? null),
       ].join(':'),
-      ActiveCellId: TR.Value(activeCell?.cellId ?? ''),
-      CellRevision: TR.Value(activeCell?.cellRevision ?? 0),
+      FocusedCellId: TR.Value(focusedCell?.cellId ?? ''),
+      CellRevision: TR.Value(focusedCell?.cellRevision ?? 0),
       InspectorBusy: TR.Value(hostState.inspector?.busy ?? false),
       InspectorCanUndo: TR.Value(hostState.inspector?.canUndo ?? false),
       InspectorInspection: TR.Value(JSON.stringify(hostState.inspector?.inspection ?? null)),
@@ -394,7 +391,7 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
       ActiveFileContent: TR.Value(activeFile?.content ?? ''),
       ActiveFilePath: TR.Value(activeFile?.path ?? ''),
       ActiveFileVersion: TR.Value(activeFile?.saved === false ? '' : activeFile?.sourceVersion ?? ''),
-      ActiveScenarioId: TR.Value(activeCell?.scenarioId ?? ''),
+      FocusedScenarioId: TR.Value(focusedCell?.scenarioId ?? ''),
       ProjectRoot: TR.Value(hostState.projectRoot ?? ''),
       Revision: TR.Value(hostState.revision),
       SelectedRenderId: TR.Value(selectedRender?.renderId ?? ''),
@@ -402,26 +399,26 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
       SelectedRenderVersion: TR.Value(selectedRender?.sourceVersion ?? ''),
       SelectionAnchor: TR.Value(activeFile?.selectionAnchor ?? 0),
       SelectionHead: TR.Value(activeFile?.selectionHead ?? 0),
-      ViewportHeight: TR.Value(activeCell?.viewportHeight ?? 0),
-      ViewportWidth: TR.Value(activeCell?.viewportWidth ?? 0),
+      ViewportHeight: TR.Value(focusedCell?.viewportHeight ?? 0),
+      ViewportWidth: TR.Value(focusedCell?.viewportWidth ?? 0),
     })
     : inspector
   const refreshedEnvironment = React.isValidElement<StudioEnvironmentSlotProps>(environment)
     ? React.cloneElement(environment, {
-      key: StudioProductHostMountIdentity.environment(activeCell),
-      ActiveCellId: TR.Value(activeCell?.cellId ?? ''),
-      CellRevision: TR.Value(activeCell?.cellRevision ?? 0),
-      NetworkErrorMessage: TR.Value(activeCell?.networkErrorMessage ?? 'Injected Studio network failure'),
-      NetworkErrorStatus: TR.Value(activeCell?.networkErrorStatus ?? 503),
-      NetworkLatencyMs: TR.Value(activeCell?.networkLatencyMs ?? 0),
-      NetworkOutcome: TR.Value(activeCell?.networkOutcome ?? 'normal'),
-      SchemeCapability: TR.Value(activeCell?.schemeCapability ?? reactiveBrowserSchemeCapability),
-      SchemeRequested: TR.Value(activeCell?.schemeRequested ?? 'system'),
-      SchemeResolved: TR.Value(activeCell?.schemeResolved ?? 'light'),
-      SchemeSource: TR.Value(activeCell?.schemeSource ?? 'system'),
-      ViewportHeight: TR.Value(activeCell?.viewportHeight ?? 0),
-      ViewportPresetId: TR.Value(activeCell?.viewportPresetId ?? 'custom'),
-      ViewportWidth: TR.Value(activeCell?.viewportWidth ?? 0),
+      key: StudioProductHostMountIdentity.environment(focusedCell),
+      FocusedCellId: TR.Value(focusedCell?.cellId ?? ''),
+      CellRevision: TR.Value(focusedCell?.cellRevision ?? 0),
+      NetworkErrorMessage: TR.Value(focusedCell?.networkErrorMessage ?? 'Injected Studio network failure'),
+      NetworkErrorStatus: TR.Value(focusedCell?.networkErrorStatus ?? 503),
+      NetworkLatencyMs: TR.Value(focusedCell?.networkLatencyMs ?? 0),
+      NetworkOutcome: TR.Value(focusedCell?.networkOutcome ?? 'normal'),
+      SchemeCapability: TR.Value(focusedCell?.schemeCapability ?? reactiveBrowserSchemeCapability),
+      SchemeRequested: TR.Value(focusedCell?.schemeRequested ?? 'system'),
+      SchemeResolved: TR.Value(focusedCell?.schemeResolved ?? 'light'),
+      SchemeSource: TR.Value(focusedCell?.schemeSource ?? 'system'),
+      ViewportHeight: TR.Value(focusedCell?.viewportHeight ?? 0),
+      ViewportPresetId: TR.Value(focusedCell?.viewportPresetId ?? 'custom'),
+      ViewportWidth: TR.Value(focusedCell?.viewportWidth ?? 0),
     })
     : environment
   const refreshedDrawer = React.isValidElement<StudioDrawerSlotProps>(drawer)
@@ -443,11 +440,11 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
     : search
   const refreshedScenario = React.isValidElement<StudioStateSlotProps>(scenario)
     ? React.cloneElement(scenario, {
-      key: StudioProductHostMountIdentity.scenario(activeCell),
-      JourneyRecordable: TR.Value(activeCell?.journeyRecordable ?? false),
-      JourneyRecording: TR.Value(activeCell?.journeyRecording ?? 'null'),
-      ResolvedAppearance: TR.Value(activeCell?.schemeResolved ?? 'light'),
-      State: TR.Value(activeCell?.scenarioModel ?? 'null'),
+      key: StudioProductHostMountIdentity.scenario(focusedCell),
+      JourneyRecordable: TR.Value(focusedCell?.journeyRecordable ?? false),
+      JourneyRecording: TR.Value(focusedCell?.journeyRecording ?? 'null'),
+      ResolvedAppearance: TR.Value(focusedCell?.schemeResolved ?? 'light'),
+      State: TR.Value(focusedCell?.scenarioModel ?? 'null'),
     })
     : scenario
   const contents = (
@@ -474,7 +471,7 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
       {scenarioTarget === undefined || refreshedScenario === undefined
         ? undefined
         : createPortal(
-          <React.Fragment key={StudioProductHostMountIdentity.scenario(activeCell)}>
+          <React.Fragment key={StudioProductHostMountIdentity.scenario(focusedCell)}>
             {refreshedScenario}
           </React.Fragment>,
           scenarioTarget,
@@ -482,7 +479,7 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
       {environmentTarget === undefined || refreshedEnvironment === undefined
         ? undefined
         : createPortal(
-          <React.Fragment key={StudioProductHostMountIdentity.environment(activeCell)}>
+          <React.Fragment key={StudioProductHostMountIdentity.environment(focusedCell)}>
             {refreshedEnvironment}
           </React.Fragment>,
           environmentTarget,
@@ -491,7 +488,7 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
       {inspectorTarget === undefined || refreshedInspector === undefined
         ? undefined
         : createPortal(
-          <React.Fragment key={`${activeCell?.cellId ?? 'none'}:${activeCell?.cellRevision ?? 0}`}>
+          <React.Fragment key={`${focusedCell?.cellId ?? 'none'}:${focusedCell?.cellRevision ?? 0}`}>
             {refreshedInspector}
           </React.Fragment>,
           inspectorTarget,

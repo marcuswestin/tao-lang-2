@@ -2,7 +2,7 @@ import React from 'react'
 import { Arrays } from './core/RuntimeCore'
 import type { RuntimeAuthScope } from './TR-auth'
 import { createElement } from './TR-create-element'
-import type { TaoDesign } from './TR-design'
+import { DesignControls, type TaoDesign } from './TR-design'
 import { runtimeRevisionStore } from './TR-listeners'
 import { mountedDesignStyle } from './TR-mounted-design'
 import type {
@@ -188,10 +188,14 @@ export class RuntimeAppDefinition implements Subscription {
     )
   }
 
-  /** design lazily resolves this mounted app's declaration-local design without a global registry. */
+  /** Keep the original declaration as the identity anchor while reading its latest published snapshot. */
   get design(): TaoDesign | undefined {
-    return this.designValue ??= this.definition.design?.()
+    return DesignControls.current(this.designValue ??= this.definition.design?.())
   }
+
+  readonly subscribeDesign = (listener: () => void): () => void => DesignControls.subscribe(this.design, listener)
+
+  readonly designSnapshot = (): number => DesignControls.revision(this.design)
 
   /** readNet is the app's guard, resolved after generated module initialization. */
   get readNet(): TaoReadNet | undefined {
@@ -764,6 +768,7 @@ function restoreNavigationApps(value: TaoRuntimeJson): void {
 registerRuntimeCaptureDomain({
   capture: captureNavigationApps,
   domain: 'navigation',
+  module: 'TR-navigation-app',
   restore: restoreNavigationApps,
   version: 1,
 })
@@ -772,13 +777,9 @@ const toastSurfaceStyle = {
   alignSelf: 'center',
   backgroundColor: '#121826',
   borderRadius: 10,
-  elevation: 6,
+  boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.3)',
   marginTop: 8,
   maxWidth: 480,
   paddingHorizontal: 16,
   paddingVertical: 12,
-  shadowColor: '#000000',
-  shadowOffset: { height: 4, width: 0 },
-  shadowOpacity: 0.3,
-  shadowRadius: 12,
 } as const

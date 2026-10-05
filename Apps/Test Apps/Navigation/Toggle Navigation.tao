@@ -28,26 +28,26 @@ nav ReadingStack = StackNav {
 }
 
 nav ToggleTabs = SelectionNav {
-   Initial @top
-   Display "toggle"
+   Initial @top,
+   Display "toggle",
    @top {
-      Label "Top"
+      Label "Top",
       Content TopStack
-   }
+   },
    @reading {
-      Label "Reading"
+      Label "Reading",
       Content ReadingStack
 }  }
 
 nav ViewToggle = SelectionNav {
-   Initial @notes
-   Display "toggle"
+   Initial @notes,
+   Display "toggle",
    @notes {
-      Label "Notes"
+      Label "Notes",
       Content NotesPage
-   }
+   },
    @stories {
-      Label "Stories"
+      Label "Stories",
       Content TopStack
 }  }
 

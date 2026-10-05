@@ -44,6 +44,10 @@ const viewValidationMessages = {
   renderSlotFillPlacement: 'A render slot fill must be a direct child of an invocation of its owning view.',
   duplicateRenderSlotFill: (name: string) => `Render slot '${name}' is filled more than once at this call site.`,
   tagAttachment: 'A #tag must be followed immediately by a render or loop in the same block.',
+  accessibilityAttachment: 'An accessible label cluster must be followed immediately by a render in the same block.',
+  accessibilityText: 'An accessible label must be a text expression.',
+  duplicateAccessibilityLabel: 'A render occurrence may have only one accessible label.',
+  duplicatePrefixTag: 'A render occurrence may have only one #tag in its metadata cluster.',
   duplicateTag: (tag: string) => `Duplicate ${tag} in the same block; a tag must be unique within its lexical block.`,
   taggedLoopRoot: `A tagged loop must contain ${loopRowRootWording}`,
   loopRowLabel: `A loop row carries no accessibility label unless the loop contains ${loopRowRootWording}`,
@@ -61,6 +65,7 @@ export const ViewsValidator = {
     [AST.RenderSlotDeclaration.$type]: validateRenderSlotDeclarationPlacement,
     [AST.RenderSlotUse.$type]: validateRenderSlotUse,
     [AST.TagStatement.$type]: validateTag,
+    [AST.RenderAccessibilityStatement.$type]: validateRenderAccessibility,
   } satisfies NodeValidationChecks,
   messages: viewValidationMessages,
   validateForeignFiles: validateForeignViewFiles,
@@ -136,14 +141,31 @@ function validateTag(tag: AST.TagStatement, ctx: ValidationContext): void {
   if (AST.isSlotFillRootTag(tag)) {
     return
   }
-  const index = block.statements.indexOf(tag)
-  const target = block.statements[index + 1]
+  const target = AST.renderPrefixTarget(tag)
   if (!AST.isRender(target) && !AST.isForStatement(target)) {
     ctx.error(tag, viewValidationMessages.tagAttachment)
     return
   }
   if (AST.isForStatement(target) && !AST.loopRowRoot(target)) {
     ctx.error(target, viewValidationMessages.taggedLoopRoot)
+  }
+  const cluster = AST.renderPrefixCluster(target)
+  if (cluster.filter(AST.isTagStatement).indexOf(tag) > 0) {
+    ctx.error(tag, viewValidationMessages.duplicatePrefixTag)
+  }
+}
+
+/** validateRenderAccessibility keeps occurrence metadata typed and attached to one concrete root. */
+function validateRenderAccessibility(prefix: AST.RenderAccessibilityStatement, ctx: ValidationContext): void {
+  const target = AST.renderPrefixTarget(prefix)
+  if (!AST.isRender(target)) {
+    ctx.error(prefix, viewValidationMessages.accessibilityAttachment)
+  } else if (AST.renderPrefixCluster(target).filter(AST.isRenderAccessibilityStatement).indexOf(prefix) > 0) {
+    ctx.error(prefix, viewValidationMessages.duplicateAccessibilityLabel)
+  }
+  const actual = Type.ofExpression(prefix.value)
+  if (actual.kind !== 'unresolved' && !(actual.kind === 'primitive' && actual.primitive === 'text')) {
+    ctx.error(prefix.value, viewValidationMessages.accessibilityText)
   }
 }
 
@@ -240,6 +262,7 @@ function validateViewBodyBlock(block: AST.Block, ctx: ValidationContext): void {
       || AST.isDeclarationSlotFill(statement)
       || AST.isViewCommandExclusion(statement)
       || AST.isTagStatement(statement)
+      || AST.isRenderAccessibilityStatement(statement)
       || AST.isRenderSlotDeclaration(statement)
     if (isViewBodySetupStatement) {
       continue
@@ -261,7 +284,7 @@ function validateRenderBlock(block: AST.Block, ctx: ValidationContext): void {
       }
       continue
     }
-    if (AST.isTagStatement(statement)) {
+    if (AST.isTagStatement(statement) || AST.isRenderAccessibilityStatement(statement)) {
       continue
     }
     if (AST.isEntityQueryDeclaration(statement)) {

@@ -7,14 +7,30 @@ Current implementation status: this repo has one renderable view family, with `s
 containers, private `#tag` test metadata, and bracketed clauses for `content`, `claim`, `gap`,
 `pad`, `margin`, `width`, `height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and `centered`.
 It also implements `width max`, adaptive `Panes`, and typed design values, lowercase styles,
-element defaults, conditions, and `color` view parameters. Render arguments are always parenthesized,
-and a spec remains a distinct following
-clause: `render View(args) [spec] { children }`. Tags, layout, and design style merge into an
+element defaults, conditions, and `color` view parameters. Argumentful renders use parentheses;
+zero-argument renders may omit `()`. A spec remains a distinct following
+clause: `render View(args) [spec] { children }` or `render View [spec] { children }`. Quoted entries
+render through the standard-library Text view, including interpolations and following specs.
+Tags, layout, and design style merge into an
 existing concrete native root and add no wrapper node. Compatible material beyond that first
 contract remains future direction in this document. The old repo implemented most of this layout
 contract with older spellings and a multi-kind declaration surface (`ui`, `frame`, `layout`,
 `dialogue`); the unified view tranche collapsed those into `view`, and this document uses the
 current public `view`, `content`, and `@@content` names.
+
+Occurrence accessibility labels are implemented as contiguous prefixes before a concrete render:
+
+```tao
+#heading accessible label "Library"
+Banner("Library")
+```
+
+`a11y label` is accepted and formats as `accessible label`. Safe adjacent tag/label clusters format
+on one line with the tag first; grouping and comments remain intact. Labels can be reactive and
+attach only to the next render in the same block. Duplicate, dangling or misplaced labels fail
+validation. An explicit occurrence label overrides the root control's default accessible name while
+preserving its visible text, handlers and native root identity. Unsupported opaque/fragment roots
+fail explicitly. Declaration-level defaults and additional accessibility properties remain future work.
 
 ## Layout Introduction
 
@@ -186,6 +202,13 @@ with `@name = empty`. A caller may fill it at most once with `@name <view>`. The
 opaque visual content and renders exactly where the declaring body places `@name`; `empty`
 contributes no node. Parameterized, repeatable, and required slots remain future work.
 
+A separate runtime renderer descriptor is ready for the selected parameterized-slot lowering.
+Each placement mounts its own stable body component with current arguments, captures and occurrence
+metadata. Updating captures preserves mounted state; replacing the body component remounts it.
+Default selection distinguishes absence from an explicitly empty own property, and forwarding
+preserves descriptor identity. This runtime support does not change the source slot contract above;
+parameterized/defaulted declarations, binder fills and repeated placement still await compiler work.
+
 ```tao
 use Col, FormButton, Row, Text from @tao/ui
 
@@ -232,8 +255,9 @@ view Card() {
 ### Declaration Properties, Children, And Slots
 
 Declaration properties use the owner-qualified binding rules in `Tao Type System.md`. Header
-parameters are shorthand for the same public properties. Header parameters require parentheses,
-including `()`. The longhand property block remains future work. Named render slots and
+parameters are shorthand for the same public properties. Argumentful header parameters require
+parentheses; zero-argument view headers may omit `()`. The longhand property block remains future
+work. Named render slots and
 `@@content` are implemented:
 
 ```tao

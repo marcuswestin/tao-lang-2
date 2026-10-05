@@ -1,5 +1,5 @@
 import { Packages } from '@ast-utils'
-import { type Diagnostic, FS } from '@shared'
+import { type Diagnostic, FS, ProjectLocal } from '@shared'
 import * as ts from 'typescript'
 import {
   ambientTypeNames,
@@ -12,7 +12,7 @@ import { nestedProjectRoots } from './ProjectSourceOwnership'
 import type { ProjectToolingOptions } from './ProjectTooling'
 
 const ROOT_CONFIG = 'tsconfig.json'
-const BASE_CONFIG = '.tao/typescript/tsconfig.json'
+const BASE_CONFIG = '.tao/cache/typescript/tsconfig.json'
 
 /** Config diagnostics used by the project tooling validator. */
 export const ProjectConfigValidationMessages = {
@@ -54,8 +54,9 @@ export async function ensureProjectTypeScriptConfig(
   if (!await FS.isDirectory(FS.resolvePath('.tao', projectRoot))) {
     return await writeProjectTypeScriptConfigUnderLock(projectRoot, options)
   }
+  await ProjectLocal.prepare(projectRoot)
   return await FS.withFileMutationLock(
-    FS.resolvePath('.tao/ts-gen-lock', projectRoot),
+    FS.resolvePath('.tao/cache/locks/ts-gen-lock', projectRoot),
     projectRoot,
     async () => await writeProjectTypeScriptConfigUnderLock(projectRoot, options),
   )
@@ -91,7 +92,7 @@ export async function writeProjectTypeScriptConfigUnderLock(
     changedOutputPaths.push(baseConfigPath)
   }
   if (!await FS.exists(rootConfigPath)) {
-    await FS.writeText(rootConfigPath, '{ "extends": "./.tao/typescript/tsconfig.json" }\n')
+    await FS.writeText(rootConfigPath, '{ "extends": "./.tao/cache/typescript/tsconfig.json" }\n')
     changedOutputPaths.push(rootConfigPath)
   }
   return { rootConfigPath, baseConfigPath, changedOutputPaths, diagnostics: [] }
@@ -118,7 +119,7 @@ async function baseConfig(
       moduleResolution: 'bundler',
       noEmit: true,
       resolveJsonModule: true,
-      rootDirs: ['../..', '../../.tao-ts'],
+      rootDirs: ['../../..', '../../../.tao-ts'],
       paths: {
         ...await hostModulePaths(projectRoot, options, excludedHostPackages),
         '@tao/runtime': [runtimePath],
@@ -130,37 +131,37 @@ async function baseConfig(
       types: [...new Set([...projectTypes, ...ambientTypeNames(typeRoots)])],
     },
     include: [
-      '../../**/*.ts',
-      '../../**/*.tsx',
-      '../../**/*.mts',
-      '../../**/*.cts',
-      '../../**/*.js',
-      '../../**/*.jsx',
-      '../../**/*.mjs',
-      '../../**/*.cjs',
-      '../../.tao-ts/**/*.ts',
-      '../../.tao-ts/**/*.tsx',
-      '../../.tao-ts/**/*.mts',
-      '../../.tao-ts/**/*.cts',
-      '../../.tao-ts/**/*.js',
-      '../../.tao-ts/**/*.jsx',
-      '../../.tao-ts/**/*.mjs',
-      '../../.tao-ts/**/*.cjs',
-      '../../.tao-ts/.dependencies/**/*.ts',
-      '../../.tao-ts/.dependencies/**/*.tsx',
-      '../../.tao-ts/.dependencies/**/*.mts',
-      '../../.tao-ts/.dependencies/**/*.cts',
-      '../../.tao-ts/.dependencies/**/*.js',
-      '../../.tao-ts/.dependencies/**/*.jsx',
-      '../../.tao-ts/.dependencies/**/*.mjs',
-      '../../.tao-ts/.dependencies/**/*.cjs',
+      '../../../**/*.ts',
+      '../../../**/*.tsx',
+      '../../../**/*.mts',
+      '../../../**/*.cts',
+      '../../../**/*.js',
+      '../../../**/*.jsx',
+      '../../../**/*.mjs',
+      '../../../**/*.cjs',
+      '../../../.tao-ts/**/*.ts',
+      '../../../.tao-ts/**/*.tsx',
+      '../../../.tao-ts/**/*.mts',
+      '../../../.tao-ts/**/*.cts',
+      '../../../.tao-ts/**/*.js',
+      '../../../.tao-ts/**/*.jsx',
+      '../../../.tao-ts/**/*.mjs',
+      '../../../.tao-ts/**/*.cjs',
+      '../../../.tao-ts/.dependencies/**/*.ts',
+      '../../../.tao-ts/.dependencies/**/*.tsx',
+      '../../../.tao-ts/.dependencies/**/*.mts',
+      '../../../.tao-ts/.dependencies/**/*.cts',
+      '../../../.tao-ts/.dependencies/**/*.js',
+      '../../../.tao-ts/.dependencies/**/*.jsx',
+      '../../../.tao-ts/.dependencies/**/*.mjs',
+      '../../../.tao-ts/.dependencies/**/*.cjs',
     ],
     exclude: [
-      '../../node_modules',
-      '../../.tao',
-      '../../.git',
-      '../../.artifacts',
-      ...nestedRoots.map(root => FS.relativePath(FS.resolvePath('.tao/typescript', projectRoot), root)),
+      '../../../node_modules',
+      '../../../.tao',
+      '../../../.git',
+      '../../../.artifacts',
+      ...nestedRoots.map(root => FS.relativePath(FS.resolvePath('.tao/cache/typescript', projectRoot), root)),
     ],
   }
 }

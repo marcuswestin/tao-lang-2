@@ -19,10 +19,15 @@ Describe('parser: syntax parse', () => {
     ])
   })
 
-  Test('counts the errors a recovering parse produced', () => {
+  Test('reports syntax errors without loading or linking a workspace', async () => {
     const parsed = Parser.parseSyntax('view Main( {\n')
+    const full = await Parser.parseCode('view Main( {\n')
 
     Expect(parsed.errors).toBeGreaterThan(0)
+    Expect(parsed.diagnostics.map(diagnostic => diagnostic.message)).toEqual(
+      full.diagnostics.filter(diagnostic => diagnostic.source === 'lexer' || diagnostic.source === 'parser')
+        .map(diagnostic => diagnostic.message),
+    )
     Expect(parsed.ast.$type).toBe('TaoFile')
   })
 

@@ -626,6 +626,12 @@ async function withFixture(test: (fixture: Fixture) => Promise<void>): Promise<v
     const cache = FS.resolvePath('.artifacts/cache.txt', root)
     const container = FS.resolvePath('.artifacts/container.txt', root)
     const docker = FS.resolvePath('docker', bin)
+    // The clean PATH below would otherwise reach macOS's /usr/bin/git shim, which writes xcrun cache
+    // warnings to stderr in a sandbox that denies the per-user temporary directory.
+    const git = await CLI.commandPath('git')
+    if (git !== undefined) {
+      await FS.symlink(git, FS.resolvePath('git', bin))
+    }
     await FS.writeText(
       docker,
       [

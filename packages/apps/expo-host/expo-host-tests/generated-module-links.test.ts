@@ -1,9 +1,103 @@
 import { managedDependencyModulesRoot } from '@project-tooling'
-import { FS } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { FS, ProjectLocal } from '@shared'
+import { Deferred, Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { withGeneratedModuleLinks } from '../expo-host-src/generated-module-links'
+import { RuntimeToolchainPaths } from '../expo-host-src/runtime-toolchain-paths'
 
 Describe('generated dependency modules', () => {
+  Test('links host dependencies when no local npm environment is declared and repairs a removed link', async () => {
+    const root = await mkTestDir('tao-generated-dependencies-')
+    try {
+      const output = FS.resolvePath('host/_gen_tao-app', root)
+      const link = FS.resolvePath('node_modules', output)
+      const hostModules = RuntimeToolchainPaths.dependencyRoot()
+      const publish = () => FS.writeText(FS.resolvePath('App.tsx', output), 'app')
+      Expect(await FS.isFile(FS.resolvePath('react/package.json', hostModules))).toBe(true)
+
+      await withGeneratedModuleLinks(output, root, [], publish)
+      Expect((await FS.entryMetadata(link)).linkTarget).toBe(hostModules)
+      Expect(await FS.isFile(FS.resolvePath('react/package.json', link))).toBe(true)
+      Expect(await FS.readJson(`${output}.tao-module-links.json`)).toEqual({
+        version: 1,
+        links: [{ relativePath: 'node_modules', target: hostModules }],
+      })
+
+      await withGeneratedModuleLinks(output, root, [], publish)
+      Expect((await FS.entryMetadata(link)).linkTarget).toBe(hostModules)
+      await FS.remove(link)
+      await withGeneratedModuleLinks(output, root, [], publish)
+      Expect((await FS.entryMetadata(link)).linkTarget).toBe(hostModules)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('refuses to replace an unowned generated host dependency path', async () => {
+    const root = await mkTestDir('tao-generated-dependencies-')
+    try {
+      const output = FS.resolvePath('host/_gen_tao-app', root)
+      const occupied = FS.resolvePath('node_modules', output)
+      await FS.writeText(occupied, 'private')
+      await Expect(withGeneratedModuleLinks(output, root, [], async () => {}))
+        .rejects.toThrow('Generated module link path is occupied')
+      Expect(await FS.readText(occupied)).toBe('private')
+      Expect(await FS.isFile(`${output}.tao-module-links.json`)).toBe(false)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('serializes concurrent publication with the generated module link and its ownership manifest', async () => {
+    const root = await mkTestDir('tao-generated-dependencies-')
+    const output = FS.resolvePath('host/_gen_tao-app', root)
+    const link = FS.resolvePath('node_modules', output)
+    const firstEntered = Deferred()
+    const releaseFirst = Deferred()
+    const secondEntered = Deferred()
+    const releaseSecond = Deferred()
+    let secondPublishing = false
+    let firstRun: Promise<void> | undefined
+    let secondRun: Promise<void> | undefined
+    try {
+      firstRun = withGeneratedModuleLinks(output, root, [], async () => {
+        firstEntered.resolve()
+        await releaseFirst.promise
+        await FS.writeText(FS.resolvePath('App.tsx', output), 'first')
+      })
+      await Promise.race([firstEntered.promise, firstRun])
+      secondRun = withGeneratedModuleLinks(output, root, [], async () => {
+        secondPublishing = true
+        secondEntered.resolve()
+        await releaseSecond.promise
+        await FS.writeText(FS.resolvePath('App.tsx', output), 'second')
+      })
+
+      const lockDirectory = ProjectLocal.cacheResolve('locks', root)
+      const lockHeld = await FS.isDirectory(lockDirectory)
+        && (await FS.listDir(lockDirectory)).some(name => name.endsWith('.tao-file-mutation.lock'))
+      if (!lockHeld) {
+        await Promise.race([secondEntered.promise, secondRun])
+      }
+      Expect(secondPublishing).toBe(false)
+
+      releaseFirst.resolve()
+      await firstRun
+      releaseSecond.resolve()
+      await secondRun
+      Expect(await FS.readText(FS.resolvePath('App.tsx', output))).toBe('second')
+      Expect((await FS.entryMetadata(link)).linkTarget).toBe(RuntimeToolchainPaths.dependencyRoot())
+      Expect(await FS.readJson(`${output}.tao-module-links.json`)).toEqual({
+        version: 1,
+        links: [{ relativePath: 'node_modules', target: RuntimeToolchainPaths.dependencyRoot() }],
+      })
+    } finally {
+      releaseFirst.resolve()
+      releaseSecond.resolve()
+      await Promise.allSettled([firstRun, secondRun].filter((run): run is Promise<void> => run !== undefined))
+      await FS.remove(root)
+    }
+  })
+
   Test('rejects incorrect direct dependency identity, range, and exact pin before publication', async () => {
     const root = await mkTestDir('tao-generated-dependencies-')
     try {
@@ -28,7 +122,7 @@ Describe('generated dependency modules', () => {
       await Expect(withGeneratedModuleLinks(output, root, [environment], publish))
         .rejects.toThrow('requires ^1')
       await FS.writeJson(manifest, { name: 'real-util', version: '1.1.0' })
-      await FS.writeJson(FS.resolvePath('.tao/lock.jsonc', root), {
+      await FS.writeJson(FS.resolvePath('.tao/store/lock.jsonc', root), {
         installs: {
           environments: {
             root: {
@@ -134,7 +228,7 @@ Describe('generated dependency modules', () => {
         })
       })
       Expect(await FS.isSymbolicLink(aLink)).toBe(false)
-      Expect(await FS.isSymbolicLink(directLink)).toBe(false)
+      Expect((await FS.entryMetadata(directLink)).linkTarget).toBe(RuntimeToolchainPaths.dependencyRoot())
       Expect(await FS.isSymbolicLink(bLink)).toBe(true)
       Expect(await FS.isFile(FS.resolvePath('same/package.json', aModules))).toBe(true)
     } finally {
@@ -225,7 +319,7 @@ Describe('generated dependency modules', () => {
       await FS.mkdir(FS.dirname(foreignLink))
       await FS.symlink(directModules, foreignLink)
       await withGeneratedModuleLinks(output, requester, [], async () => {}, durable)
-      Expect(await FS.isSymbolicLink(directLink)).toBe(false)
+      Expect((await FS.entryMetadata(directLink)).linkTarget).toBe(RuntimeToolchainPaths.dependencyRoot())
       Expect(await FS.isSymbolicLink(privateLink)).toBe(false)
       Expect((await FS.entryMetadata(foreignLink)).linkTarget).toBe(directModules)
 

@@ -1,6 +1,7 @@
 import { Langium } from './langium-exports'
 import type { PackageResolver } from './package-resolver'
 import * as AST from './parserASTExport'
+import { quotedTextImport } from './quoted-render'
 
 type BuildCacheResolver = PackageResolver & {
   clearPhysicalPathCache?: () => void
@@ -43,7 +44,21 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     }
     const builder = coreServices.shared.workspace.DocumentBuilder
     builder.onUpdate(forgetBuildCaches)
-    builder.onBuildPhase(Langium.DocumentState.Parsed, forgetBuildCaches)
+    builder.onBuildPhase(Langium.DocumentState.Parsed, () => {
+      forgetBuildCaches()
+      // A wildcard has no authored reference to trigger getScope. Populate its authoritative
+      // targets after parsing so query inference and source actions also see unused imports.
+      for (const document of coreServices.shared.workspace.LangiumDocuments.all) {
+        const file = document.parseResult.value
+        if (AST.isTaoFile(file)) {
+          for (const statement of file.statements) {
+            if (AST.isUseStatement(statement) && statement.all) {
+              this.collectTargetDeclarations(statement, document.uri.path)
+            }
+          }
+        }
+      }
+    })
   }
 
   /** getScope returns Tao values visible to a value reference. */
@@ -125,6 +140,19 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       return this.createPackageMemberScope(context.container)
     }
     if (context.property === 'view' && AST.isRender(context.container)) {
+      if (AST.isQuotedRender(context.container)) {
+        const workspaceFiles = Array.from(this.coreServices.shared.workspace.LangiumDocuments.all)
+          .map(document => document.parseResult.value).filter(AST.isTaoFile)
+        return this.createScopeForNodes(
+          this.packages.collectTargetDeclarations(quotedTextImport(), {
+            fromFilePath: AST.getDocument(context.container).uri.path,
+            workspaceFiles,
+          }).filter(declaration =>
+            AST.isViewDeclaration(declaration) && declaration.name === 'Text'
+            && AST.getDocument(declaration).uri.path.endsWith('/@tao/ui/Views.tao')
+          ),
+        )
+      }
       return this.createViewScope(context.container)
     }
     if (context.property === 'view' && AST.isScenarioRenderClause(container)) {
@@ -798,7 +826,10 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     for (const useStatement of root.statements.filter(AST.isUseStatement)) {
       const importedNames = new Set(useStatement.importedDeclarations.map(reference => reference.$refText))
       for (const statement of this.collectTargetDeclarations(useStatement, currentPath)) {
-        if (AST.isDeclaration(statement) && isDeclaration(statement) && importedNames.has(importedName(statement))) {
+        if (
+          AST.isDeclaration(statement) && isDeclaration(statement)
+          && (useStatement.all || importedNames.has(importedName(statement)))
+        ) {
           declarations.push(statement)
         }
       }

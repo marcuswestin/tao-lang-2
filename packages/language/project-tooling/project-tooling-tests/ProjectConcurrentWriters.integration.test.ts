@@ -48,8 +48,8 @@ Describe('project tooling concurrent process publication', () => {
         })
       )
       const contractPath = FS.resolvePath('.tao-ts/Main.tao.ts', root)
-      const manifestPath = FS.resolvePath('.tao/typescript/outputs.json', root)
-      const lockPath = FS.resolvePath('.tao/ts-gen-lock.tao-file-mutation.lock', root)
+      const manifestPath = FS.resolvePath('.tao/cache/typescript/outputs.json', root)
+      const lockPath = FS.resolvePath('.tao/cache/locks/ts-gen-lock.tao-file-mutation.lock', root)
       const handwrittenPath = paths['.tao-ts/Handwritten.ts']
       let firstContract: string | undefined
       try {
@@ -85,7 +85,7 @@ Describe('project tooling concurrent process publication', () => {
             Expect(results.every(result =>
               result.status === 'stale'
               && result.diagnostics.some(diagnostic =>
-                diagnostic.filePath === paths['Main.tao'] && diagnostic.code === 'TS1360'
+                diagnostic.filePath === paths['Main.tao'] && diagnostic.code === 'TS2344'
               )
             )).toBe(true)
           } else {
@@ -115,9 +115,9 @@ Describe('project tooling concurrent process publication', () => {
           if (phase === 0) {
             const rootConfig = await FS.readJson<{ extends: string }>(FS.resolvePath('tsconfig.json', root))
             const generatedConfig = await FS.readJson<{ compilerOptions: { noEmit: boolean } }>(
-              FS.resolvePath('.tao/typescript/tsconfig.json', root),
+              FS.resolvePath('.tao/cache/typescript/tsconfig.json', root),
             )
-            Expect(rootConfig.extends).toBe('./.tao/typescript/tsconfig.json')
+            Expect(rootConfig.extends).toBe('./.tao/cache/typescript/tsconfig.json')
             Expect(generatedConfig.compilerOptions.noEmit).toBe(true)
             await FS.writeText(
               paths['Words.ts'],

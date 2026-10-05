@@ -1,5 +1,5 @@
 import { CLI, Errors, FS, Repo } from '@shared'
-import { Describe, Expect, mkTestDir, Test, until } from '@shared/test'
+import { Describe, Expect, mkTestDir, Test, until, withCapturedOutput } from '@shared/test'
 import { GateCatalog } from '@verification/GateCatalog'
 import { MachineLanes } from '@verification/MachineLanes'
 import { StudioSmoke } from '../studio-tooling-src/StudioSmoke'
@@ -8,14 +8,18 @@ Describe('Studio smoke port leases', () => {
   Test('releases standalone gui when port setup fails before the child starts', async () => {
     const registryRoot = await mkTestDir('tao-studio-native-gui-setup-')
     try {
-      await Expect(StudioSmoke.run({
-        files: ['unused.test.ts'],
-        native: true,
-        portsAvailable: async () => Errors.throwHostEnvironment('port probe interrupted'),
-        registryRoot,
-        runId: 'native-gui-setup-test',
-        shardIndex: 5,
-      })).rejects.toThrow('port probe interrupted')
+      const captured = await withCapturedOutput(async () =>
+        await Expect(StudioSmoke.run({
+          files: ['unused.test.ts'],
+          native: true,
+          showStudio: true,
+          portsAvailable: async () => Errors.throwHostEnvironment('port probe interrupted'),
+          registryRoot,
+          runId: 'native-gui-setup-test',
+          shardIndex: 5,
+        })).rejects.toThrow('port probe interrupted')
+      )
+      Expect(captured.stderr).toContain('WARNING: Native Studio tests open Electrobun windows.')
       const after = await MachineLanes.tryAcquireResource({ name: GateCatalog.GUI_RESOURCE, registryRoot })
       Expect(after).toBeDefined()
       await after?.release()
@@ -44,20 +48,25 @@ Describe('Studio smoke port leases', () => {
       })
     `,
     )
-    const pending = StudioSmoke.run({
-      files: [testPath],
-      native: true,
-      portsAvailable: async () => true,
-      registryRoot,
-      runId,
-      shardIndex: 5,
-      workerIndex: 3,
-    })
+    const pending = withCapturedOutput(() =>
+      StudioSmoke.run({
+        files: [testPath],
+        native: true,
+        showStudio: true,
+        portsAvailable: async () => true,
+        registryRoot,
+        runId,
+        shardIndex: 5,
+        workerIndex: 3,
+      })
+    )
     try {
       await until(async () => await FS.exists(readyPath), { description: 'standalone native smoke child to start' })
       Expect(await MachineLanes.tryAcquireResource({ name: GateCatalog.GUI_RESOURCE, registryRoot })).toBeUndefined()
       await FS.writeText(releasePath, '')
-      Expect(await pending).toBe(0)
+      const captured = await pending
+      Expect(captured.result).toBe(0)
+      Expect(captured.stderr).toContain('WARNING: Native Studio tests open Electrobun windows.')
       const after = await MachineLanes.tryAcquireResource({ name: GateCatalog.GUI_RESOURCE, registryRoot })
       Expect(after).toBeDefined()
       await after?.release()

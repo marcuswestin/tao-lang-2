@@ -72,7 +72,7 @@ export function parseScenarioPanelCommand(name: string, payload: string): Studio
     || !Number.isInteger(input['cellRevision'])
     || (input['cellRevision'] as number) < 0
   ) {
-    Errors.throwUserInput('Tao Studio scenario actions require the active cell identity and revision.')
+    Errors.throwUserInput('Tao Studio scenario actions require the focused cell identity and revision.')
   }
   const identity = { cellId: input['cellId'], cellRevision: input['cellRevision'] as number }
   if (name === 'scenario-apply-arguments' || name === 'scenario-save-arguments') {

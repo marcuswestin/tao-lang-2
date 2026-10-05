@@ -1,0 +1,12 @@
+use Clerk from @tao/auth/clerk
+
+// Deploy the generated Jazz schema and permissions to the same AppId before running the app.
+public
+type Jazz is datasource with {
+   AppId text
+   ServerURL text?
+   accepts { IdentityToken from Clerk }
+   supports { }
+
+   provider JazzProvider from ./Jazz.ts
+}

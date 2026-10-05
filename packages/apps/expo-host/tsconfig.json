@@ -4,7 +4,7 @@
     "index.ts",
     "expo-host-src/**/*",
     "expo-host-tests/**/*",
-    "_gen_tao-app/**/*"
+    "../../../Apps/WordFlower/1 - Current/.tao/cache/_gen_tao-app/**/*"
   ],
   "exclude": [
     "**/node_modules/**/*"
@@ -17,6 +17,7 @@
     "incremental": false,
     "jsx": "react-jsx",
     "noEmit": true,
+    "rootDir": "../../..",
     "types": [
       "bun",
       "jest",

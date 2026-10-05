@@ -354,7 +354,7 @@ export class Type {
    * system, so nothing else silently widens a value into a list.
    */
   static isAssignableToSlot(actual: TaoType, expected: TaoType): boolean {
-    if (Type.isAssignable(actual, expected)) {
+    if (Type.isAssignableToConstruction(actual, expected)) {
       return true
     }
     return expected.kind === 'list' && expected.element !== undefined
@@ -384,6 +384,24 @@ export class Type {
       return false
     }
     return nominalOf(expected) ? actualSatisfiesExpectedNominal(actual, expected) : true
+  }
+
+  /**
+   * isAssignableToConstruction matches an unnamed constructor value to a field's declared
+   * contract. A scoped field retains its own identity for exact matching and member reads;
+   * constructing it can receive values admitted by its named parent contract. Inline primitive
+   * fields keep their scoped identity, and list elements still use ordinary upward admission.
+   */
+  static isAssignableToConstruction(actual: TaoType, expected: TaoType): boolean {
+    if (actual.kind === 'union') {
+      return actual.members.every(member => Type.isAssignableToConstruction(member, expected))
+    }
+    if (expected.kind === 'union') {
+      return expected.members.some(member => Type.isAssignableToConstruction(actual, member))
+    }
+    const nominal = nominalOf(expected)
+    const parent = nominal && AST.isTypeProperty(nominal) ? parentTypeDefinition(nominal) : undefined
+    return Type.isAssignable(actual, parent ? Type.ofDefinition(parent) : expected)
   }
 
   /** commonType returns a branch-safe type that every resolved input can satisfy. */
@@ -920,7 +938,7 @@ function actualSatisfiesExpectedNominal(actual: TaoType, expected: TaoType): boo
     return true
   }
   return actualNominal && expectedNominal
-    ? nominalChainsIntersect(actualNominal, expectedNominal)
+    ? nominalChain(actualNominal).includes(expectedNominal)
     : false
 }
 
@@ -1287,7 +1305,10 @@ class TypeResolutionContext {
     return this.withoutCycles(definition, () =>
       Switch.type(definition, {
         ParameterTypeDeclaration: declaration => {
-          const declared = withNominal(this.ofTypeExpression(declaration.type), declaration)
+          const underlying = this.ofTypeExpression(declaration.type)
+          const declared = AST.isNamedTypeReference(declaration.type)
+            ? underlying
+            : withNominal(underlying, declaration)
           return declaration.optional
             ? { kind: 'union', members: [declared, primitiveType('none')] }
             : declared
@@ -1416,11 +1437,6 @@ function canCarryNominal(
   type: TaoType,
 ): type is Extract<TaoType, { kind: 'primitive' | 'list' | 'item' }> {
   return isPrimitiveKind(type) || type.kind === 'list' || isItemKind(type)
-}
-
-function nominalChainsIntersect(left: AST.TypeDefinition, right: AST.TypeDefinition): boolean {
-  const rightChain = new Set(nominalChain(right))
-  return nominalChain(left).some(definition => rightChain.has(definition))
 }
 
 function nominalChain(definition: AST.TypeDefinition): AST.TypeDefinition[] {

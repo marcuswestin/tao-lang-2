@@ -5,6 +5,28 @@ import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 const DISPATCHER = Repo.resolvePath('packages/cli/agent-cli/agent-cli-src/cli/agent-host-dispatch.ts')
 
 Describe('named host command dispatch', () => {
+  Test('routes app-dev visibility through the owned-device wrapper', async () => {
+    const root = await mkTestDir('tao-app-dev-host-')
+    try {
+      const source = FS.resolvePath('permissions.jsonc', root)
+      const log = FS.resolvePath('dev.log', root)
+      await FS.writeText(source, '{ "agentHostCommands": ["app-dev"] }')
+      const dev = FS.resolvePath('dev', root)
+      await FS.writeText(dev, '#!/bin/sh\nprintf "%s\\n" "$@" > "$TAO_HOST_LOG"\n')
+      await FS.chmod(dev, 0o755)
+      const args = ['app-dev', 'Apps/Test Apps/Data MVP', '--app', 'DataMVPApp', '--web', '--show-browser']
+      const result = await CLI.run(Platform.runtimeProcess.execPath, {
+        args: [DISPATCHER, source, ...args],
+        cwd: root,
+        env: { TAO_HOST_LOG: log },
+      })
+      Expect(result.exitCode).toBe(0)
+      Expect((await FS.readText(log)).trim().split('\n')).toEqual(args)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('bounds Watchman management to fixed lifecycle actions', async () => {
     const root = await mkTestDir('tao-watchman-host-')
     try {
@@ -119,10 +141,10 @@ Describe('named host command dispatch', () => {
           },
         })
       Expect((await invoke(['start'])).exitCode).toBe(0)
-      Expect(await FS.readText(log)).toBe('-a\nDocker\n')
+      Expect(await FS.readText(log)).toBe('-g\n-a\nDocker\n')
       Expect((await invoke(['start', '-a', 'Terminal'])).exitCode).toBe(2)
       Expect((await invoke(['stop'])).exitCode).toBe(2)
-      Expect(await FS.readText(log)).toBe('-a\nDocker\n')
+      Expect(await FS.readText(log)).toBe('-g\n-a\nDocker\n')
       Expect((await invoke(['start'], '1')).exitCode).toBe(1)
     } finally {
       await FS.remove(root)
@@ -197,7 +219,7 @@ Describe('named host command dispatch', () => {
       const open = FS.resolvePath('open', bin)
       await FS.writeText(
         open,
-        '#!/usr/bin/env zsh\nprintf "%s\\n" "$*" >> "$TAO_HOST_LOG"\nif [[ "$2" == Simulator ]]; then exit 1; fi\n',
+        '#!/usr/bin/env zsh\nprintf "%s\\n" "$*" >> "$TAO_HOST_LOG"\nif [[ "$3" == Simulator ]]; then exit 1; fi\n',
       )
       await FS.chmod(open, 0o755)
       const result = await CLI.run(Platform.runtimeProcess.execPath, {
@@ -206,7 +228,7 @@ Describe('named host command dispatch', () => {
         env: { PATH: `${bin}:${Platform.runtimeProcess.env['PATH'] ?? ''}`, TAO_HOST_LOG: log },
       })
       Expect(result.exitCode).toBe(0)
-      Expect((await FS.readText(log)).trim().split('\n')).toEqual(['-a Simulator', '-a DeviceHub'])
+      Expect((await FS.readText(log)).trim().split('\n')).toEqual(['-g -a Simulator', '-g -a DeviceHub'])
     } finally {
       await FS.remove(root)
     }
@@ -228,7 +250,7 @@ Describe('named host command dispatch', () => {
       )
       await FS.writeText(
         open,
-        '#!/usr/bin/env zsh\nprintf "open:%s\\n" "$*" >> "$TAO_HOST_LOG"\nif [[ "$1" == -a && "$2" == Simulator ]]; then exit 1; fi\n',
+        '#!/usr/bin/env zsh\nprintf "open:%s\\n" "$*" >> "$TAO_HOST_LOG"\nif [[ "$2" == -a && "$3" == Simulator ]]; then exit 1; fi\n',
       )
       await FS.chmod(xcrun, 0o755)
       await FS.chmod(open, 0o755)
@@ -241,8 +263,8 @@ Describe('named host command dispatch', () => {
       Expect(result.exitCode).toBe(0)
       Expect((await FS.readText(log)).trim().split('\n')).toEqual([
         'xcrun:simctl boot SIM PRO/27',
-        'open:-a Simulator --args -CurrentDeviceUDID SIM PRO/27',
-        'open:devices://device/open?id=SIM%20PRO%2F27',
+        'open:-g -a Simulator --args -CurrentDeviceUDID SIM PRO/27',
+        'open:-g devices://device/open?id=SIM%20PRO%2F27',
       ])
     } finally {
       await FS.remove(root)

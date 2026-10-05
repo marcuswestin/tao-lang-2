@@ -4,8 +4,8 @@ Status: source implementation written. Release validation and acceptance are tra
 [the execution plan](../Roadmap/Plan%20-%20Tao%20projects%20modules%20and%20packages.md).
 
 The implemented package surface includes `@tao/text`, `@tao/time`, `@tao/linking`, and the curated
-`@tao/device/{haptic,clipboard,share}` capabilities, and requires parentheses on every view, action,
-and function declaration parameter list.
+`@tao/device/{haptic,clipboard,share}` capabilities. Zero-argument view declarations may omit `()`;
+argumentful views and every action/function declaration retain parentheses.
 
 `@tao/text` exports `CountWords(Value text)` and `Join(Values list of text, Separator text)`.
 `CountWords` trims and counts Unicode-whitespace-delimited words, returning zero for empty or
@@ -49,8 +49,8 @@ compiler-known names are involved.
 - The command writes the canonical layout of `Docs/Roadmap/Tao Revolution/Decisions.md` §1, as far
   as the toolchain runs it today: `App.tao` (app metadata and configuration), `Data.tao`, `Chrome.tao`,
   `Design.tao`, one folder per feature with a list and a detail scene, `Scenarios.tao`,
-  `<App>.test.tao`, `tsconfig.json` (extending the generated `.tao/typescript/tsconfig.json`), a tracked
-  `.tao/project.json` project identity, and the committed generated-Tao scaffold `@/.gitkeep`. The result is
+  `<App>.test.tao`, `tsconfig.json` (extending the generated `.tao/cache/typescript/tsconfig.json`), a tracked
+  `.tao/store/project.json` project identity, and the committed generated-Tao scaffold `@/.gitkeep`. The result is
   formatted, validated, and its behavior tests are run before the command reports success;
   `--skip-tests` skips only the test run.
 - The initial app `id` is also the directory name. `--id <id>` chooses it; otherwise it is suggested
@@ -119,7 +119,7 @@ scene ThreadUi(Message) {
 }
 ```
 
-A project is the nearest ancestor containing a `.tao/` directory. A tracked `.tao/project.json`
+A project is the nearest ancestor containing a `.tao/` directory. A tracked `.tao/store/project.json`
 contains an automatically generated project ID, retained across clones and build snapshots. The ID
 keeps persisted declaration origins independent of physical checkout paths. No special Tao filename or `project` declaration is
 required. Root Tao files may contain ordinary declarations, apps, and publications. Nested projects
@@ -157,6 +157,19 @@ collection import. Accessing a relationship such as `Workspace.Documents` does n
 import of the root `Documents` collection. Local declarations and implicitly visible `folder`
 declarations retain both names. Import organization and unused-import diagnostics track each
 imported form independently.
+
+`use all from Path` imports every public declaration from that target, including both names of
+public entity data. It supports the same relative, module and dependency paths as named imports;
+named imports retain their existing visibility rules. Wildcard imports never expose file, folder
+or module-private declarations. Type and value names occupy separate namespaces. Every wildcard
+binding must be unambiguous, even when unused: collisions with local declarations or another import
+are errors. Import organization preserves the wildcard, and unused-import checks do not recommend
+removing individual exports from it. Generated runtime imports include only referenced values.
+
+```tao
+use all from @tao/ui
+use all from ./PublicData
+```
 
 The UI presents first-class
 view values; bare `@tao/nav` selects the native kit, so `StackNav` owns the corresponding native
@@ -430,29 +443,54 @@ supports npm's native aliases, package exports, and subpaths. `tao install` defa
 publications; explicit selection preserves unrelated installations. Remote Tao fetching, publishing,
 and Companion URL installation remain deferred.
 
+Installation reports its active phases, elapsed timings, and npm invocation count. It delegates
+checking and repairing each selected npm installation to npm, including on repeated installs.
+Repeated installs preserve unchanged managed manifests and alias links. npm uses its ordinary
+cache and lock behavior; Tao does not maintain a separate installation-validity cache.
+
 Checks and runtime publication validate each selected installed alias against its declared package
 name and version range, and against its exact pin when recorded in the shared Tao lock. A compatible
 package installed under the wrong alias identity cannot substitute for the declared dependency.
+The lock keys each install environment by its project root relative to the locking project, so a
+committed lock reads the same in every checkout and `tao install` reuses its pins anywhere.
+A missing or mismatched install fails with a diagnostic that names the `tao install` command to run.
+Before `tao run`, `watch`, `build`, `compile`, `ship`, or `test` compiles a project in an interactive
+terminal, Tao offers to run `tao install` when the project's lock pins packages that are not
+installed. Declining, or running without a terminal, leaves the compile to report them; aliases a
+source declares that no lock pins yet surface only through that diagnostic.
+
+## The `.tao` folder
+
+The project `.tao/` contains exactly `.gitignore`, committed `store/`, ignored `local/`, and ignored
+`cache/`. Stable project identity lives at `.tao/store/project.json`; the shared Tao lock lives at
+`.tao/store/lock.jsonc`. Managed package installs live under `.tao/cache/install/` and generated
+TypeScript configuration under `.tao/cache/typescript/`. Temporary files and locks, including the
+TypeScript generation lock at `.tao/cache/locks/ts-gen-lock`, live under cache.
 
 ## Tooling files and TypeScript
 
 ```text
 project/
   .tao/
-    project.json              tracked stable project identity
-    lock.jsonc                shared Tao lock: installs, ship, toolchain concerns
-    typescript/tsconfig.json  generated TypeScript base
-    install/                  managed installation metadata
-  .tao-ts/                    generated TypeScript contracts and checks
-  node_modules/               native installed dependencies
-  tsconfig.json               developer configuration
+    .gitignore               ignores local/ and cache/
+    store/
+      project.json           tracked stable project identity
+      lock.jsonc             shared Tao lock: installs, ship, toolchain concerns
+    local/                   developer state for this project
+    cache/
+      install/                managed package installations
+      typescript/tsconfig.json  generated TypeScript base
+      locks/ts-gen-lock      TypeScript generation lock
+  .tao-ts/                   generated TypeScript contracts and checks
+  node_modules/              native installed dependencies
+  tsconfig.json              developer configuration
   App.tao
   @ui/
     Drawer.tao
-    Drawer.ts                 handwritten implementation
+    Drawer.ts                handwritten implementation
 ```
 
-The initial root configuration contains only `{"extends":"./.tao/typescript/tsconfig.json"}`.
+The initial root configuration contains only `{"extends":"./.tao/cache/typescript/tsconfig.json"}`.
 Developer overrides are preserved; incompatible overrides are diagnosed. The checker and editor
 use the same native TypeScript configuration for strictness, source selection, and import resolution.
 Required overlay and implementation-check options cannot be disabled.

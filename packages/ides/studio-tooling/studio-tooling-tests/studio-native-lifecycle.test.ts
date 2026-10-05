@@ -95,7 +95,9 @@ Describe('Studio native bounded lifecycle', () => {
     const removed: Platform.ProcessSignal[] = []
 
     await Expect(StudioNative.start({
+      nativeHostCommand: 'studio-test',
       previewUrl: 'http://127.0.0.1:8081',
+      showStudio: true,
       studioUrl: 'http://127.0.0.1:55101',
     }, {
       nativeHost: {

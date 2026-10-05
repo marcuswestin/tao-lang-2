@@ -1,3 +1,5 @@
+import { EmittedModuleCache } from '@compiler/compiler'
+import { Workspace } from '@compiler/workspace'
 import Runtime from '@expo-host'
 import { ProjectTooling, type ProjectToolingWatch } from '@project-tooling'
 import { Assert, Errors, FS, HCI, Switch } from '@shared'
@@ -12,6 +14,7 @@ import { StudioProjectSession, type StudioProjectSessionOptions } from './Studio
 import { reactiveBrowserSchemeCapability, type StudioJsonObject, type StudioJsonValue } from './StudioProtocol'
 
 export type OpenStudioPreviewSessionOptions = Omit<StudioProjectSessionOptions, 'compile'> & {
+  previewPublication?: 'on' | 'off'
   previewRuntimeRoot: string
   validationMode?: 'development' | 'release'
 }
@@ -26,6 +29,10 @@ export async function openStudioPreviewSession(
   options: OpenStudioPreviewSessionOptions,
 ): Promise<StudioPreviewSession> {
   let session: StudioProjectSession | undefined
+  let previewWorkspace: Workspace | undefined
+  let previewWorkspaceFiles: string | undefined
+  const emittedModuleCache = new EmittedModuleCache()
+  const sourceChanges = new Map<string, { version: string; epoch: number }>()
   let toolingWatch: ProjectToolingWatch | undefined
   session = await StudioProjectSession.open({
     ...options,
@@ -47,17 +54,56 @@ export async function openStudioPreviewSession(
       for (const [path, source] of Object.entries(sourceOverrides ?? {})) {
         sourceVersions[FS.relativePath(request.project, path)] = SourceActions.studioSourceVersion(source)
       }
+      const sourceEpochs: Record<string, number> = {}
+      for (const [path, version] of Object.entries(sourceVersions)) {
+        const previous = sourceChanges.get(path)
+        const epoch = previous?.version === version ? previous.epoch : request.compileRevision
+        sourceChanges.set(path, { version, epoch })
+        sourceEpochs[path] = epoch
+      }
+      for (const path of sourceChanges.keys()) {
+        if (!(path in sourceVersions)) {
+          sourceChanges.delete(path)
+        }
+      }
+      if (sourceOverrides === undefined) {
+        // A workspace indexes the project's `@` packages when it opens, so a Tao file added, removed,
+        // or renamed (a new package above all) needs a fresh one. Edits to known files reuse it.
+        const filePaths = files.map(file => file.path).toSorted().join('\n')
+        if (previewWorkspace === undefined || filePaths !== previewWorkspaceFiles) {
+          previewWorkspace = await Workspace.open(request.project)
+          previewWorkspaceFiles = filePaths
+        }
+      }
       const generated = await Runtime.generateApp(session.entryPath, {
         appName: request.appName,
         preview: {
+          publicationChecks: options.previewPublication !== 'off',
           project: request.project,
           revision: request.compileRevision,
           sourceOverrides,
           sourceVersions,
+          sourceEpochs,
         },
         runtimePackageRoot: options.previewRuntimeRoot,
         validationMode: options.validationMode,
+        previewWorkspace,
+        emittedModuleCache,
       })
+      if (generated.emittedModuleCache !== undefined) {
+        const { hits, misses, files: emitted } = generated.emittedModuleCache
+        HCI.logProcessInfo(
+          'studio',
+          JSON.stringify({
+            type: 'studio-emitted-module-cache',
+            revision: request.compileRevision,
+            hits,
+            misses,
+            emitMs: emitted.reduce((sum, file) => sum + file.emitMs, 0),
+            totalMs: emitted.reduce((sum, file) => sum + file.totalMs, 0),
+          }),
+        )
+      }
       if (generated.studioManifest !== undefined && generated.preview !== undefined) {
         session.setMatrixManifest(matrixManifest(session, generated, request.compileRevision))
       }

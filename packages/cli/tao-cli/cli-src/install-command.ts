@@ -1,11 +1,12 @@
 import { Packages } from '@ast-utils'
+import { OutputText } from '@cli-kit/OutputText'
 import { CompilerDependencies, type DependencyEnvironment, type DependencySelection } from '@compiler'
 import { discoverProjectTaoFiles, Workspace } from '@compiler/workspace'
 import { type ProjectGraph, type ProjectRequirement } from '@parser'
-import { CLI, Diagnostics, Errors, FS, HCI, ProjectIdentity } from '@shared'
+import { CLI, Diagnostics, Errors, FS, HCI, ProjectIdentity, Time } from '@shared'
 import { ManagedInstallEnvironment } from './managed-install-environment'
 import { findTaoProjectSource } from './project-root'
-import { type InstallsLock, readProjectLock, writeProjectLock } from './ship-lock'
+import { installEnvironmentsByProjectRoot, type InstallsLock, readProjectLock, writeProjectLock } from './ship-lock'
 
 export type InstallOptions = HCI.OutputOptions & {
   appName?: string
@@ -14,7 +15,15 @@ export type InstallOptions = HCI.OutputOptions & {
 }
 
 type NpmRequirement = { alias: string; name: string; requested: string }
-type InstallDependencies = { installNpm?: (directory: string, consumerRoot: string) => Promise<void> }
+type InstallDependencies = {
+  installNpm?: (directory: string, consumerRoot: string, args: readonly string[]) => Promise<void>
+  nowMs?: () => number
+}
+type InstallProgress = {
+  npmInvocations: number
+  run<T>(phase: string, announcement: string, work: () => Promise<T>): Promise<T>
+  say(message: string): void
+}
 
 /** Install selected npm requirements in namespaces owned by each physical Tao project. */
 export async function runTaoInstall(
@@ -26,52 +35,106 @@ export async function runTaoInstall(
     Errors.throwUserInput('Select one --app, --publication, or --default-publication for a scoped install.')
   }
   const say = (message: string) => HCI.writeLine(message, options)
-  say(`Locating Tao project at ${FS.displayPath(targetPath)}...`)
-  const { root } = await findTaoProjectSource(targetPath)
-  say(`Preparing project ${FS.displayPath(root)}...`)
-  await ProjectIdentity.ensure(root)
-  say('Discovering Tao source files...')
-  const discovered = await discoverProjectTaoFiles(root)
-  const owners = await Promise.all(discovered.map(path => Packages.containingProjectRoot(FS.dirname(path))))
-  const sourcePaths = discovered.filter((_, index) => owners[index] === root)
-  if (sourcePaths.length === 0) {
-    Errors.throwUserInput(`No Tao source was found in ${root}.`)
+  const now = dependencies.nowMs ?? Time.nowMs
+  const started = now()
+  const progress: InstallProgress = {
+    npmInvocations: 0,
+    say,
+    async run<T>(phase: string, announcement: string, work: () => Promise<T>): Promise<T> {
+      say(`${announcement}...`)
+      const phaseStarted = now()
+      try {
+        const result = await work()
+        say(`Finished ${phase} (${OutputText.formatElapsed(Math.round(now() - phaseStarted))}).`)
+        return result
+      } catch (error) {
+        say(`Failed ${phase} after ${OutputText.formatElapsed(Math.round(now() - phaseStarted))}.`)
+        throw error
+      }
+    },
   }
-  say('Opening Tao workspace...')
-  const workspace = await Workspace.open(root)
-  say(`Validating ${sourcePaths.length} Tao source files...`)
-  const validation = await workspace.validateFiles(sourcePaths)
-  if (Diagnostics.hasError(validation.diagnostics)) {
-    Errors.throwUserInput(Diagnostics.errors(validation.diagnostics).map(item => item.message).join('\n'))
+  try {
+    const { root } = await progress.run(
+      'project location',
+      `Locating Tao project at ${FS.displayPath(targetPath)}`,
+      () => findTaoProjectSource(targetPath),
+    )
+    await progress.run(
+      'project preparation',
+      `Preparing project ${FS.displayPath(root)}`,
+      () => ProjectIdentity.ensure(root),
+    )
+    const sourcePaths = await progress.run('source discovery', 'Discovering Tao source files', async () => {
+      const discovered = await discoverProjectTaoFiles(root)
+      const owners = await Promise.all(discovered.map(path => Packages.containingProjectRoot(FS.dirname(path))))
+      const sourcePaths = discovered.filter((_, index) => owners[index] === root)
+      if (sourcePaths.length === 0) {
+        Errors.throwUserInput(`No Tao source was found in ${root}.`)
+      }
+      return sourcePaths
+    })
+    const workspace = await progress.run('workspace open', 'Opening Tao workspace', () => Workspace.open(root))
+    const validation = await progress.run(
+      'source validation',
+      `Validating ${sourcePaths.length} Tao source files`,
+      async () => {
+        const result = await workspace.validateFiles(sourcePaths)
+        if (Diagnostics.hasError(result.diagnostics)) {
+          Errors.throwUserInput(Diagnostics.errors(result.diagnostics).map(item => item.message).join('\n'))
+        }
+        return result
+      },
+    )
+    const { graph, selection, environments } = await progress.run(
+      'dependency resolution',
+      'Resolving app and package dependencies',
+      async () => {
+        const context = await Packages.createContext(root)
+        const graph = Packages.createResolver(context).projectGraph({
+          fromFilePath: sourcePaths[0]!,
+          workspaceFiles: validation.files.map(file => file.ast),
+        })
+        const selection = selectGraphSelection(graph, options)
+        return { graph, selection, environments: CompilerDependencies.collect(graph, selection) }
+      },
+    )
+    const previous = await progress.run('dependency lock read', 'Reading dependency lock', () => readProjectLock(root))
+    const installs: InstallsLock = {
+      lockfileVersion: 2,
+      environments: installEnvironmentsByProjectRoot(previous.installs?.environments ?? {}),
+      local: { ...previous.installs?.local },
+    }
+    for (const environment of environments) {
+      await progress.run(
+        `dependency preparation for ${FS.displayPath(environment.projectRoot)}`,
+        `Preparing dependencies for ${FS.displayPath(environment.projectRoot)}`,
+        () => ProjectIdentity.ensure(environment.projectRoot),
+      )
+      await installEnvironment(root, environment, installs, dependencies, progress)
+    }
+    await progress.run('local dependency recording', 'Recording local Tao dependencies', async () => {
+      const visited = new Set<string>()
+      for (const requirement of selectedRequirements(graph, selection)) {
+        recordLocalRequirements(root, requirement, installs.local, visited)
+      }
+    })
+    await progress.run(
+      'dependency lock write',
+      'Saving dependency lock',
+      () => writeProjectLock(root, { ...previous, installs }),
+    )
+    HCI.writeSuccess(
+      `Installed dependencies for ${FS.displayPath(root)} in ${OutputText.formatElapsed(Math.round(now() - started))} `
+        + `(${progress.npmInvocations} npm ${progress.npmInvocations === 1 ? 'invocation' : 'invocations'}).\n`,
+      options,
+    )
+  } catch (error) {
+    say(
+      `Install failed after ${OutputText.formatElapsed(Math.round(now() - started))} `
+        + `(${progress.npmInvocations} npm ${progress.npmInvocations === 1 ? 'invocation' : 'invocations'}).`,
+    )
+    throw error
   }
-  say('Resolving app and package dependencies...')
-  const context = await Packages.createContext(root)
-  const graph = Packages.createResolver(context).projectGraph({
-    fromFilePath: sourcePaths[0]!,
-    workspaceFiles: validation.files.map(file => file.ast),
-  })
-  const selection = selectGraphSelection(graph, options)
-  const environments = CompilerDependencies.collect(graph, selection)
-  say('Reading dependency lock...')
-  const previous = await readProjectLock(root)
-  const installs: InstallsLock = {
-    lockfileVersion: 2,
-    environments: { ...previous.installs?.environments },
-    local: { ...previous.installs?.local },
-  }
-  for (const environment of environments) {
-    say(`Preparing dependencies for ${FS.displayPath(environment.projectRoot)}...`)
-    await ProjectIdentity.ensure(environment.projectRoot)
-    await installEnvironment(root, environment, installs, dependencies, say)
-  }
-  say('Recording local Tao dependencies...')
-  const visited = new Set<string>()
-  for (const requirement of selectedRequirements(graph, selection)) {
-    recordLocalRequirements(root, requirement, installs.local, visited)
-  }
-  say('Saving dependency lock...')
-  await writeProjectLock(root, { ...previous, installs })
-  HCI.writeSuccess(`Installed dependencies for ${FS.displayPath(root)}.\n`, options)
 }
 
 function selectGraphSelection(graph: ProjectGraph, options: InstallOptions): DependencySelection {
@@ -148,12 +211,13 @@ async function installEnvironment(
   environment: DependencyEnvironment,
   installs: InstallsLock,
   dependencies: InstallDependencies,
-  say: (message: string) => void,
+  progress: InstallProgress,
 ): Promise<void> {
   const namespace = environment.namespace
-  const previous = installs.environments[namespace]
+  const projectRoot = FS.relativePath(consumerRoot, environment.projectRoot) || '.'
+  const previous = installs.environments[projectRoot]
   const entry: InstallsLock['environments'][string] = {
-    projectRoot: FS.relativePath(consumerRoot, environment.projectRoot) || '.',
+    projectRoot,
     npm: { ...previous?.npm },
     publications: environment.publications.map(item => ({ ...item })),
   }
@@ -176,14 +240,17 @@ async function installEnvironment(
       version,
       prior !== undefined,
       dependencies,
-      say,
+      progress,
     )
   }
-  installs.environments[namespace] = entry
+  installs.environments[projectRoot] = entry
   if (FS.resolvePath(environment.projectRoot) !== FS.resolvePath(consumerRoot) && environment.npm.length > 0) {
-    say(`Linking dependencies for ${FS.displayPath(environment.projectRoot)}...`)
     const link = ManagedInstallEnvironment.generatedModulesLink(consumerRoot, namespace)
-    await ensureManagedLink(modulesRoot, link, `generated dependency namespace '${namespace}'`)
+    await progress.run(
+      `dependency link for ${FS.displayPath(environment.projectRoot)}`,
+      `Linking dependencies for ${FS.displayPath(environment.projectRoot)}`,
+      () => ensureManagedLink(modulesRoot, link, `generated dependency namespace '${namespace}'`),
+    )
   }
 }
 
@@ -195,36 +262,55 @@ async function installNpmAlias(
   version: string,
   owned: boolean,
   dependencies: InstallDependencies,
-  say: (message: string) => void,
+  progress: InstallProgress,
 ): Promise<InstallsLock['environments'][string]['npm'][string]> {
   const packageLabel = `${item.name}@${version}${item.alias === item.name ? '' : ` as ${item.alias}`}`
-  say(`Preparing npm package ${packageLabel}...`)
   const directory = ManagedInstallEnvironment.packageRoot(consumerRoot, namespace, item.alias)
   const linkPath = FS.resolvePath(item.alias, modulesRoot)
   const installed = FS.resolvePath(`node_modules/${item.alias}`, directory)
-  if (owned) {
-    await verifyOwnedLink(linkPath, installed, item.alias)
-  } else if (await FS.exists(linkPath) || await FS.isSymbolicLink(linkPath)) {
-    Errors.throwUserInput(`Cannot install npm alias '${item.alias}': ${linkPath} is not Tao-managed.`)
-  }
-  await FS.writeJson(FS.resolvePath('package.json', directory), {
-    private: true,
-    dependencies: { [item.alias]: `npm:${item.name}@${version}` },
-  })
-  say(`Installing npm package ${packageLabel}...`)
-  if (dependencies.installNpm === undefined) {
-    await CLI.mustRun('npm', {
-      args: ['install', '--prefix', directory, '--no-audit', '--no-fund'],
-      cwd: consumerRoot,
-      stdio: 'stream',
-    })
-  } else {
-    await dependencies.installNpm(directory, consumerRoot)
-  }
-  const manifest = await FS.readJson<{ version: string }>(FS.resolvePath('package.json', installed))
-  say(`Linking npm alias ${item.alias} (${manifest.version})...`)
-  await FS.replaceSymlink(installed, linkPath)
-  return { name: item.name, requested: item.requested, version: manifest.version }
+  await progress.run(
+    `npm package preparation for ${packageLabel}`,
+    `Preparing npm package ${packageLabel}`,
+    async () => {
+      if (owned) {
+        await verifyOwnedLink(linkPath, installed, item.alias)
+      } else if (await FS.exists(linkPath) || await FS.isSymbolicLink(linkPath)) {
+        Errors.throwUserInput(`Cannot install npm alias '${item.alias}': ${linkPath} is not Tao-managed.`)
+      }
+      const manifestPath = FS.resolvePath('package.json', directory)
+      const manifest = `${
+        JSON.stringify({ private: true, dependencies: { [item.alias]: `npm:${item.name}@${version}` } }, null, 2)
+      }\n`
+      if (!await FS.exists(manifestPath) || await FS.readText(manifestPath) !== manifest) {
+        await FS.writeText(manifestPath, manifest)
+      }
+    },
+  )
+  const args = ['install', '--prefix', directory, '--no-audit', '--no-fund']
+  await progress.run(
+    `npm package ${packageLabel}`,
+    `Checking/installing npm package ${packageLabel}`,
+    async () => {
+      progress.npmInvocations++
+      if (dependencies.installNpm === undefined) {
+        await CLI.mustRun('npm', { args, cwd: consumerRoot, stdio: 'stream' })
+      } else {
+        await dependencies.installNpm(directory, consumerRoot, args)
+      }
+    },
+  )
+  const installedVersion = await progress.run(
+    `npm alias link ${item.alias}`,
+    `Linking npm alias ${item.alias}`,
+    async () => {
+      const manifest = await FS.readJson<{ version: string }>(FS.resolvePath('package.json', installed))
+      if (!await FS.isSymbolicLink(linkPath)) {
+        await FS.replaceSymlink(installed, linkPath)
+      }
+      return manifest.version
+    },
+  )
+  return { name: item.name, requested: item.requested, version: installedVersion }
 }
 
 async function verifyOwnedLink(linkPath: string, expected: string, alias: string): Promise<void> {
@@ -244,5 +330,7 @@ async function ensureManagedLink(target: string, link: string, label: string): P
       Errors.throwUserInput(`Cannot update ${label}: ${link} is not Tao-managed.`)
     }
   }
-  await FS.replaceSymlink(target, link)
+  if (!await FS.isSymbolicLink(link)) {
+    await FS.replaceSymlink(target, link)
+  }
 }

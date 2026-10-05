@@ -9,6 +9,7 @@ import {
 import * as nodeFs from 'node:fs/promises'
 import * as nodeOs from 'node:os'
 import * as nodePath from 'node:path'
+import { fileURLToPath as nodeFileURLToPath, pathToFileURL } from 'node:url'
 import { messageOf, throwUnexpected, UnexpectedBehaviorError } from './core/Errors'
 import * as Json from './core/Json'
 import { sleep } from './core/Time'
@@ -40,6 +41,16 @@ export function resolvePath(inputPath: string, cwd?: string): string {
   return cwd === undefined
     ? nodePath.resolve(normalizePathPart(inputPath))
     : nodePath.resolve(normalizePathPart(cwd), normalizePathPart(inputPath))
+}
+
+/** fileUrlToPath converts an import-resolved local module URL to a filesystem path. */
+export function fileUrlToPath(url: string): string {
+  return nodeFileURLToPath(url)
+}
+
+/** fileUrl converts a filesystem path into an escaped file URL for local module imports. */
+export function fileUrl(inputPath: string): string {
+  return pathToFileURL(inputPath).href
 }
 
 /**
@@ -321,6 +332,15 @@ export async function writeFile(inputPath: string, content: string | Uint8Array)
   await nodeFs.writeFile(inputPath, content)
 }
 
+/** writeExclusiveFile creates a new file without creating parents or replacing an existing entry. */
+export async function writeExclusiveFile(
+  inputPath: string,
+  content: string | Uint8Array,
+  options: WriteOptions = {},
+): Promise<void> {
+  await nodeFs.writeFile(inputPath, content, { flag: 'wx', mode: options.mode })
+}
+
 /** writeJson writes formatted JSON, creating parent directories. */
 export async function writeJson(inputPath: string, content: unknown, options: WriteOptions = {}): Promise<void> {
   await writeText(inputPath, `${JSON.stringify(content, null, 2)}\n`, options)
@@ -340,6 +360,17 @@ export async function mkdir(inputPath: string): Promise<void> {
 /** remove deletes a path recursively if it exists. */
 export async function remove(inputPath: string): Promise<void> {
   await nodeFs.rm(inputPath, { force: true, recursive: true })
+}
+
+/** Remove a directory only while it is empty; retain a concurrently added entry. */
+export async function removeEmptyDirectory(inputPath: string): Promise<void> {
+  try {
+    await nodeFs.rmdir(inputPath)
+  } catch (error) {
+    if (!['ENOENT', 'ENOTEMPTY', 'EEXIST'].includes(fileErrorCode(error) ?? '')) {
+      throw error
+    }
+  }
 }
 
 /** copyFile copies a file, creating the destination parent directory. */
@@ -862,6 +893,8 @@ type FileMutationProcessIdentity = {
 }
 
 type FileMutationLockOptions = {
+  /** Keep lock, owner, and reclaim files in this directory instead of beside the target. */
+  lockDirectory?: string
   beforeClaimPublish?: (lockPath: string, ownerPath: string) => Promise<void>
   beforeRelease?: () => Promise<void>
   beforeStaleReclaim?: (lockPath: string) => Promise<void>
@@ -883,7 +916,10 @@ export async function withFileMutationLock<Value>(
   await assertNoSymbolicLinkComponents(resolvedBoundary, resolvedTarget, 'mutation target')
   const canonicalBoundary = await realPath(resolvedBoundary)
   const canonicalTarget = resolvePath(relativePath(resolvedBoundary, resolvedTarget), canonicalBoundary)
-  const lockPath = `${canonicalTarget}.tao-file-mutation.lock`
+  const lockPath = options.lockDirectory === undefined
+    ? `${canonicalTarget}.tao-file-mutation.lock`
+    : resolvePath(`${sha256Hex(canonicalTarget)}.tao-file-mutation.lock`, options.lockDirectory)
+  await assertNoSymbolicLinkComponents(canonicalBoundary, lockPath, 'mutation lock')
   await mkdirWithinBoundary(dirname(lockPath), canonicalBoundary)
   return await withMutationLockFile(lockPath, work, options)
 }

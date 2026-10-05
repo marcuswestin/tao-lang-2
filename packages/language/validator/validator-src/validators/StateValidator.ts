@@ -213,7 +213,10 @@ function reportSetStatementTypes(setStatement: AST.SetStatement, ctx: Validation
     return
   }
 
-  if (!Type.isAssignable(actual, expected)) {
+  const accepts = setStatement.members.length > 0
+    ? Type.isAssignableToConstruction(actual, expected)
+    : Type.isAssignable(actual, expected)
+  if (!accepts) {
     ctx.error(
       setStatement.value,
       AST.isStateDeclaration(target) && setStatement.members.length === 0

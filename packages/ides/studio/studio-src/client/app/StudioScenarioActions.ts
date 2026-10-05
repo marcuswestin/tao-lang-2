@@ -5,7 +5,7 @@ import { StudioDialog } from '../StudioDialog'
 import {
   awaitPreviewJourneyRecordingAcknowledgement,
   revealCanvasNode,
-  type StudioActivePreview,
+  type StudioFocusedPreview,
   StudioJourneyRecorder,
   type StudioPreviewConnection,
 } from '../StudioMatrixView'
@@ -13,7 +13,7 @@ import { type StudioScenarioControlModel, StudioScenarioControls } from '../Stud
 import { parseScenarioPanelCommand, type StudioScenarioPanelCommand } from './StudioScenarioPanelCommand'
 
 export type StudioScenarioActionsDeps = Readonly<{
-  activePreview: StudioActivePreview
+  focusedPreview: StudioFocusedPreview
   apply: (envelope: StudioSourceActionEnvelope) => Promise<boolean>
   /** Whether a source mutation may start; when not, the status line already says why. */
   canMutate: () => boolean
@@ -22,7 +22,7 @@ export type StudioScenarioActionsDeps = Readonly<{
 }>
 
 /**
- * The scenario panel's commands against the active cell: remounting arguments, capturing fixtures,
+ * The scenario panel's commands against the focused cell: remounting arguments, capturing fixtures,
  * replaying captures, and recording journeys. A journey operation is numbered per preview so a
  * save that outlives a discard or a re-record cannot act on the wrong draft.
  */
@@ -39,13 +39,13 @@ export class StudioScenarioActions {
     return this.#journeyBusy.has(preview)
   }
 
-  /** Brings the active cell's fixture-name field into view for the Capture Fixture command. */
+  /** Brings the focused cell's fixture-name field into view for the Capture Fixture command. */
   focusCaptureFixture(): void {
-    const preview = this.#deps.activePreview.current()
+    const preview = this.#deps.focusedPreview.current()
     const input = preview?.scenarioControls?.querySelector<HTMLInputElement>('.studio-preview-fixture-name')
     if (preview === undefined || input === null || input === undefined) {
       this.#deps.status.dataset['state'] = 'error'
-      this.#deps.status.textContent = 'The active preview cell does not expose fixture capture controls.'
+      this.#deps.status.textContent = 'The focused preview cell does not expose fixture capture controls.'
       return
     }
     revealCanvasNode(preview.frame)
@@ -54,7 +54,7 @@ export class StudioScenarioActions {
 
   async execute(name: string, payload: string): Promise<void> {
     const command = parseScenarioPanelCommand(name, payload)
-    const preview = this.#deps.activePreview.current()
+    const preview = this.#deps.focusedPreview.current()
     const model = preview?.scenarioModel
     if (
       preview?.cell === undefined
@@ -78,12 +78,12 @@ export class StudioScenarioActions {
         }
         Assert.input(
           preview.reconfigureArguments,
-          'The active scenario cannot currently remount arguments.',
+          'The focused scenario cannot currently remount arguments.',
         )
         await preview.reconfigureArguments(checked.value)
       },
       'scenario-capture-fixture': async captured => {
-        Assert.input(preview.captureFixture, 'The active scenario cannot currently capture a fixture.')
+        Assert.input(preview.captureFixture, 'The focused scenario cannot currently capture a fixture.')
         await preview.captureFixture(captured.fixtureName)
       },
       'scenario-discard-journey': async () => this.#discardJourney(preview, model),
@@ -188,7 +188,7 @@ export class StudioScenarioActions {
       const proposal = await StudioApiClient.sourceActionProposal(action.value)
       if (
         !this.#isCurrentJourneyOperation(preview, operation)
-        || preview !== this.#deps.activePreview.current()
+        || preview !== this.#deps.focusedPreview.current()
         || preview.journeyRecording !== draft
       ) {
         return
@@ -229,7 +229,7 @@ export class StudioScenarioActions {
     }
     Assert.input(
       preview.replayRuntimeCapture,
-      'The active scenario cannot currently replay captured state.',
+      'The focused scenario cannot currently replay captured state.',
     )
     await preview.replayRuntimeCapture(replay.value)
   }

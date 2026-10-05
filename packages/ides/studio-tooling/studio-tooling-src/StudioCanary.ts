@@ -18,7 +18,10 @@ export const REQUIRED_CAPABILITIES = [
   'websocket',
 ] as const
 
-const DEFAULT_CANARY_PROJECT = { appName: 'HNReader', projectRoot: 'Apps/HNReader' }
+const DEFAULT_CANARY_PROJECT = {
+  appName: 'KeyboardNavigationAcceptance',
+  projectRoot: 'packages/ides/studio-tooling/studio-smoke/fixtures/runtime-keyboard-navigation',
+}
 
 export type CanaryTargetOptions = {
   appName?: string
@@ -26,8 +29,8 @@ export type CanaryTargetOptions = {
 }
 
 /**
- * Resolves the project and app the canary opens. The default HNReader project always selects
- * `HNReader`, including when `--project Apps/HNReader` is passed without `--app` — that project
+ * Resolves the project and app the canary opens. An explicitly selected HNReader project selects
+ * `HNReader` when passed without `--app` — that project
  * also ships `HNReaderStub`, so leaving the app unset is not deterministic.
  */
 export function resolveCanaryTarget(
@@ -39,8 +42,10 @@ export function resolveCanaryTarget(
     ? defaultProjectRoot
     : FS.resolvePath(options.projectRoot, repositoryRoot)
   const onDefaultProject = FS.slashPath(projectRoot) === FS.slashPath(defaultProjectRoot)
+  const onHNReader = FS.slashPath(projectRoot) === FS.slashPath(FS.resolvePath('Apps/HNReader', repositoryRoot))
   return {
-    appName: options.appName ?? (onDefaultProject ? DEFAULT_CANARY_PROJECT.appName : undefined),
+    appName: options.appName
+      ?? (onDefaultProject ? DEFAULT_CANARY_PROJECT.appName : onHNReader ? 'HNReader' : undefined),
     projectRoot,
   }
 }
@@ -159,8 +164,9 @@ export function formatCanaryReport(report: CanaryReport): string {
 export async function survivingOwnedPids(
   launchId: string,
   repositoryRoot = Repo.getRoot(),
+  launchRecordsRoot?: string,
 ): Promise<number[]> {
-  const stored: StoredLaunch | undefined = (await readLaunches(repositoryRoot))
+  const stored: StoredLaunch | undefined = (await readLaunches(repositoryRoot, launchRecordsRoot))
     .find(launch => launch.manifest.launchId === launchId)
   if (stored === undefined) {
     return []

@@ -1,6 +1,6 @@
 import { DevDataServer } from '@expo-host/dev-loop/dev-data/DevDataServer'
 import { stopStudioProcessTree, type StudioProcessTree } from '@expo-host/dev-loop/StudioProcessTree'
-import { CLI, Errors, FS, Platform, ProjectDevSession, Repo, Time } from '@shared'
+import { CLI, Errors, FS, Platform, ProjectDevSession, ProjectLocal, Repo, Time } from '@shared'
 import { Deferred, Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import { startStudioSessionServer, StudioClientAssets, StudioDeviceGateway, StudioDeviceTrustStore } from '@studio'
 import { StudioBrowser } from '../studio-tooling-src/StudioBrowser'
@@ -704,7 +704,7 @@ Describe('Studio smoke resource isolation', () => {
 
     Expect(isStudioClientSource('/repo/Apps/Tao Studio/TaoStudioClient.tao.ts')).toBe(false)
     Expect(isStudioClientSource('/repo/Apps/Tao Studio/@code-editor/CodeEditor.tao.ts')).toBe(false)
-    Expect(isStudioClientSource('/repo/Apps/Tao Studio/.tao/bridge-check.tsconfig.json')).toBe(false)
+    Expect(isStudioClientSource('/repo/Apps/Tao Studio/.tao/cache/typescript/tsconfig.json')).toBe(false)
     Expect(isStudioClientSource('/repo/Apps/Tao Studio/TaoStudioClient.tao')).toBe(true)
     Expect(isStudioClientSource('/repo/Apps/Tao Studio/StudioServerDataProvider.ts')).toBe(true)
     Expect(isStudioClientSource('/repo/packages/ides/studio/studio-src/code-editor/CodeEditor.tsx')).toBe(true)
@@ -1034,7 +1034,7 @@ Describe('Studio smoke resource isolation', () => {
 
   Test('persists and reloads validated recent projects in device-local Studio state', async () => {
     const stateRoot = await mkTestDir('tao-studio-state-')
-    const statePath = FS.resolvePath('recent-projects.json', stateRoot)
+    const statePath = FS.resolvePath('studio/recent-projects.json', stateRoot)
     const store = createRecentProjectStore(statePath)
     const recent = [
       { appName: 'First', lastOpenedAt: '2026-08-30T12:00:00.000Z', project: '/projects/first' },
@@ -1054,7 +1054,7 @@ Describe('Studio smoke resource isolation', () => {
 
   Test('ignores malformed or unsupported recent-project state', async () => {
     const stateRoot = await mkTestDir('tao-studio-state-')
-    const statePath = FS.resolvePath('recent-projects.json', stateRoot)
+    const statePath = FS.resolvePath('studio/recent-projects.json', stateRoot)
     const store = createRecentProjectStore(statePath)
     try {
       await FS.writeText(statePath, '{not json')
@@ -1065,6 +1065,37 @@ Describe('Studio smoke resource isolation', () => {
         version: 1,
       })
       await Expect(store.load()).resolves.toEqual([])
+    } finally {
+      await FS.remove(stateRoot)
+    }
+  })
+
+  Test('merges concurrent recent-project stores from fresh disk state by project and app', async () => {
+    const stateRoot = await mkTestDir('tao-studio-state-')
+    const statePath = FS.resolvePath('studio/recent-projects.json', stateRoot)
+    const first = createRecentProjectStore(statePath)
+    const second = createRecentProjectStore(statePath)
+    const older = { appName: 'Notes', project: '/one', lastOpenedAt: '2026-10-01T12:00:00Z' }
+    const newer = { ...older, lastOpenedAt: '2026-10-03T12:00:00Z' }
+    const other = { appName: 'Notes', project: '/two', lastOpenedAt: '2026-10-02T12:00:00Z' }
+    try {
+      await Promise.all([first.save([older, other]), second.save([newer])])
+      await Promise.all([first.flush(), second.flush()])
+      Expect(await FS.readJson(statePath)).toEqual({ version: 1, recent: [newer, other] })
+      Expect(await FS.listDir(FS.resolvePath('studio', stateRoot))).toEqual(['recent-projects.json'])
+      Expect(await FS.listDir(FS.resolvePath('cache/studio/tmp', stateRoot))).toEqual([])
+      Expect(await FS.listDir(FS.resolvePath('cache/studio/locks', stateRoot))).toEqual([])
+
+      const thirteen = Array.from({ length: 13 }, (_, index) => ({
+        appName: `App${index}`,
+        project: `/project/${index}`,
+        lastOpenedAt: new Date(Date.UTC(2026, 9, 4, index)).toISOString(),
+      }))
+      await first.save(thirteen)
+      const capped = await first.load()
+      Expect(capped).toHaveLength(12)
+      Expect(capped[0]?.appName).toBe('App12')
+      Expect(capped.at(-1)?.appName).toBe('App1')
     } finally {
       await FS.remove(stateRoot)
     }
@@ -1222,6 +1253,7 @@ Describe('Studio smoke resource isolation', () => {
   Test('delivers the original classified startup failure to an in-process observer', async () => {
     const root = await mkTestDir('tao-studio-failure-observer-')
     const failures: unknown[] = []
+    const cleanupResults: unknown[] = []
     try {
       const captured = await withCapturedOutput(async () =>
         await runStudioDev({
@@ -1229,6 +1261,7 @@ Describe('Studio smoke resource isolation', () => {
           native: true,
           nativeHutchPath: FS.resolvePath('missing-hutch', root),
           onFailure: error => failures.push(error),
+          onCleanup: result => cleanupResults.push(result),
           projectRoot: Repo.getRoot(),
           userStateRoot: FS.resolvePath('user-state', root),
         })
@@ -1236,8 +1269,51 @@ Describe('Studio smoke resource isolation', () => {
 
       Expect(captured.result).toBe(1)
       Expect(failures).toHaveLength(1)
+      Expect(cleanupResults).toEqual([{ resourcesStopped: true }])
       Expect(failures[0]).toBeInstanceOf(Errors.UserInputError)
       Expect(Errors.messageOf(failures[0])).toContain('Hutch executable specified by --hutch was not found')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('keeps stop handlers installed through asynchronous cleanup and ignores repeated stop signals', async () => {
+    const root = await mkTestDir('tao-studio-cleanup-signals-')
+    const handlers = new Map<Platform.ProcessSignal, () => void>()
+    const removed: Platform.ProcessSignal[] = []
+    let handlersDuringCleanup = 0
+    let handlersAtObserver = 0
+    try {
+      const captured = await withCapturedOutput(() =>
+        runStudioDev({
+          native: true,
+          nativeHutchPath: FS.resolvePath('missing-hutch', root),
+          onFailure: () => {
+            void Promise.resolve().then(() => {
+              handlersDuringCleanup = handlers.size
+              handlers.get('SIGINT')?.()
+              handlers.get('SIGINT')?.()
+              handlers.get('SIGTERM')?.()
+            })
+          },
+          onCleanup: () => {
+            handlersAtObserver = handlers.size
+          },
+          projectRoot: Repo.getRoot(),
+          userStateRoot: FS.resolvePath('user-state', root),
+        }, (signal, listener) => {
+          handlers.set(signal, listener)
+          return () => {
+            handlers.delete(signal)
+            removed.push(signal)
+          }
+        })
+      )
+      Expect(captured.result).toBe(1)
+      Expect(handlersDuringCleanup).toBe(3)
+      Expect(handlersAtObserver).toBe(3)
+      Expect(handlers.size).toBe(0)
+      Expect(removed).toEqual(['SIGHUP', 'SIGINT', 'SIGTERM'])
     } finally {
       await FS.remove(root)
     }
@@ -1254,14 +1330,39 @@ Describe('Studio smoke resource isolation', () => {
       second = await StudioPreviewRuntime.create(sourceRoot, { artifactRoot })
       Expect(first.root === second.root).toBe(false)
       Expect(first.root.startsWith(`${artifactRoot}/`)).toBe(true)
+      // Expo resolves these local plugins from the generated project, not the source toolchain.
+      const config = await FS.readJson<{ expo: { plugins: unknown[] } }>(FS.resolvePath('app.json', first.root))
+      Expect(config.expo.plugins).toContain('./plugins/with-jazz-podfile-properties.cjs')
+      Expect(await FS.isFile(FS.resolvePath('plugins/with-jazz-podfile-properties.cjs', first.root))).toBe(true)
+      Expect(await FS.isFile(FS.resolvePath('plugins/with-ios-fmt-compat.cjs', first.root))).toBe(true)
       // Expo refuses to start a TypeScript project unless `typescript` resolves from its root, and the
       // repository hoists it above the linked package node_modules.
-      Expect(await FS.realPath(Bun.resolveSync('typescript/package.json', second.root))).toBe(
+      const nodeResolution = await CLI.run('node', {
+        args: ['-p', `require.resolve("typescript/package.json", { paths: [${JSON.stringify(second.root)}] })`],
+        cwd: second.root,
+      })
+      Expect(nodeResolution.exitCode).toBe(0)
+      Expect(await FS.realPath(nodeResolution.stdout.trim())).toBe(
         await FS.realPath(Repo.resolvePath('node_modules/typescript/package.json')),
       )
       Expect(await FS.readText(FS.resolvePath('index.ts', first.root))).toBe(
         await FS.readText(FS.resolvePath('index.ts', sourceRoot)),
       )
+      const stagedEntry = await FS.readText(FS.resolvePath('index.ts', first.root))
+      const markerImport = stagedEntry.match(/from ['"](.+ManagedLoopIdentityMarker)['"]/u)?.[1]
+      Expect(markerImport).toBe('./expo-host-src/ManagedLoopIdentityMarker')
+      const markerPath = Bun.resolveSync(markerImport!, first.root)
+      Expect(markerPath).toBe(FS.resolvePath('expo-host-src/ManagedLoopIdentityMarker.ts', first.root))
+      const markerModule = await import(markerPath)
+      const marker = markerModule.managedLoopIdentityMarker(
+        { nonce: 'studio-preview-nonce' },
+        'http://localhost/index.bundle',
+      )
+      Expect(JSON.parse(decodeURIComponent(marker.testID.slice('tao-managed-loop-identity.'.length)))).toEqual({
+        nonce: 'studio-preview-nonce',
+        devUrl: 'http://localhost/index.bundle',
+      })
+      Expect(marker.accessible).toBe(false)
       Expect(await FS.realPath(FS.resolvePath('node_modules', first.root))).toBe(
         await FS.realPath(FS.resolvePath('node_modules', sourceRoot)),
       )
@@ -1272,6 +1373,37 @@ Describe('Studio smoke resource isolation', () => {
       await first?.close()
       await second?.close()
       await FS.remove(artifactRoot)
+    }
+  })
+
+  Test('keeps concurrent preview runtimes inside the owning project cache', async () => {
+    const sourceRoot = Repo.resolvePath('packages/apps/expo-host')
+    const projectRoot = await mkTestDir('studio-preview-project-')
+    let first: Awaited<ReturnType<typeof StudioPreviewRuntime.create>> | undefined
+    let second: Awaited<ReturnType<typeof StudioPreviewRuntime.create>> | undefined
+    try {
+      first = await StudioPreviewRuntime.create(sourceRoot, { projectRoot })
+      second = await StudioPreviewRuntime.create(sourceRoot, { projectRoot })
+      const artifactRoot = ProjectLocal.cacheResolve('studio/runtimes', projectRoot)
+      Expect(first.root.startsWith(`${artifactRoot}/`)).toBe(true)
+      Expect(second.root.startsWith(`${artifactRoot}/`)).toBe(true)
+      Expect(first.root === second.root).toBe(false)
+      // Expo's dependency check resolves from the lexical project root, not Bun's module graph.
+      Expect(await FS.isFile(FS.resolvePath('node_modules/typescript/package.json', artifactRoot))).toBe(true)
+      const nodeResolution = await CLI.run('node', {
+        args: ['-p', `require.resolve("typescript/package.json", { paths: [${JSON.stringify(second.root)}] })`],
+        cwd: second.root,
+      })
+      Expect(nodeResolution.exitCode).toBe(0)
+      Expect(await FS.realPath(nodeResolution.stdout.trim())).toBe(
+        await FS.realPath(Repo.resolvePath('node_modules/typescript/package.json')),
+      )
+      await first.close()
+      Expect(await FS.isFile(FS.resolvePath('index.ts', second.root))).toBe(true)
+    } finally {
+      await first?.close()
+      await second?.close()
+      await FS.remove(projectRoot)
     }
   })
 

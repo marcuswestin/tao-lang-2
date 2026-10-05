@@ -3,7 +3,14 @@ import { Arrays } from './core/RuntimeCore'
 import { RuntimeAssert } from './TR-assert'
 import type { RuntimeAuthScope } from './TR-auth'
 import { createElement } from './TR-create-element'
-import type { TaoDataConnection, TaoDataProvider, TaoDataSchema, TaoFillOps, TaoFillRequest } from './TR-data'
+import type {
+  TaoDataConnection,
+  TaoDataProvider,
+  TaoDataSchema,
+  TaoDatasourceDeclaration,
+  TaoFillOps,
+  TaoFillRequest,
+} from './TR-data'
 import { entityHandle, metadataOf } from './TR-data-entity'
 import { UserInputError } from './TR-errors'
 import {
@@ -106,11 +113,30 @@ export type TaoStudioCellRuntime = Readonly<{
 }>
 
 type StudioHostContextValue = Readonly<{
+  declarationFor(base: TaoDatasourceDeclaration, provider: TaoDataProvider): TaoDatasourceDeclaration
+  fixtureApplications: FixtureApplication[]
+  fixtureAuthQueue: { current: Promise<void> }
+  fixtureRevision: { current: number }
   captureFixture(): Promise<TaoStudioFixturePlan>
   cell: TaoStudioCellRuntime
   providerFor(base: TaoDataProvider): TaoStudioProviderOverlay
   registerSchema(schema: TaoDataSchema): void
 }>
+
+type FixtureApplication = {
+  active: boolean
+  auth?: RuntimeAuthScope
+  boundTo: (TaoDatasourceDeclaration | undefined)[]
+  generations: number[]
+  appGenerations: number[]
+  preparingAuth: boolean
+  failure?: unknown
+  handles: Readonly<Record<string, unknown>>
+  listeners: Set<() => void>
+  ready: boolean
+  revision: number
+  schemas: readonly TaoDataSchema[]
+}
 
 export type TaoStudioActionStandInInvocation = Readonly<{
   arguments: readonly unknown[]
@@ -151,6 +177,25 @@ export const StudioEnvironmentControls = {
     const overlays = React.useMemo(() => new WeakMap<TaoDataProvider, TaoStudioProviderOverlay>(), [cell])
     const overlaySet = React.useMemo(() => new Set<TaoStudioProviderOverlay>(), [cell])
     const schemas = React.useMemo(() => new Set<TaoDataSchema>(), [cell])
+    const fixtureApplications = React.useMemo<FixtureApplication[]>(() => [], [cell])
+    const fixtureAuthQueue = React.useMemo(() => ({ current: Promise.resolve() }), [cell])
+    const fixtureRevision = React.useMemo(() => ({ current: 0 }), [cell])
+    const declarations = React.useMemo(
+      () => new WeakMap<TaoDatasourceDeclaration, WeakMap<TaoDataProvider, TaoDatasourceDeclaration>>(),
+      [cell],
+    )
+    React.useEffect(() => {
+      // A superseded cell can still have an async auth preparation in flight. Its fixture must not
+      // commit into stores now owned by the replacement cell after this Host leaves the tree.
+      for (const application of fixtureApplications) {
+        application.active = true
+      }
+      return () => {
+        for (const application of fixtureApplications) {
+          application.active = false
+        }
+      }
+    }, [fixtureApplications])
     const value = React.useMemo<StudioHostContextValue>(() => ({
       async captureFixture() {
         for (const schema of schemas) {
@@ -159,6 +204,25 @@ export const StudioEnvironmentControls = {
         return capturedFixture([...overlaySet], [...schemas])
       },
       cell,
+      declarationFor(base, provider) {
+        if (provider === base.provider) {
+          return base
+        }
+        let byProvider = declarations.get(base)
+        if (byProvider === undefined) {
+          byProvider = new WeakMap()
+          declarations.set(base, byProvider)
+        }
+        let wrapped = byProvider.get(provider)
+        if (wrapped === undefined) {
+          wrapped = Object.freeze({ ...base, provider })
+          byProvider.set(provider, wrapped)
+        }
+        return wrapped
+      },
+      fixtureApplications,
+      fixtureAuthQueue,
+      fixtureRevision,
       providerFor(base) {
         const existing = overlays.get(base)
         if (existing !== undefined) {
@@ -175,7 +239,7 @@ export const StudioEnvironmentControls = {
       registerSchema(schema) {
         schemas.add(schema)
       },
-    }), [cell, overlaySet, overlays, schemas])
+    }), [cell, declarations, fixtureApplications, fixtureAuthQueue, fixtureRevision, overlaySet, overlays, schemas])
     const scheme = schemeRequest(cell.environment.scheme)
     return createElement(
       SchemeControls.Provider,
@@ -188,6 +252,14 @@ export const StudioEnvironmentControls = {
   useProvider(base: TaoDataProvider): TaoDataProvider {
     const host = React.useContext(StudioHostContext)
     return host?.providerFor(base) ?? base
+  },
+
+  /** Keep one datasource wrapper while a generated app remounts under the same cell Host. */
+  useDatasourceDeclaration(base: TaoDatasourceDeclaration, provider: TaoDataProvider): TaoDatasourceDeclaration {
+    const host = React.useContext(StudioHostContext)
+    return React.useMemo(() =>
+      host?.declarationFor(base, provider)
+        ?? (provider === base.provider ? base : Object.freeze({ ...base, provider })), [base, host, provider])
   },
 
   /** useScenario exposes the generated host selection without making Studio durable runtime state. */
@@ -208,102 +280,44 @@ export const StudioEnvironmentControls = {
   /**
    * useFixture applies fixture creates and ordered prepare updates after datasource binding. An app
    * with several stores passes all of them: each create lands in the store that holds its entity, and
-   * each update in the store that holds the row it names.
+   * each update in the store that holds the row it names. `revision` changes whenever the fixture is
+   * applied again, so whatever captured the earlier handles can be rebuilt with the new ones.
    */
   useFixture(
     stores: TaoDataSchema | readonly TaoDataSchema[] | undefined,
     auth?: RuntimeAuthScope,
-  ): Readonly<{ handles: Readonly<Record<string, unknown>>; ready: boolean }> {
+  ): Readonly<{ handles: Readonly<Record<string, unknown>>; ready: boolean; revision: number }> {
     const host = React.useContext(StudioHostContext)
-    const applied = React.useRef(false)
-    const [failure, setFailure] = React.useState<unknown>(undefined)
-    if (failure !== undefined) {
-      throw failure
-    }
     const schemas = stores === undefined ? [] : Array.isArray(stores) ? stores : [stores as TaoDataSchema]
-    const [handles, setHandles] = React.useState<Readonly<Record<string, unknown>>>({})
-    const [ready, setReady] = React.useState(host === undefined || schemas.length === 0)
+    const application = React.useRef<FixtureApplication | undefined>(undefined)
+    const [, refresh] = React.useState(0)
+    // Checked after every commit, after the app root has bound its datasources. A hot-reloaded
+    // datasource module binds its stores to new declarations whose connections start empty, so the
+    // cell seeds them again from its fixture instead of showing an empty app. A store bound for the
+    // first time after seeding is not reseeded: its first connection carries the rows it already holds.
     React.useLayoutEffect(() => {
-      if (host === undefined || schemas.length === 0 || applied.current) {
+      if (host === undefined || schemas.length === 0) {
         return
       }
-      for (const schema of schemas) {
-        host.registerSchema(schema)
+      const next = fixtureApplication(host, schemas, auth)
+      if (application.current !== next) {
+        application.current = next
+        refresh(revision => revision + 1)
       }
-      applied.current = true
-      let active = true
-      const apply = async () => {
-        const resolved: Record<string, unknown> = {}
-        const fixture = host.cell.fixture
-        const usesAuth = auth !== undefined
-          && (fixture.accounts.length > 0 || fixture.signedIn !== undefined
-            || fixture.creates.some(create => create.account !== undefined))
-        for (const account of fixture.accounts) {
-          resolved[account.name] = resolveObject(account.fields, resolved)
-        }
-        if (usesAuth) {
-          Object.assign(
-            resolved,
-            await auth.prepareFixture({
-              accounts: fixture.accounts.map(account => ({
-                name: account.name,
-                fields: resolveObject(account.fields, resolved),
-              })),
-              ...(fixture.signedIn ? { signedIn: fixture.signedIn } : {}),
-            }, schemas),
-          )
-        }
-        try {
-          for (const create of host.cell.fixture.creates) {
-            RuntimeAssert.input(
-              create.through === undefined,
-              `Tao Studio fixture '${create.name}' uses through-action setup that this runtime cannot execute yet.`,
-              { fixture: create.name },
-            )
-            const store = schemas.find(schema => schema.definition.entities[create.entity] !== undefined)
-            RuntimeAssert.input(
-              store,
-              `Tao Studio fixture '${create.name}' creates ${create.entity}, which no store in this app holds.`,
-              { entity: create.entity, fixture: create.name },
-            )
-            resolved[create.name] = usesAuth
-              ? auth.fixtureCreate(
-                store,
-                create.entity,
-                resolveObject(create.fields, resolved),
-                create.account ?? fixture.signedIn,
-              )
-              : store.create(create.entity, resolveObject(create.fields, resolved))
-          }
-          for (const update of host.cell.scenario.prepare) {
-            const target = entityHandle(resolved[update.target])
-            RuntimeAssert.input(
-              target !== undefined,
-              `Tao Studio prepare target '${update.target}' was not created.`,
-              { target: update.target },
-            )
-            metadataOf(target).schema.update(target, resolveObject(update.fields, resolved))
-          }
-        } finally {
-          if (usesAuth) {
-            auth.finishFixture()
-          }
-        }
-        if (active) {
-          setHandles(Object.freeze({ ...resolved }))
-          setReady(true)
-        }
-      }
-      void apply().catch(error => {
-        if (active) {
-          setFailure(error)
-        }
-      })
+      const notify = () => refresh(revision => revision + 1)
+      next.listeners.add(notify)
       return () => {
-        active = false
+        next.listeners.delete(notify)
       }
-    }, [host, schemas.length, auth])
-    return { handles, ready }
+    })
+    if (application.current?.failure !== undefined) {
+      throw application.current.failure
+    }
+    return {
+      handles: application.current?.handles ?? {},
+      ready: host === undefined || schemas.length === 0 || application.current?.ready === true,
+      revision: application.current?.revision ?? 0,
+    }
   },
 
   /** Argument resolves fixture handles and wraps plain values for generated Tao view props. */
@@ -349,6 +363,162 @@ export const StudioEnvironmentControls = {
     return SchemeControls.resolve(schemeRequest(config), environment)
   },
 } as const
+
+/** One Host owns a fixture application even while its generated app child is replaced by Fast Refresh. */
+function fixtureApplication(
+  host: StudioHostContextValue,
+  schemas: readonly TaoDataSchema[],
+  auth: RuntimeAuthScope | undefined,
+): FixtureApplication {
+  const boundTo = schemas.map(schema => schema.boundDeclaration())
+  const generations = schemas.map(schema => schema.bindingGeneration())
+  const appGenerations = schemas.map(schema => schema.configuredAppBindingGeneration())
+  const index = host.fixtureApplications.findIndex(application =>
+    application.schemas.length === schemas.length
+    && application.schemas.every((schema, position) => schema === schemas[position])
+  )
+  const previous = host.fixtureApplications[index]
+  if (
+    previous && previous.auth === auth
+    && !boundTo.some((declaration, position) =>
+      previous.appGenerations[position] !== appGenerations[position]
+      || (previous.boundTo[position] !== undefined && !previous.preparingAuth
+        && (previous.boundTo[position] !== declaration || previous.generations[position] !== generations[position]))
+    )
+  ) {
+    previous.boundTo = boundTo.map((declaration, position) => previous.boundTo[position] ?? declaration)
+    previous.generations = generations
+    previous.appGenerations = appGenerations
+    return previous
+  }
+  if (previous) {
+    previous.active = false
+  }
+  for (const schema of schemas) {
+    host.registerSchema(schema)
+  }
+  const application: FixtureApplication = {
+    active: true,
+    auth,
+    boundTo,
+    generations,
+    appGenerations,
+    preparingAuth: false,
+    handles: {},
+    listeners: new Set(),
+    ready: false,
+    revision: ++host.fixtureRevision.current,
+    schemas: [...schemas],
+  }
+  if (index < 0) {
+    host.fixtureApplications.push(application)
+  } else {
+    host.fixtureApplications[index] = application
+  }
+  const run = () =>
+    applyFixture(host, application).catch(error => {
+      if (!application.active) {
+        return
+      }
+      application.failure = error
+      notifyFixtureApplication(application)
+    })
+  const fixture = host.cell.fixture
+  const usesAuth = auth !== undefined
+    && (fixture.accounts.length > 0 || fixture.signedIn !== undefined
+      || fixture.creates.some(create => create.account !== undefined))
+  if (usesAuth) {
+    // An older async auth preparation must finish before its replacement starts using that scope.
+    host.fixtureAuthQueue.current = host.fixtureAuthQueue.current.then(run, run)
+  } else {
+    void run()
+  }
+  return application
+}
+
+function notifyFixtureApplication(application: FixtureApplication): void {
+  for (const listener of application.listeners) {
+    listener()
+  }
+}
+
+async function applyFixture(host: StudioHostContextValue, application: FixtureApplication): Promise<void> {
+  if (!application.active) {
+    return
+  }
+  const schemas = application.schemas
+  const auth = application.auth
+  const fixture = host.cell.fixture
+  const usesAuth = auth !== undefined
+    && (fixture.accounts.length > 0 || fixture.signedIn !== undefined
+      || fixture.creates.some(create => create.account !== undefined))
+  const resolved: Record<string, unknown> = {}
+  for (const account of fixture.accounts) {
+    resolved[account.name] = resolveObject(account.fields, resolved)
+  }
+  let prepared = false
+  try {
+    if (usesAuth) {
+      application.preparingAuth = true
+      Object.assign(
+        resolved,
+        await auth.prepareFixture({
+          accounts: fixture.accounts.map(account => ({
+            name: account.name,
+            fields: resolveObject(account.fields, resolved),
+          })),
+          ...(fixture.signedIn ? { signedIn: fixture.signedIn } : {}),
+        }, schemas),
+      )
+      prepared = true
+      if (!application.active) {
+        return
+      }
+      application.boundTo = schemas.map(schema => schema.boundDeclaration())
+      application.generations = schemas.map(schema => schema.bindingGeneration())
+      application.appGenerations = schemas.map(schema => schema.configuredAppBindingGeneration())
+    }
+    for (const create of fixture.creates) {
+      RuntimeAssert.input(
+        create.through === undefined,
+        `Tao Studio fixture '${create.name}' uses through-action setup that this runtime cannot execute yet.`,
+        { fixture: create.name },
+      )
+      const store = schemas.find(schema => schema.definition.entities[create.entity] !== undefined)
+      RuntimeAssert.input(
+        store,
+        `Tao Studio fixture '${create.name}' creates ${create.entity}, which no store in this app holds.`,
+        { entity: create.entity, fixture: create.name },
+      )
+      resolved[create.name] = usesAuth
+        ? auth.fixtureCreate(
+          store,
+          create.entity,
+          resolveObject(create.fields, resolved),
+          create.account ?? fixture.signedIn,
+        )
+        : store.create(create.entity, resolveObject(create.fields, resolved))
+    }
+    for (const update of host.cell.scenario.prepare) {
+      const target = entityHandle(resolved[update.target])
+      RuntimeAssert.input(target !== undefined, `Tao Studio prepare target '${update.target}' was not created.`, {
+        target: update.target,
+      })
+      metadataOf(target).schema.update(target, resolveObject(update.fields, resolved))
+    }
+  } finally {
+    application.preparingAuth = false
+    if (usesAuth && prepared) {
+      auth.finishFixture()
+    }
+  }
+  if (!application.active) {
+    return
+  }
+  application.handles = Object.freeze({ ...resolved })
+  application.ready = true
+  notifyFixtureApplication(application)
+}
 
 function schemeRequest(config: TaoStudioSchemeConfig): TaoSchemeRequest {
   if (config.replay !== undefined) {

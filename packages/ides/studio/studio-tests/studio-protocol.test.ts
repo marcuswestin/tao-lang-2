@@ -803,3 +803,23 @@ Describe('Studio protocol v1', () => {
     Expect(StudioProtocol.messageOrigin('data:text/plain,preview')).toBe(undefined)
   })
 })
+
+Test('parses a preview mount without treating it as an applied publication', () => {
+  const identity = {
+    appName: 'Preview',
+    cellId: 'cell-1',
+    cellRevision: 1,
+    compileRevision: 2,
+    manifestRevision: 'manifest-2',
+    previewInstanceId: 'frame-1',
+    project: '/project',
+  }
+  const mounted = {
+    channel: studioProtocolChannel,
+    identity,
+    protocolVersion: studioProtocolVersion,
+    type: 'preview-mounted',
+  }
+  Expect(StudioProtocol.parseMessage(mounted)).toEqual(mounted)
+  Expect(StudioProtocol.parseMessage({ ...mounted, identity: { ...identity, previewInstanceId: '' } })).toBeUndefined()
+})

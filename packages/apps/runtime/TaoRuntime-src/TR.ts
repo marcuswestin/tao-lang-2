@@ -8,9 +8,11 @@ import {
   deferDetached,
   existingTransactionResource,
   markExternalEffect,
+  registerDeferredAction,
   resumeActionContinuation,
   runAction,
   runActionResult,
+  runActionScope,
   skippedActionRun,
   type TaoActionContinuation,
   type TaoActionReceipt,
@@ -66,6 +68,7 @@ import {
   type TaoHttpMatch,
   type TaoHttpShape,
 } from './TR-data-http'
+import { DataRows, type TaoDataRowOperation } from './TR-data-rows'
 import {
   SyncControls,
   type TaoChangeSet,
@@ -537,6 +540,16 @@ class TR {
     resumeActionContinuation(continuation)
   }
 
+  /** ActionScope joins one lexical action block before draining its cleanup. */
+  static ActionScope<T>(body: () => T | PromiseLike<T>): T | Promise<T> {
+    return runActionScope(body)
+  }
+
+  /** Defer registers cleanup with the current lexical action block. */
+  static Defer(body: () => unknown | PromiseLike<unknown>): void {
+    registerDeferredAction(body)
+  }
+
   /** ForeignAction adapts a named TypeScript effect and its declared Tao failure contract. */
   static ForeignAction<Args extends Array<TR.Evaluable | undefined>>(
     implementation: (...arguments_: any[]) => unknown,
@@ -574,6 +587,9 @@ class TR {
             throw error
           }
           const providerCase = providerFailureCase(error)
+          if (!providerCase) {
+            throw error
+          }
           const declared = failures.find(failure => actionFailureCaseName(failure.case) === providerCase)
           throw new TaoActionFailure(
             providerCase || (declared ? actionFailureCaseName(declared.case) : 'Unexpected'),
@@ -916,20 +932,44 @@ class TR {
     return TRTaoProps.TaoPropsControls.visualTag(props)
   }
 
-  /** VisualNativeProps lowers private Studio identity and a test tag onto an injected native root. */
+  /** VisualNativeProps lowers private occurrence identity, accessibility labels and a test tag onto a native root. */
   static VisualNativeProps(layout: TR.TaoVisualLayout | undefined, tag?: string): Record<string, unknown> {
     return TRTaoProps.TaoPropsControls.visualNativeProps(layout, tag)
   }
 
   /** VisualNativeRoot preserves filtered native controls while making their Studio occurrence selectable. */
   static VisualNativeRoot(layout: TR.TaoVisualLayout | undefined, child: React.ReactNode): React.ReactNode {
-    if (TRTaoProps.TaoPropsControls.visualRowRoot(layout)) {
-      return createElement(NativeVisualRowRoot, { child, layout })
+    const { accessibilityLabel, ...props } = TRTaoProps.TaoPropsControls.visualNativeProps(layout)
+    let nativeChild = child
+    if (accessibilityLabel !== undefined) {
+      const runtime = requireReactNativeRuntime() as ReturnType<typeof requireReactNativeRuntime> & {
+        Button?: React.ElementType
+      }
+      RuntimeAssert.input(
+        React.isValidElement(child)
+          && child.type !== React.Fragment
+          && (typeof child.type === 'string'
+            || [
+              runtime.ActivityIndicator,
+              runtime.Button,
+              runtime.Image,
+              runtime.Pressable,
+              runtime.ScrollView,
+              runtime.Switch,
+              runtime.Text,
+              runtime.TextInput,
+              runtime.View,
+            ].some(component => component !== undefined && component === child.type)),
+        'An accessibility label on an injected visual requires a supported native root; fragments and custom component roots cannot receive it.',
+      )
+      nativeChild = React.cloneElement(child as React.ReactElement<Record<string, unknown>>, { accessibilityLabel })
     }
-    const props = TRTaoProps.TaoPropsControls.visualNativeProps(layout)
+    if (TRTaoProps.TaoPropsControls.visualRowRoot(layout)) {
+      return createElement(NativeVisualRowRoot, { child: nativeChild, layout })
+    }
     return Object.keys(props).length === 0
-      ? child
-      : createElement(requireReactNativeRuntime().View, props, child)
+      ? nativeChild
+      : createElement(requireReactNativeRuntime().View, props, nativeChild)
   }
 
   /** setDevMode configures Tao runtime development-only diagnostics. */
@@ -983,6 +1023,9 @@ class TR {
 
   /** Data exposes provider-neutral reactive schemas, queries, and mutations. */
   static readonly Data = DataControls
+
+  /** DataRows translates snapshot commits into provider-neutral row writes. */
+  static readonly DataRows = DataRows
 
   /** Http is the adapter-authoring surface for Http datasources: `TR.Http.adapter`, `TR.Http.on`. */
   static readonly Http = HttpAdapterControls
@@ -1463,6 +1506,8 @@ namespace TR {
   export type DataAuthBinding = TaoDataAuthBinding
   export type AppDatasourceBinding = import('./TR-data').TaoAppDatasourceBinding
   export type DataWriteIntent = import('./TR-data').TaoDataWriteIntent
+  /** DataRowOperation is a row write using Tao entity and field names. */
+  export type DataRowOperation = TaoDataRowOperation
   export type DataWriteContext = import('./TR-data').TaoDataWriteContext
   /** TaoProps declares the Tao-owned props bag generated views receive as the `__tao` prop. */
   export type TaoProps = TRTaoProps.TaoProps
@@ -1757,7 +1802,7 @@ function NativeVisualRowRoot({ child, layout }: {
   child: React.ReactNode
   layout: TR.TaoVisualLayout | undefined
 }): React.ReactElement {
-  const props = InteractionControls.UseNativeRowRoot(layout)
+  const { accessibilityLabel: _accessibilityLabel, ...props } = InteractionControls.UseNativeRowRoot(layout)
   return createElement(requireReactNativeRuntime().View, props, child)
 }
 

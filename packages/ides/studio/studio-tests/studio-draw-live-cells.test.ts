@@ -138,7 +138,7 @@ Test(
       Expect(row.dataset['taoStudioDrawLive']).toBeUndefined()
       Expect(row.properties.has('left')).toBe(false)
     }
-    // The grid reaches the placed row, so its cell is never suspended as out of view.
+    // The grid reaches the placed row, so canvas bounds include the live cell.
     Expect(grid.properties.get('min-width')).toBe('max(100%, 420px)')
     Expect(grid.properties.get('min-height')).toBe('max(100%, 1000px)')
 
