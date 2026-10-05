@@ -224,7 +224,8 @@ export const DataCompiler = {
   },
 
   DataWriteField(pair: ASTUtils.DataWriteBindingPair): Compiled {
-    return gen`[${gen.jsLiteral(pair.field.name)}]: ${Compile.Expression(pair.write.value)},`
+    const value = Compile.Expression(pair.write.value)
+    return gen`[${gen.jsLiteral(pair.field.name)}]: ${pair.inverse ? gen`TR.Unary('not', ${value})` : value},`
   },
 } as const
 
