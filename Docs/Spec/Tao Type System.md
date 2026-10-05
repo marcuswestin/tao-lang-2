@@ -461,6 +461,8 @@ surface; raw provider rows and ID-based test selectors remain private.
 
 ## Unit values
 
+### Primitive duration compatibility
+
 A unit family has a canonical base and fixed ratios, so one accessor mechanism builds, converts, and
 reads its values. `.unit` on a number constructs a value of that unit's family, and `.unit` on a
 value of the family reads it back as a number in that unit; the two round-trip.
@@ -470,8 +472,8 @@ let Wait = 220.ms                 // number → duration
 Wait.s                            // duration → number: 0.22
 ```
 
-`duration` is the one family the language registers today, because it is the only one a real feature
-forces. Its base is the nanosecond, and its units are `ms`, `s`, `min`, `h`, `d`, and `wk`, each with
+The primitive `duration` family retains its nanosecond backing for existing APIs. Its units are
+`ms`, `s`, `min`, `h`, `d`, and `wk`, each with
 long singular and plural aliases (`1.second`, `30.seconds`). There is no bare `m` duration unit:
 minutes are `min`. Months and years are not durations, since neither has a fixed length.
 
@@ -496,6 +498,81 @@ unit or a reading the family does not have is a diagnostic, so `Wait.meters` doe
 A duration lowers to a plain number of its base unit, which is why same-family arithmetic needs no
 runtime support and only the accessors and the calendar pairs convert.
 
+### Checked numeric quantities
+
+The standard library also implements `Scalar`, an abstract numeric operation family, and concrete
+`Duration` and `Ratio` domains. These are distinct from primitive `duration`: checked `Duration`
+uses canonical seconds, and `Ratio` uses canonical unity. They do not silently convert to the
+primitive nanosecond carrier.
+
+| Domain   | Default unit | Other units and canonical scales           |
+| -------- | ------------ | ------------------------------------------ |
+| Duration | seconds      | milliseconds 0.001, minutes 60, hours 3600 |
+| Ratio    | unity        | percent 0.01, permille 0.001               |
+
+Unit names are lowercase grammar elements owned by their declaring type. A numeric expression
+followed by a visible unit constructs its checked quantity; a qualified suffix such as
+`2 Duration.seconds` selects that owner explicitly. Ambiguous shorthand produces a diagnostic.
+With the standard-library declarations in scope:
+
+```tao
+let Span = 2 minutes + 30 seconds
+let Offset = -2 seconds
+let Factor = Span / 30 seconds
+let SecondsView = Span.seconds()
+```
+
+`Span` has canonical backing 150 and retains the left operand's `minutes` view. `SecondsView`
+has the same canonical backing and concrete domain, with its selected view changed to `seconds`.
+The generated `seconds()` reading returns a typed quantity view, not a bare number. `ToText()`
+and text interpolation render the retained selected unit, so `SecondsView.ToText()` is
+`"150 seconds"` and `Factor.ToText()` is `"5 unity"`. An extreme selected reading that cannot be
+represented as a finite nonzero number uses a canonical/scale expression instead of infinity or
+false zero.
+
+Scalar supplies inherited same-`Self` addition, subtraction and unary negation, multiplication by
+a number in either order, division by a number, and the six comparisons. Static `Self` is selected
+from the source operand domains and requires a concrete quantity domain. Parent-typed operands
+use that parent's contract even when their payloads are authentic descendants; operations after
+erasing the operands to abstract `Scalar` are rejected. Comparisons normalize canonical values
+within the selected domain. Unrelated domains and nominal siblings do not gain compatibility from
+sharing unit names.
+
+Duration and Ratio additionally declare their own concrete contracts: Duration divided by Duration
+returns Ratio in unity; Duration multiplied or divided by Ratio returns Duration; Ratio multiplied
+or divided by Ratio returns Ratio. Their explicitly declared result domains remain those domains.
+There is no general inherited `Self * Self` or `Self / Self` contract. Checked construction and
+arithmetic reject nonfinite backing and enforce the selected result factory's invariant chain.
+Duration remains signed; negative construction does not clamp it to zero.
+
+### Clock samples and waits
+
+`Time.StartTimer()` synchronously creates a runtime-only timer. `Timer.Duration()` samples a fixed
+elapsed checked Duration in seconds. Sampling neither stops the timer nor makes a prior result
+live; later samples can advance while earlier returned values stay fixed. Serializing a timer
+handle fails. Persist a sampled Duration instead of the timer's monotonic origin.
+
+The native clock is required on iOS and Android, and uses
+[mach_continuous_time](https://developer.apple.com/documentation/kernel/1646199-mach_continuous_time)
+and [elapsedRealtimeNanos](https://developer.android.com/reference/android/os/SystemClock#elapsedRealtimeNanos()),
+respectively. Those platform APIs include system sleep. Native samples cross the bridge in
+milliseconds; the timer converts their difference to canonical seconds. The loader rejects
+unsupported platforms, a missing or invalid module, and invalid readings as host-environment
+failures, with no wall-clock or JavaScript fallback. The timer also rejects a decreasing sample.
+This describes the implemented clock choice; simulator compilation and injected-clock tests do
+not prove installed-module loading or a real suspend/resume journey.
+
+`Time.Now()` currently returns the implemented primitive `time` carrier: a fixed wall-clock sample
+in Unix epoch milliseconds from the runtime clock. It honors the held test clock. DateTime,
+calendar transformations and live-time APIs are not implemented by this quantity slice.
+
+`do Wait(Amount)` accepts checked Duration and reads canonical seconds. Negative and zero values
+introduce no intentional delay; positive values schedule host waits, rounding fractional
+milliseconds upward and splitting delays beyond the host's supported range. Wait inherits the
+active action's cancellation, including the existing deferred-cleanup shield. Callback resumption
+can be late and waits do not survive process termination. Legacy APIs that accept primitive
+`duration`, such as Interval, retain their nanosecond contract.
+
 ## The TypeScript boundary
 
 `<expression> from <path>` is how a value reaches TypeScript. It binds loosest, taking the whole
@@ -513,13 +590,25 @@ let BuildStamp is text = BuildStamp() from ./Shell.ts
 The expression is a name or a call to one, and that head name resolves to a **named export** of the
 path rather than to a Tao declaration — there are no default exports, in either direction, which is
 what lets one sidecar back several bindings. Arguments are ordinary Tao expressions, evaluated on the
-Tao side and passed as plain JavaScript values; the result is wrapped as a Tao value.
+Tao side. Ordinary arguments cross as plain JavaScript values and ordinary results are wrapped as
+Tao values. Checked quantity arguments retain their runtime wrapper and authenticated opaque
+payload, including their concrete owner and selected unit view.
 
 Runtime values expose `getJSValue()` at the trusted TypeScript boundary. It evaluates a live value
 once per read, retains ordinary payload identity, and extracts a checked quantity's canonical
 number regardless of its selected unit view. Aliases, cells and persisted owners stay live;
-complete value wrappers returned through runtime helpers retain their identity. Quantity-backed
-source declarations and generated native factories remain a separate implementation slice.
+complete value wrappers returned through runtime helpers retain their identity. This explicit
+extraction is separate from the automatic checked-quantity argument ABI.
+
+Generated quantity bindings expose the declaration-owned factory, such as
+`types.Duration.Factory`. Native implementations construct checked values with `Factory.fromUnit`
+or `Factory.fromJSValue`; the latter consumes canonical backing in the default unit. Native
+quantity results must return an evaluable wrapper with an authenticated payload owned by a
+permitted declared result factory. Raw numbers, raw payloads and forged quantity-shaped objects
+are not admitted as checked results. Selected static numeric `Self` calls append a compiler-supplied
+`TR.QuantityFactory` argument to the native signature. Helpers use that selected factory for
+operand admission and result construction, rather than deriving the result domain from whichever
+payload arrives first.
 
 Tao owns the type. A bridged value therefore needs a declared one — a `returns` clause, or a
 `let Name is Type =` ascription — and that declaration is the contract the sidecar must satisfy. The
