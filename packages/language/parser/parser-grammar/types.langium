@@ -94,7 +94,7 @@ ParameterTypeDeclaration:
     name=ID type=TypeExpression optional?='?'?;
 
 TypeReference:
-    ActionTypeReference | ListTypeReference | PrimitiveTypeReference | NamedTypeReference;
+    YesNoTypeExpression | ActionTypeReference | ListTypeReference | PrimitiveTypeReference | NamedTypeReference;
 
 ActionTypeReference:
     'action' '(' (parameterTypes+=TypeReference (',' parameterTypes+=TypeReference)*)? ')';
