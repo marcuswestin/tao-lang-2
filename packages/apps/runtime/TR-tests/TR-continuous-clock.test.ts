@@ -24,7 +24,7 @@ Describe('native continuous clock loader', () => {
     let moduleLoads = 0
     let clockLoads = 0
     const clock: ClockModule = { nowMilliseconds: () => samples.shift() }
-    const getter = createContinuousClockNowMilliseconds(nativeModules(<T>(capability, name) => {
+    const getter = createContinuousClockNowMilliseconds(nativeModules(<T>(capability: string, name: string) => {
       moduleLoads += 1
       Expect([capability, name]).toEqual(['Time.StartTimer', 'expo-modules-core'])
       return {
