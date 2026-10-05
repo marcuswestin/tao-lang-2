@@ -38,6 +38,14 @@ env:
   # Bun's and npm's download caches, restored before the bootstrap installs from them.
   BUN_INSTALL_CACHE_DIR: /home/runner/tao-cache/bun
   npm_config_cache: /home/runner/tao-cache/npm
+  # Every directory Bun's isolated linker writes: the root store and each workspace's own links,
+  # which point into it by relative paths, so the tree restores intact at the same checkout path.
+  NODE_MODULES_PATHS: |
+    node_modules
+    packages/*/node_modules
+    packages/*/*/node_modules
+    packages/apps/providers/*/node_modules
+    Apps/Hosted CRUD/node_modules
 
 jobs:
   partition:
@@ -64,16 +72,37 @@ jobs:
           restore-keys: |
             tao-green-${{ runner.os }}-${{ runner.arch }}-${{ steps.tree.outputs.hash }}-
 
-      # Keyed on every lock the bootstrap installs from: the repository's Bun lockfile, and the Tao
-      # lock that pins Native Bridge's npm packages.
-      - name: Restore the package download caches
-        id: package-cache
+      # The installed tree itself, keyed on everything Bun installs it from: the lockfile, every
+      # workspace manifest, and the devenv lock that pins Bun and Node. Setup finds a tree with no
+      # completion stamp, runs its health probe, and adopts the tree without installing. Never given
+      # restore-keys: a tree restored from another lockfile would pass that probe just the same.
+      - name: Restore the installed node_modules
+        id: node-modules
         uses: actions/cache/restore@v4
         with:
-          path: /home/runner/tao-cache
-          key: tao-packages-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'Apps/Test Apps/Native Bridge/.tao/store/lock.jsonc') }}
+          path: ${{ env.NODE_MODULES_PATHS }}
+          key: tao-node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'devenv.lock', 'package.json', 'packages/*/package.json', 'packages/*/*/package.json', 'packages/apps/providers/*/package.json', 'Apps/Hosted CRUD/package.json') }}
+
+      # Bun's download cache matters only when it has to install, so it is restored only then.
+      - name: Restore Bun's download cache
+        id: bun-cache
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: /home/runner/tao-cache/bun
+          key: tao-bun-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
           restore-keys: |
-            tao-packages-${{ runner.os }}-${{ runner.arch }}-
+            tao-bun-${{ runner.os }}-${{ runner.arch }}-
+
+      # npm's, for the packages the Tao lock pins for Native Bridge, which setup installs every run.
+      - name: Restore npm's download cache
+        id: npm-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /home/runner/tao-cache/npm
+          key: tao-npm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Apps/Test Apps/Native Bridge/.tao/store/lock.jsonc') }}
+          restore-keys: |
+            tao-npm-${{ runner.os }}-${{ runner.arch }}-
 
       # The Nix installation and the built locked profile, keyed on everything that decides them: the
       # pinned Nix release, the devenv lock, and the profile's expressions. On a hit the installer
@@ -99,17 +128,34 @@ jobs:
       - name: Bootstrap Nix, the pinned toolchain, and Tao setup
         run: ./.config/bootstrap-tao-dev-env --install-nix
 
-      # Saved straight after the bootstrap, so a partition that later fails still warms the cache.
-      # All partitions share one key; the first to finish saves it and the rest are refused harmlessly.
-      # Saved under the key the restore computed: hashing the locks again here would read them after
-      # setup, and a setup that rewrote one would save under a key no later restore looks for.
-      - name: Save the package download caches
-        if: steps.package-cache.outputs.cache-hit != 'true'
+      # Saved straight after the bootstrap, so a partition that later fails still warms the caches,
+      # and before verification writes any tool cache under node_modules. All partitions share one
+      # key; the first to finish saves it and the rest are refused harmlessly. Saved under the key
+      # the restore computed: hashing the locks again here would read them after setup, and a setup
+      # that rewrote one would save under a key no later restore looks for.
+      - name: Save the installed node_modules
+        if: steps.node-modules.outputs.cache-hit != 'true'
         continue-on-error: true
         uses: actions/cache/save@v4
         with:
-          path: /home/runner/tao-cache
-          key: ${{ steps.package-cache.outputs.cache-primary-key }}
+          path: ${{ env.NODE_MODULES_PATHS }}
+          key: ${{ steps.node-modules.outputs.cache-primary-key }}
+
+      - name: Save Bun's download cache
+        if: steps.bun-cache.outcome == 'success' && steps.bun-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: /home/runner/tao-cache/bun
+          key: ${{ steps.bun-cache.outputs.cache-primary-key }}
+
+      - name: Save npm's download cache
+        if: steps.npm-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: /home/runner/tao-cache/npm
+          key: ${{ steps.npm-cache.outputs.cache-primary-key }}
 
       # Collecting garbage first drops what only the build needed, chiefly the two unpacked nixpkgs
       # sources, so the cache holds Nix and the profile's closure. Both are rooted explicitly rather
