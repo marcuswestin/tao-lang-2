@@ -24,6 +24,7 @@ export const JUST_COMMANDS = [
   'fmt-file',
   'ide-extension-package',
   'land',
+  'lint',
   // The landing lock is the turn-taking primitive every broad lane and the landing itself go
   // through, so an agent has to be able to claim and return it by the same spelling it reads in
   // AGENTS.md rather than dropping to `just`.
@@ -38,6 +39,9 @@ export const JUST_COMMANDS = [
   // sandboxed merge stops partway. This is the merge alone, reachable unsandboxed by name, without
   // the lane and message work `finalize` adds or the push `land` adds.
   'merge-main',
+  // The hosted alternative to `land`: merges this branch's pull request on GitHub only after every
+  // check on its pushed head, Verify among them, has passed, then archives it like a landing.
+  'merge-pr',
   'model-audit',
   'native-bindings',
   'native-module-check',
@@ -48,6 +52,9 @@ export const JUST_COMMANDS = [
   // second spelling.
   'open-pr',
   'parser-gen',
+  'performance-check',
+  // Reads the public checks API rather than gh, so it works from the sandbox without credentials.
+  'pr-checks',
   'qa',
   'qa-capture',
   'reclaim',

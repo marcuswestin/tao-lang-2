@@ -188,9 +188,17 @@ Describe('gate release lifetime', () => {
 const IDLE_MACHINE = () => 0
 const CONTENDED_MACHINE = () => 1_000
 
-async function run(gates: readonly string[], script: GateScript, extra: Record<string, unknown> = {}) {
+async function run(
+  gates: readonly string[],
+  script: GateScript,
+  extra: Record<string, unknown> = {},
+  fixtureFiles: Readonly<Record<string, string>> = {},
+) {
   const root = await mkTestDir('tao-gate-runner-')
   try {
+    for (const [path, source] of Object.entries(fixtureFiles)) {
+      await FS.writeText(FS.resolvePath(path, root), source)
+    }
     const started: string[] = []
     const summary = await runGates({
       showStudio: true,
@@ -344,9 +352,13 @@ Describe('repository gate runner', () => {
     // A suite process that leaves no structured report proved nothing, whatever it exited. The
     // summary has to say so itself: reading the reports after rolling the run up would publish
     // `passed` and then record the failure, and the lane would disagree with its own ledger.
-    const { summary } = await run(['_test'], {})
+    const { started, summary } = await run(['_test'], {}, {}, {
+      'packages/cli/dev-cli/performance-checks/missing-results.test.ts': '// Test inventory fixture.\n',
+    })
     const performanceChecks = summary.gates.find(gate => gate.name === 'performance-checks')
 
+    Expect(started).toContain('performance-checks')
+    Expect(performanceChecks).toBeDefined()
     Expect(summary.status).toBe('failed')
     Expect(performanceChecks?.status).toBe('failed')
     Expect(performanceChecks?.reason).toContain('test result report unavailable')
@@ -383,6 +395,24 @@ Describe('repository gate runner', () => {
     Expect(
       summary.gates.filter(gate => gate.status === 'skipped').every(gate =>
         gate.reason === 'requires unsandboxed host capabilities; run ./agent unsandboxed verify-full'
+      ),
+    ).toBe(true)
+  })
+
+  Test('a split lane runs each reader on exactly one machine and the prepare phase on every one', async () => {
+    const gates = ['_fix-dprint', '_repo-lint', '_typecheck', 'dead-exports']
+    const first = await run(gates, {}, { partition: { count: 2, index: 0 } })
+    const second = await run(gates, {}, { partition: { count: 2, index: 1 } })
+
+    Expect(first.started).toContain('_fix-dprint')
+    Expect(second.started).toContain('_fix-dprint')
+    const readers = [...first.started, ...second.started].filter(name => name !== '_fix-dprint').sort()
+    Expect(readers).toEqual(['_repo-lint', '_typecheck', 'dead-exports'])
+    Expect(first.summary.partition?.digest).toBe(second.summary.partition?.digest)
+    Expect(first.summary.partition?.index).toBe(1)
+    Expect(
+      first.summary.gates.filter(gate => gate.status === 'skipped').every(gate =>
+        gate.reason === 'runs on partition 2/2'
       ),
     ).toBe(true)
   })

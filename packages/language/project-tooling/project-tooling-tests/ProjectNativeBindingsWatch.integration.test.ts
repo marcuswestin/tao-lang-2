@@ -7,6 +7,75 @@ import type { ProjectToolingResult } from '../project-tooling-src/ProjectTooling
 
 Describe('maintained native watch inputs', () => {
   Test(
+    'refreshes nested generator additions and removals, suppresses auxiliary events, and stops on disposal',
+    async () => {
+      await withTaoFiles('tao-native-watch-generator-', {
+        'consumer/.tao/.gitkeep': '',
+        'generator/generate.ts': 'export const generate = true',
+        'generator/existing/empty/.gitkeep': '',
+      }, async (paths, fixture) => {
+        const root = FS.resolvePath('consumer', fixture)
+        const generator = FS.resolvePath('generator', fixture)
+        const added = FS.resolvePath('existing/empty/new.ts', generator)
+        const results: ProjectToolingResult[] = []
+        let revision = 0
+        const refresh = async (): Promise<ProjectToolingResult> => ({
+          root,
+          revision: ++revision,
+          status: await FS.exists(added) ? 'stale' : 'fresh',
+          diagnostics: [],
+          contractPaths: [],
+          sourceMappings: [],
+          dependencyRoots: [],
+          configInputPaths: [],
+          externalSidecarInputPaths: [],
+          sidecarOwnershipInputPaths: [],
+          changedOutputPaths: [],
+          nativeBindingInputPaths: [paths['generator/generate.ts'], ...await FS.exists(added) ? [added] : []],
+          nativeBindingOutputPaths: [],
+        })
+        const watcher = await startProjectFileWatch(
+          root,
+          { onResult: result => results.push(result) },
+          refresh,
+          (path, options) => watch(path, { ...options, usePolling: true, interval: 100 }),
+        )
+        try {
+          const initial = watcher.lastResult.revision
+          await FS.writeText(added, 'export const added = true')
+          const changed = await until(
+            () => results.find(result => result.revision > initial && result.status === 'stale'),
+            { description: 'refresh after adding TypeScript inside an existing empty generator directory' },
+          )
+          Expect(changed.nativeBindingInputPaths).toContain(added)
+          await Time.sleep(1_500)
+          const settled = results.length
+          await FS.writeText(FS.resolvePath('existing/empty/unrelated.js', generator), 'unrelated source')
+          await FS.writeText(
+            FS.resolvePath('existing/empty/new.ts.tao-file-mutation.lock.owner-test', generator),
+            'owner',
+          )
+          await FS.writeText(FS.resolvePath('.tao-ts/unrelated.ts', generator), 'generated source')
+          await Time.sleep(1_500)
+          Expect(results).toHaveLength(settled)
+          await FS.remove(added)
+          await until(() => results.find(result => result.revision > changed.revision && result.status === 'fresh'), {
+            description: 'refresh after removing the newly discovered generator source',
+          })
+          await Time.sleep(1_500)
+          const disposed = results.length
+          await watcher.dispose()
+          await FS.writeText(added, 'export const afterDisposal = true')
+          await Time.sleep(1_500)
+          Expect(results).toHaveLength(disposed)
+        } finally {
+          await watcher.dispose()
+        }
+      }, { location: 'host', verbatim: true })
+    },
+  )
+
+  Test(
     'retains an initially missing explicit source root through empty creation and nested package population',
     async () => {
       await withTaoFiles(

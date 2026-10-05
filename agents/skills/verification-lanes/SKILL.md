@@ -83,8 +83,53 @@ on its size.
 - Refresh the roadmap, ledger, and spec documents the work changed **before** verifying; a tracked
   edit made after a green lane changes the tree that lane proved, so the next lane runs everything
   again from nothing.
-- A lane that is slow is usually not a regression — read the `contention` block in
-  `.artifacts/logs/<lane>/latest/summary.json` first: it names how many lanes shared the machine.
+- A lane that is slow is usually not a regression — read `.artifacts/logs/<lane>/latest/summary.json`
+  first. `overlap` names every other Tao lane that ran at any moment of it (`solo: true` means none);
+  `contention.contended` also trips on load a broad lane raises by itself, so it cannot say that.
+- Every worktree's `verify-changed` and broad-lane runs, with timing, overlap, and failure reason, and
+  every landing's outcome and phases, append to the machine-wide history under
+  `~/.cache/tao/machine-lanes/history/` (`runs.jsonl`, `landings.jsonl`), which outlives reclaimed
+  worktrees. Compare timings there, not in one checkout's `.artifacts/`.
+
+## Hosted verification
+
+`.github/workflows/verify.yml` runs `verify-full-sandbox` split across twelve free Linux runners
+(`--partition k/12`) on every pull request push, merge-queue entry, and push to `main`; its `Verify`
+job is the single verdict. It proves the portable gates only — never the host-only lanes.
+`./agent pr-checks --wait` follows a pull request's checks and prints each failure's reason from its
+annotations; a failed partition uploads its logs as the `verify-partition-<k>` artifact. Reproduce
+with `./agent test-file` locally, push the fix, and read the next verdict.
+
+An authorized landing takes one of two routes, both squash-merging the reviewed merge message and
+archiving the branch at `merged/<name>`:
+
+- **A pull request with auto-merge** when the green `Verify` verdict proves the change: the cases
+  "Propose it as ready to land" lists below, short of anything only a host lane exercises. Write and
+  review the message at `.artifacts/merge/<branch>.msg`, then run `./agent unsandboxed open-pr`: it
+  pushes, makes the message the pull request's title and description, turns on auto-merge with the
+  message verbatim as the squash commit's (GitHub's default appends ` (#N)` and wraps bullets at 72
+  columns), and follows the checks. It refuses a branch that already merged. When they pass, run `./agent unsandboxed merge-pr`: it
+  confirms `Verify` passed on the pushed head, squash-merges unless auto-merge already did, archives
+  `merged/<name>`, and reports the merge. GitHub deletes the branch, and the archive workflow writes the
+  same `merged/<name>` for a pull request merged any other way. To change the message, edit it and run
+  `open-pr` again. When a check fails, read `./agent pr-checks`, fix, commit, and run `open-pr` again.
+  Both take a `feat/<name>` branch, or the one `claude/<name>` or `codex/<name>` branch a cloud agent
+  session may push, archived at `merged/claude/<name>` or `merged/codex/<name>`. They talk to GitHub
+  over REST, so they work where a cloud host's proxy refuses `gh pr`'s GraphQL; there `open-pr` turns
+  auto-merge on through the proxy's own REST route, and where that is refused too `merge-pr` merges.
+  Never run `gh pr merge` directly: the Developer's login can bypass `Verify`, and the harness refuses it.
+- **`./agent unsandboxed land`** when the change reaches a host-only lane (Studio, browser, native
+  shell, simulator, canary), or when CI is unavailable: it verifies on this machine under the landing
+  lock, including what the hosted runners cannot.
+
+## Periodic performance proof
+
+Run `./agent unsandboxed performance-check` for a pipeline performance change and during a periodic
+repository pass. It measures language operations and real Studio saves sequentially, separately from
+the parallel `verify-full` lane. Its report owns admission, ceilings, contamination, and the verdict;
+retain an inconclusive run and repeat unchanged code after contention clears. A correctness smoke
+under load does not qualify a speed budget. `pipeline-performance` owns the implementation workflow
+and `test-quality` owns deterministic regression proofs.
 
 ## Reporting while a lane runs
 

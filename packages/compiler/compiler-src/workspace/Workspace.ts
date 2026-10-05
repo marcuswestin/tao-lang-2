@@ -1,10 +1,19 @@
 import { inspectMaintainedNativeBindings, type MaintainedBindingOptions } from '@native-bindings'
 import { type AST, Langium, Parser, type ParseResult } from '@parser'
-import { Assert, type Diagnostic, Diagnostics, FS, ReleaseCapabilities, type ReleaseProfile } from '@shared'
+import {
+  Assert,
+  type Diagnostic,
+  Diagnostics,
+  FS,
+  HCI,
+  Platform,
+  ReleaseCapabilities,
+  type ReleaseProfile,
+} from '@shared'
 import Validator, { type ValidationResult } from '@validator'
 import Compiler, { type CompileOptions, type CompileResult } from '../compiler'
 import { createWorkspaceServices, type WorkspaceServices } from './langium-services'
-import { createProjectContext, type ProjectContext } from './workspace-utils'
+import { createProjectContext, type ProjectContext, refreshProjectContext } from './workspace-utils'
 
 type CompileTestPlanOptions = {
   skipValidation?: boolean
@@ -13,6 +22,7 @@ type CompileTestPlanOptions = {
 /** Workspace coordinates project-rooted parsing, validation, and compilation. */
 export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> {
   private static readonly sharedWorkspaces = new Map<string, Promise<Workspace>>()
+  private readonly documentValidationReuse = Validator.createDocumentReuse()
 
   protected constructor(
     protected readonly project: ProjectContext<ServicesT>,
@@ -35,24 +45,7 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
     options: { sourceOverrides?: Readonly<Record<string, string>>; nativeBindings?: MaintainedBindingOptions } = {},
   ): Promise<Workspace> {
     const root = FS.resolvePath(directoryPath)
-    const sourceOverrides: Record<string, string> = {}
-    for (const [path, source] of Object.entries(options.sourceOverrides ?? {})) {
-      const resolved = FS.resolvePath(path, root)
-      Assert.input(
-        FS.extname(resolved) === '.tao' && FS.pathIsWithin(resolved, root),
-        'Source overrides must name Tao files inside the workspace root.',
-      )
-      let ancestor = resolved
-      while (!await FS.exists(ancestor) && !await FS.isSymbolicLink(ancestor)) {
-        ancestor = FS.dirname(ancestor)
-      }
-      Assert.input(
-        FS.pathIsWithin(await FS.realPath(ancestor), await FS.realPath(root)),
-        'Source overrides must remain physically inside the workspace root.',
-      )
-      sourceOverrides[resolved] = source
-    }
-    const snapshot = Object.freeze(sourceOverrides)
+    const snapshot = await sourceOverrideSnapshot(root, options.sourceOverrides ?? {})
     return new Workspace(
       await createProjectContext(
         root,
@@ -118,17 +111,36 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
     return this.project.root
   }
 
+  /** Replace the source snapshot for the next serialized workspace invocation. */
+  async setSourceOverrides(sourceOverrides: Readonly<Record<string, string>>): Promise<void> {
+    this.project.services.sourceOverrides = await sourceOverrideSnapshot(this.project.root, sourceOverrides)
+  }
+
   /** parse parses an entry Tao file and all reachable Tao documents. */
   async parse(entryFile: string): Promise<ParseResult> {
-    const entryPath = this.resolveEntryFile(entryFile)
-    return await Parser.parse(this.parserContext(), Langium.URI.file(entryPath), { validation: false })
+    return await this.withValidationReuse(async () => {
+      const relink = await this.refreshProject()
+      const entryPath = this.resolveEntryFile(entryFile)
+      const parsed = await Parser.parse(this.parserContext(), Langium.URI.file(entryPath), {
+        validation: false,
+        relink,
+      })
+      this.clearFailedBuild([parsed])
+      return parsed
+    })
   }
 
   /** parseSource parses source given a workspace file URI. */
   async parseSource(source: string, uri: Langium.URI): Promise<ParseResult> {
-    return await Parser.parseSource(this.parserContext(), source, {
-      uri,
-      validation: false,
+    return await this.withValidationReuse(async () => {
+      const relink = await this.refreshProject()
+      const parsed = await Parser.parseSource(this.parserContext(), source, {
+        uri,
+        validation: false,
+        relink,
+      })
+      this.clearFailedBuild([parsed])
+      return parsed
     })
   }
 
@@ -136,7 +148,9 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
   async validate(entryFile: string): Promise<ValidationResult> {
     const nativeBindings = await inspectMaintainedNativeBindings(this.nativeBindings)
     const parseResult = await this.parse(entryFile)
-    const validation = await Validator.validateParseResult(parseResult, this.validatorContext(parseResult))
+    const validation = (await Validator.validateParseResults([
+      { parseResult, context: this.validatorContext(parseResult) },
+    ], this.documentValidationReuse))[0]!
     return {
       ...validation,
       diagnostics: Diagnostics.unique([...nativeBindings.diagnostics, ...validation.diagnostics]),
@@ -150,13 +164,37 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
    * it: a later `parse`, `parseSource`, or `parseFiles` rebuilds the documents and leaves them stale.
    */
   async parseFiles(entryFiles: readonly string[]): Promise<readonly ParseResult[]> {
+    return await this.withValidationReuse(() => this.parseEntryFiles(entryFiles))
+  }
+
+  private async parseEntryFiles(entryFiles: readonly string[]): Promise<readonly ParseResult[]> {
+    const profile = Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_PROFILE'] === 'true'
+    const startedAt = profile ? performance.now() : 0
+    const relink = await this.refreshProject()
+    const contextDoneAt = profile ? performance.now() : 0
     const entryPaths = [...new Set(entryFiles.map(entryFile => this.resolveEntryFile(entryFile)))]
     Assert(entryPaths.length > 0, 'workspace parse has at least one entry file')
-    return await Parser.parseEntries(
+    const parsed = await Parser.parseEntries(
       this.parserContext(),
       entryPaths.map(entryPath => Langium.URI.file(entryPath)),
-      { validation: false },
+      { validation: false, relink },
     )
+    this.clearFailedBuild(parsed)
+    if (profile) {
+      HCI.logProcessInfo(
+        'workspace',
+        JSON.stringify({
+          type: 'studio-workspace-profile',
+          operation: 'parse',
+          root: this.root,
+          entries: entryPaths.length,
+          contextMs: contextDoneAt - startedAt,
+          parseMs: performance.now() - contextDoneAt,
+          relink,
+        }),
+      )
+    }
+    return parsed
   }
 
   /**
@@ -167,7 +205,24 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
    * project at all.
    */
   async validateFiles(entryFiles: readonly string[]): Promise<ValidationResult> {
-    return await this.validateParsedFiles(await this.parseFiles(entryFiles))
+    const parsed = await this.parseFiles(entryFiles)
+    const profile = Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_PROFILE'] === 'true'
+    const startedAt = profile ? performance.now() : 0
+    const validated = await this.validateParsedFiles(parsed)
+    if (profile) {
+      HCI.logProcessInfo(
+        'workspace',
+        JSON.stringify({
+          type: 'studio-workspace-profile',
+          operation: 'validate',
+          root: this.root,
+          entries: parsed.length,
+          files: validated.files.length,
+          validateMs: performance.now() - startedAt,
+        }),
+      )
+    }
+    return validated
   }
 
   /** validateParsedFiles validates what one `parseFiles` call returned; see `validateFiles`. */
@@ -181,12 +236,17 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
     }
     const batchFiles = [...filesByPath.values()]
 
-    const diagnostics: Diagnostic[] = [...(await inspectMaintainedNativeBindings(this.nativeBindings)).diagnostics]
-    for (const parsed of parsedEntries) {
-      const validation = await Validator.validateParseResult(
-        parsed,
-        this.validatorContext(parsed, batchFiles.map(file => file.ast)),
-      )
+    const nativeBindings = await inspectMaintainedNativeBindings(this.nativeBindings)
+    const projectFiles = batchFiles.map(file => file.ast)
+    const validations = await Validator.validateParseResults(
+      parsedEntries.map(parsed => ({
+        parseResult: parsed,
+        context: this.validatorContext(parsed, projectFiles),
+      })),
+      this.documentValidationReuse,
+    )
+    const diagnostics: Diagnostic[] = [...nativeBindings.diagnostics]
+    for (const validation of validations) {
       diagnostics.push(...validation.diagnostics)
     }
 
@@ -200,13 +260,30 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
   /** compile compiles an entry Tao file and all reachable Tao documents. */
   async compile(entryFile: string, options: CompileOptions = {}): Promise<CompileResult> {
     const validationResult = await this.validate(entryFile)
-    return Compiler.compileValidated(validationResult, this.compilerContext(), options)
+    return this.withValidationReuse(() => Compiler.compileValidated(validationResult, this.compilerContext(), options))
   }
 
   /** compileFiles compiles the union of several entry graphs while keeping the first as the app entry. */
   async compileFiles(entryFiles: readonly string[], options: CompileOptions = {}): Promise<CompileResult> {
     const validationResult = await this.validateFiles(entryFiles)
-    return Compiler.compileValidated(validationResult, this.compilerContext(), options)
+    const profile = Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_PROFILE'] === 'true'
+    const startedAt = profile ? performance.now() : 0
+    const compiled = await this.withValidationReuse(() =>
+      Compiler.compileValidated(validationResult, this.compilerContext(), options)
+    )
+    if (profile) {
+      HCI.logProcessInfo(
+        'workspace',
+        JSON.stringify({
+          type: 'studio-workspace-profile',
+          operation: 'emit',
+          root: this.root,
+          entries: entryFiles.length,
+          emitMs: performance.now() - startedAt,
+        }),
+      )
+    }
+    return compiled
   }
 
   /** compileTestPlan compiles v0 Tao tests for an entry file. */
@@ -217,7 +294,30 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
       !Diagnostics.hasError(nativeBindings.diagnostics),
       Diagnostics.errorMessages(nativeBindings.diagnostics).join('; '),
     )
-    return Compiler.compileTestPlan(result, this.compilerContext())
+    return this.withValidationReuse(() => Compiler.compileTestPlan(result, this.compilerContext()))
+  }
+
+  private async refreshProject(): Promise<boolean> {
+    const relink = await refreshProjectContext(this.project)
+    if (relink) {
+      this.documentValidationReuse.clear()
+    }
+    return relink
+  }
+
+  private clearFailedBuild(parsed: readonly ParseResult[]): void {
+    if (parsed.some(result => Diagnostics.hasError(result.diagnostics, 'lexer', 'parser', 'linker'))) {
+      this.documentValidationReuse.clear()
+    }
+  }
+
+  private async withValidationReuse<T>(action: () => T | Promise<T>): Promise<T> {
+    try {
+      return await action()
+    } catch (error) {
+      this.documentValidationReuse.clear()
+      throw error
+    }
   }
 
   private parserContext(): Parser.Context {
@@ -257,6 +357,27 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
     })
     return resolvedPath
   }
+}
+
+async function sourceOverrideSnapshot(root: string, overrides: Readonly<Record<string, string>>) {
+  const snapshot: Record<string, string> = {}
+  for (const [path, source] of Object.entries(overrides)) {
+    const resolved = FS.resolvePath(path, root)
+    Assert.input(
+      FS.extname(resolved) === '.tao' && FS.pathIsWithin(resolved, root),
+      'Source overrides must name Tao files inside the workspace root.',
+    )
+    let ancestor = resolved
+    while (!await FS.exists(ancestor) && !await FS.isSymbolicLink(ancestor)) {
+      ancestor = FS.dirname(ancestor)
+    }
+    Assert.input(
+      FS.pathIsWithin(await FS.realPath(ancestor), await FS.realPath(root)),
+      'Source overrides must remain physically inside the workspace root.',
+    )
+    snapshot[resolved] = source
+  }
+  return Object.freeze(snapshot)
 }
 
 export default Workspace

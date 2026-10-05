@@ -14,7 +14,7 @@ import {
 const DEBOUNCE_MS = 250
 const NATIVE_INVENTORY_MS = 1_000
 
-type Refresh = () => Promise<ProjectToolingResult>
+type Refresh = (options?: { force?: boolean }) => Promise<ProjectToolingResult>
 
 /** Watch saved source and resolution inputs, then run every requested refresh in one lane. */
 export async function startProjectFileWatch(
@@ -257,6 +257,10 @@ export async function startProjectFileWatch(
     const inputDirectories = await Promise.all(
       result.nativeBindingInputPaths.map(async path => await FS.isDirectory(path) ? FS.resolvePath(path) : undefined),
     )
+    // The maintained reader requires this entry at the generator root. Only its
+    // verified source directory gets recursive TypeScript membership discovery.
+    const generatorRoots = result.nativeBindingInputPaths.filter(path => FS.basename(path) === 'generate.ts')
+      .map(path => FS.dirname(FS.resolvePath(path)))
     const shallowRoots = [
       ...new Set([
         ...(options.nativeBindings?.sourceRoots ?? []).map(path => FS.resolvePath(path)),
@@ -265,8 +269,10 @@ export async function startProjectFileWatch(
           FS.dirname(FS.resolvePath(path))
         ),
       ]),
-    ].filter(path => ![...declarationRoots, ...outputRoots].some(root => FS.pathIsWithin(path, root)))
-    const plan = { declarationRoots, outputRoots, shallowRoots }
+    ].filter(path =>
+      ![...declarationRoots, ...outputRoots, ...generatorRoots].some(root => FS.pathIsWithin(path, root))
+    )
+    const plan = { declarationRoots, outputRoots, shallowRoots, generatorRoots }
     const baseline = await readNativeInventory(plan)
     // Exact polling avoids registering the unrelated JavaScript payloads inside
     // pinned SDK packages. Membership scans separately discover newly added inputs.
@@ -301,8 +307,8 @@ export async function startProjectFileWatch(
     return true
   }
 
-  const lane = createProjectRefreshLane(async () => {
-    let result = await refresh()
+  const lane = createProjectRefreshLane(async requestOptions => {
+    let result = await refresh(requestOptions)
     let dependencyAttached = await updateDependencyRoots(result)
     let configAttached = await updateConfigInputs(result)
     let sidecarAttached = await updateExternalSidecarInputs(result)
@@ -312,7 +318,7 @@ export async function startProjectFileWatch(
     // events, so read again after attaching new resolution inputs.
     let attached = dependencyAttached || configAttached || sidecarAttached || ownershipAttached || nativeAttached
     while (attached) {
-      result = await refresh()
+      result = await refresh({ force: true })
       dependencyAttached = await updateDependencyRoots(result)
       configAttached = await updateConfigInputs(result)
       sidecarAttached = await updateExternalSidecarInputs(result)
@@ -352,6 +358,13 @@ export async function startProjectFileWatch(
       schedule()
     }
   }
+  const requestRefresh: Refresh = requestOptions => {
+    if (timer !== undefined) {
+      clearTimeout(timer)
+      timer = undefined
+    }
+    return lane.requestRefresh(requestOptions)
+  }
   watcher.on('all', onWatchEvent)
   watcher.on('error', onError)
   try {
@@ -379,7 +392,7 @@ export async function startProjectFileWatch(
     get lastResult() {
       return lane.lastResult!
     },
-    requestRefresh: lane.requestRefresh,
+    requestRefresh,
     async dispose() {
       disposed = true
       if (timer !== undefined) {

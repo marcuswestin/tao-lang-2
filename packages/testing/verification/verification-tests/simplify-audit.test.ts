@@ -45,22 +45,22 @@ Describe('simplify audit', () => {
 
   Test('reports an instruction file over its budget and leaves reference files alone', () => {
     const issues = instructionBudgetIssues([
-      { path: 'AGENTS.md', source: 'x'.repeat(12_761) },
+      { path: 'AGENTS.md', source: 'x'.repeat(13_501) },
       { path: 'packages/AGENTS.md', source: 'x'.repeat(6_001) },
       { path: 'agents/skills/git-workflow/SKILL.md', source: 'x'.repeat(12_000) },
       { path: 'agents/skills/git-workflow/references/landing.md', source: 'x'.repeat(50_000) },
     ])
 
     Expect(issues.length).toEqual(2)
-    Expect(issues[0]).toContain('AGENTS.md is 12761 characters, over its 12760-character budget')
+    Expect(issues[0]).toContain('AGENTS.md is 13501 characters, over its 13500-character budget')
     Expect(issues[1]).toContain('packages/AGENTS.md is 6001 characters, over its 6000-character budget')
   })
 
   Test('counts what an agent carries, so folding one bullet into another does not clear the budget', () => {
     // A line budget is why this mattered: on 2026-09-21 AGENTS.md went over by a line and was brought
     // back under by merging two bullets, leaving the file the same size and the budget satisfied.
-    const spreadOut = { path: 'AGENTS.md', source: `${'x'.repeat(12_860)}\n`.replace(/(.{50})/g, '$1\n') }
-    const folded = { path: 'AGENTS.md', source: 'x'.repeat(12_860) }
+    const spreadOut = { path: 'AGENTS.md', source: `${'x'.repeat(13_600)}\n`.replace(/(.{50})/g, '$1\n') }
+    const folded = { path: 'AGENTS.md', source: 'x'.repeat(13_600) }
 
     Expect(instructionBudgetIssues([spreadOut]).length).toEqual(1)
     Expect(instructionBudgetIssues([folded]).length).toEqual(1)
@@ -81,7 +81,7 @@ Describe('simplify audit', () => {
     Expect(report.duplicatedConstants).toEqual([
       { name: 'LIMIT', paths: ['packages/apps/runtime/TaoRuntime-src/TR-new.ts', chainPath], value: '200' },
     ])
-    Expect(report.instructions).toEqual([{ budget: 12_760, characters: 304, lines: 61, path: 'AGENTS.md' }])
+    Expect(report.instructions).toEqual([{ budget: 13_500, characters: 304, lines: 61, path: 'AGENTS.md' }])
     Expect(report.docs).toEqual([{ files: 1, lines: 2, subtree: 'Docs/Roadmap/Topic' }])
   })
 })

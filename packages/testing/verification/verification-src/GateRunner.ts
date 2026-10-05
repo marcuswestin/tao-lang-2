@@ -1,4 +1,4 @@
-import { FS, HCI, Repo, Time } from '@shared'
+import { FS, HCI, Platform, Repo, Time } from '@shared'
 import { ContentionRetry } from './ContentionRetry'
 import { FailurePolicy } from './FailurePolicy'
 import { FlakeTolerance } from './FlakeTolerance'
@@ -23,6 +23,7 @@ import {
   type MachineResourceLease,
 } from './MachineLanes'
 import { RunArtifacts } from './RunArtifacts'
+import { type OverlapReport, RunHistory } from './RunHistory'
 import { buildSummary, type GateResult, type GateSummary, skippedResult } from './RunSummary'
 import { RunTimings } from './RunTimings'
 import { TaoAppSharedRun } from './TaoAppSharedRun'
@@ -31,6 +32,8 @@ import { TestNodes } from './TestNodes'
 import { TestRunner } from './TestRunner'
 import { TestShards } from './TestShards'
 import { UiVisibility } from './UiVisibility'
+import { VerificationLanes } from './VerificationLanes'
+import { type PartitionSpec, VerifyPartition } from './VerifyPartition'
 import {
   type WorkCommand,
   type WorkEvent,
@@ -84,8 +87,19 @@ export type RunGatesOptions = {
     /** Injected by tests; defaults to hashing the generator-owned ignored inputs and outputs. */
     captureGenerated?: GeneratedEvidenceCapture
     lanes: readonly string[]
+    /**
+     * The store per-gate records are also read from and published to, so a gate proved in another
+     * checkout or on another machine at this exact tree is not run again. Absent, records stay in
+     * this checkout; the CLI passes `GreenTree.sharedRoot()`.
+     */
+    sharedRoot?: string
   }
   jobs?: number
+  /**
+   * Run only this machine's share of the lane's readers; the prepare phase still runs in full. Every
+   * machine of the split runs the same command with its own index and publishes the plan's digest.
+   */
+  partition?: PartitionSpec
   /** Path to write an extra stable copy of the JSON summary to, for the lane's known-path readers. */
   jsonPath?: string
   /**
@@ -138,6 +152,8 @@ export type RunGatesOptions = {
 export const TAO_TEST_NO_CACHE_ENV_KEY = 'TAO_TEST_NO_CACHE'
 
 const DEFAULT_LANE = 'verify'
+/** The lanes `RunHistory` keeps: every broad lane, and the diff-scoped per-commit gate. */
+const HISTORY_LANES: readonly string[] = [...VerificationLanes.BROAD, VerificationLanes.VERIFY_CHANGED]
 /** The two lane-list names that stand for the whole test selection rather than a recipe. */
 const TEST_GATE = '_test'
 const TEST_CHANGED_GATE = '_test-changed'
@@ -222,6 +238,20 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   const testGate = runnableGates.find(isTestGate)
   const testPlan = testGate === undefined ? undefined : await testNodes(testGate, location)
   const suiteOfNode = new Map((testPlan?.states ?? []).map(state => [state.name, state.suite]))
+  const timings = await RunTimings.load({ repositoryRoot: location.repositoryRoot })
+  const expectedMs = (name: string) => RunTimings.expectedMs(timings, name)
+
+  // One machine's share of a lane split across several. It is planned over every reader before any
+  // record is consulted, because records can differ between machines and the plan must not.
+  const partition = options.partition === undefined ? undefined : VerifyPartition.plan([
+    ...recipeGates.filter(name => !GateCatalog.isPrepare(name)).map(name => ({ expectedMs: expectedMs(name), name })),
+    ...(testPlan?.states ?? []).map(state => ({
+      expectedMs: expectedMs(state.name),
+      files: state.selectedTestFiles,
+      name: state.name,
+    })),
+  ], options.partition)
+  const elsewhere = (name: string) => partition !== undefined && !VerifyPartition.owns(partition, name)
 
   // What another lane already proved at this exact tree and toolchain. Only work whose verdict the
   // key fully describes qualifies: a node that rewrites the tree or fills a generated directory
@@ -247,10 +277,28 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   const unstable = await unstableSuites(location.repositoryRoot, testPlan?.states ?? [])
   const proved = !readsGreenTree || startingKey === undefined
     ? { excluded: [] as readonly string[], proved: new Map<string, GreenTreeRecord>() }
-    : await GreenTree.findGates(location.repositoryRoot, startingKey, recordable, { excluded: unstable })
+    : await GreenTree.findGates(location.repositoryRoot, startingKey, recordable, {
+      excluded: unstable,
+      sharedRoot: options.greenTree?.sharedRoot,
+    })
 
-  const gatesToRun = recipeGates.filter(name => !proved.proved.has(name))
-  const testStates = (testPlan?.states ?? []).filter(state => !proved.proved.has(state.suite))
+  const gatesToRun = recipeGates.filter(name => !proved.proved.has(name) && !elsewhere(name))
+  const testStates = (testPlan?.states ?? []).filter(state => !proved.proved.has(state.suite) && !elsewhere(state.name))
+  const partitionSkips = partition === undefined ? [] : [
+    ...recipeGates.filter(elsewhere).map((name): GateResult => ({
+      elapsedMs: 0,
+      name,
+      reason: VerifyPartition.describe(partition, name),
+      status: 'skipped',
+    })),
+    ...(testPlan?.states ?? []).filter(state => elsewhere(state.name)).map((state): GateResult => ({
+      elapsedMs: 0,
+      name: state.name,
+      reason: VerifyPartition.describe(partition, state.name),
+      status: 'skipped',
+      suite: state.suite,
+    })),
+  ]
   const greenSkips = [...proved.proved].map(([name, record]): GateResult => ({
     elapsedMs: 0,
     name,
@@ -261,6 +309,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   const declaredSkips = [
     ...[...options.skipped ?? [], ...hostSkips].map(skippedResult),
     ...greenSkips,
+    ...partitionSkips,
   ]
     .filter(result => !gatesToRun.includes(result.name))
     .filter((result, index, results) => results.findIndex(candidate => candidate.name === result.name) === index)
@@ -270,8 +319,6 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
     ...TaoAppSharedRun.attach(testStates, location.logRoot, location.repositoryRoot),
   ]
   await RunArtifacts.assignLogPaths(states, location)
-  const timings = await RunTimings.load({ repositoryRoot: location.repositoryRoot })
-  const expectedMs = (name: string) => RunTimings.expectedMs(timings, name)
   const reporter = createReporter(options, location.logRoot)
   const liveArtifacts = RunArtifacts.liveWriter(location, event => reporter.handle(event))
   // A lane registers before it takes any other lease. A landing priority window captures existing
@@ -335,7 +382,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
     return guiRelease
   }
 
-  const { contention, result } = await runUnderLane(async () => {
+  const { contention, overlap, result } = await runUnderLane(async () => {
     const finishedPrepare = new Set<string>()
     const finishedGui = new Set<string>()
     const onPrepareFinished = () => {
@@ -515,7 +562,8 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   // A lane record is only written when the lane's own membership is fully describable by the key,
   // for the same reason it is only read then. A lane whose nodes include a host-dependent one, or a
   // suite the flake ledger has seen flip, records its nodes and not itself.
-  const recordsLane = wholeLaneRecordable && unstable.size === 0
+  // A partition never stands for its lane: the rest of the lane ran on other machines.
+  const recordsLane = wholeLaneRecordable && unstable.size === 0 && partition === undefined
   if (options.greenTree !== undefined && summary.status === 'passed' && !result.interrupted) {
     await recordGreen({
       canStandOnRecord,
@@ -524,6 +572,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
       lanes: options.greenTree.lanes,
       location,
       provedCount: proved.proved.size,
+      sharedRoot: options.greenTree.sharedRoot,
       startingTree,
       suiteOf: name => suiteOfNode.get(name),
       states,
@@ -545,6 +594,32 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
       repositoryRoot: location.repositoryRoot,
       startedAt: testRunStartedAt,
     })
+  }
+  summary.overlap = overlap
+  if (partition !== undefined) {
+    summary.partition = { count: partition.count, digest: partition.digest, index: partition.index + 1 }
+  }
+  if (HISTORY_LANES.includes(location.lane)) {
+    // Written while a broad lane still holds the landing lock, and kept outside this worktree, so a
+    // reclaimed checkout does not take the machine's only timing record with it.
+    await RunHistory.recordRun(
+      RunHistory.runRecord({
+        contention,
+        elapsedMs: summary.elapsedMs,
+        ...(summary.firstFailure === undefined ? {} : { firstFailure: summary.firstFailure }),
+        gates: summary.gates,
+        interrupted: result.interrupted,
+        lane: location.lane,
+        landing: (Platform.runtimeProcess.env[MachineLanes.LANDING_PRIORITY_ENV_KEY] ?? '').length > 0,
+        logRoot: location.logRoot,
+        overlap,
+        repositoryRoot: location.repositoryRoot,
+        ...(schedule === undefined ? {} : { schedule }),
+        startedAtMs: startedAt,
+        status: summary.status,
+      }),
+      options.registryRoot,
+    )
   }
   await RunArtifacts.finishRun({
     cpuOnly: contention.contended,
@@ -621,6 +696,8 @@ async function recordGreen(options: {
   /** How many nodes this run skipped on an earlier proof, which the tree it leaves must still match. */
   provedCount: number
   startingTree?: TreeFingerprint
+  /** The shared store gate records are published to as well, when the lane reads one. */
+  sharedRoot?: string
   /** The suite a node reports under, so a suite is recorded rather than its shards. */
   suiteOf: (name: string) => string | undefined
   states: readonly WorkState[]
@@ -655,6 +732,7 @@ async function recordGreen(options: {
       neverRecord: new Set(
         options.states.filter(state => !GateCatalog.isRecordable(state.name)).map(state => state.name),
       ),
+      sharedRoot: options.sharedRoot,
     },
   )
 }
@@ -816,15 +894,18 @@ function greenTreeSummary(
 async function runUnderLane<T>(
   work: () => Promise<T>,
   machineLane: MachineLane,
-): Promise<{ contention: ContentionReport; result: T }> {
+): Promise<{ contention: ContentionReport; overlap: OverlapReport; result: T }> {
+  let outcome: { contention: ContentionReport; result: T }
   try {
     // The report is read after the work, not beside it: its whole value is what the machine did
     // while the lane ran.
     const result = await work()
-    return { contention: machineLane.report(), result }
+    outcome = { contention: machineLane.report(), result }
   } finally {
     await machineLane.release()
   }
+  // Read after the release, which is what puts this lane's own end on record.
+  return { ...outcome, overlap: await machineLane.overlap() }
 }
 
 function injectedRunner(

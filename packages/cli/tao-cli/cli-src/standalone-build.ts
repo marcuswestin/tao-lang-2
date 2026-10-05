@@ -178,6 +178,9 @@ async function buildBinary(
   HCI.logProcessInfo('standalone', 'Staging native binding implementations and pinned compiler inputs...')
   await stageNativeBindingResources({ outputRoot: staging })
   await TaoAppModules.packageRuntime(staging, FS.resolvePath('packages/apps/runtime', repoRoot))
+  for (const name of StandaloneResources.LICENSE_FILES) {
+    await FS.copyFile(FS.resolvePath(name, repoRoot), FS.resolvePath(name, staging))
+  }
   await FS.writeText(
     FS.resolvePath(`${TaoResources.HOST_DIRECTORY}/expo-host-src/desktop-agent-host.js`, staging),
     await DesktopHost.agentHostSource(),

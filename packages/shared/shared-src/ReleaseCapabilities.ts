@@ -150,6 +150,7 @@ const packageRules = [
 const commands = new Map<string, ReleaseCapability>([
   ...[
     'doctor',
+    'resources',
     'bug-report',
     'create',
     'project',
@@ -224,6 +225,10 @@ const options = new Map<string, ReleaseCapability>([
   ...[
     '--app',
     '--json',
+    '--task',
+    '--register-directory',
+    '--purpose',
+    '--cleanup-condition',
     '--fingerprint',
     '--source',
     '--export',

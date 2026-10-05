@@ -12,6 +12,12 @@ node_modules/
 .tao-ts/
 # Ignore sidecars left by the previous generated-contract layout.
 *.tao.ts
+# Preserve ignored local state left by the previous project-local layout.
+# Current committed project state in .tao/store remains visible.
+**/.tao/dev/
+**/.tao/typescript/
+**/.tao/sessions/
+**/.tao/bridge-check.tsconfig.json
 
 .devenv/
 .direnv/

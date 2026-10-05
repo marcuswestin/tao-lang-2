@@ -1,7 +1,7 @@
 # Studio preview speed continuation
 
-Handoff written 2026-10-03 for the successor of `feat/studio-preview-latency-next`. Start a new
-`feat/` branch and worktree from that branch's tip, not from `main`. This document owns the Studio
+Original handoff written 2026-10-03 for the successor of `feat/studio-preview-latency-next`, which
+started from that branch's tip rather than main. This document owns the Studio
 preview latency project; [Decisions - Project folder layout](<Tao CLI workflows/Decisions - Project folder layout.md>)
 owns the project folder layout work this project also carries. [Tao tooling performance](<Tao tooling performance.md>)
 holds broader language and tooling measurements; do not treat older CLI benchmarks as edit-to-paint
@@ -9,8 +9,8 @@ timings.
 
 ## Current state
 
-The successor worktree is `feat/studio-preview-speed`, created from exactly `8ecf581e7`; the Developer
-authorized landing on 2026-10-04. Its activation and decided folder layout are implemented: every scenario and the whole-app preview now
+The successor branch `feat/studio-preview-speed`, created from exactly `8ecf581e7`, landed on
+2026-10-04 and is preserved at `origin/merged/studio-preview-speed`. Its activation and decided folder layout are implemented: every scenario and the whole-app preview now
 default to no iframe, with per-cell lightning toggles and server-persisted app activation in
 `.tao/local/studio/session.json`. Selection and its Tao ProductHost/feed boundary use focused names;
 the old browser focus/tabs and viewport import once into the project session. Fast draw and
@@ -39,8 +39,8 @@ records the fix. The native canary's Just recipe also now uses that disposable d
 opening checked-in HNReader; explicit project/app overrides remain available. The shared helper
 prepares the decided project layout before either real CLI or native launch discovers it. Its quiet
 native probe passes all six capabilities and shutdown, retaining the window-server lease while
-removing the obsolete shared HNReader reservation. The ordinary full landing lane remains required
-before pushing.
+removing the obsolete shared HNReader reservation. The ordinary full landing lane passed before
+pushing.
 Mutation checks caught deliberately removed activation serialization and callback rewiring. A real
 browser run exposed an empty session-save response; the endpoint now returns JSON, with a real HTTP
 regression. The corrected real-app Metro smoke passes all four journeys (run
@@ -71,6 +71,230 @@ source/type checks pass. The regression is an explicit headless lane:
 ```sh
 ./agent unsandboxed studio-smoke --run-id source-navigation packages/ides/studio-tooling/studio-smoke/studio-preview-source-navigation.test.ts
 ```
+
+### Speed recovery after landing, 2026-10-04
+
+The Developer requested recovery on top of landed main. `feat/studio-preview-performance` starts
+from `f27f8bb0e`; the historical annotation checkpoint remains available at `a3ba19d51` in its
+own comparison worktree. Squashing did not erase that history. The earlier HNReader fixture and
+main's split source modules differ, so their timings cannot establish an isolated change's gain.
+
+The recovery shares explicit preview acquisitions with the resident project-tooling watch,
+coalesces a notification burst into one active and one pending refresh, and retains the preview
+workspace even when Studio supplies source overrides. Unchanged Langium documents retain their
+canonical identity and skip parsing; changed sources, reachable membership, and project topology
+still refresh linking and validation. Parser and workspace tests prove zero unchanged parses,
+one parse for one imported edit, one source read per batch, deletion-only visibility recovery,
+and cold-result parity. Their deliberate reuse and invalidation mutations fail the tests.
+
+The watched tooling cache audits saved authored inputs, actual consumed discovery and text,
+configuration, host inputs, and generated outputs. Unknown resolution inputs take the cold path;
+forced attachment refreshes remain authoritative. A reused result preserves its completed
+revision and reports an empty output delta. Native diagnostic replay compares against saved native
+diagnostics, preserving the combined Tao and TypeScript warnings and hints. Validation reuse is
+bounded to one batch: type inference reuses completed results for identical linked AST inputs during
+synchronous validation, and type reports replay in their original position. Requirement graphs share
+only compatible ownership and ordered inputs. Structural checks, entry-specific marker checks,
+foreign-file disk checks, and diagnostic order remain authoritative. Per-entry workspace order is
+preserved; the attempted broader structural-report cache could not serve those differing orders and
+was removed.
+
+Host export discovery still reads the current installed packages on every refresh. A watched
+session retains completed mappings only when ordered roots, discovered names, ownership, options,
+and every consumed filesystem observation match, including missing paths and manifest text.
+Inconsistent observations and guard failures take the cold path. Forced refresh and the final watch
+disposal clear the mapping; standalone calls retain no mapping. Native declaration checks remain
+authoritative even when an alias path stays unchanged. Synchronous manifest reads use the native
+resolver's filesystem lookup model. App classification and identity indexes also share work within
+one validation batch, guarded by exact AST identities, package context, and stable file ordering;
+they are discarded before another build or relink.
+
+Descendant traversal now also snapshots each exact Tao-file AST once per completed validation
+batch. App placement checks and node validation share the read-only list while every check still
+runs in its original position. A fresh batch obtains a fresh list. Eleven batch-validation tests
+pass; bypassing the list in app validation fails the work-count assertion while diagnostic parity
+remains covered. This establishes eliminated traversal work, not an isolated paint-time gain.
+
+The real Metro harness now includes HNReader's actual `storyCard` padding edit through Studio's
+editor, observed as computed padding and subsequent paint, alongside the one-file editor and
+HNReader watched-file cases. Each runs with publication checks on and off. Ordinary verification
+checks repeated work and parity; `./agent unsandboxed performance-check` separately measures the
+language and real-preview cases under one exclusive machine lease. Missing activity evidence or
+observed contention makes qualification inconclusive. The periodic repository pass owns when to
+run it, and `pipeline-performance` owns guidance for future save/watch and pipeline edits.
+
+An argument-binding memo was measured separately and removed: it added another lifetime and
+clone boundary without a consistent compiler gain. The retained changes are the bounded refresh,
+incremental documents, batch inference and app indexes, and audited watched host mappings above.
+Selective design subscriptions remain deferred.
+
+Quiet calibration on 2026-10-05 used run
+`performance-48636607-5d39-43a4-8fb1-bae60885a528`. All 48 actual saves passed, with no iframe
+reloads or recorded revision errors. Each case retains eight rows and discards the first; p50 is
+the median of seven warm rows and p95 is their nearest-rank maximum. The exclusive lane recorded
+173 host observations, load 4.43–8.47 on 18 CPUs, with no competing registered lane. The language
+benchmark passed its existing budgets. Profiling was disabled.
+
+| Case                                     | Source→published p50 / p95 ms | Save→paint p50 / p95 ms | Source ceiling p50 / p95 ms | Total ceiling p50 / p95 ms |
+| ---------------------------------------- | ----------------------------- | ----------------------- | --------------------------- | -------------------------- |
+| One-file, publication on                 | 135 / 144                     | 386 / 474               | 175 / 200                   | 500 / 650                  |
+| One-file, publication off                | 137 / 145                     | 389 / 447               | 175 / 200                   | 500 / 600                  |
+| HNReader watched-file, publication on    | 484 / 499                     | 1447 / 1463             | 625 / 675                   | 1800 / 1975                |
+| HNReader watched-file, publication off   | 546 / 608                     | 840 / 931               | 700 / 825                   | 1100 / 1250                |
+| HNReader editor padding, publication on  | 458 / 561                     | 736 / 849               | 600 / 775                   | 950 / 1150                 |
+| HNReader editor padding, publication off | 470 / 578                     | 730 / 829               | 600 / 800                   | 950 / 1125                 |
+
+The executable ceilings include rounded headroom for ordinary variation and cover source
+publication independently of total paint. The HNReader watched-file publication-on case had an
+858ms median HMR-to-DOM interval; it must not mask a compiler regression when that interval falls.
+Both stage budgets must pass. Missing cases, malformed samples, absent activity evidence, or
+contention cannot qualify a run; a busy correctness smoke does not establish speed.
+
+These results do **not** restore or establish parity with the historical 266–289ms HNReader
+totals above. Main now includes fresh project/native validation, and HNReader's source and fixture
+corpus changed. Current matched-main comparisons retained their raw reports but were contaminated
+by external host load, including a continuously observed spike to 33.42; they establish no
+isolated end-to-end gain. Deterministic regressions prove the eliminated work and cold-result
+parity. In the current normal padding case, source publication remains the largest phase, followed
+by Metro delivery and paint. Further compiler/native validation reduction is a separate measured
+slice, rather than a reason to weaken these guards.
+
+Final qualification, committed-tip verification, and integration are recorded below when complete.
+
+Two unchanged eligible repeats did not meet every tail ceiling: run
+`performance-5934e698-a28d-45fd-b5b8-d1bb2e751430` (load 5.04–7.87, no peers) exceeded the
+one-file source p95 limits and HNReader publication-off source and total p95; run
+`performance-b487fc7b-b083-44cc-ae89-903371823868` (load 3.49–5.36, no peers) exceeded only
+HNReader publication-on source p95, at 821ms against 675ms. Both passed the language budgets and
+all six preview correctness cases. Their failures remain preserved; the ceilings were not raised.
+Diagnostic run `speed-tail-diagnosis-20261005` found unique preview revisions and 22 of 24 emitted
+modules reused after startup, with no unexpected full cold revision. Warm profiled HNReader
+publication-off medians were approximately 270ms for project Tao validation, 31ms for the first
+input audit, 26ms for receipt capture, 20ms for config, 19ms for native TypeScript, and 122ms for
+preview generation. These diagnostic timings include profiling overhead and establish the remaining
+work owners, not a new latency qualification.
+
+The first normal six-case run with descendant traversal reuse,
+`performance-d26665c4-e326-40a8-8832-2789b0a3612b`, became inconclusive when load reached 10.98
+on 18 CPUs near its final case. All six correctness cases and the language budgets passed. Its
+recorded HNReader publication-on source p95 was 822ms and padding publication-off total p95 was
+1357ms, both over their ceilings. Host contamination prevents qualification; neither the failures
+nor the missing gain is hidden by changing the ceilings.
+
+Pre-document-cache run `performance-81d97ca2-6668-4045-8096-3faec7c0a62f` also completed all
+six correctness cases and the language stage, but load reached 31.58 on 18 CPUs. It is an
+ineligible comparison, with twelve budget breaches preserved in its report. A later qualifying
+run must stand on its own; comparing against this loaded run cannot establish the cache's gain.
+
+The Developer authorized document-level validation reuse on 2026-10-05. The implementation keeps
+workspace/file checks and foreign implementation checks authoritative, while explicitly eligible
+local node checks and the later type pass may replay diagnostics at their original positions.
+The parser owns a conservative dependency snapshot: canonical transitive AST identities, resolved
+reference targets, and ordered explicit and implicit candidate membership. Unknown or unresolved
+dependencies remain cold. Each Workspace owns the reusable reports; package/physical topology,
+release inputs, entry context, build failures, and dependency changes invalidate them. Batch
+inference, requirement graphs, and app indexes retain their current shorter lifetime. Ten parser
+snapshot tests, five report-reuse tests, eleven batch-validation tests, and eleven incremental
+Workspace tests pass. An unchanged six-entry refresh performs no eligible local or type checks,
+while global and foreign checks still run for each entry. Disabling reuse fails that work witness;
+removing dependency comparisons produces stale transitive type diagnostics and fails cold parity.
+The physical ownership signature detects an external marker symlink retarget even when ASTs and
+reference targets stay identical. Unknown inputs still take the cold path.
+
+The cache's work test also exposed false topology invalidation: parsing expands the package index
+with runtime-discovered roots, so comparing that expanded index with a fresh disk scan incorrectly
+reported a change on every refresh. Workspace now compares successive fresh disk-scan baselines
+and retains its consumed physical-path audit. Unchanged scans remain stable; module additions and
+symlink retargets still invalidate. The mounted-color recovery assertion now checks the fixture's
+actual typed `DesignColorEntry` and its restored `#fff` atom, as warm and cold parses do.
+
+Root membership capture preserves the original parser reachability: unloaded root candidates are
+ordered signature observations, while only canonical loaded roots enter the AST dependency vector.
+Imports, folders, and requirements remain strict. The regression keeps an unrelated invalid library
+root unloaded, retains available snapshots, and detects root membership changes without changing
+the loaded AST or target vectors. Snapshot publication observes import selections without writing
+the semantic bindings owned by linking.
+
+Post-cache qualification `performance-eeb03565-7a2d-4cc0-b003-e812ed91e474` passed the language
+budgets and all six real-save cases in 161.8s. Its 165 continuous observations recorded no peers and
+load 3.84–6.73 on 18 CPUs. All independent source and paint ceilings passed:
+
+| Case                              | Source p50/p95 | Total p50/p95 |
+| --------------------------------- | -------------- | ------------- |
+| One-file, publication on          | 143/167ms      | 406/442ms     |
+| One-file, publication off         | 154/177ms      | 415/513ms     |
+| HNReader, publication on          | 533/585ms      | 796/830ms     |
+| HNReader, publication off         | 514/557ms      | 804/843ms     |
+| HNReader padding, publication on  | 441/570ms      | 703/846ms     |
+| HNReader padding, publication off | 568/641ms      | 834/877ms     |
+
+This qualifies the complete implementation under the existing ceilings; it does not isolate the
+document cache's numerical gain. Deterministic work counts prove reuse, and cold-result parity and
+mutation checks prove invalidation. The old approximately 270ms result has not been reproduced on
+the current corpus. Partial source-text parsing is still unimplemented; current parser reuse is
+whole-document reuse. Selective design subscriptions remain deferred.
+
+After main integration, `performance-9c5987a2-54b4-4463-9ef0-4dc64daeba20` was eligible and
+failed the fixed guard. Its 171 observations recorded no peers and load 2.61–8.25 on 18 CPUs.
+Language budgets, all six correctness cases, and all direct-edit preview budgets passed. Padding
+publication-on recorded source 686/726ms and total 956/995ms; publication-off recorded source
+727/877ms and total 1022/1177ms. These exceed six independent ceilings. The earlier qualifying
+pass remains evidence for its tree; it does not cancel this failure or establish stable speed on
+the integrated tree. This failure blocked the landing proposal; the ceilings remain unchanged.
+
+The follow-up removes repeated physical-boundary reads within one dependency publication. Each
+publication owns a fresh observation scope, keyed by filesystem operation and exact logical path;
+descriptors remain independent, and no observation survives into another build. Twelve parser
+tests pass. Three files sharing an owner and module perform seven underlying operations, including
+one owner realpath, one module realpath, and one marker stat/realpath pair. Their descriptors match
+uncached reads. Concurrent requests share pending and failed observations; later scopes recheck
+removed markers and recover from unavailable reads. Existing marker-retarget and warm/cold parity
+proofs remain green. These operation counts establish avoided work, not a measured latency gain.
+
+The complete follow-up then qualified in `performance-e5b1be24-d1ba-4aab-a7ac-b76a159da585`:
+161.2s, 164 continuous observations, load 3.07–4.73 on 18 CPUs, no peers or admission breaches.
+Language budgets and all six real-save cases passed the unchanged ceilings:
+
+| Case                              | Source p50/p95 | Total p50/p95 |
+| --------------------------------- | -------------- | ------------- |
+| One-file, publication on          | 141/156ms      | 406/445ms     |
+| One-file, publication off         | 141/164ms      | 435/467ms     |
+| HNReader, publication on          | 545/555ms      | 814/862ms     |
+| HNReader, publication off         | 517/572ms      | 774/833ms     |
+| HNReader padding, publication on  | 459/580ms      | 713/874ms     |
+| HNReader padding, publication off | 486/610ms      | 759/910ms     |
+
+The preceding attempt `performance-bb1bf0b4-3805-4d77-a606-baef12fa9794` was inconclusive:
+load reached 16.82 after its passing language stage, so no Studio cases were admitted. Both that
+report and the eligible failure remain retained. The passing result establishes the current
+implementation's guard qualification; differing host conditions do not isolate the boundary
+deduplication's latency gain. Approximately 270ms remains unreproduced on the current corpus.
+
+The first changed-suite gate found a real caller-lifetime regression: Studio's declaration scope
+check parsed before/after source concurrently through one mutable parser context, allowing both
+results to observe the newer canonical AST. It now compares independent syntax-only trees, which
+are the inputs that this authored-change check needs. Nineteen focused tests pass, including
+overlapping allowed and rejected requests. The host-command expected list now includes the new
+performance operation (eight tests pass). The missing-result guard fixture now supplies a real
+suite inventory and proves that the report-promising node actually ran before asserting failure;
+its forty-one focused tests pass. These corrections preserve the failed broad report rather than
+attributing deterministic failures to its recorded host contention.
+
+The caller inventory also corrected two retained-AST lifetimes. Scenario relocation inspects its
+destination through an independent standalone parse, preserving the linked source build whose
+references it still consumes. Wrap/group/extract actions now parse the source and same-directory
+siblings as one completed batch, then pass that batch's document and ASTs to the patch operation.
+Six relocation tests and fifty session tests pass; real-session proposals match cold patches and
+extraction respects sibling-owned names. Restoring either old lifetime pattern fails its new
+witness. Existing project-view insertion still passes its separate regression.
+
+Separate existing follow-up: parsing a consumer root before a library root can clear the
+consumer's requirement aliases before linking. A cold fixture with Library publishing
+`@ui/Widget` and Consumer requiring `@ui as @parts` then importing from `@parts` reported
+`Cannot resolve import path '@parts'.` when Library was loaded last. The clearing and load/link
+control flow predate `f27f8bb0e`; the historical commit was inspected, not executed for this
+finding. Batch-validation coverage retains distinct roots and contexts with Consumer loaded
+last. Fix the alias lifetime separately, with both entry orders covered.
 
 ### Activation baseline, 2026-10-03
 

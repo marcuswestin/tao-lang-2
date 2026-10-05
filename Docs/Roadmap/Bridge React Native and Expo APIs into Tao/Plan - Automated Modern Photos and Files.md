@@ -62,6 +62,34 @@ The real SDK case retains native roots, and genuinely conflicting installs remai
 rejected. Current main's incremental compiler and project-tooling changes require
 integration, review of refresh replay against native freshness, and final gates.
 
+Integration with main `3adc0e76d` preserves incremental document validation and
+compiler caches while checking native publication freshness before cached results
+are admitted. Focused compiler tests cover retained documents, custom native roots,
+warm cache hits, stale-output rejection and recovery; removing native admission
+makes the new regression fail. Restored code and whole-package type checking pass.
+Project-tooling receipt replay records native identity and reader-local contract
+views, and retained workspace keys include generation identity. These integration
+changes pass focused native receipt, native TypeScript, watcher and service
+regressions, and independent tooling review. The complete repository gate and
+final packaged acceptance still remain. No source or packaging result here proves
+the actual Photos and Files device journeys.
+
+Independent tooling review found and corrected a membership gap for generator
+TypeScript added inside an existing empty subdirectory. The inventory now walks
+only the verified generator root for TypeScript membership, preserving exclusions
+for unrelated JavaScript, installed dependencies, generated trees and publisher
+auxiliaries. Ordinary receipt invalidation cases are grouped by source/configuration,
+dependency topology and publication output; their assertions and timeout limits
+are preserved.
+
+The receipt mutation check substitutes a saved native inspection for current
+pre-replay and final-return admission. Both regressions fail under that mutation:
+a deleted wrapper replays the previous successful revision, and an incompatible
+fresh wrapper loses its required signature diagnostic. Production code is restored
+byte-for-byte after the check. This proof covers native admission, while ordinary
+source and configuration replay auditing remains enabled throughout. The restored
+native receipt tests and all three ordinary receipt invalidation groups pass.
+
 One host run also reported an intermittent denied process-group signal-zero probe;
 the unchanged focused suite and subsequent shared full-run suite passed. Inspection
 failures remain fatal. The related libproc error-versus-empty audit is recorded in

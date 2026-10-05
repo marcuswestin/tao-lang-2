@@ -71,14 +71,18 @@ const probeScript = `(() => {
   window.WebSocket = ProbedSocket
   const check = () => {
     const text = document.body?.textContent ?? ''
-    for (const marker of probe.watch) {
-      if (probe.seen[marker] === undefined && text.includes(marker)) {
+    for (const expected of probe.watch) {
+      const marker = typeof expected === 'string' ? expected : expected.marker
+      const matches = typeof expected === 'string' ? text.includes(marker)
+        : [...document.querySelectorAll('[data-tao-studio]')].some(node =>
+          node.textContent?.includes(expected.text) && getComputedStyle(node).paddingTop === expected.padding)
+      if (probe.seen[marker] === undefined && matches) {
         probe.seen[marker] = now()
         requestAnimationFrame(() => requestAnimationFrame(() => { probe.painted[marker] = now() }))
       }
     }
   }
-  new MutationObserver(check).observe(document, { characterData: true, childList: true, subtree: true })
+  new MutationObserver(check).observe(document, { attributes: true, characterData: true, childList: true, subtree: true })
 })()`
 
 type LatencyProject = {
@@ -93,6 +97,10 @@ type LatencyProject = {
   /** The rendered text the first compile shows. */
   initialText: string
   name: string
+  /** Ordinary source file to open before editor saves; a one-file fixture is already open. */
+  editorPath?: string
+  /** A real style edit is observed through computed layout, rather than a changing text marker. */
+  expectedStyle?: (edit: number, marker: string) => { marker: string; padding: string; text: string }
   /** Writes the authored project and returns the file the editor saves. */
   setup: (projectRoot: string) => Promise<string>
   /** The edited file's full source with `marker` in rendered text. */
@@ -100,6 +108,18 @@ type LatencyProject = {
 }
 
 const hnreaderRoot = Repo.resolvePath('Apps/HNReader')
+const hnreaderDesignSource = await FS.readText(FS.resolvePath('Design.tao', hnreaderRoot))
+
+async function copyHNReader(projectRoot: string): Promise<void> {
+  await FS.mkdir(FS.resolvePath('.tao', projectRoot))
+  await ProjectIdentity.ensure(projectRoot)
+  for (const name of await FS.listDir(hnreaderRoot)) {
+    if (/\.(tao|ts)$/.test(name) && await FS.isFile(FS.resolvePath(name, hnreaderRoot))) {
+      await FS.copyFile(FS.resolvePath(name, hnreaderRoot), FS.resolvePath(name, projectRoot))
+    }
+  }
+  await FS.copyDirectory(FS.resolvePath('@model', hnreaderRoot), FS.resolvePath('@model', projectRoot))
+}
 
 /**
  * A view beside HNReader's own, so the measurement times an ordinary view edit. Editing Data.tao
@@ -145,14 +165,7 @@ const latencyProjects: readonly LatencyProject[] = [
     initialText: 'Edit0x',
     name: 'HNReader',
     async setup(projectRoot) {
-      await FS.mkdir(FS.resolvePath('.tao', projectRoot))
-      await ProjectIdentity.ensure(projectRoot)
-      for (const name of await FS.listDir(hnreaderRoot)) {
-        if (/\.(tao|ts)$/.test(name) && await FS.isFile(FS.resolvePath(name, hnreaderRoot))) {
-          await FS.copyFile(FS.resolvePath(name, hnreaderRoot), FS.resolvePath(name, projectRoot))
-        }
-      }
-      await FS.copyDirectory(FS.resolvePath('@model', hnreaderRoot), FS.resolvePath('@model', projectRoot))
+      await copyHNReader(projectRoot)
       // Studio lists scenarios for `@/studio` views without the app importing them.
       const sourcePath = FS.resolvePath('@/studio/LatencyProbe.tao', projectRoot)
       await FS.mkdir(FS.dirname(sourcePath))
@@ -161,9 +174,37 @@ const latencyProjects: readonly LatencyProject[] = [
     },
     sourceFor: hnreaderProbeSource,
   },
+  {
+    appName: 'HNReaderStub',
+    edit: 'editor',
+    editorPath: 'Design.tao',
+    frameSelector: '.studio-preview-cell iframe[title*="HNReader.scenarios.tao#scenario:rows:leading"]',
+    initialText: 'Show HN: A Tao reader',
+    name: 'HNReader editor padding',
+    expectedStyle: (edit, marker) => ({ marker, padding: `${12 + edit}px`, text: 'Show HN: A Tao reader' }),
+    async setup(projectRoot) {
+      await copyHNReader(projectRoot)
+      return FS.resolvePath('Design.tao', projectRoot)
+    },
+    sourceFor: marker => {
+      const edit = Number(/^Edit(\d+)/u.exec(marker)?.[1])
+      Assert(Number.isInteger(edit), 'padding latency marker names its edit')
+      Assert(hnreaderDesignSource.includes('storyCard [pad 12,'), 'HNReader fixture owns the measured story padding')
+      return hnreaderDesignSource.replace('storyCard [pad 12,', `storyCard [pad ${12 + edit},`)
+    },
+  },
 ]
 
-for (const project of latencyProjects) {
+const selectedCase = Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_CASE']
+Assert.input(
+  selectedCase === undefined || latencyProjects.some(project => project.name === selectedCase),
+  'Select an existing Studio latency case.',
+)
+Assert.input(
+  Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_PERFORMANCE'] !== 'true' || selectedCase === undefined,
+  'Performance qualification runs every Studio latency case.',
+)
+for (const project of latencyProjects.filter(project => selectedCase === undefined || project.name === selectedCase)) {
   for (const mode of ['on', 'off'] as const) {
     Test(`Studio publication-${mode} edit-to-paint latency for ${project.name}`, async () => {
       await measureLatency(mode, project)
@@ -215,9 +256,32 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
       `document.body?.textContent?.includes(${JSON.stringify(project.initialText)}) === true`,
       { timeoutMs: 60_000 },
     )
+    if (project.expectedStyle !== undefined) {
+      const initial = project.expectedStyle(0, 'initial')
+      await browser.waitForInFrame(
+        previewUrl,
+        `[...document.querySelectorAll('[data-tao-studio]')].some(node =>
+          node.textContent?.includes(${JSON.stringify(initial.text)}) &&
+          getComputedStyle(node).paddingTop === ${JSON.stringify(initial.padding)})`,
+        { timeoutMs: 60_000 },
+      )
+    }
     const generatedRoot = await generatedRootFor(projectRoot)
     await browser.click('[data-preset="design"]')
     await browser.waitFor(`document.querySelector('.cm-content') !== null`)
+    if (project.editorPath !== undefined) {
+      await browser.pressShortcut('k')
+      await browser.waitFor(`document.querySelector('.studio-command-overlay')?.hidden === false
+        && document.activeElement === document.querySelector('.studio-command-overlay input')`)
+      await browser.insertText(project.editorPath)
+      await browser.waitFor(
+        `document.querySelector('.studio-command-result')?.textContent?.includes(${
+          JSON.stringify(project.editorPath)
+        }) === true`,
+      )
+      await browser.click('.studio-command-result')
+      await browser.waitFor("document.querySelector('.cm-content')?.textContent?.includes('design HNDesign') === true")
+    }
     // A cell that finishes loading registers with Metro's HMR server, and a registration that overlaps
     // an edit's update can leave the bundle's cells on a revision Metro deleted, so later edits never
     // arrive (see the edit failures in the Studio preview speed roadmap). The layout change above
@@ -244,7 +308,8 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
       // Each marker is longer than the last, as most real edits change a file's length and so move
       // every source range after them.
       const marker = `Edit${edit}${'x'.repeat(edit)}`
-      await browser.evaluateInFrame(previewUrl, `window.__taoLatencyProbe.watch.push(${JSON.stringify(marker)})`, {
+      const expected = project.expectedStyle?.(edit, marker) ?? marker
+      await browser.evaluateInFrame(previewUrl, `window.__taoLatencyProbe.watch.push(${JSON.stringify(expected)})`, {
         world: 'page',
       })
       let diskSaveAt: number | undefined
@@ -343,6 +408,13 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
         const entry = /\{"type":"studio-emitted-module-cache"[^\n]*\}/u.exec(line)?.[0]
         return entry === undefined ? [] : [JSON.parse(entry) as unknown]
       }),
+      pipelineProfile: studio.output().split('\n').flatMap(line => {
+        const entry =
+          /\{"type":"studio-(?:preview-pipeline|project-tooling|workspace|typescript-config|native-program|validator|validation-checks|host-module)-profile"[^\n]*\}/u
+            .exec(line)
+            ?.[0]
+        return entry === undefined ? [] : [JSON.parse(entry) as unknown]
+      }),
     }
     await reportSamples(`${project.name} publication-${mode}`, samples, evidence)
     Expect(samples.at(-1)!.frameLoads).toBe(0)
@@ -387,6 +459,7 @@ async function reportSamples(
     metroMessages: unknown[]
     activatedCells: number
     emissionCache: unknown[]
+    pipelineProfile: unknown[]
   },
 ): Promise<void> {
   const span = (from: number | undefined, to: number | undefined) =>
@@ -418,7 +491,13 @@ async function reportSamples(
     loadAverageMinimum: Math.min(...samples.map(sample => sample.loadAverage)),
     loadAverageMaximum: Math.max(...samples.map(sample => sample.loadAverage)),
   }
-  await FS.writeJson(path, { label, machine, rows, samples, summary, evidence })
+  const report = { label, machine, rows, samples, summary, evidence }
+  await FS.writeJson(path, report)
+  const performanceRoot = Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_PERFORMANCE_ARTIFACT_ROOT']
+  if (performanceRoot !== undefined) {
+    await FS.mkdir(performanceRoot)
+    await FS.writeJson(FS.resolvePath(`${slug}.json`, performanceRoot), report)
+  }
   HCI.writeLine(`${label} cold ${JSON.stringify(rows[0])}`)
   HCI.writeLine(`${label} warm ${JSON.stringify(summary)}; machine ${JSON.stringify(machine)}`)
   HCI.writeLine(`${label} samples: ${path}`)

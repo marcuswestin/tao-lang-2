@@ -4,6 +4,7 @@ export type ProjectNativeBindingInventory = {
   declarationRoots: readonly string[]
   outputRoots: readonly string[]
   shallowRoots: readonly string[]
+  generatorRoots: readonly string[]
 }
 
 /** Compare directory membership without reading payloads or observing generated project trees. */
@@ -45,6 +46,26 @@ export async function projectNativeBindingInventory(plan: ProjectNativeBindingIn
   }
   for (const root of plan.shallowRoots) {
     await inspect(root, () => shallow(root, false))
+  }
+  for (const root of plan.generatorRoots) {
+    if (!await FS.isDirectory(root)) {
+      entries.push(`missing:${root}`)
+      continue
+    }
+    entries.push(`directory:${root}`)
+    await inspect(root, async () => {
+      for await (
+        const path of FS.walk(root, {
+          includeHidden: true,
+          excludeDirectory: name =>
+            ['node_modules', '.tao-ts', '.tao', '.artifacts', '.expo', '.git'].includes(name) || auxiliary(name),
+        })
+      ) {
+        if (path.endsWith('.ts') && !auxiliary(path)) {
+          entries.push(path)
+        }
+      }
+    })
   }
   for (const root of plan.shallowRoots) {
     const modules = FS.resolvePath('node_modules', root)

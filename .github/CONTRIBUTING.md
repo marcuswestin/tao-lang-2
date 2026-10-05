@@ -50,3 +50,16 @@ paths and branch. Use only its `--fingerprint` output in a public report.
 `Docs/Spec/` is what Tao implements today, `Docs/Tutorials/` is the way in, and `Apps/` holds the
 apps we build the language against. If any of them disagrees with what you saw, that disagreement is
 worth one of the forms above.
+
+## Sending a change
+
+A pull request is merged once its author has accepted the
+[Tao Contributor License Agreement](../CLA.md). Post this in the pull request's description or a
+comment, once; it covers every later contribution too, and the "Contributor agreement" check on your
+pull request turns green when it finds it:
+
+> I have read the Tao Contributor License Agreement, version 1.0, and I agree to it.
+
+You keep the copyright in what you contribute. The agreement lets the maintainer license Tao, your
+contribution included, under any terms, which is what lets apps built with Tao stay yours under the
+[Tao Application Exception](../LICENSE-APP-EXCEPTION.md).

@@ -1,10 +1,11 @@
 import { Packages } from '@ast-utils'
-import { type Diagnostic, FS, ProjectLocal } from '@shared'
+import { type Diagnostic, FS, HCI, Platform, ProjectLocal } from '@shared'
 import * as ts from 'typescript'
 import {
   ambientTypeNames,
   hostModulePaths,
   hostTypeRoots,
+  type ProjectHostModuleSession,
   projectTypeRoots,
   resolveRuntimeRoot,
 } from './ProjectHostModules'
@@ -67,6 +68,7 @@ export async function writeProjectTypeScriptConfigUnderLock(
   root: string,
   options: ProjectToolingOptions = {},
   excludedHostPackages: ReadonlySet<string> = new Set(),
+  hostModuleSession?: ProjectHostModuleSession,
 ): Promise<ProjectTypeScriptConfigResult> {
   const projectRoot = FS.resolvePath(root)
   const rootConfigPath = FS.resolvePath(ROOT_CONFIG, projectRoot)
@@ -85,7 +87,9 @@ export async function writeProjectTypeScriptConfigUnderLock(
     }
   }
 
-  const baseContent = `${JSON.stringify(await baseConfig(projectRoot, options, excludedHostPackages), null, 2)}\n`
+  const baseContent = `${
+    JSON.stringify(await baseConfig(projectRoot, options, excludedHostPackages, hostModuleSession), null, 2)
+  }\n`
   const changedOutputPaths: string[] = []
   if (!await FS.isFile(baseConfigPath) || await FS.readText(baseConfigPath) !== baseContent) {
     await FS.writeText(baseConfigPath, baseContent)
@@ -102,12 +106,32 @@ async function baseConfig(
   projectRoot: string,
   options: ProjectToolingOptions,
   excludedHostPackages: ReadonlySet<string>,
+  hostModuleSession?: ProjectHostModuleSession,
 ): Promise<object> {
+  const profileEnabled = Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_PROFILE'] === 'true'
+  const phaseTimes: Record<string, number> = {}
+  let phaseStartedAt = profileEnabled ? performance.now() : 0
   const runtimePath = FS.resolvePath('TaoRuntime-src/TR.ts', resolveRuntimeRoot(projectRoot, options))
   const authoredTypeRoots = projectTypeRoots(projectRoot)
   const typeRoots = [...new Set([...authoredTypeRoots, ...hostTypeRoots(options)])]
   const projectTypes = ts.getAutomaticTypeDirectiveNames({ typeRoots: authoredTypeRoots }, ts.sys)
+  if (profileEnabled) {
+    phaseTimes['automatic-type-discovery'] = performance.now() - phaseStartedAt
+    phaseStartedAt = performance.now()
+  }
   const nestedRoots = await nestedProjectRoots(projectRoot)
+  if (profileEnabled) {
+    phaseTimes['nested-project-discovery'] = performance.now() - phaseStartedAt
+    phaseStartedAt = performance.now()
+  }
+  const hostModules = await hostModulePaths(projectRoot, options, excludedHostPackages, hostModuleSession)
+  if (profileEnabled) {
+    phaseTimes['host-module-discovery'] = performance.now() - phaseStartedAt
+    HCI.logProcessInfo(
+      'project-tooling',
+      JSON.stringify({ type: 'studio-typescript-config-profile', root: projectRoot, phases: phaseTimes }),
+    )
+  }
   return {
     compilerOptions: {
       allowImportingTsExtensions: true,
@@ -121,7 +145,7 @@ async function baseConfig(
       resolveJsonModule: true,
       rootDirs: ['../../..', '../../../.tao-ts'],
       paths: {
-        ...await hostModulePaths(projectRoot, options, excludedHostPackages),
+        ...hostModules,
         '@tao/runtime': [runtimePath],
       },
       skipLibCheck: true,

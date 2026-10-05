@@ -1,3 +1,4 @@
+import { reportPostLandingResources } from '@cli-kit/ResourceCommands'
 import { runWithCommands } from '@cli-kit/RunWithCommands'
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 import { DeveloperBranchCommand, SyncMainCommand } from '@verification/DeveloperWorkflow'
@@ -17,6 +18,7 @@ import { formatGateSummary, formatVerdict, gateExitCode } from '@verification/Ru
 import { TestRunner } from '@verification/TestRunner'
 import { UiVisibility } from '@verification/UiVisibility'
 import { VerificationLanes } from '@verification/VerificationLanes'
+import { VerifyPartition } from '@verification/VerifyPartition'
 import { WorkReporter } from '@verification/WorkReporter'
 import { CleanCommand } from './clean/CleanCommand'
 import { devZshCompletion } from './completion/DevCompletion'
@@ -27,7 +29,9 @@ import { MyStatusCommand } from './doctor/MyStatusCommand'
 import { ReclaimCommand } from './doctor/ReclaimCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
 import { MergeRecovery } from './git/MergeRecovery'
+import { MergePrCommand } from './pr/MergePrCommand'
 import { OpenPrCommand } from './pr/OpenPrCommand'
+import { PrChecksCommand } from './pr/PrChecksCommand'
 
 /*
  * Studio and Expo command modules load lazily inside their actions. Studio reaches the generated
@@ -60,6 +64,7 @@ type GatesCommandOptions = {
   json?: string
   lane?: string
   output?: string
+  partition?: string
   skipUnsandboxed?: boolean
   skipped?: string[]
 }
@@ -340,7 +345,8 @@ await runWithCommands(commands => {
             Errors.throwHostEnvironment(landingHostGateMessage(host.missing, host.report.sandboxDetected))
           }
         }
-        await LandCommand.run({
+        const resourceCheckout = Repo.getRoot()
+        const landing = await LandCommand.run({
           showStudio: options.showStudio,
           dryRun: options.dryRun === true,
           messageFile: options.messageFile,
@@ -348,6 +354,9 @@ await runWithCommands(commands => {
           skipVerify: options.skipVerify === true,
           skipVerifyFull: options.skipVerifyFull === true,
         })
+        if (landing.mode === 'executed') {
+          await reportPostLandingResources(resourceCheckout)
+        }
         Platform.runtimeProcess.exit(0)
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))
@@ -445,6 +454,10 @@ await runWithCommands(commands => {
     .option('--json <path>', 'Also write the summary as a JSON artifact at this path.')
     .option('--lane <name>', 'Artifact lane the run writes its logs and summary under.', 'verify')
     .option('--output <mode>', OUTPUT_OPTION_HELP)
+    .option(
+      '--partition <index/count>',
+      "Run this machine's share of the lane's readers, one-based, e.g. 2/8; the prepare phase runs in full.",
+    )
     .option('--skip-unsandboxed', 'Skip gates whose catalog metadata requires an unsandboxed host.')
     .option('--skipped <entry...>', 'Gates deliberately not run in this lane, as name=reason.')
     .option(
@@ -457,15 +470,21 @@ await runWithCommands(commands => {
     // uncaught stack with a code frame from inside the error helper.
     .action(async (gates: string[], options: GatesCommandOptions = {}) => {
       await runExitCommand(async () => {
-        UiVisibility.preflightGates(
-          options.skipUnsandboxed === true
-            ? gates.filter(name => GateCatalog.metadata(name).requiresUnsandboxed !== true)
-            : gates,
-          options.showStudio,
-        )
+        const runnable = options.skipUnsandboxed === true
+          ? gates.filter(name => GateCatalog.metadata(name).requiresUnsandboxed !== true)
+          : gates
+        UiVisibility.preflightGates(runnable, options.showStudio)
         // Keep this process-wide change at the CLI boundary, not in the reusable gate runner.
         // Gate children inherit it; the invoking shell and landing process keep their priority.
         if (VerificationLanes.VERIFY_OR_WIDER.includes(options.lane ?? VerificationLanes.VERIFY)) {
+          const { WatchmanCommand } = await import('./doctor/WatchmanCommand')
+          const watchmanStart = await WatchmanCommand.startBeforeLoweringPriority(
+            runnable.some(name => GateCatalog.metadata(name).usesWatchman === true),
+            { hostPlatform: Platform.hostPlatform },
+          )
+          if (watchmanStart !== undefined && watchmanStart !== 0) {
+            HCI.logProcessWarn('verify', 'Could not start Watchman at normal priority; Studio gates may refuse it.')
+          }
           try {
             Platform.lowerProcessPriority()
           } catch (error) {
@@ -480,12 +499,13 @@ await runWithCommands(commands => {
             gates,
             greenTree: options.greenTree === undefined || options.greenTree.length === 0
               ? undefined
-              : { lanes: options.greenTree, noCache: options.cache === false },
+              : { lanes: options.greenTree, noCache: options.cache === false, sharedRoot: GreenTree.sharedRoot() },
             hostPlatform: Platform.hostPlatform,
             jobs: parseOptionalPositiveInteger(options.jobs, '--jobs'),
             jsonPath: options.json,
             lane: options.lane,
             outputMode,
+            partition: options.partition === undefined ? undefined : VerifyPartition.parse(options.partition),
             skipUnsandboxed: options.skipUnsandboxed === true,
             skipped: options.skipped,
           })
@@ -830,13 +850,45 @@ await runWithCommands(commands => {
   commands
     .command('open-pr')
     .description(
-      'Push this feature branch, open or reuse its pull request against main, then stream the checks opening it starts.',
+      'Push this feat/, claude/, or codex/ branch, open or reuse its pull request titled by the reviewed merge message, turn on auto-merge, then stream the checks the push starts.',
     )
-    .option('--poll-interval-ms <ms>', 'How often to poll checks when this gh has no `--watch` flag.')
+    .option('--poll-interval-ms <ms>', 'How often to poll the checks while they run (default 60000).')
     .action(async (options: { pollIntervalMs?: string } = {}) => {
       await runExitCommand(async () =>
         (await OpenPrCommand.run({
           pollIntervalMs: parseOptionalPositiveInteger(options.pollIntervalMs, '--poll-interval-ms'),
+        })).exitCode
+      )
+    })
+
+  commands
+    .command('merge-pr')
+    .description(
+      "Wait for every check on this branch's pushed head, Verify among them; squash-merge unless auto-merge already did, then archive it at merged/<name>.",
+    )
+    .option('--interval-ms <ms>', 'How often to poll the checks while they run (default 60000).')
+    .action(async (options: { intervalMs?: string } = {}) => {
+      await runExitCommand(async () =>
+        (await MergePrCommand.run({
+          intervalMs: parseOptionalPositiveInteger(options.intervalMs, '--interval-ms'),
+        })).exitCode
+      )
+    })
+
+  commands
+    .command('pr-checks')
+    .description(
+      "Report every check on a pull request's head, with the reasons failed ones give; --wait follows them to the end.",
+    )
+    .option('--pr <number>', "The pull request; by default, the open one for this worktree's branch.")
+    .option('--wait', 'Follow the checks until every one has concluded.')
+    .option('--interval-ms <ms>', 'How often --wait polls GitHub (default 60000).')
+    .action(async (options: { intervalMs?: string; pr?: string; wait?: boolean } = {}) => {
+      await runExitCommand(async () =>
+        (await PrChecksCommand.run({
+          intervalMs: parseOptionalPositiveInteger(options.intervalMs, '--interval-ms'),
+          pr: parseOptionalPositiveInteger(options.pr, '--pr'),
+          wait: options.wait === true,
         })).exitCode
       )
     })
@@ -1350,6 +1402,14 @@ await runWithCommands(commands => {
         }
         await ReleaseWorkflow.publishIde(options.target)
       })
+    })
+
+  commands
+    .command('performance-check')
+    .description('Measure language and real Studio preview timing sequentially on a quiet, exclusively leased machine.')
+    .action(async () => {
+      const { PerformanceCheck } = await import('./performance/performance-check')
+      await runExitCommand(() => PerformanceCheck.run())
     })
 
   commands

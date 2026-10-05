@@ -138,7 +138,7 @@ const MUTATION_EVIDENCE_NOTICE =
 /** How much of a failing suite's output a quiet run repeats; the whole of it is in the log file. */
 const QUIET_FAILURE_OUTPUT_LINES = 40
 const PERFORMANCE_CHECKS = 'performance-checks'
-const PERFORMANCE_CHECK_FILE = 'packages/cli/dev-cli/performance-checks/language-performance.test.ts'
+const PERFORMANCE_CHECK_ROOT = 'packages/cli/dev-cli/performance-checks'
 const RUNTIME_JEST = 'runtime-jest'
 const RUNTIME_JEST_TESTS = 'packages/apps/expo-host/expo-host-tests'
 const TAO_APPS = 'tao-apps'
@@ -149,10 +149,11 @@ const TAO_APPS = 'tao-apps'
  * suite, and the Tao behavior tests. A source with nothing to run is not listed.
  */
 async function suiteRegistry(repositoryRoot = Shared.Repo.getRoot()): Promise<SuiteSource[]> {
-  const [byPackage, jestFiles, taoAppUnits] = await Promise.all([
+  const [byPackage, jestFiles, taoAppUnits, performanceFiles] = await Promise.all([
     packageTestFilesByPackage(repositoryRoot),
     runtimeJestTestFiles(repositoryRoot),
     taoAppShardUnits(repositoryRoot),
+    Shared.Repo.filesUnder(Shared.FS.resolvePath(PERFORMANCE_CHECK_ROOT, repositoryRoot), { extensions: ['.ts'] }),
   ])
   const sources: SuiteSource[] = [
     ...[...byPackage].map(([name, files]): SuiteSource => ({
@@ -164,7 +165,8 @@ async function suiteRegistry(repositoryRoot = Shared.Repo.getRoot()): Promise<Su
     {
       build: (selected, selection, context) =>
         bunSuite(PERFORMANCE_CHECKS, selected, selection.pattern, context, repositoryRoot),
-      files: [PERFORMANCE_CHECK_FILE],
+      files: performanceFiles.filter(path => path.endsWith('.test.ts'))
+        .map(path => repositoryRelative(path, repositoryRoot)).sort(),
       name: PERFORMANCE_CHECKS,
     },
     {

@@ -51,7 +51,7 @@ export type ProjectToolingResult = {
 /** A watch has already completed its initial refresh when it is returned. */
 export type ProjectToolingWatch = {
   readonly lastResult: ProjectToolingResult
-  requestRefresh(): Promise<ProjectToolingResult>
+  requestRefresh(options?: { force?: boolean }): Promise<ProjectToolingResult>
   dispose(): Promise<void>
 }
 

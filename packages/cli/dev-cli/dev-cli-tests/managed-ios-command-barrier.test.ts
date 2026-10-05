@@ -8,6 +8,7 @@ import {
   type ManagedIosNativeExecution,
   runManagedIosCommandBarrier,
 } from '../dev-cli-src/dev-loop/ManagedIosCommandBarrier'
+import { metadataTool } from './ManagedIosCommandBarrierMetadataTool'
 
 // Real kernels execute fixed repository source children. These tests never release a native worker.
 // Native ancestry plus the private child handle corroborates shell PPID; it is not authenticated direct PPID.
@@ -373,11 +374,15 @@ for (const fault of ['sdk', 'environment', 'plan-symlink'] as const) {
 }
 
 Test('fast fixed source downloader captures and drains its original plutil metadata descendant', async () => {
+  // The SDK downloader's metadata child is macOS's /usr/bin/plutil, which Linux does not ship.
+  if (Platform.hostPlatform !== 'darwin') {
+    return
+  }
   const f = await fixture('metadata', 20_000, 'download')
   try {
     const result = await f.execute()
     Expect(result.exitCode).toBe(0)
-    const metadata = f.evidence()!.processes.filter(process => process.command === 'plutil')
+    const metadata = f.evidence()!.processes.filter(process => process.command === metadataTool.command)
     Expect(metadata).toHaveLength(1)
     Expect(metadata[0]!.pid).not.toBe(f.evidence()!.worker.pid)
     Expect(ProcessTree.identities(metadata.map(process => process.pid)).size).toBe(0)
@@ -597,13 +602,15 @@ Test('fixed iOS barrier cancellation refuses a later successful child acknowledg
 })
 Test('fixed iOS barrier finite deadline never resets while child publication remains pending', async () => {
   // budget-ok: Deliberately expire the original finite command deadline while its publication is held.
-  const f = await fixture('short', 400)
+  // The budget also covers launching the real supervisor, which took about 700ms on a CI runner, so
+  // it must outlast that launch for the deadline to expire during publication rather than readiness.
+  const f = await fixture('short', 2_000)
   const gate = Deferred<void>()
   try {
     f.hook(async () => await gate.promise)
     const started = Time.nowMs()
     await Expect(f.execute()).rejects.toThrow('publication budget')
-    Expect(Time.nowMs() - started).toBeLessThan(1_500)
+    Expect(Time.nowMs() - started).toBeLessThan(3_500)
     gate.resolve()
     await Time.sleep(75)
     Expect(await FS.isFile(FS.resolvePath('mutation.json', f.root))).toBe(false)

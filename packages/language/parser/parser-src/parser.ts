@@ -1,7 +1,7 @@
 import { Assert, type Diagnostic, type DiagnosticRange, Diagnostics, FS, type ReleaseProfile, TaoFiles } from '@shared'
 import { Langium } from './langium-exports'
 import { bridgesToATypeScriptExport, unresolvedReferenceMessage } from './linker-diagnostics'
-import { emptyPackageResolver, type PackageResolver } from './package-resolver'
+import { createValidationBoundaryObservations, emptyPackageResolver, type PackageResolver } from './package-resolver'
 import * as AST from './parserASTExport'
 import { createQuotedRenderParser, quotedTextImport } from './quoted-render'
 import { ReleaseCompletionProvider } from './release-completion-provider'
@@ -22,6 +22,7 @@ export const codeProjectRoot = '/__tao__'
 const codeSourceUri = Langium.URI.file(`${codeProjectRoot}/source.tao`)
 
 export { AST, Langium, URI }
+export { createValidationBoundaryObservations } from './package-resolver'
 export { releaseCapabilityOf } from './release-capability'
 export { TaoReferences } from './tao-references'
 export type URI = Langium.URI
@@ -33,6 +34,7 @@ export type {
   ProjectModuleBinding,
   ProjectPublication,
   ProjectRequirement,
+  ValidationBoundaryObservations,
 } from './package-resolver'
 
 /** ParserServices declares the Langium services used by the parser stage. */
@@ -48,7 +50,11 @@ export type ParserLspServices = {
   language: Langium.LangiumServices
 }
 
-/** ParserContext declares parser invocation state. */
+/**
+ * ParserContext owns a mutable linked-document store. Serialize builds and their AST consumers
+ * across callers sharing these services: a subsequent build may relink or replace those documents.
+ * Compare independent authored syntax with parseSyntax, or use separate contexts for separate builds.
+ */
 export type ParserContext<ServicesT extends ParserServices = ParserServices> = {
   packages: PackageResolver
   services: ServicesT
@@ -78,6 +84,8 @@ export type ParserLspContributions = {
 export type ParseOptions = {
   uri?: URI
   validation?: boolean
+  /** A host refreshed package ownership or physical boundaries without necessarily changing source. */
+  relink?: boolean
 }
 
 type LexReport = ReturnType<ParserServices['language']['parser']['Lexer']['tokenize']>
@@ -116,9 +124,27 @@ export type SyntaxParse = {
 }
 
 let syntaxContext: ParserContext | undefined
+const sourceBatches = new WeakMap<Langium.LangiumSharedCoreServices, Map<string, string>>()
+
+type ValidationDependencies = {
+  readonly files: readonly AST.TaoFile[]
+  readonly targets: readonly AST.Node[]
+  readonly signature: string
+}
+
+type DependencyEdge = readonly [kind: string, paths: readonly string[]]
+type DependencyInputs = { edges: DependencyEdge[]; complete: boolean }
+type DependencyPublication = Map<AST.TaoFile, ValidationDependencies>
+const dependencyPublications = new WeakMap<Langium.LangiumSharedCoreServices, DependencyPublication>()
+const dependencyOwners = new WeakMap<AST.TaoFile, DependencyPublication>()
+const discoveredDependencies = new WeakMap<LoadedDocuments, Map<string, DependencyInputs>>()
 
 /** Parser exposes lexing and parsing functions for Tao source files and source strings. */
 export const Parser = {
+  /** Exact inputs of the last complete core build; syntax-only and editor-only builds are unknown. */
+  validationDependencies(file: AST.TaoFile): ValidationDependencies | undefined {
+    return dependencyOwners.get(file)?.get(file)
+  },
   /** createContext creates parser stage services. */
   createContext(options: CreateParserContextOptions = {}): ParserContext {
     const packages = options.packages ?? emptyPackageResolver
@@ -146,13 +172,10 @@ export const Parser = {
 
   /** parse parses one Tao file URI and all reachable Tao documents. */
   async parse(context: ParserContext, uri: URI, options: ParseOptions = {}): Promise<ParseResult> {
-    const factory = context.services.shared.workspace.LangiumDocumentFactory
-    const source = context.services.sourceOverrides?.[uri.path]
-    const entryDocument = source === undefined
-      ? await factory.fromUri<AST.TaoFile>(uri)
-      : factory.fromString<AST.TaoFile>(source, uri)
-    const documents = await loadReachableDocuments(context, entryDocument)
-    return await buildDocuments(context.services, entryDocument, documents, options)
+    const loaded = new Map<string, AST.Document>()
+    const entryDocument = await documentFromFilePath(context, uri.path, loaded)
+    const documents = await loadReachableDocuments(context, entryDocument, loaded)
+    return await buildDocuments(context, entryDocument, documents, options, loaded)
   },
 
   /**
@@ -172,8 +195,13 @@ export const Parser = {
       const entryDocument = await documentFromFilePath(context, uri.path, loaded)
       graphs.push({ entryDocument, documents: await loadReachableDocuments(context, entryDocument, loaded) })
     }
-    await linkDocuments(context.services, [...new Set(graphs.flatMap(graph => graph.documents))], options)
-    return graphs.map(graph => parseResultFromDocuments(graph.entryDocument, graph.documents))
+    await linkDocuments(context, [...new Set(graphs.flatMap(graph => graph.documents))], options, loaded)
+    return graphs.map(graph =>
+      parseResultFromDocuments(
+        graph.entryDocument,
+        canonicalDocuments(context.services, graph.documents),
+      )
+    )
   },
 
   /** parseSyntax parses Tao source text into an AST without loading imports or linking references. */
@@ -198,12 +226,11 @@ export const Parser = {
 
   /** parseSource parses Tao source code using an existing parser context. */
   async parseSource(context: ParserContext, code: string, options: ParseOptions = {}): Promise<ParseResult> {
-    const document = context.services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(
-      code,
-      options.uri ?? codeSourceUri,
-    )
-    const documents = await loadReachableDocuments(context, document)
-    return await buildDocuments(context.services, document, documents, options)
+    const uri = options.uri ?? codeSourceUri
+    const document = documentFromSource(context.services, code, uri)
+    const loaded = new Map<string, AST.Document>([[uri.path, document]])
+    const documents = await loadReachableDocuments(context, document, loaded)
+    return await buildDocuments(context, document, documents, options, loaded)
   },
 }
 
@@ -230,11 +257,13 @@ function createParserContext<ServicesT extends ParserServices>(
  */
 
 function createServices(options: CreateParserContextOptions & { packages: PackageResolver }): ParserServices {
+  const batch = sourceBatchContext(options.langiumContext ?? Langium.NodeFileSystem)
   const shared = Langium.inject(
-    Langium.createDefaultSharedCoreModule(options.langiumContext ?? Langium.NodeFileSystem),
+    Langium.createDefaultSharedCoreModule(batch.context),
     AST.GeneratedSharedModule,
     taoSharedModule(),
   )
+  sourceBatches.set(shared, batch.sources)
   const language = Langium.inject(
     Langium.createDefaultCoreModule({ shared }),
     AST.GeneratedModule,
@@ -244,12 +273,14 @@ function createServices(options: CreateParserContextOptions & { packages: Packag
 }
 
 function createLspServices(options: CreateParserLspContextOptions & { packages: PackageResolver }): ParserLspServices {
+  const batch = sourceBatchContext(options.langiumContext ?? Langium.NodeFileSystem)
   const shared = Langium.inject(
-    Langium.createDefaultSharedModule(options.langiumContext ?? Langium.NodeFileSystem),
+    Langium.createDefaultSharedModule(batch.context),
     AST.GeneratedSharedModule,
     taoSharedModule(),
     taoLspSharedModule(),
   )
+  sourceBatches.set(shared, batch.sources)
   const language = Langium.inject(
     Langium.createDefaultModule({ shared }),
     AST.GeneratedModule,
@@ -259,10 +290,42 @@ function createLspServices(options: CreateParserLspContextOptions & { packages: 
   return registerLanguage(shared, language)
 }
 
+/** Keep discovery and the subsequent update on the same captured source, including virtual files. */
+function sourceBatchContext<ContextT extends Langium.DefaultSharedCoreModuleContext>(context: ContextT) {
+  const sources = new Map<string, string>()
+  return {
+    sources,
+    context: {
+      ...context,
+      fileSystemProvider: (services: Langium.LangiumSharedCoreServices) => {
+        const provider = context.fileSystemProvider(services)
+        return Object.assign(Object.create(provider) as typeof provider, {
+          readFile: (uri: URI) =>
+            sources.has(uri.path)
+              ? Promise.resolve(sources.get(uri.path)!)
+              : provider.readFile(uri),
+          readFileSync: (uri: URI) => sources.get(uri.path) ?? provider.readFileSync(uri),
+          exists: (uri: URI) => sources.has(uri.path) ? Promise.resolve(true) : provider.exists(uri),
+          existsSync: (uri: URI) => sources.has(uri.path) || provider.existsSync(uri),
+        })
+      },
+    },
+  }
+}
+
 /** Relink implicit dependencies that have no authored Langium reference. */
 class TaoDocumentBuilder extends Langium.DefaultDocumentBuilder {
-  constructor(services: Langium.LangiumSharedCoreServices) {
-    super(services)
+  constructor(private readonly sharedServices: Langium.LangiumSharedCoreServices) {
+    super(sharedServices)
+    this.onUpdate((changed, deleted) => {
+      if (changed.length > 0 || deleted.length > 0) {
+        for (const document of this.langiumDocuments.all) {
+          // A deletion-only update otherwise never enters Parsed, leaving implicit workspace
+          // visibility and unused wildcard target sets attached to the preceding graph.
+          this.resetToState(document, Langium.DocumentState.Parsed)
+        }
+      }
+    })
     // A `folder` name is not a Langium reference — a type name is a plain identifier — so folder
     // visibility reads the workspace set recorded on each syntax tree. The checker records that set
     // before it builds. The editor builds through this class, and records every loaded Tao file once
@@ -276,24 +339,20 @@ class TaoDocumentBuilder extends Langium.DefaultDocumentBuilder {
     })
   }
 
+  override async build(
+    ...args: Parameters<InstanceType<typeof Langium.DefaultDocumentBuilder>['build']>
+  ): Promise<void> {
+    dependencyPublications.get(this.sharedServices)?.clear()
+    await super.build(...args)
+  }
+
   protected override shouldRelink(document: Langium.LangiumDocument, changedUris: Set<string>): boolean {
-    if (super.shouldRelink(document, changedUris)) {
+    // Plain type names, folder visibility, implicit mounts and unused wildcards have no indexed
+    // reference edge. Reuse their syntax trees, but refresh every retained Tao document's links.
+    if (changedUris.size > 0 && AST.isTaoFile(document.parseResult.value)) {
       return true
     }
-    if (changedUris.size === 0 || !AST.isTaoFile(document.parseResult.value)) {
-      return false
-    }
-    // An unused wildcard still depends on the target's complete public name set. Changes can
-    // introduce collisions, remove exports or change publication selection without an old ref.
-    // Conservatively revalidate its owner rather than trusting reference-only dependency indexes.
-    if (document.parseResult.value.statements.some(statement => AST.isUseStatement(statement) && statement.all)) {
-      return true
-    }
-    return AST.streamAllContents(document.parseResult.value).some(node =>
-      (AST.isValueReference(node) || AST.isMemberAccessExpression(node))
-      && AST.isDesignColorPosition(node)
-      && AST.isDesignColor(node.target.ref)
-    )
+    return super.shouldRelink(document, changedUris)
   }
 
   // A watch event can name a file that is gone by the time the build reads it. Langium does not
@@ -303,6 +362,7 @@ class TaoDocumentBuilder extends Langium.DefaultDocumentBuilder {
     deleted: URI[],
     cancelToken = Langium.CancellationToken.None,
   ): Promise<void> {
+    dependencyPublications.get(this.sharedServices)?.clear()
     try {
       await super.update(changed, deleted, cancelToken)
     } catch (error) {
@@ -474,40 +534,210 @@ function registerLanguage<
 }
 
 async function buildDocuments(
-  services: ParserServices,
+  context: ParserContext,
   entryDocument: AST.Document,
   documents: readonly AST.Document[],
   options: ParseOptions,
+  loaded: LoadedDocuments,
 ): Promise<ParseResult> {
-  await linkDocuments(services, documents, options)
-  return parseResultFromDocuments(entryDocument, documents)
+  await linkDocuments(context, documents, options, loaded)
+  return parseResultFromDocuments(entryDocument, canonicalDocuments(context.services, documents))
 }
 
-/** linkDocuments makes `documents` the whole of what the services hold, then builds them once. */
+/** linkDocuments updates the complete reachable set while retaining unchanged syntax trees. */
 async function linkDocuments(
-  services: ParserServices,
+  context: ParserContext,
   documents: readonly AST.Document[],
   options: ParseOptions,
+  loaded: LoadedDocuments,
 ): Promise<void> {
+  const services = context.services
   const langiumDocuments = services.shared.workspace.LangiumDocuments
   const currentUris = new Set(documents.map(document => document.uri.toString()))
-  for (const retained of Array.from(langiumDocuments.all)) {
-    if (!currentUris.has(retained.uri.toString())) {
-      langiumDocuments.deleteDocument(retained.uri)
-    }
-  }
-  AST.rememberVisibleWorkspaceFiles(
-    documents.map(document => document.parseResult.value).filter(AST.isTaoFile),
-  )
+  const deleted = Array.from(langiumDocuments.all)
+    .filter(document => !currentUris.has(document.uri.toString()))
+    .map(document => document.uri)
+  const changed: URI[] = []
+  const sources = sourceBatches.get(services.shared)
   for (const document of documents) {
-    if (langiumDocuments.hasDocument(document.uri)) {
+    if (langiumDocuments.getDocument(document.uri) !== document) {
+      // Discovery has already parsed the changed source. Updating this same CST lets Langium
+      // skip its second parse, while update still clears the URI's indexes and reference state.
       langiumDocuments.deleteDocument(document.uri)
+      langiumDocuments.addDocument(document)
+      changed.push(document.uri)
+    } else if (options.relink) {
+      changed.push(document.uri)
     }
-    langiumDocuments.addDocument(document)
+    sources?.set(document.uri.path, document.textDocument.getText())
   }
-  await services.shared.workspace.DocumentBuilder.build([...documents], {
-    eagerLinking: true,
-    validation: options.validation ?? true,
+  const builder = services.shared.workspace.DocumentBuilder
+  const previousOptions = builder.updateBuildOptions
+  builder.updateBuildOptions = { eagerLinking: true, validation: false }
+  try {
+    await builder.update(changed, deleted)
+    // Validation is deliberately repeated even when no text changed: Tao checks can depend on
+    // mutable workspace/package state beyond Langium's indexed references.
+    if (options.validation ?? true) {
+      await builder.build(canonicalDocuments(services, documents), { eagerLinking: true, validation: true })
+    }
+  } finally {
+    builder.updateBuildOptions = previousOptions
+    sources?.clear()
+  }
+  await publishValidationDependencies(context, canonicalDocuments(services, documents), loaded)
+}
+
+/** Publish only canonical, fully linked inputs captured by this invocation's discovery. */
+async function publishValidationDependencies(
+  context: ParserContext,
+  documents: readonly AST.Document[],
+  loaded: LoadedDocuments,
+): Promise<void> {
+  const discovered = discoveredDependencies.get(loaded)
+  if (!discovered) {
+    return
+  }
+  const publication: DependencyPublication = new Map()
+  dependencyPublications.set(context.services.shared, publication)
+  const byPath = new Map(documents.map(document => [document.uri.path, document]))
+  const allFiles = documents.map(document => document.parseResult.value)
+  const locator = context.services.language.workspace.AstNodeLocator
+  const inputs = new Map<string, DependencyInputs>()
+  const targetsByPath = new Map<string, AST.Node[]>()
+  const selectionsByPath = new Map<string, unknown[]>()
+  const boundariesByPath = new Map<string, string>()
+  const boundaryObservations = createValidationBoundaryObservations(FS)
+  const nodeKey = (node: AST.Node): readonly string[] => [
+    AST.getDocument(node).uri.path,
+    locator.getAstNodePath(node),
+    node.$type,
+  ]
+  const primitivePaths = allFiles.filter(file => file.statements.some(AST.isPrimitiveDeclaration))
+    .map(file => AST.getDocument(file).uri.path)
+  const readContextPaths = [...byPath.keys()].filter(path => path.endsWith('/@tao/data/ReadContext.tao'))
+  for (const document of documents) {
+    const path = document.uri.path
+    const captured = discovered.get(path)
+    if (!captured) {
+      continue
+    }
+    const boundary = await context.packages.validationBoundary(path, boundaryObservations)
+    if (boundary !== undefined) {
+      boundariesByPath.set(path, boundary)
+    }
+    const edges: DependencyEdge[] = [...captured.edges]
+    const input: DependencyInputs = {
+      edges,
+      complete: captured.complete
+        && boundary !== undefined
+        && document.state >= Langium.DocumentState.Linked
+        && document.parseResult.lexerErrors.length === 0
+        && document.parseResult.parserErrors.length === 0,
+    }
+    inputs.set(path, input)
+    // Mounted designs and project data membership are plain structural lookups, not references.
+    edges.push([
+      'project-visibility',
+      context.packages.projectSourceFiles({
+        fromFilePath: path,
+        workspaceFiles: allFiles,
+      }).map(file => AST.getDocument(file).uri.path),
+    ])
+    edges.push(['primitive-contracts', primitivePaths], ['read-context', readContextPaths])
+    const selections: unknown[] = []
+    selectionsByPath.set(path, selections)
+    const useStatements = document.parseResult.value.statements.filter(statement =>
+      AST.isUseStatement(statement) || AST.isUsePackageStatement(statement)
+    )
+    for (const [index, statement] of useStatements.entries()) {
+      // A root publication discovered later may establish an alias this earlier import uses.
+      // Re-read its candidate membership after all requirements have registered their bindings.
+      const candidates = await context.packages.candidateFilePaths(statement, { fromFilePath: path })
+      const kind = `import:${index}:${statement.importPath ?? ''}`
+      const edgeIndex = edges.findIndex(([edgeKind]) => edgeKind === kind)
+      if (edgeIndex === -1) {
+        input.complete = false
+      } else {
+        edges[edgeIndex] = [kind, [...candidates]]
+      }
+      if (!statement.importPath || (!AST.isUseStatement(statement) || !statement.all) && candidates.length === 0) {
+        input.complete = false
+      }
+      const declarations = context.packages.collectTargetDeclarations(statement, {
+        fromFilePath: path,
+        workspaceFiles: allFiles,
+      })
+      // Observe every selected declaration, including an unused wildcard, without changing
+      // the import bindings owned by linking.
+      edges.push([`import-targets:${index}`, declarations.map(declaration => AST.getDocument(declaration).uri.path)])
+      selections.push([index, declarations.map(nodeKey)])
+    }
+    const targets: AST.Node[] = []
+    targetsByPath.set(path, targets)
+    for (const reference of document.references) {
+      const target = 'ref' in reference ? reference.ref : undefined
+      if (!target) {
+        // These heads name TypeScript exports, not Tao declarations. Their complete authored
+        // input remains in this document's AST; foreign implementation checks run separately.
+        if (!bridgesToATypeScriptExport(reference)) {
+          input.complete = false
+        }
+        continue
+      }
+      const targetPath = AST.getDocument(target).uri.path
+      if (byPath.get(targetPath)?.parseResult.value !== AST.findRoot(target)) {
+        input.complete = false
+      }
+      targets.push(target)
+      edges.push(['reference', [targetPath]])
+    }
+  }
+  for (const document of documents) {
+    const reached = new Set<string>()
+    const queue = [document.uri.path]
+    let complete = true
+    while (queue.length > 0) {
+      const path = queue.shift()!
+      if (reached.has(path)) {
+        continue
+      }
+      reached.add(path)
+      const input = inputs.get(path)
+      if (!input?.complete || !byPath.has(path)) {
+        complete = false
+        break
+      }
+      queue.push(...input.edges.flatMap(([kind, paths]) =>
+        // Extra root membership is observational: only roots already loaded by normal discovery
+        // can supply AST inputs to local handlers. All authored/reachable candidate edges remain strict.
+        kind === 'project-root' ? paths.filter(candidate => byPath.has(candidate)) : paths
+      ))
+    }
+    if (!complete) {
+      continue
+    }
+    const paths = [...reached].sort()
+    const files = Object.freeze(paths.map(path => byPath.get(path)!.parseResult.value))
+    const targets = Object.freeze([...new Set(paths.flatMap(path => targetsByPath.get(path) ?? []))])
+    const signature = JSON.stringify(paths.map(path => [
+      path,
+      inputs.get(path)!.edges,
+      boundariesByPath.get(path),
+      selectionsByPath.get(path),
+      (targetsByPath.get(path) ?? []).map(nodeKey),
+    ]))
+    const file = document.parseResult.value
+    publication.set(file, Object.freeze({ files, targets, signature }))
+    dependencyOwners.set(file, publication)
+  }
+}
+
+function canonicalDocuments(services: ParserServices, documents: readonly AST.Document[]): AST.Document[] {
+  return documents.map(document => {
+    const canonical = services.shared.workspace.LangiumDocuments.getDocument(document.uri)
+    Assert.defined(canonical, 'built Tao document remains in the workspace', { path: document.uri.path })
+    return canonical as AST.Document
   })
 }
 
@@ -647,17 +877,24 @@ function isParsedFile(file: ParsedFile | undefined): file is ParsedFile {
  * several entries reach is read and parsed once and every entry's graph names the same document.
  */
 type LoadedDocuments = Map<string, AST.Document>
+const loadedSources = new WeakMap<LoadedDocuments, Map<string, Promise<string>>>()
 
 async function loadReachableDocuments(
   context: ParserContext,
   entryDocument: AST.Document,
-  loaded?: LoadedDocuments,
+  loaded: LoadedDocuments,
 ): Promise<AST.Document[]> {
   const documents = new Map<string, AST.Document>()
+  let inputs = discoveredDependencies.get(loaded)
+  if (!inputs) {
+    inputs = new Map()
+    discoveredDependencies.set(loaded, inputs)
+  }
   // Sibling scans are memoized per directory for this load only; files may change between runs.
   const siblingScans: SiblingScanCache = new Map()
+  const intrinsicPaths = await context.packages.intrinsicFilePaths()
   const intrinsicDocuments = await Promise.all(
-    (await context.packages.intrinsicFilePaths()).map(path => documentFromFilePath(context, path, loaded)),
+    intrinsicPaths.map(path => documentFromFilePath(context, path, loaded)),
   )
   const rootDocuments = await Promise.all(
     (await context.packages.projectRootFilePaths(entryDocument.uri.path))
@@ -672,7 +909,9 @@ async function loadReachableDocuments(
       continue
     }
     documents.set(currentPath, document)
-    queue.push(...await loadReferencedDocuments(context, document, documents, siblingScans, loaded))
+    queue.push(
+      ...await loadReferencedDocuments(context, document, documents, siblingScans, loaded, inputs, intrinsicPaths),
+    )
   }
 
   return [...documents.values()]
@@ -683,47 +922,58 @@ async function loadReferencedDocuments(
   document: AST.Document,
   loadedDocuments: ReadonlyMap<string, AST.Document>,
   siblingScans: SiblingScanCache,
-  loaded?: LoadedDocuments,
+  loaded: LoadedDocuments,
+  inputs: Map<string, DependencyInputs>,
+  intrinsicPaths: readonly string[],
 ): Promise<AST.Document[]> {
   const ast = document.parseResult.value
   if (ast === undefined) {
     return []
   }
   const referencedDocuments: AST.Document[] = []
-  if (AST.streamAllContents(ast).some(AST.isQuotedRender)) {
-    for (
-      const path of await context.packages.candidateFilePaths(quotedTextImport(), { fromFilePath: document.uri.path })
-    ) {
+  const edges: DependencyEdge[] = [['intrinsic', [...intrinsicPaths]]]
+  const input: DependencyInputs = { edges, complete: true }
+  inputs.set(document.uri.path, input)
+  const addCandidates = async (kind: string, paths: readonly string[]): Promise<void> => {
+    // Record empty sets and every candidate before suppressing already-loaded documents.
+    edges.push([kind, [...paths]])
+    for (const path of paths) {
       if (!loadedDocuments.has(path)) {
         referencedDocuments.push(await documentFromFilePath(context, path, loaded))
       }
     }
   }
-  // A sibling may carry `folder` declarations this file reaches without naming them in a `use`,
-  // so the whole folder is loaded rather than only what the imports point at.
-  for (const siblingPath of await siblingTaoFilePaths(context, document.uri.path, siblingScans)) {
-    if (!loadedDocuments.has(siblingPath)) {
-      referencedDocuments.push(await documentFromFilePath(context, siblingPath, loaded))
-    }
+  // Root membership is a validation input, not an additional reachability rule. Only the
+  // entry's original root discovery loads root files; additional root paths are signature observations.
+  edges.push(['project-root', [
+    ...await context.packages.projectRootFilePaths(document.uri.path, {
+      clearRequirementAliases: false,
+    }),
+  ]])
+  if (AST.streamAllContents(ast).some(AST.isQuotedRender)) {
+    await addCandidates(
+      'quoted-render',
+      await context.packages.candidateFilePaths(quotedTextImport(), {
+        fromFilePath: document.uri.path,
+      }),
+    )
   }
+  // Plain-name and folder visibility use these siblings even without a resolved reference.
+  await addCandidates('folder', await siblingTaoFilePaths(context, document.uri.path, siblingScans, loaded))
   const importingStatements = ast.statements.filter(statement =>
     AST.isUseStatement(statement) || AST.isUsePackageStatement(statement)
   )
-  for (const useStatement of importingStatements) {
+  for (const [index, useStatement] of importingStatements.entries()) {
     const candidatePaths = await context.packages.candidateFilePaths(useStatement, {
       fromFilePath: document.uri.path,
     })
-    for (const candidatePath of candidatePaths) {
-      if (!loadedDocuments.has(candidatePath)) {
-        referencedDocuments.push(await documentFromFilePath(context, candidatePath, loaded))
-      }
-    }
+    await addCandidates(`import:${index}:${useStatement.importPath ?? ''}`, candidatePaths)
   }
-  for (const requirement of AST.streamAllContents(ast).filter(AST.isPackageRequires)) {
-    for (const candidatePath of await context.packages.requirementFilePaths(requirement, document.uri.path)) {
-      if (!loadedDocuments.has(candidatePath)) {
-        referencedDocuments.push(await documentFromFilePath(context, candidatePath, loaded))
-      }
+  for (const [index, requirement] of AST.streamAllContents(ast).filter(AST.isPackageRequires).entries()) {
+    const paths = await context.packages.requirementFilePaths(requirement, document.uri.path)
+    await addCandidates(`requirement:${index}`, paths)
+    if (requirement.locator && paths.length === 0) {
+      input.complete = false
     }
   }
   return referencedDocuments
@@ -740,17 +990,22 @@ async function siblingTaoFilePaths(
   context: ParserContext,
   filePath: string,
   siblingScans: SiblingScanCache,
+  loaded?: LoadedDocuments,
 ): Promise<string[]> {
   const directory = FS.dirname(filePath)
   let scan = siblingScans.get(directory)
   if (!scan) {
-    scan = folderSiblingPathsIn(context, directory)
+    scan = folderSiblingPathsIn(context, directory, loaded)
     siblingScans.set(directory, scan)
   }
   return (await scan).filter(path => path !== filePath)
 }
 
-async function folderSiblingPathsIn(context: ParserContext, directory: string): Promise<string[]> {
+async function folderSiblingPathsIn(
+  context: ParserContext,
+  directory: string,
+  loaded?: LoadedDocuments,
+): Promise<string[]> {
   const overrides = context.services.sourceOverrides ?? {}
   const diskPaths = await FS.isDirectory(directory)
     ? (await FS.listDir(directory)).map(name => FS.resolvePath(name, directory))
@@ -761,7 +1016,7 @@ async function folderSiblingPathsIn(context: ParserContext, directory: string): 
     .filter(path => FS.extname(path) === '.tao' && !AST.isTestSidecarPath(path))
   const paths: string[] = []
   for (const path of candidates) {
-    const source = overrides[path] ?? await FS.readText(path)
+    const source = await sourceFromFilePath(context, path, loaded)
     if (folderDeclarationPattern.test(source)) {
       paths.push(path)
     }
@@ -778,11 +1033,36 @@ async function documentFromFilePath(
   if (held !== undefined) {
     return held
   }
-  const factory = context.services.shared.workspace.LangiumDocumentFactory
-  const source = context.services.sourceOverrides?.[filePath]
-  const document = source === undefined
-    ? await factory.fromUri<AST.TaoFile>(Langium.URI.file(filePath))
-    : factory.fromString<AST.TaoFile>(source, Langium.URI.file(filePath))
+  const source = await sourceFromFilePath(context, filePath, loaded)
+  const document = documentFromSource(context.services, source, URI.file(filePath))
   loaded?.set(filePath, document)
   return document
+}
+
+function sourceFromFilePath(context: ParserContext, filePath: string, loaded?: LoadedDocuments): Promise<string> {
+  if (loaded?.has(filePath)) {
+    return Promise.resolve(loaded.get(filePath)!.textDocument.getText())
+  }
+  let sources = loaded && loadedSources.get(loaded)
+  if (loaded && !sources) {
+    sources = new Map()
+    loadedSources.set(loaded, sources)
+  }
+  let source = sources?.get(filePath)
+  if (!source) {
+    const override = context.services.sourceOverrides?.[filePath]
+    source = override === undefined
+      ? context.services.shared.workspace.FileSystemProvider.readFile(URI.file(filePath))
+      : Promise.resolve(override)
+    sources?.set(filePath, source)
+  }
+  return source
+}
+
+function documentFromSource(services: ParserServices, source: string, uri: URI): AST.Document {
+  const retained = services.shared.workspace.LangiumDocuments.getDocument(uri)
+  if (retained !== undefined && retained.textDocument.getText() === source) {
+    return retained as AST.Document
+  }
+  return services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(source, uri)
 }

@@ -10,6 +10,16 @@
         ]
       }
     ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-prompt-submit.zsh\" || true"
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash",
@@ -102,6 +112,8 @@
       "./agent unsandboxed capabilities *",
       "./agent unsandboxed open-pr",
       "./agent unsandboxed open-pr *",
+      "./agent unsandboxed merge-pr",
+      "./agent unsandboxed merge-pr *",
       "./agent unsandboxed fix-agent-config",
       "./agent unsandboxed fix-agent-config *",
       "./agent unsandboxed verify-full",
@@ -116,10 +128,14 @@
       "./agent unsandboxed studio-proof-real-app *",
       "./agent unsandboxed admission-experiment",
       "./agent unsandboxed admission-experiment *",
+      "./agent unsandboxed performance-check",
+      "./agent unsandboxed performance-check *",
       "./agent unsandboxed native-module-check",
       "./agent unsandboxed native-module-check *",
       "./agent unsandboxed reclaim",
       "./agent unsandboxed reclaim *",
+      "./agent unsandboxed resources",
+      "./agent unsandboxed resources *",
       "./agent unsandboxed prepare-release",
       "./agent unsandboxed prepare-release *",
       "./agent unsandboxed ide-extension-acceptance",
@@ -331,6 +347,8 @@
       "Bash(./agent unsandboxed capabilities *)",
       "Bash(./agent unsandboxed open-pr)",
       "Bash(./agent unsandboxed open-pr *)",
+      "Bash(./agent unsandboxed merge-pr)",
+      "Bash(./agent unsandboxed merge-pr *)",
       "Bash(./agent unsandboxed fix-agent-config)",
       "Bash(./agent unsandboxed fix-agent-config *)",
       "Bash(./agent unsandboxed verify-full)",
@@ -345,10 +363,14 @@
       "Bash(./agent unsandboxed studio-proof-real-app *)",
       "Bash(./agent unsandboxed admission-experiment)",
       "Bash(./agent unsandboxed admission-experiment *)",
+      "Bash(./agent unsandboxed performance-check)",
+      "Bash(./agent unsandboxed performance-check *)",
       "Bash(./agent unsandboxed native-module-check)",
       "Bash(./agent unsandboxed native-module-check *)",
       "Bash(./agent unsandboxed reclaim)",
       "Bash(./agent unsandboxed reclaim *)",
+      "Bash(./agent unsandboxed resources)",
+      "Bash(./agent unsandboxed resources *)",
       "Bash(./agent unsandboxed prepare-release)",
       "Bash(./agent unsandboxed prepare-release *)",
       "Bash(./agent unsandboxed ide-extension-acceptance)",
@@ -424,6 +446,8 @@
     ],
     "deny": [
       "Bash(bun install *)",
+      "Bash(gh pr merge *)",
+      "Bash(gh pr merge)",
       "Read(**/.env)",
       "Read(**/.env.*)",
       "Read(~/.aws/**)",

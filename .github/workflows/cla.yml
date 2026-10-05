@@ -1,0 +1,91 @@
+# Holds every pull request until its author has accepted CLA.md, by posting the agreement sentence on
+# a pull request in this repository. The comment is the signature: GitHub authenticates who posted
+# it, timestamps it, and keeps its edit history. Make "Contributor agreement" a required status
+# check on `main`, so nothing merges without it.
+#
+# This runs on pull_request_target so it can report on pull requests from forks. It never checks out
+# or runs their code; it only reads comments through the API.
+name: Contributor agreement
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, edited]
+  issue_comment:
+    types: [created, edited]
+
+permissions:
+  issues: read
+  pull-requests: write
+  statuses: write
+
+concurrency:
+  group: cla-${{ github.event.pull_request.number || github.event.issue.number }}
+
+env:
+  CLA_SENTENCE: I have read the Tao Contributor License Agreement, version 1.0, and I agree to it.
+  CONTEXT: Contributor agreement
+  MARKER: '<!-- tao-cla -->'
+
+jobs:
+  check:
+    if: github.event_name == 'pull_request_target' || github.event.issue.pull_request
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check the author has accepted the agreement
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          pr=$(gh api "repos/$REPO/pulls/$NUMBER")
+          author=$(jq -r .user.login <<<"$pr")
+          sha=$(jq -r .head.sha <<<"$pr")
+          # Each check reads a whole value first: grep -q in a pipeline would end it early and fail it.
+          signed() { grep -qiF -- "$CLA_SENTENCE" <<<"$1"; }
+          comments_by() {
+            gh api --paginate "repos/$REPO/issues/$1/comments" --jq ".[] | select(.user.login == \"$author\") | .body"
+          }
+          # The maintainer holds the rights already.
+          accepted=false
+          if [ "$author" = "$OWNER" ]; then
+            accepted=true
+          # This pull request's description, or a comment on it, by its author.
+          elif signed "$(jq -r '.body // ""' <<<"$pr")" || signed "$(comments_by "$NUMBER")"; then
+            accepted=true
+          else
+            # An earlier pull request where the author accepted it.
+            for other in $(gh api -X GET search/issues \
+                -f q="repo:$REPO is:pr involves:$author \"$CLA_SENTENCE\"" --jq '.items[].number'); do
+              body=$(gh api "repos/$REPO/pulls/$other" --jq "select(.user.login == \"$author\") | .body")
+              if signed "$body" || signed "$(comments_by "$other")"; then
+                accepted=true
+                break
+              fi
+            done
+          fi
+
+          if [ "$accepted" = true ]; then
+            echo "@$author has accepted the agreement."
+            gh api "repos/$REPO/statuses/$sha" -f state=success -f context="$CONTEXT" \
+              -f description="@$author has accepted CLA.md" >/dev/null
+            exit 0
+          fi
+
+          echo "@$author has not accepted the agreement."
+          gh api "repos/$REPO/statuses/$sha" -f state=failure -f context="$CONTEXT" \
+            -f description="Waiting for @$author to accept CLA.md" >/dev/null
+          # Explain once; the status, not this job, is what holds the merge.
+          existing=$(gh api --paginate "repos/$REPO/issues/$NUMBER/comments" --jq '.[].body')
+          if ! grep -qF -- "$MARKER" <<<"$existing"; then
+            gh pr comment "$NUMBER" --repo "$REPO" --body "$MARKER
+          Thank you for the pull request, @$author. Before it can be merged, please read the
+          [Tao Contributor License Agreement](https://github.com/$REPO/blob/main/CLA.md) and, if you agree,
+          post this sentence as a comment, exactly as written:
+
+          > $CLA_SENTENCE
+
+          It covers this and every later contribution. You keep the copyright in your work; the agreement
+          lets the maintainer license Tao, your contribution included, under any terms."
+          fi

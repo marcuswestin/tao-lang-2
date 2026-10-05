@@ -11,6 +11,8 @@ export type SidecarSourceOwnership = {
 }
 
 export type SidecarSourceGraphInspection = {
+  /** Exact texts consumed by this inspection, for callers auditing a saved graph. */
+  sourceTexts: ReadonlyMap<string, string>
   sourcePaths: readonly string[]
   unresolvedCandidatePaths: readonly string[]
   ownershipInputPaths: readonly string[]
@@ -22,6 +24,7 @@ export function inspectSidecarSourceGraph(
   rootPath: string,
   ownership?: SidecarSourceOwnership,
 ): SidecarSourceGraphInspection {
+  const sourceTexts = new Map<string, string>()
   const sourcePaths: string[] = []
   const unresolvedCandidatePaths = new Set<string>()
   const ownershipInputPaths = new Set<string>()
@@ -35,10 +38,17 @@ export function inspectSidecarSourceGraph(
       severity: 'error',
       source: 'compiler',
     })
-    return { sourcePaths, unresolvedCandidatePaths: [], ownershipInputPaths: [...ownershipInputPaths], diagnostics }
+    return {
+      sourceTexts,
+      sourcePaths,
+      unresolvedCandidatePaths: [],
+      ownershipInputPaths: [...ownershipInputPaths],
+      diagnostics,
+    }
   }
   if (!FS.existsSync(rootPath)) {
     return {
+      sourceTexts,
       sourcePaths: [rootPath],
       unresolvedCandidatePaths: [rootPath],
       ownershipInputPaths: [...ownershipInputPaths],
@@ -54,6 +64,7 @@ export function inspectSidecarSourceGraph(
     visited.add(sourcePath)
     sourcePaths.push(sourcePath)
     const source = FS.readTextSync(sourcePath)
+    sourceTexts.set(sourcePath, source)
     for (const specifier of relativeModuleSpecifiers(source)) {
       if (specifier.value.endsWith('.tao')) {
         continue
@@ -86,6 +97,7 @@ export function inspectSidecarSourceGraph(
   }
   visit(rootPath)
   return {
+    sourceTexts,
     sourcePaths,
     unresolvedCandidatePaths: [...unresolvedCandidatePaths],
     ownershipInputPaths: [...ownershipInputPaths],

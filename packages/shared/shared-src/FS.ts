@@ -1,10 +1,17 @@
 import {
+  closeSync as nodeCloseSync,
   type Dirent,
   existsSync as nodeExistsSync,
+  fsyncSync as nodeFsyncSync,
+  lstatSync as nodeLstatSync,
+  mkdirSync as nodeMkdirSync,
+  openSync as nodeOpenSync,
   readdirSync as nodeReaddirSync,
   readFileSync as nodeReadFileSync,
   realpathSync as nodeRealpathSync,
+  renameSync as nodeRenameSync,
   rmSync as nodeRmSync,
+  writeFileSync as nodeWriteFileSync,
 } from 'node:fs'
 import * as nodeFs from 'node:fs/promises'
 import * as nodeOs from 'node:os'
@@ -197,6 +204,53 @@ export async function entryMetadata(inputPath: string): Promise<{
     size: stats.size,
     uid: stats.uid,
   }
+}
+
+/** entryMetadataSync inspects a synchronous ownership record without following symlinks. */
+export function entryMetadataSync(inputPath: string): {
+  device: number
+  inode: number
+  kind: 'directory' | 'file' | 'other' | 'symlink'
+  mode: number
+  modifiedMs: number
+  size: number
+  uid: number
+} {
+  const stats = nodeLstatSync(inputPath)
+  return {
+    device: stats.dev,
+    inode: stats.ino,
+    kind: stats.isDirectory() ? 'directory' : stats.isFile() ? 'file' : stats.isSymbolicLink() ? 'symlink' : 'other',
+    mode: stats.mode,
+    modifiedMs: stats.mtimeMs,
+    size: stats.size,
+    uid: stats.uid,
+  }
+}
+
+/** ensureDirSync creates parents for synchronous resource registration. */
+export function ensureDirSync(inputPath: string, options: { mode?: number } = {}): void {
+  nodeMkdirSync(inputPath, { recursive: true, mode: options.mode })
+}
+
+/** writeTextSync flushes a resource record before the caller publishes its child process. */
+export function writeTextSync(
+  inputPath: string,
+  content: string,
+  options: WriteOptions & { exclusive?: boolean } = {},
+): void {
+  const descriptor = nodeOpenSync(inputPath, options.exclusive ? 'wx' : 'w', options.mode)
+  try {
+    nodeWriteFileSync(descriptor, content, { encoding: 'utf8' })
+    nodeFsyncSync(descriptor)
+  } finally {
+    nodeCloseSync(descriptor)
+  }
+}
+
+/** renameSync publishes a completely written resource record in its existing directory. */
+export function renameSync(fromPath: string, toPath: string): void {
+  nodeRenameSync(fromPath, toPath)
 }
 
 /** realPath resolves symlinks and filesystem indirections for an existing path. */

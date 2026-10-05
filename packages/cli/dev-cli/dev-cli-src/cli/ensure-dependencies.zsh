@@ -112,6 +112,8 @@ function tao_run_bun_install() {
   local attempt
   typeset -a extra_args
   extra_args=("$@")
+  # A cold install takes a minute; say so rather than sit silent before the command's own output.
+  echo "Installing repository dependencies with Bun..." >&2
   for (( attempt = 1; attempt <= TAO_DEPENDENCY_ATTEMPTS; attempt++ )); do
     if install_output="$(TMPDIR="$TAO_DEPENDENCY_TEMP" bun "${TAO_DEPENDENCY_INSTALL_ARGS[@]}" "${extra_args[@]}" 2>&1)"; then
       touch "$TAO_DEPENDENCY_STAMP"

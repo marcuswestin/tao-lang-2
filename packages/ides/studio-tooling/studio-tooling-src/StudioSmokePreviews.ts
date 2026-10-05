@@ -3,7 +3,9 @@ import type { StudioCdp } from './StudioCdp'
 
 /** Activates the listed cells a real-Metro smoke uses, through each cell's own toggle. */
 export async function activateSmokePreviews(browser: StudioCdp, requestedCellIds?: readonly string[]): Promise<void> {
-  await browser.waitFor("document.querySelector('.studio-preview-activation-toggle') !== null")
+  // The first toggle waits on Studio's first page load and render, which a full lane's CPU
+  // contention stretches well past the default bound.
+  await browser.waitFor("document.querySelector('.studio-preview-activation-toggle') !== null", { timeoutMs: 45_000 })
   const availableCellIds = await browser.evaluate<string[]>(
     "[...document.querySelectorAll('.studio-preview-cell')].filter(cell => cell.querySelector('.studio-preview-activation-toggle')).map(cell => cell.dataset.taoStudioCell ?? cell.dataset.cellId)",
   )

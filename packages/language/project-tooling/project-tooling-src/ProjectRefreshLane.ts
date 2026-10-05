@@ -1,44 +1,82 @@
 import { Errors } from '@shared'
 import type { ProjectToolingResult } from './ProjectTooling'
 
+type ProjectRefreshOptions = { force?: boolean }
+
 export type ProjectRefreshLane = {
   readonly lastResult: ProjectToolingResult | undefined
-  requestRefresh(): Promise<ProjectToolingResult>
+  requestRefresh(options?: ProjectRefreshOptions): Promise<ProjectToolingResult>
   dispose(): Promise<void>
 }
 
-/** Serializes refreshes and keeps one request made during an active refresh for a later run. */
+type RefreshRequest = {
+  options: { force: boolean }
+  promise: Promise<ProjectToolingResult>
+  resolve: (result: ProjectToolingResult) => void
+  reject: (reason: unknown) => void
+}
+
+/** Serializes refreshes, sharing one later run across requests made during an active refresh. */
 export function createProjectRefreshLane(
-  refresh: () => Promise<ProjectToolingResult>,
+  refresh: (options: ProjectRefreshOptions) => Promise<ProjectToolingResult>,
   onResult?: (result: ProjectToolingResult) => void,
 ): ProjectRefreshLane {
   let disposed = false
   let lastResult: ProjectToolingResult | undefined
-  let tail: Promise<void> = Promise.resolve()
+  let active: Promise<void> | undefined
+  let pending: RefreshRequest | undefined
+
+  function run(request: RefreshRequest): void {
+    active = Promise.resolve().then(async () => {
+      try {
+        const result = await refresh(request.options)
+        lastResult = result
+        onResult?.(result)
+        request.resolve(result)
+      } catch (error) {
+        request.reject(error)
+      }
+    }).then(() => {
+      active = undefined
+      const next = pending
+      pending = undefined
+      if (next) {
+        run(next)
+      }
+    })
+  }
 
   return {
     get lastResult() {
       return lastResult
     },
-    requestRefresh() {
+    requestRefresh(options = {}) {
       if (disposed) {
         return Promise.reject(Errors.abortError('The project tooling watch has been disposed.'))
       }
-      const next = tail.then(async () => {
-        if (disposed) {
-          return Promise.reject(Errors.abortError('The project tooling watch has been disposed.'))
-        }
-        const result = await refresh()
-        lastResult = result
-        onResult?.(result)
-        return result
+      if (pending) {
+        pending.options.force ||= options.force === true
+        return pending.promise
+      }
+      let resolve!: RefreshRequest['resolve']
+      let reject!: RefreshRequest['reject']
+      const promise = new Promise<ProjectToolingResult>((promiseResolve, promiseReject) => {
+        resolve = promiseResolve
+        reject = promiseReject
       })
-      tail = next.then(() => {}, () => {})
-      return next
+      const request = { promise, resolve, reject, options: { force: options.force === true } }
+      if (active) {
+        pending = request
+      } else {
+        run(request)
+      }
+      return promise
     },
     async dispose() {
       disposed = true
-      await tail
+      pending?.reject(Errors.abortError('The project tooling watch has been disposed.'))
+      pending = undefined
+      await active
     },
   }
 }
