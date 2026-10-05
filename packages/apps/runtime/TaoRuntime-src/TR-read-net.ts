@@ -12,7 +12,7 @@ const readNetCases = ['loading', 'missing', 'unauthorized', 'error'] as const
 /** One exceptional read case the net handles. */
 export type TaoReadNetCase = typeof readNetCases[number]
 /** `none` is the source-facing name for a missing live entity handle. */
-type TaoReadCase = TaoReadNetCase | 'none'
+type TaoReadCase = Exclude<TaoReadNetCase, 'missing'> | 'none'
 
 /** Optional facts the compiler can prove about the expression at a guard site. */
 export type TaoReadHint = Readonly<{
@@ -92,7 +92,7 @@ export function readContext(
   state: TaoReadNetCase,
   hint: TaoReadHint = {},
   facts: Readonly<Partial<Pick<TaoReadContext, 'ElapsedSeconds' | 'MissingReason' | 'UnauthorizedReason'>>> = {},
-  selectedCase: TaoReadCase = state,
+  selectedCase: TaoReadCase = state === 'missing' ? 'none' : state,
 ): TaoReadContext {
   // TODO: Docs/Roadmap/Tao Revolution/Follow-ups - Read context producers.md tracks proven
   // elapsed time, progress, recovery, category, and retry producers. Do not invent a capability or no-op action.
@@ -148,7 +148,7 @@ export function renderReadNet(
   siteProps: TaoProps | undefined,
 ): React.ReactNode {
   const handlers = TaoPropsControls.appInChain(siteProps)?.readNet
-  const override = caseName === 'missing' ? handlers?.none ?? handlers?.missing : handlers?.[caseName]
+  const override = handlers?.[caseName === 'missing' ? 'none' : caseName]
   if (override) {
     return override({ __tao: siteProps }, context)
   }

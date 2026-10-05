@@ -75,17 +75,47 @@ Describe('TR read net', () => {
   Test('lets a case the guard names win over the net', () => {
     const { note } = storedNote()
     TR.Data.Delete(TR.Value(note))
-    let legacyContext: unknown
+    let observedContext: unknown
     const net = siteProps({
-      missing: (_, context) => {
-        legacyContext = context.evaluate().jsValue
+      none: (_, context) => {
+        observedContext = context.evaluate().jsValue
         return 'App gone'
       },
     })
 
-    Expect(TR.GuardRender(TR.Value(note), [['missing', () => 'Site gone']], () => 'Editor', net)).toBe('Site gone')
+    Expect(TR.GuardRender(TR.Value(note), [['none', () => 'Site gone']], () => 'Editor', net)).toBe('Site gone')
     Expect(TR.GuardRender(TR.Value(note), [['loading', () => 'Site loading']], () => 'Editor', net)).toBe('App gone')
-    Expect(legacyContext).toMatchObject({ Case: 'missing', State: 'missing' })
+    Expect(observedContext).toMatchObject({ Case: 'none', State: 'missing' })
+  })
+
+  Test('ignores legacy missing handlers and branches while internal absence keeps the runtime fallback', () => {
+    const { note } = storedNote()
+    TR.Data.Delete(TR.Value(note))
+    let legacyCalls = 0
+    const handlers = {
+      loading: () => 'App loading',
+      missing: () => {
+        legacyCalls += 1
+        return 'Legacy app missing'
+      },
+    }
+    const props = siteProps(TR.ReadNet(handlers))
+    const rendered = TR.GuardRender(
+      TR.Value(note),
+      [['missing', () => {
+        legacyCalls += 1
+        return 'Legacy local missing'
+      }]],
+      () => 'Editor',
+      props,
+    )
+    Expect(runtimeText(rendered)).toEqual(['This note could not be found.'])
+    Expect(legacyCalls).toBe(0)
+    Expect(readContext('missing')).toMatchObject({
+      Case: 'none',
+      State: 'missing',
+      Message: 'This item could not be found.',
+    })
   })
 
   Test('matches none for nullable values and missing entity availability', () => {
@@ -236,7 +266,11 @@ Describe('TR read net', () => {
   })
 
   Test('merges inherited read-net cases and lets the variant replace one case', () => {
-    const base = TR.ReadNet({ loading: () => 'Inherited loading', error: () => 'Inherited error' })
+    const base = TR.ReadNet({
+      loading: () => 'Inherited loading',
+      none: () => 'Inherited none',
+      error: () => 'Inherited error',
+    })
     const own = TR.ReadNet({ loading: () => 'Own loading' })
     const merged = TR.MergeReadNet(base, own)
     const props = siteProps(merged)
@@ -248,6 +282,12 @@ Describe('TR read net', () => {
         'Inherited error',
       )
     Expect(Object.isFrozen(merged)).toBe(true)
+    const { note } = storedNote()
+    TR.Data.Delete(TR.Value(note))
+    Expect(TR.GuardRender(TR.Value(note), [], () => 'Editor', props)).toBe('Inherited none')
+    const replaced = TR.MergeReadNet(merged, TR.ReadNet({ none: () => 'Own none' }))
+    Expect(TR.GuardRender(TR.Value(note), [], () => 'Editor', siteProps(replaced))).toBe('Own none')
+    Expect(TR.GuardRender(TR.Value(note), [], () => 'Editor', props)).toBe('Inherited none')
   })
 
   Test('uses a proven site hint and keeps cached refresh and stale rows as content', () => {
@@ -291,6 +331,7 @@ Describe('TR read net', () => {
     })
     Expect(context.Message).toBe('Could not resolve the link to this note.')
     Expect(context.MissingReason).toBe('unresolved-reference')
+    Expect(context).toMatchObject({ Case: 'none', State: 'missing', ReadKind: 'reference' })
   })
 
   Test("renders the app's guard where it replaces a case, and the runtime's where it does not", () => {

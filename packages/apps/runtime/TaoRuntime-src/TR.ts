@@ -501,13 +501,8 @@ class TR {
         : undefined)
     if (availability && availability.status !== 'available') {
       const status = availability.status as TaoReadNetCase
-      const handlerBranch = branches.find(([name]) => name === status)
-        ?? (entityAvailability?.status === 'missing' ? branches.find(([name]) => name === 'none') : undefined)
-      const appReadNet = TRTaoProps.TaoPropsControls.appInChain(siteProps)?.readNet
-      const selectedCase = handlerBranch?.[0] === 'none'
-          || (!handlerBranch && status === 'missing' && appReadNet?.none)
-        ? 'none'
-        : status
+      const selectedCase = status === 'missing' ? 'none' : status
+      const handlerBranch = branches.find(([name]) => name === selectedCase)
       const entity = entityAvailability ? DataControls.EntityInteraction(value)?.entity : undefined
       const context = new RuntimeValue(readContext(status, {
         readKind: accountAvailability
