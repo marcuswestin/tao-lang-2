@@ -1,3 +1,4 @@
+import { Arrays } from './core/RuntimeCore'
 import type { TaoEvaluable } from './TR-action-values'
 import { RuntimeAssert } from './TR-assert'
 import { TaoActionFailure } from './TR-errors'
@@ -204,11 +205,11 @@ function createQuantityFactory<
     parent,
     invariant: metadata.invariant,
   })
-  const invariantOwners: QuantityOwner[] = []
+  const ancestry: QuantityOwner[] = []
   for (let current: QuantityOwner | undefined = owner; current; current = current.parent) {
-    invariantOwners.push(current)
+    ancestry.push(current)
   }
-  Object.freeze(invariantOwners.reverse())
+  const invariantOwners = Object.freeze(Arrays.reversed(ancestry))
   const fail = (caseName: QuantityFailureCase, sentence: string): never => {
     throw new TaoActionFailure(caseName, sentence)
   }
