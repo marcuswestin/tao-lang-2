@@ -248,6 +248,12 @@ class CapabilityTransportPlanner {
     expected: TaoType,
   ): CapabilityTransportResult {
     if (
+      expected.genericParameter && !expected.genericReceiver
+      && actual.genericParameter !== expected.genericParameter
+    ) {
+      return unsupported('incompatible-types')
+    }
+    if (
       actual.kind !== 'capability' && actual.kind !== 'entity' && actual.kind !== 'primitive'
       && !actual.genericParameter
       && !((actual.kind === 'primitive' || actual.kind === 'item' || actual.kind === 'list')
@@ -278,7 +284,8 @@ class CapabilityTransportPlanner {
     // Identity still requires the final declaration contracts; it cannot bless a concrete value.
     if (
       (actual.kind === 'capability' || actual.genericParameter)
-      && Type.identityKey(actual) === Type.identityKey(expected)
+      && Type.identityKey(actual) === Type.identityKey(expected.genericReceiver ?? expected)
+      && requirements.every(requirement => Type.aggregateCapabilityRequirements(actual).includes(requirement))
     ) {
       return ready(identity)
     }
@@ -338,7 +345,11 @@ class CapabilityTransportPlanner {
     const planned: CapabilityTransportMethod[] = []
     let unsupportedPlan: CapabilityTransportResult | undefined
     for (const witness of witnesses) {
-      const receiverPlan = this.plan(receiver, witness.receiverDomain, 'callable')
+      // A projected implicit method is already bound to its donor's receiver. Adapting that
+      // receiver again would recursively reproject the same captured witness.
+      const receiverPlan = witness.kind === 'projection' && witness.receiverPlacement.kind === 'implicit'
+        ? ready(identity)
+        : this.plan(receiver, witness.receiverDomain, 'callable')
       if (receiverPlan.kind === 'unknown') {
         return receiverPlan
       }

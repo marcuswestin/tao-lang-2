@@ -166,6 +166,41 @@ Describe('Capability list transport', () => {
     })
   })
 
+  Test('preserves identical captured contracts and reprojects wider symbolic list witnesses', async () => {
+    const file = await parse(`${declarations}
+      func Receive where type T is Display (Values list of T) -> text { return "received" }
+      func Forward where type U is Display (Values list of U) -> text { return Receive(Values) }
+      func Wider where type U is Full (Values list of U) -> text { return Receive(Values) }
+    `)
+    withProof(file, () => {
+      const forward = namedFunction(file, 'Forward')
+      const receive = namedFunction(file, 'Receive')
+      const call = AST.returnStatementsOf(forward)[0]!.value
+      Assert(AST.isFunctionCallExpression(call), 'actual generic list forwarding exists')
+      const invocation = Type.instantiateGenericInvocation(receive, AST.argumentsOf(call))
+      Expect(invocation.genericDiagnostics).toEqual([])
+      const receiving = invocation.transportTypes.get(receive.parameterList.parameters[0]!)!
+      const actual = Type.ofParameter(forward.parameterList.parameters[0]!)
+      const forwardResult = planCapabilityTransport(actual, receiving)
+      Assert(forwardResult.kind === 'ready', 'actual symbolic forwarding has a complete plan')
+      Expect(forwardResult.plan.kind).toBe('identity')
+      const wider = namedFunction(file, 'Wider')
+      const widerCall = AST.returnStatementsOf(wider)[0]!.value
+      Assert(AST.isFunctionCallExpression(widerCall), 'actual wider generic list forwarding exists')
+      const widerInvocation = Type.instantiateGenericInvocation(receive, AST.argumentsOf(widerCall))
+      Expect(widerInvocation.genericDiagnostics).toEqual([])
+      const widerReceiving = widerInvocation.transportTypes.get(receive.parameterList.parameters[0]!)!
+      const plan = listPlan(
+        planCapabilityTransport(Type.ofParameter(wider.parameterList.parameters[0]!), widerReceiving),
+      )
+      Assert(plan.element.kind === 'reproject', 'wider source uses real captured contract reprojection')
+      Expect(plan.element.methods[0]!.required.owner).toBe(namedType(file, 'Display'))
+      Expect(plan.element.methods[0]!.supplied.owner).toBe(namedType(file, 'Full'))
+      Expect(plan.actual.element?.genericParameter).toBe(wider.genericParameters[0])
+      Expect(plan.expected.element?.genericReceiver?.genericParameter).toBe(wider.genericParameters[0])
+    })
+  })
+
   Test('retains writable list invariance while representing the readonly adaptation', async () => {
     const file = await parse(`${declarations}
       type Consumer is text with {
