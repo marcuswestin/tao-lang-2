@@ -34,6 +34,11 @@ export function BookProvider(): TaoDataProvider {
     fills: true,
     connect(context: TaoDataProviderContext): TaoDataConnection {
       const backend = new BookBackend()
+      backend.seedServer(Array.from({ length: 83 }, (_, index) => ({
+        ID: `book-${String(index + 1).padStart(3, '0')}`,
+        Title: `Book ${index + 1}`,
+        Note: '',
+      })))
       const bookEntity = context.schema.entities.Book
       if (!bookEntity) {
         TR.Errors.failInput("BookStore requires a 'Book' entity.")
@@ -88,11 +93,13 @@ export function BookProvider(): TaoDataProvider {
           }
           authorID = candidate
         }
-        const maximum = descriptor.pageSize ?? 40
-        if (!Number.isInteger(maximum) || maximum < 1 || maximum > 40) {
+        if (descriptor.limit !== undefined) {
+          TR.Errors.failInput('BookStore pagination cannot be combined with a local limit.')
+        }
+        const maximum = descriptor.pageSize
+        if (maximum === undefined || !Number.isInteger(maximum) || maximum < 1 || maximum > 40) {
           TR.Errors.failInput('BookStore query pageSize must be an integer from 1 through 40.')
         }
-        // limit belongs to Tao's local query evaluation and is intentionally excluded here.
         const identity = JSON.stringify([descriptor.entity, authorID ?? null, maximum, 'ID', 'asc'])
         return { ...(authorID === undefined ? {} : { authorID }), identity, maximum }
       }

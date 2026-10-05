@@ -76,8 +76,6 @@ function snapshotWithBook(bookID: string, title: string): string {
 Describe('Syntax2 BookStore runtime provider', () => {
   Test('projects 83 books through bounded pages without truncating accumulated rows', async () => {
     const { connection, schema } = connect()
-    const session = bookStoreSession(connection)
-    session.backend.seedServer(books(83))
     await ready(schema)
 
     schema.activateQuery(bookPlan())
@@ -211,6 +209,7 @@ Describe('Syntax2 BookStore runtime provider', () => {
 
   Test('empty owned queries support terminal continuation and reject foreign ownership', async () => {
     const { connection, schema } = connect()
+    bookStoreSession(connection).backend.seedServer([])
     await ready(schema)
     schema.activateQuery(bookPlan())
     await ready(schema)
@@ -245,5 +244,9 @@ Describe('Syntax2 BookStore runtime provider', () => {
         )
       ),
     ).rejects.toThrow('ascending ID order')
+    await Expect(Promise.resolve().then(() => session.acquire({ ...base, limit: 5 }, 'first')))
+      .rejects.toThrow('cannot be combined with a local limit')
+    await Expect(Promise.resolve().then(() => session.acquire({ ...base, pageSize: undefined }, 'first')))
+      .rejects.toThrow('pageSize must be an integer')
   })
 })
