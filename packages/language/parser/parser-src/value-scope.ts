@@ -583,23 +583,23 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       AST.isViewDeclaration(node) || AST.isNavDeclaration(node)
     let scope = this.createScopeForNodes(root.statements.filter(isRenderable))
     scope = this.createScopeForNodes(this.importedDeclarations(render, isRenderable), scope)
-    const owner = AST.findOwningView(render)
-    const slotOwner = renderSlotOwnerContaining(render)
-    const slotParameters = slotOwner ? visibleParametersAtReference(slotOwner, render) : []
-    const parameters = [
-      ...(owner ? AST.parametersOf(owner) : []),
-      ...slotParameters,
-    ].filter(isRenderableParameter)
-    const firstParameter = parameters[0]
-    if (!firstParameter) {
-      return scope
-    }
-    const document = AST.getDocument(firstParameter)
-    const descriptions = parameters.flatMap(parameter => {
-      const name = parameterValueName(parameter)
-      return name ? [this.descriptions.createDescription(parameter, name, document)] : []
-    })
-    return this.createScope(descriptions, scope)
+    const targets = new Set<string>([
+      AST.ViewDeclaration.$type,
+      AST.NavDeclaration.$type,
+      AST.AliasDeclaration.$type,
+      AST.StateDeclaration.$type,
+      AST.ParameterDeclaration.$type,
+    ])
+    const seen = new Set<string>()
+    return this.createScope(
+      this.createValueScope(render, scope).getAllElements().filter(description => {
+        if (!targets.has(description.type) || seen.has(description.name)) {
+          return false
+        }
+        seen.add(description.name)
+        return true
+      }),
+    )
   }
 
   private createRenderSlotScope(use: AST.RenderSlotUse): Langium.Scope {
@@ -1265,11 +1265,6 @@ function parameterOwningDefault(node: AST.Node | undefined): AST.ParameterDeclar
     current = current.$container
   }
   return undefined
-}
-
-/** isRenderableParameter reports a parameter whose declared type a render site may name. */
-function isRenderableParameter(parameter: AST.ParameterDeclaration): boolean {
-  return AST.renderablePrimitiveOfParameter(parameter) !== undefined
 }
 
 function parameterValueName(parameter: AST.ParameterDeclaration): string | undefined {
