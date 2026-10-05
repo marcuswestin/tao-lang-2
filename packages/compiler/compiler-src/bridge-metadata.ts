@@ -744,7 +744,7 @@ function directConfigurationImplementation(
 function bridgeOwnerRange(bridge: AST.FromExpression): DiagnosticRange | undefined {
   const owner = bridge.$container
   if (AST.isReturnStatement(owner)) {
-    return AST.findOwningFunction(owner)?.$cstNode?.range ?? bridge.$cstNode?.range
+    return nativeReturnOwner(owner)?.$cstNode?.range ?? bridge.$cstNode?.range
   }
   return owner?.$cstNode?.range ?? bridge.$cstNode?.range
 }
@@ -752,14 +752,34 @@ function bridgeOwnerRange(bridge: AST.FromExpression): DiagnosticRange | undefin
 function bridgedResultType(bridge: AST.FromExpression): ASTUtils.TaoType | undefined {
   const owner = bridge.$container
   if (AST.isReturnStatement(owner)) {
-    const functionOwner = AST.findOwningFunction(owner)
-    return functionOwner?.returnType === undefined ? undefined : Type.ofFunctionReturn(functionOwner)
+    const callable = nativeReturnOwner(owner)
+    if (AST.isAssociatedConverterDeclaration(callable)) {
+      return Type.associatedConverterDescriptor(callable)?.result
+    }
+    return callable?.returnType === undefined ? undefined : Type.ofFunctionReturn(callable)
   }
   if (AST.isAliasDeclaration(owner)) {
     return owner.type === undefined ? undefined : Type.ofReference(owner.type)
   }
   if (AST.isTypeProperty(owner)) {
     return owner.type === undefined ? undefined : Type.ofReference(owner.type)
+  }
+  return undefined
+}
+
+/** The nearest real callable supplies the native return contract, including converter targets. */
+function nativeReturnOwner(
+  statement: AST.ReturnStatement,
+): AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration | AST.AssociatedConverterDeclaration | undefined {
+  let node: AST.Node | undefined = statement.$container
+  while (node !== undefined) {
+    if (
+      AST.isFunctionDeclaration(node) || AST.isAssociatedFunctionDeclaration(node)
+      || AST.isAssociatedConverterDeclaration(node)
+    ) {
+      return node
+    }
+    node = node.$container
   }
   return undefined
 }

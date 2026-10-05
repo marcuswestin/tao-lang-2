@@ -1,11 +1,45 @@
-import { Packages } from '@ast-utils'
-import { type ModuleOrigin } from '@parser'
+import { Packages, Type } from '@ast-utils'
+import { AST, type ModuleOrigin, Parser } from '@parser'
 import { FS } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { BridgeMetadata } from '../compiler-src/bridge-metadata'
 import { Workspace } from '../compiler-src/workspace'
 
 Describe('compiler: generated TypeScript contracts', () => {
+  Test('checks native associated methods and converters against their actual return contracts', async () => {
+    const parsed = await Parser.parseCode(
+      `
+      type Source is text with {
+        func ToText() fails never -> text { return NativeText(Source) from ./Host.ts }
+        static func Create(Value text) fails never -> Source { return NativeSource(Value) from ./Host.ts }
+        Source as Target fails Invalid { return NativeTarget(Source) from ./Host.ts }
+      }
+      type Target is text
+      func NativeText(Source) -> text { return Source }
+      func NativeSource(Value text) -> Source { return Source Value }
+      func NativeTarget(Source) -> Target { return Target "" }
+    `,
+      { validation: false },
+    )
+    Expect(parsed.entry.document.parseResult.parserErrors).toEqual([])
+    const module = BridgeMetadata.collect([parsed.entry], FS.dirname(parsed.entry.path))
+      .find(item => item.sourcePath === parsed.entry.path)
+    Expect(module?.code).toContain('(arg0: string) => string')
+    Expect(module?.code).toContain('typeof Sidecar.NativeText')
+    Expect(module?.code).toContain('typeof Sidecar.NativeSource')
+    Expect(module?.code).toContain('typeof Sidecar.NativeTarget')
+    const bridges = AST.streamAllContents(parsed.entry.ast).filter(AST.isFromExpression)
+    Expect(bridges.map(bridge => Type.displayName(BridgeMetadata.bridgeResultType(bridge)!))).toEqual([
+      'text',
+      'Source',
+      'Target',
+    ])
+    const converter = AST.streamAllContents(parsed.entry.ast).find(AST.isAssociatedConverterDeclaration)
+    Expect.Is(converter, AST.isAssociatedConverterDeclaration)
+    Expect(module?.sourceMappings.some(mapping => mapping.source.start.line === converter.$cstNode?.range.start.line))
+      .toBe(true)
+  })
+
   Test('publishes erased case signatures from an unselected dependency file', async () => {
     await withTaoFiles('tao-bridge-private-case-', {
       'Main.tao': 'type HapticKind is one of Light, Heavy',

@@ -87,7 +87,7 @@ export const QuantityNativeModule = {
       declarations: options.surfaceDeclarations ?? options.owners.map(entry => entry.owner),
       reservedNames: options.reservedNames,
     })
-    const { namespaceExport, makeFactory, factoryType, payloadType, wrap, wrapperType, freeze } = plan
+    const { namespaceExport, makeFactory, factoryType, payloadType, wrap, wrapperType, freeze, withFactory } = plan
     const parentsByOwner = options.parentsByOwner ?? new Map()
     const parentBindings = new Map<AST.TypeDeclaration, Readonly<{ local: string; link: QuantityNativeParentLink }>>()
     const parentImports: string[] = []
@@ -123,6 +123,8 @@ export const QuantityNativeModule = {
       }`,
       ...parentImports,
       `const ${freeze} = Object.freeze`,
+      `const ${withFactory} = <Constructors extends object, Factory>(constructors: Constructors, factory: Factory): Constructors & Readonly<{ Factory: Factory }> =>`,
+      `  Object.defineProperty(constructors, 'Factory', { value: factory }) as Constructors & Readonly<{ Factory: Factory }>`,
       '',
     ]
     const sourceMappings: Array<{ generated: DiagnosticRange; source: DiagnosticRange }> = []
@@ -220,7 +222,9 @@ export const QuantityNativeModule = {
     lines.push(`export namespace ${namespaceExport} {`)
     for (const { entry, linkage, value, checked, source } of planned) {
       append(`  export type ${linkage.typeMember} = ${value}`, source)
-      append(`  export const ${linkage.constructorMember} = ${freeze}({`, source)
+      // The capitalized bridge-only member cannot collide with an authored lowercase unit.
+      // Keep it nonenumerable so native code can still enumerate just the unit constructors.
+      append(`  export const ${linkage.constructorMember} = ${freeze}(${withFactory}({`, source)
       for (const row of entry.units) {
         append(
           `    [${JSON.stringify(row.name)}]: (input: unknown): ${value} => ${checked}.fromUnit(input, ${
@@ -229,7 +233,7 @@ export const QuantityNativeModule = {
           source,
         )
       }
-      append('  })', source)
+      append(`  }, ${checked}))`, source)
     }
     lines.push('}')
     return {
@@ -309,6 +313,7 @@ function planNames(
       { ...surface, constructorImport: reserve(`${stem}ConstructorImport`) },
     ]),
   )
+  const withFactory = reserve('__quantityWithFactory')
   return {
     namespaceExport,
     byDeclaration,
@@ -319,6 +324,7 @@ function planNames(
     wrap,
     wrapperType,
     freeze,
+    withFactory,
     reserve,
   }
 }

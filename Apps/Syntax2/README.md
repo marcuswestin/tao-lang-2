@@ -129,6 +129,13 @@ Selected unit lookup: lowercase names are a grammar rule, including qualified fi
 unit-reading methods. Owner-qualified suffixes such as `2 Duration.seconds` are available; explicitly
 visible shorthand names may be used. Ambiguous unit names error rather than using the callee to guess.
 
+Native quantity implementations import the generated `types` namespace. `types.Duration.minutes(2)`
+constructs a checked quantity; `types.Duration.Factory` exposes that owner's checked canonical
+factory for arithmetic and native return values. The capitalized, nonenumerable bridge member
+cannot collide with lowercase Tao units and leaves unit enumeration unchanged. Abstract families
+publish neither constructors nor factories. Native calls in associated functions use their declared
+result contract; native converter results use the converter's target type.
+
 Empty text and owner-elided methods follow the new requested target. Named-state shorthand is a
 preferred grammar target: constructor positions select a type, bare expression positions select
 the value; ambiguous dotted calls retain the lexical value rule and can use a type import alias.

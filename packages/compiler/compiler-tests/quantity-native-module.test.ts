@@ -94,6 +94,8 @@ Describe('compiler: quantity native module', () => {
 import { makeQuantityType as __quantityMakeType, type TaoQuantityFactory as __QuantityFactory, type TaoQuantityPayload as __QuantityPayload } from "./TaoRuntime-src/TR-quantity-values"
 import { reactiveValue as __quantityWrap, type TaoRuntimeValue as __QuantityValue } from "./TaoRuntime-src/TR-reactive-values"
 const __quantityFreeze = Object.freeze
+const __quantityWithFactory = <Constructors extends object, Factory>(constructors: Constructors, factory: Factory): Constructors & Readonly<{ Factory: Factory }> =>
+  Object.defineProperty(constructors, 'Factory', { value: factory }) as Constructors & Readonly<{ Factory: Factory }>
 
 declare const __q0Owner: unique symbol
 type __q0Units = Readonly<{ "Seconds": 1; "Minutes": 60 }>
@@ -116,15 +118,13 @@ export { __q0Checked as __q0FactoryExport }
 
 export namespace types {
   export type Measure = __q0Value
-  export const Measure = __quantityFreeze({
+  export const Measure = __quantityFreeze(__quantityWithFactory({
     ["Seconds"]: (input: unknown): __q0Value => __q0Checked.fromUnit(input, "Seconds"),
     ["Minutes"]: (input: unknown): __q0Value => __q0Checked.fromUnit(input, "Minutes"),
-  })
+  }, __q0Checked))
 }
 `)
     Expect(emitted.sourceMappings.map(mapping => mapping.generated.start.line)).toEqual([
-      5,
-      6,
       7,
       8,
       9,
@@ -141,11 +141,13 @@ export namespace types {
       20,
       21,
       22,
-      25,
-      26,
+      23,
+      24,
       27,
       28,
       29,
+      30,
+      31,
     ])
     Expect(
       emitted.sourceMappings.every(mapping =>
@@ -371,6 +373,7 @@ export namespace types {
           runtimeImport('TR-reactive-values')
         }`,
         `export const value: types.${measureLink.typeMember} = types.${measureLink.constructorMember}.Minutes(2)`,
+        `export const canonicalFromFacade: MeasureValue = types.${measureLink.constructorMember}.Factory.fromJSValue(120)`,
         'export const other = Ratio.fromJSValue(120)',
         'export const sibling = Sibling.fromJSValue(120)',
         "export const direct: MeasureValue = Measure.fromUnit(2, 'Minutes')",
@@ -390,13 +393,14 @@ export namespace types {
         "Measure.inUnit(other, 'Seconds')",
         'export function wrongReturn(): MeasureValue { return other }',
         'Measure.read(sibling)',
+        `types.${measureLink.constructorMember}.Factory.read(sibling)`,
         'Measure.read(reactiveValue(120))',
         "Measure.fromUnit(2, 'Hours')",
         `types.${measureLink.constructorMember}.fromJSValue(120)`,
       ]
       await FS.writeText(consumerPath, `${baseline}\n${rejected.join('\n')}\n`)
       const failures = diagnostics(consumerPath)
-      Expect(failures.map(diagnostic => diagnostic.code)).toEqual([2345, 2345, 2322, 2345, 2345, 2345, 2339])
+      Expect(failures.map(diagnostic => diagnostic.code)).toEqual([2345, 2345, 2322, 2345, 2345, 2345, 2345, 2339])
       Expect(failures.map(diagnostic => {
         Assert.defined(diagnostic.file, 'the native type error names a source file')
         Assert.defined(diagnostic.start, 'the native type error has a source position')
