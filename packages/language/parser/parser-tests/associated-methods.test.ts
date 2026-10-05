@@ -255,6 +255,14 @@ Describe('parser: associated methods', () => {
     Expect.Is(member, AST.isMethodCallExpression)
     Expect.Is(member.callee, AST.isMemberAccessExpression)
     Expect(member.callee.target.ref).toBeUndefined()
+    Expect(
+      result.diagnostics.filter(diagnostic => diagnostic.source === 'linker').map(diagnostic => diagnostic.message),
+    )
+      .toEqual([
+        "No value named 'Token' is in scope.",
+        "No value named 'Token' is in scope.",
+        "No value named 'Token' is in scope.",
+      ])
   })
 
   Test('gives receiver identity only to methods in a declared type own body', async () => {

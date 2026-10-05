@@ -39,6 +39,7 @@ const DECLARATION_WORDS: Readonly<Record<string, string>> = {
   TypeDeclaration: 'type',
   UsePackageStatement: 'package',
   ValueDeclaration: 'value',
+  ValueReferenceTarget: 'value',
   ViewDeclaration: 'view',
 }
 
