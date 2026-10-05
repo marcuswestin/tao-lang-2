@@ -41,11 +41,9 @@ Describe('compiler: inverse boolean fields', () => {
       .find(member => member.members.at(-1) === 'Returned')
     Assert.defined(returnedRead, 'validated inverse-field fixture reads Book.Returned')
 
-    Expect(compiled.code).toContain(
-      'TR.Unary("not", TR.Member(_Scope.Book.evaluate(), ["LoanedOut"]))',
-    )
+    Expect(compiled.code).toMatch(/TR\.Unary\(['"]not['"], TR\.Member\(_Scope\.Book\.evaluate\(\), \["LoanedOut"\]\)\)/)
     Expect(compiled.code).toContain('TR.Data.Update(')
-    Expect(compiled.code).toContain('["LoanedOut"]: TR.Unary("not", TR.Value(true)),')
+    Expect(compiled.code).toMatch(/\["LoanedOut"\]: TR\.Unary\(['"]not['"], TR\.Value\(true\)\),/)
     Expect(compiled.code).not.toContain('["Returned"]')
 
     const { default: TR } = await runtimeModule
