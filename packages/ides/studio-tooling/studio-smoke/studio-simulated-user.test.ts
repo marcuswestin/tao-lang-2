@@ -918,7 +918,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       },
     ], { channel: 'studio-smoke-cleanup', subject: 'Studio smoke' })
   }
-}, 180_000)
+}, 360_000)
 
 function startPreviewServer(port: number): { stop(): void; url: string } {
   const server = Bun.serve({

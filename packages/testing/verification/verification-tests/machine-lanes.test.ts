@@ -447,7 +447,7 @@ Describe('machine lanes', () => {
     })
     const later = await MachineLanes.acquire({
       cpuCount: 4,
-      lane: 'test-file',
+      lane: VerificationLanes.TEST_ALL,
       registryRoot,
       repositoryRoot: '/later',
     })
@@ -480,6 +480,29 @@ Describe('machine lanes', () => {
       await existing.release()
       await holder.release()
       await later.release()
+    }
+  })
+
+  Test('landing priority does not hold back new narrow test and developer lanes', async () => {
+    const registryRoot = await mkTestDir('tao-machine-landing-priority-')
+    const priority = await MachineLanes.beginLandingPriority(registryRoot)
+    Expect(priority).toBeDefined()
+    const lanes = await Promise.all(['test-file', 'tao-check'].map(lane =>
+      MachineLanes.acquire({
+        cpuCount: 4,
+        lane,
+        registryRoot,
+        repositoryRoot: `/${lane}`,
+      })
+    ))
+    try {
+      for (const lane of lanes) {
+        await lane.waitForLandingPriority()
+        Expect(await lane.tryAcquire(1, false)).toMatchObject({ slots: 1 })
+      }
+    } finally {
+      await priority?.release()
+      await Promise.all(lanes.map(lane => lane.release()))
     }
   })
 

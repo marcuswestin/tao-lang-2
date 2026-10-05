@@ -927,3 +927,16 @@ without iframe reloads. Save-to-paint p50 was 2690/2750ms (publication checks on
 source-to-publication p50 2553/2579ms at load 5.5–7.6 on 18 CPUs. These results do not meet
 the existing speed ceilings or establish a gain against the earlier experimental pipeline.
 Full portable verification remains required; no ceiling was changed.
+
+Landing-gate diagnosis corrected the HNReader feed smoke to compare the applied publication
+revision with the published revision exposed on the status element, rather than with the latest
+compile attempt. All four real HNReader journeys pass. The simulated-user journey passes 102
+assertions; its overall budget is now six minutes, approved by the Developer after a progressing
+run reached the prior three-minute cutoff. Individual condition waits and performance ceilings
+remain unchanged. Scoped reruns pass all 982 validator cases, 370 Expo-host cases, and 273 runtime
+cases after the initial full run timed out under contention.
+
+Targeted checks had registered as broad test lanes and were also blocked by the landing-priority
+window. Collect-all requests now use narrow admission while retaining their artifact paths;
+narrow developer lanes can proceed during landing priority. Broad verification still yields,
+and resource leases are unchanged. The deterministic machine-lane regression covers both sides.

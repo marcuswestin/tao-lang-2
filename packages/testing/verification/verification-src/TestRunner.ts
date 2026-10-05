@@ -378,7 +378,7 @@ async function runTestRequest(request: TestRunRequest, options: TestRunOptions =
   // in its own graph rather than starting this command inside itself, so there is no nested runner
   // left to hand a divided budget to.
   const machineLane = await MachineLanes.acquire({
-    lane,
+    lane: prepared.failurePolicy === 'collect-all' && prepared.evidenceMode !== 'mutation' ? `${lane}-targeted` : lane,
     registryRoot: options.registryRoot,
     repositoryRoot: location.repositoryRoot,
     requestedJobs: options.jobs,
