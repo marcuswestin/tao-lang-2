@@ -229,13 +229,13 @@ view ConfirmCloseDialogue(Document) responds ConfirmResult {
 let ParagraphGoal = 10
 
 // A function body is a block and hands its result back with `return`, so an early return can
-// take a guard's place. `returns <type>` is optional and inferred when omitted.
-function DocumentLabel(Title text) returns text {
+// take a guard's place. `-> <type>` is optional and inferred when omitted.
+func DocumentLabel(Title text) -> text {
    return "Document: { Title }"
 }
 
 // A fraction between 0 and 1 for `Progress`.
-function GoalFraction(Count number) {
+func GoalFraction(Count number) {
    if Count == 0 {
       return 0
    }
