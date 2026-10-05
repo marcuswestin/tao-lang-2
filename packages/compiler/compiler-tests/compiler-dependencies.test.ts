@@ -1,10 +1,41 @@
 import { Packages } from '@ast-utils'
+import { AST } from '@parser'
 import { FS } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
+import { testParseSyntax } from '../../language/parser/parser-tests/test-parse'
 import { CompilerDependencies } from '../compiler-src/compiler-dependencies'
 import { Workspace } from '../compiler-src/workspace'
 
 Describe('compiler: dependency environments and sidecar imports', () => {
+  Test('selects only explicitly published quantity constructor dependencies', async () => {
+    const parsed = await testParseSyntax(`type Measure is number
+type Other is number
+type Unpublished is number
+view Unrelated() from ./Missing.tsx`)
+    const declarations = parsed.entry.ast.statements.filter(AST.isTypeDeclaration)
+    const [measure, other] = declarations
+    Expect(declarations.map(declaration => declaration.name)).toEqual(['Measure', 'Other', 'Unpublished'])
+    const surface = {
+      facadeNamespaceExport: 'types_1',
+      declarations: declarations.slice(0, 2).map(declaration => ({ declaration })),
+    }
+    // Unit discovery is publication-owned. This consumer receives its exact declaration identities.
+    const selected = (valueNames: string[], runtimeNamespace = false, metadata = surface) =>
+      CompilerDependencies.taoSidecarValueDeclarations(parsed.entry.ast, { valueNames, runtimeNamespace }, metadata)
+    for (const result of [selected(['types_1']), selected([], true)]) {
+      Expect(result.map(declaration => declaration.name)).toEqual(['Measure', 'Other'])
+      Expect([result[0] === measure, result[1] === other]).toEqual([true, true])
+    }
+    Expect(selected(['types']).map(declaration => declaration.name)).toEqual([])
+    Expect(selected(['Unpublished']).map(declaration => declaration.name)).toEqual([])
+    Expect(selected(['Unrelated']).map(declaration => declaration.name)).toEqual(['Unrelated'])
+    Expect(
+      CompilerDependencies.taoSidecarValueDeclarations(parsed.entry.ast, {
+        valueNames: ['types_1'],
+        runtimeNamespace: true,
+      }).map(declaration => declaration.name),
+    ).toEqual([])
+  })
   Test('keeps overlapping publications independent when checking a shared TypeScript sidecar', async () => {
     await withTaoFiles('tao-compiler-dependency-boundaries-', {
       'Main.tao':
