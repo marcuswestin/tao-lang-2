@@ -1,4 +1,5 @@
 import { AST } from '@parser'
+import { NumericUnits } from './NumericUnits'
 import { Type } from './Type'
 
 /**
@@ -24,6 +25,11 @@ export function referencedNames(
       // query's own name, while `query Notes as CurrentNote` stores it as `sourceName`. Neither
       // form is a Langium cross-reference, but both keep the collection import in use.
       names.add(node.sourceName ?? node.name)
+    }
+    if (AST.isNumericUnitConstruction(node)) {
+      for (const name of numericUnitImportedNames(file, node)) {
+        names.add(name)
+      }
     }
     for (const reference of AST.streamReferences(node)) {
       const target = 'ref' in reference.reference ? reference.reference.ref : undefined
@@ -60,6 +66,22 @@ export function referencedNames(
     }
   }
   return names
+}
+
+function numericUnitImportedNames(file: AST.TaoFile, node: AST.NumericUnitConstruction): string[] {
+  const suffix = NumericUnits.resolveSuffix(node)
+  if (!suffix) {
+    return []
+  }
+  const route = node.unit.$refText
+  return file.statements.filter(AST.isUseStatement).flatMap(statement =>
+    AST.resolvedImportedDeclarations(statement).filter(AST.isTypeDeclaration).filter(declaration =>
+      // The linked row identifies the table; its authored route identifies which import exposes it.
+      // Namespace routes do not use a parallel named import, and aliases keep their own spelling.
+      (route === suffix.unit.name || route === `${declaration.name}.${suffix.unit.name}`)
+      && NumericUnits.unitOwner(declaration) === suffix.plan.owner
+    ).map(declaration => declaration.name)
+  )
 }
 
 function isImportedShorthandPropertyReference(node: AST.Node): node is AST.TypeProperty {
