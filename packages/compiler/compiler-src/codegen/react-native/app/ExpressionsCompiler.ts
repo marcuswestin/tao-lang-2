@@ -402,7 +402,7 @@ export const ExpressionsCompiler = {
         if (type.kind === 'capability') {
           return gen`${value}.evaluate()`
         }
-        if (Type.quantityOwner(type)) {
+        if (Type.quantityOwner(type) || abstractNumericDomain(type)) {
           return value
         }
         return typeContainsQuantity(type)
@@ -420,6 +420,10 @@ export const ExpressionsCompiler = {
     const resultType = BridgeMetadata.bridgeResultType(bridge)
     if (resultType) {
       const members = nativeResultMembers(resultType)
+      Assert(
+        !members.some(abstractNumericDomain),
+        'validated native return has a checked concrete quantity owner contract',
+      )
       const owners = [...new Set(members.map(Type.quantityOwner).filter(owner => owner !== undefined))]
       if (owners.length) {
         const ordinaryPlans = members.filter(member => !Type.quantityOwner(member))
@@ -1180,8 +1184,12 @@ function primitiveNamed(type: ASTUtils.TaoType, primitive: string): boolean {
 
 /** Unions containing quantities preserve their wrappers and unwrap ordinary data branches. */
 function typeContainsQuantity(type: ASTUtils.TaoType): boolean {
-  return !!Type.quantityOwner(type)
+  return !!Type.quantityOwner(type) || abstractNumericDomain(type)
     || type.kind === 'union' && type.members.some(typeContainsQuantity)
+}
+
+function abstractNumericDomain(type: ASTUtils.TaoType): boolean {
+  return primitiveNamed(type, 'numeric') && Type.isAbstractDomain(type)
 }
 
 /** nativeResultMembers flattens result unions without inventing an owner for ordinary branches. */
