@@ -1,7 +1,7 @@
 import { AST } from '@parser'
 import { Type } from './Type'
 
-/** The checked, directly owned unit table used by all quantity emitters. */
+/** A checked table plan retains its concrete declaration owner, including inherited unit tables. */
 export type NumericUnitsDeclarationPlan = Readonly<{
   owner: AST.TypeDeclaration
   units: readonly Readonly<{ name: string; scale: number }>[]
@@ -14,11 +14,18 @@ export type NumericUnitsSuffixResolution = Readonly<{
   unit: NumericUnitsDeclarationPlan['units'][number]
 }>
 
-/** NumericUnits resolves declaration-owned construction without a separate type registry. */
+/** NumericUnits resolves declaration-owned construction and inherited table ownership. */
 export class NumericUnits {
   private constructor() {}
 
+  /** Returns a concrete owner's checked unit plan, backed by its first linked table owner. */
   static declarationPlan(owner: AST.TypeDeclaration): NumericUnitsDeclarationPlan | undefined {
+    const tableOwner = NumericUnits.unitOwner(owner)
+    const inherited = tableOwner ? NumericUnits.directDeclarationPlan(tableOwner) : undefined
+    return inherited ? { ...inherited, owner } : undefined
+  }
+
+  private static directDeclarationPlan(owner: AST.TypeDeclaration): NumericUnitsDeclarationPlan | undefined {
     const declaration = owner.type
     if (!declaration || !AST.isDerivedTypeExpression(declaration)) {
       return undefined
@@ -44,6 +51,41 @@ export class NumericUnits {
       units: rows.map(row => ({ name: row.name, scale: row.scale })),
       defaultUnit: rows.find(row => row.default)!.name,
     }
+  }
+
+  /** Finds the declaration that owns a numeric unit table through linked parents and aliases. */
+  static unitOwner(owner: AST.TypeDeclaration): AST.TypeDeclaration | undefined {
+    const visited = new Set<AST.TypeDeclaration>()
+    let current: AST.TypeDeclaration | undefined = owner
+    while (current && !visited.has(current)) {
+      visited.add(current)
+      const alias = current.aliasTarget?.member.ref
+      if (AST.isTypeDeclaration(alias)) {
+        current = alias
+        continue
+      }
+      const type = current.type
+      if (!type) {
+        return undefined
+      }
+      if (AST.isDerivedTypeExpression(type)) {
+        if (type.slots.unitBlocks.length > 0) {
+          return NumericUnits.directDeclarationPlan(current) ? current : undefined
+        }
+        const parent = Type.definitionOfReference(type.base)
+        if (!AST.isTypeDeclaration(parent)) {
+          return undefined
+        }
+        current = parent
+        continue
+      }
+      const parent = AST.isNamedTypeReference(type) ? Type.definitionOfReference(type) : undefined
+      if (!AST.isTypeDeclaration(parent)) {
+        return undefined
+      }
+      current = parent
+    }
+    return undefined
   }
 
   static resolveSuffix(expression: AST.Expression): NumericUnitsSuffixResolution | undefined {

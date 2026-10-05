@@ -1,6 +1,7 @@
 import { ASTUtils, NumericUnits, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert } from '@shared'
+import type { NumericUnitReading } from '../../../../../language/ast-utils/ast-utils-src/numeric-unit-readings'
 import { type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 
@@ -34,6 +35,12 @@ export function NumericUnitConstruction(expression: AST.NumericUnitConstruction)
   Assert.defined(resolved, 'validated numeric construction resolves its owning unit table')
   const binding = quantityFactoryBinding(resolved.plan.owner)
   return gen`${binding}.fromUnit(${Compile.Expression(expression.input)}.jsValue, ${gen.jsLiteral(resolved.unit.name)})`
+}
+
+/** compileNumericUnitReading selects a view through the receiver's concrete checked factory. */
+export function compileNumericUnitReading(reading: NumericUnitReading, receiver: Compiled): Compiled {
+  const binding = quantityFactoryBinding(reading.concreteFactoryOwner)
+  return gen`${binding}.inUnit(${receiver}, ${gen.jsLiteral(reading.unit.name)})`
 }
 
 /** checkedNumericValue checks unowned numeric backing once while retaining its runtime wrapper. */
