@@ -232,6 +232,16 @@ only the delimiters required by the accepted configuration/item syntax. Parser d
 and the `(persist)` call boundary remain A-owned. This fixture-only grant does not release slot
 frontend or shared validator source. Return the exact test file after its focused proof.
 
+C's reviewed authenticated-parent runtime slice owns exactly
+TaoRuntime-src/TR-quantity-values.ts and TR-tests/TR-quantity-values.test.ts in the runtime package.
+Implement factory-owned derive, immutable private ancestry, distinct exact ownsPayload and upward
+acceptsPayload, inherited invariant checks, and view changes retaining the concrete descendant.
+Descendants inherit the same unit table; this grant adds no unit override or extension policy.
+Prove covariant declaration-proof types without authorizing reverse or sibling admission, preserving
+canonical-number accessor inference and existing default generic callers. No compiler, Type,
+grammar, facade, native admission adapter or publication changes are released. Return the exact
+two-path independently reviewed cut; the coordinator supplies later source ancestry/publication.
+
 Managers implement against supplied frozen inputs in isolated worktrees and reconcile the landed
 base before frozen return. This manifest transfers no unlisted shared file implicitly.
 
