@@ -257,7 +257,9 @@ function quantityModuleFor(
     let valueType: string
     let constructors: string
     if (canonical.leaf.path === outputPath) {
-      const canonicalRow = surface.declarations.find(candidate => candidate.declaration === canonical.link.owner)
+      const canonicalRow: QuantityPublicationDeclaration | undefined = surface.declarations.find(candidate =>
+        candidate.declaration === canonical.link.owner
+      )
       Assert.defined(canonicalRow, 'same-leaf forwarding has its canonical declaration surface')
       valueType = canonical.link.valueTypeExport
       constructors = `${surface.namespaceExport}.${canonical.link.constructorMember}`

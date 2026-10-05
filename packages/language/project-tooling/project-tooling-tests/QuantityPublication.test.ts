@@ -156,12 +156,17 @@ type Second = Right.Measure
       await FS.writeText(paths['Native.ts'], `${native}export const mixed: First = second\n`)
       const mixed = await ProjectTooling.refresh(root, {})
       Expect(mixed.status).toBe('stale')
-      const nativeMismatch = nativeDiagnostics(root).filter(diagnostic => diagnostic.code === 2322)
+      const nativeMismatch = nativeDiagnostics(root).filter(diagnostic => diagnostic.code === 2719)
       Expect(nativeMismatch.length).toBeGreaterThan(0)
       Expect(nativeMismatch.every(diagnostic => diagnostic.file?.fileName === paths['Native.ts'])).toBe(true)
       Expect(
+        nativeMismatch.some(diagnostic =>
+          ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n').includes('[__q0Owner]')
+        ),
+      ).toBe(true)
+      Expect(
         mixed.diagnostics.some(diagnostic =>
-          diagnostic.code === 'TS2322' && diagnostic.filePath === paths['Native.ts']
+          diagnostic.code === 'TS2719' && diagnostic.filePath === paths['Native.ts']
         ),
       ).toBe(true)
     })
