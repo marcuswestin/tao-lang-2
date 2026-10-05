@@ -29,7 +29,7 @@ type ConverterTypeResolution = Readonly<{
 export function ownAssociatedConverters(owner: AST.TypeDeclaration): readonly AST.AssociatedConverterDeclaration[] {
   const type = owner.type
   const body = AST.isDerivedTypeExpression(type) ? type.slots : AST.isItemTypeExpression(type) ? type : undefined
-  return body?.converters ?? []
+  return [...(body?.converters ?? []), ...(owner.associated?.converters ?? [])]
 }
 
 export function associatedConverterDescriptor(

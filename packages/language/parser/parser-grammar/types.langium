@@ -20,7 +20,12 @@ PrimitiveDeclaration:
 TypeDeclaration:
     visibility=DeclarationVisibility?
     (abstract?='abstract'? 'type' name=ID ('is' type=TypeExpression | '=' aliasTarget=PackageMemberReference)
-      | 'can' name=ID type=CapabilityTypeExpression);
+      | 'can' name=ID type=CapabilityTypeExpression)
+    ('with' associated=RecordAssociatedBody)?;
+
+RecordAssociatedBody infers ItemTypeExpression:
+    '{' ((methods+=AssociatedFunctionDeclaration | views+=AssociatedViewDeclaration
+      | converters+=AssociatedConverterDeclaration) ','?)* '}';
 
 CapabilityTypeExpression:
     '{' (methods+=CapabilityMethodDeclaration ','?)* '}';

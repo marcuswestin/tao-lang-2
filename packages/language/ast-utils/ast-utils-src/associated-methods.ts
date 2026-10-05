@@ -208,7 +208,7 @@ export function ownAssociatedMethods(owner: AssociatedCallableOwner): readonly A
     : type && AST.isItemTypeExpression(type)
     ? type
     : undefined
-  return slots?.methods ?? []
+  return [...(slots?.methods ?? []), ...(owner.associated?.methods ?? [])]
 }
 
 /** Mounted views retain their own declaration kind rather than impersonating functions. */
@@ -225,7 +225,7 @@ export function ownAssociatedViews(owner: AssociatedCallableOwner): readonly AST
     : type && AST.isItemTypeExpression(type)
     ? type
     : undefined
-  return slots?.views ?? []
+  return [...(slots?.views ?? []), ...(owner.associated?.views ?? [])]
 }
 
 export function capabilityRequirements(owner: AST.TypeDeclaration): readonly AST.CapabilityMethodDeclaration[] {

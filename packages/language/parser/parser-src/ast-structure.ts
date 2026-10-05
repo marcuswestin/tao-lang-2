@@ -1399,7 +1399,7 @@ export function associatedConverterOwner(
   }
   const container = item.$container
   if (AST.isTypeDeclaration(container)) {
-    return container.type === item ? container : undefined
+    return container.type === item || container.associated === item ? container : undefined
   }
   if (!AST.isDerivedTypeExpression(container) || container.slots !== item) {
     return undefined
@@ -1436,7 +1436,7 @@ export function associatedFunctionOwner(
     return container.slots === item ? container : undefined
   }
   if (AST.isTypeDeclaration(container)) {
-    return container.type === item ? container : undefined
+    return container.type === item || container.associated === item ? container : undefined
   }
   if (!AST.isDerivedTypeExpression(container) || container.slots !== item) {
     return undefined
@@ -1462,7 +1462,7 @@ export function associatedViewOwner(
     return container.slots === item ? container : undefined
   }
   if (AST.isTypeDeclaration(container)) {
-    return container.type === item ? container : undefined
+    return container.type === item || container.associated === item ? container : undefined
   }
   if (!AST.isDerivedTypeExpression(container) || container.slots !== item) {
     return undefined

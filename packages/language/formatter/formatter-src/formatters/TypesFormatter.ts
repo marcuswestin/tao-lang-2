@@ -17,6 +17,7 @@ export const TypesFormatter = {
     f.oneSpaceAfter('can')
     f.oneSpaceAround('is')
     f.oneSpaceAround('=')
+    f.oneSpaceAround('with')
   },
 
   /** CaseSetTypeExpression formats `one of A, B, C`. */
