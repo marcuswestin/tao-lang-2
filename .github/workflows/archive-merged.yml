@@ -1,0 +1,43 @@
+name: Archive merged branch
+
+# Every merged feature pull request keeps its head at `merged/<name>`, where `land` archives a branch
+# it lands, so `./agent landed` and `reclaim` read a pull request merged on GitHub the same way. Auto-
+# merge, `merge-pr`, and the web page all merge here, and GitHub then deletes the head branch, so this
+# runs on the merge itself rather than in any one of them. `merge-pr` pushes the same ref; whichever
+# arrives second finds it already at this head and leaves it.
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  archive:
+    name: Archive
+    if: >-
+      github.event.pull_request.merged
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && startsWith(github.event.pull_request.head.ref, 'feat/')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Point merged/<name> at the pull request's head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          archive="merged/${HEAD_REF#feat/}"
+          existing=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$archive" --jq .object.sha 2>/dev/null || true)
+          if [ "$existing" = "$HEAD_SHA" ]; then
+            echo "$archive already points at $HEAD_SHA."
+          elif [ -n "$existing" ]; then
+            echo "::error::$archive already points at $existing, not this pull request's head $HEAD_SHA."
+            exit 1
+          else
+            gh api "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/heads/$archive" -f "sha=$HEAD_SHA" --silent
+            echo "Archived $HEAD_SHA at $archive."
+          fi

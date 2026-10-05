@@ -103,11 +103,15 @@ with `./agent test-file` locally, push the fix, and read the next verdict.
 An authorized landing takes one of two routes, both squash-merging the reviewed merge message and
 archiving the branch at `merged/<name>`:
 
-- **`./agent unsandboxed merge-pr`** when the green `Verify` verdict proves the change: the cases
-  "Propose it as ready to land" lists below, short of anything only a host lane exercises. Push with
-  `./agent unsandboxed open-pr`, write the message at `.artifacts/merge/<branch>.msg`, then run it: it
-  waits for every check on the pushed head, merges only after `Verify` passed on that exact commit,
-  and deletes the remote branch. GitHub never merges on its own; nothing enables auto-merge.
+- **A pull request with auto-merge** when the green `Verify` verdict proves the change: the cases
+  "Propose it as ready to land" lists below, short of anything only a host lane exercises. Write and
+  review the message at `.artifacts/merge/<branch>.msg`, then run `./agent unsandboxed open-pr`: it
+  pushes, makes the message the pull request's title and description (what the squash commit says),
+  turns on auto-merge, and follows the checks. GitHub merges once the required `Verify` passes, deletes
+  the branch, and the archive workflow writes `merged/<name>`. To change the message, edit it and run
+  `open-pr` again. `./agent unsandboxed merge-pr` waits for the verdict and reports the merge, merging
+  itself if auto-merge is off. Never run `gh pr merge` directly: the Developer's login can bypass
+  `Verify`, and the harness refuses it.
 - **`./agent unsandboxed land`** when the change reaches a host-only lane (Studio, browser, native
   shell, simulator, canary), or when CI is unavailable: it verifies on this machine under the landing
   lock, including what the hosted runners cannot.

@@ -1,16 +1,20 @@
 import { CLI, Errors, FS, HCI, Repo } from '@shared'
+import { type ReviewedMergeMessage, reviewedMergeMessage } from './ReviewedMergeMessage'
 
 /*
  * `open-pr` is the one command that pushes a feature branch, opens (or reuses) its pull request
- * against `main`, and stays attached to watch the checks opening it starts. The repository's
- * workflows run only when a pull request opens, so a push to a reused one has none to watch. The
- * Developer runs it by hand and an agent runs it unattended, so every `git` and `gh` invocation is
+ * against `main`, turns on auto-merge, and stays attached to watch the checks the push starts. The
+ * pull request's title and description are the reviewed merge message, rewritten from it on every
+ * run, and the repository squash-merges with them, so editing the message and running this again is
+ * how a changed message reaches `main`. Auto-merge waits for the required Verify check; it is turned
+ * on only once checks exist on the pushed head, so Verify is already pending when GitHub reads it.
+ * Verify runs on every push, so a reused pull request is watched the same way as a new one.
+ *
+ * The Developer runs it by hand and an agent runs it unattended, so every `git` and `gh` invocation is
  * behind the injected `run` seam below rather than a direct `CLI.run` call — the house pattern
  * `android.ts`'s `compatibility.requireAdb ?? requireAdb` uses for the same reason: a test can script
- * every answer without a real remote or a real `gh`.
- *
- * It never merges, never enables auto-merge, and never force-pushes; merging stays `land`'s or
- * `merge-pr`'s, not this command's.
+ * every answer without a real remote or a real `gh`. It never force-pushes, and it never merges
+ * directly: GitHub merges once Verify passes, or `merge-pr` does.
  */
 
 const FEATURE_BRANCH_PREFIX = 'feat/'
@@ -52,8 +56,7 @@ export type OpenPrOptions = {
 /** OpenPrResult reports what the command printed and how it concluded. */
 export type OpenPrResult = {
   /**
-   * 0 when every check on a newly opened pull request succeeded, or when the push went to a reused
-   * one, which starts no checks; 1 when any failed or none appeared.
+   * 0 when every check on the pushed head succeeded; 1 when any failed or none appeared.
    */
   exitCode: number
   lines: string[]
@@ -61,8 +64,6 @@ export type OpenPrResult = {
 
 type PullRequest = {
   number: number
-  /** Whether this run opened the pull request, which is the only event its workflows run on. */
-  opened: boolean
   url: string
 }
 
@@ -89,21 +90,23 @@ export const OpenPrCommand = {
     const branch = await requireFeatureBranch(dependencies, root)
     await requireCleanWorktree(dependencies, root)
     await requireCommitsBeyondMain(dependencies, root)
+    const message = await reviewedMergeMessage(dependencies, root, branch)
     await requireGh(dependencies, root)
 
     const headSha = (await git(dependencies, root, ['rev-parse', 'HEAD'])).stdout.trim()
     await pushBranch(dependencies, root, branch, report)
-    const pr = await ensurePullRequest(dependencies, root, branch, report)
-    if (!pr.opened) {
-      report(
-        `PASS  Pushed ${headSha.slice(0, 8)} to #${pr.number}; its workflows run when a pull request opens, not on`
-          + ` later pushes, so this push started no checks. To check it anyway, ${rerunByHand(branch)}`,
-      )
-      return { exitCode: 0, lines }
+    const pr = await ensurePullRequest(dependencies, root, branch, message, report)
+    if (!await awaitChecksOnHead(dependencies, root, pr.number, headSha, report)) {
+      return { exitCode: 1, lines }
     }
-    const exitCode = await awaitChecksOnHead(dependencies, root, pr.number, headSha, branch, report)
-      ? await streamChecks(dependencies, root, pr.number, options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS, report)
-      : 1
+    await enableAutoMerge(dependencies, root, pr.number, report)
+    const exitCode = await streamChecks(
+      dependencies,
+      root,
+      pr.number,
+      options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS,
+      report,
+    )
 
     return { exitCode, lines }
   },
@@ -186,17 +189,25 @@ async function ensurePullRequest(
   dependencies: OpenPrDependencies,
   root: string,
   branch: string,
+  message: ReviewedMergeMessage,
   report: (line: string) => void,
 ): Promise<PullRequest> {
   const existing = await findExistingPullRequest(dependencies, root, branch)
   if (existing !== undefined) {
-    report(`PASS  Reusing the existing pull request for ${branch}: #${existing.number} ${existing.url}`)
-    return { ...existing, opened: false }
+    const edited = await dependencies.run('gh', {
+      args: ['pr', 'edit', String(existing.number), '--title', message.title, '--body', message.body],
+      cwd: root,
+      stdio: 'pipe',
+    })
+    assertCommandSucceeded(edited)
+    report(
+      `PASS  Reusing #${existing.number} for ${branch}, titled and described by the merge message: ${existing.url}`,
+    )
+    return existing
   }
 
-  const draft = await draftTitleAndBody(dependencies, root, branch)
   const created = await dependencies.run('gh', {
-    args: ['pr', 'create', '--base', MAIN_BRANCH, '--head', branch, '--title', draft.title, '--body', draft.body],
+    args: ['pr', 'create', '--base', MAIN_BRANCH, '--head', branch, '--title', message.title, '--body', message.body],
     cwd: root,
     stdio: 'pipe',
   })
@@ -204,48 +215,50 @@ async function ensurePullRequest(
   const url = lastNonEmptyLine(created.stdout)
   const number = parsePullRequestNumber(url)
   report(`PASS  Opened pull request #${number} for ${branch}: ${url}`)
-  return { number, opened: true, url }
+  return { number, url }
+}
+
+/**
+ * Auto-merge squash-merges with the pull request's title and description once the required Verify
+ * check passes. Asking again when it is already on would fail, so this reads it first.
+ */
+async function enableAutoMerge(
+  dependencies: OpenPrDependencies,
+  root: string,
+  prNumber: number,
+  report: (line: string) => void,
+): Promise<void> {
+  const view = await dependencies.run('gh', {
+    args: ['pr', 'view', String(prNumber), '--json', 'autoMergeRequest'],
+    cwd: root,
+    stdio: 'pipe',
+  })
+  assertCommandSucceeded(view)
+  if (parseJson<{ autoMergeRequest?: unknown }>(view.stdout, {}).autoMergeRequest) {
+    report(`PASS  Auto-merge is already on for #${prNumber}.`)
+    return
+  }
+  const enabled = await dependencies.run('gh', {
+    args: ['pr', 'merge', String(prNumber), '--auto', '--squash'],
+    cwd: root,
+    stdio: 'pipe',
+  })
+  assertCommandSucceeded(enabled)
+  report(`PASS  Auto-merge is on: GitHub squash-merges #${prNumber} once Verify passes.`)
 }
 
 async function findExistingPullRequest(
   dependencies: OpenPrDependencies,
   root: string,
   branch: string,
-): Promise<Omit<PullRequest, 'opened'> | undefined> {
+): Promise<PullRequest | undefined> {
   const result = await dependencies.run('gh', {
     args: ['pr', 'list', '--head', branch, '--state', 'open', '--json', 'number,url', '--limit', '1'],
     cwd: root,
     stdio: 'pipe',
   })
   assertCommandSucceeded(result)
-  return parseJson<Omit<PullRequest, 'opened'>[]>(result.stdout, [])[0]
-}
-
-/**
- * The title and body default to a prepared merge message when one exists, at the same path
- * `./dev finalize` records one (`Finalize.ts`'s `messageFile`) — reusing that path rather than a new
- * one is what the brief asks for, and it means a branch that already finalized opens a pull request
- * with the message an author already reviewed. Its shape is `MergeWithMain.validateMergeMessage`'s:
- * a summary line, one blank line, then a bullet block, which splits cleanly into a PR title and body.
- */
-async function draftTitleAndBody(
-  dependencies: OpenPrDependencies,
-  root: string,
-  branch: string,
-): Promise<{ body: string; title: string }> {
-  const messageFile = FS.resolvePath(`.artifacts/merge/${branch}.msg`, root)
-  if (await dependencies.exists(messageFile)) {
-    return splitMergeMessage(await dependencies.readText(messageFile))
-  }
-  const subject = (await git(dependencies, root, ['log', '-1', '--pretty=format:%s'])).stdout.trim()
-  const body = (await git(dependencies, root, ['log', '-1', '--pretty=format:%b'])).stdout.trim()
-  return { body, title: subject }
-}
-
-function splitMergeMessage(source: string): { body: string; title: string } {
-  const normalized = source.replaceAll('\r\n', '\n').replace(/\n+$/u, '')
-  const lines = normalized.split('\n')
-  return { body: lines.slice(2).join('\n'), title: lines[0] ?? '' }
+  return parseJson<PullRequest[]>(result.stdout, [])[0]
 }
 
 /**
@@ -255,16 +268,14 @@ function splitMergeMessage(source: string): { body: string; title: string } {
  * pushed commit and that commit carries at least one check. None appearing within the window is
  * reported as a failure, not a pass: this command exists to observe CI, and a silent pass is how it
  * misled its first user. The usual cause is a pull request that conflicts with its base, which GitHub
- * runs no `pull_request` workflow for, and since the workflows run only on opening, a later push
- * that resolves the conflict starts none either; mergeability is only read out at the end because
- * GitHub recomputes it after each push.
+ * runs no `pull_request` workflow for until a later push resolves the conflict; mergeability is only
+ * read out at the end because GitHub recomputes it after each push.
  */
 async function awaitChecksOnHead(
   dependencies: OpenPrDependencies,
   root: string,
   prNumber: number,
   headSha: string,
-  branch: string,
   report: (line: string) => void,
 ): Promise<boolean> {
   const attempts = Math.ceil(CHECKS_APPEAR_WITHIN_MS / CHECKS_APPEAR_POLL_MS)
@@ -289,8 +300,8 @@ async function awaitChecksOnHead(
       report(
         head.mergeable === 'CONFLICTING'
           ? `${noChecks}: the pull request conflicts with ${MAIN_BRANCH}, and GitHub runs no pull_request`
-            + ` workflow until it merges cleanly. Merge ${MAIN_BRANCH} into this branch, push it with open-pr,`
-            + ` then ${rerunByHand(branch)}`
+            + ` workflow until it merges cleanly. Merge ${MAIN_BRANCH} into this branch and push it with open-pr;`
+            + ` that push starts the checks.`
           : `${noChecks}. Actions may be disabled for this repository, or no workflow matches this branch.`,
       )
       return false
@@ -396,10 +407,6 @@ function reportOutcome(checks: readonly CheckStatus[], report: (line: string) =>
     report(`FAIL  ${check.name}: ${check.link}`)
   }
   return 1
-}
-
-function rerunByHand(branch: string): string {
-  return `run each workflow by hand with \`gh workflow run <workflow file> --ref ${branch}\`.`
 }
 
 function lastNonEmptyLine(text: string): string {
