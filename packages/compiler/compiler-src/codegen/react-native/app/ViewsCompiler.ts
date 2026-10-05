@@ -3,6 +3,7 @@ import { AST } from '@parser'
 import { Assert } from '@shared'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
+import { type AssociatedViewComponentPlan } from './associated-view-codegen'
 import { authLibraryExport, contextualCommand } from './auth-context'
 import { canonicalDeclaration, compileDeclarationIdentity } from './declaration-identity'
 import { foreignViewBindingName } from './injection-plan'
@@ -13,6 +14,9 @@ import { compileRuntimeType } from './runtime-type-compiler'
 export const ViewsCompiler = {
   /** ViewDeclaration compiles a Tao view declaration into a runtime component. */
   ViewDeclaration,
+
+  /** AssociatedViewDeclaration emits a stable module-level mounted component for an associated view. */
+  AssociatedViewDeclaration,
 
   /** ViewRegistrations registers every view before app configuration evaluates restorable positions. */
   ViewRegistrations(
@@ -163,55 +167,112 @@ function ViewDeclaration(renderable: AST.ViewDeclaration, options: CodegenOption
     return compileForeignView(renderable, options)
   }
   const functionName = { name: options.studio ? `TaoGeneratedView_${renderable.name}` : renderable.name }
-  const parameterList = Compile.ViewParameterList(renderable)
-  const statements = renderable.block?.statements ?? []
-  const renderIndex = statements.findIndex(AST.isRenderStatement)
-  const setupStatements = renderIndex < 0 ? statements : statements.slice(0, renderIndex)
-  const renderStatements = renderIndex < 0 ? [] : statements.slice(renderIndex)
-  const slotDefaults = AST.renderSlotDeclarationsOf(renderable)
-  const slotDefaultsBinding = slotDefaults.length > 0 || statements.some(capturesSlotDefaults)
-    ? gen`const _TaoSlotDefaults: Record<string, TR.SlotRenderer<any> | null> = {}`
-    : gen.noop()
-  const commands = AST.commandsOf(renderable)
-  const commandTable = commands.length === 0
-    ? gen.noop()
-    : gen`TR.Interaction.UseCommands(${Compile.CommandTable(commands)})`
-  const commandSurface = compileCommandSurface(renderable)
+  const block = renderable.block
+  Assert.defined(block, 'a non-foreign view has a body')
   const hostSlotFills = AST.declarationSlotFillsOf(renderable).filter(fill => fill.name !== 'Commands')
   const hostSlots = hostSlotFills.length > 0
     ? gen`TR.Navigation.UseHostSlots(_ViewProps.__taoHost, {
       ${gen.list(hostSlotFills, compileHostSlotFill)}
     })`
     : gen.noop()
-  const declarationProps = declarationTaoPropsBinding(
-    renderable,
+  const functionBody = compileComponentBody({
+    name: renderable.name,
+    block,
+    parameters: AST.parametersOf(renderable),
+    propsType: Compile.ViewParameterList(renderable),
+    layoutDeclaration: renderable,
     options,
-    rootRenderConsumesDeclarationProps(renderStatements[0]),
-  )
+    commandSurface: compileCommandSurface(renderable),
+    hostSlots,
+  })
   return gen`
     ${options.studio ? gen`function` : gen`${gen.scopeName(renderable)} = function`} ${
     gen.Name(functionName)
-  }(_ViewProps: ${parameterList}) {
-      TR.AssertViewDepth(_ViewProps.__tao, ${gen.jsLiteral(renderable.name)})
-      TR.Interaction.UseOccurrence(_ViewProps.__tao)
-      const _TaoActionOwner = TR.UseActionOwner()
-      void _TaoActionOwner
-      const _TaoAuthScope = TR.Auth.UseOptionalContext()
-      void _TaoAuthScope
-      return TR.BlockScope(_Scope, _Scope => {
-        ${gen.list(AST.parametersOf(renderable), Compile.ViewParameterBinding)}
-        ${gen.list(setupStatements, statement => Compile.Statement(statement, options))}
-        ${slotDefaultsBinding}
-        ${gen.list(slotDefaults, slot => compileDefaultSlot(slot, options))}
-        ${commandTable}
-        ${commandSurface}
-        ${hostSlots}
-        ${declarationProps}
-        ${gen.list(renderStatements, statement => Compile.Statement(statement, options))}
-      })
-    }
+  }${functionBody}
     ${options.studio ? gen`${gen.scopeName(renderable)} = ${gen.Name(functionName)}` : gen.noop()}
   `
+}
+
+function AssociatedViewDeclaration(
+  declaration: AST.AssociatedViewDeclaration,
+  plan: AssociatedViewComponentPlan,
+  options: CodegenOptions = {},
+): Compiled {
+  const functionBody = compileComponentBody({
+    name: declaration.name,
+    block: declaration.block,
+    parameters: declaration.parameterList?.parameters ?? [],
+    propsType: plan.propsType,
+    layoutDeclaration: declaration,
+    options,
+    receiverBinding: plan.receiverBinding,
+    commandSurface: plan.commandSurface,
+    hostSlots: plan.hostSlots,
+  })
+  return gen`function ${plan.component}${functionBody}`
+}
+
+type ComponentBodyOptions = Readonly<{
+  name: string
+  block: AST.Block
+  parameters: readonly AST.ParameterDeclaration[]
+  propsType: Compiled
+  layoutDeclaration: AST.ViewDeclaration | AST.AssociatedViewDeclaration
+  options: CodegenOptions
+  receiverBinding?: Compiled
+  commandSurface?: Compiled
+  hostSlots?: Compiled
+}>
+
+/** Shared lifecycle and lexical body emission for ordinary and associated view components. */
+function compileComponentBody({
+  name,
+  block,
+  parameters,
+  propsType,
+  layoutDeclaration,
+  options,
+  receiverBinding = gen.noop(),
+  commandSurface = gen.noop(),
+  hostSlots = gen.noop(),
+}: ComponentBodyOptions): Compiled {
+  const statements = block.statements
+  const renderIndex = statements.findIndex(AST.isRenderStatement)
+  const setupStatements = renderIndex < 0 ? statements : statements.slice(0, renderIndex)
+  const renderStatements = renderIndex < 0 ? [] : statements.slice(renderIndex)
+  const slotDefaults = statements.filter(AST.isRenderSlotDeclaration)
+  const slotDefaultsBinding = slotDefaults.length > 0 || statements.some(capturesSlotDefaults)
+    ? gen`const _TaoSlotDefaults: Record<string, TR.SlotRenderer<any> | null> = {}`
+    : gen.noop()
+  const commands = statements.filter(AST.isCommandDeclaration)
+  const commandTable = commands.length === 0
+    ? gen.noop()
+    : gen`TR.Interaction.UseCommands(${Compile.CommandTable(commands)})`
+  const declarationProps = declarationTaoPropsBinding(
+    layoutDeclaration,
+    options,
+    rootRenderConsumesDeclarationProps(renderStatements[0]),
+  )
+  return gen`(_ViewProps: ${propsType}) {
+    TR.AssertViewDepth(_ViewProps.__tao, ${gen.jsLiteral(name)})
+    TR.Interaction.UseOccurrence(_ViewProps.__tao)
+    const _TaoActionOwner = TR.UseActionOwner()
+    void _TaoActionOwner
+    const _TaoAuthScope = TR.Auth.UseOptionalContext()
+    void _TaoAuthScope
+    return TR.BlockScope(_Scope, _Scope => {
+      ${receiverBinding}
+      ${gen.list(parameters, Compile.ViewParameterBinding)}
+      ${gen.list(setupStatements, statement => Compile.Statement(statement, options))}
+      ${slotDefaultsBinding}
+      ${gen.list(slotDefaults, slot => compileDefaultSlot(slot, options))}
+      ${commandTable}
+      ${commandSurface}
+      ${hostSlots}
+      ${declarationProps}
+      ${gen.list(renderStatements, statement => Compile.Statement(statement, options))}
+    })
+  }`
 }
 
 /** capturesSlotDefaults finds descriptors in this view's lexical body, excluding nested views. */
@@ -280,7 +341,7 @@ function compileForeignSlots(view: AST.ViewDeclaration): Compiled {
  * injection reads neither `@@layout` nor `@@tag` has nothing to hand the header to.
  */
 function declarationTaoPropsBinding(
-  view: AST.ViewDeclaration,
+  view: AST.ViewDeclaration | AST.AssociatedViewDeclaration,
   options: CodegenOptions,
   hasConsumer: boolean,
 ): Compiled {
