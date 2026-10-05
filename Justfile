@@ -603,7 +603,7 @@ reclaim *ARGS:
 worktree-status:
     ./dev worktree-status
 
-# Push this feature branch, open or reuse its pull request with auto-merge on, then stream its checks
+# Push this feature branch, open or reuse its pull request, then stream its checks; --auto-merge lands it once Verify passes
 [group('Dev')]
 open-pr *ARGS:
     ./dev open-pr {{ ARGS }}
@@ -617,6 +617,11 @@ merge-pr *ARGS:
 [group('Dev')]
 pr-checks *ARGS:
     ./dev pr-checks {{ ARGS }}
+
+# Compare two Verify runs step by step; by default this branch's newest against main's newest green push
+[group('Report')]
+ci-timings *ARGS:
+    ./dev ci-timings {{ ARGS }}
 
 # Report host capabilities
 [group('Report')]
