@@ -36,6 +36,10 @@ remains undiscovered.
   generics, native operator, entities, associated actions/rendering and cleanup.
 - [library/GroupedRows.tao.future](library/GroupedRows.tao.future) and
   [library/GroupedRows.ts.future](library/GroupedRows.ts.future): typed keyed rows and a pure algorithm.
+  [library/GroupedRows.ts](library/GroupedRows.ts) now implements the native projection through
+  authenticated builder methods and original live Book handles. A focused runtime check proves
+  distinct equal-name authors, absent authors, header renaming and stable book keys after regrouping.
+  Its ordinary Tao builders and complete UI integration still await graduation.
 - [library/BookIO.tao](library/BookIO.tao): active owned file/revision/query adapter contracts.
   BookIO.ts and BookStoreProvider.ts implement actual bounded acquisition, PDF creation, upload,
   cleanup and cached revision acknowledgment. Remaining adapter contracts stay in the future file.

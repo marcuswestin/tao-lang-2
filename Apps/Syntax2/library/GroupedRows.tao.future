@@ -1,5 +1,5 @@
-use Book, ui from ./Library
-use RenderKey from @tao/ui
+use Book from ./Library
+use RenderKey, ui from @tao/ui
 
 // 1. A row is a keyed recipe. Content stores live values, not rendered nodes.
 public type RowKey is RenderKey
@@ -12,11 +12,26 @@ public type GroupedRow is { RowKey, Content ui } with {
    view Render() { render GroupedRow.Content }
 }
 
-// 2. Pure grouping/flattening. Native binding must construct checked Tao rows.
-// GroupedRows.ts.future specifies the algorithm, with typed builders supplied
-// by the generated binding. It must return wrapped rows, never raw JS records.
-public func GroupedRows(Items list of Book) -> list of GroupedRow {
-   return from ./GroupedRows.ts
+// 2. Ordinary selected capability methods build rows through checked Tao constructors.
+can RowBuilders {
+   Header(RowKey, HeaderLabel) fails never -> GroupedRow
+   BookRow(RowKey, Book) fails never -> GroupedRow
+}
+type RowFactory is yes/no with {
+   func Header(RowKey, HeaderLabel) fails never {
+      return GroupedRow { RowKey, Content: GroupHeader { HeaderLabel } }
+   }
+   func BookRow(RowKey, Book) fails never {
+      return GroupedRow { RowKey, Content: Book }
+   }
+}
+
+// 2.1 The ordinary parameter projects the provider before the native boundary.
+public func GroupedRows(Items list of Book) fails never -> list of GroupedRow {
+   return BuildRows(Items, RowFactory yes)
+}
+func BuildRows(Items list of Book, Builders RowBuilders) fails never -> list of GroupedRow {
+   return GroupedRows(Items, Builders) from ./GroupedRows.ts
 }
 
 // 3. RowKey is an ordinary field, not compiler magic. Standard-library LazyList
