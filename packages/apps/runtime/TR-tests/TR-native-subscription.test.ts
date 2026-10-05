@@ -23,14 +23,18 @@ const hooks = runtimeTestOverrideSlot({
 })
 
 Describe('native subscription ownership', () => {
-  Test('keeps a hook owner across renders and removes its listeners on unmount', async () => {
+  Test('keeps committed ownership during effect replay and revokes before unmount cleanup', async () => {
     const ref: { current: TaoActionOwner | undefined } = { current: undefined }
     let cleanup: (() => void) | undefined
+    let revoke: (() => void) | undefined
     const restore = hooks.install({
       ref: (() => ref) as typeof React.useRef,
       context: (() => undefined) as typeof React.useContext,
       insertion: effect => {
-        effect()
+        const release = effect()
+        if (release) {
+          revoke = release
+        }
       },
       effect: effect => {
         cleanup = effect() as (() => void) | undefined
@@ -51,7 +55,18 @@ Describe('native subscription ownership', () => {
     }, { owner }).jsValue.invoke()
     Expect(removed).toBe(0)
     cleanup?.()
+    Expect(owner.active).toBe(true)
     Expect(removed).toBe(1)
+    await TR.Action(() => {
+      TR.NativeSubscription().attach(() => {
+        removed += 1
+      })
+    }, { owner }).jsValue.invoke()
+    revoke?.()
+    Expect(owner.active).toBe(false)
+    Expect(removed).toBe(1)
+    cleanup?.()
+    Expect(removed).toBe(2)
   })
 
   Test('isolates two views and suppresses removed listener events', async () => {

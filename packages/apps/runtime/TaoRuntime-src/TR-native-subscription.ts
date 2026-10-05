@@ -22,6 +22,17 @@ export class TaoActionOwner {
 
   dispose(): void {
     this.active = false
+    this.invalidate()
+  }
+
+  /** Revoke committed ownership without running native cleanup during an insertion effect. */
+  revoke(): void {
+    this.active = false
+    this.generation += 1
+  }
+
+  /** A replay invalidates earlier work and listeners while the committed view remains active. */
+  invalidate(): void {
     this.generation += 1
     for (const remove of [...this.subscriptions]) {
       try {
@@ -42,9 +53,12 @@ export function useActionOwner(): TaoActionOwner {
   React.useInsertionEffect(() => {
     current.boundary = boundary
   }, [current, boundary])
-  React.useEffect(() => {
+  React.useInsertionEffect(() => {
     current.active = true
-    return () => current.dispose()
+    return () => current.revoke()
+  }, [current])
+  React.useEffect(() => {
+    return () => current.invalidate()
   }, [current])
   return current
 }

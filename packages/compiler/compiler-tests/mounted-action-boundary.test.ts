@@ -21,6 +21,7 @@ Describe('compiler: mounted app action failure boundary', () => {
         public app Plain { id "com.tao.boundary.plain" version "1.0.0" name "Plain" view Main }
         public app Slow { id "com.tao.boundary.slow" version "1.0.0" name "Slow" view Later }
         public app Initial { id "com.tao.boundary.initial" version "1.0.0" name "Initial" view Start }
+        public app InitialSync { id "com.tao.boundary.initial-sync" version "1.0.0" name "InitialSync" view StartSync }
         public app Raw {
           id "com.tao.boundary.raw" version "1.0.0" name "Raw" view Unsafe
           guard { ${guard} { Label(Problem.Message) } }
@@ -28,10 +29,18 @@ Describe('compiler: mounted app action failure boundary', () => {
         public app RawPlain { id "com.tao.boundary.rawplain" version "1.0.0" name "RawPlain" view Unsafe }
         view Main() { render Button(action { do Reject() }) }
         view Later() { render Button(action { do Pause() fail InvalidInput "Use another title." }) }
-        view Start() { render Init(action { do Reject() }) }
+        view Start() {
+          render Init(action {
+            let Message = do ObserveInit()
+            if Message == "First disposed init." { fail InvalidInput "First disposed init." }
+            fail InvalidInput "Second live init."
+          })
+        }
+        view StartSync() { render Init(action { do Reject() }) }
         view Unsafe() { render Button(action { do Explode() }) }
         action Explode() from ./Native.tsx
         action Pause() from ./Native.tsx
+        action ObserveInit() returns text from ./Native.tsx
         view Button(Press action()) from ./Native.tsx
         view Label(Value text) from ./Native.tsx
         view Init(Begin action()) from ./Native.tsx
@@ -55,6 +64,17 @@ Describe('compiler: mounted app action failure boundary', () => {
         export function Pause() { return new Promise<void>(resolve => { release = resolve }) }
         export function releasePause() { release?.() }
         export function Explode() { throw new TypeError('credential=private provider detail') }
+        let observedInits = 0
+        let removedInitListeners = 0
+        export async function ObserveInit() {
+          observedInits += 1
+          const message = observedInits === 1 ? 'First disposed init.' : 'Second live init.'
+          TR.NativeSubscription().attach(() => { removedInitListeners += 1 })
+          await Promise.resolve()
+          return message
+        }
+        export function observedInitCount() { return observedInits }
+        export function removedInitListenerCount() { return removedInitListeners }
         export function Init(props: { Begin: TR.ActionValue; Layout?: unknown; Tag?: string }) {
           React.useLayoutEffect(() => { void props.Begin.invoke() }, [])
           return null
@@ -85,10 +105,10 @@ Describe('compiler: mounted app action failure boundary', () => {
         import { runtimeConsole } from ${JSON.stringify(Repo.resolvePath('packages/shared/shared-src/Platform.ts'))}
         MockModule('react-native', () => reactNativeStubs())
         MockModule('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, left: 0, right: 0, bottom: 0 }) }))
-        const { Demo, Plain, Slow, Initial, Raw, RawPlain } = await import(${
+        const { Demo, Plain, Slow, Initial, InitialSync, Raw, RawPlain } = await import(${
             JSON.stringify(FS.resolvePath(main.relativePath, output))
           })
-        const { releasePause, suspendButtons, abortSuspension, suspensionAttempts } = await import(${
+        const { releasePause, suspendButtons, abortSuspension, suspensionAttempts, observedInitCount, removedInitListenerCount } = await import(${
             JSON.stringify(FS.resolvePath('Native.tsx', output))
           })
         const { NavigationAppHost } = await import(${
@@ -115,7 +135,7 @@ Describe('compiler: mounted app action failure boundary', () => {
         const scope = TR.Auth.CreateScope()
         const originalHost = React.createElement(React.Suspense, { fallback: React.createElement('pending') },
           React.createElement(NavigationAppHost, { app: Demo }))
-        let first: any, second: any, plain: any, nested: any, slow: any, strict: any, initial: any,
+        let first: any, second: any, plain: any, nested: any, slow: any, strict: any, initial: any, initialSync: any,
           authFirst: any, authSecond: any, replacement: any, raw: any, rawPlain: any, suspending: any, aborting: any
         try {
           await Renderer.act(async () => {
@@ -129,6 +149,8 @@ Describe('compiler: mounted app action failure boundary', () => {
               React.createElement(NavigationAppHost, { app: Demo })))
             initial = Renderer.create(React.createElement(React.StrictMode, {},
               React.createElement(NavigationAppHost, { app: Initial })))
+            initialSync = Renderer.create(React.createElement(React.StrictMode, {},
+              React.createElement(NavigationAppHost, { app: InitialSync })))
             authFirst = Renderer.create(React.createElement(TR.Auth.Host, { scope },
               React.createElement(NavigationAppHost, { app: Demo })))
             authSecond = Renderer.create(React.createElement(TR.Auth.Host, { scope },
@@ -153,6 +175,7 @@ Describe('compiler: mounted app action failure boundary', () => {
           await Renderer.act(async () => { await strict.root.findByType('button').props.onPress() })
           const strictMessage = strict.root.findByType('label').children
           const initialMessage = JSON.stringify(initial.toJSON())
+          const initialSyncMessage = JSON.stringify(initialSync.toJSON())
           const disposedStrictRoot = unowned.length
           await Renderer.act(async () => { await authFirst.root.findByType('button').props.onPress() })
           const authIsolated = authFirst.root.findByType('label').children[0] === 'Use another title.'
@@ -202,12 +225,13 @@ Describe('compiler: mounted app action failure boundary', () => {
               React.createElement(NavigationAppHost, { app: Demo })))
           })
           runtimeConsole.info(JSON.stringify({ override, isolated, fallback, recovered, nearest, outerHealthy,
-            strictMessage, initialMessage, disposedStrictRoot, authIsolated, replacementHealthy, rawMessage, rawDefault,
+            strictMessage, initialMessage, initialSyncMessage, observedInits: observedInitCount(), removedInitListeners: removedInitListenerCount(), disposedStrictRoot, authIsolated, replacementHealthy, rawMessage, rawDefault,
             diagnostic: diagnostic?.message, replacementSuspended, committedMessage, abortedMessage, abortWasSuspended,
+            unownedInitMessages: unowned.map((error: any) => error.message),
             unownedDuringSuspension: unowned.length - unownedBeforeSuspension, unowned: unowned.length }))
         } finally {
           await Renderer.act(async () => { first?.unmount(); second?.unmount(); plain?.unmount(); nested?.unmount();
-            strict?.unmount(); initial?.unmount(); authFirst?.unmount(); authSecond?.unmount(); replacement?.unmount(); raw?.unmount(); rawPlain?.unmount(); suspending?.unmount(); aborting?.unmount() })
+            strict?.unmount(); initial?.unmount(); initialSync?.unmount(); authFirst?.unmount(); authSecond?.unmount(); replacement?.unmount(); raw?.unmount(); rawPlain?.unmount(); suspending?.unmount(); aborting?.unmount() })
           scope.dispose()
           stop(); console.error = originalError; console.warn = originalWarn
         }
@@ -251,8 +275,14 @@ Describe('compiler: mounted app action failure boundary', () => {
         Expect(result.nearest).toEqual(['Use another title.'])
         Expect(result.outerHealthy).toBe(true)
         Expect(result.strictMessage).toEqual(['Use another title.'])
-        Expect(result.initialMessage).toContain('Use another title.')
-        Expect(result.disposedStrictRoot).toBe(1)
+        Expect(result.observedInits).toBe(2)
+        Expect(result.removedInitListeners).toBe(2)
+        Expect(result.initialMessage).toContain('Second live init.')
+        Expect(result.initialMessage).not.toContain('First disposed init.')
+        Expect(result.unownedInitMessages).toContain('First disposed init.')
+        Expect(result.unownedInitMessages).not.toContain('Second live init.')
+        Expect(result.initialSyncMessage).toContain('Use another title.')
+        Expect(result.disposedStrictRoot).toBe(2)
         Expect(result.authIsolated).toBe(true)
         Expect(result.replacementHealthy).toBe(true)
         Expect(result.rawMessage).toContain("Couldn't finish")
@@ -265,7 +295,7 @@ Describe('compiler: mounted app action failure boundary', () => {
         Expect(result.abortedMessage).toEqual(['Use another title.'])
         Expect(result.abortWasSuspended).toBe(true)
         Expect(result.unownedDuringSuspension).toBe(0)
-        Expect(result.unowned).toBe(3)
+        Expect(result.unowned).toBe(4)
       })
     })
   }
