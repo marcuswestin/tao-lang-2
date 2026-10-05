@@ -8,13 +8,24 @@ type ModuleLinkManifest = { links: ModuleLink[]; version: 1 }
 
 const manifestSuffix = '.tao-module-links.json'
 
-/** Keep imported packages outside the synchronized source graph and its content fingerprint. */
+export const generatedModuleLinkFileOperations = {
+  remove: FS.remove,
+  symlink: FS.symlink,
+  writeJson: FS.writeJson,
+}
+
+/**
+ * Keep imported packages outside the synchronized source graph and its content fingerprint.
+ * Set preserveUnchangedLinks only when the publisher can preserve symlink paths in generated output.
+ * Full-tree publication uses the default so it can replace the generated directory safely.
+ */
 export async function withGeneratedModuleLinks(
   outputRoot: string,
   requesterRoot: string,
   environments: readonly DependencyEnvironment[],
   publish: () => Promise<void>,
   moduleLinkRoot = requesterRoot,
+  options: { preserveUnchangedLinks?: boolean } = {},
 ): Promise<void> {
   const manifestPath = `${outputRoot}${manifestSuffix}`
   let boundaryPath = FS.resolvePath(requesterRoot)
@@ -28,44 +39,71 @@ export async function withGeneratedModuleLinks(
     })
     Assert.input(diagnostics.length === 0, diagnostics.map(diagnostic => diagnostic.message).join('\n'))
     const desired = await plannedLinks(requesterRoot, moduleLinkRoot, environments)
-    const previous: ModuleLink[] = []
+    const desiredByPath = new Map(desired.map(link => [link.relativePath, link]))
+    const retained = new Set<string>()
+    const removed: ModuleLink[] = []
     for (const link of await readOwnedLinks(manifestPath)) {
       const path = FS.resolvePath(link.relativePath, outputRoot)
       if (!await FS.exists(path) && !await FS.isSymbolicLink(path)) {
         continue
       }
       await assertOwnedLink(outputRoot, link)
-      previous.push(link)
-    }
-    for (const link of previous) {
-      await FS.remove(FS.resolvePath(link.relativePath, outputRoot))
+      const desiredLink = desiredByPath.get(link.relativePath)
+      if (options.preserveUnchangedLinks === true && desiredLink?.target === link.target) {
+        retained.add(link.relativePath)
+      } else {
+        removed.push(link)
+      }
     }
     const installed: ModuleLink[] = []
     try {
+      for (const link of removed) {
+        await generatedModuleLinkFileOperations.remove(FS.resolvePath(link.relativePath, outputRoot))
+      }
       await publish()
       for (const link of desired) {
+        if (retained.has(link.relativePath)) {
+          const retainedPath = FS.resolvePath(link.relativePath, outputRoot)
+          if (await FS.exists(retainedPath) || await FS.isSymbolicLink(retainedPath)) {
+            await assertOwnedLink(outputRoot, link)
+            continue
+          }
+        }
         const linkPath = FS.resolvePath(link.relativePath, outputRoot)
         Assert.input(
           !await FS.exists(linkPath) && !await FS.isSymbolicLink(linkPath),
           `Generated module link path is occupied: ${linkPath}`,
         )
-        await FS.symlink(link.target, linkPath)
+        await generatedModuleLinkFileOperations.symlink(link.target, linkPath)
         installed.push(link)
       }
+      const serializedManifest = `${
+        JSON.stringify({ version: 1, links: desired } satisfies ModuleLinkManifest, null, 2)
+      }\n`
+      const manifestUnchanged = await FS.isFile(manifestPath)
+        && await FS.readText(manifestPath) === serializedManifest
+      if (manifestUnchanged) {
+        return
+      }
       if (desired.length === 0) {
-        await FS.remove(manifestPath)
+        if (await FS.exists(manifestPath) || await FS.isSymbolicLink(manifestPath)) {
+          await generatedModuleLinkFileOperations.remove(manifestPath)
+        }
       } else {
-        await FS.writeJson(manifestPath, { version: 1, links: desired } satisfies ModuleLinkManifest)
+        await generatedModuleLinkFileOperations.writeJson(
+          manifestPath,
+          { version: 1, links: desired } satisfies ModuleLinkManifest,
+        )
       }
     } catch (error) {
       for (const link of installed) {
         await assertOwnedLink(outputRoot, link)
-        await FS.remove(FS.resolvePath(link.relativePath, outputRoot))
+        await generatedModuleLinkFileOperations.remove(FS.resolvePath(link.relativePath, outputRoot))
       }
-      for (const link of previous) {
+      for (const link of removed) {
         const linkPath = FS.resolvePath(link.relativePath, outputRoot)
         if (!await FS.exists(linkPath) && !await FS.isSymbolicLink(linkPath)) {
-          await FS.symlink(link.target, linkPath)
+          await generatedModuleLinkFileOperations.symlink(link.target, linkPath)
         }
       }
       throw error
