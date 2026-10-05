@@ -17,9 +17,10 @@ import { type ReviewedMergeMessage, reviewedMergeMessage } from './ReviewedMerge
  * open a second, empty pull request that auto-merge also lands.
  *
  * Every read and write goes through REST (`GitHubPulls`), and the checks are followed by `pr-checks`,
- * so it works where a cloud agent host's proxy refuses `gh pr`'s GraphQL. Auto-merge has no REST
- * endpoint: where turning it on is refused, the run says so and goes on, since `merge-pr` merges
- * with the same message once Verify passes.
+ * so it works where a cloud agent host's proxy refuses `gh pr`'s GraphQL. Auto-merge has no GitHub
+ * REST endpoint: where `gh pr merge --auto` is refused, the proxy's own REST route is tried, and
+ * where that too is refused the run says so and goes on, since `merge-pr` merges with the same
+ * message once Verify passes.
  *
  * The Developer runs it by hand and an agent runs it unattended, so every `git` and `gh` invocation is
  * behind the injected `run` seam below rather than a direct `CLI.run` call — the house pattern
@@ -211,34 +212,53 @@ async function enableAutoMerge(
   report: (line: string) => void,
 ): Promise<void> {
   const current = (await github.view(prNumber)).auto_merge
-  if (current && current.commit_title === message.title && current.commit_message === message.body) {
+  if (carriesMessage(current, message)) {
     report(`PASS  Auto-merge is already on for #${prNumber} with the merge message.`)
     return
   }
+  const run = (args: readonly string[]) => dependencies.run('gh', { args, cwd: root, stdio: 'pipe' })
   if (current) {
-    mustSucceed(
-      await dependencies.run('gh', {
-        args: ['pr', 'merge', String(prNumber), '--disable-auto'],
-        cwd: root,
-        stdio: 'pipe',
-      }),
-      dependencies.writeLine,
-    )
+    const disabled = await run(['pr', 'merge', String(prNumber), '--disable-auto'])
+    if (!succeeded(disabled)) {
+      mustSucceed(await github.disableHostAutoMerge(prNumber), dependencies.writeLine)
+    }
   }
-  const enabled = await dependencies.run('gh', {
-    args: ['pr', 'merge', String(prNumber), '--auto', '--squash', '--subject', message.title, '--body', message.body],
-    cwd: root,
-    stdio: 'pipe',
-  })
-  if (enabled.exitCode !== 0 || enabled.error !== undefined || enabled.signal !== null) {
-    const said = (enabled.stderr || enabled.stdout).trim().split('\n')[0] ?? ''
+  const stayOff = (said: string): void =>
     report(
-      `NOTE  Auto-merge stays off for #${prNumber}${said === '' ? '' : ` (gh said: ${said})`};`
+      `NOTE  Auto-merge stays off for #${prNumber}${said === '' ? '' : ` (${said})`};`
         + ' merge-pr merges it with the merge message once Verify passes.',
     )
-    return
+  const enabled = await run(
+    ['pr', 'merge', String(prNumber), '--auto', '--squash', '--subject', message.title, '--body', message.body],
+  )
+  if (!succeeded(enabled)) {
+    // `gh pr merge` speaks GraphQL, which a cloud agent host's proxy refuses; its own REST route is
+    // the fallback there, and is absent everywhere else.
+    const viaHost = await github.enableHostAutoMerge(prNumber, message)
+    if (!succeeded(viaHost)) {
+      stayOff(`gh said: ${firstLine(enabled)}; the host route said: ${firstLine(viaHost)}`)
+      return
+    }
+    // Read back what the host route stored, since a squash with any other message must not land.
+    if (!carriesMessage((await github.view(prNumber)).auto_merge, message)) {
+      mustSucceed(await github.disableHostAutoMerge(prNumber), dependencies.writeLine)
+      stayOff('the host route did not keep the merge message')
+      return
+    }
   }
   report(`PASS  Auto-merge is on: GitHub squash-merges #${prNumber} with the merge message once Verify passes.`)
+}
+
+function carriesMessage(autoMerge: PullRequest['auto_merge'], message: ReviewedMergeMessage): boolean {
+  return autoMerge !== null && autoMerge.commit_title === message.title && autoMerge.commit_message === message.body
+}
+
+function succeeded(result: CLI.CommandResult): boolean {
+  return result.exitCode === 0 && result.error === undefined && result.signal === null
+}
+
+function firstLine(result: CLI.CommandResult): string {
+  return (result.stderr || result.stdout).trim().split('\n')[0] ?? ''
 }
 
 /** A branch lands once; pushing a merged one again would open an empty duplicate. */

@@ -115,8 +115,8 @@ archiving the branch at `merged/<name>`:
   `open-pr` again. When a check fails, read `./agent pr-checks`, fix, commit, and run `open-pr` again.
   Both take a `feat/<name>` branch, or the one `claude/<name>` or `codex/<name>` branch a cloud agent
   session may push, archived at `merged/claude/<name>` or `merged/codex/<name>`. They talk to GitHub
-  over REST, so they work where a cloud host's proxy refuses `gh pr`'s GraphQL; there auto-merge
-  stays off, and `merge-pr` does the merge.
+  over REST, so they work where a cloud host's proxy refuses `gh pr`'s GraphQL; there `open-pr` turns
+  auto-merge on through the proxy's own REST route, and where that is refused too `merge-pr` merges.
   Never run `gh pr merge` directly: the Developer's login can bypass `Verify`, and the harness refuses it.
 - **`./agent unsandboxed land`** when the change reaches a host-only lane (Studio, browser, native
   shell, simulator, canary), or when CI is unavailable: it verifies on this machine under the landing
