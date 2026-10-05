@@ -1011,7 +1011,7 @@ function layoutEntryTerms(entry: AST.LayoutEntry): Array<string | number> {
   return ASTUtils.layoutEntryValues(entry)
 }
 
-function valueDeclarationName(declaration: AST.ValueDeclaration | undefined): string | undefined {
+function valueDeclarationName(declaration: AST.ValueReferenceTarget | undefined): string | undefined {
   if (!declaration) {
     return undefined
   }
