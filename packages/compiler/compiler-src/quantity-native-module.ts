@@ -123,14 +123,14 @@ export const QuantityNativeModule = {
       append(
         `type ${payload} = ${payloadType}<${
           JSON.stringify(entry.owner.name)
-        }, ${unit}> & { readonly [${symbol}]: true }`,
+        }, ${unit}, { readonly [${symbol}]: true }>`,
         source,
       )
       append(`type ${value} = ${wrapperType}<${payload}>`, source)
       append(
         `type ${factory} = Omit<${factoryType}<${
           JSON.stringify(entry.owner.name)
-        }, ${units}>, 'fromJSValue' | 'fromUnit' | 'inUnit' | 'read'> & Readonly<{`,
+        }, ${units}, { readonly [${symbol}]: true }>, 'fromJSValue' | 'fromUnit' | 'inUnit' | 'read'> & Readonly<{`,
         source,
       )
       append(`  fromJSValue(input: unknown): ${value}`, source)
@@ -138,14 +138,19 @@ export const QuantityNativeModule = {
       append(`  inUnit(value: ${value}, unit: ${unit}): ${value}`, source)
       append(`  read(value: ${value}): Readonly<{ canonical: number; unit: ${unit} }>`, source)
       append('}>', source)
-      append(`const ${checked}: ${factory} = ${makeFactory}({`, source)
+      append(
+        `const ${checked}: ${factory} = ${makeFactory}<${
+          JSON.stringify(entry.owner.name)
+        }, ${units}, { readonly [${symbol}]: true }>({`,
+        source,
+      )
       append(`  domain: ${JSON.stringify(entry.owner.name)},`, source)
       append(
         `  units: { ${entry.units.map(row => `[${JSON.stringify(row.name)}]: ${row.scale}`).join(', ')} },`,
         source,
       )
       append(`  defaultUnit: ${JSON.stringify(entry.defaultUnit)},`, source)
-      // The single cast brands checked payloads only; it does not retain permissive base overloads.
+      // The single cast narrows the public factory surface without retaining permissive base overloads.
       append(`}, ${wrap}) as ${factory}`, source)
       append(`export type ${valueTypeExport} = ${value}`, source)
       append(`export { ${checked} as ${factoryExport} }`, source)

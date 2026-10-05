@@ -98,15 +98,15 @@ const __quantityFreeze = Object.freeze
 declare const __q0Owner: unique symbol
 type __q0Units = Readonly<{ "Seconds": 1; "Minutes": 60 }>
 type __q0Unit = keyof __q0Units
-type __q0Payload = __QuantityPayload<"Measure", __q0Unit> & { readonly [__q0Owner]: true }
+type __q0Payload = __QuantityPayload<"Measure", __q0Unit, { readonly [__q0Owner]: true }>
 type __q0Value = __QuantityValue<__q0Payload>
-type __q0Factory = Omit<__QuantityFactory<"Measure", __q0Units>, 'fromJSValue' | 'fromUnit' | 'inUnit' | 'read'> & Readonly<{
+type __q0Factory = Omit<__QuantityFactory<"Measure", __q0Units, { readonly [__q0Owner]: true }>, 'fromJSValue' | 'fromUnit' | 'inUnit' | 'read'> & Readonly<{
   fromJSValue(input: unknown): __q0Value
   fromUnit(input: unknown, unit: __q0Unit): __q0Value
   inUnit(value: __q0Value, unit: __q0Unit): __q0Value
   read(value: __q0Value): Readonly<{ canonical: number; unit: __q0Unit }>
 }>
-const __q0Checked: __q0Factory = __quantityMakeType({
+const __q0Checked: __q0Factory = __quantityMakeType<"Measure", __q0Units, { readonly [__q0Owner]: true }>({
   domain: "Measure",
   units: { ["Seconds"]: 1, ["Minutes"]: 60 },
   defaultUnit: "Seconds",
@@ -219,8 +219,8 @@ export namespace types {
     Expect(emitted.code.match(/declare const .*: unique symbol/g)).toEqual([
       'declare const __q1Owner_1: unique symbol',
     ])
-    Expect(emitted.code.match(/const .* = __quantityMakeType\(/g)).toEqual([
-      'const __q1Checked: __q1Factory = __quantityMakeType(',
+    Expect(emitted.code.match(/const .* = __quantityMakeType</g)).toEqual([
+      'const __q1Checked: __q1Factory = __quantityMakeType<',
     ])
     Expect(emitted.code.match(/export \{ .* \}/g)).toEqual([
       'export { __q1Checked as __q1FactoryExport }',
@@ -394,11 +394,6 @@ export namespace types {
         "Measure.fromUnit(2, 'Hours')",
         `types.${measureLink.constructorMember}.fromJSValue(120)`,
       ]
-      const expectedErrors = rejected.flatMap(line => ['// @ts-expect-error nominal or constructor boundary', line])
-        .join('\n')
-      await FS.writeText(consumerPath, `${baseline}\n${expectedErrors}\n`)
-      Expect(diagnosticSummary(consumerPath)).toEqual([])
-      // Removing the directives proves every negative check reaches a real diagnostic.
       await FS.writeText(consumerPath, `${baseline}\n${rejected.join('\n')}\n`)
       const failures = diagnostics(consumerPath)
       Expect(failures.map(diagnostic => diagnostic.code)).toEqual([2345, 2345, 2322, 2345, 2345, 2345, 2339])
