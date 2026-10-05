@@ -887,3 +887,24 @@ safety retained; focused, repository, and real Metro evidence for the exact tip;
 message and successful `finalize`; and a concise statement of the measured gain and the remaining
 dominant slice. Do not report test success as a measured latency improvement. Landing remains a
 separate Developer decision.
+
+## Production dependency-link preservation
+
+The stable-link slice retains owned generated dependency symlinks during Studio incremental
+publication when their logical paths and exact targets are unchanged. Every publication still
+audits the managed dependency environments and the actual owned symlinks. Missing links are
+repaired, retargeted and removed links are reconciled, and failed publication restores removed
+links. An unchanged ownership manifest is not rewritten. Ordinary full-tree generation keeps
+its unlink-and-recreate behavior because its directory synchronizer rejects destination symlinks.
+
+Identical publication suppression and Metro timer reductions are separate follow-up slices;
+preview-first compilation and affected-document validation remain experimental.
+
+Validation: 11 generated-link tests and 24 runtime publication tests pass. Disabling retention
+fails four lifecycle/work-count assertions. The real HNReader editor-padding smoke passes eight
+saves in each publication mode with zero iframe loads. Both periodic timing attempts were
+inconclusive: first another verification lane was active at load 12.6 on 18 CPUs, then load
+17.6 still exceeded quiet admission. The correctness smoke ran at load 22.7–40.1; its
+save-to-paint medians (4856ms checks on, 9040ms off) are not speed qualification or a comparison
+with the earlier experimental pipeline. A quiet periodic run remains required to establish
+current numerical budget compliance. No ceiling was changed.

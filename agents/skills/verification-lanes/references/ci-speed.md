@@ -7,8 +7,9 @@ A change meant to make the hosted `Verify` workflow faster carries its own befor
   compares this branch's newest `Verify` run with `main`'s newest green push; `--run <after>` and
   `--compare <before>` name the runs instead, so a stack of improvements compares each against the
   run before it.
-- A cache pays off only on the run after the one that saved it. Rerun the same commit once its
-  first run has saved, and measure the rerun.
+- Separate cache-hit runs from cache misses. If a controlled warm-cache comparison is needed,
+  measure a rerun of the same commit after its first run saved the cache; do not hold an otherwise
+  verified landing for a benchmark or claim a speedup from unlike workloads.
 - Pushing to a pull request cancels its running `Verify`, so wait for the cache-saving steps to
   finish before pushing the next improvement.
 - Put the table in the pull request description or the merge message.

@@ -28,6 +28,8 @@ permissions:
 
 concurrency:
   group: verify-${{ github.event.pull_request.number || github.ref }}
+  # PR updates replace obsolete proof; main keeps up to 100 pending runs instead of dropping one.
+  queue: ${{ github.event_name == 'pull_request' && 'single' || 'max' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
