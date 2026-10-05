@@ -44,6 +44,33 @@ does not imply whole-app or landing acceptance.
 
 ## First concurrent wave
 
+### Current signature projections and unit-reading batches
+
+A resumes private signature projections and bare/dot role construction, including the forcing
+PersonName.GivenName, PersonName(.FamilyName "Lovelace") and Subtract(Right 2, Left 5) cases. It owns
+Type.ts, invocations.ts, parser expressions.langium, types.langium and value-scope.ts, the
+functions-validator.ts and types-validator.ts source, and ExpressionsCompiler.ts solely for this
+construction/resolution batch. New focused semantic, parser, validator and compiler tests or helper
+modules for these cases belong to A. Preserve existing named argument compatibility, upward-only
+callable admission, lexical name precedence and source identities. The coordinator retains
+export aggregation, production effect installation, registration and app graduation. B's current
+alias-only ast-structure.ts grant remains separate.
+
+C resumes generated unit-reading methods such as Span.seconds(), preserving concrete descendant
+roles and canonical backing. It owns new numeric-unit-readings.ts, its focused semantic test,
+numeric-unit-readings-validator.ts, NumericUnitReadingsValidationMessages.ts and validator test,
+existing NumericUnits.ts and NumericUnitsCompiler.ts solely for inherited unit ownership and
+unit-reading emission, and a focused compiler numeric-unit-readings test. Reuse actual receiver,
+unit and owner identities and existing checked factory.inUnit; no fake associated-method AST or
+second argument matcher. Publish a small real resolver/emitter API promptly for integration.
+A owns Type and ExpressionsCompiler dispatch and may integrate C's committed API under this
+grant, through the coordinator relay. C does not edit those shared files. The coordinator retains
+facade exports, validator registration, factory dependency publication and app graduation.
+
+Both managers implement multiple sensible commits with focused checks; routine returns do not
+wait for a dedicated review. Remaining generic/Self/operator and converter work is still required,
+but these grants do not authorize unrelated shared-file changes or new language decisions.
+
 ### Current slot validation and formatting release
 
 The reviewed nine-path frontend is integrated at `9a39f2b0e`; those paths returned to the
