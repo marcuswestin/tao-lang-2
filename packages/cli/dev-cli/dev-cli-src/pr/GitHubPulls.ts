@@ -9,7 +9,7 @@ import { type CLI, Errors } from '@shared'
  */
 
 /** PR_BRANCH_PREFIXES names the branches `open-pr` pushes and `merge-pr` merges. */
-export const PR_BRANCH_PREFIXES = [
+const PR_BRANCH_PREFIXES = [
   'feat/',
   // A cloud agent session may push only the one branch its host assigned, named under these.
   'claude/',
