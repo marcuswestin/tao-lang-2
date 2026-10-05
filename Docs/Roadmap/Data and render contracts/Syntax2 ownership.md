@@ -91,6 +91,25 @@ Both managers implement multiple sensible commits with focused checks; routine r
 wait for a dedicated review. Remaining generic/Self/operator and converter work is still required,
 but these grants do not authorize unrelated shared-file changes or new language decisions.
 
+### Next generic and concrete Self batch
+
+A may now implement the accepted `where type T is Ordered and Display` function constraints and
+concrete implementing `type`/Self semantics, before operators and converters. Its existing Type,
+invocations, expressions/types grammar, value-scope, functions/types validators and
+ExpressionsCompiler ownership continues. It additionally owns callable-signatures.ts and
+associated-methods.ts for generic substitution and concrete Self correspondence, plus
+canonical-effect-snapshot.ts solely for substituting already-discovered method signatures without
+changing effect discovery or bounds. ExpressionsFormatter.ts, FunctionalCoreCompiler.ts and
+AssociatedMethodsCompiler.ts are released solely for canonical generic declarations and their
+actual associated-function emission. New generic-bindings.ts and focused feature tests belong
+to A. Use actual source declarations and the existing argument matcher; do not create a second
+matcher or infer equality between independent generic parameters. A same-T pair must reject
+mixed Celsius/Fahrenheit unless explicitly converted. Preserve function purity, inferred results,
+nominal direction, captured witnesses and the selected structural capability failure contracts.
+Root retains facades, production effect installation, capability transport and app graduation;
+D retains action result helpers and failure/runtime ownership. Operators and converters require
+the next bounded amendment after this generic batch, rather than being included implicitly.
+
 ### Current action outcomes and lexical cleanup batch
 
 D's actual source projector is integrated at `488d45510` and `5f726c6ff`; those two paths returned
