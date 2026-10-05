@@ -52,7 +52,7 @@ export type PrChecksOptions = {
 }
 
 /** PrChecksResult is 0 when every check passed, 1 when one failed or none appeared, 2 while any is still running. */
-export type PrChecksResult = { exitCode: 0 | 1 | 2; lines: string[] }
+type PrChecksResult = { exitCode: 0 | 1 | 2; lines: string[] }
 
 /** Check is one check run or commit status, reduced to what the report needs. */
 type Check = {
