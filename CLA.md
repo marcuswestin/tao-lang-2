@@ -57,6 +57,9 @@ would infringe.
    any kind, and You are not expected to support them.
 4. This agreement covers every Contribution You make to Tao, past and future, from the moment You
    accept it.
+5. This agreement is governed by the laws of the State of New York, without regard to its
+   conflict-of-laws rules. The state and federal courts located in New York County, New York, have
+   exclusive jurisdiction over any dispute arising from it, and You consent to their jurisdiction.
 
 ## 6. How to accept
 
