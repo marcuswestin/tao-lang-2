@@ -1487,6 +1487,13 @@ function containsNumericStorage(type: TaoType): boolean {
   return type.kind === 'union' ? type.members.some(containsNumericStorage) : isPrimitiveNamed(type, 'numeric')
 }
 
+/** A structural receiving role retains lexical identity without declaring an operator owner. */
+function requiresAuthoredOperationContract(type: TaoType): boolean {
+  const nominal = nominalOf(type)
+  return !!type.genericParameter || type.kind === 'capability'
+    || !!nominal && !expectedNominalAcceptsBaseCompatibleNominals(nominal)
+}
+
 function actualSatisfiesExpectedNominal(
   actual: TaoType,
   expected: TaoType,
@@ -2098,7 +2105,7 @@ class TypeResolutionContext {
       if (
         operation.problem === 'pending-contract' || operation.problem === 'ambiguous-operator'
         || operation.problem === 'unresolved-operand'
-        || operation.operandTypes.some(type => nominalOf(type) || type.genericParameter || type.kind === 'capability')
+        || operation.operandTypes.some(requiresAuthoredOperationContract)
       ) {
         return unresolvedType()
       }
@@ -2125,7 +2132,7 @@ class TypeResolutionContext {
       if (
         operation.problem === 'pending-contract' || operation.problem === 'ambiguous-operator'
         || operation.problem === 'unresolved-operand'
-        || operation.operandTypes.some(type => nominalOf(type) || type.genericParameter || type.kind === 'capability')
+        || operation.operandTypes.some(requiresAuthoredOperationContract)
       ) {
         return unresolvedType()
       }
