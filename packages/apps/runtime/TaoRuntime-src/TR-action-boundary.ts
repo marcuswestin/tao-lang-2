@@ -2,7 +2,7 @@ import React from 'react'
 import { ActionBoundaryContext, MountedActionBoundary } from './TR-action-boundary-model'
 import { createElement } from './TR-create-element'
 import { TaoErrorBoundary } from './TR-error-containment'
-import { actionFailurePublicMessage } from './TR-errors'
+import { actionFailurePublicMessage, type TaoActionFailureReport } from './TR-errors'
 import type { RuntimeAppDefinition } from './TR-navigation-app'
 import { reactiveValue } from './TR-reactive-values'
 import { readContext } from './TR-read-net'
@@ -34,7 +34,7 @@ export function MountedAppActionBoundary(props: {
       actionBoundary: boundary,
       onActionRecovery: () => boundary.recover(),
       renderActionFailure: handler
-        ? failure =>
+        ? (failure: TaoActionFailureReport) =>
           handler(
             { __tao: appProps },
             reactiveValue(Object.freeze({
