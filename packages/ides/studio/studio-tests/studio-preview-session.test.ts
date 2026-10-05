@@ -31,11 +31,12 @@ Test(
           app Garden { id "tao-studio-garden-receipts" version "1.0.0" name "Garden" view Main }
           view Main() { render Text("Before") }
         `,
-          'Data.tao': 'public type PlantKind is one of Seed, Flower\n',
+          'Data.tao': 'public type PlantKind is one of Seed\n',
         },
         async (paths, root) => {
           const originalWatch = ProjectTooling.watch
           const originalRefresh = ProjectTooling.refresh
+          const contractPath = FS.resolvePath('.tao-ts/Data.tao.ts', root)
           const acquired = Deferred<ProjectToolingResult>()
           const release = Deferred()
           const observed: ProjectToolingResult[] = []
@@ -60,7 +61,16 @@ Test(
               ...options,
               onResult: result => observed.push(result),
             })
-            const initialReceipt = watch.lastResult
+            // Startup may reread unchanged outputs after attaching dependency watchers. Establish
+            // a real changed receipt after startup rather than relying on its latest receipt.
+            let initialReceipt: ProjectToolingResult
+            try {
+              await FS.writeText(paths['Data.tao'], 'public type PlantKind is one of Seed, Flower\n')
+              initialReceipt = await watch.requestRefresh({ force: true })
+            } catch (error) {
+              await watch.dispose()
+              throw error
+            }
             publishToolingResult = result => options.onResult?.(result)
             refreshWatchedInputs = () => watch.requestRefresh({ force: true })
             return {
@@ -71,7 +81,9 @@ Test(
                 watchRequests += 1
                 const receipt = await watch.requestRefresh(requestOptions)
                 if (watchRequests === 1) {
+                  Expect(initialReceipt.status).toBe('fresh')
                   Expect(initialReceipt.changedOutputPaths.length).toBeGreaterThan(0)
+                  Expect(initialReceipt.changedOutputPaths).toContain(contractPath)
                   publishToolingResult(initialReceipt)
                 }
                 if (watchRequests === 2) {
@@ -96,7 +108,6 @@ Test(
               Expect(preview.session.compileSnapshot().compileRevision).toBe(1)
               Expect(watchRequests).toBe(1)
               Expect(oneShotRequests).toBe(0)
-              const contractPath = FS.resolvePath('.tao-ts/Data.tao.ts', root)
               Expect(await FS.readText(contractPath)).toContain('"Seed" | "Flower"')
 
               const second = preview.session.compileInitial()
