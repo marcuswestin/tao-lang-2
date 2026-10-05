@@ -5,8 +5,9 @@ import type { TaoDataConnection, TaoDataSchemaDefinition, TaoQueryDescriptor } f
 import { testDataConnection } from '../TaoRuntime-src/TR-data-provider'
 import { HostEnvironmentError } from '../TaoRuntime-src/TR-errors'
 import type { BookInput, ProviderModule } from './syntax2-app-contracts'
+import './syntax2-app-runtime'
 
-// Load the real app modules in the focused test process using the app's local path mappings.
+// Load the real app modules after registering their installed runtime package name.
 const library = Repo.resolvePath('Apps/Syntax2/library')
 const { BookProvider, bookStoreSession }: ProviderModule = await import(FS.resolvePath('BookStoreProvider.ts', library))
 

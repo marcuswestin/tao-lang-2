@@ -151,7 +151,7 @@ Describe('Associated entity descriptors', () => {
         type BookWindow is list of Book
         type Revision is { Book, RevisionID text, Unseen yes/no }
         type PersonRows is People
-        public func LoadedItems(Window BookWindow) -> Books { return Window }
+        public func LoadedItems(Window BookWindow) -> Books { return [] }
       `,
     }, async paths => {
       const validated = await Workspace.validate(paths['BookIO.tao'])
@@ -189,6 +189,9 @@ Describe('Associated entity descriptors', () => {
       const loadedType = Type.ofFunctionReturn(loaded)
       Assert(loadedType.kind === 'list' && loadedType.element?.kind === 'entity', 'the imported return has entity rows')
       Expect(loadedType.element.entity).toBe(books)
+      const windowType = Type.ofParameter(AST.parametersOf(loaded)[0]!)
+      Assert(windowType.kind === 'list' && windowType.element?.kind === 'entity', 'the imported alias has entity rows')
+      Expect(windowType.element.entity).toBe(books)
       const peopleRows = entry.statements.find(statement =>
         AST.isTypeDeclaration(statement) && statement.name === 'PersonRows'
       )

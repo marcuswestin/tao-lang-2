@@ -214,12 +214,12 @@ Describe('Capability witnesses', () => {
         const held = [ordinary, complete, TR.Alias(() => carrier)]
           .map(receiver => TR.Capability.method(receiver, 'display'))
         source.set(TR.Value('After'))
-        if (held.some(method => TR.Call<string>(method).getJSValue() !== 'After')) TR.Errors.throwUnexpected('live receiver lost')
+        RuntimeAssert(held.every(method => TR.Call<string>(method).getJSValue() === 'After'), 'live receivers retained')
         const row = TR.Cell(TR.Value({ Content: 'Before' }))
         const field = TR.Member(row, ['Content'])
         RuntimeAssert.defined(field.set, 'a writable content field')
         field.set(TR.Value('After'))
-        if (field.getJSValue() !== 'After') TR.Errors.throwUnexpected('writable member lost')
+        RuntimeAssert(field.getJSValue() === 'After', 'writable member retained')
       `,
       )
       const config = FS.resolvePath('tsconfig.json', root)

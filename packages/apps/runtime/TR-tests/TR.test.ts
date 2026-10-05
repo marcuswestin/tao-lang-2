@@ -533,6 +533,7 @@ Describe('TR.Views', () => {
     Expect(Object.keys(TR.Views).sort()).toEqual([
       'Checkbox',
       'Image',
+      'LazyList',
       'Panes',
       'Placeholder',
       'Pressable',

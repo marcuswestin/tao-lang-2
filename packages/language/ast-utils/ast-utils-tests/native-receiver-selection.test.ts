@@ -93,13 +93,15 @@ Describe('Native associated receiver selection', () => {
     }
   })
 
-  Test('does not transport member reads, nested arguments, static type roots or another owner', async () => {
+  Test('admits scalar member reads but does not transport item members, nested arguments, static roots or another owner', async () => {
     const file = await parse(
       `
       type Other is { Elapsed number }
       type Timer is {
         Elapsed number
-        func Member() -> number { return SampleDuration(Timer.Elapsed) from ./Durations.ts }
+        Child Other
+        func ScalarMember() -> number { return SampleDuration(Timer.Elapsed) from ./Durations.ts }
+        func Member() -> number { return SampleDuration(Timer.Child) from ./Durations.ts }
         func Nested() -> number { return SampleDuration(Identity(Timer)) from ./Durations.ts }
         static func Static() -> number { return SampleDuration(Timer) from ./Durations.ts }
         func Wrong(Other Other) -> number { return SampleDuration(Other) from ./Durations.ts }
@@ -110,6 +112,10 @@ Describe('Native associated receiver selection', () => {
     )
     const timer = namedType(file, 'Timer')
     const snapshot = publishCanonicalEffectSnapshot([file], { natives: nativeHeads(file) })
+    const scalar = AST.streamAllContents(method(timer, 'ScalarMember')).find(AST.isMemberAccessExpression)
+    Expect.Is(scalar, AST.isMemberAccessExpression)
+    Expect(snapshot.reads.get(scalar)?.classification).toBe('immutable')
+    Expect(snapshot.reads.get(scalar)?.proof?.kind).toBe('contextual-owner')
     for (const name of ['Member', 'Nested', 'Static', 'Wrong']) {
       const declaration = method(timer, name)
       const reference = AST.streamAllContents(declaration).find(node =>

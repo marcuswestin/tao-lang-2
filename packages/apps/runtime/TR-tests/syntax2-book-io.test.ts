@@ -6,6 +6,7 @@ import type { TaoDataSchemaDefinition } from '../TaoRuntime-src/TR-data'
 import { testDataConnection } from '../TaoRuntime-src/TR-data-provider'
 import { TaoActionFailure } from '../TaoRuntime-src/TR-errors'
 import type { IOModule, ProviderModule } from './syntax2-app-contracts'
+import './syntax2-app-runtime'
 
 // Resolve these app-owned modules at test runtime so the runtime package's typecheck stays scoped.
 const library = Repo.resolvePath('Apps/Syntax2/library')

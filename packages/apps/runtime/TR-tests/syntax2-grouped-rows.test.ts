@@ -2,8 +2,9 @@ import TR from '@runtime/TR'
 import { Repo } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import type { GroupedRowsModule } from './syntax2-app-contracts'
+import './syntax2-app-runtime'
 
-// The test process resolves this app-owned source through the app's tsconfig path mappings.
+// Load the real app module after registering its installed runtime package name.
 const { GroupedRows }: GroupedRowsModule = await import(Repo.resolvePath('Apps/Syntax2/library/GroupedRows.ts'))
 
 Describe('Syntax2 grouped row projection', () => {
