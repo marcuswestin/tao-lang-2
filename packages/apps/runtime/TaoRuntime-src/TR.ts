@@ -506,8 +506,8 @@ class TR {
   /** RenderSlots keeps body components stable while captures and placement arguments remain current. */
   static RenderSlots = Object.freeze({ create: createSlotRenderer, select: selectRenderSlot, Frame: RenderSlotFrame })
 
-  /** Call invokes a Tao pure function with runtime-wrapped values. */
-  static Call<T>(fn: TR.Function, ...args: TR.Evaluable[]): TR.Value<T> {
+  /** Call preserves raw omission holes separately from a wrapped none value. */
+  static Call<T>(fn: TR.Function, ...args: (TR.Evaluable | undefined)[]): TR.Value<T> {
     return fn.invoke(...args) as TR.Value<T>
   }
 
@@ -1373,7 +1373,7 @@ class RuntimeAction<Args extends any[] = any[]> {
 class RuntimeFunction {
   constructor(private readonly body: (...args: any[]) => TR.Evaluable | TR.Function) {}
 
-  invoke(...args: TR.Evaluable[]): TR.Value<any> | TR.Function {
+  invoke(...args: (TR.Evaluable | undefined)[]): TR.Value<any> | TR.Function {
     const result = this.body(...args)
     return result instanceof RuntimeFunction ? result : completeRuntimeValue(result)
   }

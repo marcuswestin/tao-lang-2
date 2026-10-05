@@ -6,6 +6,20 @@ function identity(name: string): TR.DeclarationIdentity {
 }
 
 Describe('TR functional core', () => {
+  Test('preserves omitted leading slots while a wrapped none suppresses the default', () => {
+    let defaults = 0
+    const format = TR.Function((prefix: TR.Value<string | null> | undefined, count: TR.Value<number>) => {
+      const selected = prefix ?? (() => {
+        defaults += 1
+        return TR.Value('default')
+      })()
+      return TR.Value([selected.getJSValue(), count.getJSValue()])
+    })
+    Expect(TR.Call(format, undefined, TR.Value(2)).getJSValue()).toEqual(['default', 2])
+    Expect(TR.Call(format, TR.Value(null), TR.Value(3)).getJSValue()).toEqual([null, 3])
+    Expect(defaults).toBe(1)
+  })
+
   Test('evaluates operators, interpolation, functions, subject cases, guards, and members', () => {
     Expect(TR.Binary(TR.Value(2), '+', TR.Value(3)).jsValue).toBe(5)
     Expect(TR.Binary(TR.Value(3), '>', TR.Value(2)).jsValue).toBe(true)
