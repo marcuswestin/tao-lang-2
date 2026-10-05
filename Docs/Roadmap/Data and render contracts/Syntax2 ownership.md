@@ -107,6 +107,14 @@ belong to D; publish inference through the actual action/return nodes and a call
 expression resolver so A can connect its held Type context. Preserve function purity and existing
 foreign action contracts. Canonical done/error payload bindings go before the arrow; legacy
 when-do input compatibility does not redefine the selected then syntax.
+
+D also owns TR-effect-outcomes.ts and its existing focused runtime tests for the canonical then
+outcome connection. Legacy when-do keeps message payloads; canonical then receives the actual
+done result or structured failure context with Message. A named failure takes precedence over
+the broad error arm, which handles modeled failures and unexpected faults alike. Reuse the
+existing joined action scope, savepoint and failure/cleanup preservation rather than adding a
+second walker. The coordinator retains TR.ts facade publication; publish the actual small API
+and its chosen compiler hookup together. This grant does not alter cancellation or app guard policy.
 Reuse the integrated runtime action scope and deferred-action primitives. Ordinary calls and their
 handlers remain joined; cleanup is serial LIFO on every scope exit and preserves a primary failure.
 Deferred shorthand registers the invocation instead of executing it during registration. Named
