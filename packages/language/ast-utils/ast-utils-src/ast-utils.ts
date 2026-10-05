@@ -6,6 +6,12 @@ import {
 } from './app-configuration'
 import { rootAppValue } from './apps'
 import { resolveArgumentBindings } from './argument-bindings'
+import {
+  associatedMethodCallTarget,
+  capabilityRequirements,
+  materializeAssociatedCallable,
+  ownAssociatedMethods,
+} from './associated-methods'
 import { bindCallableArguments, callableSignatureOf, compareCallableSignatures } from './callable-signatures'
 import { colorValues } from './color-values'
 import {
@@ -84,6 +90,10 @@ export type { NumericUnitsDeclarationPlan, NumericUnitsSuffixResolution } from '
 
 /** ASTUtils groups shared semantic helpers for Tao AST consumers. */
 export const ASTUtils = {
+  associatedMethodCallTarget,
+  capabilityRequirements,
+  materializeAssociatedCallable,
+  ownAssociatedMethods,
   parameterRequiresWritable,
   writableExpression,
   literalExpression,
@@ -161,6 +171,10 @@ export const ASTUtils = {
 } as const
 
 export namespace ASTUtils {
+  export type AssociatedCallableDescriptor = import('./associated-methods').AssociatedCallableDescriptor
+  export type AssociatedDescriptorMaterialization = import('./associated-methods').AssociatedDescriptorMaterialization
+  export type AssociatedMethodReceiver = import('./associated-methods').AssociatedMethodReceiver
+  export type AssociatedMethodSelection = import('./associated-methods').AssociatedMethodSelection
   export type ActionInvocationPair = import('./invocations').ActionInvocationPair
   export type AppDatasourceBinding = import('./app-configuration').AppDatasourceBinding
   export type AppPropertySource = import('./app-configuration').AppPropertySource

@@ -340,7 +340,13 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     // procedure and the verb in front of it.
     const owner = AST.owningCommand(reference)
     const visible = (declaration: AST.Node) => declaration !== owner
-    let scope = this.createScopeForNodes(AST.importableValueDeclarationsInFile(root).filter(visible), outer)
+    const method = AST.findOwningAssociatedFunction(reference)
+    const methodOwner = method ? AST.associatedFunctionOwner(method) : undefined
+    let scope = outer
+    if (method && methodOwner && isWithinAssociatedBody(reference, method)) {
+      scope = this.createScopeForNodes([methodOwner], scope)
+    }
+    scope = this.createScopeForNodes(AST.importableValueDeclarationsInFile(root).filter(visible), scope)
     scope = this.createScopeForNodes(
       this.importedDeclarations(reference, AST.isImportableValueDeclaration),
       scope,
@@ -380,6 +386,10 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     // Blocks and case payloads layer together at their lexical depth, so a handler payload wins
     // over outer bindings while bindings declared inside the handler shadow the payload.
     for (const carrier of scopeCarriersContaining(reference).reverse()) {
+      if (carrier.kind === 'associated-function') {
+        scope = this.createScopeForParameters(carrier.declaration, scope, reference)
+        continue
+      }
       if (carrier.kind === 'payload') {
         scope = this.createScopeForNodes([carrier.payload], scope)
         continue
@@ -852,7 +862,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
   }
 
   private createScopeForParameters(
-    declaration: AST.ParameterizedDeclaration,
+    declaration: AST.ParameterizedDeclaration | AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration,
     outerScope: Langium.Scope,
     reference?: AST.Node,
   ): Langium.Scope {
@@ -1070,12 +1080,16 @@ type ScopeCarrier =
   | { kind: 'block'; block: AST.Block }
   | { kind: 'action-block'; block: AST.ActionBlock }
   | { kind: 'payload'; payload: AST.CasePayload }
+  | { kind: 'associated-function'; declaration: AST.AssociatedFunctionDeclaration }
 
 /** scopeCarriersContaining returns blocks and case payloads from innermost to outermost. */
 function scopeCarriersContaining(node: AST.Node): ScopeCarrier[] {
   const carriers: ScopeCarrier[] = []
   let current: AST.Node | undefined = node.$container
   while (current) {
+    if (AST.isAssociatedFunctionDeclaration(current)) {
+      carriers.push({ kind: 'associated-function', declaration: current })
+    }
     if (AST.isBlock(current)) {
       carriers.push({ kind: 'block', block: current })
     }
@@ -1113,13 +1127,24 @@ function owningAppDeclaration(node: AST.Node): AST.AppDeclaration | undefined {
 }
 
 function visibleParametersAtReference(
-  declaration: AST.ParameterizedDeclaration,
+  declaration: AST.ParameterizedDeclaration | AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration,
   reference: AST.Node | undefined,
 ): readonly AST.ParameterDeclaration[] {
   const parameters = AST.parametersOf(declaration)
   const defaultParameter = parameterOwningDefault(reference)
   const index = defaultParameter ? parameters.indexOf(defaultParameter) : -1
   return index >= 0 ? parameters.slice(0, index) : parameters
+}
+
+function isWithinAssociatedBody(reference: AST.Node, declaration: AST.AssociatedFunctionDeclaration): boolean {
+  let current: AST.Node | undefined = reference
+  while (current) {
+    if (current === declaration.block) {
+      return true
+    }
+    current = current.$container
+  }
+  return false
 }
 
 function parameterOwningDefault(node: AST.Node | undefined): AST.ParameterDeclaration | undefined {

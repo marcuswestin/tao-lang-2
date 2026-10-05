@@ -438,9 +438,13 @@ function typeDefinitionReferencesRoot(
 
 function typeExpressionReferencesRoot(
   root: AST.TypeDefinition,
-  type: AST.TypeExpression,
+  type: AST.TypeExpression | AST.CapabilityTypeExpression,
   seen: Set<AST.TypeDefinition>,
 ): boolean {
+  // Callable domains/results may refer to their owner; this is not a stored-value type cycle.
+  if (AST.isCapabilityTypeExpression(type)) {
+    return false
+  }
   if (AST.isItemTypeExpression(type)) {
     return type.properties.some(property => typeDefinitionReferencesRoot(root, property, new Set(seen)))
   }

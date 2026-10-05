@@ -233,6 +233,7 @@ type ArgumentListOwner =
   | AST.DoStatement
   | AST.CommandDoClause
   | AST.FunctionCallExpression
+  | AST.MethodCallExpression
   | AST.ContextualPresentStatement
   | AST.ViewBinding
   | AST.AskStatement
@@ -712,7 +713,7 @@ export function renderablePrimitiveOfParameter(
 }
 
 function renderablePrimitiveOfTypeExpression(
-  type: AST.TypeExpression,
+  type: AST.TypeExpression | AST.CapabilityTypeExpression,
   seen: Set<AST.TypeDeclaration>,
 ): RenderablePrimitive | undefined {
   const base = AST.isDerivedTypeExpression(type) ? type.base : type
@@ -773,7 +774,7 @@ export function configurationPropertyIsKey(property: ConfigurationProperty): boo
 }
 
 function configurationPrimitiveOfTypeExpression(
-  type: AST.TypeExpression,
+  type: AST.TypeExpression | AST.CapabilityTypeExpression,
   seen: Set<AST.TypeDeclaration>,
 ): ConfigurationFamily | undefined {
   const base = AST.isDerivedTypeExpression(type) ? type.base : type
@@ -1061,7 +1062,9 @@ export function caseSetOwningCase(caseSetCase: AST.CaseSetCase): AST.TypeDeclara
 }
 
 /** parametersOf returns the parameters declared by a parameterized declaration. */
-export function parametersOf(declaration: AST.ParameterizedDeclaration): AST.ParameterDeclaration[] {
+export function parametersOf(
+  declaration: AST.ParameterizedDeclaration | AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration,
+): AST.ParameterDeclaration[] {
   // A view alias has no parameter list of its own; its interface is its target's.
   if (AST.isViewDeclaration(declaration) && declaration.aliasTarget) {
     const target = viewAliasTarget(declaration)
@@ -1071,12 +1074,16 @@ export function parametersOf(declaration: AST.ParameterizedDeclaration): AST.Par
 }
 
 /** returnStatementsOf returns every function return in source order, including early returns. */
-export function returnStatementsOf(declaration: AST.FunctionDeclaration): AST.ReturnStatement[] {
+export function returnStatementsOf(
+  declaration: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration,
+): AST.ReturnStatement[] {
   return returnsInFunctionBlock(declaration.block)
 }
 
 /** functionHasFallthroughReturn reports whether every one-sided early-return path has a final fallback. */
-export function functionHasFallthroughReturn(declaration: AST.FunctionDeclaration): boolean {
+export function functionHasFallthroughReturn(
+  declaration: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration,
+): boolean {
   return AST.isReturnStatement(declaration.block.statements.at(-1))
 }
 
@@ -1281,6 +1288,52 @@ export function actionFailuresOf(action: AST.ActionDeclaration): AST.FailStateme
 /** findOwningFunction returns the pure function declaration that owns `node`, if any. */
 export function findOwningFunction(node: AST.Node): AST.FunctionDeclaration | undefined {
   return findAncestor(node, AST.isFunctionDeclaration)
+}
+
+/** findOwningAssociatedFunction returns the associated function containing `node`. */
+export function findOwningAssociatedFunction(node: AST.Node): AST.AssociatedFunctionDeclaration | undefined {
+  return findAncestor(node, AST.isAssociatedFunctionDeclaration)
+}
+
+/** associatedFunctionOwner returns only the declared type whose own body contains this method. */
+export function associatedFunctionOwner(
+  declaration: AST.AssociatedFunctionDeclaration,
+): AST.TypeDeclaration | undefined {
+  const item = declaration.$container
+  if (!AST.isItemTypeExpression(item) || !item.methods.includes(declaration)) {
+    return undefined
+  }
+  const container = item.$container
+  if (AST.isTypeDeclaration(container)) {
+    return container.type === item ? container : undefined
+  }
+  if (!AST.isDerivedTypeExpression(container) || container.slots !== item) {
+    return undefined
+  }
+  const owner = container.$container
+  return AST.isTypeDeclaration(owner) && owner.type === container ? owner : undefined
+}
+
+/** associatedReceiverOwner recognizes only references linked to the enclosing method's real type. */
+export function associatedReceiverOwner(
+  reference: AST.Node,
+): AST.TypeDeclaration | undefined {
+  if (!AST.isValueReference(reference) && !AST.isMemberAccessExpression(reference)) {
+    return undefined
+  }
+  const method = findOwningAssociatedFunction(reference)
+  if (!method) {
+    return undefined
+  }
+  let current: AST.Node | undefined = reference
+  while (current && current !== method.block) {
+    current = current.$container
+  }
+  if (!current) {
+    return undefined
+  }
+  const owner = associatedFunctionOwner(method)
+  return owner && reference.target.ref === owner ? owner : undefined
 }
 
 /** findOwningPhrase returns the phrase declaration that owns `node`, if any. */

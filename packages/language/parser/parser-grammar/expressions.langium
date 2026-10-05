@@ -22,10 +22,15 @@ Argument:
 ArgumentValue infers Expression:
     Expression;
 
-// `returns` accepts a full type expression so `returns { ... } { body }` parses.
+// Both return spellings accept a full type expression, including structural records.
 FunctionDeclaration:
-    visibility=DeclarationVisibility? 'function' name=ID parameterList=ParameterList
-    ('returns' returnType=TypeExpression)? block=FunctionBlock;
+    visibility=DeclarationVisibility? ('func' | 'function') name=ID parameterList=ParameterList
+    ('fails' failureBound=ID)? (('->' | 'returns') returnType=TypeExpression)? block=FunctionBlock;
+
+// Associated methods inherit their owner's visibility and keep their own callable identity.
+AssociatedFunctionDeclaration:
+    'func' name=ID parameterList=ParameterList ('fails' failureBound=ID)?
+    ('->' returnType=TypeExpression)? block=FunctionBlock;
 
 FunctionBlock:
     '{' statements+=FunctionStatement* '}';
@@ -111,7 +116,9 @@ DeclarationSlotUnaryExpression infers Expression:
     | DeclarationSlotPostfixExpression;
 
 DeclarationSlotPostfixExpression infers Expression:
-    DeclarationSlotPrimaryExpression ({infer PostfixMemberAccess.receiver=current} '.' member=ID)*;
+    DeclarationSlotPrimaryExpression
+    ({infer PostfixMemberAccess.receiver=current} '.' member=ID
+      | {infer MethodCallExpression.callee=current} '(' argumentList=ArgumentList? ')')*;
 
 DeclarationSlotPrimaryExpression infers Expression:
     CopyExpression | WhenExpression | NowExpression | ActionExpression | TypedConstructor | PrimitiveConfigurationConstructor
@@ -156,7 +163,9 @@ UnaryExpression infers Expression:
     ({infer UnaryExpression} operator=('not' | '-') operand=UnaryExpression) | PostfixExpression;
 
 PostfixExpression infers Expression:
-    PrimaryExpression ({infer PostfixMemberAccess.receiver=current} '.' member=ID)*;
+    PrimaryExpression
+    ({infer PostfixMemberAccess.receiver=current} '.' member=ID
+      | {infer MethodCallExpression.callee=current} '(' argumentList=ArgumentList? ')')*;
 
 PrimaryExpression infers Expression:
     '(' Expression ')' | CopyExpression | WhenExpression | NowExpression | ActionExpression | TypedConstructor | PrimitiveConfigurationConstructor | ConfigurationConstructor | InferredConfigurationConstructor | ListLiteral | MemberAccessExpression | InterpolatedString | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral | FunctionCallExpression | RefinementExpression | ValueReference;
@@ -304,7 +313,9 @@ WhenSubjectUnaryExpression infers Expression:
     ({infer UnaryExpression} operator=('not' | '-') operand=WhenSubjectUnaryExpression) | WhenSubjectPostfixExpression;
 
 WhenSubjectPostfixExpression infers Expression:
-    WhenSubjectPrimaryExpression ({infer PostfixMemberAccess.receiver=current} '.' member=ID)*;
+    WhenSubjectPrimaryExpression
+    ({infer PostfixMemberAccess.receiver=current} '.' member=ID
+      | {infer MethodCallExpression.callee=current} '(' argumentList=ArgumentList? ')')*;
 
 // Every brace-initial primary is left out, which is what lets the block form be recognized by its
 // opening brace alone.
@@ -362,7 +373,7 @@ ItemProperty:
 // A numeric member names a design color family shade (`schemeAccent.20`), which a `color` argument
 // or default may pass; the validator rejects a shade on any other value.
 MemberAccessExpression:
-    target=[ValueDeclaration:ID] '.' (members+=ID ('.' members+=ID)* | shade=NUMBER);
+    target=[ValueReferenceTarget:ID] '.' (members+=ID ('.' members+=ID)* | shade=NUMBER);
 
 // A call invokes a pure function or named copy; both share this one shape (`Name(...)`), so a
 // separate phrase-call rule would be structurally ambiguous with this one at parse time — nothing
@@ -404,7 +415,10 @@ NowExpression:
     {infer NowExpression} 'now';
 
 ValueReference:
-    target=[ValueDeclaration:ID];
+    target=[ValueReferenceTarget:ID];
+
+// A type is a value only for its contextual receiver inside an associated method body.
+type ValueReferenceTarget = ValueDeclaration | TypeDeclaration;
 
 RefinementExpression:
     target=[RefinementBaseDeclaration:ID] 'with' patchBlock=ConfigurationBlock;

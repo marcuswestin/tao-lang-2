@@ -14,8 +14,16 @@ PrimitiveDeclaration:
     'primitive' name=PrimitiveType ('is' base=PrimitiveType)? ('with' slots=ItemTypeExpression)?;
 
 TypeDeclaration:
-    visibility=DeclarationVisibility? 'type' name=ID
-    ('is' type=TypeExpression | '=' aliasTarget=PackageMemberReference);
+    visibility=DeclarationVisibility?
+    ('type' name=ID ('is' type=TypeExpression | '=' aliasTarget=PackageMemberReference)
+      | 'can' name=ID type=CapabilityTypeExpression);
+
+CapabilityTypeExpression:
+    '{' (methods+=CapabilityMethodDeclaration ','?)* '}';
+
+// Failure bounds are contextual names; `never` remains available as an ordinary identifier.
+CapabilityMethodDeclaration:
+    name=ID parameterList=ParameterList ('fails' failureBound=ID)? '->' returnType=TypeExpression;
 
 TypeExpression:
     ProjectedItemTypeExpression | DerivedTypeExpression | UnionTypeExpression | CaseSetTypeExpression | YesNoTypeExpression | ItemTypeExpression | TypeReference;
@@ -44,7 +52,7 @@ YesNoTypeExpression:
 ItemTypeExpression:
     '{' ((properties+=TypeProperty | keys+=ConfigurationKeyDeclaration | implementations+=ConfigurationImplementation
       | issues+=ConfigurationIssues | accepts+=ConfigurationAccepts | supports+=ConfigurationSupports
-      | unitBlocks+=NumericUnitBlock) ','?)* '}';
+      | unitBlocks+=NumericUnitBlock | methods+=AssociatedFunctionDeclaration) ','?)* '}';
 
 // A postfix `?` carries optionality. Item fields take no trait list.
 TypeProperty:

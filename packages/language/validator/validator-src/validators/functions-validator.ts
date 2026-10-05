@@ -37,13 +37,17 @@ const messages = {
 export const FunctionsValidator = {
   checks: {
     [AST.FunctionDeclaration.$type]: validateFunction,
+    [AST.AssociatedFunctionDeclaration.$type]: validateFunction,
     [AST.FunctionCallExpression.$type]: validateFunctionCall,
   } satisfies NodeValidationChecks,
   messages,
 } as const
 
-function validateFunction(fn: AST.FunctionDeclaration, ctx: ValidationContext): void {
-  if (!AST.isTaoFile(fn.$container)) {
+function validateFunction(
+  fn: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration,
+  ctx: ValidationContext,
+): void {
+  if (AST.isFunctionDeclaration(fn) && !AST.isTaoFile(fn.$container)) {
     ctx.error(fn, messages.functionPlacement)
   }
   const seen = new Set<string>()
@@ -66,7 +70,7 @@ function validateFunction(fn: AST.FunctionDeclaration, ctx: ValidationContext): 
 }
 
 function validateExplicitReturnType(
-  fn: AST.FunctionDeclaration,
+  fn: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration,
   returns: readonly AST.ReturnStatement[],
   ctx: ValidationContext,
 ): void {
@@ -86,7 +90,7 @@ function validateExplicitReturnType(
 }
 
 function validateInferredReturnType(
-  fn: AST.FunctionDeclaration,
+  fn: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration,
   returns: readonly AST.ReturnStatement[],
   ctx: ValidationContext,
 ): void {

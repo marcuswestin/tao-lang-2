@@ -452,6 +452,7 @@ function subjectCaseCategory(subject: AST.Expression): SubjectCaseCategory {
     item: () => 'unsupported',
     entity: () => 'entity',
     enum: () => 'enum',
+    capability: () => 'unsupported',
     union: () => 'unsupported',
   })
 }
