@@ -418,10 +418,10 @@ Describe('gate catalog metadata', () => {
     }
   })
 
-  Test('shares the HNReader project only between the gates that open it', () => {
+  Test('serializes the native window server while disposable projects need no shared project lease', () => {
     Expect(nodeOf('studio-smoke-native').resources).toEqual(['gui'])
-    Expect(nodeOf('studio-canary').resources).toEqual(['gui', 'studio-hnreader-project'])
-    Expect(nodeOf('studio-smoke').resources).toEqual(['studio-hnreader-project'])
+    Expect(nodeOf('studio-canary').resources).toEqual(['gui'])
+    Expect(nodeOf('studio-smoke').resources).toBeUndefined()
     Expect(nodeOf('studio-proof-real-app').resources).toBeUndefined()
     Expect(nodeOf('studio-smoke-simulated-user').resources).toBeUndefined()
     Expect(nodeOf('keyboard-navigation-smoke').resources).toBeUndefined()
@@ -542,18 +542,18 @@ Describe('gate catalog scheduling', () => {
     )).toBe(true)
   })
 
-  Test('keeps the gui and HNReader lanes exclusive while independent browser lanes overlap', async () => {
+  Test('keeps gui lanes exclusive while independent browser and launch lanes overlap', async () => {
     // Each pair fits inside 24 slots. The barrier makes allowed overlap deterministic, while the
     // two gui nodes must still run sequentially because they hold the same resource.
     const guiPair = await runLane(['studio-smoke-native', 'studio-canary'], 24)
     const nativeAndBrowser = await runLane(['studio-smoke-native', 'studio-smoke-simulated-user'], 24, 2)
     const canaryAndBrowser = await runLane(['studio-canary', 'studio-smoke-simulated-user'], 24, 2)
-    const canaryAndLaunch = await runLane(['studio-canary', 'studio-smoke'], 24)
+    const canaryAndLaunch = await runLane(['studio-canary', 'studio-smoke'], 24, 2)
 
     Expect(overlapped(guiPair.overlaps, 'studio-smoke-native', 'studio-canary')).toBe(false)
     Expect(overlapped(nativeAndBrowser.overlaps, 'studio-smoke-native', 'studio-smoke-simulated-user')).toBe(true)
     Expect(overlapped(canaryAndBrowser.overlaps, 'studio-canary', 'studio-smoke-simulated-user')).toBe(true)
-    Expect(overlapped(canaryAndLaunch.overlaps, 'studio-canary', 'studio-smoke')).toBe(false)
+    Expect(overlapped(canaryAndLaunch.overlaps, 'studio-canary', 'studio-smoke')).toBe(true)
   })
 })
 

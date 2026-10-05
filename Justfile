@@ -238,11 +238,11 @@ studio-proof-real-app run_id="local":
 keyboard-navigation-smoke run_id="local":
     ./dev studio-smoke --run-id "{{ run_id }}" --worker 4 packages/ides/studio-tooling/studio-smoke/runtime-keyboard-navigation.test.ts
 
-# Run native Tao Studio against a deterministic project and report what it proved
+# Run native Tao Studio against a disposable deterministic project, or an explicit project and app
 [arg('show_studio', long='show-studio', value='true')]
 [group('Host proofs')]
-studio-canary project="Apps/HNReader" app="HNReader" show_studio='false':
-    ./dev studio-canary {{ if show_studio == "true" { "--show-studio" } else { "" } }} --project "{{ project }}" --app "{{ app }}"
+studio-canary project="" app="" show_studio='false':
+    ./dev studio-canary {{ if show_studio == "true" { "--show-studio" } else { "" } }} {{ if project != "" { "--project " + quote(project) } else { "" } }} {{ if app != "" { "--app " + quote(app) } else { "" } }}
 
 # Export real release and Studio-preview iOS bundles and prove only the preview carries Studio code
 [group('Host proofs')]

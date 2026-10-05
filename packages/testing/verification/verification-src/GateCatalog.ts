@@ -322,8 +322,6 @@ const GUI_PRIORITY = 6
 const GUI_RESOURCE = 'gui'
 /** Graph GUI children inherit the lease held by GateRunner instead of taking it again. */
 const GUI_LEASE_HELD_ENV_KEY = 'TAO_GUI_LEASE_HELD'
-/** Both gates open the checked-in HNReader project, which permits one dev-session owner. */
-const HNREADER_PROJECT_RESOURCE = 'studio-hnreader-project'
 
 /** studioLane is the shape every browser or native UI node shares. */
 function studioLane(resources?: readonly string[]): GateMetadata {
@@ -446,14 +444,12 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
       },
     ],
 
-    // Browser smokes have separate ports and artifacts, but the launch smoke and canary both open
-    // HNReader and must share its project resource. The native shell and canary also contend on
-    // the window server, which is what `gui` names. Each smoke gate is named for its public recipe.
+    // Browser smokes have separate ports, artifacts and disposable launch projects. The native
+    // shell and canary contend on the window server, which is what `gui` names. Each smoke gate
+    // is named for its public recipe.
     [
       'studio-smoke',
-      studioSmoke('studio-smoke', 'packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts', {
-        resources: [HNREADER_PROJECT_RESOURCE],
-      }),
+      studioSmoke('studio-smoke', 'packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts'),
     ],
     [
       'studio-proof-real-app',
@@ -514,7 +510,7 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     [
       'studio-canary',
       {
-        ...studioLane([GUI_RESOURCE, HNREADER_PROJECT_RESOURCE]),
+        ...studioLane([GUI_RESOURCE]),
         optionalVisibleSurface: 'studio',
         priority: GUI_PRIORITY,
         requiresMacOS: true,

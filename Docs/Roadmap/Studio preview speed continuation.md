@@ -35,7 +35,12 @@ project with the decided project layout, retaining its real CLI readiness, sessi
 and teardown assertions. Its focused host run passes all 14 assertions in 6.7s while the Developer's
 HNReader Studio remains live at the same PID and port. Unproved shutdown retains the disposable
 project with an ownership receipt. [The archived launch-smoke ledger entry](<Developer environment upgrades/Archive/DEVENV-STUDIO-LAUNCH-SMOKE-USES-SHARED-PROJECT.md>)
-records the fix; the ordinary full landing lane remains required before pushing.
+records the fix. The native canary's Just recipe also now uses that disposable default instead of
+opening checked-in HNReader; explicit project/app overrides remain available. The shared helper
+prepares the decided project layout before either real CLI or native launch discovers it. Its quiet
+native probe passes all six capabilities and shutdown, retaining the window-server lease while
+removing the obsolete shared HNReader reservation. The ordinary full landing lane remains required
+before pushing.
 Mutation checks caught deliberately removed activation serialization and callback rewiring. A real
 browser run exposed an empty session-save response; the endpoint now returns JSON, with a real HTTP
 regression. The corrected real-app Metro smoke passes all four journeys (run

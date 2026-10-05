@@ -1,4 +1,4 @@
-import { FS, Platform, ProjectLocal, Repo } from '@shared'
+import { FS, Platform, Repo } from '@shared'
 import { Expect, Test } from '@shared/test'
 import { listLaunches } from '../studio-tooling-src/StudioLifecycle'
 import { StudioNativeTestRun } from '../studio-tooling-src/StudioNativeTestRun'
@@ -43,7 +43,6 @@ Test('./dev studio reports a usable session, records what it owns, and gives it 
   let resourcesStopped = true
 
   try {
-    await ProjectLocal.prepare(target.projectRoot)
     resourcesStopped = false
     const launch = await startStudioSmokeLaunch({
       appName: target.appName,

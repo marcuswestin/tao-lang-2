@@ -1,3 +1,4 @@
+import { findProjectRoot } from '@project-tooling'
 import { Errors, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import { MachineResourceBusyError } from '@verification/MachineLanes'
@@ -207,6 +208,7 @@ Describe('native Studio test isolation', () => {
   Test('removes the default disposable projection after canary startup fails', async () => {
     const root = await mkTestDir('tao-native-canary-isolation-')
     let sourceRoot: string | undefined
+    let discoveredRoot: string | undefined
     try {
       await withCapturedOutput(async () => {
         Expect(
@@ -221,6 +223,7 @@ Describe('native Studio test isolation', () => {
               Expect(options.projectRoot).not.toContain('Apps/HNReader')
               Expect(await FS.readText(FS.resolvePath('KeyboardNavigation.tao', options.projectRoot)))
                 .toContain('app KeyboardNavigationAcceptance')
+              discoveredRoot = await findProjectRoot(FS.resolvePath('KeyboardNavigation.tao', options.projectRoot))
               Expect(options.nativeIdentity?.bundleIdentifier).toMatch(/\.test-[0-9a-f]{12}$/)
               Expect(options.nativeHutchHome).toBe(Repo.resolvePath('.artifacts/tests/studio-native/hutch-home'))
               Expect(options.devDataRoot).toContain('/invocations/')
@@ -234,6 +237,7 @@ Describe('native Studio test isolation', () => {
         ).toBe(1)
       })
       Expect(sourceRoot).toBeDefined()
+      Expect(discoveredRoot).toBe(sourceRoot)
       Expect(await FS.exists(sourceRoot!)).toBe(false)
       const invocation = (await FS.listDir(FS.resolvePath('invocations', root)))[0]!
       Expect(await FS.readJson(FS.resolvePath(`invocations/${invocation}/external-directories.json`, root)))

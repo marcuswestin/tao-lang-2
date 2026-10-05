@@ -82,6 +82,7 @@ async function project(options: CanaryTargetOptions, artifactRoot: string, repos
       FS.resolvePath('KeyboardNavigation.tao', projectRoot),
       await FS.readText(FS.resolvePath('KeyboardNavigation.tao', target.projectRoot)),
     )
+    await ProjectLocal.prepare(projectRoot)
   } catch (error) {
     await FS.remove(projectRoot)
     throw error
