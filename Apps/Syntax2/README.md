@@ -10,14 +10,18 @@ remains undiscovered.
 
 - [Main.tao](Main.tao): active shell with a quoted Library header, bare zero-argument render calls,
   signature-scoped private types, reversed role-bound arguments for number and text pairs, and a Group button switching
-  ordinary boolean state between two quoted labels. Bare Person and Feedback placement use the
+  named yes/no state between two quoted labels. Bare Person and Feedback placement use the
   standard Text view; compact handlers show and clear feedback. The show handler joins an inferred
   source action result through `then { done Message -> ... }`. A named list supplies two readers.
   Feed acquires 40 books, extends to 80 and 83, and refreshes while retaining acquired content.
   This collection slice uses an eager loop; the standard-library lazy host remains pending.
+  Signed quantity arithmetic exercises Duration and Ratio; Title.Default supplies a structural
+  UI value whose associated Render calls its pure uppercase ToText method. Book titles use that
+  same selected renderer, producing uppercase labels.
 - [library/Library.tao](library/Library.tao): graduated Name/GivenName/FamilyName, PersonName and
   Subtract declarations. The app renders Ada Lovelace and 3 using the actual signature projections
   and argument matcher. ComparedNames constructs a list with contextual Name elements.
+  Display, Title's associated methods/view, and GroupMode are graduated as well.
 - [Library.test.tao](Library.test.tao): active journey asserting the header and both directions of
   the grouping display transition, signature-role results, and bounded book acquisition,
   continuation and refresh.
@@ -52,8 +56,9 @@ checks; the runtime journey verdict is recorded by the integration owner. The or
 library modules, adapter sketch, standard-library target and future journey remain intact.
 The shell demonstrates quotation, reachable grouping and feedback transitions, bare text-value
 placement, contextual named lists, joined source action results and graduated nominal signature/role
-matching. The active book collection acquires bounded pages through its adapter. Capability,
-quantity, parameterized-slot and complete failure/cleanup app integration remain pending.
+matching, selected structural UI rendering and signed quantity arithmetic. The active book collection
+acquires bounded pages through its adapter. Inherited Scalar operations, parameterized slots and
+complete failure/cleanup app integration remain pending.
 Mounted feature proof verifies that empty bare text values emit no node;
 a quoted empty string and explicit Text("") still retain their Text nodes.
 

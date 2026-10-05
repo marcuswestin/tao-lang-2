@@ -24,7 +24,7 @@ Describe('compiler: render witness imports', () => {
         Compiler.createContext(await Packages.createContext(root), root),
       )
       Expect(compiled.code).toContain('TR.MountRendered(TR.Call<TR.Rendered>(')
-      Expect(compiled.code).toMatch(/__tao_associated_[^\s]+.*from ['"]\.\/Provider/)
+      Expect(compiled.code).toMatch(/__tao_associated_[^\s]+.*from ['"]\.\/modules\/Provider\.tao['"]/)
     })
   })
 
@@ -52,7 +52,7 @@ Describe('compiler: render witness imports', () => {
         Compiler.createContext(await Packages.createContext(root), root),
       )
       Expect(compiled.code).toContain('TR.Capability.attach(')
-      Expect(compiled.code).toMatch(/__tao_associated_[^\s]+.*from ['"]\.\/Provider/)
+      Expect(compiled.code).toMatch(/__tao_associated_[^\s]+.*from ['"]\.\/modules\/Provider\.tao['"]/)
     })
   })
 })

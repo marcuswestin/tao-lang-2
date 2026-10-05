@@ -1,3 +1,5 @@
+use UpperCase from @tao/core
+
 // 1. Private semantic roles remain accessible through the exported signature.
 public
 type Name is text
@@ -23,7 +25,27 @@ func Subtract(Left number, Right number) {
 
 // 3. Live data identity and one stored Boolean with its inverse member.
 public
-type Title is text
+can Display {
+   ToText() fails never -> text
+}
+
+public
+type GroupMode is yes/no
+
+public
+type Title is text with {
+   func ToText() fails never {
+      return UpperCase(Title)
+   }
+
+   view Render() {
+      render Title.ToText()
+   }
+
+   static func Default() {
+      return Title "Library"
+   }
+}
 
 public
 type NewBook is Book { Title }

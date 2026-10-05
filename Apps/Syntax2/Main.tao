@@ -1,7 +1,7 @@
-use Length, UpperCase from @tao/core
+use Duration, Ratio, Length, UpperCase from @tao/core
 use all from @tao/ui
 use BookStore, LoadAfter, Refresh from ./library/BookIO
-use Books, ComparedNames, PersonName, Subtract from ./library/Library
+use Books, ComparedNames, PersonName, Subtract, GroupMode, Title from ./library/Library
 
 app LibraryApp {
    id "com.tao.syntax2"
@@ -22,11 +22,17 @@ view Banner(Title text, Subtitle text) {
 }  }
 
 view Library {
-   state GroupMode is boolean = false
+   state GroupMode no
    state Feedback = ""
    let Person = PersonName(ProfileName "Ada", .FamilyName "Lovelace")
    let Readers = ComparedNames ["Ada", "Lovelace"]
    let Shout = UpperCase(ProfileName "Ada")
+   let Caption = Title.Default()
+   // 2.1 Quantities keep their unit view; dimensionless division yields Ratio.
+   let Span = 2 minutes + 30 seconds
+   let Scaled = 2 * Span
+   let Factor = Span / 30 seconds
+   let Offset = -2 seconds
    query Feed = Books with {
       order by Id asc
       ,
@@ -41,6 +47,7 @@ view Library {
       Banner(Subtitle "Reversed text roles", Title "Library")
       Person
       Shout
+      Caption
       "{ Length(Readers) } readers"
       Feedback
       Row {
@@ -52,18 +59,24 @@ view Library {
             on press -> set Feedback = ""
       }  }
       "{ Subtract(Right 2, Left 5) }"
+      if Span == 150 seconds and Scaled == 300 seconds and Factor == 5 unity {
+         "Quantity arithmetic ready."
+      }
+      if Offset < 0 seconds {
+         "Signed offset ready."
+      }
       Spacer
       Button("Group") {
          // 4. Matching cases are captured before a selected action mutates their subject.
          on press -> when GroupMode {
-            true -> {
-               set GroupMode = false
+            yes -> {
+               set GroupMode = GroupMode no
             }
-            false -> {
-               set GroupMode = true
+            no -> {
+               set GroupMode = GroupMode yes
       }  }  }
       when GroupMode {
-         true -> "Grouped books."
+         yes -> "Grouped books."
          otherwise -> "All books."
       }
       // 5. Acquisition is bounded; continuation extends this same owned window.

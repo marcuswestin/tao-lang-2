@@ -6,16 +6,11 @@ use CreateTemporaryPDF, DeleteTemporaryFile, UploadFile,
 
 // 1. Name, private signature types and PersonName graduated to Library.tao.
 // ComparedNames graduated to Library.tao.
-public type GroupMode is yes/no
+// GroupMode graduated to Library.tao.
 
 // 2. Structural capabilities; omitted owner prefix is canonical in with.
-public can Display { ToText() fails never -> text }
+// Display and Title's structural rendering/static default graduated to Library.tao.
 public can ui { Render() -> rendered }
-public type Title is text with {
-   func ToText() fails never { return UpperCase(Title) }
-   view Render() { render Title.ToText() }
-   static func Default() { return Title "Library" }
-}
 public func EarlierLabel
    where type T is Ordered and Display
    (Left T, Right T) {
