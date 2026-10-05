@@ -112,8 +112,8 @@ view DocumentEditor(Document) {
       set DetachedParagraphText = ParagraphText
       async {
          create Paragraph {
-            Text: DetachedParagraphText
-            Ordering: Paragraphs.Count + 1
+            Text: DetachedParagraphText,
+            Ordering: Paragraphs.Count + 1,
             Document
       }  }
       set ParagraphText = ""
