@@ -51,11 +51,27 @@ export type CallableEffectFactInputs = Readonly<{
   natives: readonly NativeEffectPublication[]
 }>
 
+/** Real supported source implementation roots and conservative, potentially legal defaults; no signature purity promise. */
+type SourceRootExecution =
+  & PublicationStatus
+  & Readonly<{
+    node: AST.Node
+    bodies: readonly AST.Node[]
+    defaults: readonly Readonly<{ parameter: AST.Node; expression: AST.Node }>[]
+  }>
+
+export type SourceDiscoveryContext = Readonly<{
+  root?: SourceRootExecution
+  covered?: ReadonlySet<AST.Node>
+}>
+
 /** Consume source identities without reference resolution, type inference, or admission callbacks. */
 export function discoverCallableEffectFacts(
   owner: AST.Node,
   inputs: CallableEffectFactInputs,
+  context?: SourceDiscoveryContext,
 ): readonly CallableEffectFact[] {
+  Assert(!context?.root || context.root.node === owner, 'Expected source root identity to match the effect owner.')
   const calls = indexRows(inputs.calls, row => row.site)
   const reads = indexRows(inputs.reads, row => row.reference)
   const natives = indexRows(inputs.natives, row => row.declaration)
@@ -131,6 +147,15 @@ export function discoverCallableEffectFacts(
     const target = targets.get(node)
     const call = calls.get(node)
     const read = reads.get(node)
+    const sourceRoot = context?.root?.node === node ? context.root : undefined
+    if (sourceRoot) {
+      for (const body of sourceRoot.bodies) {
+        edge(body, sourceRoot.node)
+      }
+      for (const selected of sourceRoot.defaults) {
+        edge(selected.expression, selected.parameter)
+      }
+    }
     const callSite = call || AST.isFunctionCallExpression(node) || AST.isDoStatement(node)
     const applyOperationContract = (
       contract: EffectContract,
@@ -269,7 +294,7 @@ export function discoverCallableEffectFacts(
     } else if (AST.isActionDeclaration(node)) {
       if (node === owner && node.block) {
         edge(node.block)
-      } else {
+      } else if (!sourceRoot) {
         reason = 'unclassified-native'
       }
     } else if (AST.isPhraseDeclaration(node)) {
@@ -295,18 +320,28 @@ export function discoverCallableEffectFacts(
         reason = 'unclassified-native'
       }
     } else {
-      for (const child of AST.streamContents(node)) {
-        if (AST.isParameterDeclaration(child) || AST.isTypeReference(child)) {
-          continue
+      // Publication owns supported implementation identity; associated owners need not be top-level declarations.
+      const publishedDeclarationRoots = Boolean(sourceRoot && !AST.isExpression(node) && !isStructuralEvaluation(node))
+      if (!publishedDeclarationRoots) {
+        for (const child of AST.streamContents(node)) {
+          if (AST.isParameterDeclaration(child) || AST.isTypeReference(child)) {
+            continue
+          }
+          if (AST.isFunctionDeclaration(child) || AST.isActionDeclaration(child) || AST.isPhraseDeclaration(child)) {
+            continue
+          }
+          edge(child)
         }
-        if (AST.isFunctionDeclaration(child) || AST.isActionDeclaration(child) || AST.isPhraseDeclaration(child)) {
-          continue
-        }
-        edge(child)
       }
-      if (!isStructuralEvaluation(node)) {
+      if (!isStructuralEvaluation(node) && !publishedDeclarationRoots) {
         reason = 'incomplete-fact'
       }
+    }
+    if (sourceRoot?.kind === 'unknown') {
+      reason ??= sourceRoot.reason
+    }
+    if (context?.covered && !context.covered.has(node)) {
+      reason ??= 'incomplete-fact'
     }
     facts.push({
       node,

@@ -973,6 +973,169 @@ Describe('Published source callable effect discovery', () => {
       })
     ).toThrow(Errors.UnexpectedBehaviorError)
   })
+
+  Test('seeds an uncalled declaration body and potentially legal defaults at their real witnesses', async () => {
+    const file = await parse(`
+      view Main {
+        action Unused(Value number default Default()) { do Body() }
+        action Body() { }
+      }
+      function Default() returns number { return 2 }
+    `)
+    const owner = namedAction(file, 'Unused')
+    const bodyTarget = namedAction(file, 'Body')
+    const defaultTarget = namedFunction(file, 'Default')
+    const bodySite = owner.block!.statements[0]!
+    Expect.Is(bodySite, AST.isDoStatement)
+    const parameter = owner.parameterList.parameters[0]!
+    const defaultSite = parameter.defaultValue!
+    Expect.Is(defaultSite, AST.isFunctionCallExpression)
+    const facts = discoverCallableEffectFacts(owner, {
+      calls: [
+        call(bodySite, bodyTarget, {
+          operation: 'action',
+          contract: { purity: { violations: ['suspend'], open: false }, failures: { cases: [], open: false } },
+        }),
+        call(defaultSite, defaultTarget, {
+          contract: { purity: { violations: ['io'], open: false }, failures: { cases: [], open: false } },
+        }),
+      ],
+      reads: [],
+      natives: [],
+    }, {
+      root: {
+        node: owner,
+        kind: 'complete',
+        bodies: [owner.block!],
+        defaults: [{ parameter, expression: defaultSite }],
+      },
+    })
+    const ownerFact = facts.find(fact => fact.node === owner)!
+    Expect(ownerFact.executes.some(edge => edge.site === owner && edge.target === owner.block)).toBe(true)
+    Expect(ownerFact.executes.some(edge => edge.site === parameter && edge.target === defaultSite)).toBe(true)
+    Expect(facts.some(fact => fact.node === defaultSite)).toBe(true)
+    Expect(new Set(analyzeCallableEffects(owner, facts).effects.purity.violations)).toEqual(
+      new Set(['action', 'suspend', 'io']),
+    )
+  })
+
+  Test('retains effects from plural source roots and independent native and read facets', async () => {
+    const f = await fixture()
+    const native: NativeEffectPublication = {
+      phase: 'evaluation',
+      declaration: f.root,
+      exportSource: f.exportSource,
+      kind: 'unknown',
+      reason: 'unclassified-native',
+      purity: { violations: ['suspend'], open: false },
+      failures: { cases: ['NativeFailed'], open: false },
+    }
+    const facts = discoverCallableEffectFacts(f.root, {
+      calls: [
+        f.rootCall,
+        call(f.middleSite, f.middle, {
+          contract: { purity: { violations: ['io'], open: false }, failures: { cases: [], open: false } },
+        }),
+      ],
+      reads: [{ reference: f.rootSite, initializer: f.sourceSite, classification: 'reactive', kind: 'complete' }],
+      natives: [native],
+    }, {
+      root: { node: f.root, kind: 'complete', bodies: [f.root.block, f.middle.block], defaults: [] },
+    })
+    const result = analyzeCallableEffects(f.root, facts)
+    Expect(result.effects.purity.violations).toEqual(['suspend', 'reactive-state', 'io'])
+    Expect(result.effects.purity.open).toBe(true)
+    Expect(result.effects.failures.cases).toContain('NativeFailed')
+    Expect(facts.find(fact => fact.node === f.root)!.executes.some(edge => edge.target === f.middle.block)).toBe(true)
+  })
+
+  Test(
+    'keeps pending source status and uncovered reached nodes incomplete without dropping known effects',
+    async () => {
+      const f = await fixture()
+      const pending = discoverCallableEffectFacts(f.root, {
+        calls: [f.rootCall],
+        reads: [{ reference: f.rootSite, initializer: f.sourceSite, classification: 'reactive', kind: 'complete' }],
+        natives: [{
+          phase: 'evaluation',
+          declaration: f.rootSite,
+          exportSource: f.rootSite,
+          kind: 'unknown',
+          reason: 'unclassified-native',
+          purity: { violations: ['io'], open: false },
+          failures: { cases: ['NativeFailed'], open: false },
+        }],
+      }, {
+        root: { node: f.root, kind: 'unknown', reason: 'dynamic-target', bodies: [f.root.block], defaults: [] },
+      })
+      const pendingRoot = pending.find(fact => fact.node === f.root)!
+      Expect(pendingRoot.kind).toBe('unknown')
+      Expect(pendingRoot.reason).toBe('dynamic-target')
+      Expect(pendingRoot.executes.some(edge => edge.target === f.root.block)).toBe(true)
+      const pendingEffects = analyzeCallableEffects(f.root, pending).effects
+      Expect(new Set(pendingEffects.purity.violations)).toEqual(new Set(['reactive-state', 'io']))
+      Expect(pendingEffects.purity.open).toBe(true)
+      Expect(pendingEffects.failures.cases).toContain('NativeFailed')
+
+      const file = await parse('function Root() returns number { return 7 }')
+      const owner = namedFunction(file, 'Root')
+      const literal = returned(owner)
+      const covered = new Set<AST.Node>([owner, owner.block, owner.block.statements[0]!])
+      const facts = discoverCallableEffectFacts(owner, { calls: [], reads: [], natives: [] }, {
+        root: { node: owner, kind: 'complete', bodies: [owner.block], defaults: [] },
+        covered,
+      })
+      const uncovered = facts.find(fact => fact.node === literal)!
+      Expect(uncovered.kind).toBe('unknown')
+      Expect(uncovered.reason).toBe('incomplete-fact')
+      const uncoveredEffects = analyzeCallableEffects(owner, facts).effects
+      Expect(uncoveredEffects.purity).toEqual({ violations: [], open: true })
+      Expect(uncoveredEffects.failures).toEqual({ cases: [], open: true })
+
+      const coverageOnly = discoverCallableEffectFacts(owner, { calls: [], reads: [], natives: [] }, {
+        covered: new Set<AST.Node>([owner]),
+      })
+      const coverageOnlyEffects = analyzeCallableEffects(owner, coverageOnly).effects
+      Expect(coverageOnlyEffects.purity.open).toBe(true)
+      Expect(coverageOnlyEffects.failures.open).toBe(true)
+    },
+  )
+
+  Test('rejects source-root identity mismatches', async () => {
+    const f = await fixture()
+    Expect(() =>
+      discoverCallableEffectFacts(f.root, { calls: [], reads: [], natives: [] }, {
+        root: { node: f.middle, kind: 'complete', bodies: [f.middle.block], defaults: [] },
+      })
+    ).toThrow(Errors.UnexpectedBehaviorError)
+  })
+
+  Test('uses nested source command roots instead of traversing signature metadata', async () => {
+    const file = await parse(`
+      view Main {
+        command Unused(Value number default Default()) { }
+      }
+      function Default() returns number { return 2 }
+    `)
+    const owner = AST.streamAllContents(file).find(AST.isCommandDeclaration)
+    Expect.Is(owner, AST.isCommandDeclaration)
+    const parameter = owner.parameterList.parameters[0]!
+    const parameterList = owner.parameterList
+    const defaultSite = parameter.defaultValue!
+    const facts = discoverCallableEffectFacts(owner, { calls: [], reads: [], natives: [] }, {
+      root: {
+        node: owner,
+        kind: 'complete',
+        bodies: [owner.block],
+        defaults: [{ parameter, expression: defaultSite }],
+      },
+    })
+    const ownerFact = facts.find(fact => fact.node === owner)!
+    Expect(ownerFact.executes.some(edge => edge.site === owner && edge.target === owner.block)).toBe(true)
+    Expect(ownerFact.executes.some(edge => edge.site === parameter && edge.target === defaultSite)).toBe(true)
+    Expect(facts.some(fact => fact.node === defaultSite)).toBe(true)
+    Expect(facts.some(fact => fact.node === parameterList)).toBe(false)
+  })
 })
 
 function analyze(owner: AST.Node, inputs: CallableEffectFactInputs) {
@@ -1004,7 +1167,7 @@ function namedFunction(file: AST.TaoFile, name: string): AST.FunctionDeclaration
 }
 
 function namedAction(file: AST.TaoFile, name: string): AST.ActionDeclaration {
-  const result = file.statements.find(value => AST.isActionDeclaration(value) && value.name === name)
+  const result = AST.streamAllContents(file).find(value => AST.isActionDeclaration(value) && value.name === name)
   Expect.Is(result, AST.isActionDeclaration)
   return result
 }
