@@ -61,6 +61,7 @@ let launchGeneration = 0
 
 class ActionTransaction {
   scope: ActionScope | undefined
+  readonly cancellation = new AbortController()
   readonly scopes = new WeakSet<ActionScope>()
   readonly afterCommit: Array<() => void> = []
   readonly rollbackEffects: Array<() => void> = []
@@ -204,6 +205,7 @@ function shallowSavepoint<ValueT>(value: ValueT): () => void {
 }
 
 let activeTransaction: ActionTransaction | undefined
+const liveRoots = new Set<ActionTransaction>()
 let rootQueue: Promise<void> = Promise.resolve()
 let queuedRoots = 0
 let externalEffectRevision = 0
@@ -213,6 +215,7 @@ type ActionScope = {
   parent: ActionScope | undefined
   deferred: Array<() => unknown | PromiseLike<unknown>>
   users: Set<Promise<void>>
+  cancellationShielded: boolean
   closed: boolean
 }
 
@@ -223,7 +226,14 @@ export function runActionScope<T>(body: () => T | PromiseLike<T>): T | Promise<T
   RuntimeAssert(!transaction.settled, 'a live action transaction')
   const parent = transaction.scope
   RuntimeAssert(!parent?.closed, 'a live parent action scope')
-  const scope: ActionScope = { transaction, parent, deferred: [], users: new Set(), closed: false }
+  const scope: ActionScope = {
+    transaction,
+    parent,
+    deferred: [],
+    users: new Set(),
+    cancellationShielded: parent?.cancellationShielded ?? false,
+    closed: false,
+  }
   transaction.scopes.add(scope)
   transaction.scope = scope
   let value: T | PromiseLike<T>
@@ -316,6 +326,7 @@ function finishActionScope<T>(
       scope.transaction.scope = scope.parent
       return pending
     }
+    scope.cancellationShielded = true
     while (scope.deferred.length > 0) {
       const callback = scope.deferred.pop()!
       let result: unknown
@@ -369,8 +380,7 @@ export function captureActionContinuation(): TaoActionContinuation {
     : {}
 }
 
-/** resumeActionContinuation selects the transaction owned by the generated segment about to run. */
-export function resumeActionContinuation(continuation: TaoActionContinuation): void {
+function continuationTransaction(continuation: TaoActionContinuation): ActionTransaction | undefined {
   const transaction = continuation.transaction as ActionTransaction | undefined
   const scope = continuation.scope as ActionScope | undefined
   RuntimeAssert(
@@ -378,10 +388,39 @@ export function resumeActionContinuation(continuation: TaoActionContinuation): v
         && transaction.scopes.has(scope) && scope.transaction === transaction && !scope.closed,
     'a live owned action scope',
   )
-  if (transaction instanceof ActionTransaction && !transaction.settled) {
+  return transaction instanceof ActionTransaction && !transaction.settled ? transaction : undefined
+}
+
+/** resumeActionContinuation selects the transaction owned by the generated segment about to run. */
+export function resumeActionContinuation(continuation: TaoActionContinuation): void {
+  const transaction = continuationTransaction(continuation)
+  if (transaction) {
     activeTransaction = transaction
-    transaction.scope = scope
+    transaction.scope = continuation.scope as ActionScope | undefined
   }
+}
+
+/** Cooperative waits inherit their actual root's signal; lexical cleanup and nested scopes are shielded. */
+export function actionCancellationSignal(): AbortSignal | undefined {
+  const transaction = activeTransaction
+  return transaction && !transaction.settled && !transaction.scope?.cancellationShielded
+    ? transaction.cancellation.signal
+    : undefined
+}
+
+/** Cancel only a runtime-owned live root, without selecting it over an interrupting root. */
+export function cancelActionContinuation(continuation: TaoActionContinuation): boolean {
+  const transaction: ActionTransaction | undefined = continuationTransaction(continuation)
+  RuntimeAssert(transaction && liveRoots.has(transaction), 'a live owned root action transaction')
+  return cancelTransaction(transaction)
+}
+
+function cancelTransaction(transaction: ActionTransaction): boolean {
+  if (transaction.cancellation.signal.aborted) {
+    return false
+  }
+  transaction.cancellation.abort(new TaoActionFailure('cancelled', 'Cancelled'))
+  return true
 }
 
 /** The active action keeps the check whose foreign outcomes it may observe. */
@@ -412,6 +451,11 @@ export function beginActionLaunch(): void {
   }
   rootQueue = Promise.resolve()
   queuedRoots = 0
+  for (const transaction of liveRoots) {
+    if (abandonedByLaunch(transaction)) {
+      cancelTransaction(transaction)
+    }
+  }
 }
 
 /**
@@ -457,6 +501,10 @@ export function runAction(
   }
   const run = (): void | Promise<void> => {
     const transaction = new ActionTransaction(launch, testStubs, receipt, owner)
+    liveRoots.add(transaction)
+    if (abandonedByLaunch(transaction)) {
+      cancelTransaction(transaction)
+    }
     let pending = false
     activeTransaction = transaction
     transaction.pushFrame(name)
@@ -550,6 +598,7 @@ function finishRoot(
   suspendedScope?: ActionScope,
 ): void {
   transaction.settled = true
+  liveRoots.delete(transaction)
   if (activeTransaction === undefined && suspendedTransaction && !suspendedTransaction.settled) {
     activeTransaction = suspendedTransaction
     suspendedTransaction.scope = suspendedScope

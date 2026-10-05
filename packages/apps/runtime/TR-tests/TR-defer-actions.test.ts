@@ -1,6 +1,8 @@
 import TR from '@runtime/TR'
 import { Deferred, Describe, Expect, Test } from '@shared/test'
 import {
+  actionCancellationSignal,
+  cancelActionContinuation,
   captureActionContinuation,
   deferDetached,
   deferTransactionCommit,
@@ -10,7 +12,9 @@ import {
   resumeSuspendedTransaction,
   runActionResult,
   runActionScope,
+  runActionScopeUser,
   suspendActiveTransaction,
+  type TaoActionContinuation,
 } from '../TaoRuntime-src/TR-action-transactions'
 import {
   actionExitOf,
@@ -18,6 +22,7 @@ import {
   type TaoActionFailureReport,
   UnexpectedBehaviorError,
 } from '../TaoRuntime-src/TR-errors'
+import { runMultiOutcome } from '../TaoRuntime-src/TR-multi-outcome'
 
 function notes() {
   const saved: string[] = []
@@ -52,7 +57,235 @@ async function root(body: () => unknown, allowFailure = false): Promise<readonly
   return reports
 }
 
+/** A cooperative test wait exercises the root signal without claiming the unpublished checked Wait leaf. */
+function cooperativeWait(): { signal: AbortSignal | undefined; promise: Promise<void>; release: () => void } {
+  const signal = actionCancellationSignal()
+  let release!: () => void
+  const promise = new Promise<void>((resolve, reject) => {
+    const abort = () => {
+      signal?.removeEventListener('abort', abort)
+      reject(signal?.reason)
+    }
+    release = () => {
+      signal?.removeEventListener('abort', abort)
+      resolve()
+    }
+    if (signal?.aborted) {
+      abort()
+    } else {
+      signal?.addEventListener('abort', abort, { once: true })
+    }
+  })
+  return { signal, promise, release }
+}
+
 Describe('Tao lexical action cleanup', () => {
+  Test('keeps joined multi-outcome bodies cancellable until deferred cleanup starts', async () => {
+    const firstStarted = Deferred()
+    const firstGate = Deferred()
+    const secondStarted = Deferred()
+    const cleanupStarted = Deferred()
+    const cleanupGate = Deferred()
+    const seen: string[] = []
+    let continuation: TaoActionContinuation = {}
+    let rootSignal: AbortSignal | undefined
+    let firstResumedSignal: AbortSignal | undefined
+    let secondWait: ReturnType<typeof cooperativeWait> | undefined
+    let cleanupSignal: AbortSignal | undefined
+    let cleanupResumedSignal: AbortSignal | undefined
+    let cancellation: unknown
+    let joined: unknown
+    const running = root(() =>
+      runActionScope(() => {
+        continuation = captureActionContinuation()
+        rootSignal = actionCancellationSignal()
+        registerDeferredAction(() => {
+          runActionScopeUser(async () => {
+            cleanupSignal = actionCancellationSignal()
+            seen.push('cleanup started')
+            cleanupStarted.resolve()
+            await cleanupGate.promise
+            resumeActionContinuation(continuation)
+            cleanupResumedSignal = actionCancellationSignal()
+            seen.push('cleanup finished')
+          })
+        })
+        joined = runMultiOutcome(() => undefined, () => ({ matched: true, payload: undefined }), [
+          ['first', async () => {
+            firstStarted.resolve()
+            await firstGate.promise
+            resumeActionContinuation(continuation)
+            firstResumedSignal = actionCancellationSignal()
+            seen.push('first body finished')
+          }],
+          ['second', async () => {
+            secondWait = cooperativeWait()
+            seen.push('second body started')
+            secondStarted.resolve()
+            try {
+              await secondWait.promise
+            } catch (error) {
+              cancellation = error
+            }
+            resumeActionContinuation(continuation)
+            seen.push('second body finished')
+          }],
+        ])
+        seen.push('parent body finished')
+      })
+    )
+    await firstStarted.promise
+    try {
+      Expect(seen).toEqual(['parent body finished'])
+      Expect(rootSignal).toBeDefined()
+      firstGate.resolve()
+      await secondStarted.promise
+      Expect(firstResumedSignal).toBe(rootSignal)
+      Expect(secondWait?.signal).toBe(rootSignal)
+      Expect(cancelActionContinuation(continuation)).toBe(true)
+      await cleanupStarted.promise
+      Expect(cancellation).toBe(rootSignal?.reason)
+      Expect(rootSignal?.aborted).toBe(true)
+      Expect(cleanupSignal).toBeUndefined()
+      Expect(seen).toEqual([
+        'parent body finished',
+        'first body finished',
+        'second body started',
+        'second body finished',
+        'cleanup started',
+      ])
+    } finally {
+      firstGate.resolve()
+      secondWait?.release()
+      cleanupGate.resolve()
+      await running
+      await joined
+    }
+    Expect(cleanupResumedSignal).toBeUndefined()
+    Expect(seen.at(-1)).toBe('cleanup finished')
+  })
+
+  Test('cancels a real cooperative root wait and shields nested asynchronous LIFO cleanup', async () => {
+    const bodyStarted = Deferred()
+    const cleanupStarted = Deferred()
+    const seen: string[] = []
+    const state = notes()
+    const cleanupFault = new UnexpectedBehaviorError('cleanup fault')
+    let continuation: TaoActionContinuation = {}
+    let bodyWait: ReturnType<typeof cooperativeWait> | undefined
+    let cleanupWait: ReturnType<typeof cooperativeWait> | undefined
+    let caught: unknown
+    let settled = false
+    const running = root(async () => {
+      try {
+        await runActionScope(async () => {
+          continuation = captureActionContinuation()
+          state.add('Body')
+          registerDeferredAction(() => {
+            seen.push('older cleanup')
+            throw cleanupFault
+          })
+          registerDeferredAction(() =>
+            runActionScope(async () => {
+              const nested = captureActionContinuation()
+              registerDeferredAction(() => {
+                Expect(actionCancellationSignal()).toBeUndefined()
+                seen.push('nested cleanup')
+              })
+              cleanupWait = cooperativeWait()
+              seen.push('cleanup start')
+              cleanupStarted.resolve()
+              await cleanupWait.promise
+              resumeActionContinuation(nested)
+              Expect(actionCancellationSignal()).toBeUndefined()
+              state.add('Cleanup')
+              seen.push('cleanup finished')
+            })
+          )
+          bodyWait = cooperativeWait()
+          bodyStarted.resolve()
+          await bodyWait.promise
+          seen.push('unexpected tail')
+        })
+      } catch (error) {
+        caught = error
+        throw error
+      }
+    }, true).then(reports => {
+      settled = true
+      return reports
+    })
+    await bodyStarted.promise
+    try {
+      Expect(bodyWait?.signal).toBeDefined()
+      Expect(cancelActionContinuation(continuation)).toBe(true)
+      Expect(cancelActionContinuation(continuation)).toBe(false)
+      await cleanupStarted.promise
+      Expect(bodyWait?.signal?.aborted).toBe(true)
+      Expect(cleanupWait?.signal).toBeUndefined()
+      Expect(settled).toBe(false)
+      Expect(seen).toEqual(['cleanup start'])
+    } finally {
+      bodyWait?.release()
+      cleanupWait?.release()
+    }
+    const reports = await running
+    await TR.Data.Settle(state.schema)
+
+    Expect(seen).toEqual(['cleanup start', 'cleanup finished', 'nested cleanup', 'older cleanup'])
+    Expect(actionExitOf(caught)?.kind).toBe('cancelled')
+    Expect(actionExitOf(caught)?.primary).toBe(bodyWait?.signal?.reason)
+    Expect(actionExitOf(caught)?.cleanupFailures).toEqual([cleanupFault])
+    Expect(reports).toEqual([Expect['objectContaining']({ case: 'cancelled', message: 'Cancelled' })])
+    Expect(state.titles()).toEqual([])
+    Expect(state.saved).toEqual([])
+    Expect(actionCancellationSignal()).toBeUndefined()
+    Expect(() => cancelActionContinuation(continuation)).toThrow()
+  })
+
+  Test('preserves caught cancellation recovery while later cooperative waits see the same aborted signal', async () => {
+    const started = Deferred()
+    const state = notes()
+    const failures: unknown[] = []
+    let continuation: TaoActionContinuation = {}
+    let wait: ReturnType<typeof cooperativeWait> | undefined
+    const running = root(() =>
+      runActionScope(async () => {
+        continuation = captureActionContinuation()
+        wait = cooperativeWait()
+        started.resolve()
+        try {
+          await wait.promise
+        } catch (error) {
+          failures.push(error)
+        }
+        resumeActionContinuation(continuation)
+        const later = cooperativeWait()
+        Expect(later.signal).toBe(wait.signal)
+        try {
+          await later.promise
+        } catch (error) {
+          failures.push(error)
+        }
+        resumeActionContinuation(continuation)
+        state.add('Recovered')
+      })
+    )
+    await started.promise
+    try {
+      Expect(cancelActionContinuation(continuation)).toBe(true)
+    } finally {
+      wait?.release()
+    }
+    await running
+    await TR.Data.Settle(state.schema)
+
+    Expect(failures).toEqual([wait?.signal?.reason, wait?.signal?.reason])
+    Expect(wait?.signal?.reason).toBeInstanceOf(TaoActionFailure)
+    Expect(state.titles()).toEqual(['Recovered'])
+    Expect(state.saved).toHaveLength(1)
+  })
+
   Test('adopts a public WhenDo handler thenable once and drains cleanup after its work', async () => {
     for (const scoped of [false, true]) {
       const seen: string[] = []
