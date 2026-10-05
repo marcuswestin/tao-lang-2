@@ -125,8 +125,15 @@ Current exclusive assignments:
 - B's renderer and native-leaf paths have returned; slot frontend and foreign adapters remain held.
   The isolated leaf is integrated at `62b2cac5d`, supplying constructor-only types.Owner.Unit methods
   and allocated checked-factory/type linkage metadata from one owner factory, with executable/static
-  proof. B prepares the slot frontend packet without editing shared source.
-- The coordinator owns Backend/bridge-metadata/project tooling/native factory publication,
+  proof. To parallelize its publisher integration, B now owns bridge-metadata.ts,
+  ProjectToolingService.ts and new project-tooling-tests/QuantityPublication.test.ts, limited to
+  source quantity leaf/companion publication, mapped owner types and existing manifest lifecycle.
+  Preserve current erased contracts and dependency discovery. Supply explicit output/type-binding
+  and reexport APIs before coordinator Backend consumption; C owns NumericUnits/Type discovery.
+  The coordinator retains Backend/compiled output/DTS/native import rewriting, ProjectOutputPublisher
+  and snapshots, runtime ingress, compiler dependencies and whole-graph singleton acceptance.
+  B's slot frontend packet remains read-only until these shared publisher paths return.
+- The coordinator owns Backend/compiled native factory publication,
   InvocationsCompiler/FunctionalCoreCompiler caller adaptations, runtime facade, preparatory
   comma-helper retirement, app/stdlib graduation, combined verification and landing.
 
