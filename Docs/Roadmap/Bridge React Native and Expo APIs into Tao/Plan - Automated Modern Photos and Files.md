@@ -467,7 +467,7 @@ run and do not establish that contention caused the browser failures.
 
 The Developer requested hosted verification for the remaining portable checks.
 The CI workflow runs portable verification across twelve Linux partitions; it does
-not prove macOS Studio or device operation journeys. `open-pr --no-auto-merge` opens
+not prove macOS Studio or device operation journeys. `open-pr` opens
 or reuses a pull request and follows CI without enabling automatic landing. It
 refuses a reused pull request whose auto-merge is already enabled before pushing.
 It follows the exact pushed commit and refuses a changed head before querying

@@ -850,9 +850,12 @@ await runWithCommands(commands => {
   commands
     .command('open-pr')
     .description(
-      'Push this feat/, claude/, or codex/ branch, open or reuse its pull request titled by the reviewed merge message, then stream its checks; auto-merge is on unless --no-auto-merge is specified.',
+      'Push this feat/, claude/, or codex/ branch, open or reuse its pull request titled by the reviewed merge message, then stream its checks; auto-merge stays off unless --auto-merge is specified.',
     )
-    .option('--no-auto-merge', 'Run CI without enabling auto-merge; refuse a pull request that already has it enabled.')
+    .option(
+      '--auto-merge',
+      'Enable GitHub auto-merge after checks start; by default, refuse an already enabled pull request.',
+    )
     .option('--poll-interval-ms <ms>', 'How often to poll the checks while they run (default 60000).')
     .action(async (options: { autoMerge?: boolean; pollIntervalMs?: string } = {}) => {
       await runExitCommand(async () =>
