@@ -443,6 +443,9 @@ Product and codebase backlog, unordered.
   - What to share, what to serialize, what is duplicated per worktree for no reason, and where a
     single orchestrator does and does not help live in
     `Docs/Roadmap/Parallel agents on one machine.md`.
+- [ ] Move the repository to an organization and enable native merge queue.
+  - Transfer, remote and integration checks, queue-aware landing prerequisites, and the initial
+    queue validation checklist live in [CI organization migration](<Docs/Roadmap/CI organization migration.md>).
 - [ ] Let Codex drive Tao Studio on its own, for testing and for developing Studio itself.
 - [ ] Shorten the TUI tests' main timer from 0.5 s to 0.1 s.
 

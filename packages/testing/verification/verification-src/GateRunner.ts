@@ -239,7 +239,11 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   const testPlan = testGate === undefined ? undefined : await testNodes(testGate, location)
   const suiteOfNode = new Map((testPlan?.states ?? []).map(state => [state.name, state.suite]))
   const timings = await RunTimings.load({ repositoryRoot: location.repositoryRoot })
-  const expectedMs = (name: string) => RunTimings.expectedMs(timings, name)
+  const testEstimates = new Map((testPlan?.states ?? []).map(state => [state.name, state.expectedMs]))
+  const expectedMs = (name: string) =>
+    testEstimates.has(name)
+      ? testEstimates.get(name)
+      : RunTimings.expectedMs(timings, name)
 
   // One machine's share of a lane split across several. It is planned over every reader before any
   // record is consulted, because records can differ between machines and the plan must not.

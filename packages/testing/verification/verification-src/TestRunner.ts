@@ -206,10 +206,11 @@ function selectSuites(
       result.selected.push({
         buildProcess: (nodeName, nodeUnits, slots) =>
           source.build(nodeUnits, selection, { ...context, nodeName, slots }),
+        estimationUnits: source.shardUnits ?? source.files,
         files,
         name: source.name,
         ...(shardUnits === undefined ? {} : { shardUnits }),
-        ...(shardUnits === undefined || source.unitCostMs === undefined ? {} : { unitCostMs: source.unitCostMs }),
+        ...(source.unitCostMs === undefined ? {} : { unitCostMs: source.unitCostMs }),
       })
     }
   }
@@ -430,7 +431,11 @@ async function runSuites(options: RunSuitesOptions): Promise<number> {
   const mode = options.mode ?? WorkReporter.resolveMode()
   const graphStates = TaoAppSharedRun.attach(states, location.logRoot, location.repositoryRoot)
   await RunArtifacts.assignLogPaths(graphStates, location)
-  const expectedMs = (name: string) => RunTimings.expectedMs(timings, name)
+  const estimatedNodes = new Map(states.map(state => [state.name, state.expectedMs]))
+  const expectedMs = (name: string) =>
+    estimatedNodes.has(name)
+      ? estimatedNodes.get(name)
+      : RunTimings.expectedMs(timings, name)
   const reporter = WorkReporter.create({ lane: location.lane, logRoot: location.logRoot, mode })
   const liveArtifacts = RunArtifacts.liveWriter(location, event => reporter.handle(event))
   const failure = FailurePolicy.create({

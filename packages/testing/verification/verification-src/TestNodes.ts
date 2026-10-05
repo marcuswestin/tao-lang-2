@@ -44,6 +44,8 @@ export type SelectedSuite = {
   buildProcess: (nodeName: string, units: readonly string[], slots: number) => TestProcess
   files: readonly string[]
   name: string
+  /** Complete runner membership before this request filters files or extracts named cohorts. */
+  estimationUnits?: readonly string[]
   /**
    * What one process of this suite can be asked to run, when that is not its files. The Tao behavior
    * tests are the case: the ledger keys them as one synthetic `Apps` unit, because a per-file
@@ -63,6 +65,8 @@ export type SelectedSuite = {
 
 /** TestNodeState is a work-graph state that remembers which suite and files it stands for. */
 export type TestNodeState = WorkState & {
+  /** Duration estimate from this node's current file membership and its suite's current weights. */
+  expectedMs?: number
   selectedTestFiles?: readonly string[]
   /** The suite this node reports under; equal to `name` for an unsharded suite. */
   suite: string
@@ -132,7 +136,9 @@ function build(options: BuildTestNodesOptions): TestNodePlan {
     if (preflightFiles.length > 0) {
       const name = `${suite.name}:core`
       if (options.proved?.has(name) !== true) {
-        states.push(nodeState(suite, name, preflightFiles, 1, options.timings))
+        states.push(
+          nodeState(suite, name, preflightFiles, 1, undefined, estimationContext(suite, options)),
+        )
         preflightNames.push(name)
       }
     }
@@ -149,7 +155,9 @@ function build(options: BuildTestNodesOptions): TestNodePlan {
       }
       const name = `${suite.name}:${partition.name}`
       if (options.proved?.has(name) !== true) {
-        states.push(nodeState(suite, name, files, 1, options.timings))
+        states.push(
+          nodeState(suite, name, files, 1, partition.cost, estimationContext(suite, options)),
+        )
       }
     }
     const remaining = (suite.shardUnits ?? suite.files).filter(file => !partitionedFiles.has(file))
@@ -160,18 +168,18 @@ function build(options: BuildTestNodesOptions): TestNodePlan {
     // about relative per-file cost either, so shards fall back to the mean-cost packing
     // `TestShards.packFiles` already gives an unmeasured file. `GateCatalog` owns which suites those
     // are and why; the ledger declines to record their durations for the same reason.
-    const ledgerCosts = GateCatalog.reportsAttributableDurations(suite.name)
-      ? TestShards.fileCostsFromLedger(options.ledger, suite.name)
-      : new Map<string, number>()
+    const estimate = estimationContext(suite, options)
+    const remainderMs = estimate.suiteMs === undefined
+      ? undefined
+      : estimate.fixedMs + Math.max(0, estimate.suiteMs - estimate.fixedMs)
+          * TestShards.weightShare(remaining, estimate.units, estimate.costs)
     const plan = TestShards.planShards({
       coldShardCount: tuning.coldShardCount,
       // A suite's own units win when the ledger cannot speak about them at all.
-      fileCostMs: suite.shardUnits === undefined || suite.unitCostMs === undefined
-        ? ledgerCosts
-        : suite.unitCostMs,
+      fileCostMs: estimate.costs,
       files: remaining,
-      fixedMs: tuning.fixedMs ?? GateCatalog.BUN_SUITE_FIXED_MS,
-      measuredMs: RunTimings.expectedMs(options.timings, suite.name),
+      fixedMs: estimate.fixedMs,
+      measuredMs: remainderMs,
       shardable: tuning.shardable,
       suite: suite.name,
     })
@@ -191,7 +199,7 @@ function build(options: BuildTestNodesOptions): TestNodePlan {
       if (options.proved?.has(name) === true) {
         return
       }
-      states.push(nodeState(suite, name, files, count, options.timings))
+      states.push(nodeState(suite, name, files, count, undefined, estimate))
     })
   }
   for (const state of states) {
@@ -209,18 +217,16 @@ function nodeState(
   name: string,
   files: readonly string[],
   shardCount: number,
-  timings: TimingsStore,
+  costOverride: number | undefined,
+  estimate: SuiteEstimation,
 ): TestNodeState {
   const tuning = GateCatalog.suiteTuning(suite.name)
   // A shard's parallelism is usually the graph's, not its own, so it reserves one slot; a suite
   // whose shard genuinely spawns more says so, because under-reserving is how a lane oversubscribes
   // the machine and makes every node in it slower.
-  const cost = shardCount > 1 ? tuning.shardCost : tuning.cost
+  const cost = costOverride ?? (shardCount > 1 ? tuning.shardCost : tuning.cost)
   const process = suite.buildProcess(name, files, cost ?? 1)
-  // A shard's own history is what bounds it once it has one; before that, its share of the suite's.
-  const suiteMs = RunTimings.expectedMs(timings, suite.name)
-  const expectedMs = RunTimings.expectedMs(timings, name)
-    ?? (suiteMs === undefined ? undefined : suiteMs / shardCount)
+  const expectedMs = expectedDuration(files, estimate)
   const node: WorkNode = {
     budgetEnvKeys: tuning.budgetEnvKeys,
     cost,
@@ -245,8 +251,39 @@ function nodeState(
   state.dashboardGroup = shardCount > 1 ? suite.name : undefined
   state.selectedTestFiles = process.files
   state.suite = suite.name
+  state.expectedMs = expectedMs
   state.testReport = process.testReport
   return state
+}
+
+type SuiteEstimation = {
+  costs: ReadonlyMap<string, number>
+  fixedMs: number
+  suiteMs?: number
+  units: readonly string[]
+}
+
+/** estimationContext measures file shares against full suite membership, including extracted nodes. */
+function estimationContext(suite: SelectedSuite, options: BuildTestNodesOptions): SuiteEstimation {
+  const units = suite.estimationUnits ?? suite.shardUnits ?? suite.files
+  const ledgerCosts = GateCatalog.reportsAttributableDurations(suite.name)
+    ? TestShards.fileCostsFromLedger(options.ledger, suite.name)
+    : new Map<string, number>()
+  return {
+    costs: suite.unitCostMs ?? ledgerCosts,
+    fixedMs: GateCatalog.suiteTuning(suite.name).fixedMs ?? GateCatalog.BUN_SUITE_FIXED_MS,
+    suiteMs: RunTimings.expectedMs(options.timings, suite.name),
+    units,
+  }
+}
+
+/** expectedDuration charges one process startup plus this membership's share of suite work. */
+function expectedDuration(files: readonly string[], estimate: SuiteEstimation): number | undefined {
+  if (estimate.suiteMs === undefined) {
+    return undefined
+  }
+  const share = TestShards.weightShare(files, estimate.units, estimate.costs)
+  return estimate.fixedMs + Math.max(0, estimate.suiteMs - estimate.fixedMs) * share
 }
 
 /** wallTimeoutMs bounds a node at several times its measured duration, never below the floor. */

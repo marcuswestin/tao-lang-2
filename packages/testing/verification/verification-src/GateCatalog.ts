@@ -130,7 +130,7 @@ const DEFAULT_METADATA: GateMetadata = { cost: 1, reads: ['gen-app', 'gen-ide', 
 /** SuiteTuning is what one test suite needs beyond the defaults every suite gets. */
 export type SuiteTuning = {
   /** Stable file cohorts run separately without adding an ordering barrier or widening selection. */
-  filePartitions?: readonly { name: string; files: readonly string[] }[]
+  filePartitions?: readonly { cost?: number; name: string; files: readonly string[] }[]
   /** Repository-relative, measured small core files; execute once before dependent app suites. */
   preflightFiles?: readonly string[]
   /** Wait for the core files present in this request; absent core selections add no dependency. */
@@ -212,7 +212,7 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
   // Fresh history needs enough units to balance the expensive bridge and CLI integration files.
   // Eight initial shards still grouped a 24s tail after splitting those files; twelve lets the
   // scheduler spread the work within its existing CPU budget until measured costs take over.
-  ['cli/tao-cli', { coldShardCount: 12 }],
+  ['cli/tao-cli', { coldShardCount: 12, cost: 2, serial: false, shardCost: 2 }],
   ['language/validator', {
     args: ['--concurrent'],
     preflightFiles: ['packages/language/validator/validator-tests/phrases.test.ts'],
@@ -282,32 +282,46 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
     reads: ['gen-parser', 'tao', 'ts'],
   }],
   ['language/project-tooling', {
+    cost: 2,
     filePartitions: [{
-      name: 'native',
+      cost: 2,
+      name: 'native-bindings',
       files: [
         'packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingInventory.test.ts',
         'packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingModules.test.ts',
         'packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingsService.test.ts',
+      ],
+    }, {
+      cost: 2,
+      name: 'native-lifecycle',
+      files: [
         'packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingsWatch.integration.test.ts',
         'packages/language/project-tooling/project-tooling-tests/ProjectNativeRefreshReceipt.test.ts',
         'packages/language/project-tooling/project-tooling-tests/ProjectNativeTypeScript.test.ts',
       ],
     }, {
+      cost: 2,
       name: 'receipts',
       files: ['packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceipt.test.ts'],
     }, {
+      cost: 2,
       name: 'receipt-inputs',
       files: ['packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptInputs.test.ts'],
     }, {
+      cost: 2,
       name: 'receipt-resolution',
       files: ['packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptResolution.test.ts'],
     }, {
+      cost: 2,
       name: 'receipt-host',
       files: ['packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptHost.test.ts'],
     }, {
+      cost: 2,
       name: 'receipt-races',
       files: ['packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptRaces.test.ts'],
     }],
+    serial: false,
+    shardCost: 2,
   }],
   ['language/source-actions', { reads: ['gen-parser', 'tao', 'ts'] }],
 ])

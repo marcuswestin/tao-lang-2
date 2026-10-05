@@ -143,10 +143,9 @@ function packFiles(
   fileCostMs: ReadonlyMap<string, number>,
   count: number,
 ): readonly (readonly string[])[] {
-  const known = files.map(file => fileCostMs.get(file)).filter((cost): cost is number => cost !== undefined)
-  const meanMs = known.length === 0 ? 1 : known.reduce((total, cost) => total + cost, 0) / known.length
+  const normalized = normalizedFileCosts(files, fileCostMs)
   const weighted = files
-    .map(file => ({ costMs: fileCostMs.get(file) ?? meanMs, file }))
+    .map(file => ({ costMs: normalized.get(file)!, file }))
     .toSorted((left, right) => right.costMs - left.costMs || left.file.localeCompare(right.file))
   const shards = Array.from({ length: count }, () => ({ costMs: 0, files: [] as string[] }))
   for (const { costMs, file } of weighted) {
@@ -157,6 +156,47 @@ function packFiles(
   // A count above the number of files cannot happen, but an empty shard would become a node with
   // nothing to run, which reads as a passing suite that ran no tests.
   return shards.filter(shard => shard.files.length > 0).map(shard => shard.files.toSorted())
+}
+
+/** normalizedFileCosts gives unknown units the mean known cost, or equal unit weight if none are known. */
+function normalizedFileCosts(
+  files: readonly string[],
+  fileCostMs: ReadonlyMap<string, number>,
+): ReadonlyMap<string, number> {
+  const known = files.map(file => fileCostMs.get(file)).filter((cost): cost is number => cost !== undefined)
+  const meanMs = known.length === 0 ? 1 : known.reduce((total, cost) => total + cost, 0) / known.length
+  return new Map(files.map(file => [file, fileCostMs.get(file) ?? meanMs]))
+}
+
+/** weightShare reports a selection's proportional cost within the complete suite membership. */
+function weightShare(
+  selected: readonly string[],
+  complete: readonly string[],
+  fileCostMs: ReadonlyMap<string, number>,
+): number {
+  if (complete.length === 0) {
+    return 1
+  }
+  const normalized = normalizedFileCosts(complete, fileCostMs)
+  const total = complete.reduce((sum, file) => sum + normalized.get(file)!, 0)
+  if (total <= 0) {
+    return selected.length / complete.length
+  }
+  const covered = new Set<string>()
+  let unmatched = 0
+  for (const root of selected) {
+    const descendants = complete.filter(file => file === root || file.startsWith(root + '/'))
+    if (descendants.length === 0) {
+      unmatched += 1
+    } else {
+      for (const file of descendants) {
+        covered.add(file)
+      }
+    }
+  }
+  const meanMs = [...normalized.values()].reduce((sum, cost) => sum + cost, 0) / complete.length
+  const selectedCost = [...covered].reduce((sum, file) => sum + normalized.get(file)!, 0) + unmatched * meanMs
+  return selectedCost / total
 }
 
 /** fileCostsFromLedger sums each file's recorded per-test durations into one relative cost. */
@@ -192,7 +232,9 @@ export const TestShards = {
   TARGET_SHARD_MS,
   fileCostsFromLedger,
   planShards,
+  normalizedFileCosts,
   shardName,
   startupCap,
   suiteOf,
+  weightShare,
 } as const

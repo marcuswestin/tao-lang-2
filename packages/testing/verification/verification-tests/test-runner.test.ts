@@ -81,14 +81,15 @@ function suiteState(name: string): SuiteState {
 
 Describe('test runner suite registry', () => {
   Test(
-    'partitions complete native and receipt cohorts exactly once while preserving parent report identities',
+    'partitions independent native and receipt cohorts exactly once while preserving parent report identities',
     async () => {
       const { byName } = await discover({}, { reportRoot: '/tmp/test-reports' })
       const suite = byName.get('language/project-tooling')!
       Expect(suite).toBeDefined()
       const { states } = TestNodes.build({ ...NO_HISTORY, selected: [suite] })
       Expect(states.map(state => state.name)).toEqual([
-        'language/project-tooling:native',
+        'language/project-tooling:native-bindings',
+        'language/project-tooling:native-lifecycle',
         'language/project-tooling:receipts',
         'language/project-tooling:receipt-inputs',
         'language/project-tooling:receipt-resolution',
@@ -96,8 +97,9 @@ Describe('test runner suite registry', () => {
         'language/project-tooling:receipt-races',
         'language/project-tooling#1',
       ])
-      Expect(states[0]?.selectedTestFiles).toEqual(NATIVE_PROJECT_TEST_FILES)
-      Expect(states.slice(1, 6).map(state => state.selectedTestFiles)).toEqual(
+      Expect(states[0]?.selectedTestFiles).toEqual(NATIVE_PROJECT_TEST_FILES.slice(0, 3))
+      Expect(states[1]?.selectedTestFiles).toEqual(NATIVE_PROJECT_TEST_FILES.slice(3))
+      Expect(states.slice(2, 7).map(state => state.selectedTestFiles)).toEqual(
         PROJECT_RECEIPT_TESTS.map(file => [file]),
       )
       const executed = states.flatMap(state => state.selectedTestFiles ?? [])
@@ -108,7 +110,8 @@ Describe('test runner suite registry', () => {
         Expect(state.testReport?.suite).toBe('language/project-tooling')
       }
       Expect(states.map(state => state.testReport?.path)).toEqual([
-        '/tmp/test-reports/language_project-tooling_native.xml',
+        '/tmp/test-reports/language_project-tooling_native-bindings.xml',
+        '/tmp/test-reports/language_project-tooling_native-lifecycle.xml',
         '/tmp/test-reports/language_project-tooling_receipts.xml',
         '/tmp/test-reports/language_project-tooling_receipt-inputs.xml',
         '/tmp/test-reports/language_project-tooling_receipt-resolution.xml',
@@ -129,7 +132,7 @@ Describe('test runner suite registry', () => {
       })
       const { states } = TestNodes.build({ ...NO_HISTORY, selected })
       Expect(states.map(state => state.name)).toEqual([
-        'language/project-tooling:native',
+        'language/project-tooling:native-bindings',
         'language/project-tooling:receipts',
         'language/project-tooling:receipt-inputs',
         'language/project-tooling:receipt-resolution',
@@ -154,7 +157,10 @@ Describe('test runner suite registry', () => {
         selected: [{ buildProcess, files, name: 'language/project-tooling' }],
       })
       Expect(states.flatMap(state => state.selectedTestFiles ?? [])).toEqual(files)
-      Expect(states.some(state => state.name.endsWith(':native'))).toBe(files.includes(NATIVE_PROJECT_TEST_FILES[0]))
+      Expect(states.some(state => state.name.endsWith(':native-bindings')))
+        .toBe(files.some(file => new Set<string>(NATIVE_PROJECT_TEST_FILES.slice(0, 3)).has(file)))
+      Expect(states.some(state => state.name.endsWith(':native-lifecycle')))
+        .toBe(files.some(file => new Set<string>(NATIVE_PROJECT_TEST_FILES.slice(3)).has(file)))
       for (const [name, file] of Object.entries(PROJECT_RECEIPT_FILES)) {
         Expect(states.some(state => state.name.endsWith(`:${name}`))).toBe(files.includes(file))
       }
@@ -176,7 +182,8 @@ Describe('test runner suite registry', () => {
     for (const preflight of [false, true]) {
       const { states } = TestNodes.build({ ...NO_HISTORY, preflight, selected })
       const byName = new Map(states.map(state => [state.name, state]))
-      Expect(byName.get('language/project-tooling:native')?.node.after).toBeUndefined()
+      Expect(byName.get('language/project-tooling:native-bindings')?.node.after).toBeUndefined()
+      Expect(byName.get('language/project-tooling:native-lifecycle')?.node.after).toBeUndefined()
       for (const name of Object.keys(PROJECT_RECEIPT_FILES)) {
         Expect(byName.get(`language/project-tooling:${name}`)?.node.after).toBeUndefined()
       }
@@ -186,17 +193,19 @@ Describe('test runner suite registry', () => {
     }
     for (
       const provedNames of [
-        ['language/project-tooling:native'],
+        ['language/project-tooling:native-bindings'],
+        ['language/project-tooling:native-lifecycle'],
         ...Object.keys(PROJECT_RECEIPT_FILES).map(name => [`language/project-tooling:${name}`]),
         [
-          'language/project-tooling:native',
+          'language/project-tooling:native-bindings',
+          'language/project-tooling:native-lifecycle',
           ...Object.keys(PROJECT_RECEIPT_FILES).map(name => `language/project-tooling:${name}`),
         ],
       ]
     ) {
       const { states } = TestNodes.build({ ...NO_HISTORY, proved: new Set(provedNames), selected: [selected[1]!] })
       Expect(states.map(state => state.name)).toEqual([
-        'language/project-tooling:native',
+        'language/project-tooling:native-bindings',
         'language/project-tooling:receipts',
         'language/project-tooling:receipt-inputs',
         'language/project-tooling:receipt-resolution',
@@ -208,7 +217,34 @@ Describe('test runner suite registry', () => {
     }
   })
 
-  Test('keeps automatic recorded-duration sharding for the ordinary named-cohort remainder', () => {
+  Test('named cohort reservations reach their process builder', () => {
+    const widths: number[] = []
+    const buildProcess: SelectedSuite['buildProcess'] = (_name, files, slots) => {
+      widths.push(slots)
+      return { args: [], command: 'true', files }
+    }
+    const state = TestNodes.build({
+      ...NO_HISTORY,
+      selected: [{
+        buildProcess,
+        files: [NATIVE_PROJECT_TEST_FILES[0]!],
+        estimationUnits: NATIVE_PROJECT_TEST_FILES,
+        name: 'language/project-tooling',
+      }],
+    }).states[0]!
+
+    Expect(state.node.cost).toBe(2)
+    Expect(state.node.serial).toBe(false)
+    Expect(widths).toEqual([2])
+    Expect(typeof state.node.run).toBe('function')
+    if (typeof state.node.run !== 'function') {
+      return
+    }
+    state.node.run({ slots: 2 })
+    Expect(widths).toEqual([2, 2])
+  })
+
+  Test('estimates the remainder without charging it for extracted cohort work', () => {
     const ordinaryFiles = [PROJECT_TOOLING_TEST, 'a.test.ts', 'b.test.ts', 'c.test.ts']
     const buildProcess: SelectedSuite['buildProcess'] = (_name, files) => ({ args: [], command: 'true', files })
     const plan = TestNodes.build({
@@ -232,18 +268,64 @@ Describe('test runner suite registry', () => {
       },
     })
     Expect(plan.states.map(state => state.name)).toEqual([
-      'language/project-tooling:native',
+      'language/project-tooling:native-bindings',
+      'language/project-tooling:native-lifecycle',
       'language/project-tooling:receipts',
       'language/project-tooling:receipt-inputs',
       'language/project-tooling:receipt-resolution',
       'language/project-tooling:receipt-host',
       'language/project-tooling:receipt-races',
       'language/project-tooling#1',
-      'language/project-tooling#2',
     ])
+    // The whole suite is long enough to shard, but the ordinary remainder owns only four of the
+    // fifteen equal-cost units. Charging it the full 8.6s would invent a second remainder process.
+    Expect(plan.plans[0]?.shards.length).toBe(1)
     Expect(plan.plans[0]?.shards.flat().toSorted()).toEqual(ordinaryFiles.toSorted())
     Expect(plan.states.flatMap(state => state.selectedTestFiles ?? []).toSorted())
       .toEqual([...NATIVE_PROJECT_TEST_FILES, ...PROJECT_RECEIPT_TESTS, ...ordinaryFiles].toSorted())
+  })
+
+  Test('weights current membership instead of a stale exact node sample', () => {
+    const files = ['heavy.test.ts', 'light.test.ts', 'other.test.ts']
+    const buildProcess: SelectedSuite['buildProcess'] = (_name, selected) => ({
+      args: [],
+      command: 'true',
+      files: selected,
+    })
+    const plan = TestNodes.build({
+      ...NO_HISTORY,
+      selected: [{
+        buildProcess,
+        estimationUnits: files,
+        files: files.slice(0, 2),
+        name: 'shared',
+        unitCostMs: new Map([[files[0]!, 8_000], [files[1]!, 1_000], [files[2]!, 1_000]]),
+      }],
+      timings: {
+        nodes: {
+          shared: {
+            emaMs: 20_600,
+            lastMs: 20_600,
+            lastRunAt: '2026-01-01T00:00:00.000Z',
+            samples: 1,
+            source: 'wall',
+          },
+          'shared#1': {
+            emaMs: 100,
+            lastMs: 100,
+            lastRunAt: '2026-01-01T00:00:00.000Z',
+            samples: 10,
+            source: 'wall',
+          },
+        },
+        version: 1,
+      },
+    })
+
+    // The heavy and light files own 90% of the suite's variable work. Each dynamic shard uses its
+    // current membership despite old #1/#2 samples carrying unrelated costs.
+    Expect(plan.states.map(state => state.expectedMs)).toEqual([16_600, 2_600])
+    Expect(plan.states.map(state => state.node.timeoutMs)).toEqual([300_000, 300_000])
   })
 
   Test('reconstructs cohort timing and ledger summaries only under the complete parent suite', async () => {
@@ -294,7 +376,7 @@ Describe('test runner suite registry', () => {
       Expect(Object.keys(ledger.tests).every(key => key.startsWith('language/project-tooling::'))).toBe(true)
       const captured = await withCapturedOutput(() => TestResultSummary.printResultSummary(states, 30_000))
       Expect(captured.stdout).toContain('- language/project-tooling: passed; tests 7; pass 7; fail 0;')
-      Expect(captured.stdout).not.toContain('language/project-tooling:native:')
+      Expect(captured.stdout).not.toContain('language/project-tooling:native-bindings:')
       for (const name of Object.keys(PROJECT_RECEIPT_FILES)) {
         Expect(captured.stdout).not.toContain(`language/project-tooling:${name}:`)
       }
@@ -463,6 +545,56 @@ Describe('test runner suite registry', () => {
     Expect(wordFlower).toBeGreaterThan(
       (await FS.readText(Repo.resolvePath('Apps/WordFlower/1 - Current/WordFlower.tao'))).length,
     )
+  })
+
+  Test('estimates Tao app and ancestor selections against the complete source-size inventory', async () => {
+    const { byName } = await discover()
+    const fullSuite = byName.get('tao-apps')!
+    const costs = fullSuite.unitCostMs!
+    const units = fullSuite.estimationUnits!
+    const totalCost = [...costs.values()].reduce((sum, cost) => sum + cost, 0)
+    const app = 'Apps/Test Apps/Navigation'
+    const appCost = costs.get(app)!
+    const ancestor = 'Apps/Test Apps'
+    const ancestorCost = [...costs]
+      .filter(([unit]) => unit.startsWith(`${ancestor}/`))
+      .reduce((sum, [, cost]) => sum + cost, 0)
+    const suiteMs = 100_000
+    const fixedMs = 800
+    const scopes = [
+      { files: [app], variableShare: appCost / totalCost },
+      { files: [ancestor], variableShare: ancestorCost / totalCost },
+      { files: ['Apps'], variableShare: 1 },
+    ]
+
+    for (const scope of scopes) {
+      const { selected } = await discover({
+        files: new Map([['tao-apps', scope.files]]),
+        suites: new Set(['tao-apps']),
+      })
+      const suite = selected[0]!
+      Expect(suite.unitCostMs).toEqual(costs)
+      Expect(suite.estimationUnits).toEqual(units)
+      const plan = TestNodes.build({
+        ...NO_HISTORY,
+        selected: [suite],
+        timings: {
+          nodes: {
+            'tao-apps': {
+              emaMs: suiteMs,
+              lastMs: suiteMs,
+              lastRunAt: '2026-01-01T00:00:00.000Z',
+              samples: 1,
+              source: 'wall',
+            },
+          },
+          version: 1,
+        },
+      })
+      const expected = fixedMs + (suiteMs - fixedMs) * scope.variableShare
+      Expect(plan.states).toHaveLength(1)
+      Expect(plan.states[0]?.expectedMs).toBe(expected)
+    }
   })
 
   // `validator` is tuned `--concurrent` (like `dev`) and stays shardable; `shared` is neither. A

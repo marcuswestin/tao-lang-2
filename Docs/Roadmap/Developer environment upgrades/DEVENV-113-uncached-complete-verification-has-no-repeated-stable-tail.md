@@ -124,6 +124,15 @@
     validation of all nineteen cases remains pending. Build/clean and Firebase creation passed on isolated retry after
     their initial timeouts; retain those observations without claiming stable
     first-attempt timing.
+  - CI planning evidence on October 5: successful PR15 Verify `37356653198` at `e0383128`
+    and its successful main Verify `37358101885` at `63e70f0f` retain a portable tail.
+    PR partitions ranged156–535 seconds of verification; partition11 added about71 seconds
+    for an isolated CLI retry and partition10 about182 seconds for three isolated retries.
+    The outer planner had no exact numbered-shard or extracted-cohort history and used30-second
+    fallback weights. `feat/ci-partition-balance` derives estimates from current membership,
+    splits independent native files, reserves nested-build capacity, and refreshes suite/file
+    seeds from these runs. Derived file weights and one inferred isolated CLI retry are documented
+    in `.github/verify/README.md`; they are scheduling estimates, not a stable-tail speed verdict.
 - **Proposed change:** The requested file partition and initial scheduling adjustment are implemented.
   Keep this observation open until fresh-checkout complete-lane measurements establish how much
   end-to-end tail remains; a cached skip is not a repeat measurement.

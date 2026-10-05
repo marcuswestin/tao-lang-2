@@ -1,16 +1,18 @@
 {
   "nodes": {
     "_compile-word-flower-app": {
-      "emaMs": 155,
-      "lastMs": 157,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 23318,
+      "lastMs": 23476,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "_doctor-json": {
-      "emaMs": 2717,
-      "lastMs": 2705,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 3233,
+      "lastMs": 3060,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "_dprint-check": {
       "emaMs": 7231,
@@ -19,52 +21,60 @@
       "samples": 1
     },
     "_fix-dprint": {
-      "emaMs": 7660,
-      "lastMs": 7855,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 5731,
+      "lastMs": 5595,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "_fix-just-fmt": {
-      "emaMs": 13,
-      "lastMs": 12,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 16,
+      "lastMs": 17,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "_fix-ledger-index": {
-      "emaMs": 146,
-      "lastMs": 139,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 287,
+      "lastMs": 282,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "_fix-tao": {
-      "emaMs": 5908,
-      "lastMs": 5714,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 10346,
+      "lastMs": 10416,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "_ide-extension-build": {
-      "emaMs": 9683,
-      "lastMs": 10076,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 30241,
+      "lastMs": 30223,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "_parser-gen": {
-      "emaMs": 46,
-      "lastMs": 47,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 67,
+      "lastMs": 66,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "_repo-lint": {
-      "emaMs": 1770,
-      "lastMs": 1767,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 3032,
+      "lastMs": 3190,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "_runtime-pack-check": {
-      "emaMs": 63,
-      "lastMs": 61,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 138,
+      "lastMs": 130,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "_tao-check": {
       "emaMs": 39702,
@@ -73,112 +83,130 @@
       "samples": 1
     },
     "_typecheck": {
-      "emaMs": 29920,
-      "lastMs": 29125,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 21397,
+      "lastMs": 25991,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "ai/generation": {
-      "emaMs": 773,
-      "lastMs": 773,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 793,
+      "lastMs": 771,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "ai/tao-skills": {
-      "emaMs": 49019,
-      "lastMs": 49019,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 108526,
+      "lastMs": 130759,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "apps/expo-host": {
-      "emaMs": 56071,
-      "lastMs": 56071,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 147014,
+      "lastMs": 144192,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "apps/native-bindings": {
-      "emaMs": 30709,
-      "lastMs": 30709,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 209969,
+      "lastMs": 210398,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "apps/providers/icloud": {
-      "emaMs": 292,
-      "lastMs": 292,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 381,
+      "lastMs": 384,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "apps/providers/instantdb": {
-      "emaMs": 565,
-      "lastMs": 565,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 333,
+      "lastMs": 361,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "apps/runtime": {
-      "emaMs": 1941,
-      "lastMs": 1941,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 5901,
+      "lastMs": 5971,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "apps/stdlib": {
-      "emaMs": 671,
-      "lastMs": 671,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 695,
+      "lastMs": 748,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "cli/agent-cli": {
-      "emaMs": 7468,
-      "lastMs": 7468,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 13607,
+      "lastMs": 13417,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "cli/cli-kit": {
-      "emaMs": 118,
-      "lastMs": 118,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 88,
+      "lastMs": 93,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "cli/dev-cli": {
-      "emaMs": 68717,
-      "lastMs": 68717,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 80416,
+      "lastMs": 72221,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "cli/tao-cli": {
-      "emaMs": 1051323,
-      "lastMs": 1051323,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 2372226,
+      "lastMs": 2372226,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 1,
+      "source": "wall"
     },
     "compiler": {
-      "emaMs": 68184,
-      "lastMs": 68184,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 591206,
+      "lastMs": 565909,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "dead-exports": {
-      "emaMs": 9356,
-      "lastMs": 9356,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 8753,
+      "lastMs": 8892,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "ides/ide-extension": {
-      "emaMs": 23394,
-      "lastMs": 23394,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 31924,
+      "lastMs": 37728,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "ides/studio": {
-      "emaMs": 128364,
-      "lastMs": 128364,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 537247,
+      "lastMs": 531379,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "ides/studio-tooling": {
-      "emaMs": 30489,
-      "lastMs": 30489,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 17578,
+      "lastMs": 18549,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "keyboard-navigation-smoke": {
       "emaMs": 78318,
@@ -187,58 +215,67 @@
       "samples": 1
     },
     "language/ast-utils": {
-      "emaMs": 5640,
-      "lastMs": 5640,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 4325,
+      "lastMs": 4170,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "language/formatter": {
-      "emaMs": 4051,
-      "lastMs": 4051,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 5320,
+      "lastMs": 5580,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "language/formatter:core": {
-      "emaMs": 592,
-      "lastMs": 592,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 774,
+      "lastMs": 776,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "language/parser": {
-      "emaMs": 23684,
-      "lastMs": 23684,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 41570,
+      "lastMs": 43438,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "language/parser:core": {
-      "emaMs": 595,
-      "lastMs": 595,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 1167,
+      "lastMs": 1126,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "language/project-tooling": {
-      "emaMs": 179947,
-      "lastMs": 179947,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 1477267,
+      "lastMs": 1477267,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 1,
+      "source": "wall"
     },
     "language/source-actions": {
-      "emaMs": 28979,
-      "lastMs": 28979,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 69873,
+      "lastMs": 63265,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "language/validator": {
-      "emaMs": 47397,
-      "lastMs": 47397,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 130062,
+      "lastMs": 128254,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "language/validator:core": {
-      "emaMs": 1850,
-      "lastMs": 1850,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 1590,
+      "lastMs": 1848,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "native-bindings": {
       "emaMs": 24386,
@@ -247,10 +284,11 @@
       "samples": 1
     },
     "performance-checks": {
-      "emaMs": 389,
-      "lastMs": 389,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 592,
+      "lastMs": 651,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "providers/icloud": {
       "emaMs": 203,
@@ -265,34 +303,39 @@
       "samples": 1
     },
     "runtime-jest": {
-      "emaMs": 105740,
-      "lastMs": 105740,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 235548,
+      "lastMs": 240172,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "services/account-server": {
-      "emaMs": 50042,
-      "lastMs": 50042,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 57568,
+      "lastMs": 58129,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "services/update-server": {
-      "emaMs": 45,
-      "lastMs": 45,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 114,
+      "lastMs": 134,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "shared": {
-      "emaMs": 8450,
-      "lastMs": 8450,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 8748,
+      "lastMs": 8577,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "ship-bundle-proof": {
-      "emaMs": 35713,
-      "lastMs": 35713,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 48856,
+      "lastMs": 40079,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "studio-agent-browser": {
       "emaMs": 18868,
@@ -343,10 +386,11 @@
       "samples": 1
     },
     "tao-apps": {
-      "emaMs": 235845,
-      "lastMs": 235845,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 535418,
+      "lastMs": 523687,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "tao-apps:finalize": {
       "emaMs": 412,
@@ -361,52 +405,60 @@
       "samples": 1
     },
     "testing/appium-driver": {
-      "emaMs": 311,
-      "lastMs": 311,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 241,
+      "lastMs": 258,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "testing/e2e-testing": {
-      "emaMs": 43190,
-      "lastMs": 43190,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 40454,
+      "lastMs": 41064,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "testing/host-control": {
-      "emaMs": 545,
-      "lastMs": 545,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 797,
+      "lastMs": 755,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "testing/verification": {
-      "emaMs": 15573,
-      "lastMs": 15573,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 15414,
+      "lastMs": 15444,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "apps/providers/convex": {
-      "emaMs": 149,
-      "lastMs": 149,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 214,
+      "lastMs": 225,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "apps/providers/firebase": {
-      "emaMs": 966,
-      "lastMs": 966,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 648,
+      "lastMs": 706,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "apps/providers/jazz": {
-      "emaMs": 484,
-      "lastMs": 484,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 199,
+      "lastMs": 181,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     },
     "apps/providers/pylon": {
-      "emaMs": 198,
-      "lastMs": 198,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 154,
+      "lastMs": 166,
+      "lastRunAt": "2026-10-05T18:53:20Z",
+      "samples": 2,
+      "source": "wall"
     }
   },
   "version": 1

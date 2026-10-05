@@ -267,6 +267,24 @@ Describe('gate catalog metadata', () => {
     // The developer suite's own tests start child runners and whole lanes, so one of its processes
     // is not one core either; it says so rather than letting the graph assume otherwise.
     Expect(GateCatalog.suiteTuning('cli/dev-cli').cost).toBe(2)
+    Expect(GateCatalog.suiteTuning('cli/tao-cli')).toMatchObject({
+      cost: 2,
+      serial: false,
+      shardCost: 2,
+    })
+    const tooling = GateCatalog.suiteTuning('language/project-tooling')
+    Expect(tooling.cost).toBe(2)
+    Expect(tooling.serial).toBe(false)
+    Expect(tooling.shardCost).toBe(2)
+    Expect(tooling.filePartitions?.map(partition => [partition.name, partition.files.length, partition.cost])).toEqual([
+      ['native-bindings', 3, 2],
+      ['native-lifecycle', 3, 2],
+      ['receipts', 1, 2],
+      ['receipt-inputs', 1, 2],
+      ['receipt-resolution', 1, 2],
+      ['receipt-host', 1, 2],
+      ['receipt-races', 1, 2],
+    ])
     Expect(GateCatalog.suiteTuning('language/parser').cost).toBeUndefined()
     Expect(nodeOf('_typecheck').cost).toBe(GateCatalog.TYPECHECK_COST)
     Expect(nodeOf('_tao-check').cost).toBe(GateCatalog.TAO_CHECK_COST)
