@@ -94,8 +94,10 @@ For landing a finished slice during a longer task, or `/merge-progress`, read
 `references/merge-progress.md` before preparing the partial landing.
 
 Require a clean feature branch with its merge message reviewed; `verification-lanes` owns the
-landing command's mechanics, evidence, and message format. After the Developer authorizes landing this slice,
-run `./agent unsandboxed land`: it fetches and integrates current `main`, verifies, and pushes while holding
+landing command's mechanics, evidence, message format, and local-versus-hosted route. After the
+Developer authorizes landing this slice, use the route it selects; an already verified pull request
+goes through `merge-pr` when its proof covers the change. For the local route, run
+`./agent unsandboxed land`: it fetches and integrates current `main`, verifies, and pushes while holding
 one lock. Every integration must attempt to fetch `origin/main` first and use the fetched tip when
 available, never prefer stale local `main`. If preparation falls back to local `main` because fetching
 failed, report that as offline preparation, not current remote integration. Landing requires a successful

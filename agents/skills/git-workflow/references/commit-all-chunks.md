@@ -5,7 +5,8 @@ commit all outstanding changes. Make commits only; do not edit code without sepa
 
 - Do not change file contents. Ask before fixing anything discovered during commit preparation.
 - Inspect staged and unstaged state and preserve the user's intended index boundaries where possible.
-- On a feature branch, run `./agent verify` before the first commit. In a Developer-directed primary
+- On a feature branch, follow `verification-lanes` for local or hosted proof; its hosted route
+  permits committing reviewed chunks before CI runs, without claiming them verified. In a Developer-directed primary
   `dev/<name>` checkout, use best-effort focused checks and commit without full verification; the
   landing command runs it when landing is authorized.
 - Choose the smallest self-contained remaining chunk, stage only that chunk, commit it, and repeat.
