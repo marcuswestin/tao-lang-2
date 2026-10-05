@@ -265,8 +265,9 @@ async function installEnvironment(
 
 /**
  * Installs every selected alias of one origin with a single npm invocation into the origin's shared
- * prefix, then links each alias into the origin's modules root. One tree per origin lets npm resolve
- * the aliases together, so a peer they share, such as `expo`, is installed once rather than per alias.
+ * prefix, then links each alias into the origin's modules root. Peers are left to the host the app
+ * runs in: an `expo` or `react-native` installed here would be a second copy beside the host's, and
+ * Metro resolves a package's imports from its own tree first, so it would bundle both.
  */
 async function installNpmEnvironment(
   consumerRoot: string,
@@ -315,7 +316,9 @@ async function installNpmEnvironment(
       }
     },
   )
-  const args = ['install', '--prefix', directory, '--no-audit', '--no-fund']
+  // `--legacy-peer-deps` neither installs peers nor fetches their metadata; `--omit=peer` would
+  // still resolve the whole peer graph and only skip writing it.
+  const args = ['install', '--prefix', directory, '--no-audit', '--no-fund', '--legacy-peer-deps']
   await progress.run(
     `npm ${noun} ${label}`,
     `Checking/installing npm ${noun} ${label}`,

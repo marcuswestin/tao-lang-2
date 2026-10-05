@@ -35,9 +35,9 @@ env:
   # Per-gate green records travel between runs of the same tree through the Actions cache, which
   # accepts only an absolute path with no `..` in it.
   TAO_GREEN_STORE: /home/runner/tao-green
-  # Bun's and npm's download caches, restored before the bootstrap installs from them.
+  # Bun's download cache, restored before the bootstrap installs from it. npm's is not cached: the
+  # Tao projects' pins install without their peers, a few hundred kilobytes downloaded in a second.
   BUN_INSTALL_CACHE_DIR: /home/runner/tao-cache/bun
-  npm_config_cache: /home/runner/tao-cache/npm
   # Every directory Bun's isolated linker writes: the root store and each workspace's own links,
   # which point into it by relative paths, so the tree restores intact at the same checkout path.
   NODE_MODULES_PATHS: |
@@ -46,11 +46,6 @@ env:
     packages/*/*/node_modules
     packages/apps/providers/*/node_modules
     Apps/Hosted CRUD/node_modules
-  # Each Tao project whose `.tao/store/lock.jsonc` pins npm packages: its alias links and the trees
-  # `tao install` built. Add a project here when its lock gains an npm pin.
-  TAO_INSTALL_PATHS: |
-    Apps/Test Apps/Native Bridge/node_modules
-    Apps/Test Apps/Native Bridge/.tao/cache/install
 
 jobs:
   partition:
@@ -99,29 +94,6 @@ jobs:
           restore-keys: |
             tao-bun-${{ runner.os }}-${{ runner.arch }}-
 
-      # The npm trees `tao install` builds for the Tao projects whose locks pin npm packages, today
-      # only Native Bridge: the shared environment under `.tao/cache/install` and the project's alias
-      # links into it, which are absolute and so need the same checkout path. Setup reads each pinned
-      # manifest through its link and skips the install when every version matches. Keyed on every
-      # Tao lock, the devenv lock that pins Node and npm, and the install code that lays the tree out.
-      - name: Restore the installed Tao npm trees
-        id: tao-installs
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ env.TAO_INSTALL_PATHS }}
-          key: tao-installs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/.tao/store/lock.jsonc','devenv.lock', 'packages/cli/tao-cli/cli-src/install-command.ts', 'packages/cli/tao-cli/cli-src/managed-install-environment.ts') }}
-
-      # npm's, for the packages the Tao locks pin, which matters only when they must be installed.
-      - name: Restore npm's download cache
-        id: npm-cache
-        if: steps.tao-installs.outputs.cache-hit != 'true'
-        uses: actions/cache/restore@v4
-        with:
-          path: /home/runner/tao-cache/npm
-          key: tao-npm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Apps/Test Apps/Native Bridge/.tao/store/lock.jsonc') }}
-          restore-keys: |
-            tao-npm-${{ runner.os }}-${{ runner.arch }}-
-
       # The Nix installation and the built locked profile, keyed on everything that decides them: the
       # pinned Nix release, the devenv lock, and the profile's expressions. On a hit the installer
       # finds Nix present and the bootstrap reuses the profile generation, so it neither downloads nor
@@ -166,22 +138,6 @@ jobs:
         with:
           path: /home/runner/tao-cache/bun
           key: ${{ steps.bun-cache.outputs.cache-primary-key }}
-
-      - name: Save the installed Tao npm trees
-        if: steps.tao-installs.outputs.cache-hit != 'true'
-        continue-on-error: true
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ env.TAO_INSTALL_PATHS }}
-          key: ${{ steps.tao-installs.outputs.cache-primary-key }}
-
-      - name: Save npm's download cache
-        if: steps.npm-cache.outcome == 'success' && steps.npm-cache.outputs.cache-hit != 'true'
-        continue-on-error: true
-        uses: actions/cache/save@v4
-        with:
-          path: /home/runner/tao-cache/npm
-          key: ${{ steps.npm-cache.outputs.cache-primary-key }}
 
       # Collecting garbage first drops what only the build needed, chiefly the two unpacked nixpkgs
       # sources, so the cache holds Nix and the profile's closure. Both are rooted explicitly rather

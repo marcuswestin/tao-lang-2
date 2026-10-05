@@ -142,7 +142,7 @@ view Main() { render inject \`\`\`ts return null \`\`\` }
       const terminal = fakeTerminal()
       await runTaoInstall(consumer, { appName: 'Consumer', output: terminal.output }, {
         installNpm: async (path, _root, args) => {
-          Expect(args).toEqual(['install', '--prefix', path, '--no-audit', '--no-fund'])
+          Expect(args).toEqual(['install', '--prefix', path, '--no-audit', '--no-fund', '--legacy-peer-deps'])
           const manifest = await FS.readJson<{ dependencies: Record<string, string> }>(
             FS.resolvePath('package.json', path),
           )
@@ -309,7 +309,7 @@ view Main() { render inject \`\`\`ts return null \`\`\` }
       const manifestPath = FS.resolvePath('package.json', directory)
       const installed = FS.resolvePath('node_modules/util', directory)
       const linkPath = FS.resolvePath('util', ManagedInstallEnvironment.modulesRoot(root, root, namespace))
-      const args = ['install', '--prefix', directory, '--no-audit', '--no-fund']
+      const args = ['install', '--prefix', directory, '--no-audit', '--no-fund', '--legacy-peer-deps']
       const calls: string[][] = []
       const installNpm = async (path: string, _consumer: string, argv: readonly string[]) => {
         calls.push([...argv])
