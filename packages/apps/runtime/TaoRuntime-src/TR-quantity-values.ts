@@ -33,6 +33,11 @@ type QuantityOwner = Readonly<{
   invariant?: (canonical: number) => boolean
 }>
 
+const quantityFactoriesByOwner = new WeakMap<
+  QuantityOwner,
+  TaoQuantityFactory<string, Readonly<Record<string, number>>, object>
+>()
+
 /** TaoQuantityDefinition is declaration-owned metadata. Publish one factory per nominal domain. */
 export type TaoQuantityDefinition<Domain extends string, Units extends Readonly<Record<string, number>>> = Readonly<{
   domain: Domain
@@ -134,6 +139,14 @@ class QuantityPayload<Unit extends string> {
   static is(input: unknown): input is QuantityPayload<string> {
     return typeof input === 'object' && input !== null && #canonical in input
   }
+
+  static factoryOf(
+    input: QuantityPayload<string>,
+  ): TaoQuantityFactory<string, Readonly<Record<string, number>>, object> {
+    const factory = quantityFactoriesByOwner.get(input.#owner)
+    RuntimeAssert.defined(factory, 'a checked quantity payload retains its registered factory')
+    return factory
+  }
 }
 
 // Instances expose this prototype to trusted native code. Keep getters, admission and branding
@@ -149,6 +162,17 @@ export function isQuantityPayload(input: unknown): input is TaoQuantityPayload<s
 /** quantityPayloadJSValue is the leaf seam a uniform accessor can call on evaluated jsValue data. */
 export function quantityPayloadJSValue(input: unknown): number | undefined {
   return QuantityPayload.is(input) ? input.canonical : undefined
+}
+
+/** Returns the exact declaration factory carried by an authenticated quantity payload. */
+export function factoryOfQuantityInput(
+  value: TaoEvaluable<unknown>,
+): TaoQuantityFactory<string, Readonly<Record<string, number>>, object> {
+  const payload = value.evaluate().jsValue
+  if (!QuantityPayload.is(payload)) {
+    throw new TaoActionFailure(QuantityFailureCases.BadShape, 'A checked quantity value is required.')
+  }
+  return QuantityPayload.factoryOf(payload)
 }
 
 /**
@@ -306,5 +330,11 @@ function createQuantityFactory<
       )
     },
   })
+  // The registry erases only static role proofs; its private owner key retains the exact factory.
+  // Generic conditional native-output types cannot express that erasure as structural covariance.
+  quantityFactoriesByOwner.set(
+    owner,
+    factory as unknown as TaoQuantityFactory<string, Readonly<Record<string, number>>, object>,
+  )
   return factory
 }
