@@ -21,8 +21,8 @@ Describe('emitted Tao module cache', () => {
           data Notes / Note { Title text }
           app Preview {
             id "com.tao.cache.firebase" version "1.0.0" name "Preview"
-            Auth FirebaseAuth { ApiKey "source-auth-key" ProjectId "source-project" }
-            Datasource Firebase { ApiKey "source-data-key" ProjectId "source-project" }
+            Auth FirebaseAuth { ApiKey "source-auth-key", ProjectId "source-project" }
+            Datasource Firebase { ApiKey "source-data-key", ProjectId "source-project" }
             view Main
           }
           view Main() { render inject \`\`\`ts return null \`\`\` }
