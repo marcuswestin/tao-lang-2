@@ -26,7 +26,9 @@ Describe('mounted keyed slot rows', () => {
         observed.set(occurrence, props)
         useEffect(() => {
           lifecycle.push(`body:${occurrence}:mounted`)
-          return () => lifecycle.push(`body:${occurrence}:removed`)
+          return () => {
+            lifecycle.push(`body:${occurrence}:removed`)
+          }
         }, [occurrence])
         return createElement(
           RN.Pressable,
@@ -46,7 +48,9 @@ Describe('mounted keyed slot rows', () => {
         const occurrence = props.taoProps?.testTag ?? 'missing'
         useEffect(() => {
           lifecycle.push(`replacement:${occurrence}:mounted`)
-          return () => lifecycle.push(`replacement:${occurrence}:removed`)
+          return () => {
+            lifecycle.push(`replacement:${occurrence}:removed`)
+          }
         }, [occurrence])
         return createElement(
           RN.Text,

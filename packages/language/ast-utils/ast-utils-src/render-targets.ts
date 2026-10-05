@@ -49,6 +49,9 @@ export function resolveRenderTarget(render: AST.Render): RenderTarget | undefine
   if (AST.isNavDeclaration(target)) {
     return { kind: 'nav', declaration: target }
   }
+  if (!AST.isValueDeclaration(target)) {
+    return undefined
+  }
   const type = Type.ofValueDeclaration(target, render)
   const visual = resolveVisualValue(render, target, type)
   if (visual) {
