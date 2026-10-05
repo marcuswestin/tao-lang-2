@@ -228,17 +228,74 @@ export function configurableTypeAliasResolution(
     : { kind: 'invalid', target: current }
 }
 
-/** resolvedImportedDeclarations returns requested declarations, preserving identity across data forms and namespace peers. */
-export function resolvedImportedDeclarations(useStatement: AST.UseStatement): AST.Declaration[] {
-  const names = new Set(useStatement.importedDeclarations.map(reference => reference.$refText))
-  const declarations = resolvedUseTargets.get(useStatement)
-    ?? useStatement.importedDeclarations.map(reference => reference.ref).filter(AST.isDeclaration)
+/** importSourceName is the exported spelling selected by a named import. */
+export function importSourceName(specifier: AST.NamedImport): string {
+  return specifier.target?.$refText ?? ''
+}
+
+/** importLocalName is the spelling a named import binds in its receiving file. */
+export function importLocalName(specifier: AST.NamedImport): string {
+  return specifier.alias ?? importSourceName(specifier)
+}
+
+/** importSpecifierText preserves the authored source and local names of a named import. */
+export function importSpecifierText(specifier: AST.NamedImport): string {
+  const sourceName = importSourceName(specifier)
+  return specifier.alias ? `${sourceName} as ${specifier.alias}` : sourceName
+}
+
+export type ImportedBinding = {
+  specifier: AST.NamedImport | undefined
+  declaration: AST.Declaration
+  sourceName: string
+  localName: string
+  namespace: DeclarationNamespace
+}
+
+/** resolvedImportedBindings retains source forms and namespace peers without changing declaration identity. */
+export function resolvedImportedBindings(
+  useStatement: AST.UseStatement,
+  candidates?: readonly AST.Declaration[],
+): ImportedBinding[] {
+  // Scope providers pass candidates before linking, so this path never touches a recursive ref.
+  const declarations = [
+    ...new Set(
+      candidates ?? resolvedUseTargets.get(useStatement)
+        ?? useStatement.importedDeclarations.map(specifier => specifier.target?.ref).filter(AST.isDeclaration),
+    ),
+  ]
+  const binding = (declaration: AST.Declaration, sourceName: string, specifier?: AST.NamedImport): ImportedBinding => ({
+    specifier,
+    declaration,
+    sourceName,
+    localName: specifier ? importLocalName(specifier) : sourceName,
+    namespace: AST.isEntityDataDeclaration(declaration) && sourceName === declaration.singularName
+      ? 'type'
+      : declarationNamespace(declaration),
+  })
   if (useStatement.all) {
-    return [...new Set(declarations)]
+    return declarations.flatMap(declaration => {
+      const names = AST.isEntityDataDeclaration(declaration)
+        ? [declaration.name, declaration.singularName]
+        : [declaration.name]
+      return names.filter(Boolean).map(name => binding(declaration, name))
+    })
   }
-  return [...new Set(declarations)].filter(declaration =>
-    names.has(declaration.name) || (AST.isEntityDataDeclaration(declaration) && names.has(declaration.singularName))
-  )
+  return useStatement.importedDeclarations.flatMap(specifier => {
+    const sourceName = importSourceName(specifier)
+    if (!sourceName || !importLocalName(specifier)) {
+      return []
+    }
+    return declarations.filter(declaration =>
+      sourceName === declaration.name
+      || (AST.isEntityDataDeclaration(declaration) && sourceName === declaration.singularName)
+    ).map(declaration => binding(declaration, sourceName, specifier))
+  })
+}
+
+/** resolvedImportedDeclarations projects bindings onto their deduplicated real declarations. */
+export function resolvedImportedDeclarations(useStatement: AST.UseStatement): AST.Declaration[] {
+  return [...new Set(resolvedImportedBindings(useStatement).map(binding => binding.declaration))]
 }
 
 type ArgumentListOwner =
@@ -804,23 +861,48 @@ function configurationPrimitiveOfTypeExpression(
 }
 
 function visibleTypeDeclaration(node: AST.Node, name: string): AST.TypeDeclaration | undefined {
-  return visibleFileDeclarations(node, AST.isTypeDeclaration).find(declaration => declaration.name === name)
+  return visibleFileBindings(node, AST.isTypeDeclaration).find(binding => binding.localName === name)?.declaration
 }
 
-/** visibleFileDeclarations returns local, folder-visible and imported declarations, optionally selecting one import form. */
-export function visibleFileDeclarations<DeclarationT extends AST.Node>(
+export type VisibleFileBinding<DeclarationT extends AST.Node> = {
+  declaration: DeclarationT
+  sourceName: string
+  localName: string
+  namespace: DeclarationNamespace
+}
+
+/** visibleFileBindings retains the visible spelling alongside each original declaration. */
+export function visibleFileBindings<DeclarationT extends AST.Node>(
   node: AST.Node,
   guard: (candidate: unknown) => candidate is DeclarationT,
   importedName?: (declaration: DeclarationT) => string,
-): DeclarationT[] {
+): VisibleFileBinding<DeclarationT>[] {
   const root = findRoot(node)
   if (!AST.isTaoFile(root)) {
     return []
   }
-  const declarations: DeclarationT[] = []
+  const bindings: VisibleFileBinding<DeclarationT>[] = []
+  const add = (declaration: DeclarationT) => {
+    const name = importedName ? importedName(declaration) : 'name' in declaration ? String(declaration.name) : ''
+    const names = !importedName && AST.isEntityDataDeclaration(declaration)
+      ? [declaration.name, declaration.singularName]
+      : [name]
+    for (const sourceName of names.filter(Boolean)) {
+      bindings.push({
+        declaration,
+        sourceName,
+        localName: sourceName,
+        namespace: AST.isEntityDataDeclaration(declaration) && sourceName === declaration.singularName
+          ? 'type'
+          : AST.isDeclaration(declaration)
+          ? declarationNamespace(declaration)
+          : 'value',
+      })
+    }
+  }
   for (const statement of root.statements) {
     if (guard(statement)) {
-      declarations.push(statement)
+      add(statement)
     }
   }
   const currentPath = AST.getDocument(root).uri.path
@@ -832,52 +914,65 @@ export function visibleFileDeclarations<DeclarationT extends AST.Node>(
     }
     for (const statement of file.statements) {
       if (guard(statement) && 'visibility' in statement && statement.visibility === 'folder') {
-        declarations.push(statement)
+        add(statement)
       }
     }
   }
-  for (const statement of root.statements) {
-    if (!AST.isUseStatement(statement)) {
-      continue
-    }
-    for (const declaration of resolvedImportedDeclarations(statement)) {
-      if (
-        guard(declaration)
-        && (statement.all || !importedName
-          || statement.importedDeclarations.some(reference => reference.$refText === importedName(declaration)))
-      ) {
-        declarations.push(declaration)
+  for (const statement of root.statements.filter(AST.isUseStatement)) {
+    for (const binding of resolvedImportedBindings(statement)) {
+      const declaration = binding.declaration
+      if (guard(declaration) && (!importedName || binding.sourceName === importedName(declaration))) {
+        bindings.push({
+          declaration,
+          sourceName: binding.sourceName,
+          localName: binding.localName,
+          namespace: binding.namespace,
+        })
       }
     }
   }
-  return declarations
+  return bindings
+}
+
+/** visibleFileDeclarations projects visible bindings onto original declaration identities. */
+export function visibleFileDeclarations<DeclarationT extends AST.Node>(
+  node: AST.Node,
+  guard: (candidate: unknown) => candidate is DeclarationT,
+  importedName?: (declaration: DeclarationT) => string,
+): DeclarationT[] {
+  return [...new Set(visibleFileBindings(node, guard, importedName).map(binding => binding.declaration))]
 }
 
 /**
- * visibleValueDeclarations returns the effective file-level value table used by ordinary value
+ * visibleValueBindings returns the effective file-level value table used by ordinary value
  * references. The order deliberately matches ValueScopeProvider: `folder` siblings and explicit
  * imports occupy its inner imported scope, while declarations in this file are the outer fallback.
  * The guard is applied before names are claimed so the type and value namespaces remain distinct.
  */
-export function visibleValueDeclarations<DeclarationT extends AST.Declaration>(
+export function visibleValueBindings<DeclarationT extends AST.Declaration>(
   node: AST.Node,
   guard: (candidate: unknown) => candidate is DeclarationT,
-): readonly DeclarationT[] {
+): readonly VisibleFileBinding<DeclarationT>[] {
   const root = findRoot(node)
   if (!AST.isTaoFile(root)) {
     return []
   }
-  const visible: DeclarationT[] = []
+  const visible: VisibleFileBinding<DeclarationT>[] = []
   const names = new Set<string>()
-  const add = (declaration: AST.Node) => {
+  const add = (declaration: AST.Node, localName?: string) => {
     if (
       AST.isDeclaration(declaration)
       && declarationNamespace(declaration) === 'value'
       && guard(declaration)
-      && !names.has(declaration.name)
+      && !names.has(localName ?? declaration.name)
     ) {
-      names.add(declaration.name)
-      visible.push(declaration)
+      names.add(localName ?? declaration.name)
+      visible.push({
+        declaration,
+        sourceName: declaration.name,
+        localName: localName ?? declaration.name,
+        namespace: 'value',
+      })
     }
   }
   const currentPath = AST.getDocument(root).uri.path
@@ -899,10 +994,9 @@ export function visibleValueDeclarations<DeclarationT extends AST.Declaration>(
   }
   for (const statement of root.statements) {
     if (AST.isUseStatement(statement)) {
-      const names = new Set(statement.importedDeclarations.map(reference => reference.$refText))
-      for (const declaration of resolvedImportedDeclarations(statement)) {
-        if (statement.all || names.has(declaration.name)) {
-          add(declaration)
+      for (const binding of resolvedImportedBindings(statement)) {
+        if (binding.sourceName === binding.declaration.name) {
+          add(binding.declaration, binding.localName)
         }
       }
     }
@@ -911,6 +1005,14 @@ export function visibleValueDeclarations<DeclarationT extends AST.Declaration>(
     add(declaration)
   }
   return visible
+}
+
+/** visibleValueDeclarations returns the effective value table's original declarations. */
+export function visibleValueDeclarations<DeclarationT extends AST.Declaration>(
+  node: AST.Node,
+  guard: (candidate: unknown) => candidate is DeclarationT,
+): readonly DeclarationT[] {
+  return [...new Set(visibleValueBindings(node, guard).map(binding => binding.declaration))]
 }
 
 function effectiveConfigurationProperties(
@@ -1414,8 +1516,8 @@ export function associatedConverterSourceOwner(
 ): AST.TypeDeclaration | undefined {
   const source = declaration.conversionSource
   return AST.isNamedTypeReference(source) && source.members.length === 0
-    ? visibleFileDeclarations(source, AST.isTypeDeclaration, owner => owner.name)
-      .find(owner => owner.name === source.root)
+    ? visibleFileBindings(source, AST.isTypeDeclaration, owner => owner.name)
+      .find(binding => binding.localName === source.root)?.declaration
     : undefined
 }
 
@@ -1580,8 +1682,8 @@ export function namedStateTypeDeclaration(state: AST.StateDeclaration): AST.Type
   if (!isNamedStateShorthand(state)) {
     return undefined
   }
-  return visibleFileDeclarations(state, AST.isTypeDeclaration, declaration => declaration.name)
-    .find(declaration => declaration.name === state.name)
+  return visibleFileBindings(state, AST.isTypeDeclaration, declaration => declaration.name)
+    .find(binding => binding.localName === state.name)?.declaration
 }
 
 export function isNamedStateShorthand(state: AST.StateDeclaration): boolean {

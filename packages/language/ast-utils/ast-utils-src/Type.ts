@@ -1066,8 +1066,8 @@ export class Type {
       return source.kind === 'list' && source.element?.kind === 'entity' ? source.element.entity : undefined
     }
     const sourceName = query.sourceName ?? query.name
-    return AST.visibleFileDeclarations(query, AST.isEntityDataDeclaration, entity => entity.name)
-      .find(entity => entity.name === sourceName)
+    return AST.visibleFileBindings(query, AST.isEntityDataDeclaration, entity => entity.name)
+      .find(binding => binding.localName === sourceName)?.declaration
   }
 
   /** dataEntityName returns the durable singular name stored in provider envelopes. */
@@ -1124,11 +1124,7 @@ export class Type {
       return undefined
     }
     const relationName = Type.dataFieldRelationName(field)
-    return AST.visibleFileDeclarations(
-      field,
-      AST.isEntityDataDeclaration,
-      entity => entity.name === relationName ? entity.name : entity.singularName,
-    ).find(entity => entity.singularName === relationName || entity.name === relationName)
+    return visibleEntityBinding(field, relationName)?.declaration
   }
 
   /** dataFieldIsInverseRelation distinguishes plural owner-side relations from stored handles. */
@@ -1136,7 +1132,8 @@ export class Type {
     if (field.primitive || field.boolean) {
       return false
     }
-    return Type.dataFieldRelationEntity(field)?.name === Type.dataFieldRelationName(field)
+    const binding = visibleEntityBinding(field, Type.dataFieldRelationName(field))
+    return binding !== undefined && binding.sourceName === binding.declaration.name
   }
 
   /** topLevelDataEntities returns the current provider-neutral catalog declarations in a file. */
@@ -1675,16 +1672,19 @@ function typePropertyNamed(itemType: ItemShape, name: string): AST.TypeProperty 
 
 /** Cardinality belongs to the two authored entity names, including their selected import form. */
 function writtenEntityDomain(node: AST.Node, name: string): TaoType | undefined {
-  const entity = AST.visibleFileDeclarations(
-    node,
-    AST.isEntityDataDeclaration,
-    declaration => declaration.name === name ? declaration.name : declaration.singularName,
-  ).find(declaration => declaration.name === name || declaration.singularName === name)
-  if (!entity) {
+  const binding = visibleEntityBinding(node, name)
+  if (!binding) {
     return undefined
   }
+  const entity = binding.declaration
   const single: TaoType = { kind: 'entity', entity }
-  return entity.name === name ? { kind: 'list', element: single } : single
+  return binding.sourceName === entity.name ? { kind: 'list', element: single } : single
+}
+
+function visibleEntityBinding(node: AST.Node, name: string) {
+  const bindings = AST.visibleFileBindings(node, AST.isEntityDataDeclaration)
+    .filter(binding => binding.localName === name)
+  return bindings.find(binding => binding.namespace === 'type') ?? bindings[0]
 }
 
 /**
@@ -3018,13 +3018,12 @@ function namedParentDefinition(
 }
 
 function visibleTypeDeclaration(node: AST.Node, name: string): AST.TypeDeclaration | undefined {
-  return AST.visibleFileDeclarations(node, AST.isTypeDeclaration).find(type => type.name === name)
+  return AST.visibleFileBindings(node, AST.isTypeDeclaration).find(binding => binding.localName === name)?.declaration
 }
 
 function visibleParameterizedDeclaration(node: AST.Node, name: string): AST.ParameterizedDeclaration | undefined {
-  return AST.visibleFileDeclarations(node, AST.isParameterizedDeclaration).find(declaration =>
-    declaration.name === name
-  )
+  return AST.visibleFileBindings(node, AST.isParameterizedDeclaration)
+    .find(binding => binding.localName === name)?.declaration
 }
 
 function owningTypePropertyDefinition(property: AST.TypeProperty): AST.TypeDefinition | undefined {

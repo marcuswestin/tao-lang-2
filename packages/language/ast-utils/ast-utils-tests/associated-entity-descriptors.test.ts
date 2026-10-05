@@ -164,10 +164,10 @@ Describe('Associated entity descriptors', () => {
       const entry = validated.entry.ast
       const imports = entry.statements.find(AST.isUseStatement)
       Expect.Is(imports, AST.isUseStatement)
-      Expect(imports.importedDeclarations.map(reference => reference.$refText)).toEqual(['Book', 'Books', 'People'])
-      Expect(imports.importedDeclarations[0]?.ref).toBe(books)
-      Expect(imports.importedDeclarations[1]?.ref).toBe(books)
-      Expect(imports.importedDeclarations[2]?.ref).toBe(people)
+      Expect(imports.importedDeclarations.map(AST.importSourceName)).toEqual(['Book', 'Books', 'People'])
+      Expect(imports.importedDeclarations[0]?.target.ref).toBe(books)
+      Expect(imports.importedDeclarations[1]?.target.ref).toBe(books)
+      Expect(imports.importedDeclarations[2]?.target.ref).toBe(people)
       const revision = entry.statements.find(statement =>
         AST.isTypeDeclaration(statement) && statement.name === 'Revision'
       )

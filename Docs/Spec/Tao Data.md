@@ -64,6 +64,8 @@ its case name, as in `Final yes / Draft no`. The `no` side is the default unless
 `(default Case)`. `Pinned` and `Public` above demonstrate the unaliased and explicit-default forms.
 They exercise declaration syntax and do not require product journeys. Writes, `is <Case>` tests,
 and boolean query filters use named declared cases rather than raw spelling conventions.
+Both case names read the same stored field: `Row.Draft` negates `Row.Final`. An explicit labeled
+write such as `update Row { Draft: yes }` stores `Final: no`; it does not create a second field.
 
 Explicit write labels also accept the negative alias. For `Final yes / Draft no`,
 `update Document { Draft: true }` writes `Final: false`; `Draft: false` writes `Final: true`.

@@ -201,27 +201,26 @@ function capturedFixtureImportEdits(file: AST.TaoFile, entityNames: readonly str
     if (visibleNames.has(name)) {
       continue
     }
-    const matchingUses = uses.filter(use =>
-      AST.resolvedImportedDeclarations(use).some(declaration =>
-        AST.isEntityDataDeclaration(declaration) && declaration.singularName === name
-      )
-    )
-    const targets = new Set(
-      matchingUses.flatMap(use =>
-        AST.resolvedImportedDeclarations(use).filter(declaration =>
-          AST.isEntityDataDeclaration(declaration) && declaration.singularName === name
+    const matchingBindings = uses.flatMap(use =>
+      AST.resolvedImportedBindings(use)
+        .filter(binding =>
+          AST.isEntityDataDeclaration(binding.declaration) && binding.declaration.singularName === name
         )
-      ),
+        .map(binding => ({ binding, use }))
     )
+    const targets = new Set(matchingBindings.map(({ binding }) => binding.declaration))
     if (targets.size !== 1) {
       Errors.throwUserInput(`Studio captured entity is not uniquely available in this source file: ${name}`)
     }
-    const use = matchingUses[0]!
+    const { binding, use } = matchingBindings[0]!
     if (use.all) {
       continue
     }
-    const names = additions.get(use) ?? new Set(use.importedDeclarations.map(reference => reference.$refText))
-    names.add(name)
+    if (binding.localName === name) {
+      continue
+    }
+    const names = additions.get(use) ?? new Set(use.importedDeclarations.map(AST.importSpecifierText))
+    names.add(binding.sourceName === name ? name : `${binding.sourceName} as ${name}`)
     additions.set(use, names)
   }
   return [...additions].map(([use, names]) => {
@@ -376,12 +375,14 @@ export async function retargetScenarioRender(
   const nameInFile = file.statements.some(statement =>
     (AST.isDeclaration(statement) && AST.declarationNamespace(statement) === 'value' && statement.name === request.view)
     || (AST.isUseStatement(statement)
-      && (AST.resolvedImportedDeclarations(statement).some(declaration =>
-        AST.declarationNamespace(declaration) === 'value' && declaration.name === request.view
-      ) || statement.importedDeclarations.some(item => item.$refText === request.view && item.ref === undefined)))
+      && (AST.resolvedImportedBindings(statement).some(binding =>
+        binding.namespace === 'value' && binding.localName === request.view
+      ) || statement.importedDeclarations.some(item =>
+        AST.importLocalName(item) === request.view && item.target.ref === undefined
+      )))
   )
   const originalUse = file.statements.filter(AST.isUseStatement)
-    .find(use => AST.resolvedImportedDeclarations(use).includes(original))
+    .find(use => AST.resolvedImportedBindings(use).some(binding => binding.declaration === original))
   const importEdit = originalUse === undefined || nameInFile
     ? undefined
     : namedImportEdit(originalUse, request.view)

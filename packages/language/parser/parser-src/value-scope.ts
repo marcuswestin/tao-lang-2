@@ -135,8 +135,11 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     ) {
       return this.createCommandReferenceScope(context.container)
     }
-    if (context.property === 'importedDeclarations' && AST.isUseStatement(context.container)) {
-      return this.createUseImportScope(context.container)
+    if (
+      context.property === 'target' && AST.isNamedImport(context.container)
+      && AST.isUseStatement(context.container.$container)
+    ) {
+      return this.createUseImportScope(context.container.$container)
     }
     if (context.property === 'namespace' && AST.isPackageMemberReference(context.container)) {
       return this.createPackageNamespaceScope(context.container)
@@ -254,7 +257,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       }
       units.add(unit)
     }
-    const addOwner = (declaration: AST.TypeDeclaration, prefix?: string): void => {
+    const addOwner = (declaration: AST.TypeDeclaration, prefix?: string, name = declaration.name): void => {
       const canonical = canonicalNumericUnitDeclaration(declaration)
       const expression = canonical?.type
       if (!expression || !AST.isDerivedTypeExpression(expression)) {
@@ -265,19 +268,18 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
           if (!unit.name) {
             continue
           }
-          add(`${prefix ? `${prefix}.` : ''}${declaration.name}.${unit.name}`, unit)
+          add(`${prefix ? `${prefix}.` : ''}${name}.${unit.name}`, unit)
           if (!prefix) {
             add(unit.name, unit)
           }
         }
       }
     }
-    const declarations = [
-      ...root.statements.filter(AST.isTypeDeclaration),
-      ...this.importedDeclarations(node, AST.isTypeDeclaration),
-    ]
-    for (const declaration of declarations) {
+    for (const declaration of root.statements.filter(AST.isTypeDeclaration)) {
       addOwner(declaration)
+    }
+    for (const binding of this.importedBindings(node, AST.isTypeDeclaration)) {
+      addOwner(binding.declaration, undefined, binding.localName)
     }
     for (const statement of root.statements.filter(AST.isUsePackageStatement)) {
       const namespace = AST.packageNamespaceName(statement)
@@ -356,7 +358,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     const entityMethodOwner = method && AST.associatedEntityReceiverOwner(method)
     let scope = outer
     if (isAssociatedTypeRootReference(reference)) {
-      scope = this.createScopeForNodes(this.importedDeclarations(reference, AST.isTypeDeclaration), scope)
+      scope = this.createImportedScope(reference, AST.isTypeDeclaration, scope)
       scope = this.createScopeForNodes(root.statements.filter(AST.isTypeDeclaration), scope)
     }
     if (
@@ -397,10 +399,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       scope = this.createScopeForNodes([converterSource], scope)
     }
     scope = this.createScopeForNodes(AST.importableValueDeclarationsInFile(root).filter(visible), scope)
-    scope = this.createScopeForNodes(
-      this.importedDeclarations(reference, AST.isImportableValueDeclaration),
-      scope,
-    )
+    scope = this.createImportedScope(reference, AST.isImportableValueDeclaration, scope)
     scope = this.createScopeForNodes(this.importedCaseSetCases(reference), scope)
 
     const app = owningAppDeclaration(reference)
@@ -494,7 +493,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       return this.createScopeForNodes([])
     }
     let scope = this.createScopeForNodes(root.statements.filter(AST.isCommandDeclaration))
-    scope = this.createScopeForNodes(this.importedDeclarations(node, AST.isCommandDeclaration), scope)
+    scope = this.createImportedScope(node, AST.isCommandDeclaration, scope)
     const view = AST.findOwningView(node)
     if (AST.isViewDeclaration(view)) {
       scope = this.createScopeForNodes(AST.commandsOf(view), scope)
@@ -513,12 +512,14 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       return this.createScopeForNodes([])
     }
     const local = preferredConstructorDeclarations(node, root.statements.filter(isFileConstructorDeclaration))
+    const bindings = this.importedBindings(node, isFileConstructorDeclaration)
     const imported = preferredConstructorDeclarations(
       node,
-      this.importedDeclarations(node, isFileConstructorDeclaration),
+      bindings.map(binding => binding.declaration),
+      declaration => bindings.filter(binding => binding.declaration === declaration).map(binding => binding.localName),
     )
     let scope = this.createScopeForNodes(local, signatureScope)
-    scope = this.createScopeForNodes(imported, scope)
+    scope = this.createScopeForBindings(bindings.filter(binding => imported.includes(binding.declaration)), scope)
     return scope
   }
 
@@ -542,7 +543,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       AST.isImportableValueDeclaration(candidate)
       || AST.isConfigurableDeclaration(candidate)
     let scope = this.createScopeForNodes(root.statements.filter(configurable))
-    scope = this.createScopeForNodes(this.importedDeclarations(node, configurable), scope)
+    scope = this.createImportedScope(node, configurable, scope)
     const app = owningAppDeclaration(node)
     if (app?.block) {
       scope = this.createScopeForNodes(
@@ -565,9 +566,9 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     const type = (candidate: AST.Node): candidate is AST.TypeDeclaration => AST.isTypeDeclaration(candidate)
     // A refinement name resolves the value namespace first, then falls back to the type namespace.
     // Keeping them as nested scopes also permits same-name peers without creating an ambiguous ref.
-    let scope = this.createScopeForNodes(this.importedDeclarations(node, type))
+    let scope = this.createImportedScope(node, type)
     scope = this.createScopeForNodes(root.statements.filter(type), scope)
-    scope = this.createScopeForNodes(this.importedDeclarations(node, value), scope)
+    scope = this.createImportedScope(node, value, scope)
     scope = this.createScopeForNodes(root.statements.filter(value), scope)
     return scope
   }
@@ -632,7 +633,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     const isRenderable = (node: AST.Node): node is AST.ViewDeclaration | AST.NavDeclaration =>
       AST.isViewDeclaration(node) || AST.isNavDeclaration(node)
     let scope = this.createScopeForNodes(root.statements.filter(isRenderable))
-    scope = this.createScopeForNodes(this.importedDeclarations(render, isRenderable), scope)
+    scope = this.createImportedScope(render, isRenderable, scope)
     const targets = new Set<string>([
       AST.ViewDeclaration.$type,
       AST.NavDeclaration.$type,
@@ -668,11 +669,9 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
 
     // Resolve by the invocation's source name without touching its `.ref` while this slot itself
     // is linking. The ordinary render reference is linked independently by the same visible set.
-    const views = [
-      ...root.statements.filter(AST.isViewDeclaration),
-      ...this.importedDeclarations(use, AST.isViewDeclaration),
-    ]
-    const target = views.find(candidate => candidate.name === targetName)
+    const target = root.statements.filter(AST.isViewDeclaration).find(candidate => candidate.name === targetName)
+      ?? this.importedBindings(use, AST.isViewDeclaration)
+        .find(binding => binding.localName === targetName)?.declaration
     return this.createScopeForNodes(target ? AST.renderSlotDeclarationsOf(target) : [])
   }
 
@@ -699,7 +698,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       return this.createScopeForNodes([])
     }
     let scope = this.createScopeForNodes(root.statements.filter(isDeclaration))
-    scope = this.createScopeForNodes(this.importedDeclarations(node, isDeclaration), scope)
+    scope = this.createImportedScope(node, isDeclaration, scope)
     return scope
   }
 
@@ -719,14 +718,9 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (!AST.isTaoFile(root)) {
       return this.createScopeForNodes([])
     }
-    const declarations = [
-      ...root.statements.filter(AST.isEntityDataDeclaration),
-      ...this.importedDeclarations(node, AST.isEntityDataDeclaration),
-    ]
-    return this.createScope(
-      declarations.map(declaration =>
-        this.descriptions.createDescription(declaration, declaration.name, AST.getDocument(declaration))
-      ),
+    return this.createScopeForNodes(
+      root.statements.filter(AST.isEntityDataDeclaration),
+      this.createImportedScope(node, AST.isEntityDataDeclaration),
     )
   }
 
@@ -735,14 +729,13 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (!AST.isTaoFile(root)) {
       return this.createScopeForNodes([])
     }
-    const declarations = [
-      ...root.statements.filter(AST.isEntityDataDeclaration),
-      ...this.importedDeclarations(node, AST.isEntityDataDeclaration, declaration => declaration.singularName),
-    ]
-    const descriptions = declarations.map(declaration =>
+    const descriptions = root.statements.filter(AST.isEntityDataDeclaration).map(declaration =>
       this.descriptions.createDescription(declaration, declaration.singularName, AST.getDocument(declaration))
     )
-    return this.createScope(descriptions)
+    return this.createScope(
+      descriptions,
+      this.createImportedScope(node, AST.isEntityDataDeclaration, undefined, declaration => declaration.singularName),
+    )
   }
 
   private createFixtureDeclarationScope(node: AST.ScenarioFixtureClause | AST.TestFixtureClause): Langium.Scope {
@@ -750,10 +743,10 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (!AST.isTaoFile(root)) {
       return this.createScopeForNodes([])
     }
-    return this.createScopeForNodes([
-      ...root.statements.filter(AST.isFixtureDeclaration),
-      ...this.importedDeclarations(node, AST.isFixtureDeclaration),
-    ])
+    return this.createScopeForNodes(
+      root.statements.filter(AST.isFixtureDeclaration),
+      this.createImportedScope(node, AST.isFixtureDeclaration),
+    )
   }
 
   private createScenarioSubjectScope(node: AST.ScenarioGroupDeclaration): Langium.Scope {
@@ -765,10 +758,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       ...AST.appValueDeclarationsInFile(root),
       ...root.statements.filter(AST.isViewDeclaration),
     ])
-    scope = this.createScopeForNodes(
-      this.importedDeclarations(node, AST.isScenarioSubjectDeclaration),
-      scope,
-    )
+    scope = this.createImportedScope(node, AST.isScenarioSubjectDeclaration, scope)
     return scope
   }
 
@@ -899,13 +889,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       return this.createScopeForNodes([])
     }
     let scope = this.createScopeForNodes(AST.appValueDeclarationsInFile(root))
-    scope = this.createScopeForNodes(
-      this.importedDeclarations(
-        node,
-        AST.isConcreteAppValueDeclaration,
-      ),
-      scope,
-    )
+    scope = this.createImportedScope(node, AST.isConcreteAppValueDeclaration, scope)
     return scope
   }
 
@@ -994,31 +978,64 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     )
   }
 
-  private importedDeclarations<DeclarationT extends AST.Declaration>(
+  private importedBindings<DeclarationT extends AST.Declaration>(
     node: AST.Node,
     isDeclaration: (node: AST.Node) => node is DeclarationT,
     importedName: (declaration: DeclarationT) => string = declaration => declaration.name,
-  ): DeclarationT[] {
+  ): AST.VisibleFileBinding<DeclarationT>[] {
     const root = AST.findRoot(node)
     if (!AST.isTaoFile(root)) {
       return []
     }
-    const document = AST.getDocument(node)
-    const currentPath = document.uri.path
-
-    const declarations: DeclarationT[] = [...this.folderDeclarations(currentPath, isDeclaration)]
-    for (const useStatement of root.statements.filter(AST.isUseStatement)) {
-      const importedNames = new Set(useStatement.importedDeclarations.map(reference => reference.$refText))
-      for (const statement of this.collectTargetDeclarations(useStatement, currentPath)) {
-        if (
-          AST.isDeclaration(statement) && isDeclaration(statement)
-          && (useStatement.all || importedNames.has(importedName(statement)))
-        ) {
-          declarations.push(statement)
+    const currentPath = AST.getDocument(node).uri.path
+    const bindings: AST.VisibleFileBinding<DeclarationT>[] = this.folderDeclarations(currentPath, isDeclaration)
+      .map(declaration => ({
+        declaration,
+        sourceName: importedName(declaration),
+        localName: importedName(declaration),
+        namespace: AST.isEntityDataDeclaration(declaration) && importedName(declaration) === declaration.singularName
+          ? 'type' as const
+          : AST.declarationNamespace(declaration),
+      }))
+    for (const use of root.statements.filter(AST.isUseStatement)) {
+      for (const binding of AST.resolvedImportedBindings(use, this.collectTargetDeclarations(use, currentPath))) {
+        const declaration = binding.declaration
+        if (isDeclaration(declaration) && binding.sourceName === importedName(declaration)) {
+          bindings.push({
+            declaration,
+            sourceName: binding.sourceName,
+            localName: binding.localName,
+            namespace: binding.namespace,
+          })
         }
       }
     }
-    return declarations
+    return bindings
+  }
+
+  private createScopeForBindings<DeclarationT extends AST.Declaration>(
+    bindings: readonly AST.VisibleFileBinding<DeclarationT>[],
+    outerScope?: Langium.Scope,
+  ): Langium.Scope {
+    return this.createScope(
+      bindings.map(binding =>
+        this.descriptions.createDescription(
+          binding.declaration,
+          binding.localName,
+          AST.getDocument(binding.declaration),
+        )
+      ),
+      outerScope,
+    )
+  }
+
+  private createImportedScope<DeclarationT extends AST.Declaration>(
+    node: AST.Node,
+    isDeclaration: (node: AST.Node) => node is DeclarationT,
+    outerScope?: Langium.Scope,
+    importedName?: (declaration: DeclarationT) => string,
+  ): Langium.Scope {
+    return this.createScopeForBindings(this.importedBindings(node, isDeclaration, importedName), outerScope)
   }
 
   // A `folder` declaration joins its siblings' scopes with no `use` statement naming it. This sits
@@ -1114,7 +1131,9 @@ function constructorParameterDefinition(parameter: AST.ParameterDeclaration): AS
   if (!reference || reference.members.length > 0) {
     return undefined
   }
-  return ASTStruct.visibleFileDeclarations(reference, AST.isTypeDeclaration).find(type => type.name === reference.root)
+  return ASTStruct.visibleFileBindings(reference, AST.isTypeDeclaration).find(binding =>
+    binding.localName === reference.root
+  )?.declaration
 }
 
 /** Inline parameter types enter only through the selected signature, never file imports. */
@@ -1165,9 +1184,9 @@ function entityDataForValueDeclaration(
   if (AST.isParameterDeclaration(declaration)) {
     const type = declaration.inlineType ? declaration.inlineType.type : declaration.type
     if (AST.isNamedTypeReference(type) && type.members.length === 0) {
-      return AST.visibleFileDeclarations(context, AST.isEntityDataDeclaration, entity => entity.singularName).find(
-        entity => entity.singularName === type.root,
-      )
+      return AST.visibleFileBindings(context, AST.isEntityDataDeclaration, entity => entity.singularName).find(
+        binding => binding.localName === type.root,
+      )?.declaration
     }
   }
   if (AST.isForStatement(declaration)) {
@@ -1205,11 +1224,8 @@ function relationEntityForField(
     return undefined
   }
   const relationName = field.typeName ?? field.name
-  return AST.visibleFileDeclarations(
-    field,
-    AST.isEntityDataDeclaration,
-    entity => entity.name === relationName ? entity.name : entity.singularName,
-  ).find(entity => entity.singularName === relationName || entity.name === relationName)
+  return AST.visibleFileBindings(field, AST.isEntityDataDeclaration)
+    .find(binding => binding.localName === relationName)?.declaration
 }
 
 function entityDataForCollection(
@@ -1228,7 +1244,8 @@ function entityDataForCollection(
   if (!owner || !fieldName) {
     return undefined
   }
-  return AST.visibleFileDeclarations(context, AST.isEntityDataDeclaration).find(entity => entity.name === fieldName)
+  return AST.visibleFileBindings(context, AST.isEntityDataDeclaration).find(binding => binding.localName === fieldName)
+    ?.declaration
 }
 
 function entityDataForQuery(query: AST.EntityQueryDeclaration): AST.EntityDataDeclaration | undefined {
@@ -1236,8 +1253,8 @@ function entityDataForQuery(query: AST.EntityQueryDeclaration): AST.EntityDataDe
     return entityDataForCollection(query.source, query)
   }
   const sourceName = query.sourceName ?? query.name
-  return AST.visibleFileDeclarations(query, AST.isEntityDataDeclaration, entity => entity.name)
-    .find(entity => entity.name === sourceName)
+  return AST.visibleFileBindings(query, AST.isEntityDataDeclaration, entity => entity.name)
+    .find(binding => binding.localName === sourceName)?.declaration
 }
 
 type ScopeCarrier =
@@ -1387,10 +1404,11 @@ function parameterValueName(parameter: AST.ParameterDeclaration): string | undef
 function preferredConstructorDeclarations(
   node: AST.ConfiguredValue,
   candidates: readonly AST.ConstructorDeclaration[],
+  names: (declaration: AST.ConstructorDeclaration) => readonly string[] = declaration => [declaration.name],
 ): AST.ConstructorDeclaration[] {
   // Completion creates a partial constructor before it has a reference token.
   const rootName = node.type?.$refText
-  const sameName = candidates.filter(candidate => candidate.name === rootName)
+  const sameName = candidates.filter(candidate => rootName !== undefined && names(candidate).includes(rootName))
   if (sameName.length <= 1) {
     return [...candidates]
   }
@@ -1408,7 +1426,7 @@ function preferredConstructorDeclarations(
     ? typeMatches
     : sameName
   return [
-    ...candidates.filter(candidate => candidate.name !== rootName),
+    ...candidates.filter(candidate => rootName === undefined || !names(candidate).includes(rootName)),
     ...preferred,
   ]
 }

@@ -158,6 +158,20 @@ import of the root `Documents` collection. Local declarations and implicitly vis
 declarations retain both names. Import organization and unused-import diagnostics track each
 imported form independently.
 
+A named import may choose a local spelling with `as`:
+
+```tao
+use Title as TitleType from ./library/Library
+use Workspaces as LocalWorkspaces, Workspace as LocalWorkspace from @data
+```
+
+The source spelling selects the exported declaration and its visibility; the local spelling is
+used in the receiving file. An alias retains the original type, signature projections, and
+associated-method owner. Renaming an entity form retains its singular or collection cardinality.
+Type and value namespace peers selected by one source name share its local alias. Collisions and
+unused-import checks use the local spelling. Import organization preserves an alias beside a
+wildcard when that wildcard cannot supply the alias's local name.
+
 `use all from Path` imports every public declaration from that target, including both names of
 public entity data. It supports the same relative, module and dependency paths as named imports;
 named imports retain their existing visibility rules. Wildcard imports never expose file, folder

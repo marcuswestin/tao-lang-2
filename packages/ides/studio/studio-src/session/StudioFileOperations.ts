@@ -506,42 +506,63 @@ function rewriteGeneratedStudioImports(
   const uses = file.statements.filter(AST.isUseStatement)
   const sourceUses = uses.filter(statement =>
     statement.importPath === '@/studio'
-    && statement.importedDeclarations.some(reference => reference.$refText === name)
+    && statement.importedDeclarations.some(specifier => AST.importSourceName(specifier) === name)
   )
   if (sourceUses.length === 0) {
     return undefined
   }
-  const targetUse = uses.find(statement => statement.importPath === targetPackage)
+  const moved = sourceUses.flatMap(statement =>
+    statement.importedDeclarations.filter(specifier => AST.importSourceName(specifier) === name)
+  )
+  const targetUses = uses.filter(statement => statement.importPath === targetPackage)
+  const targetUse = targetUses.find(statement => !statement.all)
+  const targetWildcard = targetUses.some(statement => statement.all)
   const edits: Array<{ end: number; replacement: string; start: number }> = sourceUses.map(statement => {
     Assert.defined(statement.$cstNode, 'parsed use statement has source coordinates')
     const remaining = statement.importedDeclarations
-      .map(reference => reference.$refText)
-      .filter(imported => imported !== name)
+      .filter(specifier => AST.importSourceName(specifier) !== name)
+      .map(AST.importSpecifierText)
     return {
       end: statement.$cstNode.end,
       replacement: remaining.length === 0 ? '' : `use ${remaining.join(', ')} from @/studio`,
       start: statement.$cstNode.offset,
     }
   })
-  if (targetUse === undefined) {
-    const lastUse = uses.at(-1)
-    if (lastUse?.$cstNode) {
-      edits.push({
-        end: lastUse.$cstNode.end,
-        replacement: `\nuse ${name} from ${targetPackage}`,
-        start: lastUse.$cstNode.end,
-      })
-    } else {
-      edits.push({ end: 0, replacement: `use ${name} from ${targetPackage}\n\n`, start: 0 })
-    }
-  } else if (!targetUse.importedDeclarations.some(reference => reference.$refText === name)) {
+  const additions = moved.filter(specifier => {
+    const localName = AST.importLocalName(specifier)
+    const existing = targetUse?.importedDeclarations.find(candidate => AST.importLocalName(candidate) === localName)
+    Assert.input(
+      existing === undefined || AST.importSourceName(existing) === AST.importSourceName(specifier),
+      `Cannot move ${name}; ${localName} is already imported from another declaration.`,
+    )
+    return existing === undefined
+      && !(targetWildcard && AST.importLocalName(specifier) === AST.importSourceName(specifier))
+  })
+  if (targetUse !== undefined && additions.length > 0) {
     Assert.defined(targetUse.$cstNode, 'parsed target use statement has source coordinates')
-    const names = [...targetUse.importedDeclarations.map(reference => reference.$refText), name].toSorted()
+    const names = [
+      ...new Set([
+        ...targetUse.importedDeclarations.map(AST.importSpecifierText),
+        ...additions.map(AST.importSpecifierText),
+      ]),
+    ].toSorted()
     edits.push({
       end: targetUse.$cstNode.end,
       replacement: `use ${names.join(', ')} from ${targetPackage}`,
       start: targetUse.$cstNode.offset,
     })
+  } else if (additions.length > 0) {
+    const specs = additions.map(AST.importSpecifierText).toSorted()
+    const lastUse = uses.at(-1)
+    if (lastUse?.$cstNode) {
+      edits.push({
+        end: lastUse.$cstNode.end,
+        replacement: `\nuse ${specs.join(', ')} from ${targetPackage}`,
+        start: lastUse.$cstNode.end,
+      })
+    } else {
+      edits.push({ end: 0, replacement: `use ${specs.join(', ')} from ${targetPackage}\n\n`, start: 0 })
+    }
   }
   return edits
     .toSorted((left, right) => right.start - left.start)
