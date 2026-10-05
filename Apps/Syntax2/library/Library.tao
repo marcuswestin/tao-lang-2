@@ -1,4 +1,4 @@
-use UpperCase from @tao/core
+use Comparison, Ordered, UpperCase from @tao/core
 
 // 1. Private semantic roles remain accessible through the exported signature.
 public
@@ -38,6 +38,10 @@ type Title is text with {
       return UpperCase(Title)
    }
 
+   func Compare(Other Title) fails never -> Comparison {
+      return CompareTitles(Title, Other) from ./Library.ts
+   }
+
    view Render() {
       render Title.ToText()
    }
@@ -46,6 +50,24 @@ type Title is text with {
       return Title "Library"
    }
 }
+
+// 3.1 Both roles retain one concrete ordered/displayable type.
+public
+func EarlierLabel where type T is Ordered and Display (Left T, Right T) {
+   return pick Left.Compare(Right) {
+      greater -> Right.ToText()
+      otherwise -> Left.ToText()
+}  }
+
+public
+type Score is number with {
+   func +(Other Score) fails never -> Score {
+      return AddScores(Score, Other) from ./Library.ts
+   }
+
+   Score as Title fails never {
+      return Title "{ Score }"
+}  }
 
 public
 type NewBook is Book { Title }

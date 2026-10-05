@@ -11,23 +11,11 @@ use CreateTemporaryPDF, DeleteTemporaryFile, UploadFile,
 // 2. Structural capabilities; omitted owner prefix is canonical in with.
 // Display and Title's structural rendering/static default graduated to Library.tao.
 public can ui { Render() -> rendered }
-public func EarlierLabel
-   where type T is Ordered and Display
-   (Left T, Right T) {
-   return pick {
-      Left <= Right -> Left.ToText()
-      otherwise -> Right.ToText()
-   }
-}
+// EarlierLabel's same-type generic comparison and total pick graduated to Library.tao.
 // 2.1 Subtract graduated to Library.tao.
 
 // 2.1 Pure native operator; raw JavaScript output must be checked and wrapped.
-public type Score is number with {
-   func +(Other Score) {
-      return `types.Score.fromJSValue(Score.getJSValue() + Other.getJSValue())`
-   }
-   Score as Title fails never { return Title "{Score}" }
-}
+// Score's native addition and explicit Title converter graduated to Library.tao/Library.ts.
 
 // 3. Live item handles, inverse field, item and collection receivers.
 public type NewBook is { Title }

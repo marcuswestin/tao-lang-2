@@ -9,6 +9,8 @@ test "Syntax2 Library" {
       expect text "Ada Lovelace"
       expect text "ADA"
       expect text "LIBRARY"
+      expect text "Earlier: LIBRARY"
+      expect text "5"
       expect text "2 readers"
       expect text "3"
       expect text "Quantity arithmetic ready."

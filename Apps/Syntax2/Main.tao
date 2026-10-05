@@ -1,7 +1,7 @@
 use Duration, Length, Ratio, UpperCase from @tao/core
 use all from @tao/ui
 use BookStore, LoadAfter, Refresh from ./library/BookIO
-use Books, ComparedNames, GroupMode, PersonName, Subtract, Title from ./library/Library
+use Books, ComparedNames, EarlierLabel, GroupMode, PersonName, Score, Subtract, Title from ./library/Library
 
 app LibraryApp {
    id "com.tao.syntax2"
@@ -28,6 +28,10 @@ view Library {
    let Readers = ComparedNames ["Ada", "Lovelace"]
    let Shout = UpperCase(ProfileName "Ada")
    let Caption = Title.Default()
+   let ShelfLabel = Title "Shelf"
+   let Label = EarlierLabel(.Right ShelfLabel, .Left Caption)
+   let Points = Score 2 + Score 3
+   let ScoreLabel = Points as Title
    // 2.1 Quantities keep their unit view; dimensionless division yields Ratio.
    let Span = 2 minutes + 30 seconds
    let Scaled = 2 * Span
@@ -48,6 +52,8 @@ view Library {
       Person
       Shout
       Caption
+      "Earlier: { Label }"
+      ScoreLabel
       "{ Length(Readers) } readers"
       Feedback
       Row {

@@ -112,7 +112,12 @@ export function referencedAssociatedWitnessOwners(
           invocation.function && invocation.diagnostics.length === 0,
           'Expected a validated function call correspondence.',
         )
-        invocation.pairs.forEach(pair => transport(pair.argument.value, Type.ofParameter(pair.parameter)))
+        invocation.pairs.forEach(pair =>
+          transport(
+            Type.genericRoleConstructor(pair.argument)?.value ?? pair.argument.value,
+            invocation.transportTypes?.get(pair.parameter) ?? Type.ofParameter(pair.parameter),
+          )
+        )
       }
       if (AST.isConversionExpression(node)) {
         const converter = Type.associatedConversion(node).descriptor

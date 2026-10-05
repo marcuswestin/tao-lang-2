@@ -18,10 +18,13 @@ remains undiscovered.
   Signed quantity arithmetic exercises Duration and Ratio; Title.Default supplies a structural
   UI value whose associated Render calls its pure uppercase ToText method. Book titles use that
   same selected renderer, producing uppercase labels.
+  EarlierLabel uses one generic Ordered/Display domain and a total first-match pick;
+  Score demonstrates checked native addition and an explicit Title conversion.
 - [library/Library.tao](library/Library.tao): graduated Name/GivenName/FamilyName, PersonName and
   Subtract declarations. The app renders Ada Lovelace and 3 using the actual signature projections
   and argument matcher. ComparedNames constructs a list with contextual Name elements.
-  Display, Title's associated methods/view, and GroupMode are graduated as well.
+  Display, Title's associated methods/view, GroupMode, EarlierLabel and Score are graduated as well.
+  Library.ts supplies pure text ordering and numeric addition at the checked native boundary.
 - [Library.test.tao](Library.test.tao): active journey asserting the header and both directions of
   the grouping display transition, signature-role results, and bounded book acquisition,
   continuation and refresh.
