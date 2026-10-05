@@ -130,11 +130,26 @@ Describe('Canonical callable effect projection', () => {
       Expect.Is(nestedReference, AST.isValueReference)
       const ordinaryReference = AST.returnStatementsOf(other)[0]?.value
       Expect.Is(ordinaryReference, AST.isValueReference)
-      for (const reference of [member, nestedReference, ordinaryReference]) {
+      for (const reference of [member, ordinaryReference]) {
         const read = snapshot.reads.get(reference)
         Assert.defined(read, 'the real conservative read keeps its canonical publication')
         Expect(read.classification).toBe('unknown')
         Expect(read.kind).toBe('unknown')
+      }
+      const transport = snapshot.reads.get(nestedReference)
+      Assert.defined(transport, 'the immediate source argument keeps its canonical publication')
+      Expect(transport.classification).toBe('immutable')
+      Expect(transport.kind).toBe('complete')
+      Expect(transport.proof?.kind).toBe('source-call-entity-transport')
+      if (transport.proof?.kind === 'source-call-entity-transport') {
+        Expect(transport.proof.owner).toBe(nested)
+        Expect(transport.proof.call).toBe(inner)
+        Expect(transport.proof.argument).toBe(inner.argumentList?.arguments[0])
+        Expect(transport.proof.sourceParameter).toBe(nestedReference.target.ref)
+        Expect(transport.proof.target).toBe(other)
+        Expect(transport.proof.targetParameter).toBe(other.parameterList.parameters[0])
+        Expect(transport.proof.entity).toBe(file.statements.find(AST.isEntityDataDeclaration))
+        Expect(transport.proof.cardinality).toBe('one')
       }
       const projected = projectCallableEffectPublications(snapshot, nested)
       const facts = discoverCallableEffectFacts(nested, projected.inputs, projected.context)

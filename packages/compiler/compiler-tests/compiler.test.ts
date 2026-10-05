@@ -1841,9 +1841,10 @@ Describe('compiler: language lowering', () => {
             ...('enabled' in step ? { enabled: step.enabled } : {}),
             ...('fresh' in step ? { fresh: step.fresh } : {}),
             ...('tag' in step ? { tag: step.tag } : {}),
+            ...('missing' in step ? { missing: step.missing } : {}),
           })),
         ).toEqual([
-          { kind: 'expect', selector: 'text', text: 'Hello' },
+          { kind: 'expect', missing: false, selector: 'text', text: 'Hello' },
           { kind: 'press', selector: 'text', text: 'Add' },
           { kind: 'pressDown', selector: 'label', target: 'Add' },
           { kind: 'pressUp', selector: 'tag', target: 'add' },
@@ -1858,7 +1859,7 @@ Describe('compiler: language lowering', () => {
           { kind: 'back' },
           { fresh: false, kind: 'relaunch' },
           { fresh: true, kind: 'relaunch' },
-          { kind: 'expect', selector: 'text', text: 'Loading' },
+          { kind: 'expect', missing: true, selector: 'text', text: 'Loading' },
         ])
         Expect(plan.suites[0]?.source.range).toBeDefined()
         Expect(plan.suites[0]?.checks[0]?.run.source.range).toBeDefined()

@@ -39,6 +39,7 @@ export const testValidationMessages = {
   narrowPlacement: 'Narrow steps are only allowed inside test blocks.',
   selector: (selector: string) =>
     `Unsupported test selector '${selector}'. Supported selectors: ${supportedSelectors.join(', ')}.`,
+  missingModifier: (word: string) => `Only 'missing' is valid as a text expectation modifier, got '${word}'.`,
   inputSelector: (selector: string) =>
     `Unsupported input test selector '${selector}'. Supported selectors: ${supportedInputSelectors.join(', ')}.`,
   missingRun: (name: string) => `Test '${name}' must start exactly one app with run.`,
@@ -109,7 +110,8 @@ export const testValidationChecks = {
   [AST.WaitForSyncStep.$type]: validateSyncPlacement,
   [AST.DatasourceFailureStep.$type]: [validateDatasourceFailurePlacement, validateDatasourceFailureTarget],
   [AST.ExpectCheckboxStateStep.$type]: validateExpectationPlacement,
-  [AST.ExpectTextStep.$type]: [validateExpectationPlacement, validateSelector],
+  [AST.ExpectTextStep.$type]: [validateExpectationPlacement, validateSelector, validateMissingModifier],
+  [AST.TestExpectation.$type]: validateMissingModifier,
   [AST.ExpectNavigationTitleStep.$type]: [
     validateExpectationPlacement,
     validateNavigationVocabulary,
@@ -510,6 +512,15 @@ function validateSelector(
   }
   if (!supportedSelectors.includes(step.selector as (typeof supportedSelectors)[number])) {
     ctx.error(step, testValidationMessages.selector(step.selector))
+  }
+}
+
+function validateMissingModifier(
+  step: AST.ExpectTextStep | AST.TestExpectation,
+  ctx: ValidationContext,
+): void {
+  if (step.missing !== undefined && step.missing !== 'missing') {
+    ctx.error(step, testValidationMessages.missingModifier(step.missing))
   }
 }
 

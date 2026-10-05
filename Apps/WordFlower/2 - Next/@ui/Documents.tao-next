@@ -29,7 +29,7 @@ scene DocumentScreen(Document) {
    render Col() [grow] {
       // The screen names the one case it words itself; loading, unauthorized, and error go to the net.
       guard Document {
-         missing -> {
+         none -> {
             TextMultiline("Document { Document.Id } no longer exists.") [body] // a handle keeps its Id
       }  }
       DocumentEditor(Document)

@@ -99,7 +99,7 @@ scene IngredientDetail(Ingredient) {
          Text("INGREDIENT") [eyebrow]
          guard Ingredient {
             loading -> { Spinner() }
-            missing -> { TextMultiline("This ingredient no longer exists.") [body] }
+            none -> { TextMultiline("This ingredient no longer exists.") [body] }
             error -> Context { TextMultiline("The ingredient could not be loaded: { Context.Message }") [body] }
          }
 

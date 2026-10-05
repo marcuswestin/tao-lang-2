@@ -413,7 +413,7 @@ called action's current block; execution after `do Callee()` in the caller conti
 a nested event handler stops only that handler block. A render guard renders its matched handler and
 skips only later siblings in the same render block.
 
-An entity subject additionally supports `loading`, `missing`, `unauthorized`, and `error`.
+An entity subject additionally supports `loading`, `none`, `unauthorized`, and `error`.
 Exceptional render-guard payloads are `ReadContext` records, whose `Message` is safe display copy;
 optional metadata, timing, cause and recovery fields are `none` when unknown or unimplemented.
 Ordinary `when` and action-guard error payloads remain text.
@@ -430,7 +430,7 @@ guard Document {
          Spinner()
          Text(Context.Message)
       }
-   missing -> Context { Text(Context.Message) }
+   none -> Context { Text(Context.Message) }
    unauthorized -> Context { Text(Context.Message) }
    error -> Context { Text(Context.Message) }
 }

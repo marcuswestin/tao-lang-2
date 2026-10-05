@@ -39,14 +39,29 @@ Describe('validator: public none subject case', () => {
   )
 
   Test(
-    'rejects missing as an entity subject case',
+    'accepts missing as a declared enum case name',
+    accepts(`
+      type Availability is one of missing, Available
+      view Main(Current Availability) {
+        action Check() { check Current is missing }
+        render Stack() {
+          when Current {
+            missing -> { Text("Unavailable") }
+            Available -> { Text("Ready") }
+            otherwise -> { Text("Unknown") }
+          }
+        }
+      }
+      ${runtimeViews}
+    `),
+  )
+
+  Test(
+    'rejects missing as an entity guard case',
     rejects(
       `
         data Documents / Document { Title text }
-        view Main(Document) { render Stack() { when Document {
-          missing -> { Text("Gone") }
-          otherwise -> { Text("Ready") }
-        } } }
+        view Main(Document) { render Stack() { guard Document { missing -> { Text("Gone") } } } }
         ${runtimeViews}
       `,
       FunctionalCoreValidator.messages.invalidCase('missing', 'an entity subject'),
@@ -63,5 +78,14 @@ Describe('validator: public none subject case', () => {
       `,
       FunctionalCoreValidator.messages.appGuardCase('missing'),
     ),
+  )
+
+  Test(
+    'does not treat missing as a built-in entity case test',
+    rejects(`
+      data Documents / Document { Title text }
+      view Main(Document) { action Check() { check Document is missing } render Stack() }
+      ${runtimeViews}
+    `),
   )
 })

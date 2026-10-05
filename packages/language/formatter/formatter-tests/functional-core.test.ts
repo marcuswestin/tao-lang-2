@@ -132,18 +132,36 @@ Describe('functional core formatter', () => {
   Test(
     'formats grouped entity availability guards and their error payload',
     formats(
-      `view DocumentScreen(Document){render Stack(){guard Document{loading->{Text("Loading")}missing->{Text("Missing")}unauthorized->{Text("Unauthorized")}error->Context{Text(Context.Message)}}DocumentEditor(Document)}}`,
+      `view DocumentScreen(Document){render Stack(){guard Document{loading->{Text("Loading")}none->{Text("No longer present")}unauthorized->{Text("Unauthorized")}error->Context{Text(Context.Message)}}DocumentEditor(Document)}}`,
       `
         view DocumentScreen(Document) {
            render Stack() {
               guard Document {
                  loading -> { Text("Loading") }
-                 missing -> { Text("Missing") }
+                 none -> { Text("No longer present") }
                  unauthorized -> { Text("Unauthorized") }
                  error -> Context { Text(Context.Message) }
               }
               DocumentEditor(Document)
         }  }
+      `,
+    ),
+  )
+
+  Test(
+    'preserves a declared enum case named missing as an identifier',
+    formats(
+      `type Availability is one of missing, Available\nview Main(Current Availability){render Stack(){when Current{missing->{Text("Unavailable")}Available->{Text("Ready")}otherwise->{Text("Unknown")}}}}`,
+      `
+        type Availability is one of missing, Available
+
+        view Main(Current Availability) {
+           render Stack() {
+              when Current {
+                 missing -> { Text("Unavailable") }
+                 Available -> { Text("Ready") }
+                 otherwise -> { Text("Unknown") }
+        }  }  }
       `,
     ),
   )

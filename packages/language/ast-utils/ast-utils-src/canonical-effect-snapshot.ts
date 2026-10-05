@@ -106,6 +106,17 @@ export type CanonicalReadPublication =
         entity: AST.EntityDataDeclaration
         capability: AST.TypeDeclaration
       }>
+      | Readonly<{
+        kind: 'source-call-entity-transport'
+        owner: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration
+        call: AST.FunctionCallExpression | AST.MethodCallExpression
+        argument: AST.Argument
+        sourceParameter: AST.ParameterDeclaration
+        target: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration
+        targetParameter: AST.ParameterDeclaration
+        entity: AST.EntityDataDeclaration
+        cardinality: 'one' | 'many'
+      }>
     initializer?: AST.Expression
   }>
 
@@ -563,6 +574,7 @@ export function publishCanonicalEffectSnapshot(
     }
   }
   publishConfiguredEntityTransport(constructors, reads, resolution)
+  publishSourceEntityTransport(calls, reads, resolution)
   const snapshot: CanonicalEffectIndependentSnapshot = Object.freeze({
     [factoryBrand]: true as const,
     phase: 'correspondence',
@@ -831,6 +843,116 @@ function nativeArgumentOwner(
     return undefined
   }
   return nativeForwardOwners.get(call)
+}
+
+/** Explicit source arguments transport readonly handles; the callee's executing body remains separate. */
+function publishSourceEntityTransport(
+  calls: ReadonlyMap<AST.Node, CanonicalCallPublication>,
+  reads: Map<AST.Node, CanonicalReadPublication>,
+  resolution: Pick<ReturnType<typeof Type.correspondenceResolver>, 'ofParameter' | 'ofReferenceRoot'>,
+): void {
+  for (const call of calls.values()) {
+    if (
+      call.kind !== 'complete' || call.descriptor?.kind !== 'source'
+      || (!AST.isFunctionCallExpression(call.site) && !AST.isMethodCallExpression(call.site))
+      || (!AST.isFunctionDeclaration(call.target) && !AST.isAssociatedFunctionDeclaration(call.target))
+      || call.descriptor.declaration !== call.target || !call.descriptor.body
+    ) {
+      continue
+    }
+    for (const pair of call.pairs) {
+      const reference = pair.argument.value
+      const destination = pair.parameter
+      if (
+        !AST.isValueReference(reference) || reference.$container !== pair.argument
+        || !AST.argumentsOf(call.site).includes(pair.argument) || destination.mutable || destination.copy
+      ) {
+        continue
+      }
+      const parameter = reference.target.ref
+      if (!AST.isParameterDeclaration(parameter) || parameter.mutable || parameter.copy) {
+        continue
+      }
+      const owner = AST.findOwningAssociatedFunction(parameter) ?? AST.findOwningFunction(parameter)
+      const destinationOwner = AST.findOwningAssociatedFunction(destination) ?? AST.findOwningFunction(destination)
+      if (!owner || destinationOwner !== call.target || !executesInSourceFunction(reference, owner)) {
+        continue
+      }
+      const source = entityTransportDomain(resolution.ofParameter(parameter))
+      const readDomain = entityTransportDomain(resolution.ofReferenceRoot(reference))
+      const expected = entityTransportDomain(resolution.ofParameter(destination))
+      const input = call.descriptor.signature?.inputs.find(input => input.declaration === destination)
+      const canonical = input && entityTransportDomain(input.type)
+      if (
+        !source || !readDomain || !expected || !canonical
+        || [readDomain, expected, canonical].some(domain =>
+          domain.entity !== source.entity || domain.cardinality !== source.cardinality
+        )
+      ) {
+        continue
+      }
+      const read = reads.get(reference)
+      if (
+        read?.kind !== 'unknown' || read.classification !== 'unknown' || read.declaration !== parameter
+        || read.proof?.kind !== 'parameter' || read.proof.owner !== owner
+      ) {
+        continue
+      }
+      reads.set(
+        reference,
+        Object.freeze({
+          reference,
+          declaration: parameter,
+          classification: 'immutable',
+          kind: 'complete',
+          proof: Object.freeze({
+            kind: 'source-call-entity-transport',
+            owner,
+            call: call.site,
+            argument: pair.argument,
+            sourceParameter: parameter,
+            target: call.target,
+            targetParameter: destination,
+            entity: source.entity,
+            cardinality: source.cardinality,
+          }),
+        }),
+      )
+    }
+  }
+}
+
+function entityTransportDomain(domain: TaoType):
+  | Readonly<{ entity: AST.EntityDataDeclaration; cardinality: 'one' | 'many' }>
+  | undefined
+{
+  return domain.kind === 'entity'
+    ? { entity: domain.entity, cardinality: 'one' }
+    : domain.kind === 'list' && domain.element?.kind === 'entity'
+    ? { entity: domain.element.entity, cardinality: 'many' }
+    : undefined
+}
+
+function executesInSourceFunction(
+  reference: AST.ValueReference,
+  owner: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration,
+): boolean {
+  let current: AST.Node | undefined = reference.$container
+  while (current && current !== owner) {
+    if (current === owner.block) {
+      return true
+    }
+    if (
+      AST.isParameterDeclaration(current) || AST.isActionExpression(current) || AST.isActionDeclaration(current)
+      || AST.isViewDeclaration(current) || AST.isAssociatedViewDeclaration(current)
+      || AST.isFunctionDeclaration(current) || AST.isAssociatedFunctionDeclaration(current)
+      || AST.isAssociatedConverterDeclaration(current)
+    ) {
+      return false
+    }
+    current = current.$container
+  }
+  return false
 }
 
 /** A complete supplied capability binding captures a readonly handle without reading its fields. */
