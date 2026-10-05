@@ -33,6 +33,7 @@ import { LayoutValidator } from './validators/layout-validator'
 import { navigationValidationChecks } from './validators/navigation-validator'
 import { numericUnitReadingsValidationChecks } from './validators/numeric-unit-readings-validator'
 import { numericUnitsValidationChecks } from './validators/numeric-units-validator'
+import { rendererSlotsValidationChecks } from './validators/renderer-slots-validator'
 import { packageValidationChecks, validatePackageFile } from './validators/package-validator'
 import { pairingValidationChecks, validateAppPairing } from './validators/pairing-validator'
 import { PhrasesValidator } from './validators/phrases-validator'
@@ -89,6 +90,7 @@ const nodeValidationChecks = NodeValidation.compile(
     unitsValidationChecks,
     numericUnitsValidationChecks,
     numericUnitReadingsValidationChecks,
+    rendererSlotsValidationChecks,
     bridgeValidationChecks,
     usePackageValidationChecks,
     configuredValueValidationChecks,
