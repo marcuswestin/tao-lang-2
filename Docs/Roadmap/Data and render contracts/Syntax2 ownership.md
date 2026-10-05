@@ -196,6 +196,18 @@ InvocationsCompiler, FunctionalCoreCompiler, Backend, bridge publication and all
 consumers. A requests a bounded consumer hook when needed, rather than changing another owner's
 file. C's two retained compiler paths remain untouched by A.
 
+D now owns exactly new ast-utils-src/callable-effect-facts.ts and
+ast-utils-tests/callable-effect-facts.test.ts. This discovery leaf consumes immutable, already
+published target, correspondence, read and native-contract rows keyed by real AST identity. It
+walks actual execution, arguments despite incomplete binding, selected defaults and live alias
+initializers; carrying a callable does not execute its body. Unproved native and unsupported
+indirect targets remain open. Import AST and effect-contract types only; no Type, binder, resolver,
+facade or resolution callbacks. Publish the input-row ABI early for the associated frontend.
+The coordinator retains production row publication and phase separation: correspondence must be
+available without effect-dependent admission, followed by effect analysis and final admission.
+Provisional correspondence never proves compatibility. Two-file discovery proof alone is not
+integrated function-purity or capability-admission proof; additional shared paths need a new grant.
+
 The integrated numeric continuation gate exposed one regression in source-actions' existing
 adjacent accessibility-label extraction case: a parenthesized label followed by a view invocation
 is consumed as a unit construction. A's parser grant includes repairing that syntactic boundary
