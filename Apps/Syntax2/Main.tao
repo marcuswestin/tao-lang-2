@@ -1,5 +1,6 @@
 use Duration, Length, Ratio, UpperCase from @tao/core
 use all from @tao/ui
+use GroupedShelf, NumberedBook, Shelf from ./Shelves
 use Add from ./library/BookActions
 use BookStore, LoadAfter, LoadedItems, Refresh from ./library/BookIO
 use Books, ComparedNames, EarlierLabel, GroupMode, NewBook, PersonName, Score, Subtract, Title as TitleType from ./library/Library
@@ -109,8 +110,14 @@ view Library {
          empty -> "No books."
          stale -> "Showing cached books."
       }
-      loop Feed / Book {
-         Book
+      "{ LoadedItems(Feed).Count } loaded"
+      when GroupMode {
+         no -> Shelf(LoadedItems(Feed)) {
+            @header Title -> Banner(.Title Title, .Subtitle "{ Length(Readers) } readers")
+            @item Book, Occurrence -> NumberedBook(Occurrence, Book)
+            @footer: empty
+         }
+         yes -> GroupedShelf(LoadedItems(Feed))
       }
       Button("More") {
          on press -> do LoadAfter(Feed)

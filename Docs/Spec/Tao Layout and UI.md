@@ -3,7 +3,7 @@
 Status: authoritative intended design. This document describes where Tao layout is going, not only what this repo implements today.
 
 Current implementation status: this repo has one renderable view family, with `scene is view` and
-`nav is scene is view`, explicit `render` roots, unnamed `@@content`, optional single-fill named render slots, runtime-backed controls and
+`nav is scene is view`, explicit `render` roots, unnamed `@@content`, parameterized named renderer slots, runtime-backed controls and
 containers, private `#tag` test metadata, and bracketed clauses for `content`, `claim`, `gap`,
 `pad`, `margin`, `width`, `height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and `centered`.
 It also implements `width max`, adaptive `Panes`, and typed design values, lowercase styles,
@@ -54,7 +54,8 @@ grammar while carrying the one composition restriction described below:
 - A view accepts unnamed caller content iff its body places `@@content` — in its render tree, or by
   naming the `@@content` channel in its `render inject` list. Passing child content to a view that
   places no `@@content` is a validation error.
-- A view offers named render slots iff its body declares them with `@name = empty`.
+- A view offers named render slots iff its body declares them, for example `@name: empty`
+  or `@item(Item, Occurrence): RowView`.
 - A view answers `ask` iff its head declares `responds <Type>`.
 - A `scene` describes itself to a host by filling a supplied host-facing slot such as `Title` or
   `Toolbar`. `scene is view`: it uses the same body grammar, but is presented rather than composed.
@@ -186,8 +187,9 @@ assignment. Disabled controls suppress native press/change/submit delivery. Nati
 callbacks are revoked on unmount and execute writes through Tao actions.
 
 `ScrollView` is a scrollable container, `Spinner` is a loading indicator, and `Progress` is a
-progress indicator. Rendering a collection remains language-owned through `loop`; Tao deliberately
-introduces no stdlib `List` or function-typed row slot.
+progress indicator. `loop` eagerly renders a collection. The standard-library `LazyList` uses a
+native virtualized viewport and a typed item renderer; acquisition and pagination remain separate
+from rendering. Its identity policy belongs to the library, not to every loop or custom list.
 
 Modal presentation is not an ordinary UI primitive. Non-blocking modal surfaces use
 `present X() as overlay`, which layers above the nearest nav or an explicit `in` target. Every nav
@@ -197,17 +199,39 @@ layering remain a separate deferred design question.
 
 ### Rendering Named Parts of the UI
 
-The first named-slot contract is implemented. Any view may declare an optional named content slot
-with `@name = empty`. A caller may fill it at most once with `@name <view>`. The filled value is
-opaque visual content and renders exactly where the declaring body places `@name`; `empty`
-contributes no node. Parameterized, repeatable, and required slots remain future work.
+Any view may declare a named renderer slot with a default, such as `@footer: empty`, or typed
+inputs, such as `@item(Book, Occurrence): NumberedBook`. Callers fill a slot at most once.
+Omitting the fill selects the default; `@footer: empty` explicitly suppresses it. Place zero-input
+slots with `@footer`, and argumentful slots with `@item(Book, Occurrence)`. Repeated placements
+are supported, each with independent mounted state. A zero-input fill may be ordinary rendered
+content; an argumentful fill is a named renderer or a typed inline binder.
 
-A separate runtime renderer descriptor is ready for the selected parameterized-slot lowering.
+The compiler lowers these declarations to runtime renderer descriptors.
 Each placement mounts its own stable body component with current arguments, captures and occurrence
 metadata. Updating captures preserves mounted state; replacing the body component remounts it.
 Default selection distinguishes absence from an explicitly empty own property, and forwarding
-preserves descriptor identity. This runtime support does not change the source slot contract above;
-parameterized/defaulted declarations, binder fills and repeated placement still await compiler work.
+preserves descriptor identity. `@item: @item` forwards a compatible renderer rather than invoking it.
+An explicitly empty renderer skips placement argument evaluation.
+
+```tao
+view Bookshelf(Items list of Book) {
+   @item(Book, Occurrence): BookRow
+   render LazyList(Items) {
+      @item: @item
+   }
+}
+
+Bookshelf(Books) {
+   @item Book, Position -> NumberedBook(Book, Position)
+}
+```
+
+The exported `LazyList` requires an ordinary structural `Keyed` contract:
+`Key() fails never -> RenderKey`. Its item callback receives the original live item and an
+`Occurrence` with a one-based `Ordinal` in this displayed sequence. Stable keys preserve mounted
+occurrence state through reordering; removal unmounts the occurrence. Duplicate keys fail instead
+of being repaired with indexes. Grouped lists flatten header/item recipes with stable keys and
+retain live data handles; they do not cache mounted nodes or copy provider rows.
 
 ```tao
 use Col, FormButton, Row, Text from @tao/ui
@@ -516,8 +540,8 @@ view LabeledSection(Label text) {
 }
 ```
 
-Render slots are different from `@@content`. Tao implements optional single-fill holes such as
-`@actions`; parameterized forms such as `@row Item` still need their own design.
+Render slots are different from `@@content`: they provide defaultable, typed renderer contracts
+with explicit placements, whereas `@@content` places unnamed caller content.
 
 ## Advanced Layout
 

@@ -148,8 +148,11 @@ Implicit nominal admission follows declared ancestry upward; it does not narrow 
 into a descendant or cross sibling branches. Parameters referencing an existing named type preserve
 that identity. After explicit labels and exact identities, the binder considers compatible assignments
 together and accepts only pairs present in every maximum matching. Ambiguous alternatives remain
-errors instead of depending on argument order. Repeated primitive roles require explicit owner labels
-when unlabelled values cannot distinguish them. Contextual construction of literals and declared field
+errors instead of depending on argument order. Repeated primitive roles require role construction
+when raw values cannot distinguish them: `Subtract(Right 2, Left 5)` binds by scoped role names.
+`.Right 2` explicitly selects the receiving signature role when a lexical type shadows that name;
+the fully qualified projection is also available. Existing named-type inputs preserve their identity
+instead of creating a distinct signature-local type. Contextual construction of literals and declared field
 contracts remains separate from callable admission, including member writes and configured slots.
 
 Defaults may be omitted. A defaulted slot does not compete for an unlabeled value, so override it
@@ -167,13 +170,16 @@ invocations inside a render block. Actions, functions and presentation retain th
 Existing guard/when payload syntax retains priority: `loading -> Context { ... }` binds Context
 to the case payload. To render a view with children in that branch, write
 `loading -> { Handler { ... } }` or retain `Handler() { ... }` where that handler form is accepted.
-Removing those parentheses would change ownership; the bare-view shorthand does not override it.
+The canonical payload spelling is `loading Context -> { ... }`; legacy arrow-before-payload
+forms remain accepted where their handler grammar permits them. A compact quoted branch, such as
+`loading -> "Loading"`, has no payload binder and is unambiguous.
 
 Quoted render entries use the standard-library `Text` view, including its layout and native text
 defaults. This shorthand works without importing `Text` and is unaffected by a local view named
 `Text`; an explicit `Text(...)` call resolves normally. Interpolations remain reactive. Both a
-quoted empty string and explicit `Text("")` retain a text node. Bare text-value placement is not
-part of this implementation slice.
+quoted empty string and explicit `Text("")` retain a text node. A bare text value renders through
+the same library Text behavior, but an empty bare text value emits no node. Bare values with a
+structurally selected `ui` capability invoke their associated renderer instead.
 
 ```tao
 view Greeting(Name text) {
@@ -270,6 +276,54 @@ ordinary item field paths, or a writable parameter. An explicit change handler s
 action-backed mapping instead. Computed values, readonly aliases, and entity fields require that
 mapping or an explicit copy before mutation.
 
+### Structural capabilities and associated behavior
+
+`can` declares a structural behavior contract. Types satisfy it through matching associated
+signatures; they do not list an explicit implementation marker. A capability parameter uses
+ordinary type syntax, and methods inside a type may omit the redundant owner prefix:
+
+```tao
+can Display {
+   ToText() fails never -> text
+}
+
+type Title is text with {
+   func ToText() fails never { return UpperCase(Title) }
+   view Render() { render Title.ToText() }
+}
+
+func DisplayLabel(Value Display) { return Value.ToText() }
+```
+
+Return types may be inferred. An explicit return contract restricts the result. Functions,
+including converters, cannot invoke actions, perform I/O or suspend. A method's failure bound
+participates in structural admission: `fails never` is a closed empty bound, a named list is a
+closed bound, and omission retains an unknown remainder when inference cannot close it.
+
+The library `ui` capability selects an associated `Render` view. A transported capability keeps
+the original live receiver and the validated selected methods; an ordinary object with similar
+fields is not an authenticated runtime behavior carrier. Configured item fields and list
+transport preserve these carriers, including rendering a live Book stored in a grouped-row recipe.
+
+Generic signatures use `where type T is Contract`, with multiple requirements joined by `and`.
+Concrete `Self` requirements refer to that implementing domain. Inference can select an ancestor
+already supplied by a typed argument when every other input admits upward into it. It cannot
+invent an unsupplied ancestor to reconcile siblings. Explicit conversion remains available:
+
+```tao
+func Earlier where type T is Ordered (Left T, Right T) {
+   return pick Left.Compare(Right) {
+      greater -> Right
+      otherwise -> Left
+   }
+}
+Earlier(.Left Cool, .Right Imperial as Celsius)
+```
+
+Static methods retain their declared result identity. Associated converters declare an explicit
+source-to-target transformation inside the source type; merely sharing backing data does not
+permit implicit sibling conversion. Method visibility follows the visible owning type.
+
 ### Reactive parameters and copies
 
 View and action arguments keep live reads. Mutating a parameter with `set` or `toggle`, or
@@ -308,6 +362,11 @@ preserves omitted fields; it does not infer which fields the user changed.
 
 ### Persisted app state
 
+Named-state construction may omit a redundant assignment: `state GroupMode no` constructs
+`GroupMode no` and binds a state value named `GroupMode`. Constructor positions select the type;
+bare value positions select the state. An imported type alias can disambiguate a dotted static
+call when a lexical value has the original type's spelling.
+
 App-level state must declare an explicit type and device-local persistence:
 
 ```tao
@@ -325,27 +384,29 @@ before load finishes. Saves serialize in write order. Persisted state participat
 the explicit runtime-capture registry. This slice permits `(persist)` only on app state; view-local keying
 remains future work.
 
-### Subject `when`
+### Matching: `pick` and `when`
 
-`when` evaluates one subject once and selects one case lazily:
+`pick` produces one value, selecting the first matching case lazily:
 
 ```tao
-let Label = when Draft {
+let Label = pick Draft {
    empty -> "Required"
    otherwise -> Draft
 }
 
 when Ready {
-   true -> { Text("Ready") }
-   otherwise -> { Text("Waiting") }
+   yes -> "Ready"
+   otherwise -> "Waiting"
 }
 ```
 
-`otherwise` is required for every supported `when`; it is always exhaustive. Value branches must
-have compatible results. Exact boolean cases preserve ordinary boolean conditionals. Query subjects
-add mutually exclusive `loading`, `error -> Message`, and ready `empty` cases. Render branches use
-blocks. This tranche did not introduce an action-statement `when`; actions use `check`, one-sided
-`if`, and guards.
+`pick` requires exhaustiveness and compatible result types. Statement and render `when` run every
+matching case in source order. They capture the subject and all case matches before running any
+case, so writes in one action case cannot change which later cases run. A failure interrupts the
+remaining action cases. `otherwise` runs only when no ordinary case matched; it is optional for
+multi-outcome `when`. Query states can overlap, such as usable empty content while refreshing.
+Condition-only forms use `pick { Condition -> Value ... }` or `when { Condition -> Body ... }`.
+Existing value-position `when` remains a compatibility spelling for single-value matching.
 
 ### One-sided `if`
 
