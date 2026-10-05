@@ -18,6 +18,7 @@ import {
 } from './TR-interaction-outline'
 import { InteractionScrollContext, type Measurable, measuredBounds, revealMountedRow } from './TR-interaction-scroll'
 import { LayoutControls, type TaoLayoutEntry, type TaoResolvedLayoutStyle } from './TR-layout'
+import { invokeNativeEvent, type NativeEventAction } from './TR-native-events'
 import { ParentDirectionContext } from './TR-parent-direction'
 import { type ReactNativeRuntime, requireReactNativeRuntime } from './TR-react-native'
 import { catalystPalette, SchemeControls } from './TR-scheme'
@@ -25,9 +26,7 @@ import RuntimeSwitch from './TR-switch'
 import { TaoPropsControls, type TaoViewProps, type TaoViewRuntimeProps } from './TR-TaoProps'
 
 type TaoButtonProps = TaoViewProps & {
-  action?: {
-    invoke(): unknown
-  }
+  action?: NativeEventAction<[]>
   /** defaultStyle is component chrome applied below mounted design and render-site overrides. */
   defaultStyle?: TaoResolvedLayoutStyle
   disabled?: boolean
@@ -72,7 +71,7 @@ type TaoTextInputProps = TaoViewProps & {
   id?: string
   label: string
   onChange?: (value: string) => unknown
-  onSubmit?: () => unknown
+  onSubmit?: (event?: unknown) => unknown
   placeholder?: string
   secure?: boolean
   value: string
@@ -130,7 +129,11 @@ export const Views = {
       kind: 'Pressable',
       nativePropOverrides: {
         disabled: props.disabled === true,
-        onPress: props.disabled === true ? undefined : () => props.action?.invoke(),
+        onPress: props.disabled === true ? undefined : (event?: unknown) => {
+          if (props.action) {
+            return invokeNativeEvent(props.action, event)
+          }
+        },
       },
       pressableTitle: props.title,
       providesParentDirection: true,
@@ -785,7 +788,9 @@ function renderTaoPrimitiveElement(
         ...semanticPressableProps(
           occurrence,
           rawElementProps['disabled'] === true,
-          typeof rawElementProps['onPress'] === 'function' ? rawElementProps['onPress'] as () => unknown : undefined,
+          typeof rawElementProps['onPress'] === 'function'
+            ? rawElementProps['onPress'] as (event?: unknown) => unknown
+            : undefined,
           rawElementProps,
         ),
         accessibilityHint: rawElementProps['accessibilityHint'] ?? occurrence?.description,
@@ -851,7 +856,7 @@ function interactionOccurrence(
 function semanticPressableProps(
   occurrence: TaoInteractionOccurrence | undefined,
   disabled: boolean,
-  onPress: (() => unknown) | undefined,
+  onPress: ((event?: unknown) => unknown) | undefined,
   nativeProps: Record<string, unknown> = {},
 ): Record<string, unknown> {
   if (occurrence?.control) {

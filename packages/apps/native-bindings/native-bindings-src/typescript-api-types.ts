@@ -2,35 +2,114 @@ import { Assert, Errors } from '@shared'
 import type * as TS from 'typescript'
 import type { NativeApiEnum, NativeApiParameter, NativeApiRecord, NativeApiType } from './native-api'
 
-export type NativeResourceContract = { packageName: string; typeName: string; disposal: string }
+export type NativeResourceContract = { packageName: string; typeName: string; disposal: string; declaration?: string }
+export type NativeTypeSubstitutions = ReadonlyMap<TS.Type, TS.Type>
 
-/** Resolves the structural value types shared by every declaration-reader adapter. */
+/** Resolves concrete value shapes while delegating live object identity to the catalog. */
 export function nativeTypeReader(
   ts: typeof TS,
   checker: TS.TypeChecker,
   resources: readonly NativeResourceContract[],
   enums: { declaration: NativeApiEnum; types: readonly TS.Type[] }[],
+  reference?: (type: TS.Type, hint: string, substitutions: NativeTypeSubstitutions) => NativeApiType,
+  unresolved?: (type: TS.Type, node?: TS.Node) => never,
+  listener?: (
+    type: TS.Type,
+    node: TS.Node | undefined,
+    substitutions: NativeTypeSubstitutions,
+  ) => NativeApiType | undefined,
 ) {
   const records: NativeApiRecord[] = []
-  const recordNames = new Map<TS.Type, string>()
-  const pending = new Set<TS.Type>()
-
-  function read(type: TS.Type, hint: string, optional = false): NativeApiType {
-    assertAbsence(type, optional)
+  const byteViews: TS.Type[] = []
+  const recordNames = new Map<string, string>()
+  const pending = new Set<string>()
+  const ids = new Map<TS.Type, number>()
+  const symbolIds = new Map<TS.Symbol, number>()
+  function identity(type: TS.Type): number {
+    if (!ids.has(type)) {
+      ids.set(type, ids.size)
+    }
+    return ids.get(type)!
+  }
+  function key(type: TS.Type, substitutions: NativeTypeSubstitutions): string {
+    const symbol = type.aliasSymbol ?? type.getSymbol()
+    if (symbol && !symbol.name.startsWith('__')) {
+      if (!symbolIds.has(symbol)) {
+        symbolIds.set(symbol, symbolIds.size)
+      }
+      const arguments_ = type.aliasTypeArguments ?? checker.getTypeArguments(type as TS.TypeReference)
+      return `symbol${symbolIds.get(symbol)}:${
+        arguments_.map(argument => identity(concrete(argument, substitutions))).join(',')
+      }`
+    }
+    return `${identity(type)}:${[...substitutions].map(([a, b]) => `${identity(a)}=${identity(b)}`).sort().join(',')}`
+  }
+  function concrete(type: TS.Type, substitutions: NativeTypeSubstitutions): TS.Type {
+    const replacement = substitutions.get(type)
+    if (replacement) {
+      return concrete(replacement, substitutions)
+    }
+    if (type.flags & ts.TypeFlags.IndexedAccess) {
+      const indexed = type as TS.IndexedAccessType
+      const object = concrete(indexed.objectType, substitutions)
+      const index = concrete(indexed.indexType, substitutions)
+      if (index.isStringLiteral() || index.isNumberLiteral()) {
+        const property = checker.getPropertyOfType(object, String(index.value))
+        const declaration = property?.valueDeclaration ?? property?.declarations?.[0]
+        Assert.input(
+          property !== undefined && declaration !== undefined,
+          `Cannot resolve native indexed type '${checker.typeToString(type)}'.`,
+        )
+        return concrete(checker.getTypeOfSymbolAtLocation(property, declaration), substitutions)
+      }
+    }
+    return type
+  }
+  function read(
+    input: TS.Type,
+    hint: string,
+    optional = false,
+    substitutions: NativeTypeSubstitutions = new Map(),
+    node?: TS.Node,
+  ): NativeApiType {
+    const type = concrete(input, substitutions)
+    // Unresolved declarations have TypeScript's error intrinsic, despite carrying the Any flag.
+    if (type.flags & ts.TypeFlags.Any && (type as TS.Type & { intrinsicName?: string }).intrinsicName === 'error') {
+      return unresolved
+        ? unresolved(type, node)
+        : Errors.throwUserInput(`Unresolved TypeScript type '${checker.typeToString(type)}'.`)
+    }
+    const listening = listener?.(type, node, substitutions)
+    if (listening) {
+      return listening
+    }
     const present = type.isUnion() ? type.types.filter(member => !(member.flags & ts.TypeFlags.Undefined)) : [type]
+    const undefinedAbsent = type.isUnion() && present.length !== type.types.length
+    if (undefinedAbsent && !optional) {
+      const values = present.filter(member => !(member.flags & ts.TypeFlags.Null))
+      if (values.length === 1 && values.length === present.length) {
+        return { kind: 'nullable', value: read(values[0]!, hint, false, substitutions, node), absence: 'undefined' }
+      }
+    }
+    if (present.length === 1 && present[0] !== type && (optional || !undefinedAbsent)) {
+      return read(present[0]!, hint, false, substitutions, node)
+    }
     const enumeration = enums.find(item => present.length > 0 && present.every(member => item.types.includes(member)))
-    if (enumeration) {
-      Assert.input(present.length === enumeration.types.length, 'Narrowed enum subsets require an explicit mapping.')
+    if (enumeration && present.length === enumeration.types.length) {
       return { kind: 'enum', name: enumeration.declaration.name }
     }
-    Assert.input(!(type.flags & ts.TypeFlags.EnumLiteral), 'Enum values require a public runtime enum export.')
+    Assert.input(
+      !(type.flags & ts.TypeFlags.EnumLiteral) || enumeration !== undefined,
+      'Enum values require a public runtime enum export.',
+    )
     if (present.some(member => member.flags & ts.TypeFlags.Null)) {
       const values = present.filter(member => !(member.flags & ts.TypeFlags.Null))
-      Assert.input(values.length === 1, 'Nullable unions require one present type.')
-      return { kind: 'nullable', value: read(values[0]!, hint) }
+      if (values.length === 1 && !undefinedAbsent) {
+        return { kind: 'nullable', value: read(values[0]!, hint, false, substitutions, node) }
+      }
     }
-    if (present.length === 1 && present[0] !== type) {
-      return read(present[0]!, hint)
+    if (type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) {
+      return { kind: 'dynamic' }
     }
     if (type.flags & ts.TypeFlags.String) {
       return { kind: 'primitive', name: 'text' }
@@ -44,36 +123,73 @@ export function nativeTypeReader(
     ) {
       return { kind: 'primitive', name: 'boolean' }
     }
-    if (present.length > 0 && present.every(member => member.isStringLiteral())) {
+    if (type.flags & ts.TypeFlags.Null) {
+      return { kind: 'absence', value: 'null' }
+    }
+    if (type.flags & ts.TypeFlags.Undefined) {
+      return { kind: 'absence', value: 'undefined' }
+    }
+    if (
+      present.length > 0 && !undefinedAbsent
+      && present.every(member =>
+        member.isStringLiteral() || member.isNumberLiteral() || member.flags & ts.TypeFlags.BooleanLiteral
+      )
+    ) {
       const name = type.aliasSymbol?.name ?? hint
-      const members = present.map(member => ({
-        name: literalName((member as TS.StringLiteralType).value),
-        value: (member as TS.StringLiteralType).value,
-      }))
+      const members = present.map(member => {
+        const value = member.isStringLiteral() || member.isNumberLiteral()
+          ? member.value
+          : checker.typeToString(member) === 'true'
+        return { name: literalName(String(value)), value }
+      })
       const existing = enums.find(item => item.declaration.name === name)
-      Assert.input(existing === undefined, `Native literal type name '${name}' is ambiguous.`)
+      Assert.input(
+        existing === undefined || JSON.stringify(existing.declaration.members) === JSON.stringify(members),
+        `Native literal type name '${name}' is ambiguous.`,
+      )
       Assert.input(
         new Set(members.map(member => member.name)).size === members.length,
         `Literal cases collide in '${name}'.`,
       )
-      enums.push({ declaration: { name, members, literal: true }, types: present })
+      if (!existing) {
+        enums.push({ declaration: { name, members, literal: true }, types: present })
+      }
       return { kind: 'enum', name }
     }
-    if (checker.isArrayType(type)) {
+    const symbol = type.aliasSymbol ?? type.getSymbol()
+    if (
+      symbol?.name === 'Uint8Array'
+      && symbol.declarations?.some(declaration => declaration.getSourceFile().hasNoDefaultLib)
+    ) {
+      if (!byteViews.includes(type)) {
+        byteViews.push(type)
+      }
+      return { kind: 'bytes' }
+    }
+    if (checker.isArrayType(type) || type.getSymbol()?.name === 'ReadonlyArray') {
       const element = checker.getTypeArguments(type as TS.TypeReference)[0]
       Assert.defined(element, 'array has an element type')
-      const item = read(element, `${hint}Item`)
-      Assert.input(item.kind !== 'union', 'Arrays of unions require a named element type.')
-      return { kind: 'list', element: item }
+      return { kind: 'list', element: read(element, `${hint}Item`, false, substitutions, node) }
     }
-    if (type.isUnion() && present.length > 0) {
-      const members = present.map(member => read(member, hint))
-      Assert.input(
-        members.every(member =>
-          member.kind === 'primitive' || member.kind === 'list' && member.element.kind === 'primitive'
-        ),
-        'Only primitive and primitive-list unions are supported.',
-      )
+    if (type.isUnion()) {
+      const remaining = new Set(optional ? present : type.types)
+      const members: NativeApiType[] = []
+      // Only complete native enums can be grouped: a partial enum must retain its narrower cases.
+      for (const enumeration of enums.filter(item => !item.declaration.literal)) {
+        if (enumeration.types.length > 0 && enumeration.types.every(member => remaining.has(member))) {
+          members.push({ kind: 'enum', name: enumeration.declaration.name })
+          enumeration.types.forEach(member => remaining.delete(member))
+        }
+      }
+      members.push(...[...remaining].map(member =>
+        read(
+          member,
+          `${hint}${upper(checker.typeToString(member).replace(/[^A-Za-z0-9]/g, ''))}`,
+          false,
+          substitutions,
+          node,
+        )
+      ))
       return members.length === 1 ? members[0]! : { kind: 'union', members }
     }
     const signatures = checker.getSignaturesOfType(type, ts.SignatureKind.Call)
@@ -84,52 +200,89 @@ export function nativeTypeReader(
         !signature.typeParameters?.length && !!(checker.getReturnTypeOfSignature(signature).flags & ts.TypeFlags.Void),
         'Callbacks must be non-generic and return void.',
       )
-      const args = parameters(signature, hint)
-      Assert.input(
-        args.every(parameter => !parameter.optional),
-        'Optional callback parameters require an explicit absence mapping.',
-      )
-      return { kind: 'callback', parameters: args }
+      return { kind: 'callback', parameters: parameters(signature, hint, substitutions) }
     }
-    if (type.flags & ts.TypeFlags.Object) {
-      Assert.input(!pending.has(type), 'Recursive native records are not supported.')
-      const known = recordNames.get(type)
-      if (known) {
-        return { kind: 'record', name: known }
+    if (type.flags & (ts.TypeFlags.Object | ts.TypeFlags.Intersection)) {
+      if (checker.isTupleType(type)) {
+        const tuple = type as TS.TypeReference
+        const elements = checker.getTypeArguments(tuple)
+        Assert.input(
+          (tuple.target as TS.TupleType).elementFlags.every(flag => flag === ts.ElementFlags.Required),
+          `Native tuple '${checker.typeToString(type)}' requires a fixed required element for every position.`,
+        )
+        const tupleKey = key(type, substitutions)
+        const known = recordNames.get(tupleKey)
+        if (known) {
+          return { kind: 'record', name: known }
+        }
+        Assert.input(!records.some(record => record.name === hint), `Native tuple record name '${hint}' is ambiguous.`)
+        const record: NativeApiRecord = {
+          name: hint,
+          tuple: true,
+          fields: elements.map((element, index) => ({
+            name: `item${index}`,
+            optional: false,
+            type: read(element, `${hint}Item${index}`, false, substitutions, node),
+          })),
+        }
+        records.push(record)
+        recordNames.set(tupleKey, hint)
+        return { kind: 'record', name: hint }
       }
-      Assert.input(
-        !type.aliasTypeArguments?.length && !checker.getTypeArguments(type as TS.TypeReference).length,
-        'Generic native records are not supported.',
-      )
-      Assert.input(checker.getIndexInfosOfType(type).length === 0, 'Indexed native records are not supported.')
-      const symbol = type.aliasSymbol ?? type.getSymbol()
-      const name = symbol && !symbol.name.startsWith('__') ? symbol.name : hint
-      Assert.input(!records.some(record => record.name === name), `Native record type name '${name}' is ambiguous.`)
-      const properties = checker.getPropertiesOfType(type)
-      Assert.input(properties.length > 0, 'Empty native object types are not supported.')
       const resource = resources.find(contract =>
         symbol?.name === contract.typeName
         && symbol.declarations?.some(declaration =>
           declaration.getSourceFile().fileName.replaceAll('\\', '/').includes(`/node_modules/${contract.packageName}/`)
+          && (contract.declaration === undefined
+            || declaration.getSourceFile().fileName.replaceAll('\\', '/').endsWith(`/${contract.declaration}`))
         )
       )
+      const properties = checker.getPropertiesOfType(type)
+      const live = !resource && (symbol?.declarations?.some(ts.isClassDeclaration) || properties.some(property => {
+        const declaration = property.valueDeclaration ?? property.declarations?.[0]
+        return declaration !== undefined
+          && (ts.isMethodSignature(declaration) || ts.isMethodDeclaration(declaration)
+            || ts.isGetAccessorDeclaration(declaration) || ts.isSetAccessorDeclaration(declaration))
+      }))
+      if (live && reference) {
+        return reference(type, hint, substitutions)
+      }
+      const indexes = checker.getIndexInfosOfType(type)
+      if (indexes.length > 0) {
+        Assert.input(
+          indexes.length === 1 && !!(indexes[0]!.keyType.flags & ts.TypeFlags.String) && properties.length === 0,
+          'Native maps require only a string index signature.',
+        )
+        return { kind: 'map', name: hint, value: read(indexes[0]!.type, `${hint}Value`, false, substitutions, node) }
+      }
+      const typeKey = key(type, substitutions)
+      const known = recordNames.get(typeKey)
+      Assert.input(!pending.has(typeKey), 'Recursive native records are not supported.')
+      if (known) {
+        return { kind: 'record', name: known }
+      }
+      const arguments_ = type.aliasTypeArguments ?? checker.getTypeArguments(type as TS.TypeReference)
+      const suffix = arguments_.map(argument =>
+        upper(checker.typeToString(concrete(argument, substitutions)).replace(/[^A-Za-z0-9]/g, ''))
+      ).join('')
+      const name = (symbol && !symbol.name.startsWith('__') ? symbol.name : hint) + suffix
+      Assert.input(!records.some(record => record.name === name), `Native record type name '${name}' is ambiguous.`)
+      Assert.input(properties.length > 0, 'Empty native object types are not supported.')
       const record: NativeApiRecord = { name, fields: [] }
       records.push(record)
-      recordNames.set(type, name)
-      pending.add(type)
+      recordNames.set(typeKey, name)
+      pending.add(typeKey)
       try {
         record.fields = properties.map(property => {
           const declaration = property.valueDeclaration ?? property.declarations?.[0]
           Assert.defined(declaration, 'native record field has a declaration')
           const fieldType = checker.getTypeOfSymbolAtLocation(property, declaration)
-          const optional = !!(property.flags & ts.SymbolFlags.Optional)
-          assertAbsence(fieldType, optional)
-          const reflected = read(fieldType, `${name}${upper(property.name)}`, optional)
-          Assert.input(
-            reflected.kind !== 'callback' || resource,
-            'Returned methods need a declared native resource contract.',
-          )
-          return { name: property.name, optional, type: reflected }
+          const fieldOptional = !!(property.flags & ts.SymbolFlags.Optional)
+          return {
+            name: property.name,
+            optional: fieldOptional,
+            type: read(fieldType, `${name}${upper(property.name)}`, fieldOptional, substitutions, declaration),
+          }
         })
         if (resource) {
           Assert.input(
@@ -140,34 +293,49 @@ export function nativeTypeReader(
           record.disposal = resource.disposal
         }
       } finally {
-        pending.delete(type)
+        pending.delete(typeKey)
       }
       return { kind: 'record', name }
     }
     return Errors.throwUserInput(`Unsupported native API type '${checker.typeToString(type)}'.`)
   }
-
-  function parameters(signature: TS.Signature, hint: string): NativeApiParameter[] {
-    return signature.parameters.map(parameter => {
+  function parameters(
+    signature: TS.Signature,
+    hint: string,
+    substitutions: NativeTypeSubstitutions = new Map(),
+  ): NativeApiParameter[] {
+    const names = new Set(
+      signature.parameters.filter(parameter =>
+        parameter.valueDeclaration && ts.isParameter(parameter.valueDeclaration)
+        && ts.isIdentifier(parameter.valueDeclaration.name)
+      ).map(parameter => parameter.name),
+    )
+    return signature.parameters.map((parameter, index) => {
       const declaration = parameter.valueDeclaration
       Assert.input(declaration !== undefined && ts.isParameter(declaration), 'A parameter declaration is required.')
-      Assert.input(declaration.dotDotDotToken === undefined, 'Rest parameters are not supported.')
-      const type = checker.getTypeOfSymbolAtLocation(parameter, declaration)
       const optional = declaration.questionToken !== undefined || declaration.initializer !== undefined
-      assertAbsence(type, optional)
-      return { name: parameter.name, type: read(type, `${hint}${upper(parameter.name)}`, optional), optional }
+      let name = parameter.name
+      if (!ts.isIdentifier(declaration.name)) {
+        name = `argument${index + 1}`
+        while (names.has(name)) {
+          name += 'Value'
+        }
+        names.add(name)
+      }
+      return {
+        name,
+        type: read(
+          checker.getTypeOfSymbolAtLocation(parameter, declaration),
+          `${hint}${upper(name)}`,
+          optional,
+          substitutions,
+          declaration,
+        ),
+        optional,
+        ...(declaration.dotDotDotToken ? { rest: true as const } : {}),
+      }
     })
   }
-
-  function assertAbsence(type: TS.Type, optional: boolean): void {
-    Assert.input(
-      optional
-        || !(type.flags & ts.TypeFlags.Undefined)
-          && (!type.isUnion() || !type.types.some(member => member.flags & ts.TypeFlags.Undefined)),
-      'Required values accepting undefined need an explicit absence mapping.',
-    )
-  }
-
   function checkpoint(): () => void {
     const recordCount = records.length
     const enumCount = enums.length
@@ -181,13 +349,12 @@ export function nativeTypeReader(
       }
     }
   }
-  return { read, parameters, records, checkpoint }
+  return { read, parameters, records, checkpoint, concrete, byteViews }
 }
 
 function upper(name: string): string {
   return name.charAt(0).toUpperCase() + name.slice(1)
 }
-
 function literalName(value: string): string {
   const name = value.split(/[^A-Za-z0-9_]+/).filter(Boolean).map(upper).join('')
   Assert.input(name.length > 0, `Literal '${value}' cannot be named as a Tao case.`)

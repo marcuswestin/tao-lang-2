@@ -1,5 +1,6 @@
 import { FS, HCI } from '@shared'
 import { watch } from 'chokidar'
+import { type ProjectNativeBindingInventory, projectNativeBindingInventory } from './ProjectNativeBindingInventory'
 import { createProjectRefreshLane } from './ProjectRefreshLane'
 import type { ProjectToolingOptions, ProjectToolingResult, ProjectToolingWatch } from './ProjectTooling'
 import {
@@ -11,6 +12,7 @@ import {
 } from './ProjectWatchPaths'
 
 const DEBOUNCE_MS = 250
+const NATIVE_INVENTORY_MS = 1_000
 
 type Refresh = () => Promise<ProjectToolingResult>
 
@@ -20,12 +22,16 @@ export async function startProjectFileWatch(
   options: ProjectToolingOptions,
   refresh: Refresh,
   watchFiles: typeof watch = watch,
+  readNativeInventory: typeof projectNativeBindingInventory = projectNativeBindingInventory,
 ): Promise<ProjectToolingWatch> {
   const projectRoot = FS.resolvePath(root)
   const dependencyRoots = new Set<string>()
   const configInputPaths = new Set<string>()
   const externalSidecarInputPaths = new Set<string>()
   const sidecarOwnershipInputPaths = new Set<string>()
+  const nativeBindingPaths = new Set<string>()
+  const nativeBindingAncestors = new Set<string>()
+  const nativeBindingWatchers = new Map<string, ReturnType<typeof watch>>()
   const dependencyWatchers = new Map<string, ReturnType<typeof watch>>()
   const externalConfigWatchers = new Map<string, ReturnType<typeof watch>>()
   const externalSidecarWatchers = new Map<string, ReturnType<typeof watch>>()
@@ -33,6 +39,41 @@ export async function startProjectFileWatch(
   const onError = options.onError ?? (error => HCI.logProcessError('project-tooling-watch', String(error)))
   let disposed = false
   let timer: ReturnType<typeof setTimeout> | undefined
+  let nativeTimer: ReturnType<typeof setTimeout> | undefined
+  let nativeScan: Promise<void> | undefined
+  let nativePlan: ProjectNativeBindingInventory | undefined
+  let nativeInventory: string | undefined
+
+  const stopNativeScan = async (): Promise<void> => {
+    if (nativeTimer !== undefined) {
+      clearTimeout(nativeTimer)
+      nativeTimer = undefined
+    }
+    await nativeScan
+    if (nativeTimer !== undefined) {
+      clearTimeout(nativeTimer)
+      nativeTimer = undefined
+    }
+  }
+  const scheduleNativeScan = (): void => {
+    if (disposed || nativePlan === undefined || nativeTimer !== undefined) {
+      return
+    }
+    nativeTimer = setTimeout(() => {
+      nativeTimer = undefined
+      const plan = nativePlan!
+      nativeScan = (async () => {
+        const inventory = await readNativeInventory(plan)
+        if (!disposed && nativePlan === plan && nativeInventory !== inventory) {
+          nativeInventory = inventory
+          schedule()
+        }
+      })().catch(onError).finally(() => {
+        nativeScan = undefined
+        scheduleNativeScan()
+      })
+    }, NATIVE_INVENTORY_MS)
+  }
 
   const watcher = watchFiles(projectRoot, {
     ignoreInitial: true,
@@ -44,6 +85,8 @@ export async function startProjectFileWatch(
         configInputPaths,
         externalSidecarInputPaths,
         sidecarOwnershipInputPaths,
+        nativeBindingPaths,
+        nativeBindingAncestors,
       ),
   })
 
@@ -58,6 +101,8 @@ export async function startProjectFileWatch(
           configInputPaths,
           externalSidecarInputPaths,
           sidecarOwnershipInputPaths,
+          nativeBindingPaths,
+          nativeBindingAncestors,
         ),
     })
     addedWatcher.on('all', onWatchEvent)
@@ -169,22 +214,111 @@ export async function startProjectFileWatch(
     return attached
   }
 
+  const updateNativeBindings = async (result: ProjectToolingResult): Promise<boolean> => {
+    const exact = [
+      ...new Set([...result.nativeBindingInputPaths, ...result.nativeBindingOutputPaths]
+        .map(path => FS.resolvePath(path))),
+    ].sort()
+    const key = JSON.stringify(exact)
+    if (nativeBindingWatchers.has(key)) {
+      await stopNativeScan()
+      const inventory = await readNativeInventory(nativePlan!)
+      if (inventory !== nativeInventory) {
+        nativeInventory = inventory
+        schedule()
+      }
+      scheduleNativeScan()
+      return false
+    }
+    await stopNativeScan()
+    nativePlan = undefined
+    for (const [previous, nativeWatcher] of nativeBindingWatchers) {
+      nativeBindingWatchers.delete(previous)
+      await nativeWatcher.close()
+    }
+    nativeBindingPaths.clear()
+    nativeBindingAncestors.clear()
+    for (const path of exact) {
+      nativeBindingPaths.add(path)
+      for (let ancestor = FS.dirname(path);; ancestor = FS.dirname(ancestor)) {
+        nativeBindingAncestors.add(ancestor)
+        if (FS.dirname(ancestor) === ancestor) {
+          break
+        }
+      }
+    }
+    if (exact.length === 0) {
+      return false
+    }
+    const declarationRoots = result.nativeBindingInputPaths
+      .filter(path => /\/node_modules\/(?:@[^/]+\/)?[^/]+$/.test(path)).map(path => FS.resolvePath(path))
+    const outputRoots = result.nativeBindingOutputPaths.filter(path => FS.basename(path) === 'maintained.json')
+      .map(path => FS.dirname(FS.resolvePath(path)))
+    const inputDirectories = await Promise.all(
+      result.nativeBindingInputPaths.map(async path => await FS.isDirectory(path) ? FS.resolvePath(path) : undefined),
+    )
+    const shallowRoots = [
+      ...new Set([
+        ...(options.nativeBindings?.sourceRoots ?? []).map(path => FS.resolvePath(path)),
+        ...inputDirectories.filter((path): path is string => path !== undefined),
+        ...result.nativeBindingInputPaths.filter(path => /\.[cm]?tsx?$/.test(path)).map(path =>
+          FS.dirname(FS.resolvePath(path))
+        ),
+      ]),
+    ].filter(path => ![...declarationRoots, ...outputRoots].some(root => FS.pathIsWithin(path, root)))
+    const plan = { declarationRoots, outputRoots, shallowRoots }
+    const baseline = await readNativeInventory(plan)
+    // Exact polling avoids registering the unrelated JavaScript payloads inside
+    // pinned SDK packages. Membership scans separately discover newly added inputs.
+    const nativeWatcher = watchFiles(exact, {
+      ignoreInitial: true,
+      usePolling: true,
+      interval: NATIVE_INVENTORY_MS,
+      depth: 0,
+      ignored: (candidate: string) => {
+        const absolute = FS.resolvePath(candidate)
+        return FS.isFileMutationAuxiliaryPath(absolute)
+          || !nativeBindingPaths.has(absolute) && !nativeBindingAncestors.has(absolute)
+      },
+    })
+    nativeBindingWatchers.set(key, nativeWatcher)
+    nativeWatcher.on('all', (_event, candidate) => {
+      if (nativeBindingPaths.has(FS.resolvePath(candidate)) && !FS.isFileMutationAuxiliaryPath(candidate)) {
+        schedule()
+      }
+    })
+    nativeWatcher.on('error', onError)
+    await new Promise<void>((resolve, reject) => {
+      nativeWatcher.once('ready', resolve)
+      nativeWatcher.once('error', reject)
+    })
+    nativePlan = plan
+    nativeInventory = await readNativeInventory(plan)
+    if (baseline !== nativeInventory) {
+      schedule()
+    }
+    scheduleNativeScan()
+    return true
+  }
+
   const lane = createProjectRefreshLane(async () => {
     let result = await refresh()
     let dependencyAttached = await updateDependencyRoots(result)
     let configAttached = await updateConfigInputs(result)
     let sidecarAttached = await updateExternalSidecarInputs(result)
     let ownershipAttached = await updateSidecarOwnershipInputs(result)
+    let nativeAttached = await updateNativeBindings(result)
     // Changes made before a new watcher is ready appear as suppressed initial
     // events, so read again after attaching new resolution inputs.
-    let attached = dependencyAttached || configAttached || sidecarAttached || ownershipAttached
+    let attached = dependencyAttached || configAttached || sidecarAttached || ownershipAttached || nativeAttached
     while (attached) {
       result = await refresh()
       dependencyAttached = await updateDependencyRoots(result)
       configAttached = await updateConfigInputs(result)
       sidecarAttached = await updateExternalSidecarInputs(result)
       ownershipAttached = await updateSidecarOwnershipInputs(result)
-      attached = dependencyAttached || configAttached || sidecarAttached || ownershipAttached
+      nativeAttached = await updateNativeBindings(result)
+      attached = dependencyAttached || configAttached || sidecarAttached || ownershipAttached || nativeAttached
     }
     return result
   }, options.onResult)
@@ -211,6 +345,8 @@ export async function startProjectFileWatch(
         configInputPaths,
         externalSidecarInputPaths,
         sidecarOwnershipInputPaths,
+        nativeBindingPaths,
+        nativeBindingAncestors,
       )
     ) {
       schedule()
@@ -226,11 +362,16 @@ export async function startProjectFileWatch(
     await lane.requestRefresh()
   } catch (error) {
     disposed = true
+    if (timer !== undefined) {
+      clearTimeout(timer)
+    }
+    await stopNativeScan()
     await watcher.close()
     await Promise.all([...dependencyWatchers.values()].map(dependencyWatcher => dependencyWatcher.close()))
     await Promise.all([...externalConfigWatchers.values()].map(configWatcher => configWatcher.close()))
     await Promise.all([...externalSidecarWatchers.values()].map(sidecarWatcher => sidecarWatcher.close()))
     await Promise.all([...sidecarOwnershipWatchers.values()].map(ownershipWatcher => ownershipWatcher.close()))
+    await Promise.all([...nativeBindingWatchers.values()].map(nativeWatcher => nativeWatcher.close()))
     throw error
   }
 
@@ -245,12 +386,14 @@ export async function startProjectFileWatch(
         clearTimeout(timer)
         timer = undefined
       }
+      await stopNativeScan()
       await lane.dispose()
       await watcher.close()
       await Promise.all([...dependencyWatchers.values()].map(dependencyWatcher => dependencyWatcher.close()))
       await Promise.all([...externalConfigWatchers.values()].map(configWatcher => configWatcher.close()))
       await Promise.all([...externalSidecarWatchers.values()].map(sidecarWatcher => sidecarWatcher.close()))
       await Promise.all([...sidecarOwnershipWatchers.values()].map(ownershipWatcher => ownershipWatcher.close()))
+      await Promise.all([...nativeBindingWatchers.values()].map(nativeWatcher => nativeWatcher.close()))
     },
   }
 }

@@ -1,6 +1,7 @@
 import { FS, Platform, TaoStdlib } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { TestCache } from '../cli-src/test-cache'
+import { copyMaintainedBindingPayload } from './maintained-bindings-fixture'
 import { withGitTaoFixture, withTaoFixture } from './test-cli-files'
 
 /**
@@ -26,6 +27,7 @@ function requestFor(rootDir: string, testFileNames: readonly string[] = ['App.te
   const nested = FS.resolvePath('Nested', rootDir)
   return {
     roots: [nested],
+    toolchainRoot: rootDir,
     runtimeRoot: FS.resolvePath('runtime-root', rootDir),
     testPaths: testFileNames.map(name => FS.resolvePath(name, nested)),
   }
@@ -173,6 +175,7 @@ Describe('tao test compiled-output fingerprint', () => {
   Test('fingerprints a run whose stdlib is declared outside the repository', async () => {
     await withTaoFixture({ ...fixture }, async rootDir => {
       const payload = FS.resolvePath('payload-stdlib', rootDir)
+      await copyMaintainedBindingPayload(payload)
       await FS.writeText(FS.resolvePath('@tao/ui/Views.tao', payload), 'public view Text(Value text) { }\n')
       await withDeclaredStdlibRoot(payload, async () => {
         Expect(await fingerprintOf(requestFor(rootDir))).toBe(await fingerprintOf(requestFor(rootDir)))
@@ -183,6 +186,7 @@ Describe('tao test compiled-output fingerprint', () => {
   Test('changes when a source inside a stdlib declared outside the repository changes', async () => {
     await withTaoFixture({ ...fixture }, async rootDir => {
       const payload = FS.resolvePath('payload-stdlib', rootDir)
+      await copyMaintainedBindingPayload(payload)
       const view = FS.resolvePath('@tao/ui/Views.tao', payload)
       await FS.writeText(view, 'public view Text(Value text) { }\n')
       await withDeclaredStdlibRoot(payload, async () => {
@@ -199,6 +203,7 @@ Describe('tao test compiled-output fingerprint', () => {
   Test('changes when the stdlib is redirected at all', async () => {
     await withTaoFixture({ ...fixture }, async rootDir => {
       const payload = FS.resolvePath('payload-stdlib', rootDir)
+      await copyMaintainedBindingPayload(payload)
       await FS.writeText(FS.resolvePath('@tao/ui/Views.tao', payload), 'public view Text(Value text) { }\n')
       const builtIn = await fingerprintOf(requestFor(rootDir))
       const redirected = await withDeclaredStdlibRoot(payload, () => fingerprintOf(requestFor(rootDir)))

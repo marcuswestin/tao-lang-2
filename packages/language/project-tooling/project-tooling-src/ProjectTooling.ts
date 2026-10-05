@@ -2,6 +2,8 @@ import type { Diagnostic, DiagnosticRange } from '@shared'
 
 /** Options shared by a one-shot refresh and a disk-backed watch. */
 export type ProjectToolingOptions = {
+  /** Maintained binding locations for an installed or embedded stdlib. Inspection never generates. */
+  nativeBindings?: { stdlibRoot?: string; sourceRoots?: readonly string[] }
   /** The installed TypeScript and ambient packages, when they are outside the project. */
   hostModulesRoot?: string
   /** Additional installed node_modules roots used for host peer imports. */
@@ -36,6 +38,10 @@ export type ProjectToolingResult = {
   externalSidecarInputPaths: readonly string[]
   /** Exact Tao ownership markers, including nested and external candidates, watched but not copied. */
   sidecarOwnershipInputPaths: readonly string[]
+  /** Maintained declaration and generator inputs, including inventory directories. */
+  nativeBindingInputPaths: readonly string[]
+  /** Exact native-owned outputs watched independently of ordinary generated output. */
+  nativeBindingOutputPaths: readonly string[]
   /** Published files whose bytes changed, including paths removed in this refresh. */
   changedOutputPaths: readonly string[]
   /** Monotonically increasing per-project completed-refresh number. */

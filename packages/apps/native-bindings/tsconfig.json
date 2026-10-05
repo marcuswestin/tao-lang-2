@@ -9,6 +9,7 @@
     "composite": false,
     "declaration": false,
     "incremental": false,
+    "jsx": "react",
     "noEmit": true,
     "types": [
       "bun",

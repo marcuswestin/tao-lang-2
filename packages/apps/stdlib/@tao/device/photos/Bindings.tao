@@ -1,0 +1,564 @@
+// Generated from public native API declarations. Regenerate instead of editing.
+public
+type AssetInfo is {
+   Id text,
+   Filename text,
+   Uri text,
+   MediaType MediaType,
+   Width number,
+   Height number,
+   Duration number?,
+   CreationTime number?,
+   ModificationTime number?,
+   IsFavorite boolean
+}
+
+public
+type AssetMetadata is {
+   Id text,
+   Filename text?,
+   MediaType MediaType,
+   Width number?,
+   Height number?,
+   Duration number?,
+   CreationTime number?,
+   ModificationTime number?,
+   IsFavorite boolean
+}
+
+public
+type EventSubscription is {
+   Remove action()
+}
+
+public
+type Location is {
+   Latitude number,
+   Longitude number
+}
+
+public
+type MediaLibraryAssetsChangeEvent is {
+   HasIncrementalChanges boolean,
+   InsertedAssets list of text?,
+   DeletedAssets list of text?,
+   UpdatedAssets list of text?
+}
+
+public
+type PermissionResponse is {
+   Status PermissionStatus,
+   Expires PermissionResponseExpires,
+   Granted boolean,
+   CanAskAgain boolean,
+   AccessPrivileges PermissionResponseAccessPrivileges?
+}
+
+public
+type Shape is {
+   Width number,
+   Height number
+}
+
+public
+type SortDescriptor is {
+   Key AssetField,
+   Ascending boolean?
+}
+
+// Source: expo-media-library/build/index.d.ts:15:1
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/index.d.ts:15:1
+public
+type Album is item
+
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/index.d.ts:15:1
+public
+action ReleaseAlbum(Value Album) from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/index.d.ts:9:1
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/index.d.ts:9:1
+public
+type Asset is item
+
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/index.d.ts:9:1
+public
+action ReleaseAsset(Value Asset) from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/index.d.ts:7:1
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/index.d.ts:7:1
+public
+type Query is item
+
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/index.d.ts:7:1
+public
+action ReleaseQuery(Value Query) from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+public
+type NativeValue is item
+
+public
+action NativeValueKind(Value NativeValue) returns text from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+public
+action NativeValueKeys(Value NativeValue) returns list of text from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+public
+action NativeValueReadKey(Value NativeValue, Key text) returns NativeValue? from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+public
+action NativeValueLength(Value NativeValue) returns number from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+public
+action NativeValueReadIndex(Value NativeValue, Index number) returns NativeValue? from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+public
+action NativeValueText(Value NativeValue) returns text from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+public
+action NativeValueNumber(Value NativeValue) returns number from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+public
+action NativeValueBoolean(Value NativeValue) returns boolean from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+public
+action ReleaseNativeValue(Value NativeValue) from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+public
+type AssetGetExifResultEntry is {
+   Key text,
+   Value NativeValue
+}
+
+public
+type PermissionResponseExpires is number | PermissionResponseExpiresNever
+
+public
+type PermissionResponseAccessPrivileges is PermissionResponseAccessPrivilegesAll | PermissionResponseAccessPrivilegesLimited | PermissionResponseAccessPrivilegesNone
+
+public
+type AlbumAddAssets is Asset | list of Asset
+
+public
+type AlbumCreateAssetsRefs is list of text | list of Asset
+
+public
+type QueryOrderBySortDescriptors is AssetField | SortDescriptor
+
+public
+action QueryOrderBySortDescriptorsIsSortDescriptor(Value QueryOrderBySortDescriptors) returns boolean from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+public
+action QueryOrderBySortDescriptorsAsSortDescriptor(Value QueryOrderBySortDescriptors) returns SortDescriptor from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+public
+type AssetField is one of CREATION_TIME, MODIFICATION_TIME, MEDIA_TYPE, WIDTH, HEIGHT, DURATION, IS_FAVORITE
+
+public
+type GranularPermission is one of Audio, GranularPermission_Photo, GranularPermission_Video
+
+public
+type MediaSubtype is one of DEPTH_EFFECT, HDR, HIGH_FRAME_RATE, LIVE_PHOTO, PANORAMA, SCREENSHOT, STREAM, TIME_LAPSE, SPATIAL_MEDIA, VIDEO_CINEMATIC
+
+public
+type MediaType is one of UNKNOWN, IMAGE, AUDIO, VIDEO
+
+public
+type MediaTypeFilter is one of MediaTypeFilter_Photo, MediaTypeFilter_Video
+
+public
+type PermissionResponseAccessPrivilegesAll is one of All
+
+public
+type PermissionResponseAccessPrivilegesLimited is one of Limited
+
+public
+type PermissionResponseAccessPrivilegesNone is one of None
+
+public
+type PermissionResponseExpiresNever is one of Never
+
+public
+type PermissionStatus is one of GRANTED, UNDETERMINED, DENIED
+
+public
+type QueryEqForAssetFieldCREATIONTIMEField is one of QueryEqForAssetFieldCREATIONTIMEField_CreationTime
+
+public
+type QueryEqForAssetFieldDURATIONField is one of QueryEqForAssetFieldDURATIONField_Duration
+
+public
+type QueryEqForAssetFieldHEIGHTField is one of QueryEqForAssetFieldHEIGHTField_Height
+
+public
+type QueryEqForAssetFieldISFAVORITEField is one of QueryEqForAssetFieldISFAVORITEField_IsFavorite
+
+public
+type QueryEqForAssetFieldMEDIATYPEField is one of QueryEqForAssetFieldMEDIATYPEField_MediaType
+
+public
+type QueryEqForAssetFieldMODIFICATIONTIMEField is one of QueryEqForAssetFieldMODIFICATIONTIMEField_ModificationTime
+
+public
+type QueryEqForAssetFieldWIDTHField is one of QueryEqForAssetFieldWIDTHField_Width
+
+public
+type QueryWithinForAssetFieldCREATIONTIMEField is one of QueryWithinForAssetFieldCREATIONTIMEField_CreationTime
+
+public
+type QueryWithinForAssetFieldDURATIONField is one of QueryWithinForAssetFieldDURATIONField_Duration
+
+public
+type QueryWithinForAssetFieldHEIGHTField is one of QueryWithinForAssetFieldHEIGHTField_Height
+
+public
+type QueryWithinForAssetFieldISFAVORITEField is one of QueryWithinForAssetFieldISFAVORITEField_IsFavorite
+
+public
+type QueryWithinForAssetFieldMEDIATYPEField is one of QueryWithinForAssetFieldMEDIATYPEField_MediaType
+
+public
+type QueryWithinForAssetFieldMODIFICATIONTIMEField is one of QueryWithinForAssetFieldMODIFICATIONTIMEField_ModificationTime
+
+public
+type QueryWithinForAssetFieldWIDTHField is one of QueryWithinForAssetFieldWIDTHField_Width
+
+// Source: expo-media-library/build/index.d.ts:75:1
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/index.d.ts:75:1
+public
+action AddListener(Listener action(MediaLibraryAssetsChangeEvent)) returns EventSubscription from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Album.d.ts:72:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Album.d.ts:72:5
+public
+action AlbumAdd(Receiver Album, Assets AlbumAddAssets) from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Album.d.ts:14:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Album.d.ts:14:5
+public
+action AlbumConstruct(Id text) returns Album from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Album.d.ts:105:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Album.d.ts:105:5
+public
+action AlbumCreate(Name text, AssetsRefs AlbumCreateAssetsRefs, MoveAssets boolean? default none) returns Album from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Album.d.ts:55:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Album.d.ts:55:5
+public
+action AlbumDelete(Receiver Album) from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Album.d.ts:133:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Album.d.ts:133:5
+public
+action AlbumGet(Title text) returns Album? from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Album.d.ts:143:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Album.d.ts:143:5
+public
+action AlbumGetAll() returns list of Album from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Album.d.ts:30:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Album.d.ts:30:5
+public
+action AlbumGetAssets(Receiver Album) returns list of Asset from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Album.d.ts:42:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Album.d.ts:42:5
+public
+action AlbumGetTitle(Receiver Album) returns text from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Album.d.ts:19:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Album.d.ts:19:5
+public
+action AlbumIdGet(Receiver Album) returns text from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Album.d.ts:19:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Album.d.ts:19:5
+public
+action AlbumIdSet(Receiver Album, Value text) from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Album.d.ts:89:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Album.d.ts:89:5
+// Upstream platform annotation: ios.
+public
+action AlbumRemoveAssets(Receiver Album, Assets list of Asset) from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Album.d.ts:119:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Album.d.ts:119:5
+public
+action AlbumStaticDelete(Albums list of Album, DeleteAssets boolean? default none) from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Asset.d.ts:20:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Asset.d.ts:20:5
+public
+action AssetConstruct(Id text) returns Asset from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Asset.d.ts:193:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Asset.d.ts:193:5
+public
+action AssetCreate(FilePath text, Album Album? default none) returns Asset from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Asset.d.ts:164:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Asset.d.ts:164:5
+public
+action AssetDelete(Receiver Asset) from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Asset.d.ts:138:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Asset.d.ts:138:5
+public
+action AssetGetAlbums(Receiver Asset) returns list of Album from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Asset.d.ts:32:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Asset.d.ts:32:5
+public
+action AssetGetCreationTime(Receiver Asset) returns number? from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Asset.d.ts:40:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Asset.d.ts:40:5
+public
+action AssetGetDuration(Receiver Asset) returns number? from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Asset.d.ts:152:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Asset.d.ts:152:5
+public
+action AssetGetExif(Receiver Asset) returns list of AssetGetExifResultEntry from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Asset.d.ts:177:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Asset.d.ts:177:5
+public
+action AssetGetFavorite(Receiver Asset) returns boolean from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Asset.d.ts:46:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Asset.d.ts:46:5
+public
+action AssetGetFilename(Receiver Asset) returns text from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Asset.d.ts:53:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Asset.d.ts:53:5
+public
+action AssetGetHeight(Receiver Asset) returns number from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Asset.d.ts:124:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Asset.d.ts:124:5
+public
+action AssetGetInfo(Receiver Asset) returns AssetInfo from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/index.d.ts:12:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/index.d.ts:12:5
+// Upstream platform annotation: ios.
+public
+action AssetGetIsInCloud(Receiver Asset) returns boolean from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/index.d.ts:11:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/index.d.ts:11:5
+// Upstream platform annotation: ios.
+public
+action AssetGetLivePhotoVideoUri(Receiver Asset) returns text? from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Asset.d.ts:145:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Asset.d.ts:145:5
+public
+action AssetGetLocation(Receiver Asset) returns Location? from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/index.d.ts:10:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/index.d.ts:10:5
+// Upstream platform annotation: ios.
+public
+action AssetGetMediaSubtypes(Receiver Asset) returns list of MediaSubtype from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Asset.d.ts:59:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Asset.d.ts:59:5
+public
+action AssetGetMediaType(Receiver Asset) returns MediaType from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Asset.d.ts:96:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Asset.d.ts:96:5
+public
+action AssetGetModificationTime(Receiver Asset) returns number? from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/index.d.ts:13:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/index.d.ts:13:5
+// Upstream platform annotation: ios.
+public
+action AssetGetOrientation(Receiver Asset) returns number? from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Asset.d.ts:102:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Asset.d.ts:102:5
+public
+action AssetGetShape(Receiver Asset) returns Shape? from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Asset.d.ts:109:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Asset.d.ts:109:5
+public
+action AssetGetUri(Receiver Asset) returns text from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Asset.d.ts:116:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Asset.d.ts:116:5
+public
+action AssetGetWidth(Receiver Asset) returns number from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Asset.d.ts:26:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Asset.d.ts:26:5
+public
+action AssetIdGet(Receiver Asset) returns text from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Asset.d.ts:26:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Asset.d.ts:26:5
+public
+action AssetIdSet(Receiver Asset, Value text) from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Asset.d.ts:192:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Asset.d.ts:192:5
+public
+action AssetSetFavorite(Receiver Asset, IsFavorite boolean) from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Asset.d.ts:199:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Asset.d.ts:199:5
+public
+action AssetStaticDelete(Assets list of Asset) from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/index.d.ts:34:1
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/index.d.ts:34:1
+public
+action GetPermissionsAsync(WriteOnly boolean? default none, GranularPermissions list of GranularPermission? default none) returns PermissionResponse from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/index.d.ts:66:1
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/index.d.ts:66:1
+// Upstream platform annotation: android, 14+, ios.
+public
+action PresentPermissionsPicker(MediaTypes list of MediaTypeFilter? default none) from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Query.d.ts:77:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Query.d.ts:77:5
+public
+action QueryAlbum(Receiver Query, Album Album) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Query.d.ts:13:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Query.d.ts:13:5
+public
+action QueryConstruct() returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Query.d.ts:20:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Query.d.ts:20:5
+public
+action QueryEqForAssetFieldCREATIONTIME(Receiver Query, Value number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Query.d.ts:20:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Query.d.ts:20:5
+public
+action QueryEqForAssetFieldDURATION(Receiver Query, Value number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Query.d.ts:20:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Query.d.ts:20:5
+public
+action QueryEqForAssetFieldHEIGHT(Receiver Query, Value number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Query.d.ts:20:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Query.d.ts:20:5
+public
+action QueryEqForAssetFieldISFAVORITE(Receiver Query, Value boolean) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Query.d.ts:20:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Query.d.ts:20:5
+public
+action QueryEqForAssetFieldMEDIATYPE(Receiver Query, Value MediaType) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Query.d.ts:20:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Query.d.ts:20:5
+public
+action QueryEqForAssetFieldMODIFICATIONTIME(Receiver Query, Value number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Query.d.ts:20:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Query.d.ts:20:5
+public
+action QueryEqForAssetFieldWIDTH(Receiver Query, Value number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Query.d.ts:92:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Query.d.ts:92:5
+public
+action QueryExe(Receiver Query) returns list of Asset from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Query.d.ts:111:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Query.d.ts:111:5
+public
+action QueryExeForMetadata(Receiver Query) returns list of AssetMetadata from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Query.d.ts:34:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Query.d.ts:34:5
+public
+action QueryGt(Receiver Query, Field AssetField, Value number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Query.d.ts:40:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Query.d.ts:40:5
+public
+action QueryGte(Receiver Query, Field AssetField, Value number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Query.d.ts:60:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Query.d.ts:60:5
+public
+action QueryLimit(Receiver Query, Limit number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Query.d.ts:47:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Query.d.ts:47:5
+public
+action QueryLt(Receiver Query, Field AssetField, Value number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Query.d.ts:54:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Query.d.ts:54:5
+public
+action QueryLte(Receiver Query, Field AssetField, Value number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Query.d.ts:66:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Query.d.ts:66:5
+public
+action QueryOffset(Receiver Query, Offset number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Query.d.ts:71:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Query.d.ts:71:5
+public
+action QueryOrderBy(Receiver Query, SortDescriptors QueryOrderBySortDescriptors) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Query.d.ts:27:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Query.d.ts:27:5
+public
+action QueryWithinForAssetFieldCREATIONTIME(Receiver Query, Value list of number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Query.d.ts:27:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Query.d.ts:27:5
+public
+action QueryWithinForAssetFieldDURATION(Receiver Query, Value list of number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Query.d.ts:27:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Query.d.ts:27:5
+public
+action QueryWithinForAssetFieldHEIGHT(Receiver Query, Value list of number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Query.d.ts:27:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Query.d.ts:27:5
+public
+action QueryWithinForAssetFieldISFAVORITE(Receiver Query, Value list of boolean) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Query.d.ts:27:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Query.d.ts:27:5
+public
+action QueryWithinForAssetFieldMEDIATYPE(Receiver Query, Value list of MediaType) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Query.d.ts:27:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Query.d.ts:27:5
+public
+action QueryWithinForAssetFieldMODIFICATIONTIME(Receiver Query, Value list of number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/types/Query.d.ts:27:5
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/types/Query.d.ts:27:5
+public
+action QueryWithinForAssetFieldWIDTH(Receiver Query, Value list of number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/index.d.ts:79:1
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/index.d.ts:79:1
+public
+action RemoveAllListeners() from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+
+// Source: expo-media-library/build/index.d.ts:26:1
+// Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/index.d.ts:26:1
+public
+action RequestPermissionsAsync(WriteOnly boolean? default none, GranularPermissions list of GranularPermission? default none) returns PermissionResponse from ../../../.tao-ts/native-bindings/photos/Bindings.ts

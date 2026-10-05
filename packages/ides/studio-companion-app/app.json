@@ -28,6 +28,8 @@
     },
     "plugins": [
       "expo-dev-client",
+      "expo-media-library",
+      "expo-file-system",
       [
         "@clerk/expo",
         {

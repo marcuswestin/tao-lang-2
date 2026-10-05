@@ -13,6 +13,7 @@
   "dependencies": {
     "tao-ast-utils": "workspace:*",
     "tao-generation": "workspace:*",
+    "tao-native-bindings": "workspace:*",
     "tao-parser": "workspace:*",
     "tao-shared": "workspace:*",
     "tao-validator": "workspace:*",

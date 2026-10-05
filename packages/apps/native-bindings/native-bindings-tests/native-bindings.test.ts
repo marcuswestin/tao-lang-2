@@ -44,7 +44,7 @@ Describe('native binding generation', () => {
     Expect(generated.diagnostics).toEqual([])
   })
 
-  Test('reads only public declarations, follows reexports, and reports unsupported shapes and overloads', async () => {
+  Test('reads only public declarations and follows reexports, overloads and union arrays', async () => {
     await withTaoFiles('native-bindings-test', {
       'node_modules/expo-example/package.json': JSON.stringify({
         name: 'expo-example',
@@ -70,15 +70,18 @@ export declare function privateToModule(): void;
         packageName: 'expo-example',
         fromDirectory: root,
       })
-      Expect(generated.catalog.operations.map(operation => operation.name)).toEqual(['choose', 'fetchValue'])
+      Expect(generated.catalog.operations.map(operation => operation.name)).toEqual([
+        'choose',
+        'fetchValue',
+        'overloadedWithNumber',
+        'overloadedWithString',
+        'unionArray',
+      ])
       Expect(generated.catalog.enums).toEqual([{
         name: 'Choice',
         members: [{ name: 'First', value: 'first' }, { name: 'Second', value: 'second' }],
       }])
-      Expect(generated.diagnostics.map(diagnostic => diagnostic.symbol).sort()).toEqual([
-        'overloaded',
-        'unionArray',
-      ])
+      Expect(generated.diagnostics).toEqual([])
       Expect(generated.files['Bindings.ts']).toContain('native()["choose"]()')
     }, { location: 'host', verbatim: true })
   })
@@ -107,7 +110,7 @@ export declare function privateToModule(): void;
       },
     }
     const generated = await NativeBindings.generate({ source, packageName: 'future-native-host', fromDirectory })
-    Expect(generated.files['Bindings.tao']).toContain('public action Pulse(Length number) from ./Bindings.ts')
+    Expect(generated.files['Bindings.tao']).toContain('public\naction Pulse(Length number) from ./Bindings.ts')
     Expect(generated.files['Bindings.ts']).toContain('native()["pulse"](argument0)')
     Expect(generated.diagnostics).toEqual([])
   })
@@ -137,11 +140,10 @@ export declare function requiredAbsent(value: string | undefined): void;
         packageName: 'expo-types',
         fromDirectory: root,
       })
-      Expect(generated.catalog.operations.map(operation => operation.name)).toEqual(['real'])
+      Expect(generated.catalog.operations.map(operation => operation.name)).toEqual(['real', 'requiredAbsent'])
       Expect(generated.catalog.enums).toEqual([])
       Expect(generated.diagnostics.map(diagnostic => diagnostic.symbol).sort()).toEqual([
         'Erased',
-        'requiredAbsent',
         'run',
       ])
     }, { location: 'host', verbatim: true })
@@ -229,7 +231,7 @@ export declare function requiredAbsent(value: string | undefined): void;
       await generateNativeBindingFiles('expo-replace', options)
 
       Expect(await FS.readText(FS.resolvePath('Bindings.tao', options.out)))
-        .toContain('public action NewPulse(Strength number? default none) from ./Bindings.ts')
+        .toContain('public\naction NewPulse(Strength number? default none) from ./Bindings.ts')
       Expect(await FS.readText(FS.resolvePath('Bindings.tao', options.out))).not.toContain('OldPulse')
       Expect(await FS.readText(FS.resolvePath('Bindings.ts', options.out))).toContain('return native()["newPulse"]()')
       Expect(await FS.readText(FS.resolvePath('bindings.json', options.out))).toContain('"packageVersion": "2.0.0"')
@@ -240,7 +242,7 @@ export declare function requiredAbsent(value: string | undefined): void;
       const workingBinding = await FS.readText(FS.resolvePath('Bindings.ts', options.out))
       await FS.writeText(
         FS.resolvePath('node_modules/expo-replace/index.d.ts', root),
-        'export declare function unsupported(): Map<string, number>;',
+        'export declare function unsupported<T>(value: T): T;',
       )
       await Expect(generateNativeBindingFiles('expo-replace', options)).rejects.toThrow(
         'Cannot generate the complete binding',

@@ -39,6 +39,7 @@ export const JUST_COMMANDS = [
   // the lane and message work `finalize` adds or the push `land` adds.
   'merge-main',
   'model-audit',
+  'native-bindings',
   'native-module-check',
   'notify-developer',
   // Pushes the branch, opens or reuses its pull request, and stays attached to stream the checks a

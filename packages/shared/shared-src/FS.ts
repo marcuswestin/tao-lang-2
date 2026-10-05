@@ -865,6 +865,13 @@ function commonPathAncestorOf(paths: readonly string[]): string {
   return ancestor
 }
 
+/** Mutation ownership and synchronization sidecars are coordination state, never source inputs. */
+export function isFileMutationAuxiliaryPath(path: string): boolean {
+  const name = basename(path)
+  return /\.tao-file-mutation\.lock(?:$|\.reclaim$|\.(?:owner|stale|release)-[^/]+$)/u.test(name)
+    || /\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.\d+\.(?:tmp|restore)$/u.test(name)
+}
+
 /**
  * filesIdentity is the content identity of a labelled set of files: the label a caller gives each
  * file, paired with the hash of its bytes, in label order. Callers that discover files in an

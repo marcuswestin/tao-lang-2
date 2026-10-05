@@ -13,6 +13,15 @@ export const ManagedInstallEnvironment = {
       consumerRoot,
     )
   },
+  legacyPackageRoot(consumerRoot: string, namespace: string, alias: string): string {
+    return FS.resolvePath(
+      `.tao/install/packages/${namespace}/${Platform.sha256Hex([alias]).slice(0, 16)}`,
+      consumerRoot,
+    )
+  },
+  legacyModulesRoot(consumerRoot: string, namespace: string): string {
+    return FS.resolvePath(`.tao/install/origins/${namespace}/node_modules`, consumerRoot)
+  },
   generatedModulesLink(consumerRoot: string, namespace: string): string {
     return FS.resolvePath(`.tao-ts/.dependencies/${namespace}/node_modules`, consumerRoot)
   },

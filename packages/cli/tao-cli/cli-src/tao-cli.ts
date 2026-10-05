@@ -86,6 +86,27 @@ export function createCommands(): Command {
       }
     })
 
+  commands.command('bindings')
+    .description('Maintain generated native API bindings.')
+    .command('generate')
+    .argument('[package]', 'Installed package whose public API should be imported.')
+    .option('--maintained', 'Regenerate all maintained native bindings from their pinned declarations.')
+    .option('--source <source>', 'Source adapter: expo or react-native.')
+    .option('--export <name>', 'Import one public object, such as React Native Vibration.')
+    .option('--exclude <names...>', 'Explicitly omit named public exports and record them in the generated catalog.')
+    .option('--from <directory>', 'Resolve installed declarations from this directory.')
+    .option('--out <directory>', 'Regenerate an explicit package in a dedicated generated directory.')
+    .description('Regenerate maintained bindings or import an explicit native package.')
+    .action(async (packageName, options) => {
+      try {
+        const { runBindingsGeneration } = await import('./bindings-command')
+        await runBindingsGeneration(packageName, options)
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.setExitCode(1)
+      }
+    })
+
   commands
     .command('create')
     .argument('<description>', 'What the app is, in a sentence. URLs and image paths in it are read.')

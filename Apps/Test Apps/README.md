@@ -54,6 +54,16 @@ without erasing compatible coverage:
   `@tao/nav` native-default import, while its basic-kit app proves that explicit `@tao/nav/basic`
   renders the same title and toolbar command contract deterministically.
 
+## Modern Photos and Files
+
+Exercise the generated `@tao/device/files` and `@tao/device/photos` APIs directly,
+without handwritten operation adapters. Files acceptance writes only an app-cache
+directory owned by this fixture and covers text, bytes, fresh metadata, copy and
+rename, explicit handle closure, stream lifecycle, cancellation and cleanup.
+Photos acceptance distinguishes permission states and queries image metadata with
+pagination; consent and real library behavior require separate native acceptance.
+The fixture README records those procedures and which results remain unproved.
+
 ## Navigation
 
 Exercise the navigation layer: the native stack, the portable basic kit, platform sheet and overlay

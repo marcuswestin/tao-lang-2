@@ -99,7 +99,16 @@ ViewRender returns ViewRender:
      | quotation=PhraseText) layoutClause=LayoutClause? block=Block?;
 
 EventHandler:
-    'on' event=EventName (action=ValueReference | '->' payload=CasePayload? block=ActionBlock);
+    'on' event=EventName
+    (controls=NativeEventControls '->' (action=ValueReference | payload=CasePayload? block=ActionBlock)
+     | action=ValueReference | '->' payload=CasePayload? block=ActionBlock);
+
+// Control names remain identifiers so misspellings receive positioned semantic diagnostics.
+NativeEventControls:
+    '(' controls+=NativeEventControl (',' controls+=NativeEventControl)* ')';
+
+NativeEventControl:
+    name=ID;
 
 EventName returns string:
     'press' | 'change' | 'submit';

@@ -3,6 +3,7 @@ import { AST } from '@parser'
 import { Switch } from '@shared'
 import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
+import { nativeEventControlsValidationMessages } from './native-event-controls-validator'
 
 /** invocationValidationMessages declares render invocation diagnostics. */
 const invocationValidationMessages = {
@@ -114,6 +115,24 @@ function reportInvocationDiagnostics(render: AST.Render, ctx: ValidationContext)
   }
   for (const diagnostic of invocation.eventDiagnostics) {
     Switch.kind(diagnostic, {
+      'unknown-native-event-control': diagnostic => {
+        ctx.error(diagnostic.control, nativeEventControlsValidationMessages.unknownControl(diagnostic.control.name))
+      },
+      'duplicate-native-event-control': diagnostic => {
+        ctx.error(diagnostic.control, nativeEventControlsValidationMessages.duplicateControl(diagnostic.control.name))
+      },
+      'unsupported-native-event-control': diagnostic => {
+        ctx.error(
+          diagnostic.control,
+          nativeEventControlsValidationMessages.unsupportedControl(diagnostic.control.name, diagnostic.event),
+        )
+      },
+      'unsupported-native-event-controls': diagnostic => {
+        ctx.error(
+          diagnostic.handler.controls ?? diagnostic.handler,
+          nativeEventControlsValidationMessages.unsupportedEvent(diagnostic.handler.event),
+        )
+      },
       'duplicate-event': diagnostic => {
         ctx.error(
           diagnostic.handler,

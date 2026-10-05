@@ -2,6 +2,7 @@ import { CLI, Diagnostic, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { CheckCache } from '../cli-src/check-cache'
 import { type CheckWorkspaceOutcome, runCheck, runFix } from '../cli-src/source-commands'
+import { copyMaintainedBindingPayload } from './maintained-bindings-fixture'
 import { withGitTaoFixture, withTaoFixture } from './test-cli-files'
 
 /**
@@ -447,6 +448,7 @@ Describe('tao check toolchain identity', () => {
 
   Test('refuses an identity when TAO_STDLIB_ROOT names a stdlib it does not hash', async () => {
     await withTaoFixture(TOOLCHAIN_FILES, async rootDir => {
+      await copyMaintainedBindingPayload(FS.resolvePath('packages/apps/stdlib', rootDir))
       const previous = Platform.runtimeProcess.env['TAO_STDLIB_ROOT']
       Platform.runtimeProcess.env['TAO_STDLIB_ROOT'] = FS.resolvePath('elsewhere', rootDir)
       try {

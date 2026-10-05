@@ -13,6 +13,8 @@ function result(revision: number): ProjectToolingResult {
     configInputPaths: [],
     externalSidecarInputPaths: [],
     sidecarOwnershipInputPaths: [],
+    nativeBindingInputPaths: [],
+    nativeBindingOutputPaths: [],
     changedOutputPaths: [],
     revision,
   }

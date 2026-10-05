@@ -4,6 +4,11 @@ import {
   type RenderInvocationPair,
   resolveArgumentBindings,
 } from './argument-bindings'
+import {
+  type NativeEventControlDiagnostic,
+  type NativeEventControls,
+  resolveNativeEventControls,
+} from './native-event-controls'
 import { writableExpression } from './reactive-parameters'
 import { type TaoType, Type } from './Type'
 
@@ -11,6 +16,7 @@ import { type TaoType, Type } from './Type'
 export type RenderEventBindingPair = {
   handler: AST.EventHandler
   parameter: AST.ParameterDeclaration
+  controls: NativeEventControls
 }
 
 /** ImplicitChangeBinding declares the writable state synthesized for an omitted Change handler. */
@@ -20,6 +26,7 @@ export type ImplicitChangeBinding = {
 }
 
 export type RenderEventBindingDiagnostic =
+  | NativeEventControlDiagnostic
   | { kind: 'duplicate-event'; handler: AST.EventHandler }
   | { kind: 'unsupported-event'; handler: AST.EventHandler; parameter?: AST.ParameterDeclaration }
   | {
@@ -137,6 +144,8 @@ function resolveRenderEventBindings(
   const seenEvents = new Set<AST.EventName>()
 
   for (const handler of handlers) {
+    const nativeControls = resolveNativeEventControls(handler)
+    diagnostics.push(...nativeControls.diagnostics)
     if (seenEvents.has(handler.event)) {
       diagnostics.push({ kind: 'duplicate-event', handler })
       continue
@@ -176,7 +185,7 @@ function resolveRenderEventBindings(
       }
     }
 
-    pairs.push({ handler, parameter })
+    pairs.push({ handler, parameter, controls: nativeControls.controls })
   }
 
   const implicitChange = resolveImplicitChangeBinding(render, view, {

@@ -1,6 +1,6 @@
-import { Packages } from '@ast-utils'
+import { Packages, Type } from '@ast-utils'
 import { CompilerDependencies, type DependencyEnvironment } from '@compiler'
-import { BridgeMetadata } from '@compiler/bridge-metadata'
+import { BridgeMetadata, type BridgeModule, type BridgeTypeOriginResolver } from '@compiler/bridge-metadata'
 import { inspectSidecarSourceGraph } from '@compiler/sidecar-source-graph'
 import { discoverProjectTaoFiles, Workspace } from '@compiler/workspace'
 import {
@@ -11,6 +11,7 @@ import {
   type ProjectRequirement,
 } from '@parser'
 import { type Diagnostic, Diagnostics, Errors, FS, ProjectIdentity, ProjectLocal } from '@shared'
+import { inspectMaintainedNativeBindings, readMaintainedNativeBridgeTypeOrigins } from 'tao-native-bindings'
 import { collectProjectDependencySnapshots, resolveRelativeSource } from './ProjectDependencySnapshots'
 import { validateManagedDependencyEnvironments } from './ProjectManagedDependencies'
 import {
@@ -27,11 +28,68 @@ const lastDependencyRoots = new Map<string, readonly string[]>()
 const lastPrivatePackages = new Map<string, ReadonlySet<string>>()
 const lastGoodResults = new Map<string, ProjectToolingResult>()
 const typeScriptSessions = new Map<string, { references: number; session: ProjectTypeScriptProgramSession }>()
+const ProjectNativeBindingValidationMessages = {
+  changedDuringRefresh: 'Maintained native bindings changed during project refresh. Refresh the project again.',
+} as const
 
 /** ProjectTooling refreshes saved project files and owns their generated TypeScript publication. */
 export const ProjectTooling: ProjectToolingService = {
   async refresh(inputRoot, options) {
     const root = await findProjectRoot(inputRoot) ?? FS.resolvePath(inputRoot)
+    const nativeBindings = await inspectMaintainedNativeBindings(options.nativeBindings)
+    if (nativeBindings.status === 'stale') {
+      const previous = lastGoodResults.get(root)
+      return result(
+        root,
+        'stale',
+        nativeBindings.diagnostics,
+        previous?.contractPaths ?? [],
+        previous?.sourceMappings ?? [],
+        previous?.dependencyRoots ?? [],
+        previous?.configInputPaths ?? [],
+        previous?.externalSidecarInputPaths ?? [],
+        previous?.sidecarOwnershipInputPaths ?? [],
+        [],
+        nextRevision(root),
+        nativeBindings,
+      )
+    }
+    let typeOriginResolver: BridgeTypeOriginResolver
+    try {
+      const origins = await readMaintainedNativeBridgeTypeOrigins({
+        ...options.nativeBindings,
+        inspection: nativeBindings,
+      })
+      const bySource = new Map<string, Map<string, typeof origins[number]>>()
+      for (const origin of origins) {
+        const types = bySource.get(origin.sourcePath) ?? new Map()
+        types.set(origin.name, origin)
+        bySource.set(origin.sourcePath, types)
+      }
+      typeOriginResolver = declaration =>
+        AST.isTypeDeclaration(declaration)
+          ? bySource.get(AST.getDocument(declaration).uri.path)?.get(declaration.name)
+          : undefined
+    } catch (error) {
+      if (!(error instanceof Errors.UserInputError)) {
+        throw error
+      }
+      const previous = lastGoodResults.get(root)
+      return result(
+        root,
+        'stale',
+        [{ severity: 'error', source: 'compiler', message: error.messageForUser }],
+        previous?.contractPaths ?? [],
+        previous?.sourceMappings ?? [],
+        previous?.dependencyRoots ?? [],
+        previous?.configInputPaths ?? [],
+        previous?.externalSidecarInputPaths ?? [],
+        previous?.sidecarOwnershipInputPaths ?? [],
+        [],
+        nextRevision(root),
+        nativeBindings,
+      )
+    }
     const markerPath = FS.resolvePath('.tao', root)
     if (!await FS.isDirectory(markerPath)) {
       const config = await writeProjectTypeScriptConfigUnderLock(root, options)
@@ -47,6 +105,7 @@ export const ProjectTooling: ProjectToolingService = {
         lastGoodResults.get(root)?.sidecarOwnershipInputPaths ?? [],
         [],
         nextRevision(root),
+        nativeBindings,
       )
     }
     await ProjectLocal.prepare(root)
@@ -54,7 +113,14 @@ export const ProjectTooling: ProjectToolingService = {
     const refreshed = await FS.withFileMutationLock(
       lockPath,
       root,
-      async () => await refreshUnderLock(root, options, typeScriptSessions.get(root)?.session),
+      async () =>
+        await refreshUnderLock(
+          root,
+          options,
+          nativeBindings,
+          typeOriginResolver,
+          typeScriptSessions.get(root)?.session,
+        ),
     )
     if (refreshed.status === 'fresh') {
       lastGoodResults.set(root, refreshed)
@@ -102,6 +168,8 @@ export const ProjectTooling: ProjectToolingService = {
 async function refreshUnderLock(
   root: string,
   options: ProjectToolingOptions,
+  nativeBindings: Awaited<ReturnType<typeof inspectMaintainedNativeBindings>>,
+  typeOriginResolver: BridgeTypeOriginResolver,
   typeScriptSession?: ProjectTypeScriptProgramSession,
 ): Promise<ProjectToolingResult> {
   try {
@@ -128,6 +196,7 @@ async function refreshUnderLock(
       previous?.sidecarOwnershipInputPaths ?? [],
       [],
       nextRevision(root),
+      nativeBindings,
     )
   }
   const sourcePaths = await discoverProjectTaoFiles(root)
@@ -139,14 +208,17 @@ async function refreshUnderLock(
   const externalSidecarInputs = new Set<string>()
   const sidecarOwnershipInputs = new Set<string>()
   let planned: ProjectPlannedOutput[] | undefined = []
+  let nativeContracts: readonly BridgeModule[] = []
   if (entryPaths.length > 0) {
-    const workspace = await Workspace.open(root)
+    const workspace = await Workspace.open(root, { nativeBindings: options.nativeBindings })
     let validation = await workspace.validateFiles(entryPaths)
     diagnostics.push(...validation.diagnostics)
     if (Diagnostics.hasError(diagnostics)) {
       planned = undefined
     } else {
-      const context = await Packages.createContext(root)
+      const context = await Packages.createContext(root, {
+        ...(options.nativeBindings?.stdlibRoot === undefined ? {} : { stdlibRoot: options.nativeBindings.stdlibRoot }),
+      })
       const graph = Packages.createResolver(context).projectGraph({
         fromFilePath: entryPaths[0]!,
         workspaceFiles: validation.files.map(file => file.ast),
@@ -229,10 +301,14 @@ async function refreshUnderLock(
             validation.files.filter(file => contractSourcePaths.has(file.path)),
             root,
             origins,
-            { runtimeRoot: options.runtimeRoot, selectedStatementsBySourcePath: statementsBySourcePath },
+            {
+              runtimeRoot: options.runtimeRoot,
+              selectedStatementsBySourcePath: statementsBySourcePath,
+              typeOriginResolver,
+            },
           )
         let modules = collectContracts()
-        let snapshots = await collectProjectDependencySnapshots(root, modules, origins)
+        let snapshots = await collectProjectDependencySnapshots(root, modules, origins, nativeBindings)
         let changed = true
         while (changed && !Diagnostics.hasError(diagnostics)) {
           changed = false
@@ -254,7 +330,9 @@ async function refreshUnderLock(
               pathsByRoot.set(origin.projectRoot, paths)
             }
             for (const [dependencyRoot, paths] of pathsByRoot) {
-              const dependencyValidation = await (await Workspace.open(dependencyRoot)).validateFiles(paths)
+              const dependencyValidation = await (await Workspace.open(dependencyRoot, {
+                nativeBindings: options.nativeBindings,
+              })).validateFiles(paths)
               diagnostics.push(...dependencyValidation.diagnostics)
               const files = new Map(validation.files.map(file => [file.path, file]))
               for (const file of dependencyValidation.files) {
@@ -302,7 +380,7 @@ async function refreshUnderLock(
           }
           if (changed) {
             modules = collectContracts()
-            snapshots = await collectProjectDependencySnapshots(root, modules, origins)
+            snapshots = await collectProjectDependencySnapshots(root, modules, origins, nativeBindings)
           }
         }
         diagnostics.push(...snapshots.diagnostics)
@@ -313,6 +391,16 @@ async function refreshUnderLock(
         ))
         diagnostics.push(...await validateSelectedAppImports(root, graph.appRequirements))
         diagnostics.push(...await validateManagedDependencyEnvironments(root, environments))
+        const nativeStatements = reachedNativeStatements([...ownDeclarations], new Set(nativeBindings.outputPaths))
+        const nativeFiles = validation.files.filter(file => nativeStatements.has(file.path))
+        const nativeRoot = nativeFiles[0]?.path.split('/@tao/')[0]
+        if (nativeRoot !== undefined) {
+          nativeContracts = BridgeMetadata.collect(nativeFiles, nativeRoot, new Map(), {
+            runtimeRoot: options.runtimeRoot,
+            selectedStatementsBySourcePath: nativeStatements,
+            typeOriginResolver,
+          })
+        }
         planned = Diagnostics.hasError(diagnostics) ? undefined : [
           ...modules.map(module => ({
             path: module.path,
@@ -330,6 +418,29 @@ async function refreshUnderLock(
         ]
       }
     }
+  }
+  const confirmedNativeBindings = await inspectMaintainedNativeBindings(options.nativeBindings)
+  if (confirmedNativeBindings.status === 'stale' || confirmedNativeBindings.identity !== nativeBindings.identity) {
+    const previous = lastGoodResults.get(root)
+    return result(
+      root,
+      'stale',
+      confirmedNativeBindings.diagnostics.length > 0 ? confirmedNativeBindings.diagnostics : [{
+        severity: 'error',
+        source: 'compiler',
+        code: 'maintained-native-bindings-stale',
+        message: ProjectNativeBindingValidationMessages.changedDuringRefresh,
+      }],
+      previous?.contractPaths ?? [],
+      previous?.sourceMappings ?? [],
+      dependencyRoots,
+      previous?.configInputPaths ?? [],
+      previous?.externalSidecarInputPaths ?? [],
+      previous?.sidecarOwnershipInputPaths ?? [],
+      [],
+      nextRevision(root),
+      confirmedNativeBindings,
+    )
   }
   const config = await writeProjectTypeScriptConfigUnderLock(root, options, privatePackages)
   diagnostics.push(...config.diagnostics)
@@ -349,6 +460,8 @@ async function refreshUnderLock(
     published.sourceMappings,
     options,
     hasExternalSidecars ? undefined : typeScriptSession,
+    nativeBindings,
+    nativeContracts,
   )
   diagnostics.push(...typeCheck.diagnostics)
   const status = Diagnostics.hasError(diagnostics) ? 'stale' : 'fresh'
@@ -372,6 +485,7 @@ async function refreshUnderLock(
     [...sidecarOwnershipInputs].sort(),
     changedOutputPaths,
     nextRevision(root),
+    nativeBindings,
   )
 }
 
@@ -565,6 +679,50 @@ async function validateSelectedAppImports(
   return diagnostics
 }
 
+/** Follow semantic references without selecting unrelated standard capabilities. */
+function reachedNativeStatements(
+  declarations: readonly AST.Declaration[],
+  nativePaths: ReadonlySet<string>,
+): ReadonlyMap<string, readonly AST.Statement[]> {
+  const statements = new Map<string, AST.Statement[]>()
+  const reached = new Set<AST.Declaration>()
+  const queue = [...declarations]
+  const enqueue = (target: AST.Node | undefined): void => {
+    let current = target
+    while (current !== undefined) {
+      if (AST.isDeclaration(current) && AST.isTaoFile(current.$container)) {
+        queue.push(current)
+        break
+      }
+      current = current.$container
+    }
+  }
+  while (queue.length > 0) {
+    const declaration = queue.shift()!
+    if (reached.has(declaration)) {
+      continue
+    }
+    reached.add(declaration)
+    const path = AST.getDocument(declaration).uri.path
+    if (nativePaths.has(path)) {
+      const selected = statements.get(path) ?? []
+      selected.push(declaration)
+      statements.set(path, selected)
+    }
+    for (const node of [declaration, ...AST.streamAllContents(declaration)]) {
+      // Named type roots use semantic visibility rather than Langium references.
+      if (AST.isNamedTypeReference(node)) {
+        enqueue(Type.definitionOfReference(node))
+      }
+      for (const reference of AST.streamReferences(node)) {
+        const target = 'ref' in reference.reference ? reference.reference.ref : undefined
+        enqueue(target)
+      }
+    }
+  }
+  return statements
+}
+
 function nextRevision(root: string): number {
   const revision = (revisions.get(root) ?? 0) + 1
   revisions.set(root, revision)
@@ -583,6 +741,7 @@ function result(
   sidecarOwnershipInputPaths: ProjectToolingResult['sidecarOwnershipInputPaths'],
   changedOutputPaths: ProjectToolingResult['changedOutputPaths'],
   revision: number,
+  nativeBindings: Awaited<ReturnType<typeof inspectMaintainedNativeBindings>>,
 ): ProjectToolingResult {
   return {
     root,
@@ -594,6 +753,18 @@ function result(
     configInputPaths,
     externalSidecarInputPaths,
     sidecarOwnershipInputPaths,
+    nativeBindingInputPaths: [
+      ...new Set([
+        ...nativeBindings.inputPaths,
+        ...(status === 'stale' ? lastGoodResults.get(root)?.nativeBindingInputPaths ?? [] : []),
+      ]),
+    ].sort(),
+    nativeBindingOutputPaths: [
+      ...new Set([
+        ...nativeBindings.outputPaths,
+        ...(status === 'stale' ? lastGoodResults.get(root)?.nativeBindingOutputPaths ?? [] : []),
+      ]),
+    ].sort(),
     changedOutputPaths,
     revision,
   }

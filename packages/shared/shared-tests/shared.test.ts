@@ -395,6 +395,11 @@ Describe('FS', () => {
     const orphanedRollback = FS.resolvePath(`target.${uuid}.3.restore`, root)
     const unrelated = FS.resolvePath('target-notes.tmp', root)
 
+    Expect(FS.isFileMutationAuxiliaryPath(orphanedStaging)).toBe(true)
+    Expect(FS.isFileMutationAuxiliaryPath(orphanedRollback)).toBe(true)
+    Expect(FS.isFileMutationAuxiliaryPath(unrelated)).toBe(false)
+    Expect(FS.isFileMutationAuxiliaryPath(FS.resolvePath(`target.${uuid}.notes.tmp`, root))).toBe(false)
+
     await FS.writeText(FS.resolvePath('value.txt', sourceDir), 'current')
     await FS.mkdir(targetDir)
     await FS.writeText(orphanedStaging, 'orphaned staging')
@@ -1482,6 +1487,38 @@ Describe('TaoStdlib', () => {
       Expect(await TaoStdlib.declaredRootIdentity()).toBe(before)
 
       await FS.writeText(authored, 'export const authored = 2\n')
+      Expect(await TaoStdlib.declaredRootIdentity()).not.toBe(before)
+    })
+  })
+
+  Test('includes native-owned generated implementations while excluding ordinary contracts', async () => {
+    const payload = await tmpDir()
+    const native = FS.resolvePath('.tao-ts/native-bindings/files/Bindings.ts', payload)
+    await FS.writeText(native, 'export const native = 1\n')
+    await withDeclaredStdlibRoot(payload, async () => {
+      const before = await TaoStdlib.declaredRootIdentity()
+      await FS.writeText(FS.resolvePath('.tao-ts/@tao/device/files/Bindings.tao.ts', payload), 'ordinary contract\n')
+      Expect(await TaoStdlib.declaredRootIdentity()).toBe(before)
+      await FS.writeText(native, 'export const native = 2\n')
+      Expect(await TaoStdlib.declaredRootIdentity()).not.toBe(before)
+    })
+  })
+
+  Test('keeps stdlib identity stable while native files have real mutation ownership sidecars', async () => {
+    const payload = await tmpDir()
+    const native = FS.resolvePath('.tao-ts/native-bindings/files/Bindings.ts', payload)
+    await FS.writeText(native, 'export const native = 1\n')
+    await withDeclaredStdlibRoot(payload, async () => {
+      const before = await TaoStdlib.declaredRootIdentity()
+      await FS.withFileMutationLock(native, payload, async () => {
+        Expect(await TaoStdlib.declaredRootIdentity()).toBe(before)
+      }, {
+        beforeClaimPublish: async (_lock, owner) => {
+          Expect(await FS.isFile(owner)).toBe(true)
+          Expect(await TaoStdlib.declaredRootIdentity()).toBe(before)
+        },
+      })
+      await FS.writeText(native, 'export const native = 2\n')
       Expect(await TaoStdlib.declaredRootIdentity()).not.toBe(before)
     })
   })

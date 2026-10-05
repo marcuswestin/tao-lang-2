@@ -1,4 +1,4 @@
-import { FS, ProjectLocal, TaoResources } from '@shared'
+import { FS, ProjectLocal, TaoResources, TaoStdlib } from '@shared'
 import * as ts from 'typescript'
 import type { ProjectToolingOptions } from './ProjectTooling'
 
@@ -69,7 +69,7 @@ export async function hostModulePaths(
 ): Promise<Record<string, string[]>> {
   const paths: Record<string, string[]> = {}
   const seen = new Set<string>()
-  for (const root of resolveHostModuleRoots(options)) {
+  for (const root of [...resolveHostModuleRoots(options), ...await nativeBindingModuleRoots(options)]) {
     for (const packageName of await packageNames(root)) {
       if (
         seen.has(packageName) || excludedPackages.has(packageName)
@@ -125,6 +125,24 @@ export async function hostModulePaths(
     }
   }
   return paths
+}
+
+/** Verified portable declarations remain available before a project installs its native peers. */
+export async function nativeBindingModuleRoots(options: ProjectToolingOptions = {}): Promise<string[]> {
+  const stdlibRoot = options.nativeBindings?.stdlibRoot ?? TaoStdlib.declaredRoot()
+    ?? FS.resolvePath('../../../../packages/apps/stdlib', import.meta.dir)
+  const nativeRoot = FS.resolvePath('.tao-ts/native-bindings', stdlibRoot)
+  if (!await FS.isDirectory(nativeRoot)) {
+    return []
+  }
+  const roots: string[] = []
+  for (const capability of await FS.listDir(nativeRoot)) {
+    const root = FS.resolvePath(`${capability}/inputs/node_modules`, nativeRoot)
+    if (await FS.isDirectory(root)) {
+      roots.push(root)
+    }
+  }
+  return roots
 }
 
 function resolveInstalledExport(specifier: string, nodeModulesRoot: string): string | undefined {

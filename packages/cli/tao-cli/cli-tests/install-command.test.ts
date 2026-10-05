@@ -379,6 +379,239 @@ view Main() { render inject \`\`\`ts return null \`\`\` }
     }
   })
 
+  Test('computes exact legacy and current package targets for scoped npm aliases', () => {
+    const root = FS.resolvePath('fixture-consumer')
+    Expect(ManagedInstallEnvironment.legacyPackageRoot(root, 'origin-namespace', '@tools/util'))
+      .toBe(FS.resolvePath('.tao/install/packages/origin-namespace/4868cd7539a9cb35', root))
+    Expect(ManagedInstallEnvironment.packageRoot(root, 'origin-namespace', '@tools/util'))
+      .toBe(FS.resolvePath('.tao/cache/install/packages/origin-namespace/4868cd7539a9cb35', root))
+  })
+
+  for (const contents of ['populated', 'dangling']) {
+    Test(`repairs a locked ${contents} legacy link after install and keeps repeated links stable`, async () => {
+      const root = await mkTestDir('tao-install-legacy-')
+      try {
+        const alias = 'util'
+        await writeNpmApp(root, alias)
+        const packageName = 'date-fns'
+        const namespace = BridgeMetadata.dependencyNamespace(root)
+        const legacy = FS.resolvePath(
+          `node_modules/${alias}`,
+          FS.resolvePath(
+            `.tao/install/packages/${namespace}/9342af224fa264b0`,
+            root,
+          ),
+        )
+        const current = FS.resolvePath(
+          `node_modules/${alias}`,
+          ManagedInstallEnvironment.packageRoot(root, namespace, alias),
+        )
+        const link = FS.resolvePath(`node_modules/${alias}`, root)
+        await writeNpmLock(root, '.', alias)
+        // Migration moves these contents, leaving the old symlink target dangling.
+        if (contents === 'populated') {
+          await FS.writeText(FS.resolvePath('native.ts', legacy), 'retained native contents')
+        }
+        await FS.symlink(FS.relativePath(FS.dirname(link), legacy), link)
+        const before = await FS.entryMetadata(link)
+        let calls = 0
+        const installNpm = async (path: string) => {
+          calls++
+          Expect(await FS.entryMetadata(link)).toEqual(calls === 1 ? before : repaired)
+          const manifest = await FS.readJson<{ dependencies: Record<string, string> }>(
+            FS.resolvePath('package.json', path),
+          )
+          Expect(manifest.dependencies).toEqual({ [alias]: `npm:${packageName}@4.1.0` })
+          await FS.writeJson(FS.resolvePath(`node_modules/${alias}/package.json`, path), {
+            name: packageName,
+            version: '4.1.0',
+          })
+        }
+        const run = () => runTaoInstall(root, { appName: 'Reader', output: fakeTerminal().output }, { installNpm })
+        await run()
+        Expect(await FS.realPath(link)).toBe(current)
+        const repaired = await FS.entryMetadata(link)
+        await run()
+        Expect(calls).toBe(2)
+        Expect(await FS.entryMetadata(link)).toEqual(repaired)
+        if (contents === 'populated') {
+          Expect(await FS.readText(FS.resolvePath('native.ts', current))).toBe('retained native contents')
+        }
+        Expect((await readProjectLock(root)).installs?.environments['.']?.npm[alias])
+          .toEqual({ name: packageName, requested: '4.1.0', version: '4.1.0' })
+      } finally {
+        await FS.remove(root)
+      }
+    })
+  }
+
+  for (const outcome of ['npm failure', 'missing installed manifest']) {
+    Test(`keeps a locked legacy link when repair stops at ${outcome}`, async () => {
+      const root = await mkTestDir('tao-install-legacy-failure-')
+      try {
+        await writeNpmApp(root)
+        await writeNpmLock(root, '.', 'util')
+        const namespace = BridgeMetadata.dependencyNamespace(root)
+        const legacy = FS.resolvePath(
+          'node_modules/util',
+          ManagedInstallEnvironment.legacyPackageRoot(root, namespace, 'util'),
+        )
+        const link = FS.resolvePath('node_modules/util', root)
+        await FS.symlink(legacy, link)
+        const before = await FS.entryMetadata(link)
+        let calls = 0
+        await Expect(runTaoInstall(root, { appName: 'Reader', output: fakeTerminal().output }, {
+          installNpm: async () => {
+            calls++
+            if (outcome === 'npm failure') {
+              Errors.throwUnexpected('npm failed')
+            }
+          },
+        })).rejects.toThrow()
+        Expect(calls).toBe(1)
+        Expect(await FS.entryMetadata(link)).toEqual(before)
+      } finally {
+        await FS.remove(root)
+      }
+    })
+  }
+
+  for (const kind of ['unowned', 'wrong namespace', 'wrong alias', 'prefix', 'arbitrary', 'directory']) {
+    Test(`rejects a ${kind} legacy alias before npm or package mutation`, async () => {
+      const root = await mkTestDir('tao-install-legacy-unowned-')
+      try {
+        await writeNpmApp(root)
+        if (kind !== 'unowned') {
+          await writeNpmLock(root, '.', 'util')
+        }
+        const namespace = BridgeMetadata.dependencyNamespace(root)
+        const legacy = FS.resolvePath(
+          'node_modules/util',
+          ManagedInstallEnvironment.legacyPackageRoot(root, namespace, 'util'),
+        )
+        const link = FS.resolvePath('node_modules/util', root)
+        const target = kind === 'wrong namespace'
+          ? FS.resolvePath(
+            'node_modules/util',
+            ManagedInstallEnvironment.legacyPackageRoot(root, 'other-namespace', 'util'),
+          )
+          : kind === 'wrong alias'
+          ? FS.resolvePath('node_modules/util', ManagedInstallEnvironment.legacyPackageRoot(root, namespace, 'other'))
+          : kind === 'prefix'
+          ? `${legacy}/child`
+          : kind === 'arbitrary'
+          ? FS.resolvePath('unrelated', root)
+          : legacy
+        if (kind === 'directory') {
+          await FS.mkdir(link)
+        } else {
+          await FS.symlink(target, link)
+        }
+        const before = await FS.entryMetadata(link)
+        const lock = await readProjectLock(root)
+        let calls = 0
+        await Expect(runTaoInstall(root, { appName: 'Reader', output: fakeTerminal().output }, {
+          installNpm: async () => {
+            calls++
+          },
+        })).rejects.toThrow('Tao-managed')
+        Expect(calls).toBe(0)
+        Expect(await FS.entryMetadata(link)).toEqual(before)
+        Expect(await readProjectLock(root)).toEqual(lock)
+        Expect(await FS.exists(ManagedInstallEnvironment.packageRoot(root, namespace, 'util'))).toBe(false)
+      } finally {
+        await FS.remove(root)
+      }
+    })
+  }
+
+  for (const kind of ['owned', 'unowned', 'wrong namespace', 'directory']) {
+    Test(`${kind === 'owned' ? 'repairs' : 'rejects'} a ${kind} legacy dependency origin link`, async () => {
+      const directory = await mkTestDir('tao-install-legacy-origin-')
+      const root = FS.resolvePath('consumer', directory)
+      const library = FS.resolvePath('library', directory)
+      try {
+        await writeNpmApp(root)
+        await FS.writeText(FS.resolvePath('.tao/.gitkeep', library), '')
+        await FS.writeText(
+          FS.resolvePath('App.tao', root),
+          `app Reader {
+   id "reader"
+   version "1.0.0"
+   name "Reader"
+   requires ts npm:date-fns version 4.1.0 as util
+   requires ../library version ^1.0.0 { @ui }
+   view Main
+}
+view Main() { render inject \`\`\`ts return null \`\`\` }
+`,
+        )
+        await FS.writeText(
+          FS.resolvePath('Package.tao', library),
+          'package { version 1.0.0 license MIT includes @ui requires ts npm:date-fns version 4.1.0 as util }\n',
+        )
+        await FS.writeText(
+          FS.resolvePath('@ui/Card.tao', library),
+          'public view Card() { render inject ```ts return null ``` }\n',
+        )
+        if (kind !== 'unowned') {
+          await writeNpmLock(root, '../library', 'util')
+        }
+        const namespace = BridgeMetadata.dependencyNamespace(library)
+        const modules = ManagedInstallEnvironment.modulesRoot(root, library, namespace)
+        const aliasLink = FS.resolvePath('util', modules)
+        const generated = ManagedInstallEnvironment.generatedModulesLink(root, namespace)
+        const legacyModules = ManagedInstallEnvironment.legacyModulesRoot(root, namespace)
+        if (kind === 'directory') {
+          await FS.mkdir(generated)
+        } else {
+          await FS.symlink(
+            kind === 'wrong namespace' ? ManagedInstallEnvironment.legacyModulesRoot(root, 'other') : legacyModules,
+            generated,
+          )
+        }
+        if (kind === 'owned') {
+          await FS.symlink(
+            FS.resolvePath('node_modules/util', ManagedInstallEnvironment.legacyPackageRoot(root, namespace, 'util')),
+            FS.resolvePath('util', legacyModules),
+          )
+        }
+        const before = await FS.entryMetadata(generated)
+        let calls = 0
+        const run = () =>
+          runTaoInstall(root, { appName: 'Reader', output: fakeTerminal().output }, {
+            installNpm: async path => {
+              calls++
+              await FS.writeJson(FS.resolvePath('node_modules/util/package.json', path), {
+                name: 'date-fns',
+                version: '4.1.0',
+              })
+            },
+          })
+        if (kind === 'owned') {
+          await run()
+          Expect(await FS.realPath(generated)).toBe(modules)
+          Expect(await FS.realPath(aliasLink)).toBe(
+            FS.resolvePath('node_modules/util', ManagedInstallEnvironment.packageRoot(root, namespace, 'util')),
+          )
+          const repaired = await FS.entryMetadata(generated)
+          const repairedAlias = await FS.entryMetadata(aliasLink)
+          await run()
+          Expect(calls).toBe(4)
+          Expect(await FS.entryMetadata(generated)).toEqual(repaired)
+          Expect(await FS.entryMetadata(aliasLink)).toEqual(repairedAlias)
+        } else {
+          await Expect(run()).rejects.toThrow('not Tao-managed')
+          Expect(calls).toBe(0)
+          Expect(await FS.entryMetadata(generated)).toEqual(before)
+          Expect(await FS.exists(ManagedInstallEnvironment.packageRoot(root, namespace, 'util'))).toBe(false)
+        }
+      } finally {
+        await FS.remove(directory)
+      }
+    })
+  }
+
   Test('refuses to replace an unrelated root npm installation', async () => {
     const root = await mkTestDir('tao-install-unowned-')
     try {
@@ -411,7 +644,24 @@ view Main() { render inject \`\`\`ts return null \`\`\` }
   })
 })
 
-async function writeNpmApp(root: string): Promise<void> {
+async function writeNpmLock(root: string, projectRoot: string, alias: string): Promise<void> {
+  await FS.writeJson(FS.resolvePath('.tao/store/lock.jsonc', root), {
+    schemaVersion: 1,
+    installs: {
+      lockfileVersion: 2,
+      local: {},
+      environments: {
+        [projectRoot]: {
+          projectRoot,
+          publications: [],
+          npm: { [alias]: { name: 'date-fns', requested: '4.1.0', version: '4.1.0' } },
+        },
+      },
+    },
+  })
+}
+
+async function writeNpmApp(root: string, alias = 'util'): Promise<void> {
   await FS.writeText(FS.resolvePath('.tao/.gitkeep', root), '')
   await FS.writeText(
     FS.resolvePath('App.tao', root),
@@ -419,7 +669,7 @@ async function writeNpmApp(root: string): Promise<void> {
    id "reader"
    version "1.0.0"
    name "Reader"
-   requires ts npm:date-fns version 4.1.0 as util
+   requires ts npm:date-fns version 4.1.0 as ${alias}
    view Main
 }
 view Main() { render inject \`\`\`ts return null \`\`\` }
