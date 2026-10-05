@@ -1614,6 +1614,20 @@ export function associatedEntityActionReceiver(
   return declaration.receiverName === owner.name ? { owner, cardinality: 'many' } : undefined
 }
 
+/** The runtime binding of a contextual receiver preserves singular or collection cardinality. */
+export function associatedReceiverBindingName(reference: AST.Node): string | undefined {
+  const owner = associatedReceiverOwner(reference)
+  if (!owner) {
+    return undefined
+  }
+  if (!AST.isEntityDataDeclaration(owner)) {
+    return owner.name
+  }
+  const action = findOwningAction(reference)
+  const receiver = action && associatedEntityActionReceiver(action)
+  return receiver?.owner === owner && receiver.cardinality === 'many' ? owner.name : owner.singularName
+}
+
 /** associatedReceiverOwner recognizes only references linked to a real instance receiver. */
 export function associatedReceiverOwner(
   reference: AST.Node,

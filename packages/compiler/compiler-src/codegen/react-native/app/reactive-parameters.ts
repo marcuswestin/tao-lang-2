@@ -11,7 +11,11 @@ export function compileReactiveArgument(expression: AST.Expression): Compiled {
       ? expression.target.ref
       : undefined
     if (AST.isValueDeclaration(target)) {
-      return compileWritableTarget(target, AST.isMemberAccessExpression(expression) ? expression.members : [])
+      return compileWritableTarget(
+        target,
+        AST.isMemberAccessExpression(expression) ? expression.members : [],
+        AST.associatedReceiverBindingName(expression),
+      )
     }
   }
   const type = Type.ofExpression(expression)
@@ -30,8 +34,12 @@ export function compileReactiveArgument(expression: AST.Expression): Compiled {
 }
 
 /** The validator admits only writable roots and ordinary item paths here. */
-export function compileWritableTarget(target: AST.ValueDeclaration, members: readonly string[]): Compiled {
-  const name = { name: AST.isRenderSlotInputBinding(target) ? target.name : Type.declarationName(target) }
+export function compileWritableTarget(
+  target: AST.ValueDeclaration,
+  members: readonly string[],
+  receiverName?: string,
+): Compiled {
+  const name = { name: receiverName ?? (AST.isRenderSlotInputBinding(target) ? target.name : Type.declarationName(target)) }
   let value = gen`${gen.scopeName(name)}`
   for (const member of members) {
     value = gen`(TR.Member(${value}, ${gen.jsLiteral([member])}) as TR.Writable<any>)`

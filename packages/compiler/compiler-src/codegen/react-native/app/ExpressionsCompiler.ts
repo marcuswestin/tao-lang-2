@@ -415,7 +415,7 @@ export const ExpressionsCompiler = {
         AST.associatedReceiverOwner(reference) === target,
         'validated type reference names the contextual receiver',
       )
-      return compileMemberPath(gen.scopeName(target), Type.ofReferenceRoot(reference), reference.members)
+      return compileMemberPath(contextualReceiverReference(reference, target), Type.ofReferenceRoot(reference), reference.members)
     }
     const root = Compile.ValueDeclarationReference(target)
     return compileMemberPath(root, Type.ofValueDeclaration(target), reference.members)
@@ -523,7 +523,7 @@ export const ExpressionsCompiler = {
         AST.associatedReceiverOwner(reference) === target,
         'validated type reference names the contextual receiver',
       )
-      return gen`${gen.scopeName(target)}.evaluate()`
+      return gen`${contextualReceiverReference(reference, target)}.evaluate()`
     }
     return Compile.ValueDeclarationReference(target)
   },
@@ -669,6 +669,19 @@ function itemPropertyBindingPairs(
   const result = ASTUtils.resolveItemPropertyBindings(itemType.properties, item.properties)
   Assert(result.diagnostics.length === 0, 'validated item constructor has no binding diagnostics')
   return result.pairs
+}
+
+/** Contextual entity references select their actual bound row or collection, not the catalog name. */
+function contextualReceiverReference(
+  reference: AST.ValueReference | AST.MemberAccessExpression,
+  owner: AST.TypeDeclaration | AST.EntityDataDeclaration,
+): Compiled {
+  if (!AST.isEntityDataDeclaration(owner)) {
+    return gen.scopeName(owner)
+  }
+  return gen.scopeName({
+    name: AST.associatedReceiverBindingName(reference)!,
+  })
 }
 
 function compileConfiguredItem(
