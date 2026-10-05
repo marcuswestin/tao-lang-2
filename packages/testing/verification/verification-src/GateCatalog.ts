@@ -178,7 +178,7 @@ const BUDGET_KEY_TAO_TEST = WorkGraph.BUDGET_ENV_KEYS.taoTest
  * measurements have a fallback width for a new worktree without local timing history.
  */
 const SUITE_TUNING = new Map<string, SuiteTuning>([
-  ['compiler', { args: ['--concurrent'], reads: ['gen-parser', 'tao', 'ts'] }],
+  ['compiler', { reads: ['gen-parser', 'tao', 'ts'] }],
   // Developer and verification tests deliberately run concurrently and many of them spawn child
   // processes. During full verification, a healthy child can wait behind the other CPU-heavy
   // suites long enough to exceed Bun's generic five-second test timeout even though it completes
