@@ -18,8 +18,12 @@ type CapabilityMetadata = {
 
 const ownedCapabilities = new WeakMap<object, CapabilityMetadata>()
 
+// The erased nominal brand does not emit a class field; runtime ownership lives in the WeakMap.
+interface Capability<ValueT> {
+  readonly [capabilityBrand]: true
+}
+
 class Capability<ValueT> implements TaoCapability<ValueT> {
-  declare readonly [capabilityBrand]: true
   readonly #source: TaoEvaluable<ValueT>
 
   constructor(source: TaoEvaluable<ValueT>) {
