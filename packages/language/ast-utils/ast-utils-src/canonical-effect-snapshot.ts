@@ -804,7 +804,10 @@ function publishRead(
   const contextualTransport = forwardingMethod && AST.isAssociatedFunctionDeclaration(forwardingMethod)
     && !forwardingMethod.static && AST.findOwningAssociatedFunction(reference) === forwardingMethod
     && 'nominal' in domain && domain.nominal === owner
-  if (owner && declaration === owner && (immutableReadDomain(domain) || contextualTransport)) {
+  const contextualItemField = AST.isMemberAccessExpression(reference) && AST.isTypeDeclaration(owner)
+    && domain.kind === 'item' && domain.nominal === owner && selectedDomain !== domain
+    && immutableReadDomain(selectedDomain)
+  if (owner && declaration === owner && (immutableReadDomain(domain) || contextualItemField || contextualTransport)) {
     return Object.freeze({
       reference,
       declaration,
