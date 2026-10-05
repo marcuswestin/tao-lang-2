@@ -338,10 +338,31 @@ export const ExpressionsCompiler = {
       ? gen`${binding}(${gen.join(values, value => value)})`
       : binding
     const resultType = BridgeMetadata.bridgeResultType(bridge)
-    const owner = resultType && Type.quantityOwner(resultType)
-    return owner
-      ? gen`(() => { const result = ${nativeValue}; ${quantityFactoryBinding(owner)}.read(result); return result })()`
-      : resultType?.kind === 'primitive' && resultType.primitive === 'numeric'
+    if (resultType) {
+      const members = nativeResultMembers(resultType)
+      const owners = [...new Set(members.map(Type.quantityOwner).filter(owner => owner !== undefined))]
+      if (owners.length) {
+        const ordinaryPlans = members.filter(member => !Type.quantityOwner(member))
+          .sort((left, right) => Number(primitiveNamed(left, 'numeric')) - Number(primitiveNamed(right, 'numeric')))
+          .map(nativePrimitiveResultBranch)
+        const ordinaryBranches = ordinaryPlans.filter(branch => branch !== undefined)
+        const ambiguousData = ordinaryPlans.some(branch => branch === undefined)
+        return gen`(() => {
+          const result = ${nativeValue};
+          ${gen.list(ordinaryBranches, branch => branch)}
+          ${
+          ambiguousData
+            ? gen`if (!TR.isRuntimeValue(result) && !TR.isQuantityPayload(result)) return TR.Value(result);`
+            : gen.noop()
+        }
+          TR.admitQuantityUnion(result, [${gen.join(owners, owner => gen`${quantityFactoryBinding(owner)}`)}], ${
+          gen.jsLiteral(Type.displayName(resultType))
+        });
+          return result
+        })()`
+      }
+    }
+    return resultType?.kind === 'primitive' && resultType.primitive === 'numeric'
       ? gen`TR.Value(TR.checkedNumericBacking(${nativeValue}, ${
         gen.jsLiteral(
           resultType.nominal && AST.isTypeDeclaration(resultType.nominal) ? resultType.nominal.name : 'numeric',
@@ -1002,6 +1023,38 @@ function primitiveNamed(type: ASTUtils.TaoType, primitive: string): boolean {
 function typeContainsQuantity(type: ASTUtils.TaoType): boolean {
   return !!Type.quantityOwner(type)
     || type.kind === 'union' && type.members.some(typeContainsQuantity)
+}
+
+/** nativeResultMembers flattens result unions without inventing an owner for ordinary branches. */
+function nativeResultMembers(type: ASTUtils.TaoType): readonly ASTUtils.TaoType[] {
+  return type.kind === 'union' ? type.members.flatMap(nativeResultMembers) : [type]
+}
+
+/** Disjoint primitive native data keeps raw passage; numeric backing is finite at ingress. */
+function nativePrimitiveResultBranch(type: ASTUtils.TaoType): Compiled | undefined {
+  if (type.kind !== 'primitive') {
+    return undefined
+  }
+  switch (type.primitive) {
+    case 'numeric':
+      return gen`if (typeof result === 'number') return TR.Value(TR.checkedNumericBacking(result, ${
+        gen.jsLiteral(Type.displayName(type))
+      }));`
+    case 'number':
+    case 'time':
+    case 'duration':
+      return gen`if (typeof result === 'number') return TR.Value(result);`
+    case 'text':
+    case 'color':
+    case 'shortcut':
+      return gen`if (typeof result === 'string') return TR.Value(result);`
+    case 'boolean':
+      return gen`if (typeof result === 'boolean') return TR.Value(result);`
+    case 'none':
+      return gen`if (result === null) return TR.Value(result);`
+    default:
+      return undefined
+  }
 }
 
 function ratioOf(family: ASTUtils.UnitFamily, unit: string): number {

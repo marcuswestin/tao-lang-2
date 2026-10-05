@@ -67,6 +67,20 @@ async function executeExpression(code: string, ownerFactory: Awaited<ReturnType<
   return new Function('TR', 'Factory', '_Scope', javascript)(TR, ownerFactory, scope)
 }
 
+async function mixedResultInvoker(ordinary: string) {
+  const file = await validated(`${declaration}
+    type Ordinary is ${ordinary}
+    type Choice is Measure | Ordinary
+    function Make() returns Choice { return Make() from ./Make.ts }
+  `)
+  const bridge = AST.streamAllContents(file).find(AST.isFromExpression)
+  Expect.Is(bridge, AST.isFromExpression)
+  const code = new Bun.Transpiler({ loader: 'ts' }).transformSync(
+    `return ${expressionCode(bridge, quantityOwner(file))}`,
+  )
+  return new Function('TR', 'Factory', '__tao_bridge_1__', code)
+}
+
 Describe('compiler: numeric units', () => {
   Test('checks direct and nominal numeric wrapper admission once without replacing the wrapper', async () => {
     const file = await validated('type Storage is numeric let Direct = Storage 2')
@@ -245,6 +259,323 @@ Describe('compiler: numeric units', () => {
     }
   })
 
+  Test('admits either exact quantity owner from a native result union without reconstructing wrappers', async () => {
+    const file = await validated(`${declaration}
+      type Other is numeric with { units { Items 1 (default) } }
+      type Choice is Measure | Other
+      function Make() returns Choice { return Make() from ./Make.ts }
+    `)
+    const bridge = AST.streamAllContents(file).find(AST.isFromExpression)
+    Expect.Is(bridge, AST.isFromExpression)
+    const code = withQuantityFactoryBindings(
+      new Map([[quantityOwner(file), 'First'], [quantityOwner(file, 'Other'), 'Second']]),
+      () => Langium.toString(Compile.Expression(bridge)),
+    )
+    const javascript = new Bun.Transpiler({ loader: 'ts' }).transformSync(`return ${code}`)
+    const invoke = new Function('TR', 'First', 'Second', '__tao_bridge_1__', javascript)
+    const { default: TR } = await runtimeModule
+    const { makeQuantityType } = await quantityModule
+    const first = await factory()
+    const second = makeQuantityType({ domain: 'Other', units: { Items: 1 }, defaultUnit: 'Items' }, TR.Value)
+    for (const input of [first.fromUnit(2, 'Minutes'), second.fromUnit(3, 'Items')]) {
+      let invocations = 0
+      let evaluations = 0
+      let getters = 0
+      const returned = {
+        evaluate() {
+          Expect(this).toBe(returned)
+          evaluations++
+          return {
+            get jsValue() {
+              getters++
+              return input.jsValue
+            },
+          }
+        },
+      }
+      const result = invoke(TR, first, second, () => {
+        invocations++
+        return returned
+      })
+      Expect(result).toBe(returned)
+      Expect(invocations).toBe(1)
+      Expect(evaluations).toBe(1)
+      Expect(getters).toBe(1)
+    }
+    for (
+      const [input, failureCase] of [
+        [(await factory()).fromUnit(2, 'Minutes'), 'QuantityDomainMismatch'],
+        [120, 'QuantityBadShape'],
+        [first.fromUnit(2, 'Minutes').jsValue, 'QuantityBadShape'],
+        [TR.Value(120), 'QuantityBadShape'],
+      ] as const
+    ) {
+      let invocations = 0
+      let failure: unknown
+      try {
+        invoke(TR, first, second, () => {
+          invocations++
+          return input
+        })
+      } catch (error) {
+        failure = error
+      }
+      Expect(failure).toHaveProperty('caseName', failureCase)
+      Expect(invocations).toBe(1)
+    }
+  })
+
+  Test('admits mixed native quantity and primitive results without double wrapping', async () => {
+    const { default: TR } = await runtimeModule
+    const ownerFactory = await factory()
+    const quantity = ownerFactory.fromUnit(2, 'Minutes')
+    for (const target of ['number', 'numeric', 'text']) {
+      const file = await validated(`${declaration}
+        type Choice is Measure | ${target}
+        function Make() returns Choice { return Make() from ./Make.ts }
+      `)
+      const bridge = AST.streamAllContents(file).find(AST.isFromExpression)
+      Expect.Is(bridge, AST.isFromExpression)
+      const code = expressionCode(bridge, quantityOwner(file))
+      const javascript = new Bun.Transpiler({ loader: 'ts' }).transformSync(`return ${code}`)
+      const invoke = new Function('TR', 'Factory', '__tao_bridge_1__', javascript)
+      for (const input of [quantity, target === 'text' ? 'ready' : 7]) {
+        let invocations = 0
+        const result = invoke(TR, ownerFactory, () => {
+          invocations++
+          return input
+        })
+        Expect(invocations).toBe(1)
+        if (input === quantity) {
+          Expect(result).toBe(quantity)
+          Expect(ownerFactory.read(result)).toEqual({ canonical: 120, unit: 'Minutes' })
+        } else {
+          Expect(result.jsValue).toBe(input)
+        }
+      }
+      if (target === 'numeric') {
+        for (const input of [NaN, Infinity, -Infinity]) {
+          let failure: unknown
+          try {
+            invoke(TR, ownerFactory, () => input)
+          } catch (error) {
+            failure = error
+          }
+          Expect(failure).toHaveProperty('caseName', 'QuantityNonFinite')
+        }
+      }
+      for (
+        const [input, failureCase] of [
+          [(await factory()).fromUnit(2, 'Minutes'), 'QuantityDomainMismatch'],
+          [quantity.jsValue, 'QuantityBadShape'],
+          [TR.Value(target === 'text' ? 'ready' : 7), 'QuantityBadShape'],
+        ] as const
+      ) {
+        let failure: unknown
+        try {
+          invoke(TR, ownerFactory, () => input)
+        } catch (error) {
+          failure = error
+        }
+        Expect(failure).toHaveProperty('caseName', failureCase)
+      }
+    }
+  })
+
+  Test('dispatches multiple ordinary union branches and retains number admission alongside numeric', async () => {
+    const { default: TR } = await runtimeModule
+    const ownerFactory = await factory()
+    for (const ordinary of ['numeric | number | text | boolean', 'number | numeric | text | boolean']) {
+      const file = await validated(`${declaration}
+        type Choice is Measure | ${ordinary}
+        function Make() returns Choice { return Make() from ./Make.ts }
+      `)
+      const bridge = AST.streamAllContents(file).find(AST.isFromExpression)
+      Expect.Is(bridge, AST.isFromExpression)
+      const code = new Bun.Transpiler({ loader: 'ts' }).transformSync(
+        `return ${expressionCode(bridge, quantityOwner(file))}`,
+      )
+      const invoke = new Function('TR', 'Factory', '__tao_bridge_1__', code)
+      const quantity = ownerFactory.fromUnit(2, 'Minutes')
+      for (const input of [quantity, 7, NaN, Infinity, 'ready', true]) {
+        const result = invoke(TR, ownerFactory, () => input)
+        if (input === quantity) {
+          Expect(result).toBe(quantity)
+        } else {
+          Expect(Object.is(result.jsValue, input)).toBe(true)
+        }
+      }
+    }
+  })
+
+  for (
+    const [name, ordinary, input] of [
+      ['records', '{ evaluate text }', { evaluate: 'ordinary', jsValue: 'ordinary' }],
+      ['arrays', 'list of text', ['ordinary']],
+    ] as const
+  ) {
+    Test(`keeps ordinary native ${name} in mixed quantity results as raw data`, async () => {
+      const invoke = await mixedResultInvoker(ordinary)
+      const { default: TR } = await runtimeModule
+      const ownerFactory = await factory()
+      let calls = 0
+      const result = invoke(TR, ownerFactory, () => {
+        calls++
+        return input
+      })
+      Expect(result.jsValue).toBe(input)
+      Expect(calls).toBe(1)
+      const quantity = ownerFactory.fromUnit(2, 'Minutes')
+      Expect(invoke(TR, ownerFactory, () => quantity)).toBe(quantity)
+      Expect(ownerFactory.read(quantity)).toEqual({ canonical: 120, unit: 'Minutes' })
+    })
+  }
+
+  Test('does not probe getter or prototype lookalikes at an ambiguous native result boundary', async () => {
+    const { default: TR } = await runtimeModule
+    const ownerFactory = await factory()
+    const quantity = ownerFactory.fromUnit(2, 'Minutes')
+    const recordInvoke = await mixedResultInvoker('{}')
+    const arrayInvoke = await mixedResultInvoker('list of text')
+    for (
+      const input of [
+        Object.create(Object.getPrototypeOf(quantity)),
+        Object.create(Object.getPrototypeOf(quantity.jsValue)),
+        ['ordinary'],
+      ]
+    ) {
+      let probes = 0
+      let calls = 0
+      for (const property of ['evaluate', 'jsValue', 'getJSValue']) {
+        Object.defineProperty(input, property, {
+          get: () => {
+            probes++
+            throw new Error('ordinary field was probed')
+          },
+        })
+      }
+      const invoke = Array.isArray(input) ? arrayInvoke : recordInvoke
+      const result = invoke(TR, ownerFactory, () => {
+        calls++
+        return input
+      })
+      Expect(result.jsValue).toBe(input)
+      Expect(calls).toBe(1)
+      Expect(probes).toBe(0)
+    }
+  })
+
+  Test(
+    'retains registered quantity wrappers and rejects wrong owners or direct payloads in object unions',
+    async () => {
+      const invoke = await mixedResultInvoker('{}')
+      const { default: TR } = await runtimeModule
+      const ownerFactory = await factory()
+      const quantity = ownerFactory.fromUnit(2, 'Minutes')
+      for (const input of [quantity, TR.Readonly(quantity)]) {
+        Expect(invoke(TR, ownerFactory, () => input)).toBe(input)
+        Expect(ownerFactory.read(input)).toEqual({ canonical: 120, unit: 'Minutes' })
+      }
+      for (
+        const [input, failureCase] of [
+          [(await factory()).fromUnit(2, 'Minutes'), 'QuantityDomainMismatch'],
+          [quantity.jsValue, 'QuantityBadShape'],
+          [TR.Value({}), 'QuantityBadShape'],
+        ] as const
+      ) {
+        let calls = 0
+        let failure: unknown
+        try {
+          invoke(TR, ownerFactory, () => {
+            calls++
+            return input
+          })
+        } catch (error) {
+          failure = error
+        }
+        Expect(failure).toHaveProperty('caseName', failureCase)
+        Expect(calls).toBe(1)
+      }
+    },
+  )
+
+  Test('explicitly adapts legacy native quantities while retaining facade identity and selected unit', async () => {
+    const invoke = await mixedResultInvoker('{}')
+    const { default: TR } = await runtimeModule
+    const ownerFactory = await factory()
+    const quantity = ownerFactory.fromUnit(2, 'Minutes')
+    let evaluations = 0
+    let reads = 0
+    const legacy = Object.freeze({
+      evaluate() {
+        Expect(this).toBe(legacy)
+        evaluations++
+        return {
+          get jsValue() {
+            reads++
+            return quantity.jsValue
+          },
+        }
+      },
+    })
+    const facade = TR.nativeQuantityResult(legacy)
+    Expect(evaluations).toBe(0)
+    Expect(reads).toBe(0)
+    Expect(TR.isRuntimeValue(legacy)).toBe(false)
+    Expect(TR.isRuntimeValue(facade)).toBe(true)
+    Expect(TR.nativeQuantityResult(quantity)).toBe(quantity)
+    let calls = 0
+    const result = invoke(TR, ownerFactory, () => {
+      calls++
+      return facade
+    })
+    Expect(result).toBe(facade)
+    Expect(calls).toBe(1)
+    Expect(evaluations).toBe(1)
+    Expect(reads).toBe(1)
+    Expect(ownerFactory.read(result)).toEqual({ canonical: 120, unit: 'Minutes' })
+    const plainData = invoke(TR, ownerFactory, () => legacy)
+    Expect(plainData.jsValue).toBe(legacy)
+    Expect(evaluations).toBe(2)
+    Expect(reads).toBe(2)
+    const wrongOwner = (await factory()).fromUnit(2, 'Minutes')
+    let failure: unknown
+    try {
+      invoke(TR, ownerFactory, () => TR.nativeQuantityResult({ evaluate: () => wrongOwner }))
+    } catch (error) {
+      failure = error
+    }
+    Expect(failure).toHaveProperty('caseName', 'QuantityDomainMismatch')
+  })
+
+  Test('preserves modeled failure for malformed adapted native snapshots', async () => {
+    const invoke = await mixedResultInvoker('{}')
+    const { default: TR } = await runtimeModule
+    const ownerFactory = await factory()
+    for (const snapshot of [null, undefined]) {
+      let calls = 0
+      let evaluations = 0
+      const facade = TR.nativeQuantityResult({
+        evaluate: () => {
+          evaluations++
+          return snapshot
+        },
+      })
+      let failure: unknown
+      try {
+        invoke(TR, ownerFactory, () => {
+          calls++
+          return facade
+        })
+      } catch (error) {
+        failure = error
+      }
+      Expect(failure).toHaveProperty('caseName', 'QuantityBadShape')
+      Expect(calls).toBe(1)
+      Expect(evaluations).toBe(1)
+    }
+  })
+
   Test('checks a native quantity result once and retains its wrapper and selected unit', async () => {
     const file = await validated(`${declaration}
       function Make() returns Measure { return Make() from ./Make.ts }
@@ -253,7 +584,7 @@ Describe('compiler: numeric units', () => {
     const bridge = AST.streamAllContents(file).find(AST.isFromExpression)
     Expect.Is(bridge, AST.isFromExpression)
     const code = expressionCode(bridge, owner)
-    Expect(code).toContain('Factory.read(result)')
+    Expect(code).toContain('TR.admitQuantityUnion(result, [Factory]')
     Expect(code).not.toContain('TR.Value(')
     Expect(code).not.toContain('fromJSValue')
     const { default: TR } = await runtimeModule
