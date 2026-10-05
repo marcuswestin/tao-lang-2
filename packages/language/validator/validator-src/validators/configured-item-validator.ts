@@ -235,7 +235,7 @@ function collectConfiguredItemCandidates(
       state.namedEntries.set(entry.label, entry)
       const actual = Type.ofExpression(entry.expression)
       const expectedType = Type.itemFieldType(expected)
-      if (actual.kind !== 'unresolved' && !Type.isCastCompatible(actual, expectedType)) {
+      if (actual.kind !== 'unresolved' && !Type.isAssignableToConstruction(actual, expectedType)) {
         state.ctx.error(
           entry,
           configuredItemValidationMessages.namedPropertyType(
