@@ -32,7 +32,7 @@ async function copyNativeBindings(selectedRoot: string): Promise<void> {
 }
 
 async function warmReceipt(watch: ProjectToolingWatch): Promise<ProjectToolingResult> {
-  let previous = await watch.requestRefresh()
+  let previous = watch.lastResult
   for (let index = 0; index < 4; index += 1) {
     const current = await watch.requestRefresh()
     if (current.revision === previous.revision) {

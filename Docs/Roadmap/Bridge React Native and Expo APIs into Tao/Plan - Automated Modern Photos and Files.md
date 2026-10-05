@@ -2,6 +2,18 @@
 
 ## Execution checkpoint
 
+The complete hosted run at `9db8b07a5` passed all twelve partitions and aggregate
+Verify. Pull request #9 then merged as `b4c88165` on 2026-10-05. The subsequent
+main run #34 exposed a repeatable native receipt test deadline: the wrapper
+signature-change scenario timed out in both the initial run and isolated retry.
+Its warm-up redundantly repeats a full native check after watcher initialization;
+a separate follow-up removes that extra warm-up while retaining actual receipt
+reuse, signature mutation and both implementation/contract diagnostics. Both
+receipt tests pass locally (31.2 seconds total), and repository lint passes.
+Main run #34 completed with eleven passing partitions and this sole failing
+partition; hosted validation of the correction is pending. Native device-operation
+journeys remain unproved.
+
 Implementation started on `feat/native-photos-files` from main `e33f2d5ab`.
 The shared object reader, emitter, reference groups, boxed values, bytes and
 call-scoped callbacks are implemented. The writer supports separate Tao and

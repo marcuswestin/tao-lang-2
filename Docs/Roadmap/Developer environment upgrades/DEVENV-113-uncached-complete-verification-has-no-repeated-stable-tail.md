@@ -99,6 +99,18 @@
     those three titles are renamed; local lint passes. The complete hosted verdict
     for that correction remains pending. This recheck also completed authenticated
     check following without the anonymous quota failure.
+  - Hosted run #33 at `9db8b07a5` passed all twelve partitions and aggregate
+    Verify; pull request #9 merged as `b4c88165`. The subsequent main run #34
+    timed out the native wrapper-signature receipt scenario in both the initial
+    run (51.2 seconds with a 48.4-second budget) and isolated retry (45 seconds).
+    No assertion mismatch appeared. Watch initialization already refreshes, but
+    the test warm-up starts from another full refresh before proving replay.
+    Seeding that comparison from the watcher's completed result removes one
+    redundant full native check without altering budgets or product behavior;
+    both focused receipt tests pass locally in 31.2 seconds total, and lint passes.
+    Main run #34 completed with eleven partitions passing and this sole failing
+    partition. Hosted validation of the correction remains pending. These observations do not
+    establish contention as the cause or a stable complete-lane tail.
 - **Proposed change:** The requested file partition and initial scheduling adjustment are implemented.
   Keep this observation open until fresh-checkout complete-lane measurements establish how much
   end-to-end tail remains; a cached skip is not a repeat measurement.
