@@ -229,7 +229,7 @@ class CapabilityTransportPlanner {
     expected: TaoType,
   ): CapabilityTransportResult {
     if (
-      actual.kind !== 'capability' && !actual.genericParameter
+      actual.kind !== 'capability' && actual.kind !== 'entity' && !actual.genericParameter
       && !((actual.kind === 'primitive' || actual.kind === 'item' || actual.kind === 'list')
         && AST.isTypeDeclaration(actual.nominal))
     ) {
@@ -461,7 +461,13 @@ function domainWitness(type: TaoType): object {
   if (type.genericParameter || type.genericReceiver) {
     return type
   }
-  return type.kind === 'capability' ? type.declaration : 'nominal' in type ? type.nominal ?? type : type
+  return type.kind === 'entity'
+    ? type.entity
+    : type.kind === 'capability'
+    ? type.declaration
+    : 'nominal' in type
+    ? type.nominal ?? type
+    : type
 }
 
 function isNone(type: TaoType): boolean {

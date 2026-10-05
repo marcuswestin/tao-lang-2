@@ -726,33 +726,42 @@ export class Type {
       )
       : dispatchReceiver.kind === 'capability'
       ? dispatchReceiver.declaration
+      : dispatchReceiver.kind === 'entity'
+      ? dispatchReceiver.entity
       : nominalOf(dispatchReceiver)
     const expectedRequirement = Type.aggregateCapabilityRequirements(expected)[0]
     const expectedOwner = expected.kind === 'capability'
       ? expected.declaration
       : expectedRequirement && contextualTypeOwner(expectedRequirement.returnType)
     if (
-      !AST.isTypeDeclaration(actualOwner) || !AST.isTypeDeclaration(expectedOwner)
+      (!AST.isTypeDeclaration(actualOwner) && !AST.isEntityDataDeclaration(actualOwner))
+      || !AST.isTypeDeclaration(expectedOwner)
     ) {
       return undefined
     }
     let witnesses: readonly AssociatedCapabilityWitness[] | undefined
     const accepted = withAssociatedAdmissionPair(actualOwner, expectedOwner, () => {
       const supplied = new Map<string, AssociatedCallableDeclaration>()
-      const owners = projection ? [actualOwner] : nominalChain(actualOwner)
+      const owners = projection || AST.isEntityDataDeclaration(actualOwner) ? [actualOwner] : nominalChain(actualOwner)
       for (const requirement of Type.aggregateCapabilityRequirements(dispatchReceiver)) {
         if (!supplied.has(requirement.name)) {
           supplied.set(requirement.name, requirement)
         }
       }
       for (const owner of owners) {
-        if (!AST.isTypeDeclaration(owner)) {
+        if (!AST.isTypeDeclaration(owner) && !AST.isEntityDataDeclaration(owner)) {
           continue
         }
-        const methods = projection
+        const methods = projection && AST.isTypeDeclaration(owner)
           ? capabilityRequirements(owner)
           : [...ownAssociatedMethods(owner).filter(method => !method.static), ...ownAssociatedViews(owner)]
         for (const method of methods) {
+          if (
+            AST.isEntityDataDeclaration(owner)
+            && (AST.isCapabilityMethodDeclaration(method) || AST.associatedEntityReceiverOwner(method) !== owner)
+          ) {
+            continue
+          }
           if (!supplied.has(method.name)) {
             supplied.set(method.name, method)
           }
@@ -1708,7 +1717,7 @@ class TypeResolutionContext {
   /** resolving holds what this context is already resolving, so a declaration that reaches itself
    * resolves to unresolved instead of recursing forever. */
   private readonly resolving = new Set<AST.Node>()
-  private readonly comparing = new Map<AST.TypeDeclaration, Set<AST.TypeDeclaration>>()
+  private readonly comparing = new Map<AST.TypeDeclaration | AST.EntityDataDeclaration, Set<AST.TypeDeclaration>>()
 
   constructor(
     private readonly descriptors?: ReadonlyMap<
@@ -1834,9 +1843,11 @@ class TypeResolutionContext {
       ? contextualTypeOwner(Type.aggregateCapabilityRequirements(actual)[0]?.returnType ?? actual.genericParameter)
       : actual.kind === 'capability'
       ? actual.declaration
+      : actual.kind === 'entity'
+      ? actual.entity
       : nominalOf(actual)
     if (
-      !AST.isTypeDeclaration(actualOwner)
+      !AST.isTypeDeclaration(actualOwner) && !AST.isEntityDataDeclaration(actualOwner)
     ) {
       return 'incompatible'
     }

@@ -30,7 +30,7 @@ export type AssociatedEffectsContext = Readonly<{
 }>
 
 type AssociatedAdmissionContext = AssociatedEffectsContext & {
-  visiting: Map<AST.TypeDeclaration, Set<AST.TypeDeclaration>>
+  visiting: Map<AST.TypeDeclaration | AST.EntityDataDeclaration, Set<AST.TypeDeclaration>>
 }
 
 let associatedEffectsContext: AssociatedAdmissionContext | undefined
@@ -66,7 +66,7 @@ export function associatedCallableAnalysis(declaration: AST.Node): CallableAnaly
 
 /** A repeated real declaration pair cannot justify structural admission through itself. */
 export function withAssociatedAdmissionPair(
-  actual: AST.TypeDeclaration,
+  actual: AST.TypeDeclaration | AST.EntityDataDeclaration,
   expected: AST.TypeDeclaration,
   consumeSync: () => boolean,
 ): boolean {
