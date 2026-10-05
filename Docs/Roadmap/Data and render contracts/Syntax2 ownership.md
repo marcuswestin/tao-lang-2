@@ -192,6 +192,23 @@ types grammar; root retains facades, the quoted text import, intrinsic declarati
 graduation. Associated views and general structural `ui` rendering require the subsequent shared
 contract amendment; this release does not permit unrelated generic or associated-method edits.
 
+This B release also covers canonical atomic event handlers in views.langium and their focused
+formatter/compiler proofs: `on press -> do Save() then { ... }` and `on press -> when Mode { ... }`.
+Reuse the existing ActionBlock/AtomicActionBlock identity and D's action lowering; do not create
+a second action grammar or change outcome semantics. Root retains action/compiler facade ownership.
+
+### Next wait and fixed timer runtime leaves
+
+C may implement new TR-wait.ts and TR-time.ts with focused tests. Wait receives a checked Duration
+reader and cancellation signal supplied by its caller; nonpositive durations complete immediately,
+long delays use bounded host-timer chunks, and cancellation rejects through modeled failure so
+joined cleanup can unwind. Do not manufacture a global action cancellation contract. Publish the
+small hook required from D/root for production cancellation. Fixed timers receive an injected
+sleep-inclusive monotonic clock and checked Duration factory; Duration() returns a fixed sample.
+Time.Now remains wall clock. Verify the available host clock seam before claiming production
+monotonic or sleep-inclusive behavior; report any missing platform contract. Root retains TR facade,
+standard-library declarations, production clock/cancellation connection and app graduation.
+
 ### Current slot compiler integration batch
 
 B also owns ViewsCompiler.ts, InvocationsCompiler.ts and FilesCompiler.ts solely for production
