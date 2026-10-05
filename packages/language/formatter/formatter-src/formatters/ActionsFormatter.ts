@@ -20,6 +20,7 @@ export const ActionsFormatter = {
     // and control-flow bodies keep their own lines. A comment inside would swallow the closing braces,
     // so it holds the block open.
     const canUseSingleLineActionBody = isInlineActionBody(f.node.$container)
+      && !f.node.statements.some(AST.isWhenActionStatement)
       && collapsesToOneLine(f.node, f.node.statements)
     if (canUseSingleLineActionBody) {
       f.singleLineBraceBlock(f.node.statements[0]!)
@@ -121,6 +122,28 @@ export const ActionsFormatter = {
   GuardActionCaseBlock(f) {
     f.indentedBraceBlock(f.node.branches)
     f.lineSeparatedList(f.node.branches)
+  },
+
+  /** WhenActionStatement formats matching action branches in authored order. */
+  WhenActionStatement(f) {
+    const branches = [...f.node.branches, ...(f.node.otherwise ? [f.node.otherwise] : [])]
+    f.oneSpaceAfter('when')
+    f.oneSpaceBefore('{')
+    f.indentedBraceBlock(branches)
+    f.lineSeparatedList(branches)
+  },
+
+  /** WhenActionBranch separates its case, optional payload, and branch body. */
+  WhenActionBranch(f) {
+    f.oneSpaceBefore('->')
+    if (f.node.payload !== undefined) {
+      f.oneSpaceAfter('->')
+    }
+  },
+
+  /** WhenActionOtherwise formats the no-match fallback body. */
+  WhenActionOtherwise(f) {
+    f.oneSpaceBefore('->')
   },
 
   /** GuardActionBranch formats its optional handler and error payload. */

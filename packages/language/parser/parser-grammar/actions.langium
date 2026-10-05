@@ -31,7 +31,7 @@ ActionBlock:
     '{' statements+=ActionStatement* '}';
 
 ActionStatement:
-    AsyncActionStatement | AliasDeclaration | ReturnStatement | SetStatement | ToggleStatement | DoStatement | WhenDoStatement | DeferStatement | FailStatement | CheckStatement | GuardActionStatement | IfActionStatement | AskStatement | ActionResultStatement | RespondStatement | CreateStatement | UpdateStatement | DeleteStatement | RetryStatement | ContextualPresentStatement | SelectionActivateStatement | DismissStatement | ReplaceStatement | DeclarationSlotFill;
+    AsyncActionStatement | AliasDeclaration | ReturnStatement | SetStatement | ToggleStatement | DoStatement | WhenDoStatement | WhenActionStatement | DeferStatement | FailStatement | CheckStatement | GuardActionStatement | IfActionStatement | AskStatement | ActionResultStatement | RespondStatement | CreateStatement | UpdateStatement | DeleteStatement | RetryStatement | ContextualPresentStatement | SelectionActivateStatement | DismissStatement | ReplaceStatement | DeclarationSlotFill;
 
 FailStatement:
     'fail' case=[CaseSetCase:ID] sentence=STRING;
@@ -63,6 +63,17 @@ GuardActionCaseBlock:
 
 GuardActionBranch:
     case=SubjectCaseName ('->' payload=CasePayload?)? block=ActionBlock?;
+
+// A source action `when` runs every matching branch; this remains distinct from value-producing
+// WhenExpression and invocation-specific WhenDoStatement.
+WhenActionStatement:
+    'when' subject=SubjectExpression '{' branches+=WhenActionBranch+ otherwise=WhenActionOtherwise? '}';
+
+WhenActionBranch:
+    case=SubjectCaseName '->' payload=CasePayload? block=ActionBlock;
+
+WhenActionOtherwise:
+    'otherwise' '->' block=ActionBlock;
 
 IfActionStatement:
     'if' condition=Expression block=ActionBlock;
