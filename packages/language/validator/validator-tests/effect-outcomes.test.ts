@@ -90,7 +90,7 @@ Describe('validator: effect outcomes', () => {
             do ExportDocument(Format: "pdf") then {
               done -> { set Failure = "" }
               Offline -> { set Failure = "offline" }
-              error -> Message { set Failure = Message }
+              error -> Message { set Failure = Message.Message }
               cancelled -> { set Failure = "cancelled" }
               otherwise -> { set Failure = "other" }
             }
@@ -107,7 +107,7 @@ Describe('validator: effect outcomes', () => {
       action Run() {
         do Read() then {
           done Result -> { do Consume(Result) }
-          error Problem -> { do Consume(Problem) }
+          error Problem -> { do Consume(Problem.Message) }
         }
       }
       render Text("Ready")
@@ -119,6 +119,21 @@ Describe('validator: effect outcomes', () => {
     ))
     Expect(found).toEqual({ errors: [], warnings: [] })
   })
+
+  Test(
+    'rejects a payload on canonical `otherwise`',
+    rejects(
+      outcomesApp(`
+        action Run() {
+          do ExportDocument(Format: "pdf") then {
+            otherwise Problem -> { }
+          }
+        }
+        render Text("Ready")
+      `),
+      messages.otherwisePayload,
+    ),
+  )
 
   Test(
     'rejects a legacy outcome word in a `then` continuation',
