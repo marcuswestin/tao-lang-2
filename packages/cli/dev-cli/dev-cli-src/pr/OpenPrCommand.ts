@@ -5,10 +5,12 @@ import { type ReviewedMergeMessage, reviewedMergeMessage } from './ReviewedMerge
 
 /*
  * `open-pr` is the one command that pushes a branch, opens (or reuses) its pull request against
- * `main`, turns on auto-merge, and stays attached to watch the checks the push starts. The reviewed
- * merge message is the pull request's title and description and, verbatim, auto-merge's commit
- * headline and body, all rewritten from it on every run, so editing the message and running this
- * again is how a changed message reaches `main`. The headline and body are set explicitly because
+ * `main`, and stays attached to watch the checks the push starts. Auto-merge is opt-in: only
+ * `--auto-merge` turns it on, because a push that only wants CI must never land by itself, and a run
+ * without it turns off any auto-merge an earlier run left on. The reviewed merge message is the pull
+ * request's title and description and, verbatim, auto-merge's commit headline and body, all
+ * rewritten from it on every run, so editing the message and running this again is how a changed
+ * message reaches `main`. The headline and body are set explicitly because
  * GitHub's own squash message appends ` (#N)` to the title and wraps the description at 72 columns,
  * which breaks the repository's one-bullet-per-line format. Auto-merge waits for the required Verify
  * check; it is turned on only once checks exist on the pushed head, so Verify is already pending when
@@ -59,6 +61,8 @@ const defaultDependencies: OpenPrDependencies = {
 
 /** OpenPrOptions is the flags-ready input accepted by the development CLI command. */
 export type OpenPrOptions = {
+  /** Turn on auto-merge so the pull request lands once Verify passes; off, the run only runs CI. */
+  autoMerge?: boolean
   /** How often to poll the checks while they run; `pr-checks` sizes the default to GitHub's rate limit. */
   pollIntervalMs?: number
   /** Override the current repository root, principally for tests. */
@@ -103,7 +107,11 @@ export const OpenPrCommand = {
     if (!await awaitChecksOnHead(dependencies, github, pr.number, headSha, report)) {
       return { exitCode: 1, lines }
     }
-    await enableAutoMerge(dependencies, root, github, pr.number, message, report)
+    if (options.autoMerge === true) {
+      await enableAutoMerge(dependencies, root, github, pr.number, message, report)
+    } else {
+      await disableAutoMerge(dependencies, root, github, pr.number, report)
+    }
     const checks = await dependencies.followChecks({
       intervalMs: options.pollIntervalMs,
       pr: pr.number,
@@ -113,7 +121,9 @@ export const OpenPrCommand = {
     const exitCode = checks.exitCode === 0 ? 0 : 1
     if (exitCode === 0) {
       report(
-        `NEXT  Run merge-pr: it confirms Verify on this head, merges #${pr.number} unless auto-merge did, and archives it.`,
+        options.autoMerge === true
+          ? `NEXT  Run merge-pr: it confirms Verify on this head, merges #${pr.number} unless auto-merge did, and archives it.`
+          : `NEXT  Nothing lands from this run. To land #${pr.number}, run open-pr --auto-merge, or merge-pr.`,
       )
     }
 
@@ -218,10 +228,7 @@ async function enableAutoMerge(
   }
   const run = (args: readonly string[]) => dependencies.run('gh', { args, cwd: root, stdio: 'pipe' })
   if (current) {
-    const disabled = await run(['pr', 'merge', String(prNumber), '--disable-auto'])
-    if (!succeeded(disabled)) {
-      mustSucceed(await github.disableHostAutoMerge(prNumber), dependencies.writeLine)
-    }
+    await turnOffAutoMerge(dependencies, root, github, prNumber)
   }
   const stayOff = (said: string): void =>
     report(
@@ -247,6 +254,39 @@ async function enableAutoMerge(
     }
   }
   report(`PASS  Auto-merge is on: GitHub squash-merges #${prNumber} with the merge message once Verify passes.`)
+}
+
+/** A run without `--auto-merge` only runs CI, so auto-merge an earlier run turned on is turned off. */
+async function disableAutoMerge(
+  dependencies: OpenPrDependencies,
+  root: string,
+  github: GitHub,
+  prNumber: number,
+  report: (line: string) => void,
+): Promise<void> {
+  if ((await github.view(prNumber)).auto_merge === null) {
+    report(`PASS  Auto-merge is off for #${prNumber}; this run only runs CI. Pass --auto-merge to land it.`)
+    return
+  }
+  await turnOffAutoMerge(dependencies, root, github, prNumber)
+  report(`PASS  Turned auto-merge off for #${prNumber}; this run only runs CI. Pass --auto-merge to land it.`)
+}
+
+/** turnOffAutoMerge tries `gh pr merge`, then the cloud host's REST route, and fails if both refuse. */
+async function turnOffAutoMerge(
+  dependencies: OpenPrDependencies,
+  root: string,
+  github: GitHub,
+  prNumber: number,
+): Promise<void> {
+  const disabled = await dependencies.run('gh', {
+    args: ['pr', 'merge', String(prNumber), '--disable-auto'],
+    cwd: root,
+    stdio: 'pipe',
+  })
+  if (!succeeded(disabled)) {
+    mustSucceed(await github.disableHostAutoMerge(prNumber), dependencies.writeLine)
+  }
 }
 
 function carriesMessage(autoMerge: PullRequest['auto_merge'], message: ReviewedMergeMessage): boolean {

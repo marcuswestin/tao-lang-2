@@ -105,14 +105,17 @@ archiving the branch at `merged/<name>`:
 
 - **A pull request with auto-merge** when the green `Verify` verdict proves the change: the cases
   "Propose it as ready to land" lists below, short of anything only a host lane exercises. Write and
-  review the message at `.artifacts/merge/<branch>.msg`, then run `./agent unsandboxed open-pr`: it
-  pushes, makes the message the pull request's title and description, turns on auto-merge with the
-  message verbatim as the squash commit's (GitHub's default appends ` (#N)` and wraps bullets at 72
-  columns), and follows the checks. It refuses a branch that already merged. When they pass, run `./agent unsandboxed merge-pr`: it
+  review the message at `.artifacts/merge/<branch>.msg`, then run
+  `./agent unsandboxed open-pr --auto-merge`: it pushes, makes the message the pull request's title
+  and description, turns on auto-merge with the message verbatim as the squash commit's (GitHub's
+  default appends ` (#N)` and wraps bullets at 72 columns), and follows the checks. Pass
+  `--auto-merge` on every run meant to land, and never on one that only wants CI: without it
+  `open-pr` pushes and follows the checks but turns any auto-merge off, so nothing lands. It refuses a branch that already merged. When they pass, run `./agent unsandboxed merge-pr`: it
   confirms `Verify` passed on the pushed head, squash-merges unless auto-merge already did, archives
   `merged/<name>`, and reports the merge. GitHub deletes the branch, and the archive workflow writes the
   same `merged/<name>` for a pull request merged any other way. To change the message, edit it and run
-  `open-pr` again. When a check fails, read `./agent pr-checks`, fix, commit, and run `open-pr` again.
+  `open-pr --auto-merge` again. When a check fails, read `./agent pr-checks`, fix, commit, and run
+  `open-pr --auto-merge` again.
   Both take a `feat/<name>` branch, or the one `claude/<name>` or `codex/<name>` branch a cloud agent
   session may push, archived at `merged/claude/<name>` or `merged/codex/<name>`. They talk to GitHub
   over REST, so they work where a cloud host's proxy refuses `gh pr`'s GraphQL; there `open-pr` turns

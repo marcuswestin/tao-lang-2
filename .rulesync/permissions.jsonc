@@ -21,7 +21,7 @@
       // The generated harness rules reject this directly and point agents to `./agent setup`.
       "bun install *": "deny",
       // Through the Developer's admin login a direct merge can bypass the required Verify check;
-      // `open-pr` turns on auto-merge and `merge-pr` merges only after Verify. The output-discipline
+      // `open-pr --auto-merge` turns on auto-merge and `merge-pr` merges only after Verify. The output-discipline
       // hook refuses it too, which is what binds Codex, since its rules carry only `allow`.
       "gh pr merge": "deny",
       "gh pr merge *": "deny",

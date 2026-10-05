@@ -104,8 +104,9 @@ Do not fetch and merge `main` beforehand merely to satisfy a stale precondition.
 landing reports a conflict, resolve it outside the lock; after any merge of `main` into a branch,
 skim what arrived: `references/after-merging-main.md`.
 
-The hosted route, `./agent unsandboxed open-pr`, opens the pull request with auto-merge on and follows
-its checks; once they pass, `./agent unsandboxed merge-pr` merges it (`verification-lanes` says when
+The hosted route, `./agent unsandboxed open-pr --auto-merge`, opens the pull request with auto-merge
+on and follows its checks (without `--auto-merge` it only runs CI; pass the flag whenever the run is
+meant to land); once they pass, `./agent unsandboxed merge-pr` merges it (`verification-lanes` says when
 this route suffices). GitHub refuses a pull
 request that conflicts with `main`, so bring `main` in with `./agent merge-main` and run `open-pr` again;
 the checks run on that push. After it merges, the remote `feat/<name>` is gone and `merged/<name>`
