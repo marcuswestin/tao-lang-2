@@ -66,7 +66,9 @@ export const ActionsCompiler = {
     const asyncKeyword = actionBlockRequiresAsync(action.block) ? gen`async ` : gen``
     const interrupt = actionBlockInterruptsAsk(action.block)
     const bindings = gen`
-      ${gen.scopeName(associated.owner)} = _TaoAssociatedReceiver
+      ${
+      gen.scopeName({ name: associated.cardinality === 'many' ? associated.owner.name : associated.owner.singularName })
+    } = _TaoAssociatedReceiver
       ${gen.list(parameters, Compile.ActionParameterBinding)}
     `
 

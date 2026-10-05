@@ -11,7 +11,8 @@ Describe('compiler: contextual entity references', () => {
       data Books / Book {
         Title text,
         view Book.Render() { render Label(Book) },
-        action Books.Remember() { let Snapshot = Books }
+        action Book.Identity() { return Book },
+        action Books.Remember() { return Books }
       }
       view Label(Book) { render "{Book.Title}" }
       view Main { render "Main" }
@@ -46,6 +47,15 @@ Describe('compiler: contextual entity references', () => {
       Expect(evaluate(receiver)).toBe(original)
       Expect(TR.Data.NativeEntityContext(evaluate(receiver)).id).toBe(TR.Data.NativeEntityContext(original).id)
       Expect(evaluate(collection)).toBe(books)
+    }
+    const actions = [...AST.streamAllContents(entity)].filter(AST.isActionDeclaration)
+    for (const action of actions) {
+      const expression = Langium.toString(Compile.AssociatedActionDeclaration(action))
+      const source = new Bun.Transpiler({ loader: 'ts' }).transformSync(`return ${expression}`)
+      const factory = new Function('TR', '_Scope', source)(TR, {})
+      const expected = action.receiverName === 'Book' ? original : books
+      const result = await TR.DoResult(factory(TR.Value(expected)))
+      Expect(result.getJSValue()).toBe(expected)
     }
   })
 })
