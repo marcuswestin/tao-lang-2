@@ -1,5 +1,6 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
+import { Assert } from '@shared'
 import { type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 
@@ -44,8 +45,15 @@ export function nativeParameterName(parameter: AST.ParameterDeclaration): Compil
 
 /** Native code receives a sampled read and a revocable action callback, never the writable cell. */
 export function compileNativeParameter(parameter: AST.ParameterDeclaration): Compiled {
+  Assert(!containsCapability(Type.ofParameter(parameter)), 'Mutable native capability parameters are unsupported.')
   const value = gen.scopeName({ name: Type.parameterName(parameter) })
   return gen`{ value: ${value}.evaluate().jsValue, change: (next: any) => ${
     nativeParameterName(parameter)
   }.set(TR.Value(next)) }`
+}
+
+function containsCapability(type: ASTUtils.TaoType): boolean {
+  return type.kind === 'capability'
+    || (type.kind === 'union' && type.members.some(containsCapability))
+    || (type.kind === 'list' && type.element !== undefined && containsCapability(type.element))
 }

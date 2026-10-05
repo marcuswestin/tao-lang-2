@@ -6,12 +6,27 @@ import {
   compileAssociatedWitness,
   withAssociatedWitnessBindings,
 } from '../compiler-src/codegen/react-native/app/AssociatedMethodsCompiler'
-import { compileReactiveArgument } from '../compiler-src/codegen/react-native/app/reactive-parameters'
+import {
+  compileNativeParameter,
+  compileReactiveArgument,
+} from '../compiler-src/codegen/react-native/app/reactive-parameters'
 import { Compile } from '../compiler-src/codegen/react-native/Compile'
 
 const runtimeModule = import(FS.resolvePath('packages/apps/runtime/TaoRuntime-src/TR.ts', Repo.getRoot()))
 
 Describe('compiler: associated method witness declarations', () => {
+  Test('rejects a capability before generating a mutable native payload adapter', async () => {
+    const parsed = await Parser.parseCode(`
+      can Display { ToText() -> text }
+      func Relay(Value Display) -> Display { return Value }
+    `)
+    Expect(parsed.diagnostics).toEqual([])
+    const relay = parsed.entry.ast.statements.find(AST.isFunctionDeclaration)
+    Expect.Is(relay, AST.isFunctionDeclaration)
+    const parameter = AST.parametersOf(relay)[0]!
+    Expect(() => compileNativeParameter(parameter)).toThrow('Mutable native capability parameters are unsupported.')
+  })
+
   Test('passes a capability argument with its selected witness and live receiver intact', async () => {
     const parsed = await Parser.parseCode(`
       can Display { ToText() -> text }
