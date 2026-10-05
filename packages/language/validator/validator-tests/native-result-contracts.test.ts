@@ -58,6 +58,29 @@ Describe('validator: native quantity result contracts', () => {
   )
 
   Test(
+    'accepts an instance native Self result anchored to its real contextual receiver',
+    accepts(`
+      abstract type Scalar is numeric with {
+        func Same() -> Self { return Same(Scalar) from ./Native.ts }
+      }
+    `),
+  )
+
+  for (const inputs of ['', 'Value Scalar']) {
+    Test(
+      `rejects a static native Self result without a Self input: ${inputs || 'no inputs'}`,
+      rejects(
+        `
+        abstract type Scalar is numeric with {
+          static func Make(${inputs}) -> Self { return Make() from ./Native.ts }
+        }
+      `,
+        bridgeValidationMessages.unanchoredSelfResult,
+      ),
+    )
+  }
+
+  Test(
     'accepts concrete native results for ordinary methods and converters',
     accepts(`
       abstract type Quantity is numeric

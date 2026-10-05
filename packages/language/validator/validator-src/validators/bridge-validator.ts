@@ -11,6 +11,7 @@ export const bridgeValidationMessages = {
   missing: (path: string) => `Bridged TypeScript sidecar '${path}' does not exist.`,
   abstractNumericResult:
     'A native quantity result needs a concrete quantity type instead of an abstract numeric result contract.',
+  unanchoredSelfResult: 'A native Self quantity result needs a contextual receiver or an input declared as Self.',
 } as const
 
 /**
@@ -33,6 +34,9 @@ export const bridgeValidationChecks = {
     const result = nativeReturnType(bridge)
     if (result && containsAbstractNumeric(result)) {
       ctx.error(bridge, bridgeValidationMessages.abstractNumericResult)
+    }
+    if (result && !nativeSelfResultHasAnchor(bridge, result)) {
+      ctx.error(bridge, bridgeValidationMessages.unanchoredSelfResult)
     }
   },
 } satisfies NodeValidationChecks
@@ -114,4 +118,26 @@ function containsAbstractNumeric(type: ASTUtils.TaoType): boolean {
     ? type.members.some(containsAbstractNumeric)
     : type.kind === 'primitive' && type.primitive === 'numeric' && Type.isAbstractDomain(type)
       && type.selfOwner === undefined
+}
+
+/** A numeric Self result selects its exact concrete factory through a real receiver or Self input. */
+function nativeSelfResultHasAnchor(bridge: AST.FromExpression, result: ASTUtils.TaoType): boolean {
+  if (result.kind === 'union') {
+    return result.members.every(member => nativeSelfResultHasAnchor(bridge, member))
+  }
+  if (result.kind !== 'primitive' || result.primitive !== 'numeric' || !result.selfOwner) {
+    return true
+  }
+  if (!AST.isReturnStatement(bridge.$container)) {
+    return false
+  }
+  const owner = nativeReturnOwner(bridge.$container)
+  if (AST.isAssociatedFunctionDeclaration(owner) && !owner.static) {
+    return AST.associatedFunctionOwner(owner) === result.selfOwner
+  }
+  if (AST.isAssociatedConverterDeclaration(owner)) {
+    return AST.associatedConverterOwner(owner) === result.selfOwner
+  }
+  return owner !== undefined
+    && AST.parametersOf(owner).some(parameter => Type.ofParameter(parameter).selfOwner === result.selfOwner)
 }
