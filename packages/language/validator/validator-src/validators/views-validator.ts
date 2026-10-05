@@ -4,6 +4,7 @@ import { FS } from '@shared'
 import { viewValidationCodes } from '../diagnostic-codes'
 import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
+import { RendererSlotsValidationMessages as rendererSlotMessages } from './RendererSlotsValidationMessages'
 
 /** viewValidationMessages declares structural diagnostics for Tao view bodies. */
 /** One phrasing of the one condition: a tag and a row label both need one native root to land on. */
@@ -36,13 +37,9 @@ const viewValidationMessages = {
   callerContentCount: (name: string) => `View '${name}' may place caller content at most once with @@content.`,
   callerContentPlacement: '@@content is only available inside the render tree of a view.',
   leafContent: (name: string) => `View '${name}' places no @@content and cannot accept unnamed caller content.`,
-  renderSlotDeclarationPlacement: 'A render slot must be declared directly in a view body.',
-  duplicateRenderSlot: (name: string) => `Render slot '${name}' is declared more than once in this view.`,
-  renderSlotPlacementCount: (name: string) =>
-    `View render slot '${name}' must be placed exactly once in its render tree.`,
-  renderSlotReferencePlacement: 'A bare render slot reference is only available in its owning view render tree.',
-  renderSlotFillPlacement: 'A render slot fill must be a direct child of an invocation of its owning view.',
-  duplicateRenderSlotFill: (name: string) => `Render slot '${name}' is filled more than once at this call site.`,
+  duplicateRenderSlot: rendererSlotMessages.duplicateDeclaration,
+  renderSlotPlacementCount: rendererSlotMessages.renderSlotPlacementCount,
+  duplicateRenderSlotFill: rendererSlotMessages.duplicateFill,
   tagAttachment: 'A #tag must be followed immediately by a render or loop in the same block.',
   accessibilityAttachment: 'An accessible label cluster must be followed immediately by a render in the same block.',
   accessibilityText: 'An accessible label must be a text expression.',
@@ -300,6 +297,15 @@ function validateRenderBlock(block: AST.Block, ctx: ValidationContext): void {
       continue
     }
     if (AST.isRenderSlotUse(statement)) {
+      if (AST.isRenderSlotFill(statement)) {
+        if (statement.render) {
+          validateRender(statement.render, block, ctx)
+        }
+        if (statement.block) {
+          validateRenderBlock(statement.block, ctx)
+        }
+        continue
+      }
       hasChildInvocation = true
       if (statement.render) {
         validateRender(statement.render, block, ctx)
@@ -392,7 +398,7 @@ function validateRender(
       for (const statement of render.block.statements) {
         if (
           !AST.isEventHandler(statement)
-          && !(AST.isRenderSlotUse(statement) && statement.render)
+          && !(AST.isRenderSlotUse(statement) && AST.isRenderSlotFill(statement))
           && !(AST.isTagStatement(statement) && AST.isSlotFillRootTag(statement))
         ) {
           ctx.error(statement, viewValidationMessages.leafContent(target.name))
@@ -435,42 +441,35 @@ function validateRenderSlotDeclarationPlacement(
 ): void {
   const block = declaration.$container
   if (!AST.isBlock(block) || !AST.isViewDeclaration(block.$container) || block.$container.block !== block) {
-    ctx.error(declaration, viewValidationMessages.renderSlotDeclarationPlacement)
+    ctx.error(declaration, rendererSlotMessages.declarationPlacement)
   }
 }
 
 function validateRenderSlots(view: AST.ViewDeclaration, ctx: ValidationContext): void {
+  // Alias views share the target's exact declarations; validate declaration-owned rules once.
+  if (view.aliasTarget) {
+    return
+  }
   const declarations = AST.renderSlotDeclarationsOf(view)
   const seen = new Set<string>()
   for (const declaration of declarations) {
     if (seen.has(declaration.name)) {
-      ctx.error(declaration, viewValidationMessages.duplicateRenderSlot(declaration.name))
+      ctx.error(declaration, rendererSlotMessages.duplicateDeclaration(declaration.name))
     }
     seen.add(declaration.name)
-
-    if (view.foreign) {
-      continue
-    }
-    const placements = AST.streamAllContents(view)
-      .filter(AST.isRenderSlotUse)
-      .filter(use => !use.render && use.slot.$refText === declaration.name)
-    if (placements.length !== 1) {
-      ctx.error(declaration, viewValidationMessages.renderSlotPlacementCount(declaration.name))
-    }
   }
 }
 
 function validateRenderSlotUse(use: AST.RenderSlotUse, ctx: ValidationContext): void {
-  if (!use.render) {
+  if (!AST.isRenderSlotFill(use)) {
     const owner = AST.findOwningView(use)
     const declaration = use.slot.ref
-    const declarationBlock = declaration?.$container
     if (
       !AST.isViewDeclaration(owner)
-      || !AST.isBlock(declarationBlock)
-      || declarationBlock.$container !== owner
+      || !declaration
+      || !AST.renderSlotDeclarationsOf(owner).includes(declaration)
     ) {
-      ctx.error(use, viewValidationMessages.renderSlotReferencePlacement)
+      ctx.error(use, rendererSlotMessages.referencePlacement)
     }
     return
   }
@@ -479,20 +478,18 @@ function validateRenderSlotUse(use: AST.RenderSlotUse, ctx: ValidationContext): 
   const invocation = AST.isBlock(block) && AST.isRender(block.$container) ? block.$container : undefined
   const target = invocation?.view?.ref
   const declaration = use.slot.ref
-  const declarationBlock = declaration?.$container
   const validOwner = AST.isViewDeclaration(target)
-    && (
-      (AST.isBlock(declarationBlock) && declarationBlock.$container === target)
-      || (AST.isForeignViewImplementation(declarationBlock) && target.foreign === declarationBlock)
-    )
+    && declaration !== undefined
+    && AST.renderSlotDeclarationsOf(target).includes(declaration)
   if (!validOwner) {
-    ctx.error(use, viewValidationMessages.renderSlotFillPlacement)
+    ctx.error(use, rendererSlotMessages.fillPlacement)
   }
-  if (AST.isBlock(block)) {
+  if (declaration && AST.isBlock(block)) {
     const fills = AST.renderSlotUsesOf(block)
-      .filter(candidate => candidate.render && candidate.slot.$refText === use.slot.$refText)
+      .filter(AST.isRenderSlotFill)
+      .filter(candidate => candidate.slot.ref === declaration)
     if (fills.indexOf(use) > 0) {
-      ctx.error(use, viewValidationMessages.duplicateRenderSlotFill(use.slot.$refText))
+      ctx.error(use, rendererSlotMessages.duplicateFill(use.slot.$refText))
     }
   }
 }

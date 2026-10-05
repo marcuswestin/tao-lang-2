@@ -1116,10 +1116,14 @@ export function statementsOf(block: AST.Block | undefined): AST.Statement[] {
   return block?.statements || []
 }
 
-/** renderSlotDeclarationsOf returns the direct named visual slots owned by one view. */
+/** renderSlotDeclarationsOf follows a view alias to its cycle-safe named slot contract. */
 export function renderSlotDeclarationsOf(
   view: AST.ViewDeclaration,
 ): Array<AST.RenderSlotDeclaration | AST.ForeignViewSlotDeclaration> {
+  if (view.aliasTarget) {
+    const target = viewAliasTarget(view)
+    return target && AST.isViewDeclaration(target) ? renderSlotDeclarationsOf(target) : []
+  }
   return view.block?.statements.filter(AST.isRenderSlotDeclaration) ?? view.foreign?.slots ?? []
 }
 
