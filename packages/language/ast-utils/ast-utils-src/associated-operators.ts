@@ -178,7 +178,7 @@ export function resolveAssociatedOperatorContract(
     }
     if (
       selectedSelf?.kind === 'primitive' && selectedSelf.primitive === 'numeric'
-      && !selectedSelf.genericParameter && declaredDescriptor.result.selfOwner
+      && !selectedSelf.genericParameter
       && resolution.isAbstractDomain?.(selectedSelf)
     ) {
       continue

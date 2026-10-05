@@ -17,12 +17,13 @@ Describe('validator: static contextual Self operators', () => {
     const result = await testValidateCodeWithErrors(`${scalar}
       func Erased(Left Scalar, Right Scalar) -> Scalar { return Left + Right }
       func Negate(Value Scalar) -> Scalar { return -Value }
+      func Compare(Left Scalar, Right Scalar) -> boolean { return Left < Right }
     `)
     Expect(result.entry.document.parseResult.parserErrors).toHaveLength(0)
     const expressions = AST.streamAllContents(result.entry.ast).filter(node =>
       AST.isBinaryExpression(node) || AST.isUnaryExpression(node)
     )
-    Expect(expressions).toHaveLength(2)
+    Expect(expressions).toHaveLength(3)
     for (const expression of expressions) {
       const resolved = Type.associatedOperation(expression)
       Expect(resolved.problem).toBe('missing-operator')
@@ -34,14 +35,14 @@ Describe('validator: static contextual Self operators', () => {
     }
   })
 
-  Test('accepts authentic concrete Self domains and abstract comparisons', async () => {
+  Test('accepts authentic concrete Self domains for arithmetic and comparison', async () => {
     await testValidateCode(`${scalar}
       type Distance is Scalar with { units { metres 1 (default) } }
       type PreciseDistance is Distance
       func ParentChild(Left Distance, Right PreciseDistance) -> Distance { return Left + Right }
       func ChildParent(Left PreciseDistance, Right Distance) -> Distance { return Left + Right }
       func Child(Left PreciseDistance, Right PreciseDistance) -> PreciseDistance { return Left + Right }
-      func Compare(Left Scalar, Right Scalar) -> boolean { return Left < Right }
+      func Compare(Left Distance, Right PreciseDistance) -> boolean { return Left < Right }
     `)
   })
 })
