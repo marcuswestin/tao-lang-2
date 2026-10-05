@@ -291,6 +291,15 @@ legacy zero-input bodies, missing/duplicate/unknown arguments and writable varia
 matcher, validator/formatter registration, shared compiler, facade or generated output ownership
 is transferred. Request the follow-on registration hooks after this bounded frontend returns.
 
+C now owns the generated quantity role-proof alignment in exactly packages/compiler/compiler-src/
+quantity-native-module.ts and compiler-tests/quantity-native-module.test.ts. Consume runtime ancestry
+`71be4aa26` and lowercase fixture migration `9ffe32d20`. Pass the declaration's private symbol proof
+through the runtime payload/factory/constructor generic contracts; preserve declaration identity,
+strict known-value admission, read/inUnit signatures and source mappings. Do not silence TS2352
+with an unknown cast or weaken native nominal checks. Prove actual generated modules type-check,
+same-name owners stay distinct, and raw/reverse/sibling negatives remain rejected. No Type,
+source ancestry, bridge metadata, runtime or companion publication ownership is transferred.
+
 Managers implement against supplied frozen inputs in isolated worktrees and reconcile the landed
 base before frozen return. This manifest transfers no unlisted shared file implicitly.
 
