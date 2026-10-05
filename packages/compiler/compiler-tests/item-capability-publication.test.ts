@@ -12,8 +12,10 @@ Describe('compiler: item capability publication', () => {
     const compiled = await Compiler.compileCode(`
       type Title is text with { func ToText() fails never -> text { return "Title:{Title}" } }
       can Display { ToText() fails never -> text }
-      type Row is { Content Display }
-      func Read(Row) -> text { return Row.Content.ToText() }
+      type Row is { Content Display } with {
+        func Read() fails never -> text { return Row.Content.ToText() }
+      }
+      func Read(Row) -> text { return Row.Read() }
       view Main { let Value = Title "before" let Entry = Row { Value } render "Items" }
       app Sample { id "item.capability" name "Items" version "1.0.0" view Main }
     `)
