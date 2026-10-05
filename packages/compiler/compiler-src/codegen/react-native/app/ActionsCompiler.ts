@@ -185,6 +185,7 @@ export const ActionsCompiler = {
       DeferStatement: Compile.DeferStatement,
       AliasDeclaration: Compile.AliasDeclaration,
       ReturnStatement: Compile.ActionReturnStatement,
+      WhenActionStatement: Compile.WhenActionStatement,
       WhenDoStatement: Compile.WhenDoStatement,
       GuardActionStatement: Compile.GuardActionStatement,
       IfActionStatement: Compile.IfActionStatement,
@@ -357,6 +358,36 @@ export const ActionsCompiler = {
         : gen.noop()
     }
     ])`
+  },
+
+  /** WhenActionStatement captures all subject matches before joining selected action bodies. */
+  WhenActionStatement(statement: AST.WhenActionStatement): Compiled {
+    const owner = AST.findOwningAction(statement)
+    const hasSourceReturn = owner && AST.isActionDeclaration(owner)
+      ? ASTUtils.sourceActionResult(owner, value => value).some(({ statement: result }) =>
+        isWithinStatement(result, statement)
+      )
+      : false
+    const returnGuard = hasSourceReturn
+      ? gen`if (_TaoSourceReturn.returned) return _TaoSourceReturn.value;`
+      : gen.noop()
+    return gen`await TR.WhenAll(${Compile.Expression(statement.subject)}, [
+        ${
+      gen.list(statement.branches, branch =>
+        gen`[${gen.jsLiteral(AST.canonicalSubjectCase(branch.case))}, async _TaoCasePayload => {
+        ${branch.payload ? gen`${gen.scopeName(branch.payload)} = _TaoCasePayload;` : gen.noop()}
+        ${returnGuard}
+        return ${Compile.ActionScopedBlock(branch.block)}
+      }],`)
+    }
+    ], ${
+      statement.otherwise
+        ? gen`async () => {
+        ${returnGuard}
+        return ${Compile.ActionScopedBlock(statement.otherwise.block)}
+      }`
+        : gen`undefined`
+    })`
   },
 
   /** ActionReturnStatement saves a synchronous source-action result until its lexical scopes drain. */
@@ -535,6 +566,15 @@ function isWithinBlock(statement: AST.ReturnStatement, block: AST.ActionBlock): 
     current = current.$container
   }
   return current === block
+}
+
+/** Whether a source-owned return occurs below one action statement without crossing its owner. */
+function isWithinStatement(statement: AST.ReturnStatement, parent: AST.ActionStatement): boolean {
+  let current: AST.Node | undefined = statement
+  while (current && current !== parent) {
+    current = current.$container
+  }
+  return current === parent
 }
 
 /** Result-bearing done arms receive the same Tao value produced by a bound action result. */

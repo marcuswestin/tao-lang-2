@@ -39,7 +39,7 @@ export function actionBlockRequiresAsync(
     if (
       AST.isAskStatement(statement) || AST.isActionResultStatement(statement)
       || AST.isGuardActionStatement(statement) || AST.isIfActionStatement(statement)
-      || AST.isWhenDoStatement(statement)
+      || AST.isWhenDoStatement(statement) || AST.isWhenActionStatement(statement)
     ) {
       return true
     }
@@ -121,6 +121,10 @@ export function actionBlockInterruptsAsk(
     if (AST.isWhenDoStatement(statement)) {
       return actionInvocationInterruptsAsk(statement.invocation, seen)
         || statement.outcomes.some(outcome => actionBlockInterruptsAsk(outcome.block, seen))
+    }
+    if (AST.isWhenActionStatement(statement)) {
+      return statement.branches.some(branch => actionBlockInterruptsAsk(branch.block, seen))
+        || (statement.otherwise !== undefined && actionBlockInterruptsAsk(statement.otherwise.block, seen))
     }
     return false
   }) ?? false
