@@ -3,6 +3,7 @@ grammar TaoTypes
 import "./visibility"
 import "./expressions"
 import "./imports"
+import "./numeric-units"
 import "./terminals"
 
 entry TypesGrammarEntrypoint:
@@ -42,7 +43,8 @@ YesNoTypeExpression:
 // The structural record type. No `item` keyword: `item { ... }` constructs a value.
 ItemTypeExpression:
     '{' ((properties+=TypeProperty | keys+=ConfigurationKeyDeclaration | implementations+=ConfigurationImplementation
-      | issues+=ConfigurationIssues | accepts+=ConfigurationAccepts | supports+=ConfigurationSupports) ','?)* '}';
+      | issues+=ConfigurationIssues | accepts+=ConfigurationAccepts | supports+=ConfigurationSupports
+      | unitBlocks+=NumericUnitBlock) ','?)* '}';
 
 // A postfix `?` carries optionality. Item fields take no trait list.
 TypeProperty:
@@ -92,11 +94,11 @@ NamedTypeReference:
     root=ID ('.' members+=ID)*;
 
 PrimitiveType returns string:
-    'text' | 'number' | 'boolean' | 'time' | 'duration' | 'color' | 'item' | 'list' | 'action' | 'shortcut'
+    'text' | 'number' | 'numeric' | 'boolean' | 'time' | 'duration' | 'color' | 'item' | 'list' | 'action' | 'shortcut'
     | 'command' | 'design' | 'view' | 'scene' | 'nav' | 'datasource' | 'data' | 'app';
 
 NonListPrimitiveType returns string:
-    'text' | 'number' | 'boolean' | 'time' | 'duration' | 'color' | 'item' | 'action' | 'shortcut' | 'command'
+    'text' | 'number' | 'numeric' | 'boolean' | 'time' | 'duration' | 'color' | 'item' | 'action' | 'shortcut' | 'command'
     | 'design' | 'view' | 'scene' | 'nav' | 'datasource' | 'data' | 'app';
 
 ConstructablePrimitiveType returns string:

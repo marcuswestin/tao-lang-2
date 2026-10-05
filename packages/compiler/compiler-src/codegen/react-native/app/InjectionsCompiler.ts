@@ -120,6 +120,7 @@ function CompileTaoJsType(type: ASTUtils.TaoType): Compiled {
         },
         boolean: () => gen`boolean`,
         number: () => gen`number`,
+        numeric: () => gen`number`,
         none: () => gen`null`,
         text: () => gen`string`,
         time: () => gen`number`,

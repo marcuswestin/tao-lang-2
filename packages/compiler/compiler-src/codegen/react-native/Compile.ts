@@ -11,6 +11,7 @@ import { InjectionsCompiler } from './app/InjectionsCompiler'
 import { InteractionOutlineCompiler } from './app/InteractionOutlineCompiler'
 import { InvocationsCompiler } from './app/InvocationsCompiler'
 import { NavigationCompiler } from './app/NavigationCompiler'
+import { NumericUnitConstruction } from './app/NumericUnitsCompiler'
 import { RenderStatementCompiler } from './app/RenderStatementCompiler'
 import { StateCompiler } from './app/StateCompiler'
 import { StatementsCompiler } from './app/StatementsCompiler'
@@ -36,6 +37,7 @@ export const Compile = {
   ...InjectionsCompiler,
   ...InteractionOutlineCompiler,
   ...NavigationCompiler,
+  NumericUnitConstruction,
   ...FunctionalCoreCompiler,
   ...DataCompiler,
   ...DesignCompiler,

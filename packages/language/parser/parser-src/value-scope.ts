@@ -64,6 +64,9 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
   /** getScope returns Tao values visible to a value reference. */
   override getScope(context: Langium.ReferenceInfo): Langium.Scope {
     const container = context.container
+    if (context.property === 'unit' && AST.isNumericUnitConstruction(container)) {
+      return this.createNumericUnitScope(container)
+    }
     const isStateTargetReference = context.property === 'target' && AST.isSetStatement(container)
     if (isStateTargetReference) {
       return this.createMutableScope(container)
@@ -223,6 +226,62 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     // on which files a command happened to load. A reference the grammar gains without a rule above
     // resolves to nothing and says so, rather than to whatever is loaded.
     return this.createScopeForNodes([])
+  }
+
+  /** Unit shorthand never chooses an owner from the destination's expected type. */
+  private createNumericUnitScope(node: AST.NumericUnitConstruction): Langium.Scope {
+    const root = AST.findRoot(node)
+    if (!AST.isTaoFile(root)) {
+      return this.createScopeForNodes([])
+    }
+    const candidates = new Map<string, Set<AST.NumericUnitDeclaration>>()
+    const add = (name: string, unit: AST.NumericUnitDeclaration): void => {
+      let units = candidates.get(name)
+      if (!units) {
+        units = new Set()
+        candidates.set(name, units)
+      }
+      units.add(unit)
+    }
+    const addOwner = (declaration: AST.TypeDeclaration, prefix?: string): void => {
+      const canonical = canonicalNumericUnitDeclaration(declaration)
+      const expression = canonical?.type
+      if (!expression || !AST.isDerivedTypeExpression(expression)) {
+        return
+      }
+      for (const block of expression.slots.unitBlocks) {
+        for (const unit of block.units) {
+          if (!unit.name) {
+            continue
+          }
+          add(`${prefix ? `${prefix}.` : ''}${declaration.name}.${unit.name}`, unit)
+          if (!prefix) {
+            add(unit.name, unit)
+          }
+        }
+      }
+    }
+    const declarations = [
+      ...root.statements.filter(AST.isTypeDeclaration),
+      ...this.importedDeclarations(node, AST.isTypeDeclaration),
+    ]
+    for (const declaration of declarations) {
+      addOwner(declaration)
+    }
+    for (const statement of root.statements.filter(AST.isUsePackageStatement)) {
+      const namespace = AST.packageNamespaceName(statement)
+      if (namespace) {
+        for (const declaration of this.collectTargetDeclarations(statement).filter(AST.isTypeDeclaration)) {
+          addOwner(declaration, namespace)
+        }
+      }
+    }
+    // Repeated imports of the same canonical unit are one candidate. Distinct owners with the
+    // same spelling stay unresolved, so neither import order nor contextual typing picks one.
+    return this.createScope([...candidates].flatMap(([name, units]) => {
+      const unit = units.size === 1 ? units.values().next().value : undefined
+      return unit ? [this.descriptions.createDescription(unit, name, AST.getDocument(unit))] : []
+    }))
   }
 
   /**
@@ -887,6 +946,18 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     this.useTargets.set(useStatement, declarations)
     return declarations
   }
+}
+
+function canonicalNumericUnitDeclaration(
+  declaration: AST.TypeDeclaration,
+  seen = new Set<AST.TypeDeclaration>(),
+): AST.TypeDeclaration | undefined {
+  if (seen.has(declaration)) {
+    return undefined
+  }
+  seen.add(declaration)
+  const alias = declaration.aliasTarget?.member.ref
+  return AST.isTypeDeclaration(alias) ? canonicalNumericUnitDeclaration(alias, seen) : declaration
 }
 
 function entityDataForWrite(operation: AST.Node | undefined): AST.EntityDataDeclaration | undefined {

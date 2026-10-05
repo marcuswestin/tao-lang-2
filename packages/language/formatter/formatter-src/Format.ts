@@ -8,6 +8,7 @@ import { ExpressionsFormatter } from './formatters/ExpressionsFormatter'
 import { FilesFormatter } from './formatters/FilesFormatter'
 import { InjectionsFormatter } from './formatters/InjectionsFormatter'
 import { NavigationFormatter } from './formatters/NavigationFormatter'
+import { NumericUnitsFormatter } from './formatters/NumericUnitsFormatter'
 import { PackageFormatter } from './formatters/PackageFormatter'
 import { RestorationFormatter } from './formatters/RestorationFormatter'
 import { ScenariosFormatter } from './formatters/ScenariosFormatter'
@@ -38,6 +39,7 @@ export const Format = {
   ...TypesFormatter,
   ...StatementsFormatter,
   ...ExpressionsFormatter,
+  ...NumericUnitsFormatter,
   ...InjectionsFormatter,
   ...NavigationFormatter,
 } as const satisfies FormatHandlers

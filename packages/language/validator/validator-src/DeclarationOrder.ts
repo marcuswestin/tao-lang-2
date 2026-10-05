@@ -36,6 +36,7 @@ function valueReferences(value: AST.Expression | AST.ConfiguredValue): ValueRefe
     MemberAccessExpression: reference => [reference],
     NoneLiteral: expressionValueReferences,
     NumberLiteral: expressionValueReferences,
+    NumericUnitConstruction: expressionValueReferences,
     PrimitiveConfigurationConstructor: expressionValueReferences,
     RefinementExpression: expressionValueReferences,
     StringLiteral: expressionValueReferences,

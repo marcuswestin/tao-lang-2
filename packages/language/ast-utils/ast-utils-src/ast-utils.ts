@@ -60,6 +60,7 @@ import {
 } from './invocations'
 import { resolveItemPropertyBindings } from './item-property-bindings'
 import { layoutEntryValues, layoutTermValue } from './layouts'
+import { NumericUnits } from './NumericUnits'
 import { Packages } from './Packages'
 import {
   appAuthBinding,
@@ -78,7 +79,8 @@ import { renderTargetIsNav, renderTargetName, resolveRenderTarget } from './rend
 import { Type } from './Type'
 import { literalDurationOf, Units } from './Units'
 
-export { design, Packages, Type, Units }
+export { design, NumericUnits, Packages, Type, Units }
+export type { NumericUnitsDeclarationPlan, NumericUnitsSuffixResolution } from './NumericUnits'
 
 /** ASTUtils groups shared semantic helpers for Tao AST consumers. */
 export const ASTUtils = {

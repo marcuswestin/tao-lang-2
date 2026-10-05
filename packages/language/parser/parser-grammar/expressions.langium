@@ -8,6 +8,7 @@ import "./configuration"
 import "./types"
 import "./terminals"
 import "./restoration"
+import "./numeric-units"
 
 entry ExpressionsGrammarEntrypoint:
     ArgumentList | Expression | FunctionDeclaration | PhraseDeclaration;
@@ -99,8 +100,11 @@ DeclarationSlotAdditionExpression infers Expression:
     ({infer BinaryExpression.left=current} operator=('+' | '-') right=MultiplicationExpression)*;
 
 DeclarationSlotMultiplicationExpression infers Expression:
-    DeclarationSlotUnaryExpression
-    ({infer BinaryExpression.left=current} operator=('*' | '/') right=UnaryExpression)*;
+    DeclarationSlotNumericUnitExpression
+    ({infer BinaryExpression.left=current} operator=('*' | '/') right=NumericUnitExpression)*;
+
+DeclarationSlotNumericUnitExpression infers Expression:
+    RequiredNumericUnitConstruction | DeclarationSlotUnaryExpression;
 
 DeclarationSlotUnaryExpression infers Expression:
     ({infer UnaryExpression} operator=('not' | '-') operand=UnaryExpression)
@@ -141,7 +145,11 @@ AdditionExpression infers Expression:
     MultiplicationExpression ({infer BinaryExpression.left=current} operator=('+' | '-') right=MultiplicationExpression)*;
 
 MultiplicationExpression infers Expression:
-    UnaryExpression ({infer BinaryExpression.left=current} operator=('*' | '/') right=UnaryExpression)*;
+    NumericUnitExpression ({infer BinaryExpression.left=current} operator=('*' | '/') right=NumericUnitExpression)*;
+
+// A signed literal is the construction input; negating a grouped quantity stays an outer unary.
+NumericUnitExpression infers Expression:
+    RequiredNumericUnitConstruction | UnaryExpression;
 
 // Postfix `.member` on any primary carries unit accessors (`1.ms`, `(1.cm).meters`).
 UnaryExpression infers Expression:
@@ -177,18 +185,25 @@ type ConfiguredValue = ConfigurationConstructor;
 type ConstructorDeclaration = TypeDeclaration | ParameterizedDeclaration;
 
 ConfigurationBlock:
-    '{' (entries+=ConfigurationEntry (','? entries+=ConfigurationEntry)*)? '}';
+    '{' (entries+=ConfigurationDirective ','?)*
+    (ConfigurationValues (entries+=ConfigurationDirective ','? ConfigurationValues?)*)? '}';
+
+fragment ConfigurationValues:
+    entries+=ConfigurationValueEntry (',' entries+=ConfigurationValueEntry)* ','?;
 
 // `view Shell(Other)` in an app variant's patch rebinds the root view the way a property entry rebinds
 // a slot; it is legal only where an app value is being configured, which the validator enforces.
-ConfigurationEntry:
+ConfigurationDirective infers ConfigurationEntry:
     restoration=RestorationPolicy
     | rootView=AppView
     | requirement=PackageRequires
     | appGuard=AppGuardStatement
     | key=USE_IMPORT_PATH block=ConfigurationBlock
-    | label=ID ':' expression=Expression
-    | name=MetadataName ('.' nameMembers+=ID)* (value=ConfigurationValue | block=ConfigurationBlock)
+    | name=MetadataName ('.' nameMembers+=ID)* block=ConfigurationBlock;
+
+ConfigurationValueEntry infers ConfigurationEntry:
+    label=ID ':' expression=Expression
+    | name=MetadataName ('.' nameMembers+=ID)* value=ConfigurationValue
     | memberReference=MemberAccessExpression
     | reference=[ListedDeclaration:ID]
     | expression=NonIdentifierConstructorEntryValue;
@@ -204,8 +219,15 @@ type ListedDeclaration = ValueDeclaration | EntityDataDeclaration;
 // edge, which is what makes a slot's presence a property of the data rather than of layout.
 ConfigurationValue:
     PropertyConfigurationPatch | ConfigurationConstructor | ConfigurationKeyValue | WhenExpression
-    | NoneLiteral | ListLiteral | StringLiteral | NumberLiteral | BooleanLiteral | ViewBinding
-    | ConfigurationReference;
+    | NoneLiteral | ListLiteral | StringLiteral | RequiredNumericUnitConstruction | NumberLiteral | BooleanLiteral
+    | ViewBinding | ConfigurationReference;
+
+RequiredNumericUnitConstruction infers NumericUnitConstruction:
+    input=NumericUnitConstructionInput unit=[NumericUnitDeclaration:NumericUnitName];
+
+NumericUnitConstructionInput infers Expression:
+    '(' Expression ')' | NumberLiteral
+    | ({infer UnaryExpression} operator='-' operand=NumberLiteral);
 
 // A parameterized view remains a first-class presentation descriptor in configuration position.
 // Its arguments are captured as live bindings when the owning nav is configured; this is distinct
@@ -214,7 +236,8 @@ ViewBinding:
     view=[ViewDeclaration:ID] '(' argumentList=ArgumentList? ')';
 
 NonIdentifierConstructorEntryValue infers Expression:
-    TypedConstructor | ListLiteral | InterpolatedString | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral;
+    TypedConstructor | ListLiteral | InterpolatedString | StringLiteral | RequiredNumericUnitConstruction
+    | NumberLiteral | BooleanLiteral | NoneLiteral;
 
 PropertyConfigurationPatch:
     'with' block=ConfigurationBlock;
@@ -271,8 +294,11 @@ WhenSubjectAdditionExpression infers Expression:
 // `/` is the compact form's separator here, so division inside a `when` subject or branch value is
 // written with parentheses.
 WhenSubjectMultiplicationExpression infers Expression:
-    WhenSubjectUnaryExpression ({infer BinaryExpression.left=current} operator='*'
-        right=WhenSubjectUnaryExpression)*;
+    WhenSubjectNumericUnitExpression ({infer BinaryExpression.left=current} operator='*'
+        right=WhenSubjectNumericUnitExpression)*;
+
+WhenSubjectNumericUnitExpression infers Expression:
+    RequiredNumericUnitConstruction | WhenSubjectUnaryExpression;
 
 WhenSubjectUnaryExpression infers Expression:
     ({infer UnaryExpression} operator=('not' | '-') operand=WhenSubjectUnaryExpression) | WhenSubjectPostfixExpression;
@@ -328,7 +354,7 @@ ListLiteral:
     '[' (elements+=Expression (',' elements+=Expression)*)? ']';
 
 ItemLiteral:
-    '{' (properties+=ItemProperty (','? properties+=ItemProperty)*)? '}';
+    '{' (properties+=ItemProperty (',' properties+=ItemProperty)* ','?)? '}';
 
 ItemProperty:
     (label=ID ':')? value=Expression;

@@ -28,6 +28,7 @@ import { InteractionValidator } from './validators/interaction-validator'
 import { InvocationsValidator } from './validators/invocations-validator'
 import { LayoutValidator } from './validators/layout-validator'
 import { navigationValidationChecks } from './validators/navigation-validator'
+import { numericUnitsValidationChecks } from './validators/numeric-units-validator'
 import { packageValidationChecks, validatePackageFile } from './validators/package-validator'
 import { pairingValidationChecks, validateAppPairing } from './validators/pairing-validator'
 import { PhrasesValidator } from './validators/phrases-validator'
@@ -80,6 +81,7 @@ const nodeValidationChecks = NodeValidation.compile(
     ResponsesValidator.checks,
     navigationValidationChecks,
     unitsValidationChecks,
+    numericUnitsValidationChecks,
     bridgeValidationChecks,
     usePackageValidationChecks,
     configuredValueValidationChecks,

@@ -19,6 +19,7 @@ export function compileRuntimeType(type: ASTUtils.TaoType): Compiled {
         boolean: () => gen`TR.Value<boolean>`,
         none: () => gen`TR.Value<null>`,
         number: () => gen`TR.Value<number>`,
+        numeric: () => gen`TR.Value<number>`,
         text: () => gen`TR.Value<string>`,
         time: () => gen`TR.Value<number>`,
         duration: () => gen`TR.Value<number>`,

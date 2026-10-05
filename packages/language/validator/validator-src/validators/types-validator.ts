@@ -188,6 +188,11 @@ function validateDerivedType(derived: AST.DerivedTypeExpression, ctx: Validation
   if (base.kind === 'unresolved') {
     return
   }
+  // Numeric with-bodies carry directly owned unit tables. Their shape and scales are checked
+  // by the numeric-units validator rather than the item-slot inheritance rules below.
+  if (base.kind === 'primitive' && base.primitive === 'numeric') {
+    return
+  }
   if (base.kind !== 'item' || !base.item) {
     ctx.error(derived.base, typeValidationMessages.derivedBaseShape(Type.referenceName(derived.base)))
     return

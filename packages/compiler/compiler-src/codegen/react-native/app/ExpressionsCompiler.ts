@@ -1,6 +1,7 @@
 import { ASTUtils, Type, Units } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
+import { BridgeMetadata } from '../../../bridge-metadata'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 import { authLibraryExport, compileCurrentAccount, contextualCommand, contextualReference } from './auth-context'
@@ -8,6 +9,7 @@ import { configurationRuntimeBindingName } from './ConfigurationCompiler'
 import { activeDataStorePlan } from './data-store-context'
 import { compileDeclarationIdentity } from './declaration-identity'
 import { bridgeBindingName } from './injection-plan'
+import { checkedNumericValue, quantityFactoryBinding } from './NumericUnitsCompiler'
 import { compileReactiveArgument } from './reactive-parameters'
 
 const shapelessItemConstructorMessage = 'validated shapeless item constructor is empty'
@@ -30,6 +32,7 @@ export const ExpressionsCompiler = {
       InterpolatedString: Compile.InterpolatedString,
       InferredConfigurationConstructor: Compile.InferredConfiguration,
       NumberLiteral: Compile.NumberLiteral,
+      NumericUnitConstruction: Compile.NumericUnitConstruction,
       NoneLiteral: Compile.NoneLiteral,
       PrimitiveConfigurationConstructor: Compile.PrimitiveConfigurationConstructor,
       RefinementExpression: Compile.RefinementExpression,
@@ -65,7 +68,7 @@ export const ExpressionsCompiler = {
     }
     if (AST.isTypeDeclaration(declaration) || AST.isParameterizedDeclaration(declaration)) {
       if (value.value) {
-        return Compile.Expression(value.value)
+        return checkedNumericValue(Compile.Expression(value.value), resolvedType)
       }
       if (resolvedType.kind !== 'item') {
         return Assert.never(resolvedType as never, 'validated named block constructor resolves an item type')
@@ -124,6 +127,7 @@ export const ExpressionsCompiler = {
       // it on every render, which is what makes an absent member reactive.
       NoneLiteral: Compile.Expression,
       NumberLiteral: Compile.Expression,
+      NumericUnitConstruction: Compile.Expression,
       PropertyConfigurationPatch: value =>
         Assert.never(value as never, 'property-position with is compiled against its owning property'),
       StringLiteral: Compile.Expression,
@@ -310,23 +314,40 @@ export const ExpressionsCompiler = {
   },
 
   /**
-   * FromExpression calls the sidecar's named export with plain JavaScript arguments and wraps the
-   * result as a Tao value, which is the whole bridge (Decisions §15).
+   * FromExpression preserves quantity arguments and passes ordinary arguments as JavaScript data.
    */
   FromExpression(bridge: AST.FromExpression): Compiled {
     const call = bridge.expression
     const values = AST.isFunctionCallExpression(call)
-      ? (call.argumentList?.arguments ?? []).map(argument => gen`${Compile.Expression(argument.value)}.jsValue`)
+      ? (call.argumentList?.arguments ?? []).map(argument => {
+        const value = Compile.Expression(argument.value)
+        const type = Type.ofExpression(argument.value)
+        if (Type.quantityOwner(type)) {
+          return value
+        }
+        return typeContainsQuantity(type)
+          ? gen`(() => { const result = ${value}; const backing = result.jsValue; return TR.isQuantityPayload(backing) ? result : backing })()`
+          : gen`${value}.jsValue`
+      })
       : undefined
     const binding = gen.Name({ name: bridgeBindingName(bridge) })
     const contextual = AST.getDocument(bridge).uri.path.endsWith('/@tao/auth/Auth.tao')
-    return contextual
-      ? gen`TR.Value(${binding}(_TaoAuthScope!${
-        values?.length ? gen`, ${gen.join(values, value => value)}` : gen.noop()
-      }))`
+    const nativeValue = contextual
+      ? gen`${binding}(_TaoAuthScope!${values?.length ? gen`, ${gen.join(values, value => value)}` : gen.noop()})`
       : values
-      ? gen`TR.Value(${binding}(${gen.join(values, value => value)}))`
-      : gen`TR.Value(${binding})`
+      ? gen`${binding}(${gen.join(values, value => value)})`
+      : binding
+    const resultType = BridgeMetadata.bridgeResultType(bridge)
+    const owner = resultType && Type.quantityOwner(resultType)
+    return owner
+      ? gen`(() => { const result = ${nativeValue}; ${quantityFactoryBinding(owner)}.read(result); return result })()`
+      : resultType?.kind === 'primitive' && resultType.primitive === 'numeric'
+      ? gen`TR.Value(TR.checkedNumericBacking(${nativeValue}, ${
+        gen.jsLiteral(
+          resultType.nominal && AST.isTypeDeclaration(resultType.nominal) ? resultType.nominal.name : 'numeric',
+        )
+      }))`
+      : gen`TR.Value(${nativeValue})`
   },
 
   /** PostfixMemberAccess compiles a member read on any expression, including unit accessors. */
@@ -975,6 +996,12 @@ function unitFamilyOf(type: ASTUtils.TaoType): ASTUtils.UnitFamily | undefined {
 
 function primitiveNamed(type: ASTUtils.TaoType, primitive: string): boolean {
   return type.kind === 'primitive' && type.primitive === primitive
+}
+
+/** Unions containing quantities preserve their wrappers and unwrap ordinary data branches. */
+function typeContainsQuantity(type: ASTUtils.TaoType): boolean {
+  return !!Type.quantityOwner(type)
+    || type.kind === 'union' && type.members.some(typeContainsQuantity)
 }
 
 function ratioOf(family: ASTUtils.UnitFamily, unit: string): number {

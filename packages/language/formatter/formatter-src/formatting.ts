@@ -1,4 +1,4 @@
-import { AST, Langium } from '@parser'
+import { AST, Langium, Parser } from '@parser'
 import { type EmbeddedTsFormatter, formatEmbeddedTs } from './embedded-ts'
 
 /** taoTabSize declares the canonical Tao indentation width in spaces; Tao formatting is not configurable. */
@@ -382,6 +382,7 @@ function reindentLines(lines: readonly string[], indent: string): string[] {
 function collapseClosingBraces(text: string): string {
   const lines = text.split('\n')
   const designLines = linesInsideDesign(lines)
+  const unitClosingLines = numericUnitClosingLines(text)
   const result: string[] = []
   let index = 0
   let inBlockComment = false
@@ -411,7 +412,7 @@ function collapseClosingBraces(text: string): string {
       runEnd++
     }
     if (runEnd > index) {
-      if (designLines[index] || isTestClosingBraceRun(lines, index)) {
+      if (designLines[index] || unitClosingLines.has(index) || isTestClosingBraceRun(lines, index)) {
         result.push(lines[index]!)
         index++
         continue
@@ -426,6 +427,24 @@ function collapseClosingBraces(text: string): string {
     index++
   }
   return result.join('\n')
+}
+
+/** Unit tables keep their own closing line, including when they end a numeric with-body. */
+function numericUnitClosingLines(text: string): ReadonlySet<number> {
+  const lines = new Set<number>()
+  if (!/\bunits\s*\{/.test(text)) {
+    return lines
+  }
+  // Parse the edited text so comments, strings and injection fences cannot masquerade as tables,
+  // and closing-line positions reflect the formatting already applied rather than the input CST.
+  const parsed = Parser.parseSyntax(text)
+  for (const block of AST.streamAllContents(parsed.ast).filter(AST.isNumericUnitBlock)) {
+    const close = Langium.GrammarUtils.findNodeForKeyword(block.$cstNode, '}')
+    if (close) {
+      lines.add(close.range.start.line)
+    }
+  }
+  return lines
 }
 
 /** Structured design blocks retain one owned closing brace per line so nested typed blocks stay unambiguous. */

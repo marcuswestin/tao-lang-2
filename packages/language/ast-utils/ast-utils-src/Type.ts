@@ -1,6 +1,7 @@
 import { AST } from '@parser'
 import { Switch } from '@shared'
 import { resolveActionInvocation } from './invocations'
+import { NumericUnits } from './NumericUnits'
 import { parameterRequiresWritable } from './reactive-parameters'
 import { type UnitFamily, Units } from './Units'
 
@@ -11,6 +12,7 @@ export type TaoType =
     primitive:
       | 'text'
       | 'number'
+      | 'numeric'
       | 'boolean'
       | 'time'
       | 'duration'
@@ -74,6 +76,30 @@ type AnyTypeReference = AST.TypeReference | AST.ConstructablePrimitiveTypeRefere
 /** Type exposes static Tao type resolution and compatibility helpers. */
 export class Type {
   private constructor() {}
+
+  /** quantityOwner returns the directly owning declaration, retaining scoped field identity. */
+  static quantityOwner(type: TaoType): AST.TypeDeclaration | undefined {
+    if (!isPrimitiveNamed(type, 'numeric')) {
+      return undefined
+    }
+    const nominal = nominalOf(type)
+    if (!nominal) {
+      return undefined
+    }
+    if (AST.isTypeDeclaration(nominal)) {
+      const alias = nominal.aliasTarget?.member.ref
+      return AST.isTypeDeclaration(alias)
+        ? Type.quantityOwner(Type.ofDefinition(alias))
+        : NumericUnits.declarationPlan(nominal)?.owner
+    }
+    const parent = parentTypeDefinition(nominal)
+    if (parent) {
+      return Type.quantityOwner(Type.ofDefinition(parent))
+    }
+    return AST.isTypeProperty(nominal) && nominal.value
+      ? Type.quantityOwner(Type.ofExpression(nominal.value))
+      : undefined
+  }
 
   /** parameterName returns the value alias introduced by a parameter declaration. */
   static parameterName(parameter: AST.ParameterDeclaration): string {
@@ -377,6 +403,9 @@ export class Type {
     if (expected.kind === 'union') {
       return expected.members.some(member => Type.isAssignable(actual, member))
     }
+    if (!quantityOwnersAgree(actual, expected)) {
+      return false
+    }
     if (!typesHaveCompatibleBase(actual, expected)) {
       return false
     }
@@ -446,6 +475,9 @@ export class Type {
     }
     if (target.kind === 'union') {
       return target.members.some(member => Type.isCastCompatible(actual, member))
+    }
+    if (!quantityOwnersAgree(actual, target)) {
+      return false
     }
     if (!typesHaveCompatibleBase(actual, target)) {
       return false
@@ -896,6 +928,9 @@ function primitiveFamilyIsAssignable(actual: TaoType, expected: TaoType): boolea
   if (actual.primitive === expected.primitive) {
     return true
   }
+  if (actual.primitive === 'number' && expected.primitive === 'numeric') {
+    return true
+  }
   // The primitive lattice mirrors the Prelude's `is` chain: `nav` refines `scene` refines `view`,
   // and nothing else refines anything. The walk below follows the whole chain, so a nav stays
   // assignable to a view through scene.
@@ -922,6 +957,40 @@ function chainFrom<ValueT>(start: ValueT, parentOf: (value: ValueT) => ValueT | 
 
 function nominalOf(type: TaoType): AST.TypeDefinition | undefined {
   return canCarryNominal(type) ? type.nominal : undefined
+}
+
+function quantityOwnersAgree(actual: TaoType, expected: TaoType): boolean {
+  if (actual.kind === 'union') {
+    return actual.members.every(member => quantityOwnersAgree(member, expected))
+  }
+  if (expected.kind === 'union') {
+    return expected.members.some(member => quantityOwnersAgree(actual, member))
+  }
+  if (actual.kind === 'list' && expected.kind === 'list') {
+    return actual.element && expected.element
+      ? quantityOwnersAgree(actual.element, expected.element)
+      : !containsQuantityOwner(actual.element) && !containsQuantityOwner(expected.element)
+  }
+  const actualOwner = Type.quantityOwner(actual)
+  const expectedOwner = Type.quantityOwner(expected)
+  return !actualOwner && !expectedOwner || actualOwner !== undefined && actualOwner === expectedOwner
+}
+
+function containsQuantityOwner(type: TaoType | undefined): boolean {
+  if (!type) {
+    return false
+  }
+  if (type.kind === 'list') {
+    return containsQuantityOwner(type.element)
+  }
+  if (type.kind === 'union') {
+    return type.members.some(containsQuantityOwner)
+  }
+  return Type.quantityOwner(type) !== undefined
+}
+
+function containsNumericStorage(type: TaoType): boolean {
+  return type.kind === 'union' ? type.members.some(containsNumericStorage) : isPrimitiveNamed(type, 'numeric')
 }
 
 function actualSatisfiesExpectedNominal(actual: TaoType, expected: TaoType): boolean {
@@ -1087,6 +1156,10 @@ class TypeResolutionContext {
       MemberAccessExpression: access => this.ofMemberAccess(access),
       NoneLiteral: () => primitiveType('none'),
       NumberLiteral: () => primitiveType('number'),
+      NumericUnitConstruction: construction => {
+        const resolved = NumericUnits.resolveSuffix(construction)
+        return resolved ? this.ofDefinition(resolved.plan.owner) : unresolvedType()
+      },
       StringLiteral: () => primitiveType('text'),
       TypedConstructor: constructor => Type.ofConstructorReference(constructor.type),
       UnaryExpression: unary => this.unaryExpressionType(unary),
@@ -1113,25 +1186,31 @@ class TypeResolutionContext {
 
   /** Negating a unit value keeps its family; every other unary result is fixed by its operator. */
   private unaryExpressionType(expression: AST.UnaryExpression): TaoType {
+    const operand = this.ofExpression(expression.operand)
+    if (containsNumericStorage(operand)) {
+      return unresolvedType()
+    }
     if (expression.operator === 'not') {
       return primitiveType('boolean')
     }
-    const operand = this.ofExpression(expression.operand)
     return primitiveUnitFamily(operand) ? operand : primitiveType('number')
   }
 
   private binaryExpressionType(expression: AST.BinaryExpression): TaoType {
+    const left = this.ofExpression(expression.left)
+    const right = this.ofExpression(expression.right)
+    if (containsNumericStorage(left) || containsNumericStorage(right)) {
+      return unresolvedType()
+    }
     if (['==', '!=', '<', '<=', '>', '>=', 'and', 'or'].includes(expression.operator)) {
       return primitiveType('boolean')
     }
-    const left = this.ofExpression(expression.left)
     if (expression.operator === '+' && left.kind === 'primitive' && left.primitive === 'shortcut') {
       return primitiveType('shortcut')
     }
     if (expression.operator === '+' && left.kind === 'primitive' && left.primitive === 'text') {
       return primitiveType('text')
     }
-    const right = this.ofExpression(expression.right)
     return dimensionalResultType(left, expression.operator, right) ?? primitiveType('number')
   }
 

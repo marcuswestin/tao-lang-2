@@ -11,6 +11,43 @@ export type RenderablePrimitive = 'view' | 'scene' | 'nav'
 const resolvedUseTargets = new WeakMap<AST.UseStatement | AST.UsePackageStatement, readonly AST.Declaration[]>()
 const visibleWorkspaceFiles = new WeakMap<AST.TaoFile, readonly AST.TaoFile[]>()
 
+/** numericUnitConstructionInputIsAllowed checks the selected literal or grouped source form. */
+export function numericUnitConstructionInputIsAllowed(node: AST.NumericUnitConstruction): boolean {
+  const unit = Langium.GrammarUtils.findNodesForProperty(node.$cstNode, 'unit')[0]
+  const cst = node.$cstNode
+  if (!cst || !unit) {
+    return false
+  }
+  const tokens = [...Langium.CstUtils.streamCst(cst)]
+    .filter(Langium.isLeafCstNode)
+    .filter(token => !token.hidden && token.offset >= cst.offset && token.end <= unit.offset)
+    .map(token => token.text)
+  if (AST.isNumberLiteral(node.input) && tokens.length === 1) {
+    return true
+  }
+  if (
+    AST.isUnaryExpression(node.input) && node.input.operator === '-'
+    && AST.isNumberLiteral(node.input.operand) && tokens.length === 2 && tokens[0] === '-'
+  ) {
+    return true
+  }
+  if (tokens[0] !== '(' || tokens[tokens.length - 1] !== ')') {
+    return false
+  }
+  let depth = 0
+  for (let index = 0; index < tokens.length; index += 1) {
+    if (tokens[index] === '(') {
+      depth += 1
+    } else if (tokens[index] === ')') {
+      depth -= 1
+      if (depth === 0 && index < tokens.length - 1) {
+        return false
+      }
+    }
+  }
+  return depth === 0
+}
+
 /** readContextDeclaration finds the intrinsic public contract without making its name implicit. */
 export function readContextDeclaration(node: AST.Node): AST.TypeDeclaration | undefined {
   const root = findRoot(node)

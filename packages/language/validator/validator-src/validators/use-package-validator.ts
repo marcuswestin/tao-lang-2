@@ -1,4 +1,4 @@
-import { Packages } from '@ast-utils'
+import { Packages, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
 import type { NodeValidationChecks } from '../node-validation'
@@ -84,12 +84,15 @@ export const usePackageValidationChecks = {
   },
 } satisfies NodeValidationChecks
 
-/** reportInvalidTypeAliasTarget errors when a resolved type alias does not land on a configurable type. */
+/** reportInvalidTypeAliasTarget admits configurable targets and directly owning numeric quantities. */
 function reportInvalidTypeAliasTarget(
   declaration: AST.TypeDeclaration,
   resolution: Extract<AST.ConfigurableTypeAliasResolution, { kind: 'invalid' | 'target' }>,
   ctx: ValidationContext,
 ): void {
+  if (AST.isTypeDeclaration(resolution.target) && Type.quantityOwner(Type.ofDefinition(resolution.target))) {
+    return
+  }
   if (resolution.kind === 'invalid' || !AST.isConfigurableDeclaration(resolution.target)) {
     ctx.error(
       declaration,

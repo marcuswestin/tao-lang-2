@@ -5,6 +5,7 @@ import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 import { isAgentCommandsList } from './agent-commands-validator'
 import { FunctionsValidator } from './functions-validator'
+import { NumericUnitsValidationMessages } from './NumericUnitsValidationMessages'
 
 const messages = {
   binaryBoolean: (operator: string) => `Operator '${operator}' requires boolean values on both sides.`,
@@ -54,6 +55,10 @@ export const FunctionalCoreValidator = {
     [AST.BinaryExpression.$type]: validateBinary,
     [AST.UnaryExpression.$type]: (expression, ctx) => {
       const operand = Type.ofExpression(expression.operand)
+      if (containsNumeric(operand)) {
+        ctx.error(expression, NumericUnitsValidationMessages.operator(expression.operator))
+        return
+      }
       if (expression.operator === 'not') {
         if (!isPrimitive(operand, 'boolean')) {
           ctx.error(expression, messages.unaryBoolean)
@@ -120,6 +125,10 @@ export const FunctionalCoreValidator = {
 function validateBinary(expression: AST.BinaryExpression, ctx: ValidationContext): void {
   const left = Type.ofExpression(expression.left)
   const right = Type.ofExpression(expression.right)
+  if (containsNumeric(left) || containsNumeric(right)) {
+    ctx.error(expression, NumericUnitsValidationMessages.operator(expression.operator))
+    return
+  }
   if (left.kind === 'unresolved' || right.kind === 'unresolved') {
     return
   }
@@ -525,4 +534,8 @@ function validateRenderControlPlacement(
 
 function isPrimitive(type: ReturnType<typeof Type.ofExpression>, primitive: string): boolean {
   return type.kind === 'primitive' && type.primitive === primitive
+}
+
+function containsNumeric(type: ReturnType<typeof Type.ofExpression>): boolean {
+  return type.kind === 'union' ? type.members.some(containsNumeric) : isPrimitive(type, 'numeric')
 }
