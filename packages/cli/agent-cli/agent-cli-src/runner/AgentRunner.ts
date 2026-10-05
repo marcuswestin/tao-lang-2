@@ -76,7 +76,7 @@ export type RunAgentCommandOptions = {
 /** runAgentCommand runs one command through the front door and returns its faithful exit status. */
 export async function runAgentCommand(options: RunAgentCommandOptions): Promise<number> {
   const repositoryRoot = options.cwd ?? Repo.getRoot()
-  const flags = parseAgentFlags(options.args)
+  const flags = parseAgentFlags(options.args, Platform.runtimeProcess.env)
   const initialWarnings = UiVisibility.warningsForCommand(options.command, flags.rest)
   const start = options.start ?? CLI.start
   const now = options.now ?? Date.now
