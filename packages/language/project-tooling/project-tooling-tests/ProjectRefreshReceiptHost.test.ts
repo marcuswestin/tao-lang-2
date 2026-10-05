@@ -1,7 +1,6 @@
 import { FS } from '@shared'
 import { Describe, Expect, Test, testOverrideSlot, withTaoFiles } from '@shared/test'
 import * as ts from 'typescript'
-import { ProjectRefreshReceipt } from '../project-tooling-src/ProjectRefreshReceipt'
 import type { ProjectToolingWatch } from '../project-tooling-src/ProjectTooling'
 import { ProjectTooling } from '../project-tooling-src/ProjectToolingService'
 import { semanticResult, warmReceipt } from './ProjectRefreshReceiptTestSupport'
