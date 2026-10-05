@@ -235,6 +235,50 @@ export async function readTypeScriptApi(
       }'.`,
     )
   }
+  const signatureModules = new Map<string, string>()
+  function portableSignature(signature: TS.Signature, declaration: TS.Node): string {
+    const description = checker.signatureToString(signature, declaration, ts.TypeFormatFlags.NoTruncation)
+    const prefix = 'type NativeSignature = { '
+    const syntax = ts.createSourceFile(
+      '__native_signature__.ts',
+      `${prefix}${description} };`,
+      ts.ScriptTarget.Latest,
+      true,
+    )
+    const replacements: { start: number; end: number; text: string }[] = []
+    function visit(node: TS.Node): void {
+      if (
+        ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument)
+        && ts.isStringLiteral(node.argument.literal) && FS.isAbsolute(node.argument.literal.text)
+      ) {
+        const literal = node.argument.literal
+        let moduleName = signatureModules.get(literal.text)
+        if (moduleName === undefined) {
+          const withoutExtension = (path: string) => path.replace(/(?:\.d)?\.(?:[cm]?ts|tsx|[cm]?js|jsx)$/, '')
+          const file = program.getSourceFiles().find(file =>
+            file.fileName === literal.text || withoutExtension(file.fileName) === literal.text
+          )
+          Assert.defined(file, 'an absolute signature module refers to a loaded native declaration')
+          const owner = origin(file)
+          moduleName = `${owner.packageName}/${withoutExtension(FS.relativePath(owner.directory, file.fileName))}`
+            .replaceAll('\\', '/')
+          signatureModules.set(literal.text, moduleName)
+        }
+        replacements.push({
+          start: literal.getStart(syntax) - prefix.length,
+          end: literal.end - prefix.length,
+          text: JSON.stringify(moduleName),
+        })
+      }
+      ts.forEachChild(node, visit)
+    }
+    visit(syntax)
+    // Replace only import-type module literals, preserving unrelated string and template literal types.
+    return replacements.sort((a, b) => b.start - a.start).reduce(
+      (text, replacement) => text.slice(0, replacement.start) + replacement.text + text.slice(replacement.end),
+      description,
+    )
+  }
   function provenance(
     node: TS.Node,
     symbol: string,
@@ -253,7 +297,7 @@ export async function readTypeScriptApi(
       column: position.character + 1,
       symbol,
       ...(signature
-        ? { signature: checker.signatureToString(signature, node, ts.TypeFormatFlags.NoTruncation), overload }
+        ? { signature: portableSignature(signature, node), overload }
         : {}),
       ...(substitutions?.size || requiredParameter !== undefined
         ? {
@@ -792,7 +836,7 @@ export async function readTypeScriptApi(
     const names = new Set<string>()
     const reflectedSignatures = candidates.map(signature => ({
       signature,
-      description: checker.signatureToString(signature, declaration, ts.TypeFormatFlags.NoTruncation),
+      description: portableSignature(signature, declaration),
     })).sort((a, b) => a.description.localeCompare(b.description))
     const ordered = reflectedSignatures.filter((item, index) =>
       index === 0 || reflectedSignatures[index - 1]!.description !== item.description

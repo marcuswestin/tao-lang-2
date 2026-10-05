@@ -633,6 +633,9 @@ async function synchronizedFiles(
       continue
     }
     for (const path of await walkedFiles(root)) {
+      if (isFileMutationAuxiliaryPath(path)) {
+        continue
+      }
       const relative = relativePath(root, path)
       files.push({ fileSetIndex: index, label: `${index}/${relative}`, path, relative, root })
     }

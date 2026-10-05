@@ -2436,7 +2436,7 @@
           "line": 13,
           "column": 5,
           "symbol": "Query.constructor",
-          "signature": "(): import(\"/Users/ro/.codex/worktrees/2959/tao-lang-2/node_modules/.bun/expo-media-library@57.0.5+f0a897d6e9855115/node_modules/expo-media-library/build/index\").Query",
+          "signature": "(): import(\"expo-media-library/build/index\").Query",
           "overload": 0
         },
         "disposition": "generated",
@@ -2488,7 +2488,7 @@
           "line": 20,
           "column": 5,
           "symbol": "Asset.constructor",
-          "signature": "(id: string): import(\"/Users/ro/.codex/worktrees/2959/tao-lang-2/node_modules/.bun/expo-media-library@57.0.5+f0a897d6e9855115/node_modules/expo-media-library/build/index\").Asset",
+          "signature": "(id: string): import(\"expo-media-library/build/index\").Asset",
           "overload": 0
         },
         "disposition": "generated",
@@ -2570,7 +2570,7 @@
           "line": 14,
           "column": 5,
           "symbol": "Album.constructor",
-          "signature": "(id: string): import(\"/Users/ro/.codex/worktrees/2959/tao-lang-2/node_modules/.bun/expo-media-library@57.0.5+f0a897d6e9855115/node_modules/expo-media-library/build/index\").Album",
+          "signature": "(id: string): import(\"expo-media-library/build/index\").Album",
           "overload": 0
         },
         "disposition": "generated",
@@ -4016,7 +4016,7 @@
           "line": 14,
           "column": 5,
           "symbol": "Album.constructor",
-          "signature": "(id: string): import(\"/Users/ro/.codex/worktrees/2959/tao-lang-2/node_modules/.bun/expo-media-library@57.0.5+f0a897d6e9855115/node_modules/expo-media-library/build/index\").Album",
+          "signature": "(id: string): import(\"expo-media-library/build/index\").Album",
           "overload": 0
         }
       },
@@ -4514,7 +4514,7 @@
           "line": 20,
           "column": 5,
           "symbol": "Asset.constructor",
-          "signature": "(id: string): import(\"/Users/ro/.codex/worktrees/2959/tao-lang-2/node_modules/.bun/expo-media-library@57.0.5+f0a897d6e9855115/node_modules/expo-media-library/build/index\").Asset",
+          "signature": "(id: string): import(\"expo-media-library/build/index\").Asset",
           "overload": 0
         }
       },
@@ -5649,7 +5649,7 @@
           "line": 13,
           "column": 5,
           "symbol": "Query.constructor",
-          "signature": "(): import(\"/Users/ro/.codex/worktrees/2959/tao-lang-2/node_modules/.bun/expo-media-library@57.0.5+f0a897d6e9855115/node_modules/expo-media-library/build/index\").Query",
+          "signature": "(): import(\"expo-media-library/build/index\").Query",
           "overload": 0
         }
       },

@@ -46,6 +46,16 @@ snapshots fall back to the existing exclusive lock. Readers can overlap without
 weakening publication or compiler freshness guards. A speed improvement is not
 yet established by a repository-level measurement.
 
+The clean-checkout gate found absolute installation paths in constructor
+provenance and a race copying disappearing publisher sidecars. Signatures now
+normalize import-type module references to package-relative declaration paths;
+two relocated fixtures produce identical catalogs and generated files. Shared
+directory synchronization excludes reserved mutation coordination entries from
+both inventories, retaining exact byte hashes, symlink rejection and data-drift
+checks. Focused regressions pass. The initial host gate remains failed: compiler,
+source-action and validator timeouts passed its isolated retries, while runtime
+Jest still needs an isolated confirmation and complete gate retry.
+
 Setup, VSIX packaging, standalone packaging and all 21 installed CLI acceptance
 scenarios pass, including recovery from a deleted binding using only installed
 resources. Installed editor activation, hover, definitions, contract diagnostics,

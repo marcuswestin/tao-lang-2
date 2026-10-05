@@ -113,7 +113,7 @@ export function invokeNativeEvent<Args extends unknown[]>(
 ): unknown {
   const value = 'evaluate' in action ? action.evaluate().jsValue : action
   if (value.nativeEventActive?.() === false) {
-    return
+    return undefined
   }
   const policy = policies.get(value) ?? policies.get(action)
   if (policy === undefined) {
@@ -133,6 +133,7 @@ export function invokeNativeEvent<Args extends unknown[]>(
       reportUnownedFailure(error)
     }
   })
+  return undefined
 }
 
 function isObject(value: unknown): value is object {

@@ -133,6 +133,7 @@ export const Views = {
           if (props.action) {
             return invokeNativeEvent(props.action, event)
           }
+          return undefined
         },
       },
       pressableTitle: props.title,
