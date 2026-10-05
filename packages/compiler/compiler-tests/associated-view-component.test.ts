@@ -6,19 +6,22 @@ import { Compile } from '../compiler-src/codegen/react-native/Compile'
 Describe('compiler: associated view components', () => {
   Test('emits a stable component with receiver-first shared lifecycle and planned surfaces', async () => {
     const source = `
-      view Fixture(Value text) [pad 8] {
-        let Label = "ready"
-        render Label
+      type Token is text with {
+        view Token.Badge(Value text) [pad 8] {
+          let Label = "ready"
+          render Label
+        }
       }
     `
     const parsed = await Parser.parseCode(source, { validation: false })
     Expect(parsed.entry.document.parseResult.lexerErrors).toEqual([])
     Expect(parsed.entry.document.parseResult.parserErrors).toEqual([])
-    const fixture = parsed.entry.ast.statements.find(AST.isViewDeclaration)
-    Expect.Is(fixture, AST.isViewDeclaration)
-    Expect.Is(fixture.block, AST.isBlock)
-
-    const declaration = associatedViewFromParsedFixture(fixture)
+    const owner = parsed.entry.ast.statements.find(AST.isTypeDeclaration)
+    Expect.Is(owner, AST.isTypeDeclaration)
+    Expect.Is(owner.type, AST.isDerivedTypeExpression)
+    const declaration = owner.type.slots.views.find(AST.isAssociatedViewDeclaration)
+    Expect.Is(declaration, AST.isAssociatedViewDeclaration)
+    Expect(AST.associatedViewOwner(declaration)).toBe(owner)
     const code = Langium.toString(Compile.AssociatedViewDeclaration(declaration, {
       component: gen.Name({ name: '_TaoToken_Badge' }),
       propsType: gen`{
@@ -62,26 +65,3 @@ Describe('compiler: associated view components', () => {
     Expect(code).toContain('TR.Navigation.UseHostSlots(_ViewProps.__taoHost, { planned: true })')
   })
 })
-
-/** Move the parsed shared ViewBlock into the generated associated node until file grammar admits it. */
-function associatedViewFromParsedFixture(fixture: AST.ViewDeclaration): AST.AssociatedViewDeclaration {
-  const block = fixture.block
-  Expect.Is(block, AST.isBlock)
-  const declaration: AST.AssociatedViewDeclaration = {
-    $type: AST.AssociatedViewDeclaration.$type,
-    name: 'Badge',
-    receiverName: 'Token',
-    block,
-    parameterList: fixture.parameterList,
-    layoutClause: fixture.layoutClause,
-  }
-  Object.assign(block, { $container: declaration })
-  if (fixture.parameterList) {
-    Object.assign(fixture.parameterList, { $container: declaration })
-  }
-  if (fixture.layoutClause) {
-    Object.assign(fixture.layoutClause, { $container: declaration })
-  }
-  Object.assign(fixture, { block: undefined, parameterList: undefined, layoutClause: undefined })
-  return declaration
-}
