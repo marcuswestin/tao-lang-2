@@ -13,6 +13,7 @@ export const TypesFormatter = {
   TypeDeclaration(f) {
     f.visibilityOnOwnLine()
     f.oneSpaceAfter('type')
+    f.oneSpaceAfter('can')
     f.oneSpaceAround('is')
     f.oneSpaceAround('=')
   },
@@ -41,13 +42,19 @@ export const TypesFormatter = {
       ...f.node.accepts,
       ...f.node.supports,
       ...f.node.implementations,
+      ...f.node.methods,
     ]
       .toSorted((left, right) => (left.$cstNode?.offset ?? 0) - (right.$cstNode?.offset ?? 0))
     f.indentedBraceBlock(entries)
     f.commaLineList()
     f.separateIndentedLines(
       entries,
-      (_previous, next) => AST.isConfigurationImplementation(next) ? 2 : 1,
+      (previous, next) =>
+        AST.isConfigurationImplementation(next)
+          || AST.isAssociatedFunctionDeclaration(previous)
+          || AST.isAssociatedFunctionDeclaration(next)
+          ? 2
+          : 1,
     )
   },
 

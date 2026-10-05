@@ -44,7 +44,7 @@ Describe('Tao formatter declaration parameters and functions', () => {
       `public function GoalFraction ( Count number )returns number{if Count==0{return 0}\nreturn Count/10}\nview Main ( ){action Save ( ){ }render Empty()}`,
       `
         public
-        function GoalFraction(Count number) returns number {
+        func GoalFraction(Count number) -> number {
            if Count == 0 {
               return 0
            }

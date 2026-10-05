@@ -86,7 +86,10 @@ export const ExpressionsFormatter = {
   FunctionDeclaration(f) {
     f.visibilityOnOwnLine()
     f.oneSpaceAfter('function', 'returns')
+    f.oneSpaceAfter('func')
     f.oneSpaceBefore('returns')
+    f.oneSpaceAround('fails')
+    f.oneSpaceAround('->')
     f.noSpaceBefore('(')
   },
 
@@ -108,6 +111,13 @@ export const ExpressionsFormatter = {
 
   /** FunctionCallExpression keeps call parentheses tight and arguments comma-spaced. */
   FunctionCallExpression(f) {
+    f.noSpaceBefore('(')
+    f.noSpaceAfter('(')
+    f.noSpaceBefore(')')
+  },
+
+  /** MethodCallExpression keeps postfix invocation parentheses attached to their callee. */
+  MethodCallExpression(f) {
     f.noSpaceBefore('(')
     f.noSpaceAfter('(')
     f.noSpaceBefore(')')
@@ -224,10 +234,16 @@ export const ExpressionsFormatter = {
   },
 
   /** MemberAccessExpression has no whitespace around member dots. */
-  MemberAccessExpression() {},
+  MemberAccessExpression(f) {
+    f.noSpaceBefore('.')
+    f.noSpaceAfter('.')
+  },
 
   /** PostfixMemberAccess has no whitespace around its dot, so `220.ms` stays tight. */
-  PostfixMemberAccess() {},
+  PostfixMemberAccess(f) {
+    f.noSpaceBefore('.')
+    f.noSpaceAfter('.')
+  },
 
   /** StringLiteral is a single token with no interior formatting. */
   StringLiteral() {},

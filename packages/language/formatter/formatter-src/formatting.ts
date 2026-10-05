@@ -383,6 +383,7 @@ function collapseClosingBraces(text: string): string {
   const lines = text.split('\n')
   const designLines = linesInsideDesign(lines)
   const unitClosingLines = numericUnitClosingLines(text)
+  const methodClosingLines = associatedMethodClosingLines(text)
   const result: string[] = []
   let index = 0
   let inBlockComment = false
@@ -408,6 +409,8 @@ function collapseClosingBraces(text: string): string {
       isClosingDelimiterLine(lines[runEnd]!)
       && runEnd + 1 < lines.length
       && isClosingDelimiterLine(lines[runEnd + 1]!)
+      && !methodClosingLines.has(runEnd)
+      && !methodClosingLines.has(runEnd + 1)
     ) {
       runEnd++
     }
@@ -427,6 +430,22 @@ function collapseClosingBraces(text: string): string {
     index++
   }
   return result.join('\n')
+}
+
+/** Associated method bodies keep their own closing line separate from their owner and nested blocks. */
+function associatedMethodClosingLines(text: string): ReadonlySet<number> {
+  const lines = new Set<number>()
+  if (!/\bfunc\s/.test(text)) {
+    return lines
+  }
+  const parsed = Parser.parseSyntax(text)
+  for (const method of AST.streamAllContents(parsed.ast).filter(AST.isAssociatedFunctionDeclaration)) {
+    const close = Langium.GrammarUtils.findNodeForKeyword(method.block.$cstNode, '}')
+    if (close) {
+      lines.add(close.range.start.line)
+    }
+  }
+  return lines
 }
 
 /** Unit tables keep their own closing line, including when they end a numeric with-body. */

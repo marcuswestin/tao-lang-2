@@ -2,6 +2,7 @@ import { AST, Langium, Parser } from '@parser'
 import { Assert } from '@shared'
 import { type EmbeddedTsFormatter, ensureEmbeddedTsFormatter } from './embedded-ts'
 import { Format } from './Format'
+import { canonicalFunctionSource } from './formatters/AssociatedMethodsFormatter'
 import { canonicalRenderPrefixSource } from './formatters/ViewsFormatter'
 import {
   applyTextEdits,
@@ -22,6 +23,16 @@ export class TaoFormatter extends Langium.AbstractFormatter {
     document: Langium.LangiumDocument,
     params: Langium.DocumentFormattingParams,
   ): Promise<Langium.TextEdit[]> {
+    const functions = document.parseResult.parserErrors.length === 0
+      ? canonicalFunctionSource(document as AST.Document)
+      : undefined
+    if (functions !== undefined) {
+      const parsed = await Parser.parseCode(functions, { validation: false, uri: document.uri })
+      const migrated = parsed.entry.document
+      Assert(migrated.parseResult.parserErrors.length === 0, 'function keyword migration preserves valid syntax')
+      const migratedEdits = await new TaoFormatter().formatDocument(migrated, params)
+      return [wholeDocumentEdit(document, applyTextEdits(migrated, migratedEdits))]
+    }
     const assigned = document.parseResult.parserErrors.length === 0
       ? assignedQuerySource(document as AST.Document)
       : undefined

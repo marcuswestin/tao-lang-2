@@ -59,7 +59,7 @@ Describe('formatter: numeric units', () => {
          }
       }
 
-      function Read(Value boolean) {
+      func Read(Value boolean) {
          if Value {
             return "ordinary"
       }  }
