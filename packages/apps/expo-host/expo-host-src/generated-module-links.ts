@@ -77,7 +77,9 @@ export async function withGeneratedModuleLinks(
         await generatedModuleLinkFileOperations.symlink(link.target, linkPath)
         installed.push(link)
       }
-      const serializedManifest = `${JSON.stringify({ version: 1, links: desired } satisfies ModuleLinkManifest, null, 2)}\n`
+      const serializedManifest = `${
+        JSON.stringify({ version: 1, links: desired } satisfies ModuleLinkManifest, null, 2)
+      }\n`
       const manifestUnchanged = await FS.isFile(manifestPath)
         && await FS.readText(manifestPath) === serializedManifest
       if (manifestUnchanged) {
@@ -88,7 +90,10 @@ export async function withGeneratedModuleLinks(
           await generatedModuleLinkFileOperations.remove(manifestPath)
         }
       } else {
-        await generatedModuleLinkFileOperations.writeJson(manifestPath, { version: 1, links: desired } satisfies ModuleLinkManifest)
+        await generatedModuleLinkFileOperations.writeJson(
+          manifestPath,
+          { version: 1, links: desired } satisfies ModuleLinkManifest,
+        )
       }
     } catch (error) {
       for (const link of installed) {

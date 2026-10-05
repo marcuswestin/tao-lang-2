@@ -1,6 +1,6 @@
 import { managedDependencyModulesRoot } from '@project-tooling'
 import { FS, ProjectLocal } from '@shared'
-import { Deferred, Describe, Expect, mkTestDir, testOverrideSlot, Test } from '@shared/test'
+import { Deferred, Describe, Expect, mkTestDir, Test, testOverrideSlot } from '@shared/test'
 import {
   generatedModuleLinkFileOperations,
   withGeneratedModuleLinks,
@@ -12,15 +12,21 @@ type MutableFileOperations = typeof generatedModuleLinkFileOperations
 
 const removeSlot = testOverrideSlot<typeof generatedModuleLinkFileOperations.remove>({
   read: () => generatedModuleLinkFileOperations.remove,
-  write: value => { (generatedModuleLinkFileOperations as MutableFileOperations).remove = value },
+  write: value => {
+    ;(generatedModuleLinkFileOperations as MutableFileOperations).remove = value
+  },
 })
 const symlinkSlot = testOverrideSlot<typeof generatedModuleLinkFileOperations.symlink>({
   read: () => generatedModuleLinkFileOperations.symlink,
-  write: value => { (generatedModuleLinkFileOperations as MutableFileOperations).symlink = value },
+  write: value => {
+    ;(generatedModuleLinkFileOperations as MutableFileOperations).symlink = value
+  },
 })
 const writeJsonSlot = testOverrideSlot<typeof generatedModuleLinkFileOperations.writeJson>({
   read: () => generatedModuleLinkFileOperations.writeJson,
-  write: value => { (generatedModuleLinkFileOperations as MutableFileOperations).writeJson = value },
+  write: value => {
+    ;(generatedModuleLinkFileOperations as MutableFileOperations).writeJson = value
+  },
 })
 
 async function withFileOperationCalls<T>(
@@ -367,7 +373,9 @@ Describe('generated dependency modules', () => {
           output,
           root,
           [b],
-          async () => { throw new TypeError('publication failed') },
+          async () => {
+            throw new TypeError('publication failed')
+          },
           root,
           { preserveUnchangedLinks: true },
         )).rejects.toThrow('publication failed')

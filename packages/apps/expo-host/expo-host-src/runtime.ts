@@ -197,14 +197,21 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
       relativePath: 'ManagedLoopIdentity.ts',
       code: `export default ${JSON.stringify(publication ?? null)}\n`,
     }]
-    await withGeneratedModuleLinks(generatedAppRoot, requesterRoot, compiled.dependencyEnvironments, async () => {
-      await writeGeneratedFiles(
-        generatedAppRoot,
-        generatedFiles,
-        preview === undefined ? undefined : studioPublicationPath,
-        opts.publicationHooks,
-      )
-    }, opts.moduleLinkRoot ?? requesterRoot, { preserveUnchangedLinks: preview !== undefined })
+    await withGeneratedModuleLinks(
+      generatedAppRoot,
+      requesterRoot,
+      compiled.dependencyEnvironments,
+      async () => {
+        await writeGeneratedFiles(
+          generatedAppRoot,
+          generatedFiles,
+          preview === undefined ? undefined : studioPublicationPath,
+          opts.publicationHooks,
+        )
+      },
+      opts.moduleLinkRoot ?? requesterRoot,
+      { preserveUnchangedLinks: preview !== undefined },
+    )
     if (preview === undefined) {
       previewPublications.delete(generatedAppRoot)
     } else {
