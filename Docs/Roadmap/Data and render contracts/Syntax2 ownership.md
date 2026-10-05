@@ -71,6 +71,22 @@ Both managers implement multiple sensible commits with focused checks; routine r
 wait for a dedicated review. Remaining generic/Self/operator and converter work is still required,
 but these grants do not authorize unrelated shared-file changes or new language decisions.
 
+### Current action outcomes and lexical cleanup batch
+
+D's actual source projector is integrated at `488d45510` and `5f726c6ff`; those two paths returned
+to the coordinator. D resumes the executable `do ... then { ... }`, `done` outcome and lexical
+`defer` batch. It owns parser actions.langium; ActionsFormatter.ts; effect-outcomes.ts;
+effect-outcomes-validator.ts and its message module; compiler ActionsCompiler.ts and
+action-control-flow.ts; and focused parser/formatter/validator/compiler tests for this batch.
+New focused defer codegen/semantic helpers belong to D. The coordinator retains shared parser
+installation, ASTUtils/Compile/Format/TR facade dispatch, validator registration and app migration.
+Reuse the integrated runtime action scope and deferred-action primitives. Ordinary calls and their
+handlers remain joined; cleanup is serial LIFO on every scope exit and preserves a primary failure.
+Deferred shorthand registers the invocation instead of executing it during registration. Named
+failures and broad error fallback propagate through the existing failure machinery, not raw host
+exceptions. Preserve existing spellings as inputs where safe; migrate authored source separately
+through the coordinator. No function grammar, Type or ExpressionsCompiler ownership transfers.
+
 ### Current slot validation and formatting release
 
 The reviewed nine-path frontend is integrated at `9a39f2b0e`; those paths returned to the
