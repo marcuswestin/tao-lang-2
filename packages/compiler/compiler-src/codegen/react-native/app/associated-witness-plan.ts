@@ -66,6 +66,23 @@ export function referencedAssociatedWitnessOwners(
           }
         }
       }
+      if (AST.isRenderSlotUse(node) && !AST.isRenderSlotFill(node)) {
+        const contract = node.slot.ref
+        const invocation = ASTUtils.bindRendererSlotArguments(node)
+        Assert.defined(contract, 'Expected a validated slot placement contract.')
+        Assert(
+          invocation && invocation.diagnostics.length === 0,
+          'Expected a validated slot placement correspondence.',
+        )
+        const signature = ASTUtils.rendererSlotSignatureOf(contract)
+        const inputTypes = new Map(signature.inputs.map(input => [input.declaration, input.type]))
+        for (const pair of invocation.pairs) {
+          const expression = Type.genericRoleConstructor(pair.argument)?.value ?? pair.argument.value
+          const expected = inputTypes.get(pair.parameter)
+          Assert.defined(expected, 'Expected a slot placement input domain.')
+          transport(expression, expected)
+        }
+      }
       if (AST.isRender(node)) {
         const target = ASTUtils.resolveRenderTarget(node)
         if (target?.kind === 'ui') {

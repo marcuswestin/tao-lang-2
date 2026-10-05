@@ -3,6 +3,7 @@ import { AST } from '@parser'
 import { Assert } from '@shared'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
+import { compileValueForType } from './capability-projection'
 import { compileReactiveArgument } from './reactive-parameters'
 import { registerSlotBody } from './render-slot-hoists'
 
@@ -19,8 +20,9 @@ export function emitSlotBody(
     environment: Compiled
   }>,
 ): Compiled {
-  const parameters = AST.renderSlotParametersOf(input.contract)
-  const argumentType = slotArgumentType(parameters)
+  const signature = ASTUtils.rendererSlotSignatureOf(input.contract)
+  const parameters = signature.inputs.map(input => input.declaration)
+  const argumentType = slotArgumentType(signature)
   const environmentType = gen`Readonly<{
     _Scope: TR.Scope
     _ViewProps: any
@@ -66,8 +68,8 @@ export function compileSlotPlacement(use: SlotUse, options: CodegenOptions): Com
   const binding = ASTUtils.bindRendererSlotArguments(use)
   Assert.defined(binding, 'validated slot placement has a renderer slot signature')
   Assert(binding.diagnostics.length === 0, 'validated slot placement arguments bind without diagnostics')
-  const parameters = AST.renderSlotParametersOf(contract)
-  const argumentType = slotArgumentType(parameters)
+  const signature = ASTUtils.rendererSlotSignatureOf(contract)
+  const argumentType = slotArgumentType(signature)
   const sourceOrderedPairs = AST.argumentsOf(use).flatMap(argument => {
     const pair = binding.pairs.find(candidate => candidate.argument === argument)
     return pair ? [pair] : []
@@ -78,7 +80,7 @@ export function compileSlotPlacement(use: SlotUse, options: CodegenOptions): Com
     ${gen.jsLiteral(name)},
     _TaoSlotDefaults[${gen.jsLiteral(name)}],
   )`
-  const args = compileSlotArguments(parameters, sourceOrderedPairs)
+  const args = compileSlotArguments(signature, sourceOrderedPairs)
   return emitSlotPlacement({
     createElement: gen`React.createElement`,
     frameComponent: gen`TR.RenderSlots.Frame<${argumentType}>`,
@@ -94,14 +96,21 @@ export function compileSlotPlacement(use: SlotUse, options: CodegenOptions): Com
 
 /** compileSlotArguments evaluates source expressions first, then binds defaults in contract order. */
 function compileSlotArguments(
-  parameters: readonly AST.ParameterDeclaration[],
+  signature: ASTUtils.CallableSignature,
   pairs: readonly ASTUtils.RenderInvocationPair[],
 ): Compiled {
+  const parameters = signature.inputs.map(input => input.declaration)
+  const inputTypes = new Map(signature.inputs.map(input => [input.declaration, input.type]))
   const sourceNames = new Map<AST.ParameterDeclaration, string>()
   const sourceAssignments = pairs.map((pair, index) => {
     const local = `_TaoSlotSourceArgument${index}`
     sourceNames.set(pair.parameter, local)
-    return gen`const ${gen.Name({ name: local })} = ${compileReactiveArgument(pair.argument.value)}`
+    const source = Type.genericRoleConstructor(pair.argument)?.value ?? pair.argument.value
+    const expected = inputTypes.get(pair.parameter)
+    Assert.defined(expected, 'validated slot argument has an input domain in its callable signature')
+    return gen`const ${gen.Name({ name: local })} = ${
+      compileValueForType(compileReactiveArgument(source), Type.ofExpression(source), expected)
+    }`
   })
   return gen`(() => {
     ${gen.list(sourceAssignments, statement => statement)}
@@ -112,7 +121,11 @@ function compileSlotArguments(
       const value = source
         ? gen`${gen.Name({ name: source })}`
         : parameter.defaultValue
-        ? compileReactiveArgument(parameter.defaultValue)
+        ? compileValueForType(
+          compileReactiveArgument(parameter.defaultValue),
+          Type.ofExpression(parameter.defaultValue),
+          inputTypes.get(parameter)!,
+        )
         : gen`TR.Value(undefined)`
       return gen`_Scope[${gen.jsLiteral(Type.parameterName(parameter))}] = ${value}`
     })
@@ -124,7 +137,7 @@ function compileSlotArguments(
       return gen`${gen.jsLiteral(name)}: _Scope[${gen.jsLiteral(name)}],`
     })
   }
-      } as ${slotArgumentType(parameters)}
+      } as ${slotArgumentType(signature)}
     })
   })()`
 }
@@ -209,12 +222,9 @@ function slotBodyParameterBinding(parameter: AST.ParameterDeclaration): Compiled
   return gen`_Scope[${gen.jsLiteral(name)}] = ${binding}`
 }
 
-function slotArgumentType(parameters: readonly AST.ParameterDeclaration[]): Compiled {
+function slotArgumentType(signature: ASTUtils.CallableSignature): Compiled {
   return gen`Readonly<{
-    ${
-    gen.list(parameters, parameter =>
-      gen`${gen.jsLiteral(Type.parameterName(parameter))}: ${Compile.ParameterType(parameter)}`)
-  }
+    ${gen.list(signature.inputs, input => gen`${gen.jsLiteral(input.labelName)}: ${Compile.RuntimeType(input.type)}`)}
   }>`
 }
 
