@@ -1,6 +1,8 @@
 import { Type } from '@ast-utils'
 import { AST, Langium, Parser } from '@parser'
 import { Describe, Expect, Test } from '@shared/test'
+import TR from '../../apps/runtime/TaoRuntime-src/TR'
+import { makeQuantityType } from '../../apps/runtime/TaoRuntime-src/TR-quantity-values'
 import { withQuantityFactoryBindings } from '../compiler-src/codegen/react-native/app/NumericUnitsCompiler'
 import { Compile } from '../compiler-src/codegen/react-native/Compile'
 
@@ -41,6 +43,42 @@ Describe('compiler: generated unit reading dispatch', () => {
     Expect(code.match(/ChildFactory\.inUnit/g)).toHaveLength(2)
     Expect(code).toContain('"seconds"')
     Expect(code).toContain('"minutes"')
+  })
+
+  Test('executes the actual emitted chain once and retains checked descendant backing', async () => {
+    const code = await emit('func Read(Value Child) -> Child { return Value.seconds().minutes() }')
+    let invariantCalls = 0
+    const parent = makeQuantityType(
+      {
+        domain: 'Span',
+        defaultUnit: 'seconds',
+        units: { seconds: 1, minutes: 60 },
+        invariant: () => {
+          invariantCalls++
+          return true
+        },
+      } as const,
+      TR.Value,
+    )
+    const child = parent.derive({ domain: 'Child' })
+    const input = child.fromUnit(2, 'minutes')
+    const before = invariantCalls
+    let reads = 0
+    const scope = {
+      Value: {
+        evaluate: () => {
+          reads++
+          return input
+        },
+      },
+    }
+    const output = new Function('TR', '_Scope', 'ChildFactory', `return ${code}`)(TR, scope, child) as ReturnType<
+      typeof child.fromJSValue
+    >
+    Expect(reads).toBe(1)
+    Expect(child.ownsPayload(output.jsValue)).toBe(true)
+    Expect(child.read(output)).toEqual({ canonical: 120, unit: 'minutes' })
+    Expect(invariantCalls).toBe(before)
   })
 
   Test('retains real member-path receiver emission', async () => {
