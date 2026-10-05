@@ -111,6 +111,19 @@
     Main run #34 completed with eleven partitions passing and this sole failing
     partition. Hosted validation of the correction remains pending. These observations do not
     establish contention as the cause or a stable complete-lane tail.
+  - Hosted follow-up #36 passed eleven partitions, including native refresh.
+    Ordinary receipts completed all fifteen cases twice: initial606.6 seconds
+    with a source/config case deadline, isolated482.5 seconds with a publication
+    case deadline. The combined gate elapsed1,089.2 seconds; queue waits are
+    separate. A file-only split cannot address that individual publication
+    deadline. Separate the independent source/config and publication mutations,
+    then partition the coverage into five singleton file cohorts with all cold
+    parity, repair, race and lifecycle checks retained. The ten restructured
+    reuse/publication and input cases pass locally in113.1 and102.0 seconds;
+    43 registry checks, lint and independent review pass. Complete hosted
+    validation of all nineteen cases remains pending. Build/clean and Firebase creation passed on isolated retry after
+    their initial timeouts; retain those observations without claiming stable
+    first-attempt timing.
 - **Proposed change:** The requested file partition and initial scheduling adjustment are implemented.
   Keep this observation open until fresh-checkout complete-lane measurements establish how much
   end-to-end tail remains; a cached skip is not a repeat measurement.

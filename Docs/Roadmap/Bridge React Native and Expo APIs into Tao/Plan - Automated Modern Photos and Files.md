@@ -14,6 +14,20 @@ Main run #34 completed with eleven passing partitions and this sole failing
 partition; hosted validation of the correction is pending. Native device-operation
 journeys remain unproved.
 
+Hosted follow-up #36 passed eleven partitions, including the corrected native
+receipt scope. The ordinary receipt file completed all fifteen cases in both
+attempts: the initial run took 606.6 seconds with one source/config deadline,
+and isolated retry took 482.5 seconds with one publication deadline. Its combined
+execution time was 1,089.2 seconds; queue waits are separate. The correction
+separates independent source/config and publication mutations and moves receipt
+coverage into five smaller singleton file cohorts, preserving cold parity,
+repair, race and lifecycle assertions. The ten restructured reuse/publication and
+input cases pass locally (113.1 and 102.0 seconds per cohort); the 43 registry
+checks and repository lint pass. Independent review verifies the ten unchanged
+standalone bodies and retained mutation assertions. Complete hosted validation
+of all nineteen cases remains pending.
+Two CLI scopes passed on isolated retry; those timeout observations are retained.
+
 Implementation started on `feat/native-photos-files` from main `e33f2d5ab`.
 The shared object reader, emitter, reference groups, boxed values, bytes and
 call-scoped callbacks are implemented. The writer supports separate Tao and
