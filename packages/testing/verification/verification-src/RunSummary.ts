@@ -2,6 +2,7 @@ import { OutputText } from '@cli-kit'
 import { FS, HCI, Repo } from '@shared'
 import { type ContentionReport, MachineLanes } from './MachineLanes'
 import { RunArtifacts } from './RunArtifacts'
+import type { OverlapReport } from './RunHistory'
 import type { WorkState } from './WorkGraph'
 import { type ScheduleReport, type ScheduleWait, WorkSchedule } from './WorkSchedule'
 
@@ -112,6 +113,16 @@ export type GateSummary = {
   /** The lane this run belongs to, which is also its artifact directory. */
   lane: string
   logRoot: string
+  /**
+   * Which other Tao lanes ran at any moment of this one. `contention` says how busy the machine
+   * looked, which a broad lane trips on its own; this says whether the run was actually alone.
+   */
+  overlap?: OverlapReport
+  /**
+   * This run's share of a lane split across machines: one-based `index` of `count`, and the digest
+   * of the whole plan, which every machine of one split must report identically.
+   */
+  partition?: { count: number; digest: string; index: number }
   /** What the schedule achieved and where it lost time; absent for a run that did not schedule. */
   schedule?: ScheduleReport
   status: 'failed' | 'passed'

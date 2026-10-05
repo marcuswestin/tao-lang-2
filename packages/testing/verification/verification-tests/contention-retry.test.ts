@@ -136,6 +136,7 @@ Describe('contended failure confirmation', () => {
       },
       capacity: 1,
       ceiling: 1,
+      overlap: async () => ({ known: false, lanes: [], loadAverageAtStart: 0, solo: false }),
       report: () => contended,
       release: async () => {},
       tryAcquire: async () => ({

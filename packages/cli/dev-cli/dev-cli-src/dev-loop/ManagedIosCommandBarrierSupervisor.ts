@@ -39,7 +39,7 @@ if (download) {
     Errors.throwHostEnvironment('Private iOS held downloader refused its fixed SDK plan/environment.')
   }
 }
-const worker = CLI.start('/bin/sh', {
+const worker = CLI.start('/bin/bash', {
   args: [
     Repo.resolvePath(
       download

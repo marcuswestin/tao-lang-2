@@ -16,11 +16,16 @@ export type AgentFlags = {
 /**
  * parseAgentFlags finds `--verbose`, `--json`, and `--max-lines` wherever they appear in the
  * argument list, in either `--max-lines 40` or `--max-lines=40` form, and returns the remaining
- * arguments in their original order for the child command.
+ * arguments in their original order for the child command. Under CI (`CI=true`, which every hosted
+ * runner sets) a run is verbose by default: its log file is gone with the machine, so the output has
+ * to be in the job's own log.
  */
-export function parseAgentFlags(args: readonly string[]): AgentFlags {
+export function parseAgentFlags(
+  args: readonly string[],
+  env: Readonly<Record<string, string | undefined>> = {},
+): AgentFlags {
   let json = false
-  let verbose = false
+  let verbose = env['CI'] === 'true'
   let maxLines: number | undefined
   const rest: string[] = []
 

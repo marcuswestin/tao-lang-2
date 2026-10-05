@@ -15,7 +15,29 @@ file changes. The warn-only Git hooks
 `./agent setup` installs speak up on a detached HEAD, an unnamed branch, or an attribution trailer.
 `verification-lanes` owns `merge-with-main`'s evidence, flags, and message-file format.
 
-## This repository has many worktrees
+## Resource review after landing
+
+After every successful landing, inspect the single inventory with `./agent unsandboxed resources --json`.
+The ordinary landing command also saves `.artifacts/resources/after-land.json`; read its full
+entries and warnings. Include active sessions started by this task as well as stranded resources.
+Match this task's receipts and external-directory registrations; a checkout path alone does not
+prove task ownership in a shared checkout. Ask the Developer whether to clean the concrete
+task-owned items before doing so. If nothing is eligible, say so briefly.
+
+Register each nonstandard external directory when created, in addition to the task-local note:
+
+```sh
+./agent resources --register-directory /absolute/path --task '<task identifier>' \
+  --purpose '<why it exists>' --cleanup-condition '<when it can be removed>' --json
+```
+
+The report is discovery, never removal authority. Recheck identities and task activity after
+approval; use existing owned stop/recovery commands for sessions and retained fences, and
+`worktree-status` before reclaiming any checkout. Preserve unknown ownership, borrowed devices,
+unrelated processes, reusable caches, and evidence still needed for review. Never use broad
+`clean-all` or PID/name matching to resolve a retained resource.
+
+## Worktree ownership
 
 `git worktree list` routinely shows fifteen or more checkouts sharing one object store, worked in concurrently by other agents and the Developer.
 
@@ -81,6 +103,13 @@ fetch inside its lock before merging and verifying; an earlier fetch or merge do
 Do not fetch and merge `main` beforehand merely to satisfy a stale precondition. If the
 landing reports a conflict, resolve it outside the lock; after any merge of `main` into a branch,
 skim what arrived: `references/after-merging-main.md`.
+
+The hosted route, `./agent unsandboxed open-pr`, opens the pull request with auto-merge on and follows
+its checks; once they pass, `./agent unsandboxed merge-pr` merges it (`verification-lanes` says when
+this route suffices). GitHub refuses a pull
+request that conflicts with `main`, so bring `main` in with `./agent merge-main` and run `open-pr` again;
+the checks run on that push. After it merges, the remote `feat/<name>` is gone and `merged/<name>`
+holds its head; the local branch and worktree remain for the resource review below.
 
 A person's branch is `dev/<name>`. It lands through the same `./agent unsandboxed land` as
 `feat/<name>`, then the same name is created again from `main` (`references/personal-dev-branch.md`).

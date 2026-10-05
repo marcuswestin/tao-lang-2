@@ -102,6 +102,7 @@ function needs_build() {
 }
 
 function build_agent() {
+  echo "Building the agent CLI..." >&2
   if ! build_output="$(TMPDIR="$BUN_TEMP_DIR" bun build --cwd "$AGENT_CLI_PACKAGE_DIR" agent-cli-src/agent-dev.ts --target bun --outfile "$BUILD_OUTPUT" 2>&1)"; then
     echo "$build_output" >&2
     exit 1

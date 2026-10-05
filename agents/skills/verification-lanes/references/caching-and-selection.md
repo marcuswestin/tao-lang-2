@@ -17,6 +17,12 @@ Nothing verifies the same bytes twice: a `verify-full` after `verify --complete`
 runs only the host-dependent gates, and the merge command compares against the tree `verify-full`
 already proved rather than running a second lane.
 
+Per-gate records are shared machine-wide under `~/.cache/tao/green/<toolchain>-<tree>/`, so a gate
+another worktree proved at byte-identical content and toolchain is skipped here too, and its evidence
+line names that worktree's log. `TAO_GREEN_STORE` points the store elsewhere — the directory CI jobs
+restore from and save to their cache, so shards and re-runs share proofs. Whole-lane records stay per
+checkout, because their generated evidence describes one checkout's ignored state.
+
 ## Test selection
 
 The changed scope selects whole suites from the workspace import graph — a package change selects

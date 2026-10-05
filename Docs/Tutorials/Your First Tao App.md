@@ -26,8 +26,8 @@ From the checkout root, save the first block below as `ReadingList.tao`, then ru
 
 The second command opens the browser app and watches the file. Keep it running as you replace and
 add snippets. After step 9, stop the dev process and run the test command shown there. The example's
-`license MIT` is a choice for this sample app; the licensing policy for apps built with Tao remains
-an unresolved pre-release decision.
+`license MIT` is a choice for this sample app. An app you build with Tao is yours to license however you
+like; see the [Tao Application Exception](../../LICENSE-APP-EXCEPTION.md).
 
 ## What you will have built
 

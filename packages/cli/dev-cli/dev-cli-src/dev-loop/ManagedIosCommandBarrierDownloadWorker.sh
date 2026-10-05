@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Fixed SDK downloader only. The private supervisor derives every argument; no command plan chooses an executable.
 [ "$#" -eq 6 ] || exit 71
 generation=$1

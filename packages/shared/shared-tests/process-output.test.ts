@@ -1,7 +1,45 @@
-import { CLI, FS, Platform } from '@shared'
+import { CLI, Errors, FS, Platform } from '@shared'
 import { Describe, Expect, Test, until } from '@shared/test'
 
 Describe('process output ownership', () => {
+  Test('joins an explicitly owned auxiliary pipe while preserving unknown-descriptor native close', async () => {
+    const child = Platform.spawn('/bin/sh', {
+      args: ['-c', 'IFS= read -r admission <&3; exec 3<&-; exit 0'],
+      stdio: ['ignore', 'ignore', 'ignore', 'pipe'],
+    })
+    const pipe = child.stdio[3]
+    if (pipe === undefined || pipe === null || !('write' in pipe)) {
+      return Errors.throwUnexpected('Expected an owned test control pipe.')
+    }
+    const emit = child.emit.bind(child)
+    child.emit = (event, ...args) => event === 'close' ? false : emit(event, ...args)
+    let unknownClosed = false
+    const releaseUnknown = Platform.onChildProcessClose(child, () => {
+      unknownClosed = true
+    })
+    let releaseOwned = () => {}
+    const ownedClosed = new Promise<number | null>(resolve => {
+      releaseOwned = Platform.onChildProcessClose(child, code => resolve(code), [pipe])
+    })
+    try {
+      if ('resume' in pipe && typeof pipe.resume === 'function') {
+        pipe.resume()
+      }
+      pipe.write('admitted\n')
+      pipe.end()
+      Expect(await ownedClosed).toBe(0)
+      Expect(pipe.closed).toBe(true)
+      Expect(unknownClosed).toBe(false)
+      emit('close', 0, null)
+      Expect(unknownClosed).toBe(true)
+    } finally {
+      releaseOwned()
+      releaseUnknown()
+      pipe.destroy()
+      child.kill('SIGKILL')
+    }
+  })
+
   Test('preserves both pipes when a fast child exits before consumers attach', async () => {
     const child = Platform.spawn('/bin/sh', {
       args: ['-c', "printf 'early stdout'; printf 'early stderr' >&2"],

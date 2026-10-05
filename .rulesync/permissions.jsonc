@@ -20,6 +20,11 @@
       // One owner prevents concurrent or redundant Bun installs from colliding in node_modules.
       // The generated harness rules reject this directly and point agents to `./agent setup`.
       "bun install *": "deny",
+      // Through the Developer's admin login a direct merge can bypass the required Verify check;
+      // `open-pr` turns on auto-merge and `merge-pr` merges only after Verify. The output-discipline
+      // hook refuses it too, which is what binds Codex, since its rules carry only `allow`.
+      "gh pr merge": "deny",
+      "gh pr merge *": "deny",
       // Routine inspection stays sandboxed. State-changing variants are deliberately absent.
       "pwd": "allow",
       // Harmless on its own, and listed so a compound `cd <dir> && rg …` keeps every part inside
@@ -107,9 +112,9 @@
     // file every agent sandbox protects, such as `.gitmodules`. The SessionStart hook already runs
     // the same entry outside the sandbox; this reaches it mid-session.
     "setup",
-    "land", "finalize", "merge-main", "merge-recover", "landed", "capabilities", "open-pr", "fix-agent-config", "verify-full",
+    "land", "finalize", "merge-main", "merge-recover", "landed", "capabilities", "open-pr", "merge-pr", "fix-agent-config", "verify-full",
     "test-host", "qa-capture", "studio-smoke", "studio-proof-real-app", "admission-experiment",
-    "native-module-check", "reclaim --execute",
+    "native-module-check", "reclaim --execute", "resources",
     "prepare-release studio", "prepare-release ide-extension", "ide-extension-acceptance",
     "app-dev", "dev-loop", "test-watch", "standalone-cli-acceptance", "studio", "studio-native", "studio-ps", "studio-stop", "studio-canary", "studio-manual-checks",
     "docker-desktop start",

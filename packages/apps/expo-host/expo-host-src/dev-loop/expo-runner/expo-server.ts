@@ -67,7 +67,7 @@ export class ExpoServer {
     const startArgs = launcher.namesExpoScript === true && this.config.EXPO_START_ARGS[0] === 'expo'
       ? this.config.EXPO_START_ARGS.slice(1)
       : this.config.EXPO_START_ARGS
-    this.child = startStudioProcessTree(launcher.executable, {
+    this.child = await startStudioProcessTree(launcher.executable, {
       args: [...(launcher.argsPrefix ?? []), ...startArgs],
       cwd: this.runtimeRoot,
       env: {

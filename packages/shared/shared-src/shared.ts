@@ -24,6 +24,7 @@ import * as ProjectIdentity from './ProjectIdentity'
 import { ProjectLocal } from './ProjectLocal'
 import { ReleaseCapabilities } from './ReleaseCapabilities'
 import * as Repo from './Repo'
+import * as ResourceInventory from './ResourceInventory'
 import * as SecretsFile from './SecretsFile'
 import { TaoFiles } from './TaoFiles'
 import { TaoHome } from './TaoHome'
@@ -64,6 +65,7 @@ export {
   ProjectLocal,
   ReleaseCapabilities,
   Repo,
+  ResourceInventory,
   SecretsFile,
   Switch,
   TaoFiles,

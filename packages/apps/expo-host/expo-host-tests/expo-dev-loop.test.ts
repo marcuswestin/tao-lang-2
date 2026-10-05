@@ -454,7 +454,8 @@ Describe('Expo dev-loop command helpers', () => {
         executable: '/bin/sh',
         argsPrefix: [
           '-c',
-          'printf "%s\\n" "$1"; printf "%s\\n" "WARN Native Firebase persistence unavailable" >&2',
+          // Stay live until stop captures the launch ancestry; natural exit cannot prove descendant ownership.
+          'printf "%s\\n" "$1"; printf "%s\\n" "WARN Native Firebase persistence unavailable" >&2; while :; do sleep 1; done',
           'expo-fixture',
           ` WARN ${dexiePromotion}`,
         ],
@@ -490,20 +491,23 @@ Describe('Expo dev-loop command helpers', () => {
       const argsPath = FS.resolvePath('args.txt', root)
       const server = new ExpoServer(root, createExpoConfig(49_154), async () => {}, {
         command: {
-          argsPrefix: ['-c', 'printf "%s\\n" "$@" > "$0.pending"; mv "$0.pending" "$0"', argsPath],
+          argsPrefix: [
+            '-c',
+            'printf "%s\\n" "$@" > "$0.pending"; mv "$0.pending" "$0"; while :; do sleep 1; done',
+            argsPath,
+          ],
           executable: '/bin/sh',
           namesExpoScript,
         },
         logRoot: root,
         runtimeToolchainSourceRoot: root,
-        stopTimeoutMs: 25,
       })
       try {
         await server.start()
         await until(() => FS.isFile(argsPath), { description: 'the complete Expo launcher argument receipt' })
         return (await FS.readText(argsPath)).split('\n')[0] ?? ''
       } finally {
-        await server.stop().catch(() => undefined)
+        await server.stop()
         await FS.remove(root)
       }
     }
@@ -526,7 +530,6 @@ Describe('Expo dev-loop command helpers', () => {
       command: { argsPrefix: ['-c', shellScript, descendantPidPath, descendantReadyPath], executable: '/bin/sh' },
       logRoot: root,
       runtimeToolchainSourceRoot: root,
-      stopTimeoutMs: 25,
     })
     let descendant: TrackedProcess | undefined
     try {
