@@ -475,11 +475,11 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code.slice(compiled.code.indexOf("name: 'Stories',")))
       .toContain('collection: "Stories"')
     // Reads and writes reach the store that holds their collection.
-    Expect(compiled.code).toContain(
-      'TR.Data.Query(\n      TR.Auth.Store(_TaoAuthScope, _Scope._TaoDataCatalog_Stories),',
+    Expect(compiled.code.replace(/\s+/g, ' ')).toContain(
+      'TR.Data.Query( TR.Auth.Store(_TaoAuthScope, _Scope._TaoDataCatalog_Stories),',
     )
-    Expect(compiled.code).toContain(
-      'TR.Data.Query(\n      TR.Auth.Store(_TaoAuthScope, _Scope._TaoDataCatalog_Bookmarks),',
+    Expect(compiled.code.replace(/\s+/g, ' ')).toContain(
+      'TR.Data.Query( TR.Auth.Store(_TaoAuthScope, _Scope._TaoDataCatalog_Bookmarks),',
     )
     Expect(compiled.code.replace(/\s+/g, ' ')).toContain(
       'TR.Data.Create( TR.Auth.Store(_TaoAuthScope, _Scope._TaoDataCatalog_Bookmarks),',
@@ -782,11 +782,11 @@ Describe('compiler: language lowering', () => {
       'useTaoGeneratedStudioFixture([_Scope._TaoDataCatalog, _Scope._TaoLocalDataCatalog])',
     )
     // Reads and writes route to the catalog that stores the entity.
-    Expect(compiled.code).toContain(
-      '_Scope.CurrentSession = TR.Data.Query(\n      TR.Auth.Store(_TaoAuthScope, _Scope._TaoLocalDataCatalog),',
+    Expect(compiled.code.replace(/\s+/g, ' ')).toContain(
+      '_Scope.CurrentSession = TR.Data.Query( TR.Auth.Store(_TaoAuthScope, _Scope._TaoLocalDataCatalog),',
     )
-    Expect(compiled.code).toContain(
-      '_Scope.Notes = TR.Data.Query(\n      TR.Auth.Store(_TaoAuthScope, _Scope._TaoDataCatalog),',
+    Expect(compiled.code.replace(/\s+/g, ' ')).toContain(
+      '_Scope.Notes = TR.Data.Query( TR.Auth.Store(_TaoAuthScope, _Scope._TaoDataCatalog),',
     )
     Expect(compiled.code.replace(/\s+/g, ' ')).toContain(
       'TR.Auth.Store(_TaoAuthScope, _Scope._TaoLocalDataCatalog), "FocusSession",',
