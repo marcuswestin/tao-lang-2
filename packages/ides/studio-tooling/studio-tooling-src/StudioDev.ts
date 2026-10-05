@@ -827,7 +827,13 @@ async function studioWatchmanEnvironment(
       childEnvironment[key] = value
     }
   }
-  return { ...childEnvironment, PATH: [profileBin, ...inheritedPath].join(':'), WATCHMAN_SOCK: socketName }
+  return {
+    ...childEnvironment,
+    PATH: [profileBin, ...inheritedPath].join(':'),
+    WATCHMAN_SOCK: socketName,
+    TAO_STUDIO_FAST_HMR: childEnvironment['TAO_STUDIO_FAST_HMR'] ?? 'true',
+    TAO_STUDIO_FAST_FILE_MAP: childEnvironment['TAO_STUDIO_FAST_FILE_MAP'] ?? 'true',
+  }
 }
 
 function watchmanCapabilityNames(output: string): ReadonlySet<string> {

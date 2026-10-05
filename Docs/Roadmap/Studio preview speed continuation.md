@@ -887,3 +887,26 @@ safety retained; focused, repository, and real Metro evidence for the exact tip;
 message and successful `finalize`; and a concise statement of the measured gain and the remaining
 dominant slice. Do not report test success as a measured latency improvement. Landing remains a
 separate Developer decision.
+
+## Approved Metro timer experiment, 2026-10-05
+
+The Developer approved a narrow, reproducible patch for the Expo host's exact Metro 0.84.5
+installation and Expo file-map fork 57.0.3. Studio's Metro child defaults to `TAO_STUDIO_FAST_HMR=true` and
+`TAO_STUDIO_FAST_FILE_MAP=true`; setting either variable to `false` retains that timer's upstream
+behavior. Ordinary app launches retain the upstream defaults unless explicitly opted in.
+
+The HMR patch changes only its debounce delay from 50ms to 0ms. The file-map patch replaces the
+30ms polling interval with one event-triggered 1ms flush, waits for already-observed processing,
+and cancels pending work on shutdown. It preserves Metro's HMR queue, revision handling, event
+aggregation, and recrawl logic. The rejected revision fallback and revision-error retry remain
+ruled out for the reasons above.
+
+The upstream waits collect nearby events and reduce repeated work. Shortening them can produce
+more refresh cycles or expose intermediate states during multi-file writes; queue serialization
+alone does not make a publication atomic. The exact choice of 30ms and 50ms has no documented
+rationale in the inspected upstream source. Actual installed-module tests must cover batching,
+delayed processing, deletion/recreation, recrawl, shutdown, and queued HMR edits. Real Metro
+burst-save and latency evidence is required before reporting this experiment as ready to land.
+The pinned patches must reproduce through frozen setup and be reassessed on a Metro upgrade.
+Standalone host staging carries the root patch registrations and their exact version pins;
+installed-host setup copies the captured patch bytes and includes them in its install identity.

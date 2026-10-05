@@ -55,7 +55,9 @@ async function ensure(options: EnsureOptions = {}): Promise<void> {
  * Two first runs serialize on one lock, and the second finds the first's stamp.
  */
 async function ensureIn(host: HostInstall, options: EnsureOptions = {}): Promise<void> {
-  const identity = Platform.sha256Hex(await FS.readFile(FS.resolvePath('bun.lock', host.hostFiles)))
+  const lock = await FS.readFile(FS.resolvePath('bun.lock', host.hostFiles))
+  const patches = await readHostPatches(host.hostFiles)
+  const identity = hostInstallIdentity(lock, patches)
   if (await installedWith(host.installRoot, identity)) {
     await FS.withFileMutationLock(host.installRoot, FS.dirname(host.installRoot), async () => {
       await RuntimeToolchainPaths.prepareNodeLauncher(host.installRoot)
@@ -80,10 +82,58 @@ async function ensureIn(host: HostInstall, options: EnsureOptions = {}): Promise
     for (const name of HOST_INSTALL_FILES) {
       await FS.copyFile(FS.resolvePath(name, host.hostFiles), FS.resolvePath(name, host.installRoot))
     }
+    for (const patch of patches) {
+      await FS.writeFile(FS.resolvePath(patch.path, host.installRoot), patch.contents)
+    }
     await host.install(host.installRoot)
     await FS.writeText(FS.resolvePath(INSTALLED_STAMP, host.installRoot), identity)
   })
   await linkBesideHostFiles(host)
+}
+
+type HostPatch = { key: string; path: string; contents: Uint8Array }
+
+async function readHostPatches(hostFiles: string): Promise<HostPatch[]> {
+  const manifest = await FS.readJson<{ patchedDependencies?: Record<string, string> }>(
+    FS.resolvePath('package.json', hostFiles),
+  )
+  const patches: HostPatch[] = []
+  for (
+    const [key, patchPath] of Object.entries(manifest.patchedDependencies ?? {}).sort(([left], [right]) =>
+      left.localeCompare(right)
+    )
+  ) {
+    if (!isSafePatchPath(patchPath)) {
+      Errors.throwHostEnvironment(`The Expo host has an invalid patched dependency path for ${key}: ${patchPath}.`)
+    }
+    const patchesRoot = FS.resolvePath('patches', hostFiles)
+    const patchFile = FS.resolvePath(patchPath, hostFiles)
+    const pathFromPatches = FS.relativePath(patchesRoot, patchFile)
+    if (pathFromPatches === '..' || pathFromPatches.startsWith('../') || !await FS.isFile(patchFile)) {
+      Errors.throwHostEnvironment(`The Expo host patch for ${key} is missing or outside patches/: ${patchPath}.`)
+    }
+    patches.push({ key, path: patchPath, contents: await FS.readFile(patchFile) })
+  }
+  return patches
+}
+
+function isSafePatchPath(path: string): boolean {
+  return !FS.isAbsolute(path)
+    && !path.includes('\\')
+    && !path.includes('\0')
+    && path.startsWith('patches/')
+    && path.split('/').every(part => part !== '' && part !== '.' && part !== '..')
+}
+
+function hostInstallIdentity(lock: Uint8Array, patches: readonly HostPatch[]): string {
+  if (patches.length === 0) {
+    return Platform.sha256Hex(lock)
+  }
+  return Platform.sha256Hex([
+    'tao-host-install-with-patches-v1\0',
+    lock,
+    ...patches.flatMap(({ key, path, contents }) => [`\0${key}\0${path}\0${contents.byteLength}\0`, contents]),
+  ])
 }
 
 /**
