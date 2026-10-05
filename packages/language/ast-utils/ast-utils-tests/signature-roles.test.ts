@@ -84,10 +84,11 @@ Describe('signature role type projections', () => {
     Expect(Type.signatureParameterDefinition(subtract, 'Left') === left).toBe(true)
     Expect(Type.signatureParameterDefinition(subtract, 'Right') === right).toBe(true)
     Expect(Type.identityKey(Type.ofDefinition(left)) === Type.identityKey(Type.ofDefinition(right))).toBe(false)
-    const binding = ASTUtils.resolveFunctionInvocation(result.value)
+    const call = result.value
+    const binding = ASTUtils.resolveFunctionInvocation(call)
     Expect(binding.diagnostics).toEqual([])
     Expect(binding.pairs.map(pair => Type.parameterName(pair.parameter))).toEqual(['Left', 'Right'])
-    Expect(binding.pairs.map(pair => AST.argumentsOf(result.value).indexOf(pair.argument))).toEqual([1, 0])
+    Expect(binding.pairs.map(pair => AST.argumentsOf(call).indexOf(pair.argument))).toEqual([1, 0])
   })
 
   Test('resolves contextual inline constructors through their real parameter type declaration', async () => {
