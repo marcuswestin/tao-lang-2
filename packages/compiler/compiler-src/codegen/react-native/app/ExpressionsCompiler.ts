@@ -11,7 +11,13 @@ import {
   compileAssociatedWitness,
   compileCallableWitnessKey,
 } from './AssociatedMethodsCompiler'
-import { authLibraryExport, compileCurrentAccount, contextualCommand, contextualReference } from './auth-context'
+import {
+  authLibraryExport,
+  compileCurrentAccount,
+  contextualCommand,
+  contextualReference,
+  needsAuthContext,
+} from './auth-context'
 import { compileArgumentForType, compileValueForType } from './capability-projection'
 import { configurationRuntimeBindingName } from './ConfigurationCompiler'
 import { activeDataStorePlan } from './data-store-context'
@@ -577,9 +583,11 @@ function compileAssociatedActionSelection(
     'the validated associated action retains its actual receiver owner and cardinality',
   )
   const hasOwner = AST.findOwningView(expression) || AST.findOwningAssociatedView(expression)
+  const needsAuth = needsAuthContext(selected.action)
+  const options = hasOwner ? gen`, { owner: _TaoActionOwner }` : needsAuth ? gen`, {}` : gen.noop()
   return gen`${compileAssociatedActionWitness(selected.action)}(TR.CaptureActionReceiver(${
     compileMethodReceiver(receiver.receiver)
-  }, ${gen.jsLiteral(receiver.cardinality)})${hasOwner ? gen`, { owner: _TaoActionOwner }` : gen.noop()})`
+  }, ${gen.jsLiteral(receiver.cardinality)})${options}${needsAuth ? gen`, _TaoAuthScope` : gen.noop()})`
 }
 
 /** Selected operators call the real ordered contract before any built-in runtime leaf. */

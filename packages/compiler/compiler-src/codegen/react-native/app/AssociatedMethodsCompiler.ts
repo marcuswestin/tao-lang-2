@@ -78,7 +78,7 @@ export function AssociatedMethodsDeclaration(owner: AssociatedOwner): Compiled {
   Assert(type.kind !== 'unresolved', 'Expected a resolved concrete associated owner.')
   const views = Type.ownAssociatedViews(owner)
   return gen`const ${associatedWitnessBinding(owner)} = {
-    "$actions": [${gen.join(associatedActions(owner), Compile.AssociatedActionDeclaration)}],
+    "$actions": [${gen.join(associatedActions(owner), Compile.AssociatedActionDeclaration)}] as const,
     "$views": [${
     gen.join(views, (view) => {
       return Compile.AssociatedViewDeclaration(view, {

@@ -11,7 +11,7 @@ import {
   actionInstrumentationEnabled,
   actionInvocationRequiresAsync,
 } from './action-control-flow'
-import { authLibraryExport, withAuthContextFactory } from './auth-context'
+import { authLibraryExport, needsAuthContext, withAuthContextFactory } from './auth-context'
 import { compileArgumentForType } from './capability-projection'
 import { compileDeclarationIdentity, declarationModuleName } from './declaration-identity'
 import { foreignActionBindingName } from './injection-plan'
@@ -73,6 +73,7 @@ export const ActionsCompiler = {
     return gen`(
       _TaoAssociatedReceiver: ${compileRuntimeType(domainType)},
       options: NonNullable<Parameters<typeof TR.Action>[1]> = {},
+      ${needsAuthContext(action) ? gen`_TaoAuthScope: TR.AuthScope | undefined = undefined,` : gen.noop()}
     ) => TR.Action(${asyncKeyword}(${gen.join(parameters, Compile.ActionRuntimeParameter)}) => {
       return ${Compile.ActionScopedBlock(action.block, bindings)}
     }, {

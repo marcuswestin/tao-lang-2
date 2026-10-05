@@ -1,3 +1,4 @@
+import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert } from '@shared'
 import { type Compiled, gen } from '../codegen-util'
@@ -24,6 +25,12 @@ export function needsAuthContext(node: AST.Node, seen = new Set<AST.Node>()): bo
   for (const child of [node, ...AST.streamAllContents(node)]) {
     if (AST.isCreateStatement(child) || AST.isEntityQueryDeclaration(child)) {
       return true
+    }
+    if (AST.isMemberAccessExpression(child) || AST.isPostfixMemberAccess(child)) {
+      const selected = ASTUtils.resolveAssociatedActionTarget(child)
+      if (selected && needsAuthContext(selected.action, seen)) {
+        return true
+      }
     }
     const target = AST.isValueReference(child) || AST.isMemberAccessExpression(child)
       ? child.target.ref
