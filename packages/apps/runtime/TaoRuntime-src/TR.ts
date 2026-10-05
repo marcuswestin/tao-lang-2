@@ -142,6 +142,7 @@ import {
   testNavKind as testNavigationKind,
 } from './TR-navigation'
 import type { TaoDeclarationIdentity } from './TR-navigation-identity'
+import { checkedNumericBacking } from './TR-numeric-units'
 import type {
   TaoAuthPairing,
   TaoAuthProofKind,
@@ -470,6 +471,9 @@ class TR {
     }
     return new RuntimeValue(value === undefined ? null : value)
   }
+
+  /** checkedNumericBacking checks raw native/computed numeric storage before wrapping it. */
+  static checkedNumericBacking = checkedNumericBacking
 
   /** Function creates a Tao pure-function value. */
   static Function(body: (...args: any[]) => TR.Evaluable | TR.Function): TR.Function {
