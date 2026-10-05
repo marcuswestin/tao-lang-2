@@ -51,6 +51,29 @@ export function referencedAssociatedWitnessOwners(
       owners.add(owner)
     }
   }
+  const configuredTransport = (
+    site: AST.ConfigurationConstructor | AST.ConfigurationEntry,
+    expected?: ASTUtils.TaoType,
+  ): void => {
+    const construction = ASTUtils.resolveConfiguredItemConstruction(site, undefined, expected)
+    // Only complete ordinary-record plans add transport evidence; other validated forms keep existing paths.
+    if (construction.kind !== 'complete') {
+      return
+    }
+    for (const pair of construction.pairs) {
+      for (const owner of capabilityTransportOwners(pair.actual, pair.expected)) {
+        owners.add(owner)
+      }
+      if (pair.entry.block) {
+        configuredTransport(pair.entry, pair.actual)
+      }
+    }
+    for (const operand of construction.operands) {
+      if (!AST.isConfigurationEntry(operand.node)) {
+        transport(operand.node, Type.itemFieldType(operand.field))
+      }
+    }
+  }
   for (const statement of statements) {
     for (const node of [statement, ...AST.streamAllContents(statement)]) {
       if (AST.isMemberAccessExpression(node) || AST.isPostfixMemberAccess(node)) {
@@ -71,6 +94,9 @@ export function referencedAssociatedWitnessOwners(
             transport(pair.property.value, Type.itemFieldType(pair.expected))
           }
         }
+      }
+      if (AST.isConfigurationConstructor(node)) {
+        configuredTransport(node)
       }
       if (AST.isRenderSlotUse(node) && !AST.isRenderSlotFill(node)) {
         const contract = node.slot.ref

@@ -696,7 +696,56 @@ function compileConfiguredItem(
   itemType: ASTUtils.ItemShape | undefined,
 ): Compiled {
   Assert.defined(value.block, 'validated item constructor has a block')
-  return compileConfiguredItemBlock(value.block, itemType)
+  if (!itemType) {
+    return compileConfiguredItemBlock(value.block, itemType)
+  }
+  const construction = ASTUtils.resolveConfiguredItemConstruction(value)
+  // The canonical plan covers ordinary records; other validated constructors keep their existing path.
+  if (construction.kind !== 'complete') {
+    return compileConfiguredItemBlock(value.block, itemType)
+  }
+  return compileConfiguredItemConstruction(construction)
+}
+
+/** Allocation and witness transport consume the same real configured-field correspondence. */
+function compileConfiguredItemConstruction(plan: ASTUtils.ConfiguredItemConstruction): Compiled {
+  Assert(plan.kind === 'complete', 'validated configured item construction has complete correspondence')
+  const pairs = plan.operands.map(operand => {
+    const expected = operand.field
+    const destination = Type.itemFieldType(expected)
+    if (!AST.isConfigurationEntry(operand.node)) {
+      return { expected, compiled: compileArgumentForType(operand.node, destination) }
+    }
+    const pair = plan.pairs.find(pair => pair.entry === operand.node && pair.field === expected)
+    Assert.defined(pair, 'supplied configured operand retains its field correspondence')
+    const entry = pair.entry
+    const expression = entry.expression ?? entry.memberReference
+    if (expression) {
+      return { expected, compiled: compileArgumentForType(expression, pair.expected) }
+    }
+    let source: Compiled
+    if (entry.reference?.ref && AST.isValueDeclaration(entry.reference.ref)) {
+      const reference = Compile.ValueDeclarationReference(entry.reference.ref)
+      source = ASTUtils.containsCapability(pair.expected) ? gen`TR.Alias(() => ${reference})` : reference
+    } else if (entry.block) {
+      source = compileConfiguredItemConstruction(
+        ASTUtils.resolveConfiguredItemConstruction(entry, undefined, pair.actual),
+      )
+    } else {
+      Assert.defined(entry.value, 'validated configured operand has an actual payload')
+      Assert.is(entry.value, AST.isExpression, 'validated configured operand retains an expression')
+      source = Compile.Expression(entry.value)
+    }
+    return { expected, compiled: compileValueForType(source, pair.actual, pair.expected) }
+  })
+  return gen`TR.Value({
+    ${
+    gen.list(
+      pairs,
+      pair => gen`[${gen.nameLiteral(pair.expected)}]: ${itemFieldStorage(pair.compiled, pair.expected)},`,
+    )
+  }
+  })`
 }
 
 function compileConfiguredItemBlock(

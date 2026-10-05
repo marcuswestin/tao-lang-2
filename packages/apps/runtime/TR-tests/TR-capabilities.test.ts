@@ -19,22 +19,24 @@ Describe('Capability witnesses', () => {
     const row = TR.Value({ Content: capabilities.storedValue(carrier), Count: capabilities.storedValue(TR.Value(2)) })
     const writable = TR.Cell(row)
     for (const owner of [row, writable]) {
-      const field = TR.Member(owner, ['Content']).evaluate() as TaoCapability<string>
+      const field = capabilities.read(TR.Member(owner, ['Content']))
       Expect(field).toBe(carrier)
       Expect(TR.Call<string>(capabilities.method(field, 'text')).getJSValue()).toBe('Value:Before')
       Expect(TR.Member(owner, ['Count']).getJSValue()).toBe(2)
     }
     source.set(TR.Value('After'))
-    Expect(TR.Call<string>(capabilities.method(TR.Member(row, ['Content']).evaluate(), 'text')).getJSValue())
+    Expect(TR.Call<string>(capabilities.method(capabilities.read(TR.Member(row, ['Content'])), 'text')).getJSValue())
       .toBe('Value:After')
     const replacement = capabilities.attach(TR.Value('Replacement'), {
       text: TR.Function((receiver: TaoEvaluable<string>) => TR.Value(`New:${getJSValue(receiver)}`)),
     })
     const writableContent = TR.Member(writable, ['Content']) as TR.Writable<string>
     writableContent.set(replacement)
-    Expect(TR.Call<string>(capabilities.method(TR.Member(writable, ['Content']).evaluate(), 'text')).getJSValue())
+    Expect(
+      TR.Call<string>(capabilities.method(capabilities.read(TR.Member(writable, ['Content'])), 'text')).getJSValue(),
+    )
       .toBe('New:Replacement')
-    Expect(TR.Call<string>(capabilities.method(TR.Member(row, ['Content']).evaluate(), 'text')).getJSValue())
+    Expect(TR.Call<string>(capabilities.method(capabilities.read(TR.Member(row, ['Content'])), 'text')).getJSValue())
       .toBe('Value:After')
   })
 
@@ -75,6 +77,13 @@ Describe('Capability witnesses', () => {
     Expect(schema.query({ entity: 'Book', filters: [] })[0]).toBe(book)
     Expect(() => capabilities.attach(forwarded, {})).toThrow(UnexpectedBehaviorError)
     Expect(() => capabilities.method(forwarded, 'Render')).toThrow(UnexpectedBehaviorError)
+  })
+
+  Test('rejects ordinary values and copied carrier backing at a checked capability read', () => {
+    const carrier = capabilities.attach(TR.Value('Original'), {})
+    Expect(capabilities.read(carrier)).toBe(carrier)
+    Expect(() => capabilities.read(TR.Value('Original'))).toThrow(UnexpectedBehaviorError)
+    Expect(() => capabilities.read(TR.Value({ ...carrier }))).toThrow(UnexpectedBehaviorError)
   })
 
   Test('rebinds selected adapted witnesses to a new live Self result without reading or changing the donor', () => {

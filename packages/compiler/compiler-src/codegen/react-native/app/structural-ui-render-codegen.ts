@@ -18,7 +18,7 @@ export function compileStructuralUiRender(
     return gen`<>{TR.MountRendered(${value}, ${occurrence})}</>`
   }
   return gen`<>{(() => {
-    const _TaoUiReceiver = (${compileValueForType(value, target.actual, target.contract)}).evaluate();
+    const _TaoUiReceiver = TR.Capability.read(${compileValueForType(value, target.actual, target.contract)});
     return TR.MountRendered(TR.Call<TR.Rendered>(
       TR.Capability.method(_TaoUiReceiver, ${gen.jsLiteral(target.witness.required.declaration.name)}),
     ), ${occurrence});

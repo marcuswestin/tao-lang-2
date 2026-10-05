@@ -13,8 +13,9 @@ import {
 declare const capabilityBrand: unique symbol
 
 /** A capability carries selected methods while retaining its concrete source's current reads. */
-export type TaoCapability<ValueT = unknown> = TaoRuntimeValue<ValueT> & {
+export type TaoCapability<ValueT = unknown> = Omit<TaoRuntimeValue<ValueT>, 'evaluate'> & {
   readonly [capabilityBrand]: true
+  evaluate(): TaoCapability<ValueT>
 }
 
 type CapabilityMetadata = {
@@ -79,6 +80,10 @@ export function createCapabilityRuntime(functionFactory: typeof TR.Function) {
     return ownedCapabilities.has(value) ? value as TaoCapability<ValueT> : value.jsValue
   }
 
+  function isOwnedCapability<ValueT>(value: unknown): value is TaoCapability<ValueT> {
+    return typeof value === 'object' && value !== null && ownedCapabilities.has(value)
+  }
+
   return {
     /** Item fields retain authenticated behavior carriers while ordinary values retain raw backing. */
     storedValue,
@@ -87,6 +92,12 @@ export function createCapabilityRuntime(functionFactory: typeof TR.Function) {
       return (ownedCapabilities.get(value)?.source ?? value) as TaoEvaluable<ValueT>
     },
 
+    /** A stored member read keeps the original carrier only after runtime ownership is checked. */
+    read<ValueT>(source: TaoEvaluable<ValueT>): TaoCapability<ValueT> {
+      const value = source.evaluate()
+      RuntimeAssert(isOwnedCapability<ValueT>(value), 'a capability constructed by the runtime')
+      return value
+    },
     /** List storage retains authenticated behavior wrappers and otherwise preserves original payloads. */
     listElements<StoredT>(
       source: TaoEvaluable<readonly unknown[]>,
