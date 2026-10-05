@@ -601,13 +601,15 @@ Test('fixed iOS barrier cancellation refuses a later successful child acknowledg
 })
 Test('fixed iOS barrier finite deadline never resets while child publication remains pending', async () => {
   // budget-ok: Deliberately expire the original finite command deadline while its publication is held.
-  const f = await fixture('short', 400)
+  // The budget also covers launching the real supervisor, which took about 700ms on a CI runner, so
+  // it must outlast that launch for the deadline to expire during publication rather than readiness.
+  const f = await fixture('short', 2_000)
   const gate = Deferred<void>()
   try {
     f.hook(async () => await gate.promise)
     const started = Time.nowMs()
     await Expect(f.execute()).rejects.toThrow('publication budget')
-    Expect(Time.nowMs() - started).toBeLessThan(1_500)
+    Expect(Time.nowMs() - started).toBeLessThan(3_500)
     gate.resolve()
     await Time.sleep(75)
     Expect(await FS.isFile(FS.resolvePath('mutation.json', f.root))).toBe(false)
