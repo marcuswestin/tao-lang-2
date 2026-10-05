@@ -49,7 +49,10 @@ export type NativeEffectPublication =
 export type ResolvedConstructorExecution =
   & PublicationStatus
   & EffectContract
-  & Readonly<{ site: AST.ConfigurationConstructor; operands: readonly AST.Expression[] }>
+  & Readonly<{
+    site: AST.ConfigurationConstructor | AST.ConfigurationEntry
+    operands: readonly (AST.Expression | AST.ConfigurationEntry)[]
+  }>
 
 /** Canonically resolved intrinsic operations execute their own contract and real source operands. */
 export type ResolvedUnitExecution =
@@ -307,11 +310,17 @@ export function discoverCallableEffectFacts(
         })
         reason ??= 'incomplete-fact'
       }
-    } else if (AST.isConfigurationConstructor(node)) {
-      // Syntax still evaluates payloads and unsupported blocks, regardless of wrapper evidence.
-      for (const child of AST.streamContents(node)) {
-        if (!AST.isTypeReference(child)) {
-          edge(child)
+    } else if (constructor || AST.isConfigurationConstructor(node)) {
+      if (constructor?.kind === 'complete') {
+        for (const operand of constructor.operands) {
+          edge(operand)
+        }
+      } else {
+        // Unsupported construction still evaluates authored payloads conservatively.
+        for (const child of AST.streamContents(node)) {
+          if (!AST.isTypeReference(child)) {
+            edge(child)
+          }
         }
       }
       if (constructor) {
@@ -421,4 +430,5 @@ function isStructuralEvaluation(node: AST.Node): boolean {
     || AST.isIfFunctionStatement(node) || AST.isIfActionStatement(node) || AST.isCheckStatement(node)
     || AST.isWhenExpression(node) || AST.isWhenBranch(node) || AST.isWhenOtherwise(node)
     || AST.isArgument(node) || AST.isArgumentList(node) || AST.isActionResultStatement(node)
+    || (AST.isConfigurationEntry(node) && !!(node.expression || node.value || node.memberReference))
 }

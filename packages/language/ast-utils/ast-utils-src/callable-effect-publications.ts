@@ -96,7 +96,8 @@ export function projectCallableEffectPublications(
     Assert(key === publication.reference, 'Expected canonical read inventory keys to match their references.')
     Assert(
       AST.isValueReference(publication.reference) || AST.isMemberAccessExpression(publication.reference)
-        || AST.isPostfixMemberAccess(publication.reference),
+        || AST.isPostfixMemberAccess(publication.reference)
+        || (AST.isConfigurationEntry(publication.reference) && !!publication.reference.reference),
       'Expected canonical reads to use a supported read site.',
     )
     reads.push(projectRead(publication))
@@ -135,10 +136,17 @@ export function projectCallableEffectPublications(
     natives: Object.freeze(natives),
     constructors: Object.freeze([...snapshot.constructors].map(([key, publication]) => {
       Assert(key === publication.site, 'Expected canonical constructor keys to match their sites.')
-      Assert(AST.isConfigurationConstructor(publication.site), 'Expected an actual named constructor site.')
       Assert(
-        publication.operands.length === (publication.site.value ? 1 : 0)
-          && (!publication.site.value || publication.operands[0] === publication.site.value),
+        AST.isConfigurationConstructor(publication.site) || AST.isConfigurationEntry(publication.site),
+        'Expected an actual named constructor site.',
+      )
+      Assert(
+        publication.binding
+          ? publication.binding.site === publication.site
+            && publication.operands.length === publication.binding.operands.length
+            && publication.operands.every((operand, index) => operand === publication.binding?.operands[index]?.node)
+          : publication.operands.length === (publication.site.value ? 1 : 0)
+            && (!publication.site.value || publication.operands[0] === publication.site.value),
         'Expected constructor operands to retain their actual authored value.',
       )
       return Object.freeze({

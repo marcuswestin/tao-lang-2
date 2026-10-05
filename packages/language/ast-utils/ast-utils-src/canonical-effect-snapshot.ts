@@ -18,6 +18,7 @@ import {
 } from './associated-methods'
 import type { NativeEffectPublication } from './callable-effect-facts'
 import { type CallableSignature, callableSignatureOf } from './callable-signatures'
+import { type ConfiguredItemConstruction, resolveConfiguredItemConstruction } from './configured-item-bindings'
 import { declaredCallableFailureContract } from './failure-contracts'
 import { resolveFunctionInvocation } from './invocations'
 import { type NumericUnitReading, resolveNumericUnitReading } from './numeric-unit-readings'
@@ -73,7 +74,7 @@ export type CanonicalCallPublication =
 export type CanonicalReadPublication =
   & PublicationStatus
   & Readonly<{
-    reference: AST.ValueReference | AST.MemberAccessExpression | AST.PostfixMemberAccess
+    reference: AST.ValueReference | AST.MemberAccessExpression | AST.PostfixMemberAccess | AST.ConfigurationEntry
     declaration?: AST.ValueReferenceTarget | AssociatedDeclaration
     classification: 'immutable' | 'reactive' | 'unknown'
     proof?:
@@ -97,15 +98,16 @@ export type CanonicalReadPublication =
     initializer?: AST.Expression
   }>
 
-/** Linked text wrapper construction executes its real operand without an implicit numeric check. */
+/** Allocation executes real supplied/default operands independently of latent associated bodies. */
 export type CanonicalConstructorPublication =
   & PublicationStatus
   & EffectContract
   & Readonly<{
-    site: AST.ConfigurationConstructor
+    site: AST.ConfigurationConstructor | AST.ConfigurationEntry
     declaration?: AST.ConstructorDeclaration
     result: TaoType
-    operands: readonly AST.Expression[]
+    operands: readonly (AST.Expression | AST.ConfigurationEntry)[]
+    binding?: ConfiguredItemConstruction
   }>
 
 /** Intrinsic contracts retain resolved unit witnesses and evaluate their actual source operands. */
@@ -434,16 +436,23 @@ export function publishCanonicalEffectSnapshot(
     if (AST.isConfigurationConstructor(node)) {
       const declaration = node.type.ref
       const result = resolution.ofExpression(node)
-      const complete = AST.isTypeDeclaration(declaration) && !!node.value && !node.block
-        && node.members.length === 0 && result.kind === 'primitive' && result.primitive === 'text'
+      const scalar = AST.isTypeDeclaration(declaration) && !!node.value && !node.block
+        && node.members.length === 0 && result.kind === 'primitive'
+        && (result.primitive === 'text'
+          || (result.primitive === 'boolean' && AST.isBooleanLiteral(node.value) && !result.slots))
         && !Type.isAbstractDomain(result)
+      const binding = node.block
+        ? sealConfiguredConstruction(resolveConfiguredItemConstruction(node, resolution))
+        : undefined
+      const complete = scalar || binding?.kind === 'complete'
       constructors.set(
         node,
         Object.freeze({
           site: node,
           ...(declaration ? { declaration } : {}),
           result: sealType(result),
-          operands: Object.freeze(node.value ? [node.value] : []),
+          operands: Object.freeze(binding?.operands.map(operand => operand.node) ?? (node.value ? [node.value] : [])),
+          ...(binding ? { binding } : {}),
           ...sealEffectContract({
             purity: { violations: [], open: false },
             failures: { cases: [], open: false },
@@ -451,6 +460,29 @@ export function publishCanonicalEffectSnapshot(
           ...(complete ? { kind: 'complete' } as const : { kind: 'unknown', reason: 'incomplete-fact' } as const),
         }),
       )
+    }
+    if (AST.isConfigurationEntry(node) && node.block && node.name) {
+      const binding = sealConfiguredConstruction(resolveConfiguredItemConstruction(node, resolution))
+      constructors.set(
+        node,
+        Object.freeze({
+          site: node,
+          result: sealType(binding.result),
+          binding,
+          operands: Object.freeze(binding.operands.map(operand => operand.node)),
+          ...sealEffectContract({ purity: { violations: [], open: false }, failures: { cases: [], open: false } }),
+          ...(binding.kind === 'complete'
+            ? { kind: 'complete' } as const
+            : { kind: 'unknown', reason: 'incomplete-fact' } as const),
+        }),
+      )
+    }
+    if (AST.isConfigurationEntry(node) && node.reference) {
+      const declaration = node.reference.ref
+      const domain = AST.isValueDeclaration(declaration)
+        ? Type.ofValueDeclaration(declaration)
+        : { kind: 'unresolved' } as const
+      reads.set(node, publishRead(node, domain))
     }
     if (AST.isValueReference(node) || AST.isMemberAccessExpression(node)) {
       const domain = resolution.ofReferenceRoot(node)
@@ -790,7 +822,7 @@ function nativeArgumentOwner(
 }
 
 function publishRead(
-  reference: AST.ValueReference | AST.MemberAccessExpression,
+  reference: AST.ValueReference | AST.MemberAccessExpression | AST.ConfigurationEntry,
   domain: TaoType,
   selectedDomain: TaoType = domain,
   nativeForwardOwners: ReadonlyMap<
@@ -798,9 +830,9 @@ function publishRead(
     AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration
   > = new Map(),
 ): CanonicalReadPublication {
-  const declaration = reference.target.ref
+  const declaration = AST.isConfigurationEntry(reference) ? reference.reference?.ref : reference.target.ref
   const owner = AST.associatedReceiverOwner(reference)
-  const forwardingMethod = nativeArgumentOwner(reference, nativeForwardOwners)
+  const forwardingMethod = !AST.isConfigurationEntry(reference) && nativeArgumentOwner(reference, nativeForwardOwners)
   const contextualTransport = forwardingMethod && AST.isAssociatedFunctionDeclaration(forwardingMethod)
     && !forwardingMethod.static && AST.findOwningAssociatedFunction(reference) === forwardingMethod
     && 'nominal' in domain && domain.nominal === owner
@@ -830,7 +862,8 @@ function publishRead(
     if (
       pureOwner && !declaration.mutable && !declaration.copy
       && (immutableReadDomain(selectedDomain)
-        || nativeHandleTransport(reference, domain, pureOwner, nativeForwardOwners))
+        || (!AST.isConfigurationEntry(reference)
+          && nativeHandleTransport(reference, domain, pureOwner, nativeForwardOwners)))
     ) {
       return Object.freeze({
         reference,
@@ -918,6 +951,9 @@ function inventoryNodes(files: readonly AST.TaoFile[], evidence: CanonicalEffect
         enter(declaration)
       }
     }
+    if (AST.isConfigurationEntry(node) && node.reference?.ref) {
+      enter(node.reference.ref)
+    }
     if (AST.isNamedTypeReference(node)) {
       const declaration = Type.definitionOfReference(node)
       if (declaration) {
@@ -965,6 +1001,20 @@ function sealEffectContract(contract: EffectContract): EffectContract {
   return Object.freeze({
     purity: Object.freeze({ violations: Object.freeze([...contract.purity.violations]), open: contract.purity.open }),
     failures: Object.freeze({ cases: Object.freeze([...contract.failures.cases]), open: contract.failures.open }),
+  })
+}
+
+function sealConfiguredConstruction(binding: ConfiguredItemConstruction): ConfiguredItemConstruction {
+  return Object.freeze({
+    ...binding,
+    result: sealType(binding.result),
+    pairs: Object.freeze(binding.pairs.map(pair =>
+      Object.freeze({
+        ...pair,
+        actual: sealType(pair.actual),
+        expected: sealType(pair.expected),
+      })
+    )),
   })
 }
 
