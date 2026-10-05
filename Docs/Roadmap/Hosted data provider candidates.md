@@ -376,7 +376,8 @@ cause remains unconfirmed. Provider tests use optional account fields and mock/m
 replicas; local app journeys do not exercise Firebase. Source verification and bundling
 did not close these gates. The account-seeding bug entered with the ordinary provider/app
 in `883ea9ee8`, not the later runtime merge. See the [continuation handoff](<Hosted provider continuation.md>)
-for the schema/default repair proposal and native diagnosis boundary.
+for the implemented bounded Account repair, unchanged physical-cache schema, native diagnostics,
+and outstanding host acceptance boundary.
 
 Continue with Firebase as the previously selected first stack, but close ordinary app
 bootstrap and native storage before calling its full flow accepted. Earlier handwritten
@@ -389,3 +390,26 @@ a scoped user/store server reset. Local replicas and Auth users are outside rese
 project/app/Auth-user deletion is not implemented. Source/fixture checks and independent
 review cover the CLI, including protection against inherited project aliases and emulator
 routing. No live cloud-management acceptance or new provider acceptance is claimed.
+
+### Firebase repair source checkpoint — 2026-10-05
+
+The app/template default, bounded Account repair, strict logical/wire validation and generated
+required-field rules are implemented and independently reviewed. Real RxDB/provider/runtime
+fixtures pass; they mock remote transport. Native diagnostic preflight and transitive native-kit
+selection are implemented. After the Developer authorized dependency changes, Companion gained
+`expo-sqlite ~57.0.3`; setup and the Simulator host build passed. Its exact Companion launched
+but produced no database result; native open/reopen remains unproved.
+A quiet Expo Go57.0.9 probe started but produced no database result, so native durability remains open.
+
+The ordinary-app Firebase hostile probe is prepared, credential-local and directly measures server
+responses after positive controls; its live run remains pending. Reconnect to review/deploy the
+updated rules, then verify bootstrap, live two-client CRUD, offline restart/replay, account isolation
+and the probe. Earlier handwritten pilot acceptance does not close these ordinary-provider gates.
+Appwrite remains deferred; Jazz, Convex and Pylon gates retain their separate dispositions.
+
+Existing-resource API acceptance2026-10-05: live project/app management and reconnect of
+`tao-autocreate-test` passed using the existing default CLI login. The only reviewed rules change
+made required Account.DisplayName text nonnullable; deployment readback verified Native Standard,
+Email/Password Auth and generated rules, preserving indexes and billing. No accounts or passwords
+were entered by the agent. Client bootstrap, native reopen, two-client sync and direct hostile
+responses remain separate open gates. Conditional landing follows working web/Simulator proof.

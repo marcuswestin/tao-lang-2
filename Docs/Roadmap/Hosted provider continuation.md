@@ -421,7 +421,8 @@ For the new Firebase app, the Developer accepts each manual verification on eith
 Simulator; do not duplicate the checklist on both. Realtime observation still needs one sender
 and one receiver. Hosted CRUD/realtime, offline restart/replay, online/offline account isolation,
 and direct server authorization against the new store layout remain unproved. A matching
-hostile-request probe still needs implementation; the standalone pilot probe is insufficient.
+Firebase-only hostile-request probe is prepared at `Apps/Hosted Firebase/scripts/hostile-probe.ts`;
+its live run remains pending. The standalone pilot probe is insufficient.
 Remove the temporary account buttons after acceptance. Appwrite's realtime repair still needs
 host acceptance, followed by offline/restart/replay, account isolation, and direct requests that
 separately test forged ownerId and explicit row permissions. Its full Tao adapter and CLI-created
@@ -517,29 +518,56 @@ fixture uses an optional `Name` and injected fake replicas; the rules fixture ex
 expects nullable required DisplayName. Local app journeys use Memory/TestAuth. No test
 joined real account bootstrap with the Tao runtime's persisted-row validation.
 
-Proposed repair, not yet implemented: declare an appropriate app DisplayName default;
-create Account fields from authored defaults/optional metadata, rejecting required fields
-without a value instead of inventing implicit scalar defaults; align RxDB and server-rule
-nullability; repair affected synthetic account values without resetting IDs or notes;
-cover bootstrap, runtime load, restart and incoming replication with a required text field.
-Do not weaken runtime validation or erase stores as a workaround.
+The authorized repair is implemented. The app and creation template declare `DisplayName text
+(default "")`. Account bootstrap uses authored literal defaults and optional nulls; a required
+field without a declared value fails explicitly. A bounded repair fills only missing/null required
+Account fields with declared literal defaults, preserving row IDs, notes, and populated names.
+Optional omissions become explicit nulls in runtime snapshots without changing wire/master state.
+Unknown application fields are rejected, and incoming, proposed, and conflicting replicated rows
+use the same production validator. Generated server rules reject null required fields. Reconnect
+through API setup to review and deploy those updated rules before hosted validation.
+
+The physical RxDB version-zero schema remains byte-compatible with existing caches. Logical
+validation enforces the authored contract at storage and runtime boundaries; changing the physical
+schema under the same version would strand existing offline stores. Real RxDB/provider/runtime
+fixtures now prove bootstrap, bounded repair, reopen, optional projection, malformed-row rejection,
+replication conflicts and tombstones. Firebase tests passed 40/40 and typecheck passed; independent
+architecture review found no remaining Account finding. These tests mock remote Auth/transport,
+so deployed rules and authenticated hosted behavior remain separate gates.
 
 The Simulator separately reports `expo-sqlite is not installed`. The JavaScript dependency
-already exists at the expected SDK57 version. The third-party React Native adapter catches
-every import/evaluation failure and replaces its cause with this installation message.
-Expo SDK57 Go includes SQLite. A custom host missing native ExpoSQLite, a host/JS mismatch,
-or a lazy-import/evaluation failure remain possible; no original exception or launched
-binary identity has yet been established. Tests replace native storage with memory, so
-iOS bundling and source gates did not prove native database opening. Separately, host
-native-kit discovery inspects direct manifest dependencies only and misses transitive
-provider dependencies; record and fix that independently of the unconfirmed live cause.
+already exists at the expected SDK57 version. The third-party adapter catches every import failure
+and replaces its cause with that suggestion. Native preflight now preserves the original import
+or storage-initialization stage and exception in development app logs; the recovery screen points
+to those logs. Host compatibility now traverses installed dependency/dev/peer graphs, selects the
+version Expo resolves before filtering native modules, and retains native source fingerprints.
+The initial Companion kit lacked SQLite. The Developer subsequently authorized dependencies and
+completion decisions; Companion now declares `expo-sqlite ~57.0.3` and setup refreshed its lockfile.
+Expo-host already reaches SQLite through the Firebase provider, so no duplicate edge was added.
+The Simulator host build passed at `.artifacts/hosts/1.0.0-585e6bbd1f9e/ios-simulator`,
+including ExpoSQLite57.0.3; the real dependency-graph test passed26/26. A later reserved-Simulator
+probe installed and launched that exact Companion. No bundle/database result arrived, and Device Hub
+inspection timed out twice. Real native SQLite open/reopen remains pending.
 
-The RxDB premium text is a Dexie storage console warning on the first bulk write, forwarded
-by app logging. Supported premium suppression needs purchased premium access; narrowly
-filtering that promotional message is a separate CLI decision. No suppression was applied.
-The sign-in button boxes are horizontally centered; their labels can sit slightly high
-because the basic FormButton applies a minimum height of 44 points and symmetric padding but
-no vertical justification. The Developer requested an explanation only; layout is unchanged.
+A credential-free probe was dispatched quietly to a task-reserved Simulator with Expo Go57.0.9.
+Go startup was observed, but no bundle or database result arrived. This does not prove native
+open/reopen or establish the original reported cause. The Developer's iPhone17 session was not
+controlled. Live native validation remains pending; memory-storage tests and bundling are not proof.
+
+The RxDB premium text is a Dexie storage console warning on first bulk write. The authorized
+change filters only the complete, recognized promotional banner from displayed Expo and Hosted
+CRUD logs. Raw logs retain it; real warnings/errors and incomplete or modified messages remain
+visible. Incremental UTF-8 decoding preserves split characters. No premium entitlement is claimed.
+The authorized FormButton change adds `justifyContent: 'center'` to center labels vertically.
+The earlier explanation-only and proposal-only limits are superseded by the later fix request.
+
+The ordinary Firebase probe uses compiled storage paths and fields, two locally entered existing
+accounts, positive own-CRUD controls, and direct unauthorized/foreign requests. Only exact server
+403/PERMISSION_DENIED responses count as authorization passes. It separately records server
+results, redacts entered credentials even within provider codes, hashes the executing implementation,
+and saves attempted fixture IDs before creating them so lost or malformed responses still receive
+bounded tombstone cleanup. Source tests passed11/11 and independent review cleared
+redaction/provenance findings. No live requests were run by the agent.
 
 Root instructions now require retention of earlier requests/questions across messages and
 compaction, a task-local unresolved queue, and explicit acknowledgement of superseded items.
@@ -571,11 +599,35 @@ and raw vendor errors. Existing provisioning uses the extracted shared CLI runne
 
 Independent review found no remaining findings after project-alias, endpoint, authored
 StorageKey, JSON-login, and exact environment-restoration repairs. Focused management
-and provisioning tests passed. These are source/fixture checks; no live management or
-reset operation has been run. The Account-default repair and native import diagnosis
-remain proposals/pending acceptance, and the Developer's explanation-only layout request
-remains unchanged. This follow-up is not authorized to land.
+and provisioning tests passed. Source/fixture checks passed. Live default-account project list/info and Web app listing
+subsequently passed for `tao-autocreate-test`; no reset operation was run. The Account-default repair, native diagnostics, label centering and exact promotion filter
+are implemented in the subsequent authorized source follow-up; live acceptance remains pending. This follow-up is not authorized to land.
 
 Management commands and their flags use the existing `hosted-data` release capability.
 The immutable public-release surface regression passed after adding these classifications;
 no public release phase or provider eligibility was broadened.
+
+The quiet diagnostic session was stopped through managed recovery after the Developer approved
+termination of its exact recorded controller. Cleanup and reserved Simulator release were proved;
+temporary source was retained in task artifacts and removed from Apps. No database result was obtained.
+
+Both later probe sessions were stopped with proved cleanup, temporary Apps source removed, and
+artifacts retained. Selecting the test email explicitly stopped before cloud calls because that
+Google account was not signed in locally; the existing default CLI account was already signed in.
+Live project list/info and Web app listing then succeeded using that default account.
+
+The API reconnect to existing `tao-autocreate-test` and its existing FirebaseNotes Web registration
+completed on 2026-10-05. Review found only the required DisplayName rule changed; deployment and
+readback verified the default Native Standard database, existing Email/Password Auth and exact
+generated rules. Indexes and billing were preserved. Public config was saved locally and the next
+run command printed. No project, cloud account, sign-in or password was created/entered by the agent.
+This proves existing-resource provisioning and deployed-rule readback, not client CRUD or hostile
+server denial. Those credential-local and native acceptance gates remain open.
+
+Complete verification also exposed a dead-export checker gap for Metro's unsuffixed platform
+imports. The checker now follows actual value uses and named runtime re-exports to matching native
+exports, while retaining orphan findings for unused/type-only/web-only/unrelated bindings. Its
+focused regressions and independent review are required before final source gates.
+
+The completion goal requests landing after the working web/Simulator flow is proven. That condition
+is not yet met, so source finalize must not be presented as landing or hosted acceptance.

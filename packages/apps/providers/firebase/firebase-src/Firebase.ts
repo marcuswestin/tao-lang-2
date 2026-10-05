@@ -3,7 +3,7 @@ import { Assert, Errors, Switch } from '@shared/core'
 import { type FirebaseClient, firebaseClient } from './firebase-client'
 import { authenticatedStoreKey, firebaseConfig } from './firebase-config'
 import { type FirebaseReplica, openFirebaseReplica } from './firebase-replica'
-import { type FirebaseRow, validateFirebaseSchema } from './firebase-schema'
+import { type FirebaseRow, firebaseRuntimeRow, validateFirebaseSchema } from './firebase-schema'
 
 type OpenReplica = (
   client: FirebaseClient,
@@ -25,7 +25,12 @@ function rowsOf(snapshot: string): Snapshot {
   return value
 }
 
-function project(definition: TR.DataSchemaDefinition, rows: Record<string, FirebaseRow[]>, nextId: number): string {
+function project(
+  definition: TR.DataSchemaDefinition,
+  rows: Record<string, FirebaseRow[]>,
+  nextId: number,
+  uid: string,
+): string {
   return JSON.stringify({
     formatVersion: 1,
     schemaVersion: definition.schemaVersion ?? 1,
@@ -33,7 +38,8 @@ function project(definition: TR.DataSchemaDefinition, rows: Record<string, Fireb
     rows: Object.fromEntries(
       Object.keys(definition.entities).map(name => [
         name,
-        (rows[name] ?? []).sort((left, right) => left.Id.localeCompare(right.Id)),
+        (rows[name] ?? []).map(row => firebaseRuntimeRow(name, definition.entities[name]!, row, uid))
+          .sort((left, right) => left.Id.localeCompare(right.Id)),
       ]),
     ),
   })
@@ -107,7 +113,7 @@ export function FirebaseProvider(
       }
       const publish = async (source: FirebaseReplica, revision: number): Promise<void> => {
         try {
-          const snapshot = project(context.schema, await source.rows(), nextId)
+          const snapshot = project(context.schema, await source.rows(), nextId, auth.accountId)
           if (cancelled(auth, closed) || revision !== publication) {
             return
           }
@@ -181,7 +187,7 @@ export function FirebaseProvider(
         async load() {
           const source = await open()
           await ensureSession()
-          const snapshot = project(context.schema, await source.rows(), nextId)
+          const snapshot = project(context.schema, await source.rows(), nextId, auth.accountId)
           view = snapshot
           replay = undefined
           return snapshot
@@ -191,6 +197,7 @@ export function FirebaseProvider(
           const source = await open()
           const previous = writeContext?.previousSnapshot ?? view
           const next = rowsOf(snapshot)
+          project(context.schema, next.rows, next.nextId, auth.accountId)
           const operations = TR.DataRows.rowOperations(context.schema, previous, snapshot, intents)
           nextId = Math.max(nextId, next.nextId)
           saving = true

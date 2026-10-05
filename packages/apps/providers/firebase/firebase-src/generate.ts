@@ -62,7 +62,7 @@ export function generateFirebaseBackend(schema: TR.DataSchemaDefinition, access?
     for (const [name, field] of Object.entries(definition.fields)) {
       Assert.input(identifier.test(name) && !reserved.has(name), `Firebase cannot use '${entity}.${name}' as a field.`)
       allowed.push(name)
-      if (entity === 'Account' || field.optional !== true) {
+      if (field.optional !== true) {
         required.push(name)
       }
       const value = `data[${JSON.stringify(name)}]`
@@ -93,7 +93,7 @@ export function generateFirebaseBackend(schema: TR.DataSchemaDefinition, access?
         time: () => `${value} is number`,
       })
       checks.push(
-        field.optional === true || entity === 'Account' ? `(!${present} || ${value} == null || (${valid}))` : valid,
+        field.optional === true ? `(!${present} || ${value} == null || (${valid}))` : valid,
       )
     }
 

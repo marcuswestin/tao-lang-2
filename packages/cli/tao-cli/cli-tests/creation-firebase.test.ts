@@ -44,6 +44,10 @@ Describe('tao create Firebase', () => {
         )
       }
       Expect(problems).toEqual([])
+      const compiled = await workspace.compile(FS.resolvePath('App.tao', root))
+      Expect([compiled.code, ...compiled.files.map(file => file.code)].join('\n')).toMatch(
+        /\["DisplayName"\]:\s*\{[^}]*defaultValue: ""/u,
+      )
       const journey = await runTestCommandOnce(root, { output: 'quiet' })
       Expect(journey.failed).toBe(false)
     } finally {

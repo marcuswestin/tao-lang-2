@@ -2,7 +2,7 @@
 // readable on one page.
 package
 data Accounts / Account {
-   DisplayName text,
+   DisplayName text (default ""),
 }
 
 // One thing the app keeps track of.

@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as authSdk from 'firebase/auth'
 import type { Persistence } from 'firebase/auth'
 import type { RxStorage } from 'rxdb'
+import { firebaseNativeStorage } from './firebase-native-diagnostics'
 
 export function firebaseAuthPersistence(): Persistence {
   // Firebase's generic declarations omit its React Native persistence export.
@@ -13,5 +14,5 @@ export function firebaseAuthPersistence(): Persistence {
 }
 
 export function firebaseRxStorage(): RxStorage<unknown, unknown> {
-  return getRxStorageSQLite()
+  return firebaseNativeStorage(() => require('expo-sqlite'), getRxStorageSQLite)
 }

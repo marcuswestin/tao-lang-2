@@ -199,7 +199,9 @@ ${fields}
   return `// The data catalog. Every entity the app stores is declared here, so what a row contains is
 // readable on one page.
 
-${firebase ? 'package\ndata Accounts / Account {\n   DisplayName text,\n}\n\n' : ''}${entities.join('\n\n')}
+${firebase ? 'package\ndata Accounts / Account {\n   DisplayName text (default ""),\n}\n\n' : ''}${
+    entities.join('\n\n')
+  }
 `
 }
 

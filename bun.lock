@@ -98,8 +98,8 @@
         "tao-icloud": "workspace:*",
         "tao-instantdb": "workspace:*",
         "tao-jazz": "workspace:*",
-        "tao-pylon": "workspace:*",
         "tao-project-tooling": "workspace:*",
+        "tao-pylon": "workspace:*",
         "tao-runtime": "workspace:*",
         "tao-shared": "workspace:*",
       },
@@ -305,8 +305,8 @@
         "tao-jazz": "workspace:*",
         "tao-native-bindings": "workspace:*",
         "tao-parser": "workspace:*",
-        "tao-pylon": "workspace:*",
         "tao-project-tooling": "workspace:*",
+        "tao-pylon": "workspace:*",
         "tao-shared": "workspace:*",
         "tao-skills": "workspace:*",
         "tao-source-actions": "workspace:*",
@@ -404,6 +404,7 @@
         "expo-glass-effect": "~57.0.4",
         "expo-haptics": "~57.0.3",
         "expo-secure-store": "~57.0.4",
+        "expo-sqlite": "~57.0.3",
         "expo-updates": "~57.0.24",
         "jazz-rn": "2.0.0-alpha.57",
         "react": "19.2.3",
@@ -3907,8 +3908,9 @@
 
     "tao-playwright-driver": ["tao-playwright-driver@workspace:packages/testing/playwright-driver"],
 
-    "tao-pylon": ["tao-pylon@workspace:packages/apps/providers/pylon"],
     "tao-project-tooling": ["tao-project-tooling@workspace:packages/language/project-tooling"],
+
+    "tao-pylon": ["tao-pylon@workspace:packages/apps/providers/pylon"],
 
     "tao-runtime": ["tao-runtime@workspace:packages/apps/runtime"],
 

@@ -34,6 +34,7 @@ import Run from '@expo-host/dev-loop/Run'
 import { CLI, Errors, FS, Platform, ProcessTree, Repo, type TrackedProcess } from '@shared'
 import { Deferred, Describe, Expect, mkTestDir, Test, until, withCapturedOutput } from '@shared/test'
 import { connect, createServer, type Server } from 'node:net'
+import { dexiePromotion } from '../../../shared/shared-tests/fixtures/dexie-promotion'
 
 Describe('Expo dev-loop output severity', () => {
   Test('reads a child process line by its text, not by the stream it chose', () => {
@@ -443,6 +444,42 @@ Describe('Expo dev-loop command helpers', () => {
       'Error: Cannot find module ./publicFolder',
       'Expo exited with code=1.',
     ].join('\n'))
+  })
+
+  Test('hides the exact promotion in ordinary Expo display while retaining raw logs and native warnings', async () => {
+    const root = await mkTestDir('tao-expo-app-log-display-')
+    const config = createExpoConfig(49_156)
+    const server = new ExpoServer(root, config, async () => {}, {
+      command: {
+        executable: '/bin/sh',
+        argsPrefix: [
+          '-c',
+          'printf "%s\\n" "$1"; printf "%s\\n" "WARN Native Firebase persistence unavailable" >&2',
+          'expo-fixture',
+          ` WARN ${dexiePromotion}`,
+        ],
+      },
+      logRoot: root,
+      runtimeToolchainSourceRoot: root,
+    })
+    try {
+      const captured = await withCapturedOutput(async () => {
+        await server.start()
+        await until(async () => {
+          const raw = await FS.readText(FS.resolvePath(FS.basename(config.EXPO_LOG_PATH), root))
+          return raw.includes('WARN Native Firebase persistence unavailable')
+        }, { description: 'the complete Expo app-log fixture' })
+        await server.stop()
+      })
+      Expect(captured.stdout + captured.stderr).not.toContain('https://rxdb.info/premium/?console=dexie')
+      Expect(captured.stdout + captured.stderr).toContain('WARN Native Firebase persistence unavailable')
+      const raw = await FS.readText(FS.resolvePath(FS.basename(config.EXPO_LOG_PATH), root))
+      Expect(raw).toContain(dexiePromotion)
+      Expect(raw).toContain('WARN Native Firebase persistence unavailable')
+    } finally {
+      await server.stop()
+      await FS.remove(root)
+    }
   })
 
   // `bunx` takes the package name first; an installed Tao's launcher already names Expo's script,

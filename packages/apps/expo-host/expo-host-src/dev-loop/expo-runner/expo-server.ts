@@ -1,4 +1,4 @@
-import { FS, Repo, Text } from '@shared'
+import { DevAppLogFilter, FS, Repo, Text } from '@shared'
 import { DevLoopOutput } from '../DevLoopOutput'
 import {
   finalizeStudioProcessTree,
@@ -19,6 +19,7 @@ export class ExpoServer {
   private childClose?: WaitForStudioProcessTreeClose
   private closeOutputAndLogPromise?: Promise<void>
   private logFile?: FS.FileHandle
+  private readonly displayedLogs = { stderr: new DevAppLogFilter(), stdout: new DevAppLogFilter() }
   private recentOutputChunks: string[] = []
   private recentOutputLength = 0
   private unexpectedExit?: (message: string) => void
@@ -77,7 +78,10 @@ export class ExpoServer {
       },
       onOutput: (stream, chunk) => {
         this.appendRecentOutput(String(chunk))
-        DevLoopOutput.writeDevLoopOutput('expo', stream, chunk)
+        const displayed = this.displayedLogs[stream].write(chunk)
+        if (displayed) {
+          DevLoopOutput.writeDevLoopOutput('expo', stream, displayed)
+        }
         void this.logFile?.write(chunk)
       },
     })
@@ -127,6 +131,12 @@ export class ExpoServer {
 
   private async closeOutputAndLogOnce(): Promise<void> {
     await this.child?.closeOutput()
+    for (const stream of ['stdout', 'stderr'] as const) {
+      const displayed = this.displayedLogs[stream].flush()
+      if (displayed) {
+        DevLoopOutput.writeDevLoopOutput('expo', stream, displayed)
+      }
+    }
     await this.closeLogFile()
   }
 

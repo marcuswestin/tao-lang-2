@@ -42,24 +42,165 @@ export type HostManifest = {
 
 type PackageManifest = {
   dependencies?: Record<string, string>
+  devDependencies?: Record<string, string>
+  name?: string
+  peerDependencies?: Record<string, string>
+  peerDependenciesMeta?: Record<string, { optional?: boolean }>
   private?: boolean
   version?: string
 }
 
 /**
  * nativeKitOf computes the native kit of the package at `packageDirectory` from its installed
- * dependencies: every one that ships native code, keyed by name, valued by its build identity.
+ * dependency graph: wrappers can bring native modules indirectly. Root development dependencies
+ * and required peers participate in discovery; dependency packages' development dependencies do not.
  */
 export async function nativeKitOf(packageDirectory: string): Promise<NativeKit> {
-  const manifest = await FS.readJson<PackageManifest>(FS.resolvePath('package.json', packageDirectory))
   const kit: Record<string, string> = {}
-  for (const name of Object.keys(manifest.dependencies ?? {}).toSorted()) {
-    const directory = await FS.resolvePackageDirectory(name, packageDirectory)
-    if (directory !== undefined && await shipsNativeCode(directory)) {
-      kit[name] = await buildIdentity(directory)
+  const visited = new Set<string>()
+  const packages = new Map<string, PackageManifest>()
+  const selected = new Map<string, {
+    depth: number
+    pathDepth: number
+    candidates: Map<string, PackageManifest>
+  }>()
+  const queue: Array<{ directory: string; depth: number; name?: string; originPath: string }> = [{
+    directory: await FS.realPath(packageDirectory),
+    depth: 0,
+    originPath: packageDirectory,
+  }]
+  // Breadth first means a shared real directory's children are traversed from its closest edge.
+  for (let index = 0; index < queue.length; index++) {
+    const current = queue[index]!
+    let manifest = packages.get(current.directory)
+    if (manifest === undefined) {
+      manifest = await FS.readJson<PackageManifest>(FS.resolvePath('package.json', current.directory))
+      packages.set(current.directory, manifest)
+    }
+    if (current.name !== undefined) {
+      const name = manifest.name ?? current.name
+      const pathDepth = current.originPath.split('/node_modules/').length
+      const previous = selected.get(name)
+      if (
+        previous === undefined || current.depth < previous.depth
+        || (current.depth === previous.depth && pathDepth < previous.pathDepth)
+      ) {
+        selected.set(name, { depth: current.depth, pathDepth, candidates: new Map([[current.directory, manifest]]) })
+      } else if (current.depth === previous.depth && pathDepth === previous.pathDepth) {
+        previous.candidates.set(current.directory, manifest)
+      }
+    }
+    // An alias may improve native selection priority, but never repeats a directory's children.
+    if (visited.has(current.directory)) {
+      continue
+    }
+    visited.add(current.directory)
+    const dependencies = new Set([
+      ...Object.keys(manifest.dependencies ?? {}),
+      ...Object.keys(current.depth === 0 ? manifest.devDependencies ?? {} : {}),
+      ...Object.keys(manifest.peerDependencies ?? {}).filter(name =>
+        manifest.peerDependenciesMeta?.[name]?.optional !== true
+      ),
+    ])
+    for (const name of [...dependencies].toSorted()) {
+      if (!includeAutolinkingDependency(name)) {
+        continue
+      }
+      const dependency = await resolveInstalledDependency(name, current.directory)
+      if (dependency !== undefined) {
+        queue.push({ ...dependency, name, depth: current.depth + 1 })
+      }
     }
   }
-  return kit
+  for (const [name, selection] of selected) {
+    // Resolve all packages before asking whether the winning version carries native code:
+    // a shallower JavaScript-only version suppresses a deeper native version, as Expo does.
+    const identities = [
+      ...new Set(
+        await Promise.all(
+          [...selection.candidates.keys()].map(async directory =>
+            await shipsNativeCode(directory) ? await buildIdentity(directory) : undefined
+          ),
+        ),
+      ),
+    ]
+    if (identities.length === 1 && identities[0] === undefined) {
+      continue
+    }
+    // Expo resolves remaining ties deterministically by source and origin path. This host
+    // manifest deliberately refuses equal-priority candidates with different native identities
+    // (including native versus JavaScript-only), because it cannot attest both builds.
+    if (identities.length > 1) {
+      Errors.throwHostEnvironment(
+        `Installed native package '${name}' has conflicting build identities at the same resolution priority: ${
+          identities.map(identity => identity ?? 'no native build').join(' and ')
+        }. Resolve the conflicting dependencies before selecting a native host.`,
+        { details: { name, identities, directories: [...selection.candidates.keys()] } },
+      )
+    }
+    kit[name] = identities[0]!
+  }
+  return Object.fromEntries(Object.entries(kit).toSorted(([left], [right]) => left.localeCompare(right)))
+}
+
+/** Preserve the origin path as well as the real path for Expo's shallow node_modules precedence. */
+async function resolveInstalledDependency(
+  name: string,
+  fromDirectory: string,
+): Promise<{ directory: string; originPath: string } | undefined> {
+  let directory = FS.resolvePath(fromDirectory)
+  for (;;) {
+    const originPath = FS.resolvePath(`node_modules/${name}`, directory)
+    if (await FS.isFile(FS.resolvePath('package.json', originPath))) {
+      return { directory: await FS.realPath(originPath), originPath }
+    }
+    const parent = FS.dirname(directory)
+    if (parent === directory) {
+      return undefined
+    }
+    directory = parent
+  }
+}
+
+// Focused mirror of expo-modules-autolinking 57.0.13:
+// src/dependencies/resolution.ts (root dev dependencies and required peers), and
+// src/dependencies/utils.ts (defaultShouldIncludeDependency and mergeWithDuplicate).
+// Tooling/test subgraphs do not lead to autolinked modules. Keep these exclusions aligned
+// with the installed Expo version when upgrading it; do not extend them for individual apps.
+const autolinkingExcludedScopes = new Set([
+  'babel',
+  'types',
+  'eslint',
+  'typescript-eslint',
+  'testing-library',
+  'aws-crypto',
+  'aws-sdk',
+])
+const autolinkingExcludedPackages = new Set([
+  '@expo/cli',
+  '@expo/config',
+  '@expo/metro-config',
+  '@expo/package-manager',
+  '@expo/prebuild-config',
+  '@expo/webpack-config',
+  '@expo/env',
+  '@react-native/codegen',
+  '@react-native/community-cli-plugin',
+  'eslint',
+  'eslint-config-expo',
+  'eslint-plugin-expo',
+  'eslint-plugin-import',
+  'jest-expo',
+  'jest',
+  'metro',
+  'ts-node',
+  'typescript',
+  'webpack',
+])
+
+function includeAutolinkingDependency(name: string): boolean {
+  const scope = name.startsWith('@') ? name.slice(1, name.indexOf('/')) : undefined
+  return !autolinkingExcludedPackages.has(name) && (scope === undefined || !autolinkingExcludedScopes.has(scope))
 }
 
 /**

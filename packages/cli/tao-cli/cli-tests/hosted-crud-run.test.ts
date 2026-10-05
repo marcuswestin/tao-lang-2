@@ -1,5 +1,6 @@
 import { Errors, FS, Time } from '@shared'
 import { Describe, Expect, fakeTerminal, mkTestDir, Test } from '@shared/test'
+import { dexiePromotion } from '../../../shared/shared-tests/fixtures/dexie-promotion'
 import type { MetroStarter } from '../cli-src/hosted-crud-metro'
 import { hostedCrudRunCommand, runHostedCrud, taoAppRunCommand } from '../cli-src/hosted-crud-run'
 
@@ -93,6 +94,34 @@ const bundleEvents = [
 ]
 
 Describe('tao connect run', () => {
+  Test('hides only the complete Dexie promotion while keeping app warnings and error events', async () => {
+    const root = await mkTestDir('tao-connect-run-app-log-display-')
+    try {
+      const project = await expoProject(root)
+      const terminal = fakeTerminal()
+      const fake = fakeMetro([
+        { type: 'client_log', level: 'warn', data: [dexiePromotion] },
+        { type: 'client_log', level: 'warn', data: ['RxDB Dexie storage failed: quota exceeded'] },
+        { type: 'client_log', level: 'warn', data: ['Native Firebase persistence unavailable'] },
+        { type: 'client_log', level: 'error', data: [dexiePromotion] },
+        { type: 'client_log', level: 'warn', data: [dexiePromotion, { diagnostic: 'extra data' }] },
+        { type: 'client_log', data: ['app logs complete'] },
+      ])
+      const running = runHostedCrud(project, { ...terminal, ...fake })
+      await until(() => terminal.outputText().includes('app logs complete'))
+      terminal.input.write('q')
+      await running
+      const output = terminal.outputText()
+      Expect(output).toContain('RxDB Dexie storage failed: quota exceeded')
+      Expect(output).toContain('Native Firebase persistence unavailable')
+      Expect(output).toContain('app error:')
+      Expect(output).toContain('{"diagnostic":"extra data"}')
+      Expect(output.split('https://rxdb.info/premium/?console=dexie').length - 1).toBe(2)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('prints the ordinary app run command from its app folder with the local repository wrapper', async () => {
     const root = await mkTestDir('tao-app-run-command-')
     try {

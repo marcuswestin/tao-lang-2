@@ -23,7 +23,15 @@ async function writeHost(root: string, dependencies: Record<string, string>): Pr
 async function installPackage(
   root: string,
   name: string,
-  manifest: { private?: boolean; version: string },
+  manifest: {
+    dependencies?: Record<string, string>
+    devDependencies?: Record<string, string>
+    optionalDependencies?: Record<string, string>
+    peerDependencies?: Record<string, string>
+    peerDependenciesMeta?: Record<string, { optional?: boolean }>
+    private?: boolean
+    version: string
+  },
   files: Record<string, string> = {},
 ): Promise<string> {
   const directory = FS.resolvePath(`node_modules/${name}`, root)
@@ -83,13 +91,172 @@ Describe('prebuilt host native kit', () => {
     })
   })
 
-  Test('computes the installed app host kit, and the Companion carries it', async () => {
-    const host = await nativeKitOf(Repo.resolvePath('packages/apps/expo-host'))
-    const companion = await nativeKitOf(Repo.resolvePath('packages/ides/studio-companion-app'))
-
-    Expect(Object.keys(host)).toEqual(Expect['arrayContaining'](['expo', 'react-native', 'tao-icloud']))
-    Expect(hostKitProblems(companion, host)).toEqual([])
+  Test('discovers native modules through wrappers, root development dependencies, and required peers', async () => {
+    await withHostDirectory(async root => {
+      await FS.writeJson(FS.resolvePath('package.json', root), {
+        dependencies: { wrapper: '1.0.0' },
+        devDependencies: { 'root-native': '1.0.0' },
+      })
+      const wrapper = await installPackage(root, 'wrapper', {
+        dependencies: { bridge: '1.0.0' },
+        devDependencies: { 'dependency-dev-native': '1.0.0' },
+        optionalDependencies: { 'installed-optional-native': '1.0.0', absent: '1.0.0' },
+        peerDependencies: { 'required-peer-native': '1.0.0', 'optional-peer-native': '1.0.0' },
+        peerDependenciesMeta: { 'optional-peer-native': { optional: true } },
+        version: '1.0.0',
+      })
+      const bridge = await installPackage(wrapper, 'bridge', {
+        dependencies: { 'indirect-native': '1.0.0' },
+        version: '1.0.0',
+      })
+      await installPackage(bridge, 'indirect-native', { version: '1.0.3' }, { 'expo-module.config.json': '{}' })
+      for (
+        const name of [
+          'root-native',
+          'installed-optional-native',
+          'required-peer-native',
+          'optional-peer-native',
+          'dependency-dev-native',
+        ]
+      ) {
+        await installPackage(root, name, { version: '1.0.0' }, { 'expo-module.config.json': '{}' })
+      }
+      Expect(await nativeKitOf(root)).toEqual({
+        'indirect-native': '1.0.3',
+        'required-peer-native': '1.0.0',
+        'root-native': '1.0.0',
+      })
+    })
   })
+
+  Test('traverses symlink aliases and dependency cycles once by their real directories', async () => {
+    await withHostDirectory(async root => {
+      await writeHost(root, { wrapper: '1.0.0', alias: '1.0.0' })
+      const wrapper = await installPackage(root, 'wrapper', { dependencies: { bridge: '1.0.0' }, version: '1.0.0' })
+      const bridge = await installPackage(wrapper, 'bridge', {
+        dependencies: { wrapper: '1.0.0', 'native-module': '1.0.0' },
+        version: '1.0.0',
+      })
+      await FS.symlink(wrapper, FS.resolvePath('node_modules/alias', root))
+      await FS.symlink(wrapper, FS.resolvePath('node_modules/wrapper', bridge))
+      await installPackage(bridge, 'native-module', { version: '1.0.0' }, { 'expo-module.config.json': '{}' })
+      Expect(await nativeKitOf(root)).toEqual({ 'native-module': '1.0.0' })
+    })
+  })
+
+  Test('selects root AsyncStorage 2.2.0 over a deeper 1.24.0 peer resolution', async () => {
+    await withHostDirectory(async root => {
+      const name = '@react-native-async-storage/async-storage'
+      await writeHost(root, { wrapper: '1.0.0', [name]: '2.2.0' })
+      await installPackage(root, name, { version: '2.2.0' }, { 'expo-module.config.json': '{}' })
+      const wrapper = await installPackage(root, 'wrapper', {
+        peerDependencies: { [name]: '>=1.19' },
+        version: '1.0.0',
+      })
+      await installPackage(wrapper, name, { version: '1.24.0' }, { 'expo-module.config.json': '{}' })
+      Expect(await nativeKitOf(root)).toEqual({ [name]: '2.2.0' })
+    })
+  })
+
+  Test('a direct JavaScript-only version suppresses a deeper native version of the same package', async () => {
+    await withHostDirectory(async root => {
+      await writeHost(root, { wrapper: '1.0.0', 'module-that-changed': '2.0.0' })
+      await installPackage(root, 'module-that-changed', { version: '2.0.0' }, { 'index.js': '' })
+      const wrapper = await installPackage(root, 'wrapper', {
+        dependencies: { 'module-that-changed': '1.0.0' },
+        version: '1.0.0',
+      })
+      await installPackage(wrapper, 'module-that-changed', { version: '1.0.0' }, { 'expo-module.config.json': '{}' })
+      Expect(await nativeKitOf(root)).toEqual({})
+    })
+  })
+
+  Test('rejects conflicting native identities with equal selected resolution priority', async () => {
+    await withHostDirectory(async root => {
+      await writeHost(root, { 'wrapper-a': '1.0.0', 'wrapper-b': '1.0.0' })
+      for (const [wrapperName, version] of [['wrapper-a', '1.0.0'], ['wrapper-b', '2.0.0']] as const) {
+        const wrapper = await installPackage(root, wrapperName, {
+          dependencies: { 'native-module': version },
+          version: '1.0.0',
+        })
+        await installPackage(wrapper, 'native-module', { version }, { 'expo-module.config.json': '{}' })
+      }
+      await Expect(nativeKitOf(root)).rejects.toThrow(
+        "Installed native package 'native-module' has conflicting build identities at the same resolution priority: 1.0.0 and 2.0.0.",
+      )
+    })
+  })
+
+  Test('selects the shallower node_modules origin when graph depths match', async () => {
+    await withHostDirectory(async root => {
+      await writeHost(root, { 'wrapper-a': '1.0.0', 'wrapper-b': '1.0.0' })
+      await installPackage(root, 'native-module', { version: '2.2.0' }, { 'expo-module.config.json': '{}' })
+      await installPackage(root, 'wrapper-a', { dependencies: { 'native-module': '2.2.0' }, version: '1.0.0' })
+      const wrapper = await installPackage(root, 'wrapper-b', {
+        dependencies: { 'native-module': '1.24.0' },
+        version: '1.0.0',
+      })
+      await installPackage(wrapper, 'native-module', { version: '1.24.0' }, { 'expo-module.config.json': '{}' })
+      Expect(await nativeKitOf(root)).toEqual({ 'native-module': '2.2.0' })
+    })
+  })
+
+  Test(
+    'ignores documented Expo tooling and test subgraphs even when their fixtures contain native markers',
+    async () => {
+      await withHostDirectory(async root => {
+        await writeHost(root, { 'jest-expo': '1.0.0', '@testing-library/react-native': '1.0.0', wrapper: '1.0.0' })
+        for (const name of ['jest-expo', '@testing-library/react-native']) {
+          const tooling = await installPackage(root, name, {
+            dependencies: { 'tooling-native': '1.0.0' },
+            version: '1.0.0',
+          })
+          await installPackage(tooling, 'tooling-native', { version: '1.0.0' }, { 'expo-module.config.json': '{}' })
+        }
+        const wrapper = await installPackage(root, 'wrapper', {
+          dependencies: { 'app-native': '1.0.0' },
+          version: '1.0.0',
+        })
+        await installPackage(wrapper, 'app-native', { version: '1.0.0' }, { 'expo-module.config.json': '{}' })
+        Expect(await nativeKitOf(root)).toEqual({ 'app-native': '1.0.0' })
+      })
+    },
+  )
+
+  Test('lets a shallower alias improve selection without traversing its real directory twice', async () => {
+    await withHostDirectory(async root => {
+      await writeHost(root, { 'wrapper-a': '1.0.0', 'wrapper-b': '1.0.0', 'wrapper-c': '1.0.0' })
+      const native = await installPackage(root, 'native-module', { version: '2.2.0' }, {
+        'expo-module.config.json': '{}',
+      })
+      const first = await installPackage(root, 'wrapper-a', {
+        dependencies: { 'native-module': '*' },
+        version: '1.0.0',
+      })
+      await FS.symlink(native, FS.resolvePath('node_modules/native-module', first))
+      await installPackage(root, 'wrapper-b', { dependencies: { 'native-module': '*' }, version: '1.0.0' })
+      const third = await installPackage(root, 'wrapper-c', {
+        dependencies: { 'native-module': '*' },
+        version: '1.0.0',
+      })
+      await installPackage(third, 'native-module', { version: '1.24.0' }, { 'expo-module.config.json': '{}' })
+      Expect(await nativeKitOf(root)).toEqual({ 'native-module': '2.2.0' })
+    })
+  })
+
+  Test(
+    'refuses the installed Companion because it lacks indirect SQLite while selecting root AsyncStorage',
+    async () => {
+      const host = await nativeKitOf(Repo.resolvePath('packages/apps/expo-host'))
+      const companion = await nativeKitOf(Repo.resolvePath('packages/ides/studio-companion-app'))
+
+      Expect(Object.keys(host)).toEqual(
+        Expect['arrayContaining'](['expo', 'expo-sqlite', 'react-native', 'tao-icloud']),
+      )
+      Expect(host['@react-native-async-storage/async-storage']).toBe('2.2.0')
+      Expect(hostKitProblems(companion, host)).toEqual([])
+    },
+  )
 })
 
 Describe('prebuilt host compatibility', () => {

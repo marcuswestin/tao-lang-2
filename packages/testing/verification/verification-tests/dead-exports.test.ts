@@ -4,6 +4,7 @@ import {
   facadeReachedMembers,
   moduleBoundNames,
   namespaceFacadeAliases,
+  nativeImportedMembers,
   resolveTaoBindings,
   reviewUnusedExports,
   runDeadExports,
@@ -415,6 +416,159 @@ Describe('import-type query references', () => {
   })
 })
 
+Describe('native module sibling references', () => {
+  const platform: SourceFile[] = [
+    { path: 'packages/a/platform.ts', source: 'export function persistence() {}\nexport const shared = 1\n' },
+    {
+      path: 'packages/a/platform.native.ts',
+      source: 'export function persistence() {}\nconst implementation = 1\nexport { implementation as shared }\n'
+        + 'export const unused = 1\nexport const nativeOnly = 2\n',
+    },
+  ]
+
+  Test('maps real named imports and aliases to the same native export while retaining unused exports', () => {
+    const files: SourceFile[] = [
+      ...platform,
+      {
+        path: 'packages/a/client.ts',
+        source: "import { persistence as persist, shared } from './platform'\npersist(); shared\n",
+      },
+    ]
+    const keys = nativeImportedMembers(files)
+    Expect([...keys]).toEqual(['packages/a/platform.native.ts#persistence', 'packages/a/platform.native.ts#shared'])
+    const review = reviewUnusedExports(
+      [
+        { file: 'packages/a/platform.native.ts', line: 1, name: 'persistence' },
+        { file: 'packages/a/platform.native.ts', line: 4, name: 'unused' },
+      ],
+      new Set(),
+      new Set(),
+      new Set(),
+      [],
+      keys,
+    )
+    Expect(review.nativeImported).toBe(1)
+    Expect(review.reported).toEqual([{ file: 'packages/a/platform.native.ts', line: 4, name: 'unused' }])
+  })
+
+  Test('requires the imported symbol to be exported by both implementations', () => {
+    const files: SourceFile[] = [
+      ...platform,
+      {
+        path: 'packages/a/client.ts',
+        source: "import { nativeOnly, missing } from './platform'\nnativeOnly; missing\n",
+      },
+    ]
+    Expect([...nativeImportedMembers(files)]).toEqual([])
+  })
+
+  Test('ignores prose, side effects, namespace imports, explicit paths, and unrelated namesakes', () => {
+    const files: SourceFile[] = [
+      ...platform,
+      { path: 'packages/a/other.ts', source: 'export const persistence = 1\n' },
+      {
+        path: 'packages/a/client.ts',
+        source: "// import { persistence } from './platform'\n"
+          + 'const prose = "import { persistence } from \'./platform\'"\n'
+          + "import './platform'\nimport * as platform from './platform'\n"
+          + "import { persistence } from './platform.ts'\n"
+          + "import { shared } from './platform.native'\n"
+          + "import { persistence as other } from './other'\npersistence(); shared; other\n",
+      },
+    ]
+    Expect([...nativeImportedMembers(files)]).toEqual([])
+  })
+
+  Test('resolves a relative directory index and a TSX native sibling', () => {
+    const files: SourceFile[] = [
+      { path: 'packages/a/platform/index.ts', source: 'export const persistence = 1\n' },
+      { path: 'packages/a/platform/index.native.tsx', source: 'export const persistence = 2\n' },
+      { path: 'packages/a/client.tsx', source: "import { persistence } from './platform'\npersistence\n" },
+    ]
+    Expect([...nativeImportedMembers(files)]).toEqual(['packages/a/platform/index.native.tsx#persistence'])
+  })
+
+  Test('does not infer native runtime reachability from type-only or web-only importers', () => {
+    const files: SourceFile[] = [
+      ...platform,
+      {
+        path: 'packages/a/types.ts',
+        source: "import type { persistence } from './platform'\nimport { type shared } from './platform'\n",
+      },
+      { path: 'packages/a/client.web.ts', source: "import { persistence } from './platform'\npersistence()\n" },
+      { path: 'packages/a/view.web.tsx', source: "import { shared } from './platform'\nshared\n" },
+    ]
+    Expect([...nativeImportedMembers(files)]).toEqual([])
+  })
+
+  Test('does not count an unused binding, shadowed alias, declaration, or type-only reference', () => {
+    const files: SourceFile[] = [
+      ...platform,
+      { path: 'packages/a/unused.ts', source: "import { persistence } from './platform'\n" },
+      {
+        path: 'packages/a/shadowed.ts',
+        source: "import { persistence as persist } from './platform'\n"
+          + 'function local(persist: () => void) { persist() }\n',
+      },
+      {
+        path: 'packages/a/type-reference.ts',
+        source: "import { persistence } from './platform'\ntype Persistence = typeof persistence\n"
+          + 'class Local implements persistence {}\n',
+      },
+      {
+        path: 'packages/a/declaration.ts',
+        source: "import { persistence } from './platform'\ndeclare class Local extends persistence {}\n",
+      },
+    ]
+    Expect([...nativeImportedMembers(files)]).toEqual([])
+  })
+
+  Test('counts the actual imported alias used by shorthand, local re-export, or runtime typeof', () => {
+    for (
+      const usage of [
+        'const value = { persist }',
+        'export { persist as kept }',
+        'const kind = typeof persist',
+        'class Local extends persist {}',
+      ]
+    ) {
+      const files: SourceFile[] = [
+        ...platform,
+        { path: 'packages/a/client.ts', source: `import { persistence as persist } from './platform'\n${usage}\n` },
+      ]
+      Expect([...nativeImportedMembers(files)]).toEqual(['packages/a/platform.native.ts#persistence'])
+    }
+  })
+
+  Test('counts runtime named barrel re-exports and aliases, leaving unexported native names alone', () => {
+    const files: SourceFile[] = [
+      ...platform,
+      {
+        path: 'packages/a/barrel.ts',
+        source: "export { persistence as persist, shared } from './platform'\n",
+      },
+    ]
+    Expect([...nativeImportedMembers(files)])
+      .toEqual(['packages/a/platform.native.ts#persistence', 'packages/a/platform.native.ts#shared'])
+  })
+
+  Test('excludes type-only, web-only, explicitly suffixed, and missing-symbol barrel exports', () => {
+    const files: SourceFile[] = [
+      ...platform,
+      {
+        path: 'packages/a/barrel.ts',
+        source: "export type { persistence } from './platform'\nexport { type shared } from './platform'\n"
+          + "export { persistence } from './platform.ts'\nexport { shared } from './platform.native'\n"
+          + "export { missing, nativeOnly } from './platform'\n",
+      },
+      { path: 'packages/a/barrel.web.ts', source: "export { persistence } from './platform'\n" },
+      { path: 'packages/a/barrel.web.tsx', source: "export { shared } from './platform'\n" },
+      { path: 'packages/a/barrel.d.ts', source: "export { persistence } from './platform'\n" },
+    ]
+    Expect([...nativeImportedMembers(files)]).toEqual([])
+  })
+})
+
 Describe('unused export review', () => {
   const unused: readonly UnusedExport[] = [
     { file: 'packages/studio/studio-src/Actions.ts', line: 4, name: 'CreateFile' },
@@ -586,6 +740,40 @@ Describe('dead export run', () => {
       Expect(captured.result).toBe(0)
       Expect(captured.stderr).toBe('')
       Expect(captured.stdout).toContain('0 unused, 0 bound from .tao sources')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('filters only imported native sibling symbols from the actual runner report', async () => {
+    const root = await repository()
+    const source = 'packages/studio/studio-src'
+    try {
+      await FS.writeText(FS.resolvePath(`${source}/platform.ts`, root), 'export const persistence = 1\n')
+      await FS.writeText(
+        FS.resolvePath(`${source}/platform.native.ts`, root),
+        'export const persistence = 2\nexport const unusedNative = 3\n',
+      )
+      await FS.writeText(
+        FS.resolvePath(`${source}/client.ts`, root),
+        "import { persistence as persist } from './platform'\npersist\n",
+      )
+      const captured = await withCapturedOutput(async () =>
+        await runDeadExports({
+          readKnipReport: async () => ({
+            issues: [{
+              file: `${source}/platform.native.ts`,
+              exports: [{ line: 1, name: 'persistence' }, { line: 2, name: 'unusedNative' }],
+            }],
+          }),
+          repositoryRoot: root,
+        })
+      )
+      Expect(captured.result).toBe(1)
+      Expect(captured.stderr).toContain('platform.native.ts:2 unusedNative')
+      Expect(captured.stderr).not.toContain('platform.native.ts:1 persistence')
+      Expect(captured.stdout).toContain('1 unused, 0 bound from .tao sources')
+      Expect(captured.stdout).toContain('1 reached through a native module sibling')
     } finally {
       await FS.remove(root)
     }
