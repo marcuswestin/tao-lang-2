@@ -176,7 +176,12 @@ export function canonicalRenderPrefixSource(
 function ViewDeclaration(f: NodeFormat<AST.ViewDeclaration>): void {
   f.visibilityOnOwnLine()
   f.oneSpaceAfter('view', 'scene')
-  f.noSpaceBefore('(')
+  if (f.node.genericParameters.length > 0) {
+    f.oneSpaceAround('where')
+    f.commaSpacedList()
+  } else {
+    f.noSpaceBefore('(')
+  }
   f.oneSpaceBefore('responds')
   f.oneSpaceAfter('responds')
   // The header clause sits between the parameters (or `responds`) and the body, spaced as a render
@@ -184,4 +189,7 @@ function ViewDeclaration(f: NodeFormat<AST.ViewDeclaration>): void {
   f.oneSpaceBeforeProperty('layoutClause')
   // The pass-through alias form: `view Name = ns.Member`.
   f.oneSpaceAround('=')
+  if (f.node.foreign?.accepts) {
+    f.oneSpaceBeforeProperty('foreign')
+  }
 }

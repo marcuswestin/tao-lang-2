@@ -40,6 +40,7 @@ ViewCommandExclusion:
 // the body sets stays private.
 ViewDeclaration:
     visibility=DeclarationVisibility? (scene?='scene' | 'view') name=ID
+    ('where' genericParameters+=GenericTypeParameter (',' genericParameters+=GenericTypeParameter)*)?
     (parameterList=ParameterList? ('responds' response=[TypeDeclaration:ID])? layoutClause=LayoutClause?
         (block=ViewBlock | foreign=ForeignViewImplementation)
         | '=' aliasTarget=PackageMemberReference);

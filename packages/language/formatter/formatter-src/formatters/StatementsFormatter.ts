@@ -45,7 +45,7 @@ export const StatementsFormatter = {
     f.commaSpacedList()
     const owner = f.node.$container
     if (
-      (AST.isFunctionDeclaration(owner) || AST.isAssociatedFunctionDeclaration(owner))
+      (AST.isFunctionDeclaration(owner) || AST.isAssociatedFunctionDeclaration(owner) || AST.isViewDeclaration(owner))
       && owner.genericParameters.length > 0
     ) {
       f.oneSpaceBefore('(')
