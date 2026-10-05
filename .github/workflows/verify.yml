@@ -30,13 +30,15 @@ concurrency:
 
 env:
   PARTITIONS: 8
-  # Per-gate green records travel between runs of the same tree through the Actions cache.
-  TAO_GREEN_STORE: ${{ github.workspace }}/../tao-green
+  # Per-gate green records travel between runs of the same tree through the Actions cache, which
+  # accepts only an absolute path with no `..` in it.
+  TAO_GREEN_STORE: /home/runner/tao-green
 
 jobs:
   partition:
     name: Partition ${{ matrix.partition }}/8
-    runs-on: ubuntu-24.04-arm
+    # x86-64, not ARM: the Hermes compiler `ship-bundle-proof` runs ships no Linux ARM binary.
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:
       fail-fast: false
