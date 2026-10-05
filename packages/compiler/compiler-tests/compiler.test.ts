@@ -481,8 +481,8 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code).toContain(
       'TR.Data.Query(\n      TR.Auth.Store(_TaoAuthScope, _Scope._TaoDataCatalog_Bookmarks),',
     )
-    Expect(compiled.code).toContain(
-      'TR.Data.Create(\n              TR.Auth.Store(_TaoAuthScope, _Scope._TaoDataCatalog_Bookmarks),',
+    Expect(compiled.code.replace(/\s+/g, ' ')).toContain(
+      'TR.Data.Create( TR.Auth.Store(_TaoAuthScope, _Scope._TaoDataCatalog_Bookmarks),',
     )
     // The app mounts both, and the patch on the listed name layers an app-local copy over the bound declaration
     // without touching the declaration itself.
@@ -788,10 +788,12 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code).toContain(
       '_Scope.Notes = TR.Data.Query(\n      TR.Auth.Store(_TaoAuthScope, _Scope._TaoDataCatalog),',
     )
-    Expect(compiled.code).toContain(
-      'TR.Auth.Store(_TaoAuthScope, _Scope._TaoLocalDataCatalog),\n              "FocusSession",',
+    Expect(compiled.code.replace(/\s+/g, ' ')).toContain(
+      'TR.Auth.Store(_TaoAuthScope, _Scope._TaoLocalDataCatalog), "FocusSession",',
     )
-    Expect(compiled.code).toContain('TR.Auth.Store(_TaoAuthScope, _Scope._TaoDataCatalog),\n              "Note",')
+    Expect(compiled.code.replace(/\s+/g, ' ')).toContain(
+      'TR.Auth.Store(_TaoAuthScope, _Scope._TaoDataCatalog), "Note",',
+    )
   })
 
   Test('imports the companion catalog into an app root that configures no datasource', async () => {

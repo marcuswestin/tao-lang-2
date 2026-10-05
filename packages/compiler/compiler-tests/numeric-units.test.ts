@@ -1,6 +1,6 @@
 import { NumericUnits, Type } from '@ast-utils'
 import { AST, Langium } from '@parser'
-import { Diagnostics, FS, Repo } from '@shared'
+import { Diagnostics, Errors, FS, Repo } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import Validator from '@validator'
 import {
@@ -450,7 +450,7 @@ Describe('compiler: numeric units', () => {
         Object.defineProperty(input, property, {
           get: () => {
             probes++
-            throw new Error('ordinary field was probed')
+            Errors.throwUnexpected('An ordinary native field was probed.')
           },
         })
       }

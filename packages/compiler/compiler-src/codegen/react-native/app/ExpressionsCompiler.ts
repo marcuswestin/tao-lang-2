@@ -1035,26 +1035,32 @@ function nativePrimitiveResultBranch(type: ASTUtils.TaoType): Compiled | undefin
   if (type.kind !== 'primitive') {
     return undefined
   }
-  switch (type.primitive) {
-    case 'numeric':
-      return gen`if (typeof result === 'number') return TR.Value(TR.checkedNumericBacking(result, ${
+  const rawNumber = () => gen`if (typeof result === 'number') return TR.Value(result);`
+  const rawText = () => gen`if (typeof result === 'string') return TR.Value(result);`
+  const unsupported = () => undefined
+  return Switch(type.primitive, {
+    numeric: () =>
+      gen`if (typeof result === 'number') return TR.Value(TR.checkedNumericBacking(result, ${
         gen.jsLiteral(Type.displayName(type))
-      }));`
-    case 'number':
-    case 'time':
-    case 'duration':
-      return gen`if (typeof result === 'number') return TR.Value(result);`
-    case 'text':
-    case 'color':
-    case 'shortcut':
-      return gen`if (typeof result === 'string') return TR.Value(result);`
-    case 'boolean':
-      return gen`if (typeof result === 'boolean') return TR.Value(result);`
-    case 'none':
-      return gen`if (result === null) return TR.Value(result);`
-    default:
-      return undefined
-  }
+      }));`,
+    number: rawNumber,
+    time: rawNumber,
+    duration: rawNumber,
+    text: rawText,
+    color: rawText,
+    shortcut: rawText,
+    boolean: () => gen`if (typeof result === 'boolean') return TR.Value(result);`,
+    none: () => gen`if (result === null) return TR.Value(result);`,
+    action: unsupported,
+    command: unsupported,
+    design: unsupported,
+    view: unsupported,
+    scene: unsupported,
+    nav: unsupported,
+    datasource: unsupported,
+    data: unsupported,
+    app: unsupported,
+  })
 }
 
 function ratioOf(family: ASTUtils.UnitFamily, unit: string): number {

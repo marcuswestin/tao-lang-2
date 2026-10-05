@@ -37,7 +37,7 @@ export type CallableEffectFact =
     | Readonly<{ kind: 'unknown'; reason: UnknownFactReason }>
   )
 
-export type CallableEffectFinding =
+type CallableEffectFinding =
   & Readonly<{
     owner: AST.Node
     node: AST.Node
