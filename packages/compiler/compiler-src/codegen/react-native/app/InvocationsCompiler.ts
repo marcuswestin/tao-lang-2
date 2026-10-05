@@ -6,7 +6,7 @@ import { Compile } from '../Compile'
 import { actionBlockInterruptsAsk, actionBlockRequiresAsync } from './action-control-flow'
 import { compileValueForType } from './capability-projection'
 import { compileReactiveArgument } from './reactive-parameters'
-import { emitSlotBody } from './renderer-slot-codegen'
+import { compileForwardedSlotSelection, emitSlotBody } from './renderer-slot-codegen'
 import { compileStructuralUiRender } from './structural-ui-render-codegen'
 import { compileBareTextRender } from './ui-render-codegen'
 
@@ -253,6 +253,24 @@ function compileSlotFill(fill: AST.RenderSlotUse, options: CodegenOptions): Comp
   if (body.kind === 'empty') {
     return gen`${gen.jsLiteral(fill.slot.$refText)}: null,`
   }
+  if (body.kind === 'forwarded') {
+    const comparison = ASTUtils.compareRendererSlotForwarding(fill)
+    Assert(comparison?.compatible, 'validated forwarding has a safe input correspondence')
+    if (
+      comparison.correspondence.every(pair => {
+        if (pair.required.labelName !== pair.supplied.labelName) {
+          return false
+        }
+        if (!ASTUtils.containsCapability(pair.supplied.type)) {
+          return true
+        }
+        const transport = ASTUtils.planCapabilityTransport(pair.required.type, pair.supplied.type)
+        return transport.kind === 'ready' && transport.plan.kind === 'identity'
+      })
+    ) {
+      return gen`${gen.jsLiteral(fill.slot.$refText)}: ${compileForwardedSlotSelection(fill)},`
+    }
+  }
   Assert(body.kind !== 'absent', 'validated slot fill has a body')
   const environment = gen`{
     _Scope,
@@ -261,15 +279,17 @@ function compileSlotFill(fill: AST.RenderSlotUse, options: CodegenOptions): Comp
     _TaoAuthScope,
     _TaoSlotDefaults,
   }`
-  return gen`${gen.jsLiteral(fill.slot.$refText)}: ${
-    emitSlotBody({
-      anchor: fill,
-      contract,
-      body: fill,
-      options,
-      environment,
-    })
-  },`
+  const renderer = emitSlotBody({
+    anchor: fill,
+    contract,
+    body: fill,
+    options,
+    environment,
+  })
+  const selected = body.kind === 'forwarded'
+    ? gen`${compileForwardedSlotSelection(fill)} === null ? null : ${renderer}`
+    : renderer
+  return gen`${gen.jsLiteral(fill.slot.$refText)}: ${selected},`
 }
 
 /** studioLensRender wraps exactly each preview occurrence while leaving test and production output untouched. */

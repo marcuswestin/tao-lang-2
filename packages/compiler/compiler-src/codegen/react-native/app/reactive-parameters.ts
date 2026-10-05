@@ -31,7 +31,7 @@ export function compileReactiveArgument(expression: AST.Expression): Compiled {
 
 /** The validator admits only writable roots and ordinary item paths here. */
 export function compileWritableTarget(target: AST.ValueDeclaration, members: readonly string[]): Compiled {
-  const name = { name: Type.declarationName(target) }
+  const name = { name: AST.isRenderSlotInputBinding(target) ? target.name : Type.declarationName(target) }
   let value = gen`${gen.scopeName(name)}`
   for (const member of members) {
     value = gen`(TR.Member(${value}, ${gen.jsLiteral([member])}) as TR.Writable<any>)`

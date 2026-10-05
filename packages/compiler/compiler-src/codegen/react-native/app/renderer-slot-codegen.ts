@@ -20,7 +20,8 @@ export function emitSlotBody(
     environment: Compiled
   }>,
 ): Compiled {
-  const signature = ASTUtils.rendererSlotSignatureOf(input.contract)
+  const occurrence = AST.isRenderSlotUse(input.body) ? input.body : undefined
+  const signature = ASTUtils.rendererSlotSignatureOf(input.contract, occurrence)
   const parameters = signature.inputs.map(input => input.declaration)
   const argumentType = slotArgumentType(signature)
   const environmentType = gen`Readonly<{
@@ -47,7 +48,15 @@ export function emitSlotBody(
         void _TaoSlotDefaults
         const _ViewProps = { ..._SlotParentViewProps, __tao: taoProps ?? _SlotParentViewProps.__tao }
         return TR.BlockScope(_Scope, _Scope => {
-          ${gen.list(parameters, parameter => slotBodyParameterBinding(parameter))}
+          ${
+      occurrence?.inputBindings.length
+        ? gen.list(occurrence.inputBindings, binding => {
+          const domain = ASTUtils.resolveRendererSlotInputBinding(binding)
+          Assert.defined(domain, 'validated inline slot name retains its receiving input')
+          return slotBodyParameterBinding(domain.parameter, domain.input.labelName, binding.name)
+        })
+        : gen.list(parameters, parameter => slotBodyParameterBinding(parameter))
+    }
           ${viewBody}
         })
       }
@@ -148,8 +157,9 @@ function compileNamedSlotRenderer(
   renderer: AST.ViewDeclaration,
   args: Compiled,
   taoProps: Compiled,
+  occurrence: AST.RenderSlotUse,
 ): Compiled {
-  const comparison = ASTUtils.compareRendererSlotRenderer(contract, renderer)
+  const comparison = ASTUtils.compareRendererSlotRenderer(contract, renderer, occurrence)
   Assert(comparison.diagnostics.length === 0, 'validated named slot renderer matches the receiving contract')
   return namedRendererElement(renderer, comparison.correspondence, args, taoProps)
 }
@@ -203,23 +213,56 @@ function compileSlotBody(
     Assert(AST.isViewDeclaration(renderer), 'validated named slot body resolves a view')
     const args = gen`_Scope`
     const element = AST.isRenderSlotUse(body)
-      ? compileNamedSlotRenderer(contract, renderer, args, gen`taoProps`)
+      ? compileNamedSlotRenderer(contract, renderer, args, gen`taoProps`, body)
       : compileDefaultSlotRenderer(contract, renderer, args, gen`taoProps`)
     return gen`return ${element}`
   }
   if (shape.kind === 'render') {
     return gen`return ${Compile.Render(shape.render, options)}`
   }
+  if (shape.kind === 'forwarded') {
+    Assert(AST.isRenderSlotUse(body), 'forwarding belongs to a slot fill')
+    const comparison = ASTUtils.compareRendererSlotForwarding(body)
+    Assert(comparison?.compatible, 'validated forwarding retains its safe input correspondence')
+    const argumentType = slotArgumentType(ASTUtils.rendererSlotSignatureOf(shape.slot.ref!))
+    return gen`return React.createElement(TR.RenderSlots.Frame<${argumentType}>, {
+      renderer: ${compileForwardedSlotSelection(body)},
+      args: {
+        ${
+      gen.list(comparison.correspondence, pair =>
+        gen`${gen.jsLiteral(pair.supplied.labelName)}: ${
+          compileValueForType(
+            gen`args[${gen.jsLiteral(pair.required.labelName)}]`,
+            pair.required.type,
+            pair.supplied.type,
+          )
+        },`)
+    }
+      },
+      taoProps,
+    })`
+  }
   return Compile.RenderBlockBody(shape.block, options)
 }
 
-function slotBodyParameterBinding(parameter: AST.ParameterDeclaration): Compiled {
-  const name = Type.parameterName(parameter)
-  const value = gen`args[${gen.jsLiteral(name)}]`
+export function compileForwardedSlotSelection(fill: AST.RenderSlotUse): Compiled {
+  const source = fill.forwardedSlot?.ref
+  Assert.defined(source, 'validated forwarding resolves the lexical source slot')
+  return gen`TR.RenderSlots.select(_ViewProps.__taoSlots, ${gen.jsLiteral(source.name)}, _TaoSlotDefaults[${
+    gen.jsLiteral(source.name)
+  }])`
+}
+
+function slotBodyParameterBinding(
+  parameter: AST.ParameterDeclaration,
+  argumentName = Type.parameterName(parameter),
+  localName = Type.parameterName(parameter),
+): Compiled {
+  const value = gen`args[${gen.jsLiteral(argumentName)}]`
   const binding = parameter.copy || ASTUtils.parameterRequiresWritable(parameter)
     ? gen`TR.UseParameterCell(${value}, { copy: ${parameter.copy} })`
     : value
-  return gen`_Scope[${gen.jsLiteral(name)}] = ${binding}`
+  return gen`_Scope[${gen.jsLiteral(localName)}] = ${binding}`
 }
 
 function slotArgumentType(signature: ASTUtils.CallableSignature): Compiled {

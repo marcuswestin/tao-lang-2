@@ -5,7 +5,12 @@ import { Compile } from '../Compile'
 /** compileBareTextRender preserves the source value and occurrence while delegating visual output to Text. */
 export function compileBareTextRender(
   render: AST.Render,
-  source: AST.AliasDeclaration | AST.StateDeclaration | AST.ParameterDeclaration | AST.Expression,
+  source:
+    | AST.AliasDeclaration
+    | AST.StateDeclaration
+    | AST.ParameterDeclaration
+    | AST.RenderSlotInputBinding
+    | AST.Expression,
   options: CodegenOptions,
 ): Compiled {
   const value = AST.isExpression(source) ? Compile.Expression(source) : Compile.ValueDeclarationReference(source)

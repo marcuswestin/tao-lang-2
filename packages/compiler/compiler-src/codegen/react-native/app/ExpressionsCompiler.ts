@@ -554,6 +554,7 @@ export const ExpressionsCompiler = {
       DatasourceDeclaration: declaration => gen`${gen.scopeName(declaration)}.evaluate()`,
       NavDeclaration: declaration => gen`${gen.scopeName(declaration)}.evaluate()`,
       ParameterDeclaration: parameter => gen`${gen.scopeName({ name: Type.parameterName(parameter) })}.evaluate()`,
+      RenderSlotInputBinding: binding => gen`${gen.scopeName({ name: binding.name })}.evaluate()`,
       // A phrase compiles to a callable `TR.Function`; a bare reference is its zero-argument call.
       PhraseDeclaration: phrase => gen`TR.Call(${contextualReference(phrase)})`,
       StateDeclaration: state => gen`${gen.scopeName(state)}.evaluate()`,
