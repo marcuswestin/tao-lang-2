@@ -73,6 +73,7 @@ import {
 } from './invocations'
 import { resolveItemPropertyBindings } from './item-property-bindings'
 import { layoutEntryValues, layoutTermValue } from './layouts'
+import { numericUnitReadingCollisions, resolveNumericUnitReading } from './numeric-unit-readings'
 import { NumericUnits } from './NumericUnits'
 import { Packages } from './Packages'
 import {
@@ -103,6 +104,8 @@ export type { NumericUnitsDeclarationPlan, NumericUnitsSuffixResolution } from '
 
 /** ASTUtils groups shared semantic helpers for Tao AST consumers. */
 export const ASTUtils = {
+  resolveNumericUnitReading,
+  numericUnitReadingCollisions,
   createAssociatedEffects,
   resolveAssociatedMethodInvocation,
   associatedCallableAnalysis,
@@ -196,6 +199,7 @@ export const ASTUtils = {
 } as const
 
 export namespace ASTUtils {
+  export type NumericUnitReading = import('./numeric-unit-readings').NumericUnitReading
   export type AssociatedCallableDescriptor = import('./associated-methods').AssociatedCallableDescriptor
   export type AssociatedEffectsContext = import('./associated-methods').AssociatedEffectsContext
   export type CapabilityTransportPlan = import('./capability-transport').CapabilityTransportPlan

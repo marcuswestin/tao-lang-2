@@ -330,7 +330,7 @@ Describe('validator: numeric units', () => {
     )
   })
 
-  Test('keeps nominal descendants unowned and prevents quantity erasure and owner changes', async () => {
+  Test('retains concrete descendant owners and prevents quantity erasure and owner changes', async () => {
     await withValidationParse(
       `
       ${measure}
@@ -352,8 +352,8 @@ Describe('validator: numeric units', () => {
           AST.isTypeDeclaration(statement) && statement.name === 'Descendant'
         )
         Expect.Is(descendant, AST.isTypeDeclaration)
-        Expect(NumericUnits.declarationPlan(descendant)).toBeUndefined()
-        Expect(Type.quantityOwner(Type.ofDefinition(descendant))).toBeUndefined()
+        Expect(NumericUnits.declarationPlan(descendant)?.owner).toBe(descendant)
+        Expect(Type.quantityOwner(Type.ofDefinition(descendant))).toBe(descendant)
         const owner = result.entry.ast.statements.find(statement =>
           AST.isTypeDeclaration(statement) && statement.name === 'Measure'
         )

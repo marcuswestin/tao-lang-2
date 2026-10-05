@@ -65,6 +65,9 @@ export const associatedMethodsValidationChecks = {
   },
   [AST.FunctionDeclaration.$type]: validateFailureBound,
   [AST.MethodCallExpression.$type]: (call, ctx) => {
+    if (ASTUtils.resolveNumericUnitReading(call).kind !== 'not-unit-reading') {
+      return
+    }
     const resolved = ASTUtils.resolveAssociatedMethodInvocation(call)
     if (resolved.problem) {
       if (resolved.problem !== 'unresolved-receiver') {
