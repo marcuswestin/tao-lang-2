@@ -35,16 +35,17 @@ For those, ask when the exchange buys something a subagent of your own would not
 
 ## Model and effort routing
 
-For every GPT task and tier, use the newest GPT-6 Sol available in the harness. Only routine execution with settled inputs and steps, requiring no exploration, judgment, or diagnosis, uses the newest GPT-6 Luna instead. This overrides broader fast/frontier task labels below for GPT. For Claude Code and Cursor, use the newest available release within the table's selected Claude family; preserve each tier's family. Table IDs are concrete generated defaults, not a version ceiling. Keep supported rolling aliases where offered; never invent a latest alias.
+Prefer the newest GPT-6 Luna available for bounded implementation with settled requirements, focused tests, fixture migrations, inventories and routine validation. The brief names expected behavior and requires escalation on surprises, semantic uncertainty or plan changes. The assigning agent checks the exact diff and evidence before integration. Use the newest GPT-6 Sol for unsettled design, delicate shared seams, diagnosis, research and independent review; workers may escalate such questions. Keep useful running work. This policy overrides broader tier labels below for GPT. For Claude Code and Cursor, use the newest available release within the table's selected Claude family; preserve each tier's family. Table IDs are concrete generated defaults, not a version ceiling. Keep supported rolling aliases where offered; never invent a latest alias.
 
-| Work                                                                       | Tier                                        | Effort |
-| -------------------------------------------------------------------------- | ------------------------------------------- | ------ |
-| Mechanical sweeps, file inventories, single-fact lookups across many paths | fast                                        | low    |
-| Codebase exploration, tracing behavior, web research, comparing call sites | standard                                    | medium |
-| Running a verify lane and distilling the failures                          | standard                                    | low    |
-| Implementing a slice that is already specified                             | standard, or deep when the seam is delicate | high   |
-| Adversarial review, architectural judgment, root-cause dead ends           | deep                                        | xhigh  |
-| Language semantics, decisions that are expensive to reverse                | frontier                                    | xhigh  |
+| Work                                                                       | Tier                             | Effort |
+| -------------------------------------------------------------------------- | -------------------------------- | ------ |
+| Mechanical sweeps, file inventories, single-fact lookups across many paths | fast                             | low    |
+| Codebase exploration, tracing behavior, web research, comparing call sites | standard                         | medium |
+| Running a verify lane and distilling the failures                          | standard                         | low    |
+| Implementing a bounded slice with settled requirements                     | fast for GPT, standard otherwise | high   |
+| Implementation involving delicate shared seams or unresolved judgments     | standard or deep                 | high   |
+| Adversarial review, architectural judgment, root-cause dead ends           | deep                             | xhigh  |
+| Language semantics, decisions that are expensive to reverse                | frontier                         | xhigh  |
 
 | Tier     | Claude Code `model` | Codex CLI `model` | Cursor `model`     |
 | -------- | ------------------- | ----------------- | ------------------ |
@@ -73,7 +74,7 @@ A brief the Developer asks you to print takes none of that worktree boilerplate:
 
 ## The return contract and what you do with it
 
-Ask for, and hold agents to, three to seven hundred dense tokens for a routine finding, and up to two thousand only for a review or a design judgment whose reasoning is the deliverable: conclusion first; evidence as `file:line`, commands, or output, not description of evidence; decisions taken and reasoning not obvious from them; open questions and what it did not check. Name the budget in the brief — an agent told nothing writes to the larger figure, and a routine answer at that length is padding the caller pays to read. Agent-to-agent text is exempt from the response shape the Developer reads, not from these:
+Ask for, and hold agents to, three to seven hundred dense tokens for a routine finding, and up to two thousand only for a review or a design judgment whose reasoning is the deliverable: conclusion first; evidence as `file:line`, commands, or output, not description of evidence; decisions taken and reasoning not obvious from them; open questions and what it did not check. Name the budget in the brief — an agent told nothing writes to the larger figure, and a routine answer at that length is padding the caller pays to read. Commit coherent reviewed implementation slices at sensible milestones, using only owned paths; a shared-checkout worker returns its diff for the assigning agent to commit. Agent-to-agent text is exempt from the response shape the Developer reads, not from these:
 
 - **Restate nothing the brief said.** Answer what was asked, in the order asked, and stop.
 - **Read `Docs/Roadmap/Developer environment upgrades/` before calling a finding new.** It often holds it, and may record the numbers it rests on as withdrawn — `DEVENV-046` had, for durations an analysis was later built on.

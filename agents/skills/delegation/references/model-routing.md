@@ -13,10 +13,10 @@ Claude Code and Codex accept `low`/`medium`/`high`/`xhigh` effort in `effort` an
 
 [Codex subagent precedence](https://developers.openai.com/codex/subagents) gives an explicit spawn
 model priority over `agents.default_subagent_model`; a custom agent file can pin its own model.
-The repository generates `[agents]` from the standard row. Every GPT task follows the skill's newest
-GPT-6 Sol policy, including frontier work; only routine execution of fully determined steps uses
-newest GPT-6 Luna. Inventories, research, failure interpretation, implementation judgment, and reviews
-use Sol. Pass the selected concrete ID explicitly when the harness allows it. Generated defaults
+The repository generates `[agents]` from the standard row. Follow the skill's task-selection policy:
+bounded settled implementation favors the fast tier, with escalation and assigning-agent review;
+unsettled judgments and independent reviews use the appropriate higher tier. Pass the selected
+concrete ID explicitly when the harness allows it. Generated defaults
 and role files still require concrete IDs. `model-audit` reports when those
 defaults lag; refreshing them is a separate repository change, not an automatic catalog rewrite.
 An unavailable newest release is a reported limitation, not permission to silently change families.
