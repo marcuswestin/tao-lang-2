@@ -35,12 +35,20 @@ Describe('Syntax2 Shelf mounted source', () => {
     await mountShelf('', '@item Item, Position -> Text("{Item.ToText()}:{Position.Ordinal}")')
   })
 
+  Test('mounts the actual inline row value through its authored ui witness', async () => {
+    await mountShelf('', '@item Item, Position -> Item', ['Ada', 'Grace'])
+  })
+
   Test('forwards an ordinary Shelf default @item into the public LazyList', async () => {
     await mountShelf('@item(Item Entry, Occurrence): RowView', '@item: @item')
   })
 })
 
-async function mountShelf(shelfSlot: string, lazyListSlot: string): Promise<void> {
+async function mountShelf(
+  shelfSlot: string,
+  lazyListSlot: string,
+  expectedTexts: readonly string[] = ['Ada:1', 'Grace:2'],
+): Promise<void> {
   const runtime = TaoReactNative.requireReactNativeRuntime()
   const FlatList = (props: FlatListProps): React.ReactElement =>
     React.createElement(
@@ -99,8 +107,9 @@ async function mountShelf(shelfSlot: string, lazyListSlot: string): Promise<void
         }
       `,
       screen => {
-        Expect(screen.getByText('Ada:1')).toBeDefined()
-        Expect(screen.getByText('Grace:2')).toBeDefined()
+        for (const text of expectedTexts) {
+          Expect(screen.getByText(text)).toBeDefined()
+        }
       },
     )
   } finally {
