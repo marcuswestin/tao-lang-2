@@ -7,7 +7,7 @@ import {
   resolveAssociatedConversion,
 } from './associated-converters'
 import {
-  associatedCallableAnalysis,
+  associatedCallableAdmissionAnalysis,
   type AssociatedCallableDeclaration,
   type AssociatedCallableDescriptor,
   associatedCallableDescriptor,
@@ -825,7 +825,7 @@ export class Type {
       for (let index = 0; index < required.length; index++) {
         const implementation = implementations[index] as Extract<AssociatedCapabilityImplementation, { kind: 'ready' }>
         const supplied = implementation.supplied
-        const analysis = projection ? undefined : associatedCallableAnalysis(supplied.declaration)
+        const analysis = projection ? undefined : associatedCallableAdmissionAnalysis(supplied.declaration)
         if (
           !projection && (!analysis || !puritySatisfiesFunction(analysis.effects.purity)
             || !failureContractSatisfiesBound(analysis.effects.failures, supplied.signature.failures))

@@ -1,7 +1,7 @@
 import { AST } from '@parser'
 import { Switch } from '@shared'
 import {
-  associatedCallableAnalysis,
+  associatedCallableAdmissionAnalysis,
   type AssociatedCallableDescriptor,
   associatedCallableDescriptor,
   hasAssociatedEffects,
@@ -299,7 +299,7 @@ class CapabilityTransportPlanner {
         return unknown('unresolved-domain')
       }
       if (actual.kind !== 'capability' && !actual.genericParameter) {
-        const analysis = associatedCallableAnalysis(declaration)
+        const analysis = associatedCallableAdmissionAnalysis(declaration)
         if (!analysis || analysis.effects.purity.open) {
           return unknown('missing-proof')
         }
@@ -315,7 +315,7 @@ class CapabilityTransportPlanner {
       }
       const analysis = actual.kind === 'capability' || actual.genericParameter
         ? undefined
-        : associatedCallableAnalysis(method.supplied.declaration)
+        : associatedCallableAdmissionAnalysis(method.supplied.declaration)
       const comparisonSignature = Type.capabilityImplementationSignature(method)
       const signature = analysis
         ? { ...comparisonSignature, failures: analysis.effects.failures }

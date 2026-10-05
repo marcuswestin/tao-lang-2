@@ -27,6 +27,8 @@ export type AssociatedEffectsContext = Readonly<{
     AssociatedCallableDescriptor
   >
   analyses: ReadonlyMap<AST.Node, CallableAnalysis>
+  /** Mounted descriptor creation has a separate execution boundary from its deferred body. */
+  creatorAnalyses?: ReadonlyMap<AST.AssociatedViewDeclaration, CallableAnalysis>
 }>
 
 type AssociatedAdmissionContext = AssociatedEffectsContext & {
@@ -41,6 +43,7 @@ export function withAssociatedEffects<T>(context: AssociatedEffectsContext, cons
   associatedEffectsContext = {
     descriptors: new Map(context.descriptors),
     analyses: new Map(context.analyses),
+    creatorAnalyses: new Map(context.creatorAnalyses),
     visiting: new Map(),
   }
   try {
@@ -62,6 +65,13 @@ export function associatedCallableDescriptor(
 
 export function associatedCallableAnalysis(declaration: AST.Node): CallableAnalysis | undefined {
   return associatedEffectsContext?.analyses.get(declaration)
+}
+
+/** Structural substitution consumes creator proof for mounted views, body proof for functions. */
+export function associatedCallableAdmissionAnalysis(declaration: AST.Node): CallableAnalysis | undefined {
+  return AST.isAssociatedViewDeclaration(declaration)
+    ? associatedEffectsContext?.creatorAnalyses?.get(declaration)
+    : associatedCallableAnalysis(declaration)
 }
 
 /** A repeated real declaration pair cannot justify structural admission through itself. */

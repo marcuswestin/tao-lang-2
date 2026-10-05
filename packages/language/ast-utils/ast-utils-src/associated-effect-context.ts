@@ -12,6 +12,7 @@ import { projectCallableEffectPublications } from './callable-effect-publication
 import { analyzeCallableEffects, type CallableAnalysis, type PurityContract } from './callable-effects'
 import { publishCanonicalEffectSnapshot } from './canonical-effect-snapshot'
 import type { FailureContract } from './failure-contracts'
+import { mountedViewCreationAnalysis } from './mounted-view-creation'
 import { Type } from './Type'
 
 /** Materialize correspondence, discover real source effects, then seal final structural admission. */
@@ -31,6 +32,7 @@ export function createAssociatedEffects(files: readonly AST.TaoFile[]): Associat
     AssociatedCallableDescriptor
   >()
   const analyses = new Map<AST.Node, CallableAnalysis>()
+  const creatorAnalyses = new Map<AST.AssociatedViewDeclaration, CallableAnalysis>()
   const requirements = new Map<
     AST.CapabilityMethodDeclaration,
     Readonly<{ purity: PurityContract; failures: FailureContract }>
@@ -82,6 +84,12 @@ export function createAssociatedEffects(files: readonly AST.TaoFile[]): Associat
     if (contract.kind === 'ready') {
       descriptors.set(method, contract.descriptor)
     }
+    if (AST.isAssociatedViewDeclaration(method)) {
+      const creator = mountedViewCreationAnalysis(snapshot, method)
+      if (creator) {
+        creatorAnalyses.set(method, creator)
+      }
+    }
   }
   for (const declaration of snapshot.descriptors.keys()) {
     if (
@@ -93,5 +101,5 @@ export function createAssociatedEffects(files: readonly AST.TaoFile[]): Associat
       analyses.set(declaration, analyzeCallableEffects(declaration, facts))
     }
   }
-  return Object.freeze({ descriptors, analyses })
+  return Object.freeze({ descriptors, analyses, creatorAnalyses })
 }
