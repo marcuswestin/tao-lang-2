@@ -35,6 +35,12 @@ For those, ask when the exchange buys something a subagent of your own would not
 
 ## Model and effort routing
 
+Choose the model and effort for every spawn explicitly; ignore personal, harness, and project
+defaults and parent inheritance. Pass the chosen model and effort as spawn arguments when the
+tool accepts them. If a history-fork mode forbids overrides, use a self-contained brief in a mode
+that allows them; if a role fixes its model or effort, choose a role whose pins match the work.
+Report unavailable choices rather than silently falling back to defaults.
+
 For every GPT task and tier, use the newest GPT-6 Sol available in the harness. Only routine execution with settled inputs and steps, requiring no exploration, judgment, or diagnosis, uses the newest GPT-6 Luna instead. This overrides broader fast/frontier task labels below for GPT. For Claude Code and Cursor, use the newest available release within the table's selected Claude family; preserve each tier's family. Table IDs are concrete generated defaults, not a version ceiling. Keep supported rolling aliases where offered; never invent a latest alias.
 
 | Work                                                                       | Tier                                        | Effort |
@@ -55,7 +61,7 @@ For every GPT task and tier, use the newest GPT-6 Sol available in the harness. 
 
 `repo-lint` checks profile pins against this table; Codex `[agents]` defaults come from the standard row. See [model routing](references/model-routing.md) for precedence, availability, effort syntax, and completed-task measurement.
 
-Downward is the usual direction: a deep or frontier orchestrator almost never lets a subagent inherit its model, so say the tier explicitly. Upward, a standard or deep orchestrator escalates one hard question to `oracle` — a root cause that survived two attempts, a costly design fork, a diagnosis you keep circling — read-only, no mandate to fix; name the frontier tier on the call if you are already there, since `oracle` defaults to deep. Effort is separate from tier: a stronger model at low effort beats a weaker one at high effort for judgment, and loses for breadth.
+Upward, a standard or deep orchestrator escalates one hard question to `oracle` — a root cause that survived two attempts, a costly design fork, a diagnosis you keep circling — read-only, no mandate to fix; choose its model and effort under the same routing policy. Effort is separate from tier: a stronger model at low effort beats a weaker one at high effort for judgment, and loses for breadth.
 
 ## Choosing the tier
 
