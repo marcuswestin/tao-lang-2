@@ -15,6 +15,8 @@ type StudioTestProcessRunnerOptions = {
   cwd: string
   env?: Readonly<Record<string, string>>
   stopTimeoutMs?: number
+  /** Keep controlled subprocess tests out of the persistent machine discovery index. */
+  resourceIndexRoot?: string
 }
 
 const retainedOutputBytes = 1_000_000
@@ -70,10 +72,11 @@ export class StudioTestProcessRunner implements StudioTestRunner {
     this.#lastJourneyObservations = undefined
     const startedAt = Date.now()
     const output = new StudioTestProcessOutput(retainedOutputBytes)
-    const command = startStudioProcessTree(this.#options.command, {
+    const command = await startStudioProcessTree(this.#options.command, {
       args: [...this.#options.args, '--journey-observations', journeyObservationsPath],
       cwd: this.#options.cwd,
       env: this.#options.env,
+      resourceIndexRoot: this.#options.resourceIndexRoot,
       onOutput(_stream, chunk) {
         output.write(chunk)
       },
