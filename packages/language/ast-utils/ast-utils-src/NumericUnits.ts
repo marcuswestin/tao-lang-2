@@ -59,12 +59,12 @@ export class NumericUnits {
     let current: AST.TypeDeclaration | undefined = owner
     while (current && !visited.has(current)) {
       visited.add(current)
-      const alias = current.aliasTarget?.member.ref
+      const alias: AST.Declaration | undefined = current.aliasTarget?.member.ref
       if (AST.isTypeDeclaration(alias)) {
         current = alias
         continue
       }
-      const type = current.type
+      const type: AST.TypeExpression | undefined = current.type
       if (!type) {
         return undefined
       }
@@ -72,14 +72,18 @@ export class NumericUnits {
         if (type.slots.unitBlocks.length > 0) {
           return NumericUnits.directDeclarationPlan(current) ? current : undefined
         }
-        const parent = Type.definitionOfReference(type.base)
+        const parent: AST.TypeDefinition | undefined = AST.isNamedTypeReference(type.base)
+          ? Type.definitionOfReference(type.base)
+          : undefined
         if (!AST.isTypeDeclaration(parent)) {
           return undefined
         }
         current = parent
         continue
       }
-      const parent = AST.isNamedTypeReference(type) ? Type.definitionOfReference(type) : undefined
+      const parent: AST.TypeDefinition | undefined = AST.isNamedTypeReference(type)
+        ? Type.definitionOfReference(type)
+        : undefined
       if (!AST.isTypeDeclaration(parent)) {
         return undefined
       }

@@ -31,7 +31,7 @@ export const numericUnitReadingsValidationChecks = {
     if (!owner.type || !AST.isDerivedTypeExpression(owner.type) || owner.type.slots.unitBlocks.length === 0) {
       return
     }
-    const parent = Type.definitionOfReference(owner.type.base)
+    const parent = AST.isNamedTypeReference(owner.type.base) ? Type.definitionOfReference(owner.type.base) : undefined
     if (AST.isTypeDeclaration(parent) && NumericUnits.unitOwner(parent)) {
       for (const block of owner.type.slots.unitBlocks) {
         ctx.error(block, messages.inheritedTable)
