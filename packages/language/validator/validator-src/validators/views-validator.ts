@@ -359,7 +359,10 @@ function validateRender(
   owningBlock: AST.Block,
   ctx: ValidationContext,
 ): void {
-  if (AST.isRenderStatement(render) && render.view === undefined && render.injection === undefined) {
+  if (
+    AST.isRenderStatement(render) && render.view === undefined
+    && render.expression === undefined && render.injection === undefined
+  ) {
     ctx.error(render, viewValidationMessages.renderTarget)
   }
   // The one fact a scene carries that a body cannot state. Diagnosing it here, at the render site,
@@ -367,6 +370,18 @@ function validateRender(
   // end up composed inline where no host would read it. A nav is a scene by the Prelude and is the
   // one exception: it supplies its own chrome, so a render site may name it.
   const target = render.view?.ref
+  if (render.expression !== undefined && ASTUtils.resolveRenderTarget(render) === undefined) {
+    const type = Type.ofExpression(render.expression)
+    if (type.kind !== 'unresolved') {
+      ctx.error(
+        render,
+        viewValidationMessages.bareRenderTargetType(
+          render.expression.$cstNode?.text ?? 'expression',
+          Type.displayName(type),
+        ),
+      )
+    }
+  }
   if (
     (AST.isAliasDeclaration(target) || AST.isStateDeclaration(target) || AST.isParameterDeclaration(target))
     && ASTUtils.resolveRenderTarget(render) === undefined

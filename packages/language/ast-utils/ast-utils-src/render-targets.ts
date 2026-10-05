@@ -9,11 +9,22 @@ import { Type } from './Type'
 export type RenderTarget =
   | { kind: 'view'; view: AST.ViewDeclaration }
   | { kind: 'nav'; declaration: AST.NavDeclaration }
-  | { kind: 'text'; declaration: AST.AliasDeclaration | AST.StateDeclaration | AST.ParameterDeclaration }
+  | {
+    kind: 'text'
+    declaration: AST.AliasDeclaration | AST.StateDeclaration | AST.ParameterDeclaration
+    expression?: undefined
+  }
+  | { kind: 'text'; expression: AST.Expression; declaration?: undefined }
   | { kind: 'parameter'; parameter: AST.ParameterDeclaration; family: 'view' | 'scene' | 'nav' }
 
 /** resolveRenderTarget classifies the linked target of one render site. */
 export function resolveRenderTarget(render: AST.Render): RenderTarget | undefined {
+  if (render.expression) {
+    const type = Type.ofExpression(render.expression)
+    return type.kind === 'primitive' && type.primitive === 'text'
+      ? { kind: 'text', expression: render.expression }
+      : undefined
+  }
   const target = render.view?.ref
   if (!target) {
     return undefined
@@ -51,7 +62,9 @@ export function renderTargetName(target: RenderTarget): string {
     : target.kind === 'nav'
     ? target.declaration.name
     : target.kind === 'text'
-    ? Type.declarationName(target.declaration)
+    ? target.expression !== undefined
+      ? target.expression.$cstNode?.text ?? 'expression'
+      : Type.declarationName(target.declaration)
     : Type.parameterName(target.parameter)
 }
 

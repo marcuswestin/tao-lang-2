@@ -28,7 +28,15 @@ export const InvocationsCompiler = {
     const target = ASTUtils.resolveRenderTarget(render)
     Assert.defined(target, 'validated render names a supported visual or text value', { render: render.view?.$refText })
     if (target.kind === 'text') {
-      return studioLensRender(render, compileBareTextRender(render, target.declaration, options), options)
+      return studioLensRender(
+        render,
+        compileBareTextRender(
+          render,
+          target.expression !== undefined ? target.expression : target.declaration,
+          options,
+        ),
+        options,
+      )
     }
     if (target.kind !== 'view') {
       return Compile.RenderOccurrence(render, target, options)

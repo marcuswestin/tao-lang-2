@@ -11,6 +11,25 @@ import {
 } from './test-validate'
 
 Describe('validator: bare renders', () => {
+  Test('admits qualified text fields and associated text results', async () => {
+    await testValidateCode(`
+      type ContentValue is { Content text }
+      type Token is text with { func Label() fails never -> text { return Token } }
+      view Field(Value ContentValue) { render Value.Content }
+      view Method(Value Token) { render Value.Label() }
+    `)
+  })
+
+  Test('diagnoses qualified scalar fields before code generation', async () => {
+    const result = await testValidateCodeWithErrors(`
+      type Counter is { Count number }
+      view Main(Value Counter) { render Value.Count }
+    `)
+    Expect(validationErrorMessages(result)).toEqual([
+      ViewsValidator.messages.bareRenderTargetType('Value.Count', 'Counter.Count'),
+    ])
+  })
+
   Test('renders linked text aliases, states, and parameters as text values', async () => {
     const result = await testValidateCode(`
       view AliasText { let Title = "Books" render Title }
@@ -46,11 +65,11 @@ Describe('validator: bare renders', () => {
         Expect.Is(root, AST.isRenderStatement)
         Expect.Is(root.block, AST.isBlock)
         const child = AST.streamAllContents(root).filter(AST.isViewRender)
-          .find(render => render.view.$refText === 'Caption')
+          .find(render => render.view?.$refText === 'Caption')
         Expect.Is(child, AST.isViewRender)
         const inner = AST.streamAllContents(root.block).find(AST.isAliasDeclaration)
         Expect.Is(inner, AST.isAliasDeclaration)
-        Expect(child.view.ref).toBe(inner)
+        Expect(child.view?.ref).toBe(inner)
         Expect(validationErrorMessages(result)).toEqual([
           ViewsValidator.messages.bareRenderTargetType('Caption', 'number'),
           ViewsValidator.messages.bareRenderTargetType('Count', 'number'),
