@@ -278,6 +278,19 @@ target. No production source, owner typing, grammar, native imports or metadata 
 released. A bounded worker may implement this settled migration; its manager reviews and commits
 the exact diff and returns focused proof before coordinator integration.
 
+B now owns the renderer-slot frontend in exactly six existing paths under packages/language:
+parser/parser-grammar/{views,blocks}.langium; parser/parser-src/{ast-structure,value-scope,parser}.ts;
+and ast-utils/ast-utils-src/reactive-parameters.ts. Three new paths are released:
+parser/parser-tests/renderer-slots.test.ts, ast-utils/ast-utils-src/renderer-slots.ts and
+ast-utils/ast-utils-tests/renderer-slots.test.ts. Consume the integrated lowercase lexer and
+associated AST at `62d34b064`; preserve their guards and regression suites. Add real slot
+parameters, placement arguments, binder/default/body ownership and repeated placements through
+the existing parameter-array callable and binding APIs. Keep ParameterizedDeclaration unchanged
+and use a separate slot accessor. Prove receiving fills versus placements, explicit empty,
+legacy zero-input bodies, missing/duplicate/unknown arguments and writable variance. No Type,
+matcher, validator/formatter registration, shared compiler, facade or generated output ownership
+is transferred. Request the follow-on registration hooks after this bounded frontend returns.
+
 Managers implement against supplied frozen inputs in isolated worktrees and reconcile the landed
 base before frozen return. This manifest transfers no unlisted shared file implicitly.
 
