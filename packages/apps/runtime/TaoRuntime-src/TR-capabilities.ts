@@ -2,7 +2,7 @@ import type TR from './TR'
 import type { TaoEvaluable } from './TR-action-values'
 import { RuntimeAssert } from './TR-assert'
 import { getJSValue } from './TR-js-value'
-import { registerCompleteRuntimeValue, type TaoRuntimeValue } from './TR-reactive-values'
+import { isRuntimeValue, registerCompleteRuntimeValue, type TaoRuntimeValue } from './TR-reactive-values'
 
 declare const capabilityBrand: unique symbol
 
@@ -75,6 +75,17 @@ export function createCapabilityRuntime(functionFactory: typeof TR.Function) {
     ): TaoCapability<ValueT> {
       RuntimeAssert(!ownedCapabilities.has(originalSource), 'a concrete source rather than an attached capability')
       return create(originalSource, new Map(Object.entries(witnesses)))
+    },
+
+    /** A validated contextual Self result keeps selected witnesses but binds them to its new receiver. */
+    rebind<ValueT>(
+      donor: TaoCapability,
+      newSource: TaoEvaluable<ValueT>,
+    ): TaoCapability<ValueT> {
+      const selected = metadata(donor)
+      RuntimeAssert(isRuntimeValue(newSource), 'a runtime-owned contextual Self result')
+      const concreteSource = ownedCapabilities.get(newSource)?.source ?? newSource
+      return create(concreteSource as TaoEvaluable<ValueT>, selected.witnesses)
     },
 
     /** Maps each receiving requirement key to an already selected key; unrequested methods disappear. */

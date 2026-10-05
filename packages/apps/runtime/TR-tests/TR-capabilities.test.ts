@@ -10,6 +10,58 @@ import { completeRuntimeValue } from '../TaoRuntime-src/TR-reactive-values'
 const capabilities = TR.Capability
 
 Describe('Capability witnesses', () => {
+  Test('rebinds selected adapted witnesses to a new live Self result without reading or changing the donor', () => {
+    const original = TR.Cell(TR.Value('Original'))
+    const replacement = TR.Cell(TR.Value('Replacement'))
+    let reads = 0
+    const source = TR.Alias(() => {
+      reads += 1
+      return replacement.evaluate()
+    })
+    const donor = capabilities.attach(original, {
+      display: TR.Function((receiver: TaoEvaluable<string>, suffix: TaoEvaluable<string>) =>
+        TR.Value(`${getJSValue(receiver)}${getJSValue(suffix)}`)
+      ),
+      clone: TR.Function((receiver: TaoEvaluable<string>) => {
+        Expect(receiver).toBe(source)
+        return receiver
+      }),
+    })
+    const projected = capabilities.reproject(donor, { text: 'display', clone: 'clone' }, {
+      text: selected => TR.Function((receiver: TR.Evaluable) => selected.invoke(receiver, TR.Value('!'))),
+    })
+    const rebound = capabilities.rebind(projected, source)
+    const text = capabilities.method(rebound, 'text')
+    Expect(reads).toBe(0)
+    Expect(TR.Call<string>(text).getJSValue()).toBe('Replacement!')
+    Expect(TR.Call<string>(capabilities.method(rebound, 'clone')).getJSValue()).toBe('Replacement')
+    replacement.set(TR.Value('Changed'))
+    Expect(TR.Call<string>(text).getJSValue()).toBe('Changed!')
+    Expect(TR.Call<string>(capabilities.method(projected, 'text')).getJSValue()).toBe('Original!')
+    Expect(() => capabilities.method(rebound, 'display')).toThrow(UnexpectedBehaviorError)
+    Expect(Object.getOwnPropertySymbols(rebound)).toEqual([])
+  })
+
+  Test('unwraps an owned result carrier and rejects counterfeit rebind inputs without getter probes', () => {
+    const source = TR.Value('New')
+    const donor = capabilities.attach(TR.Value('Old'), {
+      identity: TR.Function((receiver: TaoEvaluable<string>) => receiver),
+    })
+    const wrapped = capabilities.attach(source, {})
+    const rebound = capabilities.rebind(donor, wrapped)
+    Expect(TR.Call<string>(capabilities.method(rebound, 'identity'))).toBe(source)
+    let probes = 0
+    const counterfeit = {
+      get evaluate() {
+        probes += 1
+        return () => TR.Value('Counterfeit')
+      },
+    } as unknown as TaoCapability<string>
+    Expect(() => capabilities.rebind(counterfeit, source)).toThrow(UnexpectedBehaviorError)
+    Expect(() => capabilities.rebind(donor, counterfeit)).toThrow(UnexpectedBehaviorError)
+    Expect(probes).toBe(0)
+  })
+
   Test('keeps receiver backing private so public property writes cannot diverge from selected witnesses', () => {
     const source = TR.Cell(TR.Value('Original'))
     const carrier = capabilities.attach(source, {

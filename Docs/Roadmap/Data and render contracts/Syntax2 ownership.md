@@ -82,6 +82,13 @@ primitives. Unsupported web or absent native capability reports HostEnvironmentE
 silently changing the timing contract. Root retains TR-time hookup, the facade and standard Time
 declarations. Native build evidence and actual device-sleep acceptance remain distinct.
 
+C may also delegate the isolated app-owned BookBackend.ts leaf and its focused
+TR-tests/syntax2-book-backend.test.ts to a fast worker while native compilation runs. It implements
+the README's deterministic memory backend, bounded server pages and opaque continuation ownership,
+revision-specific acknowledgment and owned export-file operations with controlled failures.
+Root retains BookIO binding, schemas, query syntax, live-handle projection and all Tao app edits.
+This adapter leaf adds no universal query/status API and cannot count as completed app integration.
+
 D additionally owns TR-action-transactions.ts and its existing transaction/defer tests for a real
 root cancellation signal inherited by joined calls. Checked Wait consumes that signal through the
 root-owned facade; cleanup drains with cancellation shielded. Abandoned launches retain existing
