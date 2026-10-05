@@ -1,4 +1,5 @@
 use all from @tao/ui
+use UpperCase, Length from @tao/core
 use ComparedNames, PersonName, Subtract from ./library/Library
 
 app LibraryApp {
@@ -23,6 +24,7 @@ view Library {
    state Feedback = ""
    let Person = PersonName(ProfileName "Ada", .FamilyName "Lovelace")
    let Readers = ComparedNames ["Ada", "Lovelace"]
+   let Shout = UpperCase(ProfileName "Ada")
    // 3. An inferred source result reaches the joined completion handler.
    action ReadyMessage() {
       return "Ready"
@@ -31,7 +33,8 @@ view Library {
       #heading accessible label "Library"
       Banner(Subtitle "Reversed text roles", Title "Library")
       Person
-      "{ Readers.Count } readers"
+      Shout
+      "{ Length(Readers) } readers"
       Feedback
       Row {
          Button("Show feedback") {
