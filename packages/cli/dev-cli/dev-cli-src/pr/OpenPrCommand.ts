@@ -14,7 +14,7 @@ import { type ReviewedMergeMessage, reviewedMergeMessage } from './ReviewedMerge
  * behind the injected `run` seam below rather than a direct `CLI.run` call — the house pattern
  * `android.ts`'s `compatibility.requireAdb ?? requireAdb` uses for the same reason: a test can script
  * every answer without a real remote or a real `gh`. It never force-pushes, and it never merges
- * directly: GitHub merges once Verify passes, or `merge-pr` does.
+ * directly: once the checks pass it names `merge-pr`, which merges unless auto-merge already did.
  */
 
 const FEATURE_BRANCH_PREFIX = 'feat/'
@@ -107,6 +107,11 @@ export const OpenPrCommand = {
       options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS,
       report,
     )
+    if (exitCode === 0) {
+      report(
+        `NEXT  Run merge-pr: it confirms Verify on this head, merges #${pr.number} unless auto-merge did, and archives it.`,
+      )
+    }
 
     return { exitCode, lines }
   },

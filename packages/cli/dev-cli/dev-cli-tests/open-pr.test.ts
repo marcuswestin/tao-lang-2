@@ -145,6 +145,7 @@ Describe('open-pr', () => {
       calls.indexOf(routeKey('gh', ['pr', 'checks', '2', '--watch'], ROOT)),
     )
     Expect(result.lines).toContain('PASS  All 1 check(s) succeeded.')
+    Expect(result.lines.at(-1)).toStartWith('NEXT  Run merge-pr')
     // Auto-merge goes on once checks exist on the head, so Verify is pending when GitHub reads it.
     const autoMerge = calls.indexOf(routeKey('gh', ['pr', 'merge', '2', '--auto', '--squash'], ROOT))
     Expect(autoMerge).toBeGreaterThan(calls.lastIndexOf(headViewKey(2)))
@@ -261,6 +262,7 @@ Describe('open-pr', () => {
     Expect(calls.some(call => call.startsWith('gh pr create') || call.startsWith('gh pr merge'))).toBe(false)
     Expect(result.lines).toContain('PASS  Auto-merge is already on for #7.')
     Expect(result.lines).toContain('PASS  All 1 check(s) succeeded.')
+    Expect(result.lines.at(-1)).toStartWith('NEXT  Run merge-pr')
   })
 
   Test('opens a pull request titled by the merge message and fails when a check fails', async () => {

@@ -107,11 +107,12 @@ archiving the branch at `merged/<name>`:
   "Propose it as ready to land" lists below, short of anything only a host lane exercises. Write and
   review the message at `.artifacts/merge/<branch>.msg`, then run `./agent unsandboxed open-pr`: it
   pushes, makes the message the pull request's title and description (what the squash commit says),
-  turns on auto-merge, and follows the checks. GitHub merges once the required `Verify` passes, deletes
-  the branch, and the archive workflow writes `merged/<name>`. To change the message, edit it and run
-  `open-pr` again. `./agent unsandboxed merge-pr` waits for the verdict and reports the merge, merging
-  itself if auto-merge is off. Never run `gh pr merge` directly: the Developer's login can bypass
-  `Verify`, and the harness refuses it.
+  turns on auto-merge, and follows the checks. When they pass, run `./agent unsandboxed merge-pr`: it
+  confirms `Verify` passed on the pushed head, squash-merges unless auto-merge already did, archives
+  `merged/<name>`, and reports the merge. GitHub deletes the branch, and the archive workflow writes the
+  same `merged/<name>` for a pull request merged any other way. To change the message, edit it and run
+  `open-pr` again. When a check fails, read `./agent pr-checks`, fix, commit, and run `open-pr` again.
+  Never run `gh pr merge` directly: the Developer's login can bypass `Verify`, and the harness refuses it.
 - **`./agent unsandboxed land`** when the change reaches a host-only lane (Studio, browser, native
   shell, simulator, canary), or when CI is unavailable: it verifies on this machine under the landing
   lock, including what the hosted runners cannot.
