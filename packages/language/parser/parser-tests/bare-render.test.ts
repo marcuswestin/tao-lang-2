@@ -56,7 +56,7 @@ Describe('parser: bare renders', () => {
     const parsed = await testParseCode(`
       view Main(Value text) {
         guard Value Failed -> Failure { Handler(Failure) }
-        render Host { when Value { missing -> Reason { Handler(Reason) } otherwise -> Leaf } }
+        render Host { when Value { missing Reason -> { Handler(Reason) } otherwise -> Leaf } }
       }
       view Handler(Value text) { render Leaf }
       view Host { render Leaf }

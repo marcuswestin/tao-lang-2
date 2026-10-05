@@ -156,7 +156,7 @@ Describe('compiler: functional core', () => {
       view Main(Document) {
         render Stack() {
           when Document {
-            error -> Message { Text(Message) }
+            error Message -> { Text(Message) }
             otherwise -> { Text("Ready") }
           }
         }

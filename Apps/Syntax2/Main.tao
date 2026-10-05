@@ -44,7 +44,11 @@ view Library {
       "{ Subtract(Right 2, Left 5) }"
       Spacer
       Button("Group") {
-         on press -> { toggle GroupMode }
+         // 4. Matching cases are captured before a selected action mutates their subject.
+         on press -> when GroupMode {
+            true -> { set GroupMode = false }
+            false -> { set GroupMode = true }
+         }
       }
       when GroupMode {
          true -> "Grouped books."

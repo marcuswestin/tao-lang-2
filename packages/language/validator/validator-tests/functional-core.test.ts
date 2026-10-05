@@ -255,7 +255,7 @@ Describe('validator: functional core', () => {
     view Main(Document) {
       render Stack() {
         when Document {
-          error -> Message { Text(Message.Message) }
+          error Message -> { Text(Message.Message) }
           otherwise -> { Text("Ready") }
         }
       }

@@ -67,16 +67,17 @@ export const StatementsFormatter = {
     f.oneSpaceBeforeProperty('type')
   },
 
-  /** WhenRenderStatement puts each branch and its required fallback on an indented line. */
+  /** WhenRenderStatement puts each branch and its optional fallback on an indented line. */
   WhenRenderStatement(f) {
     f.oneSpaceAfter('when')
-    if (f.node.otherwise?.barSyntax) {
-      f.indentedLines([...f.node.branches, f.node.otherwise])
+    const branches = [...f.node.branches, ...(f.node.otherwise ? [f.node.otherwise] : [])]
+    if (f.node.otherwise?.barSyntax || f.node.branches.some(branch => branch.barSyntax)) {
+      f.indentedLines(branches)
       return
     }
     f.oneSpaceBefore('{')
-    f.indentedBraceBlock([...f.node.branches, f.node.otherwise])
-    f.lineSeparatedList([...f.node.branches, f.node.otherwise])
+    f.indentedBraceBlock(branches)
+    f.lineSeparatedList(branches)
   },
 
   /** WhenRenderBranch spaces its condition against the branch arrow. */

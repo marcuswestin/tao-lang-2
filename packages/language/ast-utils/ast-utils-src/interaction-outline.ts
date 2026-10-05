@@ -190,7 +190,7 @@ function siblingRootRenders(statements: readonly AST.Statement[], renderedNav: A
     } else if (AST.isRenderSlotUse(statement) && statement.render) {
       roots.push(statement.render)
     } else if (AST.isWhenRenderStatement(statement)) {
-      for (const branch of [...statement.branches, statement.otherwise]) {
+      for (const branch of [...statement.branches, ...(statement.otherwise ? [statement.otherwise] : [])]) {
         roots.push(...siblingRootRenders(branch.block.statements, renderedNav))
       }
     } else if (AST.isGuardRenderStatement(statement)) {
