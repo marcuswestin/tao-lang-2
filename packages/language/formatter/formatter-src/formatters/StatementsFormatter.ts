@@ -161,7 +161,7 @@ export const StatementsFormatter = {
     f.oneSpaceAfter('on')
     f.oneSpaceBefore('->')
     f.oneSpaceBeforeProperty('action')
-    if (f.node.payload !== undefined) {
+    if (f.node.payload !== undefined || (f.node.block && !f.node.block.$cstNode?.text.startsWith('{'))) {
       f.oneSpaceAfter('->')
     }
   },

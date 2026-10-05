@@ -6,6 +6,7 @@ import { Compile } from '../Compile'
 import { actionBlockInterruptsAsk, actionBlockRequiresAsync } from './action-control-flow'
 import { compileReactiveArgument } from './reactive-parameters'
 import { emitSlotBody } from './renderer-slot-codegen'
+import { compileBareTextRender } from './ui-render-codegen'
 
 export const InvocationsCompiler = {
   /** RenderStatementBody compiles a Tao render statement into a JSX fragment. */
@@ -25,7 +26,10 @@ export const InvocationsCompiler = {
   /** Render compiles a Tao view invocation into a JSX fragment. */
   Render(render: AST.Render, options: CodegenOptions = {}): Compiled {
     const target = ASTUtils.resolveRenderTarget(render)
-    Assert.defined(target, 'validated render names a view, a nav, or a parameter', { render: render.view?.$refText })
+    Assert.defined(target, 'validated render names a supported visual or text value', { render: render.view?.$refText })
+    if (target.kind === 'text') {
+      return studioLensRender(render, compileBareTextRender(render, target.declaration, options), options)
+    }
     if (target.kind !== 'view') {
       return Compile.RenderOccurrence(render, target, options)
     }
@@ -73,7 +77,7 @@ export const InvocationsCompiler = {
    * its clauses and its tag, and the validator has already refused arguments, content, and events.
    */
   RenderOccurrence(render: AST.Render, target: ASTUtils.RenderTarget, options: CodegenOptions = {}): Compiled {
-    Assert(target.kind !== 'view', 'a view target compiles as an invocation')
+    Assert(target.kind !== 'view' && target.kind !== 'text', 'a visual declaration target compiles directly')
     const declaration = target.kind === 'nav' ? target.declaration : target.parameter
     return studioLensRender(
       render,

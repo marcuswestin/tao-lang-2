@@ -25,6 +25,8 @@ const viewValidationMessages = {
   loopSelectDuplicate: 'A loop may declare at most one `on select` handler.',
   loopSelectInline: '`on select` requires an inline action block.',
   renderTarget: '`render` must target a view or inject block.',
+  bareRenderTargetType: (name: string, actual: string) =>
+    `Bare render target '${name}' must have type text, got ${actual}.`,
   sceneComposed: (name: string) => `Scene '${name}' is presented, never composed. Present it, or declare it as a view.`,
   sceneBoundToView: (scene: string, parameter: string) =>
     `Scene '${scene}' cannot be bound to view parameter '${parameter}'; a view renders it inline where no host reads its chrome.`,
@@ -365,6 +367,18 @@ function validateRender(
   // end up composed inline where no host would read it. A nav is a scene by the Prelude and is the
   // one exception: it supplies its own chrome, so a render site may name it.
   const target = render.view?.ref
+  if (
+    (AST.isAliasDeclaration(target) || AST.isStateDeclaration(target) || AST.isParameterDeclaration(target))
+    && ASTUtils.resolveRenderTarget(render) === undefined
+  ) {
+    const type = Type.ofValueDeclaration(target, render)
+    if (type.kind !== 'unresolved') {
+      ctx.error(
+        render,
+        viewValidationMessages.bareRenderTargetType(Type.declarationName(target), Type.displayName(type)),
+      )
+    }
+  }
   const aliasTarget = AST.isViewDeclaration(target) ? AST.viewAliasTarget(target) : undefined
   const effectiveTarget = AST.isViewDeclaration(aliasTarget) ? aliasTarget : target
   if (AST.isViewDeclaration(effectiveTarget) && effectiveTarget.scene) {

@@ -19,6 +19,15 @@ Describe('parser: bare renders', () => {
     ])
   })
 
+  Test('parses a bare lexical value render into the existing render reference field', async () => {
+    const parsed = await testParseSyntax('view Main { state Title is text = "Books" render Title }')
+    const main = parsed.entry.ast.statements.find(AST.isViewDeclaration)!
+    const render = main.block!.statements.find(AST.isRenderStatement)!
+    Expect(render.view?.$refText).toBe('Title')
+    Expect(render.argumentList).toBeUndefined()
+    Expect(render.block).toBeUndefined()
+  })
+
   Test('lowers empty and interpolated quotations to normal arguments while retaining source ranges', async () => {
     const parsed = await testParseSyntax(
       'view Main { state Name is text = "Books" render "{Name}" [pad 8] } view Empty { render "" }',
