@@ -40,6 +40,7 @@ function fixture() {
       calls.push('lane-release')
       state.registered = false
     },
+    overlap: async () => ({ known: true, lanes: [], loadAverageAtStart: 1, solo: true }),
     report: () => ({ contended: false, cpuCount: 8, peakLanes: 1, peakLoadAverage: 1 }),
     tryAcquire: async () => undefined,
     waitForAvailability: async () => {},
