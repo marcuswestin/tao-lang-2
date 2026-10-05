@@ -33,14 +33,18 @@ export function referencedAssociatedWitnessOwners(
       }
       if (AST.isReturnStatement(node)) {
         let owner: AST.Node | undefined = node.$container
-        while (owner && !AST.isFunctionDeclaration(owner) && !AST.isAssociatedFunctionDeclaration(owner)) {
+        while (
+          owner && !AST.isFunctionDeclaration(owner) && !AST.isAssociatedFunctionDeclaration(owner)
+          && !AST.isActionDeclaration(owner)
+        ) {
           owner = owner.$container
         }
         Assert(
-          owner && (AST.isFunctionDeclaration(owner) || AST.isAssociatedFunctionDeclaration(owner)),
-          'Expected a function return owner.',
+          owner && (AST.isFunctionDeclaration(owner) || AST.isAssociatedFunctionDeclaration(owner)
+            || AST.isActionDeclaration(owner)),
+          'Expected a callable return owner.',
         )
-        transport(node.value, Type.ofFunctionReturn(owner))
+        transport(node.value, AST.isActionDeclaration(owner) ? Type.ofActionResult(owner) : Type.ofFunctionReturn(owner))
       }
       if (
         AST.isFunctionCallExpression(node)
