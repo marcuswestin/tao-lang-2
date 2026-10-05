@@ -27,34 +27,46 @@ Describe('validator: associated action members', () => {
 
   Test(
     'rejects an unknown row action member',
-    rejects(`
+    rejects(
+      `
       data Books / Book { Title text, action Book.Return() { } }
       action Caller(Row Book) { let Saved = Row.Absent }
-    `, typeValidationMessages.unknownMember('Book', 'Absent')),
+    `,
+      typeValidationMessages.unknownMember('Book', 'Absent'),
+    ),
   )
 
   Test(
     'rejects a singular action on a collection',
-    rejects(`
+    rejects(
+      `
       data Books / Book { Title text, action Book.Return() { } }
       action Caller(Rows Books) { let Saved = Rows.Return }
-    `, typeValidationMessages.memberNotItem('Return')),
+    `,
+      typeValidationMessages.memberNotItem('Return'),
+    ),
   )
 
   Test(
     'rejects a scalar action receiver',
-    rejects(`
+    rejects(
+      `
       data Books / Book { Title text, action Book.Return() { } }
       action Caller(Value text) { let Saved = Value.Return }
-    `, typeValidationMessages.memberNotItem('Return')),
+    `,
+      typeValidationMessages.memberNotItem('Return'),
+    ),
   )
 
   Test(
     'validates an unresolved nested prefix without suppressing its member error',
-    rejects(`
+    rejects(
+      `
       data Books / Book { Title text, action Book.Return() { } }
       type Revision is { Book }
       action Caller(Value Revision) { let Saved = Value.Absent.Return }
-    `, typeValidationMessages.unknownMember('Revision', 'Absent')),
+    `,
+      typeValidationMessages.unknownMember('Revision', 'Absent'),
+    ),
   )
 })
