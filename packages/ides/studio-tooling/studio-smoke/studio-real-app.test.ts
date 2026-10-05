@@ -12,7 +12,7 @@ import { exerciseHnreaderFeed } from './studio-hnreader-feed-journey'
 Test(
   'Studio feeds, keeps, discards, and undoes generated HNReader Stories through real browser drags',
   exerciseHnreaderFeed,
-  480_000,
+  600_000,
 )
 
 async function canvasTranslation(browser: StudioCdp): Promise<{ x: number; y: number }> {
@@ -112,7 +112,7 @@ Test('Studio compiles, applies insertion and undo, and publishes the real HNRead
     await preview?.close()
     await FS.remove(projectRoot)
   }
-}, 120_000)
+}, 600_000)
 
 Test('Studio drag refreshes the real Metro preview without blanking, reloading, or losing state', async () => {
   const repositoryRoot = Repo.getRoot()
@@ -424,7 +424,7 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
     await studio?.stop()
     await FS.remove(projectRoot)
   }
-}, 300_000)
+}, 600_000)
 
 async function waitForPreview(
   browser: StudioCdp,
@@ -983,4 +983,4 @@ Test('Studio publication-off preview renders edits without reloading its frame',
     await studio?.stop()
     await FS.remove(projectRoot)
   }
-}, 180_000)
+}, 600_000)

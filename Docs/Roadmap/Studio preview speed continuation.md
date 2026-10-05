@@ -931,9 +931,12 @@ Full portable verification remains required; no ceiling was changed.
 Landing-gate diagnosis corrected the HNReader feed smoke to compare the applied publication
 revision with the published revision exposed on the status element, rather than with the latest
 compile attempt. All four real HNReader journeys pass. The simulated-user journey passes 102
-assertions; its overall budget is now six minutes, approved by the Developer after a progressing
-run reached the prior three-minute cutoff. Individual condition waits and performance ceilings
-remain unchanged. Scoped reruns pass all 982 validator cases, 370 Expo-host cases, and 273 runtime
+assertions. The Developer subsequently approved increasing all timing-out execution budgets:
+Studio smoke tests now allow ten minutes, server readiness five minutes, and activation waits two
+minutes. Runtime journeys have a two-minute base and five-minute cap; Bun tests have a four-minute
+base and ten-minute cap. Suite processes allow twenty to thirty minutes, and source-mutation lock
+waits five minutes. Assertions and performance ceilings remain unchanged. Scoped reruns pass all
+982 validator cases, 370 Expo-host cases, and 273 runtime
 cases after the initial full run timed out under contention.
 
 Targeted checks had registered as broad test lanes and were also blocked by the landing-priority

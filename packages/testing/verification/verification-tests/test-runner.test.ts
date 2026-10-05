@@ -10,7 +10,10 @@ import { WorkGraph } from '../verification-src/WorkGraph'
 // The Jest bound lives in a CommonJS config Jest loads itself; it is read here so the three runners'
 // ceilings are held together in one place.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const jestConfig = require('../../../apps/expo-host/jest.shared.config.cjs') as { MAX_JOURNEY_DEADLINE_MS: number }
+const jestConfig = require('../../../apps/expo-host/jest.shared.config.cjs') as {
+  JOURNEY_BUDGET_MS: number
+  MAX_JOURNEY_DEADLINE_MS: number
+}
 
 /** An empty history: no recorded duration means no suite is sharded, so a node is named for its suite. */
 const NO_HISTORY = { ledger: { tests: {}, version: 1 } as const, timings: { nodes: {}, version: 1 } as const }
@@ -442,6 +445,7 @@ Describe('test runner suite registry', () => {
     // sits strictly above the one it contains, so whatever hangs is named by the nearest bound and
     // not swallowed by the one around it; the wall bound is armed before the process even spawns.
     Expect(jestConfig.MAX_JOURNEY_DEADLINE_MS).toBeLessThan(TestRunner.MAX_TEST_DEADLINE_MS)
+    Expect(jestConfig.JOURNEY_BUDGET_MS).toBeLessThan(TestRunner.starvationAdjustedTimeoutMs(0, 18))
     Expect(TestNodes.WALL_TIMEOUT_FLOOR_MS).toBeGreaterThanOrEqual(TestNodes.IDLE_TIMEOUT_FLOOR_MS)
     Expect(TestNodes.wallTimeoutMs(TestRunner.MAX_TEST_DEADLINE_MS)).toBeGreaterThan(
       TestNodes.IDLE_TIMEOUT_FLOOR_MS,
@@ -606,7 +610,7 @@ Describe('test runner suite registry', () => {
     // three other lanes. Every Bun suite therefore carries an explicit bound.
     const bounds = argsOf(byName, 'ides/studio').filter(argument => argument.startsWith('--timeout='))
     Expect(bounds).toHaveLength(1)
-    Expect(Number(bounds[0]?.slice('--timeout='.length))).toBeGreaterThanOrEqual(45_000)
+    Expect(Number(bounds[0]?.slice('--timeout='.length))).toBeGreaterThanOrEqual(240_000)
   })
 
   Test('spends the per-test budget on work, and stretches the deadline only while the machine is loaded', () => {
@@ -614,11 +618,11 @@ Describe('test runner suite registry', () => {
 
     // A machine this run has to itself keeps the fixed budget, so a test that genuinely regresses
     // is still caught even though a loaded machine may stretch the deadline.
-    Expect(starvationAdjustedTimeoutMs(9, 18)).toBe(45_000)
+    Expect(starvationAdjustedTimeoutMs(9, 18)).toBe(240_000)
     // The run that motivated this: load 41.1 on 18 CPUs, where the killed test had run 3.7x slower
-    // than in isolation. The load adjustment gives this test 205.5s while preserving the fixed
-    // uncontended budget above.
-    Expect(starvationAdjustedTimeoutMs(41.1, 18)).toBe(205_500)
+    // than in isolation. Moderate load stretches the floor; extreme load reaches the shared cap.
+    Expect(starvationAdjustedTimeoutMs(18, 18)).toBe(480_000)
+    Expect(starvationAdjustedTimeoutMs(41.1, 18)).toBe(TestRunner.MAX_TEST_DEADLINE_MS)
     // A more extreme load reaches the shared ten-minute ceiling.
     Expect(starvationAdjustedTimeoutMs(1_000, 18)).toBe(TestRunner.MAX_TEST_DEADLINE_MS)
   })

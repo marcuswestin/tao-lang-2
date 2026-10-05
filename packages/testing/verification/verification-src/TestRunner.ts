@@ -1026,12 +1026,12 @@ function starvationAdjustedTimeoutMs(loadAverage: number, cpuCount: number): num
  * nothing on a test that passes and buys headroom on the genuinely slow ones, while the
  * regression-catching property survives because the budget is still fixed rather than waived.
  */
-const TEST_BUDGET_MS = 45_000
+const TEST_BUDGET_MS = 240_000
 /** How far the lagging load average is trusted to under-report the starvation a test is feeling. */
 const LOAD_AVERAGE_LAG_ALLOWANCE = 2
 /**
  * The concurrent-suite hang guard, in milliseconds rather than budgets. It also caps the serial
- * suite's load-adjusted deadline; the uncontended serial budget above remains fixed at 45 seconds.
+ * suite's load-adjusted deadline; the uncontended serial budget above remains fixed at four minutes.
  * Ten minutes gives a test room to finish under heavy machine contention while preserving a bound
  * for a genuine hang.
  */

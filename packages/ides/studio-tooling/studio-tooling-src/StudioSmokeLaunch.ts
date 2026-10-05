@@ -9,7 +9,7 @@ import type { StudioReadiness } from './StudioReadiness'
  */
 
 /** How long a smoke launch is given to reach readiness before it is treated as failed. */
-const READY_TIMEOUT_MS = 180_000
+const READY_TIMEOUT_MS = 300_000
 const READY_POLL_MS = 200
 
 export type StudioSmokeLaunchOptions = {
