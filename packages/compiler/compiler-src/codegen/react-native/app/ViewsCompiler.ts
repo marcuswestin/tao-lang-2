@@ -416,8 +416,13 @@ function compileForeignView(view: AST.ViewDeclaration, options: CodegenOptions):
           ${
     gen.list(AST.parametersOf(view), parameter => {
       const name = Type.parameterName(parameter)
+      const value = gen`_Scope.${name}.evaluate()`
       return gen`${name}={${
-        parameter.mutable ? compileNativeParameter(parameter) : gen`_Scope.${name}.evaluate().jsValue`
+        parameter.mutable
+          ? compileNativeParameter(parameter)
+          : Type.ofParameter(parameter).kind === 'capability'
+          ? value
+          : gen`${value}.jsValue`
       }}`
     })
   }
