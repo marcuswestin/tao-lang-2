@@ -130,7 +130,31 @@ export function projectCallableEffectPublications(
     calls: Object.freeze(calls),
     reads: Object.freeze(reads),
     natives: Object.freeze(natives),
+    constructors: Object.freeze([...snapshot.constructors].map(([key, publication]) => {
+      Assert(key === publication.site, 'Expected canonical constructor keys to match their sites.')
+      Assert(AST.isConfigurationConstructor(publication.site), 'Expected an actual named constructor site.')
+      Assert(
+        publication.operands.length === (publication.site.value ? 1 : 0)
+          && (!publication.site.value || publication.operands[0] === publication.site.value),
+        'Expected constructor operands to retain their actual authored value.',
+      )
+      return Object.freeze({
+        site: publication.site,
+        operands: Object.freeze([...publication.operands]),
+        purity: publication.purity,
+        failures: publication.failures,
+        ...(publication.kind === 'complete'
+          ? { kind: 'complete' as const }
+          : { kind: 'unknown' as const, reason: publication.reason }),
+      })
+    })),
   })
+
+  for (const node of snapshot.covered) {
+    if (AST.isConfigurationConstructor(node)) {
+      Assert(snapshot.constructors.has(node), 'Expected every covered named constructor to have a publication.')
+    }
+  }
 
   const descriptor = snapshot.descriptors.get(owner)
   const root = descriptor && descriptor.declaration === owner

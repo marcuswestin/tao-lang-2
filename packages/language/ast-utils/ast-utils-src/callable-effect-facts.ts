@@ -45,10 +45,17 @@ export type NativeEffectPublication =
     exportSource: AST.Node
   }>
 
+/** The wrapper's own execution is separate from its authored operand evaluation. */
+export type ResolvedConstructorExecution =
+  & PublicationStatus
+  & EffectContract
+  & Readonly<{ site: AST.ConfigurationConstructor; operands: readonly AST.Expression[] }>
+
 export type CallableEffectFactInputs = Readonly<{
   calls: readonly ResolvedCallExecution[]
   reads: readonly ResolvedReadExecution[]
   natives: readonly NativeEffectPublication[]
+  constructors?: readonly ResolvedConstructorExecution[]
 }>
 
 /** Real supported source implementation roots and conservative, potentially legal defaults; no signature purity promise. */
@@ -74,6 +81,7 @@ export function discoverCallableEffectFacts(
   Assert(!context?.root || context.root.node === owner, 'Expected source root identity to match the effect owner.')
   const calls = indexRows(inputs.calls, row => row.site)
   const reads = indexRows(inputs.reads, row => row.reference)
+  const constructors = indexRows(inputs.constructors ?? [], row => row.site)
   const natives = indexRows(inputs.natives, row => row.declaration)
   const targets = new Map<AST.Node, Readonly<{ body?: AST.Node; contract?: EffectContract }>>()
   const exports = new Map<AST.Node, NativeEffectPublication>()
@@ -147,6 +155,7 @@ export function discoverCallableEffectFacts(
     const target = targets.get(node)
     const call = calls.get(node)
     const read = reads.get(node)
+    const constructor = constructors.get(node)
     const sourceRoot = context?.root?.node === node ? context.root : undefined
     if (sourceRoot) {
       for (const body of sourceRoot.bodies) {
@@ -280,6 +289,18 @@ export function discoverCallableEffectFacts(
           unknown: call?.reason === 'dynamic-target' ? 'dynamic-target' : 'unresolved-target',
         })
         reason ??= 'incomplete-fact'
+      }
+    } else if (AST.isConfigurationConstructor(node)) {
+      // Syntax still evaluates payloads and unsupported blocks, regardless of wrapper evidence.
+      for (const child of AST.streamContents(node)) {
+        if (!AST.isTypeReference(child)) {
+          edge(child)
+        }
+      }
+      if (constructor) {
+        applyOperationContract(constructor, undefined, constructor)
+      } else {
+        reason = 'incomplete-fact'
       }
     } else if (read || AST.isValueReference(node) || AST.isMemberAccessExpression(node)) {
       if (!read) {

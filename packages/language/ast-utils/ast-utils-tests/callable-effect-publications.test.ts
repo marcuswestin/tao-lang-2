@@ -560,7 +560,7 @@ Describe('Canonical callable effect projection', () => {
     Expect(analysis.effects.purity.open).toBe(false)
   })
 
-  Test('keeps real computed receivers while unsupported construction stays open', async () => {
+  Test('keeps real computed receivers through supported text wrapper construction', async () => {
     const file = await parse(`
       type Token is text with {
         func Again() fails never -> Token { return Token }
@@ -594,8 +594,8 @@ Describe('Canonical callable effect projection', () => {
     Expect(facts.some(fact => fact.node === again.returnType || fact.node === format.returnType)).toBe(false)
     Expect(facts.some(fact => fact.node === buildCall.site)).toBe(true)
     Expect(facts.some(fact => fact.executes.some(edge => edge.target === buildCall.site))).toBe(true)
-    Expect(analysis.effects.purity.open).toBe(true)
-    Expect(analysis.effects.failures.open).toBe(true)
+    Expect(analysis.effects.purity.open).toBe(false)
+    Expect(analysis.effects.failures.open).toBe(false)
   })
 
   Test('closes parameter-based static selections and preserves reactive receiver violations', async () => {

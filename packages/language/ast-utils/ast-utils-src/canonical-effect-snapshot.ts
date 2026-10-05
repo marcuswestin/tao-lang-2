@@ -93,6 +93,17 @@ export type CanonicalReadPublication =
     initializer?: AST.Expression
   }>
 
+/** Linked text wrapper construction executes its real operand without an implicit numeric check. */
+export type CanonicalConstructorPublication =
+  & PublicationStatus
+  & EffectContract
+  & Readonly<{
+    site: AST.ConfigurationConstructor
+    declaration?: AST.ConstructorDeclaration
+    result: TaoType
+    operands: readonly AST.Expression[]
+  }>
+
 const factoryBrand: unique symbol = Symbol('canonical effect-independent snapshot')
 const publishedSnapshots = new WeakSet<CanonicalEffectIndependentSnapshot>()
 
@@ -106,6 +117,7 @@ export type CanonicalEffectIndependentSnapshot = Readonly<{
   associatedDescriptors: ReadonlyMap<AssociatedDeclaration, AssociatedDescriptorMaterialization>
   calls: ReadonlyMap<AST.Node, CanonicalCallPublication>
   reads: ReadonlyMap<AST.Node, CanonicalReadPublication>
+  constructors: ReadonlyMap<AST.Node, CanonicalConstructorPublication>
   natives: readonly NativeEffectPublication[]
 }>
 
@@ -349,7 +361,29 @@ export function publishCanonicalEffectSnapshot(
       )
     }
   }
+  const constructors = new Map<AST.Node, CanonicalConstructorPublication>()
   for (const node of nodes) {
+    if (AST.isConfigurationConstructor(node)) {
+      const declaration = node.type.ref
+      const result = resolution.ofExpression(node)
+      const complete = AST.isTypeDeclaration(declaration) && !!node.value && !node.block
+        && node.members.length === 0 && result.kind === 'primitive' && result.primitive === 'text'
+        && !Type.isAbstractDomain(result)
+      constructors.set(
+        node,
+        Object.freeze({
+          site: node,
+          ...(declaration ? { declaration } : {}),
+          result: sealType(result),
+          operands: Object.freeze(node.value ? [node.value] : []),
+          ...sealEffectContract({
+            purity: { violations: [], open: false },
+            failures: { cases: [], open: false },
+          }),
+          ...(complete ? { kind: 'complete' } as const : { kind: 'unknown', reason: 'incomplete-fact' } as const),
+        }),
+      )
+    }
     if (AST.isValueReference(node) || AST.isMemberAccessExpression(node)) {
       const domain = resolution.ofReferenceRoot(node)
       const selectedDomain = AST.isMemberAccessExpression(node) && domain.kind === 'item' && node.members.length === 1
@@ -399,6 +433,7 @@ export function publishCanonicalEffectSnapshot(
     associatedDescriptors: immutableMap(associated),
     calls: immutableMap(calls),
     reads: immutableMap(reads),
+    constructors: immutableMap(constructors),
     natives: Object.freeze(
       (evidence.natives ?? []).map(native => Object.freeze({ ...native, ...sealEffectContract(native) })),
     ),
