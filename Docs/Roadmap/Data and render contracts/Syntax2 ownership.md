@@ -15,11 +15,32 @@ individual commits, worker returns and small integration handoffs do not require
 reviewer. The coordinator may integrate inspected commits and continue dependent work within the
 existing ownership grants.
 
-Reserve independent review for substantial completed milestones and the final integrated change
-before landing. Request an earlier targeted review only for a concrete unresolved correctness risk.
-Finish an already running review without duplicating it. This cadence supersedes earlier requests
-for independent review of each bounded cut; historical review receipts and ownership boundaries
-remain valid.
+Do not start independent reviews by default at intermediate milestones. Request a light targeted
+review only for a concrete unresolved correctness risk: inspect the changed behavior or named
+integration seam and report actionable blockers briefly. Existing reviewers narrow their scope
+accordingly; avoid broad architectural exploration, neighboring-feature audits, unsolicited
+refactors and repeated context gathering. Ordinary implementation handoffs do not wait for a
+dedicated reviewer.
+
+Defer comprehensive whole-project review until the implementation is working. Final landing
+readiness still requires its blocking-risk assessment and verification. This cadence supersedes
+earlier requests for independent review of each bounded cut; historical review receipts and
+ownership boundaries remain valid. Reuse completed proofs and avoid repeating green checks
+without a relevant change or concrete unresolved concern.
+
+## Verification cadence
+
+The Developer also selected less frequent broad verification on 2026-10-05. Managers and workers
+normally run focused affected-suite checks while implementing multiple commits. The coordinator
+batches repository typecheck and verify-changed on the integrated tree at substantial milestones,
+or when investigating a concrete cross-package regression. Do not run broad gates per commit or
+worker return, or repeat a known failure outside the workstream on a stale integration baseline.
+This supersedes the ordinary per-commit broad gate for this implementation program.
+
+Reserve full verification and required host acceptance for a completed landing candidate, using
+the landing workflow rather than duplicating those lanes in each manager's worktree. After a gate
+fails, fix and recheck the failing scope before repeating the broad lane. Passing focused checks
+does not imply whole-app or landing acceptance.
 
 ## First concurrent wave
 
