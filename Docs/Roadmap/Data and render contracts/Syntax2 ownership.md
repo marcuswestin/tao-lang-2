@@ -110,6 +110,19 @@ Root retains facades, production effect installation, capability transport and a
 D retains action result helpers and failure/runtime ownership. Operators and converters require
 the next bounded amendment after this generic batch, rather than being included implicitly.
 
+### Next checked quantity arithmetic leaf
+
+C may implement new TR-quantity-arithmetic.ts and its focused runtime test under the existing
+runtime source/test directories. Accept authenticated operand and result factories supplied by
+the authored operation, rather than granting arithmetic through shared numeric storage. Reuse
+checked canonical construction for finite results and existing QuantityFailureCases; do not add
+an unrelated exception engine. Preserve ordered scaling and division, signed quantities, same-domain
+leftmost-unit selection, sole-quantity unit retention and explicit different-result-domain defaults.
+Reject invalid domain/unit/invariant inputs through the existing modeled quantity failures. Helpers
+must not make Celsius/Fahrenheit comparable merely because both have number backing, nor invent
+unrequested affine operator contracts. Root retains runtime facade publication, standard declarations
+and compiler dispatch. Wait/timer work needs a later exact grant and verified cancellation/clock seams.
+
 ### Current action outcomes and lexical cleanup batch
 
 D's actual source projector is integrated at `488d45510` and `5f726c6ff`; those two paths returned
