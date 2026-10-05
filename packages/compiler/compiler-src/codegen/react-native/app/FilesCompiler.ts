@@ -5,6 +5,7 @@ import { Compile } from '../Compile'
 import { hasAssociatedWitnessPublication } from './AssociatedMethodsCompiler'
 import { isRuntimeConfigurableDeclaration } from './ConfigurationCompiler'
 import { activeFixtureStores } from './data-store-context'
+import { createSlotBodyOptions, emitSlotBodyHoists, slotBodyRows } from './render-slot-hoists'
 
 type TaoFileCompileOptions = CodegenOptions & {
   bridgeTypes?: string
@@ -22,7 +23,12 @@ type TaoFileCompileOptions = CodegenOptions & {
 export const FilesCompiler = {
   /** TaoFile compiles a parsed Tao file into a default React component module. */
   TaoFile(taoFile: AST.TaoFile, opts: TaoFileCompileOptions = {}): Compiled {
+    const options = createSlotBodyOptions(opts)
     const statements = opts.selectedStatements ?? taoFile.statements
+    const content = gen.list(inDeclarationOrder(statements), statement => Compile.Statement(statement, options), {
+      newLines: 2,
+    })
+    const slotBodies = slotBodyRows(options)
     const configurationTypes = opts.configurationTypes ?? ''
     const bridgeTypes = opts.bridgeTypes ?? ''
     const importLines = opts.importLines?.join('\n') ?? ''
@@ -39,7 +45,9 @@ export const FilesCompiler = {
       || (AST.isEmittingRuntimeBinding(statement)
         && (!AST.isTypeDeclaration(statement) || isRuntimeConfigurableDeclaration(statement)))
     )
-    if (!hasRuntimeStatements && !importLines && !scopeBindings && !exportLines && !bridgeTypes) {
+    if (
+      !hasRuntimeStatements && !importLines && !scopeBindings && !exportLines && !bridgeTypes && slotBodies.length === 0
+    ) {
       return gen`export {}`
     }
     const registry = apps.length === 0 ? gen.noop() : gen`
@@ -77,7 +85,8 @@ export const FilesCompiler = {
     }
       ${Compile.OutlineTable(taoFile, statements)}
 
-      ${gen.list(inDeclarationOrder(statements), statement => Compile.Statement(statement, opts), { newLines: 2 })}
+      ${emitSlotBodyHoists(slotBodies)}
+      ${content}
       ${
       moduleCommands.length === 0
         ? gen.noop()
