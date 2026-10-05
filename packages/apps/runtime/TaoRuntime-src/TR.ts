@@ -168,7 +168,7 @@ import {
 import { selectPluralForm, type TaoPluralCategory, type TaoPluralForms } from './TR-phrases'
 import { admitQuantityUnion, nativeQuantityResult } from './TR-quantity-admission'
 import { QuantityArithmetic, quantityOperand, scalarOperand } from './TR-quantity-arithmetic'
-import { factoryOfQuantityInput } from './TR-quantity-values'
+import { factoryOfQuantityInput, quantityToText } from './TR-quantity-values'
 import { isQuantityPayload, type TaoQuantityPayload } from './TR-quantity-values'
 import { requireReactNativeRuntime } from './TR-react-native'
 import { isReactiveValue, markReactiveValue } from './TR-reactive'
@@ -298,7 +298,12 @@ class TR {
 
   /** Interpolate concatenates Tao values, rendering absence as an empty string. */
   static Interpolate(parts: readonly TR.Evaluable[]): TR.Value<string> {
-    return new RuntimeValue(parts.map(part => part.evaluate().jsValue).map(value => value ?? '').join(''))
+    return new RuntimeValue(
+      parts.map(part => {
+        const value = part.evaluate().jsValue
+        return isQuantityPayload(value) ? quantityToText(new RuntimeValue(value)) : value ?? ''
+      }).join(''),
+    )
   }
 
   /**
@@ -545,6 +550,7 @@ class TR {
   static quantityOperand = quantityOperand
   /** Trusted native Self implementations retain the receiver's exact checked concrete factory. */
   static factoryOfQuantityInput = factoryOfQuantityInput
+  static quantityToText = quantityToText
   static scalarOperand = scalarOperand
 
   /** Wait joins its caller and inherits cancellation, while lexical cleanup remains shielded. */

@@ -30,6 +30,17 @@ function expectBadShape(value: unknown): void {
 }
 
 Describe('quantity text formatting', () => {
+  Test('interpolates quantities in their retained unit and samples each source once', () => {
+    let reads = 0
+    const source = TR.Alias(() => {
+      reads += 1
+      return Duration.fromUnit(reads === 1 ? 2 : 3, 'Minutes')
+    })
+    Expect(TR.Interpolate([TR.Value('Wait '), source, TR.Value(undefined)]).jsValue).toBe('Wait 2 Minutes')
+    Expect(reads).toBe(1)
+    Expect(TR.quantityToText(Ratio.fromUnit(50, 'Percent'))).toBe('50 Percent')
+  })
+
   Test('renders canonical values in their selected units', () => {
     Expect(quantityToText(Duration.fromUnit(2, 'Minutes'))).toBe('2 Minutes')
     Expect(quantityToText(Duration.fromJSValue(120))).toBe('120 Seconds')

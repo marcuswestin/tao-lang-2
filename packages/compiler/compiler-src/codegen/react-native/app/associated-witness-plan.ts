@@ -56,6 +56,21 @@ export function referencedAssociatedWitnessOwners(
       if (AST.isParameterDeclaration(node) && node.defaultValue) {
         transport(node.defaultValue, Type.ofParameter(node))
       }
+      if (AST.isRender(node)) {
+        const target = ASTUtils.resolveRenderTarget(node)
+        if (target?.kind === 'ui') {
+          for (const owner of capabilityTransportOwners(target.actual, target.contract)) {
+            owners.add(owner)
+          }
+        }
+        if (target?.kind === 'view') {
+          const invocation = ASTUtils.resolveRenderInvocation(node)
+          for (const pair of invocation.pairs) {
+            const expression = Type.genericRoleConstructor(pair.argument)?.value ?? pair.argument.value
+            transport(expression, invocation.transportTypes?.get(pair.parameter) ?? Type.ofParameter(pair.parameter))
+          }
+        }
+      }
       if (AST.isReturnStatement(node)) {
         let owner: AST.Node | undefined = node.$container
         while (
