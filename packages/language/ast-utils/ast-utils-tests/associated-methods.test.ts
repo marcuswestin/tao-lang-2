@@ -1,5 +1,6 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST, Parser } from '@parser'
+import { Assert } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 
 Describe('Associated callable contract materialization', () => {
@@ -47,9 +48,7 @@ Describe('Associated callable contract materialization', () => {
     Expect(selected.descriptor.signature.failures).toEqual({ cases: [], open: true })
     Expect(Object.isFrozen(selected.descriptor)).toBe(true)
     Expect(display.kind).toBe('capability')
-    if (display.kind !== 'capability') {
-      throw new Error('Expected the declared structural capability.')
-    }
+    Assert(display.kind === 'capability', 'Expected the declared structural capability.')
     const requirements = Type.capabilityMethods(display)
     Expect(requirements).toHaveLength(1)
     Expect(requirements[0]!.kind).toBe('ready')
