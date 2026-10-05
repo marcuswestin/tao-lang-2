@@ -110,7 +110,7 @@ ViewRender returns ViewRender:
      | quotation=PhraseText) layoutClause=LayoutClause? block=Block?;
 
 EventHandler:
-    'on' event=EventName (action=ValueReference | '->' payload=CasePayload? block=ActionBlock);
+    'on' event=EventName (action=ValueReference | '->' payload=CasePayload? block=(ActionBlock | AtomicActionBlock));
 
 EventName returns string:
     'press' | 'change' | 'submit';
