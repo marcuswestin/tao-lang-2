@@ -16,6 +16,7 @@ import {
   capabilityRequirements,
   materializeAssociatedCallable,
   ownAssociatedMethods,
+  ownAssociatedViews,
   withAssociatedEffects,
 } from './associated-methods'
 import { analyzeCallableEffects } from './callable-effects'
@@ -115,6 +116,7 @@ export const ASTUtils = {
   capabilityRequirements,
   materializeAssociatedCallable,
   ownAssociatedMethods,
+  ownAssociatedViews,
   withAssociatedEffects,
   containsCapability,
   planCapabilityTransport,
@@ -203,6 +205,7 @@ export const ASTUtils = {
 export namespace ASTUtils {
   export type NumericUnitReading = import('./numeric-unit-readings').NumericUnitReading
   export type AssociatedCallableDescriptor = import('./associated-methods').AssociatedCallableDescriptor
+  export type AssociatedCallableOwner = import('./associated-methods').AssociatedCallableOwner
   export type AssociatedEffectsContext = import('./associated-methods').AssociatedEffectsContext
   export type CapabilityTransportPlan = import('./capability-transport').CapabilityTransportPlan
   export type CapabilityTransportMethod = import('./capability-transport').CapabilityTransportMethod

@@ -28,7 +28,7 @@ Describe('compiler: shared sidecar dependency identity', () => {
       const compiled = await Workspace.compile(paths['Main.tao'], { appName: 'SharedApp' })
       const copies = compiled.files.filter(file => file.sourcePath === paths['State.ts'])
       Expect(copies).toHaveLength(1)
-      for (const source of ['first/First.tsx', 'second/Second.tsx']) {
+      for (const source of ['first/First.tsx', 'second/Second.tsx'] as const) {
         const native = compiled.files.find(file => file.sourcePath === paths[source])!
         const dependency = sidecarModuleSpecifiers(native.code, native.sourcePath).find(import_ =>
           import_.value.startsWith('.')
