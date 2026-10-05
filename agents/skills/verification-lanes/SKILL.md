@@ -122,6 +122,15 @@ archiving the branch at `merged/<name>`:
   shell, simulator, canary), or when CI is unavailable: it verifies on this machine under the landing
   lock, including what the hosted runners cannot.
 
+## Periodic performance proof
+
+Run `./agent unsandboxed performance-check` for a pipeline performance change and during a periodic
+repository pass. It measures language operations and real Studio saves sequentially, separately from
+the parallel `verify-full` lane. Its report owns admission, ceilings, contamination, and the verdict;
+retain an inconclusive run and repeat unchanged code after contention clears. A correctness smoke
+under load does not qualify a speed budget. `pipeline-performance` owns the implementation workflow
+and `test-quality` owns deterministic regression proofs.
+
 ## Reporting while a lane runs
 
 A lane running for many minutes is the one place where backgrounding a gate is right, because the Developer is

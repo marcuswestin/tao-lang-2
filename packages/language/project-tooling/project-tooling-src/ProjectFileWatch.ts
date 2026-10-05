@@ -12,7 +12,7 @@ import {
 
 const DEBOUNCE_MS = 250
 
-type Refresh = () => Promise<ProjectToolingResult>
+type Refresh = (options?: { force?: boolean }) => Promise<ProjectToolingResult>
 
 /** Watch saved source and resolution inputs, then run every requested refresh in one lane. */
 export async function startProjectFileWatch(
@@ -169,8 +169,8 @@ export async function startProjectFileWatch(
     return attached
   }
 
-  const lane = createProjectRefreshLane(async () => {
-    let result = await refresh()
+  const lane = createProjectRefreshLane(async requestOptions => {
+    let result = await refresh(requestOptions)
     let dependencyAttached = await updateDependencyRoots(result)
     let configAttached = await updateConfigInputs(result)
     let sidecarAttached = await updateExternalSidecarInputs(result)
@@ -179,7 +179,7 @@ export async function startProjectFileWatch(
     // events, so read again after attaching new resolution inputs.
     let attached = dependencyAttached || configAttached || sidecarAttached || ownershipAttached
     while (attached) {
-      result = await refresh()
+      result = await refresh({ force: true })
       dependencyAttached = await updateDependencyRoots(result)
       configAttached = await updateConfigInputs(result)
       sidecarAttached = await updateExternalSidecarInputs(result)
@@ -216,6 +216,13 @@ export async function startProjectFileWatch(
       schedule()
     }
   }
+  const requestRefresh: Refresh = requestOptions => {
+    if (timer !== undefined) {
+      clearTimeout(timer)
+      timer = undefined
+    }
+    return lane.requestRefresh(requestOptions)
+  }
   watcher.on('all', onWatchEvent)
   watcher.on('error', onError)
   try {
@@ -238,7 +245,7 @@ export async function startProjectFileWatch(
     get lastResult() {
       return lane.lastResult!
     },
-    requestRefresh: lane.requestRefresh,
+    requestRefresh,
     async dispose() {
       disposed = true
       if (timer !== undefined) {

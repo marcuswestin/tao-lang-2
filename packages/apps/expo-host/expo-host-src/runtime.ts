@@ -272,10 +272,12 @@ async function compileStudioPreview(
     )
     return await Workspace.compile(sourcePath, options)
   }
-  const workspace = preview.sourceOverrides === undefined && previewWorkspace !== undefined
+  const workspace = previewWorkspace !== undefined
     ? previewWorkspace
-    : await Workspace.open(preview.project, { sourceOverrides: preview.sourceOverrides })
+    : await Workspace.open(preview.project)
   Assert(workspace.root === FS.resolvePath(preview.project), 'preview workspace matches its project')
+  // Each workspace load refreshes package topology; feed overrides replace one atomic source snapshot.
+  await workspace.setSourceOverrides(preview.sourceOverrides ?? {})
   return await workspace.compileFiles([sourcePath, ...generatedEntries], options)
 }
 

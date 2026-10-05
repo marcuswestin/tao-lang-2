@@ -2091,12 +2091,18 @@ export class StudioProjectSession {
       }
       if (request.kind === 'wrap-render' || request.kind === 'group-renders' || request.kind === 'extract-view') {
         const directory = FS.dirname(path)
-        for (const siblingPath of this.#files.absolutePaths()) {
-          if (siblingPath === path || FS.dirname(siblingPath) !== directory) {
-            continue
-          }
-          const sibling = await this.#workspace.parse(siblingPath)
-          workspaceFiles.push(sibling.entry.ast)
+        const siblingPaths = this.#files.absolutePaths().filter(siblingPath =>
+          siblingPath !== path && FS.dirname(siblingPath) === directory
+        )
+        if (siblingPaths.length > 0) {
+          const entries = await this.#workspace.parseFiles([path, ...siblingPaths])
+          parsed = entries[0]!
+          workspaceFiles = [
+            ...new Set([
+              ...parsed.files.map(file => file.ast),
+              ...entries.slice(1).map(sibling => sibling.entry.ast),
+            ]),
+          ]
         }
       }
       const patch = await SourceActions.applyStudioPatch(

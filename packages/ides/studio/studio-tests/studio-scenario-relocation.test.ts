@@ -1,9 +1,10 @@
 import { Workspace } from '@compiler/workspace'
-import { AST } from '@parser'
+import { AST, Parser } from '@parser'
 import { Errors, FS } from '@shared'
 import { Deferred, Expect, Test, testOverrideSlot, withTaoFiles } from '@shared/test'
 import { StudioGeneratedSources } from '../studio-src/StudioGeneratedSources'
 import { StudioProjectSession } from '../studio-src/StudioProjectSession'
+import { StudioScenarioRelocation } from '../studio-src/StudioScenarioRelocation'
 
 const baseFiles = {
   '@/studio/View1.tao':
@@ -17,6 +18,46 @@ const moveSlot = testOverrideSlot({
   write: value => {
     StudioGeneratedSources.prototype.moveView = value
   },
+})
+
+const relocationSlot = testOverrideSlot({
+  read: () => StudioScenarioRelocation.prepare,
+  write: prepare => Object.assign(StudioScenarioRelocation, { prepare }),
+})
+
+Test('Move retains the linked source build while inspecting destination declarations', async () => {
+  await withTaoFiles('tao-move-linked-lifetime-', baseFiles, async (paths, root) => {
+    const session = await StudioProjectSession.open({
+      async compile() {},
+      entryPath: paths['Garden.tao'],
+      projectRoot: root,
+    })
+    const before = await session.readFile('@/studio/View1.tao')
+    const prepare = StudioScenarioRelocation.prepare
+    let inspected = false
+    const restore = relocationSlot.install(request => {
+      // A later build in the same store retires this publication, even if old reference objects remain.
+      Expect(Parser.validationDependencies(request.document.parseResult.value)).toBeDefined()
+      inspected = true
+      return prepare(request)
+    })
+    try {
+      const result = await session.moveGeneratedSource({
+        path: before.path,
+        sourceVersion: before.sourceVersion,
+        targetPackage: '@views',
+        writeId: 'linked-lifetime',
+      })
+      Expect(result.status).toBe('moved')
+      Expect(inspected).toBe(true)
+      const parsed = await (await Workspace.open(root)).parse(FS.resolvePath('Scenarios.tao', root))
+      const group = parsed.entry.ast.statements.find(AST.isScenarioGroupDeclaration)!
+      Expect.Is(group.subject?.ref, AST.isViewDeclaration)
+      Expect(AST.getDocument(group.subject!.ref!).uri.fsPath).toBe(FS.resolvePath('@views/View1.tao', root))
+    } finally {
+      restore()
+    }
+  })
 })
 
 for (const existing of [false, true]) {

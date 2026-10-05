@@ -1405,6 +1405,14 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('performance-check')
+    .description('Measure language and real Studio preview timing sequentially on a quiet, exclusively leased machine.')
+    .action(async () => {
+      const { PerformanceCheck } = await import('./performance/performance-check')
+      await runExitCommand(() => PerformanceCheck.run())
+    })
+
+  commands
     .command('studio-smoke')
     .description('Run explicit slow Studio smoke test files in an isolated resource lane.')
     .argument('<files...>', 'Explicit Studio smoke test files.')

@@ -1,7 +1,149 @@
+import { ProjectTooling, type ProjectToolingResult } from '@project-tooling'
 import { Errors, FS } from '@shared'
-import { Deferred, Expect, mkTestDir, Test, until, withTaoFiles } from '@shared/test'
+import { Deferred, Expect, mkTestDir, settle, Test, testOverrideSlot, until, withTaoFiles } from '@shared/test'
 import { startStudioFileWatcher, StudioFileWatcherTesting } from '../studio-src/StudioFileWatcher'
 import { openStudioPreviewSession } from '../studio-src/StudioPreviewSession'
+
+const projectToolingWatchSlot = testOverrideSlot({
+  read: () => ProjectTooling.watch,
+  write: value => {
+    Reflect.set(ProjectTooling, 'watch', value)
+  },
+})
+const projectToolingRefreshSlot = testOverrideSlot({
+  read: () => ProjectTooling.refresh,
+  write: value => {
+    Reflect.set(ProjectTooling, 'refresh', value)
+  },
+})
+
+Test(
+  'Studio consumes watched refresh receipts and still publishes a later tooling revision during acquisition',
+  async () => {
+    const previewRuntimeRoot = await mkTestDir('tao-studio-tooling-receipts-runtime-')
+    try {
+      await withTaoFiles(
+        'tao-studio-tooling-receipts-project-',
+        {
+          'Garden.tao': `
+          use Text from @tao/ui
+          use PlantKind from ./Data
+          app Garden { id "tao-studio-garden-receipts" version "1.0.0" name "Garden" view Main }
+          view Main() { render Text("Before") }
+        `,
+          'Data.tao': 'public type PlantKind is one of Seed, Flower\n',
+        },
+        async (paths, root) => {
+          const originalWatch = ProjectTooling.watch
+          const originalRefresh = ProjectTooling.refresh
+          const acquired = Deferred<ProjectToolingResult>()
+          const release = Deferred()
+          const observed: ProjectToolingResult[] = []
+          let watchRequests = 0
+          let oneShotRequests = 0
+          let publishToolingResult: (result: ProjectToolingResult) => void = () => {}
+          let refreshWatchedInputs: () => Promise<ProjectToolingResult> = async () =>
+            Errors.throwUnexpected('Expected the preview tooling watch to be open.')
+          const restoreRefresh = projectToolingRefreshSlot.install(async (project, options) => {
+            if (FS.resolvePath(project) === root) {
+              oneShotRequests += 1
+            }
+            return await originalRefresh(project, options)
+          })
+          const restoreWatch = projectToolingWatchSlot.install(async (project, options) => {
+            if (FS.resolvePath(project) !== root) {
+              return await originalWatch(project, options)
+            }
+            // Keep the real watch and receipts; control callback delivery to cover both sides of
+            // an acquisition without depending on the file watcher's debounce timing.
+            const watch = await originalWatch(project, {
+              ...options,
+              onResult: result => observed.push(result),
+            })
+            const initialReceipt = watch.lastResult
+            publishToolingResult = result => options.onResult?.(result)
+            refreshWatchedInputs = () => watch.requestRefresh({ force: true })
+            return {
+              get lastResult() {
+                return watch.lastResult
+              },
+              async requestRefresh(requestOptions?: { force?: boolean }) {
+                watchRequests += 1
+                const receipt = await watch.requestRefresh(requestOptions)
+                if (watchRequests === 1) {
+                  Expect(initialReceipt.changedOutputPaths.length).toBeGreaterThan(0)
+                  publishToolingResult(initialReceipt)
+                }
+                if (watchRequests === 2) {
+                  acquired.resolve(receipt)
+                  await release.promise
+                }
+                return receipt
+              },
+              dispose: () => watch.dispose(),
+            }
+          })
+          try {
+            const preview = await openStudioPreviewSession({
+              entryPath: paths['Garden.tao'],
+              previewRuntimeRoot,
+              projectRoot: root,
+            })
+            try {
+              const first = await preview.session.compileInitial()
+              Expect(first.status).toBe('compiled')
+              await settle()
+              Expect(preview.session.compileSnapshot().compileRevision).toBe(1)
+              Expect(watchRequests).toBe(1)
+              Expect(oneShotRequests).toBe(0)
+              const contractPath = FS.resolvePath('.tao-ts/Data.tao.ts', root)
+              Expect(await FS.readText(contractPath)).toContain('"Seed" | "Flower"')
+
+              const second = preview.session.compileInitial()
+              const consumed = await acquired.promise
+              const file = await preview.session.readFile('Garden.tao')
+              await FS.writeText(paths['Garden.tao'], file.content.replace('Before', 'After'))
+              await FS.writeText(paths['Data.tao'], 'public type PlantKind is one of Seed, Flower, Tree\n')
+              await refreshWatchedInputs()
+              const changed = observed.find(result =>
+                result.revision > consumed.revision && result.changedOutputPaths.length > 0
+              )
+              Expect(changed).toBeDefined()
+              if (changed === undefined) {
+                Errors.throwUnexpected('Expected the edited case contract to produce a changed watch receipt.')
+              }
+              Expect(changed.status).toBe('fresh')
+              Expect(changed.changedOutputPaths).toContain(contractPath)
+              Expect(await FS.readText(contractPath)).toContain('"Seed" | "Flower" | "Tree"')
+              publishToolingResult(changed)
+              release.resolve()
+              Expect((await second).status).toBe('compiled')
+              await until(() => {
+                const snapshot = preview.session.compileSnapshot()
+                return snapshot.compileRevision === 3 && snapshot.status === 'compiled'
+              }, { description: 'the later tooling revision to publish its preview' })
+              Expect(watchRequests).toBe(3)
+              Expect(oneShotRequests).toBe(0)
+              const generatedRoot = FS.resolvePath('_gen_tao-app', previewRuntimeRoot)
+              Expect(await FS.readText(FS.resolvePath('TaoStudioPublication.ts', generatedRoot)))
+                .toContain('"compileRevision":3')
+              Expect(await FS.readText(FS.resolvePath('TaoApp.tsx', generatedRoot))).toContain('After')
+            } finally {
+              release.resolve()
+              await preview.close()
+            }
+          } finally {
+            release.resolve()
+            restoreWatch()
+            restoreRefresh()
+          }
+        },
+      )
+    } finally {
+      await FS.remove(previewRuntimeRoot)
+    }
+  },
+)
 
 Test(
   'Studio preview session publishes successful revisions and keeps invalid drafts off the runtime graph',
