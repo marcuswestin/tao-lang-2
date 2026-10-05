@@ -5,8 +5,8 @@ import { validStudioProofArgs } from '../agent-cli-src/agent-config/StudioProofA
 
 const session = '0fe7bb54-bbc8-4133-897f-e9d0b2d6b37a'
 
-Test('combined proofs are fixed owned cases without caller target or failure selectors', () => {
-  for (const selected of ['combined-lifecycle', 'combined-target-failure']) {
+Test('cleanup and combined proofs are fixed owned cases without caller target or failure selectors', () => {
+  for (const selected of ['ios-cleanup', 'combined-lifecycle', 'combined-target-failure']) {
     Expect(parseManagedLoopAcceptanceArgs(['--case', selected]).case).toBe(selected)
     for (
       const extra of [['--session', session], ['--target', 'web'], ['--simulator', session], ['--fault', 'ios'], [

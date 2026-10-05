@@ -4,6 +4,52 @@ Prepared 2026-10-03 against `dev/ro` at `b13ddc54d`, in the shared primary check
 `$HOME/code/tao-lang-2`. Status: **implementation landed; scoped retained-resource cleanup authorized;
 remaining managed-loop and isolated native acceptance deferred until post-MVP**.
 
+## Scoped managed iOS cleanup repair — 2026-10-04
+
+A separate explicit request authorizes this cleanup repair and fresh quiet simulator proof;
+it does not resume the broader interaction, visibility or human acceptance matrix.
+The private shutdown barrier bypassed launch cancellation but reused the controller's
+launch-only child publication callback, which rejects stopping. Shutdown now has a separate
+capture callback, fenced to the live controller, authorized worker generation, exact owned
+target, retained resource generations, and original supervisor/worker identities before and
+after durable publication. Legitimate worker restart preserves physical reservation authority;
+replacement during publication refuses it. Launch cancellation and native admission remain fenced.
+Capture failures now log their nested cause while retaining the original refusal.
+
+Historical invocation `e73f1b30-a638-4696-b7b6-48da553e4da7` first failed an `openurl`
+macOS process-identity query. Its held shutdown publication refusal lacks a nested cause;
+the cancellation defect is reproduced independently, not asserted as that refusal's sole cause.
+Manual shutdown of historical simulator `63467AFA-4498-4C7C-91A1-64F5038E24F4`
+does not turn its failed receipt into successful acceptance.
+
+Fresh fixed `test-host managed-loop --case ios-cleanup` invocation
+`1c1cc789-9dd4-4681-b931-9fe22a87adfb` proves successful-stop and invalid-compilation
+cleanup without a viewer or mobile input driver. Both receipts report stopped/proved,
+devices released, shutdown barriers drained, controllers disposed, and private assets deleted.
+Original launchd_sim identities `38515 / 1791164875:820038` and
+`44409 / 1791164918:374740` are absent; final target resource records are absent and
+both source projections removed. The compilation failure remains in its diagnostics.
+Primary peer identities and baseline resource generations were preserved.
+
+Repeat invocation `f86b4abf-0c78-4dc3-a7fb-6ec3a1f20695` passes after requiring the
+exact invalid-fixture compiler diagnostic in the owned session log. Fresh targets
+`EB2B0EB8-DFE6-42EB-8DE2-3D60422609D4` and `AFD13A86-4CC9-42FD-82AB-28E4EB4E3CCB`
+both reach proved shutdown and collection; original bootstrap identities
+`6246 / 1791165784:709388` and `18112 / 1791165838:74463` are independently absent.
+Final target and invocation-creation ownership records are absent, both source projections
+are removed, and all16 primary peers/31 baseline resource generations remain preserved.
+Stopping, startup cancellation, legitimate restart, stale generations, replaced kernels,
+foreign targets, owner rotation and durable publication refusal have focused regressions;
+mutation checks detect cancellation, post-publication authority and runtime-routing defects.
+The integrated `verify-changed` gate passes (`2026-10-05T02-03-03-052Z-5893`).
+
+An earlier prototype invocation `cf491870-35fe-4673-8d36-3264d466ddf6` remains failed/retained:
+an overly strict new comparison confused the optional resource timestamp with the controller's
+kernel timestamp. The corrected check uses exact resource snapshots and the device's kernel
+holder. Its simulator `FA80D19D-0CC2-4B32-88C5-9ECD17BC8E10` and source projection
+`tao-managed-loop-project-7YhENw` remain quarantined pending scoped shutdown approval.
+No supported arbitrary private-iOS recovery route exists. Keep its failure receipt and fences.
+
 ## Accepted follow-up priorities — 2026-10-04
 
 The completed implementation landed on `main` as `20bbeff06b95b393d8a6d6418ad36c3d71ab567d`.

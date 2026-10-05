@@ -6,6 +6,18 @@
 - **Impact:** Source checks prove guards and configuration, but cannot prove the Developer's focus,
   native consent, or real concurrent device cleanup.
 - **Evidence:** Decided 2026-10-04: remaining implementation/host/human acceptance is deferred
+  except for the separately authorized managed iOS cleanup repair. Branch
+  `feat/managed-ios-cleanup` separates shutdown capture from launch cancellation without
+  weakening generation, kernel, target or resource admission. Fresh quiet invocation
+  `1c1cc789-9dd4-4681-b931-9fe22a87adfb` proves successful-stop and failed-compilation
+  shutdown, original bootstrap exit, target-fence release and private asset/source collection.
+  Repeat invocation `f86b4abf-0c78-4dc3-a7fb-6ec3a1f20695` also passes with the exact
+  invalid-fixture compiler diagnostic required; integrated changed-suite verification passes.
+  The earlier prototype `cf491870-35fe-4673-8d36-3264d466ddf6` remains quarantined after
+  a corrected timestamp-comparison guard defect; arbitrary private-iOS recovery is still absent.
+  The execution plan records the precise custody and historical-cause limits.
+  These scoped results do not close the broader acceptance entry. Previously decided:
+  remaining implementation/host/human acceptance is deferred
   until post-MVP. Completed source changes are being committed and landed with ordinary
   verification; this does not close acceptance. The execution plan's stopping decision supersedes
   older continuation instructions. Preserve original retained-resource ledgers and ownership
