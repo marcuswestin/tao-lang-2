@@ -387,6 +387,24 @@ Describe('repository gate runner', () => {
     ).toBe(true)
   })
 
+  Test('a split lane runs each reader on exactly one machine and the prepare phase on every one', async () => {
+    const gates = ['_fix-dprint', '_repo-lint', '_typecheck', 'dead-exports']
+    const first = await run(gates, {}, { partition: { count: 2, index: 0 } })
+    const second = await run(gates, {}, { partition: { count: 2, index: 1 } })
+
+    Expect(first.started).toContain('_fix-dprint')
+    Expect(second.started).toContain('_fix-dprint')
+    const readers = [...first.started, ...second.started].filter(name => name !== '_fix-dprint').sort()
+    Expect(readers).toEqual(['_repo-lint', '_typecheck', 'dead-exports'])
+    Expect(first.summary.partition?.digest).toBe(second.summary.partition?.digest)
+    Expect(first.summary.partition?.index).toBe(1)
+    Expect(
+      first.summary.gates.filter(gate => gate.status === 'skipped').every(gate =>
+        gate.reason === 'runs on partition 2/2'
+      ),
+    ).toBe(true)
+  })
+
   Test('skips the macOS-only gates off macOS and runs them on it', async () => {
     const macOnly = ['studio-smoke-native', 'studio-canary']
     const linux = await run(['_repo-lint', ...macOnly], {}, { hostPlatform: 'linux' })

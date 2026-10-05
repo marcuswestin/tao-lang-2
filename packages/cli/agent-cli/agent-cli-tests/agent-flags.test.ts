@@ -31,4 +31,10 @@ Describe('agent flags', () => {
     Expect(parseAgentFlags(['--max-lines']).maxLines).toBeUndefined()
     Expect(parseAgentFlags(['--max-lines=0']).maxLines).toBeUndefined()
   })
+
+  Test('streams by default under CI, where the log file leaves with the runner', () => {
+    Expect(parseAgentFlags([], { CI: 'true' }).verbose).toBe(true)
+    Expect(parseAgentFlags([], {}).verbose).toBe(false)
+    Expect(parseAgentFlags([], { CI: 'false' }).verbose).toBe(false)
+  })
 })

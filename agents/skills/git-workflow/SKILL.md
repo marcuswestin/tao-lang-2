@@ -104,6 +104,12 @@ Do not fetch and merge `main` beforehand merely to satisfy a stale precondition.
 landing reports a conflict, resolve it outside the lock; after any merge of `main` into a branch,
 skim what arrived: `references/after-merging-main.md`.
 
+The hosted route, `./agent unsandboxed merge-pr`, merges the pull request on GitHub instead, once its
+checks pass (`verification-lanes` says when it suffices). GitHub refuses a pull request that conflicts
+with `main`, so bring `main` in with `./agent merge-main`, push, and let the checks run again. After it
+merges, the remote `feat/<name>` is gone and `merged/<name>` holds its head; the local branch and
+worktree remain for the resource review below.
+
 A person's branch is `dev/<name>`. It lands through the same `./agent unsandboxed land` as
 `feat/<name>`, then the same name is created again from `main` (`references/personal-dev-branch.md`).
 A `feat/<name>` branch lands once and is not recreated for more commits. Pushing is irreversible:

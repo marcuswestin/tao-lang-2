@@ -373,6 +373,10 @@ for (const fault of ['sdk', 'environment', 'plan-symlink'] as const) {
 }
 
 Test('fast fixed source downloader captures and drains its original plutil metadata descendant', async () => {
+  // The SDK downloader's metadata child is macOS's /usr/bin/plutil, which Linux does not ship.
+  if (Platform.hostPlatform !== 'darwin') {
+    return
+  }
   const f = await fixture('metadata', 20_000, 'download')
   try {
     const result = await f.execute()

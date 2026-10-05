@@ -21,6 +21,7 @@ const expected = [
   'landed',
   'capabilities',
   'open-pr',
+  'merge-pr',
   'fix-agent-config',
   'verify-full',
   'test-host',

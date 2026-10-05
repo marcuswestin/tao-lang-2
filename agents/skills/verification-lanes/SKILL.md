@@ -83,8 +83,34 @@ on its size.
 - Refresh the roadmap, ledger, and spec documents the work changed **before** verifying; a tracked
   edit made after a green lane changes the tree that lane proved, so the next lane runs everything
   again from nothing.
-- A lane that is slow is usually not a regression — read the `contention` block in
-  `.artifacts/logs/<lane>/latest/summary.json` first: it names how many lanes shared the machine.
+- A lane that is slow is usually not a regression — read `.artifacts/logs/<lane>/latest/summary.json`
+  first. `overlap` names every other Tao lane that ran at any moment of it (`solo: true` means none);
+  `contention.contended` also trips on load a broad lane raises by itself, so it cannot say that.
+- Every worktree's `verify-changed` and broad-lane runs, with timing, overlap, and failure reason, and
+  every landing's outcome and phases, append to the machine-wide history under
+  `~/.cache/tao/machine-lanes/history/` (`runs.jsonl`, `landings.jsonl`), which outlives reclaimed
+  worktrees. Compare timings there, not in one checkout's `.artifacts/`.
+
+## Hosted verification
+
+`.github/workflows/verify.yml` runs `verify-full-sandbox` split across twelve free Linux runners
+(`--partition k/12`) on every pull request push, merge-queue entry, and push to `main`; its `Verify`
+job is the single verdict. It proves the portable gates only — never the host-only lanes.
+`./agent pr-checks --wait` follows a pull request's checks and prints each failure's reason from its
+annotations; a failed partition uploads its logs as the `verify-partition-<k>` artifact. Reproduce
+with `./agent test-file` locally, push the fix, and read the next verdict.
+
+An authorized landing takes one of two routes, both squash-merging the reviewed merge message and
+archiving the branch at `merged/<name>`:
+
+- **`./agent unsandboxed merge-pr`** when the green `Verify` verdict proves the change: the cases
+  "Propose it as ready to land" lists below, short of anything only a host lane exercises. Push with
+  `./agent unsandboxed open-pr`, write the message at `.artifacts/merge/<branch>.msg`, then run it: it
+  waits for every check on the pushed head, merges only after `Verify` passed on that exact commit,
+  and deletes the remote branch. GitHub never merges on its own; nothing enables auto-merge.
+- **`./agent unsandboxed land`** when the change reaches a host-only lane (Studio, browser, native
+  shell, simulator, canary), or when CI is unavailable: it verifies on this machine under the landing
+  lock, including what the hosted runners cannot.
 
 ## Reporting while a lane runs
 

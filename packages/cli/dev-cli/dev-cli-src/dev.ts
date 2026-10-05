@@ -18,6 +18,7 @@ import { formatGateSummary, formatVerdict, gateExitCode } from '@verification/Ru
 import { TestRunner } from '@verification/TestRunner'
 import { UiVisibility } from '@verification/UiVisibility'
 import { VerificationLanes } from '@verification/VerificationLanes'
+import { VerifyPartition } from '@verification/VerifyPartition'
 import { WorkReporter } from '@verification/WorkReporter'
 import { CleanCommand } from './clean/CleanCommand'
 import { devZshCompletion } from './completion/DevCompletion'
@@ -28,7 +29,9 @@ import { MyStatusCommand } from './doctor/MyStatusCommand'
 import { ReclaimCommand } from './doctor/ReclaimCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
 import { MergeRecovery } from './git/MergeRecovery'
+import { MergePrCommand } from './pr/MergePrCommand'
 import { OpenPrCommand } from './pr/OpenPrCommand'
+import { PrChecksCommand } from './pr/PrChecksCommand'
 
 /*
  * Studio and Expo command modules load lazily inside their actions. Studio reaches the generated
@@ -61,6 +64,7 @@ type GatesCommandOptions = {
   json?: string
   lane?: string
   output?: string
+  partition?: string
   skipUnsandboxed?: boolean
   skipped?: string[]
 }
@@ -450,6 +454,10 @@ await runWithCommands(commands => {
     .option('--json <path>', 'Also write the summary as a JSON artifact at this path.')
     .option('--lane <name>', 'Artifact lane the run writes its logs and summary under.', 'verify')
     .option('--output <mode>', OUTPUT_OPTION_HELP)
+    .option(
+      '--partition <index/count>',
+      "Run this machine's share of the lane's readers, one-based, e.g. 2/8; the prepare phase runs in full.",
+    )
     .option('--skip-unsandboxed', 'Skip gates whose catalog metadata requires an unsandboxed host.')
     .option('--skipped <entry...>', 'Gates deliberately not run in this lane, as name=reason.')
     .option(
@@ -485,12 +493,13 @@ await runWithCommands(commands => {
             gates,
             greenTree: options.greenTree === undefined || options.greenTree.length === 0
               ? undefined
-              : { lanes: options.greenTree, noCache: options.cache === false },
+              : { lanes: options.greenTree, noCache: options.cache === false, sharedRoot: GreenTree.sharedRoot() },
             hostPlatform: Platform.hostPlatform,
             jobs: parseOptionalPositiveInteger(options.jobs, '--jobs'),
             jsonPath: options.json,
             lane: options.lane,
             outputMode,
+            partition: options.partition === undefined ? undefined : VerifyPartition.parse(options.partition),
             skipUnsandboxed: options.skipUnsandboxed === true,
             skipped: options.skipped,
           })
@@ -842,6 +851,38 @@ await runWithCommands(commands => {
       await runExitCommand(async () =>
         (await OpenPrCommand.run({
           pollIntervalMs: parseOptionalPositiveInteger(options.pollIntervalMs, '--poll-interval-ms'),
+        })).exitCode
+      )
+    })
+
+  commands
+    .command('merge-pr')
+    .description(
+      "Squash-merge this branch's pull request once every check on its pushed head, Verify among them, has passed; then archive it at merged/<name> and delete the remote branch.",
+    )
+    .option('--interval-ms <ms>', 'How often to poll the checks while they run (default 60000).')
+    .action(async (options: { intervalMs?: string } = {}) => {
+      await runExitCommand(async () =>
+        (await MergePrCommand.run({
+          intervalMs: parseOptionalPositiveInteger(options.intervalMs, '--interval-ms'),
+        })).exitCode
+      )
+    })
+
+  commands
+    .command('pr-checks')
+    .description(
+      "Report every check on a pull request's head, with the reasons failed ones give; --wait follows them to the end.",
+    )
+    .option('--pr <number>', "The pull request; by default, the open one for this worktree's branch.")
+    .option('--wait', 'Follow the checks until every one has concluded.')
+    .option('--interval-ms <ms>', 'How often --wait polls GitHub (default 60000).')
+    .action(async (options: { intervalMs?: string; pr?: string; wait?: boolean } = {}) => {
+      await runExitCommand(async () =>
+        (await PrChecksCommand.run({
+          intervalMs: parseOptionalPositiveInteger(options.intervalMs, '--interval-ms'),
+          pr: parseOptionalPositiveInteger(options.pr, '--pr'),
+          wait: options.wait === true,
         })).exitCode
       )
     })

@@ -1,0 +1,200 @@
+name: Verify
+
+# Runs verify-full's portable membership (`./agent verify-full-sandbox`) split across free Linux
+# runners, so an agent on a small machine can open a pull request and read one verdict instead of
+# running the full lane itself. Each partition runs the whole prepare phase and its own share of the
+# readers; the final `Verify` job is the one verdict, and it refuses a set of partitions that did not
+# compute the same plan, because a disagreement there means some node ran nowhere.
+#
+# What this does not prove: the host-only lanes (Studio smokes, browser, native shell, simulator,
+# canary), which need macOS and a window server. `./agent unsandboxed verify-full` still owns those.
+#
+# PARTITIONS and the matrix list below must change together. Never cache `.artifacts`: the plan
+# reads recorded timings, and partitions that restored different ones would place nodes differently.
+# Each partition instead seeds them from `.github/verify/durations.json` and `ledger.json`.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main]
+  merge_group:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  PARTITIONS: 12
+  # Per-gate green records travel between runs of the same tree through the Actions cache, which
+  # accepts only an absolute path with no `..` in it.
+  TAO_GREEN_STORE: /home/runner/tao-green
+  # Bun's and npm's download caches, restored before the bootstrap installs from them.
+  BUN_INSTALL_CACHE_DIR: /home/runner/tao-cache/bun
+  npm_config_cache: /home/runner/tao-cache/npm
+
+jobs:
+  partition:
+    name: Partition ${{ matrix.partition }}/12
+    # x86-64, not ARM: the Hermes compiler `ship-bundle-proof` runs ships no Linux ARM binary.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        partition: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Identify the tree
+        id: tree
+        run: echo "hash=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
+
+      - name: Restore green records for this tree
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.TAO_GREEN_STORE }}
+          key: tao-green-${{ runner.os }}-${{ runner.arch }}-${{ steps.tree.outputs.hash }}-${{ matrix.partition }}-of-${{ env.PARTITIONS }}
+          restore-keys: |
+            tao-green-${{ runner.os }}-${{ runner.arch }}-${{ steps.tree.outputs.hash }}-
+
+      # Keyed on every lock the bootstrap installs from: the repository's Bun lockfile, and the Tao
+      # lock that pins Native Bridge's npm packages.
+      - name: Restore the package download caches
+        id: package-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /home/runner/tao-cache
+          key: tao-packages-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'Apps/Test Apps/Native Bridge/.tao/store/lock.jsonc') }}
+          restore-keys: |
+            tao-packages-${{ runner.os }}-${{ runner.arch }}-
+
+      # Installs a checksum-pinned single-user Nix, builds the locked Linux profile, then runs
+      # `./agent setup`; the same path the native Linux contributor acceptance proves.
+      - name: Bootstrap Nix, the pinned toolchain, and Tao setup
+        run: ./.config/bootstrap-tao-dev-env --install-nix
+
+      # Saved straight after the bootstrap, so a partition that later fails still warms the cache.
+      # All partitions share one key; the first to finish saves it and the rest are refused harmlessly.
+      - name: Save the package download caches
+        if: steps.package-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: /home/runner/tao-cache
+          key: tao-packages-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'Apps/Test Apps/Native Bridge/.tao/store/lock.jsonc') }}
+
+      # Every partition plans from this one committed snapshot of measured durations, so all of them
+      # compute the same plan, and suites split into shards sized by cost rather than running whole.
+      # The durations are CI's own suite and gate totals; the ledger holds only per-file relative
+      # costs, under an identity no real file hashes to, so it shapes shards without skipping tests.
+      - name: Seed the plan with the committed durations
+        run: |
+          mkdir -p .artifacts/timings .artifacts/testing
+          cp .github/verify/durations.json .artifacts/timings/durations.json
+          cp .github/verify/ledger.json .artifacts/testing/ledger.json
+
+      - name: Verify partition ${{ matrix.partition }}/${{ env.PARTITIONS }}
+        run: ./agent verify-full-sandbox --partition ${{ matrix.partition }}/${{ env.PARTITIONS }}
+
+      # Locally the prepare phase fixes formatting and regenerates indexes in place; here a rewrite
+      # means the pull request carries unformatted or stale files, which is a failure.
+      - name: Require the prepare phase to leave the tree unchanged
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "The prepare phase rewrote tracked files; run ./agent fix and commit the result:"
+            git status --porcelain
+            git diff --stat
+            exit 1
+          fi
+
+      # The Verify job reads every partition's summary; the gate logs matter only when one failed, so a
+      # green partition uploads its summary alone.
+      - name: Collect the run's summary, and its logs when it failed
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/verify-logs"
+          latest=.artifacts/logs/verify-full-sandbox/latest
+          if [ "$JOB_STATUS" = success ] && [ -e "$latest/summary.json" ]; then
+            cp -L "$latest/summary.json" "$RUNNER_TEMP/verify-logs/"
+          elif [ -e "$latest" ]; then
+            cp -RL "$latest/." "$RUNNER_TEMP/verify-logs/"
+          fi
+
+      - name: Upload the run's summary and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-partition-${{ matrix.partition }}
+          path: ${{ runner.temp }}/verify-logs
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Save green records for this tree
+        if: always()
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.TAO_GREEN_STORE }}
+          key: tao-green-${{ runner.os }}-${{ runner.arch }}-${{ steps.tree.outputs.hash }}-${{ matrix.partition }}-of-${{ env.PARTITIONS }}
+
+  verify:
+    name: Verify
+    needs: partition
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Download every partition's summary
+        uses: actions/download-artifact@v4
+        with:
+          pattern: verify-partition-*
+          path: partitions
+
+      - name: Require every partition green and every plan identical
+        env:
+          PARTITION_RESULT: ${{ needs.partition.result }}
+        run: |
+          # One annotation per extracted failure, and one for each failed gate whose log matched no
+          # recognized format, escaped as workflow commands require.
+          cat > "$RUNNER_TEMP/annotate.jq" <<'JQ'
+          def escape: gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A") | .[0:2000];
+          (.partition.index // "?") as $k
+          | (.failures // []) as $failures
+          | ($failures[] | "::error title=Partition \($k): \(.gate)::\((.test + (if .error then ": " + .error else "" end)) | escape)"),
+            (.gates[] | select(.status == "failed") | .name as $gate
+              | select([$failures[] | select(.gate == $gate)] | length == 0)
+              | "::error title=Partition \($k): \($gate)::Failed with no recognized test failure; the partition's log artifact holds its output.")
+          JQ
+          status=0
+          summaries=$(find partitions -name summary.json | sort)
+          count=$(printf '%s\n' "$summaries" | grep -c . || true)
+          if [ "$count" != "$PARTITIONS" ]; then
+            echo "Expected $PARTITIONS partition summaries, found $count."
+            status=1
+          fi
+          digests=$(for summary in $summaries; do jq -r '.partition.digest // "missing"' "$summary"; done | sort -u)
+          if [ "$(printf '%s\n' "$digests" | grep -c .)" != 1 ] || [ "$digests" = missing ]; then
+            echo "Partitions disagreed about the plan, so some node may have run nowhere:"
+            printf '%s\n' "$digests"
+            status=1
+          fi
+          for summary in $summaries; do
+            jq -r '"partition \(.partition.index // "?")/\(.partition.count // "?"): \(.status), \([.gates[] | select(.status == "passed")] | length) passed, \([.gates[] | select(.status == "failed")] | length) failed in \(.elapsedMs / 1000 | floor)s"' "$summary"
+            jq -r '.gates[] | select(.status == "failed") | "  failed: \(.name)"' "$summary"
+            # Annotations carry each failure's reason to the checks API, where `./agent pr-checks`
+            # reads them without downloading a log.
+            jq -r -f "$RUNNER_TEMP/annotate.jq" "$summary"
+          done
+          if [ "$PARTITION_RESULT" != success ]; then
+            echo "At least one partition did not succeed ($PARTITION_RESULT); its artifact holds the logs."
+            status=1
+          fi
+          exit $status

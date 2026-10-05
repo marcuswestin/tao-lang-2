@@ -28,6 +28,13 @@ import { Errors, FS, Platform, TaoResources } from '@shared'
  */
 const PAYLOAD_FILE_NAME = 'tao-resources.tgz'
 const PAYLOAD_STEM = 'tao-resources'
+
+/**
+ * LICENSE_FILES travel at the root of every payload, named from the repository root: the runtime the
+ * payload carries into apps is under the AGPL with the application exception, and whoever receives
+ * it must receive both texts.
+ */
+const LICENSE_FILES = ['LICENSE', 'LICENSE-APP-EXCEPTION.md', 'TRADEMARKS.md'] as const
 const PAYLOAD_EXTENSION = '.tgz'
 
 /** How much of the payload's identity names its tree: enough to tell builds apart, short to read. */
@@ -38,6 +45,7 @@ const STAGING_MARKER = '.tmp-'
 
 /** StandaloneResources owns the embedded resource payload and its unpacked tree. */
 export const StandaloneResources = {
+  LICENSE_FILES,
   PAYLOAD_FILE_NAME,
   ensureUnpacked,
   unpack,

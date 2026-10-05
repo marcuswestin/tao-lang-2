@@ -3,6 +3,13 @@ import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { StandaloneResources } from '../cli-src/standalone-resources'
 
 Describe('standalone resources', () => {
+  Test('ships the licence texts that cover the runtime it carries into apps', async () => {
+    for (const name of StandaloneResources.LICENSE_FILES) {
+      Expect(await FS.isFile(FS.resolvePath(`../../../../${name}`, import.meta.dir))).toBe(true)
+    }
+    Expect(StandaloneResources.LICENSE_FILES).toContain('LICENSE-APP-EXCEPTION.md')
+  })
+
   Test('unpacks the payload into a stamped tree', async () => {
     await withRoot(async root => {
       const directory = FS.resolvePath('resources', root)
