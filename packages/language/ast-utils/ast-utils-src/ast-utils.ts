@@ -5,6 +5,7 @@ import {
   referenceBlockOf,
 } from './app-configuration'
 import { rootAppValue } from './apps'
+import { sourceActionResult } from './source-action-results'
 import { resolveArgumentBindings } from './argument-bindings'
 import { createAssociatedEffects } from './associated-effect-context'
 import { resolveAssociatedMethodInvocation } from './associated-invocations'
@@ -184,6 +185,7 @@ export const ASTUtils = {
   resolveRenderInvocation,
   resolveRenderTarget,
   rootAppValue,
+  sourceActionResult,
   isPluralCategory,
   phraseIsPlural,
   phraseNumberParameters,
