@@ -531,7 +531,7 @@ class TR {
       return noneBranch ? noneBranch[1](context) : renderReadNet('missing', context, siteProps)
     }
     if (legacyPayload) {
-      return renderMatchedBranches(value, branches, remaining)
+      return renderMatchedBranches(value, branches, remaining as () => React.ReactNode)
     }
     const matched = firstMatchedBranch(value, branches)
     if (matched) {
