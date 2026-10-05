@@ -5,6 +5,7 @@ import {
   type RenderInvocationPair,
   resolveArgumentBindings,
 } from './argument-bindings'
+import type { AssociatedMethodReceiver } from './associated-methods'
 import { writableExpression } from './reactive-parameters'
 import { type TaoType, Type } from './Type'
 
@@ -66,9 +67,18 @@ export type ResolvedRenderInvocation = {
 export type ResolvedActionInvocation = {
   invocation: AST.DoStatement
   action?: AST.ActionDeclaration | AST.CommandDeclaration
+  associated?: AssociatedActionReceiver
   pairs: ActionInvocationPair[]
   diagnostics: ArgumentBindingDiagnostic[]
 }
+
+/** Associated action dispatch retains the authored receiver and its actual entity domain. */
+type AssociatedActionReceiver = Readonly<{
+  receiver: AssociatedMethodReceiver
+  domain: TaoType
+  owner: AST.EntityDataDeclaration
+  cardinality: 'one' | 'many'
+}>
 
 /**
  * ResolvedFunctionInvocation declares one call's owner-bound arguments. Its target links to a pure
@@ -88,7 +98,7 @@ export type ResolvedFunctionInvocation = {
 
 /** ResolvedActionTarget declares how an expression resolves as an action target. */
 export type ResolvedActionTarget =
-  | { kind: 'named'; action: AST.ActionDeclaration | AST.CommandDeclaration }
+  | { kind: 'named'; action: AST.ActionDeclaration | AST.CommandDeclaration; associated?: AssociatedActionReceiver }
   | { kind: 'dynamic' }
   | { kind: 'unresolved' }
 
@@ -312,6 +322,7 @@ export function resolveActionInvocation(invocation: AST.DoStatement): ResolvedAc
   return {
     invocation,
     action: target.action,
+    ...(target.associated ? { associated: target.associated } : {}),
     pairs: bindings.pairs,
     diagnostics: bindings.diagnostics,
   }
@@ -362,11 +373,48 @@ function resolveActionTargetWithSeenAliases(
   if (AST.isValueReference(expression)) {
     return resolveActionTargetReference(expression, seenAliases, typeOfExpression)
   }
+  const associated = resolveAssociatedActionTarget(expression, typeOfExpression)
+  if (associated) {
+    return associated
+  }
   const type = typeOfExpression(expression)
   if (type.kind === 'primitive' && type.primitive === 'action') {
     return { kind: 'dynamic' }
   }
   return UnresolvedActionTarget
+}
+
+function resolveAssociatedActionTarget(
+  expression: AST.Expression,
+  typeOfExpression: (expression: AST.Expression) => TaoType,
+): ResolvedActionTarget | undefined {
+  let name: string
+  let receiver: AssociatedMethodReceiver
+  if (AST.isMemberAccessExpression(expression) && expression.shade === undefined && expression.members.length > 0) {
+    name = expression.members.at(-1)!
+    receiver = { kind: 'member-path', site: expression, members: expression.members.slice(0, -1) }
+  } else if (AST.isPostfixMemberAccess(expression)) {
+    name = expression.member
+    receiver = { kind: 'expression', expression: expression.receiver }
+  } else {
+    return undefined
+  }
+  const domain = receiver.kind === 'expression'
+    ? typeOfExpression(receiver.expression)
+    : Type.atMemberPath(Type.ofReferenceRoot(receiver.site), receiver.members)
+  const entity = domain.kind === 'entity' ? domain : domain.kind === 'list' ? domain.element : undefined
+  if (entity?.kind !== 'entity' || !AST.isEntityDataDeclaration(entity.entity)) {
+    return undefined
+  }
+  const owner = entity.entity
+  const cardinality = domain.kind === 'list' ? 'many' : 'one'
+  const action = owner.block.entries.filter(AST.isActionDeclaration).find(declaration => {
+    const declared = AST.associatedEntityActionReceiver(declaration)
+    return declaration.name === name && declared?.owner === owner && declared.cardinality === cardinality
+  })
+  return action
+    ? { kind: 'named', action, associated: { receiver, domain, owner, cardinality } }
+    : undefined
 }
 
 function resolveActionTargetReference(
