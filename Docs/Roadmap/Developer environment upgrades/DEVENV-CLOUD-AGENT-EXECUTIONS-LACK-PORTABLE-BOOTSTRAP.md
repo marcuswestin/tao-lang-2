@@ -652,7 +652,10 @@ A hosted Claude cloud session ran the repository's own lanes from main `fef60a5`
 `feat/cloud-workflow-verify`. The container was Linux on 4 CPUs, running as root, with no IPv6 stack
 (no `/proc/net/if_inet6`). `./agent setup` left `.codex/config.toml` unmodified. The session title
 did not carry the `CLOUD: ` prefix until it was set by hand, even though the SessionStart rename
-note was present. Port-reservation suites passed without IPv6.
+note was present. A session started from the app is untitled at SessionStart, so a
+UserPromptSubmit hook (`agent-prompt-submit.zsh`) now prefixes the custom title on the next prompt;
+the harness passes only a custom title, never a generated one, to that hook. Port-reservation
+suites passed without IPv6.
 
 The per-commit gate exposed Linux and root defects, each fixed on the branch and proved by a failing
 case before the fix:
@@ -691,7 +694,9 @@ The final `verify-changed` passed 48, failed 0 and skipped 1.
   - Diagnosis: the journey waits for files on disk, then gives the default 15-second browser budget
     to UI that updates only after a compile. On this host the whole journey also nears bun's
     300-second per-test limit.
-  - It remains open as a test synchronization defect. Aborted runs also left Expo servers behind;
+  - Fixed on the branch: the board wait gets 30s, each bind waits for the compile and an enabled
+    `StoryTypical` row, and the test limit is 480s. Run alone afterwards it passed in 370.4s, past
+    the old limit; a full lane run with it is still unproved. Aborted runs also left Expo servers behind;
     see [DEVENV-STUDIO-SMOKE-LEAVES-EXPO-SERVERS-RUNNING](DEVENV-STUDIO-SMOKE-LEAVES-EXPO-SERVERS-RUNNING.md).
 
 Hosted Claude proof is therefore partial: the per-commit gate passes, and full verification reaches

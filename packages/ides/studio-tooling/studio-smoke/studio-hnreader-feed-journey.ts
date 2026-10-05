@@ -53,7 +53,8 @@ export async function exerciseHnreaderFeed(): Promise<void> {
     Expect(created.sketches).toHaveLength(1)
     const sketchId = created.sketches[0]!.id
     const board = `[data-tao-studio-sketch="${sketchId}"]`
-    await driver.waitFor(`document.querySelector(${JSON.stringify(board)}) !== null`)
+    // The catalog reaches disk before the board renders; a loaded host can take longer than the default wait.
+    await driver.waitFor(`document.querySelector(${JSON.stringify(board)}) !== null`, { timeoutMs: 30_000 })
     await drawRect(driver, board, { x: 225, y: 60 }, { x: 110, y: 30 })
     await until(async () => (await catalog()).sketches[0]?.rects.length === 1)
     await waitForCompiledPreview(driver)
@@ -118,6 +119,7 @@ export async function exerciseHnreaderFeed(): Promise<void> {
         `document.querySelector(${JSON.stringify(board)}).scrollIntoView({block:'center',inline:'center'})`,
       )
       await waitForVisibleTarget(driver, board)
+      await waitForEnabledFeedRow(driver, 'StoryTypical')
       const typical = await markText(driver, `${feedPanel} .studio-feed-row`, 'StoryTypical', 'row')
       await driver.drag(typical, board)
       await waitForKeep(driver)
@@ -282,6 +284,16 @@ async function waitForCompiledPreview(browser: StudioCdp): Promise<void> {
       const revisions = /^compiled (\\d+) · applied (\\d+) —/.exec(status?.textContent ?? '')
       return status?.dataset.state === 'compiled' && revisions !== null && revisions[1] === revisions[2]
     })()`,
+    { timeoutMs: 30_000 },
+  )
+}
+
+/** Feed rows stay disabled while the feed reloads after a compile; wait for the compile, then the row. */
+async function waitForEnabledFeedRow(browser: StudioCdp, text: string): Promise<void> {
+  await waitForCompiledPreview(browser)
+  await browser.waitFor(
+    `[...document.querySelectorAll('${feedPanel} .studio-feed-row')]
+      .some(row => !row.disabled && row.textContent.trim() === ${JSON.stringify(text)})`,
     { timeoutMs: 30_000 },
   )
 }

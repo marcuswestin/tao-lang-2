@@ -15,6 +15,8 @@
   process and its `node .../runtime-*/node_modules/.bin/expo start` child behind, with PPID 1, 766
   and 352 seconds after their runs. The second run hit `ENOSPC` while the first run's servers were
   still alive. Stopping the four exact PIDs cleared them.
+- **Workaround:** After a smoke ends abnormally, list `expo start` processes with PPID 1 and stop
+  those exact PIDs before the next Studio launch.
 - **Proposed change:** Give the preview server process-group or recorded-ownership cleanup that
   still runs when the test body is cut off by a timeout. Also have the smoke harness stop leftover
   servers from its own earlier runs before it launches.

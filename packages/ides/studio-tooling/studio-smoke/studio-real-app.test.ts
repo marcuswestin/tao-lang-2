@@ -11,7 +11,7 @@ import { exerciseHnreaderFeed } from './studio-hnreader-feed-journey'
 Test(
   'Studio feeds, keeps, discards, and undoes generated HNReader Stories through real browser drags',
   exerciseHnreaderFeed,
-  300_000,
+  480_000,
 )
 
 async function canvasTranslation(browser: StudioCdp): Promise<{ x: number; y: number }> {
