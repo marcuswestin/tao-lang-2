@@ -25,9 +25,14 @@ adapter/list graduation remain. No language stream is complete.
 The associated-method frontend, private defining-module witness publication and concrete
 capability transport now have focused source/execution proof. Required defaults retain their
 defining-module scope, nested inputs/results retain their receiving contracts, and raw omitted
-argument slots remain distinct from wrapped `none`. Canonical effect snapshot/discovery adapters
-are integrated, but production effect installation, union transport and complete slot integration
-remain prerequisites for capability-driven app graduation. Existing function examples now use
+argument slots remain distinct from wrapped `none`. Canonical effect snapshot/discovery now runs
+before associated admission in standalone and editor validation, and the same generation's sealed
+context is retained for compilation. Transport emission and private dependencies share the
+canonical plan, including optional absence. A genuine source method passes app compilation and
+runtime invocation through an inherited live receiver; unclassified native implementations retain
+unknown effects. This is a source capability milestone, not complete app graduation. Generic/Self,
+converters, rendering capabilities, full slots, quantities and action/data integration remain.
+Existing function examples now use
 the formatter's selected `func` and arrow return spelling. Broad follow-up verification is pending.
 The parameter-array signature adapter is reviewed and integrated at `0ac15b312`.
 Numeric/unit construction, the isolated capability carrier runtime, generated native unit leaf

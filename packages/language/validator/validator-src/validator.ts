@@ -1,4 +1,4 @@
-import { Packages } from '@ast-utils'
+import { ASTUtils, Packages } from '@ast-utils'
 import { AST, codeProjectRoot, Parser, type ParseResult, type ParserServices } from '@parser'
 import { type Diagnostic, Diagnostics, FS, ReleaseCapabilities, type ReleaseProfile } from '@shared'
 import { registerTaoValidationChecks } from './langium-validation'
@@ -10,6 +10,8 @@ import { validateReleaseCapabilities } from './validators/release-capabilities-v
 /** ValidationResult declares validated Tao source and diagnostics. */
 export type ValidationResult = Pick<ParseResult, 'entry' | 'files'> & {
   diagnostics: readonly Diagnostic[]
+  /** Sealed source contracts for this validated AST generation, retained for compilation. */
+  associatedEffects?: ASTUtils.AssociatedEffectsContext
 }
 
 /** ValidatorSession reuses standalone parser services across independent source strings. */
@@ -125,13 +127,17 @@ async function validateParseResult(
     ...(context.projectFiles === undefined ? {} : { projectFiles: context.projectFiles }),
   })
   validatePackageWorkspace(ctx)
+  const associatedEffects = ASTUtils.createAssociatedEffects(context.workspaceFiles)
   for (const file of context.workspaceFiles) {
-    const nodes = Validate.TaoFile(file, ctx)
-    Validate.Types(file, nodes, ctx)
+    const nodes = Validate.TaoFile(file, ctx, associatedEffects)
+    Validate.Types(file, nodes, ctx, associatedEffects)
     await Validate.ForeignImplementationFiles(file, ctx)
   }
 
-  return validationResultFromParse(parseResult, [...parseResult.diagnostics, ...validationDiagnostics.diagnostics])
+  return {
+    ...validationResultFromParse(parseResult, [...parseResult.diagnostics, ...validationDiagnostics.diagnostics]),
+    associatedEffects,
+  }
 }
 
 /**

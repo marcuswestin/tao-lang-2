@@ -6,6 +6,7 @@ import {
 } from './app-configuration'
 import { rootAppValue } from './apps'
 import { resolveArgumentBindings } from './argument-bindings'
+import { createAssociatedEffects } from './associated-effect-context'
 import { resolveAssociatedMethodInvocation } from './associated-invocations'
 import {
   associatedCallableAnalysis,
@@ -18,6 +19,7 @@ import {
 } from './associated-methods'
 import { analyzeCallableEffects } from './callable-effects'
 import { bindCallableArguments, callableSignatureOf, compareCallableSignatures } from './callable-signatures'
+import { containsCapability, planCapabilityTransport } from './capability-transport'
 import { colorValues } from './color-values'
 import {
   commandSlots,
@@ -101,6 +103,7 @@ export type { NumericUnitsDeclarationPlan, NumericUnitsSuffixResolution } from '
 
 /** ASTUtils groups shared semantic helpers for Tao AST consumers. */
 export const ASTUtils = {
+  createAssociatedEffects,
   resolveAssociatedMethodInvocation,
   associatedCallableAnalysis,
   associatedCallableDescriptor,
@@ -109,6 +112,8 @@ export const ASTUtils = {
   materializeAssociatedCallable,
   ownAssociatedMethods,
   withAssociatedEffects,
+  containsCapability,
+  planCapabilityTransport,
   parameterRequiresWritable,
   writableExpression,
   literalExpression,
@@ -193,6 +198,9 @@ export const ASTUtils = {
 export namespace ASTUtils {
   export type AssociatedCallableDescriptor = import('./associated-methods').AssociatedCallableDescriptor
   export type AssociatedEffectsContext = import('./associated-methods').AssociatedEffectsContext
+  export type CapabilityTransportPlan = import('./capability-transport').CapabilityTransportPlan
+  export type CapabilityTransportMethod = import('./capability-transport').CapabilityTransportMethod
+  export type CapabilityTransportResult = import('./capability-transport').CapabilityTransportResult
   export type AssociatedCapabilityWitness = import('./Type').AssociatedCapabilityWitness
   export type AssociatedDescriptorMaterialization = import('./associated-methods').AssociatedDescriptorMaterialization
   export type AssociatedMethodReceiver = import('./associated-methods').AssociatedMethodReceiver

@@ -1,10 +1,6 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
-import {
-  type CapabilityTransportResult,
-  planCapabilityTransport,
-} from '../../../ast-utils/ast-utils-src/capability-transport'
 import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 
@@ -31,6 +27,9 @@ export const capabilityTransportValidationChecks = {
     }
   },
   [AST.FunctionCallExpression.$type]: (call, ctx) => {
+    if (AST.isFromExpression(call.$container) && call.$container.expression === call) {
+      return
+    }
     const resolved = ASTUtils.resolveFunctionInvocation(call)
     for (const pair of resolved.pairs) {
       validateCapabilityTransport(pair.argument.value, Type.ofParameter(pair.parameter), ctx)
@@ -56,9 +55,9 @@ export function validateCapabilityTransport(
   value: AST.Expression,
   expected: ASTUtils.TaoType,
   ctx: ValidationContext,
-): CapabilityTransportResult {
+): ASTUtils.CapabilityTransportResult {
   const actual = Type.ofExpression(value)
-  const result = planCapabilityTransport(actual, expected)
+  const result = ASTUtils.planCapabilityTransport(actual, expected)
   if (result.kind === 'unsupported') {
     const name = Type.displayName(expected)
     const message = Switch.on<typeof result, 'reason', string | undefined>(result, 'reason', {

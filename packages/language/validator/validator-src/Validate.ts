@@ -8,6 +8,7 @@ import { AliasesValidator } from './validators/aliases-validator'
 import { AppValidator } from './validators/app-validator'
 import { associatedMethodsValidationChecks } from './validators/associated-methods-validator'
 import { bridgeValidationChecks, validateBridgedSidecarFiles } from './validators/bridge-validator'
+import { capabilityTransportValidationChecks } from './validators/capability-transport-validator'
 import { colorValueValidationChecks } from './validators/color-values-validator'
 import { commandValidationChecks } from './validators/commands-validator'
 import { completenessValidationChecks } from './validators/completeness-validator'
@@ -68,6 +69,7 @@ const nodeValidationChecks = NodeValidation.compile(
     testValidationChecks,
     typeValidationChecks,
     associatedMethodsValidationChecks,
+    capabilityTransportValidationChecks,
     InvocationsValidator.checks,
     FunctionalCoreValidator.checks,
     PhrasesValidator.checks,

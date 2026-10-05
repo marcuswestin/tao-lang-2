@@ -1,4 +1,4 @@
-import { Packages } from '@ast-utils'
+import { ASTUtils, Packages } from '@ast-utils'
 import { AST, codeProjectRoot } from '@parser'
 import { Assert, Diagnostics, ReleaseCapabilities, type ReleaseProfile } from '@shared'
 import Validator, { type ValidationResult } from '@validator'
@@ -149,13 +149,17 @@ function compileValidated(
       ? `Cannot compile ambiguous app '${options.appName}'. Select its declaring Tao file as the entry.`
       : `Cannot compile unknown app '${options.appName}'. Available apps: ${appNames.join(', ')}.`,
   )
-  return Backends[options.target ?? 'react-native'].compile({
-    validation: validationResult,
-    context,
-    app: selected.app,
-    appPath: selected.path,
-    options,
-  })
+  const emit = () =>
+    Backends[options.target ?? 'react-native'].compile({
+      validation: validationResult,
+      context,
+      app: selected.app,
+      appPath: selected.path,
+      options,
+    })
+  return validationResult.associatedEffects
+    ? ASTUtils.withAssociatedEffects(validationResult.associatedEffects, emit)
+    : emit()
 }
 
 function validationForCompileMode(

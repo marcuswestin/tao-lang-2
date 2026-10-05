@@ -204,10 +204,9 @@ Describe('Canonical callable effect projection', () => {
         'the receiver does not weaken static selection',
       )
       Expect(canonicalSelection.proof.owner).toBe(reactiveToken)
+      const receiver = call.callee.receiver
       Expect(
-        reactiveFacts.find(fact => fact.node === call.callee)?.executes.some(edge =>
-          edge.target === call.callee.receiver
-        ),
+        reactiveFacts.find(fact => fact.node === call.callee)?.executes.some(edge => edge.target === receiver),
       ).toBe(true)
     }
     Expect(reactiveAnalysis.effects).toEqual({

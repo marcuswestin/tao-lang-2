@@ -480,7 +480,8 @@ function descriptorUnresolved(descriptor: AssociatedCallableDescriptor): boolean
     || descriptor.signature.inputs.some(input => unresolvedDomain(input.type))
 }
 
-function containsCapability(type: TaoType): boolean {
+/** Whether a receiving domain needs capability transport rather than ordinary source construction. */
+export function containsCapability(type: TaoType): boolean {
   return Switch.kind(type, {
     capability: () => true,
     union: union => union.members.some(containsCapability),
