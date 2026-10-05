@@ -32,6 +32,10 @@ export type InspectOptions = {
   inspectGroup?: typeof ProcessTree.groupMembers
   inspectProcessTable?: typeof ProcessTree.processTable
   inspectProcessAlive?: typeof Platform.processIsAlive
+  inspectProjectFiles?: (
+    checkout: string,
+    limits: { maxFiles: number; maxBytes: number; timeoutMs: number },
+  ) => readonly string[]
   taskId?: string
 }
 
@@ -413,6 +417,124 @@ function classify(candidate: Candidate, identities: Map<number, TrackedProcess> 
     : 'The recorded owner is active.'
 }
 
+function projectFiles(
+  checkout: string,
+  limits: { maxFiles: number; maxBytes: number; timeoutMs: number },
+): readonly string[] {
+  const marker = FS.resolvePath('.git', checkout)
+  metadataSync(marker)
+  if (!FS.existsSync(marker)) {
+    return []
+  }
+  const result = Platform.spawnSync('git', {
+    args: ['ls-files', '-z', '--cached', '--', ':(glob)**/.tao/.gitignore', ':(glob)*.tao', ':(glob)**/*.tao'],
+    cwd: checkout,
+    timeout: limits.timeoutMs,
+    maxBuffer: limits.maxBytes,
+  })
+  if (result.error !== undefined || result.status !== 0) {
+    Errors.throwHostEnvironment('Authored project discovery failed or exceeded its budget.')
+  }
+  return result.stdout.toString('utf8').split('\0').filter(Boolean)
+}
+
+/** Discover authored roots from Git metadata; probe only fixed legacy locations, never their contents. */
+async function legacyProjects(
+  checkout: string,
+  options: InspectOptions,
+  candidates: Candidate[],
+  warnings: string[],
+): Promise<void> {
+  const limits = options.mode === 'startup'
+    ? { maxFiles: MAX_ENTRIES, maxBytes: MAX_RECORD_BYTES, timeoutMs: 500 }
+    : { maxFiles: 4_096, maxBytes: 1_048_576, timeoutMs: 2_000 }
+  const roots = new Set([FS.resolvePath(checkout)])
+  let rootLimitWarned = false
+  try {
+    const files = (options.inspectProjectFiles ?? projectFiles)(checkout, limits)
+    if (files.length > limits.maxFiles) {
+      warnings.push(
+        `Authored project discovery bounded to ${limits.maxFiles} paths in ${
+          redact(checkout)
+        }; legacy inventory is partial.`,
+      )
+    }
+    for (const file of files.slice(0, limits.maxFiles)) {
+      if (!text(file) || FS.isAbsolute(file) || file.split('/').some(part => part === '..' || part === '.')) {
+        warnings.push(`Invalid authored project path in ${redact(checkout)}; legacy inventory is partial.`)
+        continue
+      }
+      const parts = file.split('/')
+      const resolved = FS.resolvePath(file, checkout)
+      if (!FS.pathIsWithin(resolved, checkout)) {
+        warnings.push(`Invalid authored project path in ${redact(checkout)}; legacy inventory is partial.`)
+        continue
+      }
+      const isMarker = file.endsWith('/.tao/.gitignore') || file === '.tao/.gitignore'
+      if (
+        parts.some(part => part === 'node_modules' || part === '.artifacts' || part.startsWith('_gen_'))
+        || (!isMarker && parts.some(part => part.startsWith('.')))
+      ) {
+        continue
+      }
+      let root = isMarker ? FS.dirname(FS.dirname(resolved)) : FS.dirname(resolved)
+      if (!isMarker && !file.endsWith('.tao')) {
+        continue
+      }
+      for (;;) {
+        if (roots.size >= limits.maxFiles && !roots.has(root)) {
+          if (!rootLimitWarned) {
+            warnings.push(
+              `Authored project root discovery exceeded its limit in ${redact(checkout)}; legacy inventory is partial.`,
+            )
+            rootLimitWarned = true
+          }
+          break
+        }
+        roots.add(root)
+        if (root === FS.resolvePath(checkout) || isMarker) {
+          break
+        }
+        root = FS.dirname(root)
+      }
+    }
+  } catch {
+    warnings.push(
+      `Authored project discovery failed or exceeded its budget in ${redact(checkout)}; legacy inventory is partial.`,
+    )
+  }
+  const paths = [
+    ['dev', 'legacy-project-dev', 'directory'],
+    ['typescript', 'legacy-project-typescript', 'directory'],
+    ['sessions', 'legacy-project-sessions', 'directory'],
+    ['bridge-check.tsconfig.json', 'legacy-project-bridge-check', 'file'],
+  ] as const
+  for (const root of roots) {
+    for (const [relative, kind, expected] of paths) {
+      const path = FS.resolvePath(`.tao/${relative}`, root)
+      try {
+        const info = await metadata(path)
+        candidates.push({
+          entry: {
+            id: path,
+            kind,
+            path,
+            checkout,
+            classification: 'unverified',
+            reason: info.kind === expected
+              ? 'Legacy project metadata does not establish ownership or cleanup authority.'
+              : 'Legacy project metadata has an unexpected filesystem kind; ownership is unverified.',
+          },
+        })
+      } catch (error) {
+        if (!absent(error)) {
+          candidates.push({ entry: unverified(path, kind) })
+        }
+      }
+    }
+  }
+}
+
 async function directories(options: InspectOptions, candidates: Candidate[], warnings: string[]): Promise<void> {
   const roots = [
     ['.artifacts/host-acceptance', 'host-acceptance'],
@@ -704,8 +826,12 @@ export async function inspect(options: InspectOptions): Promise<Report> {
     limit,
   )
   await sessions(FS.resolvePath(options.checkout), candidates, warnings, limit)
+  if (options.mode === 'startup') {
+    await legacyProjects(FS.resolvePath(options.checkout), options, candidates, warnings)
+  }
   if (options.mode === 'full') {
     await directories(options, candidates, warnings)
+    await legacyProjects(FS.resolvePath(options.checkout), options, candidates, warnings)
     const knownWorktrees = new Set(
       candidates.filter(candidate => candidate.entry.kind === 'worktree')
         .flatMap(candidate => candidate.entry.checkout === undefined ? [] : [candidate.entry.checkout]),
@@ -713,6 +839,7 @@ export async function inspect(options: InspectOptions): Promise<Report> {
     knownWorktrees.delete(FS.resolvePath(options.checkout))
     for (const checkout of knownWorktrees) {
       await sessions(checkout, candidates, warnings, limit)
+      await legacyProjects(checkout, options, candidates, warnings)
     }
     legacyProcesses(options, candidates, warnings)
   }

@@ -31,6 +31,7 @@ async function fixture() {
     inspectProcessTable: () => [],
     inspectProcessAlive: () => false,
     inspectGroup: () => [],
+    inspectProjectFiles: () => [],
   }
 }
 
@@ -409,6 +410,130 @@ Describe('resource inventory authoritative metadata', () => {
 })
 
 Describe('resource inventory record safety', () => {
+  Test(
+    'nested authored projects expose every fixed legacy path including the bridge-check file without reading contents',
+    async () => {
+      const options = await fixture()
+      const project = FS.resolvePath('Apps/Nested Project', options.checkout)
+      for (const name of ['dev', 'typescript', 'sessions']) {
+        await FS.writeText(FS.resolvePath(`.tao/${name}/.env`, project), 'SECRET=private-legacy')
+      }
+      const bridge = FS.resolvePath('.tao/bridge-check.tsconfig.json', project)
+      await FS.writeText(bridge, 'password=private-legacy')
+      const report = await inspect({
+        ...options,
+        mode: 'full',
+        inspectProjectFiles: () => ['Apps/Nested Project/.tao/.gitignore'],
+      })
+      Expect(report.entries.filter(entry => entry.kind.startsWith('legacy-project')).map(entry => entry.path)).toEqual([
+        FS.resolvePath('.tao/dev', project),
+        FS.resolvePath('.tao/typescript', project),
+        FS.resolvePath('.tao/sessions', project),
+        bridge,
+      ])
+      Expect(report.entries.every(entry => entry.classification === 'unverified')).toBe(true)
+      Expect(JSON.stringify(report)).not.toContain('private-legacy')
+      Expect(await FS.readText(bridge)).toBe('password=private-legacy')
+    },
+  )
+
+  Test('checkout-root legacy metadata remains visible after project discovery fails or times out', async () => {
+    const options = await fixture()
+    for (const name of ['dev', 'typescript', 'sessions']) {
+      await FS.mkdir(FS.resolvePath(`.tao/${name}`, options.checkout))
+    }
+    await FS.writeText(FS.resolvePath('.tao/bridge-check.tsconfig.json', options.checkout), '{}')
+    const report = await inspect({
+      ...options,
+      inspectProjectFiles: () => {
+        throw { code: 'ETIMEDOUT' }
+      },
+    })
+    Expect(report.entries.map(entry => entry.kind)).toEqual([
+      'legacy-project-dev',
+      'legacy-project-typescript',
+      'legacy-project-sessions',
+      'legacy-project-bridge-check',
+    ])
+    Expect(report.warnings[0]).toContain('failed or exceeded its budget')
+  })
+
+  Test('startup bounds authored-path enumeration and keeps linked discovery for full inspection', async () => {
+    const options = await fixture()
+    const seen: Array<{ checkout: string; maxFiles: number; maxBytes: number; timeoutMs: number }> = []
+    const files = Array.from({ length: 257 }, (_, index) => `Apps/Project${index}/.tao/.gitignore`)
+    const late = FS.resolvePath('Apps/Project256/.tao/bridge-check.tsconfig.json', options.checkout)
+    await FS.writeText(late, '{}')
+    const inspectProjectFiles = (
+      checkout: string,
+      limits: { maxFiles: number; maxBytes: number; timeoutMs: number },
+    ) => {
+      seen.push({ checkout, ...limits })
+      return files
+    }
+    const startup = await inspect({ ...options, inspectProjectFiles })
+    Expect(seen).toEqual([{ checkout: options.checkout, maxFiles: 256, maxBytes: 65_536, timeoutMs: 500 }])
+    Expect(startup.entries).toEqual([])
+    Expect(startup.warnings.some(warning => warning.includes('legacy inventory is partial'))).toBe(true)
+    const full = await inspect({ ...options, mode: 'full', inspectProjectFiles })
+    Expect(full.entries.some(entry => entry.path === late && entry.classification === 'unverified')).toBe(true)
+    Expect(seen[1]).toMatchObject({ maxFiles: 4_096, maxBytes: 1_048_576, timeoutMs: 2_000 })
+  })
+
+  Test('full legacy discovery covers primary and linked authored roots while startup stays local', async () => {
+    const options = await fixture()
+    const linked = FS.resolvePath('linked-checkout', options.checkout)
+    await FS.writeText(FS.resolvePath('.git/worktrees/linked/gitdir', options.checkout), `${linked}/.git\n`)
+    for (const checkout of [options.checkout, linked]) {
+      await FS.writeText(FS.resolvePath('Apps/Project/.tao/bridge-check.tsconfig.json', checkout), '{}')
+    }
+    const seen: string[] = []
+    const inspectProjectFiles = (checkout: string) => {
+      seen.push(checkout)
+      return ['Apps/Project/App.tao']
+    }
+    const startup = await inspect({ ...options, inspectProjectFiles })
+    Expect(seen).toEqual([options.checkout])
+    Expect(startup.entries.filter(entry => entry.kind === 'legacy-project-bridge-check')).toHaveLength(1)
+    seen.length = 0
+    const full = await inspect({ ...options, mode: 'full', inspectProjectFiles })
+    Expect(seen).toEqual([options.checkout, linked])
+    Expect(full.entries.filter(entry => entry.kind === 'legacy-project-bridge-check')).toHaveLength(2)
+  })
+
+  Test(
+    'legacy discovery refuses path escapes and symlinked project state without following ignored generated trees',
+    async () => {
+      const options = await fixture()
+      const outside = FS.resolvePath('outside', options.checkout)
+      await FS.writeText(FS.resolvePath('bridge-check.tsconfig.json', outside), 'private-external')
+      await FS.symlink(outside, FS.resolvePath('Apps/Linked/.tao', options.checkout))
+      await FS.writeText(
+        FS.resolvePath('node_modules/Generated/.tao/bridge-check.tsconfig.json', options.checkout),
+        '{}',
+      )
+      const report = await inspect({
+        ...options,
+        mode: 'full',
+        inspectProjectFiles: () => [
+          '../outside/App.tao',
+          'Apps/Linked/.tao/.gitignore',
+          'node_modules/Generated/.tao/.gitignore',
+          '.artifacts/build/_gen_app/.tao/.gitignore',
+        ],
+      })
+      Expect(report.entries.filter(entry => entry.kind.startsWith('legacy-project'))).toHaveLength(4)
+      Expect(
+        report.entries.filter(entry => entry.kind.startsWith('legacy-project')).every(entry =>
+          entry.classification === 'unverified'
+        ),
+      ).toBe(true)
+      Expect(report.warnings.some(warning => warning.includes('Invalid authored project path'))).toBe(true)
+      Expect(JSON.stringify(report)).not.toContain('private-external')
+      Expect(report.entries.some(entry => entry.path?.includes('node_modules'))).toBe(false)
+      Expect(await FS.readText(FS.resolvePath('bridge-check.tsconfig.json', outside))).toBe('private-external')
+    },
+  )
   Test('full inspection uses Android home and known machine storage metadata without reading secrets', async () => {
     const options = await fixture()
     const android = FS.resolvePath('.android/avd', options.homeRoot)
@@ -560,7 +685,7 @@ Describe('resource inventory record safety', () => {
     await FS.mkdir(FS.resolvePath('tao-managed-loop-project-example', options.temporaryRoot))
     await FS.mkdir(FS.resolvePath('other-project', options.temporaryRoot))
     const startup = await inspect(options)
-    Expect(startup.entries).toEqual([])
+    Expect(startup.entries.map(entry => entry.kind)).toEqual(['legacy-project-dev'])
     const report = await inspect({ ...options, mode: 'full' })
     Expect(report.entries.map(entry => entry.kind)).toEqual([
       'host-acceptance',

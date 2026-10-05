@@ -18,6 +18,7 @@
   ownership records. No dependency installation, default runtime timer, or automatic cleanup.
 - **Acceptance:** Focused source checks must cover dead-owner/live-child detection, PID reuse,
   failed inspection, retained ownership, directory identity drift, symlink/malformed-record refusal,
+  fixed legacy output discovery under known project roots without adopting cleanup ownership,
   JSON-safe advisories, repeated signals, and descendant shutdown. Run a read-only host inventory.
   Deliberate real Metro/controller crash acceptance and visible/native/mobile fault checks remain
   deferred; no source test substitutes for those measurements. Unpublished launches and historical
@@ -45,14 +46,18 @@ Focused source regressions cover publication failure, stopped-launcher rollback 
 boundary, escaped descendants, unrelated-process preservation, signal coalescing, receipt
 uncertainty, linked-to-primary discovery, and read-only host argument refusal. Integrated typecheck
 and dead-export checks passed. The full host inventory completed without inspection warnings;
-its report is `.artifacts/resource-hygiene-inventory-host.json`. These checks do not close the
+its final report is `.artifacts/resource-hygiene-inventory-host-final.json`. These checks do not close the
 deferred real Metro crash, mobile/native fault, focus, or human acceptance lanes.
 
 The main layout migration surfaced previously ignored local `.tao/dev`, `typescript`, `sessions`
 and bridge-check output in source scans and landing cleanliness checks. Narrow root compatibility
 ignores preserve those legacy paths; current committed `.tao/store` remains visible. The resource
-inventory still reports the legacy locations. One earlier failed controlled source fixture is retained pending
+inventory reports fixed legacy locations under known project roots as unverified; presence alone
+does not establish cleanup authority. One earlier failed controlled source fixture is retained pending
 approval for its exact identity-fenced host cleanup operation.
+The final inventory regressions passed 49 cases, followed by integrated typecheck. The read-only
+host report found 275 fixed legacy locations across known checkouts, all classified unverified,
+with no inspection warnings. Discovery reads metadata rather than legacy contents.
 The Developer authorized committing and landing this source slice after its focused checks and
 independent review. No dependency, machine setting, or broad asset cleanup is included. Live crash,
 mobile/native, visible and human acceptance stays deferred.
