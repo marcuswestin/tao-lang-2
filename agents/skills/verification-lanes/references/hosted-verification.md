@@ -48,14 +48,23 @@ verification first. A fully successful CI run covering the current PR head repla
 local per-commit and readiness gates. Until that result exists, describe the branch as awaiting
 CI, not verified. Do not require local `finalize` as a prerequisite for the hosted route.
 
-Authorization to publish or merge remains separate from route selection. `open-pr` pushes and
-enables auto-merge before checks finish, so use it only after the Developer authorizes landing the
-slice and every required host acceptance check has passed. If host proof is still pending, defer
-`open-pr`; GitHub can merge independently of a later `merge-pr` call. Without landing authorization,
-inspect an existing PR read-only or finish local preparation
-and report that starting hosted verification through `open-pr` awaits authorization. A green
-existing PR may be proposed as ready without rerunning local verification; authorization to merge
-is still required.
+Authorization to publish or merge remains separate from route selection. When pushing for CI is
+authorized but landing is not, use `./agent unsandboxed open-pr --no-auto-merge`: it pushes, opens
+or reuses the PR, follows CI, and requires auto-merge to stay off. It refuses a PR whose auto-merge
+is already enabled; do not change another task's setting to make it proceed. This mode also allows
+portable CI while required host acceptance is pending. Without push authorization, inspect an
+existing PR read-only or finish local preparation and report that starting hosted CI awaits it.
+
+Default `open-pr` enables auto-merge before checks finish, so use that mode only after the
+Developer authorizes landing the slice and every required host acceptance check has passed.
+GitHub can merge independently of a later `merge-pr` call. A green existing PR may be proposed as
+ready without rerunning local verification; authorization to merge is still required.
+
+Always poll ongoing CI through completion. Start diagnosing and fixing failures as they appear
+while polling the remaining jobs; a run link is not completion. Retain logs and a run/commit-scoped
+failure list, then address every issue after all jobs finish, including failures from superseded
+runs. Follow replacement runs to a complete verdict or a concrete external blocker. Test-only
+authorization does not permit auto-merge or landing.
 
 ## Merge the already verified pull request
 

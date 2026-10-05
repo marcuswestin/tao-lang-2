@@ -7,9 +7,11 @@ import { inPlace } from './in-place-files'
 import { findTaoFiles } from './tao-files'
 import { type FingerprintRequest, TestCache } from './test-cache'
 import { TestOutput, type TestOutputMode } from './test-output'
+import { maintainedNativeBindingIdentity } from './toolchain-packages'
 
 /** CompiledTaoTests declares the files and generated manifest for one Tao test run. */
 type CompiledTaoTests = {
+  nativeBindingIdentity?: string
   /** True when this run took a previous passing run's output instead of compiling its own. */
   reused?: boolean
   manifestPath?: string
@@ -20,16 +22,17 @@ type CompiledTaoTests = {
 
 /** SharedRunHandoff is the immutable compiled output one verification lane hands to its Tao app shards. */
 type SharedRunHandoff = {
+  nativeBindingIdentity?: string
   fingerprint?: string
   manifestPath: string
   reused: boolean
   runRoot: string
   runtimeRoot: string
   testPaths: readonly string[]
-  version: 1
+  version: 2
 }
 
-const SHARED_RUN_HANDOFF_VERSION = 1
+const SHARED_RUN_HANDOFF_VERSION = 2
 
 /** TestCommandOptions configures one `tao test` run. */
 export type TestCommandOptions = {
@@ -76,8 +79,11 @@ export async function prepareSharedTaoTestRun(
     await ProjectIdentity.ensure(await inPlace.workspaceRootForPath(testPath))
   }
   const runtimeRoot = testRuntimeRoot()
-  const fingerprint = await reusableRunFingerprint({ roots, runtimeRoot, testPaths })
-  const compiled = await reusedTaoTests(fingerprint, runtimeRoot, testPaths)
+  const nativeBindingIdentity = await maintainedNativeBindingIdentity()
+  const fingerprint = nativeBindingIdentity === undefined
+    ? undefined
+    : await reusableRunFingerprint({ roots, runtimeRoot, testPaths })
+  const compiled = await reusedTaoTests(fingerprint, runtimeRoot, testPaths, nativeBindingIdentity)
     ?? await validateAndCompileTaoTests(testPaths, runtimeRoot)
   if (compiled === 'validation-failed') {
     return { failed: true }
@@ -86,6 +92,7 @@ export async function prepareSharedTaoTestRun(
     return Errors.throwUnexpected('A prepared Tao test run has no compiled manifest.')
   }
   const handoff: SharedRunHandoff = {
+    ...(nativeBindingIdentity === undefined ? {} : { nativeBindingIdentity }),
     ...(fingerprint === undefined ? {} : { fingerprint }),
     manifestPath: compiled.manifestPath,
     reused: compiled.reused === true,
@@ -108,6 +115,14 @@ export async function runSharedTaoTestRun(
   options: TestCommandOptions = {},
 ): Promise<TestRunOutcome> {
   const handoff = await readSharedRunHandoff(handoffPath)
+  if (
+    handoff.nativeBindingIdentity === undefined
+    || await maintainedNativeBindingIdentity() !== handoff.nativeBindingIdentity
+  ) {
+    return Errors.throwUserInput(
+      'Shared Tao test inputs changed. Regenerate maintained bindings with tao bindings generate --maintained and prepare the run again.',
+    )
+  }
   const runtimeRoot = testRuntimeRoot()
   if (handoff.runtimeRoot !== runtimeRoot) {
     return Errors.throwUserInput(
@@ -174,6 +189,7 @@ export async function finalizeSharedTaoTestRun(handoffPath: string): Promise<voi
     )
   }
   await keepOrDiscardRunRoot({
+    ...(handoff.nativeBindingIdentity === undefined ? {} : { nativeBindingIdentity: handoff.nativeBindingIdentity }),
     manifestPath: opened.manifestPath,
     reused: handoff.reused,
     runRoot: opened.runRoot,
@@ -231,12 +247,18 @@ export async function runTestCommandOnce(
   }
   HCI.logProcessInfo('test', `Found ${testPaths.length} Tao test ${testPaths.length === 1 ? 'file' : 'files'}`)
   const runtimeRoot = testRuntimeRoot()
-  const fingerprint = await reusableRunFingerprint({ roots, runtimeRoot, testPaths })
-  const compiled = await reusedTaoTests(fingerprint, runtimeRoot, testPaths)
+  const nativeBindingIdentity = await maintainedNativeBindingIdentity()
+  const fingerprint = nativeBindingIdentity === undefined
+    ? undefined
+    : await reusableRunFingerprint({ roots, runtimeRoot, testPaths })
+  const compiled = await reusedTaoTests(fingerprint, runtimeRoot, testPaths, nativeBindingIdentity)
     ?? await validateAndCompileTaoTests(testPaths, runtimeRoot)
   if (compiled === 'validation-failed') {
     await writeJourneyObservations(options, undefined)
     return { failed: true }
+  }
+  if (nativeBindingIdentity !== undefined) {
+    compiled.nativeBindingIdentity = nativeBindingIdentity
   }
   if (!await reportSelectedJourneys(compiled, options, fingerprint, displayedRoots)) {
     await writeJourneyObservations(options, undefined)
@@ -280,8 +302,9 @@ async function reusedTaoTests(
   fingerprint: string | undefined,
   runtimeRoot: string,
   testPaths: readonly string[],
+  nativeBindingIdentity: string | undefined,
 ): Promise<CompiledTaoTests | undefined> {
-  if (fingerprint === undefined) {
+  if (fingerprint === undefined || nativeBindingIdentity === undefined) {
     return undefined
   }
   const cached = await RuntimeTesting.TestRunRoot.lookup(
@@ -289,11 +312,18 @@ async function reusedTaoTests(
     fingerprint,
     testRunRootOptions(runtimeRoot),
   )
-  if (cached === undefined) {
+  if (cached === undefined || await maintainedNativeBindingIdentity() !== nativeBindingIdentity) {
     return undefined
   }
   HCI.logProcessInfo('test', 'Reusing compiled apps (nothing they are built from has changed)')
-  return { manifestPath: cached.manifestPath, reused: true, runRoot: cached.runRoot, runtimeRoot, testPaths }
+  return {
+    manifestPath: cached.manifestPath,
+    nativeBindingIdentity,
+    reused: true,
+    runRoot: cached.runRoot,
+    runtimeRoot,
+    testPaths,
+  }
 }
 
 /**
@@ -313,6 +343,8 @@ async function keepOrDiscardRunRoot(compiled: CompiledTaoTests, fingerprint: str
   }
   const options = testRunRootOptions(compiled.runtimeRoot)
   const published = fingerprint !== undefined
+    && compiled.nativeBindingIdentity !== undefined
+    && await maintainedNativeBindingIdentity() === compiled.nativeBindingIdentity
     && await RuntimeTesting.TestRunRoot.publish(TestCache.CATEGORY, fingerprint, compiled.runRoot, options)
   if (!published) {
     await RuntimeTesting.TestRunRoot.discard(compiled.runRoot, options)
@@ -775,11 +807,16 @@ async function readSharedRunHandoff(handoffPath: string): Promise<SharedRunHando
     || !Array.isArray(value['testPaths'])
     || !value['testPaths'].every(path => typeof path === 'string')
     || (value['fingerprint'] !== undefined && typeof value['fingerprint'] !== 'string')
+    || (value['nativeBindingIdentity'] !== undefined && typeof value['nativeBindingIdentity'] !== 'string')
+    || (value['fingerprint'] !== undefined && value['nativeBindingIdentity'] === undefined)
   ) {
     return Errors.throwUserInput(`Shared Tao test handoff is invalid: ${FS.displayPath(path)}.`)
   }
   return {
     ...(typeof value['fingerprint'] === 'string' ? { fingerprint: value['fingerprint'] } : {}),
+    ...(typeof value['nativeBindingIdentity'] === 'string'
+      ? { nativeBindingIdentity: value['nativeBindingIdentity'] }
+      : {}),
     manifestPath: value['manifestPath'],
     reused: value['reused'],
     runRoot: value['runRoot'],

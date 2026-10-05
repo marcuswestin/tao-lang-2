@@ -4,7 +4,7 @@ import { Assert, Errors, FS, Platform, ProjectIdentity, Time } from '@shared'
 import type { ValidationResult } from '@validator'
 import { appMetadata } from '../../app-metadata'
 import { authPolicy } from '../../auth-policy'
-import { BridgeMetadata } from '../../bridge-metadata'
+import { BridgeMetadata, type BridgeTypeOriginResolver } from '../../bridge-metadata'
 import { CompilerDependencies } from '../../compiler-dependencies'
 import { sidecarModuleSpecifiers } from '../../sidecar-module-specifiers'
 import { inspectSidecarSourceGraph, sidecarSourceBelongsToProject } from '../../sidecar-source-graph'
@@ -14,6 +14,7 @@ import {
   studioPreviewManifestModule,
 } from '../../studio-preview-manifest'
 import { withActionInstrumentation } from './app/action-control-flow'
+import { withActionResultBridgeTypes } from './app/action-result-bridge-types'
 import {
   configurationAliasTargetTypeBindingName,
   configurationRuntimeBindingName,
@@ -240,6 +241,7 @@ function compileReactNative(
       identityProjects,
       identityOwnerBySourcePath: dependencyOwnerBySourcePath,
       projectRoot: context.sourceRoot,
+      nativeBridgeTypeOrigins: context.nativeBridgeTypeOrigins,
       selectedAppDatasourceConfiguration: options.appDatasourceConfiguration,
       selectedAppFirebaseConfiguration: options.appFirebaseConfiguration,
       selectedAppAuthConfiguration: options.appAuthConfiguration,
@@ -618,6 +620,7 @@ type CompileSourceFileOptions = {
   identityProjects: readonly DeclarationIdentityProject[]
   identityOwnerBySourcePath: ReadonlyMap<string, string>
   projectRoot: string
+  nativeBridgeTypeOrigins?: CompilerContext['nativeBridgeTypeOrigins']
   selectedAppDatasourceConfiguration?: Readonly<Record<string, string>>
   selectedAppFirebaseConfiguration?: Readonly<Record<string, string>>
   selectedAppAuthConfiguration?: Readonly<Record<string, string>>
@@ -684,6 +687,28 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
   }
   const planned = outputPaths.bySourcePath.get(file.path)
   Assert.defined(planned, compiledSourceOutputPathMessage, { sourcePath: file.path })
+  const nativeOrigins = new Map(
+    (options.nativeBridgeTypeOrigins ?? []).map(origin =>
+      [`${FS.resolvePath(origin.sourcePath)}#${origin.name}`, origin] as const
+    ),
+  )
+  const sidecarCopies = new Map(
+    [...outputPaths.bySourcePath.values()].flatMap(output =>
+      output.sidecarCopies.map(copy => [FS.resolvePath(copy.sourcePath), copy.relativePath] as const)
+    ),
+  )
+  const typeOriginResolver: BridgeTypeOriginResolver = declaration => {
+    if (!AST.isTypeDeclaration(declaration)) {
+      return undefined
+    }
+    const origin = nativeOrigins.get(`${FS.resolvePath(AST.getDocument(declaration).uri.fsPath)}#${declaration.name}`)
+    return origin === undefined ? undefined : {
+      exportName: origin.exportName,
+      memberName: origin.memberName,
+      implementationPath: sidecarCopies.get(FS.resolvePath(origin.implementationPath)) ?? origin.implementationPath,
+    }
+  }
+  const bridgeTypeOptions = { modulePath: planned.modulePath, typeOriginResolver }
   const typeStatements = file.ast.statements.filter(statement => {
     if (!isRuntimeConfigurableDeclaration(statement)) {
       return false
@@ -731,34 +756,36 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
           withInlineInjectionBindings(
             new Map(planned.injections.map(injection => [injection.node, injection.binding])),
             () =>
-              withActionInstrumentation(debug, () =>
-                RuntimeGen.TaoFile(file.ast, {
-                  bridgeTypes: BridgeMetadata.typesFor(file.ast, selectedStatements),
-                  configurationTypes: planned.declarationsPath === undefined
-                    ? undefined
-                    : RuntimeGen.ConfigurationTypes(file.ast, typeStatements),
-                  dataEntities: ownsDataCatalog ? dataCatalog.entities : [],
-                  dataAccess: ownsDataCatalog ? dataCatalog.access : [],
-                  emitDataCatalog: ownsDataCatalog,
-                  importLines,
-                  localDataCatalog: usesLocalDataCatalog,
-                  journeyObservations,
-                  scopeBindings,
-                  exportedBindings,
-                  selectedAppDatasourceConfiguration,
-                  selectedAppFirebaseConfiguration,
-                  selectedAppAuthConfiguration,
-                  selectedAppName,
-                  projectRoot,
-                  studioDataCatalog: studio && dataCatalog !== undefined && (ownsDataCatalog || needsStudioDataCatalog),
-                  studio,
-                  debug,
-                  studioViews: studio && selectedAppName !== undefined ? studioViews : [],
-                  studioSourceEpochs,
-                  studioDesignEpochs,
-                  viewRegistrations: RuntimeGen.ViewRegistrations(file.ast, { studio }, selectedStatements),
-                  selectedStatements,
-                })),
+              withActionResultBridgeTypes(bridgeTypeOptions, () =>
+                withActionInstrumentation(debug, () =>
+                  RuntimeGen.TaoFile(file.ast, {
+                    bridgeTypes: BridgeMetadata.typesFor(file.ast, selectedStatements, bridgeTypeOptions),
+                    configurationTypes: planned.declarationsPath === undefined
+                      ? undefined
+                      : RuntimeGen.ConfigurationTypes(file.ast, typeStatements),
+                    dataEntities: ownsDataCatalog ? dataCatalog.entities : [],
+                    dataAccess: ownsDataCatalog ? dataCatalog.access : [],
+                    emitDataCatalog: ownsDataCatalog,
+                    importLines,
+                    localDataCatalog: usesLocalDataCatalog,
+                    journeyObservations,
+                    scopeBindings,
+                    exportedBindings,
+                    selectedAppDatasourceConfiguration,
+                    selectedAppFirebaseConfiguration,
+                    selectedAppAuthConfiguration,
+                    selectedAppName,
+                    projectRoot,
+                    studioDataCatalog: studio && dataCatalog !== undefined
+                      && (ownsDataCatalog || needsStudioDataCatalog),
+                    studio,
+                    debug,
+                    studioViews: studio && selectedAppName !== undefined ? studioViews : [],
+                    studioSourceEpochs,
+                    studioDesignEpochs,
+                    viewRegistrations: RuntimeGen.ViewRegistrations(file.ast, { studio }, selectedStatements),
+                    selectedStatements,
+                  }))),
           )),
     ),
   )
@@ -769,7 +796,7 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
       file.ast,
       configurationAliasImportLines(file, declarationsPath, outputPaths, typeStatements),
       [
-        BridgeMetadata.typesFor(file.ast, selectedStatements),
+        BridgeMetadata.typesFor(file.ast, selectedStatements, { ...bridgeTypeOptions, modulePath: declarationsPath }),
         identityOwnerBySourcePath.has(file.path)
           ? BridgeMetadata.caseSetTypesFor(file.ast.statements)
           : '',
@@ -855,6 +882,7 @@ function createEmissionFingerprintContext(
       identityProjects: options.identityProjects,
       identityOwnerBySourcePath: [...options.identityOwnerBySourcePath],
       projectRoot: options.projectRoot,
+      nativeBridgeTypeOrigins: options.nativeBridgeTypeOrigins,
       selectedAppDatasourceConfiguration: options.selectedAppDatasourceConfiguration,
       selectedAppFirebaseConfiguration: options.selectedAppFirebaseConfiguration,
       selectedAppAuthConfiguration: options.selectedAppAuthConfiguration,

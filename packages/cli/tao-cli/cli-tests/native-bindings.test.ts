@@ -1,12 +1,46 @@
-import { ExpoApiSource, NativeBindings, ReactNativeApiSource } from '@native-bindings'
+import { ExpoApiSource, inspectMaintainedNativeBindings, NativeBindings, ReactNativeApiSource } from '@native-bindings'
 import { FS, Repo } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { runCheck } from '../cli-src/source-commands'
+import { copyMaintainedBindingPayload } from './maintained-bindings-fixture'
 import { checkedProjectFile, runTaoCliForTest, withTaoFixture } from './test-cli-files'
+import { withEnv } from './test-command-fixtures'
 
 const fromDirectory = Repo.resolvePath('packages/apps/expo-host')
 
 Describe('native binding CLI contracts', () => {
+  Test('recovers maintained output without a package and preserves explicit package generation', async () => {
+    await withTaoFixture(checkedProjectFile, async root => {
+      const stdlibRoot = FS.resolvePath('stdlib', root)
+      const sourceRoot = FS.resolvePath('source', root)
+      await copyMaintainedBindingPayload(stdlibRoot, sourceRoot)
+      const output = FS.resolvePath('.tao-ts/native-bindings/files/Bindings.ts', stdlibRoot)
+      await FS.remove(output)
+      await withEnv('TAO_STDLIB_ROOT', stdlibRoot, async () => {
+        Expect((await inspectMaintainedNativeBindings({ sourceRoots: [sourceRoot] })).status).toBe('stale')
+        const recovered = await runTaoCliForTest(['bindings', 'generate', '--maintained', '--from', sourceRoot])
+        Expect({ exitCode: recovered.exitCode, stderr: recovered.stderr }).toEqual({ exitCode: 0, stderr: '' })
+        Expect(recovered.stdout).toContain('Generated maintained native bindings')
+        Expect((await inspectMaintainedNativeBindings({ sourceRoots: [sourceRoot] })).status).toBe('fresh')
+      })
+      const generated = await runTaoCliForTest([
+        'bindings',
+        'generate',
+        'expo-haptics',
+        '--source',
+        'expo',
+        '--from',
+        fromDirectory,
+        '--out',
+        FS.resolvePath('Explicit', root),
+      ])
+      Expect(generated.exitCode).toBe(0)
+      Expect(await FS.readText(FS.resolvePath('Explicit/Bindings.tao', root))).toContain('SelectionAsync')
+      const ambiguous = await runTaoCliForTest(['bindings', 'generate', 'expo-haptics', '--maintained'])
+      Expect(ambiguous.exitCode).toBe(1)
+      Expect(ambiguous.stderr).toContain('--maintained selects the maintained bindings')
+    })
+  })
   Test('checks the generated Haptics Tao and TypeScript contracts', async () => {
     const generated = await NativeBindings.generate({
       source: ExpoApiSource,

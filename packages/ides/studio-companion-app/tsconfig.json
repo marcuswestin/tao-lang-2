@@ -10,6 +10,7 @@
     "android"
   ],
   "compilerOptions": {
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "composite": false,
     "declaration": false,
     "incremental": false,

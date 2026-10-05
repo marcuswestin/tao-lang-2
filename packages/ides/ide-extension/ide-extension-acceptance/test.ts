@@ -177,7 +177,82 @@ export async function run(): Promise<void> {
     'the source origin selection to match the generated link range',
   )
 
-  await phase(6, 'Tao diagnostics')
+  await phase(6, 'native origin')
+  // Opening documents for provider requests does not present another editor or change the selection.
+  const nativeFixture = await vscode.workspace.openTextDocument(vscode.Uri.file(FS.resolvePath('Native.tao', root)))
+  Assert(nativeFixture.getText().includes('Value File'), 'the native fixture to reference the real File type')
+  const nativeDirectory = FS.resolvePath(
+    '_gen_ide-extension/stdlib/.tao-ts/native-bindings/files',
+    extension.extensionPath,
+  )
+  const nativeGeneratedPath = FS.resolvePath('Bindings.ts', nativeDirectory)
+  const nativeDocument = await vscode.workspace.openTextDocument(vscode.Uri.file(nativeGeneratedPath))
+  const nativeLines = nativeDocument.getText().split('\n')
+  const nativeTypeLine = nativeLines.findIndex(line => line.startsWith('type NativeFile ='))
+  Assert(nativeTypeLine > 0, 'the bundled File reference declaration to exist')
+  const nativeCommentLine = nativeTypeLine - 1
+  const nativeComment = nativeLines[nativeCommentLine]!
+  const nativeOriginMatch = /^\/\/ Native origin: (\.{1,2}\/[^\r\n]+):([1-9][0-9]*):([1-9][0-9]*)$/.exec(nativeComment)
+  Assert.defined(nativeOriginMatch, 'the bundled File declaration to have a physical native origin')
+  const nativeSourcePath = FS.resolvePath('inputs/node_modules/expo-file-system/build/File.d.ts', nativeDirectory)
+  Assert(
+    FS.resolvePath(nativeOriginMatch[1]!, nativeDirectory) === nativeSourcePath,
+    'the native origin to target the installed pinned File declaration',
+  )
+  const nativeSource = await vscode.workspace.openTextDocument(vscode.Uri.file(nativeSourcePath))
+  const sourceToken = 'export declare class File '
+  const sourceOffset = nativeSource.getText().indexOf(sourceToken)
+  Assert(sourceOffset >= 0, 'the pinned upstream File declaration token to exist')
+  Assert(
+    nativeSource.getText().indexOf(sourceToken, sourceOffset + sourceToken.length) === -1,
+    'the pinned upstream File declaration token to be unique',
+  )
+  const nativePosition = nativeSource.positionAt(sourceOffset)
+  Assert(
+    Number(nativeOriginMatch[2]) === nativePosition.line + 1
+      && Number(nativeOriginMatch[3]) === nativePosition.character + 1,
+    'the emitted native origin to match the independently located upstream declaration',
+  )
+  const nativeLink = await until('installed pinned native declaration link', async () => {
+    const items = await vscode.commands.executeCommand<vscode.DocumentLink[]>(
+      'vscode.executeLinkProvider',
+      nativeDocument.uri,
+    )
+    return items?.find(item =>
+      item.range.start.line === nativeCommentLine && item.tooltip === 'Open pinned native declaration'
+      && item.target?.toString().startsWith('command:tao.openSourceOrigin?')
+    )
+  })
+  const nativeLinkCharacter = nativeComment.indexOf(nativeOriginMatch[1]!)
+  Assert(
+    nativeLink.range.start.character === nativeLinkCharacter && nativeLink.range.end.line === nativeCommentLine
+      && nativeLink.range.end.character === nativeLinkCharacter + nativeOriginMatch[1]!.length,
+    'the installed native link to cover the physical declaration reference in the generated comment',
+  )
+  Assert.defined(nativeLink.target, 'the native declaration link command target')
+  const nativeTarget = nativeLink.target.toString()
+  const nativeArgs: unknown = JSON.parse(decodeURIComponent(nativeTarget.slice(nativeTarget.indexOf('?') + 1)))
+  Assert(Array.isArray(nativeArgs) && nativeArgs.length === 2, 'a pinned path and exact range in the native link')
+  const [nativeLinkPath, nativeRange] = nativeArgs as [string, {
+    start: { line: number; character: number }
+    end: { line: number; character: number }
+  }]
+  Assert(nativeLinkPath === nativeSourcePath, 'the registered provider to resolve the exact pinned declaration path')
+  Assert(
+    nativeRange.start.line === nativePosition.line && nativeRange.start.character === nativePosition.character
+      && nativeRange.end.line === nativePosition.line && nativeRange.end.character === nativePosition.character,
+    'the registered provider to resolve the exact pinned declaration line and column',
+  )
+  Assert(vscode.window.activeTextEditor === editor, 'native origin resolution to leave the visible editor unchanged')
+  const nativeOrigin = {
+    generatedPath: nativeGeneratedPath,
+    sourcePath: nativeSourcePath,
+    line: nativePosition.line + 1,
+    column: nativePosition.character + 1,
+    sourceToken,
+  }
+
+  await phase(7, 'Tao diagnostics')
   const broken = FS.resolvePath('Broken.tao', root)
   await FS.writeText(broken, 'let Broken = Missing\n')
   const brokenDocument = await open(root, 'Broken.tao')
@@ -198,7 +273,7 @@ export async function run(): Promise<void> {
     () => !errors(root, 'Broken.tao').some(diagnostic => diagnostic.message.includes('Missing')),
   )
 
-  await phase(7, 'sidecar')
+  await phase(8, 'sidecar')
   const sidecar = FS.resolvePath('Words.ts', root)
   await FS.writeText(sidecar, 'export function CountWords(value: string): string { return value }\n')
   const signatureError = (): boolean =>
@@ -206,9 +281,9 @@ export async function run(): Promise<void> {
       String(diagnostic.code) === 'TS1360' || diagnostic.message.includes('TypeScript:')
     )
   await until('TypeScript sidecar signature diagnostic', signatureError)
-  await phase(8, 'recovery')
+  await phase(9, 'recovery')
   await FS.writeText(sidecar, 'export function CountWords(value: string): number { return value.length }\n')
   await until('cleared TypeScript sidecar diagnostic', () => !signatureError())
-  await FS.writeJson(marker, { result: 'passed', extension: identity, version })
+  await FS.writeJson(marker, { result: 'passed', extension: identity, version, nativeOrigin })
   HCI.writeLine('TAO_EDITOR_ACCEPTANCE_PASSED')
 }

@@ -59,16 +59,18 @@ Describe('generated Clipboard contracts', () => {
     Expect(generated.files['Bindings.tao']).toContain('returns text from ./Bindings.ts')
     Expect(generated.files['Bindings.tao']).toContain('returns ClipboardImage? from ./Bindings.ts')
     Expect(generated.files['Bindings.tao']).toContain('Listener action(ClipboardEvent)')
-    Expect(generated.files['Bindings.tao']).toContain('public type EventSubscription is {')
+    Expect(generated.files['Bindings.tao']).toContain('public\ntype EventSubscription is {')
     Expect((await NativeBindings.generate(request)).files).toEqual(generated.files)
   })
 
   Test('keeps unsupported exports explicit and rejects exclusions that no longer exist', async () => {
     const complete = await NativeBindings.generate({ ...request, exclude: undefined })
     Expect(complete.diagnostics.map(diagnostic => diagnostic.symbol)).toEqual([
-      'isPasteButtonAvailable',
       'ClipboardPasteButton',
     ])
+    Expect(complete.catalog.operations.find(operation => operation.name === 'isPasteButtonAvailableGet')).toMatchObject(
+      { result: { kind: 'primitive', name: 'boolean' } },
+    )
     await Expect(NativeBindings.generate({ ...request, exclude: ['MisspelledExport'] }))
       .rejects.toThrow('MisspelledExport')
     await withTaoFiles('clipboard-bindings', {}, async (_paths, root) => {
@@ -80,14 +82,16 @@ Describe('generated Clipboard contracts', () => {
     }, { location: 'host', verbatim: true })
   })
 
-  Test('rejects recursive, generic and unowned callback shapes without leaking partial types', async () => {
-    await withTaoFiles('native-value-shapes', {
-      'node_modules/expo-shapes/package.json': JSON.stringify({
-        name: 'expo-shapes',
-        version: '1',
-        types: 'index.d.ts',
-      }),
-      'node_modules/expo-shapes/index.d.ts': `
+  Test(
+    'retains supported absences and exposes unsupported reached methods without leaking rejected records',
+    async () => {
+      await withTaoFiles('native-value-shapes', {
+        'node_modules/expo-shapes/package.json': JSON.stringify({
+          name: 'expo-shapes',
+          version: '1',
+          types: 'index.d.ts',
+        }),
+        'node_modules/expo-shapes/index.d.ts': `
         export type Recursive = { next: Recursive };
         export type EventSubscription = { remove(): void };
         export declare function recursive(): Recursive;
@@ -101,28 +105,127 @@ Describe('generated Clipboard contracts', () => {
         export declare function undefinedElement(): Array<string | undefined>;
         export declare function supported(): { count: number; label?: string };
       `,
-    }, async (_paths, root) => {
-      const generated = await NativeBindings.generate({
-        source: ExpoApiSource,
-        packageName: 'expo-shapes',
-        fromDirectory: root,
-      })
-      Expect(generated.catalog.operations.map(operation => operation.name)).toEqual(['supported'])
-      Expect(generated.catalog.records?.map(record => record.name)).toEqual(['SupportedResult'])
-      Expect(generated.diagnostics.map(diagnostic => diagnostic.symbol).sort()).toEqual([
-        'callback',
-        'callbackList',
-        'callbackRecord',
-        'generic',
-        'optionalCallback',
-        'recursive',
-        'undefinedElement',
-        'undefinedResult',
-        'unowned',
-      ])
-      Expect(generated.files['Bindings.tao']).not.toContain('EventSubscription')
-    }, { location: 'host', verbatim: true })
-  })
+      }, async (_paths, root) => {
+        const fixtureRequest = {
+          source: ExpoApiSource,
+          packageName: 'expo-shapes',
+          fromDirectory: root,
+        }
+        const reflected = await ExpoApiSource.read(fixtureRequest)
+        Expect(reflected.catalog.operations.find(operation => operation.name === 'undefinedElement')?.result).toEqual({
+          kind: 'list',
+          element: { kind: 'nullable', value: { kind: 'primitive', name: 'text' }, absence: 'undefined' },
+        })
+        await Expect(NativeBindings.generate(fixtureRequest)).rejects.toThrow(
+          "Native operation 'undefinedElement' ((): Array<string | undefined>) cannot represent type 'Array<string | undefined>' in Tao: nullable type 'string | undefined' occurs in list element.",
+        )
+        const generated = await NativeBindings.generate({ ...fixtureRequest, exclude: ['undefinedElement'] })
+        Expect(generated.catalog.operations.find(operation => operation.name === 'supported')?.result).toEqual({
+          kind: 'record',
+          name: 'SupportedResult',
+        })
+        Expect(generated.catalog.operations.find(operation => operation.name === 'undefinedResult')?.result).toEqual({
+          kind: 'nullable',
+          value: { kind: 'primitive', name: 'text' },
+          absence: 'undefined',
+        })
+        Expect(generated.files['Bindings.ts']).toContain('=== undefined')
+        Expect(generated.catalog.operations.find(operation => operation.name === 'generic')?.result).toEqual({
+          kind: 'reference',
+          name: 'MapStringNumber',
+        })
+        Expect(generated.catalog.operations.some(operation => operation.name === 'MapStringNumberForEach')).toBe(false)
+        Expect(generated.diagnostics.find(diagnostic => diagnostic.symbol === 'MapStringNumber.forEach')).toMatchObject(
+          { reason: 'Callback operations must return a supported owned subscription.' },
+        )
+        Expect(
+          generated.diagnostics.filter(diagnostic => /^(Map|IteratorObject)/.test(diagnostic.symbol)).map(diagnostic =>
+            diagnostic.symbol
+          ).sort(),
+        ).toEqual([
+          ...[
+            'MapIteratorNumber',
+            'MapIteratorString',
+            'MapIteratorStringNumber',
+            'IteratorObjectNumberUndefinedUnknown',
+            'IteratorObjectStringUndefinedUnknown',
+            'IteratorObjectStringNumberUndefinedUnknown',
+          ].flatMap(owner =>
+            [
+              'every',
+              'filter',
+              'filter',
+              'find',
+              'find',
+              'flatMap',
+              'forEach',
+              'map',
+              'reduce',
+              'reduce',
+              'reduce',
+              'some',
+            ].map(member => `${owner}.${member}`)
+          ),
+          'MapStringNumber.forEach',
+        ].sort())
+        for (
+          const owner of [
+            'MapIteratorNumber',
+            'MapIteratorString',
+            'MapIteratorStringNumber',
+            'IteratorObjectNumberUndefinedUnknown',
+            'IteratorObjectStringUndefinedUnknown',
+            'IteratorObjectStringNumberUndefinedUnknown',
+          ]
+        ) {
+          const next = generated.catalog.operations.find(operation => operation.provenance?.symbol === `${owner}.next`)
+          Expect(next?.parameters[1]).toMatchObject({ name: 'argument1', rest: true })
+          Expect(next?.target).toEqual({ kind: 'method', receiver: { kind: 'reference', name: owner }, member: 'next' })
+        }
+        for (const owner of ['MapIteratorStringNumber', 'IteratorObjectStringNumberUndefinedUnknown']) {
+          for (const member of ['return', 'throw', 'toArray']) {
+            Expect(
+              generated.catalog.operations.some(operation => operation.provenance?.symbol === `${owner}.${member}`),
+            )
+              .toBe(true)
+          }
+          const result = generated.catalog.operations.find(operation =>
+            operation.provenance?.symbol === `${owner}.toArray`
+          )?.result
+          Expect(result?.kind).toBe('list')
+          if (result?.kind !== 'list' || result.element.kind !== 'record') {
+            throw Error('Expected tuple list result')
+          }
+          const tupleName = result.element.name
+          Expect(generated.catalog.records?.find(record => record.name === tupleName)).toMatchObject({
+            tuple: true,
+            fields: [
+              { name: 'item0', optional: false, type: { kind: 'primitive', name: 'text' } },
+              { name: 'item1', optional: false, type: { kind: 'primitive', name: 'number' } },
+            ],
+          })
+        }
+        Expect(generated.catalog.records?.map(record => record.name)).toContain('SupportedResult')
+        Expect(
+          generated.catalog.records?.some(record => record.name === 'Recursive' || record.name === 'EventSubscription'),
+        ).toBe(false)
+        Expect(
+          generated.diagnostics.map(diagnostic => diagnostic.symbol).filter(symbol =>
+            !/^(Map|IteratorObject)/.test(symbol)
+          )
+            .sort(),
+        ).toEqual([
+          'callback',
+          'callbackList',
+          'callbackRecord',
+          'optionalCallback',
+          'recursive',
+          'unowned',
+        ])
+        Expect(generated.files['Bindings.tao']).not.toContain('EventSubscription')
+      }, { location: 'host', verbatim: true })
+    },
+  )
 
   Test('accepts only direct resources with the required adapter-declared disposal contract', async () => {
     await withTaoFiles('native-resource-shapes', {

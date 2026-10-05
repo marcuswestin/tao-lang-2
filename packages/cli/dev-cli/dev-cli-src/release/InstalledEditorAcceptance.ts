@@ -9,6 +9,7 @@ const PHASES = [
   'definitions',
   'contracts',
   'origin',
+  'native origin',
   'Tao diagnostics',
   'sidecar',
   'recovery',
@@ -239,6 +240,13 @@ export async function launchProbe(options: ProbeLaunch, seams: LaunchSeams = liv
 }
 
 type ExtensionManifest = { name?: unknown; publisher?: unknown; version?: unknown }
+type NativeOriginReceipt = {
+  generatedPath: string
+  sourcePath: string
+  line: number
+  column: number
+  sourceToken: string
+}
 
 async function runCommand(
   command: string,
@@ -314,6 +322,10 @@ async function run(): Promise<void> {
       FS.resolvePath('Words.ts', workspace),
       'export function CountWords(value: string): number { return value.length }\n',
     )
+    await FS.writeText(
+      FS.resolvePath('Native.tao', workspace),
+      'use File from @tao/device/files\naction InspectNative(Value File) { }\n',
+    )
 
     const code = await vscodeCli()
     const profileArgs = ['--user-data-dir', user, '--extensions-dir', extensions]
@@ -357,14 +369,26 @@ async function run(): Promise<void> {
     }
     HCI.writeLine(`Launching the isolated VS Code installed-extension probe for ${expected}.`)
     const executable = await launchProbe({ codeCli: code, profileArgs, probe, probeBundle, workspace, root, env })
-    return { executable, expected, workspace, editorVersion }
+    const receipt = await FS.readJson<{ nativeOrigin?: NativeOriginReceipt }>(FS.resolvePath('probe-passed.json', root))
+    const nativeOrigin = receipt.nativeOrigin
+    if (
+      nativeOrigin === undefined || typeof nativeOrigin.generatedPath !== 'string'
+      || typeof nativeOrigin.sourcePath !== 'string' || !Number.isInteger(nativeOrigin.line) || nativeOrigin.line < 1
+      || !Number.isInteger(nativeOrigin.column) || nativeOrigin.column < 1
+      || nativeOrigin.sourceToken !== 'export declare class File '
+    ) {
+      Errors.throwHostEnvironment('The installed editor probe did not publish its pinned native origin evidence.')
+    }
+    return { executable, expected, workspace, editorVersion, nativeOrigin }
   })
   await FS.writeJson(FS.resolvePath('receipt.json', root), {
     extension: accepted.expected,
     executable: accepted.executable,
     editorVersion: accepted.editorVersion,
     workspace: accepted.workspace,
-    probe: 'activation, hover, definition, diagnostics, disk contracts, sidecar recovery, source origin',
+    probe:
+      'activation, hover, definition, diagnostics, disk contracts, sidecar recovery, source origin, pinned native origin',
+    nativeOrigin: accepted.nativeOrigin,
     result: 'passed',
   })
   HCI.writeLine(

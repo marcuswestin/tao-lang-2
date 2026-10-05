@@ -1003,7 +1003,8 @@ Describe('Tao Companion shell configuration', () => {
     const entry = await FS.readText(FS.resolvePath('index.ts', packageRoot))
     Expect(entry).toContain('registerRootComponent(CompanionPlaceholder)')
     Expect(entry).not.toContain('@studio')
-    Expect(entry).not.toContain('@runtime')
+    Expect(entry.match(/@runtime(?:\/[^'"]+)?/g)).toEqual(['@runtime/TR-native-abort'])
+    Expect(entry).toContain('installNativeAbortSupport()')
   })
 })
 

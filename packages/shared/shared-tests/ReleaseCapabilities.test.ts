@@ -53,6 +53,10 @@ Describe('release capability catalog', () => {
       Expect(ReleaseCapabilities.allows(capability, phase5)).toBe(false)
     }
     Expect(ReleaseCapabilities.commandCapability('run')).toBe('core')
+    Expect(ReleaseCapabilities.commandCapability('bindings')).toBe('core')
+    Expect(ReleaseCapabilities.commandCapability('bindings generate')).toBe('core')
+    Expect(ReleaseCapabilities.optionCapability('bindings generate', '--maintained')).toBe('core')
+    Expect(ReleaseCapabilities.optionCapability('bindings generate', '--source')).toBe('native-bindings')
     Expect(ReleaseCapabilities.commandCapability('dev')).toBe('unclassified')
     Expect(ReleaseCapabilities.optionCapability('run', '--device')).toBe('companion')
     Expect(ReleaseCapabilities.optionCapability('_preview qa', '--device')).toBe('studio')

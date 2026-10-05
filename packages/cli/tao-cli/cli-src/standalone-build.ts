@@ -1,4 +1,5 @@
 import { DesktopHost } from '@expo-host'
+import { generateMaintainedNativeBindings, stageNativeBindingResources } from '@native-bindings'
 import { CLI, Errors, FS, HCI, Platform, ReleaseCapabilities, Repo, TaoResources } from '@shared'
 import { AgentClientBuild } from './agent-client-build'
 import { TaoAppModules } from './app-modules'
@@ -162,6 +163,8 @@ async function buildBinary(
   profile: ReturnType<typeof ReleaseCapabilities.profile>,
 ): Promise<void> {
   const repoRoot = Repo.getRoot()
+  HCI.logProcessInfo('standalone', 'Generating maintained native bindings...')
+  await generateMaintainedNativeBindings({ mode: 'write' })
   const portableBun = (await CLI.mustRun('bash', { args: [PORTABLE_BUN_SCRIPT], cwd: repoRoot })).stdout.trim()
   const staging = FS.resolvePath(`${BUILD_ROOT}/standalone/${TaoResources.INSTALLED_DIRECTORY}`, repoRoot)
   const archive = FS.resolvePath(`${BUILD_ROOT}/standalone/${StandaloneResources.PAYLOAD_FILE_NAME}`, repoRoot)
@@ -172,6 +175,8 @@ async function buildBinary(
       await copyVisibleFiles(FS.resolvePath(tree.source, repoRoot), within, FS.resolvePath(tree.target, staging))
     }
   }
+  HCI.logProcessInfo('standalone', 'Staging native binding implementations and pinned compiler inputs...')
+  await stageNativeBindingResources({ outputRoot: staging })
   await TaoAppModules.packageRuntime(staging, FS.resolvePath('packages/apps/runtime', repoRoot))
   for (const name of StandaloneResources.LICENSE_FILES) {
     await FS.copyFile(FS.resolvePath(name, repoRoot), FS.resolvePath(name, staging))
@@ -273,9 +278,11 @@ async function makeHostInstallable(repoRoot: string, stagedHost: string, portabl
     compilerOptions: { ...baseOptions, ...tsconfig.compilerOptions },
   })
 
+  HCI.logProcessInfo('standalone', 'Resolving the portable host dependency lock...')
   await CLI.mustRun(portableBun, {
     args: ['install', '--lockfile-only', '--cwd', stagedHost],
     cwd: repoRoot,
+    stdio: 'inherit',
   })
 }
 

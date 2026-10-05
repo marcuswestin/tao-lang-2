@@ -1,6 +1,47 @@
 import { FS, HCI, Platform, Switch, Time } from '@shared'
 import * as ts from 'typescript'
 
+/** Declaration views are reader-local; their originating implementation bytes stay on disk. */
+export type ProjectTypeScriptDeclarationViews = ReadonlyMap<string, string>
+
+export function createProjectTypeScriptProgram(
+  rootNames: readonly string[],
+  options: ts.CompilerOptions,
+  declarations: ProjectTypeScriptDeclarationViews = new Map(),
+  engine: typeof ts = ts,
+  sources: ReadonlyMap<string, string> = new Map(),
+): ts.Program {
+  const host = engine.createCompilerHost(options)
+  const getSourceFile = host.getSourceFile.bind(host)
+  const readFile = host.readFile.bind(host)
+  const fileExists = host.fileExists.bind(host)
+  host.readFile = path => declarations.get(FS.resolvePath(path)) ?? sources.get(FS.resolvePath(path)) ?? readFile(path)
+  host.fileExists = path =>
+    declarations.has(FS.resolvePath(path)) || sources.has(FS.resolvePath(path)) || fileExists(path)
+  const directories = new Set<string>()
+  for (const path of sources.keys()) {
+    for (let directory = FS.dirname(path);; directory = FS.dirname(directory)) {
+      directories.add(directory)
+      if (FS.dirname(directory) === directory) {
+        break
+      }
+    }
+  }
+  const directoryExists = host.directoryExists?.bind(host)
+  host.directoryExists = path => directories.has(FS.resolvePath(path)) || directoryExists?.(path) === true
+  host.getSourceFile = (path, languageVersion, onError, shouldCreateNewSourceFile) => {
+    const declaration = declarations.get(FS.resolvePath(path))
+    const source = sources.get(FS.resolvePath(path))
+    if (declaration === undefined && source === undefined) {
+      return getSourceFile(path, languageVersion, onError, shouldCreateNewSourceFile)
+    }
+    const file = engine.createSourceFile(path, declaration ?? source!, languageVersion)
+    file.isDeclarationFile = declaration !== undefined
+    return file
+  }
+  return engine.createProgram([...rootNames], options, host)
+}
+
 type Observation = {
   kind: 'readFile' | 'fileExists' | 'directoryExists' | 'readDirectory' | 'getDirectories' | 'realpath'
   args: readonly unknown[]

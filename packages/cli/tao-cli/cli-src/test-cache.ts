@@ -1,6 +1,7 @@
+import type { MaintainedBindingOptions } from '@native-bindings'
 import { FS, Platform, ReleaseCapabilities, Repo, TaoFiles, TaoStdlib } from '@shared'
 import { inPlace } from './in-place-files'
-import { verdictPackageFiles } from './toolchain-packages'
+import { maintainedNativeBindingIdentity, verdictPackageFiles } from './toolchain-packages'
 
 /**
  * `tao test` spends most of a run validating and compiling Tao apps into TypeScript that the last
@@ -54,7 +55,7 @@ const CATEGORY = 'tao-test-command'
  * declared stdlib into the key, which version 2 answered for by refusing to produce a key at all.
  * Version 4 refuses reuse when authored Tao declares dependencies outside the hashed source roots.
  */
-const VERSION = '4'
+const VERSION = '5'
 
 /**
  * SOURCE_EXCLUDED_DIRECTORIES are the directories Tao source discovery never descends. Reusing that
@@ -65,6 +66,7 @@ const SOURCE_EXCLUDED_DIRECTORIES = TaoFiles.discoveryExcludeDirectoryNames
 
 /** FingerprintRequest declares everything about one run that its compiled output depends on. */
 export type FingerprintRequest = {
+  nativeBindings?: MaintainedBindingOptions
   /** The paths the command was asked to test, as the user gave them. */
   roots: readonly string[]
   /** The runtime package root this run compiles into. */
@@ -105,6 +107,10 @@ async function fingerprint(request: FingerprintRequest): Promise<string | undefi
     return undefined
   }
   try {
+    const nativeIdentity = await maintainedNativeBindingIdentity(request.nativeBindings)
+    if (nativeIdentity === undefined) {
+      return undefined
+    }
     if (!await cacheableRootConfigs(request.testPaths)) {
       return undefined
     }
@@ -112,7 +118,7 @@ async function fingerprint(request: FingerprintRequest): Promise<string | undefi
     if (sources === undefined) {
       return undefined
     }
-    return FS.contentIdentity([
+    const identity = FS.contentIdentity([
       `release-profile\n${ReleaseCapabilities.fingerprint()}`,
       `version\n${VERSION}`,
       `runtime-root\n${FS.resolvePath(request.runtimeRoot)}`,
@@ -120,9 +126,11 @@ async function fingerprint(request: FingerprintRequest): Promise<string | undefi
       `profile\n${await profileIdentity(toolchainRoot)}`,
       `toolchain\n${await toolchainIdentity(toolchainRoot)}`,
       `stdlib\n${await TaoStdlib.declaredRootIdentity(toolchainRoot)}`,
+      `native-bindings\n${nativeIdentity}`,
       `parser\n${await generatedParserIdentity(toolchainRoot)}`,
       `sources\n${sources}`,
     ])
+    return await maintainedNativeBindingIdentity(request.nativeBindings) === nativeIdentity ? identity : undefined
   } catch {
     return undefined
   }
