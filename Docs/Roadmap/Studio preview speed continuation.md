@@ -943,3 +943,11 @@ timers (publication checks on/off). Total p50 is 5924/5028ms upstream and 3876/3
 load ranges differ (16.6–20.7 versus 14.0–18.8 on 18 CPUs), and the control overlapped a focused
 runtime test. These totals cannot establish the patch's save-to-paint gain or budget compliance.
 The existing ceilings remain unchanged; quiet periodic qualification is still outstanding.
+
+A later sequential repeat, with no other local lane from this task, passed another sixteen saves
+per timer configuration. With publication checks on, upstream versus fast p50 was 2660 versus
+2597ms total, 2513 versus 2502ms source-to-publication, and 86 versus 26ms publication-to-HMR.
+With checks off, the corresponding p50 values were 2859 versus 2572ms total, 2682 versus 2498ms
+source-to-publication, and 119 versus 28ms publication-to-HMR. Loads were 4.5–7.2 upstream and
+7.2–9.6 fast on 18 CPUs. This supports a shorter post-publication wait, with compilation still
+dominating. It is not periodic quiet-machine admission or proof of meeting the existing ceilings.
