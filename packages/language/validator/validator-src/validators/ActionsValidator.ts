@@ -41,7 +41,10 @@ const actionValidationMessages = {
   foreignActionMissing: (path: string) => `Foreign action implementation '${path}' does not exist.`,
   returnNative: '`returns` is allowed only on a foreign action.',
   returnLatest: 'A foreign action with a result cannot use `runs latest`.',
-  resultRequired: 'A result binding requires a named foreign action that declares `returns`.',
+  resultRequired:
+    'A result binding requires a foreign action that declares `returns` or a source action with a return value.',
+  sourceActionMayCompleteWithoutResult: (name: string) =>
+    `Source action '${name}' can complete without returning a value.`,
   duplicateResult: (name: string) => `Action result '${name}' is declared more than once in this action block.`,
   runsLatestNative: '`runs latest` is allowed only on a foreign action.',
 }
@@ -64,11 +67,17 @@ export const ActionsValidator = {
         if (!/^\.\.?\/.+\.tsx?$/.test(action.foreign.path)) {
           ctx.error(action.foreign, actionValidationMessages.foreignActionPath)
         }
+      } else if (action.block) {
+        validateSourceActionCompletion(action, ctx)
       }
     },
     [AST.ActionResultStatement.$type]: (statement, ctx) => {
       const action = ASTUtils.resolveActionInvocation(statement.invocation).action
-      if (!AST.isActionDeclaration(action) || !action.foreign || !action.returnType) {
+      const hasForeignResult = AST.isActionDeclaration(action) && Boolean(action.foreign && action.returnType)
+      const hasSourceResult = AST.isActionDeclaration(action)
+        && !action.foreign
+        && ASTUtils.sourceActionResult(action, value => value).length > 0
+      if (!hasForeignResult && !hasSourceResult) {
         ctx.error(statement, actionValidationMessages.resultRequired)
       }
     },
@@ -96,6 +105,74 @@ export const ActionsValidator = {
   /** validateParameters is shared with commands, whose slots are parameters under the same rules. */
   validateParameters,
 } as const
+
+interface SourceActionCompletion {
+  mayFallThrough: boolean
+  mayStopAtCheck: boolean
+}
+
+/** validateSourceActionCompletion rejects successful source-result paths that complete without a value. */
+function validateSourceActionCompletion(action: AST.ActionDeclaration, ctx: ValidationContext): void {
+  const returns = ASTUtils.sourceActionResult(action, value => value)
+  if (returns.length === 0) {
+    return
+  }
+  const ownedReturns = new Set(returns.map(result => result.statement))
+  const completion = sourceActionCompletion(action.block!.statements, ownedReturns)
+  if (completion.mayFallThrough || completion.mayStopAtCheck) {
+    ctx.error(action, actionValidationMessages.sourceActionMayCompleteWithoutResult(action.name))
+  }
+}
+
+/** sourceActionCompletion follows sequential returns and literal-true action branches conservatively. */
+function sourceActionCompletion(
+  statements: readonly AST.ActionStatement[],
+  ownedReturns: ReadonlySet<AST.ReturnStatement>,
+): SourceActionCompletion {
+  let mayFallThrough = true
+  let mayStopAtCheck = false
+
+  for (const statement of statements) {
+    if (!mayFallThrough) {
+      break
+    }
+    if (
+      !AST.isReturnStatement(statement) && !AST.isFailStatement(statement)
+      && !AST.isCheckStatement(statement) && !AST.isIfActionStatement(statement)
+    ) {
+      continue
+    }
+    Switch.type(statement, {
+      ReturnStatement: returned => {
+        if (ownedReturns.has(returned)) {
+          mayFallThrough = false
+        }
+      },
+      FailStatement: () => {
+        mayFallThrough = false
+      },
+      CheckStatement: checked => {
+        if (AST.isBooleanLiteral(checked.condition) && checked.condition.value === 'true') {
+          return
+        }
+        mayFallThrough = false
+        mayStopAtCheck = true
+      },
+      IfActionStatement: conditional => {
+        const literal = AST.isBooleanLiteral(conditional.condition) ? conditional.condition.value : undefined
+        if (literal === 'false') {
+          return
+        }
+        const branch = sourceActionCompletion(conditional.block.statements, ownedReturns)
+        mayStopAtCheck ||= branch.mayStopAtCheck
+        // A dynamic condition leaves its false path open.
+        mayFallThrough = literal === 'true' ? branch.mayFallThrough : true
+      },
+    })
+  }
+
+  return { mayFallThrough, mayStopAtCheck }
+}
 
 async function validateForeignActionFiles(file: AST.TaoFile, ctx: ValidationContext): Promise<void> {
   for (const action of AST.streamAllContents(file).filter(AST.isActionDeclaration)) {

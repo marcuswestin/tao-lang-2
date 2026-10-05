@@ -23,6 +23,11 @@ function functionalApp(body: string, declarations = ''): string {
 }
 
 Describe('validator: functional core', () => {
+  Test('keeps action execution and suspension outside pure function bodies', async () => {
+    await rejects('action Save() { } function Run() { do Save() return 1 }')()
+    await rejects('function Suspend() { async { return 1 } return 1 }')()
+  })
+
   Test(
     'rejects function results incompatible with the declared return type',
     rejects(
