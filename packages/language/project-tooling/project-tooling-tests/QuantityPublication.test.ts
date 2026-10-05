@@ -324,25 +324,37 @@ export const reverse: cross.Forwarded = types.Measure.Minutes(4)
         'Library/@ui/Widget.tao': 'public view Widget() from ./Widget.tsx',
         'Library/@ui/Widget.tsx': typeOnly
           ? `import type { types } from './Private.tao'
+import { Read } from './Private.tao'
 export function Widget(_props: unknown) {
   void (null as unknown as types.Measure)
+  void (null as unknown as Read)
   return null
 }
 `
-          : `import { types } from './Private.tao'
+          : `import { types, Read } from './Private.tao'
 export function Widget(_props: unknown) {
   void types.Measure.Minutes(2)
+  void (null as unknown as Read)
   return null
 }
 `,
-        'Library/@ui/Private.tao': `${measureDeclaration}
+        'Library/@ui/Private.tao': `use package @owners as Canonical
+type Measure = Canonical.Measure
+function Read() returns Measure {
+  return Read() from ./QuantityNative.ts
+}
+`,
+        'Library/@ui/QuantityNative.ts': `import { types } from './Private.tao'
+export function Read(): types.Measure { return types.Measure.Minutes(2) }
+`,
+        'Library/@owners/Owner.tao': `public ${measureDeclaration}
 type UnusedSource is datasource with {
   StorageKey text
   supports { }
   provider MemoryProvider from ./Providers.ts
 }
 `,
-        'Library/@ui/Providers.ts': "import 'undeclared-unused-package'\nexport const MemoryProvider = 42\n",
+        'Library/@owners/Providers.ts': "import 'undeclared-unused-package'\nexport const MemoryProvider = 42\n",
         'Consumer/.tao/.gitkeep': '',
         'Consumer/Main.tao': `use Widget from @widgets
 package { version 1.0.0 requires "Widgets" from ../Library version ^1.0.0 { @ui as @widgets } }
@@ -355,15 +367,26 @@ view Home() { render Widget() }
         Expect(result.status).toBe('fresh')
         const companion = result.contractPaths.find(path => path.endsWith('/@ui/Private.tao.ts'))
         const leaf = result.contractPaths.find(path => path.endsWith('/@ui/Private.tao.quantities.ts'))
+        const ownerLeaf = result.contractPaths.find(path => path.endsWith('/@owners/Owner.tao.quantities.ts'))
         Assert.defined(companion, 'the private dependency quantity companion is published')
         Assert.defined(leaf, 'the private dependency quantity leaf is published')
+        Assert.defined(ownerLeaf, 'the alias reaches its initially unselected canonical owner leaf')
         Expect(FS.pathIsWithin(companion, FS.resolvePath('.tao-ts/.dependencies', root))).toBe(true)
         Expect(FS.pathIsWithin(leaf, FS.resolvePath('.tao-ts/.dependencies', root))).toBe(true)
         Expect(await FS.isFile(companion)).toBe(true)
         Expect(await FS.isFile(leaf)).toBe(true)
         Expect(await FS.readText(companion)).toContain('./Private.tao.quantities')
-        Expect(await FS.readText(leaf)).toContain('export namespace types')
+        Expect(await FS.readText(leaf)).toContain('../@owners/Owner.tao.quantities')
+        Expect(await FS.readText(leaf)).not.toContain('unique symbol')
         Expect(await FS.readText(leaf)).toContain('export type Measure')
+        Expect(await FS.readText(companion)).toContain('../@owners/Owner.tao.quantities')
+        Expect(await FS.readText(companion)).toContain('typeof Sidecar.Read')
+        Expect(await FS.readText(ownerLeaf)).toContain('unique symbol')
+        Expect(
+          result.sourceMappings.some(mapping =>
+            mapping.generatedPath === ownerLeaf && mapping.sourcePath === paths['Library/@owners/Owner.tao']
+          ),
+        ).toBe(true)
         Expect(
           result.sourceMappings.some(mapping =>
             mapping.generatedPath === leaf && mapping.sourcePath === paths['Library/@ui/Private.tao']
