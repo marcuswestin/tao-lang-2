@@ -76,6 +76,41 @@ function fakeDependencies(script: {
 }
 
 Describe('pr-checks', () => {
+  Test('follows checks on the expected pull request head', async () => {
+    const fake = fakeDependencies({
+      checkRuns: [[run('Verify', 'in_progress')], [run('Verify', 'completed', 'success')]],
+    })
+    const result = await PrChecksCommand.run(
+      { expectedHead: 'abcdef1234567890', pr: 3, repositoryRoot: ROOT, wait: true },
+      fake.dependencies,
+    )
+
+    Expect(result.exitCode).toBe(0)
+    Expect(fake.requested).toEqual([
+      '/repos/owner/repo/pulls/3',
+      '/repos/owner/repo/commits/abcdef1234567890/check-runs?per_page=100',
+      '/repos/owner/repo/commits/abcdef1234567890/status',
+      '/repos/owner/repo/commits/abcdef1234567890/check-runs?per_page=100',
+      '/repos/owner/repo/commits/abcdef1234567890/status',
+    ])
+    Expect(fake.lines.at(-1)).toBe('PASS  All 1 check(s) succeeded.')
+  })
+
+  Test('refuses a changed pull request head before reading or following checks', async () => {
+    const fake = fakeDependencies({ checkRuns: [[run('Verify', 'completed', 'success')]] })
+    const result = await PrChecksCommand.run(
+      { expectedHead: 'abcdef1234567891', pr: 3, repositoryRoot: ROOT, wait: true },
+      fake.dependencies,
+    )
+
+    Expect(result.exitCode).toBe(1)
+    Expect(fake.requested).toEqual(['/repos/owner/repo/pulls/3'])
+    Expect(fake.lines).toEqual([
+      'FAIL  Pull request #3 changed head: expected abcdef1234567891, actual abcdef1234567890;'
+      + ' refusing to follow checks for a different commit.',
+    ])
+  })
+
   Test('follows running checks to a pass, announcing each as it concludes', async () => {
     const fake = fakeDependencies({
       checkRuns: [
@@ -139,7 +174,12 @@ Describe('pr-checks', () => {
 
   Test('reads a named pull request directly', async () => {
     const fake = fakeDependencies({ checkRuns: [[run('Verify', 'completed', 'success')]] })
-    await PrChecksCommand.run({ pr: 3, repositoryRoot: ROOT }, fake.dependencies)
-    Expect(fake.requested[0]).toBe(`/repos/${SLUG}/pulls/3`)
+    const result = await PrChecksCommand.run({ pr: 3, repositoryRoot: ROOT }, fake.dependencies)
+    Expect(result.exitCode).toBe(0)
+    Expect(fake.requested).toEqual([
+      '/repos/owner/repo/pulls/3',
+      '/repos/owner/repo/commits/abcdef1234567890/check-runs?per_page=100',
+      '/repos/owner/repo/commits/abcdef1234567890/status',
+    ])
   })
 })

@@ -65,6 +65,20 @@
     a newer real unchanged receipt; selecting the latter reproduces its assertion
     failure. Focused tests pass. The failed complete run took 558.8 seconds with
     no contention; the final split and fixture still require complete-lane proof.
+  - The final native tree `57c5f9eaf` passed the uncached four-job host lane in
+    1122 seconds: 59 groups, zero failures or skips, peak load 14.8 on 18 CPUs.
+    Native, ordinary and receipt cohorts took 110.2, 232.9 and 247.2 seconds;
+    Studio took 248.3 seconds. This establishes coverage within the existing
+    bounds, not two repeated stable-tail measurements.
+  - An original-checkout readiness rerun at the same tree failed after 533.4
+    seconds on the native Files publication lock and compiler/runtime deadlines.
+    Unchanged compiler and runtime tests passed separately. A four-job host
+    retry passed those scopes but failed two real-app Studio browser deadlines
+    after 371.7 seconds (peak load 16 on 18 CPUs, no recorded contention).
+    The four-journey Studio check passed unchanged in isolation in 152.6 seconds.
+    These observations do not establish that contention caused the browser
+    failures. The Developer selected CI for further portable verification;
+    macOS/browser and native acceptance remain distinct evidence.
 - **Proposed change:** The requested file partition and initial scheduling adjustment are implemented.
   Keep this observation open until fresh-checkout complete-lane measurements establish how much
   end-to-end tail remains; a cached skip is not a repeat measurement.

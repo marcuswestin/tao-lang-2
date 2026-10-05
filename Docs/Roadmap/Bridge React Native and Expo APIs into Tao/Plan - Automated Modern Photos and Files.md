@@ -433,10 +433,10 @@ Repository type-checking passed after adding JSX support to the native-bindings
 test project that now imports runtime components. Bare nominal item types use
 existing state rejection; no new opaque language category is claimed.
 
-The broader changed-file gate failed in eight unchanged desktop-host tests when
+An initial broader changed-file gate failed in eight unchanged desktop-host tests when
 `Bun.serve` could not bind `port: 0` (`EADDRINUSE`, `errno: 0`). An isolated rerun
-reproduced the failure; its cause remains unconfirmed and no host comparison has
-run. This does not establish a passing integration gate.
+reproduced the sandbox failure. Later named host verification passed those tests;
+the earlier failed run is retained and is not claimed as passing integration evidence.
 
 A source check initially failed because Native Bridge's existing declared
 `expo-clipboard` and `expo-haptics` installations were missing from its project
@@ -445,15 +445,34 @@ exact lock-owned links from the old managed-install layout. The original source
 check also found an import-order issue in `TR.ts`, which was corrected, and
 refreshed generated project configuration. The later source check found an
 exhaustive-dispatch lint issue in the reader; it was corrected and the focused
-extraction suite passed. A stable successful repository gate remains required.
+extraction suite passed. Complete host verification subsequently passed on the
+reviewed native implementation tree.
 
 `./agent doctor` passed and `./agent setup` completed its frozen install. Optional
 shell preparation could not reach the sandbox-excluded Nix daemon; the existing
 pinned development profile is usable. Synthetic source generation and coverage
 tests and complete modern-library source validation have run. Maintained stdlib
-publication and installed standalone packaging have passing evidence. Final
-packaged reruns and complete repository verification remain required; native
-operation journeys and platform acceptance remain unproved.
+publication and installed standalone packaging have passing evidence. The final
+native implementation at `57c5f9eaf` passed complete host verification (59 groups,
+zero failures or skips), all 21 installed CLI acceptance scenarios, VSIX packaging,
+and installed editor activation, diagnostics, recovery and pinned-native source
+navigation. Native operation journeys and platform acceptance remain unproved.
+
+A subsequent readiness run in the original checkout encountered a Files mutation
+lock timeout and compiler/runtime deadlines. Unchanged focused compiler and runtime
+tests passed. A four-job host retry passed those scopes but timed out two real-app
+Studio browser journeys; the exact four-journey Studio check then passed unchanged
+in isolation. These retries are retained separately from the earlier complete green
+run and do not establish that contention caused the browser failures.
+
+The Developer requested hosted verification for the remaining portable checks.
+The CI workflow runs portable verification across twelve Linux partitions; it does
+not prove macOS Studio or device operation journeys. `open-pr --no-auto-merge` opens
+or reuses a pull request and follows CI without enabling automatic landing. It
+refuses a reused pull request whose auto-merge is already enabled before pushing.
+It follows the exact pushed commit and refuses a changed head before querying
+checks. The tooling addition passed 33 focused tests, type-checking and independent
+review; its hosted result remains pending.
 
 Branch setup exposed pre-existing old `.tao/typescript`, `.tao/install` and
 `.tao/sessions` output as untracked under main's current local-state layout.

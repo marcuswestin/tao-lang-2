@@ -43,6 +43,8 @@ const defaultDependencies: PrChecksDependencies = {
 
 /** PrChecksOptions is the flags-ready input accepted by the development CLI command. */
 export type PrChecksOptions = {
+  /** Refuse to observe checks if the pull request's head differs from this caller's pushed commit. */
+  expectedHead?: string
   intervalMs?: number
   /** The pull request; by default, the open one whose head is this worktree's branch. */
   pr?: number
@@ -88,6 +90,13 @@ export const PrChecksCommand = {
       ? await pullRequestForBranch(dependencies, github, root, slug)
       : await github.json<PullRequest>(`/repos/${slug}/pulls/${options.pr}`)
     const sha = pr.head.sha
+    if (options.expectedHead !== undefined && options.expectedHead !== sha) {
+      report(
+        `FAIL  Pull request #${pr.number} changed head: expected ${options.expectedHead}, actual ${sha};`
+          + ' refusing to follow checks for a different commit.',
+      )
+      return { exitCode: 1, lines } satisfies PrChecksResult
+    }
     report(`Pull request #${pr.number} (${pr.head.ref}) at ${sha.slice(0, 8)}: ${pr.html_url}`)
     const local = (await dependencies.run('git', { args: ['rev-parse', 'HEAD'], cwd: root, stdio: 'pipe' })).stdout
       .trim()
