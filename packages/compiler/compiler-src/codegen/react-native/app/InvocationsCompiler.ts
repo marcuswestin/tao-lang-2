@@ -193,11 +193,12 @@ export const InvocationsCompiler = {
         ? gen`_TaoEventValue: ${Compile.RuntimeType(eventInput.type)}`
         : ''
     }) => {
-        const _TaoActionContinuation = TR.ActionContinuation()
-        return TR.BlockScope(_Scope, ${asyncKeyword}_Scope => {
-          ${handler.payload ? gen`${gen.scopeName(handler.payload)} = _TaoEventValue` : ''}
-          ${Compile.ActionBlockBody(handler.block)}
-        })
+        return ${
+      Compile.ActionScopedBlock(
+        handler.block,
+        handler.payload ? gen`${gen.scopeName(handler.payload)} = _TaoEventValue` : gen.noop(),
+      )
+    }
       }, { owner: _TaoActionOwner, ${actionBlockInterruptsAsk(handler.block) ? gen`interrupt: true` : gen``} })
     `
   },
