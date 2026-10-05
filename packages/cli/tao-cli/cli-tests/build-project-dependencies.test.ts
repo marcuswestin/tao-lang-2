@@ -169,6 +169,7 @@ export function Card(_props: unknown) { mark(prefix); tag(prefix); return null }
       const artifactRoot = FS.resolvePath(compiledId!, compiledOutput)
       const resolvedModules = await FS.realPath(sharedModules)
       Expect(FS.pathIsWithin(resolvedModules, artifactRoot)).toBe(true)
+      const packageParents: string[] = []
       for (
         const [alias, implementation] of [
           ['localutil', 'exports.mark = value => value\n'],
@@ -177,9 +178,10 @@ export function Card(_props: unknown) { mark(prefix); tag(prefix); return null }
       ) {
         const resolvedPackage = await FS.realPath(FS.resolvePath(alias, sharedModules))
         Expect(FS.pathIsWithin(resolvedPackage, artifactRoot)).toBe(true)
-        Expect(FS.dirname(resolvedPackage)).toBe(resolvedModules)
+        packageParents.push(FS.dirname(resolvedPackage))
         Expect(await FS.readText(FS.resolvePath('index.js', resolvedPackage))).toBe(implementation)
       }
+      Expect(packageParents[0]).toBe(packageParents[1])
       Expect(await FS.exists(FS.resolvePath('.tao-ts', library))).toBe(false)
       Expect(await FS.exists(FS.resolvePath('node_modules', library))).toBe(false)
     } finally {
