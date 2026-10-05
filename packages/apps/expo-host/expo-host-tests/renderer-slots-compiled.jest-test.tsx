@@ -118,8 +118,8 @@ Describe('compiled renderer slots', () => {
           screen => {
             Expect(screen.queryByText('empty-rendered')).toBeNull()
             Expect(screen.getByText('selected-rendered')).toBeDefined()
-            Expect(globals.__rendererSlotEvaluationCounts?.empty).toBeUndefined()
-            Expect(globals.__rendererSlotEvaluationCounts?.selected).toBeGreaterThan(0)
+            Expect(globals.__rendererSlotEvaluationCounts?.['empty']).toBeUndefined()
+            Expect(globals.__rendererSlotEvaluationCounts?.['selected']).toBeGreaterThan(0)
           },
         )
       } finally {
