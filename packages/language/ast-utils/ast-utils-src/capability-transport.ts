@@ -256,7 +256,7 @@ class CapabilityTransportPlanner {
     if (
       actual.kind !== 'capability' && actual.kind !== 'entity' && actual.kind !== 'primitive'
       && !actual.genericParameter
-      && !((actual.kind === 'primitive' || actual.kind === 'item' || actual.kind === 'list')
+      && !((actual.kind === 'item' || actual.kind === 'list')
         && AST.isTypeDeclaration(actual.nominal))
     ) {
       return unsupported('incompatible-types')

@@ -116,7 +116,8 @@ export type AssociatedCapabilityImplementation =
     receiverPlacement: NonNullable<AssociatedOperatorContractResolution['receiverPlacement']>
     receiverDomain: TaoType
   }>
-  | Readonly<{ kind: 'pending' | 'missing' }>
+  | Readonly<{ kind: 'pending' }>
+  | Readonly<{ kind: 'missing' }>
 
 /** ItemShape is the effective slot surface of an item type, including projected data fields. */
 export type ItemShape = {
@@ -2872,7 +2873,7 @@ class TypeResolutionContext {
     return this.withoutCycles(definition, () =>
       Switch.type(definition, {
         ParameterTypeDeclaration: declaration => {
-          const underlying = this.ofReference(declaration.type)
+          const underlying = this.ofTypeExpression(declaration.type)
           const declared = AST.isNamedTypeReference(declaration.type)
             ? underlying
             : withNominal(underlying, declaration)
@@ -2922,7 +2923,6 @@ class TypeResolutionContext {
       CaseSetTypeExpression: caseSet => ({ kind: 'enum', declaration: caseSet.$container as AST.TypeDeclaration }),
       ItemTypeExpression: item => ({ kind: 'item', item }),
       ProjectedItemTypeExpression: projected => this.projectedItemType(projected),
-      YesNoTypeExpression: () => primitiveType('boolean'),
       UnionTypeExpression: union => ({
         kind: 'union',
         members: union.members.map(member => this.ofReference(member)),
