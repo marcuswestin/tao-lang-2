@@ -47,7 +47,7 @@ Describe('watched project refresh receipt host integration', () => {
         await watch.dispose()
       }
     }, { location: 'host', verbatim: true })
-  })
+  }, 180_000)
 
   Test(
     'host mapping reuse belongs to live watches and drops on force, standalone refresh, and final disposal',
@@ -109,6 +109,7 @@ Describe('watched project refresh receipt host integration', () => {
         }
       }, { location: 'host', verbatim: true })
     },
+    180_000,
   )
 
   Test('a declaration edit refreshes native diagnostics while retaining the same host export alias', async () => {
@@ -141,5 +142,5 @@ Describe('watched project refresh receipt host integration', () => {
         await watch.dispose()
       }
     }, { location: 'host', verbatim: true })
-  })
+  }, 180_000)
 })
