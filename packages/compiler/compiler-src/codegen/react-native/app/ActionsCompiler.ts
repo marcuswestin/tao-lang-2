@@ -181,6 +181,7 @@ export const ActionsCompiler = {
       DeclarationSlotFill: Compile.DeclarationSlotFill,
       DismissStatement: Compile.DismissStatement,
       DoStatement: Compile.DoStatement,
+      DeferStatement: Compile.DeferStatement,
       WhenDoStatement: Compile.WhenDoStatement,
       GuardActionStatement: Compile.GuardActionStatement,
       IfActionStatement: Compile.IfActionStatement,
@@ -250,6 +251,17 @@ export const ActionsCompiler = {
   ActionResultStatement(statement: AST.ActionResultStatement): Compiled {
     const invocation = statement.invocation
     const type = BridgeMetadata.resultType(Type.ofValueDeclaration(statement))
+    if (invocation.then) {
+      return Compile.JoinedDoStatement(
+        invocation,
+        gen`() => TR.DoResult<${type}>(${Compile.Expression(invocation.action)}${
+          Compile.ActionArguments(invocation)
+        }).then(_TaoActionResult => {
+          ${gen.scopeName(statement)} = _TaoActionResult
+          return _TaoActionResult
+        })`,
+      )
+    }
     return gen`${gen.scopeName(statement)} = await TR.DoResult<${type}>(${Compile.Expression(invocation.action)}${
       Compile.ActionArguments(invocation)
     })`
@@ -257,8 +269,52 @@ export const ActionsCompiler = {
 
   /** DoStatement compiles Tao action invocation. */
   DoStatement(invocation: AST.DoStatement): Compiled {
+    if (invocation.then) {
+      return Compile.JoinedDoStatement(invocation)
+    }
     const awaitKeyword = actionInvocationRequiresAsync(invocation) ? gen`await ` : gen``
     return gen`${awaitKeyword}TR.Do(${Compile.Expression(invocation.action)}${Compile.ActionArguments(invocation)})`
+  },
+
+  /** JoinedDoStatement runs a `do ... then` call and waits for its success/failure branch. */
+  JoinedDoStatement(statement: AST.DoStatement, invocationCall?: Compiled): Compiled {
+    const invocation = statement
+    const success = isAuthEffect(invocation) ? 'completed' : 'saved'
+    const failureContract = ASTUtils.invocationFailureContract(invocation)
+    const capturesDoneValue = statement.outcomes.some(outcome => outcome.case === 'done' && outcome.payload)
+    const invoke = invocationCall ?? (capturesDoneValue
+      ? compileDoResultInvocation(invocation)
+      : gen`() => TR.Do(${Compile.Expression(invocation.action)}${Compile.ActionArguments(invocation)})`)
+    const capturedInvoke = capturesDoneValue
+      ? gen`() => Promise.resolve((${invoke})()).then(_TaoDoOutcomeValue => {
+        _TaoDoOutcomePayload = _TaoDoOutcomeValue
+      })`
+      : invoke
+    const whenDo = gen`TR.WhenDo(${capturedInvoke}, {
+      name: ${gen.jsLiteral(effectOutcomeName(invocation))},
+      success: ${gen.jsLiteral(success)},
+      ${compileEffectContract(invocation, statement.outcomes)}
+    }, [
+      ${
+      compileJoinedOutcomes(
+        statement,
+        success,
+        failureContract.cases,
+        capturesDoneValue ? gen`_TaoDoOutcomePayload` : undefined,
+      )
+    }
+      ${
+      statement.otherwise
+        ? gen`['otherwise', async () => ${Compile.ActionScopedBlock(statement.otherwise.block)}],`
+        : gen.noop()
+    }
+    ])`
+    return capturesDoneValue
+      ? gen`await (() => {
+        let _TaoDoOutcomePayload: unknown
+        return ${whenDo}
+      })()`
+      : gen`await ${whenDo}`
   },
 
   /**
@@ -268,12 +324,13 @@ export const ActionsCompiler = {
    */
   WhenDoStatement(statement: AST.WhenDoStatement): Compiled {
     const invocation = statement.invocation
-    return gen`await TR.WhenDo(() => TR.Do(${Compile.Expression(invocation.action)}${
-      Compile.ActionArguments(invocation)
-    }), {
+    const invocationCall = invocation.then
+      ? gen`async () => ${Compile.JoinedDoStatement(invocation)}`
+      : gen`() => TR.Do(${Compile.Expression(invocation.action)}${Compile.ActionArguments(invocation)})`
+    return gen`await TR.WhenDo(${invocationCall}, {
       name: ${gen.jsLiteral(effectOutcomeName(statement))},
-      ${isAuthEffect(statement) ? gen`success: 'completed',` : gen.noop()}
-      ${compileEffectContract(statement)}
+      ${isAuthEffect(invocation) ? gen`success: 'completed',` : gen.noop()}
+      ${compileEffectContract(invocation, statement.outcomes)}
     }, [
       ${
       gen.list(
@@ -293,6 +350,16 @@ export const ActionsCompiler = {
         : gen.noop()
     }
     ])`
+  },
+
+  /** DeferStatement registers a lexical cleanup block or invocation for the current action scope. */
+  DeferStatement(statement: AST.DeferStatement): Compiled {
+    if (statement.block) {
+      return gen`TR.Defer(() => ${Compile.ActionScopedBlock(statement.block)})`
+    }
+    Assert.defined(statement.invocation, 'validated defer shorthand has an invocation')
+    const invocation = statement.invocation
+    return gen`TR.Defer(() => TR.Do(${Compile.Expression(invocation.action)}${Compile.ActionArguments(invocation)}))`
   },
 
   /** FailStatement aborts the joined action transaction with one declared case and sentence. */
@@ -424,23 +491,87 @@ function positionalArguments(
 /**
  * compileEffectContract preserves both known cases and an unknown remainder through named callers.
  */
-function compileEffectContract(statement: AST.WhenDoStatement): Compiled {
-  if (isAuthEffect(statement)) {
+function compileEffectContract(
+  invocation: AST.DoStatement,
+  outcomes: readonly AST.WhenDoOutcome[],
+): Compiled {
+  if (isAuthEffect(invocation)) {
     return gen`declared: ['cancelled', 'rejected'],`
   }
-  const contract = ASTUtils.invocationFailureContract(statement)
-  return gen`declared: [${gen.join(contract.cases, failureCase => gen.jsLiteral(failureCase))}],
+  const contract = ASTUtils.invocationFailureContract(invocation)
+  const cases = [...contract.cases]
+  if (outcomes.some(outcome => outcome.case === 'cancelled') && !cases.includes('cancelled')) {
+    cases.push('cancelled')
+  }
+  return gen`declared: [${gen.join(cases, failureCase => gen.jsLiteral(failureCase))}],
     ${contract.open ? gen`open: true,` : gen.noop()}`
 }
 
+/** Result-bearing done arms receive the same Tao value produced by a bound action result. */
+function compileDoResultInvocation(invocation: AST.DoStatement): Compiled {
+  const action = ASTUtils.resolveActionInvocation(invocation).action
+  Assert.defined(action, 'validated result-bearing action invocation resolves')
+  Assert.defined(action.returnType, 'validated done payload invocation has a declared result')
+  const resultType = BridgeMetadata.resultType(Type.ofActionResult(action))
+  return gen`() => TR.DoResult<${resultType}>(${Compile.Expression(invocation.action)}${
+    Compile.ActionArguments(invocation)
+  })`
+}
+
+function compileJoinedOutcomes(
+  statement: AST.DoStatement,
+  success: string,
+  declaredCases: readonly string[],
+  successPayload?: Compiled,
+): Compiled {
+  const outcomeBlock = (outcome: AST.WhenDoOutcome): Compiled =>
+    gen`async _TaoCasePayload => ${
+      Compile.ActionScopedBlock(
+        outcome.block,
+        outcome.payload
+          ? gen`${gen.scopeName(outcome.payload)} = ${
+            outcome.case === 'done' && successPayload
+              ? successPayload
+              : gen`_TaoCasePayload`
+          }`
+          : gen.noop(),
+      )
+    }`
+  const error = statement.outcomes.find(outcome => outcome.case === 'error')
+  const rejected = statement.outcomes.find(outcome => outcome.case === 'rejected')
+  const explicit = new Set(statement.outcomes.map(outcome => outcome.case))
+  const direct = statement.outcomes.flatMap(outcome => {
+    if (outcome.case === 'error') {
+      return [
+        gen`['error', ${outcomeBlock(outcome)}],`,
+        ...(rejected ? [] : [gen`['rejected', ${outcomeBlock(outcome)}],`]),
+      ]
+    }
+    if (outcome.case === 'otherwise') {
+      return [gen`['otherwise', async () => ${Compile.ActionScopedBlock(outcome.block)}],`]
+    }
+    const runtimeCase = outcome.case === 'done' ? success : outcome.case
+    return [gen`[${gen.jsLiteral(runtimeCase)}, ${outcomeBlock(outcome)}],`]
+  })
+  const modeledErrorAliases = error
+    ? declaredCases
+      .filter(failureCase => !explicit.has(failureCase) && failureCase !== 'rejected')
+      .map(failureCase => gen`[${gen.jsLiteral(failureCase)}, ${outcomeBlock(error)}],`)
+    : []
+  return gen.list([...direct, ...modeledErrorAliases], compiled => compiled)
+}
+
 /** effectOutcomeName is the verb name a failure message falls back to when nothing says more. */
-function effectOutcomeName(statement: AST.WhenDoStatement): string {
+function effectOutcomeName(statement: AST.WhenDoStatement | AST.DoStatement): string {
+  const invocation = AST.isWhenDoStatement(statement) ? statement.invocation : statement
   const effect = ASTUtils.invokedEffect(statement)
   if (effect && !AST.isActionExpression(effect)) {
     return effect.name
   }
-  const action = statement.invocation.action
-  return AST.isValueReference(action) ? action.target.$refText : 'action'
+  const action = invocation.action
+  return AST.isValueReference(action) || AST.isMemberAccessExpression(action)
+    ? action.target.$refText
+    : 'action'
 }
 
 function actionInvocationArguments(invocation: AST.DoStatement): Compiled[] {
@@ -547,7 +678,7 @@ function statementPath(block: AST.ActionBlock, index: number): string {
   return segments.join('.')
 }
 
-function isAuthEffect(statement: AST.WhenDoStatement): boolean {
-  const effect = ASTUtils.invokedEffect(statement)
+function isAuthEffect(invocation: AST.DoStatement): boolean {
+  const effect = ASTUtils.invokedEffect(invocation)
   return effect !== undefined && authLibraryExport(effect) !== undefined
 }

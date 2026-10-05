@@ -6,10 +6,32 @@ type Probe = {
   register(label: string): void
   suspend(): Promise<void>
   mark(label: string): void
+  alternative?(label: string): void
+  read?(): string
 }
 
-type ActionName = 'Run' | 'Recover' | 'Otherwise' | 'CheckExit' | 'GuardExit' | 'Inline' | 'Detached' | 'Sync'
-type Actions = Record<ActionName, { jsValue: { invoke(...args: unknown[]): void | Promise<void> } }>
+type ActionName =
+  | 'Run'
+  | 'Recover'
+  | 'Otherwise'
+  | 'CheckExit'
+  | 'GuardExit'
+  | 'Inline'
+  | 'Detached'
+  | 'Sync'
+  | 'Joined'
+  | 'DeferredOrder'
+  | 'DeferredInvocation'
+  | 'JoinedError'
+  | 'JoinedOtherwise'
+  | 'ResultJoined'
+  | 'Read'
+  | 'Mark'
+  | 'Alternative'
+type Actions = Record<
+  ActionName,
+  { evaluate(): { jsValue: unknown }; jsValue: { invoke(...args: unknown[]): void | Promise<void> } }
+>
 
 // Compiler tests have no JSX target. Load the real JSX-bearing runtime through its file boundary;
 // the complete emitted graph below is separately checked with the app's JSX compiler options.
@@ -24,10 +46,12 @@ let runtimeFixture: Promise<void> = Promise.resolve()
 const authoredActions = `
   action Register(Label text) from ./Native.ts
   action Suspend() from ./Native.ts
-  action Mark(Label text) from ./Native.ts
+  public action Mark(Label text) from ./Native.ts
+  public action Alternative(Label text) from ./Native.ts
   type Failure is one of Offline
   action Failing() { fail Offline "Unavailable." }
   action Succeed() { }
+  public action Read() returns text from ./Native.ts
   public action Run(Label text) {
     do Register(Label)
     if true { do Register("inner") do Suspend() }
@@ -64,6 +88,41 @@ const authoredActions = `
     do Mark("parent-tail")
   }
   public action Sync() { do Succeed() check false }
+  public action Joined() {
+    do Succeed() then {
+      done -> {
+        do Mark("done")
+        defer { do Mark("cleanup-start") do Suspend() do Mark("cleanup-done") }
+      }
+    }
+    do Mark("parent-tail")
+  }
+  public action DeferredOrder() {
+    defer { do Mark("outer-first") }
+    defer { do Mark("outer-second") }
+    if true { do Mark("inner-body") defer { do Mark("inner-cleanup") } }
+    do Mark("parent-tail")
+  }
+  public action DeferredInvocation(Callback action(text), Label text) {
+    defer Callback(Label)
+    do Suspend()
+  }
+  public action JoinedError() {
+    do Failing() then {
+      error -> { do Mark("generic-error") }
+    }
+    do Mark("parent-tail")
+  }
+  public action JoinedOtherwise() {
+    do Failing() then | otherwise -> { do Mark("otherwise") }
+    do Mark("parent-tail")
+  }
+  public action ResultJoined() {
+    do Read() then {
+      done Result -> { do Mark(Result) }
+    }
+    do Mark("parent-tail")
+  }
 `
 
 Describe('compiler: lexical action cleanup', () => {
@@ -223,6 +282,146 @@ Describe('compiler: lexical action cleanup', () => {
     })
   })
 
+  Test('joins a do-then outcome cleanup before the parent action continues', async () => {
+    await withCompiledActions(false, async (actions, native) => {
+      const events: string[] = []
+      const cleanupStarted = Deferred()
+      const releaseCleanup = Deferred()
+      native.Configure({
+        register(label) {
+          events.push(`register:${label}`)
+        },
+        suspend() {
+          cleanupStarted.resolve()
+          return releaseCleanup.promise
+        },
+        mark(label) {
+          events.push(label)
+        },
+      })
+      let settled = false
+      const pending = Promise.resolve(actions.Joined!.jsValue.invoke()).then(() => {
+        settled = true
+      })
+      try {
+        await started(cleanupStarted, pending)
+        Expect(events).toEqual(['done', 'cleanup-start'])
+        Expect(settled).toBe(false)
+        releaseCleanup.resolve()
+        await pending
+        Expect(events).toEqual(['done', 'cleanup-start', 'cleanup-done', 'parent-tail'])
+      } finally {
+        releaseCleanup.resolve()
+        await pending
+      }
+    })
+  })
+
+  Test('runs nested defer scopes at exit and drains registrations in LIFO order', async () => {
+    await withCompiledActions(false, async (actions, native) => {
+      const events: string[] = []
+      native.Configure({
+        register(label) {
+          events.push(`register:${label}`)
+        },
+        suspend() {
+          return Promise.resolve()
+        },
+        mark(label) {
+          events.push(label)
+        },
+      })
+      await actions.DeferredOrder!.jsValue.invoke()
+      Expect(events).toEqual([
+        'inner-body',
+        'inner-cleanup',
+        'parent-tail',
+        'outer-second',
+        'outer-first',
+      ])
+    })
+  })
+
+  Test('evaluates a deferred invocation target and arguments when cleanup runs', async () => {
+    await withCompiledActions(false, async (actions, native) => {
+      const events: string[] = []
+      const suspended = Deferred()
+      const release = Deferred()
+      let label = 'early'
+      let target = actions.Mark!
+      native.Configure({
+        register(label) {
+          events.push(`register:${label}`)
+        },
+        suspend() {
+          suspended.resolve()
+          return release.promise
+        },
+        mark(label) {
+          events.push(label)
+        },
+        alternative(label) {
+          events.push(`alternate:${label}`)
+        },
+      })
+      const pending = Promise.resolve(actions.DeferredInvocation!.jsValue.invoke(
+        TR.Alias(() => target),
+        TR.Alias(() => TR.Value(label)),
+      ))
+      try {
+        await started(suspended, pending)
+        label = 'late'
+        target = actions.Alternative!
+        release.resolve()
+        await pending
+        Expect(events).toEqual(['alternate:late'])
+      } finally {
+        release.resolve()
+        await pending
+      }
+    })
+  })
+
+  Test('routes modeled failures through the joined generic error and otherwise arms', async () => {
+    await withCompiledActions(false, async (actions, native) => {
+      const events: string[] = []
+      native.Configure({
+        register(label) {
+          events.push(`register:${label}`)
+        },
+        suspend() {
+          return Promise.resolve()
+        },
+        mark(label) {
+          events.push(label)
+        },
+      })
+      await actions.JoinedError!.jsValue.invoke()
+      await actions.JoinedOtherwise!.jsValue.invoke()
+      Expect(events).toEqual(['generic-error', 'parent-tail', 'otherwise', 'parent-tail'])
+    })
+  })
+
+  Test('passes the native action result as a Tao value to the joined done binding', async () => {
+    await withCompiledActions(false, async (actions, native) => {
+      const events: string[] = []
+      native.Configure({
+        register() {},
+        suspend() {
+          return Promise.resolve()
+        },
+        mark(label) {
+          events.push(label)
+        },
+        read() {
+          return 'native-result'
+        },
+      })
+      await actions.ResultJoined!.jsValue.invoke()
+      Expect(events).toEqual(['native-result', 'parent-tail'])
+    })
+  })
+
   Test('restores the lexical frame after a real debugger pause', async () => {
     await withCompiledActions(true, async (actions, native) => {
       const events: string[] = []
@@ -325,24 +524,28 @@ async function withCompiledActions(
   try {
     await withTaoFiles('tao-lexical-actions-', {
       'Main.tao': `
-        use Run, Recover, Otherwise, CheckExit, GuardExit, Inline, Detached, Sync from ./Actions
+          use Run, Recover, Otherwise, CheckExit, GuardExit, Inline, Detached, Sync, Joined, DeferredOrder, DeferredInvocation, JoinedError, JoinedOtherwise, ResultJoined, Mark, Alternative from ./Actions
         app Demo { id "com.tao.lexical" version "1.0.0" name "Lexical" view Main }
         view Main() {
-          render inject Run, Recover, Otherwise, CheckExit, GuardExit, Inline, Detached, Sync
+          render inject Run, Recover, Otherwise, CheckExit, GuardExit, Inline, Detached, Sync, Joined, DeferredOrder, DeferredInvocation, JoinedError, JoinedOtherwise, ResultJoined, Mark, Alternative
             \`\`\`ts
               void Run; void Recover; void Otherwise; void CheckExit; void GuardExit; void Inline; void Detached; void Sync
+              void Joined; void DeferredOrder; void DeferredInvocation; void JoinedError; void JoinedOtherwise; void ResultJoined
+              void Mark; void Alternative
               return null
             \`\`\`
         }
       `,
       'Actions.tao': authoredActions,
       'Native.ts': `
-        type Probe = { register(label: string): void; suspend(): Promise<void>; mark(label: string): void }
+        type Probe = { register(label: string): void; suspend(): Promise<void>; mark(label: string): void; alternative?(label: string): void; read?(): string }
         let probe: Probe
         export function Configure(value: Probe): void { probe = value }
         export function Register(label: string): void { probe.register(label) }
         export function Suspend(): Promise<void> { return probe.suspend() }
         export function Mark(label: string): void { probe.mark(label) }
+        export function Alternative(label: string): void { probe.alternative?.(label) }
+        export function Read(): string { return probe.read?.() ?? '' }
       `,
     }, async (paths, root) => {
       const compiled = await (await Workspace.open(root)).compile(paths['Main.tao'], { debug })

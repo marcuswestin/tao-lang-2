@@ -43,7 +43,13 @@ export function actionBlockRequiresAsync(
     ) {
       return true
     }
-    return AST.isDoStatement(statement) && actionInvocationRequiresAsync(statement, seen)
+    if (AST.isDeferStatement(statement)) {
+      return statement.block
+        ? actionBlockRequiresAsync(statement.block, seen)
+        : statement.invocation === undefined || actionInvocationRequiresAsync(statement.invocation, seen)
+    }
+    return AST.isDoStatement(statement)
+      && (statement.then || actionInvocationRequiresAsync(statement, seen))
   }) ?? false
 }
 
