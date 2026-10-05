@@ -46,6 +46,11 @@ env:
     packages/*/*/node_modules
     packages/apps/providers/*/node_modules
     Apps/Hosted CRUD/node_modules
+  # Each Tao project whose `.tao/store/lock.jsonc` pins npm packages: its alias links and the trees
+  # `tao install` built. Add a project here when its lock gains an npm pin.
+  TAO_INSTALL_PATHS: |
+    Apps/Test Apps/Native Bridge/node_modules
+    Apps/Test Apps/Native Bridge/.tao/cache/install
 
 jobs:
   partition:
@@ -94,9 +99,22 @@ jobs:
           restore-keys: |
             tao-bun-${{ runner.os }}-${{ runner.arch }}-
 
-      # npm's, for the packages the Tao lock pins for Native Bridge, which setup installs every run.
+      # The npm trees `tao install` builds for the Tao projects whose locks pin npm packages, today
+      # only Native Bridge: the shared environment under `.tao/cache/install` and the project's alias
+      # links into it, which are absolute and so need the same checkout path. Setup reads each pinned
+      # manifest through its link and skips the install when every version matches. Keyed on every
+      # Tao lock, the devenv lock that pins Node and npm, and the install code that lays the tree out.
+      - name: Restore the installed Tao npm trees
+        id: tao-installs
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.TAO_INSTALL_PATHS }}
+          key: tao-installs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/.tao/store/lock.jsonc','devenv.lock', 'packages/cli/tao-cli/cli-src/install-command.ts', 'packages/cli/tao-cli/cli-src/managed-install-environment.ts') }}
+
+      # npm's, for the packages the Tao locks pin, which matters only when they must be installed.
       - name: Restore npm's download cache
         id: npm-cache
+        if: steps.tao-installs.outputs.cache-hit != 'true'
         uses: actions/cache/restore@v4
         with:
           path: /home/runner/tao-cache/npm
@@ -149,8 +167,16 @@ jobs:
           path: /home/runner/tao-cache/bun
           key: ${{ steps.bun-cache.outputs.cache-primary-key }}
 
+      - name: Save the installed Tao npm trees
+        if: steps.tao-installs.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.TAO_INSTALL_PATHS }}
+          key: ${{ steps.tao-installs.outputs.cache-primary-key }}
+
       - name: Save npm's download cache
-        if: steps.npm-cache.outputs.cache-hit != 'true'
+        if: steps.npm-cache.outcome == 'success' && steps.npm-cache.outputs.cache-hit != 'true'
         continue-on-error: true
         uses: actions/cache/save@v4
         with:
