@@ -1,9 +1,11 @@
-import { Packages } from '@ast-utils'
-import { AST, codeProjectRoot, Parser, type ParseResult, type ParserServices } from '@parser'
-import { type Diagnostic, Diagnostics, FS, ReleaseCapabilities, type ReleaseProfile } from '@shared'
+import { Packages, Type } from '@ast-utils'
+import { AST, codeProjectRoot, Parser, type ParseResult, type ParserServices, type ProjectGraph } from '@parser'
+import { type Diagnostic, Diagnostics, FS, HCI, Platform, ReleaseCapabilities, type ReleaseProfile } from '@shared'
 import { registerTaoValidationChecks } from './langium-validation'
+import type { NodeValidationReuse } from './node-validation'
 import { Validate } from './Validate'
-import { Validation, type ValidationRunContext } from './validation'
+import { Validation, type ValidationContext, type ValidationRunContext } from './validation'
+import { AppValidator } from './validators/app-validator'
 import { validatePackageWorkspace } from './validators/package-validator'
 import { validateReleaseCapabilities } from './validators/release-capabilities-validator'
 
@@ -105,10 +107,268 @@ function installLangiumChecks(
   }, editorRelease)
 }
 
+type TypeReport = (ctx: ValidationContext) => void
+
+/** DocumentReuse belongs to one workspace; clear it when package topology changes or a build fails. */
+export interface DocumentReuse {
+  clear(): void
+}
+
+type CapturedReport = {
+  severity: 'error' | 'warning' | 'hint'
+  node: AST.Node
+  message: string
+  opts: Parameters<ValidationContext['error']>[2]
+}
+type DocumentReports = {
+  structural: Map<
+    AST.Node,
+    Map<number, {
+      check: Parameters<NodeValidationReuse['run']>[1]
+      reports: readonly CapturedReport[]
+    }>
+  >
+  types?: readonly CapturedReport[]
+}
+type DocumentVariant = {
+  file: AST.TaoFile
+  dependencies: NonNullable<ReturnType<typeof Parser.validationDependencies>>
+  packagesContext: Packages.Context
+  contextKey: string
+  reports: DocumentReports
+}
+type DocumentReuseState = Map<string, readonly DocumentVariant[]>
+const documentReuseStates = new WeakMap<DocumentReuse, DocumentReuseState>()
+
+function createDocumentReuse(): DocumentReuse {
+  const state: DocumentReuseState = new Map()
+  const reuse = { clear: () => state.clear() }
+  documentReuseStates.set(reuse, state)
+  return reuse
+}
+
+function captureReports(action: (ctx: ValidationContext) => void, ctx: ValidationContext): readonly CapturedReport[] {
+  const reports: CapturedReport[] = []
+  const accept = (severity: CapturedReport['severity']): ValidationContext['error'] => (node, message, opts) => {
+    reports.push(Object.freeze({ severity, node, message, opts: opts ? Object.freeze({ ...opts }) : undefined }))
+  }
+  action({ ...ctx, error: accept('error'), warning: accept('warning'), hint: accept('hint') })
+  return Object.freeze(reports)
+}
+
+function replayReports(reports: readonly CapturedReport[], ctx: ValidationContext): void {
+  for (const report of reports) {
+    ctx[report.severity](report.node, report.message, report.opts ? { ...report.opts } : undefined)
+  }
+}
+
+function documentVariant(
+  file: AST.TaoFile,
+  context: ValidationRunContext,
+  state: DocumentReuseState,
+  contextKey: string,
+): DocumentVariant | undefined {
+  const dependencies = Parser.validationDependencies(file)
+  if (!dependencies) {
+    state.delete(AST.getDocument(file).uri.path)
+    return undefined
+  }
+  const path = AST.getDocument(file).uri.path
+  const variants = state.get(path) ?? []
+  const same = <T>(left: readonly T[], right: readonly T[]) =>
+    left.length === right.length && left.every((value, index) => value === right[index])
+  const previous = variants.find(candidate =>
+    candidate.file === file && candidate.packagesContext === context.packagesContext
+    && candidate.contextKey === contextKey && candidate.dependencies.signature === dependencies.signature
+    && same(candidate.dependencies.files, dependencies.files)
+    && same(candidate.dependencies.targets, dependencies.targets)
+  )
+  if (previous) {
+    return previous
+  }
+  const variant: DocumentVariant = {
+    file,
+    dependencies,
+    packagesContext: context.packagesContext,
+    contextKey,
+    reports: { structural: new Map() },
+  }
+  // Bound entry/context variants and release old ASTs rather than retaining an edit history.
+  state.set(path, [...variants.filter(candidate => candidate.file === file).slice(-31), variant])
+  return variant
+}
+
+function documentContextKey(context: ValidationRunContext): string {
+  const paths = (files: readonly AST.TaoFile[]) => files.map(candidate => AST.getDocument(candidate).uri.path)
+  return JSON.stringify([
+    ReleaseCapabilities.fingerprint(context.releaseProfile ?? ReleaseCapabilities.current()),
+    context.entryFilePath,
+    Packages.isTestSourcePath(context.entryFilePath),
+    paths(context.workspaceFiles),
+    paths(context.projectFiles ?? context.workspaceFiles),
+  ])
+}
+
+function structuralReuse(reports: DocumentReports, ctx: ValidationContext): Pick<NodeValidationReuse, 'run'> {
+  let collecting: CapturedReport[] = []
+  const accept = (severity: CapturedReport['severity']): ValidationContext['error'] => (node, message, opts) => {
+    collecting.push(Object.freeze({ severity, node, message, opts: opts ? Object.freeze({ ...opts }) : undefined }))
+  }
+  const reportingContext = { ...ctx, error: accept('error'), warning: accept('warning'), hint: accept('hint') }
+  return {
+    run(node, check, slot, ctx, file) {
+      let slots = reports.structural.get(node)
+      if (!slots) {
+        slots = new Map()
+        reports.structural.set(node, slots)
+      }
+      let invocation = slots.get(slot)
+      if (!invocation || invocation.check !== check) {
+        collecting = []
+        check(node, reportingContext, file)
+        invocation = { check, reports: Object.freeze(collecting) }
+        slots.set(slot, invocation)
+      }
+      replayReports(invocation.reports, ctx)
+    },
+  }
+}
+
+type BatchReuse = {
+  apps: ReturnType<typeof AppValidator.createBatchMemo>
+  inference: ReturnType<typeof Type.createInferenceMemo>
+  nodes: WeakMap<AST.TaoFile, readonly AST.Node[]>
+  types: Map<Packages.Context, Map<AST.TaoFile, readonly TypeReport[]>>
+  graphs: {
+    packagesContext: Packages.Context
+    projectRoot: string
+    workspaceFiles: readonly AST.TaoFile[]
+    testEntry: string | undefined
+    graph: ProjectGraph
+  }[]
+}
+
+/**
+ * validateParseResults shares linked-AST inference, type reports, app helpers, and equivalent requirement graphs.
+ * Results retain each entry's gating, file order, structural checks, and foreign-file checks. All
+ * inference, graph, app, and descendant reuse dies with this call. An optional caller-owned
+ * document cache retains only eligible handler reports guarded by parser dependency snapshots.
+ * Callers must supply results from one completed, unmodified build.
+ */
+async function validateParseResults(
+  runs: readonly { parseResult: ParseResult; context: ValidationRunContext }[],
+  documentReuse?: DocumentReuse,
+): Promise<readonly ValidationResult[]> {
+  const reuse: BatchReuse = {
+    apps: AppValidator.createBatchMemo(),
+    inference: Type.createInferenceMemo(),
+    nodes: new WeakMap(),
+    types: new Map(),
+    graphs: [],
+  }
+  const persisted = documentReuse && documentReuseStates.get(documentReuse)
+  const failedBuild = runs.some(run => Diagnostics.hasError(run.parseResult.diagnostics, 'lexer', 'parser', 'linker'))
+  if (failedBuild) {
+    documentReuse?.clear()
+  }
+  // New reports are published only after every entry has completed successfully.
+  const staged = persisted && !failedBuild ? new Map(persisted) : undefined
+  const activeVariants = new Set<DocumentVariant>()
+  try {
+    const results: ValidationResult[] = []
+    for (const { parseResult, context } of runs) {
+      results.push(await validateParseResult(parseResult, context, reuse, staged, activeVariants))
+    }
+    if (persisted && staged) {
+      const paths = new Set(runs.flatMap(run => run.context.workspaceFiles.map(file => AST.getDocument(file).uri.path)))
+      persisted.clear()
+      for (const [path, variants] of staged) {
+        if (paths.has(path)) {
+          persisted.set(path, variants.filter(variant => activeVariants.has(variant)))
+        }
+      }
+    }
+    return results
+  } catch (error) {
+    documentReuse?.clear()
+    throw error
+  }
+}
+
+/** batchNodes snapshots descendants once for each exact AST identity in this batch. */
+function batchNodes(file: AST.TaoFile, reuse: BatchReuse): readonly AST.Node[] {
+  let nodes = reuse.nodes.get(file)
+  if (!nodes) {
+    nodes = Object.freeze(AST.streamAllContents(file))
+    reuse.nodes.set(file, nodes)
+  }
+  return nodes
+}
+
+/** sharedRequirementGraph compares the exact ordered graph inputs before sharing a graph. */
+function sharedRequirementGraph(context: ValidationRunContext, reuse: BatchReuse): ProjectGraph {
+  const projectRoot = Packages.projectRootForPath(context.packagesContext.index, context.entryFilePath)
+    ?? FS.dirname(context.entryFilePath)
+  const workspaceFiles = [...new Set(context.workspaceFiles.flatMap(AST.workspaceFilesFor))]
+    .filter(file => {
+      const path = AST.getDocument(file).uri.path
+      return !Packages.isTestSourcePath(path) || path === context.entryFilePath
+    })
+  const testEntry = Packages.isTestSourcePath(context.entryFilePath) ? context.entryFilePath : undefined
+  const existing = reuse.graphs.find(candidate =>
+    candidate.packagesContext === context.packagesContext
+    && candidate.projectRoot === projectRoot
+    && candidate.testEntry === testEntry
+    && candidate.workspaceFiles.length === workspaceFiles.length
+    && candidate.workspaceFiles.every((file, index) => file === workspaceFiles[index])
+  )
+  if (existing) {
+    return existing.graph
+  }
+  const graph = Packages.createResolver(context.packagesContext).projectGraph({
+    fromFilePath: context.entryFilePath,
+    workspaceFiles: context.workspaceFiles,
+  })
+  reuse.graphs.push({ packagesContext: context.packagesContext, projectRoot, workspaceFiles, testEntry, graph })
+  return graph
+}
+
+/** validateBatchTypes replays AST-only type reports where the ordinary type pass would run. */
+function validateBatchTypes(
+  file: AST.TaoFile,
+  nodes: readonly AST.Node[],
+  ctx: ValidationContext,
+  reuse: BatchReuse,
+): void {
+  let types = reuse.types.get(ctx.packagesContext)
+  if (!types) {
+    types = new Map()
+    reuse.types.set(ctx.packagesContext, types)
+  }
+  let reports = types.get(file)
+  if (!reports) {
+    const collected: TypeReport[] = []
+    Validate.Types(file, nodes, {
+      ...ctx,
+      error: (node, message, opts) => collected.push(context => context.error(node, message, opts)),
+      warning: (node, message, opts) => collected.push(context => context.warning(node, message, opts)),
+      hint: (node, message, opts) => collected.push(context => context.hint(node, message, opts)),
+    })
+    reports = collected
+    types.set(file, reports)
+  }
+  for (const report of reports) {
+    report(ctx)
+  }
+}
+
 /** validateParseResult validates an existing parse result. */
 async function validateParseResult(
   parseResult: ParseResult,
   context: ValidationRunContext,
+  reuse?: BatchReuse,
+  documents?: DocumentReuseState,
+  activeVariants?: Set<DocumentVariant>,
 ): Promise<ValidationResult> {
   if (Diagnostics.hasError(parseResult.diagnostics, 'lexer', 'parser')) {
     return validationResultFromParse(parseResult, parseResult.diagnostics)
@@ -122,13 +382,59 @@ async function validateParseResult(
     entryFilePath: context.entryFilePath,
     packagesContext: context.packagesContext,
     workspaceFiles: context.workspaceFiles,
+    ...(reuse === undefined ? {} : { appMemo: reuse.apps }),
+    ...(reuse === undefined ? {} : { nodesInFile: (file: AST.TaoFile) => batchNodes(file, reuse) }),
+    ...(reuse === undefined ? {} : { requirementGraph: () => sharedRequirementGraph(context, reuse) }),
     ...(context.projectFiles === undefined ? {} : { projectFiles: context.projectFiles }),
   })
   validatePackageWorkspace(ctx)
+  const profile = Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_PROFILE'] === 'true'
+  const phases = { structural: 0, types: 0, foreign: 0 }
+  const contextKey = documents ? documentContextKey(context) : undefined
   for (const file of context.workspaceFiles) {
-    const nodes = Validate.TaoFile(file, ctx)
-    Validate.Types(file, nodes, ctx)
+    const document = documents ? documentVariant(file, context, documents, contextKey!) : undefined
+    if (document) {
+      activeVariants?.add(document)
+    }
+    const startedAt = profile ? performance.now() : 0
+    const nodes = reuse
+      ? Type.withInferenceMemo(
+        reuse.inference,
+        () => Validate.TaoFile(file, ctx, document && structuralReuse(document.reports, ctx)),
+      )
+      : Validate.TaoFile(file, ctx)
+    const structuralAt = profile ? performance.now() : 0
+    if (document) {
+      if (!document.reports.types) {
+        document.reports.types = Type.withInferenceMemo(
+          reuse!.inference,
+          () => captureReports(context => validateBatchTypes(file, nodes, context, reuse!), ctx),
+        )
+      }
+      replayReports(document.reports.types, ctx)
+    } else if (reuse) {
+      Type.withInferenceMemo(reuse.inference, () => validateBatchTypes(file, nodes, ctx, reuse))
+    } else {
+      Validate.Types(file, nodes, ctx)
+    }
+    const typesAt = profile ? performance.now() : 0
     await Validate.ForeignImplementationFiles(file, ctx)
+    if (profile) {
+      phases.structural += structuralAt - startedAt
+      phases.types += typesAt - structuralAt
+      phases.foreign += performance.now() - typesAt
+    }
+  }
+  if (profile) {
+    HCI.logProcessInfo(
+      'validator',
+      JSON.stringify({
+        type: 'studio-validator-profile',
+        entry: context.entryFilePath,
+        files: context.workspaceFiles.length,
+        phases,
+      }),
+    )
   }
 
   return validationResultFromParse(parseResult, [...parseResult.diagnostics, ...validationDiagnostics.diagnostics])
@@ -196,11 +502,13 @@ function releaseDiagnostics(context: ValidationRunContext): readonly Diagnostic[
 /** Validator exposes Tao source validation functions. */
 const Validator = {
   createContext,
+  createDocumentReuse,
   createSession,
   releaseDiagnostics,
   installLangiumChecks,
   validateCode,
   validateParseResult,
+  validateParseResults,
 }
 
 namespace Validator {

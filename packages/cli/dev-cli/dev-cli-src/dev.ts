@@ -473,15 +473,21 @@ await runWithCommands(commands => {
     // uncaught stack with a code frame from inside the error helper.
     .action(async (gates: string[], options: GatesCommandOptions = {}) => {
       await runExitCommand(async () => {
-        UiVisibility.preflightGates(
-          options.skipUnsandboxed === true
-            ? gates.filter(name => GateCatalog.metadata(name).requiresUnsandboxed !== true)
-            : gates,
-          options.showStudio,
-        )
+        const runnable = options.skipUnsandboxed === true
+          ? gates.filter(name => GateCatalog.metadata(name).requiresUnsandboxed !== true)
+          : gates
+        UiVisibility.preflightGates(runnable, options.showStudio)
         // Keep this process-wide change at the CLI boundary, not in the reusable gate runner.
         // Gate children inherit it; the invoking shell and landing process keep their priority.
         if (VerificationLanes.VERIFY_OR_WIDER.includes(options.lane ?? VerificationLanes.VERIFY)) {
+          const { WatchmanCommand } = await import('./doctor/WatchmanCommand')
+          const watchmanStart = await WatchmanCommand.startBeforeLoweringPriority(
+            runnable.some(name => GateCatalog.metadata(name).usesWatchman === true),
+            { hostPlatform: Platform.hostPlatform },
+          )
+          if (watchmanStart !== undefined && watchmanStart !== 0) {
+            HCI.logProcessWarn('verify', 'Could not start Watchman at normal priority; Studio gates may refuse it.')
+          }
           try {
             Platform.lowerProcessPriority()
           } catch (error) {
@@ -847,9 +853,9 @@ await runWithCommands(commands => {
   commands
     .command('open-pr')
     .description(
-      'Push this feature branch, open or reuse its pull request titled by the reviewed merge message, turn on auto-merge, then stream the checks the push starts.',
+      'Push this feat/, claude/, or codex/ branch, open or reuse its pull request titled by the reviewed merge message, turn on auto-merge, then stream the checks the push starts.',
     )
-    .option('--poll-interval-ms <ms>', 'How often to poll checks when this gh has no `--watch` flag.')
+    .option('--poll-interval-ms <ms>', 'How often to poll the checks while they run (default 60000).')
     .action(async (options: { pollIntervalMs?: string } = {}) => {
       await runExitCommand(async () =>
         (await OpenPrCommand.run({
@@ -1418,6 +1424,14 @@ await runWithCommands(commands => {
         }
         await ReleaseWorkflow.publishIde(options.target)
       })
+    })
+
+  commands
+    .command('performance-check')
+    .description('Measure language and real Studio preview timing sequentially on a quiet, exclusively leased machine.')
+    .action(async () => {
+      const { PerformanceCheck } = await import('./performance/performance-check')
+      await runExitCommand(() => PerformanceCheck.run())
     })
 
   commands

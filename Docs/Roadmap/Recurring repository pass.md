@@ -20,6 +20,13 @@ notes after each completed pass; Git history is the longer record.
 
 ## Periodic isolation checks
 
+Run `./agent unsandboxed performance-check` against the pass's committed HEAD as a separate,
+sequential host proof. It reserves the machine's test capacity and checks host conditions while
+measuring language operations and real Studio saves, including an HNReader editor padding edit.
+Keep its summary and per-edit phase samples with the pass evidence. Busy or unavailable host
+evidence is inconclusive; repeat the unchanged code after contention clears. Ordinary verification
+retains deterministic repeated-work regressions, while this periodic proof enforces timing budgets.
+
 Keep these explicit periodic host checks, outside ordinary verification runs. Follow the existing
 [installed CLI and prepared-base commands](<../MVP Roadmap/Plan - Standalone Tao CLI.md#follow-up-order-decided-2026-09-26>)
 and [contributor verification workflow](<Developer environment upgrades/DEVENV-CLOUD-AGENT-EXECUTIONS-LACK-PORTABLE-BOOTSTRAP.md#local-reproduction-and-cloud-proof>):

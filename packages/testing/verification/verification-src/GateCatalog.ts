@@ -107,6 +107,8 @@ export type GateMetadata =
      * reports it skipped rather than running it, so it proves nothing there and is never green.
      */
     requiresMacOS?: boolean
+    /** True when the node starts Studio, whose Metro refuses to run without the shared Watchman daemon. */
+    usesWatchman?: boolean
     /**
      * The process the node runs, or a builder over what the graph admitted; absent, the node is
      * `just <name>`. A public recipe and a catalog command may share a name: the recipe is the
@@ -333,6 +335,7 @@ function studioLane(resources?: readonly string[]): GateMetadata {
     reads: ['gen-app', 'gen-parser', 'tao', 'ts'],
     requiresUnsandboxed: true,
     resources,
+    usesWatchman: true,
   }
 }
 
@@ -620,6 +623,7 @@ function node(name: string, repositoryRoot: string): WorkNode {
     requiresMacOS: _requiresMacOS,
     requiresUnsandboxed: _requiresUnsandboxed,
     run,
+    usesWatchman: _usesWatchman,
     writes: _writes,
     ...scheduling
   } = metadata(name)

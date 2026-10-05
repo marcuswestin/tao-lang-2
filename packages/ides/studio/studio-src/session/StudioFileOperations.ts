@@ -228,10 +228,12 @@ export class StudioFileOperations {
       const scenariosBefore = relocate
         ? otherRewrites.find(rewrite => rewrite.path === scenariosPath)?.content ?? existingScenarios?.content ?? ''
         : ''
-      const scenariosParsed = await this.#context.workspace.parseSource(
-        scenariosBefore,
-        Langium.URI.file(scenariosPath),
-      )
+      // Destination declarations need only authored syntax. Keep this independent of the linked
+      // source workspace, whose references relocation still consumes below.
+      const scenariosParsed = await Parser.parseCode(scenariosBefore, {
+        uri: Langium.URI.file(scenariosPath),
+        validation: false,
+      })
       Assert.input(
         !Diagnostics.hasError(scenariosParsed.diagnostics, 'lexer', 'parser'),
         `Cannot relocate scenarios until ${scenariosRelativePath} parses.`,

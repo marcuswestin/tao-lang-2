@@ -1,7 +1,17 @@
 import type { Packages } from '@ast-utils'
-import type { AST, Langium } from '@parser'
+import type { AST, Langium, ProjectGraph } from '@parser'
 import type { Diagnostic, ReleaseProfile } from '@shared'
 import { validatorDiagnostic } from './diagnostics'
+
+/** AppValidationMemo holds only app helper results from one completed linked-AST batch. */
+export interface AppValidationMemo {
+  values(file: AST.TaoFile, compute: () => readonly AST.AppValueDeclaration[]): readonly AST.AppValueDeclaration[]
+  identities(
+    packagesContext: Packages.Context,
+    files: readonly AST.TaoFile[],
+    compute: () => ReadonlyMap<string, AST.AppValueDeclaration>,
+  ): ReadonlyMap<string, AST.AppValueDeclaration>
+}
 
 /** ValidationRunContext declares shared validation invocation state. */
 export interface ValidationRunContext {
@@ -17,6 +27,12 @@ export interface ValidationRunContext {
   readonly projectFiles?: readonly AST.TaoFile[]
   /** One Langium document-build batch shares read-only workspace indexes across its file checks. */
   readonly memoStore?: Map<string, unknown>
+  /** Requirement graphs may be shared across equivalent entries in one parsed batch. */
+  readonly requirementGraph?: () => ProjectGraph
+  /** App helpers may reuse exact AST inputs only inside one parsed batch. */
+  readonly appMemo?: AppValidationMemo
+  /** Descendant snapshots may be reused only inside one completed, unmodified parsed batch. */
+  readonly nodesInFile?: (file: AST.TaoFile) => readonly AST.Node[]
 }
 
 /** ValidationContext carries validation run state and diagnostic reporting. */

@@ -113,10 +113,23 @@ archiving the branch at `merged/<name>`:
   `merged/<name>`, and reports the merge. GitHub deletes the branch, and the archive workflow writes the
   same `merged/<name>` for a pull request merged any other way. To change the message, edit it and run
   `open-pr` again. When a check fails, read `./agent pr-checks`, fix, commit, and run `open-pr` again.
+  Both take a `feat/<name>` branch, or the one `claude/<name>` or `codex/<name>` branch a cloud agent
+  session may push, archived at `merged/claude/<name>` or `merged/codex/<name>`. They talk to GitHub
+  over REST, so they work where a cloud host's proxy refuses `gh pr`'s GraphQL; there `open-pr` turns
+  auto-merge on through the proxy's own REST route, and where that is refused too `merge-pr` merges.
   Never run `gh pr merge` directly: the Developer's login can bypass `Verify`, and the harness refuses it.
 - **`./agent unsandboxed land`** when the change reaches a host-only lane (Studio, browser, native
   shell, simulator, canary), or when CI is unavailable: it verifies on this machine under the landing
   lock, including what the hosted runners cannot.
+
+## Periodic performance proof
+
+Run `./agent unsandboxed performance-check` for a pipeline performance change and during a periodic
+repository pass. It measures language operations and real Studio saves sequentially, separately from
+the parallel `verify-full` lane. Its report owns admission, ceilings, contamination, and the verdict;
+retain an inconclusive run and repeat unchanged code after contention clears. A correctness smoke
+under load does not qualify a speed budget. `pipeline-performance` owns the implementation workflow
+and `test-quality` owns deterministic regression proofs.
 
 ## Reporting while a lane runs
 

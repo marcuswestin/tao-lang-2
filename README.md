@@ -1,7 +1,6 @@
 # Tao
 
-Today, building an app is 20% value and 80% boilerplate, platform-specific detail, and unnecessary
-complexity.
+Today, building an app is 20% value and 80% boilerplate, platform-specific detail, and unnecessary complexity.
 
 Tao is a new programming language, and it takes care of that 80% for you. Every time.
 
