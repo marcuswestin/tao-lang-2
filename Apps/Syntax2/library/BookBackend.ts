@@ -3,8 +3,11 @@ export type BookRecord = Readonly<{
   Title: string
   Note: string
   AuthorID?: string
+  LoanedOut: boolean
   Revision: number
 }>
+
+export type BookInput = Readonly<Omit<BookRecord, 'Revision' | 'LoanedOut'> & { LoanedOut?: boolean }>
 
 export type BookQuery = Readonly<{ AuthorID?: string; Text?: string }>
 
@@ -48,6 +51,18 @@ const queryKey = (query: BookQuery): string =>
 
 const copyBook = (book: BookRecord): BookRecord => ({ ...book })
 
+const normalizedBook = (book: BookInput, revision: number): BookRecord => ({
+  ...book,
+  LoanedOut: book.LoanedOut ?? false,
+  Revision: revision,
+})
+
+const sameBook = (current: BookRecord, next: BookInput): boolean =>
+  current.Title === next.Title
+  && current.Note === next.Note
+  && current.AuthorID === next.AuthorID
+  && current.LoanedOut === (next.LoanedOut ?? false)
+
 /** App-owned deterministic backend for Syntax2's BookIO sidecar and behavior tests. */
 export class BookBackend {
   private readonly server = new Map<string, BookRecord>()
@@ -65,7 +80,7 @@ export class BookBackend {
   private canWrite = true
 
   /** Seeds the server fixture only; records become observable after a successful page fetch. */
-  seedServer(records: readonly Omit<BookRecord, 'Revision'>[]): void {
+  seedServer(records: readonly BookInput[]): void {
     this.server.clear()
     this.cache.clear()
     this.seen.clear()
@@ -74,7 +89,7 @@ export class BookBackend {
       if (this.server.has(record.ID)) {
         continue
       }
-      this.server.set(record.ID, { ...record, Revision: 1 })
+      this.server.set(record.ID, normalizedBook(record, 1))
     }
     this.serverRevision++
   }
@@ -82,13 +97,56 @@ export class BookBackend {
   /** Advances one server record; an acquired cached handle updates only after a successful fetch. */
   setServerRevision(bookID: string, revision: number): BookBackendResult<BookRecord> {
     const book = this.server.get(bookID)
-    if (!book || !Number.isInteger(revision) || revision <= book.Revision) {
+    if (!book || !Number.isSafeInteger(revision) || revision <= book.Revision) {
       return failure('invalid-request', 'A book revision must advance an existing server record.')
     }
     const revised = { ...book, Revision: revision }
     this.server.set(bookID, revised)
     this.serverRevision++
     return { ok: true, value: copyBook(revised) }
+  }
+
+  /** Atomically writes app-submitted records while retaining unrelated server rows. */
+  upsertBooks(records: readonly BookInput[]): BookBackendResult<void> {
+    const submittedIDs = new Set<string>()
+    for (const record of records) {
+      if (submittedIDs.has(record.ID)) {
+        return failure('invalid-request', `The book write batch contains duplicate ID '${record.ID}'.`)
+      }
+      submittedIDs.add(record.ID)
+    }
+    if (!this.canWrite) {
+      return failure('permission-denied', 'The current user cannot write these books.')
+    }
+    const injected = this.takeFailure('write')
+    if (injected !== undefined) {
+      return failure('injected-failure', injected)
+    }
+
+    const pending: BookRecord[] = []
+    let changed = false
+    for (const record of records) {
+      const current = this.server.get(record.ID)
+      if (current && sameBook(current, record)) {
+        pending.push(current)
+        continue
+      }
+      changed = true
+      const revision = current ? current.Revision + 1 : 1
+      if (!Number.isSafeInteger(revision) || (changed && !Number.isSafeInteger(this.serverRevision + 1))) {
+        return failure('invalid-request', 'The book revision cannot advance safely.')
+      }
+      pending.push(normalizedBook(record, revision))
+    }
+
+    for (const record of pending) {
+      this.server.set(record.ID, record)
+      this.cache.set(record.ID, record)
+    }
+    if (changed) {
+      this.serverRevision++
+    }
+    return { ok: true, value: undefined }
   }
 
   failNext(operation: Operation, message: string): void {
@@ -200,13 +258,16 @@ export class BookBackend {
   }
 
   createTemporaryPDF(bookID: string): BookBackendResult<TemporaryBookFile> {
-    const injected = this.takeFailure('export')
-    if (injected !== undefined) {
-      return failure('injected-failure', injected)
-    }
     const book = this.cache.get(bookID)
     if (!book) {
       return failure('invalid-request', 'Only an acquired book can be exported.')
+    }
+    if (![book.ID, book.Title, book.Note].every(supportsPDFText)) {
+      return failure('invalid-request', 'PDF export supports printable ASCII book text only.')
+    }
+    const injected = this.takeFailure('export')
+    if (injected !== undefined) {
+      return failure('injected-failure', injected)
     }
     const streamContent = [
       'BT',
@@ -281,9 +342,10 @@ export class BookBackend {
   }
 }
 
+const supportsPDFText = (value: string): boolean => /^[\x20-\x7E]*$/.test(value)
+
 const pdfLiteral = (value: string): string =>
   value
-    .replace(/[^\x20-\x7E]/g, '?')
     .replace(/\\/g, '\\\\')
     .replace(/\(/g, '\\(')
     .replace(/\)/g, '\\)')

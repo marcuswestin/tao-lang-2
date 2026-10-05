@@ -99,6 +99,135 @@ Describe('Syntax2 app-owned book backend', () => {
       .toBe(false)
   })
 
+  Test('rejects permission-denied and injected write batches without changing server, cache, or cursors', async () => {
+    const backend = new BookBackend()
+    backend.seedServer([bookFixture('a', 'Original'), bookFixture('b', 'Second')])
+    const first = value(await backend.fetchPage({ Maximum: 1 }))
+    const before = backend.observeRevision('a', 'user-a')!
+    const beforePermissionFile = value(backend.createTemporaryPDF('a'))
+    const beforePermissionFailure = value(backend.readTemporaryFile(beforePermissionFile))
+
+    backend.setWritePermission(false)
+    Expect(errorOf(backend.upsertBooks([bookFixture('a', 'Denied edit'), bookFixture('new')]))?.kind)
+      .toBe('permission-denied')
+    Expect(backend.observeRevision('a', 'user-a')).toEqual(before)
+    Expect(backend.observeRevision('new', 'user-a')).toBeNull()
+    const afterPermissionFailure = value(backend.createTemporaryPDF('a'))
+    Expect(value(backend.readTemporaryFile(afterPermissionFailure))).toEqual(beforePermissionFailure)
+    value(backend.deleteTemporaryFile(afterPermissionFailure))
+    value(backend.deleteTemporaryFile(beforePermissionFile))
+    backend.setWritePermission(true)
+    Expect(value(await backend.fetchPage({ Maximum: 1, Continuation: first.Continuation })).Books[0]?.ID).toBe('b')
+
+    const secondCursor = value(await backend.fetchPage({ Maximum: 1 }))
+    const beforeInjected = backend.observeRevision('a', 'user-a')!
+    const beforeInjectedFile = value(backend.createTemporaryPDF('a'))
+    const beforeInjectedFailure = value(backend.readTemporaryFile(beforeInjectedFile))
+    backend.failNext('write', 'write unavailable')
+    Expect(errorOf(backend.upsertBooks([bookFixture('a', 'Failed edit'), bookFixture('new')]))?.message)
+      .toBe('write unavailable')
+    Expect(backend.observeRevision('a', 'user-a')).toEqual(beforeInjected)
+    Expect(backend.observeRevision('new', 'user-a')).toBeNull()
+    const afterInjectedFailure = value(backend.createTemporaryPDF('a'))
+    Expect(value(backend.readTemporaryFile(afterInjectedFailure))).toEqual(beforeInjectedFailure)
+    value(backend.deleteTemporaryFile(afterInjectedFailure))
+    value(backend.deleteTemporaryFile(beforeInjectedFile))
+    Expect(value(await backend.fetchPage({ Maximum: 1, Continuation: secondCursor.Continuation })).Books[0]?.ID).toBe(
+      'b',
+    )
+    Expect((await fetchEveryPage(backend, 40)).map(book => [book.ID, book.Title])).toEqual([
+      ['a', 'Original'],
+      ['b', 'Second'],
+    ])
+    Expect(errorOf(backend.upsertBooks([bookFixture('dup'), bookFixture('dup')]))?.kind).toBe('invalid-request')
+  })
+
+  Test(
+    'upserts local books with default fields, revision changes, retained files, and preserved old tokens',
+    async () => {
+      const backend = new BookBackend()
+      backend.seedServer([bookFixture('server-only', 'Unloaded')])
+      value(backend.upsertBooks([bookFixture('local', 'A (Book) \\ path')]))
+      const original = backend.observeRevision('local', 'user-a')!
+      Expect(original.Revision).toBe(1)
+      Expect(original.Unseen).toBe(true)
+      Expect(backend.observeRevision('local', 'user-a') && backend.observeRevision('local', 'user-a')!.Revision).toBe(1)
+      Expect(
+        value(await backend.fetchPage({ Maximum: 40, Query: { AuthorID: 'author-a' } })).Books
+          .some(book => book.ID === 'server-only'),
+      ).toBe(true)
+      Expect(backend.observeRevision('local', 'user-a')?.Unseen).toBe(true)
+
+      value(backend.markSeen(original))
+      const file = value(backend.createTemporaryPDF('local'))
+      const originalFileBytes = value(backend.readTemporaryFile(file))
+      value(backend.upsertBooks([bookFixture('local', 'A (Book) \\ path')]))
+      Expect(backend.observeRevision('local', 'user-a')?.Revision).toBe(1)
+      Expect(backend.observeRevision('local', 'user-a')?.Unseen).toBe(false)
+
+      value(backend.upsertBooks([{ ...bookFixture('local', 'Changed'), LoanedOut: true }]))
+      const loaned = backend.observeRevision('local', 'user-a')!
+      Expect(loaned.Revision).toBe(2)
+      Expect(loaned.Unseen).toBe(true)
+      Expect(value(await backend.fetchPage({ Maximum: 40 })).Books.find(book => book.ID === 'local')?.LoanedOut).toBe(
+        true,
+      )
+      value(backend.markSeen(original))
+      Expect(backend.observeRevision('local', 'user-a')?.Unseen).toBe(true)
+      Expect(value(backend.readTemporaryFile(file))).toEqual(originalFileBytes)
+      Expect(value(backend.uploadFile(file)).Bytes).toEqual(originalFileBytes)
+      Expect(backend.acceptedUploads()).toHaveLength(1)
+
+      value(backend.upsertBooks([{ ...bookFixture('local', 'Changed'), LoanedOut: false }]))
+      Expect(backend.observeRevision('local', 'user-a')?.Revision).toBe(3)
+      value(backend.upsertBooks([{ ...bookFixture('local', 'Changed'), AuthorID: 'author-b', LoanedOut: false }]))
+      Expect(backend.observeRevision('local', 'user-a')?.Revision).toBe(4)
+      value(backend.upsertBooks([{ ...bookFixture('local', 'Changed'), AuthorID: 'author-b', Note: 'Changed note' }]))
+      Expect(backend.observeRevision('local', 'user-a')?.Revision).toBe(5)
+      const allBooks = await fetchEveryPage(backend, 40)
+      Expect(allBooks.map(book => book.ID)).toEqual(['local', 'server-only'])
+      Expect(allBooks[0]).toMatchObject({ AuthorID: 'author-b', LoanedOut: false, Note: 'Changed note' })
+      value(backend.deleteTemporaryFile(file))
+    },
+  )
+
+  Test('keeps an unchanged page cursor and rejects batches whose revision cannot advance safely', async () => {
+    const backend = new BookBackend()
+    backend.seedServer([bookFixture('a', 'Original'), bookFixture('b', 'Second')])
+    const first = value(await backend.fetchPage({ Maximum: 1 }))
+    value(backend.upsertBooks([bookFixture('a', 'Original')]))
+    Expect(value(await backend.fetchPage({ Maximum: 1, Continuation: first.Continuation })).Books[0]?.ID).toBe('b')
+
+    value(backend.setServerRevision('a', Number.MAX_SAFE_INTEGER))
+    await fetchEveryPage(backend, 40)
+    const before = backend.observeRevision('a', 'user-a')!
+    Expect(errorOf(backend.upsertBooks([bookFixture('a', 'Cannot advance'), bookFixture('new')]))?.kind)
+      .toBe('invalid-request')
+    Expect(backend.observeRevision('a', 'user-a')).toEqual(before)
+    Expect(backend.observeRevision('new', 'user-a')).toBeNull()
+    Expect((await fetchEveryPage(backend, 40)).map(book => [book.ID, book.Title])).toEqual([
+      ['a', 'Original'],
+      ['b', 'Second'],
+    ])
+  })
+
+  Test('rejects unsupported PDF text without creating an owned file or upload', () => {
+    const backend = new BookBackend()
+    value(backend.upsertBooks([
+      bookFixture('ascii', 'ASCII title'),
+      bookFixture('unicode', 'Café title'),
+      { ...bookFixture('control', 'Control title'), Note: 'line\nbreak' },
+    ]))
+
+    Expect(errorOf(backend.createTemporaryPDF('unicode'))?.kind).toBe('invalid-request')
+    Expect(errorOf(backend.createTemporaryPDF('control'))?.kind).toBe('invalid-request')
+    Expect(backend.acceptedUploads()).toEqual([])
+    const asciiFile = value(backend.createTemporaryPDF('ascii'))
+    Expect(value(backend.uploadFile(asciiFile)).FileID).toBe('book-export-1')
+    Expect(backend.acceptedUploads()).toHaveLength(1)
+    value(backend.deleteTemporaryFile(asciiFile))
+  })
+
   Test('cancellation and a server revision race leave cache and cursor state unadvanced', async () => {
     const backend = new BookBackend()
     backend.seedServer([bookFixture('a'), bookFixture('b')])
@@ -181,7 +310,7 @@ Describe('Syntax2 app-owned book backend', () => {
 
   Test('keeps export bytes owned through upload and retryable cleanup failures', async () => {
     const backend = new BookBackend()
-    backend.seedServer([bookFixture('a', 'A (Book) \\ Café')])
+    backend.seedServer([bookFixture('a', 'A (Book) \\ path')])
     const foreign = new BookBackend()
 
     backend.failNext('acquisition', '')
@@ -195,7 +324,7 @@ Describe('Syntax2 app-owned book backend', () => {
     const bytes = value(backend.readTemporaryFile(file))
     const pdf = new TextDecoder().decode(bytes)
     Expect(pdf.startsWith('%PDF-1.4\n')).toBe(true)
-    Expect(pdf).toContain('(Title: A \\(Book\\) \\\\ Caf?) Tj')
+    Expect(pdf).toContain('(Title: A \\(Book\\) \\\\ path) Tj')
     const startXref = Number(/startxref\n(\d+)\n%%EOF/.exec(pdf)?.[1])
     Expect(pdf.slice(startXref, startXref + 5)).toBe('xref\n')
     const xrefLines = pdf.slice(startXref).split('\n')
