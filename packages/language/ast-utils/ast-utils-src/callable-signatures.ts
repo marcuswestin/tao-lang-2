@@ -101,6 +101,7 @@ export function compareCallableSignatures(
     candidateType: input => input.type,
     targetType: input => input.type,
     namedTypeAccepts: accepts,
+    compatibleTypeAccepts: accepts,
     pairAccepts: (caller, implementation) => inputIncompatibilities(caller, implementation, accepts).length === 0,
     targetRequiresValue: input => !input.omissible,
     completeCorrespondence: true,

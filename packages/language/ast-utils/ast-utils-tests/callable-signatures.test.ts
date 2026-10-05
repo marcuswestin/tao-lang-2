@@ -2,7 +2,7 @@ import { ASTUtils, Packages } from '@ast-utils'
 import { AST, Parser, URI } from '@parser'
 import { Assert } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
-import { resolveArgumentBindings } from '../ast-utils-src/argument-bindings'
+import { resolveArgumentBindings, resolveParameterArgumentBindings } from '../ast-utils-src/argument-bindings'
 import {
   bindCallableArguments,
   type CallableSignature,
@@ -14,6 +14,36 @@ import { type TaoType, Type } from '../ast-utils-src/Type'
 import { resolveBindings } from '../ast-utils-src/type-binding-matches'
 
 Describe('Concrete callable signature substitution', () => {
+  Test('binds real call arguments with the contract-stage relation before effect admission', async () => {
+    const parsed = await Parser.parseCode('view Target(Value number) { } view Main() { render Target(1) }')
+    Expect(parsed.diagnostics).toEqual([])
+    const target = parsed.entry.ast.statements.find(statement =>
+      AST.isViewDeclaration(statement) && statement.name === 'Target'
+    )
+    const main = parsed.entry.ast.statements.find(statement =>
+      AST.isViewDeclaration(statement) && statement.name === 'Main'
+    )
+    Expect.Is(target, AST.isViewDeclaration)
+    Expect.Is(main, AST.isViewDeclaration)
+    const call = AST.blockStatementOf(main, 0)
+    Expect.Is(call, AST.isRenderStatement)
+    const parameters = AST.parametersOf(target)
+    const arguments_ = AST.argumentsOf(call)
+    const number: TaoType = { kind: 'primitive', primitive: 'number' }
+    const text: TaoType = { kind: 'primitive', primitive: 'text' }
+    const denied = resolveParameterArgumentBindings(parameters, arguments_, { accepts: () => false })
+    Expect(denied.pairs).toEqual([])
+    const admitted = resolveParameterArgumentBindings(parameters, arguments_, {
+      parameterType: () => number,
+      argumentType: () => text,
+      accepts: () => true,
+    })
+    Expect(admitted.diagnostics).toEqual([])
+    Expect(admitted.pairs).toHaveLength(1)
+    Expect(admitted.pairs[0]!.parameter === parameters[0]).toBe(true)
+    Expect(admitted.pairs[0]!.argument === arguments_[0]).toBe(true)
+  })
+
   Test('uses guarded contract resolution and final admission without substituting default relations', async () => {
     const parsed = await Parser.parseCode('view Target(Entry text?) { }')
     Expect(parsed.diagnostics).toEqual([])
@@ -44,6 +74,21 @@ Describe('Concrete callable signature substitution', () => {
     Expect(rejected.compatible).toBe(false)
     Expect(rejected.correspondence).toEqual([])
     Expect(rejected.diagnostics.length).toBeGreaterThan(0)
+    const required = {
+      ...signature,
+      inputs: signature.inputs.map(input => ({ ...input, role: undefined, labelName: 'Required' })),
+    }
+    const supplied = {
+      ...signature,
+      inputs: signature.inputs.map(input => ({
+        ...input,
+        role: undefined,
+        labelName: 'Supplied',
+        type: { kind: 'primitive', primitive: 'text' } as TaoType,
+      })),
+    }
+    Expect(compareCallableSignatures(supplied, required).compatible).toBe(false)
+    Expect(compareCallableSignatures(supplied, required, () => true).compatible).toBe(true)
   })
 
   Test('retains owned parameter metadata and writable forwarding through readonly arrays', async () => {

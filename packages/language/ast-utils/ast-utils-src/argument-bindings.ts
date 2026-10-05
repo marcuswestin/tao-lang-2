@@ -57,6 +57,8 @@ export function resolveParameterArgumentBindings(
     parameterName?(parameter: AST.ParameterDeclaration): string
     parameterType?(parameter: AST.ParameterDeclaration): TaoType
     parameterOmissible?(parameter: AST.ParameterDeclaration): boolean
+    argumentType?(argument: AST.Argument): TaoType
+    accepts?(actual: TaoType, expected: TaoType): boolean
   } = {},
 ): ArgumentBindingResult {
   const resolution = resolveBindings<AST.Argument, AST.ParameterDeclaration>({
@@ -64,9 +66,17 @@ export function resolveParameterArgumentBindings(
     targets: parameters,
     candidateLabel: argument => argument.label,
     targetName: metadata.parameterName ?? Type.parameterName,
-    candidateType: argument => Type.ofArgument(argument),
+    candidateType: metadata.argumentType ?? Type.ofArgument,
     targetType: metadata.parameterType ?? Type.ofParameter,
-    namedTypeAccepts: (actual, expected) => Type.isAssignable(actual, expected),
+    namedTypeAccepts: metadata.accepts ?? Type.isAssignable,
+    compatibleTypeAccepts: metadata.accepts ?? Type.isAssignable,
+    pairAccepts: metadata.accepts
+      ? (argument, parameter) =>
+        metadata.accepts!(
+          (metadata.argumentType ?? Type.ofArgument)(argument),
+          (metadata.parameterType ?? Type.ofParameter)(parameter),
+        )
+      : undefined,
     duplicateTargetTypesOnlyWithCandidates: true,
     afterNamedBinding: ({ remainingTargets }) => {
       // Optional parameters are explicit-only for type-based view/action binding. This keeps a
