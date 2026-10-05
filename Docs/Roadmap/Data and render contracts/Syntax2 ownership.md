@@ -300,6 +300,28 @@ with an unknown cast or weaken native nominal checks. Prove actual generated mod
 same-name owners stay distinct, and raw/reverse/sibling negatives remain rejected. No Type,
 source ancestry, bridge metadata, runtime or companion publication ownership is transferred.
 
+A now owns canonical effect-independent publication in six paths under language/ast-utils:
+new ast-utils-src/canonical-effect-snapshot.ts and ast-utils-tests/canonical-effect-snapshot.test.ts;
+existing ast-utils-src/{Type,invocations,associated-invocations,argument-bindings}.ts. Publish a
+branded immutable correspondence snapshot from actual linked files; retain targets, descriptors,
+canonical argument pairs, read proofs, exhaustive default eligibility, independent native phases
+and explicit metadata coverage. Reuse the existing admission kernel, binder and signature comparator
+with a phase-local relation; unresolved and pending competitors keep correspondence open and
+defaults possible. No inferred purity, native trust or concrete body failure proof is manufactured.
+Keep default behavior of ordinary public resolution unchanged. Index semantic metadata only;
+the existing effect discovery owns the one execution traversal. Publish the concrete type/factory
+ABI in an early reviewed commit for D. Root retains facade, native/requirement evidence, validation
+and compiler wiring. This release includes no whole-app refinement or new language decision.
+
+D's next release owns new ast-utils-src/callable-effect-publications.ts and
+ast-utils-tests/callable-effect-publications.test.ts under the same package. Source writing starts
+after consuming A's frozen actual snapshot ABI. Project that factory's records into the existing
+CallableEffectFactInputs; retain real source witnesses and conservative uncovered regions, without
+a second execution traversal, Type import, resolver or matcher. Prove actual parsed source through
+the canonical factory, projection, discovery and analyzer, including aliases/defaults, receiver
+reads, recursion, requirement failures and unknown native phases. If the projection is redundant,
+return that finding before introducing another layer. Root supplies final sealed admission/wiring.
+
 Managers implement against supplied frozen inputs in isolated worktrees and reconcile the landed
 base before frozen return. This manifest transfers no unlisted shared file implicitly.
 
