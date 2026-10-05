@@ -22,7 +22,7 @@ export type RenderSourceIdentity = {
 }
 
 /** renderSourceIdentity identifies one authored render and the exact source text it came from. */
-export function renderSourceIdentity(render: AST.Render): RenderSourceIdentity | undefined {
+export function renderSourceIdentity(render: AST.Render | AST.RenderSlotUse): RenderSourceIdentity | undefined {
   const cstNode = render.$cstNode
   if (cstNode === undefined) {
     return undefined

@@ -64,7 +64,7 @@ export class NumericUnits {
         current = alias
         continue
       }
-      const type: AST.TypeExpression | undefined = current.type
+      const type: AST.TypeExpression | AST.CapabilityTypeExpression | undefined = current.type
       if (!type) {
         return undefined
       }
