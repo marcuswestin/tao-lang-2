@@ -22,7 +22,7 @@ ForeignActionImplementation:
     failures+=ActionFailureDeclaration* 'from' path=USE_IMPORT_PATH;
 
 ActionFailureDeclaration:
-    'fails' case=[CaseSetCase:ID] sentence=STRING;
+    'fails' case=[FailureDeclaration:ID] sentence=STRING;
 
 ActionExpression:
     ('action' | '->') block=ActionBlock;
@@ -38,7 +38,7 @@ ActionStatement:
     AsyncActionStatement | AliasDeclaration | ReturnStatement | SetStatement | ToggleStatement | DoStatement | WhenDoStatement | WhenActionStatement | DeferStatement | FailStatement | CheckStatement | GuardActionStatement | IfActionStatement | AskStatement | ActionResultStatement | RespondStatement | CreateStatement | UpdateStatement | DeleteStatement | RetryStatement | ContextualPresentStatement | SelectionActivateStatement | DismissStatement | ReplaceStatement | ActionLoopStatement | DeclarationSlotFill;
 
 FailStatement:
-    'fail' case=[CaseSetCase:ID] sentence=STRING;
+    'fail' case=[FailureDeclaration:ID] sentence=STRING;
 
 // `check` is an action's early exit: a false condition skips the rest of the action without failing.
 CheckStatement:

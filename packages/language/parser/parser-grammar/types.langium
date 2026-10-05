@@ -53,6 +53,8 @@ CaseSetTypeExpression:
 CaseSetCase:
     name=ID | literal=STRING;
 
+type FailureDeclaration = CaseSetCase | TypeDeclaration;
+
 // The alias precedes `no`, so the keyword terminates it and no contextual lexer token is needed.
 YesNoTypeExpression:
     'yes/no' | 'yes' '/' negativeName=ID? 'no';
