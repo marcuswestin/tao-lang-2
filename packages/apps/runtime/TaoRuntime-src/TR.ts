@@ -590,7 +590,12 @@ class TR {
     readDuration: TaoDurationReader<Value>,
     duration: Value,
   ): Promise<void> {
-    return wait(readDuration, duration, actionCancellationSignal())
+    return wait(
+      readDuration,
+      duration,
+      actionCancellationSignal(),
+      (callback, milliseconds) => Clock.after(milliseconds, callback),
+    )
   }
 
   /** Function creates a Tao pure-function value. */
