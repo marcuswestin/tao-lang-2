@@ -144,7 +144,6 @@ import {
 } from './TR-navigation'
 import type { TaoDeclarationIdentity } from './TR-navigation-identity'
 import { checkedNumericBacking } from './TR-numeric-units'
-import { isQuantityPayload } from './TR-quantity-values'
 import type {
   TaoAuthPairing,
   TaoAuthProofKind,
@@ -164,6 +163,8 @@ import {
   usePersistedState,
 } from './TR-persisted-state'
 import { selectPluralForm, type TaoPluralCategory, type TaoPluralForms } from './TR-phrases'
+import { admitQuantityUnion } from './TR-quantity-admission'
+import { isQuantityPayload } from './TR-quantity-values'
 import { requireReactNativeRuntime } from './TR-react-native'
 import { isReactiveValue, markReactiveValue } from './TR-reactive'
 import {
@@ -479,6 +480,9 @@ class TR {
 
   /** Distinguish checked quantity payloads at explicitly typed native union boundaries. */
   static isQuantityPayload = isQuantityPayload
+
+  /** Admit one native quantity snapshot against the caller's explicit canonical owner set. */
+  static admitQuantityUnion = admitQuantityUnion
 
   /** Function creates a Tao pure-function value. */
   static Function(body: (...args: any[]) => TR.Evaluable | TR.Function): TR.Function {

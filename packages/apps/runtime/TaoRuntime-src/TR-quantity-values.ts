@@ -42,6 +42,8 @@ export type TaoQuantityFactory<Domain extends string, Units extends Readonly<Rec
   fromUnit(input: unknown, unit: UnitNames<Units>): TaoQuantityValue<Domain, UnitNames<Units>>
   inUnit(value: TaoEvaluable<unknown>, unit: UnitNames<Units>): TaoQuantityValue<Domain, UnitNames<Units>>
   read(value: TaoEvaluable<unknown>): Readonly<{ canonical: number; unit: UnitNames<Units> }>
+  /** Tests private owner identity without reading a wrapper or exposing a public nominal registry. */
+  ownsPayload(payload: unknown): boolean
 }>
 
 const constructionKey = Object.freeze({})
@@ -183,6 +185,9 @@ export function makeQuantityType<
     read(value: TaoRuntimeValue<unknown>) {
       const payload = readPayload(value)
       return Object.freeze({ canonical: payload.canonical, unit: payload.unit })
+    },
+    ownsPayload(payload: unknown): boolean {
+      return QuantityPayload.is(payload) && payload.belongsTo(identity)
     },
   })
 }
