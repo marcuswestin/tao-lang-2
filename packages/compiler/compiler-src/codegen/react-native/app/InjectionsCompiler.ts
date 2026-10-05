@@ -136,6 +136,7 @@ function CompileTaoJsType(type: ASTUtils.TaoType): Compiled {
         command: () => gen`TR.CommandValue`,
         design: () => gen`any`,
         view: () => gen`import('react').ReactNode`,
+        rendered: () => gen`TR.Rendered`,
         scene: () => gen`import('react').ReactNode`,
         nav: () => gen`TR.NavigationValue`,
         datasource: () => gen`any`,

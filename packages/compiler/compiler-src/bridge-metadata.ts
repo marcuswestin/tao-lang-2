@@ -823,6 +823,9 @@ function typescriptType(type: ASTUtils.TaoType, seen = new Set<AST.EntityDataDec
       if (type.primitive === 'none') {
         return 'null'
       }
+      if (type.primitive === 'rendered') {
+        return 'TR.Rendered'
+      }
       return 'unknown'
     },
     list: type => `Array<${typescriptType(type.element ?? { kind: 'unresolved' }, seen)}>`,
@@ -833,7 +836,9 @@ function typescriptType(type: ASTUtils.TaoType, seen = new Set<AST.EntityDataDec
       }
       seen.add(type.entity)
       const fields = Type.dataFields(type.entity).map(field =>
-        `${JSON.stringify(field.name)}${field.optional ? '?' : ''}: ${typescriptType(Type.dataFieldType(field), seen)}`
+        `${JSON.stringify(field.name)}${field.optional ? '?' : ''}: ${typescriptType(Type.dataFieldType(field), seen)}${
+          field.optional ? ' | null' : ''
+        }`
       )
       seen.delete(type.entity)
       return `{ ${fields.join('; ')} }`

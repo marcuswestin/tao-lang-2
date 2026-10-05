@@ -199,6 +199,7 @@ import {
   selectRenderSlot,
   type TaoSlotRenderer,
 } from './TR-render-slots'
+import { describeRenderedView, mountRenderedView, type TaoRendered } from './TR-rendered-view'
 import {
   captureRuntime,
   registerRuntimeCaptureDomain,
@@ -565,6 +566,16 @@ class TR {
   /** Bare empty text emits no node while nonempty values keep the normal reactive Text path. */
   static RenderText = renderTextValue
 
+  /** RenderView creates opaque content without mounting the selected associated component. */
+  static RenderView<PropsT extends object>(
+    component: React.ComponentType<PropsT>,
+    props: PropsT,
+  ): TR.Value<TaoRendered> {
+    return TR.Value(describeRenderedView(component, props))
+  }
+
+  static MountRendered = mountRenderedView
+
   /** Call preserves raw omission holes separately from a wrapped none value. */
   static Call<T>(fn: TR.Function, ...args: (TR.Evaluable | undefined)[]): TR.Value<T> {
     return fn.invoke(...args) as TR.Value<T>
@@ -633,6 +644,8 @@ class TR {
   static ResumeActionContinuation(continuation: TaoActionContinuation): void {
     resumeActionContinuation(continuation)
   }
+
+  static ActionCancellationSignal = actionCancellationSignal
 
   /** ActionScope joins one lexical action block before draining its cleanup. */
   static ActionScope<T>(body: () => T | PromiseLike<T>): T | Promise<T> {
@@ -1612,6 +1625,7 @@ namespace TR {
   export type NativeMutationLease<T> = import('./TR-reactive-values').NativeMutationLease<T>
   /** Value declares a runtime Tao value wrapper. */
   export type Value<T> = TaoRuntimeValue<T>
+  export type Rendered = TaoRendered
   /** QuantityPayload retains authentic opaque storage across ordinary quantity and abstract-family parameters. */
   export type QuantityPayload = TaoQuantityPayload<string, string, object>
   /** Ticker declares the reactive value `@tao/time`'s `Interval` returns. */
