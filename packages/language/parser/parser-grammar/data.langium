@@ -54,7 +54,7 @@ EntityQueryDeclaration:
       | (sourceName=ID 'as' name=ID | name=ID ('from' source=MemberAccessExpression)?) block=QueryBlock?);
 
 QueryBlock:
-    '{' clauses+=QueryClause* '}';
+    '{' (clauses+=QueryClause (','? clauses+=QueryClause)* ','?)? '}';
 
 QueryClause:
     WhereClause | BooleanWhereClause | SearchClause | OrderClause | LimitClause | PaginationClause;

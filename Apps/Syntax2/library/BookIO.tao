@@ -1,0 +1,76 @@
+use Book, Books, People from ./Library
+
+// 1. Bounded server acquisition is supplied by this app's adapter.
+type BookProvider is datasource with {
+   supports { Relations, FieldUpdates }
+
+   provider BookProvider from ./BookStoreProvider.ts
+}
+
+public
+datasource BookStore = BookProvider {
+   Data {
+      Books,
+      People
+}  }
+
+public
+type TemporaryFile is {
+   ID text
+}
+
+public
+type RevisionID is text
+
+public
+type Unseen is yes/no
+
+public
+type Revision is {
+   Book,
+   RevisionID,
+   Unseen
+}
+
+public
+type BookWindow is list of Book
+
+public
+type Occurrence is {
+   Ordinal number
+}
+
+// 2. Cached reads neither acquire data nor acknowledge it.
+public
+func ObservedRevision(Book) -> Revision {
+   return ObservedRevision(Book) from ./BookIO.ts
+}
+
+public
+func LoadedItems(BookWindow) -> Books {
+   return LoadedItems(BookWindow) from ./BookIO.ts
+}
+
+public
+func ExportNotice(Book) -> text {
+   return ExportNotice(Book) from ./BookIO.ts
+}
+
+// 3. Native I/O joins its caller; defer invokes deletion after file use ends.
+public
+action CreateTemporaryPDF(Book) -> TemporaryFile from ./BookIO.ts
+
+public
+action DeleteTemporaryFile(TemporaryFile) from ./BookIO.ts
+
+public
+action UploadFile(TemporaryFile) from ./BookIO.ts
+
+public
+action MarkSeen(Revision) from ./BookIO.ts
+
+public
+action LoadAfter(BookWindow) from ./BookIO.ts
+
+public
+action Refresh(BookWindow) from ./BookIO.ts

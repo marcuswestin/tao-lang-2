@@ -1,6 +1,4 @@
-import TR from '../../../packages/apps/runtime/TaoRuntime-src/TR'
-import { actionCancellationSignal } from '../../../packages/apps/runtime/TaoRuntime-src/TR-action-transactions'
-import type { TaoDataConnection } from '../../../packages/apps/runtime/TaoRuntime-src/TR-data'
+import TR from '@tao/runtime'
 import { type BookBackendResult, type ObservedBookRevision, type TemporaryBookFile } from './BookBackend'
 import { type BookStoreSession, bookStoreSession } from './BookStoreProvider'
 
@@ -31,7 +29,7 @@ const files = new WeakMap<
     issued: TemporaryBookFile
   }>
 >()
-const notices = new WeakMap<TaoDataConnection, Map<string, string>>()
+const notices = new WeakMap<TR.DataConnection, Map<string, string>>()
 let nextFileID = 1
 
 function bookContext(book: LiveBook): EntityContext {
@@ -119,7 +117,7 @@ export function MarkSeen(revision: Revision): void {
 
 export async function LoadAfter(window: LiveBook[]): Promise<void> {
   const query = TR.Data.NativeQueryContext(window)
-  const signal = actionCancellationSignal()
+  const signal = TR.ActionCancellationSignal()
   await query.run(async (connection, descriptor) => {
     await bookStoreSession(connection).acquire(descriptor, 'next', signal)
   })
@@ -127,7 +125,7 @@ export async function LoadAfter(window: LiveBook[]): Promise<void> {
 
 export async function Refresh(window: LiveBook[]): Promise<void> {
   const query = TR.Data.NativeQueryContext(window)
-  const signal = actionCancellationSignal()
+  const signal = TR.ActionCancellationSignal()
   await query.run(async (connection, descriptor) => {
     await bookStoreSession(connection).acquire(descriptor, 'refresh', signal)
   })

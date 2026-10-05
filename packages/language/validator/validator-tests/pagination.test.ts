@@ -5,6 +5,8 @@ import { accepts, app, rejects } from './test-validate'
 Describe('validator: query pagination', () => {
   Test('accepts a page size of 40', accepts(queryApp('paginate 40')))
 
+  Test('accepts pagination ordered by the existing entity identity', accepts(queryApp('order by Id asc, paginate 40')))
+
   Test('accepts safe page sizes above the app backend bound', accepts(queryApp('paginate 41')))
 
   Test('rejects invalid page sizes', async () => {

@@ -23,4 +23,13 @@ Describe('parser: query pagination', () => {
       `)()
     }
   })
+
+  Test('keeps comma-separated query clauses distinct from render and expression boundaries', async () => {
+    const parsed = await testParseCode(`
+      data Documents / Document { Title text }
+      view Home { query Documents = Documents with { order by Title asc, paginate 40, } }
+    `)
+    const query = AST.streamAllContents(parsed.entry.ast).find(AST.isEntityQueryDeclaration)!
+    Expect(query.block!.clauses.map(clause => clause.$type)).toEqual(['OrderClause', 'PaginationClause'])
+  })
 })

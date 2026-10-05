@@ -1,11 +1,13 @@
+use Length, UpperCase from @tao/core
 use all from @tao/ui
-use UpperCase, Length from @tao/core
-use ComparedNames, PersonName, Subtract from ./library/Library
+use BookStore, LoadAfter, Refresh from ./library/BookIO
+use Books, ComparedNames, PersonName, Subtract from ./library/Library
 
 app LibraryApp {
    id "com.tao.syntax2"
    name "Syntax2 Library"
    version "0.1.0"
+   Datasource BookStore
    view Library
 }
 
@@ -25,6 +27,11 @@ view Library {
    let Person = PersonName(ProfileName "Ada", .FamilyName "Lovelace")
    let Readers = ComparedNames ["Ada", "Lovelace"]
    let Shout = UpperCase(ProfileName "Ada")
+   query Feed = Books with {
+      order by Id asc
+      ,
+      paginate 40
+   }
    // 3. An inferred source result reaches the joined completion handler.
    action ReadyMessage() {
       return "Ready"
@@ -49,11 +56,24 @@ view Library {
       Button("Group") {
          // 4. Matching cases are captured before a selected action mutates their subject.
          on press -> when GroupMode {
-            true -> { set GroupMode = false }
-            false -> { set GroupMode = true }
-         }
-      }
+            true -> {
+               set GroupMode = false
+            }
+            false -> {
+               set GroupMode = true
+      }  }  }
       when GroupMode {
          true -> "Grouped books."
          otherwise -> "All books."
+      }
+      // 5. Acquisition is bounded; continuation extends this same owned window.
+      guard Feed
+      loop Feed / Book {
+         Book.Title
+      }
+      Button("More") {
+         on press -> do LoadAfter(Feed)
+      }
+      Button("Refresh") {
+         on press -> do Refresh(Feed)
 }  }  }

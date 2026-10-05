@@ -450,6 +450,10 @@ function validateEntityQuery(query: AST.EntityQueryDeclaration, ctx: ValidationC
     if (AST.isLimitClause(clause) || AST.isPaginationClause(clause) || AST.isSearchClause(clause)) {
       continue
     }
+    // Id is the existing, immutable entity identity rather than an authored data field.
+    if (AST.isOrderClause(clause) && clause.fieldName === 'Id') {
+      continue
+    }
     if (AST.isBooleanWhereClause(clause)) {
       const field = clause.case.ref
       if (field && !fields.includes(field)) {

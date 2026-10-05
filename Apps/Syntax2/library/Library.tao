@@ -20,3 +20,25 @@ public
 func Subtract(Left number, Right number) {
    return Left - Right
 }
+
+// 3. Live data identity and one stored Boolean with its inverse member.
+public
+type Title is text
+
+public
+type NewBook is {
+   Title
+}
+
+public
+data People / Person {
+   Name
+}
+
+public
+data Books / Book {
+   Title (required "Enter a title"),
+   Note text (default ""),
+   Author Person?,
+   LoanedOut yes / Returned no
+}

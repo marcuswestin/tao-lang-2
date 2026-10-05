@@ -69,7 +69,7 @@ view Library {
    let Offset = -2 seconds
 
    // 4. Provisional app-level bounded query contract; see README.
-   query Feed = Books with { order by ID asc, paginate 40 }
+   query Feed = Books with { order by Id asc, paginate 40 }
    render Col {
       #heading accessible label "Library"
       Banner(.Subtitle "{Scaled.seconds()} / {Factor}", .Title Label)

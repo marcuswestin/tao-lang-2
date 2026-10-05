@@ -1,11 +1,9 @@
-import TR from '../../../packages/apps/runtime/TaoRuntime-src/TR'
-import type {
-  TaoDataConnection,
-  TaoDataConnectionObserver,
-  TaoDataProvider,
-  TaoDataProviderContext,
-  TaoQueryDescriptor,
-} from '../../../packages/apps/runtime/TaoRuntime-src/TR-data'
+import TR from '@tao/runtime'
+type TaoDataConnection = TR.DataConnection
+type TaoDataConnectionObserver = TR.DataConnectionObserver
+type TaoDataProvider = TR.DataProvider
+type TaoDataProviderContext = TR.DataProviderContext
+type TaoQueryDescriptor = TR.QueryDescriptor
 import { BookBackend, type BookInput, type BookPage, type BookRecord } from './BookBackend'
 
 export type BookStoreAcquisition = 'first' | 'next' | 'refresh'

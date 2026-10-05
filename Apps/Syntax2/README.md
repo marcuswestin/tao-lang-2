@@ -13,19 +13,22 @@ remains undiscovered.
   ordinary boolean state between two quoted labels. Bare Person and Feedback placement use the
   standard Text view; compact handlers show and clear feedback. The show handler joins an inferred
   source action result through `then { done Message -> ... }`. A named list supplies two readers.
+  Feed acquires 40 books, extends to 80 and 83, and refreshes while retaining acquired content.
+  This collection slice uses an eager loop; the standard-library lazy host remains pending.
 - [library/Library.tao](library/Library.tao): graduated Name/GivenName/FamilyName, PersonName and
   Subtract declarations. The app renders Ada Lovelace and 3 using the actual signature projections
   and argument matcher. ComparedNames constructs a list with contextual Name elements.
 - [Library.test.tao](Library.test.tao): active journey asserting the header and both directions of
-  the grouping display transition and the signature-role results. It exercises no book collection
-  or acquisition behavior.
+  the grouping display transition, signature-role results, and bounded book acquisition,
+  continuation and refresh.
 - [Main.tao.future](Main.tao.future): project/app boundary, controls, slots, units and bounded list UI.
 - [library/Library.tao.future](library/Library.tao.future): nominal signatures, structural capabilities,
   generics, native operator, entities, associated actions/rendering and cleanup.
 - [library/GroupedRows.tao.future](library/GroupedRows.tao.future) and
   [library/GroupedRows.ts.future](library/GroupedRows.ts.future): typed keyed rows and a pure algorithm.
-- [library/BookIO.tao.future](library/BookIO.tao.future): app-owned adapter contracts. The referenced
-  BookIO.ts is a required implementation artifact, not an existing backend or a successful stub.
+- [library/BookIO.tao](library/BookIO.tao): active owned file/revision/query adapter contracts.
+  BookIO.ts and BookStoreProvider.ts implement actual bounded acquisition, PDF creation, upload,
+  cleanup and cached revision acknowledgment. Remaining adapter contracts stay in the future file.
 - [Library.test.tao.future](Library.test.tao.future): initial user-visible journey to activate with
   the entry slice; it is not current acceptance evidence.
 - [stdlib/Keyed.tao.future](stdlib/Keyed.tao.future): target ordinary declarations for @tao/ui,
@@ -48,9 +51,10 @@ The active shell is intentionally dependency-complete and small. It compiles and
 checks; the runtime journey verdict is recorded by the integration owner. The original future Main,
 library modules, adapter sketch, standard-library target and future journey remain intact.
 The shell demonstrates quotation, reachable grouping and feedback transitions, bare text-value
-placement, contextual named lists, joined source action results and graduated nominal signature/role matching. It does not yet
-implement the future book collection, capability, quantity, parameterized-slot, failure/cleanup
-or adapter contracts. Mounted feature proof verifies that empty bare text values emit no node;
+placement, contextual named lists, joined source action results and graduated nominal signature/role
+matching. The active book collection acquires bounded pages through its adapter. Capability,
+quantity, parameterized-slot and complete failure/cleanup app integration remain pending.
+Mounted feature proof verifies that empty bare text values emit no node;
 a quoted empty string and explicit Text("") still retain their Text nodes.
 
 1. Extract small feature modules from the future files when necessary. Move working declarations,
@@ -68,7 +72,7 @@ a quoted empty string and explicit Text("") still retain their Text nodes.
 
 These are deliberately narrow integration requirements, not the final A29 query-state API.
 
-- BookStore starts with an available empty collection. Use a deterministic memory adapter and
+- BookStore supplies 83 deterministic server rows, acquired in bounded pages. Use the memory adapter and
   controllable acquisition/write/export failures for journeys; do not hide unimplemented I/O behind
   successful no-ops. A native export adapter needs separate platform acceptance if included.
 - Feed acquires at most 40 results per request, with stable unique ID ordering. LoadedItems projects
