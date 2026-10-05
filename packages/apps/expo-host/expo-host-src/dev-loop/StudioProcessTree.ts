@@ -95,10 +95,12 @@ export async function startStudioProcessTree(
     const identities = ProcessTree.identities([...owned.keys()])
     // macOS may omit a just-exited child until its parent reaps it. Treat unreadable live PIDs
     // as pending, allowing the bounded wait to drain; signalTracked still refuses to signal them.
+    // Linux procfs is definitive and reports an unreaped zombie as gone, which kill(pid, 0) would
+    // call alive forever under a container init that never reaps orphans.
     return [...owned.values()].filter(expected => {
       const current = identities.get(expected.pid)
       return current === undefined
-        ? Platform.processIsAlive(expected.pid)
+        ? Platform.hostPlatform === 'darwin' && Platform.processIsAlive(expected.pid)
         : ProcessTree.sameProcess(current, expected)
     })
   }
@@ -325,7 +327,9 @@ async function rollbackUnpublishedLaunch(
       const identities = ProcessTree.identities(tracked.map(process => process.pid))
       const pending = tracked.filter(process => {
         const current = identities.get(process.pid)
-        return current === undefined ? Platform.processIsAlive(process.pid) : ProcessTree.sameProcess(current, process)
+        return current === undefined
+          ? Platform.hostPlatform === 'darwin' && Platform.processIsAlive(process.pid)
+          : ProcessTree.sameProcess(current, process)
       })
       if (pending.length === 0) {
         return
