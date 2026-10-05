@@ -104,7 +104,8 @@ const BUN_INSTALL_REFUSAL =
   + 'Ask the Developer before adding or updating packages, then edit the manifest and run `./agent setup --refresh-lockfile`.'
 
 const GH_PR_MERGE_REFUSAL = "Agents never run `gh pr merge` (AGENTS.md): through the Developer's login it can "
-  + 'bypass the required Verify check. `./agent unsandboxed open-pr --auto-merge` turns on auto-merge, and '
+  + 'bypass the required Verify check. `./agent unsandboxed open-pr` leaves auto-merge off by default; '
+  + 'pass `--auto-merge` only when explicitly intended. '
   + '`./agent unsandboxed merge-pr` merges only once Verify passed on the pushed head.'
 
 const GIT_ADD_WIDE_REFUSAL =

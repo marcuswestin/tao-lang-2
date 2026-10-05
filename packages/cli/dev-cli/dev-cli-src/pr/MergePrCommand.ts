@@ -8,8 +8,9 @@ import { reviewedMergeMessage } from './ReviewedMergeMessage'
  * `merge-pr` merges this branch's pull request on GitHub once hosted CI has proved it. It follows
  * every check on the pushed head to its conclusion, requires the `Verify` verdict among them, then
  * squash-merges with the reviewed merge message, pinned to the head it watched so a later push
- * cannot slip in unproved. `open-pr` has usually turned on auto-merge, in which case GitHub may merge
- * first; a pull request already merged at the watched head is this command's success too. Afterwards it archives the head at `merged/<name>`, exactly where `land`
+ * cannot slip in unproved. `open-pr` leaves auto-merge off unless `--auto-merge` is requested, in
+ * which case GitHub may merge first; a pull request already merged at the watched head is this
+ * command's success too. Afterwards it archives the head at `merged/<name>`, exactly where `land`
  * archives a feature branch, and only then deletes the remote branch, so `landed` and `reclaim` read
  * a merged pull request the same way they read a landing. The Verify workflow marks a draft ready once
  * Verify passes; a draft still waiting when the checks end (the workflow lacked its token) is marked
@@ -19,7 +20,7 @@ import { reviewedMergeMessage } from './ReviewedMergeMessage'
  * It is the hosted alternative to `land`, which verifies on this machine under the landing lock;
  * neither runs the host-only lanes the other skips, so choosing between them is the
  * `verification-lanes` skill's call, not this command's. GitHub never merges on its own: nothing here
- * enables auto-merge; that is `open-pr`'s.
+ * enables auto-merge; `open-pr` only does so when explicitly requested.
  *
  * Like `open-pr`, every `git` and `gh` call goes through the injected `run` seam so a test can script
  * every answer without a real remote, and every GitHub read and the merge itself go through REST

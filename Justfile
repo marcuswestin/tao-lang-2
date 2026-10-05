@@ -603,7 +603,7 @@ reclaim *ARGS:
 worktree-status:
     ./dev worktree-status
 
-# Push this feature branch, open or reuse its pull request, then stream its checks; --auto-merge lands it once Verify passes
+# Push this feature branch and stream pull-request checks; --auto-merge explicitly enables automatic landing
 [group('Dev')]
 open-pr *ARGS:
     ./dev open-pr {{ ARGS }}
