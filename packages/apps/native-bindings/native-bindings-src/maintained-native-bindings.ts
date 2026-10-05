@@ -170,9 +170,9 @@ function entries(value: unknown): value is Entry[] {
   )
 }
 
-async function readManifest(path: string, captured?: Uint8Array): Promise<Manifest> {
+async function readManifest(path: string, captured?: Uint8Array | null): Promise<Manifest> {
   Assert.input(
-    !await FS.isSymbolicLink(path) && await FS.isFile(path),
+    captured !== null && (captured !== undefined || !await FS.isSymbolicLink(path) && await FS.isFile(path)),
     `Maintained native binding manifest is missing at '${path}'.`,
   )
   const value = Json.tryParse(
@@ -197,6 +197,8 @@ async function readManifest(path: string, captured?: Uint8Array): Promise<Manife
 export async function inspectMaintainedNativeBindings(
   options: MaintainedBindingOptions = {},
   observers: {
+    /** Observe that inspection must cross the publication barrier, before waiting on its lock. */
+    beforePublicationBarrier?: () => Promise<void>
     /** Test seam for races after capture; it cannot substitute the bytes or the validation result. */
     afterManifestCapture?: () => Promise<void>
     /** Observe completed hashing before the final snapshot guards, without changing its verdict. */
@@ -206,53 +208,93 @@ export async function inspectMaintainedNativeBindings(
   const location = locations(options)
   const first = roots(location.root, maintainedNativeSources[0]!)[0]
   const parent = FS.dirname(first)
-  const inspect = () => inspectUnlocked(location)
   if (!await FS.isDirectory(parent)) {
-    return await inspect()
+    return await inspectUnlocked(location)
   }
-  // Match the publisher's canonical boundary and target, without claiming its exclusive lock.
-  // Missing roots and every interrupted snapshot retain the lock's wait/reclaim behavior.
-  if (await FS.isDirectory(first) && !await FS.isSymbolicLink(first) && !await FS.isSymbolicLink(parent)) {
-    const canonicalParent = await FS.realPath(parent)
-    const canonicalFirst = FS.resolvePath(FS.relativePath(parent, first), canonicalParent)
-    const lock = `${canonicalFirst}.tao-file-mutation.lock`
-    const paths = maintainedNativeSources.map(source => FS.resolvePath(manifestName, roots(location.root, source)[1]))
-    const capture = async () =>
-      new Map(
-        await Promise.all(paths.map(async path => {
-          Assert.input(
-            !await FS.isSymbolicLink(path) && await FS.isFile(path),
-            `Maintained native binding manifest is missing at '${path}'.`,
-          )
-          return [path, await FS.readFile(path)] as const
-        })),
-      )
-    try {
-      if (!await FS.exists(lock)) {
-        const before = await capture()
-        await observers.afterManifestCapture?.()
-        const result = await inspectUnlocked(location, before)
-        await observers.afterInspection?.()
-        const after = await capture()
-        if (
-          !await FS.exists(lock)
-          && paths.every(path => {
-            const previous = before.get(path)!
-            const current = after.get(path)!
-            return previous.length === current.length && previous.every((byte, index) => byte === current[index])
-          })
-        ) {
-          return result
-        }
-      }
-    } catch {
-      // Re-read under the publisher lock to report the existing actionable diagnostics.
+  const canInspectOptimistically = await FS.isDirectory(first)
+    && !await FS.isSymbolicLink(first) && !await FS.isSymbolicLink(parent)
+  const lock = `${FS.resolvePath(FS.relativePath(parent, first), await FS.realPath(parent))}.tao-file-mutation.lock`
+  const paths = maintainedNativeSources.map(source => FS.resolvePath(manifestName, roots(location.root, source)[1]))
+  const capture = async () =>
+    new Map(
+      await Promise.all(paths.map(async path =>
+        [
+          path,
+          !await FS.isSymbolicLink(path) && await FS.isFile(path) ? await FS.readFile(path) : null,
+        ] as const
+      )),
+    )
+  const sameSnapshot = (
+    before: ReadonlyMap<string, Uint8Array | null>,
+    after: ReadonlyMap<string, Uint8Array | null>,
+  ) =>
+    paths.every(path => {
+      const previous = before.get(path)!
+      const current = after.get(path)!
+      return previous === null || current === null
+        ? previous === current
+        : previous.length === current.length && previous.every((byte, index) => byte === current[index])
+    })
+  let observedCapture = false
+  let observedInspection = false
+  const notifyCapture = async () => {
+    if (!observedCapture) {
+      observedCapture = true
+      await observers.afterManifestCapture?.()
     }
   }
-  return await FS.withFileMutationLock(first, parent, inspect)
+  const notifyInspection = async () => {
+    if (!observedInspection) {
+      observedInspection = true
+      await observers.afterInspection?.()
+    }
+  }
+  let firstAttempt = true
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const barrierRequired = !firstAttempt || !canInspectOptimistically || await FS.exists(lock)
+    firstAttempt = false
+    if (barrierRequired) {
+      await observers.beforePublicationBarrier?.()
+      // Let the publication lock validate the canonical boundary and reclaim stale ownership.
+      await FS.withFileMutationLock(first, parent, async () => undefined)
+    }
+    let before: Map<string, Uint8Array | null>
+    try {
+      before = await capture()
+    } catch {
+      continue
+    }
+    await notifyCapture()
+    let result: Inspection
+    try {
+      result = await inspectUnlocked(location, before)
+    } catch {
+      // A concurrent publication can interrupt hashing; retry from a fresh barrier.
+      continue
+    }
+    await notifyInspection()
+    let after: Map<string, Uint8Array | null>
+    try {
+      after = await capture()
+    } catch {
+      continue
+    }
+    if (!await FS.exists(lock) && sameSnapshot(before, after)) {
+      if (result.status === 'fresh') {
+        return result
+      }
+      return await FS.withFileMutationLock(first, parent, () => inspectUnlocked(location))
+    }
+  }
+  Errors.throwHostEnvironment(
+    'Maintained native binding files kept changing during inspection. Retry the check after publication finishes.',
+  )
 }
 
-async function inspectUnlocked(location: Locations, manifests?: ReadonlyMap<string, Uint8Array>): Promise<Inspection> {
+async function inspectUnlocked(
+  location: Locations,
+  manifests?: ReadonlyMap<string, Uint8Array | null>,
+): Promise<Inspection> {
   // These snapshots are shared only within this inspection, never with a later check
   // or generation's independent publication guard.
   const inventories = new Map<string, ReturnType<typeof inventory>>()
