@@ -148,7 +148,9 @@ Describe('parser: lowercase numeric units', () => {
       AST.isRenderStatement(node) && node.view?.$refText === 'leaf'
     )
     Expect.Is(render, AST.isRenderStatement)
-    Expect(render.view?.ref?.name).toBe('leaf')
+    const rendered = render.view?.ref
+    Expect.Is(rendered, AST.isViewDeclaration)
+    Expect(rendered.name).toBe('leaf')
   })
 
   Test('keeps lower view and directive names outside direct label and scalar suffixes', async () => {
