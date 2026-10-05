@@ -111,15 +111,21 @@ Current exclusive assignments:
   DeclarationOrder.ts for unit-construction traversal, InjectionsCompiler.ts and
   runtime-type-compiler.ts for numeric backing cases, preserving unrelated item construction and
   upward-only invocation admission. The coordinator adds branded owner publication after return.
+  C additionally owns quoted-render.ts's parser-constructor injection while preserving quotation
+  lowering, use-package-validator.ts's bounded numeric alias admission and formatting.ts's units
+  brace selection. These are the three reviewed integration gaps; no broader formatter, alias or
+  parser redesign is released.
   No other manager
   writes these shared seams.
-- D owns existing-block cleanup lowering in ActionsCompiler.ts, action-control-flow.ts and a new
-  defer-actions compiler test, plus the bounded effect-outcomes.test.ts expectation amendment for
-  the lexical wrapper. Defer grammar, then/result-token and purity extensions remain held.
-- B's renderer paths have returned; slot frontend and foreign adapters remain held. Its reviewed
-  native namespace investigation releases only new quantity-native-module.ts and its compiler
-  test. The isolated leaf supplies constructor-only types.Owner.Unit methods and allocated
-  checked-factory/type linkage metadata from one owner factory, with executable/static proof.
+- D's existing-block cleanup lowering and outcome assertion are integrated at `858a971f9`;
+  their source ownership has returned. Coordinator event/selection callers and mounted payload
+  cleanup proof are committed at `033a6d760`, including a caught scope-removal mutation.
+  D prepares the transitive purity/failure producer packet without a new source grant. Defer grammar,
+  then/result-token and purity extensions remain held.
+- B's renderer and native-leaf paths have returned; slot frontend and foreign adapters remain held.
+  The isolated leaf is integrated at `62b2cac5d`, supplying constructor-only types.Owner.Unit methods
+  and allocated checked-factory/type linkage metadata from one owner factory, with executable/static
+  proof. B prepares the slot frontend packet without editing shared source.
 - The coordinator owns Backend/bridge-metadata/project tooling/native factory publication,
   InvocationsCompiler/FunctionalCoreCompiler caller adaptations, runtime facade, preparatory
   comma-helper retirement, app/stdlib graduation, combined verification and landing.
