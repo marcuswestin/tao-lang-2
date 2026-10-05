@@ -348,11 +348,14 @@ const pendingChildCompletions = new Set<() => void>()
 export function onChildProcessClose(
   child: SpawnedChild,
   listener: (exitCode: number | null, signal: NodeJS.Signals | null) => void,
+  ownedAuxiliaryPipes: readonly (Readable | Writable)[] = [],
 ): () => void {
-  const streams = [child.stdout, child.stderr].filter(stream => stream !== null)
-  // Auxiliary descriptors and IPC retain their native close contract. The fallback covers only
-  // the standard output pipes whose complete lifecycle this observer can verify.
-  const standardPipesOnly = child.stdio.length <= 3 && child.channel === undefined
+  const streams = [child.stdout, child.stderr, ...ownedAuxiliaryPipes].filter(stream => stream !== null)
+  // Unknown auxiliary descriptors and IPC retain their native close contract. A caller may
+  // explicitly include its own pipes, but every actual auxiliary descriptor must match exactly.
+  const auxiliary = child.stdio.slice(3)
+  const knownPipesOnly = child.channel === undefined && auxiliary.length === ownedAuxiliaryPipes.length
+    && auxiliary.every((stream, index) => stream !== null && stream === ownedAuxiliaryPipes[index])
   let exited = child.exitCode !== null || child.signalCode !== null
   let exitCode = child.exitCode
   let signal = child.signalCode
@@ -374,7 +377,7 @@ export function onChildProcessClose(
     listener(code, exitSignal)
   }
   const check = () => {
-    if (standardPipesOnly && exited && streams.every(stream => stream.closed)) {
+    if (knownPipesOnly && exited && streams.every(stream => stream.closed)) {
       complete(exitCode, signal)
     }
   }

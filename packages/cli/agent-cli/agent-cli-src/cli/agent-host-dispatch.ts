@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, HCI, Platform } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, ResourceInventory } from '@shared'
 import { parseDevLoopArgs } from '../agent-config/DevLoopArgs'
 import { agentHostCommands, hostCommandKind, hostCommandPrefix } from '../agent-config/HostCommandPolicy'
 import { hostCommandTarget } from '../agent-config/HostCommandTargets'
@@ -26,7 +26,12 @@ async function run(): Promise<number> {
     HCI.writeErrorLine(`FAIL  ${prefix.join(' ')} has no named host implementation.`)
     return 2
   }
+  await ResourceInventory.notifyStartup({ checkout: Platform.runtimeProcess.cwd() })
   const args = argv.slice(prefix.length)
+  if (target.argsPolicy === 'inventory' && !(args.length === 0 || (args.length === 1 && args[0] === '--json'))) {
+    HCI.writeErrorLine('Usage: ./agent unsandboxed resources [--json]')
+    return 2
+  }
   if (target.argsPolicy === 'studio-proof' && !validStudioProofArgs(args)) {
     HCI.writeErrorLine(
       `Usage: ./agent unsandboxed ${prefix.join(' ')} [--project <path>] [--app <name>] [--show-studio]`,

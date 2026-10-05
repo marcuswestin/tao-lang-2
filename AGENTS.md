@@ -36,7 +36,7 @@ The Developer is Tao's author, project lead, and language designer, and decides 
 
 - Never archive your own task, thread, or conversation. Leave a final response; the Developer archives manually.
 - Other agents and the Developer may change this worktree concurrently. Preserve changes you did not make and adapt around them.
-- Keep task scratch and generated output in this worktree unless a tool requires another location. Record each external directory you or a tool creates in a task-local `.artifacts/` note: path, owner, purpose, and cleanup condition. Remove only owned inactive output; before finishing, report remaining external directories and cleanup needs.
+- Keep scratch and generated output in this worktree unless a tool requires another location. Register external directories with `./agent resources --register-directory`; `git-workflow` owns the fields and post-landing cleanup offer. Remove only owned inactive output; report remaining external directories before finishing.
 - For an authorized change task, stage and commit only exact reviewed paths this task changed; never sweep unrelated work into the index. Unstaging, resetting, or stashing work still needs the Developer's explicit request.
 - Commit only from a named `feat/<name>` branch, or from `dev/<name>` when the Developer assigns work in that personal checkout; never commit from detached HEAD.
 - When assigned work in the primary `dev/<name>` checkout, stay there even if it is dirty. The Developer and other agents may be editing alongside you. Preserve their files and index, follow the requested stopping point, and use the shared-checkout rules in `git-workflow`.

@@ -24,6 +24,7 @@ export const JUST_COMMANDS = [
   'fmt-file',
   'ide-extension-package',
   'land',
+  'lint',
   // The landing lock is the turn-taking primitive every broad lane and the landing itself go
   // through, so an agent has to be able to claim and return it by the same spelling it reads in
   // AGENTS.md rather than dropping to `just`.

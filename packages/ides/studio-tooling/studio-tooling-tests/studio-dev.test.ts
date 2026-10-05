@@ -107,15 +107,20 @@ Describe('Studio test process output', () => {
       format: 'tao-journey-observations',
       version: 1,
     }
+    const root = await mkTestDir('studio-test-journey-artifact-')
     const runner = new StudioTestProcessRunner({
       args: ['-c', `printf '%s' '${JSON.stringify(artifact)}' > "$2"`, 'journey-artifact'],
       command: '/bin/sh',
-      cwd: FS.tmpdir(),
+      cwd: root,
+      resourceIndexRoot: FS.resolvePath('resource-index', root),
     })
-
-    await runner.run()
-
-    Expect(runner.journeyObservations()).toEqual(artifact)
+    try {
+      await runner.run()
+      Expect(runner.journeyObservations()).toEqual(artifact)
+    } finally {
+      await runner.close()
+      await FS.remove(root)
+    }
   })
 })
 
@@ -534,7 +539,8 @@ Describe('Studio native wrapper foundation', () => {
   Test('stops Electrobun gracefully and closes process resources', async () => {
     const fake = fakeCommand(true)
 
-    await StudioNative.testing.stopCommand(fake.command, async () => {})
+    // A timer turn allows authoritative asynchronous output closure to settle before timeout.
+    await StudioNative.testing.stopCommand(fake.command, () => Time.sleep(0))
 
     Expect(fake.events).toEqual(['kill SIGTERM', 'close-output', 'dispose'])
   })
@@ -542,7 +548,8 @@ Describe('Studio native wrapper foundation', () => {
   Test('forces Electrobun closed after the graceful timeout and closes process resources', async () => {
     const fake = fakeCommand(false)
 
-    await StudioNative.testing.stopCommand(fake.command, async () => {})
+    // Preserve production timer ordering while the fake advances through its graceful budget.
+    await StudioNative.testing.stopCommand(fake.command, () => Time.sleep(0))
 
     Expect(fake.events).toEqual(['kill SIGTERM', 'kill SIGKILL', 'close-output', 'dispose'])
   })

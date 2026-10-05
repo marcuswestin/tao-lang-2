@@ -103,7 +103,9 @@ function processTable(): ProcessTableEntry[] {
     args: ['-axo', 'pid=,ppid=,lstart=,command='],
   })
   if (result.status !== 0) {
-    return []
+    Errors.throwHostEnvironment('Could not inspect the process table; process absence is unproved.', {
+      details: { status: result.status },
+    })
   }
   const processes: ProcessTableEntry[] = []
   for (const line of String(result.stdout).split('\n')) {

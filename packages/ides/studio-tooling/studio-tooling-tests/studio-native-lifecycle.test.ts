@@ -1,10 +1,54 @@
 import { startStudioProcessTree, type StudioProcessTree } from '@expo-host/dev-loop/StudioProcessTree'
-import { CLI, Errors, FS, ProcessTree } from '@shared'
-import type { Platform } from '@shared'
+import { CLI, Errors, FS, Platform, ProcessTree, Repo, type TrackedProcess } from '@shared'
 import { Deferred, Describe, Expect, mkTestDir, settle, Test, until } from '@shared/test'
 import { StudioNative } from '../studio-tooling-src/StudioNative'
 
 Describe('Studio native bounded lifecycle', () => {
+  Test('failed publication drains a stopped held launcher before returning failure to the CLI', async () => {
+    const root = await mkTestDir('studio-publication-rollback-')
+    const ready = FS.resolvePath('ready', root)
+    const indexRoot = FS.resolvePath('index', root)
+    const sharedModule = Repo.resolvePath('packages/shared/shared-src/shared.ts')
+    let captured: TrackedProcess | undefined
+    try {
+      const error = await rejectedError(StudioNative.testing.prepareElectrobun('/tools/hutch', root, {
+        log: () => {},
+        startCommand: () =>
+          startStudioProcessTree(Platform.runtimeProcess.execPath, {
+            args: [
+              '-e',
+              `
+            import { FS, Time } from ${JSON.stringify(sharedModule)};
+            await FS.writeText(${JSON.stringify(ready)}, 'ready');
+            while (true) await Time.sleep(1000);
+          `,
+            ],
+            cwd: root,
+            resourceIndexRoot: indexRoot,
+            beforeLaunchPublication: async process => {
+              captured = process
+              Expect(await FS.isFile(ready)).toBe(false)
+              ProcessTree.signalTracked([process], 'SIGSTOP')
+              Errors.throwHostEnvironment('controlled publication failure')
+            },
+          }),
+      }))
+      Expect(error).toBeInstanceOf(Errors.HostEnvironmentError)
+      Expect(error.message).toContain('Could not start install')
+      Expect(captured).toBeDefined()
+      // The caller may now explicitly exit. No polling after rejection can hide unfinished rollback.
+      Expect(ProcessTree.sameProcess(ProcessTree.identities([captured!.pid]).get(captured!.pid), captured!)).toBe(false)
+      Expect(Platform.processIsAlive(captured!.pid)).toBe(false)
+      Expect(await FS.isFile(ready)).toBe(false)
+      Expect((await FS.listDir(indexRoot)).length).toBe(1)
+    } finally {
+      if (captured !== undefined) {
+        ProcessTree.signalTracked([captured], 'SIGKILL')
+      }
+      await FS.remove(root)
+    }
+  })
+
   Test('wires the release timeout into the production Electrobun build invocation', async () => {
     const calls: unknown[] = []
 
@@ -215,6 +259,7 @@ Describe('Studio native bounded lifecycle', () => {
       startCommand: () =>
         startStudioProcessTree('/bin/sh', {
           args: ['-c', 'sleep 60 & child=$!; echo "$child" > "$1"; wait', 'hutch-child', descendantPath],
+          resourceIndexRoot: FS.resolvePath('resource-index', root),
         }),
     })
     try {

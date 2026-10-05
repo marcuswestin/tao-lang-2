@@ -13,7 +13,9 @@ import METRO_EVENTS_PRELOAD from './metro-events-preload.cjs.txt'
 type MetroProcess = { exited: Promise<number | null>; output(): string; stop(): Promise<void> }
 
 /** MetroStarter launches Expo CLI with the given `node` arguments; a test hands in a scripted one. */
-export type MetroStarter = (spec: { args: readonly string[]; cwd: string; env: Record<string, string> }) => MetroProcess
+export type MetroStarter = (
+  spec: { args: readonly string[]; cwd: string; env: Record<string, string> },
+) => MetroProcess | Promise<MetroProcess>
 
 export type MetroSessionOptions = {
   expo: string
@@ -71,7 +73,7 @@ export async function runMetroSession(options: MetroSessionOptions): Promise<voi
   await FS.writeText(preload, METRO_EVENTS_PRELOAD)
   await FS.writeText(events, '')
 
-  const metro = (options.metro ?? startMetro)({
+  const metro = await (options.metro ?? startMetro)({
     args: ['--require', preload, options.expo, 'start', '--go', '--port', String(port)],
     cwd: options.project,
     env: { TAO_METRO_EVENTS: events },
@@ -443,9 +445,11 @@ function createScreen(output: Writable | undefined): Screen {
   }
 }
 
-function startMetro(spec: { args: readonly string[]; cwd: string; env: Record<string, string> }): MetroProcess {
+async function startMetro(
+  spec: { args: readonly string[]; cwd: string; env: Record<string, string> },
+): Promise<MetroProcess> {
   let output = ''
-  const tree = startStudioProcessTree('node', {
+  const tree = await startStudioProcessTree('node', {
     args: spec.args,
     cwd: spec.cwd,
     env: spec.env,
