@@ -252,7 +252,7 @@ view Card(Title text) {
 
 Card("Draft") {
    Text("Unsaved changes")
-   @actions FormButton("Save") {
+   @actions: FormButton("Save") {
       on press Save
    }
 }
@@ -302,7 +302,7 @@ Properties, unnamed render children, and named render slots are distinct channel
 
 - An explicit property constructor such as `User CurrentUser` binds a public declaration property.
 - Ordinary render expressions in a caller content block remain children. They are never consumed as properties solely because their types match.
-- `@name` fills a named render slot.
+- `@name: ...` fills a named render slot; bare `@name` places it in the declaring view.
 - `@@content` places unnamed children inside a content-accepting view implementation.
 - Keyed navigation entries bind the configured nav declaration's direct `@key { ... }` contract;
   they are not visual render slots or an implicit `Items` property.
@@ -332,7 +332,7 @@ view UserCard() {
 render UserCard() {
    User CurrentUser       // property
    Text("Recent activity") // unnamed child
-   @actions Button("Edit") // named render slot, filled once
+   @actions: Button("Edit") // named render slot, filled once
 }
 ```
 

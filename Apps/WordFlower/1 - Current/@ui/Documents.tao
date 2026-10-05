@@ -98,7 +98,7 @@ view DocumentEditor(Document) {
       // action for the very save it announces, reading the values captured above.
       present SavedToast(Revert: -> {
          update Document {
-            Title: PreviousTitle
+            Title: PreviousTitle,
             Body: PreviousBody
          }
          set Input.Title = PreviousTitle

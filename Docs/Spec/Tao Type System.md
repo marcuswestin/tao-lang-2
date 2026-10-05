@@ -418,8 +418,8 @@ if Result is Confirmed {
 }
 ```
 
-It never takes `else`. A conditional with two or more outcomes is modeled by exhaustive `when` in
-the contexts where `when` is supported. `Value is <Case>` can appear anywhere a boolean expression
+It never takes `else`. Use `pick` to select one value, or `when` to apply matching statement/render
+outcomes. `Value is <Case>` can appear anywhere a boolean expression
 is accepted; the declaration-linked case must belong to that value.
 
 ### Action early exit: `check`

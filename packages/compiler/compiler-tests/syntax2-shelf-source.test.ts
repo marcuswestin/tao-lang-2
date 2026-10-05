@@ -2,7 +2,7 @@ import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert, Diagnostics, FS, Repo } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
-import { Workspace } from '../compiler-src/workspace/workspace'
+import { Workspace } from '../compiler-src/workspace/Workspace'
 
 Describe('actual Syntax2 Shelf source composition', () => {
   Test('validates actual Shelf and GroupedShelf composition while retaining concrete Book inputs', async () => {
