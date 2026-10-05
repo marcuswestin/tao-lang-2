@@ -99,12 +99,26 @@ export const associatedMethodsValidationChecks = {
     }
   },
   [AST.CapabilityTypeExpression.$type]: (capability, ctx) => {
-    const names = new Set<string>()
+    const previous: AST.CapabilityMethodDeclaration[] = []
     for (const method of capability.methods) {
-      if (names.has(method.name)) {
+      const owner = capabilityRequirementOwner(method)
+      const contract = owner && Type.associatedCallable(method, owner)
+      if (
+        previous.some(other => {
+          if (other.name !== method.name) {
+            return false
+          }
+          if (!operatorNames.has(method.name)) {
+            return true
+          }
+          const preceding = owner && Type.associatedCallable(other, owner)
+          return contract?.kind === 'ready' && preceding?.kind === 'ready'
+            && Type.sameAssociatedCallableContract(contract.descriptor, preceding.descriptor)
+        })
+      ) {
         ctx.error(method, messages.duplicateRequirement(method.name))
       }
-      names.add(method.name)
+      previous.push(method)
     }
   },
   [AST.CapabilityMethodDeclaration.$type]: (method, ctx) => {
@@ -175,9 +189,12 @@ function containsCapability(type: ASTUtils.TaoType): boolean {
 
 const operatorNames = new Set(['+', '-', '*', '/', '==', '!=', '<', '<=', '>', '>='])
 
-function validateAssociatedOwner(owner: ASTUtils.AssociatedCallableOwner, ctx: ValidationContext): void {
+function validateAssociatedOwner(
+  owner: NonNullable<ReturnType<typeof AST.associatedFunctionOwner>>,
+  ctx: ValidationContext,
+): void {
   const ordinaryNames = new Set<string>()
-  const operatorContracts = new Set<string>()
+  const operatorContracts: ASTUtils.AssociatedCallableDescriptor[] = []
   for (const method of ASTUtils.ownAssociatedMethods(owner)) {
     if (!operatorNames.has(method.name)) {
       if (ordinaryNames.has(method.name)) {
@@ -186,46 +203,14 @@ function validateAssociatedOwner(owner: ASTUtils.AssociatedCallableOwner, ctx: V
       ordinaryNames.add(method.name)
       continue
     }
-    const identity = associatedOperatorContractIdentity(method, owner)
-    if (identity && operatorContracts.has(identity)) {
-      ctx.error(method, messages.duplicateImplementation(owner.name, method.name))
+    const contract = Type.associatedCallable(method, owner)
+    if (contract.kind === 'ready') {
+      if (operatorContracts.some(previous => Type.sameAssociatedCallableContract(previous, contract.descriptor))) {
+        ctx.error(method, messages.duplicateImplementation(owner.name, method.name))
+      }
+      operatorContracts.push(contract.descriptor)
     }
-    if (identity) {
-      operatorContracts.add(identity)
-    }
   }
-}
-
-function associatedOperatorContractIdentity(
-  method: AST.AssociatedFunctionDeclaration,
-  owner: ASTUtils.AssociatedCallableOwner,
-): string | undefined {
-  const materialized = Type.associatedCallable(method, owner)
-  if (materialized.kind !== 'ready') {
-    return undefined
-  }
-  const { descriptor } = materialized
-  const receiver = Type.identityKey(descriptor.receiver)
-  const result = Type.identityKey(descriptor.result)
-  const inputs = descriptor.signature.inputs.map(input => {
-    const type = Type.identityKey(input.type)
-    return type
-      ? [input.role ?? input.labelName, input.labelName, type, input.acceptsNone, input.omissible, input.callerWritable]
-      : undefined
-  })
-  if (!receiver || !result || inputs.some(input => !input)) {
-    return undefined
-  }
-  const signature = descriptor.signature
-  return JSON.stringify([
-    method.name,
-    !!method.static,
-    receiver,
-    inputs,
-    result,
-    [...signature.failures.cases].sort(),
-    signature.failures.open,
-  ])
 }
 
 function validateEntityReceiverShadow(method: AST.AssociatedFunctionDeclaration, ctx: ValidationContext): void {
@@ -246,4 +231,15 @@ function validateFailureBound(
   if (method.failureBound !== undefined && method.failureBound !== 'never') {
     ctx.error(method, messages.failureBound)
   }
+}
+
+function capabilityRequirementOwner(method: AST.CapabilityMethodDeclaration): AST.TypeDeclaration | undefined {
+  let node: AST.Node | undefined = method.$container
+  while (node) {
+    if (AST.isTypeDeclaration(node)) {
+      return node
+    }
+    node = node.$container
+  }
+  return undefined
 }

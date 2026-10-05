@@ -11,7 +11,7 @@ import {
   type CallableSignatureComparison,
   compareCallableSignatures,
 } from './callable-signatures'
-import { type TaoType, Type } from './Type'
+import { type AssociatedCapabilityImplementation, type AssociatedCapabilityWitness, type TaoType, Type } from './Type'
 
 /** Executable adaptation, independent of payload values and nominal spelling. */
 export type CapabilityTransportPlan =
@@ -32,6 +32,8 @@ export type CapabilityTransportMethod = Readonly<{
   required: AssociatedCallableDescriptor
   supplied: AssociatedCallableDescriptor
   correspondence: CallableSignatureComparison['correspondence']
+  receiverPlacement: AssociatedCapabilityWitness['receiverPlacement']
+  receiver: CapabilityTransportPlan
   inputs: readonly CapabilityTransportInput[]
   result: CapabilityTransportPlan
 }>
@@ -229,9 +231,18 @@ class CapabilityTransportPlanner {
     expected: TaoType,
   ): CapabilityTransportResult {
     if (
-      actual.kind !== 'capability' && actual.kind !== 'entity' && !actual.genericParameter
+      actual.kind !== 'capability' && actual.kind !== 'entity' && actual.kind !== 'primitive'
+      && !actual.genericParameter
       && !((actual.kind === 'primitive' || actual.kind === 'item' || actual.kind === 'list')
         && AST.isTypeDeclaration(actual.nominal))
+    ) {
+      return unsupported('incompatible-types')
+    }
+    if (
+      actual.kind === 'primitive' && !actual.nominal && !actual.genericParameter
+      && Type.aggregateCapabilityRequirements(expected).some(method =>
+        !['+', '-', '*', '/', '==', '!=', '<', '<=', '>', '>='].includes(method.name)
+      )
     ) {
       return unsupported('incompatible-types')
     }
@@ -254,20 +265,19 @@ class CapabilityTransportPlanner {
     ) {
       return ready(identity)
     }
-    const methods: { required: AssociatedCallableDescriptor; supplied: AssociatedCallableDescriptor }[] = []
+    const methods:
+      (Extract<AssociatedCapabilityImplementation, { kind: 'ready' }> & { required: AssociatedCallableDescriptor })[] =
+        []
     for (let index = 0; index < requirements.length; index++) {
-      const requirement = requirements[index]!
-      const declaration = actual.kind === 'capability' || actual.genericParameter
-        ? Type.aggregateCapabilityRequirements(actual).find(method => method.name === requirement.name)
-        : Type.associatedMethodDeclaration(receiver, requirement.name)?.declaration
-      if (!declaration) {
+      const selected = Type.capabilityImplementation(receiver, requiredDescriptors[index]!)
+      if (selected.kind === 'missing') {
         return unsupported('incompatible-types')
       }
-      const descriptor = associatedCallableDescriptor(declaration)
-      if (!descriptor) {
+      if (selected.kind === 'pending') {
         return unknown('missing-proof')
       }
-      const supplied = Type.specializeAssociatedDescriptor(descriptor, receiver)
+      const supplied = selected.supplied
+      const declaration = supplied.declaration
       if (descriptorUnresolved(supplied)) {
         return unknown('unresolved-domain')
       }
@@ -277,7 +287,7 @@ class CapabilityTransportPlanner {
           return unknown('missing-proof')
         }
       }
-      methods.push({ required: requiredDescriptors[index]!, supplied })
+      methods.push({ ...selected, required: requiredDescriptors[index]! })
     }
     // Probe nested proof before final admission. Its recursion guard intentionally refuses self-proof.
     let unavailable: CapabilityTransportResult | undefined
@@ -289,9 +299,10 @@ class CapabilityTransportPlanner {
       const analysis = actual.kind === 'capability' || actual.genericParameter
         ? undefined
         : associatedCallableAnalysis(method.supplied.declaration)
+      const comparisonSignature = Type.capabilityImplementationSignature(method)
       const signature = analysis
-        ? { ...method.supplied.signature, failures: analysis.effects.failures }
-        : method.supplied.signature
+        ? { ...comparisonSignature, failures: analysis.effects.failures }
+        : comparisonSignature
       const comparison = compareCallableSignatures(signature, method.required.signature, (input, supplied) => {
         const plan = this.plan(input, supplied, 'callable')
         if (plan.kind === 'unknown') {
@@ -310,6 +321,21 @@ class CapabilityTransportPlanner {
     const planned: CapabilityTransportMethod[] = []
     let unsupportedPlan: CapabilityTransportResult | undefined
     for (const witness of witnesses) {
+      const receiverPlan = this.plan(receiver, witness.receiverDomain, 'callable')
+      if (receiverPlan.kind === 'unknown') {
+        return receiverPlan
+      }
+      if (receiverPlan.kind === 'unsupported') {
+        unsupportedPlan ??= receiverPlan
+        continue
+      }
+      if (
+        witness.receiverPlacement.kind === 'parameter' && witness.receiverPlacement.input.callerWritable
+        && receiverPlan.plan.kind !== 'identity'
+      ) {
+        unsupportedPlan ??= unsupported('writable-input')
+        continue
+      }
       const inputs: CapabilityTransportInput[] = []
       for (const pair of witness.correspondence) {
         const result = this.plan(pair.required.type, pair.supplied.type, 'callable')
@@ -346,6 +372,10 @@ class CapabilityTransportPlanner {
             supplied: this.snapshotInput(pair.supplied),
           })
         )),
+        receiverPlacement: witness.receiverPlacement.kind === 'parameter'
+          ? Object.freeze({ ...witness.receiverPlacement, input: this.snapshotInput(witness.receiverPlacement.input) })
+          : Object.freeze({ kind: 'implicit' }),
+        receiver: receiverPlan.plan,
         inputs: Object.freeze(inputs),
         result: result.plan,
       }))
@@ -551,6 +581,11 @@ function equivalentMethods(
     const other = right[index]!
     return equivalentDescriptor(method.required, other.required)
       && equivalentDescriptor(method.supplied, other.supplied)
+      && method.receiverPlacement.kind === other.receiverPlacement.kind
+      && (method.receiverPlacement.kind !== 'parameter' || (other.receiverPlacement.kind === 'parameter'
+        && method.receiverPlacement.parameter === other.receiverPlacement.parameter
+        && equivalentInput(method.receiverPlacement.input, other.receiverPlacement.input)))
+      && equivalentPlan(method.receiver, other.receiver)
       && method.correspondence.length === other.correspondence.length
       && method.correspondence.every((pair, pairIndex) => {
         const otherPair = other.correspondence[pairIndex]!
@@ -569,6 +604,7 @@ function equivalentMethods(
 
 function equivalentDescriptor(left: AssociatedCallableDescriptor, right: AssociatedCallableDescriptor): boolean {
   return left.declaration === right.declaration && left.owner === right.owner
+    && equivalentDomain(left.result, right.result)
     && left.signature.inputs.length === right.signature.inputs.length
     && left.signature.inputs.every((input, index) => equivalentInput(input, right.signature.inputs[index]!))
     && left.signature.failures.open === right.signature.failures.open
@@ -577,7 +613,13 @@ function equivalentDescriptor(left: AssociatedCallableDescriptor, right: Associa
 }
 
 function equivalentInput(left: CallableInput, right: CallableInput): boolean {
-  return left.declaration === right.declaration && left.role === right.role && left.labelName === right.labelName
+  return equivalentDomain(left.type, right.type) && left.declaration === right.declaration && left.role === right.role
+    && left.labelName === right.labelName
     && left.localName === right.localName && left.acceptsNone === right.acceptsNone
     && left.omissible === right.omissible && left.callerWritable === right.callerWritable
+}
+
+function equivalentDomain(left: TaoType, right: TaoType): boolean {
+  const identity = Type.identityKey(left)
+  return left === right || (identity !== undefined && identity === Type.identityKey(right))
 }

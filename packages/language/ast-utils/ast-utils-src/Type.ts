@@ -28,6 +28,7 @@ import {
 import {
   type AssociatedOperation,
   type AssociatedOperatorContract,
+  type AssociatedOperatorContractResolution,
   resolveAssociatedOperation,
 } from './associated-operators'
 import { puritySatisfiesFunction } from './callable-effects'
@@ -100,8 +101,19 @@ export type AssociatedCapabilityWitness = Readonly<{
   receiver: TaoType
   required: AssociatedCallableDescriptor
   supplied: AssociatedCallableDescriptor
+  receiverPlacement: NonNullable<AssociatedOperatorContractResolution['receiverPlacement']>
+  receiverDomain: TaoType
   correspondence: CallableSignatureComparison['correspondence']
 }>
+
+export type AssociatedCapabilityImplementation =
+  | Readonly<{
+    kind: 'ready'
+    supplied: AssociatedCallableDescriptor
+    receiverPlacement: NonNullable<AssociatedOperatorContractResolution['receiverPlacement']>
+    receiverDomain: TaoType
+  }>
+  | Readonly<{ kind: 'pending' | 'missing' }>
 
 /** ItemShape is the effective slot surface of an item type, including projected data fields. */
 export type ItemShape = {
@@ -129,6 +141,8 @@ type TypeReferenceRoot = {
   remainingMembers: readonly string[]
 }
 
+const associatedOperatorNames = new Set(['+', '-', '*', '/', '==', '!=', '<', '<=', '>', '>='])
+
 type AnyTypeReference = AST.TypeReference | AST.ConstructablePrimitiveTypeReference
 
 /** Type exposes static Tao type resolution and compatibility helpers. */
@@ -138,6 +152,51 @@ export class Type {
   }
   static associatedOperation(expression: AssociatedOperation) {
     return new TypeResolutionContext().associatedOperation(expression)
+  }
+  static associatedOperatorContract(operator: string, orderedDomains: readonly TaoType[], site: AST.Node) {
+    return new TypeResolutionContext().associatedOperatorContract(operator, orderedDomains, site)
+  }
+  /** Capability substitution uses the same real operator selection as authored expressions. */
+  static capabilityImplementation(receiver: TaoType, required: AssociatedCallableDescriptor) {
+    return new TypeResolutionContext().capabilityImplementation(receiver, required)
+  }
+
+  /** Receiver removal changes only the comparison signature; supplied declarations remain whole. */
+  static capabilityImplementationSignature(
+    implementation: Extract<AssociatedCapabilityImplementation, { kind: 'ready' }>,
+  ) {
+    const { supplied, receiverPlacement } = implementation
+    return receiverPlacement.kind === 'parameter'
+      ? {
+        ...supplied.signature,
+        inputs: supplied.signature.inputs.filter(input => input.declaration !== receiverPlacement.parameter),
+      }
+      : supplied.signature
+  }
+
+  /** Duplicate contracts compare semantic domains without allocating publication keys. */
+  static sameAssociatedCallableContract(
+    left: AssociatedCallableDescriptor,
+    right: AssociatedCallableDescriptor,
+  ): boolean {
+    const sameDomain = (left: TaoType, right: TaoType) => {
+      const identity = Type.identityKey(left)
+      return identity !== undefined && identity === Type.identityKey(right)
+    }
+    return left.declaration.name === right.declaration.name
+      && (AST.isAssociatedFunctionDeclaration(left.declaration) && !!left.declaration.static)
+        === (AST.isAssociatedFunctionDeclaration(right.declaration) && !!right.declaration.static)
+      && sameDomain(left.receiver, right.receiver) && sameDomain(left.result, right.result)
+      && left.signature.inputs.length === right.signature.inputs.length
+      && left.signature.inputs.every((input, index) => {
+        const other = right.signature.inputs[index]!
+        return input.role === other.role && input.labelName === other.labelName
+          && input.acceptsNone === other.acceptsNone && input.omissible === other.omissible
+          && input.callerWritable === other.callerWritable && sameDomain(input.type, other.type)
+      })
+      && left.signature.failures.open === right.signature.failures.open
+      && left.signature.failures.cases.length === right.signature.failures.cases.length
+      && left.signature.failures.cases.every(failure => right.signature.failures.cases.includes(failure))
   }
   static ownAssociatedConverters(owner: AST.TypeDeclaration) {
     return ownAssociatedConverters(owner)
@@ -720,6 +779,24 @@ export class Type {
       return undefined
     }
     const projection = dispatchReceiver.kind === 'capability' || dispatchReceiver.genericParameter !== undefined
+    const resolution = new TypeResolutionContext()
+    const definingRequirements = Type.aggregateCapabilityRequirements(expected).map(associatedCallableDescriptor)
+    const required = definingRequirements.map(descriptor =>
+      descriptor && Type.specializeAssociatedDescriptor(descriptor, dispatchReceiver)
+    )
+    if (
+      required.some(descriptor => !descriptor)
+      || duplicateCapabilityContracts(definingRequirements as AssociatedCallableDescriptor[])
+    ) {
+      return undefined
+    }
+    const implementations = required.map(descriptor =>
+      resolution.capabilityImplementation(dispatchReceiver, descriptor!)
+    )
+    if (implementations.some(implementation => implementation.kind !== 'ready')) {
+      return undefined
+    }
+    const first = implementations[0] as Extract<AssociatedCapabilityImplementation, { kind: 'ready' }> | undefined
     const actualOwner = dispatchReceiver.genericParameter
       ? contextualTypeOwner(
         Type.aggregateCapabilityRequirements(dispatchReceiver)[0]?.returnType ?? dispatchReceiver.genericParameter,
@@ -728,82 +805,47 @@ export class Type {
       ? dispatchReceiver.declaration
       : dispatchReceiver.kind === 'entity'
       ? dispatchReceiver.entity
-      : nominalOf(dispatchReceiver)
+      : associatedNominalOwner(dispatchReceiver)
+        ?? (AST.isPrimitiveDeclaration(first?.supplied.owner) ? first.supplied.owner : undefined)
     const expectedRequirement = Type.aggregateCapabilityRequirements(expected)[0]
     const expectedOwner = expected.kind === 'capability'
       ? expected.declaration
       : expectedRequirement && contextualTypeOwner(expectedRequirement.returnType)
     if (
-      (!AST.isTypeDeclaration(actualOwner) && !AST.isEntityDataDeclaration(actualOwner))
-      || !AST.isTypeDeclaration(expectedOwner)
+      (!AST.isTypeDeclaration(actualOwner) && !AST.isEntityDataDeclaration(actualOwner)
+        && !AST.isPrimitiveDeclaration(actualOwner)) || !AST.isTypeDeclaration(expectedOwner)
     ) {
       return undefined
     }
     let witnesses: readonly AssociatedCapabilityWitness[] | undefined
     const accepted = withAssociatedAdmissionPair(actualOwner, expectedOwner, () => {
-      const supplied = new Map<string, AssociatedCallableDeclaration>()
-      const owners = projection || AST.isEntityDataDeclaration(actualOwner) ? [actualOwner] : nominalChain(actualOwner)
-      for (const requirement of Type.aggregateCapabilityRequirements(dispatchReceiver)) {
-        if (!supplied.has(requirement.name)) {
-          supplied.set(requirement.name, requirement)
-        }
-      }
-      for (const owner of owners) {
-        if (!AST.isTypeDeclaration(owner) && !AST.isEntityDataDeclaration(owner)) {
-          continue
-        }
-        const methods = projection && AST.isTypeDeclaration(owner)
-          ? capabilityRequirements(owner)
-          : [...ownAssociatedMethods(owner).filter(method => !method.static), ...ownAssociatedViews(owner)]
-        for (const method of methods) {
-          if (
-            AST.isEntityDataDeclaration(owner)
-            && (AST.isCapabilityMethodDeclaration(method) || AST.associatedEntityReceiverOwner(method) !== owner)
-          ) {
-            continue
-          }
-          if (!supplied.has(method.name)) {
-            supplied.set(method.name, method)
-          }
-        }
-      }
       const selected: AssociatedCapabilityWitness[] = []
-      const requiredMethods = Type.aggregateCapabilityRequirements(expected)
-      if (new Set(requiredMethods.map(method => method.name)).size !== requiredMethods.length) {
-        return false
-      }
-      for (const requirement of requiredMethods) {
-        const contractReceiver = expected.genericReceiver ?? actual
-        const requiredDescriptor = associatedCallableDescriptor(requirement)
-        const required = requiredDescriptor && Type.specializeAssociatedDescriptor(requiredDescriptor, contractReceiver)
-        const implementation = supplied.get(requirement.name)
-        const definingDescriptor = implementation && associatedCallableDescriptor(implementation)
-        const implementationDescriptor = definingDescriptor
-          && Type.specializeAssociatedDescriptor(definingDescriptor, contractReceiver)
-        if (!required || !implementation || !implementationDescriptor) {
-          return false
-        }
-        const analysis = projection ? undefined : associatedCallableAnalysis(implementation)
+      for (let index = 0; index < required.length; index++) {
+        const implementation = implementations[index] as Extract<AssociatedCapabilityImplementation, { kind: 'ready' }>
+        const supplied = implementation.supplied
+        const analysis = projection ? undefined : associatedCallableAnalysis(supplied.declaration)
         if (
-          !projection
-          && (!analysis || !puritySatisfiesFunction(analysis.effects.purity)
-            || !failureContractSatisfiesBound(analysis.effects.failures, implementationDescriptor.signature.failures))
+          !projection && (!analysis || !puritySatisfiesFunction(analysis.effects.purity)
+            || !failureContractSatisfiesBound(analysis.effects.failures, supplied.signature.failures))
         ) {
           return false
         }
+        const comparisonSignature = Type.capabilityImplementationSignature(implementation)
         const signature = analysis
-          ? { ...implementationDescriptor.signature, failures: analysis.effects.failures }
-          : implementationDescriptor.signature
-        const comparison = compareCallableSignatures(signature, required.signature, Type.isCallableAssignable)
-        if (!comparison.compatible || !Type.isCallableAssignable(implementationDescriptor.result, required.result)) {
+          ? { ...comparisonSignature, failures: analysis.effects.failures }
+          : comparisonSignature
+        const comparison = compareCallableSignatures(signature, required[index]!.signature, Type.isCallableAssignable)
+        if (!comparison.compatible || !Type.isCallableAssignable(supplied.result, required[index]!.result)) {
           return false
         }
         selected.push({
           kind: projection ? 'projection' : 'concrete',
           receiver: actual,
-          required,
-          supplied: implementationDescriptor,
+          required: required[index]!,
+          supplied,
           correspondence: comparison.correspondence,
+          receiverPlacement: implementation.receiverPlacement,
+          receiverDomain: implementation.receiverDomain,
         })
       }
       witnesses = Object.freeze(selected.map(selection => Object.freeze(selection)))
@@ -1483,6 +1525,16 @@ function nominalOf(type: TaoType): AST.TypeDefinition | undefined {
   return canCarryNominal(type) ? type.nominal : undefined
 }
 
+/** Inline input roles retain their own identity while dispatch follows their authored ancestry. */
+function associatedNominalOwner(
+  type: TaoType,
+  definitionOfReference: (reference: AST.NamedTypeReference) => AST.TypeDefinition | undefined =
+    Type.definitionOfReference,
+): AST.TypeDeclaration | undefined {
+  const nominal = nominalOf(type)
+  return nominal && nominalChain(nominal, definitionOfReference).find(AST.isTypeDeclaration)
+}
+
 /** Contract discovery needs only membership of none, with no structural type admission. */
 function containsNoneDomain(type: TaoType): boolean {
   return isPrimitiveNamed(type, 'none') || (type.kind === 'union' && type.members.some(containsNoneDomain))
@@ -1544,15 +1596,11 @@ function actualSatisfiesExpectedNominal(
 ): boolean {
   const actualNominal = nominalOf(actual)
   const expectedNominal = nominalOf(expected)
+  if (expectedNominal && expectedNominalAcceptsBaseCompatibleNominals(expectedNominal)) {
+    return true
+  }
   if (!actualNominal && expectedNominal) {
     return constructsNominal
-  }
-  if (
-    actualNominal
-    && expectedNominal
-    && expectedNominalAcceptsBaseCompatibleNominals(expectedNominal)
-  ) {
-    return true
   }
   return actualNominal && expectedNominal
     ? nominalChain(actualNominal, definitionOfReference).includes(expectedNominal)
@@ -1717,7 +1765,7 @@ class TypeResolutionContext {
   /** resolving holds what this context is already resolving, so a declaration that reaches itself
    * resolves to unresolved instead of recursing forever. */
   private readonly resolving = new Set<AST.Node>()
-  private readonly comparing = new Map<AST.TypeDeclaration | AST.EntityDataDeclaration, Set<AST.TypeDeclaration>>()
+  private readonly comparing = new Map<AssociatedCallableOwner, Set<AST.TypeDeclaration>>()
 
   constructor(
     private readonly descriptors?: ReadonlyMap<
@@ -1742,6 +1790,65 @@ class TypeResolutionContext {
     })
   }
 
+  associatedOperatorContract(operator: string, orderedDomains: readonly TaoType[], site: AST.Node) {
+    return resolveAssociatedOperatorContract(operator, orderedDomains, this.operatorResolution(site))
+  }
+
+  capabilityImplementation(
+    receiver: TaoType,
+    required: AssociatedCallableDescriptor,
+  ): AssociatedCapabilityImplementation {
+    if (associatedOperatorNames.has(required.declaration.name)) {
+      const selected = this.associatedOperatorContract(required.declaration.name, [
+        receiver,
+        ...required.signature.inputs.map(input => input.type),
+      ], required.declaration)
+      return selected.descriptor && selected.receiverPlacement && selected.operandDomains
+        ? {
+          kind: 'ready',
+          supplied: selected.descriptor,
+          receiverPlacement: selected.receiverPlacement,
+          receiverDomain: selected.operandDomains[0]!,
+        }
+        : {
+          kind: selected.problem === 'pending-contract' || selected.problem === 'unresolved-operand'
+            ? 'pending'
+            : 'missing',
+        }
+    }
+    const declaration = receiver.kind === 'capability' || receiver.genericParameter
+      ? Type.aggregateCapabilityRequirements(receiver).find(method => method.name === required.declaration.name)
+      : Type.associatedMethodDeclaration(
+        receiver,
+        required.declaration.name,
+        reference => this.definitionOfReference(reference),
+      )?.declaration
+    if (!declaration) {
+      return { kind: 'missing' }
+    }
+    const materialized = this.descriptors?.get(declaration)
+    const descriptor = this.descriptors
+      ? materialized?.kind === 'ready' ? materialized.descriptor : undefined
+      : associatedCallableDescriptor(declaration)
+    return descriptor
+      ? {
+        kind: 'ready',
+        supplied: Type.specializeAssociatedDescriptor(descriptor, receiver),
+        receiverPlacement: { kind: 'implicit' },
+        receiverDomain: descriptor.receiver,
+      }
+      : { kind: 'pending' }
+  }
+
+  private operatorResolution(site: AST.Node) {
+    return {
+      contracts: (operands: readonly TaoType[], operator: string) =>
+        this.associatedOperatorContracts(operands, operator, site),
+      accepts: (actual: TaoType, expected: TaoType) => this.compareDomains(actual, expected, false) === 'compatible',
+      specialize: Type.specializeAssociatedDescriptor,
+    }
+  }
+
   private associatedOperatorContracts(
     operands: readonly TaoType[],
     operator: string,
@@ -1754,6 +1861,11 @@ class TypeResolutionContext {
       const discovered: (AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration)[] = [
         ...(receiver.kind === 'capability' || receiver.genericParameter
           ? Type.aggregateCapabilityRequirements(receiver)
+          : []),
+        ...(receiver.kind === 'entity'
+          ? ownAssociatedMethods(receiver.entity).filter(method =>
+            AST.associatedEntityReceiverOwner(method) === receiver.entity
+          )
           : []),
         ...(nominal
           ? nominalChain(nominal, reference => this.definitionOfReference(reference))
@@ -1839,17 +1951,26 @@ class TypeResolutionContext {
     expected: Extract<TaoType, { kind: 'capability' }>,
   ): 'compatible' | 'incompatible' | 'pending' {
     const projection = actual.kind === 'capability' || actual.genericParameter !== undefined
+    const firstRequirement = capabilityRequirements(expected.declaration)[0]
+    const firstContract = firstRequirement && this.descriptors?.get(firstRequirement)
+    const firstImplementation = firstContract?.kind === 'ready'
+      ? this.capabilityImplementation(actual, Type.specializeAssociatedDescriptor(firstContract.descriptor, actual))
+      : undefined
     const actualOwner = actual.genericParameter
       ? contextualTypeOwner(Type.aggregateCapabilityRequirements(actual)[0]?.returnType ?? actual.genericParameter)
       : actual.kind === 'capability'
       ? actual.declaration
       : actual.kind === 'entity'
       ? actual.entity
-      : nominalOf(actual)
+      : associatedNominalOwner(actual, reference => this.definitionOfReference(reference))
+        ?? (firstImplementation?.kind === 'ready' && AST.isPrimitiveDeclaration(firstImplementation.supplied.owner)
+          ? firstImplementation.supplied.owner
+          : undefined)
     if (
       !AST.isTypeDeclaration(actualOwner) && !AST.isEntityDataDeclaration(actualOwner)
+      && !AST.isPrimitiveDeclaration(actualOwner)
     ) {
-      return 'incompatible'
+      return actual.kind === 'primitive' && firstContract?.kind !== 'ready' ? 'pending' : 'incompatible'
     }
     const expectedOwners = this.comparing.get(actualOwner) ?? new Set<AST.TypeDeclaration>()
     if (expectedOwners.has(expected.declaration)) {
@@ -1859,30 +1980,34 @@ class TypeResolutionContext {
     expectedOwners.add(expected.declaration)
     try {
       const requirements = capabilityRequirements(expected.declaration)
-      if (new Set(requirements.map(method => method.name)).size !== requirements.length) {
+      const contracts = requirements.map(method => this.descriptors?.get(method))
+      if (
+        contracts.every(contract => contract?.kind === 'ready')
+        && duplicateCapabilityContracts(
+          contracts.map(contract =>
+            (contract as Extract<AssociatedDescriptorMaterialization, { kind: 'ready' }>).descriptor
+          ),
+        )
+      ) {
         return 'incompatible'
       }
       let pending = false
       for (const requirement of requirements) {
-        const implementation = projection
-          ? Type.aggregateCapabilityRequirements(actual).find(method => method.name === requirement.name)
-          : Type.associatedMethodDeclaration(
-            actual,
-            requirement.name,
-            reference => this.definitionOfReference(reference),
-          )
-            ?.declaration
-        if (!implementation) {
-          return 'incompatible'
-        }
         const required = this.descriptors?.get(requirement)
-        const supplied = this.descriptors?.get(implementation)
-        if (!required || !supplied || required.kind === 'pending' || supplied.kind === 'pending') {
+        if (required?.kind !== 'ready') {
           pending = true
           continue
         }
         const requiredDescriptor = Type.specializeAssociatedDescriptor(required.descriptor, actual)
-        const suppliedDescriptor = Type.specializeAssociatedDescriptor(supplied.descriptor, actual)
+        const implementation = this.capabilityImplementation(actual, requiredDescriptor)
+        if (implementation.kind === 'missing') {
+          return 'incompatible'
+        }
+        if (implementation.kind === 'pending') {
+          pending = true
+          continue
+        }
+        const suppliedDescriptor = implementation.supplied
         if (
           [...requiredDescriptor.signature.inputs, ...suppliedDescriptor.signature.inputs]
             .some(input => typeHasUnresolvedDomain(input.type))
@@ -1894,7 +2019,7 @@ class TypeResolutionContext {
         }
         let inputPending = false
         const comparison = compareCallableSignatures(
-          suppliedDescriptor.signature,
+          Type.capabilityImplementationSignature(implementation),
           requiredDescriptor.signature,
           (actual, expected) => {
             const result = this.compareDomains(actual, expected, false)
@@ -2588,7 +2713,7 @@ class TypeResolutionContext {
     return this.withoutCycles(definition, () =>
       Switch.type(definition, {
         ParameterTypeDeclaration: declaration => {
-          const underlying = this.ofTypeExpression(declaration.type)
+          const underlying = this.ofReference(declaration.type)
           const declared = AST.isNamedTypeReference(declaration.type)
             ? underlying
             : withNominal(underlying, declaration)
@@ -2877,4 +3002,14 @@ function itemLiteralType(
     return constructorItemType(parent.type)
   }
   return undefined
+}
+
+function duplicateCapabilityContracts(descriptors: readonly AssociatedCallableDescriptor[]): boolean {
+  return descriptors.some((descriptor, index) =>
+    descriptors.slice(0, index).some(previous =>
+      previous.declaration.name === descriptor.declaration.name
+      && (!associatedOperatorNames.has(descriptor.declaration.name)
+        || Type.sameAssociatedCallableContract(previous, descriptor))
+    )
+  )
 }

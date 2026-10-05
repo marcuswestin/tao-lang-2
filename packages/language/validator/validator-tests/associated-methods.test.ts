@@ -9,6 +9,28 @@ import { accepts, rejects } from './test-validate'
 
 Describe('validator: associated declaration boundaries', () => {
   Test(
+    'accepts distinct unary/binary structural operator contracts',
+    accepts(`
+    can Arithmetic { +() -> Self, +(Other Self) -> Self }
+  `),
+  )
+  Test(
+    'accepts typed requirements sharing an operator symbol',
+    accepts(`
+    can Addition { +(Other number) -> number, +(Other text) -> text }
+  `),
+  )
+  Test(
+    'rejects exact duplicate structural operator contracts',
+    rejects(
+      `
+    can Arithmetic { +(Other Self) -> Self, +(Other Self) -> Self }
+  `,
+      messages.duplicateRequirement('+'),
+    ),
+  )
+
+  Test(
     'rejects duplicate owner methods before a private witness table can overwrite the selected implementation',
     rejects(
       `
