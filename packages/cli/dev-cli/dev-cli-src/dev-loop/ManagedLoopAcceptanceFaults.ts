@@ -789,6 +789,7 @@ export function createManagedLoopFaultWorker(options: {
           baselineResources: options.baselineResources,
           shouldStop: managed.shouldStop,
           onChild: managed.onChild,
+          onCleanupChild: managed.onCleanupChild,
         }, {
           ...overrides.iosRuntime,
           ...(nativeStage === 'boot' || nativeStage === 'install'

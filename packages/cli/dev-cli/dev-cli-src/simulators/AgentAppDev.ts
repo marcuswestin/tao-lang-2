@@ -110,9 +110,17 @@ export type ManagedChildCapture = Readonly<{
   members: readonly TrackedProcess[]
 }>
 
+/** Shutdown publication is separate from permission to launch application work. */
+export type ManagedCleanupChild = (
+  child: CLI.StartedCommand,
+  capture: ManagedChildCapture,
+  reservation: AgentAppDevReservation,
+) => Promise<void>
+
 type ManagedAppDev = {
   childEnv: Platform.ProcessEnv
   onChild: (child: CLI.StartedCommand, capture?: ManagedChildCapture) => Promise<void>
+  onCleanupChild?: ManagedCleanupChild
   shouldStop: () => boolean
   onOutput: NonNullable<CLI.CommandSpec['onOutput']>
   onDevice?: (device: AgentAppDevDevice) => Promise<void>
@@ -249,6 +257,7 @@ export async function runAgentAppDev(
             ),
             shouldStop: managed?.shouldStop ?? (() => false),
             onChild: managed?.onChild,
+            onCleanupChild: managed?.onCleanupChild,
           })
         } catch (error) {
           if (error instanceof Errors.HostEnvironmentError && error.details?.['retainsTargetLease'] === true) {

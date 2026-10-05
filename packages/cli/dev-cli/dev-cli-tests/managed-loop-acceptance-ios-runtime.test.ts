@@ -13,7 +13,11 @@ import {
   loadManagedIosSdkDownloaderForSourceRegression,
   type ManagedIosRuntimeOperations,
 } from '../dev-cli-src/dev-loop/ManagedLoopAcceptanceIosRuntime'
-import { type AgentAppDevDevice, appDevReservation } from '../dev-cli-src/simulators/AgentAppDev'
+import {
+  type AgentAppDevDevice,
+  appDevReservation,
+  type ManagedCleanupChild,
+} from '../dev-cli-src/simulators/AgentAppDev'
 
 Test('private iOS SDK loader uses the installed Expo publisher despite a competing checkout CLI', async () => {
   const root = await mkTestDir('managed-ios-sdk-loader-')
@@ -72,6 +76,7 @@ Test('private iOS SDK loader uses the installed Expo publisher despite a competi
 async function fixture(
   hold?: 'boot' | 'download' | 'install' | 'shutdown',
   nativeObserver?: ManagedIosRuntimeOperations['onNativeExecution'],
+  cleanupPublisher?: ManagedCleanupChild,
 ) {
   const invocation = Platform.randomUUID()
   const artifactRoot = Repo.resolvePath(`.artifacts/host-acceptance/managed-loops/${invocation}/source-runtime`)
@@ -496,6 +501,7 @@ async function fixture(
     artifactRoot,
     baselineResources: [],
     shouldStop: () => stopped,
+    onCleanupChild: cleanupPublisher,
     onChild: async child => {
       const identity = identities.get(child.pid!)
       Expect(identity).toBeDefined()
@@ -686,6 +692,53 @@ async function fixture(
       mutateArtifact = kind
     },
   }
+}
+
+for (const publicationFailure of [false, true]) {
+  Test(
+    `private iOS cancelled startup routes shutdown through cleanup publication${
+      publicationFailure ? ' and retains failed acknowledgement' : ''
+    }`,
+    async () => {
+      let publishedTarget = ''
+      const f = await fixture(undefined, undefined, async (child, capture, reservation) => {
+        Expect(capture.root.pid).toBe(child.pid)
+        Expect(capture.members.length).toBe(2)
+        Expect(reservation.platform).toBe('ios')
+        Expect(reservation.resources.map(owner => owner.name)).toEqual([`ios-simulator:${reservation.id}`])
+        Expect(Object.isFrozen(reservation)).toBe(true)
+        await reservation.assertCurrent()
+        publishedTarget = reservation.id
+        if (publicationFailure) {
+          Errors.throwHostEnvironment('Injected shutdown publication failure')
+        }
+      })
+      try {
+        await f.mint()
+        f.stop()
+        const result = f.helper.run('xcrun', { args: ['simctl', 'shutdown', f.device.udid] })
+        if (publicationFailure) {
+          await Expect(result).rejects.toThrow('Injected shutdown publication failure')
+          Expect(f.executes).not.toContain('shutdown')
+          Expect(f.device.state).toBe('Booted')
+          Expect(f.helper.asset.actions.at(-1)!.state).toBe('retained')
+          Expect(f.helper.asset.actions.at(-1)!.barrier!.drainProved).toBe(false)
+          Expect((await f.operations.resources.readOwner({ name: `ios-simulator:${f.device.udid}` }))!.retention)
+            .toBeDefined()
+        } else {
+          Expect((await result).exitCode).toBe(0)
+          Expect(f.executes).toContain('shutdown')
+          Expect(f.device.state).toBe('Shutdown')
+          Expect(f.helper.asset.actions.at(-1)!.state).toBe('closed')
+          Expect(f.helper.asset.actions.at(-1)!.barrier!.drainProved).toBe(true)
+        }
+        Expect(publishedTarget).toBe(f.device.udid)
+        Expect(f.registered).not.toContain('shutdown')
+      } finally {
+        await f.cleanup()
+      }
+    },
+  )
 }
 
 Test('private iOS SDK executable accepts a literal Expo Go basename with publisher and digest proof', async () => {
