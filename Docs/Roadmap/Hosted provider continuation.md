@@ -44,6 +44,13 @@ Earlier failure and recovery entries below are historical evidence, not the curr
 - This thread must not start CI while another workflow is running; check and poll every ten
   seconds before dispatching a new workflow. Local checks do not start CI. Ordinary-app offline,
   isolation, hostile-request, and physical-device gates remain open.
+- Source changes are committed as `7b38b1da5`. Focused Firebase provisioning, inspection,
+  management, creation, and release-surface checks pass, as do regenerated starter checks,
+  lint, and typechecking. Both broad local lanes failed on the native-binding inspection lock
+  with compiler/validator timeouts; isolated editor packaging and nominal-admission tests pass,
+  and automatic retries recovered some compiler scopes. Broad readiness remains unproved.
+  Evidence is deduplicated in the [developer-environment ledger](<Developer environment upgrades.md>).
+  No CI, push, or landing was started in this follow-up; task-owned native probes are stopped.
 
 ## State at handoff — 2026-10-03
 
