@@ -115,7 +115,7 @@ export namespace Packages {
         )
           .then(paths => paths.filter((path): path is string => path !== undefined))
       },
-      async validationBoundary(fromFilePath) {
+      async validationBoundary(fromFilePath, observations = FS) {
         const ownerRoot = sourceRootForPath(context, fromFilePath)
         const namespace = containingPath(fromFilePath, context.index)
         const inStdlib = FS.pathIsWithin(fromFilePath, context.stdlibRoot)
@@ -125,10 +125,12 @@ export namespace Packages {
           // Use the resolver's indexed owners. Do not climb outside them looking for markers.
           const physicalFile = context.sourcePaths?.has(fromFilePath)
             ? physicalPath(context, fromFilePath)
-            : await FS.realPath(fromFilePath)
-          const physicalOwner = ownerRoot && await FS.realPath(ownerRoot)
-          const physicalModule = namespace && await FS.realPath(namespace.path)
-          const physicalMarker = marker && await FS.isDirectory(marker) ? await FS.realPath(marker) : undefined
+            : await observations.realPath(fromFilePath)
+          const physicalOwner = ownerRoot && await observations.realPath(ownerRoot)
+          const physicalModule = namespace && await observations.realPath(namespace.path)
+          const physicalMarker = marker && await observations.isDirectory(marker)
+            ? await observations.realPath(marker)
+            : undefined
           if (projectRoot && !physicalMarker) {
             return undefined
           }

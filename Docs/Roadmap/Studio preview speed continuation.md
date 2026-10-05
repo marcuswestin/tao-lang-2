@@ -234,6 +234,42 @@ mutation checks prove invalidation. The old approximately 270ms result has not b
 the current corpus. Partial source-text parsing is still unimplemented; current parser reuse is
 whole-document reuse. Selective design subscriptions remain deferred.
 
+After main integration, `performance-9c5987a2-54b4-4463-9ef0-4dc64daeba20` was eligible and
+failed the fixed guard. Its 171 observations recorded no peers and load 2.61–8.25 on 18 CPUs.
+Language budgets, all six correctness cases, and all direct-edit preview budgets passed. Padding
+publication-on recorded source 686/726ms and total 956/995ms; publication-off recorded source
+727/877ms and total 1022/1177ms. These exceed six independent ceilings. The earlier qualifying
+pass remains evidence for its tree; it does not cancel this failure or establish stable speed on
+the integrated tree. This failure blocked the landing proposal; the ceilings remain unchanged.
+
+The follow-up removes repeated physical-boundary reads within one dependency publication. Each
+publication owns a fresh observation scope, keyed by filesystem operation and exact logical path;
+descriptors remain independent, and no observation survives into another build. Twelve parser
+tests pass. Three files sharing an owner and module perform seven underlying operations, including
+one owner realpath, one module realpath, and one marker stat/realpath pair. Their descriptors match
+uncached reads. Concurrent requests share pending and failed observations; later scopes recheck
+removed markers and recover from unavailable reads. Existing marker-retarget and warm/cold parity
+proofs remain green. These operation counts establish avoided work, not a measured latency gain.
+
+The complete follow-up then qualified in `performance-e5b1be24-d1ba-4aab-a7ac-b76a159da585`:
+161.2s, 164 continuous observations, load 3.07–4.73 on 18 CPUs, no peers or admission breaches.
+Language budgets and all six real-save cases passed the unchanged ceilings:
+
+| Case                              | Source p50/p95 | Total p50/p95 |
+| --------------------------------- | -------------- | ------------- |
+| One-file, publication on          | 141/156ms      | 406/445ms     |
+| One-file, publication off         | 141/164ms      | 435/467ms     |
+| HNReader, publication on          | 545/555ms      | 814/862ms     |
+| HNReader, publication off         | 517/572ms      | 774/833ms     |
+| HNReader padding, publication on  | 459/580ms      | 713/874ms     |
+| HNReader padding, publication off | 486/610ms      | 759/910ms     |
+
+The preceding attempt `performance-bb1bf0b4-3805-4d77-a606-baef12fa9794` was inconclusive:
+load reached 16.82 after its passing language stage, so no Studio cases were admitted. Both that
+report and the eligible failure remain retained. The passing result establishes the current
+implementation's guard qualification; differing host conditions do not isolate the boundary
+deduplication's latency gain. Approximately 270ms remains unreproduced on the current corpus.
+
 The first changed-suite gate found a real caller-lifetime regression: Studio's declaration scope
 check parsed before/after source concurrently through one mutable parser context, allowing both
 results to observe the newer canonical AST. It now compares independent syntax-only trees, which

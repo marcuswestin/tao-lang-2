@@ -74,11 +74,40 @@ type PackageFileResolveRequest = {
 /** ImportingStatement is any statement that names an import path to resolve against packages. */
 type ImportingStatement = AST.UseStatement | AST.UsePackageStatement
 
+/** Physical observations shared only while publishing one completed build's dependency snapshots. */
+export type ValidationBoundaryObservations = {
+  realPath(path: string): Promise<string>
+  isDirectory(path: string): Promise<boolean>
+}
+
+/** Share exact operation/path observations, including failures, until this publication is discarded. */
+export function createValidationBoundaryObservations(
+  operations: ValidationBoundaryObservations,
+): ValidationBoundaryObservations {
+  const realPaths = new Map<string, Promise<string>>()
+  const directories = new Map<string, Promise<boolean>>()
+  const observe = <T>(cache: Map<string, Promise<T>>, path: string, operation: () => Promise<T>): Promise<T> => {
+    let pending = cache.get(path)
+    if (!pending) {
+      pending = Promise.resolve().then(operation)
+      cache.set(path, pending)
+    }
+    return pending
+  }
+  return {
+    realPath: path => observe(realPaths, path, () => operations.realPath(path)),
+    isDirectory: path => observe(directories, path, () => operations.isDirectory(path)),
+  }
+}
+
 /** PackageResolver resolves declarations and files reachable through Tao use statements. */
 export type PackageResolver = {
   intrinsicFilePaths(): Promise<readonly string[]>
   /** Current resolver ownership and physical boundaries; unavailable metadata cannot authorize reuse. */
-  validationBoundary(fromFilePath: string): Promise<string | undefined>
+  validationBoundary(
+    fromFilePath: string,
+    observations?: ValidationBoundaryObservations,
+  ): Promise<string | undefined>
   projectRootFilePaths(
     fromFilePath: string,
     options?: { clearRequirementAliases?: boolean },

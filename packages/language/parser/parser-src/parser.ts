@@ -1,7 +1,7 @@
 import { Assert, type Diagnostic, type DiagnosticRange, Diagnostics, FS, type ReleaseProfile, TaoFiles } from '@shared'
 import { Langium } from './langium-exports'
 import { bridgesToATypeScriptExport, unresolvedReferenceMessage } from './linker-diagnostics'
-import { emptyPackageResolver, type PackageResolver } from './package-resolver'
+import { createValidationBoundaryObservations, emptyPackageResolver, type PackageResolver } from './package-resolver'
 import * as AST from './parserASTExport'
 import { createQuotedRenderParser, quotedTextImport } from './quoted-render'
 import { ReleaseCompletionProvider } from './release-completion-provider'
@@ -22,6 +22,7 @@ export const codeProjectRoot = '/__tao__'
 const codeSourceUri = Langium.URI.file(`${codeProjectRoot}/source.tao`)
 
 export { AST, Langium, URI }
+export { createValidationBoundaryObservations } from './package-resolver'
 export { releaseCapabilityOf } from './release-capability'
 export { TaoReferences } from './tao-references'
 export type URI = Langium.URI
@@ -33,6 +34,7 @@ export type {
   ProjectModuleBinding,
   ProjectPublication,
   ProjectRequirement,
+  ValidationBoundaryObservations,
 } from './package-resolver'
 
 /** ParserServices declares the Langium services used by the parser stage. */
@@ -605,6 +607,7 @@ async function publishValidationDependencies(
   const targetsByPath = new Map<string, AST.Node[]>()
   const selectionsByPath = new Map<string, unknown[]>()
   const boundariesByPath = new Map<string, string>()
+  const boundaryObservations = createValidationBoundaryObservations(FS)
   const nodeKey = (node: AST.Node): readonly string[] => [
     AST.getDocument(node).uri.path,
     locator.getAstNodePath(node),
@@ -619,7 +622,7 @@ async function publishValidationDependencies(
     if (!captured) {
       continue
     }
-    const boundary = await context.packages.validationBoundary(path)
+    const boundary = await context.packages.validationBoundary(path, boundaryObservations)
     if (boundary !== undefined) {
       boundariesByPath.set(path, boundary)
     }

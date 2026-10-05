@@ -1,10 +1,123 @@
 import { Packages } from '@ast-utils'
 import { Workspace } from '@compiler/workspace'
-import { AST, Parser, URI } from '@parser'
+import { AST, createValidationBoundaryObservations, Parser, URI, type ValidationBoundaryObservations } from '@parser'
 import { FS } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 
 Describe('parser validation dependency snapshots', () => {
+  Test('shares owner, module, and marker filesystem work only within one publication', async () => {
+    await withTaoFiles('tao-validation-observations-', {
+      '.tao/.gitkeep': '',
+      '@ui/One.tao': 'public let One = "one"',
+      '@ui/Two.tao': 'public let Two = "two"',
+      '@ui/Three.tao': 'public let Three = "three"',
+    }, async (paths, root) => {
+      const resolver = Packages.createResolver(
+        await Packages.createContext(root, {
+          stdlibRoot: FS.resolvePath('absent-stdlib', root),
+        }),
+      )
+      const sourcePaths = ['@ui/One.tao', '@ui/Two.tao', '@ui/Three.tao'].map(name => paths[name]!)
+      const marker = FS.resolvePath('.tao', root)
+      const moduleRoot = FS.resolvePath('@ui', root)
+      const reads = new Map<string, number>()
+      let failMarker = false
+      const operations: ValidationBoundaryObservations = {
+        async realPath(path) {
+          const key = `realpath:${path}`
+          reads.set(key, (reads.get(key) ?? 0) + 1)
+          return FS.realPath(failMarker && path === marker ? FS.resolvePath('missing-marker', root) : path)
+        },
+        async isDirectory(path) {
+          const key = `directory:${path}`
+          reads.set(key, (reads.get(key) ?? 0) + 1)
+          return FS.isDirectory(path)
+        },
+      }
+      const publish = async () => {
+        reads.clear()
+        const observations = createValidationBoundaryObservations(operations)
+        return Promise.all(sourcePaths.map(path => resolver.validationBoundary(path, observations)))
+      }
+      const first = await publish()
+      Expect(first.every(value => value !== undefined)).toBe(true)
+      Expect(new Set(first).size).toBe(3)
+      Expect(reads.get(`realpath:${root}`)).toBe(1)
+      Expect(reads.get(`realpath:${moduleRoot}`)).toBe(1)
+      Expect(reads.get(`directory:${marker}`)).toBe(1)
+      Expect(reads.get(`realpath:${marker}`)).toBe(1)
+      Expect([...reads.values()].reduce((sum, count) => sum + count, 0)).toBe(7)
+      const uncached = await Promise.all(sourcePaths.map(path => resolver.validationBoundary(path)))
+      Expect(first).toEqual(uncached)
+      const second = await publish()
+      Expect(second).toEqual(first)
+      Expect(reads.get(`realpath:${root}`)).toBe(1)
+      Expect(reads.get(`realpath:${moduleRoot}`)).toBe(1)
+      Expect(reads.get(`realpath:${marker}`)).toBe(1)
+      await FS.remove(marker)
+      const unavailable = await publish()
+      Expect(unavailable.every(value => value === undefined)).toBe(true)
+      Expect(reads.get(`directory:${marker}`)).toBe(1)
+      Expect(reads.has(`realpath:${marker}`)).toBe(false)
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', root), '')
+      failMarker = true
+      const failed = await publish()
+      Expect(failed.every(value => value === undefined)).toBe(true)
+      Expect(reads.get(`directory:${marker}`)).toBe(1)
+      Expect(reads.get(`realpath:${marker}`)).toBe(1)
+      failMarker = false
+      const recovered = await publish()
+      Expect(recovered).toEqual(first)
+      Expect(reads.get(`realpath:${marker}`)).toBe(1)
+    })
+  })
+
+  Test('passes one observation scope to every document and replaces it on the next completed build', async () => {
+    await withTaoFiles('tao-validation-publication-scope-', {
+      '.tao/.gitkeep': '',
+      'Main.tao': 'use Value from ./Library\nlet Selected = Value',
+      'Library.tao': 'public let Value = "one"',
+    }, async (paths, root) => {
+      const resolver = Packages.createResolver(
+        await Packages.createContext(root, {
+          stdlibRoot: FS.resolvePath('absent-stdlib', root),
+        }),
+      )
+      const scopes: (ValidationBoundaryObservations | undefined)[] = []
+      const context = Parser.createContext({
+        packages: {
+          ...resolver,
+          validationBoundary(path, observations) {
+            scopes.push(observations)
+            return resolver.validationBoundary(path, observations)
+          },
+        },
+      })
+      const first = await Parser.parse(context, URI.file(paths['Main.tao']!))
+      Expect(first.diagnostics).toEqual([])
+      Expect(scopes).toHaveLength(2)
+      Expect(scopes[0]).toBeDefined()
+      Expect(scopes[0] === scopes[1]).toBe(true)
+      const before = Parser.validationDependencies(first.entry.ast)!
+      const warm = await Parser.parse(context, URI.file(paths['Main.tao']!))
+      Expect(scopes).toHaveLength(4)
+      Expect(scopes[2] === scopes[3]).toBe(true)
+      Expect(scopes[2] === scopes[0]).toBe(false)
+      const after = Parser.validationDependencies(warm.entry.ast)!
+      expectIdentities(after.files, before.files)
+      expectIdentities(after.targets, before.targets)
+      Expect(after.signature).toBe(before.signature)
+      await FS.remove(FS.resolvePath('.tao', root))
+      const removed = await Parser.parse(context, URI.file(paths['Main.tao']!))
+      Expect(Parser.validationDependencies(removed.entry.ast)).toBeUndefined()
+      await FS.writeText(FS.resolvePath('.tao/.gitkeep', root), '')
+      const restored = await Parser.parse(context, URI.file(paths['Main.tao']!))
+      const cold = await Parser.parse(await fixtureContext(root), URI.file(paths['Main.tao']!))
+      Expect(restored.diagnostics).toEqual(cold.diagnostics)
+      Expect(Parser.validationDependencies(restored.entry.ast)!.signature).toBe(before.signature)
+    })
+  })
+
   Test('captures exact immutable vectors and reuses canonical ASTs on an unchanged build', async () => {
     await withTaoFiles('tao-validation-inputs-', {
       'Main.tao': 'use Value from ./Library\nlet Selected = Value',
