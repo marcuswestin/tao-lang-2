@@ -223,6 +223,8 @@ export type TaoDataWriteIntent = Readonly<{
 export type TaoDataConnectionObserver = Readonly<{
   error(error: unknown): void
   snapshot(value: string | undefined): void
+  /** Cached provider metadata can change while the stored entity snapshot remains identical. */
+  metadataChanged?(): void
 }>
 
 /** TaoDataProviderContext is the provider-neutral mount passed to a package implementation. */

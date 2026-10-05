@@ -36,6 +36,7 @@ export function BookProvider(): TaoDataProvider {
         ID: `book-${String(index + 1).padStart(3, '0')}`,
         Title: `Book ${index + 1}`,
         Note: '',
+        LoanedOut: index === 0,
       })))
       const bookEntity = context.schema.entities['Book']
       if (!bookEntity) {
@@ -222,6 +223,11 @@ export function BookProvider(): TaoDataProvider {
             TR.Errors.failHost(result.error.message)
           }
           publish(TR.Data.NativeSnapshots.encode(next, context.schema))
+          // Acknowledged revisions advance after the optimistic row render; an identical
+          // snapshot echo is deliberately suppressed by the runtime.
+          for (const observer of observers) {
+            observer.metadataChanged?.()
+          }
         },
         subscribe(observer) {
           observers.add(observer)

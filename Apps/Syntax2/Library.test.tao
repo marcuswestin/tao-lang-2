@@ -56,4 +56,18 @@ test "Syntax2 Library" {
       press "More"
       expect text "Couldn't finish 'action.'"
    }
+   test "acknowledges only the displayed revision and returns the live book" {
+      run LibraryApp
+      select #book [1] {
+         expect text "BOOK 1"
+         expect text "Unknown author"
+         expect missing text "Available"
+         expect text "●"
+         press label "Seen book-001"
+         expect missing text "●"
+         press label "Return book-001"
+         expect text "Available"
+         expect text "●"
+      }
+   }
 }

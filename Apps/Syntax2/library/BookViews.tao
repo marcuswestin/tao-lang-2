@@ -8,6 +8,8 @@ use Book, Person from ./Library
 package
 view BookRow(Book) {
    let Revision = ObservedRevision(Book)
+
+   #book
    render Col {
       Book.Title
       AuthorName(Book.Author)

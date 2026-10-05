@@ -1755,6 +1755,11 @@ export class RuntimeDataSchema {
       this.providerUnsubscribe = connection.subscribe({
         error: error => this.failSubscription(generation, error),
         snapshot: value => this.receiveSnapshot(generation, value),
+        metadataChanged: () => {
+          if (generation === this.generation && connection === this.connection) {
+            this.emit()
+          }
+        },
       })
     } catch (error) {
       this.failSubscription(generation, error)
