@@ -78,6 +78,15 @@ export function projectCallableEffectPublications(
   for (const node of snapshot.covered) {
     if (AST.isValueReference(node) || AST.isMemberAccessExpression(node)) {
       Assert(snapshot.reads.has(node), 'Expected every covered supported read to have a canonical publication.')
+    } else if (
+      AST.isPostfixMemberAccess(node)
+      && AST.isMethodCallExpression(node.$container)
+      && node.$container.callee === node
+    ) {
+      Assert(
+        snapshot.reads.has(node),
+        'Expected every covered method callee to have a canonical selection publication.',
+      )
     }
   }
 

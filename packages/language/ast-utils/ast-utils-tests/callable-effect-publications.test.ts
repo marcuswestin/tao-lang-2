@@ -80,7 +80,7 @@ Describe('Canonical callable effect projection', () => {
     Expect(analysis.effects.purity.open).toBe(false)
   })
 
-  Test('keeps real computed receivers while unproved selection stays open', async () => {
+  Test('keeps real computed receivers while unsupported construction stays open', async () => {
     const file = await parse(`
       type Token is text with {
         func Again() fails never -> Token { return Token }
@@ -116,6 +116,104 @@ Describe('Canonical callable effect projection', () => {
     Expect(facts.some(fact => fact.executes.some(edge => edge.target === buildCall.site))).toBe(true)
     Expect(analysis.effects.purity.open).toBe(true)
     Expect(analysis.effects.failures.open).toBe(true)
+  })
+
+  Test('closes parameter-based static selections and preserves reactive receiver violations', async () => {
+    const pureFile = await parse(`
+      type Token is text with {
+        func Again() fails never -> Token { return Token }
+        func Format() fails never -> text { return "token" }
+      }
+      func Build(Value Token) fails never -> Token { return Value }
+      func Chain(Value Token) fails never -> text { return Build(Value).Again().Format() }
+    `)
+    const pureToken = namedType(pureFile, 'Token')
+    const pureMethods = ownAssociatedMethods(pureToken)
+    const again = pureMethods.find(value => value.name === 'Again')
+    const format = pureMethods.find(value => value.name === 'Format')
+    const chain = namedFunction(pureFile, 'Chain')
+    Assert.defined(again, 'Token declares the pure Again method')
+    Assert.defined(format, 'Token declares the pure Format method')
+    const pureSnapshot = publishCanonicalEffectSnapshot([pureFile])
+    const methodCalls = AST.streamAllContents(chain).filter(AST.isMethodCallExpression)
+    const pureProjected = projectCallableEffectPublications(pureSnapshot, chain)
+    const pureFacts = discoverCallableEffectFacts(chain, pureProjected.inputs, pureProjected.context)
+    const pureAnalysis = analyzeCallableEffects(chain, pureFacts)
+
+    Expect(methodCalls).toHaveLength(2)
+    for (const call of methodCalls) {
+      Expect.Is(call.callee, AST.isPostfixMemberAccess)
+      const selection = pureProjected.inputs.reads.find(read => read.reference === call.callee)
+      Assert.defined(selection, 'each computed method callee has a projected selection read')
+      const canonicalSelection = pureSnapshot.reads.get(call.callee)
+      Assert.defined(canonicalSelection, 'the factory retains each static selection proof')
+      Expect(selection.kind).toBe('complete')
+      Expect(selection.classification).toBe('immutable')
+      Assert(
+        canonicalSelection.proof?.kind === 'static-method-selection',
+        'the selection carries its independent static proof',
+      )
+      Expect(canonicalSelection.proof.owner).toBe(pureToken)
+      Expect(pureFacts.find(fact => fact.node === call.callee)?.kind).toBe('complete')
+    }
+    Expect(pureSnapshot.calls.size).toBe(3)
+    Expect(pureFacts.some(fact => fact.node === chain.parameterList.parameters[0])).toBe(false)
+    Expect(pureAnalysis.effects).toEqual({
+      purity: { violations: [], open: false },
+      failures: { cases: [], open: false },
+    })
+
+    const reactiveFile = await parse(`
+      type Token is text with {
+        func Again() fails never -> Token { return Token }
+        func Format() fails never -> text { return "token" }
+      }
+      func Build(Value Token) fails never -> Token { return Value }
+      view Example {
+        state Current is Token = Token "current"
+        func Read() fails never -> text { return Build(Current).Again().Format() }
+      }
+    `)
+    const reactiveToken = namedType(reactiveFile, 'Token')
+    const view = reactiveFile.statements.find(AST.isViewDeclaration)
+    Expect.Is(view, AST.isViewDeclaration)
+    const state = AST.streamAllContents(view).find(value => AST.isStateDeclaration(value) && value.name === 'Current')
+    Expect.Is(state, AST.isStateDeclaration)
+    const read = namedFunction(reactiveFile, 'Read')
+    const reactiveSnapshot = publishCanonicalEffectSnapshot([reactiveFile])
+    const stateReference = AST.streamAllContents(read).find(value =>
+      AST.isValueReference(value) && value.target.ref === state
+    )
+    Expect.Is(stateReference, AST.isValueReference)
+    const reactiveCalls = AST.streamAllContents(read).filter(AST.isMethodCallExpression)
+    const reactiveProjected = projectCallableEffectPublications(reactiveSnapshot, read)
+    const reactiveFacts = discoverCallableEffectFacts(read, reactiveProjected.inputs, reactiveProjected.context)
+    const reactiveAnalysis = analyzeCallableEffects(read, reactiveFacts)
+
+    Expect(reactiveSnapshot.reads.get(stateReference)?.classification).toBe('reactive')
+    Expect(reactiveCalls).toHaveLength(2)
+    for (const call of reactiveCalls) {
+      Expect.Is(call.callee, AST.isPostfixMemberAccess)
+      const selection = reactiveProjected.inputs.reads.find(value => value.reference === call.callee)
+      Assert.defined(selection, 'the reactive receiver call keeps its static selection read')
+      const canonicalSelection = reactiveSnapshot.reads.get(call.callee)
+      Assert.defined(canonicalSelection, 'the factory keeps the selection proof beside the reactive receiver')
+      Expect(selection.classification).toBe('immutable')
+      Assert(
+        canonicalSelection.proof?.kind === 'static-method-selection',
+        'the receiver does not weaken static selection',
+      )
+      Expect(canonicalSelection.proof.owner).toBe(reactiveToken)
+      Expect(
+        reactiveFacts.find(fact => fact.node === call.callee)?.executes.some(edge =>
+          edge.target === call.callee.receiver
+        ),
+      ).toBe(true)
+    }
+    Expect(reactiveAnalysis.effects).toEqual({
+      purity: { violations: ['reactive-state'], open: false },
+      failures: { cases: [], open: false },
+    })
   })
 
   Test('retains a genuine recursive backedge with one fact per source node', async () => {
