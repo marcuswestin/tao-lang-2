@@ -31,7 +31,10 @@ async function printAgentHelp(justCommands: readonly string[]): Promise<number> 
     [
       ...justHelpLines(result.stdout, justCommands),
       fallbackLine('tao [args...]', 'Run the Tao CLI inside the sandbox'),
-      fallbackLine('resources [--json]', 'Inspect sessions, retained assets, worktrees and temporary directories without cleanup'),
+      fallbackLine(
+        'resources [--json]',
+        'Inspect sessions, retained assets, worktrees and temporary directories without cleanup',
+      ),
       fallbackLine(
         'start-branch <name>',
         'Start a feat/* branch from fetched origin/main after checking checkout writes, then run setup',

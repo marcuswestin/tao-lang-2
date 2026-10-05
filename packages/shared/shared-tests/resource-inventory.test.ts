@@ -472,11 +472,13 @@ Describe('resource inventory record safety', () => {
       return files
     }
     const startup = await inspect({ ...options, inspectProjectFiles })
+    // budget-ok: These assert production metadata inspection configuration and never wait.
     Expect(seen).toEqual([{ checkout: options.checkout, maxFiles: 256, maxBytes: 65_536, timeoutMs: 500 }])
     Expect(startup.entries).toEqual([])
     Expect(startup.warnings.some(warning => warning.includes('legacy inventory is partial'))).toBe(true)
     const full = await inspect({ ...options, mode: 'full', inspectProjectFiles })
     Expect(full.entries.some(entry => entry.path === late && entry.classification === 'unverified')).toBe(true)
+    // budget-ok: These assert production metadata inspection configuration and never wait.
     Expect(seen[1]).toMatchObject({ maxFiles: 4_096, maxBytes: 1_048_576, timeoutMs: 2_000 })
   })
 
