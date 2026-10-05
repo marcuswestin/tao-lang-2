@@ -1,10 +1,14 @@
 import { Type } from '@ast-utils'
 import { AST, Langium, Parser } from '@parser'
+import { FS, Repo } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
-import TR from '../../apps/runtime/TaoRuntime-src/TR'
-import { makeQuantityType } from '../../apps/runtime/TaoRuntime-src/TR-quantity-values'
 import { withQuantityFactoryBindings } from '../compiler-src/codegen/react-native/app/NumericUnitsCompiler'
 import { Compile } from '../compiler-src/codegen/react-native/Compile'
+
+const runtimeModule = import(FS.resolvePath('packages/apps/runtime/TaoRuntime-src/TR.ts', Repo.getRoot()))
+const quantityModule = import(
+  FS.resolvePath('packages/apps/runtime/TaoRuntime-src/TR-quantity-values.ts', Repo.getRoot())
+)
 
 async function emit(body: string) {
   const parsed = await Parser.parseCode(
@@ -46,6 +50,7 @@ Describe('compiler: generated unit reading dispatch', () => {
   })
 
   Test('executes the actual emitted chain once and retains checked descendant backing', async () => {
+    const [{ default: TR }, { makeQuantityType }] = await Promise.all([runtimeModule, quantityModule])
     const code = await emit('func Read(Value Child) -> Child { return Value.seconds().minutes() }')
     let invariantCalls = 0
     const parent = makeQuantityType(

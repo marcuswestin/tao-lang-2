@@ -1,7 +1,6 @@
 import { ASTUtils, Type, Units } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
-import { resolveNumericUnitReading } from '../../../../../language/ast-utils/ast-utils-src/numeric-unit-readings'
 import { BridgeMetadata } from '../../../bridge-metadata'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
@@ -272,7 +271,7 @@ export const ExpressionsCompiler = {
 
   /** Method calls use the canonical selected descriptor and its parameter correspondence. */
   MethodCallExpression(expression: AST.MethodCallExpression): Compiled {
-    const reading = resolveNumericUnitReading(expression)
+    const reading = ASTUtils.resolveNumericUnitReading(expression)
     if (reading.kind !== 'not-unit-reading') {
       Assert(reading.kind === 'unit-reading', 'validated unit reading has no argument or method collision')
       return compileNumericUnitReading(reading.reading, compileMethodReceiver(reading.reading.receiverAnchor))

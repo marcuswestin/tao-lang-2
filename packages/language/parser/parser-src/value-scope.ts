@@ -461,10 +461,10 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (!AST.isTaoFile(root)) {
       return this.createScopeForNodes([])
     }
-    const local = preferredConstructorDeclarations(node, root.statements.filter(AST.isConstructorDeclaration))
+    const local = preferredConstructorDeclarations(node, root.statements.filter(isFileConstructorDeclaration))
     const imported = preferredConstructorDeclarations(
       node,
-      this.importedDeclarations(node, AST.isConstructorDeclaration),
+      this.importedDeclarations(node, isFileConstructorDeclaration),
     )
     let scope = this.createScopeForNodes(local, signatureScope)
     scope = this.createScopeForNodes(imported, scope)
@@ -1015,7 +1015,8 @@ function immediateConstructorSignature(node: AST.ConfiguredValue): AST.Parameter
         return owner.function.ref
       }
       if (AST.isRender(owner)) {
-        return owner.view.ref
+        const target = owner.view?.ref
+        return AST.isParameterizedDeclaration(target) ? target : undefined
       }
       return undefined
     }
@@ -1034,6 +1035,11 @@ function constructorParameterDefinition(parameter: AST.ParameterDeclaration): AS
     return undefined
   }
   return ASTStruct.visibleFileDeclarations(reference, AST.isTypeDeclaration).find(type => type.name === reference.root)
+}
+
+/** Inline parameter types enter only through the selected signature, never file imports. */
+function isFileConstructorDeclaration(node: unknown): node is AST.TypeDeclaration | AST.ParameterizedDeclaration {
+  return AST.isTypeDeclaration(node) || AST.isParameterizedDeclaration(node)
 }
 
 function canonicalNumericUnitDeclaration(
