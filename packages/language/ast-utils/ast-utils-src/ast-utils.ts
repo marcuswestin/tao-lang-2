@@ -107,6 +107,7 @@ export type {
   AssociatedCallableWitnessKeyContext,
   AssociatedOperatorWitnessDeclaration,
 } from './associated-callable-witness-key'
+export { declaredCallableFailureContract } from './failure-contracts'
 export type { NumericUnitsDeclarationPlan, NumericUnitsSuffixResolution } from './NumericUnits'
 
 /** ASTUtils groups shared semantic helpers for Tao AST consumers. */

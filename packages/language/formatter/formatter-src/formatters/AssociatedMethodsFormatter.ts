@@ -15,6 +15,7 @@ export const AssociatedMethodsFormatter = {
     f.noSpaceBefore('(')
     f.oneSpaceAround('fails')
     f.oneSpaceAround('->')
+    f.commaSpacedList()
   },
 
   /** AssociatedFunctionDeclaration formats an implementation inside its owning item type. */
@@ -24,6 +25,7 @@ export const AssociatedMethodsFormatter = {
     f.noSpaceAfter('.')
     f.oneSpaceAround('fails')
     f.oneSpaceAround('->')
+    f.commaSpacedList()
     f.noSpaceBefore('(')
   },
 } satisfies Partial<FormatHandlers>

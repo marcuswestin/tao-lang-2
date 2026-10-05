@@ -18,6 +18,7 @@ import {
 } from './associated-methods'
 import type { NativeEffectPublication } from './callable-effect-facts'
 import { type CallableSignature, callableSignatureOf } from './callable-signatures'
+import { declaredCallableFailureContract } from './failure-contracts'
 import { resolveFunctionInvocation } from './invocations'
 import { type ItemShape, type TaoType, Type } from './Type'
 
@@ -200,13 +201,16 @@ export function publishCanonicalEffectSnapshot(
         : node.returnType
         ? resolution.ofTypeExpression(node.returnType)
         : resolution.ofFunctionReturn(node)
-      const signature = sealSignature(callableSignatureOf(parameters, {
-        cases: [],
-        open: !AST.isFunctionDeclaration(node) || node.failureBound !== 'never',
-      }, {
-        inputDomain: parameter => resolution.ofParameter(parameter),
-        accepts: (actual, expected) => resolution.compare(actual, expected) === 'compatible',
-      }))
+      const signature = sealSignature(callableSignatureOf(
+        parameters,
+        AST.isFunctionDeclaration(node)
+          ? declaredCallableFailureContract(node)
+          : { cases: [], open: true },
+        {
+          inputDomain: parameter => resolution.ofParameter(parameter),
+          accepts: (actual, expected) => resolution.compare(actual, expected) === 'compatible',
+        },
+      ))
       const body = AST.isFunctionDeclaration(node) ? node.block : node.text
       const supportedBody = !!body && (!AST.isPhraseDeclaration(node) || node.forms.length === 0)
       descriptors.set(

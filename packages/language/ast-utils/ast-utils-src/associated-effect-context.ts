@@ -11,7 +11,7 @@ import { discoverCallableEffectFacts, type NativeEffectPublication } from './cal
 import { projectCallableEffectPublications } from './callable-effect-publications'
 import { analyzeCallableEffects, type CallableAnalysis, type PurityContract } from './callable-effects'
 import { publishCanonicalEffectSnapshot } from './canonical-effect-snapshot'
-import type { FailureContract } from './failure-contracts'
+import { declaredCallableFailureContract, type FailureContract } from './failure-contracts'
 import { mountedViewCreationAnalysis } from './mounted-view-creation'
 import { Type } from './Type'
 
@@ -64,7 +64,7 @@ export function createAssociatedEffects(files: readonly AST.TaoFile[]): Associat
       }
       const failures: FailureContract = AST.isAssociatedConverterDeclaration(declaration)
         ? Type.associatedConverterDescriptor(declaration)?.signature.failures ?? { cases: [], open: true }
-        : { cases: [], open: declaration.failureBound !== 'never' }
+        : declaredCallableFailureContract(declaration)
       for (const statement of AST.returnStatementsOf(declaration)) {
         const bridge = statement.value
         if (!AST.isFromExpression(bridge) || !AST.isFunctionCallExpression(bridge.expression)) {

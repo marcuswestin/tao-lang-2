@@ -27,12 +27,12 @@ FunctionDeclaration:
     visibility=DeclarationVisibility? ('func' | 'function') name=ID
     ('where' genericParameters+=GenericTypeParameter (',' genericParameters+=GenericTypeParameter)*)?
     parameterList=ParameterList
-    ('fails' failureBound=ID)? (('->' | 'returns') returnType=TypeExpression)? block=FunctionBlock;
+    ('fails' failureBound=ID (',' additionalFailureBounds+=ID)*)? (('->' | 'returns') returnType=TypeExpression)? block=FunctionBlock;
 
 // Associated methods inherit their owner's visibility and keep their own callable identity.
 AssociatedFunctionDeclaration:
     static?='static'? 'func' (receiverName=ID '.')? name=AssociatedFunctionName ('where' genericParameters+=GenericTypeParameter (',' genericParameters+=GenericTypeParameter)*)?
-    parameterList=ParameterList ('fails' failureBound=ID)?
+    parameterList=ParameterList ('fails' failureBound=ID (',' additionalFailureBounds+=ID)*)?
     ('->' returnType=TypeExpression)? block=FunctionBlock;
 
 AssociatedFunctionName returns string:

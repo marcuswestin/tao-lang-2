@@ -257,10 +257,10 @@ Describe('validator: associated declaration boundaries', () => {
   )
 
   Test(
-    'keeps a declared failure bound separate and rejects unsupported bound spellings',
+    'rejects never combined with named failure bounds',
     rejects(
       `
-    can Display { ToText() fails Maybe -> text }
+    can Display { ToText() fails never, Maybe -> text }
   `,
       messages.failureBound,
     ),

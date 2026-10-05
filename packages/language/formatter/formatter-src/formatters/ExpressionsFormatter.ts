@@ -98,10 +98,10 @@ export const ExpressionsFormatter = {
     f.oneSpaceBefore('returns')
     f.oneSpaceAround('fails')
     f.oneSpaceAround('->')
+    f.commaSpacedList()
     if (f.node.genericParameters.length > 0) {
       f.oneSpaceBefore('where')
       f.oneSpaceAfter('where')
-      f.commaSpacedList()
     } else {
       f.noSpaceBefore('(')
     }
@@ -114,10 +114,10 @@ export const ExpressionsFormatter = {
     f.noSpaceAfter('.')
     f.oneSpaceAround('fails')
     f.oneSpaceAround('->')
+    f.commaSpacedList()
     if (f.node.genericParameters.length > 0) {
       f.oneSpaceBefore('where')
       f.oneSpaceAfter('where')
-      f.commaSpacedList()
     } else {
       f.noSpaceBefore('(')
     }

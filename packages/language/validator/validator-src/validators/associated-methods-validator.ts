@@ -1,4 +1,4 @@
-import { ASTUtils, Type } from '@ast-utils'
+import { ASTUtils, declaredCallableFailureContract, Type } from '@ast-utils'
 import { AST } from '@parser'
 import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
@@ -47,7 +47,8 @@ export const associatedMethodsValidationChecks = {
         ctx.error(method, messages.purity(method.name))
       }
       if (
-        analysis && !ASTUtils.failureContractSatisfiesBound(analysis.effects.failures, descriptor.signature.failures)
+        analysis
+        && !ASTUtils.failureContractSatisfiesBound(analysis.effects.failures, declaredCallableFailureContract(method))
       ) {
         ctx.error(method, messages.failures(method.name))
       }
@@ -228,7 +229,8 @@ function validateFailureBound(
   method: AST.FunctionDeclaration | AST.AssociatedFunctionDeclaration | AST.CapabilityMethodDeclaration,
   ctx: ValidationContext,
 ): void {
-  if (method.failureBound !== undefined && method.failureBound !== 'never') {
+  const bounds = method.failureBound === undefined ? [] : [method.failureBound, ...method.additionalFailureBounds]
+  if (bounds.includes('never') && bounds.length > 1) {
     ctx.error(method, messages.failureBound)
   }
 }

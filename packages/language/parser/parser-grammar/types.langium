@@ -27,7 +27,7 @@ CapabilityTypeExpression:
 
 // Failure bounds are contextual names; `never` remains available as an ordinary identifier.
 CapabilityMethodDeclaration:
-    name=AssociatedFunctionName parameterList=ParameterList ('fails' failureBound=ID)? '->' returnType=TypeExpression;
+    name=AssociatedFunctionName parameterList=ParameterList ('fails' failureBound=ID (',' additionalFailureBounds+=ID)*)? '->' returnType=TypeExpression;
 
 // Explicit converters are function bodies with source/target contracts and no value slots.
 AssociatedConverterDeclaration:
