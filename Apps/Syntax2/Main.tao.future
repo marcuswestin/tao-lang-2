@@ -27,9 +27,7 @@ app LibraryApp {
 }
 
 // 2. Repeated types, renderer defaults, repeated placement and forwarding.
-view Banner(Title text, Subtitle text) {
-   render Col { "{Title}" [caption] "{Subtitle}" }
-}
+// Banner's two text roles graduated to Main.tao.
 view Heading(Title) { render Title [caption] }
 view NumberedBook(Book, Occurrence) {
    render Row { "{Occurrence.Ordinal}." Book }

@@ -9,7 +9,7 @@ remains undiscovered.
 ## Source and authority
 
 - [Main.tao](Main.tao): active shell with a quoted Library header, bare zero-argument render calls,
-  signature-scoped private types, reversed role-bound arguments, and a Group button switching
+  signature-scoped private types, reversed role-bound arguments for number and text pairs, and a Group button switching
   ordinary boolean state between two quoted labels.
 - [library/Library.tao](library/Library.tao): graduated Name/GivenName/FamilyName, PersonName and
   Subtract declarations. The app renders Ada Lovelace and 3 using the actual signature projections

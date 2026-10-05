@@ -11,9 +11,11 @@ app LibraryApp {
 // 1. The projection preserves GivenName identity; this named descendant admits upward.
 type ProfileName is PersonName.GivenName
 
-view Banner(Heading text) {
+// 2. Two text roles bind by their names, including when arguments are reversed.
+view Banner(Title text, Subtitle text) {
    render Col {
-      "{ Heading }" [weight bold]
+      "{ Title }" [weight bold]
+      "{ Subtitle }"
 }  }
 
 view Library {
@@ -21,7 +23,7 @@ view Library {
    let Person = PersonName(ProfileName "Ada", .FamilyName "Lovelace")
    render Col {
       #heading accessible label "Library"
-      Banner("Library")
+      Banner(Subtitle "Reversed text roles", Title "Library")
       "{ Person }"
       "{ Subtract(Right 2, Left 5) }"
       Spacer

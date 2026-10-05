@@ -5,6 +5,7 @@ test "Syntax2 Library" {
       run LibraryApp
 
       expect text "Library"
+      expect text "Reversed text roles"
       expect text "Ada Lovelace"
       expect text "3"
       expect text "All books."
