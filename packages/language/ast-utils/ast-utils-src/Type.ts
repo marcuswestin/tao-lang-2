@@ -1379,7 +1379,7 @@ function admitsType(
   if (actual.kind === 'capability') {
     return false
   }
-  if (!quantityOwnersAgree(actual, expected, quantityOwner)) {
+  if (!quantityOwnersAgree(actual, expected, quantityOwner, definitionOfReference)) {
     return false
   }
   if (!typesHaveCompatibleBase(actual, expected, accepts)) {
@@ -1546,16 +1546,18 @@ function quantityOwnersAgree(
   actual: TaoType,
   expected: TaoType,
   quantityOwner: (type: TaoType) => AST.TypeDeclaration | undefined = Type.quantityOwner,
+  definitionOfReference: (reference: AST.NamedTypeReference) => AST.TypeDefinition | undefined =
+    Type.definitionOfReference,
 ): boolean {
   if (actual.kind === 'union') {
-    return actual.members.every(member => quantityOwnersAgree(member, expected, quantityOwner))
+    return actual.members.every(member => quantityOwnersAgree(member, expected, quantityOwner, definitionOfReference))
   }
   if (expected.kind === 'union') {
-    return expected.members.some(member => quantityOwnersAgree(actual, member, quantityOwner))
+    return expected.members.some(member => quantityOwnersAgree(actual, member, quantityOwner, definitionOfReference))
   }
   if (actual.kind === 'list' && expected.kind === 'list') {
     return actual.element && expected.element
-      ? quantityOwnersAgree(actual.element, expected.element, quantityOwner)
+      ? quantityOwnersAgree(actual.element, expected.element, quantityOwner, definitionOfReference)
       : !containsQuantityOwner(actual.element, quantityOwner) && !containsQuantityOwner(expected.element, quantityOwner)
   }
   const actualOwner = quantityOwner(actual)
@@ -1760,12 +1762,16 @@ function associatedCallableInContext(
   return materializeAssociatedCallable(declaration, owner, {
     receiver: receiverOwner => resolution.ofAssociatedOwner(receiverOwner),
     signature: callable =>
-      callableSignatureOf(AST.parametersOf(callable), AST.isAssociatedViewDeclaration(callable)
-        ? { cases: [], open: true }
-        : declaredCallableFailureContract(callable), {
-        inputDomain: parameter => associatedInputDomain(parameter, resolution),
-        accepts: (actual, expected) => isPrimitiveNamed(actual, 'none') && containsNoneDomain(expected),
-      }),
+      callableSignatureOf(
+        AST.parametersOf(callable),
+        AST.isAssociatedViewDeclaration(callable)
+          ? { cases: [], open: true }
+          : declaredCallableFailureContract(callable),
+        {
+          inputDomain: parameter => associatedInputDomain(parameter, resolution),
+          accepts: (actual, expected) => isPrimitiveNamed(actual, 'none') && containsNoneDomain(expected),
+        },
+      ),
     result: callable =>
       AST.isAssociatedViewDeclaration(callable)
         ? primitiveType('rendered')
