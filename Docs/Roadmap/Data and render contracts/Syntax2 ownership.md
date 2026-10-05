@@ -151,6 +151,58 @@ Current exclusive assignments:
   InvocationsCompiler/FunctionalCoreCompiler caller adaptations, runtime facade, preparatory
   comma-helper retirement, app/stdlib graduation, combined verification and landing.
 
+## Associated frontend release
+
+The following release supersedes the frontend holds above. The integrated numeric input is
+`334ddc94a`; its 29 frontend, Type and helper paths returned unchanged. C retains only
+ExpressionsCompiler.ts and compiler-tests/numeric-units.test.ts until its native-result handoff.
+The supplied-graph callable-effects producer is integrated at `6cd436ad8`; its five paths have
+returned. Focused numeric parser, validator, formatter, callable-effects and type checks passed
+on that combined input. The original preserved compiler input is consumed without transferring
+the two retained paths.
+
+A now owns the first associated-method and structural-capability source vertical. The forcing
+case has distinct text nominals with distinct pure ToText implementations, a distinct descendant
+inheriting a method, structural Display admission, and live witness forwarding through an ordinary
+function return. This release does not add decisions or claim generic Self, converters, static
+factories, ui, collection storage or whole-app effect refinement is complete.
+
+Exact existing shared paths transferred to A, bounded to that vertical:
+
+- parser-grammar/{types,expressions,blocks,tao-grammar}.langium;
+  parser-src/{ast-structure,value-scope,parser}.ts.
+- ast-utils-src/{Type,ast-utils}.ts.
+- validator-src/{Validate,DeclarationOrder}.ts and
+  validators/{types-validator,functions-validator,FunctionalCoreValidator}.ts.
+- formatter-src/Format.ts and formatters/{TypesFormatter,ExpressionsFormatter}.ts.
+- compiler-src/codegen/react-native/Compile.ts and
+  app/{StatementsCompiler,FilesCompiler,runtime-type-compiler,reactive-parameters}.ts.
+
+Prefixes in this list refer to the existing owning packages under packages/language or
+packages/compiler. No other shared file is implicitly transferred. A also owns new feature files
+associated-methods.ts and associated-methods.test.ts in ast-utils; associated-methods-validator.ts,
+AssociatedMethodsValidationMessages.ts and associated-methods.test.ts in validator;
+AssociatedMethodsFormatter.ts and associated-methods.test.ts in formatter;
+AssociatedMethodsCompiler.ts and associated-methods.test.ts in compiler; and parser's new
+associated-methods.test.ts. The positive Associated Methods Test App and its Tao journey may be
+created after source integration; the coordinator owns the app index and Syntax2 graduation.
+
+Publish AST and method/type descriptor interfaces early. Structural admission must consume proved
+transitive function purity and full known/open failure bounds, without resolver/admission recursion.
+Unknown native effects stay unknown. Preserve concrete callable correspondence and nominal
+descendant identity; no sibling/downward implicit conversion or public nominal registry.
+The coordinator supplies actual source-effect/native facts and retains TR.ts, runtime modules,
+InvocationsCompiler, FunctionalCoreCompiler, Backend, bridge publication and all unlisted Type
+consumers. A requests a bounded consumer hook when needed, rather than changing another owner's
+file. C's two retained compiler paths remain untouched by A.
+
+The integrated numeric continuation gate exposed one regression in source-actions' existing
+adjacent accessibility-label extraction case: a parenthesized label followed by a view invocation
+is consumed as a unit construction. A's parser grant includes repairing that syntactic boundary
+without unit-name guessing, newline significance or field-name reservations. Preserve the existing
+regression fixture and verify the whole source-actions scope after repair. The coordinator's
+reference-app comma migration and one-off comma-helper retirement are separate source paths.
+
 Managers implement against supplied frozen inputs in isolated worktrees and reconcile the landed
 base before frozen return. This manifest transfers no unlisted shared file implicitly.
 
