@@ -69,8 +69,7 @@ type SortDescriptor is {
 // Source: expo-media-library/build/index.d.ts:15:1
 // Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/index.d.ts:15:1
 public
-type Album is item with {
-   action Add(Assets AlbumAddAssets) from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+type Album is item with { action Add(Assets AlbumAddAssets) from ../../../.tao-ts/native-bindings/photos/Bindings.ts
    static action Construct(Id text) returns Album from ../../../.tao-ts/native-bindings/photos/Bindings.ts
    static action Create(Name text, AssetsRefs AlbumCreateAssetsRefs, MoveAssets boolean? default none) returns Album from ../../../.tao-ts/native-bindings/photos/Bindings.ts
    action Delete() from ../../../.tao-ts/native-bindings/photos/Bindings.ts
@@ -92,8 +91,7 @@ action ReleaseAlbum(Value Album) from ../../../.tao-ts/native-bindings/photos/Bi
 // Source: expo-media-library/build/index.d.ts:9:1
 // Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/index.d.ts:9:1
 public
-type Asset is item with {
-   static action Construct(Id text) returns Asset from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+type Asset is item with { static action Construct(Id text) returns Asset from ../../../.tao-ts/native-bindings/photos/Bindings.ts
    static action Create(FilePath text, Album Album? default none) returns Asset from ../../../.tao-ts/native-bindings/photos/Bindings.ts
    action Delete() from ../../../.tao-ts/native-bindings/photos/Bindings.ts
    action GetAlbums() returns list of Album from ../../../.tao-ts/native-bindings/photos/Bindings.ts
@@ -128,8 +126,7 @@ action ReleaseAsset(Value Asset) from ../../../.tao-ts/native-bindings/photos/Bi
 // Source: expo-media-library/build/index.d.ts:7:1
 // Native origin: ../../../.tao-ts/native-bindings/photos/inputs/node_modules/expo-media-library/build/index.d.ts:7:1
 public
-type Query is item with {
-   action Album(Album Album) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
+type Query is item with { action Album(Album Album) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
    static action Construct() returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
    action EqForAssetFieldCREATIONTIME(Value number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts
    action EqForAssetFieldDURATION(Value number) returns Query from ../../../.tao-ts/native-bindings/photos/Bindings.ts

@@ -78,7 +78,7 @@ scene RecipeDetail(Recipe) {
    action SaveRecipe() {
       check TitleDraft is not empty
       update Recipe {
-         Title: TitleDraft
+         Title: TitleDraft,
          Steps: StepsDraft
    }  }
    action SetFavorite(Value boolean) {

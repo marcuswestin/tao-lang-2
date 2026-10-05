@@ -75,7 +75,7 @@ scene ItemDetail(Item) {
    action SaveItem() {
       check TitleDraft is not empty
       update Item {
-         Title: TitleDraft
+         Title: TitleDraft,
          Notes: NotesDraft
    }  }
    action SetDone(Value boolean) {

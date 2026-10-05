@@ -77,7 +77,7 @@ scene NoteDetail(Note) {
    action SaveNote() {
       check TitleDraft is not empty
       update Note {
-         Title: TitleDraft
+         Title: TitleDraft,
          Body: BodyDraft
    }  }
    action SetPinned(Value boolean) {

@@ -281,8 +281,7 @@ type WatchSubscription is {
 // Source: typescript/lib/lib.dom.d.ts:2717:1
 // Native origin: ../../../.tao-ts/native-bindings/files/inputs/node_modules/typescript/lib/lib.dom.d.ts:2717:1
 public
-type AbortController is item with {
-   action Abort(Reason NativeValue? default none) from ../../../.tao-ts/native-bindings/files/Bindings.ts
+type AbortController is item with { action Abort(Reason NativeValue? default none) from ../../../.tao-ts/native-bindings/files/Bindings.ts
    static action Construct() returns AbortController from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action SignalGet() returns AbortSignal from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action ReleaseReference() from ../../../.tao-ts/native-bindings/files/Bindings.ts
@@ -295,8 +294,7 @@ action ReleaseAbortController(Value AbortController) from ../../../.tao-ts/nativ
 // Source: typescript/lib/lib.dom.d.ts:11563:1
 // Native origin: ../../../.tao-ts/native-bindings/files/inputs/node_modules/typescript/lib/lib.dom.d.ts:11563:1
 public
-type EventTarget is item with {
-   action AddEventListener(Type text, Callback EventTargetAddEventListenerCallback, Options AbortSignalAddEventListenerWithKAndThisAbortSignalEvAbortSignalEventMapKAnyAndBooleanAddEventListenerOptionsUndefinedForAbortOptions? default none) from ../../../.tao-ts/native-bindings/files/Bindings.ts
+type EventTarget is item with { action AddEventListener(Type text, Callback EventTargetAddEventListenerCallback, Options AbortSignalAddEventListenerWithKAndThisAbortSignalEvAbortSignalEventMapKAnyAndBooleanAddEventListenerOptionsUndefinedForAbortOptions? default none) from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action DispatchEvent(Event Event) returns boolean from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action RemoveEventListener(Type text, Callback EventTargetAddEventListenerCallback, Options AbortSignalRemoveEventListenerWithKAndThisAbortSignalEvAbortSignalEventMapKAnyAndBooleanEventListenerOptionsUndefinedForAbortOptions? default none) from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action ReleaseReference() from ../../../.tao-ts/native-bindings/files/Bindings.ts
@@ -309,8 +307,7 @@ action ReleaseEventTarget(Value EventTarget) from ../../../.tao-ts/native-bindin
 // Source: typescript/lib/lib.dom.d.ts:2746:1
 // Native origin: ../../../.tao-ts/native-bindings/files/inputs/node_modules/typescript/lib/lib.dom.d.ts:2746:1
 public
-type AbortSignal is EventTarget with {
-   action AbortedGet() returns boolean from ../../../.tao-ts/native-bindings/files/Bindings.ts
+type AbortSignal is EventTarget with { action AbortedGet() returns boolean from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action AddEventListenerWithKAndThisAbortSignalEvAbortSignalEventMapKAnyAndBooleanAddEventListenerOptionsUndefinedForAbort(Listener EventListener, Options AbortSignalAddEventListenerWithKAndThisAbortSignalEvAbortSignalEventMapKAnyAndBooleanAddEventListenerOptionsUndefinedForAbortOptions? default none) from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action AddEventListenerWithStringAndEventListenerOrEventListenerObjectAndBooleanAddEventListenerOptionsUndefined(Type text, Listener EventListener, Options AbortSignalAddEventListenerWithKAndThisAbortSignalEvAbortSignalEventMapKAnyAndBooleanAddEventListenerOptionsUndefinedForAbortOptions? default none) from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action DispatchEvent(Event Event) returns boolean from ../../../.tao-ts/native-bindings/files/Bindings.ts
@@ -330,8 +327,7 @@ action ReleaseAbortSignal(Value AbortSignal) from ../../../.tao-ts/native-bindin
 // Source: typescript/lib/lib.es5.d.ts:1702:1
 // Native origin: ../../../.tao-ts/native-bindings/files/inputs/node_modules/typescript/lib/lib.es5.d.ts:1702:1
 public
-type ArrayBuffer is item with {
-   action ByteLengthGet() returns number from ../../../.tao-ts/native-bindings/files/Bindings.ts
+type ArrayBuffer is item with { action ByteLengthGet() returns number from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action DetachedGet() returns boolean from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action MaxByteLengthGet() returns number from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action ResizableGet() returns boolean from ../../../.tao-ts/native-bindings/files/Bindings.ts
@@ -350,8 +346,7 @@ action ReleaseArrayBuffer(Value ArrayBuffer) from ../../../.tao-ts/native-bindin
 // Source: typescript/lib/lib.dom.d.ts:4391:1
 // Native origin: ../../../.tao-ts/native-bindings/files/inputs/node_modules/typescript/lib/lib.dom.d.ts:4391:1
 public
-type Blob is item with {
-   action ArrayBuffer() returns ArrayBuffer from ../../../.tao-ts/native-bindings/files/Bindings.ts
+type Blob is item with { action ArrayBuffer() returns ArrayBuffer from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action Bytes() returns list of number from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action SizeGet() returns number from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action Slice(Start number? default none, End number? default none, ContentType text? default none) returns Blob from ../../../.tao-ts/native-bindings/files/Bindings.ts
@@ -368,8 +363,7 @@ action ReleaseBlob(Value Blob) from ../../../.tao-ts/native-bindings/files/Bindi
 // Source: expo-file-system/build/Directory.d.ts:15:1
 // Native origin: ../../../.tao-ts/native-bindings/files/inputs/node_modules/expo-file-system/build/Directory.d.ts:15:1
 public
-type Directory is item with {
-   static action Construct(Uris list of DirectoryConstructUrisElement) returns Directory from ../../../.tao-ts/native-bindings/files/Bindings.ts
+type Directory is item with { static action Construct(Uris list of DirectoryConstructUrisElement) returns Directory from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action Copy(Destination WatchEventFileDirectoryTarget, Options RelocationOptions? default none) from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action CopySync(Destination WatchEventFileDirectoryTarget, Options RelocationOptions? default none) from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action Create(Options DirectoryCreateOptions? default none) from ../../../.tao-ts/native-bindings/files/Bindings.ts
@@ -402,8 +396,7 @@ action ReleaseDirectory(Value Directory) from ../../../.tao-ts/native-bindings/f
 // Source: expo-file-system/build/NetworkTasks.d.ts:76:1
 // Native origin: ../../../.tao-ts/native-bindings/files/inputs/node_modules/expo-file-system/build/NetworkTasks.d.ts:76:1
 public
-type DownloadTask is item with {
-   action AddListener(EventName DownloadTaskAddListenerEventName, Listener action(DownloadProgress)) returns EventSubscription from ../../../.tao-ts/native-bindings/files/Bindings.ts
+type DownloadTask is item with { action AddListener(EventName DownloadTaskAddListenerEventName, Listener action(DownloadProgress)) returns EventSubscription from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action Cancel() from ../../../.tao-ts/native-bindings/files/Bindings.ts
    static action Construct(Url text, Destination WatchEventFileDirectoryTarget, Options DownloadTaskOptions? default none) returns DownloadTask from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action DownloadAsync() returns DownloadTaskDownloadAsyncPending from ../../../.tao-ts/native-bindings/files/Bindings.ts
@@ -424,8 +417,7 @@ action ReleaseDownloadTask(Value DownloadTask) from ../../../.tao-ts/native-bind
 // Source: typescript/lib/lib.dom.d.ts:11347:1
 // Native origin: ../../../.tao-ts/native-bindings/files/inputs/node_modules/typescript/lib/lib.dom.d.ts:11347:1
 public
-type Event is item with {
-   action AT_TARGETGet() returns EventAT_TARGETValue from ../../../.tao-ts/native-bindings/files/Bindings.ts
+type Event is item with { action AT_TARGETGet() returns EventAT_TARGETValue from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action BubblesGet() returns boolean from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action BUBBLING_PHASEGet() returns EventBUBBLING_PHASEValue from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action CancelableGet() returns boolean from ../../../.tao-ts/native-bindings/files/Bindings.ts
@@ -459,8 +451,7 @@ action ReleaseEvent(Value Event) from ../../../.tao-ts/native-bindings/files/Bin
 // Source: expo-file-system/build/File.d.ts:18:1
 // Native origin: ../../../.tao-ts/native-bindings/files/inputs/node_modules/expo-file-system/build/File.d.ts:18:1
 public
-type File is item with {
-   action ArrayBuffer() returns ArrayBuffer from ../../../.tao-ts/native-bindings/files/Bindings.ts
+type File is item with { action ArrayBuffer() returns ArrayBuffer from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action Base64() returns text from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action Base64Sync() returns text from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action Bytes() returns list of number from ../../../.tao-ts/native-bindings/files/Bindings.ts
@@ -528,8 +519,7 @@ action FileAsBlob(Value File) returns Blob from ../../../.tao-ts/native-bindings
 // Source: expo-file-system/build/File.types.d.ts:80:1
 // Native origin: ../../../.tao-ts/native-bindings/files/inputs/node_modules/expo-file-system/build/File.types.d.ts:80:1
 public
-type FileHandle is item with {
-   action Close() from ../../../.tao-ts/native-bindings/files/Bindings.ts
+type FileHandle is item with { action Close() from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action OffsetGet() returns number? from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action OffsetSet(Value number?) from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action ReadBytes(Length number) returns list of number from ../../../.tao-ts/native-bindings/files/Bindings.ts
@@ -546,8 +536,7 @@ action ReleaseFileHandle(Value FileHandle) from ../../../.tao-ts/native-bindings
 // Source: react-native/src/types/globals.d.ts:201:3
 // Native origin: ../../../.tao-ts/native-bindings/files/inputs/node_modules/react-native/src/types/globals.d.ts:201:3
 public
-type FormData is item with {
-   action Append(Key text, Value NativeValue) from ../../../.tao-ts/native-bindings/files/Bindings.ts
+type FormData is item with { action Append(Key text, Value NativeValue) from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action GetAll(Key text) returns list of FormDataGetAllResultElement from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action GetParts() returns list of FormDataGetPartsResultElement from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action ReleaseReference() from ../../../.tao-ts/native-bindings/files/Bindings.ts
@@ -560,8 +549,7 @@ action ReleaseFormData(Value FormData) from ../../../.tao-ts/native-bindings/fil
 // Source: expo-file-system/build/Paths.d.ts:4:1
 // Native origin: ../../../.tao-ts/native-bindings/files/inputs/node_modules/expo-file-system/build/Paths.d.ts:4:1
 public
-type Paths is item with {
-   static action AppleSharedContainersGet() returns list of PathsAppleSharedContainersValueEntry from ../../../.tao-ts/native-bindings/files/Bindings.ts
+type Paths is item with { static action AppleSharedContainersGet() returns list of PathsAppleSharedContainersValueEntry from ../../../.tao-ts/native-bindings/files/Bindings.ts
    static action AvailableDiskSpaceGet() returns number from ../../../.tao-ts/native-bindings/files/Bindings.ts
    static action Basename(Path DirectoryConstructUrisElement, Ext text? default none) returns text from ../../../.tao-ts/native-bindings/files/Bindings.ts
    static action BundleGet() returns Directory from ../../../.tao-ts/native-bindings/files/Bindings.ts
@@ -587,8 +575,7 @@ action ReleasePaths(Value Paths) from ../../../.tao-ts/native-bindings/files/Bin
 // Source: typescript/lib/lib.dom.d.ts:25973:1
 // Native origin: ../../../.tao-ts/native-bindings/files/inputs/node_modules/typescript/lib/lib.dom.d.ts:25973:1
 public
-type ReadableStreamGenericReader is item with {
-   action Cancel(Reason NativeValue? default none) from ../../../.tao-ts/native-bindings/files/Bindings.ts
+type ReadableStreamGenericReader is item with { action Cancel(Reason NativeValue? default none) from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action ClosedGet() from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action ReleaseReference() from ../../../.tao-ts/native-bindings/files/Bindings.ts
 }
@@ -600,8 +587,7 @@ action ReleaseReadableStreamGenericReader(Value ReadableStreamGenericReader) fro
 // Source: typescript/lib/lib.dom.d.ts:25860:1
 // Native origin: ../../../.tao-ts/native-bindings/files/inputs/node_modules/typescript/lib/lib.dom.d.ts:25860:1
 public
-type ReadableStreamBYOBReader is ReadableStreamGenericReader with {
-   action Cancel(Reason NativeValue? default none) from ../../../.tao-ts/native-bindings/files/Bindings.ts
+type ReadableStreamBYOBReader is ReadableStreamGenericReader with { action Cancel(Reason NativeValue? default none) from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action ClosedGet() from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action ReadForUint8ArrayArrayBuffer(View list of number) returns ReadableStreamBYOBReaderReadForUint8ArrayArrayBufferResult from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action ReadForUint8ArrayArrayBufferLike(View list of number) returns ReadableStreamBYOBReaderReadForUint8ArrayArrayBufferLikeResult from ../../../.tao-ts/native-bindings/files/Bindings.ts
@@ -616,8 +602,7 @@ action ReleaseReadableStreamBYOBReader(Value ReadableStreamBYOBReader) from ../.
 // Source: typescript/lib/lib.dom.d.ts:25953:1
 // Native origin: ../../../.tao-ts/native-bindings/files/inputs/node_modules/typescript/lib/lib.dom.d.ts:25953:1
 public
-type ReadableStreamDefaultReaderUint8ArrayArrayBuffer is item with {
-   action Cancel(Reason NativeValue? default none) from ../../../.tao-ts/native-bindings/files/Bindings.ts
+type ReadableStreamDefaultReaderUint8ArrayArrayBuffer is item with { action Cancel(Reason NativeValue? default none) from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action ClosedGet() from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action Read() returns ReadableStreamBYOBReaderReadForUint8ArrayArrayBufferResult from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action ReleaseLock() from ../../../.tao-ts/native-bindings/files/Bindings.ts
@@ -631,8 +616,7 @@ action ReleaseReadableStreamDefaultReaderUint8ArrayArrayBuffer(Value ReadableStr
 // Source: typescript/lib/lib.dom.d.ts:25807:1
 // Native origin: ../../../.tao-ts/native-bindings/files/inputs/node_modules/typescript/lib/lib.dom.d.ts:25807:1
 public
-type ReadableStreamUint8ArrayArrayBuffer is item with {
-   action Cancel(Reason NativeValue? default none) from ../../../.tao-ts/native-bindings/files/Bindings.ts
+type ReadableStreamUint8ArrayArrayBuffer is item with { action Cancel(Reason NativeValue? default none) from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action GetReaderWithModeByob(Options ReadableStreamUint8ArrayArrayBufferGetReaderWithModeByobOptions) returns ReadableStreamBYOBReader from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action GetReaderWithNoArguments() returns ReadableStreamDefaultReaderUint8ArrayArrayBuffer from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action GetReaderWithReadableStreamGetReaderOptionsUndefinedRequiringOptions(Options ReadableStreamGetReaderOptions) returns ReadableStreamUint8ArrayArrayBufferGetReaderWithReadableStreamGetReaderOptionsUndefinedRequiringOptionsResult from ../../../.tao-ts/native-bindings/files/Bindings.ts
@@ -650,8 +634,7 @@ action ReleaseReadableStreamUint8ArrayArrayBuffer(Value ReadableStreamUint8Array
 // Source: expo-file-system/build/NetworkTasks.d.ts:11:1
 // Native origin: ../../../.tao-ts/native-bindings/files/inputs/node_modules/expo-file-system/build/NetworkTasks.d.ts:11:1
 public
-type UploadTask is item with {
-   action AddListener(EventName DownloadTaskAddListenerEventName, Listener action(UploadProgress)) returns EventSubscription from ../../../.tao-ts/native-bindings/files/Bindings.ts
+type UploadTask is item with { action AddListener(EventName DownloadTaskAddListenerEventName, Listener action(UploadProgress)) returns EventSubscription from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action Cancel() from ../../../.tao-ts/native-bindings/files/Bindings.ts
    static action Construct(File File, Url text, Options UploadOptions? default none) returns UploadTask from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action Release() from ../../../.tao-ts/native-bindings/files/Bindings.ts
@@ -667,8 +650,7 @@ action ReleaseUploadTask(Value UploadTask) from ../../../.tao-ts/native-bindings
 // Source: typescript/lib/lib.dom.d.ts:37055:1
 // Native origin: ../../../.tao-ts/native-bindings/files/inputs/node_modules/typescript/lib/lib.dom.d.ts:37055:1
 public
-type WritableStreamDefaultWriterUint8ArrayArrayBuffer is item with {
-   action AbortForUint8ArrayArrayBuffer(Reason NativeValue? default none) from ../../../.tao-ts/native-bindings/files/Bindings.ts
+type WritableStreamDefaultWriterUint8ArrayArrayBuffer is item with { action AbortForUint8ArrayArrayBuffer(Reason NativeValue? default none) from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action ClosedGet() from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action CloseForUint8ArrayArrayBuffer() from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action DesiredSizeGet() returns number? from ../../../.tao-ts/native-bindings/files/Bindings.ts
@@ -685,8 +667,7 @@ action ReleaseWritableStreamDefaultWriterUint8ArrayArrayBuffer(Value WritableStr
 // Source: typescript/lib/lib.dom.d.ts:37055:1
 // Native origin: ../../../.tao-ts/native-bindings/files/inputs/node_modules/typescript/lib/lib.dom.d.ts:37055:1
 public
-type WritableStreamDefaultWriterUint8ArrayArrayBufferLike is item with {
-   action Abort(Reason NativeValue? default none) from ../../../.tao-ts/native-bindings/files/Bindings.ts
+type WritableStreamDefaultWriterUint8ArrayArrayBufferLike is item with { action Abort(Reason NativeValue? default none) from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action Close() from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action ClosedGet() from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action DesiredSizeGet() returns number? from ../../../.tao-ts/native-bindings/files/Bindings.ts
@@ -703,8 +684,7 @@ action ReleaseWritableStreamDefaultWriterUint8ArrayArrayBufferLike(Value Writabl
 // Source: typescript/lib/lib.dom.d.ts:36993:1
 // Native origin: ../../../.tao-ts/native-bindings/files/inputs/node_modules/typescript/lib/lib.dom.d.ts:36993:1
 public
-type WritableStreamUint8ArrayArrayBuffer is item with {
-   action AbortForUint8ArrayArrayBuffer(Reason NativeValue? default none) from ../../../.tao-ts/native-bindings/files/Bindings.ts
+type WritableStreamUint8ArrayArrayBuffer is item with { action AbortForUint8ArrayArrayBuffer(Reason NativeValue? default none) from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action CloseForUint8ArrayArrayBuffer() from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action GetWriterForUint8ArrayArrayBuffer() returns WritableStreamDefaultWriterUint8ArrayArrayBuffer from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action LockedGet() returns boolean from ../../../.tao-ts/native-bindings/files/Bindings.ts
@@ -718,8 +698,7 @@ action ReleaseWritableStreamUint8ArrayArrayBuffer(Value WritableStreamUint8Array
 // Source: typescript/lib/lib.dom.d.ts:36993:1
 // Native origin: ../../../.tao-ts/native-bindings/files/inputs/node_modules/typescript/lib/lib.dom.d.ts:36993:1
 public
-type WritableStreamUint8ArrayArrayBufferLike is item with {
-   action Abort(Reason NativeValue? default none) from ../../../.tao-ts/native-bindings/files/Bindings.ts
+type WritableStreamUint8ArrayArrayBufferLike is item with { action Abort(Reason NativeValue? default none) from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action Close() from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action GetWriter() returns WritableStreamDefaultWriterUint8ArrayArrayBufferLike from ../../../.tao-ts/native-bindings/files/Bindings.ts
    action LockedGet() returns boolean from ../../../.tao-ts/native-bindings/files/Bindings.ts

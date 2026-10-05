@@ -49,18 +49,18 @@ action ApplyFocusedCellEnvironment(CellId text, CellRevision number, Preset text
 project
 view StudioRoot(CollapsedFolders list of text, ToggleFolder action(text)) {
    render ProductHostBoundary() {
-      @files FilesPanel(CollapsedFolders: CollapsedFolders, ToggleFolder: ToggleFolder)
-      @components ComponentsPanel()
-      @projectViews ProjectViewsPanel()
-      @screens ScreensPanel()
-      @tokens DesignTokensPanel()
-      @data StudioDataRailPanel(InitialDataPanel)
-      @search StudioSearchPanel([])
-      @drawer StudioDrawerPanel(Tab: "Problems", Compile: InitialCompilePanel, Problems: InitialProblemsPanel, Data: InitialDataPanel, Debug: InitialDebugPanel, Tests: InitialTestsPanel, Logs: InitialLogsPanel)
-      @scenario StudioScenarioPanel(State: "null", JourneyRecording: "null", JourneyRecordable: false, ResolvedAppearance: "light")
-      @environment StudioEnvironmentPanel(FocusedCellId: "", CellRevision: 0, ViewportPresetId: "custom", ViewportWidth: 0, ViewportHeight: 0, NetworkOutcome: "normal", NetworkLatencyMs: 0, NetworkErrorMessage: "Injected Studio network failure", NetworkErrorStatus: 503, SchemeRequested: "system", SchemeResolved: "light", SchemeSource: "system", SchemeCapability: "reactive-browser")
-      @editor StudioCodeEditor()
-      @inspector StudioContextPanel(Revision: 0, ProjectRoot: "", ActiveFilePath: "", ActiveFileContent: "", ActiveFileVersion: "", SelectionAnchor: 0, SelectionHead: 0, SelectedRenderId: "", SelectedRenderPath: "", SelectedRenderVersion: "", FocusedCellId: "", CellRevision: 0, FocusedScenarioId: "", ViewportWidth: 0, ViewportHeight: 0, InspectorBusy: false, InspectorCanUndo: false, InspectorInspection: "null", InspectorSelection: "null", LensLines: [], LensJourneyPath: "")
+      @files: FilesPanel(CollapsedFolders: CollapsedFolders, ToggleFolder: ToggleFolder)
+      @components: ComponentsPanel()
+      @projectViews: ProjectViewsPanel()
+      @screens: ScreensPanel()
+      @tokens: DesignTokensPanel()
+      @data: StudioDataRailPanel(InitialDataPanel)
+      @search: StudioSearchPanel([])
+      @drawer: StudioDrawerPanel(Tab: "Problems", Compile: InitialCompilePanel, Problems: InitialProblemsPanel, Data: InitialDataPanel, Debug: InitialDebugPanel, Tests: InitialTestsPanel, Logs: InitialLogsPanel)
+      @scenario: StudioScenarioPanel(State: "null", JourneyRecording: "null", JourneyRecordable: false, ResolvedAppearance: "light")
+      @environment: StudioEnvironmentPanel(FocusedCellId: "", CellRevision: 0, ViewportPresetId: "custom", ViewportWidth: 0, ViewportHeight: 0, NetworkOutcome: "normal", NetworkLatencyMs: 0, NetworkErrorMessage: "Injected Studio network failure", NetworkErrorStatus: 503, SchemeRequested: "system", SchemeResolved: "light", SchemeSource: "system", SchemeCapability: "reactive-browser")
+      @editor: StudioCodeEditor()
+      @inspector: StudioContextPanel(Revision: 0, ProjectRoot: "", ActiveFilePath: "", ActiveFileContent: "", ActiveFileVersion: "", SelectionAnchor: 0, SelectionHead: 0, SelectedRenderId: "", SelectedRenderPath: "", SelectedRenderVersion: "", FocusedCellId: "", CellRevision: 0, FocusedScenarioId: "", ViewportWidth: 0, ViewportHeight: 0, InspectorBusy: false, InspectorCanUndo: false, InspectorInspection: "null", InspectorSelection: "null", LensLines: [], LensJourneyPath: "")
 }  }
 
 view ProductHostBoundary() accepts content slots @files, @components, @projectViews, @screens, @tokens, @data, @search, @drawer, @scenario, @environment, @editor, @inspector from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
