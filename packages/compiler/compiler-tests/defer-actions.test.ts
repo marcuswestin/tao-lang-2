@@ -8,6 +8,9 @@ type Probe = {
   mark(label: string): void
   alternative?(label: string): void
   read?(): string
+  createFile?(): string
+  removeFile?(file: string): void
+  currentSample?: string
 }
 
 type ActionName =
@@ -25,12 +28,24 @@ type ActionName =
   | 'JoinedError'
   | 'JoinedOtherwise'
   | 'ResultJoined'
+  | 'BuildReport'
+  | 'JoinedResult'
+  | 'CreateFile'
+  | 'RemoveFile'
   | 'Read'
   | 'Mark'
   | 'Alternative'
 type Actions = Record<
   ActionName,
-  { evaluate(): { jsValue: unknown }; jsValue: { invoke(...args: unknown[]): void | Promise<void> } }
+  {
+    evaluate(): {
+      jsValue: { invokeJoinedResult(...args: unknown[]): Promise<unknown> }
+    }
+    jsValue: {
+      invoke(...args: unknown[]): void | Promise<void>
+      invokeJoinedResult(...args: unknown[]): Promise<unknown>
+    }
+  }
 >
 
 // Compiler tests have no JSX target. Load the real JSX-bearing runtime through its file boundary;
@@ -52,6 +67,9 @@ const authoredActions = `
   action Failing() { fail Offline "Unavailable." }
   action Succeed() { }
   public action Read() returns text from ./Native.ts
+  action CreateFile() returns text from ./Native.ts
+  action RemoveFile(File text) from ./Native.ts
+  func CurrentSample() -> text { return ReadSample() from ./Native.ts }
   public action Run(Label text) {
     do Register(Label)
     if true { do Register("inner") do Suspend() }
@@ -122,6 +140,25 @@ const authoredActions = `
       done Result -> { do Mark(Result) }
     }
     do Mark("parent-tail")
+  }
+  public action BuildReport() {
+    let File = do CreateFile()
+    let Report = CurrentSample()
+    do Mark(Report)
+    defer {
+      do RemoveFile(File)
+      do Mark("cleanup-start")
+      do Suspend()
+      do Mark("cleanup-done")
+    }
+    if true { return CurrentSample() }
+    do Mark("parent-unreachable")
+  }
+  public action JoinedResult() {
+    do BuildReport() then {
+      done Result -> { do Mark(Result) }
+    }
+    do Mark("caller-tail")
   }
 `
 
@@ -422,6 +459,97 @@ Describe('compiler: lexical action cleanup', () => {
     })
   })
 
+  Test('returns the fixed source result after deferred cleanup before joined done and caller tail', async () => {
+    await withCompiledActions(false, async (actions, native) => {
+      const events: string[] = []
+      const cleanupStarted = Deferred()
+      const releaseCleanup = Deferred()
+      native.Configure({
+        register() {},
+        suspend() {
+          cleanupStarted.resolve()
+          return releaseCleanup.promise
+        },
+        mark(label) {
+          events.push(label)
+        },
+        currentSample: 'unset',
+        createFile() {
+          events.push('file-created')
+          this.currentSample = 'before-cleanup'
+          return '/generated/report.txt'
+        },
+        removeFile(file) {
+          events.push(`removed:${file}`)
+          this.currentSample = 'after-cleanup'
+        },
+      })
+
+      const direct = TR.DoResult<string>(actions.BuildReport!)
+      try {
+        await started(cleanupStarted, direct.then(() => undefined))
+        Expect(events).toEqual([
+          'file-created',
+          'before-cleanup',
+          'removed:/generated/report.txt',
+          'cleanup-start',
+        ])
+        releaseCleanup.resolve()
+        const result = await direct
+        Expect(result.evaluate().jsValue).toBe('before-cleanup')
+        Expect(events).toEqual([
+          'file-created',
+          'before-cleanup',
+          'removed:/generated/report.txt',
+          'cleanup-start',
+          'cleanup-done',
+        ])
+
+        const joinedCleanupStarted = Deferred()
+        const releaseJoinedCleanup = Deferred()
+        native.Configure({
+          register() {},
+          suspend() {
+            joinedCleanupStarted.resolve()
+            return releaseJoinedCleanup.promise
+          },
+          mark(label) {
+            events.push(label)
+          },
+          currentSample: 'unset',
+          createFile() {
+            this.currentSample = 'before-cleanup'
+            return '/generated/joined-report.txt'
+          },
+          removeFile(file) {
+            events.push(`removed:${file}`)
+            this.currentSample = 'after-cleanup'
+          },
+        })
+
+        const joined = Promise.resolve(actions.JoinedResult!.jsValue.invoke())
+        try {
+          await started(joinedCleanupStarted, joined)
+          Expect(events.slice(-3)).toEqual([
+            'before-cleanup',
+            'removed:/generated/joined-report.txt',
+            'cleanup-start',
+          ])
+          Expect(events).not.toContain('caller-tail')
+          releaseJoinedCleanup.resolve()
+          await joined
+          Expect(events.slice(-3)).toEqual(['cleanup-done', 'before-cleanup', 'caller-tail'])
+        } finally {
+          releaseJoinedCleanup.resolve()
+          await joined
+        }
+      } finally {
+        releaseCleanup.resolve()
+        await direct
+      }
+    })
+  })
+
   Test('restores the lexical frame after a real debugger pause', async () => {
     await withCompiledActions(true, async (actions, native) => {
       const events: string[] = []
@@ -524,13 +652,14 @@ async function withCompiledActions(
   try {
     await withTaoFiles('tao-lexical-actions-', {
       'Main.tao': `
-          use Run, Recover, Otherwise, CheckExit, GuardExit, Inline, Detached, Sync, Joined, DeferredOrder, DeferredInvocation, JoinedError, JoinedOtherwise, ResultJoined, Mark, Alternative from ./Actions
+          use Run, Recover, Otherwise, CheckExit, GuardExit, Inline, Detached, Sync, Joined, DeferredOrder, DeferredInvocation, JoinedError, JoinedOtherwise, ResultJoined, BuildReport, JoinedResult, Mark, Alternative from ./Actions
         app Demo { id "com.tao.lexical" version "1.0.0" name "Lexical" view Main }
         view Main() {
-          render inject Run, Recover, Otherwise, CheckExit, GuardExit, Inline, Detached, Sync, Joined, DeferredOrder, DeferredInvocation, JoinedError, JoinedOtherwise, ResultJoined, Mark, Alternative
+          render inject Run, Recover, Otherwise, CheckExit, GuardExit, Inline, Detached, Sync, Joined, DeferredOrder, DeferredInvocation, JoinedError, JoinedOtherwise, ResultJoined, BuildReport, JoinedResult, Mark, Alternative
             \`\`\`ts
               void Run; void Recover; void Otherwise; void CheckExit; void GuardExit; void Inline; void Detached; void Sync
               void Joined; void DeferredOrder; void DeferredInvocation; void JoinedError; void JoinedOtherwise; void ResultJoined
+              void BuildReport; void JoinedResult
               void Mark; void Alternative
               return null
             \`\`\`
@@ -538,7 +667,7 @@ async function withCompiledActions(
       `,
       'Actions.tao': authoredActions,
       'Native.ts': `
-        type Probe = { register(label: string): void; suspend(): Promise<void>; mark(label: string): void; alternative?(label: string): void; read?(): string }
+        type Probe = { register(label: string): void; suspend(): Promise<void>; mark(label: string): void; alternative?(label: string): void; read?(): string; createFile?(): string; removeFile?(file: string): void; currentSample?: string }
         let probe: Probe
         export function Configure(value: Probe): void { probe = value }
         export function Register(label: string): void { probe.register(label) }
@@ -546,6 +675,9 @@ async function withCompiledActions(
         export function Mark(label: string): void { probe.mark(label) }
         export function Alternative(label: string): void { probe.alternative?.(label) }
         export function Read(): string { return probe.read?.() ?? '' }
+        export function CreateFile(): string { return probe.createFile?.() ?? '' }
+        export function RemoveFile(file: string): void { probe.removeFile?.(file) }
+        export function ReadSample(): string { return probe.currentSample ?? '' }
       `,
     }, async (paths, root) => {
       const compiled = await (await Workspace.open(root)).compile(paths['Main.tao'], { debug })

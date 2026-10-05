@@ -144,7 +144,7 @@ export const ActionsCompiler = {
     const asyncKeyword = actionBlockRequiresAsync(action.block) ? gen`async ` : gen``
     return gen`
       TR.Action(${asyncKeyword}() => {
-        return ${Compile.ActionScopedBlock(action.block)}
+      return ${Compile.ActionScopedBlock(action.block, undefined, false, true)}
       }, { ${AST.findOwningView(action) ? gen`owner: _TaoActionOwner,` : gen``}
         ${actionBlockInterruptsAsk(action.block) ? gen`interrupt: true,` : gen``} })
     `
@@ -182,6 +182,8 @@ export const ActionsCompiler = {
       DismissStatement: Compile.DismissStatement,
       DoStatement: Compile.DoStatement,
       DeferStatement: Compile.DeferStatement,
+      AliasDeclaration: Compile.AliasDeclaration,
+      ReturnStatement: Compile.ActionReturnStatement,
       WhenDoStatement: Compile.WhenDoStatement,
       GuardActionStatement: Compile.GuardActionStatement,
       IfActionStatement: Compile.IfActionStatement,
@@ -196,44 +198,70 @@ export const ActionsCompiler = {
   },
 
   /** ActionScopedBlock returns the completion of one lexical action frame and its local bindings. */
-  ActionScopedBlock(block: AST.ActionBlock | undefined, bindings?: Compiled, asyncBoundary = false): Compiled {
+  ActionScopedBlock(
+    block: AST.ActionBlock | undefined,
+    bindings?: Compiled,
+    asyncBoundary = false,
+    _returnBoundary = false,
+  ): Compiled {
     const asyncKeyword = actionBlockRequiresAsync(block) ? gen`async ` : gen``
     const boundaryKeyword = asyncBoundary ? gen`async ` : gen``
+    const owner = block ? AST.findOwningAction(block) : undefined
+    const sourceReturns = owner ? ASTUtils.sourceActionResult(owner, value => value) : []
+    const hasReturnContext = Boolean(
+      block && sourceReturns.some(({ statement }) => isWithinBlock(statement, block)),
+    )
+    const ownsReturnContext = Boolean(owner && block?.$container === owner && hasReturnContext)
+    const returnContext = ownsReturnContext
+      ? gen`const _TaoSourceReturn: { returned: boolean; value: unknown } = { returned: false, value: undefined };
+        void _TaoSourceReturn;`
+      : gen.noop()
     return gen`TR.BlockScope(_Scope, ${boundaryKeyword}_Scope => TR.ActionScope(${asyncKeyword}() => {
       const _TaoActionContinuation = TR.ActionContinuation()
+      ${returnContext}
       ${bindings ?? gen.noop()}
-      ${Compile.ActionBlockBody(block)}
+      ${Compile.ActionBlockBody(block, hasReturnContext)}
     }))`
   },
 
   /** ActionBlockBody compiles one callback-owned action block. */
-  ActionBlockBody(block: AST.ActionBlock | undefined): Compiled {
+  ActionBlockBody(block: AST.ActionBlock | undefined, hasReturnContext = false): Compiled {
     // Every caller declares the continuation before the body; an empty body must still read it,
     // or a generated app compiled with unused-local checks rejects `on submit -> { }`.
     if (!block || block.statements.length === 0) {
       return gen`void _TaoActionContinuation`
     }
+    const returnCheck = hasReturnContext
+      ? gen`if (_TaoSourceReturn.returned) return _TaoSourceReturn.value`
+      : gen.noop()
+    const returnFallthrough = hasReturnContext ? gen`return undefined` : gen.noop()
     if (!actionInstrumentationEnabled()) {
-      return gen.list(block.statements, statement =>
-        gen`
+      return gen`${
+        gen.list(block.statements, statement =>
+          gen`
         TR.ResumeActionContinuation(_TaoActionContinuation)
         ${Compile.ActionStatement(statement)}
         TR.ResumeActionContinuation(_TaoActionContinuation)
+        ${returnCheck}
       `)
+      } ${returnFallthrough}`
     }
     const owner = debugOwner(block)
-    return gen.list(block.statements.map((statement, index) => ({ index, statement })), ({ index, statement }) =>
-      gen`
+    return gen`${
+      gen.list(block.statements.map((statement, index) => ({ index, statement })), ({ index, statement }) =>
+        gen`
         TR.ResumeActionContinuation(_TaoActionContinuation)
         await TR.Debug.At({ action: ${gen.jsLiteral(owner.name)}, path: ${
-        gen.jsLiteral(statementPath(block, index))
-      }, declaration: ${compileDeclarationIdentity(owner.declaration)}.canonical, statement: ${
-        gen.jsLiteral(structuralStatementIdentity(statement, owner.declaration))
-      } }, _Scope)
+          gen.jsLiteral(statementPath(block, index))
+        }, declaration: ${compileDeclarationIdentity(owner.declaration)}.canonical, statement: ${
+          gen.jsLiteral(structuralStatementIdentity(statement, owner.declaration))
+        } }, _Scope)
         TR.ResumeActionContinuation(_TaoActionContinuation)
         ${Compile.ActionStatement(statement)}
         TR.ResumeActionContinuation(_TaoActionContinuation)
+        ${returnCheck}
       `)
+    } ${returnFallthrough}`
   },
 
   /** DeclarationSlotFill is metadata consumed by its owning action or view compiler. */
@@ -244,7 +272,7 @@ export const ActionsCompiler = {
   /** AsyncActionStatement launches an isolated action sub-block without delaying its caller. */
   AsyncActionStatement(statement: AST.AsyncActionStatement): Compiled {
     return gen`TR.Async(() => {
-      return ${Compile.ActionScopedBlock(statement.block, undefined, true)}
+      return ${Compile.ActionScopedBlock(statement.block, undefined, true, true)}
     })`
   },
 
@@ -279,42 +307,23 @@ export const ActionsCompiler = {
   /** JoinedDoStatement runs a `do ... then` call and waits for its success/failure branch. */
   JoinedDoStatement(statement: AST.DoStatement, invocationCall?: Compiled): Compiled {
     const invocation = statement
-    const success = isAuthEffect(invocation) ? 'completed' : 'saved'
-    const failureContract = ASTUtils.invocationFailureContract(invocation)
-    const capturesDoneValue = statement.outcomes.some(outcome => outcome.case === 'done' && outcome.payload)
-    const invoke = invocationCall ?? (capturesDoneValue
+    const passesDoneValue = statement.outcomes.some(outcome => outcome.case === 'done' && outcome.payload)
+    const invoke = invocationCall ?? (passesDoneValue
       ? compileDoResultInvocation(invocation)
       : gen`() => TR.Do(${Compile.Expression(invocation.action)}${Compile.ActionArguments(invocation)})`)
-    const capturedInvoke = capturesDoneValue
-      ? gen`() => Promise.resolve((${invoke})()).then(_TaoDoOutcomeValue => {
-        _TaoDoOutcomePayload = _TaoDoOutcomeValue
-      })`
-      : invoke
-    const whenDo = gen`TR.WhenDo(${capturedInvoke}, {
+    return gen`await TR.ThenDo(${invoke}, {
       name: ${gen.jsLiteral(effectOutcomeName(invocation))},
-      success: ${gen.jsLiteral(success)},
       ${compileEffectContract(invocation, statement.outcomes)}
     }, [
-      ${
-      compileJoinedOutcomes(
-        statement,
-        success,
-        failureContract.cases,
-        capturesDoneValue ? gen`_TaoDoOutcomePayload` : undefined,
-      )
-    }
+      ${compileJoinedOutcomes(statement)}
       ${
       statement.otherwise
-        ? gen`['otherwise', async () => ${Compile.ActionScopedBlock(statement.otherwise.block)}],`
+        ? gen`['otherwise', async () => ${
+          Compile.ActionScopedBlock(statement.otherwise.block, undefined, false, true)
+        }],`
         : gen.noop()
     }
     ])`
-    return capturesDoneValue
-      ? gen`await (() => {
-        let _TaoDoOutcomePayload: unknown
-        return ${whenDo}
-      })()`
-      : gen`await ${whenDo}`
   },
 
   /**
@@ -340,22 +349,38 @@ export const ActionsCompiler = {
             Compile.ActionScopedBlock(
               outcome.block,
               outcome.payload ? gen`${gen.scopeName(outcome.payload)} = _TaoCasePayload` : gen.noop(),
+              false,
+              true,
             )
           }],`,
       )
     }
       ${
       statement.otherwise
-        ? gen`['otherwise', async () => ${Compile.ActionScopedBlock(statement.otherwise.block)}],`
+        ? gen`['otherwise', async () => ${
+          Compile.ActionScopedBlock(statement.otherwise.block, undefined, false, true)
+        }],`
         : gen.noop()
     }
     ])`
   },
 
+  /** ActionReturnStatement saves a synchronous source-action result until its lexical scopes drain. */
+  ActionReturnStatement(statement: AST.ReturnStatement): Compiled {
+    const action = AST.findOwningAction(statement)
+    const belongsToSourceAction = action
+      ? ASTUtils.sourceActionResult(action, value => value).some(result => result.statement === statement)
+      : false
+    const value = gen`${Compile.Expression(statement.value)}.evaluate().jsValue`
+    return belongsToSourceAction
+      ? gen`_TaoSourceReturn.value = ${value}; _TaoSourceReturn.returned = true;`
+      : gen`return ${value}`
+  },
+
   /** DeferStatement registers a lexical cleanup block or invocation for the current action scope. */
   DeferStatement(statement: AST.DeferStatement): Compiled {
     if (statement.block) {
-      return gen`TR.Defer(() => ${Compile.ActionScopedBlock(statement.block)})`
+      return gen`TR.Defer(() => ${Compile.ActionScopedBlock(statement.block, undefined, false, true)})`
     }
     Assert.defined(statement.invocation, 'validated defer shorthand has an invocation')
     const invocation = statement.invocation
@@ -507,58 +532,44 @@ function compileEffectContract(
     ${contract.open ? gen`open: true,` : gen.noop()}`
 }
 
+/** Whether a helper-classified source return belongs to one synchronous lexical block. */
+function isWithinBlock(statement: AST.ReturnStatement, block: AST.ActionBlock): boolean {
+  let current: AST.Node | undefined = statement
+  while (current && current !== block) {
+    current = current.$container
+  }
+  return current === block
+}
+
 /** Result-bearing done arms receive the same Tao value produced by a bound action result. */
 function compileDoResultInvocation(invocation: AST.DoStatement): Compiled {
   const action = ASTUtils.resolveActionInvocation(invocation).action
-  Assert.defined(action, 'validated result-bearing action invocation resolves')
-  Assert.defined(action.returnType, 'validated done payload invocation has a declared result')
+  Assert.is(action, AST.isActionDeclaration, 'validated result-bearing invocation resolves an action')
   const resultType = BridgeMetadata.resultType(Type.ofActionResult(action))
   return gen`() => TR.DoResult<${resultType}>(${Compile.Expression(invocation.action)}${
     Compile.ActionArguments(invocation)
   })`
 }
 
-function compileJoinedOutcomes(
-  statement: AST.DoStatement,
-  success: string,
-  declaredCases: readonly string[],
-  successPayload?: Compiled,
-): Compiled {
+function compileJoinedOutcomes(statement: AST.DoStatement): Compiled {
   const outcomeBlock = (outcome: AST.WhenDoOutcome): Compiled =>
     gen`async _TaoCasePayload => ${
       Compile.ActionScopedBlock(
         outcome.block,
         outcome.payload
-          ? gen`${gen.scopeName(outcome.payload)} = ${
-            outcome.case === 'done' && successPayload
-              ? successPayload
-              : gen`_TaoCasePayload`
-          }`
+          ? gen`${gen.scopeName(outcome.payload)} = _TaoCasePayload`
           : gen.noop(),
+        false,
+        true,
       )
     }`
-  const error = statement.outcomes.find(outcome => outcome.case === 'error')
-  const rejected = statement.outcomes.find(outcome => outcome.case === 'rejected')
-  const explicit = new Set(statement.outcomes.map(outcome => outcome.case))
   const direct = statement.outcomes.flatMap(outcome => {
-    if (outcome.case === 'error') {
-      return [
-        gen`['error', ${outcomeBlock(outcome)}],`,
-        ...(rejected ? [] : [gen`['rejected', ${outcomeBlock(outcome)}],`]),
-      ]
-    }
     if (outcome.case === 'otherwise') {
-      return [gen`['otherwise', async () => ${Compile.ActionScopedBlock(outcome.block)}],`]
+      return [gen`['otherwise', async () => ${Compile.ActionScopedBlock(outcome.block, undefined, false, true)}],`]
     }
-    const runtimeCase = outcome.case === 'done' ? success : outcome.case
-    return [gen`[${gen.jsLiteral(runtimeCase)}, ${outcomeBlock(outcome)}],`]
+    return [gen`[${gen.jsLiteral(outcome.case)}, ${outcomeBlock(outcome)}],`]
   })
-  const modeledErrorAliases = error
-    ? declaredCases
-      .filter(failureCase => !explicit.has(failureCase) && failureCase !== 'rejected')
-      .map(failureCase => gen`[${gen.jsLiteral(failureCase)}, ${outcomeBlock(error)}],`)
-    : []
-  return gen.list([...direct, ...modeledErrorAliases], compiled => compiled)
+  return gen.list(direct, compiled => compiled)
 }
 
 /** effectOutcomeName is the verb name a failure message falls back to when nothing says more. */
