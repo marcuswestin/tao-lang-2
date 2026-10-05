@@ -1,3 +1,4 @@
+import { type CLI, Errors } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { PrChecksCommand, type PrChecksDependencies } from '../dev-cli-src/pr/PrChecksCommand'
 
@@ -20,21 +21,26 @@ function run(name: string, status: string, conclusion: string | null = null, id 
 
 function fakeDependencies(script: {
   annotations?: Record<number, unknown[]>
+  auth?: Partial<CLI.CommandResult>
   checkRuns: Run[][]
+  env?: Readonly<Record<string, string | undefined>>
   mergeableState?: string
   statuses?: { context: string; state: string }[]
 }) {
   const lines: string[] = []
   const requested: string[] = []
+  const requestHeaders: Record<string, string>[] = []
+  const commandCalls: { command: string; spec: CLI.CommandSpec }[] = []
   let polls = 0
   let clock = 0
   const respond = (body: unknown, status = 200): Response =>
     new Response(JSON.stringify(body), { headers: { etag: `"${polls}"` }, status })
   const dependencies: PrChecksDependencies = {
-    env: {},
-    fetch: async url => {
+    env: script.env ?? {},
+    fetch: async (url, init) => {
       const path = url.replace('https://api.github.com', '')
       requested.push(path)
+      requestHeaders.push(init.headers)
       if (path.startsWith(`/repos/${SLUG}/pulls?`)) {
         return respond([PR])
       }
@@ -57,6 +63,7 @@ function fakeDependencies(script: {
     },
     now: () => clock,
     run: async (command, spec = {}) => {
+      commandCalls.push({ command, spec })
       const args = (spec.args ?? []).join(' ')
       const stdout = args === 'remote get-url origin'
         ? `git@github.com:${SLUG}.git\n`
@@ -65,17 +72,119 @@ function fakeDependencies(script: {
         : args === 'rev-parse HEAD'
         ? `${SHA}\n`
         : ''
-      return { args: [...(spec.args ?? [])], command, cwd: spec.cwd, exitCode: 0, signal: null, stderr: '', stdout }
+      return {
+        args: [...(spec.args ?? [])],
+        command,
+        cwd: spec.cwd,
+        exitCode: 0,
+        signal: null,
+        stderr: '',
+        stdout,
+        ...(command === 'gh' && args === 'auth token' ? script.auth : {}),
+      }
     },
     sleep: async ms => {
       clock += ms
     },
     writeLine: line => lines.push(line),
   }
-  return { dependencies, lines, requested }
+  return { commandCalls, dependencies, lines, requested, requestHeaders }
 }
 
 Describe('pr-checks', () => {
+  Test('reuses the existing CLI login once across authenticated check polling', async () => {
+    const env = Object.freeze({})
+    const fake = fakeDependencies({
+      auth: { stdout: 'fixture-login-token\n' },
+      checkRuns: [[run('Verify', 'in_progress')], [run('Verify', 'completed', 'success')]],
+      env,
+    })
+
+    const result = await PrChecksCommand.run(
+      { ghAuth: true, pr: 3, repositoryRoot: ROOT, wait: true },
+      fake.dependencies,
+    )
+
+    Expect(result.exitCode).toBe(0)
+    Expect(fake.commandCalls.filter(call => call.command === 'gh')).toEqual([
+      { command: 'gh', spec: { args: ['auth', 'token'], cwd: ROOT, stdio: 'pipe' } },
+    ])
+    Expect(fake.requestHeaders.map(headers => headers['Authorization'])).toEqual([
+      'Bearer fixture-login-token',
+      'Bearer fixture-login-token',
+      'Bearer fixture-login-token',
+      'Bearer fixture-login-token',
+      'Bearer fixture-login-token',
+    ])
+    Expect(fake.dependencies.env).toBe(env)
+    Expect(env).toEqual({})
+    Expect(result.lines.some(line => line.includes('fixture-login-token'))).toBe(false)
+  })
+
+  Test('prefers nonempty environment tokens without reading the CLI login', async () => {
+    for (
+      const env of [
+        { GH_TOKEN: 'fixture-gh-token', GITHUB_TOKEN: 'fixture-github-token' },
+        { GH_TOKEN: '', GITHUB_TOKEN: 'fixture-github-token' },
+      ]
+    ) {
+      const fake = fakeDependencies({ checkRuns: [[run('Verify', 'completed', 'success')]], env })
+
+      const result = await PrChecksCommand.run({ ghAuth: true, pr: 3, repositoryRoot: ROOT }, fake.dependencies)
+
+      Expect(result.exitCode).toBe(0)
+      Expect(fake.commandCalls.some(call => call.command === 'gh')).toBe(false)
+      Expect(fake.requestHeaders.map(headers => headers['Authorization'])).toEqual(
+        env.GH_TOKEN === ''
+          ? ['Bearer fixture-github-token', 'Bearer fixture-github-token', 'Bearer fixture-github-token']
+          : ['Bearer fixture-gh-token', 'Bearer fixture-gh-token', 'Bearer fixture-gh-token'],
+      )
+    }
+  })
+
+  Test('redacts failed or missing CLI authentication and makes no API requests', async () => {
+    for (
+      const auth of [
+        { exitCode: 4, stderr: 'fixture-private-error', stdout: 'fixture-private-token' },
+        { error: new Errors.HostEnvironmentError('fixture-private-error'), exitCode: null },
+        { stdout: '' },
+      ] satisfies Partial<CLI.CommandResult>[]
+    ) {
+      const fake = fakeDependencies({ auth, checkRuns: [[run('Verify', 'completed', 'success')]] })
+
+      const message = await PrChecksCommand.run({ ghAuth: true, pr: 3, repositoryRoot: ROOT }, fake.dependencies)
+        .then(() => 'unexpected success', error => Errors.messageOf(error))
+
+      Expect(message).toBe('GitHub CLI authentication is unavailable. Run `gh auth login` and retry.')
+      Expect(fake.requested).toEqual([])
+      Expect(fake.lines).toEqual([])
+    }
+  })
+
+  Test('keeps public check observation unauthenticated when CLI authentication is omitted', async () => {
+    const fake = fakeDependencies({ checkRuns: [[run('Verify', 'completed', 'success')]] })
+
+    const result = await PrChecksCommand.run({ pr: 3, repositoryRoot: ROOT }, fake.dependencies)
+
+    Expect(result.exitCode).toBe(0)
+    Expect(fake.commandCalls.some(call => call.command === 'gh')).toBe(false)
+    Expect(fake.requestHeaders.map(headers => headers['Authorization'])).toEqual([undefined, undefined, undefined])
+  })
+
+  Test('redacts a credential subprocess rejection before making API requests', async () => {
+    const fake = fakeDependencies({ checkRuns: [[run('Verify', 'completed', 'success')]] })
+    const originalRun = fake.dependencies.run
+    fake.dependencies.run = async (command, spec) =>
+      command === 'gh' ? Errors.throwHostEnvironment('fixture-private-error') : originalRun(command, spec)
+
+    const message = await PrChecksCommand.run({ ghAuth: true, pr: 3, repositoryRoot: ROOT }, fake.dependencies)
+      .then(() => 'unexpected success', error => Errors.messageOf(error))
+
+    Expect(message).toBe('GitHub CLI authentication is unavailable. Run `gh auth login` and retry.')
+    Expect(fake.requested).toEqual([])
+    Expect(fake.lines).toEqual([])
+  })
+
   Test('follows checks on the expected pull request head', async () => {
     const fake = fakeDependencies({
       checkRuns: [[run('Verify', 'in_progress')], [run('Verify', 'completed', 'success')]],

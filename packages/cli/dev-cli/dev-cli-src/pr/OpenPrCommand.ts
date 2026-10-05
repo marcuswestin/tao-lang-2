@@ -124,6 +124,7 @@ export const OpenPrCommand = {
     report(`Following CI checks for #${pr.number}...`)
     const checks = await dependencies.followChecks({
       expectedHead: options.autoMerge === false ? headSha : undefined,
+      ghAuth: true,
       intervalMs: options.pollIntervalMs,
       pr: pr.number,
       repositoryRoot: root,

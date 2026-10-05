@@ -190,9 +190,11 @@ Describe('open-pr', () => {
     delete routes[enableAutoMergeKey(2)]
     const { calls, dependencies, followed } = fakeDependencies(routes)
     let expectedHead: string | undefined
+    let ghAuth: boolean | undefined
     const follow = dependencies.followChecks
     dependencies.followChecks = async options => {
       expectedHead = options.expectedHead
+      ghAuth = options.ghAuth
       return await follow(options)
     }
 
@@ -207,6 +209,7 @@ Describe('open-pr', () => {
     Expect(calls.some(call => call.startsWith('gh pr merge') || call.includes('/ccr/auto_merge'))).toBe(false)
     Expect(followed).toEqual([2])
     Expect(expectedHead).toBe('headsha1111aaaa')
+    Expect(ghAuth).toBe(true)
     Expect(result.lines.at(-1)).toBe('PASS  CI succeeded on headsha1 for #2; auto-merge is off.')
     Expect(result.lines.some(line => line.startsWith('NEXT'))).toBe(false)
   })

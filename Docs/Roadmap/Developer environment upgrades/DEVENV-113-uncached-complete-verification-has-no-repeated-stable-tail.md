@@ -79,6 +79,20 @@
     These observations do not establish that contention caused the browser
     failures. The Developer selected CI for further portable verification;
     macOS/browser and native acceptance remain distinct evidence.
+  - Hosted verification at `6fdda50d` passed ten of twelve Linux partitions.
+    The CLI cache file exceeded its 300-second process bound twice; completed
+    cases passed. Its thirty expanded cases now retain their original assertions
+    in four files, each passing locally. The receipt partition failed the combined
+    ownership/lock/package-topology case on retry after twelve passes; its precise
+    error remains unknown because retry filenames containing `:` broke artifact
+    upload. The unchanged thirteen-case file passed locally; splitting its three
+    independent mutations yields fifteen passing cases without increasing limits.
+    Retry/resume logs now share normal filename sanitization, and focused tests
+    check actual files. The CI follower also reuses the existing CLI login in
+    memory rather than exhausting the anonymous API quota. Authentication failure
+    output is redacted. Independent review and type checking pass; hosted recheck
+    remains pending. Neither the local passes nor the split establish the receipt
+    failure's cause or a stable tail measurement.
 - **Proposed change:** The requested file partition and initial scheduling adjustment are implemented.
   Keep this observation open until fresh-checkout complete-lane measurements establish how much
   end-to-end tail remains; a cached skip is not a repeat measurement.

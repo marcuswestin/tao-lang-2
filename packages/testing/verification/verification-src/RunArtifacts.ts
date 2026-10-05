@@ -220,6 +220,7 @@ export const RunArtifacts = {
   assignLogPaths,
   finishRun,
   liveWriter,
+  logFileName,
   locate,
   writeSummaryCopy,
 } as const

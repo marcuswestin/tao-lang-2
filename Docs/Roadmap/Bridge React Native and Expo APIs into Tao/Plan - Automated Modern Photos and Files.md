@@ -472,7 +472,23 @@ or reuses a pull request and follows CI without enabling automatic landing. It
 refuses a reused pull request whose auto-merge is already enabled before pushing.
 It follows the exact pushed commit and refuses a changed head before querying
 checks. The tooling addition passed 33 focused tests, type-checking and independent
-review; its hosted result remains pending.
+review. At `6fdda50d`, hosted verification passed ten of twelve partitions. The
+complete cache test file exceeded its 300-second process budget twice despite
+passing completed cases. The receipt partition passed twelve cases and failed the
+combined ownership/lock/package-topology case on retry; its exact retry diagnostic
+was lost because a colon in the retry log filename prevented artifact upload.
+The unchanged thirteen-case receipt file subsequently passed locally. These
+results do not establish a timeout or contention cause for the receipt failure.
+
+Cache tests are now divided into four files with all thirty expanded cases and
+their assertions preserved. The three independent receipt mutations have separate
+cases; all fifteen receipt cases pass locally. Retry and resumed logs reuse the
+normal artifact filename sanitizer. The pull-request follower reuses the existing
+GitHub CLI authentication without logging credential output, avoiding the anonymous
+API limit encountered during the first run. Focused tests, whole-package type
+checking and independent review pass; another hosted run remains pending.
+Both Companion host jobs passed at `6fdda50d`, including Android and iOS simulator
+builds and native-kit parity. This is build evidence, not native-operation proof.
 
 Branch setup exposed pre-existing old `.tao/typescript`, `.tao/install` and
 `.tao/sessions` output as untracked under main's current local-state layout.
