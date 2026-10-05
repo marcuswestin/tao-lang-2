@@ -77,15 +77,16 @@ export function createCapabilityRuntime(functionFactory: typeof TR.Function) {
     reproject<ValueT>(
       carrier: TaoCapability<ValueT>,
       validatedRequiredKeyMap: Readonly<Record<string, string>>,
+      validatedWitnessAdapters: Readonly<Record<string, (selected: TR.Function) => TR.Function>> = {},
     ): TaoCapability<ValueT> {
       const selected = metadata(carrier)
+      const adapters = new Map(Object.entries(validatedWitnessAdapters))
       const witnesses = new Map(
-        Object.entries(validatedRequiredKeyMap).map(([requiredKey, selectedKey]) =>
-          [
-            requiredKey,
-            witness(selected, selectedKey),
-          ] as const
-        ),
+        Object.entries(validatedRequiredKeyMap).map(([requiredKey, selectedKey]) => {
+          const implementation = witness(selected, selectedKey)
+          const adapt = adapters.get(requiredKey)
+          return [requiredKey, adapt ? adapt(implementation) : implementation] as const
+        }),
       )
       return create(selected.source as TaoEvaluable<ValueT>, witnesses)
     },

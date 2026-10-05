@@ -152,6 +152,37 @@ Describe('Capability witnesses', () => {
       .toBe('Inner')
   })
 
+  Test('adapts proved parameter correspondence without sampling the original receiver', () => {
+    const source = TR.Cell(TR.Value('Before'))
+    const left = TR.Value('Left')
+    const right = TR.Value('Right')
+    let calls = 0
+    const carrier = capabilities.attach(source, {
+      selected: TR.Function((receiver: TaoEvaluable<string>, second: TR.Value<string>, first: TR.Value<string>) => {
+        calls += 1
+        Expect(receiver).toBe(source)
+        Expect(first).toBe(left)
+        Expect(second).toBe(right)
+        return TR.Value(`${getJSValue(receiver)}:${first.getJSValue()}:${second.getJSValue()}`)
+      }),
+    })
+    const adapters = {
+      ordered: (selected: TR.Function) =>
+        TR.Function((receiver: TR.Evaluable, first: TR.Evaluable, second: TR.Evaluable) =>
+          selected.invoke(receiver, second, first)
+        ),
+    }
+    const projected = capabilities.reproject(carrier, { ordered: 'selected' }, adapters)
+    adapters.ordered = () => TR.Function(() => TR.Value('Replacement'))
+    const again = capabilities.reproject(projected, { final: 'ordered' })
+    const held = capabilities.method(again, 'final')
+    Expect(calls).toBe(0)
+    Expect(TR.Call<string>(held, left, right).getJSValue()).toBe('Before:Left:Right')
+    source.set(TR.Value('After'))
+    Expect(TR.Call<string>(held, left, right).getJSValue()).toBe('After:Left:Right')
+    Expect(calls).toBe(2)
+  })
+
   Test('snapshots selected tables and treats prototype-looking keys as ordinary own requirements', () => {
     const selected = TR.Function(() => TR.Value('Selected'))
     const witnesses = { ['__proto__']: selected, constructor: selected }
