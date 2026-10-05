@@ -9,7 +9,7 @@ import "./visibility"
 import "./terminals"
 
 entry ViewsGrammarEntrypoint:
-    ViewDeclaration;
+    ViewDeclaration | AssociatedViewDeclaration;
 
 TagStatement:
     tag=TagOrHexColor;
@@ -44,6 +44,11 @@ ViewDeclaration:
         (block=ViewBlock | foreign=ForeignViewImplementation)
         | '=' aliasTarget=PackageMemberReference);
 
+// An associated view inherits its owner's visibility and mounts with that owner's bound receiver.
+AssociatedViewDeclaration:
+    'view' (receiverName=ID '.')? name=ID parameterList=ParameterList?
+    layoutClause=LayoutClause? block=ViewBlock;
+
 ForeignViewImplementation:
     // Parse `content` as an ID and validate its spelling so the canonical layout word remains an ID
     // everywhere else rather than becoming a global lexer keyword.
@@ -65,21 +70,27 @@ RenderSlotDeclaration:
     name=USE_IMPORT_PATH parameterList=ParameterList ':'
       (renderer=[ViewDeclaration:ID] | empty?='empty')
     | name=USE_IMPORT_PATH ':'
-      (renderer=[ViewDeclaration:ID] | empty?='empty' | render=SlotInlineRender | block=Block)?
+      (render=QualifiedSlotInlineRender | renderer=[ViewDeclaration:ID] | empty?='empty' | render=SlotInlineRender | block=Block)?
     | name=USE_IMPORT_PATH '=' empty?='empty';
 
 type RenderSlotContract = RenderSlotDeclaration | ForeignViewSlotDeclaration;
 
 RenderSlotUse:
     slot=[RenderSlotContract:USE_IMPORT_PATH]
-    (fill?=':' (renderer=[ViewDeclaration:ID] | empty?='empty' | render=SlotInlineRender | block=Block)?
+    (fill?=':' (render=QualifiedSlotInlineRender | renderer=[ViewDeclaration:ID] | empty?='empty' | render=SlotInlineRender | block=Block)?
     | ('(' argumentList=ArgumentList? ')')?);
 
 // A bare identifier is a named renderer target. Calls, quotations and decorated named renders are
 // real zero-input inline bodies and retain the standard ViewRender AST shape.
 SlotInlineRender returns ViewRender:
     (quotation=PhraseText
+    | expression=(MemberMethodCallExpression | MemberAccessExpression)
     | view=[RenderTarget:ID] ('(' argumentList=ArgumentList? ')')?)
+    layoutClause=LayoutClause? block=Block?;
+
+// Qualified targets must be distinguished before a bare supplied renderer reference consumes its ID.
+QualifiedSlotInlineRender returns ViewRender:
+    expression=(MemberMethodCallExpression | MemberAccessExpression)
     layoutClause=LayoutClause? block=Block?;
 
 // A content-accepting view places its opaque unnamed caller content explicitly in its render tree.
@@ -93,12 +104,14 @@ type RenderTarget = ViewDeclaration | NavDeclaration | AliasDeclaration | StateD
 
 RenderStatement:
     'render' (injection=Injection layoutClause=LayoutClause?
-        | (view=[RenderTarget:ID] ('(' argumentList=ArgumentList? ')')?
+        | (expression=(MemberMethodCallExpression | MemberAccessExpression)
+           | view=[RenderTarget:ID] ('(' argumentList=ArgumentList? ')')?
            | quotation=PhraseText) layoutClause=LayoutClause? block=Block?);
 
 // Quotation lowering supplies the ordinary view reference before consumers see this node.
 interface ViewRender {
-    view: @RenderTarget
+    view?: @RenderTarget
+    expression?: Expression
     argumentList?: ArgumentList
     quotation?: Expression
     layoutClause?: LayoutClause
@@ -106,7 +119,8 @@ interface ViewRender {
 }
 
 ViewRender returns ViewRender:
-    (view=[RenderTarget:ID] ('(' argumentList=ArgumentList? ')')?
+    (expression=(MemberMethodCallExpression | MemberAccessExpression)
+     | view=[RenderTarget:ID] ('(' argumentList=ArgumentList? ')')?
      | quotation=PhraseText) layoutClause=LayoutClause? block=Block?;
 
 EventHandler:
