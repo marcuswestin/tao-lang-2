@@ -7,12 +7,45 @@ import {
   bindCallableArguments,
   type CallableSignature,
   callableSignatureOf,
+  type CallableSignatureResolution,
   compareCallableSignatures,
 } from '../ast-utils-src/callable-signatures'
 import { type TaoType, Type } from '../ast-utils-src/Type'
 import { resolveBindings } from '../ast-utils-src/type-binding-matches'
 
 Describe('Concrete callable signature substitution', () => {
+  Test('uses guarded contract resolution and final admission without substituting default relations', async () => {
+    const parsed = await Parser.parseCode('view Target(Entry text?) { }')
+    Expect(parsed.diagnostics).toEqual([])
+    const view = parsed.entry.ast.statements.find(AST.isViewDeclaration)
+    Assert.defined(view, 'the guarded contract fixture has its real parameter owner')
+    const domain: TaoType = { kind: 'primitive', primitive: 'number' }
+    const resolved: AST.ParameterDeclaration[] = []
+    const acceptanceCalls: [TaoType, TaoType][] = []
+    const resolution: CallableSignatureResolution = {
+      inputDomain: parameter => {
+        resolved.push(parameter)
+        return domain
+      },
+      accepts: (actual, expected) => {
+        acceptanceCalls.push([actual, expected])
+        return true
+      },
+    }
+    const signature = callableSignatureOf(AST.parametersOf(view), { cases: [], open: false }, resolution)
+    Expect(resolved).toHaveLength(1)
+    Expect(resolved[0] === AST.parametersOf(view)[0]).toBe(true)
+    Expect(signature.inputs[0]!.type).toBe(domain)
+    Expect(signature.inputs[0]!.acceptsNone).toBe(true)
+    Expect(Type.isAssignable(Type.ofNone(), domain)).toBe(false)
+    Expect(acceptanceCalls).toEqual([[Type.ofNone(), domain]])
+    Expect(compareCallableSignatures(signature, signature).compatible).toBe(true)
+    const rejected = compareCallableSignatures(signature, signature, () => false)
+    Expect(rejected.compatible).toBe(false)
+    Expect(rejected.correspondence).toEqual([])
+    Expect(rejected.diagnostics.length).toBeGreaterThan(0)
+  })
+
   Test('retains owned parameter metadata and writable forwarding through readonly arrays', async () => {
     const { Supplied } = await signatures(`
       type Book is text
