@@ -45,6 +45,10 @@ export const FilesCompiler = {
       || (AST.isEmittingRuntimeBinding(statement)
         && (!AST.isTypeDeclaration(statement) || isRuntimeConfigurableDeclaration(statement)))
     )
+    const emitsDataCatalog = opts.emitDataCatalog ?? dataEntities.length > 0
+    const needsRuntimePrelude = hasRuntimeStatements || emitsDataCatalog || slotBodies.length > 0
+      || Boolean(scopeBindings || viewRegistrations || exportLines)
+    const typesUseRuntime = configurationTypes.includes('TR.') || bridgeTypes.includes('TR.')
     if (
       !hasRuntimeStatements && !importLines && !scopeBindings && !exportLines && !bridgeTypes && slotBodies.length === 0
     ) {
@@ -58,9 +62,15 @@ export const FilesCompiler = {
     `
     // Module-scope hook aliases let Fast Refresh resolve them without forcing an app remount.
     return gen`
-      import React from 'react'
-      void React
-      import TR from '@runtime/TR'
+      ${
+      needsRuntimePrelude
+        ? gen`import React from 'react'
+          void React
+          import TR from '@runtime/TR'`
+        : typesUseRuntime
+        ? gen`import type TR from '@runtime/TR'`
+        : gen.noop()
+    }
 
       ${gen.textLines(importLines)}
 
@@ -74,12 +84,12 @@ export const FilesCompiler = {
         : gen.noop()
     }
 
-      const _Scope: any = {}
+      ${needsRuntimePrelude ? gen`const _Scope: any = {}` : gen.noop()}
       ${gen.textLines(scopeBindings)}
       ${gen.textLines(viewRegistrations)}
 
       ${
-      (opts.emitDataCatalog ?? dataEntities.length > 0)
+      emitsDataCatalog
         ? Compile.DataCatalog(dataEntities, opts.dataAccess)
         : gen.noop()
     }
