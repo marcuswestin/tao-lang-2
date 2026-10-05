@@ -12,6 +12,14 @@ const messages = {
   binaryComparable: (operator: string) => `Operator '${operator}' requires number values on both sides.`,
   binaryCompatible: (operator: string) => `Operator '${operator}' requires compatible values on both sides.`,
   binaryNumeric: (operator: string) => `Operator '${operator}' requires number values on both sides.`,
+  authoredContract: (operator: string, problem: ReturnType<typeof Type.associatedOperation>['problem']) =>
+    `Operator '${operator}' has ${
+      problem === 'ambiguous-operator'
+        ? 'more than one applicable authored contract'
+        : problem === 'pending-contract'
+        ? 'an unresolved authored contract'
+        : 'no applicable authored contract for these ordered operands'
+    }.`,
   actionGuardRetired:
     '`guard` in an action is retired: use `check <condition>` to stop the action, or `if` to branch. `guard` stays the view-side construct.',
   checkCondition: '`check` requires a boolean condition.',
@@ -205,16 +213,7 @@ function validateAssociatedOperation(
   ) {
     return false
   }
-  ctx.error(
-    expression,
-    `Operator '${expression.operator}' has ${
-      resolved.problem === 'ambiguous-operator'
-        ? 'more than one applicable authored contract'
-        : resolved.problem === 'pending-contract'
-        ? 'an unresolved authored contract'
-        : 'no applicable authored contract for these ordered operands'
-    }.`,
-  )
+  ctx.error(expression, messages.authoredContract(expression.operator, resolved.problem))
   return true
 }
 
