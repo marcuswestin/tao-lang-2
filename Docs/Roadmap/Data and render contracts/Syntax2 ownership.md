@@ -242,6 +242,18 @@ canonical-number accessor inference and existing default generic callers. No com
 grammar, facade, native admission adapter or publication changes are released. Return the exact
 two-path independently reviewed cut; the coordinator supplies later source ancestry/publication.
 
+A additionally owns parser-src/grammar-words.ts solely to preserve the existing author-facing
+`value` diagnostic for the new ValueReferenceTarget union. Preserve all other wording and grammar
+roles; this diagnostic adapter grant adds no lexer or unit-case source ownership.
+
+B's reviewed isolated slot-emitter packet releases exactly compiler-src/codegen/react-native/app/
+render-slot-hoists.ts and renderer-slot-codegen.ts, with compiler-tests/render-slot-hoists.test.ts
+and renderer-slot-codegen.test.ts. Consume already compiled fragments and real source anchors;
+reject duplicate hoist anchors/names, evaluate selection and props once, and project arguments only
+for a nonempty renderer. Preserve stable body identity and fresh captured environments. No parser,
+slot admission, facade, FilesCompiler, shared TaoProps or collision-name allocator ownership is
+released. The coordinator supplies those production seams and mounted acceptance after return.
+
 Managers implement against supplied frozen inputs in isolated worktrees and reconcile the landed
 base before frozen return. This manifest transfers no unlisted shared file implicitly.
 
