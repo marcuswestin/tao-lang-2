@@ -7,6 +7,7 @@ import {
   withQuantityFactoryBindings,
 } from '../compiler-src/codegen/react-native/app/NumericUnitsCompiler'
 import { type Compiled, gen } from '../compiler-src/codegen/react-native/codegen-util'
+import { TestCompiler } from './test-compile'
 
 const runtimeModule = import(FS.resolvePath('packages/apps/runtime/TaoRuntime-src/TR.ts', Repo.getRoot()))
 const quantityModule = import(
@@ -62,6 +63,24 @@ function execute(code: string, factory: unknown, provide: () => unknown): unknow
 }
 
 Describe('compiler: numeric unit reading emission', () => {
+  Test('plans a whole app with an associated call chained after a declared unit reading', async () => {
+    const result = await TestCompiler.compileCode(`
+      type Span is numeric with {
+        units { seconds 1 (default), minutes 60 }
+        func ToText() fails never -> text { return "reading" }
+      }
+      app Sample { id "unit.reading.chain" name "Units" version "1.0.0" view Main }
+      view Main {
+        let Span = 2 minutes
+        let Caption = Span.seconds().ToText()
+        render Caption
+      }
+    `)
+    Expect(result.code).toContain('.inUnit(')
+    Expect(result.code).toContain('["ToText"]')
+    Expect(result.code).toContain('TR.RenderText(')
+  })
+
   Test('reads once, retains canonical backing and concrete descendant proof without rerunning invariants', async () => {
     const f = await factories()
     const input = f.child.fromUnit(2, 'minutes')

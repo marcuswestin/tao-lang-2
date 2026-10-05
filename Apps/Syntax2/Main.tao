@@ -1,7 +1,7 @@
-use Duration, Ratio, Length, UpperCase from @tao/core
+use Duration, Length, Ratio, UpperCase from @tao/core
 use all from @tao/ui
 use BookStore, LoadAfter, Refresh from ./library/BookIO
-use Books, ComparedNames, PersonName, Subtract, GroupMode, Title from ./library/Library
+use Books, ComparedNames, GroupMode, PersonName, Subtract, Title from ./library/Library
 
 app LibraryApp {
    id "com.tao.syntax2"

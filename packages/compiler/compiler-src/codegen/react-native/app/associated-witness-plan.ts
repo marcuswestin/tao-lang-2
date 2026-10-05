@@ -120,6 +120,9 @@ export function referencedAssociatedWitnessOwners(
       if (!AST.isMethodCallExpression(node)) {
         continue
       }
+      if (ASTUtils.resolveNumericUnitReading(node).kind === 'unit-reading') {
+        continue
+      }
       const invocation = ASTUtils.resolveAssociatedMethodInvocation(node)
       Assert(
         invocation.problem === undefined && invocation.diagnostics.length === 0,
