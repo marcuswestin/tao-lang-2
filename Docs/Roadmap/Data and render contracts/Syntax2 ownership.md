@@ -322,6 +322,19 @@ the canonical factory, projection, discovery and analyzer, including aliases/def
 reads, recursion, requirement failures and unknown native phases. If the projection is redundant,
 return that finding before introducing another layer. Root supplies final sealed admission/wiring.
 
+D additionally owns existing ast-utils-src/callable-effect-facts.ts and
+ast-utils-tests/callable-effect-facts.test.ts for the reviewed source-root/coverage adapter.
+Add optional inert discovery context with actual owner identity, real body roots, actual parameter
+default initializer witnesses and canonical covered nodes. Seed these edges in the existing queue;
+do not introduce another execution traversal, fabricated call rows, Type/resolver callbacks or
+purity promises. Whole-declaration default inclusion is a conservative admission upper bound;
+ordinary calls retain their independently selected defaults. An uncovered reached node keeps
+known facets and edges while opening the remainder. Root identity must match the analysis owner,
+and unsupported/pending metadata must remain open. Preserve independent read/native facets and
+all old context-free callers. Plural callee bodies remain incomplete until explicitly supported;
+never choose one alternative body to manufacture closure. This two-path adapter can proceed before
+A's committed snapshot ABI; D's production projector still waits for that coherent reviewed cut.
+
 Managers implement against supplied frozen inputs in isolated worktrees and reconcile the landed
 base before frozen return. This manifest transfers no unlisted shared file implicitly.
 
