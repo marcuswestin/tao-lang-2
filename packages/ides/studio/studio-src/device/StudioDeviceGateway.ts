@@ -1471,7 +1471,7 @@ function deviceManifest(manifest: StudioPreviewManifestV2): TaoStudioDeviceManif
 function compileState(snapshot: StudioCompileSnapshot): TaoStudioDeviceCompileState {
   return {
     appliedRevision: snapshot.appliedRevision,
-    compileRevision: snapshot.compileRevision,
+    compileRevision: snapshot.publishedRevision ?? snapshot.compileRevision,
     message: snapshot.message,
     status: snapshot.status,
   }

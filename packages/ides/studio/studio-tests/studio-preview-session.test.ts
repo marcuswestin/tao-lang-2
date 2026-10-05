@@ -148,12 +148,12 @@ Test(
               await until(() => {
                 const snapshot = preview.session.compileSnapshot()
                 return snapshot.compileRevision === 3 && snapshot.status === 'compiled'
-              }, { description: 'the later tooling revision to publish its preview' })
+              }, { description: 'the later tooling revision compile attempt' })
               Expect(watchRequests).toBe(3)
               Expect(oneShotRequests).toBe(0)
               const generatedRoot = FS.resolvePath('_gen_tao-app', previewRuntimeRoot)
               Expect(await FS.readText(FS.resolvePath('TaoStudioPublication.ts', generatedRoot)))
-                .toContain('"compileRevision":3')
+                .toContain('"compileRevision":2')
               Expect(await FS.readText(FS.resolvePath('TaoApp.tsx', generatedRoot))).toContain('After')
             } finally {
               release.resolve()
@@ -229,6 +229,13 @@ Test(
               'focus',
             ])
 
+            const unchanged = await preview.session.compileInitial()
+            Expect(unchanged.status).toBe('compiled')
+            Expect(unchanged.compileRevision).toBe(2)
+            Expect(unchanged.publishedRevision).toBe(1)
+            Expect(preview.session.previewManifest()).toEqual(manifest)
+            Expect(await FS.readText(FS.resolvePath('TaoStudioPublication.ts', generatedRoot))).toBe(firstPublication)
+
             const invalid = await preview.session.syncDraft({
               content: 'app Garden { id "tao-studio-garden" version "1.0.0" name "Garden" ',
               path: file.path,
@@ -247,9 +254,16 @@ Test(
             const secondPublication = await FS.readText(FS.resolvePath('TaoStudioPublication.ts', generatedRoot))
 
             Expect(valid.saved).toBe(true)
-            Expect(valid.compile?.compileRevision).toBe(2)
-            Expect(secondPublication).toContain('"compileRevision":2')
+            Expect(valid.compile?.compileRevision).toBe(3)
+            Expect(secondPublication).toContain('"compileRevision":3')
             Expect(secondPublication).toContain(valid.file.sourceVersion)
+
+            const changedManifest = preview.session.previewManifest()
+            const unchangedAfterEdit = await preview.session.compileInitial()
+            Expect(unchangedAfterEdit.compileRevision).toBe(4)
+            Expect(unchangedAfterEdit.publishedRevision).toBe(3)
+            Expect(preview.session.previewManifest()).toEqual(changedManifest)
+            Expect(await FS.readText(FS.resolvePath('TaoStudioPublication.ts', generatedRoot))).toBe(secondPublication)
 
             await FS.writeText(paths['Garden.tao'], 'app Garden { id "garden" version "1.0.0" name "Garden"')
             const stale = await preview.session.noteWatchChanges([{ path: paths['Garden.tao'] }])
@@ -260,9 +274,27 @@ Test(
             const recovered = await preview.session.noteWatchChanges([{ path: paths['Garden.tao'] }])
             Expect(recovered.compile?.status).toBe('compiled')
             Expect(await FS.readText(FS.resolvePath('TaoStudioPublication.ts', generatedRoot)))
-              .toContain('"compileRevision":4')
+              .toContain('"compileRevision":6')
           } finally {
             await preview.close()
+          }
+
+          const reopened = await openStudioPreviewSession({
+            entryPath: paths['Garden.tao'],
+            previewRuntimeRoot,
+            projectRoot: root,
+          })
+          try {
+            const fresh = await reopened.session.compileInitial()
+            Expect(fresh.status).toBe('compiled')
+            Expect(fresh.compileRevision).toBe(1)
+            Expect(fresh.publishedRevision).toBe(undefined)
+            Expect(reopened.session.previewManifest()?.compileRevision).toBe(1)
+            const reopenedGeneratedRoot = FS.resolvePath('_gen_tao-app', previewRuntimeRoot)
+            Expect(await FS.readText(FS.resolvePath('TaoStudioPublication.ts', reopenedGeneratedRoot)))
+              .toContain('"compileRevision":1')
+          } finally {
+            await reopened.close()
           }
         },
       )

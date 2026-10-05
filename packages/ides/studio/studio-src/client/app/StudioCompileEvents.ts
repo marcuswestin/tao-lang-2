@@ -167,6 +167,7 @@ export const StudioCompileStatus = {
       compileRevision: completion.compileRevision,
       diagnostics: completion.diagnostics,
       message: completion.message,
+      ...(completion.publishedRevision === undefined ? {} : { publishedRevision: completion.publishedRevision }),
       status: completion.status,
     }
   },

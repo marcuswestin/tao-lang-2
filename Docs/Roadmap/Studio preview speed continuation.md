@@ -887,3 +887,18 @@ safety retained; focused, repository, and real Metro evidence for the exact tip;
 message and successful `finalize`; and a concise statement of the measured gain and the remaining
 dominant slice. Do not report test success as a measured latency improvement. Landing remains a
 separate Developer decision.
+
+## Identical-publication production slice, 2026-10-05
+
+Preview generation compares the exact non-marker path-to-code map and publication metadata with
+its last successful output. The metadata includes source versions, the full Studio manifest,
+dependency environments, app/project identity, and publication-check mode. A successful identical
+compile retains the published revision while its compile-attempt revision still advances.
+Generated-file repair and dependency-link audits still run; equality is not permission to skip
+checking or repairing the output tree. Reset, session close/reopen, and non-preview generation
+clear reuse state. Managed mobile publications retain their per-attempt nonce behavior.
+
+Studio activation, phone save acknowledgements, and device freshness use the published revision
+when a compile retains it. Diagnostics and compile completion still report the attempt. Focused
+lifecycle proof, full portable verification, and real Metro measurements for the final integrated
+slice remain required; the earlier proof-of-concept timings do not establish this slice's gain.
