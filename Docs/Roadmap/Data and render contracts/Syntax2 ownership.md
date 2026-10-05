@@ -335,6 +335,21 @@ all old context-free callers. Plural callee bodies remain incomplete until expli
 never choose one alternative body to manufacture closure. This two-path adapter can proceed before
 A's committed snapshot ABI; D's production projector still waits for that coherent reviewed cut.
 
+A's canonical snapshot cut returns its six shared paths at `3caea4bb1`.
+The next bounded release owns new ast-utils-src/capability-transport.ts and
+ast-utils-tests/capability-transport.test.ts, plus new validator-src/validators/
+capability-transport-validator.ts and validator-tests/capability-transport.test.ts under language/.
+Plan runtime transport after final sealed admission using the existing Type relation and exact
+witness correspondence: identity, concrete attachment, capability projection, nested inputs/results,
+and none/present splitting. Unique or equivalent plans are safe; erased alternatives needing
+different plans receive a source diagnostic rather than payload-based dispatch. Keep Type admission
+unchanged. Publish immutable plans and their concrete ABI early for compiler consumption; root
+retains facade, registration, production context and compiler wiring. Also release only existing
+canonical-effect-snapshot.ts and its test for the reviewed actual PostfixMemberAccess selection
+facet: retain the real callee and static selected declaration without promising receiver purity.
+The existing discovery walker must still evaluate the real receiver independently. No Type,
+resolver, parser or ordinary action-call publication changes are granted by this follow-up.
+
 Managers implement against supplied frozen inputs in isolated worktrees and reconcile the landed
 base before frozen return. This manifest transfers no unlisted shared file implicitly.
 
