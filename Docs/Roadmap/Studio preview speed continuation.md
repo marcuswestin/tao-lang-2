@@ -931,3 +931,15 @@ burst-save and latency evidence is required before reporting this experiment as 
 The pinned patches must reproduce through frozen setup and be reassessed on a Metro upgrade.
 Standalone host staging carries the root patch registrations and their exact version pins;
 installed-host setup copies the captured patch bytes and includes them in its install identity.
+
+Integration evidence: six actual-installed-module timer tests, 72 Studio launch cases, eight
+standalone packaging cases, and eleven installed-host cases pass. Frozen setup reproduces the
+patches. The real Metro burst smoke handles three paired two-file saves and a later follow-up
+save, with final content present, no observed HMR errors, and no iframe reloads.
+
+After integrating stable dependency links, sixteen HNReader padding saves pass with each timer
+configuration. Publication-to-HMR p50 is 122/132ms with upstream timers and 50/53ms with fast
+timers (publication checks on/off). Total p50 is 5924/5028ms upstream and 3876/3663ms fast, but
+load ranges differ (16.6–20.7 versus 14.0–18.8 on 18 CPUs), and the control overlapped a focused
+runtime test. These totals cannot establish the patch's save-to-paint gain or budget compliance.
+The existing ceilings remain unchanged; quiet periodic qualification is still outstanding.
