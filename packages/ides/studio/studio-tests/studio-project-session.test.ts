@@ -1274,7 +1274,11 @@ Test('Studio prepares sibling-aware render actions from one completed parse batc
     'Two.tao': 'use Text from @tao/ui\nfolder view View2() { render Text("Two") }',
     'Other/Three.tao': 'view View3() { }',
   }, async (paths, root) => {
-    const session = await StudioProjectSession.open({ entryPath: paths['Garden.tao'], projectRoot: root })
+    const session = await StudioProjectSession.open({
+      async compile() {},
+      entryPath: paths['Garden.tao'],
+      projectRoot: root,
+    })
     session.registerPreview({ previewInstanceId: 'sibling-actions' })
     const file = await session.readFile('Garden.tao')
     const renderId = (text: string) => {
@@ -1307,14 +1311,14 @@ Test('Studio prepares sibling-aware render actions from one completed parse batc
     const batches: string[][] = []
     let completed: Awaited<ReturnType<typeof parseFiles>> | undefined
     let applied = 0
-    const restoreParse = parseSlot.install(async function(entry) {
+    const restoreParse = parseSlot.install(async function(this: Workspace, entry) {
       if (this.root === session.projectRoot) {
         singles.push(entry)
         completed = undefined
       }
       return await parse.call(this, entry)
     })
-    const restoreBatch = parseFilesSlot.install(async function(entries) {
+    const restoreBatch = parseFilesSlot.install(async function(this: Workspace, entries) {
       const results = await parseFiles.call(this, entries)
       if (this.root === session.projectRoot) {
         batches.push([...entries])
