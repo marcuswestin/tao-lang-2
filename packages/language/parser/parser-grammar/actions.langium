@@ -13,7 +13,7 @@ StateDeclaration:
     'state' name=ID (('is' type=TypeReference)? '=' value=Expression | value=BooleanLiteral) ('(' persist?='persist' ')')?;
 
 ActionDeclaration:
-    visibility=DeclarationVisibility? 'action' name=ID parameterList=ParameterList
+    visibility=DeclarationVisibility? 'action' (receiverName=ID '.')? name=ID parameterList=ParameterList
     ('returns' returnType=TypeExpression optionalResult?='?'? | '->' returnType=TypeExpression)? (runsLatest?='runs' 'latest')? (block=ActionBlock | foreign=ForeignActionImplementation);
 
 // A foreign action publishes the failures its TypeScript implementation may deliberately raise.
@@ -30,8 +30,12 @@ ActionExpression:
 ActionBlock:
     '{' statements+=ActionStatement* '}';
 
+// Action-owned loops reuse the view loop's AST while retaining an action-only block body.
+ActionLoopStatement infers ForStatement:
+    'loop' collection=ForCollectionExpression '/' name=ID block=ActionBlock;
+
 ActionStatement:
-    AsyncActionStatement | AliasDeclaration | ReturnStatement | SetStatement | ToggleStatement | DoStatement | WhenDoStatement | WhenActionStatement | DeferStatement | FailStatement | CheckStatement | GuardActionStatement | IfActionStatement | AskStatement | ActionResultStatement | RespondStatement | CreateStatement | UpdateStatement | DeleteStatement | RetryStatement | ContextualPresentStatement | SelectionActivateStatement | DismissStatement | ReplaceStatement | DeclarationSlotFill;
+    AsyncActionStatement | AliasDeclaration | ReturnStatement | SetStatement | ToggleStatement | DoStatement | WhenDoStatement | WhenActionStatement | DeferStatement | FailStatement | CheckStatement | GuardActionStatement | IfActionStatement | AskStatement | ActionResultStatement | RespondStatement | CreateStatement | UpdateStatement | DeleteStatement | RetryStatement | ContextualPresentStatement | SelectionActivateStatement | DismissStatement | ReplaceStatement | ActionLoopStatement | DeclarationSlotFill;
 
 FailStatement:
     'fail' case=[CaseSetCase:ID] sentence=STRING;

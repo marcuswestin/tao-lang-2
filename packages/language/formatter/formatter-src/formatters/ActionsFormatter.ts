@@ -33,6 +33,8 @@ export const ActionsFormatter = {
   ActionDeclaration(f) {
     f.visibilityOnOwnLine()
     f.oneSpaceAfter('action')
+    f.noSpaceBefore('.')
+    f.noSpaceAfter('.')
     f.noSpaceBefore('(')
     f.oneSpaceBefore('returns')
     f.oneSpaceAfter('returns')
