@@ -77,9 +77,9 @@ Describe('compiler: associated method witness declarations', () => {
     Expect(defaultResult.evaluate().jsValue).toBe('fallback')
     Expect(suppliedResult.evaluate() === supplied).toBe(true)
     Expect(localScopes).toHaveLength(2)
-    Expect(localScopes.every(local => local.Token === receiver)).toBe(true)
+    Expect(localScopes.every(local => local['Token'] === receiver)).toBe(true)
     Expect(localScopes[0] === localScopes[1]).toBe(false)
-    Expect(scope.Token === shadow).toBe(true)
+    Expect(scope['Token'] === shadow).toBe(true)
     Expect(witness.Prefix === method).toBe(true)
   })
 

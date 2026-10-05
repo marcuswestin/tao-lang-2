@@ -9,7 +9,7 @@ export function compileReactiveArgument(expression: AST.Expression): Compiled {
     const target = AST.isValueReference(expression) || AST.isMemberAccessExpression(expression)
       ? expression.target.ref
       : undefined
-    if (target) {
+    if (AST.isValueDeclaration(target)) {
       return compileWritableTarget(target, AST.isMemberAccessExpression(expression) ? expression.members : [])
     }
   }
