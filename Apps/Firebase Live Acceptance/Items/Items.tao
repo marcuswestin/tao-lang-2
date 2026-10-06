@@ -75,7 +75,7 @@ scene ItemDetail(Item) {
    action SaveItem() {
       check TitleDraft is not empty
       update Item {
-         Title: TitleDraft
+         Title: TitleDraft,
          Notes: NotesDraft
    }  }
    action SetDone(Value boolean) {
@@ -98,7 +98,7 @@ scene ItemDetail(Item) {
          Text("ITEM") [eyebrow]
          guard Item {
             loading -> { Spinner() }
-            missing -> { TextMultiline("This item no longer exists.") [body] }
+            none -> { TextMultiline("This item no longer exists.") [body] }
             error -> Context { TextMultiline("The item could not be loaded: { Context.Message }") [body] }
          }
 
