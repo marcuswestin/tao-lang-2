@@ -17,7 +17,7 @@ export const TWO_WORKSPACES = {
  * sidecar, stdlib and runtime files the invalidation tests change, so every such test starts from
  * the same stamped state.
  */
-export const STAMPED_WORKSPACES = {
+const STAMPED_WORKSPACES = {
   ...TWO_WORKSPACES,
   'AppOne/@ui/Shell.ts': 'export const shell = 1\n',
   'packages/apps/stdlib/@tao/ui/Shell.ts': 'export const shell = 1\n',
