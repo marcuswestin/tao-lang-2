@@ -1,4 +1,5 @@
 import { CLI, Errors, FS, Platform, ReleaseCapabilities } from '@shared'
+import { QaScenarioApps } from './QaScenarioApps'
 
 const storyPlan = 'Docs/MVP Roadmap/Plan - Initial release QA.md'
 const internalDocument = /^(?:Docs\/(?:QA|Roadmap|MVP Roadmap)\/|agents\/|\.rulesync\/)|(?:^|\/)(?:AGENTS|CLAUDE)\.md$/u
@@ -26,6 +27,9 @@ export type QaSurface = {
   captureCells?: Record<string, string>
   /** captureApp names the app a capture must have launched for its cells to show this surface. */
   captureApp?: string
+  /** Project and source identities prevent another app's identically named cell from proving coverage. */
+  captureProject?: string
+  captureSources?: Record<string, string>
 }
 
 export type QaInventoryData = {
@@ -38,6 +42,7 @@ export type QaInventoryData = {
   dependencies: { path: string; sha256: string }[]
   surfaces: QaSurface[]
   exclusions: { path: string; reason: string; canonicalSources?: string[]; presentationReview?: string }[]
+  scenarioDiscoveryFailures: { source: string; error: string }[]
 }
 
 /** QaInventory inventories Git's complete document namespace, including canonical hidden files. */
@@ -251,44 +256,12 @@ export class QaInventory {
         dimension: 'functional',
         channels: ['source-test'],
       },
-      {
-        id: 'visual:reading-list',
-        title: 'Tutorial ReadingList captured views',
-        source: 'Docs/Tutorials/Your First Tao App.md',
-        dimension: 'visual',
-        channels: ['phone-light', 'phone-dark', 'desktop'],
-        captureCells: { 'phone-light': 'QA views/phone', 'phone-dark': 'QA views/dark', desktop: 'QA views/desktop' },
-        captureApp: 'ReadingList',
-      },
-      {
-        id: 'visual:notebook',
-        title: 'Notebook starter captured initial states',
-        source: 'packages/cli/tao-cli',
-        dimension: 'visual',
-        channels: ['phone', 'tablet-dark', 'notes-groceries', 'notes-ideas'],
-        captureCells: {
-          phone: 'devices/phone',
-          'tablet-dark': 'devices/tabletDark',
-          'notes-groceries': 'notes states/groceries',
-          'notes-ideas': 'notes states/ideas',
-        },
-        captureApp: 'Notebook',
-      },
-      {
-        id: 'visual:hnreader',
-        title: 'HNReaderStub browser capture cells',
-        source: 'Apps/HNReader',
-        dimension: 'visual',
-        channels: ['rows-leading', 'rows-wrapping'],
-        captureCells: { 'rows-leading': 'rows/leading', 'rows-wrapping': 'rows/wrapping' },
-        captureApp: 'HNReaderStub',
-      },
     ]
     for (const check of checks) {
       surfaces.push({
         ...check,
         kind: check.dimension === 'visual' ? 'screenshot-set' : 'dev-check',
-        phase: check.id === 'visual:hnreader' ? 2 : 1,
+        phase: 1,
         tags: ['A'],
         requirements: ['agent'],
         dimensions: [check.dimension],
@@ -298,6 +271,33 @@ export class QaInventory {
         profileHash,
         scopeNote:
           'Scoped development-source pilot evidence; never substitutes for a complete release story or required human review.',
+      })
+    }
+    const scenarios = await new QaScenarioApps(this.root).discover(paths)
+    for (const app of scenarios.apps) {
+      const channels = app.cells.map(cell => JSON.stringify([cell.source, cell.group, cell.label]))
+      surfaces.push({
+        id: app.id,
+        title: `${app.app} scenario captures (${app.project})`,
+        kind: 'screenshot-set',
+        source: app.project,
+        phase: 1,
+        tags: ['A'],
+        channels,
+        dimensions: ['visual'],
+        dimensionChannels: { visual: channels },
+        requirements: ['agent'],
+        sourceHash,
+        rendererHash,
+        profileHash,
+        captureApp: app.app,
+        captureProject: app.project,
+        captureCells: Object.fromEntries(
+          app.cells.map((cell, index) => [channels[index]!, `${cell.group}/${cell.label}`]),
+        ),
+        captureSources: Object.fromEntries(app.cells.map((cell, index) => [channels[index]!, cell.source])),
+        scopeNote:
+          'Automatically discovered scenario cells; browser captures need visual judgment and never replace release or human acceptance.',
       })
     }
     const commit = await CLI.mustRun('git', { args: ['rev-parse', 'HEAD'], cwd: this.root })
@@ -319,6 +319,7 @@ export class QaInventory {
       surfaces,
       dependencies: dependencyInputs,
       exclusions,
+      scenarioDiscoveryFailures: scenarios.failures,
     }
   }
 
