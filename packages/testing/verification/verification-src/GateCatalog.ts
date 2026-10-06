@@ -178,7 +178,41 @@ const BUDGET_KEY_TAO_TEST = WorkGraph.BUDGET_ENV_KEYS.taoTest
  * measurements have a fallback width for a new worktree without local timing history.
  */
 const SUITE_TUNING = new Map<string, SuiteTuning>([
-  ['compiler', { args: ['--concurrent'], reads: ['gen-parser', 'tao', 'ts'] }],
+  ['compiler', {
+    // A controlled serial run took 210s. Keep independent expensive workloads visible even on
+    // a cold checkout; measured history still balances the remaining language features.
+    reads: ['gen-parser', 'tao', 'ts'],
+    filePartitions: [{
+      name: 'emission-cache',
+      files: ['packages/compiler/compiler-tests/emitted-module-cache.test.ts'],
+    }, {
+      name: 'workspace',
+      files: [
+        'packages/compiler/compiler-tests/workspace/workspace-batch.test.ts',
+        'packages/compiler/compiler-tests/workspace/workspace-incremental.test.ts',
+        'packages/compiler/compiler-tests/workspace/workspace-native-cache.test.ts',
+        'packages/compiler/compiler-tests/workspace/workspace-overlays.test.ts',
+        'packages/compiler/compiler-tests/workspace/workspace-scopes.test.ts',
+        'packages/compiler/compiler-tests/workspace/workspace.test.ts',
+      ],
+    }, {
+      name: 'preview',
+      files: [
+        'packages/compiler/compiler-tests/publication-compile.test.ts',
+        'packages/compiler/compiler-tests/studio-fixture-values.test.ts',
+        'packages/compiler/compiler-tests/studio-render-occurrences.test.ts',
+        'packages/compiler/compiler-tests/studio-synthetic-app-metadata.test.ts',
+      ],
+    }, {
+      name: 'app-output',
+      files: [
+        'packages/compiler/compiler-tests/compiler.test.ts',
+        'packages/compiler/compiler-tests/design.test.ts',
+        'packages/compiler/compiler-tests/files.test.ts',
+        'packages/compiler/compiler-tests/watchos.test.ts',
+      ],
+    }],
+  }],
   // Developer and verification tests deliberately run concurrently and many of them spawn child
   // processes. During full verification, a healthy child can wait behind the other CPU-heavy
   // suites long enough to exceed Bun's generic five-second test timeout even though it completes
@@ -187,7 +221,8 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
   // Sharding the suite multiplies that, and its own tests are then the ones starved — a trivial
   // child `bun test` ran past a fifteen-second bound with three shards of this suite in flight.
   // Like Jest, each already saturates what it is given, so it takes one reservation and stays
-  // whole. Its per-test bound is a hang guard, which it no longer has to spell out: `--concurrent`
+  // whole. TestRunner caps blanket test concurrency to the granted slots. Its per-test bound is
+  // a hang guard, which it no longer has to spell out: `--concurrent`
   // reports each test's duration as the time from the file's shared start, so every concurrent
   // suite is bounded that way and the hand-written `--timeout=60000` that used to sit here said
   // only what the flag already implies.
@@ -214,7 +249,8 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
   // scheduler spread the work within its existing CPU budget until measured costs take over.
   ['cli/tao-cli', { coldShardCount: 12 }],
   ['language/validator', {
-    args: ['--concurrent'],
+    // Validation shares the maintained-source publication lock. Keep test work sequential
+    // within each batch rather than starting every lock waiter and timeout window together.
     preflightFiles: ['packages/language/validator/validator-tests/phrases.test.ts'],
     reads: ['gen-parser', 'tao', 'ts'],
   }],
@@ -307,6 +343,37 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
     }, {
       name: 'receipt-races',
       files: ['packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptRaces.test.ts'],
+    }, {
+      name: 'watch-files',
+      files: ['packages/language/project-tooling/project-tooling-tests/ProjectFileWatch.integration.test.ts'],
+    }, {
+      name: 'watch-topology',
+      files: ['packages/language/project-tooling/project-tooling-tests/ProjectFileWatchTopology.integration.test.ts'],
+    }, {
+      name: 'watch-refresh',
+      files: ['packages/language/project-tooling/project-tooling-tests/ProjectFileWatchRefresh.integration.test.ts'],
+    }, {
+      name: 'service',
+      files: ['packages/language/project-tooling/project-tooling-tests/ProjectToolingService.test.ts'],
+    }],
+  }],
+  ['ides/studio', {
+    // The preview-session and edit-to-preview files accounted for 133s of the 186s serial suite.
+    filePartitions: [{
+      name: 'session-receipts',
+      files: ['packages/ides/studio/studio-tests/studio-preview-session.test.ts'],
+    }, {
+      name: 'session-sources',
+      files: ['packages/ides/studio/studio-tests/studio-preview-session-sources.test.ts'],
+    }, {
+      name: 'session-scenarios',
+      files: ['packages/ides/studio/studio-tests/studio-preview-session-scenarios.test.ts'],
+    }, {
+      name: 'session-watch',
+      files: ['packages/ides/studio/studio-tests/studio-preview-session-watch.test.ts'],
+    }, {
+      name: 'edit-to-preview',
+      files: ['packages/ides/studio/studio-tests/studio-edit-to-preview.test.ts'],
     }],
   }],
   ['language/source-actions', { reads: ['gen-parser', 'tao', 'ts'] }],

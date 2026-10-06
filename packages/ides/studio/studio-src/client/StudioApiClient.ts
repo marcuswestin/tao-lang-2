@@ -62,7 +62,7 @@ export type { StudioCompileDiagnostic, StudioDiagnosticRange } from '../StudioCo
 /** The slice of the compile snapshot the browser renders; the wire carries the whole `StudioCompileSnapshot`. */
 export type StudioCompileState = Pick<
   StudioCompileSnapshot,
-  'appliedRevision' | 'compileRevision' | 'diagnostics' | 'message' | 'status'
+  'appliedRevision' | 'compileRevision' | 'diagnostics' | 'message' | 'publishedRevision' | 'status'
 >
 
 export type StudioFile = StudioProjectFile

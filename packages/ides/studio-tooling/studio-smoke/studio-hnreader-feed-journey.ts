@@ -288,7 +288,8 @@ async function waitForCompiledPreview(browser: StudioCdp): Promise<void> {
     `(() => {
       const status = document.querySelector('.studio-status')
       const revisions = /^compiled (\\d+) · applied (\\d+) —/.exec(status?.textContent ?? '')
-      return status?.dataset.state === 'compiled' && revisions !== null && revisions[1] === revisions[2]
+      return status?.dataset.state === 'compiled' && revisions !== null
+        && status.dataset.publishedRevision === revisions[2]
     })()`,
     { timeoutMs: 30_000 },
   )

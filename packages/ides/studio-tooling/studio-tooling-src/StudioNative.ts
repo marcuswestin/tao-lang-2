@@ -21,6 +21,7 @@ import {
   TaoHome,
   Text,
   Time,
+  VerificationTimeouts,
 } from '@shared'
 import { StudioClientAssets } from '@studio'
 import {
@@ -164,6 +165,7 @@ type StopOwnerDependencies = {
   stop?: typeof stopLaunches
 }
 type PrepareElectrobunOptions = {
+  timeoutPolicy?: VerificationTimeouts.Policy
   hutchHome?: string
   installTimeoutMs?: number
   log?: NativePhaseLog
@@ -1342,7 +1344,7 @@ async function runHutchCommand(
     )
   }
   const waitForClose = finalizeStudioProcessTree(command)
-  const outcome = await waitForCommandOutcome(waitForClose(), options.timeoutMs, options.signal)
+  const outcome = await waitForCommandOutcome(waitForClose(), options.timeoutMs, options.signal, options.timeoutPolicy)
   if (outcome.kind !== 'closed') {
     let cleanupError: unknown
     try {
@@ -1414,6 +1416,7 @@ async function waitForCommandOutcome(
   closed: Promise<CLI.CommandCloseResult>,
   timeoutMs: number,
   signal?: AbortSignal,
+  timeoutPolicy?: VerificationTimeouts.Policy,
 ): Promise<HutchCommandOutcome> {
   return await new Promise(resolve => {
     let finished = false
@@ -1431,7 +1434,9 @@ async function waitForCommandOutcome(
     }
     const interrupted = () => complete({ kind: 'interrupted' })
     signal?.addEventListener('abort', interrupted, { once: true })
-    timeout = setTimeout(() => complete({ kind: 'timeout' }), timeoutMs)
+    if (VerificationTimeouts.enabled(timeoutPolicy)) {
+      timeout = setTimeout(() => complete({ kind: 'timeout' }), timeoutMs)
+    }
     void closed.then(result => complete({ kind: 'closed', result }))
     if (signal?.aborted === true) {
       interrupted()
@@ -1537,7 +1542,7 @@ async function waitForProbeResult(
       Errors.throwHostEnvironment('Electrobun exited before writing its runtime probe result.')
     }
     return undefined
-  }, { intervalMs: 100, sleep, timeoutMs: probeTimeoutMs })
+  }, { intervalMs: 100, sleep, timeoutMs: VerificationTimeouts.resolve(probeTimeoutMs) ?? Infinity })
   if (result !== undefined) {
     return result
   }

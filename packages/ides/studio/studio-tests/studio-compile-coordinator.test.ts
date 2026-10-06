@@ -90,6 +90,39 @@ Describe('Studio compile coordinator', () => {
     }])
   })
 
+  Test('acknowledges only the retained publication revision after an identical compile attempt', async () => {
+    let calls = 0
+    const coordinator = new StudioCompileCoordinator({
+      appName: 'Garden',
+      async compile() {
+        calls += 1
+        return calls === 1 ? {} : { publishedRevision: 1 }
+      },
+      project: '/workspace/garden',
+    })
+    const first = await coordinator.requestInitialCompile()
+    const second = await coordinator.noteStudioWrite({
+      path: 'Garden.tao',
+      sourceVersion: 'source-2',
+      writeId: 'write-2',
+    })
+    const watch = await coordinator.noteWatchChanges([{ path: 'Garden.tao', sourceVersion: 'source-2' }])
+
+    Expect(first.publishedRevision).toBe(undefined)
+    Expect(second.compileRevision).toBe(2)
+    Expect(second.publishedRevision).toBe(1)
+    Expect(watch.acknowledgements).toEqual([{
+      compileRevision: 1,
+      path: 'Garden.tao',
+      sourceVersion: 'source-2',
+      writeId: 'write-2',
+    }])
+    Expect(coordinator.snapshot()).toMatchObject({ compileRevision: 2, publishedRevision: 1 })
+
+    Expect(coordinator.acknowledgeCompiledRevision(appliedMessage('preview-1', 2))).toBe(false)
+    Expect(coordinator.acknowledgeCompiledRevision(appliedMessage('preview-1', 1))).toBe(true)
+  })
+
   Test('does not let an obsolete Studio acknowledgement swallow a later external revert', async () => {
     const requests: StudioCompileRequest[] = []
     const coordinator = new StudioCompileCoordinator({

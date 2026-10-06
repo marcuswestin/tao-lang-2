@@ -10,7 +10,10 @@ import { WorkGraph } from '../verification-src/WorkGraph'
 // The Jest bound lives in a CommonJS config Jest loads itself; it is read here so the three runners'
 // ceilings are held together in one place.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const jestConfig = require('../../../apps/expo-host/jest.shared.config.cjs') as { MAX_JOURNEY_DEADLINE_MS: number }
+const jestConfig = require('../../../apps/expo-host/jest.shared.config.cjs') as {
+  JOURNEY_BUDGET_MS: number
+  MAX_JOURNEY_DEADLINE_MS: number
+}
 
 /** An empty history: no recorded duration means no suite is sharded, so a node is named for its suite. */
 const NO_HISTORY = { ledger: { tests: {}, version: 1 } as const, timings: { nodes: {}, version: 1 } as const }
@@ -39,7 +42,7 @@ type Suites = ReadonlyMap<string, SelectedSuite>
 /** discover answers one selection from the real registry and returns the selected suites by name. */
 async function discover(
   selection: Parameters<typeof TestRunner.discoverTestSuites>[0] = {},
-  context: Parameters<typeof TestRunner.discoverTestSuites>[1] = {},
+  context: Parameters<typeof TestRunner.discoverTestSuites>[1] = { verificationEnv: {} },
 ) {
   const result = await TestRunner.discoverTestSuites(selection, context)
   return { ...result, byName: new Map(result.selected.map(suite => [suite.name, suite])) as Suites }
@@ -80,6 +83,28 @@ function suiteState(name: string): SuiteState {
 }
 
 Describe('test runner suite registry', () => {
+  Test('can disable runner deadlines independently of serial diagnostic concurrency', async () => {
+    const { byName } = await discover({}, {
+      verificationEnv: { TAO_VERIFY_JOBS: '1', TAO_VERIFY_NO_TIMEOUTS: 'true' },
+    })
+    Expect(argsOf(byName, 'ides/ide-extension')).not.toContain('--concurrent')
+    Expect(argsOf(byName, 'ides/ide-extension').some(arg => arg.startsWith('--max-concurrency='))).toBe(false)
+    Expect(argsOf(byName, 'ides/ide-extension').filter(arg => arg.startsWith('--timeout='))).toEqual(['--timeout=0'])
+    const parallel = await discover({}, { verificationEnv: { TAO_VERIFY_NO_TIMEOUTS: 'true' } })
+    Expect(argsOf(parallel.byName, 'ides/ide-extension')).toContain('--concurrent')
+    Expect(argsOf(parallel.byName, 'ides/ide-extension')).toContain('--timeout=0')
+  })
+  Test('blanket Bun concurrency uses the granted slots in bounded and unbounded runs', async () => {
+    for (const verificationEnv of [{}, { TAO_VERIFY_NO_TIMEOUTS: 'true' }]) {
+      const { byName } = await discover({}, { verificationEnv })
+      for (const suite of ['cli/dev-cli', 'cli/agent-cli', 'testing/verification', 'ides/studio-tooling']) {
+        Expect(argsOf(byName, suite, { slots: 2 })).toContain('--max-concurrency=2')
+        Expect(argsOf(byName, suite, { slots: 1 })).toContain('--max-concurrency=1')
+      }
+      Expect(argsOf(byName, 'ides/ide-extension', { slots: 3 })).toContain('--max-concurrency=3')
+      Expect(argsOf(byName, 'shared', { slots: 3 }).some(arg => arg.startsWith('--max-concurrency='))).toBe(false)
+    }
+  })
   Test(
     'partitions complete native and receipt cohorts exactly once while preserving parent report identities',
     async () => {
@@ -94,6 +119,10 @@ Describe('test runner suite registry', () => {
         'language/project-tooling:receipt-resolution',
         'language/project-tooling:receipt-host',
         'language/project-tooling:receipt-races',
+        'language/project-tooling:watch-files',
+        'language/project-tooling:watch-topology',
+        'language/project-tooling:watch-refresh',
+        'language/project-tooling:service',
         'language/project-tooling#1',
       ])
       Expect(states[0]?.selectedTestFiles).toEqual(NATIVE_PROJECT_TEST_FILES)
@@ -114,6 +143,10 @@ Describe('test runner suite registry', () => {
         '/tmp/test-reports/language_project-tooling_receipt-resolution.xml',
         '/tmp/test-reports/language_project-tooling_receipt-host.xml',
         '/tmp/test-reports/language_project-tooling_receipt-races.xml',
+        '/tmp/test-reports/language_project-tooling_watch-files.xml',
+        '/tmp/test-reports/language_project-tooling_watch-topology.xml',
+        '/tmp/test-reports/language_project-tooling_watch-refresh.xml',
+        '/tmp/test-reports/language_project-tooling_service.xml',
         '/tmp/test-reports/language_project-tooling_1.xml',
       ])
     },
@@ -135,7 +168,7 @@ Describe('test runner suite registry', () => {
         'language/project-tooling:receipt-resolution',
         'language/project-tooling:receipt-host',
         'language/project-tooling:receipt-races',
-        'language/project-tooling#1',
+        'language/project-tooling:service',
       ])
       Expect(states.map(state => state.selectedTestFiles)).toEqual([
         [NATIVE_PROJECT_TEST_FILES[0]],
@@ -162,6 +195,27 @@ Describe('test runner suite registry', () => {
     }
   })
 
+  Test('cold compiler and Studio partitions execute every selected file exactly once', async () => {
+    const { byName } = await discover({}, { reportRoot: '/tmp/test-reports' })
+    for (const name of ['compiler', 'ides/studio']) {
+      const suite = byName.get(name)!
+      const { states } = TestNodes.build({ ...NO_HISTORY, selected: [suite] })
+      Expect(states.length).toBeGreaterThan(1)
+      const executed = states.flatMap(state => state.selectedTestFiles ?? [])
+      Expect(executed.toSorted()).toEqual(suite.files.toSorted())
+      Expect(new Set(executed).size).toBe(suite.files.length)
+      for (const state of states) {
+        Expect(state.suite).toBe(name)
+        Expect(state.testReport?.suite).toBe(name)
+      }
+      for (const file of suite.files) {
+        const selected = { ...suite, files: [file] }
+        const exact = TestNodes.build({ ...NO_HISTORY, selected: [selected] })
+        Expect(exact.states.flatMap(state => state.selectedTestFiles ?? [])).toEqual([file])
+      }
+    }
+  })
+
   Test('named cohorts add no core ordering barrier and keep parser preflight dependencies unchanged', () => {
     const buildProcess: SelectedSuite['buildProcess'] = (_name, files) => ({ args: [], command: 'true', files })
     const selected = [
@@ -180,7 +234,7 @@ Describe('test runner suite registry', () => {
       for (const name of Object.keys(PROJECT_RECEIPT_FILES)) {
         Expect(byName.get(`language/project-tooling:${name}`)?.node.after).toBeUndefined()
       }
-      Expect(byName.get('language/project-tooling#1')?.node.after).toBeUndefined()
+      Expect(byName.get('language/project-tooling:service')?.node.after).toBeUndefined()
       Expect(byName.get('apps/expo-host')?.node.after).toEqual(preflight ? ['language/parser:core'] : [])
       Expect(byName.has('language/parser:core')).toBe(preflight)
     }
@@ -202,14 +256,14 @@ Describe('test runner suite registry', () => {
         'language/project-tooling:receipt-resolution',
         'language/project-tooling:receipt-host',
         'language/project-tooling:receipt-races',
-        'language/project-tooling#1',
+        'language/project-tooling:service',
       ].filter(name => !provedNames.includes(name)))
       Expect(states.at(-1)?.selectedTestFiles).toEqual([PROJECT_TOOLING_TEST])
     }
   })
 
   Test('keeps automatic recorded-duration sharding for the ordinary named-cohort remainder', () => {
-    const ordinaryFiles = [PROJECT_TOOLING_TEST, 'a.test.ts', 'b.test.ts', 'c.test.ts']
+    const ordinaryFiles = ['ordinary.test.ts', 'a.test.ts', 'b.test.ts', 'c.test.ts']
     const buildProcess: SelectedSuite['buildProcess'] = (_name, files) => ({ args: [], command: 'true', files })
     const plan = TestNodes.build({
       ledger: NO_HISTORY.ledger,
@@ -298,7 +352,7 @@ Describe('test runner suite registry', () => {
       for (const name of Object.keys(PROJECT_RECEIPT_FILES)) {
         Expect(captured.stdout).not.toContain(`language/project-tooling:${name}:`)
       }
-      Expect(captured.stdout).not.toContain('language/project-tooling#1:')
+      Expect(captured.stdout).not.toContain('language/project-tooling:service:')
       // Green-tree proof consumes this parent identity, never a mutable node composition.
       Expect([...new Set(states.map(state => state.suite))]).toEqual(['language/project-tooling'])
       Expect(TestRunner.completeRun({ kind: 'full', pattern: '' })).toBe(true)
@@ -424,8 +478,8 @@ Describe('test runner suite registry', () => {
         argsOf(byName, suite).find(argument => argument.startsWith('--timeout='))?.slice('--timeout='.length),
       )
 
-    Expect(argsOf(byName, 'language/validator')).toContain('--concurrent')
-    Expect(timeoutOf('language/validator')).toBe(TestRunner.MAX_TEST_DEADLINE_MS)
+    Expect(argsOf(byName, 'ides/ide-extension')).toContain('--concurrent')
+    Expect(timeoutOf('ides/ide-extension')).toBe(TestRunner.MAX_TEST_DEADLINE_MS)
     // A suite whose tests run one at a time keeps the budget, which is what catches a regression.
     Expect(argsOf(byName, 'shared')).not.toContain('--concurrent')
     Expect(timeoutOf('shared')).toBeLessThanOrEqual(TestRunner.MAX_TEST_DEADLINE_MS)
@@ -442,7 +496,11 @@ Describe('test runner suite registry', () => {
     // sits strictly above the one it contains, so whatever hangs is named by the nearest bound and
     // not swallowed by the one around it; the wall bound is armed before the process even spawns.
     Expect(jestConfig.MAX_JOURNEY_DEADLINE_MS).toBeLessThan(TestRunner.MAX_TEST_DEADLINE_MS)
-    Expect(TestNodes.WALL_TIMEOUT_FLOOR_MS).toBeGreaterThan(TestNodes.IDLE_TIMEOUT_FLOOR_MS)
+    Expect(jestConfig.JOURNEY_BUDGET_MS).toBeLessThan(TestRunner.starvationAdjustedTimeoutMs(0, 18))
+    Expect(TestNodes.WALL_TIMEOUT_FLOOR_MS).toBeGreaterThanOrEqual(TestNodes.IDLE_TIMEOUT_FLOOR_MS)
+    Expect(TestNodes.wallTimeoutMs(TestRunner.MAX_TEST_DEADLINE_MS)).toBeGreaterThan(
+      TestNodes.IDLE_TIMEOUT_FLOOR_MS,
+    )
   })
 
   Test('weighs Tao app shards by the source they compile, not by how many journeys they hold', async () => {
@@ -465,7 +523,7 @@ Describe('test runner suite registry', () => {
     )
   })
 
-  // `validator` is tuned `--concurrent` (like `dev`) and stays shardable; `shared` is neither. A
+  // `ide-extension` is tuned `--concurrent` and stays shardable; `shared` is neither. A
   // `--concurrent` suite's per-file ledger sums are inflated by however many other tests in the file
   // finished after the one being measured (see the `--concurrent` timeout test above), not by real
   // work, so packing by them would weigh a file wrong in exactly the suites this catches.
@@ -512,7 +570,7 @@ Describe('test runner suite registry', () => {
           samples: 1,
           source: 'wall' as const,
         },
-        'language/validator': {
+        'ides/ide-extension': {
           emaMs: 8_600,
           lastMs: 8_600,
           lastRunAt: '2026-01-01T00:00:00.000Z',
@@ -524,10 +582,10 @@ Describe('test runner suite registry', () => {
     }
 
     const concurrentPlan = TestNodes.build({
-      ledger: skewedLedgerFor('language/validator'),
-      selected: [{ buildProcess, files, name: 'language/validator' }],
+      ledger: skewedLedgerFor('ides/ide-extension'),
+      selected: [{ buildProcess, files, name: 'ides/ide-extension' }],
       timings,
-    }).plans.find(plan => plan.suite === 'language/validator')
+    }).plans.find(plan => plan.suite === 'ides/ide-extension')
     const serialPlan = TestNodes.build({
       ledger: skewedLedgerFor('shared'),
       selected: [{ buildProcess, files, name: 'shared' }],
@@ -603,19 +661,21 @@ Describe('test runner suite registry', () => {
     // three other lanes. Every Bun suite therefore carries an explicit bound.
     const bounds = argsOf(byName, 'ides/studio').filter(argument => argument.startsWith('--timeout='))
     Expect(bounds).toHaveLength(1)
-    Expect(Number(bounds[0]?.slice('--timeout='.length))).toBeGreaterThanOrEqual(45_000)
+    Expect(Number(bounds[0]?.slice('--timeout='.length))).toBeGreaterThanOrEqual(240_000)
   })
 
   Test('spends the per-test budget on work, and stretches the deadline only while the machine is loaded', () => {
     const { starvationAdjustedTimeoutMs } = TestRunner
 
     // A machine this run has to itself keeps the fixed budget, so a test that genuinely regresses
-    // is still caught. This is the case a flat two-minute bound gives up.
-    Expect(starvationAdjustedTimeoutMs(9, 18)).toBe(45_000)
+    // is still caught even though a loaded machine may stretch the deadline.
+    Expect(starvationAdjustedTimeoutMs(9, 18)).toBe(240_000)
     // The run that motivated this: load 41.1 on 18 CPUs, where the killed test had run 3.7x slower
-    // than in isolation. The raised floor times that multiple is past the ceiling, so what the suite
-    // actually gets here is the ceiling itself rather than the scaled multiple.
+    // than in isolation. Moderate load stretches the floor; extreme load reaches the shared cap.
+    Expect(starvationAdjustedTimeoutMs(18, 18)).toBe(480_000)
     Expect(starvationAdjustedTimeoutMs(41.1, 18)).toBe(TestRunner.MAX_TEST_DEADLINE_MS)
+    // A more extreme load reaches the shared ten-minute ceiling.
+    Expect(starvationAdjustedTimeoutMs(1_000, 18)).toBe(TestRunner.MAX_TEST_DEADLINE_MS)
   })
 
   Test('names every Bun test file absolutely, so the runner never walks the repository to find it', async () => {

@@ -1,4 +1,4 @@
-import { HCI, Time } from '@shared'
+import { HCI, Time, VerificationTimeouts } from '@shared'
 
 /**
  * The one machine-readable answer to "is Studio up, and what is its address?". Smoke lanes and
@@ -44,6 +44,7 @@ export type ProbeOptions = {
   pollMs?: number
   sleep?: (milliseconds: number) => Promise<void>
   timeoutMs?: number
+  timeoutPolicy?: VerificationTimeouts.Policy
 }
 
 /**
@@ -60,7 +61,7 @@ export async function waitForReadyUrl(url: string, options: ProbeOptions = {}): 
     async () => (await fetchUrl(url, pollMs * 2).catch(() => ({ ok: false }))).ok,
     {
       intervalMs: pollMs,
-      timeoutMs: options.timeoutMs ?? READY_TIMEOUT_MS,
+      timeoutMs: VerificationTimeouts.resolve(options.timeoutMs ?? READY_TIMEOUT_MS, options.timeoutPolicy) ?? Infinity,
       ...(options.now === undefined ? {} : { now: options.now }),
       ...(options.sleep === undefined ? {} : { sleep: options.sleep }),
     },

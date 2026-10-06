@@ -288,6 +288,39 @@ Test('Studio activation gate wakes on disconnect and bounds abort and timeout', 
   StudioPreviewPublication.cancel(peer)
 })
 
+Test('Studio activation accepts the retained manifest after an unchanged compile attempt', async () => {
+  const parent = {} as HTMLElement
+  const published = manifest(cell('peer'))
+  const peer = connection(published.cells[0]!)
+  peer.activated = true
+  peer.cellIdentity = {
+    appName: 'Demo',
+    cellId: 'peer',
+    cellRevision: 1,
+    compileRevision: 1,
+    manifestRevision: 'manifest-1',
+    project: '/project',
+  }
+  StudioPreviewActivationGate.attach(
+    parent,
+    {
+      appliedRevision: 0,
+      compileRevision: 2,
+      diagnostics: [],
+      message: 'Compiled unchanged inputs.',
+      publishedRevision: 1,
+      status: 'compiled',
+    },
+    published,
+    [peer],
+  )
+  StudioPreviewPublication.acknowledged(peer, peer.cellIdentity!, peer.previewInstanceId)
+  StudioPreviewActivationGate.changed(peer)
+
+  Expect(await StudioPreviewActivationGate.wait(parent, Date.now() + 1_000, () => published)).toBe(0)
+  StudioPreviewPublication.cancel(peer)
+})
+
 Test('Studio reloads one lagging peer once after another peer acknowledges the publication', async () => {
   const parent = {} as HTMLElement
   const published = manifest(cell('first'), cell('lagging'))

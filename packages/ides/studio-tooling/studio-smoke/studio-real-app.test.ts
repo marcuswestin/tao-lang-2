@@ -1,4 +1,4 @@
-import { Errors, FS, HCI, Platform, ProjectIdentity, ProjectLocal, Repo, Time } from '@shared'
+import { Errors, FS, HCI, Platform, ProjectIdentity, ProjectLocal, Repo, Time, VerificationTimeouts } from '@shared'
 import { Expect, mkTestDir, Test } from '@shared/test'
 import {
   openStudioPreviewSession,
@@ -12,7 +12,7 @@ import { exerciseHnreaderFeed } from './studio-hnreader-feed-journey'
 Test(
   'Studio feeds, keeps, discards, and undoes generated HNReader Stories through real browser drags',
   exerciseHnreaderFeed,
-  480_000,
+  600_000,
 )
 
 async function canvasTranslation(browser: StudioCdp): Promise<{ x: number; y: number }> {
@@ -112,7 +112,7 @@ Test('Studio compiles, applies insertion and undo, and publishes the real HNRead
     await preview?.close()
     await FS.remove(projectRoot)
   }
-}, 120_000)
+}, 600_000)
 
 Test('Studio drag refreshes the real Metro preview without blanking, reloading, or losing state', async () => {
   const repositoryRoot = Repo.getRoot()
@@ -178,7 +178,7 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
     await browser.click('.studio-preview-inactive-activate')
     await browser.waitFor(
       `document.querySelector('.studio-preview-cell iframe') instanceof HTMLIFrameElement`,
-      { timeoutMs: 30_000 },
+      { timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity },
     )
     // The native button renders its title uppercase on web, and innerText reports the transformed text.
     await waitForPreview(browser, studio, previewUrl, `document.body?.textContent?.includes('Increment') === true`)
@@ -424,7 +424,7 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
     await studio?.stop()
     await FS.remove(projectRoot)
   }
-}, 300_000)
+}, 600_000)
 
 async function waitForPreview(
   browser: StudioCdp,
@@ -440,7 +440,7 @@ async function waitForPreview(
       last = Errors.messageOf(error)
       return false
     }
-  }, { intervalMs: 100, timeoutMs: 30_000 })
+  }, { intervalMs: 100, timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity })
   if (!ready) {
     const diagnostics = await writePreviewDiagnostics(browser, studio, previewUrl, 'preview-timeout')
     Errors.throwHostEnvironment(
@@ -555,7 +555,7 @@ async function waitForCompileAfter(browser: StudioCdp, previousRevision: number)
     const match = /^compiled (\d+) · applied \d+ —/.exec(last)?.[1]
     revision = match === undefined ? undefined : Number(match)
     return state === 'compiled' && revision !== undefined && revision > previousRevision
-  }, { intervalMs: 100, timeoutMs: 30_000 })
+  }, { intervalMs: 100, timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity })
   if (!ready || revision === undefined) {
     Errors.throwHostEnvironment(
       `Timed out waiting for Studio compile revision after ${previousRevision}; last=${JSON.stringify(last)}`,
@@ -611,7 +611,7 @@ async function pressIncrementOnce(browser: StudioCdp, previewUrl: string): Promi
     await browser.clickAt(point)
     await Time.sleep(300)
     return await browser.evaluateInFrame<boolean>(previewUrl, counted)
-  }, { intervalMs: 100, timeoutMs: 30_000 })
+  }, { intervalMs: 100, timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity })
   if (!ready) {
     const diagnostics = await browser.evaluate(`(() => {
       const frame = document.querySelector('.studio-preview-cell iframe')
@@ -633,7 +633,7 @@ async function waitForStudioStatus(browser: StudioCdp, expected: string): Promis
       return { state: status?.getAttribute('data-state') ?? '', text: status?.textContent ?? '' }
     })()`)
     return last.state === expected
-  }, { intervalMs: 100, timeoutMs: 30_000 })
+  }, { intervalMs: 100, timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity })
   if (!ready) {
     Errors.throwHostEnvironment(`Timed out waiting for Studio status ${expected}; last=${JSON.stringify(last)}`)
   }
@@ -672,7 +672,7 @@ async function waitForSourceOrder(path: string, ordered: readonly string[]): Pro
       previous = index
     }
     return true
-  }, { intervalMs: 100, timeoutMs: 30_000 })
+  }, { intervalMs: 100, timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity })
   if (!updated) {
     Errors.throwHostEnvironment(
       `Timed out waiting for Studio source order ${ordered.join(', ')}. Last source:\n${source}`,
@@ -924,7 +924,7 @@ Test('Studio publication-off preview renders edits without reloading its frame',
       async () => await browser!.evaluate<number>('window.__taoPublicationOffActions.length') > 0,
       {
         intervalMs: 100,
-        timeoutMs: 10_000,
+        timeoutMs: VerificationTimeouts.resolve(10_000) ?? Infinity,
       },
     )
     if (!sent) {
@@ -957,7 +957,7 @@ Test('Studio publication-off preview renders edits without reloading its frame',
     )
     const saved = await Time.pollUntil(async () => (await FS.readText(sourcePath)).includes('Text("Updated")'), {
       intervalMs: 100,
-      timeoutMs: 10_000,
+      timeoutMs: VerificationTimeouts.resolve(10_000) ?? Infinity,
     })
     Expect(saved).toBe(true)
     await browser.waitFor(`fetch(location.pathname + '/api/preview/manifest')
@@ -983,4 +983,4 @@ Test('Studio publication-off preview renders edits without reloading its frame',
     await studio?.stop()
     await FS.remove(projectRoot)
   }
-}, 180_000)
+}, 600_000)

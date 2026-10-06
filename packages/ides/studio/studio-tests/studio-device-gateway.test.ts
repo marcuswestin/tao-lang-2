@@ -701,6 +701,53 @@ Describe('Studio device gateway sealed control plane', () => {
     })
   })
 
+  Test('reports the retained publication revision to devices during an identical compile', async () => {
+    await withGateway({}, async env => {
+      await env.session.compileInitial()
+      env.compile.publishedRevision = 2
+      const device = await pairedDevice(env)
+      device.sendSealed({ cellId: 'cell:phone', type: 'device.selectCell' })
+      let assigned: TaoStudioDeviceStudioMessage | undefined
+      while (assigned?.type !== 'studio.cellAssigned') {
+        assigned = await device.nextSealed()
+      }
+      Expect(assigned.identity.compileRevision).toBe(2)
+
+      device.sendSealed({
+        appliedRevision: 2,
+        compileRevision: 2,
+        identity: assigned.identity,
+        type: 'device.applied',
+      })
+      let appliedAck: TaoStudioDeviceStudioMessage | undefined
+      while (appliedAck?.type !== 'studio.appliedAck') {
+        appliedAck = await device.nextSealed()
+      }
+      Expect(appliedAck).toEqual({ accepted: true, compileRevision: 2, type: 'studio.appliedAck' })
+
+      await env.session.compileInitial()
+      let compiling: TaoStudioDeviceStudioMessage | undefined
+      while (
+        compiling?.type !== 'studio.compileState'
+        || compiling.status !== 'compiling'
+        || compiling.message !== 'Compiling Garden revision 3.'
+      ) {
+        compiling = await device.nextSealed()
+      }
+      Expect(compiling.compileRevision).toBe(2)
+      let completed: TaoStudioDeviceStudioMessage | undefined
+      while (
+        completed?.type !== 'studio.compileState'
+        || completed.status !== 'compiled'
+        || completed.message !== 'Compiled Garden revision 3.'
+      ) {
+        completed = await device.nextSealed()
+      }
+      Expect(completed.compileRevision).toBe(2)
+      Expect(env.session.compileSnapshot()).toMatchObject({ compileRevision: 3, publishedRevision: 2 })
+    })
+  })
+
   Test('pushes the manifest and re-registers the selected cell when a compile changes it', async () => {
     await withGateway({}, async env => {
       const device = await pairedDevice(env)
@@ -713,7 +760,7 @@ Describe('Studio device gateway sealed control plane', () => {
       env.cells.splice(0, env.cells.length, 'cell:phone')
       await env.session.compileInitial()
       const compiling = await device.nextSealed()
-      Expect(compiling).toMatchObject({ compileRevision: 2, status: 'compiling', type: 'studio.compileState' })
+      Expect(compiling).toMatchObject({ compileRevision: 1, status: 'compiling', type: 'studio.compileState' })
       const manifest = await device.nextSealed()
       Expect(manifest).toMatchObject({ manifest: { compileRevision: 2, manifestRevision: 'manifest-2' } })
       Expect(manifest.type === 'studio.manifest' ? manifest.manifest.scenarios.map(item => item.cellId) : []).toEqual([
@@ -901,7 +948,7 @@ const fixedNow = new Date('2026-09-02T10:00:00.000Z')
 type Env = {
   cells: string[]
   clock: { now: Date }
-  compile: { failNext: boolean }
+  compile: { failNext: boolean; publishedRevision?: number }
   gateway: StudioDeviceGateway
   metroPort: number
   session: StudioProjectSession
@@ -1174,7 +1221,7 @@ async function openProject(
 ): Promise<{
   cells: string[]
   close: () => Promise<void>
-  compile: { failNext: boolean }
+  compile: { failNext: boolean; publishedRevision?: number }
   session: StudioProjectSession
 }> {
   const root = await mkTestDir(prefix, { location: 'host' })
@@ -1187,7 +1234,7 @@ async function openProject(
   const cells = ['cell:phone', 'cell:tablet']
   // A failing compile still advances the coordinator's compileRevision but never publishes a
   // manifest, which is the state a device must not be able to claim as applied.
-  const compile = { failNext: false }
+  const compile: { failNext: boolean; publishedRevision?: number } = { failNext: false }
   let session: StudioProjectSession | undefined
   session = await StudioProjectSession.open({
     async compile(request) {
@@ -1195,7 +1242,9 @@ async function openProject(
         compile.failNext = false
         Errors.throwUserInput(`Compile of revision ${request.compileRevision} failed on purpose.`)
       }
-      session?.setMatrixManifest(manifestFor(session, request.compileRevision, cells))
+      const publishedRevision = compile.publishedRevision
+      session?.setMatrixManifest(manifestFor(session, publishedRevision ?? request.compileRevision, cells))
+      return publishedRevision === undefined ? undefined : { publishedRevision }
     },
     entryPath: `${appName}.tao`,
     projectRoot: root,

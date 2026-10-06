@@ -7,6 +7,7 @@ import { logProcessError } from '../HCI'
 import * as Platform from '../Platform'
 import * as ProjectIdentity from '../ProjectIdentity'
 import * as Repo from '../Repo'
+import * as VerificationTimeouts from '../VerificationTimeouts'
 import { runCleanups } from './TestCleanup'
 import { testOverrideSlot } from './TestOverride'
 
@@ -82,7 +83,7 @@ export const Test = ((...args: any[]) => {
         }
       })
   }
-  return getTestRuntime().test(...args)
+  return getTestRuntime().test(...resolveRunnerTimeoutArgs(args))
 }) as TestRunnerFunction
 const temporaryDirectories = new Set<string>()
 const keptOnFailure = new Set<string>()
@@ -252,13 +253,18 @@ export function setClockForTest(now: number | (() => number)): () => void {
 /** setTestRuntime configures the active runner used by Tao test wrappers. */
 export function setTestRuntime(nextRuntime: TestRuntime): void {
   testRuntime = nextRuntime
-  copyFunctionProperties(AfterAll, nextRuntime.afterAll)
-  copyFunctionProperties(AfterEach, nextRuntime.afterEach)
+  copyFunctionProperties(AfterAll, nextRuntime.afterAll, true)
+  copyFunctionProperties(AfterEach, nextRuntime.afterEach, true)
   copyFunctionProperties(Describe, nextRuntime.describe)
   copyFunctionProperties(Expect, nextRuntime.expect)
-  copyFunctionProperties(Test, nextRuntime.test)
-  // Bun exposes skip lazily, so Reflect.ownKeys does not enumerate it.
-  Test['skip'] = nextRuntime.test['skip']
+  copyFunctionProperties(Test, nextRuntime.test, true)
+  // Bun exposes registration variants lazily, so Reflect.ownKeys does not enumerate them.
+  for (const variant of ['skip', 'only', 'each', 'concurrent', 'failing', 'todo']) {
+    const registration = nextRuntime.test[variant]
+    if (typeof registration === 'function') {
+      Test[variant] = wrapRunnerTimeouts(registration, nextRuntime.test)
+    }
+  }
   Describe['skip'] = nextRuntime.describe['skip']
   // `copyFunctionProperties` carries the runner's own statics (`expect.any`, `expect.objectContaining`,
   // …) across; these two are Tao's and are restored after it, in case a runner ever spells them too.
@@ -481,12 +487,36 @@ function isPlainObject(value: object): boolean {
 }
 
 function createTestRunnerFunction(key: 'afterAll' | 'afterEach' | 'describe' | 'test'): TestRunnerFunction {
-  return ((...args: any[]) => getTestRuntime()[key](...args)) as TestRunnerFunction
+  return ((...args: any[]) =>
+    getTestRuntime()[key](...(key === 'describe' ? args : resolveRunnerTimeoutArgs(args)))) as TestRunnerFunction
+}
+
+/** Runner timeout fixtures may append a Policy after their numeric budget; the native runner never sees it. */
+function resolveRunnerTimeoutArgs(args: any[]): any[] {
+  const timeoutIndex = args.findIndex(arg => typeof arg === 'function') + 1
+  if (timeoutIndex === 0) {
+    return args
+  }
+  const policy = args[timeoutIndex + 1]
+  const explicitPolicy = policy === 'bounded' || policy === 'environment' ? policy : undefined
+  if (explicitPolicy !== undefined) {
+    args.splice(timeoutIndex + 1, 1)
+  }
+  const timeoutMs = args[timeoutIndex]
+  // Leave invalid registrations to the runner's existing validation even in diagnostic mode.
+  if (
+    typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0
+    && VerificationTimeouts.resolve(timeoutMs, explicitPolicy) === undefined
+  ) {
+    args.splice(timeoutIndex, 1)
+  }
+  return args
 }
 
 function copyFunctionProperties(
   target: TestRunnerFunction | TestRunnerExpect,
   source: TestRunnerFunction | TestRunnerExpect,
+  runnerTimeouts = false,
 ): void {
   for (const key of Reflect.ownKeys(source)) {
     if (key === 'length' || key === 'name' || key === 'prototype') {
@@ -495,9 +525,34 @@ function copyFunctionProperties(
 
     const descriptor = Object.getOwnPropertyDescriptor(source, key)
     if (descriptor !== undefined) {
+      if (runnerTimeouts) {
+        if (typeof descriptor.value === 'function') {
+          descriptor.value = wrapRunnerTimeouts(descriptor.value, source)
+        } else if (descriptor.get !== undefined) {
+          const get = descriptor.get
+          descriptor.get = () => {
+            const value = Reflect.apply(get, source, [])
+            return typeof value === 'function' ? wrapRunnerTimeouts(value, source) : value
+          }
+        }
+      }
       Object.defineProperty(target, key, descriptor)
     }
   }
+}
+
+/** Native registration variants and curried table registrations share the same deadline policy. */
+function wrapRunnerTimeouts(source: TestRunnerFunction, receiver: unknown = source): TestRunnerFunction {
+  const wrapped = function(...args: any[]) {
+    const result = Reflect.apply(source, receiver, resolveRunnerTimeoutArgs(args))
+    return typeof result === 'function' ? wrapRunnerTimeouts(result) : result
+  } as TestRunnerFunction
+  return new Proxy(wrapped, {
+    get(_target, key) {
+      const value = Reflect.get(source, key, source)
+      return typeof value === 'function' ? wrapRunnerTimeouts(value, source) : value
+    },
+  })
 }
 
 function getTestRuntime(): TestRuntime {
