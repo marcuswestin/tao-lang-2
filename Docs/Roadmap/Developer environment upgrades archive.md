@@ -87,6 +87,7 @@ hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 - [DEVENV-DEV-SHELL-WRITES-COMPLETION-DUMP-IN-SOURCE — Dev shell writes completion dump in source](<Developer environment upgrades/Archive/DEVENV-DEV-SHELL-WRITES-COMPLETION-DUMP-IN-SOURCE.md>) — Resolved
 - [DEVENV-DIRENV-RELOAD-TEST-SHARES-FILE-TIMESTAMPS — direnv reload test shares file timestamps](<Developer environment upgrades/Archive/DEVENV-DIRENV-RELOAD-TEST-SHARES-FILE-TIMESTAMPS.md>) — Resolved
 - [DEVENV-DOCTOR-TEST-OBSERVES-CONCURRENT-ARTIFACT-CREATION — Doctor test observes concurrent artifact creation](<Developer environment upgrades/Archive/DEVENV-DOCTOR-TEST-OBSERVES-CONCURRENT-ARTIFACT-CREATION.md>) — Resolved
+- [DEVENV-EDITOR-BUILD-LEAVES-ESBUILD-SERVICE-RUNNING — Editor build leaves an esbuild service running](<Developer environment upgrades/Archive/DEVENV-EDITOR-BUILD-LEAVES-ESBUILD-SERVICE-RUNNING.md>) — Resolved
 - [DEVENV-EMULATOR-EXIT-LOG-CAN-REPORT-PRIOR-LAUNCH — Emulator exit can report a prior launch's failure](<Developer environment upgrades/Archive/DEVENV-EMULATOR-EXIT-LOG-CAN-REPORT-PRIOR-LAUNCH.md>) — Resolved
 - [DEVENV-FIREBASE-BUILD-SNAPSHOT-OMITS-CONNECTION-SETTINGS — Firebase build snapshot omits connection settings](<Developer environment upgrades/Archive/DEVENV-FIREBASE-BUILD-SNAPSHOT-OMITS-CONNECTION-SETTINGS.md>) — Resolved
 - [DEVENV-FIREBASE-GUARD-TESTS-REQUIRE-LOCAL-CONNECTION — Firebase guard tests require a local connection](<Developer environment upgrades/Archive/DEVENV-FIREBASE-GUARD-TESTS-REQUIRE-LOCAL-CONNECTION.md>) — Resolved

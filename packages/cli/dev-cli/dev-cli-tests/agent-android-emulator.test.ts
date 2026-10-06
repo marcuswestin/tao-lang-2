@@ -1120,7 +1120,7 @@ Platform.runtimeConsole.info(JSON.stringify({disposed, shutdownRetention, ownedN
     worker.dispose()
     if (child !== undefined) {
       ProcessTree.signalTracked([child], 'SIGKILL')
-      await until(() => ProcessTree.identities([child.pid]).get(child.pid)?.startedAt !== child.startedAt)
+      await ProcessTree.waitForTrackedExit([child])
     }
   }
 })
