@@ -32,7 +32,8 @@ Describe('isolated QA capture', () => {
       await FS.writeText(FS.resolvePath('App.tao.ts', original), 'import type TR from "../../runtime/TR"\n')
       const capture = new QaCapture(root, async (staged, options) => {
         Expect(staged).not.toBe(original)
-        Expect(await FS.exists(FS.resolvePath('.tao', staged))).toBe(false)
+        Expect(await FS.isDirectory(FS.resolvePath('.tao', staged))).toBe(true)
+        Expect(await FS.listDir(FS.resolvePath('.tao', staged))).toEqual([])
         Expect(await FS.exists(FS.resolvePath('node_modules', staged))).toBe(false)
         Expect(await FS.exists(FS.resolvePath('secrets', staged))).toBe(false)
         Expect(await FS.exists(FS.resolvePath('credentials', staged))).toBe(false)

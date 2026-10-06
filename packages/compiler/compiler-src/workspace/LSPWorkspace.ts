@@ -45,6 +45,7 @@ export class LSPWorkspace extends Workspace<WorkspaceLspServices> {
 
   /** startLanguageServer starts Langium for this LSP Workspace. */
   startLanguageServer(): void {
+    publishVersionedDiagnostics(this.services.shared)
     Langium.startLanguageServer(this.services.shared)
   }
 
@@ -72,6 +73,35 @@ export class LSPWorkspace extends Workspace<WorkspaceLspServices> {
       }
       documents.addDocument(await factory.fromUri(uri))
     }
+  }
+}
+
+/**
+ * publishVersionedDiagnostics labels every diagnostics publication for a client-open document with
+ * the document version its positions were computed from. Langium publishes without a version, so a
+ * client that has already sent a newer edit maps the older positions onto its newer text: a
+ * character typed and deleted at the end of a file leaves a diagnostic one position past the end,
+ * and an editor that maps it throws. With a version the client discards a superseded publication.
+ * A publication whose validated text no longer matches the open document is dropped here instead,
+ * because the live version would mislabel it and the rebuild for the newer text publishes its own.
+ */
+function publishVersionedDiagnostics(shared: Langium.LangiumSharedServices): void {
+  const connection = shared.lsp.Connection
+  if (connection === undefined) {
+    return
+  }
+  const send = connection.sendDiagnostics.bind(connection)
+  connection.sendDiagnostics = params => {
+    const open = shared.workspace.TextDocuments.get(params.uri)
+    if (open === undefined || params.version !== undefined) {
+      return send(params)
+    }
+    const validatedText = shared.workspace.LangiumDocuments.getDocument(Langium.URI.parse(params.uri))
+      ?.parseResult.value.$cstNode?.root.fullText
+    if (validatedText === undefined) {
+      return send(params)
+    }
+    return validatedText === open.getText() ? send({ ...params, version: open.version }) : Promise.resolve()
   }
 }
 

@@ -51,7 +51,8 @@ the aggregate verdict and the only required check on `main`. The `plan` job reso
 whether other `Verify` runs are in flight, with the sizing reasoning beside the workflow's defaults
 and repository variables overriding them; read the workflow for the current numbers. Every
 partition and the aggregate read that resolved count. A cancelled or failed partition records no
-green tree. It proves the portable gates only; the local complement proves the rest. Read the
+green tree. It proves the portable gates and, through `--hosted-linux`, the host gates the
+catalog marks `runsOnHostedLinux`; the local complement proves the rest. Read the
 current workflow and lane membership when deciding what the complement is; a gate the workflow
 admits leaves the local list.
 

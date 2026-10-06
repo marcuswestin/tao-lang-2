@@ -321,6 +321,13 @@ proves, so a public build must hide later surfaces and a reviewer must be able t
 - Developer decisions, 2026-10-03:
   - Screenshot every app that declares scenarios, found automatically, so Pantry and new apps are
     covered without editing the QA inventory by hand.
+    Implementation: the QA inventory derives project/app surfaces and source/group/label channels
+    from authored scenario manifests. A headless capture batch enforces a deadline per app and
+    retains expected coverage, missing/failed cells and discovery failures in `coverage.json`.
+    Discovery includes unimported view scenarios and Studio sketch sources; capture activates
+    inactive previews through the existing Studio control before waiting for readiness.
+    Capture evidence still requires visual judgment; the remaining element checks and language
+    rules below are separate work.
   - Add element-tree checks to the browser capture: text contrast, tap-target size, overlapping
     elements, and content overflowing its container. They read the rendered elements, not pixels.
   - Let an app state its own design rules in a `rules` section of `Design.tao`, with Tao's defaults
@@ -329,7 +336,7 @@ proves, so a public build must hide later surfaces and a reviewer must be able t
   - Agent visual review reuses the existing `--ai` lanes under the deferred `ai-assist` capability.
   - A separate `--suggest` report offers design recommendations and never creates findings.
 - Context: `packages/ides/studio-tooling/studio-tooling-src/StudioReview.ts` (capture),
-  `packages/cli/dev-cli/dev-cli-src/qa/QaInventory.ts` (the hand-listed screenshot sets),
+  `packages/cli/dev-cli/dev-cli-src/qa/QaInventory.ts` (discovered screenshot sets),
   `TR-studio-preview.tsx` (computed styles), and `Docs/QA/README.md`.
 - Done: a capture of every scenario app reports each check per screenshot, a failing check fails
   that screenshot, and the rules section is decided and implemented.
