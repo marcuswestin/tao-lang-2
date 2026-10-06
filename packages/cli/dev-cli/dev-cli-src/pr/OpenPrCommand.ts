@@ -1,4 +1,5 @@
 import { CLI, Errors, FS, HCI, Repo } from '@shared'
+import { syncAfterLanding, SyncLocalMainCommand } from '../git/SyncLocalMain'
 import { enableAutoMerge } from './AutoMerge'
 import { cancelVerifyRuns } from './CancelVerify'
 import {
@@ -27,7 +28,7 @@ import { type ReviewedMergeMessage, reviewedMergeMessage } from './ReviewedMerge
  * again is how a changed message reaches `main`. The headline and body are set explicitly because
  * GitHub's own squash message appends ` (#N)` to the title and wraps the description at 72 columns,
  * which breaks the repository's one-bullet-per-line format. Auto-merge waits for the required Verify
- * check; it is turned on once any check exists on the pushed head, while `pr-checks` keeps following
+ * check; it is turned on once any check or a Verify run exists on the pushed head, while `pr-checks` keeps following
  * the Verify workflow itself through its literal successful check run. Verify runs on every push,
  * so a reused pull request is watched the same way as a new one. A branch that already merged is
  * refused before any push, because pushing it again would
@@ -35,6 +36,8 @@ import { type ReviewedMergeMessage, reviewedMergeMessage } from './ReviewedMerge
  * By default, it refuses an already enabled pull request before pushing, checks that auto-merge is
  * still off before following CI, and leaves landing to a later decision. Before the push it also
  * waits for admission to the hosted runner pool (`admitVerifyRun`), which `--jump-queue` skips.
+ * With the complement, it first regenerates stale maintained native bindings, which the complement's
+ * compiles refuse. Once GitHub has merged, it fast-forwards local `main` (`sync-main`).
  *
  * Every read and write goes through REST (`GitHubPulls`), and the checks are followed by `pr-checks`,
  * so it works where a cloud agent host's proxy refuses `gh pr`'s GraphQL. Auto-merge has no GitHub
@@ -53,7 +56,12 @@ import { type ReviewedMergeMessage, reviewedMergeMessage } from './ReviewedMerge
 const REMOTE = 'origin'
 const MAIN_BRANCH = 'main'
 const CHECKS_APPEAR_POLL_MS = 5_000
-const CHECKS_APPEAR_WITHIN_MS = 90_000
+/**
+ * GitHub started Verify two to three minutes after the push on three landings on 2026-10-06, while
+ * its runners were busy; 90 s failed all three before auto-merge was armed, leaving each pull
+ * request green and unmerged. A queued run already counts as the checks appearing.
+ */
+const CHECKS_APPEAR_WITHIN_MS = 180_000
 /**
  * GitHub merges an armed pull request some seconds after its last required check concludes
  * (45 s on 2026-10-06's landings). The merge is the landing, so with auto-merge on the command
@@ -85,10 +93,17 @@ export type OpenPrDependencies = {
   /** The current time in epoch milliseconds; admission ages runs and bounds its wait by it. */
   now: () => number
   readText: (path: string) => Promise<string>
+  /**
+   * Regenerates the checkout's maintained native bindings when their inputs or generator changed;
+   * a current tree is only hashed. The complement compiles apps that refuse a stale one.
+   */
+  refreshNativeBindings: (root: string) => Promise<{ exitCode: number }>
   run: OpenPrRunner
   /** Runs the local complement lane to its verdict; the lane posts its own status on the head. */
   runComplement: (root: string) => Promise<{ exitCode: number }>
   sleep: (ms: number) => Promise<void>
+  /** Fast-forwards local `main` to the `origin/main` GitHub's merge just moved. */
+  syncLocalMain: (root: string) => Promise<unknown>
   writeLine: (line: string) => void
 }
 
@@ -97,13 +112,17 @@ const defaultDependencies: OpenPrDependencies = {
   followChecks: options => PrChecksCommand.run(options),
   now: () => Date.now(),
   readText: FS.readText,
+  refreshNativeBindings: root => justRecipe(root, 'native-bindings'),
   run: CLI.run,
-  runComplement: async root => {
-    const result = await CLI.run('just', { args: ['verify-complement'], cwd: root, stdio: 'inherit' })
-    return { exitCode: result.error === undefined && result.signal === null ? result.exitCode ?? 1 : 1 }
-  },
+  runComplement: root => justRecipe(root, 'verify-complement'),
   sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
+  syncLocalMain: root => SyncLocalMainCommand.run({ repositoryRoot: root }),
   writeLine: HCI.writeLine,
+}
+
+async function justRecipe(root: string, recipe: string): Promise<{ exitCode: number }> {
+  const result = await CLI.run('just', { args: [recipe], cwd: root, stdio: 'inherit' })
+  return { exitCode: result.error === undefined && result.signal === null ? result.exitCode ?? 1 : 1 }
 }
 
 /** OpenPrOptions is the flags-ready input accepted by the development CLI command. */
@@ -157,6 +176,10 @@ export const OpenPrCommand = {
         await requireAutoMergeOff(github, existing.number)
       }
     }
+    const runsComplement = options.autoMerge === true && options.complement !== false
+    if (runsComplement) {
+      await refreshNativeBindings(dependencies, root, report)
+    }
 
     const headSha = (await git(dependencies, root, ['rev-parse', 'HEAD'])).stdout.trim()
     if (!await admitVerifyRun(dependencies, root, github, branch, options.jumpQueue === true, report)) {
@@ -175,7 +198,7 @@ export const OpenPrCommand = {
     } else {
       await enableAutoMerge(dependencies, root, github, pr.number, message, report)
     }
-    const complement = options.autoMerge === true && options.complement !== false
+    const complement = runsComplement
       ? startComplement(dependencies, root, github, pr.number, headSha, report)
       : undefined
     report(`Following CI checks for #${pr.number}...`)
@@ -203,6 +226,7 @@ export const OpenPrCommand = {
         report(`PASS  CI succeeded on ${headSha.slice(0, 8)} for #${pr.number}; auto-merge is off.`)
         report(`NEXT  After authorization, run merge-pr to confirm Verify and merge #${pr.number}.`)
       } else if (await awaitMerge(dependencies, github, pr.number, report)) {
+        await syncAfterLanding(() => dependencies.syncLocalMain(root), report)
         report(
           `NEXT  The archive workflow records merged/<name>; \`landed\` reads it. Put further work on a new branch.`,
         )
@@ -266,6 +290,37 @@ async function requireCleanWorktree(dependencies: OpenPrDependencies, root: stri
       `The worktree has uncommitted changes; open-pr refuses to push it. Dirty paths:\n${status.trimEnd()}`,
     )
   }
+}
+
+/**
+ * The complement compiles apps, and a compile refuses maintained native bindings generated from
+ * other inputs or by another generator — which a merge of `main` leaves behind, four times on
+ * 2026-10-06, each failing a landing on a change that never touched bindings. Regenerating before
+ * the push costs a second of hashing on a current tree, and the output is ignored, so the worktree
+ * stays clean. Should it ever change a tracked file, that change is not in the commit about to be
+ * pushed, so this refuses rather than prove one tree and land another.
+ */
+async function refreshNativeBindings(
+  dependencies: OpenPrDependencies,
+  root: string,
+  report: (line: string) => void,
+): Promise<void> {
+  report('Refreshing maintained native bindings before the complement...')
+  const { exitCode } = await dependencies.refreshNativeBindings(root)
+  if (exitCode !== 0) {
+    Errors.throwUserInput(
+      `Regenerating maintained native bindings failed (exit ${exitCode}); nothing was pushed.`
+        + ' Run ./agent native-bindings to see why, fix it, and run open-pr again.',
+    )
+  }
+  const status = (await git(dependencies, root, ['status', '--porcelain=v1', '--untracked-files=all'])).stdout
+  if (status !== '') {
+    Errors.throwUserInput(
+      'Regenerating maintained native bindings changed the worktree; nothing was pushed. Review and commit'
+        + ` these paths, then run open-pr again:\n${status.trimEnd()}`,
+    )
+  }
+  report('PASS  Maintained native bindings are current.')
 }
 
 async function requireCommitsBeyondMain(dependencies: OpenPrDependencies, root: string): Promise<void> {
@@ -550,6 +605,12 @@ async function refuseMergedBranch(github: GitHub, branch: string): Promise<void>
  * usual cause is a pull request that conflicts with its base, which GitHub runs no `pull_request`
  * workflow for until a later push resolves the conflict; mergeability is only read out at the end
  * because GitHub recomputes it after each push.
+ *
+ * A Verify run for the head counts as the checks appearing even while it is queued with no check
+ * run yet: GitHub creates the run as the push arrives but its jobs only once runners free up, which
+ * took minutes on 2026-10-06. When the window ends with no run, the commit's check suites tell the
+ * two remaining causes apart: none at all means the push event never reached Actions, which only
+ * another push fixes; some means Actions saw the push and started nothing yet.
  */
 async function awaitChecksOnHead(
   dependencies: OpenPrDependencies,
@@ -561,8 +622,18 @@ async function awaitChecksOnHead(
   const attempts = Math.ceil(CHECKS_APPEAR_WITHIN_MS / CHECKS_APPEAR_POLL_MS)
   for (let attempt = 1;; attempt += 1) {
     const pr = await github.view(prNumber)
-    if (pr.head.sha === headSha && await github.checkRunCount(headSha) > 0) {
-      return true
+    if (pr.head.sha === headSha) {
+      if (await github.checkRunCount(headSha) > 0) {
+        return true
+      }
+      const run = (await github.verifyRuns(headSha))[0]
+      if (run !== undefined) {
+        report(
+          `PASS  Verify run ${run.id} exists for ${headSha.slice(0, 8)} (${run.status}); `
+            + `GitHub starts its jobs as runners free up.`,
+        )
+        return true
+      }
     }
     if (attempt >= attempts) {
       const noChecks = `FAIL  No checks appeared on ${headSha.slice(0, 8)} within ${
@@ -573,7 +644,12 @@ async function awaitChecksOnHead(
           ? `${noChecks}: the pull request conflicts with ${MAIN_BRANCH}, and GitHub runs no pull_request`
             + ` workflow until it merges cleanly. Merge ${MAIN_BRANCH} into this branch and push it with open-pr;`
             + ` that push starts the checks.`
-          : `${noChecks}. Actions may be disabled for this repository, or no workflow matches this branch.`,
+          : await github.checkSuiteCount(headSha) === 0
+          ? `${noChecks}, and the commit has no check suite at all: the push event never reached Actions.`
+            + ` Push a new head with \`git commit --allow-empty -m 'Run Verify again'\` and run open-pr again.`
+          : `${noChecks}, though GitHub has check suites on the commit. Once \`gh run list --commit ${headSha}\``
+            + ` shows its Verify run, run open-pr again on this head; if none ever appears, Actions may be`
+            + ` disabled for this repository, or no workflow matches this branch.`,
       )
       return false
     }

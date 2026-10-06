@@ -42,7 +42,7 @@ description: >-
 - The five browser and native UI smoke/canary gates cannot run inside the managed Bash sandbox: `studio-smoke`, `studio-proof-real-app`, `keyboard-navigation-smoke`, `studio-canary`, and the quarantined `studio-smoke-simulated-user`. `verification-lanes` owns which lane to run instead.
 - Derive `./agent help` descriptions for passthrough commands from live `just help` output instead of duplicating recipe help.
 - Use `kebab-case` Just recipe names and `ALL_CAPS` Just variables when changing the human workflow surface.
-- Keep test selection, ledger, reporting, and merge usage in the `verification-lanes` skill rather than duplicating that workflow here.
+- Keep test selection, ledger, and reporting usage in the `verification-lanes` skill, and landing usage in `landing`, rather than duplicating that workflow here.
 - `just` has no named-argument syntax. `just recipe run_id="local"` passes the literal string `run_id=local` as the recipe's _first positional_ parameter, so a composed recipe silently runs with the wrong arguments. Pass positionals in declaration order.
 - Chrome never synthesizes HTML5 drag-and-drop from `Input.dispatchMouseEvent`. Pointer-driven UI (dividers, resizers) works with mouse events; anything using `dragstart`/`drop` needs drag interception: `Input.setInterceptDrags`, then the payload from `Input.dragIntercepted`, replayed through `Input.dispatchDragEvent`. A mouse-only drag against a drop target fails silently.
 - A task may be unable to rewrite protected generated harness files such as `.codex/rules/tao.rules`.

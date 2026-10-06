@@ -1,7 +1,7 @@
 # Interaction surfaces and quiet development review
 
 Researched and cross-checked against Tao on 2026-09-30. This reference explains capabilities and
-evidence boundaries; the parent skill owns visibility policy and `browser-use` owns browser choice.
+evidence boundaries; the parent skill owns visibility policy and browser choice.
 Consult live command help and tool documentation for arguments rather than copying host commands
 from vendor examples around Tao's named permission boundary.
 

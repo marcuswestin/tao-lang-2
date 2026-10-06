@@ -441,6 +441,19 @@ Describe('gate catalog metadata', () => {
     Expect(nodeOf('studio-network-simulation').resources).toBeUndefined()
   })
 
+  Test('only browser gates proved on hosted Linux stay in a hosted Linux lane that skips unsandboxed gates', () => {
+    const hostedLinux = HOST_ONLY_GATES.filter(name => GateCatalog.metadata(name).runsOnHostedLinux === true)
+    Expect(hostedLinux).toEqual(['studio-dialog-browser'])
+    for (const name of HOST_ONLY_GATES) {
+      // A local sandboxed lane skips every one of them, hosted-Linux or not.
+      Expect(GateCatalog.skippedUnsandboxed(name)).toBe(true)
+      Expect(GateCatalog.skippedUnsandboxed(name, { hostedLinux: true })).toBe(!hostedLinux.includes(name))
+    }
+    // The native canary needs macOS, so no Linux runner can be its home.
+    Expect(GateCatalog.metadata('studio-canary').runsOnHostedLinux).toBeUndefined()
+    Expect(GateCatalog.skippedUnsandboxed('_typecheck', { hostedLinux: true })).toBe(false)
+  })
+
   Test('marks every browser and native UI lane as requiring an unsandboxed host', () => {
     for (const name of HOST_ONLY_GATES) {
       Expect(GateCatalog.metadata(name).requiresUnsandboxed).toBe(true)

@@ -502,6 +502,25 @@ Describe('repository gate runner', () => {
     ).toBe(true)
   })
 
+  Test('a hosted Linux lane keeps the unsandboxed gates proved there and skips the rest', async () => {
+    const hostedLinux = await run(['_repo-lint', 'studio-dialog-browser', 'studio-canary'], {}, {
+      hostedLinux: true,
+      skipUnsandboxed: true,
+    })
+    Expect(hostedLinux.started.toSorted()).toEqual(['_repo-lint', 'studio-dialog-browser'])
+    Expect(hostedLinux.summary.gates.filter(gate => gate.status === 'skipped').map(gate => gate.name)).toEqual([
+      'studio-canary',
+    ])
+
+    // The same lane without the flag is a local sandboxed run, which still cannot start a browser.
+    const sandboxed = await run(['_repo-lint', 'studio-dialog-browser'], {}, { skipUnsandboxed: true })
+    Expect(sandboxed.started).toEqual(['_repo-lint'])
+
+    // A lane that skips nothing, as `verify-full` is, runs it whatever the flag says.
+    const full = await run(['_repo-lint', 'studio-dialog-browser'], {}, {})
+    Expect(full.started.toSorted()).toEqual(['_repo-lint', 'studio-dialog-browser'])
+  })
+
   Test('a split lane runs each reader on exactly one machine and the prepare phase on every one', async () => {
     const gates = ['_fix-dprint', '_repo-lint', '_typecheck', 'dead-exports']
     const first = await run(gates, {}, { partition: { count: 2, index: 0 } })
