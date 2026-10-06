@@ -50,15 +50,25 @@ const controls = `
   view Text(Value text) { render inject Value \`\`\`ts return <RN.Text>{Value}</RN.Text> \`\`\` }
 `
 
+let generation: Promise<Record<string, string>> | undefined
+
+/**
+ * generatedFiles generates the Clipboard bindings once for this file: the generator reads the same
+ * installed package declarations for every test, and each test only compiles its own app against
+ * the result.
+ */
 async function generatedFiles(): Promise<Record<string, string>> {
-  const generated = await NativeBindings.generate({
-    source: ExpoApiSource,
-    packageName: 'expo-clipboard',
-    fromDirectory: Repo.resolvePath('packages/apps/expo-host'),
-    exclude: ['ClipboardPasteButton', 'isPasteButtonAvailable'],
-  })
-  Expect(generated.diagnostics).toEqual([])
-  return generated.files
+  generation ??= (async () => {
+    const generated = await NativeBindings.generate({
+      source: ExpoApiSource,
+      packageName: 'expo-clipboard',
+      fromDirectory: Repo.resolvePath('packages/apps/expo-host'),
+      exclude: ['ClipboardPasteButton', 'isPasteButtonAvailable'],
+    })
+    Expect(generated.diagnostics).toEqual([])
+    return generated.files
+  })()
+  return { ...await generation }
 }
 
 Describe('generated native Clipboard bindings', () => {

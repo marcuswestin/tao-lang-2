@@ -136,7 +136,7 @@ export async function withGitTaoFixture(
 }
 
 /** withoutInheritedNoCache runs one fixture with the lane's cache opt-out out of the way, then restores it. */
-async function withoutInheritedNoCache(run: () => Promise<void>): Promise<void> {
+export async function withoutInheritedNoCache(run: () => Promise<void>): Promise<void> {
   const previous = NO_CACHE_ENV_KEYS.map(key => [key, Platform.runtimeProcess.env[key]] as const)
   for (const [key] of previous) {
     delete Platform.runtimeProcess.env[key]
