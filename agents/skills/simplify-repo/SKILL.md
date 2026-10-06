@@ -28,8 +28,8 @@ run shares. Standing decisions below are the Developer's and are not reopened; a
    fan-out mechanics.
 6. Execute on one branch through `./agent`'s own commands (`verify`, `typecheck`, `dead-exports`,
    `parser-gen`, `ledger-index`, …), not a direct `just` recipe it already exposes. Run narrow checks
-   and `verify-changed` while iterating; hosted `Verify` on the landing route `verification-lanes`
-   owns is the only merge evidence. After moving or renaming a package, `./agent setup --refresh-lockfile`
+   and `verify-changed` while iterating; hosted `Verify` on `landing`'s route is the only merge
+   evidence. After moving or renaming a package, `./agent setup --refresh-lockfile`
    is the one install that rewrites `bun.lock`. A read-only `reviewer` using `delegation`'s effort policy reads every wave's
    seams before it starts and the whole diff again before every landing, briefed to hunt what
    `./agent typecheck` cannot see — a moved literal that still resolves, just not to what it used to.

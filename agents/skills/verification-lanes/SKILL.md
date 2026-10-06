@@ -2,14 +2,14 @@
 name: verification-lanes
 description: >-
   Choose and interpret Tao verification workflows. Use when selecting or running test and
-  verification lanes, diagnosing failures, retrying, choosing sandbox or host execution,
-  assessing cache or test selection, comparing machine and CI contention, reporting long gates,
-  preparing finalize, or evaluating landing evidence and merge readiness.
+  verification lanes, diagnosing a red lane, a failed Verify partition, or pr-checks, retrying
+  one, assessing cache or test selection, comparing machine and CI contention or the partition
+  count, reporting long gates, or preparing finalize.
 ---
 
 # Verification Lanes
 
-`./agent help` and each command's own `--help` print the lane scopes, their composition, and the flags (`--no-cache`, target resolution, `--json`); read those rather than a second copy here. This skill owns what they do not print: the caching and test-selection reasoning (`references/caching-and-selection.md`), the landing command's mechanics and failure classification (`references/landing.md`), and the judgment calls below.
+`./agent help` and each command's own `--help` print the lane scopes, their composition, and the flags; read those rather than a second copy here. This skill owns what they do not print: the caching and test-selection reasoning (`references/caching-and-selection.md`), CI contention and coverage (`references/hosted-verification.md`), and the judgment calls below. `landing` owns the route that proves a merge.
 
 Run a host-only lane through its listed wrapper shape, such as `./agent unsandboxed studio-smoke`;
 the plain `./agent` shape stays sandboxed.
@@ -23,7 +23,11 @@ does not hide it. Report deferred visible acceptance separately from completed q
 For development loops used during acceptance, follow `quiet-ui-workflows`' managed-session
 guidance. A background start receipt or successful reload dispatch is not a behavior-test verdict.
 
+## Reading a red lane
+
 - After a broad failure, let the runner finish cleanup and release its leases, diagnose the failed scope with an explicit file or name target, fix it, then repeat broad verification. An aborted or filtered run is not complete coverage. Command help owns the failure policy; keep diagnostic scope explicit instead of repeatedly paying for a broad inventory of failures.
+- Read `.artifacts/logs/<lane>/latest/summary.json` first; it names each node's failure cause. A separately recorded retry, not concatenated output, owns the final classification: a node failing again on its isolated retry is `repository`, not `machine-contention`.
+- For hosted `Verify`, `./agent unsandboxed pr-checks --wait` follows the run and says why failed checks failed; a failed partition uploads its `verify-partition-<k>` logs. Diagnose from those, fix, and push again through `landing`'s route; a run link is not completion.
 
 ## The machine-wide landing lock
 
@@ -44,10 +48,10 @@ For a Developer-directed edit or commit in the primary `dev/<name>` checkout, do
 Use available focused checks, commit the exact reviewed paths when asked, and leave full verification
 to authorized landing. Other work may be in progress in that shared checkout.
 
-It is not a step of the hosted landing route, which needs only the reviewed message. For the local
-route, it is the iteration-time readiness command when landing is not yet authorized, not a step of
-an already authorized landing — `./agent unsandboxed land` does its own preparation, integration and
-verification in one process. It brings a branch to ready:
+It is not a step of any landing: the hosted route needs only the reviewed message, and
+`./agent unsandboxed land` does its own preparation, integration and verification in one process.
+It is the iteration-time readiness command for the local route before landing is authorized. It
+brings a branch to ready:
 asserts the branch and a clean tree, integrates `main`, runs a verification lane only when no green
 record already covers this exact tree, drafts the merge message from the branch's own commits when
 none exists, and prints what remains. An existing merge message is kept; `--redraft` is the explicit
@@ -59,31 +63,11 @@ run, and the message reviewed and edited, never handed over as drafted. `./agent
 worktree's branch, cleanliness, finalize state, and last proof, beside the lane and lease registry —
 read it before calling a slow lane a regression, and before landing, to see who else is close.
 
-## Whether to propose the landing or hold it back
-
-The Developer's explicit yes authorizes landing the named slice for the rest of this thread, including retries;
-absent one a ready branch waits. What you ask for turns on whether the gates prove the change, not
-on its size.
-
-- **Propose it as ready to land** when the gates that ran green cover the change: documentation,
-  roadmap, agent instructions, developer tooling, and test-only changes always; product code whose
-  behavior the suites actually exercise.
-- **Propose it as needing the Developer's eyes first** when the change reaches what no gate proves — Studio's or
-  an app's visible behavior, a language surface the Developer has not seen, native or device paths, or anything
-  covered only by the lanes a person runs: `./dev studio-manual-checks`, a device install, and
-  everything named in `VERIFY_FULL_SKIPPED`. Say exactly what needs looking at and why.
-- A green `Verify` is not by itself an answer: a change can pass every gate and still be one the Developer
-  wants to see first, because the thing it changed is the thing the Developer is designing. When the two pull
-  against each other, say so in the proposal.
-
 ## Working inside a busy machine
 
-- Landing is one route, spelled out at the top of
-  [hosted verification](references/hosted-verification.md): `open-pr --auto-merge` plus the local
-  host-only gates in parallel, GitHub merging on green `Verify`. Local checks beyond that are for
-  iteration and diagnosis; never repeat CI-covered verification locally. `open-pr` may print `WAIT`
-  and hold the push while two `Verify` runs are in flight or another lander changed the same files;
-  that is the route working, not a failure, and `--jump-queue` is the Developer's flag, not yours.
+- Local lanes are for iteration and diagnosis; never repeat CI-covered verification locally, and
+  never offer a broad local lane as merge evidence. Hosted `Verify` is the portable final proof even
+  when a local lane would finish sooner.
 - Never background a gate and then poll for its output in a sleep loop: run it in the foreground with
   a timeout, since the gate is no faster for being backgrounded. **Reporting while a lane runs**,
   below, is the one exception — a lane too long to wait out, with the Developer waiting on it.
@@ -100,11 +84,8 @@ on its size.
 
 ## Hosted verification
 
-Read [hosted verification](references/hosted-verification.md) for the landing route, contention,
-CI coverage, offline limits, and what `merge-pr` still does after GitHub has merged. Local `land`
-is for `dev/<name>` branches and for when GitHub is unavailable.
-
-A change meant to make CI faster carries its own `./agent ci-timings` before-and-after
+Read [hosted verification](references/hosted-verification.md) before judging CI contention, a
+partition count, or what hosted `Verify` covers. A change meant to make CI faster carries its own `./agent ci-timings` before-and-after
 (`references/ci-speed.md`).
 
 ## Periodic performance proof
@@ -123,8 +104,8 @@ waiting on it and a silent agent is indistinguishable from a stuck one. Backgrou
 in which to say something; it does not buy the right to say nothing.
 
 - Decide by how long the run is, not by which is tidier: a gate finishing inside a minute runs in the
-  foreground with a timeout, while the landing route's host-only gates, `verify-full`, and
-  `./agent unsandboxed land` run backgrounded with a report.
+  foreground with a timeout, while `open-pr --auto-merge`, `verify-full`, and
+  `./agent unsandboxed land` may run backgrounded with a report.
 - Report about every 20 seconds from start to verdict, one line each: what finished since the last
   note, what is running now, and anything that has already failed. A note that the same node is still
   running is the report the Developer wants, because it dates the silence — do not wait to be asked.

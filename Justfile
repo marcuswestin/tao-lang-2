@@ -433,7 +433,7 @@ my-status:
 # Fast-forward main, move the mirrors that follow it, and merge it into your branch
 [group('Mine')]
 my-sync:
-    ./dev sync-main
+    ./dev my-sync
 
 # Hand merge conflicts in this checkout to an agent for best-effort focused checks and a merge commit
 [group('Mine')]
@@ -621,6 +621,11 @@ cancel-verify *ARGS:
 [group('Dev')]
 land-fix *ARGS:
     ./dev land-fix {{ ARGS }}
+
+# Fast-forward local main to fetched origin/main, with a clean checkout of it and main mirrors; never forces
+[group('Dev')]
+sync-main:
+    ./dev sync-main
 
 # Report a pull request's checks and why failed ones failed; --wait follows them to the end
 [group('Dev')]
