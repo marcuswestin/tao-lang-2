@@ -487,6 +487,7 @@ Describe('repository gate runner', () => {
       'studio-smoke-simulated-user',
       'keyboard-navigation-smoke',
       'studio-dialog-browser',
+      'studio-metro-refresh',
       'studio-agent-browser',
       'studio-network-simulation',
       'studio-canary',
