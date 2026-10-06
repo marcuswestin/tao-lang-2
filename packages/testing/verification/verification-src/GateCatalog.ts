@@ -190,11 +190,14 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
       files: [
         'packages/compiler/compiler-tests/workspace/workspace-batch.test.ts',
         'packages/compiler/compiler-tests/workspace/workspace-incremental.test.ts',
-        'packages/compiler/compiler-tests/workspace/workspace-native-cache.test.ts',
         'packages/compiler/compiler-tests/workspace/workspace-overlays.test.ts',
         'packages/compiler/compiler-tests/workspace/workspace-scopes.test.ts',
         'packages/compiler/compiler-tests/workspace/workspace.test.ts',
       ],
+    }, {
+      // Half the workspace partition's time: together they were a 97s node in hosted Verify.
+      name: 'workspace-native-cache',
+      files: ['packages/compiler/compiler-tests/workspace/workspace-native-cache.test.ts'],
     }, {
       name: 'preview',
       files: [
@@ -384,6 +387,11 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
     }, {
       name: 'watch-sidecar',
       files: ['packages/language/project-tooling/project-tooling-tests/ProjectFileWatchSidecar.integration.test.ts'],
+    }, {
+      name: 'watch-sidecar-root',
+      files: [
+        'packages/language/project-tooling/project-tooling-tests/ProjectFileWatchSidecarRoot.integration.test.ts',
+      ],
     }, {
       name: 'watch-dependencies',
       files: [

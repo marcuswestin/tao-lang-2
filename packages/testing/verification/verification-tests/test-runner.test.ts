@@ -34,6 +34,7 @@ const SPLIT_PROJECT_PARTITIONS = [
   'receipt-repairs',
   'receipt-ownership',
   'watch-sidecar',
+  'watch-sidecar-root',
   'watch-dependencies',
 ] as const
 const PROJECT_RECEIPT_FILES = {
