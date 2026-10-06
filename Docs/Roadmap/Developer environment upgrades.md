@@ -126,6 +126,7 @@ change that addressed it.
 - [DEVENV-SANDBOXED-VERIFY-FAILS-DEV-CLI-SHELL-TESTS — Sandboxed verification fails the dev-cli shell tests](<Developer environment upgrades/DEVENV-SANDBOXED-VERIFY-FAILS-DEV-CLI-SHELL-TESTS.md>) — Candidate
 - [DEVENV-SECRET-MATERIALIZATION-MISSING-FROM-AGENT-COMMANDS — Secret materialization is missing from agent commands](<Developer environment upgrades/DEVENV-SECRET-MATERIALIZATION-MISSING-FROM-AGENT-COMMANDS.md>) — Candidate
 - [DEVENV-SETUP-SUCCEEDS-WHEN-RULESYNC-REJECTS-HOOKS — Setup succeeds when rulesync rejects the hooks file](<Developer environment upgrades/DEVENV-SETUP-SUCCEEDS-WHEN-RULESYNC-REJECTS-HOOKS.md>) — Candidate
+- [DEVENV-SIX-HOST-ONLY-GATES-HAVE-NO-UNSANDBOXED-SHAPE — Six host-only gates have no unsandboxed shape](<Developer environment upgrades/DEVENV-SIX-HOST-ONLY-GATES-HAVE-NO-UNSANDBOXED-SHAPE.md>) — Candidate
 - [DEVENV-STRANDED-DEVELOPMENT-RESOURCE-DISCOVERY — Stranded development resource discovery](<Developer environment upgrades/DEVENV-STRANDED-DEVELOPMENT-RESOURCE-DISCOVERY.md>) — In progress
 - [DEVENV-STUDIO-LEGACY-LOCK-TEST-IS-INTERMITTENT — Studio legacy-lock test is intermittent](<Developer environment upgrades/DEVENV-STUDIO-LEGACY-LOCK-TEST-IS-INTERMITTENT.md>) — Candidate
 - [DEVENV-STUDIO-REAL-APP-PROOF-FAILS-INTERMITTENTLY-UNDER-LOAD — The Studio real-app proof fails intermittently under load](<Developer environment upgrades/DEVENV-STUDIO-REAL-APP-PROOF-FAILS-INTERMITTENTLY-UNDER-LOAD.md>) — In progress
