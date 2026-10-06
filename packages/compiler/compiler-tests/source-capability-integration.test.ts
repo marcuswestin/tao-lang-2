@@ -65,7 +65,7 @@ Describe('compiler: source capability admission', () => {
   Test('rejects unclassified native implementations rather than trusting fails never', async () => {
     const validation = await Validator.validateCode(`
       type Title is text with {
-        func ToText() fails never -> text { return NativeTitle() from ./Native.ts }
+        func ToText() fails never -> text { return NativeTitle from ./Native.ts }
       }
       can Display { ToText() fails never -> text }
       func TextOf(Value Display) -> text { return Value.ToText() }

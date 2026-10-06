@@ -39,7 +39,7 @@ Describe('validator: color values', () => {
       ${themeDesign('Light')}
       ${themeDesign('Dark')}
       app Demo { id "demo" version "1.0.0" name "Demo" Navigator StackNav { Initial Main } Design Light }
-      app DemoDark = Demo with { id "demodark" name "Demo Dark" Design Dark }
+      app DemoDark = Demo with { id "demodark", name "Demo Dark", Design Dark }
       scene Main() { Title "Main" render Badge("Final", Tint: accent) }
       ${colorViews}
     `)
@@ -53,7 +53,7 @@ Describe('validator: color values', () => {
       ${themeDesign('Light')}
       ${themeDesign('Dark', 'glow #ffcc00')}
       app Demo { id "demo" version "1.0.0" name "Demo" Navigator StackNav { Initial Main } Design Light }
-      app DemoDark = Demo with { id "demodark" name "Demo Dark" Design Dark }
+      app DemoDark = Demo with { id "demodark", name "Demo Dark", Design Dark }
       scene Main() { Title "Main" render Badge("Final", Tint: glow) }
       view Glowing(Tint color default glow) { render Surface() [background Tint] }
       ${colorViews}
@@ -72,7 +72,7 @@ Describe('validator: color values', () => {
       use StackNav from @tao/nav
       ${themeDesign('Dark', 'glow #ffcc00')}
       app Demo { id "demo" version "1.0.0" name "Demo" Navigator StackNav { Initial Main } }
-      app DemoDark = Demo with { id "demodark" name "Demo Dark" Design Dark }
+      app DemoDark = Demo with { id "demodark", name "Demo Dark", Design Dark }
       scene Main() { Title "Main" render Swatch(Tint: glow) }
       view Swatch(Tint color default glow) { render Surface() [background Tint] }
       view Surface() {

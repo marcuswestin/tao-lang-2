@@ -19,7 +19,7 @@ nav PantryNavigator = SelectionNav {
       Label "Ingredients",
       Icon "list.bullet",
       Content IngredientsStack
-   },
+   }
    @recipes {
       Label "Recipes",
       Icon "book",

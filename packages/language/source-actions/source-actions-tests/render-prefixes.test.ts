@@ -203,7 +203,9 @@ Describe('Studio render occurrence prefixes', () => {
 
   Test('extracts adjacent labels and captures label-only aliases in first-read order', async () => {
     const document = await parseDocument(`use Col, Text from @tao/ui
-      type Caption is text
+      type Caption is text with {
+        static func +(Left Caption, Right text) fails never -> text { return "{Left}{Right}" }
+      }
       view Main(Caption) {
         let Alias = Caption
         render Col() {
