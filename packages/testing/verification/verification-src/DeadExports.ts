@@ -59,7 +59,8 @@ const PROJECT_ROOTS = ['Apps', 'packages']
 const TAO_EXTENSIONS = ['.tao', '.tao-next', '.tao-revolution']
 
 /** Directories that hold no authored source; `_gen_*` is knip's ignore and dprint's too. */
-const EXCLUDED_DIRECTORIES = (name: string) => name === 'node_modules' || name.startsWith('_gen_')
+const EXCLUDED_DIRECTORIES = (name: string) =>
+  name === 'node_modules' || name.startsWith('_gen_') || (name.startsWith('.') && name !== '.host-tests')
 
 /** The issue lists knip's JSON reporter uses for unused exported symbols. */
 const KNIP_EXPORT_KEYS = ['enumMembers', 'exports', 'nsExports', 'nsTypes', 'types'] as const
@@ -1122,7 +1123,10 @@ async function readSourceFiles(repositoryRoot: string, extensions: readonly stri
     if (!await FS.isDirectory(rootPath)) {
       continue
     }
-    for await (const path of FS.walk(rootPath, { excludeDirectory: EXCLUDED_DIRECTORIES, extensions })) {
+    // Authored host fixtures bind sidecars too; ordinary hidden build/cache trees remain excluded.
+    for await (
+      const path of FS.walk(rootPath, { excludeDirectory: EXCLUDED_DIRECTORIES, extensions, includeHidden: true })
+    ) {
       if (path.endsWith('.tao.ts')) {
         continue
       }

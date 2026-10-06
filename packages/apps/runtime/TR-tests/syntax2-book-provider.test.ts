@@ -55,10 +55,11 @@ function books(count: number): BookInput[] {
 async function acquireThroughQuery(
   schema: BookSchema,
   mode: 'first' | 'next' | 'refresh',
+  signal?: AbortSignal,
 ): Promise<void> {
   const rows = schema.query(bookPlan())
   await TR.Data.NativeQueryContext(rows).run(async (connection, descriptor) => {
-    await bookStoreSession(connection).acquire(descriptor, mode)
+    await bookStoreSession(connection).acquire(descriptor, mode, signal)
   })
 }
 
@@ -186,6 +187,65 @@ Describe('Syntax2 BookStore runtime provider', () => {
     await acquireThroughQuery(schema, 'next')
     await ready(schema)
     Expect(schema.query(bookPlan())).toHaveLength(80)
+  })
+
+  Test('failed refresh preserves live rows and cursor continuation', async () => {
+    const { connection, schema } = connect()
+    const backend = bookStoreSession(connection).backend
+    backend.seedServer(books(83))
+    await ready(schema)
+    schema.activateQuery(bookPlan())
+    await ready(schema)
+    await acquireThroughQuery(schema, 'next')
+    await ready(schema)
+    Expect(schema.query(bookPlan())).toHaveLength(80)
+
+    const original = schema.query(bookPlan())[0] as never
+    backend.failNext('acquisition', 'Temporary refresh failure')
+    await Expect(acquireThroughQuery(schema, 'refresh')).rejects.toBeInstanceOf(HostEnvironmentError)
+    await ready(schema)
+
+    const retained = schema.query(bookPlan())
+    Expect(retained).toHaveLength(80)
+    Expect(retained[0]).toBe(original)
+    Expect(schema.read(retained[0] as never, 'Title')).toBe('Book 1')
+
+    await acquireThroughQuery(schema, 'next')
+    await ready(schema)
+    Expect(schema.query(bookPlan())).toHaveLength(83)
+    Expect(schema.query(bookPlan())[0]).toBe(original)
+    Expect(schema.read(schema.query(bookPlan())[0] as never, 'Title')).toBe('Book 1')
+  })
+
+  Test('cancelled next acquisition preserves publication and cursor for retry', async () => {
+    const { connection, schema } = connect()
+    const session = bookStoreSession(connection)
+    session.backend.seedServer(books(83))
+    await ready(schema)
+    schema.activateQuery(bookPlan())
+    await ready(schema)
+    Expect(schema.query(bookPlan())).toHaveLength(40)
+
+    const started = Deferred<void>()
+    const gate = Deferred<void>()
+    session.backend.setBeforePageCommit(async () => {
+      started.resolve()
+      await gate.promise
+    })
+    const controller = new AbortController()
+    const cancelled = acquireThroughQuery(schema, 'next', controller.signal)
+    await started.promise
+    controller.abort()
+    gate.resolve()
+    await Expect(cancelled).rejects.toBeInstanceOf(HostEnvironmentError)
+    await ready(schema)
+
+    Expect(schema.query(bookPlan())).toHaveLength(40)
+    const original = schema.query(bookPlan())[0] as never
+    await acquireThroughQuery(schema, 'next')
+    await ready(schema)
+    Expect(schema.query(bookPlan())).toHaveLength(80)
+    Expect(schema.query(bookPlan())[0]).toBe(original)
   })
 
   Test('identical concurrent acquisitions join one backend request', async () => {

@@ -853,4 +853,40 @@ Describe('Appium W3C transport', () => {
     const session = await createAppiumWebDriverClient(transport).createSession({ 'appium:automationName': 'xcuitest' })
     await Expect(session.dismissAlert!()).rejects.toBeInstanceOf(AppiumNoSuchAlertError)
   })
+
+  Test('queries the owned application state through the Appium protocol', async () => {
+    const requests: Array<{ body?: unknown; method?: string; path: string }> = []
+    const transport = createAppiumHttpTransport({
+      fetch: async (url, init) => {
+        const path = new URL(url).pathname
+        const body = init?.body === undefined ? undefined : JSON.parse(String(init.body)) as unknown
+        requests.push({ ...(body === undefined ? {} : { body }), method: init?.method, path })
+        const value = path === '/session' ? { sessionId: 'owned' } : 3
+        return new Response(JSON.stringify({ value }), { status: 200 })
+      },
+      serverUrl: 'http://127.0.0.1:4723',
+    })
+    const session = await createAppiumWebDriverClient(transport).createSession({ platformName: 'iOS' })
+    Expect(await session.queryApplicationState!('com.example.syntax2')).toBe(3)
+    Expect(requests.at(-1)).toEqual({
+      body: { appId: 'com.example.syntax2' },
+      method: 'POST',
+      path: '/session/owned/appium/device/app_state',
+    })
+  })
+
+  Test('rejects an unknown application state from Appium', async () => {
+    const transport = createAppiumHttpTransport({
+      fetch: async url =>
+        new Response(
+          JSON.stringify({
+            value: new URL(url).pathname === '/session' ? { sessionId: 'owned' } : 5,
+          }),
+          { status: 200 },
+        ),
+      serverUrl: 'http://127.0.0.1:4723',
+    })
+    const session = await createAppiumWebDriverClient(transport).createSession({ platformName: 'Android' })
+    await Expect(session.queryApplicationState!('com.example.syntax2')).rejects.toThrow('invalid application state')
+  })
 })

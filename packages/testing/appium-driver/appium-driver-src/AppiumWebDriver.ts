@@ -31,6 +31,9 @@ export type AppiumElement = Readonly<{
 
 export type AppiumActionSequence = Readonly<Record<string, unknown>>
 
+/** Appium's cross-platform application state values. */
+export type AppiumApplicationState = 0 | 1 | 2 | 3 | 4
+
 export type AppiumSession = Readonly<{
   actions: (actions: readonly AppiumActionSequence[]) => Promise<void>
   activateApplication: (appId: string) => Promise<void>
@@ -46,6 +49,7 @@ export type AppiumSession = Readonly<{
     platform: 'ios' | 'android',
     expectedAppId: string,
   ) => Promise<Readonly<{ appId: string; label: string }>>
+  queryApplicationState?: (appId: string) => Promise<AppiumApplicationState>
   captureManagedHandshakeDiagnostics?: (
     options: Readonly<{
       platform?: 'ios' | 'android'
@@ -273,6 +277,10 @@ class AppiumWebDriverSession implements AppiumSession {
 
   async activateApplication(appId: string): Promise<void> {
     await this.#request('POST', 'appium/device/activate_app', { bundleId: appId })
+  }
+
+  async queryApplicationState(appId: string): Promise<AppiumApplicationState> {
+    return appiumApplicationState(await this.#request('POST', 'appium/device/app_state', { appId }))
   }
 
   async delete(): Promise<void> {
@@ -722,6 +730,12 @@ function record(value: unknown): Record<string, unknown> | undefined {
 
 function string(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined
+}
+
+function appiumApplicationState(value: unknown): AppiumApplicationState {
+  return value === 0 || value === 1 || value === 2 || value === 3 || value === 4
+    ? value
+    : protocolError('Appium returned an invalid application state.')
 }
 
 function rect(value: unknown): AppiumElementRect | undefined {

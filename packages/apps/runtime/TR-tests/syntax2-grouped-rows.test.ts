@@ -51,6 +51,22 @@ Describe('Syntax2 grouped row projection', () => {
       books[3],
     ])
     Expect(new Set(first.map(entry => entry.RowKey)).size).toBe(first.length)
+    const reversed = GroupedRows([books[1], books[0], books[2], books[3]], builders)
+    Expect(reversed.map(entry => entry.RowKey)).toEqual([
+      first[3]!.RowKey,
+      first[4]!.RowKey,
+      first[0]!.RowKey,
+      first[1]!.RowKey,
+      first[2]!.RowKey,
+      first[5]!.RowKey,
+      first[6]!.RowKey,
+    ])
+    // Projection preserves occurrences; LazyList owns duplicate-key rejection.
+    const duplicate = GroupedRows([books[0], books[0]], builders)
+    Expect(duplicate).toHaveLength(3)
+    Expect(duplicate[1]!.RowKey).toBe(duplicate[2]!.RowKey)
+    Expect(duplicate[1]!.Content.getJSValue()).toBe(books[0])
+    Expect(duplicate[2]!.Content.getJSValue()).toBe(books[0])
     const firstBookKey = first[1]!.RowKey
     const originalHeaderKey = first[0]!.RowKey
     TR.Data.Update(TR.Value(people[0]), { Name: TR.Value('Augusta') })

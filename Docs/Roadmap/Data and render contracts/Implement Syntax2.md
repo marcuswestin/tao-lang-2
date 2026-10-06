@@ -66,12 +66,18 @@ that authorization's implementation scope.
    writes, continuation/refresh failures and cancellation. Do not restore eager all-row assumptions.
 2. **Native acceptance.** Compiled Export tests prove PDF bytes, checked Duration and cleanup on
    success/upload failure; native CompareTitles and grouped builder boundaries have focused proof.
-   iOS clock compilation has arm64/x86_64 evidence. Installed-device, suspend/resume and Android
-   behavior remain unproved. Use the existing managed native lanes and record their boundaries.
-3. **Future-source and coverage reconciliation.** Compare Main.tao.future, Library.test.tao.future
-   and library/GroupedRows.ts.future with active modules and the numbered obligations below. They
-   remain undiscovered design fixtures, not runtime dependencies or acceptance evidence. Account for
-   every obligation before retiring a fixture; update app documentation and coverage together.
+   Installed iOS simulator run `8075bfdd-c223-4ecf-8417-6e72d9df47ff` and Android emulator run
+   `39e509a5-7fdd-4822-a1d8-84528f4ea2eb` pass real ten-second background/resume timing,
+   immediate sampling of the same timer, joined cancellation cleanup and actual Library export.
+   Two mounted screens preserve Library state and virtualized row reachability; native assertions
+   retain accessibility-label selectors independently of visible text. Neither receipt
+   claims physical-device or operating-system file-service behavior.
+3. **Future-source and coverage reconciliation.** Complete: Main, the empty-result journey and the
+   grouped projection sketch are retired after case-by-case mapping to active modules and named
+   checks in the app README. The mounted query-presentation proof covers initial loading, refreshing
+   with retained rows and stale content after refresh failure. The shared conversion-failure family
+   has a cross-file effect check and an actual app rejection journey. Retired sketches are not runtime
+   dependencies or installed-platform acceptance evidence.
 4. **Final program acceptance.** Address failures from the combined journeys and applicable host
    checks, review the integrated seams, run the required final gates and land the acceptance slice.
    The broad deferred language investigations remain outside this task's completion criteria.
@@ -82,6 +88,38 @@ below describe the execution architecture and retained audit obligations, not ou
 feature families.
 
 ## Scope and boundaries
+
+### Acceptance execution plan
+
+The acceptance branch starts from landed baseline `a024a29a`. Complete the following
+slices without reopening deferred language decisions. Each slice records the exact checks and
+their proof boundaries before its coherent changes land through hosted Verify and the host-only
+complement. A source test is not installed-platform evidence.
+
+| Slice            | Required result                                                                                                                                                                                                            | Evidence owner                                                                                                                              |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Library          | Empty results remain available; first creation removes the empty message. Paging preserves acquired rows and live handles across refresh, errors and cancellation. Grouping preserves book identity across author changes. | Active Library journeys; empty CLI and mounted-app journeys; BookStore provider, grouped rows and mounted Shelf tests.                      |
+| Native           | Checked durations, export and deferred cleanup work on installed iOS and Android; cancellation and suspend/resume preserve the selected lifecycle contract.                                                                | Existing compiled export tests plus managed installed-platform acceptance receipts, identifying simulator versus physical-device execution. |
+| Future fixtures  | Every distinct retained example has executable coverage or an explicit deferred owner before retirement.                                                                                                                   | A case-by-case mapping of Main, Library journey and grouped projection future fixtures to active source and named checks.                   |
+| Written contract | Specifications and app guidance describe the actual implemented behavior and remaining platform limits.                                                                                                                    | Updated app README, relevant specs and the numbered audit below, tied to recorded checks.                                                   |
+| Integration      | All required cases and applicable platform checks pass on the final integrated head; meaningful slices are landed.                                                                                                         | Focused local repair evidence, hosted Verify, host complement and confirmed merged pull requests.                                           |
+
+Baseline recheck on 2026-10-06: all four active Library journeys and all eight BookStore
+provider tests pass. Existing empty-result CLI and mounted-app tests must be rerun before
+closing that obligation; retained future text alone does not prove it. Native capability queries
+find available iOS simulators and an Android device state, but neither establishes installed app
+acceptance. Final reporting must preserve these distinctions.
+
+If CI fails, cancel the remaining run, inspect which relevant suites never completed, reproduce
+those suites locally and batch repairs before the next push. Local diagnostic runs do not replace
+hosted merge proof.
+
+The detailed future-fixture audit closed S61's shared `ConversionFailure` contract with an executable
+core family and Title-to-ValidTitle converter. A cross-file check proves declared leaf effects admit
+into the family contract; the fifth Library journey proves safe propagated conversion feedback.
+The fixture's explicit loading override is implemented and observed by a mounted acquisition test.
+Its typed app error branch reconciles to S61's selected generic app guard; this does not add typed
+app guard cases or implement A29's deferred state redesign.
 
 Use [Decisions](../Tao%20Revolution/Decisions.md) and the app README. S66's unit table, supplied-ancestor
 inference and explicit conversions, and S67's five integration choices are selected. The final

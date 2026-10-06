@@ -43,10 +43,10 @@ const INSPECTION_LOCK_WAIT_MS = 60_000
 function locations(options: MaintainedBindingOptions): Locations {
   return {
     root: FS.resolvePath(
-      options.stdlibRoot ?? TaoStdlib.declaredRoot() ?? FS.resolvePath('../../stdlib', import.meta.dir),
+      options.stdlibRoot ?? TaoStdlib.declaredRoot() ?? FS.resolvePath('../../stdlib', import.meta.dirname),
     ),
     sourceRoots: (options.sourceRoots
-      ?? [FS.resolvePath('../../expo-host', import.meta.dir), FS.resolvePath('../../../..', import.meta.dir)])
+      ?? [FS.resolvePath('../../expo-host', import.meta.dirname), FS.resolvePath('../../../..', import.meta.dirname)])
       .map(path => FS.resolvePath(path)),
     explicitSources: options.sourceRoots !== undefined && options.sourceRoots.length > 0,
   }
@@ -82,8 +82,8 @@ async function generatorIdentity(
   beforeRead?: (paths: readonly string[]) => Promise<void>,
 ): Promise<{ identity: string; paths: string[]; directory: string }> {
   const resourceRoot = TaoResources.declaredRoot()
-  const directory = await FS.isFile(FS.resolvePath('generate.ts', import.meta.dir))
-    ? import.meta.dir
+  const directory = await FS.isFile(FS.resolvePath('generate.ts', import.meta.dirname))
+    ? import.meta.dirname
     : resourceRoot === undefined
     ? undefined
     : FS.resolvePath(TaoResources.NATIVE_BINDINGS_GENERATOR_DIRECTORY, resourceRoot)
@@ -284,6 +284,8 @@ export async function inspectMaintainedNativeBindings(
     afterManifestCapture?: () => Promise<void>
     /** Observe completed hashing before the final snapshot guards, without changing its verdict. */
     afterInspection?: () => Promise<void>
+    /** Observe each accepted unlocked attempt just before its final publication-lock probe. */
+    beforeFinalProbe?: () => Promise<void>
   } = {},
 ): Promise<Inspection> {
   const location = locations(options)
@@ -330,8 +332,12 @@ export async function inspectMaintainedNativeBindings(
       await observers.afterInspection?.()
     }
   }
+  const inspectLocked = () =>
+    FS.withFileMutationLock(first, parent, () => inspectUnlocked(location), { timeoutMs: INSPECTION_LOCK_WAIT_MS })
   let firstAttempt = true
-  for (let attempt = 0; attempt < 3; attempt++) {
+  // Two unlocked passes, then one under the lock: other readers' barriers and stale confirmations
+  // hold the same lock as a publisher, so the final probe cannot tell them apart.
+  for (let attempt = 0; attempt < 2; attempt++) {
     const barrierRequired = !firstAttempt || !canInspectOptimistically || await FS.exists(lock)
     firstAttempt = false
     if (barrierRequired) {
@@ -361,19 +367,19 @@ export async function inspectMaintainedNativeBindings(
     } catch {
       continue
     }
-    if (sameSnapshot(before, after) && await pass.accept?.() !== false && !await FS.exists(lock)) {
-      if (pass.result.status === 'fresh') {
-        pass.remember?.()
-        return pass.result
+    if (sameSnapshot(before, after) && await pass.accept?.() !== false) {
+      await observers.beforeFinalProbe?.()
+      if (!await FS.exists(lock)) {
+        if (pass.result.status === 'fresh') {
+          pass.remember?.()
+          return pass.result
+        }
+        return await inspectLocked()
       }
-      return await FS.withFileMutationLock(first, parent, () => inspectUnlocked(location), {
-        timeoutMs: INSPECTION_LOCK_WAIT_MS,
-      })
     }
   }
-  Errors.throwHostEnvironment(
-    'Maintained native binding files kept changing during inspection. Retry the check after publication finishes.',
-  )
+  // Errors raised here, such as an unreadable manifest, surface as themselves.
+  return await inspectLocked()
 }
 
 /**

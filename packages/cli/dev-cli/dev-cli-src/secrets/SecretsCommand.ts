@@ -114,10 +114,10 @@ async function recipientOf(identity: string): Promise<string> {
 /**
  * ageCipher shells out to `age`. Only `decrypt` uses the machine identity, and the Secure Enclave plugin is
  * what turns that into a Touch ID or passcode prompt; everything else is software and silent. A test passes a
- * stand-in identity file; the command always reads the machine's.
+ * stand-in identity file and its own notice stream; the command always reads the machine's.
  */
-function ageCipher(identityPath?: string): Cipher {
-  return createAgeCipher(identityPath ?? identityFile(), 'just secrets setup')
+function ageCipher(identityPath?: string, notices: HCI.OutputOptions = {}): Cipher {
+  return createAgeCipher(identityPath ?? identityFile(), 'just secrets setup', notices)
 }
 
 async function readStore(): Promise<SecretStore> {

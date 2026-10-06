@@ -1,6 +1,6 @@
 use Time from @tao/time
 use CreateTemporaryPDF, DeleteTemporaryFile, InvalidInput, UploadFile from ./BookIO
-use Book, NewBook from ./Library
+use Book, NewBook, ValidTitle from ./Library
 
 // Validation rejection is handled locally; storage failures retain the app boundary.
 public
@@ -8,6 +8,7 @@ action Add(NewBook) {
    if NewBook.Title is empty {
       fail InvalidInput "Enter a title"
    }
+   let ValidTitle = NewBook.Title as ValidTitle
    create Book with NewBook
 }
 

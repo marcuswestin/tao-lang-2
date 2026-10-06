@@ -48,6 +48,13 @@ test "Syntax2 Library" {
       press "Add"
       expect #draft input value ""
    }
+   test "routes a conversion failure to the app guard with its safe sentence" {
+      run LibraryApp
+      enter "   " into #draft
+      press "Add"
+      expect text "Enter a nonblank title"
+      expect missing text "Something went wrong."
+   }
    test "routes a stale continuation failure to the app guard" {
       run LibraryApp
       enter "A new book" into #draft

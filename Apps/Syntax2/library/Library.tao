@@ -35,6 +35,9 @@ public
 type GroupMode is yes/no
 
 public
+type ValidTitle is text
+
+public
 type Title is text with {
    func ToText() fails never {
       return UpperCase(Title)
@@ -42,6 +45,10 @@ type Title is text with {
 
    func Compare(Other Title) fails never -> Comparison {
       return CompareTitles(Title, Other) from ./Library.ts
+   }
+
+   Title as ValidTitle fails InvalidFormat {
+      return ValidateTitle(Title) from ./Library.ts
    }
 
    view Render() {

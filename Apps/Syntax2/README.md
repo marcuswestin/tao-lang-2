@@ -9,7 +9,7 @@ This is the language-review checkpoint, not completed app/platform acceptance. T
 uses the standard-library LazyList and grouped row projection; its final combined journeys pass,
 while remaining native/platform acceptance has separate proof boundaries. The Developer resumed implementation on 2026-10-05,
 including native binding adaptation and landing. Landing this functioning language baseline does not close the
-remaining acceptance work. `.tao.future` files remain undiscovered and are retained for reconciliation.
+remaining acceptance work. The forcing fixtures have now graduated and are retired after case-by-case reconciliation.
 
 ## Source and authority
 
@@ -49,17 +49,17 @@ remaining acceptance work. `.tao.future` files remain undiscovered and are retai
   second journey creates a book and then exercises stale-cursor recovery through the app guard.
 - [Shelves.tao](Shelves.tao): parameterized header/item renderers, default content, explicit empty
   replacement, repeated header placement and exact item-renderer forwarding into LazyList.
-- [Main.tao.future](Main.tao.future): retained design fixture to reconcile against the active app;
-  it is not executable acceptance evidence.
 - [library/GroupedRows.tao](library/GroupedRows.tao): graduated typed keyed rows, structural ui,
   checked ordinary Tao builders and the pure native projection boundary.
   [library/GroupedRows.ts](library/GroupedRows.ts) implements the native projection through
   authenticated builder methods and original live Book handles. A focused runtime check proves
   distinct equal-name authors, absent authors, header renaming and stable book keys after regrouping.
+  It also checks first-appearance order after reordering the input, and preserves duplicate
+  occurrences with duplicate keys; the standard-library LazyList test owns rejection of those keys.
   A compiled-source check also proves the ordinary builders and strict generated TypeScript.
   The final combined app journeys pass for grouping transitions, live revision acknowledgment and
-  singular/collection returns; header renaming and stable regrouped keys have focused runtime proof. The retained GroupedRows.ts.future algorithm sketch
-  is not a separate implementation contract.
+  singular/collection returns; header renaming and stable regrouped keys have focused runtime proof.
+  The former algorithm sketch is retired after its ordering, identity and duplicate-key cases were proved.
 - [library/BookIO.tao](library/BookIO.tao): active owned file/revision/query adapter contracts.
   BookIO.ts and BookStoreProvider.ts implement actual bounded acquisition, PDF creation, upload,
   cleanup and cached revision acknowledgment. Its former future contracts are fully graduated.
@@ -67,8 +67,9 @@ remaining acceptance work. `.tao.future` files remain undiscovered and are retai
   samples a monotonic timer before creating/uploading an owned PDF and joins deferred deletion
   before completing. A compiled-source acceptance test proves real PDF bytes, checked elapsed
   Duration, and cleanup on success and upload failure; it does not claim installed-device proof.
-- [Library.test.tao.future](Library.test.tao.future): initial user-visible journey to activate with
-  the entry slice; it is not current acceptance evidence.
+- The former empty-result future journey is retired. Its exact header, available-empty result
+  and grouping toggle run in `syntax2-empty-journey.test.ts`; the mounted empty-query journey also
+  verifies the first creation removes the empty message without invoking the app guard.
 - The former library/adapter/Keyed future targets are retired after their executable definitions
   graduated. RenderKey, Keyed, ui and Occurrence belong to the ordinary @tao/ui standard library.
 
@@ -93,15 +94,58 @@ covering 40/80/83 acquired counts, grouping transitions, revision acknowledgment
 Mounted feature proof verifies that empty bare text values emit no node;
 a quoted empty string and explicit Text("") still retain their Text nodes.
 
+### Graduated example coverage
+
+The retired forcing fixtures' numbered cases map to active modules and proof owners below.
+Installed-platform acceptance remains separate from this source and mounted-app coverage.
+
+| Future case                                                     | Active implementation                           | Proof owner                                                                                                                             |
+| --------------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Main 1: app boundary                                            | Main app guard and BookStore                    | Library propagated-failure journey                                                                                                      |
+| Main 1: loading presentation                                    | Explicit app loading Spinner                    | Mounted query-presentation test holds initial acquisition and observes the real app override                                            |
+| Main 1: shared ConversionFailure family                         | Core family and Title-to-ValidTitle converter   | Cross-file converter effect test; fifth Library journey observes InvalidFormat feedback through the generic app error guard             |
+| Main 2: slots and forwarding                                    | Shelves, Shelf and GroupedShelf                 | Mounted Shelf and compiler shelf-source tests                                                                                           |
+| Main 3: signature roles, named state, generic display and Score | Main and library/Library                        | Library rendering journey; nominal/generic compiler and validator tests                                                                 |
+| Main 3.1: signed quantities and units                           | Main and core quantity contracts                | Library quantity assertions; numeric-units compiler/runtime tests                                                                       |
+| Main 4: bounded acquisition                                     | Feed, BookIO and BookStore provider             | Library 40/80/83 journey; BookStore and BookIO tests                                                                                    |
+| Main 5: typed input and recovery                                | Add and local/app guards                        | Library invalid-input, reset and propagated-failure journeys                                                                            |
+| Main 6: empty, refreshing, stale and grouped content            | Main, GroupedRows and BookViews                 | Empty CLI/mounted journeys; mounted query presentation retains rows during refresh and failure; grouped live-handle/Shelf tests         |
+| Main 7: rejected invocations                                    | Explicit roles and concrete quantities          | `packages/language/validator/validator-tests/syntax2-forcing-cases.test.ts` passes 6/6: three retained negatives and valid alternatives |
+| Retired empty-result future journey                             | Active app with isolated empty provider seed    | syntax2-empty-journey and syntax2-empty-query-journey                                                                                   |
+| Retired GroupedRows algorithm                                   | Authored GroupedRows builder and implementation | Grouped rows tests cover first-appearance order and duplicate occurrence keys; LazyList tests reject duplicate keys before mounting     |
+
+Fresh acceptance on 2026-10-06 also replays the compiled Export, native comparison, grouped
+builder and BookIO checks. These exercise the authored boundaries with controlled host inputs;
+they do not prove installed native clocks, suspend/resume or operating-system file services.
+
+The installed acceptance host keeps the actual Library and isolated `.host-tests/Lifecycle.tao`
+fixture mounted on selectable screens so each has the full viewport. Syntax2 uses the production
+clock and scheduler rather than the host harness's virtual
+`advance` clock. Its journey checks a timer sampled before backgrounding, completion after resume,
+and cancellation of an explicitly owned adapter resource with joined deferred cleanup. The fixture
+does not add cancellation-on-unmount semantics or claim operating-system file export.
+The mounted export-notice journey calls the real NotifyExport adapter with a controlled Duration,
+then proves its metadata notification renders the notice and accessible completion label. Both are
+absent beforehand. This is publication/rendering proof, separate from native-clock and export proof.
+
 ### Remaining acceptance
 
 1. The actual Library journeys with Shelf and GroupedShelf active pass for 40/80/83 acquired
-   counts, grouping changes, seen revisions and writes. Retain the focused virtualization and
-   author/key proofs; finish reconciliation of the retained empty-collection fixture.
-2. Prove the applicable native timing/export/cancellation/cleanup boundaries. iOS build evidence
-   exists; installed-device, suspend/resume and Android acceptance are not claimed.
-3. Reconcile retained future Main/test/algorithm fixtures, documentation and coverage records.
-   Keep the future extension undiscovered; retire a fixture only after its coverage is accounted for.
+   counts, grouping changes, seen revisions and writes. Rechecked on 2026-10-06: all five active
+   journeys pass, as do the empty-result CLI and mounted-app journeys. The latter verifies both
+   grouping modes, creation of the first live row and zero app-error-guard invocations. Retain the
+   focused virtualization and author/key proofs. The mounted query-presentation test proves loading,
+   concurrent refreshing content and stale cached rows. Refresh failures report inline feedback.
+2. Installed acceptance passes on iOS simulator run
+   `8075bfdd-c223-4ecf-8417-6e72d9df47ff` and Android emulator run
+   `39e509a5-7fdd-4822-a1d8-84528f4ea2eb`. Both prove a measured ten-second background/resume interval,
+   immediate sampling of the same timer, completion, joined cancellation cleanup and actual Library
+   export. The wrapper switches between two mounted screens to keep the virtualized Library reachable;
+   native assertions preserve accessibility-label selectors even when visible text differs.
+   Receipts live under `.artifacts/host-testing/<run>/`; these are simulator/emulator proofs, not
+   physical-device or operating-system file-service acceptance.
+3. Documentation and coverage records now include both installed-platform receipts. Main, the empty
+   journey and the grouping algorithm fixtures are retired after their distinct cases were accounted for.
 4. Run the final integrated verification and authorized landing. Record the actual verdict and
    limitations rather than treating source validation as complete app acceptance.
 
@@ -140,16 +184,16 @@ These are deliberately narrow integration requirements, not the final A29 query-
   Key() fails never -> RenderKey. GroupedRow and Book supply methods explicitly; RowKey derives from
   RenderKey and returns upward through the declared contract. The compiler checks ordinary signatures,
   not these names. Library runtime enforces uniqueness without index repair. Other list components
-  choose their own identity contracts; loops are unaffected. The implementation is active; combined
-  the combined grouping, revision and live-write app journeys pass.
+  choose their own identity contracts; loops are unaffected. The implementation is active; the
+  combined grouping, revision and live-write app journeys pass.
 - GroupedRows rebuilds a projection when grouping dependencies change. Content retains Book handles;
   mounted row rendering subscribes to their fields. It never stores JSX, mounted nodes or a frozen
   Book snapshot. Keys preserve occurrence state across reorder; removal unmounts. A moved book keeps
   its key even when its author group changes. Duplicate appearances require distinct occurrence keys.
   Grouping touches only acquired rows, so a group can remain incomplete until more data arrives.
 - GroupedRows.ts returns builder-produced rows through generated capability contracts. Its binding
-  passes live handles, records dependency reads and builds checked Tao values. The retained future
-  callback shape is an algorithm sketch, not the generated TypeScript ABI.
+  passes live handles, records dependency reads and builds checked Tao values. The retired sketch's
+  callback shape is not the generated TypeScript ABI.
 - ObservedRevision returns a cached, user-scoped revision token for the displayed book. MarkSeen
   acknowledges precisely that revision; later revisions remain unseen. Rendering/visibility does
   not itself acknowledge anything. Permission failure is not a successful acknowledgment.
@@ -158,7 +202,9 @@ These are deliberately narrow integration requirements, not the final A29 query-
   prevents done; completed upload is not rolled back or automatically retried. Detached notification
   has its own root failure ownership and cannot change the completed upload's facts.
 - TextField retains Draft.Title's nominal type and validates edits. Value upcasting does not license
-  writes of arbitrary text into that field. Add maps validation rejection to InvalidInput, while
+  writes of arbitrary text into that field. Add handles an empty title as InvalidInput; whitespace-only
+  input fails its explicit Title-to-ValidTitle conversion as InvalidFormat. Other provider validation
+  rejects through InvalidInput, while
   other failures propagate to the app boundary.
 
 ## Contract review

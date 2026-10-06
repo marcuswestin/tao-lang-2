@@ -40,6 +40,7 @@ export type AppiumIosHostControl = Readonly<{
 }>
 
 export type AppiumIosHostProofOptions = Readonly<{
+  afterOperation?: (operation: HostJourneyOperation) => Promise<void>
   artifactRoot: string
   control: AppiumIosHostControl
   controller: HostController
@@ -93,7 +94,11 @@ export async function runAppiumIosHostProof(options: AppiumIosHostProofOptions):
       revision: options.revision,
       target: options.target,
     })
-    await runHostJourney(options.journey, appiumIosJourneyAdapter(session, options.control, options.runId, timeline))
+    await runHostJourney(
+      options.journey,
+      appiumIosJourneyAdapter(session, options.control, options.runId, timeline),
+      options.afterOperation,
+    )
     screenshot = (await session.captureScreenshot('journey-passed')).artifactPath
     receipt = {
       ...(options.fault === undefined ? {} : { fault: { ...options.fault, verdict: 'escaped' as const } }),
@@ -194,7 +199,7 @@ export function appiumIosJourneyAdapter(
           },
           enter: async next => await enterNativeInput(session, next.selector, next.target, next.value, next.selections),
           expect: async next =>
-            await assertText(session, next.text, next.missing, next.selections, next.source.filePath),
+            await assertText(session, next.text, next.missing, next.selections, next.source.filePath, next.selector),
           expectCheckboxState: unsupportedJourneyOperation,
           expectFocusRegion: unsupportedJourneyOperation,
           expectGroup: unsupportedJourneyOperation,
@@ -318,7 +323,7 @@ async function observeIfPresent(session: HostSession, target: HostTarget): Promi
   try {
     return await observe(session, target)
   } catch (error) {
-    if (error instanceof AppiumNoSuchElementError) {
+    if (isMissingElement(error)) {
       return undefined
     }
     throw error
@@ -353,8 +358,14 @@ async function assertText(
   missing: boolean,
   selections: readonly HostJourneySelection[],
   sourcePath: string,
+  selector = 'text',
 ): Promise<void> {
-  const target = targetWithinSelections(selections, { kind: 'text', value: text })
+  const target = targetWithinSelections(
+    selections,
+    selector === 'label'
+      ? { kind: 'accessibility', name: text }
+      : { kind: 'text', value: text },
+  )
   if (!missing) {
     const found = await Time.pollUntil(async () => {
       const observation = await observeIfPresent(session, target)
@@ -384,11 +395,17 @@ async function assertText(
       )
     }
   } catch (error) {
-    if (missing && error instanceof AppiumNoSuchElementError) {
+    if (missing && isMissingElement(error)) {
       return
     }
     throw error
   }
+}
+
+function isMissingElement(error: unknown): boolean {
+  return error instanceof AppiumNoSuchElementError
+    || (error instanceof HostControlError && error.code === 'assertion'
+      && error.details?.['reason'] === 'element-not-found')
 }
 
 /** classifyAppiumIosFault accepts a mutation only when its authored terminal text assertion failed. */

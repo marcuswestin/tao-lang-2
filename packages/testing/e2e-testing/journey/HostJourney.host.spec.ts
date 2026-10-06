@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { Errors, Repo } from '@shared'
+import { Errors, FS, Repo } from '@shared'
 import {
   compileHostJourney,
   type HostJourney,
@@ -47,12 +47,15 @@ test.beforeAll(async () => {
   journey = await compileHostJourney(Repo.resolvePath('Apps/HNReader/HNReader.test.tao'), selector)
 })
 
-test('selects the one HNReader lifecycle journey with authored source locations', () => {
+test('selects the one HNReader lifecycle journey with authored source locations', async () => {
+  const lines = (await FS.readText(journey.sourcePath)).split('\n')
   expect(journey.version).toBe(1)
   expect(journey.check.name).toBe('keeps reading history across a relaunch in most-recent order')
   expect(journey.check.source.filePath).toMatch(/Apps\/HNReader\/HNReader\.test\.tao$/u)
-  expect(journey.check.source.range?.start.line).toBe(96)
-  expect(journey.check.run.source.range?.start.line).toBe(97)
+  const checkLine = journey.check.source.range!.start.line
+  expect(lines[checkLine]?.trim()).toBe(`test "${selector.check}" {`)
+  expect(journey.check.run.source.range!.start.line).toBe(checkLine + 1)
+  expect(lines[checkLine + 1]?.trim()).toBe('run HNReaderStub')
   expect(journey.check.steps.map(step => step.kind)).toEqual([
     'press',
     'press',
@@ -89,8 +92,28 @@ test('preflights missing row selection before it sends any host input and report
   const unsupported = failure as HostJourneyUnsupportedCapabilityError
   expect(unsupported.capability).toBe('select')
   expect(unsupported.source.filePath).toMatch(/Apps\/HNReader\/HNReader\.test\.tao$/u)
-  expect(unsupported.source.range?.start.line).toBe(105)
+  const lines = (await FS.readText(journey.sourcePath)).split('\n')
+  const selectionLine = unsupported.source.range!.start.line
+  expect(lines[selectionLine]?.trim()).toBe('select #reading[1] {')
+  expect(selectionLine).toBeGreaterThan(journey.check.source.range!.start.line)
+  expect(selectionLine).toBeLessThan(journey.check.source.range!.end.line)
   expect(operations).toEqual([])
+})
+
+test('joins a host lifecycle hook before admitting the next authored operation', async () => {
+  const phases: string[] = []
+  await expect(runHostJourney(journey, {
+    capabilities,
+    async execute(operation) {
+      phases.push(operation.kind)
+    },
+  }, async operation => {
+    phases.push(`after:${operation.kind}`)
+    if (operation.kind === 'press') {
+      Errors.throwUserInput('Lifecycle proof failed.')
+    }
+  })).rejects.toThrow('Lifecycle proof failed.')
+  expect(phases).toEqual(['run', 'after:run', 'press', 'after:press'])
 })
 
 test('preserves lifecycle and selected-row scope in neutral host operations', async () => {

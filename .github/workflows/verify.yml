@@ -9,11 +9,8 @@ name: Verify
 # What this does not prove: the host-only lanes (Studio smokes, browser, native shell, canary),
 # which need a window server and an unsandboxed host. The landing route runs those locally while
 # this workflow runs (`agents/skills/verification-lanes/references/hosted-verification.md`).
-# `CI macOS` below is where they move, one gate at a time: `CI_HOST_GATES` names the host gates a
-# hosted macOS runner has been admitted to run, the job runs exactly those (with the prepare nodes
-# they read), and the local complement runs the rest, so each host gate is proved in one place.
-# The job is not required and the aggregate `Verify` does not wait for it; admit a gate only once
-# its hosted run is reliable, because admission takes it out of the local complement.
+# The `CI macOS` workflow (`ci-macos.yml`) is where they move, one gate at a time; it is a workflow
+# of its own so a run here ends when the Linux partitions do.
 #
 # The contributor-agreement check is a job here rather than a workflow of its own, so a push to a
 # pull request shows as one run in the Actions list instead of two. It runs on the same token as
@@ -36,10 +33,6 @@ on:
     inputs:
       partitions:
         description: Partition count for this run only; blank lets the plan job choose the alone or shared count below.
-        required: false
-        type: string
-      host_gates:
-        description: Host gates CI macOS runs for this run only, comma-separated; blank uses CI_HOST_GATES below.
         required: false
         type: string
 
@@ -72,10 +65,6 @@ env:
   # overrides both for that one run.
   PARTITIONS: 20
   PARTITIONS_SHARED: 11
-  # The host gates `CI macOS` is admitted to run, comma-separated, single-quoted on this one line:
-  # `verify-complement` reads exactly this line to leave them out of the local lane. Empty admits
-  # none. Admit one gate at a time, after its dispatched run (`host_gates` above) proved reliable.
-  CI_HOST_GATES: ''
   # Per-gate green records travel between runs of the same tree through the Actions cache, which
   # accepts only an absolute path with no `..` in it.
   TAO_GREEN_STORE: /home/runner/tao-green
@@ -328,21 +317,6 @@ jobs:
           restore-keys: |
             tao-native-bindings-${{ runner.os }}-
 
-      # The built editor extension, the prepare phase's longest node and on every partition's critical
-      # path. The build hashes its own inputs and outputs and skips only when both match the record
-      # inside the restored tree, so a restore from any key, or none, costs at most a rebuild. The key
-      # is only a hit-rate hint; it is computed here, before setup writes anything under packages/.
-      - name: Restore the built editor extension
-        id: ide-extension
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            packages/ides/ide-extension/_gen_ide-extension
-            packages/ides/ide-extension/ide-extension-syntaxes/_gen_syntaxes
-          key: tao-ide-extension-${{ runner.os }}-${{ hashFiles('bun.lock', 'devenv.lock', 'packages/**', '!**/node_modules/**', '!**/_gen_*/**', '!**/.tao-ts/**', '!**/.tao/cache/**') }}
-          restore-keys: |
-            tao-ide-extension-${{ runner.os }}-
-
       # Installs a checksum-pinned single-user Nix, builds the locked Linux profile, then prepares
       # only what the lane reads (`--verify-setup`): the full `./agent setup` also writes agent
       # configuration, Git hooks, and shell completion, which no gate reads.
@@ -417,18 +391,6 @@ jobs:
       - name: Verify partition ${{ env.PARTITION }}
         run: ./agent verify-full-sandbox --partition "$PARTITION"
 
-      # Saved only when the partition rebuilt the extension (its record is written last, on success).
-      # Every partition builds the same tree, so the first to finish saves and the rest are refused.
-      - name: Save the built editor extension
-        if: always() && steps.ide-extension.outputs.cache-hit != 'true' && hashFiles('packages/ides/ide-extension/_gen_ide-extension/.build-identity.json') != ''
-        continue-on-error: true
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            packages/ides/ide-extension/_gen_ide-extension
-            packages/ides/ide-extension/ide-extension-syntaxes/_gen_syntaxes
-          key: ${{ steps.ide-extension.outputs.cache-primary-key }}
-
       # Locally the prepare phase fixes formatting and regenerates indexes in place; here a rewrite
       # means the pull request carries unformatted or stale files, which is a failure.
       - name: Require the prepare phase to leave the tree unchanged
@@ -481,99 +443,6 @@ jobs:
         with:
           path: ${{ env.TAO_GREEN_STORE }}
           key: tao-green-${{ runner.os }}-${{ runner.arch }}-${{ steps.tree.outputs.hash }}-${{ matrix.partition }}-of-${{ needs.plan.outputs.count }}
-
-  # The admitted host gates on a hosted macOS runner. Not required and not waited for: `Verify`
-  # stays the one verdict until every host gate is admitted here and proved reliable, and then it
-  # is the ruleset, not this file, that makes `CI macOS` required. One job today; a second
-  # partition needs an aggregate of its own, since the artifacts are kept apart from `Verify`'s.
-  # The same devenv bootstrap and caches as `Companion hosts`: the portable Linux profile does not
-  # exist for Darwin, and the Nix store is what makes a devenv shell affordable on a fresh runner.
-  macos:
-    name: CI macOS
-    runs-on: macos-26
-    timeout-minutes: 60
-    # The workflow's cache paths are under the Linux home; a macOS runner's is /Users/runner.
-    env:
-      TAO_GREEN_STORE: /Users/runner/tao-green
-      BUN_INSTALL_CACHE_DIR: /Users/runner/tao-cache/bun
-      npm_config_cache: /Users/runner/tao-cache/npm
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: cachix/install-nix-action@v31
-
-      - name: Cache the Nix store
-        uses: nix-community/cache-nix-action@v7
-        with:
-          primary-key: tao-devenv-nix-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('devenv.lock', 'devenv.nix', 'devenv.yaml', 'packages/cli/dev-cli/dev-cli-src/environment/toolchain-packages.nix', '.config/nix/hutch.nix') }}
-          restore-prefixes-first-match: tao-devenv-nix-${{ runner.os }}-${{ runner.arch }}-
-          gc-max-store-size-macos: 6G
-
-      - uses: cachix/cachix-action@v16
-        with:
-          name: devenv
-      - name: Install devenv
-        run: nix profile add nixpkgs#devenv
-
-      - name: Restore the installed node_modules
-        id: macos-node-modules
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ env.NODE_MODULES_PATHS }}
-          key: tao-node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'devenv.lock', 'package.json', 'packages/*/package.json', 'packages/*/*/package.json', 'packages/apps/providers/*/package.json', 'Apps/Hosted CRUD/package.json') }}
-
-      - name: Set up Tao
-        run: devenv shell -- ./agent setup
-
-      - name: Save the installed node_modules
-        if: steps.macos-node-modules.outputs.cache-hit != 'true'
-        continue-on-error: true
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ env.NODE_MODULES_PATHS }}
-          key: ${{ steps.macos-node-modules.outputs.cache-primary-key }}
-
-      - name: Seed the plan with the committed durations
-        run: |
-          mkdir -p .artifacts/timings .artifacts/testing
-          cp .github/verify/durations.json .artifacts/timings/durations.json
-          cp .github/verify/ledger.json .artifacts/testing/ledger.json
-
-      - name: Run the admitted host gates
-        env:
-          # The dispatch input tries one admission for one run; the workflow's own line is the default.
-          # (`env` is a step-level context only, so this cannot sit on the job.)
-          HOST_GATES: ${{ inputs.host_gates || env.CI_HOST_GATES }}
-        run: |
-          echo "Admitted host gates: '${HOST_GATES}'"
-          devenv shell -- ./agent unsandboxed verify-full-ci --ci-host-gates "$HOST_GATES"
-
-      - name: Require the prepare phase to leave the tree unchanged
-        run: |
-          if [ -n "$(git status --porcelain)" ]; then
-            echo "The prepare phase rewrote tracked files; run ./agent fix and commit the result:"
-            git status --porcelain
-            git diff --stat
-            exit 1
-          fi
-
-      - name: Collect the run's summary and logs
-        if: always()
-        run: |
-          mkdir -p "$RUNNER_TEMP/macos-logs"
-          latest=.artifacts/logs/verify-full-ci/latest
-          if [ -e "$latest" ]; then
-            cp -RL "$latest/." "$RUNNER_TEMP/macos-logs/"
-          fi
-
-      - name: Upload the run's summary and logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: verify-macos
-          path: ${{ runner.temp }}/macos-logs
-          if-no-files-found: warn
-          retention-days: 7
 
   verify:
     name: Verify

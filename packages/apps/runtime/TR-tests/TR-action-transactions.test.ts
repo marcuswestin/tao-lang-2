@@ -61,6 +61,103 @@ function waitForAbort(signal: AbortSignal | undefined): Promise<void> {
 }
 
 Describe('Tao action transactions', () => {
+  Test('drains detached continuations and children without putting them in the foreground queue', async () => {
+    const started = Deferred()
+    const release = Deferred()
+    const childStarted = Deferred()
+    const childRelease = Deferred()
+    await runAction('Launch', [], () => {
+      deferDetached(async () => {
+        const continuation = captureActionContinuation()
+        started.resolve()
+        await release.promise
+        resumeActionContinuation(continuation)
+        deferDetached(async () => {
+          childStarted.resolve()
+          await childRelease.promise
+        })
+      })
+    })
+    await started.promise
+    let drained = false
+    const drain = settleActionRoots().then(() => {
+      drained = true
+    })
+    try {
+      for (let turn = 0; turn < 10; turn++) {
+        await Promise.resolve()
+      }
+      Expect(drained).toBe(false)
+      release.resolve()
+      await childStarted.promise
+      for (let turn = 0; turn < 10; turn++) {
+        await Promise.resolve()
+      }
+      Expect(drained).toBe(false)
+    } finally {
+      release.resolve()
+      childRelease.resolve()
+      await drain
+    }
+    Expect(drained).toBe(true)
+  })
+
+  Test('does not drain abandoned detached work into a replacement launch', async () => {
+    const started = Deferred()
+    const release = Deferred()
+    const finished = Deferred()
+    await runAction('Launch', [], () => {
+      deferDetached(async () => {
+        started.resolve()
+        await release.promise
+        finished.resolve()
+      })
+    })
+    await started.promise
+    try {
+      beginActionLaunch()
+      await settleActionRoots()
+    } finally {
+      release.resolve()
+      await finished.promise
+    }
+  })
+
+  Test('lets a foreground action release detached work while that work is suspended', async () => {
+    const started = Deferred()
+    const release = Deferred()
+    const finished = Deferred()
+    const events: string[] = []
+    await runAction('Launch', [], () => {
+      deferDetached(async () => {
+        const continuation = captureActionContinuation()
+        events.push('background starts')
+        started.resolve()
+        await release.promise
+        resumeActionContinuation(continuation)
+        events.push('background finishes')
+        finished.resolve()
+      })
+    })
+    await started.promise
+    const foreground = runAction('Release', [], () => {
+      events.push('foreground releases work')
+      release.resolve()
+    })
+    try {
+      for (let turn = 0; turn < 10; turn++) {
+        await Promise.resolve()
+      }
+      Expect(events).toContain('foreground releases work')
+    } finally {
+      release.resolve()
+      await foreground
+      await finished.promise
+      await settleActionRoots()
+    }
+    Expect(events).toEqual(['background starts', 'foreground releases work', 'background finishes'])
+  })
+
   Test(
     'shares the actual root cancellation signal with joined work and gives detached roots their own signal',
     async () => {

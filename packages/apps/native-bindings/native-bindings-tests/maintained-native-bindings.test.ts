@@ -1,4 +1,4 @@
-import { FS, Platform } from '@shared'
+import { FS, Platform, Time } from '@shared'
 import { Deferred, Describe, Expect, settle, Test, until, withTaoFiles } from '@shared/test'
 import {
   generateMaintainedNativeBindings,
@@ -608,6 +608,72 @@ Describe('maintained native binding publication', () => {
       Expect(results[1].status).toBe('fresh')
       Expect(results[2]).toEqual(paths)
       Expect(await snapshot(paths)).toEqual(previous)
+    }, { verbatim: true })
+  })
+
+  Test('lets concurrent fresh and stale readers all finish after a publication', async () => {
+    await withTaoFiles('maintained-many-readers', declarations(), async (_paths, root) => {
+      const request = options(root)
+      await generateMaintainedNativeBindings({ ...request, mode: 'write' })
+      const fresh = await Promise.all(Array.from({ length: 16 }, () => inspectMaintainedNativeBindings(request)))
+      Expect(fresh.map(result => result.status)).toEqual(fresh.map(() => 'fresh'))
+      const output = FS.resolvePath('.tao-ts/native-bindings/files/Bindings.ts', request.stdlibRoot)
+      await FS.writeText(output, 'drifted output')
+      const stale = await Promise.all(Array.from({ length: 8 }, () => inspectMaintainedNativeBindings(request)))
+      Expect(stale.map(result => result.status)).toEqual(stale.map(() => 'stale'))
+    }, { verbatim: true })
+  })
+
+  Test('inspects under the lock when other readers hold it at every final probe', async () => {
+    await withTaoFiles('maintained-contended-probe', declarations(), async (_paths, root) => {
+      const request = options(root)
+      await generateMaintainedNativeBindings({ ...request, mode: 'write' })
+      const first = FS.resolvePath('@tao/device/files', request.stdlibRoot)
+      // Each hold stands in for another reader's barrier or stale confirmation: brief and self-releasing.
+      let release = Deferred()
+      let holder: Promise<void> = Promise.resolve()
+      let probes = 0
+      const result = await inspectMaintainedNativeBindings(request, {
+        beforeFinalProbe: async () => {
+          probes++
+          release = Deferred()
+          const entered = Deferred()
+          const ownRelease = release
+          holder = FS.withFileMutationLock(first, FS.dirname(first), async () => {
+            entered.resolve()
+            // budget-ok: a rival reader's lock is brief by nature; the fallback must find it released.
+            await Promise.race([ownRelease.promise, Time.sleep(250)])
+          })
+          await entered.promise
+        },
+        beforePublicationBarrier: async () => {
+          release.resolve()
+          await holder
+        },
+      })
+      await holder
+      Expect(probes).toBeGreaterThanOrEqual(2)
+      Expect(result.status).toBe('fresh')
+    }, { verbatim: true })
+  })
+
+  Test('surfaces an unreadable manifest as its own error rather than a changing-files retry', async () => {
+    await withTaoFiles('maintained-unreadable-manifest', declarations(), async (_paths, root) => {
+      const request = options(root)
+      await generateMaintainedNativeBindings({ ...request, mode: 'write' })
+      const manifestPath = FS.resolvePath('.tao-ts/native-bindings/files/maintained.json', request.stdlibRoot)
+      await FS.chmod(manifestPath, 0o000)
+      let reported: string
+      try {
+        reported = await inspectMaintainedNativeBindings(request).then(
+          result => result.diagnostics.map(item => item.message).join('\n'),
+          (error: unknown) => String(error),
+        )
+      } finally {
+        await FS.chmod(manifestPath, 0o644)
+      }
+      Expect(reported).not.toContain('kept changing')
+      Expect(reported).toMatch(/EACCES|permission denied/i)
     }, { verbatim: true })
   })
 })
