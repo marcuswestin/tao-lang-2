@@ -1,5 +1,4 @@
-import { CLI, Errors, FS, HCI, Platform, ProjectLocal, Repo, Text } from '@shared'
-import { waitForStandaloneReadiness } from './standalone-readiness'
+import { CLI, Errors, FS, HCI, Platform, ProjectLocal, Repo, Text, waitForProcessReadiness } from '@shared'
 import { StandaloneScenarios } from './standalone-scenarios'
 
 /**
@@ -324,7 +323,7 @@ async function watchRefreshesSavedBridge(environment: Platform.ProcessEnv, proje
     stdio: 'pipe',
   })
   try {
-    await waitForStandaloneReadiness(
+    await waitForProcessReadiness(
       watch,
       () => [...output.matchAll(/Tao project fresh \(revision \d+\)\./gu)].length >= 1,
       () => output,
@@ -332,7 +331,7 @@ async function watchRefreshesSavedBridge(environment: Platform.ProcessEnv, proje
       DEV_START_TIMEOUT_MS,
     )
     await FS.writeText(taoPath, 'function Answer() returns number {\n   return Answer() from ./WatchProbe.ts\n}\n')
-    await waitForStandaloneReadiness(
+    await waitForProcessReadiness(
       watch,
       () => [...output.matchAll(/Tao project fresh \(revision \d+\)\./gu)].length >= 2,
       () => output,
@@ -543,7 +542,7 @@ async function devLoopServesWeb(environment: Platform.ProcessEnv, project: strin
   })
   try {
     let port: string | undefined
-    await waitForStandaloneReadiness(
+    await waitForProcessReadiness(
       dev,
       () => {
         port = /Waiting on http:\/\/localhost:(\d+)/.exec(output)?.[1]

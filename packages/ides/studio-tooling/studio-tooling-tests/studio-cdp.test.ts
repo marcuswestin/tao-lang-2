@@ -1,5 +1,5 @@
 import { Errors, FS } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { Deferred, Describe, Expect, mkTestDir, settle, Test } from '@shared/test'
 import {
   StudioCdp,
   type StudioCdpTransport,
@@ -98,6 +98,93 @@ class FakeCdpTransport implements StudioCdpTransport {
 }
 
 Describe('Studio browser CDP harness', () => {
+  Test('joins owned Chrome cleanup after a natural exit before disposing its observers', async () => {
+    const profile = await mkTestDir('tao-studio-cdp-cleanup-')
+    const joined = Deferred<{ exitCode: number; signal: null }>()
+    const events: string[] = []
+    const cleanup = StudioCdp.testing.stopChrome(
+      {
+        exitCode: 0,
+        signalCode: null,
+        kill: () => {
+          events.push('kill')
+          return true
+        },
+        waitForClose: () => {
+          events.push('join')
+          return joined.promise
+        },
+        closeOutput: async () => {
+          events.push('output')
+        },
+        dispose: () => events.push('dispose'),
+      },
+      profile,
+      'SIGTERM',
+    )
+    await settle()
+    Expect(events).toEqual(['join'])
+    Expect(await FS.isDirectory(profile)).toBe(true)
+    joined.resolve({ exitCode: 0, signal: null })
+    await cleanup
+    Expect(events).toEqual(['join', 'output', 'dispose'])
+    Expect(await FS.isDirectory(profile)).toBe(false)
+  })
+
+  Test('retains cleanup failures while still disposing Chrome output and removing its profile', async () => {
+    const profile = await mkTestDir('tao-studio-cdp-cleanup-')
+    const events: string[] = []
+    const original = new Errors.HostEnvironmentError('original ownership join failure')
+    let caught: unknown
+    try {
+      await StudioCdp.testing.stopChrome(
+        {
+          exitCode: 19,
+          signalCode: null,
+          kill: () => true,
+          waitForClose: async () => {
+            throw original
+          },
+          closeOutput: async () => {
+            events.push('output')
+            Errors.throwHostEnvironment('output drain failure')
+          },
+          dispose: () => events.push('dispose'),
+        },
+        profile,
+        'SIGKILL',
+      )
+    } catch (error) {
+      caught = error
+    }
+    Expect(caught).toBeInstanceOf(Errors.HostEnvironmentError)
+    Expect((caught as Errors.HostEnvironmentError).cause).toBe(original)
+    Expect(Errors.formatForLog(caught)).toContain('output drain failure')
+    Expect(events).toEqual(['output', 'dispose'])
+    Expect(await FS.isDirectory(profile)).toBe(false)
+  })
+
+  Test('rejects a stale DevTools port after Chrome failed with its original startup output', async () => {
+    const profile = await mkTestDir('tao-studio-cdp-startup-')
+    await FS.writeText(FS.resolvePath('DevToolsActivePort', profile), '9222\n/browser/token')
+    await Expect(
+      StudioCdp.testing.waitForActivePort(
+        profile,
+        { exitCode: 19, signalCode: null },
+        () => 'Executable: fixture Chrome\noriginal Chrome failure',
+      ),
+    )
+      .rejects.toThrow(
+        'Chrome DevToolsActivePort failed to start (exit 19):\nExecutable: fixture Chrome\noriginal Chrome failure',
+      )
+  })
+
+  Test('accepts the DevTools port only while its Chrome child remains healthy', async () => {
+    const profile = await mkTestDir('tao-studio-cdp-startup-')
+    await FS.writeText(FS.resolvePath('DevToolsActivePort', profile), '9222\n/browser/token')
+    Expect(await StudioCdp.testing.waitForActivePort(profile, { exitCode: null, signalCode: null })).toBe(9222)
+  })
+
   Test('sets explicit deterministic desktop viewport dimensions', async () => {
     const transport = new FakeCdpTransport()
     const browser = StudioCdp.testing.create(transport)

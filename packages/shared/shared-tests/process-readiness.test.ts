@@ -1,14 +1,80 @@
-import { CLI, Time } from '@shared'
+import { CLI, Errors, Time, waitForProcessReadiness } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
-import { waitForStandaloneReadiness } from '../cli-src/standalone-readiness'
 
 const CHILD_TIMEOUT_MS = 30_000
 
-Describe('standalone acceptance readiness', () => {
+Describe('child process readiness', () => {
+  Test('aborts a pending probe when its child fails, without starting a second probe', async () => {
+    const child = { exitCode: null as number | null, signalCode: null }
+    let probes = 0
+    let aborted = 0
+    await Expect(waitForProcessReadiness(
+      child,
+      signal => {
+        probes++
+        child.exitCode = 17
+        return new Promise<boolean>((_resolve, reject) => {
+          signal.addEventListener('abort', () => {
+            aborted++
+            reject(Errors.abortError('Readiness probe aborted'))
+          }, { once: true })
+        })
+      },
+      () => 'original child diagnostic',
+      'pending probe',
+      CHILD_TIMEOUT_MS,
+      {
+        sleep: async () => {},
+      },
+    )).rejects.toThrow('pending probe failed to start (exit 17):\noriginal child diagnostic')
+    Expect(probes).toBe(1)
+    Expect(aborted).toBe(1)
+  })
+
+  Test('aborts an unfinished probe at its deadline and contains late rejection', async () => {
+    let elapsed = 0
+    let observedSignal: AbortSignal | undefined
+    let rejectProbe: ((reason: unknown) => void) | undefined
+    // budget-ok: fake time proves the deadline; there is no real child or network request.
+    await Expect(waitForProcessReadiness(
+      undefined,
+      signal => {
+        observedSignal = signal
+        return new Promise<boolean>((_resolve, reject) => rejectProbe = reject)
+      },
+      () => 'waiting on target',
+      'browser target',
+      1_000,
+      {
+        now: () => elapsed,
+        sleep: async duration => {
+          elapsed += duration
+        },
+      },
+    )).rejects.toThrow('browser target did not become ready within 1000 ms:\nwaiting on target')
+    Expect(observedSignal?.aborted).toBe(true)
+    rejectProbe?.(Errors.abortError('Late probe rejection'))
+    await Promise.resolve()
+  })
+
+  Test('retains the first and recent diagnostics within a bounded failure report', async () => {
+    const child = { exitCode: 7, signalCode: null }
+    await Expect(
+      waitForProcessReadiness(
+        child,
+        () => false,
+        () => `original cause\n${'middle\n'.repeat(5_000)}recent failure`,
+        'probe',
+        CHILD_TIMEOUT_MS,
+      ),
+    )
+      .rejects.toThrow(/original cause[\s\S]*startup output omitted[\s\S]*recent failure/u)
+  })
+
   Test('reports a successful exit that happened before startup completed', async () => {
     await withChild('/bin/sh', ['-c', 'printf "stopped before startup\\n"; exit 0'], async (child, output) => {
       await child.waitForClose()
-      await Expect(waitForStandaloneReadiness(child, () => false, output, 'probe', CHILD_TIMEOUT_MS))
+      await Expect(waitForProcessReadiness(child, () => false, output, 'probe', CHILD_TIMEOUT_MS))
         .rejects.toThrow('probe failed to start (exit 0):\nstopped before startup')
     })
   })
@@ -16,7 +82,7 @@ Describe('standalone acceptance readiness', () => {
     await withChild('/bin/sh', ['-c', 'printf "ready marker\\n"; exit 19'], async (child, output) => {
       await child.waitForClose()
       await Expect(
-        waitForStandaloneReadiness(child, () => output().includes('ready marker'), output, 'probe', CHILD_TIMEOUT_MS),
+        waitForProcessReadiness(child, () => output().includes('ready marker'), output, 'probe', CHILD_TIMEOUT_MS),
       )
         .rejects.toThrow('probe failed to start (exit 19)')
       Expect(output()).toContain('ready marker')
@@ -25,7 +91,7 @@ Describe('standalone acceptance readiness', () => {
 
   Test('reports a spawn error promptly', async () => {
     await withChild('/definitely-not-a-tao-command', [], async (child, output) => {
-      await Expect(waitForStandaloneReadiness(child, () => false, output, 'probe', CHILD_TIMEOUT_MS))
+      await Expect(waitForProcessReadiness(child, () => false, output, 'probe', CHILD_TIMEOUT_MS))
         .rejects.toThrow(/spawn error/)
     })
   })
@@ -35,7 +101,7 @@ Describe('standalone acceptance readiness', () => {
       '/bin/sh',
       ['-c', 'read reply; printf "original startup error\\n"; exit 23'],
       async (child, output) => {
-        await Expect(waitForStandaloneReadiness(
+        await Expect(waitForProcessReadiness(
           child,
           () => {
             child.endStdin()
@@ -58,7 +124,7 @@ Describe('standalone acceptance readiness', () => {
       let elapsed = 0
       // budget-ok: fake time proves the deadline without waiting for a network request.
       await Expect(
-        waitForStandaloneReadiness(child, () => new Promise<boolean>(() => {}), output, 'HTTP response', 1_000, {
+        waitForProcessReadiness(child, () => new Promise<boolean>(() => {}), output, 'HTTP response', 1_000, {
           intervalMs: 100,
           now: () => elapsed,
           sleep: async duration => {
@@ -78,7 +144,7 @@ Describe('standalone acceptance readiness', () => {
       child.kill('SIGTERM')
       await child.waitForClose()
       await Expect(
-        waitForStandaloneReadiness(child, () => output().includes('ready marker'), output, 'probe', CHILD_TIMEOUT_MS),
+        waitForProcessReadiness(child, () => output().includes('ready marker'), output, 'probe', CHILD_TIMEOUT_MS),
       )
         .rejects.toThrow('probe failed to start (signal SIGTERM)')
     })
@@ -86,7 +152,7 @@ Describe('standalone acceptance readiness', () => {
 
   Test('resolves when readiness arrives while the child remains healthy', async () => {
     await withChild('/bin/sh', ['-c', 'printf "ready marker\\n"; exec sleep 30'], async (child, output) => {
-      await waitForStandaloneReadiness(
+      await waitForProcessReadiness(
         child,
         () => output().includes('ready marker'),
         output,
@@ -105,7 +171,7 @@ Describe('standalone acceptance readiness', () => {
         await Time.pollUntil(() => output().length > 0, { intervalMs: 25, timeoutMs: CHILD_TIMEOUT_MS })
         let elapsed = 0
         // budget-ok: fake time advances synchronously; the live child is stopped in finally.
-        await Expect(waitForStandaloneReadiness(child, () => false, output, 'server port', 1_000, {
+        await Expect(waitForProcessReadiness(child, () => false, output, 'server port', 1_000, {
           intervalMs: 100,
           now: () => elapsed,
           sleep: async duration => {

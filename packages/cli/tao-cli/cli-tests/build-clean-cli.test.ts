@@ -1,7 +1,6 @@
-import { CLI, Errors, FS, Platform, Repo } from '@shared'
+import { CLI, Errors, FS, Platform, Repo, waitForProcessReadiness } from '@shared'
 import { Deferred, Describe, Expect, mkTestDir, settle, Test } from '@shared/test'
 import { type BuildRecord, executeBuildTargets } from '../cli-src/build-command'
-import { waitForStandaloneReadiness } from '../cli-src/standalone-readiness'
 
 const fixtureRoot = Repo.resolvePath('packages/testing/e2e-testing/fixtures/Clockwork')
 
@@ -117,7 +116,7 @@ async function servesOnlyContainedFiles(buildRoot: string): Promise<void> {
   })
   try {
     let port: number | undefined
-    await waitForStandaloneReadiness(
+    await waitForProcessReadiness(
       server,
       () => {
         const value = Number(output.match(/Serving http:\/\/localhost:(\d+)/)?.[1])
@@ -128,11 +127,11 @@ async function servesOnlyContainedFiles(buildRoot: string): Promise<void> {
       'the standalone web server port',
       90_000,
     )
-    await waitForStandaloneReadiness(
+    await waitForProcessReadiness(
       server,
-      async () => {
+      async signal => {
         try {
-          return (await fetch(`http://127.0.0.1:${port}/`)).status === 200
+          return (await fetch(`http://127.0.0.1:${port}/`, { signal } as RequestInit)).status === 200
         } catch {
           return false
         }
