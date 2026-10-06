@@ -87,9 +87,10 @@ about 36 s bootstrapping, and 35–51 s of prepare-phase critical path. The boot
 freshness check proves them current. The `node_modules` cache leaves out Jazz's other-platform
 binaries. The prepare phase stays in each partition: running it once in `plan` adds more serial
 time than it saves, and each partition must still fail on unformatted or stale generated files. Its
-longest node, the editor build, skips when its recorded inputs and outputs both match, and Verify
-caches that build; a stale or foreign restore costs only a rebuild. Read a run's per-step times
-before trusting these figures.
+editor build skips when its recorded inputs and outputs both match, which helps repeat local builds.
+Verify does not cache it: the WordFlower compile beside it is as long, so a restore saved no critical
+path. Measured after, on an 11-partition run: about 46 s before the prepare phase. Read a run's
+per-step times before trusting these figures.
 
 Hosted `Verify` is the final portable proof even when a local lane would finish sooner; contention
 decides only when to run a diagnostic lane, never which machine proves the merge. A failed check
