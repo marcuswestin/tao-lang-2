@@ -317,16 +317,18 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
     ],
     reads: ['gen-parser', 'tao', 'ts'],
   }],
+  // Each partition is one process that cannot be split further, so each is held to about 25s on a
+  // developer machine, which hosted Verify runs at 2.4-2.8 times that: a partition over about 90s
+  // there sets its CI machine's wall alone. The native cohort was one 325s node in Verify run
+  // 37417599793 and set that run's 493s wall; its files are now split across the native-*
+  // partitions below. A test file that grows past that budget is split along its tests.
   ['language/project-tooling', {
     filePartitions: [{
       name: 'native',
       files: [
         'packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingInventory.test.ts',
         'packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingModules.test.ts',
-        'packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingsService.test.ts',
         'packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingsWatch.integration.test.ts',
-        'packages/language/project-tooling/project-tooling-tests/ProjectNativeRefreshReceipt.test.ts',
-        'packages/language/project-tooling/project-tooling-tests/ProjectNativeTypeScript.test.ts',
       ],
     }, {
       name: 'receipts',
@@ -355,6 +357,38 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
     }, {
       name: 'service',
       files: ['packages/language/project-tooling/project-tooling-tests/ProjectToolingService.test.ts'],
+    }, {
+      name: 'native-service',
+      files: ['packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingsService.test.ts'],
+    }, {
+      name: 'native-bodies',
+      files: ['packages/language/project-tooling/project-tooling-tests/ProjectNativeBindingsBodies.test.ts'],
+    }, {
+      name: 'native-receipt',
+      files: ['packages/language/project-tooling/project-tooling-tests/ProjectNativeRefreshReceipt.test.ts'],
+    }, {
+      name: 'native-receipt-signatures',
+      files: ['packages/language/project-tooling/project-tooling-tests/ProjectNativeRefreshReceiptSignatures.test.ts'],
+    }, {
+      name: 'native-typescript',
+      files: ['packages/language/project-tooling/project-tooling-tests/ProjectNativeTypeScript.test.ts'],
+    }, {
+      name: 'native-typescript-consumers',
+      files: ['packages/language/project-tooling/project-tooling-tests/ProjectNativeTypeScriptConsumers.test.ts'],
+    }, {
+      name: 'receipt-repairs',
+      files: ['packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptRepairs.test.ts'],
+    }, {
+      name: 'receipt-ownership',
+      files: ['packages/language/project-tooling/project-tooling-tests/ProjectRefreshReceiptOwnership.test.ts'],
+    }, {
+      name: 'watch-sidecar',
+      files: ['packages/language/project-tooling/project-tooling-tests/ProjectFileWatchSidecar.integration.test.ts'],
+    }, {
+      name: 'watch-dependencies',
+      files: [
+        'packages/language/project-tooling/project-tooling-tests/ProjectFileWatchDependencies.integration.test.ts',
+      ],
     }],
   }],
   ['ides/studio', {
