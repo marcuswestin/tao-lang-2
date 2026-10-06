@@ -2,7 +2,8 @@
 
 ## Project secrets
 
-`tao secrets` keeps encrypted values in `.tao/store/secrets.jsonc` beside the nearest Tao project
+`tao secrets` is available in development builds; public releases omit it until it ships.
+It keeps encrypted values in `.tao/store/secrets.jsonc` beside the nearest Tao project
 declaration. Commit that file so collaborators can use it. Secret names and recipient public keys are
 readable; values are encrypted with `age`. On macOS, install `age` and `age-plugin-se` (for example,
 `brew install age age-plugin-se`). Tao creates one machine identity backed by the Secure Enclave and
@@ -24,7 +25,9 @@ prompts at a terminal. It does not print the token.
 For another developer, run `tao secrets identity` on their Mac. Verify the public recipient with
 them, then an existing collaborator runs `tao secrets grant <recipient> [project-path]` and commits
 the updated store. Every enrolled recipient can read every secret. Adding a recipient to a text file
-alone does not grant access. If the last enrolled machine is lost, Tao cannot recover the store key;
+alone does not grant access, and a later `grant` wraps the store key only to machines already
+granted plus the one named. The committed file is trusted as far as your repository is: review
+changes to its `storeKey` like any other code change. If the last enrolled machine is lost, Tao cannot recover the store key;
 restore access from another enrolled machine or replace the provider credentials. Removing a value
 from the current file does not remove Git history or revoke the credential at its provider.
 
