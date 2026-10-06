@@ -10,6 +10,9 @@ labels. They do not exercise native operations. The ordinary Tao test runner use
 its module test host; it does not run
 these native acceptance journeys on a device. Source validation, compilation,
 shell tests, native builds and the journeys below are separate evidence.
+The migrated source passes validation and both shell journeys on 2026-10-05.
+The Syntax2 migration has not been accepted on a native host; the native I/O and
+permission journeys remain unproved.
 
 ## Files native journey
 
@@ -26,12 +29,15 @@ acceptance**, then press **Run file roundtrip**. Require all of the following:
 The command creates text and byte files, reads fresh native properties, copies
 and renames a file, writes and reads through a native handle, closes the handle,
 opens a native stream, reads its byte chunk and end-of-stream result, cancels its
-reader and releases its lock. It then
-releases the generated resource wrappers. Repeat the command to prove the owned
-fixture can be replaced and the file resources reopened.
+reader and releases its lock. Each generated resource registers cleanup
+immediately after acquisition. Scope exit closes the
+file handle before invalidating its wrapper. The nested reader scope cancels the
+reader, releases its lock and invalidates its wrapper before the outer stream
+wrapper is invalidated. Repeat the command to prove the owned fixture can be
+replaced and the file resources reopened.
 
 The generated
-`ReadableStreamDefaultReaderUint8ArrayArrayBufferRead(Reader)` action returns
+`Reader.Read()` associated action returns
 `ReadableStreamBYOBReaderReadForUint8ArrayArrayBufferResult`, a union of
 `ReadableStreamReadValueResultUint8ArrayArrayBuffer` and
 `ReadableStreamReadDoneResultUint8ArrayArrayBuffer`. The first record has a
@@ -60,10 +66,13 @@ All mutations are confined to the literal
 `tao-modern-photos-files-acceptance` directory under this app's `Paths.cache`.
 The roundtrip clears only this directory before creating its fixture. It never
 opens a user-selected file or accepts an externally supplied deletion path.
-Native effects cannot roll back if a later action fails. A failed run may retain
-owned files or open resources; preserve its failure, relaunch the app to close
-the process's resources, and use **Remove owned files**. Do not remove files
-outside the named directory to recover this fixture.
+Native effects cannot roll back if a later action fails. Lexical cleanup runs on
+normal and failed exits, in reverse acquisition order; cleanup failures remain
+attached to the original failure, or fail the operation themselves when there is
+no earlier failure. Process termination can still bypass cleanup, and cleanup
+does not undo file writes, copies, renames or deletes. Preserve a failed run's
+reported error and use **Remove owned files** if its owned fixture remains. Do
+not remove files outside the named directory to recover this fixture.
 
 ## Photos native journeys
 

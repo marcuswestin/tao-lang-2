@@ -26,6 +26,7 @@
     "expo-haptics": "~57.0.3",
     "expo-media-library": "57.0.5",
     "expo-secure-store": "~57.0.4",
+    "expo-sqlite": "~57.0.3",
     "expo-updates": "~57.0.24",
     "jazz-rn": "2.0.0-alpha.57",
     "react": "19.2.3",
@@ -33,7 +34,8 @@
     "react-native-get-random-values": "1.11.0",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
-    "tao-icloud": "workspace:*"
+    "tao-icloud": "workspace:*",
+    "tao-runtime": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "~19.2.0"

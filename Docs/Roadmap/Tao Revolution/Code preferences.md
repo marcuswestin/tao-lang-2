@@ -50,23 +50,23 @@ when the parentheses only surround that payload conversion. Keep parentheses whe
 expression grouping, such as `.Right (A + B) as Target`. This is a canonical grammar target awaiting
 parser proof; a conversion must preserve the argument's selected destination.
 
-1.6. Use postfix units: `150 Milliseconds`, `-2 Seconds`, or `(Count + 1) Seconds`. Initially permit
+1.6. Use lowercase postfix units: `150 milliseconds`, `-2 seconds`, or `(Count + 1) seconds`. Initially permit
 numeric literals with their sign and explicitly parenthesized number expressions; unrestricted bare
-expression suffixes are not selected. Keep `-(2 Celsius)` distinct from `-2 Celsius`: only the former
+expression suffixes are not selected. Keep `-(2 celsius)` distinct from `-2 celsius`: only the former
 requires temperature-point negation. Implementation remains outstanding. The requested binding form
-`let AnimationDuration 150 Milliseconds` explicitly constructs a declared duration role through its
+`let AnimationDuration 150 milliseconds` explicitly constructs a declared duration role through its
 authorized constructor/conversion; it does not permit implicit downward matching elsewhere.
 Use plain Duration when a distinct role/constraint is unnecessary. A checked constructor may carry
 modeled failures; do not silently equate it with a promised total as conversion. Do not rewrite a unit
 constructor to `as` unless conversion semantics, unit scaling, and validation are identical.
 
-1.7. Separate item/configuration value entries with commas: `Settings { Count 2, Timeout 3 Seconds }`.
+1.7. Separate item/configuration value entries with commas: `Settings { Count 2, Timeout 3 seconds }`.
 Newlines do not replace these separators. This does not add commas between render children or
 declaration statements. For same-domain quantity arithmetic, preserve the leftmost operand's unit;
 scaling with one quantity preserves its unit even when the unitless scaling factor comes first.
 
 1.8. Declare owner units in a block with an explicit reference scale:
-`units { Seconds 1 (default), Milliseconds 0.001, Minutes 60, Hours 3600 }`.
+`units { seconds 1 (default), milliseconds 0.001, minutes 60, hours 3600 }`.
 Keep the explicit 1 on the default/reference unit; do not format it away. This unit defines canonical
 normalization and the initial default view for the selected minimal design. Do not introduce a
 separate canonical marker yet or change backing meaning through presentation-only configuration.
@@ -79,7 +79,10 @@ invent an absent ancestor to unify sibling types, and do not run semantic conver
 Contextual raw literals can construct an established T; they are not deliberate parent anchors.
 Comparison uses the chosen static T's contract rather than a narrower dynamic receiver contract.
 
-1.10. Units are owner-scoped and can be qualified in a suffix, e.g. `2 Duration.Seconds`.
+1.10. Units are lowercase by grammar, including the final name in an owner-qualified suffix,
+e.g. `2 Duration.seconds`. Unit-reading methods use the same name: `Wait.minutes()`.
+Enforce casing before semantic lookup; a validator-only convention cannot disambiguate a suffix.
+This rule does not change the casing of nominal owners or remove required entry commas.
 Prefer shorthand names when explicitly visible and unambiguous. Never resolve an ambiguous unit name
 by guessing from the expected parameter type; qualify or rename the import.
 

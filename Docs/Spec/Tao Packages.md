@@ -132,6 +132,13 @@ ID identifies Tao-managed persistent state across release versions. Explicit dat
 independently controls backend sharing. Older state stores remain untouched during the identity-key
 transition; they are not deleted or automatically merged.
 
+App properties separate adjacent name/value pairs: `Datasource BookStore Design LibraryDesign`
+supplies two reference values. A direct named constructor with a bare identifier input must be
+grouped, as in `name (Caption CurrentName)`, so its input cannot become the next property name.
+Literal and member-access inputs can remain bare, such as `name Caption "Welcome"` or
+`name Caption Profile.Name`. Constructors nested in arguments, lists, or grouped expressions keep
+ordinary expression syntax.
+
 An app's runnable identity and dependencies do not publish an importable module API. Publishing code
 requires a separate `package` declaration and its explicit module inclusion and visibility rules.
 
@@ -157,6 +164,20 @@ collection import. Accessing a relationship such as `Workspace.Documents` does n
 import of the root `Documents` collection. Local declarations and implicitly visible `folder`
 declarations retain both names. Import organization and unused-import diagnostics track each
 imported form independently.
+
+A named import may choose a local spelling with `as`:
+
+```tao
+use Title as TitleType from ./library/Library
+use Workspaces as LocalWorkspaces, Workspace as LocalWorkspace from @data
+```
+
+The source spelling selects the exported declaration and its visibility; the local spelling is
+used in the receiving file. An alias retains the original type, signature projections, and
+associated-method owner. Renaming an entity form retains its singular or collection cardinality.
+Type and value namespace peers selected by one source name share its local alias. Collisions and
+unused-import checks use the local spelling. Import organization preserves an alias beside a
+wildcard when that wildcard cannot supply the alias's local name.
 
 `use all from Path` imports every public declaration from that target, including both names of
 public entity data. It supports the same relative, module and dependency paths as named imports;

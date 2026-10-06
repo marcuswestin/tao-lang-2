@@ -365,3 +365,66 @@ inconclusive. Follow the verification commands in the [continuation handoff](<Ho
 Firebase remains the easier first-flow recommendation based on the Developer's standalone manual
 acceptance and Appwrite's failed realtime check, not a measured setup-time comparison. Appwrite
 repair acceptance is deferred. This adds no acceptance evidence for Jazz, Convex, or Pylon.
+
+### Ordinary Firebase validation follow-up — 2026-10-04
+
+The Developer's ordinary Tao app now exposes two acceptance failures: web Account loading
+rejects the provider's null seed for required DisplayName, and Simulator native storage
+fails while importing SQLite. The latter adapter hides the original exception; the JS
+package is installed and SDK57 Expo Go includes it, so the actual launched-host/import
+cause remains unconfirmed. Provider tests use optional account fields and mock/memory
+replicas; local app journeys do not exercise Firebase. Source verification and bundling
+did not close these gates. The account-seeding bug entered with the ordinary provider/app
+in `883ea9ee8`, not the later runtime merge. See the [continuation handoff](<Hosted provider continuation.md>)
+for the implemented bounded Account repair, unchanged physical-cache schema, native diagnostics,
+and outstanding host acceptance boundary.
+
+Continue with Firebase as the previously selected first stack, but close ordinary app
+bootstrap and native storage before calling its full flow accepted. Earlier handwritten
+Firebase pilot acceptance remains valid for that pilot. Appwrite realtime acceptance and
+its later full Tao adapter remain deferred; Jazz/Convex/Pylon gates remain separate.
+
+Firebase management tooling now lists and inspects projects/apps, creates projects/Web
+registrations after local confirmation, retrieves public SDK config, and plans or performs
+a scoped user/store server reset. Local replicas and Auth users are outside reset scope;
+project/app/Auth-user deletion is not implemented. Source/fixture checks and independent
+review cover the CLI, including protection against inherited project aliases and emulator
+routing. No live cloud-management acceptance or new provider acceptance is claimed.
+
+### Firebase repair source checkpoint — 2026-10-05
+
+The app/template default, bounded Account repair, strict logical/wire validation and generated
+required-field rules are implemented and independently reviewed. Real RxDB/provider/runtime
+fixtures pass; they mock remote transport. Native diagnostic preflight and transitive native-kit
+selection are implemented. After the Developer authorized dependency changes, Companion gained
+`expo-sqlite ~57.0.3`; setup and the Simulator host build passed. Its exact Companion launched
+but produced no database result; native open/reopen remains unproved.
+A quiet Expo Go57.0.9 probe started but produced no database result, so native durability remains open.
+
+The ordinary-app Firebase hostile probe is prepared, credential-local and directly measures server
+responses after positive controls; its live run remains pending. Reconnect to review/deploy the
+updated rules, then verify bootstrap, live two-client CRUD, offline restart/replay, account isolation
+and the probe. Earlier handwritten pilot acceptance does not close these ordinary-provider gates.
+Appwrite remains deferred; Jazz, Convex and Pylon gates retain their separate dispositions.
+
+Existing-resource API acceptance2026-10-05: live project/app management and reconnect of
+`tao-autocreate-test` passed using the existing default CLI login. The only reviewed rules change
+made required Account.DisplayName text nonnullable; deployment readback verified Native Standard,
+Email/Password Auth and generated rules, preserving indexes and billing. No accounts or passwords
+were entered by the agent. Client bootstrap, native reopen, two-client sync and direct hostile
+responses remain separate open gates. Conditional landing follows working web/Simulator proof.
+
+Generated-app live check2026-10-05: fresh app creation and existing-resource API connection passed.
+The sample account already exists; sign-in succeeded on retry, then local Account resolution
+reported unauthorized. Its compiled Account/Item schemas lack authored grants, while Firebase
+expects a private owner namespace and the authenticated runtime applies grant-based default deny.
+The prior real-provider/runtime fixture omitted the authenticated binding, so it missed this
+conformance seam. An explicit provider-scoped private-account policy and a real web/Simulator
+journey are required before accepting the ordinary app. This does not invalidate the standalone
+Firebase prototype evidence. Appwrite, Jazz, Convex and Pylon dispositions remain separate.
+
+### Ordinary Firebase Simulator proof — 2026-10-05 17:21 UTC
+
+The private-account runtime policy repair now has real web/Simulator evidence. Native storage's remaining failure was a Metro dynamic-import path error, masked by the SQLite adapter as a missing installation. Selecting its supported CommonJS native entry fixed actual data loading without a vendor patch. Two repeated real UI attempts proved CRUD-account sign-in and newly created notes propagating in both directions without reload; exact marker observations and screenshots are retained under `.artifacts/host-acceptance/managed-loops/9f4ed1b3-9223-4474-94de-7ee40717251d` and `d93fe540-dec1-4cb0-9cc1-b8bf8fe1c42c`.
+
+The full two-account case remains failed because Firebase rejects the main sample account's configured password. This needs a local credential check, not an inferred password reset. Ordinary-provider edit/delete, offline restart/replay, account isolation and direct hostile requests remain separate acceptance gates; prototype results do not close them. Firebase remains the selected first stack and now has live native creation/sync proof. Appwrite's realtime/device acceptance remains deferred, and Jazz, Convex and Pylon gates are unchanged.

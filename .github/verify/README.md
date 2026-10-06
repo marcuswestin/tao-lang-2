@@ -41,3 +41,25 @@ Artifact downloads need GitHub authentication even for a public repository: the 
 neither. Run the refit after a change that moves test cost between suites, when a run's partition
 wall times spread beyond about 1.3×, and in any case every few weeks; stale entries for removed
 nodes are harmless to the plan and can be deleted by hand.
+
+## Seed provenance
+
+The node durations retain the CI refit from [Verify run 37409494450](https://github.com/tao-dev-org/tao-lang/actions/runs/37409494450),
+whose measured nodes are dated October 6, 2026, at 03:42:30 UTC. Host-only entries retain their
+previous estimates. Numbered shard histories remain in the snapshot for the refit; the planner
+uses current membership and relative file costs when a suite estimate is available.
+
+The ledger retains its existing relative costs and supplements 90 previously unrepresented,
+currently present files from the October 5 reconstruction of
+[PR15 Verify 37356653198](https://github.com/marcuswestin/tao-lang-2/actions/runs/37356653198)
+and [main Verify 37358101885](https://github.com/marcuswestin/tao-lang-2/actions/runs/37358101885).
+These supplemental records are derived weights, not individually measured test times: successful
+first-pass process elapsed time minus declared startup was distributed across the process's files
+in proportion to prior weights, using the mean known weight for unseen files. Equal splits within
+formerly grouped native files have low confidence. Records for removed files were not restored.
+The older reconstruction's suite totals and inferred CLI retry duration do not replace the newer
+CI node measurements.
+
+These snapshots describe scheduling costs, not verification receipts or proof of acceleration.
+Compare equivalent cache and coverage runs before drawing performance conclusions, and keep
+queue delays, setup, first-pass execution and retries separate.

@@ -26,16 +26,19 @@ export function synthesizeImportSection(
     const source = importSource(slice.statement)
     const targets = wildcardTargets.get(source)
     const declarations = targets === undefined ? [] : AST.resolvedImportedDeclarations(slice.statement)
-    const keptReferences = keptImportedReferences(slice.statement, usedNames).filter(reference => {
-      if (targets === undefined) {
+    const keptReferences = keptImportedReferences(slice.statement, usedNames).filter(specifier => {
+      if (targets === undefined || specifier.target.ref === undefined) {
         return true
       }
       const requested = declarations.filter(declaration =>
-        declaration.name === reference.$refText
-        || (AST.isEntityDataDeclaration(declaration) && declaration.singularName === reference.$refText)
+        declaration.name === AST.importSourceName(specifier)
+        || (AST.isEntityDataDeclaration(declaration) && declaration.singularName === AST.importSourceName(specifier))
       )
       // A named spelling can expose both namespaces; keep it when the wildcard leaves an identity out.
-      return requested.length === 0 || requested.some(declaration => !targets.has(declaration))
+      return requested.length === 0
+        || (AST.importLocalName(specifier) !== AST.importSourceName(specifier)
+          && requested.some(declaration => targets.has(declaration)))
+        || requested.some(declaration => !targets.has(declaration))
     })
     if (!slice.statement.all && keptReferences.length === 0) {
       continue
@@ -43,7 +46,7 @@ export function synthesizeImportSection(
     const group = groups.get(source) ?? { all: false, names: new Set<string>(), leading: [] }
     group.all ||= slice.statement.all
     for (const reference of keptReferences) {
-      group.names.add(reference.$refText)
+      group.names.add(AST.importSpecifierText(reference))
     }
     if (keepsOriginalImportList(slice.statement, keptReferences) && slice.leading !== '') {
       group.leading.push(slice.leading)
@@ -101,7 +104,7 @@ export function removeUnusedImportNames(
       continue
     }
     const keptReferences = keptImportedReferences(slice.statement, usedNames)
-    const names = [...new Set(keptReferences.map(reference => reference.$refText))]
+    const names = [...new Set(keptReferences.map(AST.importSpecifierText))].toSorted()
     if (names.length === 0) {
       continue
     }
@@ -145,7 +148,7 @@ function keptImportedReferences(
   useStatement: AST.UseStatement,
   usedNames: Set<string>,
 ): AST.UseStatement['importedDeclarations'] {
-  return useStatement.importedDeclarations.filter(reference => shouldKeepImportedReference(reference, usedNames))
+  return useStatement.importedDeclarations.filter(specifier => shouldKeepImportedReference(specifier, usedNames))
 }
 
 function keepsOriginalImportList(
@@ -156,8 +159,8 @@ function keepsOriginalImportList(
 }
 
 function shouldKeepImportedReference(
-  reference: AST.UseStatement['importedDeclarations'][number],
+  specifier: AST.UseStatement['importedDeclarations'][number],
   usedNames: Set<string>,
 ): boolean {
-  return usedNames.has(reference.$refText) || reference.ref === undefined
+  return usedNames.has(AST.importLocalName(specifier)) || specifier.target.ref === undefined
 }

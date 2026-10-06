@@ -649,7 +649,7 @@ Describe('validator: minimal design', () => {
       project design Light { styles { panel [pad 8] } }
       project design Dark { styles { other [pad 8] } }
       app Demo { id "demo" version "1.0.0" name "Demo" view Main Design Light }
-      app DemoDark = Demo with { id "demodark" Design Dark }
+      app DemoDark = Demo with { id "demodark", Design Dark }
       view Main() { render Surface() [panel] }
       ${surfaceView}
     `,

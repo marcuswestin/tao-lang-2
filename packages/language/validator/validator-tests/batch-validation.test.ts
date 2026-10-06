@@ -513,12 +513,12 @@ Describe('validator: batch-local reuse', () => {
           requires "Widgets" from ../Library version ^1.0.0 { @ui as @parts }
           view Root
         }
-        app Derived = Base with { id "derived" name "Derived" }
+        app Derived = Base with { id "derived", name "Derived" }
         app Missing { id "missing" version "1.0.0" name "Missing" view Root }
       `,
         'Consumer/Main.test.tao': `
         use Base from ./Main
-        app TestVariant = Base with { id "test" name "Test" }
+        app TestVariant = Base with { id "test", name "Test" }
         test "variant" { test "runs" { run TestVariant } }
       `,
         'Consumer/Other.test.tao': 'use Base from ./Main test "other" { test "runs" { run Base } }',

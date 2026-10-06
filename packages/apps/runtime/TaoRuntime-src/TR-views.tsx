@@ -8,6 +8,7 @@ import {
 } from './TR-accessibility'
 import { RuntimeAssert } from './TR-assert'
 import { createElement } from './TR-create-element'
+import { ErrorControls } from './TR-errors'
 import { InteractionControls, useAccessibilityVerbs } from './TR-interaction-catalog'
 import {
   interactionMeasurements,
@@ -21,9 +22,11 @@ import { LayoutControls, type TaoLayoutEntry, type TaoResolvedLayoutStyle } from
 import { invokeNativeEvent, type NativeEventAction } from './TR-native-events'
 import { ParentDirectionContext } from './TR-parent-direction'
 import { type ReactNativeRuntime, requireReactNativeRuntime } from './TR-react-native'
+import type { TaoSlotRenderer } from './TR-render-slots'
 import { catalystPalette, SchemeControls } from './TR-scheme'
 import RuntimeSwitch from './TR-switch'
-import { TaoPropsControls, type TaoViewProps, type TaoViewRuntimeProps } from './TR-TaoProps'
+import { type TaoProps, TaoPropsControls, type TaoViewProps, type TaoViewRuntimeProps } from './TR-TaoProps'
+import { mountKeyedSlotRow } from './TR-ui-render'
 
 type TaoButtonProps = TaoViewProps & {
   action?: NativeEventAction<[]>
@@ -76,6 +79,8 @@ type TaoTextInputProps = TaoViewProps & {
   secure?: boolean
   value: string
 }
+
+type TaoLazyListRow<Args> = Readonly<{ key: string; args: Args; taoProps?: TaoProps }>
 
 type TaoPrimitiveKind = 'Image' | 'Pressable' | 'Spinner' | 'Text' | 'View'
 
@@ -179,6 +184,16 @@ export const Views = {
 
   ScrollView(props: TaoViewProps, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
     return createElement(TaoScrollView, { props, runtimeProps })
+  },
+
+  LazyList<Args>(
+    props: TaoViewProps & {
+      rows: readonly TaoLazyListRow<Args>[]
+      renderer: TaoSlotRenderer<Args> | null
+    },
+    runtimeProps: TaoViewRuntimeProps = {},
+  ): React.JSX.Element {
+    return createElement(TaoLazyList<Args>, { props, runtimeProps })
   },
 
   Panes(props: TaoViewProps, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
@@ -324,26 +339,102 @@ function TaoScrollView({ props, runtimeProps }: {
   runtimeProps: TaoViewRuntimeProps
 }): React.ReactElement {
   const runtime = requireReactNativeRuntime()
-  const revealParent = React.useContext(InteractionScrollContext)
-  const scrollHost = React.useRef<
+  const scroll = useTaoScrollHost(props, runtimeProps, scrollToNativeScrollView, nativeScrollViewViewport)
+  return createElement(
+    runtime.ScrollView,
+    scroll.hostProps,
+    scroll.content,
+  )
+}
+
+function TaoLazyList<Args>({ props, runtimeProps }: {
+  props: TaoViewProps & { rows: readonly TaoLazyListRow<Args>[]; renderer: TaoSlotRenderer<Args> | null }
+  runtimeProps: TaoViewRuntimeProps
+}): React.ReactElement {
+  const runtime = requireReactNativeRuntime()
+  const FlatList = runtime.FlatList
+  if (!FlatList) {
+    return ErrorControls.failHost('LazyList requires the native list module, which is unavailable.')
+  }
+  const scroll = useTaoScrollHost(props, runtimeProps, scrollToNativeFlatList, nativeFlatListViewport)
+  const renderItem = React.useCallback(
+    ({ item }: { item: TaoLazyListRow<Args> }) => scroll.wrapContent(mountKeyedSlotRow(item, props.renderer)),
+    [props.renderer, scroll.wrapContent],
+  )
+  return createElement(
+    runtime.FlatList,
     {
-      measureInWindow?(callback: (x: number, y: number, width: number, height: number) => void): void
-      getBoundingClientRect?(): { x: number; y: number; width: number; height: number }
-      scrollTo?(offset: { animated: boolean; x: number; y: number }): void
-    } | null
-  >(null)
+      ...scroll.hostProps,
+      data: props.rows,
+      // Tao's LazyList is vertical, so its native scroll offset and reveal geometry both use y.
+      horizontal: false,
+      keyExtractor: (row: TaoLazyListRow<Args>) => row.key,
+      renderItem,
+    },
+  )
+}
+
+type ScrollHost = Measurable & {
+  getNativeScrollRef?(): Measurable | null
+  scrollTo?(offset: { animated: boolean; x: number; y: number }): void
+  scrollToOffset?(options: { animated: boolean; offset: number }): void
+}
+
+function scrollToNativeScrollView(host: ScrollHost, destination: Readonly<{ x: number; y: number }>): void {
+  host.scrollTo?.({ ...destination, animated: false })
+}
+
+function scrollToNativeFlatList(host: ScrollHost, destination: Readonly<{ x: number; y: number }>): void {
+  host.scrollToOffset?.({ offset: destination.y, animated: false })
+}
+
+function nativeFlatListViewport(host: ScrollHost): Measurable | null {
+  return host.getNativeScrollRef?.() ?? null
+}
+
+function nativeScrollViewViewport(host: ScrollHost): Measurable {
+  return host
+}
+
+function useTaoScrollHost(
+  props: TaoViewProps,
+  runtimeProps: TaoViewRuntimeProps,
+  scrollTo: (host: ScrollHost, destination: Readonly<{ x: number; y: number }>) => void,
+  getViewport: (host: ScrollHost) => Measurable | null,
+): {
+  content: React.ReactElement
+  hostProps: Record<string, unknown>
+  wrapContent: (children: React.ReactNode) => React.ReactNode
+} {
+  const runtime = requireReactNativeRuntime()
+  const revealParent = React.useContext(InteractionScrollContext)
+  const scrollHost = React.useRef<ScrollHost | null>(null)
   const scrollOffset = React.useRef({ x: 0, y: 0 })
   const reveal = React.useCallback((target: Measurable | null) => {
-    measuredBounds(scrollHost.current, viewport => {
+    const host = scrollHost.current
+    if (!host) {
+      return
+    }
+    const viewportHost = getViewport(host)
+    if (!viewportHost) {
+      return
+    }
+    measuredBounds(viewportHost, viewport => {
+      if (scrollHost.current !== host) {
+        return
+      }
       measuredBounds(target, row => {
+        if (scrollHost.current !== host) {
+          return
+        }
         const destination = revealMountedRow(viewport, row, scrollOffset.current)
         if (destination !== undefined) {
-          scrollHost.current?.scrollTo?.({ ...destination, animated: false })
+          scrollTo(host, destination)
         }
-        revealParent?.(scrollHost.current)
+        revealParent?.(viewportHost)
       })
     })
-  }, [revealParent])
+  }, [getViewport, revealParent, scrollTo])
   const parentDirection = ParentDirectionContext.use()
   const contentDirection = runtimeProps.direction ?? 'column'
   const merged = TaoPropsControls.mergeViewProps(
@@ -356,23 +447,23 @@ function TaoScrollView({ props, runtimeProps }: {
   const viewportEntries = entries.filter(entry => !scrollContentLayoutHeads.has(entry[0]))
   const viewportMerged = mergedWithLayoutEntries(merged, viewportEntries, undefined)
   const nativeProps = TaoPropsControls.nativePropsWithStyle(viewportMerged)
-  const { contentContainerStyle, style, ...scrollViewProps } = nativeProps
+  const { contentContainerStyle, onScroll, style, ...nativeHostProps } = nativeProps
   const contentLayoutStyle = LayoutControls.resolve({ direction: contentDirection, entries: contentEntries })
   const mergedContentContainerStyle = [{ flexGrow: 1 }, contentLayoutStyle, contentContainerStyle]
-  const children = ParentDirectionContext.childrenForLayoutParent(
-    merged.children,
-    mergedContentContainerStyle,
-  )
-  const outlinedChildren = outlineChildren(children, interactionOccurrence(props, runtimeProps))
-  return createElement(
-    runtime.ScrollView,
-    {
+  const wrapContent = React.useCallback((children: React.ReactNode) => {
+    const layoutChildren = ParentDirectionContext.childrenForLayoutParent(children, mergedContentContainerStyle)
+    const outlinedChildren = outlineChildren(layoutChildren, interactionOccurrence(props, runtimeProps))
+    return createElement(InteractionScrollContext.Provider, { value: reveal }, outlinedChildren)
+  }, [mergedContentContainerStyle, props, reveal, runtimeProps])
+  return {
+    content: wrapContent(merged.children),
+    hostProps: {
       keyboardDismissMode: runtime.Platform?.OS === 'ios' ? 'interactive' : 'on-drag',
       keyboardShouldPersistTaps: 'handled',
-      ...scrollViewProps,
+      ...nativeHostProps,
       onScroll: (event: { nativeEvent?: { contentOffset?: { x?: number; y?: number } } }) => {
-        if (typeof scrollViewProps['onScroll'] === 'function') {
-          scrollViewProps['onScroll'](event)
+        if (typeof onScroll === 'function') {
+          onScroll(event)
         }
         scrollOffset.current = {
           x: event.nativeEvent?.contentOffset?.x ?? 0,
@@ -380,12 +471,12 @@ function TaoScrollView({ props, runtimeProps }: {
         }
       },
       ref: scrollHost,
-      scrollEventThrottle: scrollViewProps['scrollEventThrottle'] ?? 16,
+      scrollEventThrottle: nativeHostProps['scrollEventThrottle'] ?? 16,
       contentContainerStyle: mergedContentContainerStyle,
       style: scrollViewportStyle(style),
     },
-    createElement(InteractionScrollContext.Provider, { value: reveal }, outlinedChildren),
-  )
+    wrapContent,
+  }
 }
 
 function scrollViewportStyle(style: unknown): unknown {

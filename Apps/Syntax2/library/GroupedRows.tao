@@ -1,0 +1,71 @@
+use RenderKey, ui from @tao/ui
+use Book from ./Library
+
+// 1. A row is a keyed recipe. Content stores live values, not rendered nodes.
+public
+type RowKey is RenderKey
+
+public
+type HeaderLabel is text
+
+public
+type GroupHeader is {
+   HeaderLabel
+} with {
+   view Render() {
+      render "{ GroupHeader.HeaderLabel }" [caption]
+}  }
+
+public
+type GroupedRow is {
+   RowKey,
+   Content ui
+} with {
+   func Key() fails never -> RenderKey {
+      return GroupedRow.RowKey
+   }
+
+   view Render() {
+      render GroupedRow.Content
+}  }
+
+// 2. Ordinary selected capability methods build rows through checked Tao constructors.
+can RowBuilders {
+   Header(RowKey, HeaderLabel) fails never -> GroupedRow
+   BookRow(RowKey, Book) fails never -> GroupedRow
+}
+
+type RowFactory is { } with {
+   func Header(RowKey, HeaderLabel) fails never {
+      return GroupedRow {
+         RowKey,
+         Content: GroupHeader {
+            HeaderLabel
+      }  }
+   }
+
+   func BookRow(RowKey, Book) fails never {
+      return GroupedRow {
+         RowKey,
+         Content: Book
+      }
+   }
+}
+
+// 2.1 The ordinary parameter projects the provider before the native boundary.
+public
+func GroupedRows(Items list of Book) fails never -> list of GroupedRow {
+   return BuildRows(Items, RowFactory { })
+}
+
+func BuildRows(Items list of Book, Builders RowBuilders) fails never -> list of GroupedRow {
+   return GroupedRows(Items, Builders) from ./GroupedRows.ts
+}
+
+// 3. RowKey is an ordinary field, not compiler magic. Standard-library LazyList
+// consumes Key() through its ordinary Keyed capability. Other list implementations
+// choose their own contracts.
+// Key extraction uses stable row identity, not index or JS object identity.
+// Moving an unchanged key preserves its occurrence; deleting it unmounts it.
+// Book members remain live. Reading them here registers normal dependencies;
+// changes that affect grouping recompute this pure projection.

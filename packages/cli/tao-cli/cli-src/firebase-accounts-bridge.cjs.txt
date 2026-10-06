@@ -1,0 +1,1 @@
+const auth = require(process.argv[1]); process.stdout.write(JSON.stringify(auth.getAllAccounts().map(a => ({ user: { email: a.user.email } }))));

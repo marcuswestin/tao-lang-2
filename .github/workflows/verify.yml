@@ -20,8 +20,8 @@ name: Verify
 # the partitions, which a fork's pull request receives read-only; the job then still decides, and
 # only its explanatory comment is lost (`CONTRIBUTING.md` says the same thing).
 #
-# The partition count is one number, `PARTITIONS` below, read by the `plan` job; nothing else in
-# this file states it. Never cache `.artifacts`: the plan reads recorded timings, and partitions
+# The partition count is two numbers, `PARTITIONS` and `PARTITIONS_SHARED` below, between which
+# the `plan` job chooses; nothing else in this file states them. Never cache `.artifacts`: the plan reads recorded timings, and partitions
 # that restored different ones would place nodes differently. Each partition instead seeds them
 # from `.github/verify/durations.json` and `ledger.json`.
 
@@ -35,7 +35,7 @@ on:
   workflow_dispatch:
     inputs:
       partitions:
-        description: Partition count for this run only; blank uses the repository variable or the default below.
+        description: Partition count for this run only; blank lets the plan job choose the alone or shared count below.
         required: false
         type: string
       host_gates:
@@ -55,35 +55,23 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  # How many Linux runners split the readers. The number comes from measurements, not a guess:
-  # `Docs/Roadmap/Verification speed research.md` §16 and `.github/verify/durations.json`.
+  # How many Linux runners split the readers. The numbers come from measurements, not a guess:
+  # `Docs/Roadmap/Verification speed research.md` and `.github/verify/durations.json`.
   #
-  # The lane's portable work is about 2,900 s of suite and gate time, and every partition first
-  # pays about 115 s on its own: checkout and cache restores (about 25 s), a warm bootstrap
-  # (about 35 s), and the prepare phase (about 50 s). A run's wall time is therefore about
-  # ceil(N / concurrency) waves of (115 + 2,900 / N) seconds, times the imbalance of the plan (the
-  # slowest partition ran 2.2x the median on 2026-10-06), bounded below by the longest
-  # unsplittable node (runtime-jest, about 110 s) plus the fixed cost:
+  # The `plan` job uses PARTITIONS when no other Verify run is in flight and PARTITIONS_SHARED when
+  # one or more are, so two runs share the pool of about 25 runners instead of thrashing it. One
+  # 20-partition run (37423624990) took 390 s wall; its longest partition ran 288 s and the median
+  # 231 s, of which about 120 s is fixed cost every partition pays (checkout and caches about 70 s,
+  # prepare about 50 s). Two 20-partition runs together thrash the pool (on 2026-10-06, 22 of 25
+  # runs were cancelled); two 11-partition runs take 22 runners side by side, an estimated 7.5 min
+  # each until a run measures it, so a pair finishes in about 7.5 min instead of 13. `open-pr` makes
+  # a third lander wait, so there is no count for three runs.
   #
-  #   concurrency 11 (measured on 2026-10-06: 11 jobs start together, the twelfth queues):
-  #     N = 10  one wave, about 405 s, one slot left for the small jobs that share the limit
-  #             (the aggregate, the contributor agreement, Archive merged branch)
-  #     N = 11  one wave only while nothing else runs; any other job adds a second wave
-  #     N = 12  two waves, about 760 s (the second wave is one partition the others wait for)
-  #   concurrency 20 or more (the Team plan documents 60 total jobs):
-  #     N = 18  about 275 s;  N = 24  about 235 s, then the fixed cost dominates.
-  #
-  # The sizing rule: PARTITIONS is at most the measured concurrency minus one, so one run is one
-  # wave with a slot left for the small jobs that share the limit (`cla`, `plan`, `verify`, the
-  # archive workflow). Raising it past that does not shorten a run: the partition that found no
-  # runner starts when the first wave ends, and the run takes two waves. Runs from several pull
-  # requests share the same limit, so under load even N = 10 queues; the rule keeps one run's own
-  # jobs from queueing behind each other.
-  #
-  # Set the repository Actions variable VERIFY_PARTITIONS (Settings → Secrets and variables →
-  # Actions) to 18 once a run shows 19 or more jobs starting together, and leave this default as
-  # the documented fallback. A `workflow_dispatch` run takes a one-run override.
-  PARTITIONS: 10
+  # The repository Actions variables VERIFY_PARTITIONS and VERIFY_PARTITIONS_SHARED (Settings →
+  # Secrets and variables → Actions) override the two defaults; a `workflow_dispatch` input
+  # overrides both for that one run.
+  PARTITIONS: 20
+  PARTITIONS_SHARED: 11
   # The host gates `CI macOS` is admitted to run, comma-separated, single-quoted on this one line:
   # `verify-complement` reads exactly this line to leave them out of the local lane. Empty admits
   # none. Admit one gate at a time, after its dispatched run (`host_gates` above) proved reliable.
@@ -182,13 +170,17 @@ jobs:
           fi
           exit 1
 
-  # Turns the one partition count into the matrix the partitions fan out over. A matrix cannot read
-  # `env`, so this job is the only place the count is resolved; it also records the override that
-  # applied, so a run's summary says how it was split.
+  # Turns the partition count into the matrix the partitions fan out over. A matrix cannot read
+  # `env`, so this job is the only place the count is resolved: the alone count, or the shared one
+  # when another Verify run already holds runners. It records the count, where it came from, and
+  # the runs it saw, so a run's summary says how it was split.
   plan:
     name: Plan the partitions
     runs-on: ubuntu-24.04
     timeout-minutes: 2
+    permissions:
+      actions: read
+      contents: read
     outputs:
       count: ${{ steps.plan.outputs.count }}
       partitions: ${{ steps.plan.outputs.partitions }}
@@ -196,15 +188,43 @@ jobs:
       - name: Resolve the partition count
         id: plan
         env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          EVENT: ${{ github.event_name }}
+          BRANCH: ${{ github.head_ref || github.ref_name }}
           RUN_OVERRIDE: ${{ inputs.partitions }}
-          REPOSITORY_OVERRIDE: ${{ vars.VERIFY_PARTITIONS }}
+          ALONE_OVERRIDE: ${{ vars.VERIFY_PARTITIONS }}
+          SHARED_OVERRIDE: ${{ vars.VERIFY_PARTITIONS_SHARED }}
         run: |
+          set -o pipefail
+          # Other in-flight runs of this workflow, as "id branch" lines. Every event holds runners,
+          # but a run in this run's own concurrency group (same event and branch, except a dispatch,
+          # which gets a group of its own) is being cancelled or is waiting, so it is not counted.
+          other_runs() {
+            for status in in_progress queued; do
+              gh api "repos/$REPO/actions/workflows/verify.yml/runs?status=$status&per_page=100" || return 1
+            done | jq -r --argjson self "$RUN_ID" --arg event "$EVENT" --arg branch "$BRANCH" '
+              .workflow_runs[]
+              | select(.id != $self)
+              | select($event == "workflow_dispatch" or .event != $event or .head_branch != $branch)
+              | "\(.id) \(.head_branch)"' | sort -u
+          }
+          # choose <variable value> <variable name> <default name>
+          choose() {
+            if [ -n "$1" ]; then count=$1; source="the repository variable $2"
+            else count=${!3}; source="the workflow default $3"; fi
+          }
           if [ -n "$RUN_OVERRIDE" ]; then
-            count=$RUN_OVERRIDE; source="this run's dispatch input"
-          elif [ -n "$REPOSITORY_OVERRIDE" ]; then
-            count=$REPOSITORY_OVERRIDE; source="the repository variable VERIFY_PARTITIONS"
+            count=$RUN_OVERRIDE; source="this run's dispatch input"; seen="not counted"
+          elif ! others=$(other_runs); then
+            echo "::warning::Could not list in-flight Verify runs; using the alone partition count."
+            choose "$ALONE_OVERRIDE" VERIFY_PARTITIONS PARTITIONS; seen="unknown, the runs API failed"
+          elif [ -z "$others" ]; then
+            choose "$ALONE_OVERRIDE" VERIFY_PARTITIONS PARTITIONS; seen="none"
           else
-            count=$PARTITIONS; source="the workflow default"
+            choose "$SHARED_OVERRIDE" VERIFY_PARTITIONS_SHARED PARTITIONS_SHARED
+            seen=$(paste -sd, - <<<"$others" | sed 's/,/, /g')
           fi
           case "$count" in
             ''|*[!0-9]*|0) echo "::error::Partition count must be a positive integer, got '$count' from $source."; exit 1 ;;
@@ -213,7 +233,9 @@ jobs:
             echo "::error::Partition count $count from $source exceeds 40; fixed cost dominates long before that."
             exit 1
           fi
-          echo "Splitting the readers across $count partitions ($source)."
+          line="Splitting the readers across $count partitions ($source); other Verify runs in flight: $seen."
+          echo "$line"
+          echo "$line" >> "$GITHUB_STEP_SUMMARY"
           echo "count=$count" >> "$GITHUB_OUTPUT"
           echo "partitions=$(seq 1 "$count" | jq -cs .)" >> "$GITHUB_OUTPUT"
 

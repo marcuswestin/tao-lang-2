@@ -126,9 +126,9 @@ Describe('validator: declaration contracts', () => {
       }
       view Home() { render Empty() }
       let Main = Carousel {
-        Initial @home
+        Initial @home,
         Display "tabs"
-        @home { Label "Home" Content Home }
+        @home { Label "Home", Content Home }
       }
       app Demo { id "demo" version "1.0.0" name "Demo"
         Navigator Main
@@ -141,57 +141,57 @@ Describe('validator: declaration contracts', () => {
   const carouselCases: ReadonlyArray<readonly [name: string, configuration: string, message: string]> = [
     [
       'duplicate ordinary configuration properties',
-      'Initial @home Initial @home Display "tabs" @home { Label "Home" Content Home }',
+      'Initial @home, Initial @home, Display "tabs" @home { Label "Home", Content Home }',
       navigationValidationMessages.duplicateConfiguration('Carousel', 'Initial'),
     ],
     [
       'non-key values for key configuration properties',
-      'Initial "home" Display "tabs" @home { Label "Home" Content Home }',
+      'Initial "home", Display "tabs" @home { Label "Home", Content Home }',
       navigationValidationMessages.configurationKeyType('Initial'),
     ],
     [
       'ordinary configuration values of the wrong type',
-      'Initial @home Display 3 @home { Label "Home" Content Home }',
+      'Initial @home, Display 3 @home { Label "Home", Content Home }',
       navigationValidationMessages.configurationType('Display', 'text', 'number'),
     ],
     [
       'unknown ordinary configuration properties',
-      'Initial @home Display "tabs" Extra "unknown" @home { Label "Home" Content Home }',
+      'Initial @home, Display "tabs", Extra "unknown" @home { Label "Home", Content Home }',
       navigationValidationMessages.unknownConfiguration('Carousel', 'Extra'),
     ],
     [
       'duplicate keyed items',
-      'Initial @home Display "tabs" @home { Label "Home" Content Home } @home { Label "Again" Content Home }',
+      'Initial @home, Display "tabs" @home { Label "Home", Content Home } @home { Label "Again", Content Home }',
       navigationValidationMessages.duplicateConfigurationKey('Carousel', '@home'),
     ],
     [
       'missing keyed items',
-      'Initial @home Display "tabs"',
+      'Initial @home, Display "tabs"',
       navigationValidationMessages.missingKeyedItem('Carousel'),
     ],
     [
       'keyed item properties of the wrong primitive type',
-      'Initial @home Display "tabs" @home { Label 4 Content Home }',
+      'Initial @home, Display "tabs" @home { Label 4, Content Home }',
       navigationValidationMessages.configurationType('Label', 'text', 'number'),
     ],
     [
       'keyed item properties of the wrong union type',
-      'Initial @home Display "tabs" @home { Label "Home" Content "not presentable" }',
+      'Initial @home, Display "tabs" @home { Label "Home", Content "not presentable" }',
       navigationValidationMessages.configurationType('Content', 'view', 'text'),
     ],
     [
       'unknown keyed item properties',
-      'Initial @home Display "tabs" @home { Label "Home" Content Home Extra "unknown" }',
+      'Initial @home, Display "tabs" @home { Label "Home", Content Home, Extra "unknown" }',
       navigationValidationMessages.keyedItemConfiguration('Carousel', '@home', 'Extra'),
     ],
     [
       'missing keyed item properties',
-      'Initial @home Display "tabs" @home { Label "Home" }',
+      'Initial @home, Display "tabs" @home { Label "Home" }',
       navigationValidationMessages.keyedItemMissing('Carousel', '@home', 'Content'),
     ],
     [
       'initial keys absent from keyed items',
-      'Initial @missing Display "tabs" @home { Label "Home" Content Home }',
+      'Initial @missing, Display "tabs" @home { Label "Home", Content Home }',
       navigationValidationMessages.unknownConfigurationKey('Carousel', 'Initial', '@missing'),
     ],
   ]
@@ -412,9 +412,9 @@ Describe('validator: declaration contracts', () => {
       `
       use SelectionNav from @tao/nav
       let MainNavigation = SelectionNav {
-        Initial @workspace
+        Initial @workspace,
         Display "tabs"
-        @workspace { Label "Workspace" Content Home }
+        @workspace { Label "Workspace", Content Home }
       }
       app SelectionApp { id "selectionapp" version "1.0.0" name "Selection" Navigator MainNavigation }
       action Activate() { present SelectionApp@workspace }
@@ -506,13 +506,13 @@ Describe('validator: declaration contracts', () => {
       let ResetNav = StackNav { Initial Home }
       app StrictApp { id "strictapp" version "1.0.0" name "Strict"
         Navigator SelectionNav {
-          Initial @workspace
+          Initial @workspace,
           Display "tabs"
-          @workspace { Label "Workspace" Content Home }
+          @workspace { Label "Workspace", Content Home }
         }
         @window SlotNav { Initial Detail }
       }
-      let StrictVariant = StrictApp with { id "strictvariant" name "Strict variant" }
+      let StrictVariant = StrictApp with { id "strictvariant", name "Strict variant" }
       scene Home() {
         Title "Home"
         action Activate() { present StrictVariant@workspace }
@@ -529,7 +529,7 @@ Describe('validator: declaration contracts', () => {
   Test(
     'rejects an Initial key absent from imported SelectionNav items',
     rejects(
-      selectionNavApp('Initial @missing Display "tabs" @home { Label "Home" Content Home }'),
+      selectionNavApp('Initial @missing, Display "tabs" @home { Label "Home", Content Home }'),
       navigationValidationMessages.unknownConfigurationKey('SelectionNav', 'Initial', '@missing'),
     ),
   )
@@ -894,10 +894,10 @@ function selectionVariantApp(variants: string, selection: string): string {
   return `
     use SelectionNav, StackNav from @tao/nav
     let MainNavigation = SelectionNav {
-      Initial @workspace
+      Initial @workspace,
       Display "tabs"
-      @workspace { Label "Workspace" Content Home }
-      @settings { Label "Settings" Content Settings }
+      @workspace { Label "Workspace", Content Home }
+      @settings { Label "Settings", Content Settings }
     }
     app SelectionApp { id "selectionapp" version "1.0.0" name "Selection" Navigator MainNavigation }
     ${variants}

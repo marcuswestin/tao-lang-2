@@ -1,7 +1,7 @@
 import { CLI, Errors, FS, HCI, Platform, ResourceInventory } from '@shared'
 import { parseDevLoopArgs } from '../agent-config/DevLoopArgs'
 import { agentHostCommands, hostCommandKind, hostCommandPrefix } from '../agent-config/HostCommandPolicy'
-import { hostCommandTarget } from '../agent-config/HostCommandTargets'
+import { type HostCommandTarget, hostCommandTarget } from '../agent-config/HostCommandTargets'
 import { validStudioProofArgs } from '../agent-config/StudioProofArgs'
 import { isNotificationText, NOTIFICATION_SOUNDS } from '../attention/NotifyDeveloper'
 import { runAgentCommand } from '../runner/AgentRunner'
@@ -70,8 +70,18 @@ async function run(): Promise<number> {
     return 2
   }
   if (target.argsPolicy === 'pid' && (args.length !== 1 || !/^\d+$/u.test(args[0]!))) {
-    HCI.writeErrorLine(`Usage: ./agent unsandboxed ${prefix.join(' ')} <pid>`)
+    HCI.writeErrorLine(
+      `Usage: ./agent unsandboxed ${prefix.join(' ')} <${prefix.join(' ') === 'processes group' ? 'pgid' : 'pid'}>`,
+    )
     return 2
+  }
+  if (prefix.join(' ') === 'processes group') {
+    const pgid = Number(args[0])
+    if (!Number.isSafeInteger(pgid) || pgid <= 1 || String(pgid) !== args[0]) {
+      HCI.writeErrorLine('Usage: ./agent unsandboxed processes group <pgid>')
+      return 2
+    }
+    return await runProcessGroup(pgid, target)
   }
   if (
     target.argsPolicy === 'standalone-vm' && args.length !== 0 && (
@@ -136,6 +146,66 @@ async function run(): Promise<number> {
     HCI.writeErrorLine(`FAIL  ${prefix.join(' ')}: ${result.error.message}`)
   }
   return result.exitCode ?? 1
+}
+
+/** Inspect one exact group without exposing unrelated process rows or arbitrary ps arguments. */
+async function runProcessGroup(pgid: number, target: HostCommandTarget): Promise<number> {
+  const maxSnapshotBytes = 16 * 1024 * 1024
+  const maxGroupRows = 128
+  const chunks: Buffer[] = []
+  let bytes = 0
+  let oversized = false
+  let stderrSeen = false
+  const process = CLI.start(target.command, {
+    args: target.fixedArgs,
+    stdio: 'pipe',
+    onOutput: (stream, chunk) => {
+      if (stream !== 'stdout') {
+        stderrSeen ||= chunk.byteLength > 0
+        return
+      }
+      bytes += chunk.byteLength
+      if (bytes > maxSnapshotBytes) {
+        oversized = true
+      } else if (!oversized) {
+        chunks.push(chunk)
+      }
+    },
+  })
+  const { exitCode } = await process.waitForClose()
+  await process.closeOutput()
+  if (exitCode !== 0 || process.error !== undefined || oversized || stderrSeen || bytes === 0) {
+    HCI.writeErrorLine('FAIL  processes group could not read a complete bounded ps snapshot.')
+    return 1
+  }
+  const snapshot = Buffer.concat(chunks).toString('utf8')
+  if (!snapshot.endsWith('\n') || snapshot.includes('\uFFFD')) {
+    HCI.writeErrorLine('FAIL  processes group received a malformed ps snapshot.')
+    return 1
+  }
+  const group: { pid: number; ppid: number; pgid: number; uid: number; stat: string; command: string }[] = []
+  for (const line of snapshot.slice(0, -1).split('\n')) {
+    const match = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(.+?)\s*$/u.exec(line)
+    if (match === null || line.length > 2_048 || /[\u0000-\u001f\u007f]/u.test(match[6]!)) {
+      HCI.writeErrorLine('FAIL  processes group received a malformed ps row.')
+      return 1
+    }
+    const [pid, ppid, rowPgid, uid] = match.slice(1, 5).map(Number)
+    if (![pid, ppid, rowPgid, uid].every(Number.isSafeInteger) || pid! <= 0 || ppid! < 0 || rowPgid! <= 0 || uid! < 0) {
+      HCI.writeErrorLine('FAIL  processes group received a malformed ps row.')
+      return 1
+    }
+    if (rowPgid !== pgid) {
+      continue
+    }
+    if (group.length >= maxGroupRows || Buffer.byteLength(match[6]!, 'utf8') > 256) {
+      HCI.writeErrorLine('FAIL  processes group exceeded its bounded output.')
+      return 1
+    }
+    group.push({ pid: pid!, ppid: ppid!, pgid: rowPgid!, uid: uid!, stat: match[5]!, command: match[6]! })
+  }
+  HCI.writeLine(JSON.stringify({ pgid, processes: group }))
+  return 0
 }
 
 /** Attention alerts accept only bounded display text and supported effects. */

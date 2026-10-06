@@ -10,15 +10,15 @@ app Clockwork {
       Initial ClockworkScene
 }  }
 
-function InitialClockworkChoice() returns text {
+func InitialClockworkChoice() -> text {
    return ClockworkChoice() from ./Clockwork.ts
 }
 
-function ClockworkEnvironmentAt(Tick time) returns text {
+func ClockworkEnvironmentAt(Tick time) -> text {
    return ReadClockworkEnvironment(Tick) from ./Clockwork.ts
 }
 
-function ClockworkControlReceiptAt(Tick time) returns text {
+func ClockworkControlReceiptAt(Tick time) -> text {
    return ReadClockworkControlReceipt(Tick) from ./Clockwork.ts
 }
 

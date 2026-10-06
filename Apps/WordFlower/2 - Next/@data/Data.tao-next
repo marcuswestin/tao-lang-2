@@ -99,8 +99,8 @@ command Duplicate(Document) {
    Icon "doc.on.doc"
    Key "d"
    do -> { create Document {
-      Title: "{ Document.Title } copy"
-      Body: Document.Body
+      Title: "{ Document.Title } copy",
+      Body: Document.Body,
       Document.Workspace
    } }
 }

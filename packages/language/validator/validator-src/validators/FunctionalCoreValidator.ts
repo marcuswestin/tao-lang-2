@@ -5,12 +5,21 @@ import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 import { isAgentCommandsList } from './agent-commands-validator'
 import { FunctionsValidator } from './functions-validator'
+import { NumericUnitsValidationMessages } from './NumericUnitsValidationMessages'
 
 const messages = {
   binaryBoolean: (operator: string) => `Operator '${operator}' requires boolean values on both sides.`,
   binaryComparable: (operator: string) => `Operator '${operator}' requires number values on both sides.`,
   binaryCompatible: (operator: string) => `Operator '${operator}' requires compatible values on both sides.`,
   binaryNumeric: (operator: string) => `Operator '${operator}' requires number values on both sides.`,
+  authoredContract: (operator: string, problem: ReturnType<typeof Type.associatedOperation>['problem']) =>
+    `Operator '${operator}' has ${
+      problem === 'ambiguous-operator'
+        ? 'more than one applicable authored contract'
+        : problem === 'pending-contract'
+        ? 'an unresolved authored contract'
+        : 'no applicable authored contract for these ordered operands'
+    }.`,
   actionGuardRetired:
     '`guard` in an action is retired: use `check <condition>` to stop the action, or `if` to branch. `guard` stays the view-side construct.',
   checkCondition: '`check` requires a boolean condition.',
@@ -20,9 +29,10 @@ const messages = {
     "A bare `guard` sends its subject's exceptional cases to the read net, so its subject must be an entity or a query.",
   emptyGuardCases: 'A `guard` case block names at least one case; to send every case to the read net, drop the braces.',
   appGuardCase: (name: string) =>
-    `App guard handles only loading, missing, unauthorized, and error; '${name}' is not one of them.`,
+    `App guard handles only loading, none, unauthorized, and error; '${name}' is not one of them.`,
   retiredGuardDefault: '`guard default` moved into the app: write `guard { ... }` inside an app block.',
   conditionalBranch: '`when` branches must produce compatible value types.',
+  pickTotal: '`pick` requires an otherwise branch unless every input is covered.',
   compactWhenSubject: 'The compact `when Subject Value / label Value` form requires a yes/no subject.',
   compactWhenLabel: (label: string, expected: string) =>
     `'${label}' is not this subject's no-pole label; use '${expected}'.`,
@@ -53,7 +63,14 @@ export const FunctionalCoreValidator = {
     ...FunctionsValidator.checks,
     [AST.BinaryExpression.$type]: validateBinary,
     [AST.UnaryExpression.$type]: (expression, ctx) => {
+      if (expression.operator !== 'not' && validateAssociatedOperation(expression, ctx)) {
+        return
+      }
       const operand = Type.ofExpression(expression.operand)
+      if (containsNumeric(operand)) {
+        ctx.error(expression, NumericUnitsValidationMessages.operator(expression.operator))
+        return
+      }
       if (expression.operator === 'not') {
         if (!isPrimitive(operand, 'boolean')) {
           ctx.error(expression, messages.unaryBoolean)
@@ -70,6 +87,7 @@ export const FunctionalCoreValidator = {
       validateWhenBranches(expression.subject, expression.branches, ctx)
       validateCompatibleBranches(AST.whenExpressionOutcomes(expression).values, ctx)
       validateCompactWhen(expression, ctx)
+      validatePickCompleteness(expression, ctx)
     },
     [AST.StringInterpolation.$type]: (interpolation, ctx) => {
       const type = Type.ofExpression(interpolation.expression)
@@ -95,6 +113,9 @@ export const FunctionalCoreValidator = {
       // §8 keeps `guard` for views; an action stops with `check`. Retired with a warning for now.
       ctx.warning(statement, messages.actionGuardRetired)
     },
+    [AST.WhenActionStatement.$type]: (statement, ctx) => {
+      validateSubjectCases(statement.subject, statement.branches, ctx)
+    },
     [AST.IfActionStatement.$type]: (statement, ctx) => {
       validateIfCondition(statement.condition, ctx)
     },
@@ -111,15 +132,24 @@ export const FunctionalCoreValidator = {
       if (collection.kind !== 'unresolved' && collection.kind !== 'list') {
         ctx.error(statement.collection, messages.forCollection)
       }
-      validateRenderControlPlacement(statement, ctx)
+      if (AST.isBlock(statement.block)) {
+        validateRenderControlPlacement(statement, ctx)
+      }
     },
   } satisfies NodeValidationChecks,
   messages,
 } as const
 
 function validateBinary(expression: AST.BinaryExpression, ctx: ValidationContext): void {
+  if (expression.operator !== 'and' && expression.operator !== 'or' && validateAssociatedOperation(expression, ctx)) {
+    return
+  }
   const left = Type.ofExpression(expression.left)
   const right = Type.ofExpression(expression.right)
+  if (containsNumeric(left) || containsNumeric(right)) {
+    ctx.error(expression, NumericUnitsValidationMessages.operator(expression.operator))
+    return
+  }
   if (left.kind === 'unresolved' || right.kind === 'unresolved') {
     return
   }
@@ -167,6 +197,28 @@ function validateBinary(expression: AST.BinaryExpression, ctx: ValidationContext
   if (!isPrimitive(left, 'number') || !isPrimitive(right, 'number')) {
     ctx.error(expression, messages.binaryNumeric(expression.operator))
   }
+}
+
+/** Authored arithmetic is selected from the ordered first operand's real owner ancestry. */
+function validateAssociatedOperation(
+  expression: AST.BinaryExpression | AST.UnaryExpression,
+  ctx: ValidationContext,
+): boolean {
+  const resolved = Type.associatedOperation(expression)
+  if (!resolved.problem) {
+    return true
+  }
+  if (resolved.problem === 'unresolved-operand' || resolved.problem === 'unsupported-operator') {
+    return false
+  }
+  if (
+    resolved.problem === 'missing-operator'
+    && !resolved.operandTypes.some(type => Type.requiresAuthoredOperationContract(type) || containsNumeric(type))
+  ) {
+    return false
+  }
+  ctx.error(expression, messages.authoredContract(expression.operator, resolved.problem))
+  return true
 }
 
 function isSupportedInterpolationType(type: ASTUtils.TaoType): boolean {
@@ -247,7 +299,12 @@ function isZeroLiteral(expression: AST.Expression): boolean {
   return AST.isNumberLiteral(expression) && expression.value === 0
 }
 
-type SubjectCaseBranch = AST.WhenBranch | AST.WhenRenderBranch | AST.GuardActionBranch | AST.GuardRenderBranch
+type SubjectCaseBranch =
+  | AST.WhenBranch
+  | AST.WhenRenderBranch
+  | AST.WhenActionBranch
+  | AST.GuardActionBranch
+  | AST.GuardRenderBranch
 
 function validateEnum(declaration: AST.TypeDeclaration, ctx: ValidationContext): void {
   if (!AST.isTaoFile(declaration.$container)) {
@@ -313,8 +370,8 @@ function validateIfCondition(condition: AST.Expression, ctx: ValidationContext):
 }
 
 /**
- * A false check returns from the callback that owns its block. An `if` block, a `guard` case, or a
- * `when do` outcome compiles to a nested callback, so a check there would skip only that sub-block
+ * A false check returns from the callback that owns its block. Conditional blocks, outcomes and
+ * loop iterations compile to nested callbacks, so a check there would skip only that sub-block
  * while the action carried on.
  */
 function validateCheck(statement: AST.CheckStatement, ctx: ValidationContext): void {
@@ -323,9 +380,42 @@ function validateCheck(statement: AST.CheckStatement, ctx: ValidationContext): v
     ctx.error(statement.condition, messages.checkCondition)
   }
   const owner = statement.$container.$container
-  if (AST.isIfActionStatement(owner) || AST.isGuardActionBranch(owner) || AST.isWhenDoOutcome(owner)) {
+  if (
+    AST.isIfActionStatement(owner) || AST.isGuardActionBranch(owner) || AST.isWhenDoOutcome(owner)
+    || AST.isForStatement(owner)
+  ) {
     ctx.error(statement, messages.checkPlacement)
   }
+}
+
+/** A pick is total only with a fallback or a proved finite-domain/unconditional match. */
+function validatePickCompleteness(expression: AST.WhenExpression, ctx: ValidationContext): void {
+  if (!expression.pickSyntax || expression.otherwise) {
+    return
+  }
+  if (!expression.subject) {
+    if (
+      expression.branches.some(branch =>
+        AST.isBooleanLiteral(branch.condition) && AST.canonicalSubjectCase(branch.condition.value) === 'true'
+      )
+    ) {
+      return
+    }
+  } else {
+    const type = Type.ofExpression(expression.subject)
+    const expected = type.kind === 'enum'
+      ? AST.caseSetCasesOf(type.declaration).map(AST.caseSetCaseName)
+      : type.kind === 'primitive' && type.primitive === 'boolean'
+      ? ['true', 'false']
+      : []
+    const covered = new Set(
+      expression.branches.flatMap(branch => branch.case === undefined ? [] : [AST.canonicalSubjectCase(branch.case)]),
+    )
+    if (expected.length > 0 && expected.every(name => covered.has(name))) {
+      return
+    }
+  }
+  ctx.error(expression, messages.pickTotal)
 }
 
 function validateWhenBranches(
@@ -404,7 +494,7 @@ function validateReadNetReach(statement: AST.GuardRenderStatement, ctx: Validati
 }
 
 /** The read net's cases: the exceptional ones, which are exactly those carrying no content. */
-const readNetCaseNames: ReadonlySet<string> = new Set(['loading', 'missing', 'unauthorized', 'error'])
+const readNetCaseNames: ReadonlySet<string> = new Set(['loading', 'none', 'unauthorized', 'error'])
 
 function readNetCases(category: SubjectCaseCategory): ReadonlySet<string> {
   return new Set([...allowedCases(category)].filter(caseName => readNetCaseNames.has(caseName)))
@@ -443,7 +533,13 @@ function subjectCaseCategory(subject: AST.Expression): SubjectCaseCategory {
     item: () => 'unsupported',
     entity: () => 'entity',
     enum: () => 'enum',
-    union: () => 'unsupported',
+    capability: () => 'unsupported',
+    union: type =>
+      type.members.length === 2
+        && type.members.some(member => member.kind === 'entity')
+        && type.members.some(member => member.kind === 'primitive' && member.primitive === 'none')
+        ? 'entity'
+        : 'unsupported',
   })
 }
 
@@ -451,7 +547,7 @@ function allowedCases(category: SubjectCaseCategory): ReadonlySet<string> {
   return Switch(category, {
     enum: () => new Set<string>(),
     boolean: () => new Set(['true', 'false']),
-    entity: () => new Set(['loading', 'missing', 'unauthorized', 'error']),
+    entity: () => new Set(['loading', 'none', 'unauthorized', 'error']),
     list: () => new Set(['empty']),
     query: () => new Set(['empty', 'loading', 'refreshing', 'stale', 'error']),
     text: () => new Set(['empty']),
@@ -525,4 +621,8 @@ function validateRenderControlPlacement(
 
 function isPrimitive(type: ReturnType<typeof Type.ofExpression>, primitive: string): boolean {
   return type.kind === 'primitive' && type.primitive === primitive
+}
+
+function containsNumeric(type: ReturnType<typeof Type.ofExpression>): boolean {
+  return type.kind === 'union' ? type.members.some(containsNumeric) : isPrimitive(type, 'numeric')
 }

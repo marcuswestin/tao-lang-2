@@ -40,6 +40,7 @@ export type DevLoopReceipt = {
   cleanupOutcome?: 'pending' | 'proved' | 'retained' | 'unknown'
   mobileDriverCleanup?: 'opening' | 'proved' | 'retained'
   mobileDriverProcesses?: TrackedProcess[]
+  retirementAudit?: { version: 1; generation: string; path: 'mobile-retirement.json'; outcome: 'proved' }
 }
 
 export function devLoopDirectory(session: string): string {

@@ -69,7 +69,7 @@ DeclarationSlotReferenceBlock:
 // bare visual/slot uses. Keep every other broad statement parseable in an app body for a semantic
 // placement diagnostic, while leaving those inherently overlapping bare forms to visual blocks.
 AppBlockDiagnosticStatement:
-    Declaration | AccessDeclaration | EntityQueryDeclaration | PackageDeclaration | UseStatement | UsePackageStatement | TestDeclaration | ScenarioGroupDeclaration | ActionFailureStubStep | RunStep | PressTextStep | TagPressStep | PressWordStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | ExpectInteractionStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep | RelaunchStep | AdvanceStep | NetworkTestStep | WaitForSyncStep | DatasourceFailureStep | ExpectNavigationTitleStep | ExpectToolbarCommandStep | PressToolbarCommandStep | StateDeclaration | Injection | TagStatement | RenderAccessibilityStatement | RenderStatement | RenderSlotDeclaration | EventHandler | LoopSelectHandler | WhenRenderStatement | GuardDefaultStatement | GuardRenderStatement | IfRenderStatement | ForStatement | AsyncActionStatement;
+    Declaration | AccessDeclaration | EntityQueryDeclaration | PackageDeclaration | UseStatement | UsePackageStatement | TestDeclaration | ScenarioGroupDeclaration | ActionFailureStubStep | RunStep | PressTextStep | TagPressStep | PressWordStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | ExpectInteractionStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep | RelaunchStep | AdvanceStep | NetworkTestStep | WaitForSyncStep | DatasourceFailureStep | ExpectNavigationTitleStep | ExpectToolbarCommandStep | PressToolbarCommandStep | StateDeclaration | Injection | TagStatement | RenderAccessibilityStatement | RenderStatement | EventHandler | LoopSelectHandler | WhenRenderStatement | GuardDefaultStatement | GuardRenderStatement | IfRenderStatement | ForStatement | AsyncActionStatement;
 
 // EntityQueryDeclaration remains in the broad diagnostic statement rule so a query written at file
 // level parses far enough for the validator to explain the unsupported shape. It is deliberately
@@ -82,14 +82,14 @@ type FileStatement = Declaration | AccessDeclaration | PackageDeclaration | UseS
 type TopLevelStatement = Declaration | AccessDeclaration | PackageDeclaration | UseStatement | UsePackageStatement | TestDeclaration | ScenarioGroupDeclaration | GuardDefaultStatement;
 // View statements are the declarations and render sites accepted by view/layout bodies.
 ViewStatement returns Statement:
-    DeclarationSlotFill | ParsedStatement;
-type Statement = AppBlockDiagnosticStatement | ViewRender | RenderSlotUse | CallerContentStatement | CommandDeclaration | DeclarationSlotFill | ViewCommandExclusion | InteractionWordStep;
-type NamedDeclaration = Declaration | ParameterDeclaration | StateDeclaration | EntityQueryDeclaration | ForStatement | CasePayload | EntityDataField | CaseSetCase | AskStatement | ActionResultStatement | DesignColor;
+    DeclarationSlotFill | RenderSlotDeclaration | ParsedStatement;
+type Statement = AppBlockDiagnosticStatement | ViewRender | RenderSlotUse | RenderSlotDeclaration | CallerContentStatement | CommandDeclaration | DeclarationSlotFill | ViewCommandExclusion | InteractionWordStep;
+type NamedDeclaration = Declaration | ParameterDeclaration | RenderSlotInputBinding | StateDeclaration | EntityQueryDeclaration | ForStatement | CasePayload | EntityDataField | CaseSetCase | AskStatement | ActionResultStatement | DesignColor;
 type MutableDeclaration = StateDeclaration | ParameterDeclaration;
 type ExportableDeclaration = AliasDeclaration | AppDeclaration | PrimitiveValueDeclaration | ViewDeclaration | TypeDeclaration | ActionDeclaration | CommandDeclaration | FunctionDeclaration | PhraseDeclaration | EntityDataDeclaration | DesignDeclaration | FixtureDeclaration;
 type EmittingRuntimeBinding = AliasDeclaration | AppDeclaration | PrimitiveValueDeclaration | ViewDeclaration | TypeDeclaration | ActionDeclaration | CommandDeclaration | FunctionDeclaration | PhraseDeclaration | EntityDataDeclaration | DesignDeclaration;
 type ParameterizedDeclaration = ViewDeclaration | ActionDeclaration | CommandDeclaration | FunctionDeclaration | PhraseDeclaration;
-type BlockStatementOwner = AppDeclaration | PackageDeclaration | ViewDeclaration | Render | ActionDeclaration | ActionExpression | ForStatement;
+type BlockStatementOwner = AppDeclaration | PackageDeclaration | ViewDeclaration | Render | RenderSlotDeclaration | RenderSlotUse | ActionDeclaration | ActionExpression | ForStatement;
 type CaseDeclaration = CaseSetCase | EntityDataField;
 // OwnedBlockStatement includes test steps and other context-only statements for generic block traversal.
 type OwnedBlockStatement = ActionStatement | AppStatement | PackageStatement | Statement;

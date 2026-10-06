@@ -104,6 +104,152 @@ Describe('maintained native binding publication', () => {
     }, { verbatim: true })
   })
 
+  Test('releases the publication lock before fallback readers hash the snapshot', async () => {
+    await withTaoFiles('maintained-unlocked-fallback-reader', declarations(), async (_paths, root) => {
+      const request = options(root)
+      await generateMaintainedNativeBindings({ ...request, mode: 'write' })
+      const first = FS.resolvePath('@tao/device/files', request.stdlibRoot)
+      const writerEntered = Deferred()
+      const releaseWriter = Deferred()
+      const releaseReader = Deferred()
+      let competingReaderReturned = false
+      let publisherEntered = false
+      let fallbackSelected = false
+      let captureReached = false
+      const writer = FS.withFileMutationLock(first, FS.dirname(first), async () => {
+        writerEntered.resolve()
+        await releaseWriter.promise
+      })
+      await writerEntered.promise
+      const fallbackReader = inspectMaintainedNativeBindings(request, {
+        beforePublicationBarrier: async () => {
+          fallbackSelected = true
+        },
+        afterManifestCapture: async () => {
+          captureReached = true
+          await releaseReader.promise
+        },
+      })
+      let competingReader: Promise<void> | undefined
+      let publisher: Promise<void> | undefined
+      try {
+        await until(() => fallbackSelected, {
+          description: 'native reader to select the publication barrier behind the paused writer',
+        })
+        releaseWriter.resolve()
+        await writer
+        await until(() => captureReached, { description: 'fallback native reader to capture its manifests' })
+        const lock = `${await FS.realPath(first)}.tao-file-mutation.lock`
+        Expect(await FS.exists(lock)).toBe(false)
+        competingReader = inspectMaintainedNativeBindings(request).then(result => {
+          Expect(result.status).toBe('fresh')
+          competingReaderReturned = true
+        })
+        publisher = FS.withFileMutationLock(first, FS.dirname(first), async () => {
+          publisherEntered = true
+        })
+        await until(
+          () => competingReaderReturned && publisherEntered,
+          { description: 'another reader and publisher to pass the paused fallback inspection' },
+        )
+        await Promise.all([competingReader, publisher])
+      } finally {
+        releaseWriter.resolve()
+        releaseReader.resolve()
+        await Promise.allSettled([
+          writer,
+          fallbackReader,
+          ...[competingReader, publisher].filter(
+            (promise): promise is Promise<void> => promise !== undefined,
+          ),
+        ])
+      }
+      Expect((await fallbackReader).status).toBe('fresh')
+    }, { verbatim: true })
+  })
+
+  Test('confirms a stale optimistic result after a completed output rollback', async () => {
+    await withTaoFiles('maintained-optimistic-output-rollback', declarations(), async (_paths, root) => {
+      const request = options(root)
+      await generateMaintainedNativeBindings({ ...request, mode: 'write' })
+      const output = FS.resolvePath('.tao-ts/native-bindings/files/Bindings.ts', request.stdlibRoot)
+      const original = await FS.readText(output)
+      const baseline = await inspectMaintainedNativeBindings(request)
+      Expect(baseline.status).toBe('fresh')
+      let changed = false
+      let barrierUsed = false
+      const result = await inspectMaintainedNativeBindings(request, {
+        beforePublicationBarrier: async () => {
+          barrierUsed = true
+        },
+        afterManifestCapture: async () => {
+          changed = true
+          await FS.writeText(output, 'temporary output mutation')
+        },
+        afterInspection: async () => {
+          await FS.writeText(output, original)
+        },
+      })
+      Expect(changed).toBe(true)
+      Expect(barrierUsed).toBe(false)
+      Expect(result.status).toBe('fresh')
+      Expect(result.diagnostics).toEqual([])
+      Expect(result.identity).toBe(baseline.identity)
+    }, { verbatim: true })
+  })
+
+  Test('confirms a stale fallback result after a completed output rollback', async () => {
+    await withTaoFiles('maintained-fallback-output-rollback', declarations(), async (_paths, root) => {
+      const request = options(root)
+      await generateMaintainedNativeBindings({ ...request, mode: 'write' })
+      const first = FS.resolvePath('@tao/device/files', request.stdlibRoot)
+      const output = FS.resolvePath('.tao-ts/native-bindings/files/Bindings.ts', request.stdlibRoot)
+      const original = await FS.readText(output)
+      const baseline = await inspectMaintainedNativeBindings(request)
+      Expect(baseline.status).toBe('fresh')
+      const writerEntered = Deferred()
+      const releaseWriter = Deferred()
+      let fallbackSelected = false
+      let changed = false
+      const writer = FS.withFileMutationLock(first, FS.dirname(first), async () => {
+        writerEntered.resolve()
+        await releaseWriter.promise
+      })
+      await writerEntered.promise
+      const reader = inspectMaintainedNativeBindings(request, {
+        beforePublicationBarrier: async () => {
+          fallbackSelected = true
+        },
+        afterManifestCapture: async () => {
+          changed = true
+          await FS.writeText(output, 'temporary output mutation')
+        },
+        afterInspection: async () => {
+          await FS.writeText(output, original)
+        },
+      })
+      let result: Awaited<typeof reader> | undefined
+      try {
+        await until(() => fallbackSelected, {
+          description: 'native reader to choose the publication barrier before output rollback',
+        })
+        releaseWriter.resolve()
+        await writer
+        result = await reader
+      } finally {
+        releaseWriter.resolve()
+        await Promise.allSettled([writer, reader])
+        if (changed) {
+          await FS.writeText(output, original)
+        }
+      }
+      Expect(changed).toBe(true)
+      Expect(result?.status).toBe('fresh')
+      Expect(result?.diagnostics).toEqual([])
+      Expect(result?.identity).toBe(baseline.identity)
+    }, { verbatim: true })
+  })
+
   Test('retries changed manifest bytes under the lock and refuses the new invalid manifest', async () => {
     await withTaoFiles('maintained-manifest-retry', declarations(), async (_paths, root) => {
       const request = options(root)

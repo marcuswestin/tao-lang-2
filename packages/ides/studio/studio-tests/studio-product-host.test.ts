@@ -286,7 +286,7 @@ Test('Tao Studio uses a content-only navigator and keeps recursive file CRUD in 
     'view StudioSegmented(Value text, Change action(text), Options list of text, Label text) from '
       + '../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx',
   )
-  Expect(source).toContain('@environment StudioEnvironmentPanel(')
+  Expect(source).toContain('@environment FocusedCellId, CellRevision, ViewportPresetId, ViewportWidth, ViewportHeight')
   Expect(source).toContain('view StudioEnvironmentPanel(FocusedCellId text, CellRevision number, ViewportPresetId text')
   Expect(source).toContain('view StudioScenarioEnvironment(')
   Expect(source).not.toContain('view StudioScenarioEnvironmentControls(')
@@ -318,15 +318,15 @@ Test('Tao Studio uses a content-only navigator and keeps recursive file CRUD in 
   Expect(source).not.toContain('StudioSearchPanelSurface')
   Expect(source).toContain('ServerOrigin text is ""')
   Expect(source).toContain('action SyncDraft(Path text, SourceVersion text, Content text) runs latest')
-  Expect(source).toContain('@editor StudioCodeEditor()')
-  Expect(source).toContain('@inspector StudioContextPanel(')
+  Expect(source).toContain('@editor: StudioCodeEditor')
+  Expect(source).toContain('@inspector Revision, ProjectRoot, ActiveFilePath, ActiveFileContent, ActiveFileVersion')
   Expect(source).toContain('view StudioContextPanel(Revision number, ProjectRoot text, ActiveFilePath text')
   Expect(source).toContain('FilePath: ActiveFilePath')
   Expect(source).toContain(
-    'accepts content slots @files, @components, @projectViews, @screens, @tokens, @data, @search, @drawer, @scenario, @environment, @editor, @inspector',
+    'accepts content slots @files, @components, @projectViews, @screens, @tokens, @data(Data StudioDataPanel), @search(Rows list of StudioSearchPanelRow), @drawer(Tab text, Compile StudioCompilePanel',
   )
   Expect(source).toContain(
-    '@scenario StudioScenarioPanel(State: "null", JourneyRecording: "null", JourneyRecordable: false, ResolvedAppearance: "light")',
+    '@scenario State, JourneyRecording, JourneyRecordable, ResolvedAppearance -> StudioScenarioPanel(State: State, JourneyRecording: JourneyRecording, JourneyRecordable: JourneyRecordable, ResolvedAppearance: ResolvedAppearance)',
   )
   Expect(source).toContain(
     'view StudioScenarioPanel(State text, JourneyRecording text, JourneyRecordable boolean, ResolvedAppearance text)',

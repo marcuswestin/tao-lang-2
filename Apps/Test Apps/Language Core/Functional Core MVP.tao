@@ -9,19 +9,19 @@ app FunctionalCoreMVP {
       Initial MainView
 }  }
 
-function HasCount(Count number) returns boolean {
+func HasCount(Count number) -> boolean {
    return Count > 0 and not false
 }
 
-function CountLabel(Count number) returns text {
+func CountLabel(Count number) -> text {
    return "Count: { Count }"
 }
 
-function NextLabel(Count number) returns text {
+func NextLabel(Count number) -> text {
    return "Next: { Count + 1 }"
 }
 
-function PresenceLabel(Present boolean) returns text {
+func PresenceLabel(Present boolean) -> text {
    return when Present {
       true -> "Ready"
       otherwise -> "Missing{ none }"

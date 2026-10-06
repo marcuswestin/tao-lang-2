@@ -25,7 +25,7 @@ Describe('compiler: render prefixes', () => {
       use Col from @tao/ui
       app PrefixApp { id "prefixreactive" version "1.0.0" name "Prefixes" view Main }
       view Main { state Caption is text = "Library" render Col {
-        accessible label Caption Leaf
+        accessible label (Caption) Leaf
         a11y label (Caption) "Quoted"
         accessible label "Literal" "Visible"
       } }

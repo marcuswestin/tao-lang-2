@@ -22,9 +22,9 @@ Describe('compiler: native event controls', () => {
     const code = compiled.code.replace(/\s+/g, ' ')
 
     Expect(code).toContain(
-      'Press={TR.NativeEventControls(_Scope.Save.evaluate(), { preventDefault: true, stopPropagation: true }, _TaoActionOwner)}',
+      'Press={TR.NativeEventControls(TR.BindEventAction(_Scope.Save.evaluate(), _TaoActionOwner), { preventDefault: true, stopPropagation: true }, _TaoActionOwner)}',
     )
-    Expect(code).toContain('Press={_Scope.Save.evaluate()}')
+    Expect(code).toContain('Press={TR.BindEventAction(_Scope.Save.evaluate(), _TaoActionOwner)}')
     Expect(code.match(/TR\.NativeEventControls\(/g)).toHaveLength(1)
     Expect(code).not.toContain('Save.nativeEvent')
   })
@@ -63,9 +63,9 @@ Describe('compiler: native event controls', () => {
     `)
     const code = compiled.code.replace(/\s+/g, ' ')
     Expect(code).toContain(
-      'Press={TR.NativeEventControls(_Scope.Save.evaluate(), { preventDefault: true }, _TaoActionOwner)}',
+      'Press={TR.NativeEventControls(TR.BindEventAction(_Scope.Save.evaluate(), _TaoActionOwner), { preventDefault: true }, _TaoActionOwner)}',
     )
-    Expect(code).toContain('Press={_Scope.Save.evaluate()}')
+    Expect(code).toContain('Press={TR.BindEventAction(_Scope.Save.evaluate(), _TaoActionOwner)}')
     Expect(code.match(/TR\.NativeEventControls\(/g)).toHaveLength(1)
   })
 })

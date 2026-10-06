@@ -367,6 +367,11 @@ test-changed ref="": _compile-word-flower-app
 test-file path: _compile-word-flower-app
     ./dev test-file "{{ path }}"
 
+# Source-only focused tests without the reference-app build; never whole-app or merge acceptance
+[group('Dev')]
+test-source-file path: _parser-gen
+    ./dev test-file {{ quote(path) }}
+
 # Run deliberate mutation checks with raw verdicts, without retries, flake tolerance or ordinary evidence updates
 [group('Dev')]
 test-mutation path: _compile-word-flower-app

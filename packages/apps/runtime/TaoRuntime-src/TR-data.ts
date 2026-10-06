@@ -2,7 +2,9 @@ import React from 'react'
 import { RuntimeAssert } from './TR-assert'
 import type { TaoAuthPrincipal, TaoAuthProof, TaoDataAuthBinding } from './TR-auth'
 import { entityHandle, metadataOf } from './TR-data-entity'
+import { emptyData, envelope, parseEnvelope, type StoredData } from './TR-data-persistence'
 import { UnboundConnection } from './TR-data-provider'
+import { nativeQueryContext } from './TR-data-query-context'
 import {
   beginTest as beginDataTest,
   bindConfiguredDataSchema,
@@ -108,6 +110,8 @@ export type TaoQueryPlan = {
   entity: string
   filters: TaoQueryFilter[]
   limit?: number
+  /** Bounds each provider request while retaining every acquired row in the local projection. */
+  pageSize?: number
   order?: {
     direction: 'asc' | 'desc'
     field: string
@@ -124,6 +128,7 @@ export type TaoQueryPlan = {
 export type TaoQueryDescriptor = {
   entity: string
   limit?: number
+  pageSize?: number
   orderBy?: string
   orderDirection?: 'asc' | 'desc'
   where: Record<string, TaoDescriptorValue>
@@ -187,6 +192,8 @@ export type TaoDataConnection = {
    * state (`stale` over cached rows, `error` over none), never a thrown render.
    */
   fill?(request: TaoFillRequest, ops: TaoFillOps): Promise<void>
+  /** The adapter owns bounded continuations; a local result limit alone makes no such promise. */
+  pagedQueries?: true
   /** fillCacheMs suppresses re-fills of a descriptor filled within the window (default 0: always). */
   fillCacheMs?: number
   load(): Promise<string | undefined> | string | undefined
@@ -216,6 +223,8 @@ export type TaoDataWriteIntent = Readonly<{
 export type TaoDataConnectionObserver = Readonly<{
   error(error: unknown): void
   snapshot(value: string | undefined): void
+  /** Cached provider metadata can change while the stored entity snapshot remains identical. */
+  metadataChanged?(): void
 }>
 
 /** TaoDataProviderContext is the provider-neutral mount passed to a package implementation. */
@@ -260,6 +269,11 @@ export type TaoDataAuthentication = Readonly<{
 
 /** TaoDataProvider is the clean package boundary implemented by Local, Memory, and remote providers. */
 export type TaoDataProvider = {
+  /**
+   * Opt in only after verifying the principal, binding storage to its account ID, and enforcing
+   * that private namespace remotely. Grant-free rows then belong to the bound account.
+   */
+  authenticatedAccess?: 'private-account'
   /** Resolves a signed-in principal to an account; a datasource without it cannot hold an Auth app's data. */
   authenticate?(context: TaoDataAuthenticationContext): Promise<TaoDataAuthentication>
   connect(context: TaoDataProviderContext): TaoDataConnection
@@ -362,6 +376,29 @@ function useConfiguredProviderBinding(
 
 /** DataControls is the provider-neutral generated-code API for Tao schemas, queries, and writes. */
 export const DataControls = {
+  /** NativeQueryContext preserves query ownership without reserving public field names. */
+  NativeQueryContext: nativeQueryContext,
+  /** NativeEntityContext authenticates a live row before an adapter accesses its connection. */
+  NativeEntityContext(value: unknown): Readonly<{
+    connection: TaoDataConnection
+    entity: string
+    id: string
+    notifyMetadataChanged(): void
+  }> {
+    const handle = entityHandle(value)
+    RuntimeAssert.input(handle, 'This operation expects a live data item.')
+    return metadataOf(handle).schema.nativeEntityContext(handle)
+  },
+  /** NativeSnapshots shares the runtime's checked wire format with datasource implementations. */
+  NativeSnapshots: {
+    empty: emptyData,
+    decode: parseEnvelope,
+    encode(data: StoredData, definition: TaoDataSchemaDefinition): string {
+      const serialized = JSON.stringify(envelope(data, definition))
+      parseEnvelope(serialized, definition)
+      return serialized
+    },
+  },
   /** interactionCandidates is the internal pending-command picker seam over active stores. */
   interactionCandidates(entity: string, scope?: { ownsStore(store: TaoDataSchema): boolean }): readonly unknown[] {
     return interactionEntityHandles(entity, scope)

@@ -56,13 +56,17 @@ export const TaoAppModules = {
     const temporary = `${destination}.tmp-${Platform.runtimeProcess.pid}-${Platform.randomUUID()}`
     try {
       await FS.copyDirectory(FS.resolvePath('TaoRuntime-src', source), FS.resolvePath('TaoRuntime-src', temporary))
-      const swiftRuntime = FS.resolvePath('swiftui', source)
-      if (await FS.isDirectory(swiftRuntime)) {
-        await FS.copyDirectory(swiftRuntime, FS.resolvePath('swiftui', temporary))
+      for (const directory of ['swiftui', 'ios', 'android']) {
+        const runtimeDirectory = FS.resolvePath(directory, source)
+        if (await FS.isDirectory(runtimeDirectory)) {
+          await FS.copyDirectory(runtimeDirectory, FS.resolvePath(directory, temporary))
+        }
       }
-      const packageJson = FS.resolvePath('package.json', source)
-      if (await FS.isFile(packageJson)) {
-        await FS.copyFile(packageJson, FS.resolvePath('package.json', temporary))
+      for (const file of ['package.json', 'expo-module.config.json']) {
+        const runtimeFile = FS.resolvePath(file, source)
+        if (await FS.isFile(runtimeFile)) {
+          await FS.copyFile(runtimeFile, FS.resolvePath(file, temporary))
+        }
       }
       await FS.remove(destination)
       await FS.move(temporary, destination)

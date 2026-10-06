@@ -29,12 +29,13 @@ export type ManagedHandshakeDiagnostics = Readonly<{
 export function appiumXcuiTestClient(
   factory: AppiumSessionFactory,
   managed?: ManagedMobileGrant,
+  diagnostics?: ManagedHandshakeDiagnostics,
 ): AppiumXcuiTestClient {
   return {
     async createSession(capabilities) {
       const remote = await factory.createSession(capabilities as AppiumCapabilities)
       if (managed !== undefined) {
-        await bindManagedRuntime(remote, managed)
+        await bindManagedRuntime(remote, managed, diagnostics)
       }
       return iosSession(remote)
     },
@@ -234,35 +235,158 @@ async function captureHandshakeFailure(
   grant: ManagedMobileGrant,
   diagnostics: ManagedHandshakeDiagnostics,
 ): Promise<void> {
-  if (grant.identity.target.platform !== 'android' || remote.captureManagedHandshakeDiagnostics === undefined) {
+  type FailureStage =
+    | 'ownership'
+    | 'current-target'
+    | 'foreground-bundle'
+    | 'xml'
+    | 'screenshot'
+    | 'timeout'
+    | 'unknown'
+  let failureStage: FailureStage = 'unknown'
+  let foregroundCategory: 'expected' | 'springboard' | 'expo-go' | 'other' | 'missing' | 'unobserved' = 'unobserved'
+  let springBoardAlert:
+    | Readonly<{
+      status: 'captured' | 'empty' | 'over-limit' | 'query-failed'
+      text?: string
+    }>
+    | undefined
+  let diagnosticSignal: AbortSignal | undefined
+  const recordFailure = async () => {
+    let directory: string | undefined
+    try {
+      directory = await FS.mkTmpDir(FS.resolvePath('managed-handshake-failure-', diagnostics.artifactRoot))
+      let springBoardAlertStatus: 'captured' | 'empty' | 'over-limit' | 'query-failed' | 'not-retained' | 'unobserved' =
+        springBoardAlert?.status ?? 'unobserved'
+      if (springBoardAlert?.status === 'captured' && springBoardAlert.text !== undefined) {
+        const alertPath = FS.resolvePath('springboard-alert.txt', directory)
+        try {
+          diagnosticSignal?.throwIfAborted()
+          await grant.assertRequestCurrent()
+          await diagnostics.assertOwnedTargetCurrent()
+          diagnosticSignal?.throwIfAborted()
+          if (Buffer.byteLength(springBoardAlert.text, 'utf8') > 4 * 1024) {
+            springBoardAlertStatus = 'over-limit'
+          } else {
+            await FS.writeExclusiveFile(alertPath, springBoardAlert.text, { mode: 0o600 })
+            diagnosticSignal?.throwIfAborted()
+            await grant.assertRequestCurrent()
+            await diagnostics.assertOwnedTargetCurrent()
+            diagnosticSignal?.throwIfAborted()
+          }
+        } catch {
+          springBoardAlertStatus = 'not-retained'
+          try {
+            await FS.remove(alertPath)
+          } catch { /* The failure record stays sanitized. */ }
+        }
+      }
+      await FS.writeExclusiveFile(
+        FS.resolvePath('diagnostic-failure.json', directory),
+        JSON.stringify({
+          classification: 'runtime-identity-unproved',
+          status: failureStage === 'ownership' || failureStage === 'current-target'
+              || failureStage === 'foreground-bundle'
+            ? 'refused'
+            : 'failed',
+          stage: failureStage,
+          ...(failureStage === 'foreground-bundle' ? { foregroundCategory } : {}),
+          ...(foregroundCategory === 'springboard' ? { springBoardAlertStatus } : {}),
+          expectedTarget: grant.identity.target,
+          loopGeneration: grant.identity.loopGeneration,
+          sourceIdentityProved: false,
+          inputPerformed: false,
+          captures: [],
+        }),
+        { mode: 0o600 },
+      )
+    } catch {
+      if (directory !== undefined) {
+        try {
+          await FS.remove(directory)
+        } catch { /* Failure metadata remains best effort. */ }
+      }
+      // Failure metadata is best effort and cannot replace the handshake error.
+    }
+  }
+  if (remote.captureManagedHandshakeDiagnostics === undefined) {
+    await recordFailure()
     return
   }
   const cancellation = new AbortController()
   const signal = AbortSignal.any([grant.signal, cancellation.signal])
+  diagnosticSignal = signal
   const timeout = setTimeout(() => cancellation.abort(), 10_000)
   let onAbort: (() => void) | undefined
   const assertCurrent = async () => {
     signal.throwIfAborted()
-    await grant.assertRequestCurrent()
-    await diagnostics.assertOwnedTargetCurrent()
+    try {
+      await grant.assertRequestCurrent()
+    } catch (error) {
+      failureStage = 'ownership'
+      throw error
+    }
+    try {
+      await diagnostics.assertOwnedTargetCurrent()
+    } catch (error) {
+      failureStage = 'current-target'
+      throw error
+    }
     signal.throwIfAborted()
   }
   try {
-    const capture = async () => {
+    const result = await Promise.race([
+      (async () => {
+        await assertCurrent()
+        return await remote.captureManagedHandshakeDiagnostics!({
+          platform: grant.identity.target.platform,
+          expectedAppId: grant.identity.runtime.appId,
+          signal,
+          assertCurrent,
+          onStage: stage => {
+            failureStage = stage
+          },
+          onForegroundCategory: category => {
+            if (!signal.aborted) {
+              foregroundCategory = category
+            }
+          },
+          onSpringBoardAlert: observation => {
+            if (!signal.aborted) {
+              springBoardAlert = observation
+            }
+          },
+        })
+      })(),
+      new Promise<never>((_resolve, reject) => {
+        onAbort = () => {
+          failureStage = cancellation.signal.aborted && !grant.signal.aborted ? 'timeout' : 'ownership'
+          reject(new Errors.HostEnvironmentError('Managed handshake diagnostics were cancelled.'))
+        }
+        if (signal.aborted) {
+          onAbort()
+        } else {
+          signal.addEventListener('abort', onAbort, { once: true })
+        }
+      }),
+    ])
+    await assertCurrent()
+    // Recheck bounds even for an injected session implementation before making any files.
+    if (Buffer.byteLength(result.source, 'utf8') > 2 * 1024 * 1024) {
+      failureStage = 'xml'
+      Errors.throwHostEnvironment('Managed handshake diagnostics exceeded their private artifact limits.')
+    }
+    if (result.screenshot.byteLength > 10 * 1024 * 1024) {
+      failureStage = 'screenshot'
+      Errors.throwHostEnvironment('Managed handshake diagnostics exceeded their private artifact limits.')
+    }
+    failureStage = 'unknown'
+    const directory = await FS.mkTmpDir(FS.resolvePath('managed-handshake-', diagnostics.artifactRoot))
+    try {
       await assertCurrent()
-      const result = await remote.captureManagedHandshakeDiagnostics!({
-        expectedAppId: grant.identity.runtime.appId,
-        signal,
-        assertCurrent,
-      })
+      await FS.writeExclusiveFile(FS.resolvePath('handshake.xml', directory), result.source, { mode: 0o600 })
       await assertCurrent()
-      // Recheck bounds even for an injected session implementation before making any files.
-      if (
-        Buffer.byteLength(result.source, 'utf8') > 2 * 1024 * 1024 || result.screenshot.byteLength > 10 * 1024 * 1024
-      ) {
-        Errors.throwHostEnvironment('Managed handshake diagnostics exceeded their private artifact limits.')
-      }
-      const directory = await FS.mkTmpDir(FS.resolvePath('managed-handshake-', diagnostics.artifactRoot))
+      await FS.writeExclusiveFile(FS.resolvePath('handshake.png', directory), result.screenshot, { mode: 0o600 })
       await assertCurrent()
       await FS.writeExclusiveFile(
         FS.resolvePath('diagnostic.json', directory),
@@ -275,21 +399,15 @@ async function captureHandshakeFailure(
         { mode: 0o600 },
       )
       await assertCurrent()
-      await FS.writeExclusiveFile(FS.resolvePath('handshake.xml', directory), result.source, { mode: 0o600 })
-      await assertCurrent()
-      await FS.writeExclusiveFile(FS.resolvePath('handshake.png', directory), result.screenshot, { mode: 0o600 })
+    } catch (error) {
+      try {
+        await FS.remove(directory)
+      } catch { /* The original handshake failure remains primary if local cleanup fails. */ }
+      throw error
     }
-    await Promise.race([
-      capture(),
-      new Promise<never>((_resolve, reject) => {
-        onAbort = () => reject(new Errors.HostEnvironmentError('Managed handshake diagnostics were cancelled.'))
-        if (signal.aborted) {
-          onAbort()
-        } else {
-          signal.addEventListener('abort', onAbort, { once: true })
-        }
-      }),
-    ])
+  } catch (error) {
+    await recordFailure()
+    throw error
   } finally {
     clearTimeout(timeout)
     cancellation.abort()

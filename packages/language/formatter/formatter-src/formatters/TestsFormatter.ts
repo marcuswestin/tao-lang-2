@@ -88,7 +88,8 @@ export const TestsFormatter = {
 
   /** ExpectTextStep formats v0 selector-targeted expectations. */
   ExpectTextStep(f) {
-    f.oneSpaceAfter('expect', 'missing')
+    f.oneSpaceAfter('expect')
+    f.oneSpaceBetweenProperties('missing', 'selector')
     f.oneSpaceBetweenProperties('selector', 'text')
   },
 
@@ -146,7 +147,8 @@ export const TestsFormatter = {
   },
 
   TestExpectation(f) {
-    f.oneSpaceAfter('missing', 'text', 'label', 'placeholder', 'input', 'value')
+    f.oneSpaceBetweenProperties('missing', 'selector')
+    f.oneSpaceAfter('text', 'label', 'placeholder', 'input', 'value')
   },
 
   /** BackTestStep has no operands. */

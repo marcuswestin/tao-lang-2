@@ -81,7 +81,7 @@ scene MainView() {
                   FormButton("Add task") {
                      on press -> {
                         create Task {
-                           Title: TaskDraft
+                           Title: TaskDraft,
                            Workspace
                         }
                         set TaskDraft = ""

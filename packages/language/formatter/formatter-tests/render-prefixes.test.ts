@@ -30,12 +30,12 @@ Describe('formatter: render prefixes', () => {
   Test(
     'keeps a dynamic shorthand label separate from a bare custom view',
     formats(
-      'view Home(){let Caption="Save"\nrender Col(){a11y label Caption\nCustom}}',
+      'view Home(){let Caption="Save"\nrender Col(){a11y label (Caption)\nCustom}}',
       `
       view Home() {
          let Caption = "Save"
          render Col() {
-            accessible label Caption
+            accessible label (Caption)
             Custom
       }  }
       `,
@@ -195,7 +195,7 @@ Describe('formatter: render prefixes', () => {
   Test(
     'retains legacy tag-only loop and named fill formatting',
     formats(
-      'view Home(){render Col(){#rows\nloop Items/Item{#row\nText(Item.Title)}\n#panel\nPanel{@header Text("Heading")}}}',
+      'view Home(){render Col(){#rows\nloop Items/Item{#row\nText(Item.Title)}\n#panel\nPanel{@header: Text("Heading")}}}',
       `
       view Home() {
          render Col() {
@@ -207,7 +207,7 @@ Describe('formatter: render prefixes', () => {
 
             #panel
             Panel {
-               @header Text("Heading")
+               @header: Text("Heading")
       }  }  }
       `,
     ),

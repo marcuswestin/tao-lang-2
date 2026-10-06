@@ -24,6 +24,7 @@ export function emitReferences(
   catalog: NativeApiCatalog,
   implementationImport = './Bindings.ts',
   origins?: ReturnType<typeof nativeOriginEmitter>,
+  associatedActions: ReadonlyMap<string, readonly string[]> = new Map(),
 ): { tao: string[]; sidecar: string[] } {
   const references = catalog.references ?? []
   const tao: string[] = []
@@ -71,7 +72,15 @@ export function emitReferences(
       Assert.defined(definition, `native parent '${parent}' is declared`)
       define(definition)
     }
-    tao.push(origin, ...physical.tao, `public type ${reference.name} is ${reference.base ?? 'item'}`, '')
+    const actions = associatedActions.get(reference.name) ?? []
+    tao.push(
+      origin,
+      ...physical.tao,
+      `public type ${reference.name} is ${reference.base ?? 'item'}${
+        actions.length > 0 ? ` with { ${actions.join('\n   ')}\n}` : ''
+      }`,
+      '',
+    )
     sidecar.push(
       origin,
       ...physical.sidecar,

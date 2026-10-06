@@ -9,9 +9,15 @@ import {
 } from 'node:child_process'
 import { createHash, createPrivateKey, sign, timingSafeEqual } from 'node:crypto'
 import { EventEmitter } from 'node:events'
+import { createRequire } from 'node:module'
 import { availableParallelism, constants, getPriority, loadavg, setPriority } from 'node:os'
 import { Readable, Writable } from 'node:stream'
 import { asError, throwHostEnvironment, throwUnexpected } from './core/Errors'
+
+/** createModuleRequire loads CommonJS dependencies relative to an installed module entry. */
+export function createModuleRequire(moduleEntryPath: string): NodeRequire {
+  return createRequire(moduleEntryPath)
+}
 
 export type ProcessEnv = NodeJS.ProcessEnv
 export type ProcessSignal = NodeJS.Signals
@@ -442,6 +448,29 @@ export const runtimeConsole = {
   error: console.error.bind(console),
   info: console.info.bind(console),
   warn: console.warn.bind(console),
+}
+
+/** Override the raw console used by third-party code; restore only replacements still owned by this scope. */
+export function overrideRuntimeConsole(overrides: Partial<typeof runtimeConsole>): () => void {
+  const restores: (() => void)[] = []
+  for (const key of ['debug', 'error', 'info', 'warn'] as const) {
+    const replacement = overrides[key]
+    if (replacement === undefined) {
+      continue
+    }
+    const previous = console[key]
+    console[key] = replacement
+    restores.push(() => {
+      if (console[key] === replacement) {
+        console[key] = previous
+      }
+    })
+  }
+  return () => {
+    for (const restore of restores.toReversed()) {
+      restore()
+    }
+  }
 }
 
 /** runtimeProcess exposes low-level process state and streams through the shared runtime boundary; use HCI for user-facing I/O. */

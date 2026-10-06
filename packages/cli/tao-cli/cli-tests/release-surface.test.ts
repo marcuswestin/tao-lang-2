@@ -100,7 +100,7 @@ Describe('Immutable public release surfaces', () => {
         for (const deferred of ['bridge', 'secrets', 'instantdb', 'connect', 'jazz', 'convex', 'pylon', 'firebase']) {
           Expect(value.commands).not.toContain(deferred)
         }
-        Expect(value.create).not.toContain('--provider')
+        Expect(value.create).toContain('--provider')
         Expect(value.create).not.toContain('--validation-tools')
         Expect(value.build).toContain('--web')
         Expect(value.build).not.toContain('--visionos')

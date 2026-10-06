@@ -27,3 +27,22 @@
 - **Acceptance:** A stale companion pointed at a dead Metro is recovered by the documented Studio
   action on a real simulator or device, with the exact user action visible in Studio.
 - **Source:** 2026-09-03 companion implementation briefing.
+
+## Fresh Firebase host observation — October 5, 2026
+
+The isolated Firebase Live Acceptance loop645bfecb-f6bf-473c-b3e2-3e12dae7f557 installed and
+opened the task-built Companion, but Appium could not find its managed runtime identity marker.
+Metro recorded web bundles and no iOS bundle activity. This is evidence of failed native mounting
+or marker exposure, not a confirmed stale-client cause. The initial diagnostic capture failure
+was silently discarded, leaving the foreground/transport distinction unproved. Sanitized
+capture-failure stages are being added without relaxing foreground or ownership checks.
+
+## Related installation identity finding — 2026-10-05
+
+SimulatorCompanion's installed-build check hashes CFBundleExecutable only. A debug Simulator
+build puts its AppDelegate, scene and dev-launcher implementation in TaoCompanion.debug.dylib,
+so a matching launcher executable does not establish matching native payload. Broaden the
+installation identity in a dedicated lifecycle pass and cover a changed dylib with an unchanged
+launcher. This is a source finding, not the cause of the current Firebase startup failure:
+read-only hashes of the actual installed dylibs on the two owned test Simulators matched the
+cached host exactly. Scene/factory wiring also matched the installed Expo57 implementation.

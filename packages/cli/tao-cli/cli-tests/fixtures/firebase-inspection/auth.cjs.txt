@@ -1,0 +1,6 @@
+const fs = require('node:fs');
+const accounts = ['default@example.test', 'selected@example.test'].map(email => ({ user: { email }, tokens: { refresh_token: 'TOKEN_SECRET_CANARY' } }));
+exports.getAllAccounts = () => accounts;
+exports.getGlobalDefaultAccount = () => accounts[0];
+exports.selectAccount = email => accounts.find(a => a.user.email === email);
+exports.setActiveAccount = (options, account) => { options.user = account.user; exports.active = account.user.email; };
