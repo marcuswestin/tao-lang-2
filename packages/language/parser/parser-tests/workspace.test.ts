@@ -322,7 +322,7 @@ Describe('minimal Tao parser', () => {
 
     const [, useStatement, sharedAlias, mainView] = parseResult.entry.ast.statements
     Expect.Is(useStatement, AST.isUseStatement)
-    Expect(useStatement.importedDeclarations.map(reference => reference.$refText)).toEqual(['Text', 'Stack'])
+    Expect(useStatement.importedDeclarations.map(AST.importSourceName)).toEqual(['Text', 'Stack'])
     Expect(useStatement.importPath).toBe('./')
     Expect.Is(sharedAlias, AST.isAliasDeclaration)
     Expect(sharedAlias.visibility).toBe('project')
@@ -352,7 +352,7 @@ Describe('minimal Tao parser', () => {
 
     const [useStatement] = parseResult.entry.ast.statements
     Expect.Is(useStatement, AST.isUseStatement)
-    Expect(useStatement.importedDeclarations.map(reference => reference.$refText)).toEqual(['Text'])
+    Expect(useStatement.importedDeclarations.map(AST.importSourceName)).toEqual(['Text'])
     Expect(useStatement.importPath).toBeUndefined()
   })
 

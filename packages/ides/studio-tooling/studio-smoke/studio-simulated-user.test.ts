@@ -365,7 +365,23 @@ Test('simulated user exercises the browser editor', async () => {
     // file: an edit beside a folded region is cancelled in favour of showing it, and a caret that
     // lands on its edge opens it rather than sitting in text the person cannot see.
     const revealedHead = 'app Smoke { id "smoke" version "1.0.0" name "Smoke" view MainView }'
+    // Editor publication can still move the toolbar after the source is saved. Dispatch one real
+    // click only after its target is stationary and unobstructed, as for other animated controls.
+    await browser.waitFor(`(() => {
+      const button = document.querySelector('[data-testid="studio-lens-preset-outline"]')
+      if (!(button instanceof HTMLButtonElement) || button.disabled) return false
+      button.scrollIntoView({ block: 'center', inline: 'center' })
+      const rect = button.getBoundingClientRect()
+      const box = [rect.left, rect.top, rect.width, rect.height].join(',')
+      const settled = window.__taoSmokeOutlineBox === box
+      window.__taoSmokeOutlineBox = box
+      const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+      return settled && rect.width > 0 && rect.height > 0 && button.contains(hit)
+    })()`)
     await browser.click('[data-testid="studio-lens-preset-outline"]')
+    await browser.waitFor(
+      `document.querySelector('[data-testid="studio-lens-preset-outline"]')?.getAttribute('aria-pressed') === 'true'`,
+    )
     await browser.waitFor(`document.querySelector('.cm-line:has(.cm-lens-glyph)') instanceof HTMLElement`)
     const outlineFolds = await foldedRegions(browser)
     Expect(outlineFolds).toBeGreaterThan(1)
@@ -861,6 +877,14 @@ Test('simulated user exercises the browser editor', async () => {
     Expect(consoleErrors.map(entry => entry.text)).toEqual([])
   } catch (error) {
     primaryFailure = error
+    if (browser !== undefined) {
+      // Diagnostics are best effort: preserve the original failure if capture or writing fails.
+      await Promise.resolve().then(async () => {
+        const consoleErrors = browser!.consoleErrors()
+        const editor = await lensDiagnostic(browser!)
+        await FS.writeJson(FS.resolvePath('logs/lens-failure.json', artifactRoot), { consoleErrors, editor })
+      }).catch(() => {})
+    }
     throw error
   } finally {
     await runCleanups(primaryFailure, [
@@ -1702,6 +1726,27 @@ async function dividerSize(browser: StudioCdp, pane: string): Promise<number> {
   return await browser.evaluate<number>(
     `Number(document.querySelector('[data-divider="${pane}"]')?.getAttribute('aria-valuenow'))`,
   )
+}
+
+async function lensDiagnostic(browser: StudioCdp): Promise<unknown> {
+  return await browser.evaluate(`(() => {
+          const content = document.querySelector('.cm-content')
+          const view = content?.cmView?.view
+          return {
+            preset: document.querySelector('.studio-lens-bar')?.dataset.preset,
+            outlinePressed: document.querySelector('[data-testid="studio-lens-preset-outline"]')?.getAttribute('aria-pressed'),
+            lines: [...document.querySelectorAll('.cm-line')].slice(0, 30).map(node => node.textContent),
+            glyphs: document.querySelectorAll('.cm-lens-glyph').length,
+            cmKeys: Object.keys(content?.cmView ?? {}),
+            document: view?.state.doc.toString().slice(0, 4000),
+            lens: view?.state.values?.filter(value => value?.config && value?.nodes).map(value => ({
+              active: value.config.active,
+              nodes: value.nodes.slice(0, 30).map(node => ({ kind: node.kind, from: node.from, body: node.body })),
+              peeks: value.peeks.slice(0, 30),
+              spans: value.spans.slice(0, 30).map(span => ({ from: span.from, to: span.to, glyph: span.glyph })),
+            })),
+          }
+        })()`)
 }
 
 /** foldedRegions counts the syntax regions the lens currently collapses behind a glyph. */

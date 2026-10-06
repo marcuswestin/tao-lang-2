@@ -1,0 +1,5 @@
+// Rendering produces a description; the selected view executes only when mounted.
+public
+can ui {
+   Render() fails never -> rendered
+}

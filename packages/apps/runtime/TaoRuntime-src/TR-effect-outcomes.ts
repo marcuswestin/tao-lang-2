@@ -12,7 +12,17 @@ import { actionExitOf, actionFailureMessage, asActionFailure, TaoActionFailure }
  * TaoEffectOutcome pairs one named outcome — `saved`, `rejected`, `error`, or a case — with its block,
  * which receives the selected user message (empty for `saved`).
  */
-type TaoEffectOutcome = readonly [string, (message: string) => unknown]
+type TaoEffectOutcome<PayloadT = string> = readonly [string, (payload: PayloadT) => unknown]
+
+/** Canonical failure binders are ordinary Tao records with the selected user-facing sentence. */
+type TaoJoinedEffectFailure = Readonly<{ Message: string }>
+
+type OutcomeProtocol<PayloadT> = Readonly<{
+  success: string
+  broadError: boolean
+  successPayload: (result: unknown) => PayloadT
+  failurePayload: (message: string) => PayloadT
+}>
 
 /** TaoEffectContract is what the compiler knows about the verb a `when do` runs. */
 export type TaoEffectContract = Readonly<{
@@ -41,13 +51,37 @@ export function runEffectOutcome(
   contract: TaoEffectContract,
   outcomes: readonly TaoEffectOutcome[],
 ): unknown {
-  return runActionScopeUser(() => runContainedEffectOutcome(invoke, contract, outcomes))
+  return runActionScopeUser(() =>
+    runContainedEffectOutcome(invoke, contract, outcomes, {
+      success: contract.success ?? 'saved',
+      broadError: false,
+      successPayload: () => '',
+      failurePayload: message => message,
+    })
+  )
 }
 
-function runContainedEffectOutcome(
+/** Canonical `then` joins its handler, forwards the result to `done`, and gives failures a record. */
+export function runJoinedEffectOutcome(
   invoke: () => unknown,
   contract: TaoEffectContract,
-  outcomes: readonly TaoEffectOutcome[],
+  outcomes: readonly TaoEffectOutcome<unknown>[],
+): unknown {
+  return runActionScopeUser(() =>
+    runContainedEffectOutcome(invoke, contract, outcomes, {
+      success: 'done',
+      broadError: true,
+      successPayload: result => result,
+      failurePayload: (message): TaoJoinedEffectFailure => Object.freeze({ Message: message }),
+    })
+  )
+}
+
+function runContainedEffectOutcome<PayloadT>(
+  invoke: () => unknown,
+  contract: TaoEffectContract,
+  outcomes: readonly TaoEffectOutcome<PayloadT>[],
+  protocol: OutcomeProtocol<PayloadT>,
 ): unknown {
   const continuation = captureActionContinuation()
   const restore = takeActionSavepoint()
@@ -57,16 +91,19 @@ function runContainedEffectOutcome(
     const exit = actionExitOf(error)
     const primary = exit ? exit.primary : error
     const failure = asActionFailure(error)
-    const handler = failureOutcome(failure, primary instanceof TaoActionFailure, contract, outcomes)
-      ?? outcomeNamed('otherwise', outcomes)
+    const handler =
+      failureOutcome(failure, primary instanceof TaoActionFailure, contract, outcomes, protocol.broadError)
+        ?? outcomeNamed('otherwise', outcomes)
     if (!handler) {
       throw error
     }
-    return handler(actionFailureMessage(failure, contract.name, exit?.stage))
+    return handler(protocol.failurePayload(actionFailureMessage(failure, contract.name, exit?.stage)))
   }
-  const saved = (): unknown => {
+  const saved = (result: unknown): unknown => {
     resumeActionContinuation(continuation)
-    return (outcomeNamed(contract.success ?? 'saved', outcomes) ?? outcomeNamed('otherwise', outcomes))?.('')
+    return (outcomeNamed(protocol.success, outcomes) ?? outcomeNamed('otherwise', outcomes))?.(
+      protocol.successPayload(result),
+    )
   }
   let result: unknown
   try {
@@ -75,21 +112,25 @@ function runContainedEffectOutcome(
     return failed(error)
   }
   if (!isPromiseLike(result)) {
-    return saved()
+    return saved(result)
   }
-  return Promise.resolve(result).then(settled => settled === skippedActionRun ? undefined : saved(), failed)
+  return Promise.resolve(result).then(settled => settled === skippedActionRun ? undefined : saved(settled), failed)
 }
 
 /**
  * failureOutcome picks the named case, then `rejected` for a declared case, then `error`. An open
  * remainder accepts other deliberate action failures without treating arbitrary throws as modeled.
  */
-function failureOutcome(
+function failureOutcome<PayloadT>(
   failure: TaoActionFailure,
   deliberate: boolean,
   contract: TaoEffectContract,
-  outcomes: readonly TaoEffectOutcome[],
-): TaoEffectOutcome[1] | undefined {
+  outcomes: readonly TaoEffectOutcome<PayloadT>[],
+  broadError: boolean,
+): TaoEffectOutcome<PayloadT>[1] | undefined {
+  if (broadError) {
+    return (deliberate ? outcomeNamed(failure.caseName, outcomes) : undefined) ?? outcomeNamed('error', outcomes)
+  }
   const declared = deliberate && (
     contract.declared?.includes(failure.caseName) === true || contract.open === true || contract.declared === null
   )
@@ -99,6 +140,9 @@ function failureOutcome(
   return outcomeNamed(failure.caseName, outcomes) ?? outcomeNamed('rejected', outcomes)
 }
 
-function outcomeNamed(name: string, outcomes: readonly TaoEffectOutcome[]): TaoEffectOutcome[1] | undefined {
+function outcomeNamed<PayloadT>(
+  name: string,
+  outcomes: readonly TaoEffectOutcome<PayloadT>[],
+): TaoEffectOutcome<PayloadT>[1] | undefined {
   return outcomes.find(([outcome]) => outcome === name)?.[1]
 }

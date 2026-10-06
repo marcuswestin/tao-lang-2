@@ -448,7 +448,6 @@ export async function snapSketchToFlow(
       .filter(declaration => AST.declarationNamespace(declaration) === 'value').map(declaration => declaration.name),
   )
   const uiUse = uses.find(statement => statement.importPath === '@tao/ui' && !statement.all)
-  const imported = new Set(uiUse?.importedDeclarations.map(reference => reference.$refText) ?? [])
   // A first snap (existing.length === 0, above) discards the whole prior render -- Placeholder and
   // whatever it drew with -- so a straight union with the old import list would leave that behind as
   // dead weight forever: this file is Studio-owned and excluded from `tao fix`'s own import pruning.
@@ -456,8 +455,12 @@ export async function snapSketchToFlow(
   // keeps this file the `tao fix`-idempotent shape StudioGeneratedSources relies on.
   const renderedSource = applySourceEdits(source, edits)
   const stillCalled = (name: string): boolean => new RegExp(`\\b${name}\\s*\\(`).test(renderedSource)
+  const retainedSpecifiers =
+    uiUse?.importedDeclarations.filter(specifier => stillCalled(AST.importLocalName(specifier))) ?? []
+  const imported = new Set(retainedSpecifiers.map(AST.importSpecifierText))
+  const importedSourceNames = new Set(retainedSpecifiers.map(AST.importSourceName))
   const missing = required.filter(name => !wildcardNames.has(name))
-  const finalImports = new Set([...imported].filter(stillCalled).concat(missing))
+  const finalImports = new Set([...imported, ...missing.filter(name => !importedSourceNames.has(name))])
   if (finalImports.size !== imported.size || [...finalImports].some(name => !imported.has(name))) {
     if (uiUse?.$cstNode !== undefined) {
       edits.push({

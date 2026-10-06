@@ -120,7 +120,7 @@ Describe('mounted render occurrence accessibility labels', () => {
         let Alias = Name
         action Rename() { set Name = "Second" }
         render Col() {
-          #custom accessible label Alias LabelTarget
+          #custom accessible label (Alias) LabelTarget
           #grouped accessible label (Alias + " quoted") "Quoted content"
           #literal a11y label "Literal label" "Literal content"
           #sibling "Sibling content"

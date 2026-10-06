@@ -61,6 +61,9 @@ export const dataValidationMessages = {
   duplicateOrder: 'A query may declare only one order clause.',
   duplicateLimit: 'A query may declare only one limit clause.',
   limitCount: 'A query limit must be a whole number of at least 1.',
+  duplicatePagination: 'A query may declare only one paginate clause.',
+  paginationPageSize: 'A query page size must be a positive safe integer.',
+  paginationWithLimit: "A query cannot declare both 'limit' and 'paginate'.",
   duplicateSearch: 'A query may declare only one search clause.',
   searchTermType: (actual: string) => `Query search term must be text, got ${actual}.`,
   missingSearchField: (entity: string) =>
@@ -189,6 +192,7 @@ function validateEntityField(
     Extract<ASTUtils.TaoType, { kind: 'primitive' }>['primitive'] | undefined
   >(fieldType, {
     primitive: type => type.primitive,
+    capability: () => undefined,
     enum: () => undefined,
     entity: () => undefined,
     unresolved: () => undefined,
@@ -415,6 +419,18 @@ function validateEntityQuery(query: AST.EntityQueryDeclaration, ctx: ValidationC
       ctx.error(limit, dataValidationMessages.limitCount)
     }
   }
+  const paginations = clauses.filter(AST.isPaginationClause)
+  for (const duplicate of paginations.slice(1)) {
+    ctx.error(duplicate, dataValidationMessages.duplicatePagination)
+  }
+  if (limits.length > 0 && paginations.length > 0) {
+    ctx.error(paginations[0]!, dataValidationMessages.paginationWithLimit)
+  }
+  for (const pagination of paginations) {
+    if (!Number.isSafeInteger(pagination.pageSize.value) || pagination.pageSize.value < 1) {
+      ctx.error(pagination, dataValidationMessages.paginationPageSize)
+    }
+  }
   const fields = Type.dataFields(entity)
   const searches = clauses.filter(AST.isSearchClause)
   for (const duplicate of searches.slice(1)) {
@@ -431,7 +447,11 @@ function validateEntityQuery(query: AST.EntityQueryDeclaration, ctx: ValidationC
     }
   }
   for (const clause of clauses) {
-    if (AST.isLimitClause(clause) || AST.isSearchClause(clause)) {
+    if (AST.isLimitClause(clause) || AST.isPaginationClause(clause) || AST.isSearchClause(clause)) {
+      continue
+    }
+    // Id is the existing, immutable entity identity rather than an authored data field.
+    if (AST.isOrderClause(clause) && clause.fieldName === 'Id') {
       continue
     }
     if (AST.isBooleanWhereClause(clause)) {

@@ -15,7 +15,7 @@ authorization; merely sharing primitive storage does not authorize a sibling/dow
 | 1  | `AdminID as UserID`           | None for declared ancestry                          | Ordinary widening; no new permission proof                                                              |
 | 2  | `GivenName as Name`           | None for declared ancestry                          | Ordinary widening                                                                                       |
 | 3  | `UUID as text`                | None if public representation projection is allowed | Representation access, not secret/opaque extraction                                                     |
-| 4  | `(2 Seconds).Minutes()`       | None for an in-range view change                    | Existing typed unit-view operation, no raw-number extraction                                            |
+| 4  | `(2 seconds).minutes()`       | None for an in-range view change                    | Typed unit-view operation, no raw-number extraction                                                     |
 | 5  | `Input as UUID`               | InvalidFormat                                       | Star: UUID syntax/representation validation                                                             |
 | 6  | `Input as AbsoluteURL`        | InvalidFormat/ConstraintViolation                   | Star: syntax and declared scheme constraints; not network reachability                                  |
 | 7  | `Input as EmailAddress`       | InvalidFormat/ConstraintViolation                   | Star: declared syntax policy; not deliverability/ownership proof                                        |

@@ -168,8 +168,8 @@ Describe('validator: host-read slots and commands', () => {
       use StackNav from @tao/nav
       ${leaf}
       nav Main = StackNav {
-        Initial Home
-        Title "Main"
+        Initial Home,
+        Title "Main",
         Toolbar []
       }
       scene Home() {
@@ -186,9 +186,9 @@ Describe('validator: host-read slots and commands', () => {
         use StackNav from @tao/nav
         ${leaf}
         nav Main = StackNav {
-          Initial Home
-          Toolbar { Card, NeedsDocument, Ready, Ready }
-          Title { Ready }
+          Initial Home,
+          Toolbar { Card, NeedsDocument, Ready, Ready },
+          Title { Ready },
           Bogus { Ready }
         }
         data Documents / Document {

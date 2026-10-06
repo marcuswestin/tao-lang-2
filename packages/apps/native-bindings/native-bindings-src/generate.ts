@@ -1,4 +1,5 @@
 import { Assert, Switch } from '@shared'
+import { emitAssociatedActions } from './emit-associated-actions'
 import { emitNativeBridgeTypes } from './emit-bridge-types'
 import { emitCapabilities } from './emit-capabilities'
 import { emitCommonValues } from './emit-common-values'
@@ -202,7 +203,8 @@ function emit(
       '',
     )
   }
-  const referenceDeclarations = emitReferences(catalog, implementationImport, origins)
+  const associatedActions = emitAssociatedActions(catalog, values, implementationImport)
+  const referenceDeclarations = emitReferences(catalog, implementationImport, origins, associatedActions.declarations)
   const capabilities = emitCapabilities(catalog, values, implementationImport)
   const projections = values.projections(implementationImport)
   const bridgeTypes = emitNativeBridgeTypes(catalog, values)
@@ -326,6 +328,7 @@ function emit(
     ...common.sidecar,
     ...origins.decorate(capabilities.sidecar, capabilityOrigins, 'sidecar'),
     ...bridgeTypes.sidecar,
+    ...associatedActions.sidecar,
   )
   for (const operation of catalog.operations) {
     const name = reserve(taoName(operation.name))

@@ -1,4 +1,4 @@
-import { Packages, Type } from '@ast-utils'
+import { ASTUtils, Packages, Type } from '@ast-utils'
 import { AST, codeProjectRoot, Parser, type ParseResult, type ParserServices, type ProjectGraph } from '@parser'
 import { type Diagnostic, Diagnostics, FS, HCI, Platform, ReleaseCapabilities, type ReleaseProfile } from '@shared'
 import { registerTaoValidationChecks } from './langium-validation'
@@ -12,6 +12,8 @@ import { validateReleaseCapabilities } from './validators/release-capabilities-v
 /** ValidationResult declares validated Tao source and diagnostics. */
 export type ValidationResult = Pick<ParseResult, 'entry' | 'files'> & {
   diagnostics: readonly Diagnostic[]
+  /** Sealed source contracts for this validated AST generation, retained for compilation. */
+  associatedEffects?: ASTUtils.AssociatedEffectsContext
 }
 
 /** ValidatorSession reuses standalone parser services across independent source strings. */
@@ -339,6 +341,7 @@ function validateBatchTypes(
   nodes: readonly AST.Node[],
   ctx: ValidationContext,
   reuse: BatchReuse,
+  effects: ASTUtils.AssociatedEffectsContext,
 ): void {
   let types = reuse.types.get(ctx.packagesContext)
   if (!types) {
@@ -353,7 +356,7 @@ function validateBatchTypes(
       error: (node, message, opts) => collected.push(context => context.error(node, message, opts)),
       warning: (node, message, opts) => collected.push(context => context.warning(node, message, opts)),
       hint: (node, message, opts) => collected.push(context => context.hint(node, message, opts)),
-    })
+    }, effects)
     reports = collected
     types.set(file, reports)
   }
@@ -388,6 +391,7 @@ async function validateParseResult(
     ...(context.projectFiles === undefined ? {} : { projectFiles: context.projectFiles }),
   })
   validatePackageWorkspace(ctx)
+  const associatedEffects = ASTUtils.createAssociatedEffects(context.workspaceFiles)
   const profile = Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_PROFILE'] === 'true'
   const phases = { structural: 0, types: 0, foreign: 0 }
   const contextKey = documents ? documentContextKey(context) : undefined
@@ -400,22 +404,22 @@ async function validateParseResult(
     const nodes = reuse
       ? Type.withInferenceMemo(
         reuse.inference,
-        () => Validate.TaoFile(file, ctx, document && structuralReuse(document.reports, ctx)),
+        () => Validate.TaoFile(file, ctx, associatedEffects, document && structuralReuse(document.reports, ctx)),
       )
-      : Validate.TaoFile(file, ctx)
+      : Validate.TaoFile(file, ctx, associatedEffects)
     const structuralAt = profile ? performance.now() : 0
     if (document) {
       if (!document.reports.types) {
         document.reports.types = Type.withInferenceMemo(
           reuse!.inference,
-          () => captureReports(context => validateBatchTypes(file, nodes, context, reuse!), ctx),
+          () => captureReports(context => validateBatchTypes(file, nodes, context, reuse!, associatedEffects), ctx),
         )
       }
       replayReports(document.reports.types, ctx)
     } else if (reuse) {
-      Type.withInferenceMemo(reuse.inference, () => validateBatchTypes(file, nodes, ctx, reuse))
+      Type.withInferenceMemo(reuse.inference, () => validateBatchTypes(file, nodes, ctx, reuse, associatedEffects))
     } else {
-      Validate.Types(file, nodes, ctx)
+      Validate.Types(file, nodes, ctx, associatedEffects)
     }
     const typesAt = profile ? performance.now() : 0
     await Validate.ForeignImplementationFiles(file, ctx)
@@ -437,7 +441,10 @@ async function validateParseResult(
     )
   }
 
-  return validationResultFromParse(parseResult, [...parseResult.diagnostics, ...validationDiagnostics.diagnostics])
+  return {
+    ...validationResultFromParse(parseResult, [...parseResult.diagnostics, ...validationDiagnostics.diagnostics]),
+    associatedEffects,
+  }
 }
 
 /**

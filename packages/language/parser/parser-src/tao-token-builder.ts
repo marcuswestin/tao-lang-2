@@ -25,6 +25,8 @@ export class TaoTokenBuilder extends DefaultTokenBuilder {
     Assert(Array.isArray(built), 'Langium to build default tokens before Tao installs lexer modes')
     const tokens = built as MutableTokenType[]
     const byName = new Map(tokens.map(token => [token.name, token]))
+    // Install before lexer and parser construction so lowercase names also satisfy every ID rule.
+    requiredToken(byName, 'NUMERIC_UNIT_ID').CATEGORIES = [requiredToken(byName, 'ID')]
     const interpolatedStart = requiredToken(byName, 'INTERPOLATED_STRING_START')
     const stringText = requiredToken(byName, 'STRING_TEXT')
     const stringEnd = requiredToken(byName, 'STRING_END')

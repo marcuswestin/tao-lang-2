@@ -1,14 +1,31 @@
 import { ASTUtils, Type, Units } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
+import { BridgeMetadata } from '../../../bridge-metadata'
+import { nativeNumericSelfContext } from '../../../numeric-self-context'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
-import { authLibraryExport, compileCurrentAccount, contextualCommand, contextualReference } from './auth-context'
+import { compileAssociatedConversion } from './associated-converters'
+import {
+  compileAssociatedActionWitness,
+  compileAssociatedWitness,
+  compileCallableWitnessKey,
+} from './AssociatedMethodsCompiler'
+import {
+  authLibraryExport,
+  compileCurrentAccount,
+  contextualCommand,
+  contextualReference,
+  needsAuthContext,
+} from './auth-context'
+import { compileArgumentForType, compileValueForType } from './capability-projection'
 import { configurationRuntimeBindingName } from './ConfigurationCompiler'
 import { activeDataStorePlan } from './data-store-context'
 import { compileDeclarationIdentity } from './declaration-identity'
 import { bridgeBindingName } from './injection-plan'
+import { checkedNumericValue, compileNumericUnitReading, quantityFactoryBinding } from './NumericUnitsCompiler'
 import { compileReactiveArgument } from './reactive-parameters'
+import { compileRuntimeType } from './runtime-type-compiler'
 
 const shapelessItemConstructorMessage = 'validated shapeless item constructor is empty'
 
@@ -24,12 +41,15 @@ export const ExpressionsCompiler = {
       BooleanLiteral: Compile.BooleanLiteral,
       CaseTestExpression: Compile.CaseTestExpression,
       CopyExpression: Compile.CopyExpression,
+      ConversionExpression: compileAssociatedConversion,
       ConfigurationConstructor: Compile.ConfiguredValue,
       WhenExpression: Compile.WhenExpression,
       FunctionCallExpression: Compile.FunctionCallExpression,
+      MethodCallExpression: Compile.MethodCallExpression,
       InterpolatedString: Compile.InterpolatedString,
       InferredConfigurationConstructor: Compile.InferredConfiguration,
       NumberLiteral: Compile.NumberLiteral,
+      NumericUnitConstruction: Compile.NumericUnitConstruction,
       NoneLiteral: Compile.NoneLiteral,
       PrimitiveConfigurationConstructor: Compile.PrimitiveConfigurationConstructor,
       RefinementExpression: Compile.RefinementExpression,
@@ -63,9 +83,12 @@ export const ExpressionsCompiler = {
       // app) in expression position; those keep their historical data-configuration lowering.
       return configureCall(declaration, config) ?? dataConfigureCall(declaration, config)
     }
-    if (AST.isTypeDeclaration(declaration) || AST.isParameterizedDeclaration(declaration)) {
+    if (
+      AST.isTypeDeclaration(declaration) || AST.isParameterTypeDeclaration(declaration)
+      || AST.isParameterizedDeclaration(declaration)
+    ) {
       if (value.value) {
-        return Compile.Expression(value.value)
+        return checkedNumericValue(Compile.Expression(value.value), resolvedType)
       }
       if (resolvedType.kind !== 'item') {
         return Assert.never(resolvedType as never, 'validated named block constructor resolves an item type')
@@ -124,6 +147,7 @@ export const ExpressionsCompiler = {
       // it on every render, which is what makes an absent member reactive.
       NoneLiteral: Compile.Expression,
       NumberLiteral: Compile.Expression,
+      NumericUnitConstruction: Compile.Expression,
       PropertyConfigurationPatch: value =>
         Assert.never(value as never, 'property-position with is compiled against its owning property'),
       StringLiteral: Compile.Expression,
@@ -142,7 +166,7 @@ export const ExpressionsCompiler = {
 
   /** BooleanLiteral compiles a Tao boolean literal into a Tao value. */
   BooleanLiteral(value: AST.BooleanLiteral): Compiled {
-    return gen`TR.Value(${value.value === 'true' ? 'true' : 'false'})`
+    return gen`TR.Value(${value.value === 'true' || value.value === 'yes' ? 'true' : 'false'})`
   },
 
   /** NoneLiteral compiles Tao absence to JavaScript null behind a Tao value. */
@@ -152,6 +176,10 @@ export const ExpressionsCompiler = {
 
   /** BinaryExpression delegates Tao operator semantics to the runtime. */
   BinaryExpression(expression: AST.BinaryExpression): Compiled {
+    const associated = compileAssociatedOperation(expression)
+    if (associated) {
+      return associated
+    }
     const calendar = compileCalendarArithmetic(expression)
     if (calendar) {
       return calendar
@@ -163,6 +191,10 @@ export const ExpressionsCompiler = {
 
   /** UnaryExpression delegates Tao unary semantics to the runtime. */
   UnaryExpression(expression: AST.UnaryExpression): Compiled {
+    const associated = compileAssociatedOperation(expression)
+    if (associated) {
+      return associated
+    }
     return gen`TR.Unary(${gen.jsLiteral(expression.operator)}, ${Compile.Expression(expression.operand)})`
   },
 
@@ -188,7 +220,12 @@ export const ExpressionsCompiler = {
   /** WhenExpression evaluates one subject and selects one lazy value case. */
   WhenExpression(expression: AST.WhenExpression): Compiled {
     if (!expression.subject) {
-      Assert.defined(expression.otherwise, 'a predicate match has a terminal otherwise')
+      if (!expression.otherwise) {
+        Assert(expression.pickSyntax, 'only a validated exhaustive pick can omit its fallback')
+      }
+      const fallback = expression.otherwise
+        ? Compile.Expression(expression.otherwise.value)
+        : gen`TR.Errors.failInvariant("A validated exhaustive pick did not match.")`
       return gen`(() => {
         ${
         gen.list(expression.branches, branch => {
@@ -198,7 +235,7 @@ export const ExpressionsCompiler = {
           }`
         })
       }
-        return ${Compile.Expression(expression.otherwise.value)}
+        return ${fallback}
       })()`
     }
     // The compact form is the two-outcome sibling of the block form, so it lowers to the same case
@@ -209,7 +246,12 @@ export const ExpressionsCompiler = {
         ['true', () => ${Compile.Expression(expression.positive)}],
       ], () => ${negative ? Compile.Expression(negative) : gen`TR.Value(null)`})`
     }
-    Assert.defined(expression.otherwise, 'validated block-form when has an otherwise branch')
+    if (!expression.otherwise) {
+      Assert(expression.pickSyntax, 'only a validated exhaustive pick can omit its fallback')
+    }
+    const otherwise = expression.otherwise
+      ? gen`() => ${Compile.Expression(expression.otherwise.value)}`
+      : gen`() => TR.Errors.failInvariant("A validated exhaustive pick did not match.")`
     return gen`TR.WhenCase(${Compile.Expression(expression.subject)}, [
       ${
       gen.list(
@@ -218,7 +260,7 @@ export const ExpressionsCompiler = {
           gen`[${gen.jsLiteral(AST.canonicalSubjectCase(branch.case!))}, () => ${Compile.Expression(branch.value)}],`,
       )
     }
-    ], () => ${Compile.Expression(expression.otherwise.value)})`
+    ], ${otherwise})`
   },
 
   /** InterpolatedString joins literal text and lazily evaluated scalar expressions. */
@@ -242,6 +284,7 @@ export const ExpressionsCompiler = {
     const fn = resolved.function
     Assert.defined(fn, 'validated function call resolves its declaration')
     Assert(resolved.diagnostics.length === 0, 'validated function call has no binding diagnostics')
+    Assert(!resolved.genericDiagnostics?.length, 'validated generic call has one bounded type substitution')
     const parameters = AST.parametersOf(fn)
     const argumentsByParameter = new Map(resolved.pairs.map(pair => [pair.parameter, pair.argument]))
     const lastProvidedIndex = Math.max(...resolved.pairs.map(pair => parameters.indexOf(pair.parameter)), -1)
@@ -250,11 +293,64 @@ export const ExpressionsCompiler = {
         parameters.slice(0, lastProvidedIndex + 1),
         parameter => {
           const argument = argumentsByParameter.get(parameter)
-          return argument ? gen`, ${Compile.Expression(argument.value)}` : gen`, undefined`
+          return argument
+            ? gen`, ${
+              compileGenericArgument(
+                argument,
+                resolved.transportTypes?.get(parameter) ?? Type.ofParameter(parameter),
+                resolved.parameterTypes?.get(parameter),
+              )
+            }`
+            : gen`, undefined`
         },
         { separator: '' },
       )
     })`
+  },
+
+  /** Method calls use the canonical selected descriptor and its parameter correspondence. */
+  MethodCallExpression(expression: AST.MethodCallExpression): Compiled {
+    const target = ASTUtils.associatedMethodCallTarget(expression)
+    const staticCall = !!target && Type.associatedMethodTypeRoot(target.receiver) !== undefined
+    const reading = staticCall ? { kind: 'not-unit-reading' } as const : ASTUtils.resolveNumericUnitReading(expression)
+    if (reading.kind !== 'not-unit-reading') {
+      Assert(reading.kind === 'unit-reading', 'validated unit reading has no argument or method collision')
+      return compileNumericUnitReading(reading.reading, compileMethodReceiver(reading.reading.receiverAnchor))
+    }
+    const resolved = ASTUtils.resolveAssociatedMethodInvocation(expression)
+    Assert(resolved.problem === undefined, 'validated associated call resolves its receiver and contract')
+    Assert.defined(resolved.descriptor, 'validated associated call has a selected descriptor')
+    Assert(resolved.diagnostics.length === 0, 'validated associated call has no binding diagnostics')
+    Assert(!resolved.genericDiagnostics?.length, 'validated generic associated call has one bounded type substitution')
+    Assert.defined(target, 'validated associated call retains its actual receiver anchor')
+    const receiver = staticCall ? undefined : compileMethodReceiver(target.receiver)
+    const capability = !staticCall
+      && (resolved.receiver?.kind === 'capability' || !!resolved.receiver?.genericParameter)
+    const rebindSelf = capability && !!resolved.receiver?.genericParameter
+      && resolved.descriptor.result.genericParameter === resolved.receiver.genericParameter
+    const callable = capability
+      ? gen`TR.Capability.method(${rebindSelf ? gen`_TaoGenericReceiver` : gen`${receiver}.evaluate()`}, ${
+        gen.jsLiteral(compileCallableWitnessKey(resolved.descriptor))
+      })`
+      : compileAssociatedWitness(resolved.descriptor)
+    const parameters = AST.parametersOf(resolved.descriptor.declaration)
+    const argumentsByParameter = new Map(resolved.pairs.map(pair => [pair.parameter, pair.argument]))
+    const lastProvidedIndex = Math.max(...resolved.pairs.map(pair => parameters.indexOf(pair.parameter)), -1)
+    const call = gen`TR.Call(${callable}${capability || staticCall ? gen.noop() : gen`, ${receiver}`}${
+      gen.join(parameters.slice(0, lastProvidedIndex + 1), parameter => {
+        const argument = argumentsByParameter.get(parameter)
+        const expected = resolved.transportTypes?.get(parameter) ?? Type.ofParameter(parameter)
+        return argument
+          ? gen`, ${compileGenericArgument(argument, expected, resolved.parameterTypes?.get(parameter))}`
+          : gen`, undefined`
+      }, { separator: '' })
+    })`
+    return rebindSelf
+      ? gen`(() => {
+        const _TaoGenericReceiver = ${receiver}.evaluate()
+        return TR.Capability.rebind(_TaoGenericReceiver, ${call})
+      })()`
+      : call
   },
 
   /** StringLiteral compiles a Tao string literal into a Tao text value. */
@@ -292,7 +388,13 @@ export const ExpressionsCompiler = {
       ${
       gen.list(
         pairs,
-        pair => gen`[${gen.nameLiteral(pair.expected)}]: ${Compile.Expression(pair.property.value)}.jsValue,`,
+        pair =>
+          gen`[${gen.nameLiteral(pair.expected)}]: ${
+            itemFieldStorage(
+              compileArgumentForType(pair.property.value, Type.itemFieldType(pair.expected)),
+              pair.expected,
+            )
+          },`,
       )
     }
     })`
@@ -300,37 +402,114 @@ export const ExpressionsCompiler = {
 
   /** MemberAccessExpression compiles a typed item member path into a runtime value wrapper. */
   MemberAccessExpression(reference: AST.MemberAccessExpression): Compiled {
+    const associatedAction = compileAssociatedActionSelection(reference)
+    if (associatedAction) {
+      return associatedAction
+    }
     const target = resolveRef(reference.target)
     if (reference.shade !== undefined) {
       Assert(AST.isDesignColorEntry(target), 'validated shade names a design color family member')
       return compileDesignColorValue(AST.designColorPath(target, reference.shade))
+    }
+    if (AST.isTypeDeclaration(target) || AST.isEntityDataDeclaration(target)) {
+      Assert(
+        AST.associatedReceiverOwner(reference) === target,
+        'validated type reference names the contextual receiver',
+      )
+      return compileMemberPath(
+        contextualReceiverReference(reference, target),
+        Type.ofReferenceRoot(reference),
+        reference.members,
+      )
     }
     const root = Compile.ValueDeclarationReference(target)
     return compileMemberPath(root, Type.ofValueDeclaration(target), reference.members)
   },
 
   /**
-   * FromExpression calls the sidecar's named export with plain JavaScript arguments and wraps the
-   * result as a Tao value, which is the whole bridge (Decisions §15).
+   * FromExpression preserves quantity arguments and passes ordinary arguments as JavaScript data.
    */
   FromExpression(bridge: AST.FromExpression): Compiled {
     const call = bridge.expression
     const values = AST.isFunctionCallExpression(call)
-      ? (call.argumentList?.arguments ?? []).map(argument => gen`${Compile.Expression(argument.value)}.jsValue`)
+      ? (call.argumentList?.arguments ?? []).map(argument => {
+        const value = Compile.Expression(argument.value)
+        const type = Type.ofExpression(argument.value)
+        if (type.kind === 'capability') {
+          return gen`${value}.evaluate()`
+        }
+        if (Type.quantityOwner(type) || abstractNumericDomain(type)) {
+          return value
+        }
+        return typeContainsQuantity(type)
+          ? gen`(() => { const result = ${value}; const backing = result.jsValue; return TR.isQuantityPayload(backing) ? result : backing })()`
+          : gen`${value}.jsValue`
+      })
       : undefined
     const binding = gen.Name({ name: bridgeBindingName(bridge) })
     const contextual = AST.getDocument(bridge).uri.path.endsWith('/@tao/auth/Auth.tao')
-    return contextual
-      ? gen`TR.Value(${binding}(_TaoAuthScope!${
-        values?.length ? gen`, ${gen.join(values, value => value)}` : gen.noop()
-      }))`
+    if (values && nativeNumericSelfContext(bridge)) {
+      values.push(gen`_TaoSelfFactory`)
+    }
+    const nativeValue = contextual
+      ? gen`${binding}(_TaoAuthScope!${values?.length ? gen`, ${gen.join(values, value => value)}` : gen.noop()})`
       : values
-      ? gen`TR.Value(${binding}(${gen.join(values, value => value)}))`
-      : gen`TR.Value(${binding})`
+      ? gen`${binding}(${gen.join(values, value => value)})`
+      : binding
+    const resultType = BridgeMetadata.bridgeResultType(bridge)
+    if (resultType) {
+      if (resultType.kind === 'enum') {
+        return gen`TR.EnumFromJS(${gen.scopeName(resultType.declaration)}, ${nativeValue})`
+      }
+      if (resultType.kind === 'primitive' && resultType.primitive === 'numeric' && resultType.selfOwner) {
+        return gen`(() => {
+          const result = ${nativeValue};
+          TR.admitQuantityUnion(result, [_TaoSelfFactory], "Self");
+          return result;
+        })()`
+      }
+      const members = nativeResultMembers(resultType)
+      Assert(
+        !members.some(abstractNumericDomain),
+        'validated native return has a checked concrete quantity owner contract',
+      )
+      const owners = [...new Set(members.map(Type.quantityOwner).filter(owner => owner !== undefined))]
+      if (owners.length) {
+        const ordinaryPlans = members.filter(member => !Type.quantityOwner(member))
+          .sort((left, right) => Number(primitiveNamed(left, 'numeric')) - Number(primitiveNamed(right, 'numeric')))
+          .map(nativePrimitiveResultBranch)
+        const ordinaryBranches = ordinaryPlans.filter(branch => branch !== undefined)
+        const ambiguousData = ordinaryPlans.some(branch => branch === undefined)
+        return gen`(() => {
+          const result = ${nativeValue};
+          ${gen.list(ordinaryBranches, branch => branch)}
+          ${
+          ambiguousData
+            ? gen`if (!TR.isRuntimeValue(result) && !TR.isQuantityPayload(result)) return TR.Value(result);`
+            : gen.noop()
+        }
+          TR.admitQuantityUnion(result, [${gen.join(owners, owner => gen`${quantityFactoryBinding(owner)}`)}], ${
+          gen.jsLiteral(Type.displayName(resultType))
+        });
+          return result
+        })()`
+      }
+    }
+    return resultType?.kind === 'primitive' && resultType.primitive === 'numeric'
+      ? gen`TR.Value(TR.checkedNumericBacking(${nativeValue}, ${
+        gen.jsLiteral(
+          resultType.nominal && AST.isTypeDeclaration(resultType.nominal) ? resultType.nominal.name : 'numeric',
+        )
+      }))`
+      : gen`TR.Value(${nativeValue})`
   },
 
   /** PostfixMemberAccess compiles a member read on any expression, including unit accessors. */
   PostfixMemberAccess(access: AST.PostfixMemberAccess): Compiled {
+    const associatedAction = compileAssociatedActionSelection(access)
+    if (associatedAction) {
+      return associatedAction
+    }
     return compileMemberPath(
       Compile.Expression(access.receiver),
       Type.ofExpression(access.receiver),
@@ -346,6 +525,13 @@ export const ExpressionsCompiler = {
     const target = resolveRef(reference.target)
     if (AST.isEntityDataField(target)) {
       return gen`TR.Value(${reference.target.$refText === target.name ? 'true' : 'false'})`
+    }
+    if (AST.isTypeDeclaration(target) || AST.isEntityDataDeclaration(target)) {
+      Assert(
+        AST.associatedReceiverOwner(reference) === target,
+        'validated type reference names the contextual receiver',
+      )
+      return gen`${contextualReceiverReference(reference, target)}.evaluate()`
     }
     return Compile.ValueDeclarationReference(target)
   },
@@ -376,6 +562,7 @@ export const ExpressionsCompiler = {
       DatasourceDeclaration: declaration => gen`${gen.scopeName(declaration)}.evaluate()`,
       NavDeclaration: declaration => gen`${gen.scopeName(declaration)}.evaluate()`,
       ParameterDeclaration: parameter => gen`${gen.scopeName({ name: Type.parameterName(parameter) })}.evaluate()`,
+      RenderSlotInputBinding: binding => gen`${gen.scopeName({ name: binding.name })}.evaluate()`,
       // A phrase compiles to a callable `TR.Function`; a bare reference is its zero-argument call.
       PhraseDeclaration: phrase => gen`TR.Call(${contextualReference(phrase)})`,
       StateDeclaration: state => gen`${gen.scopeName(state)}.evaluate()`,
@@ -389,10 +576,111 @@ export const ExpressionsCompiler = {
   },
 } as const
 
+/** Selection binds the validated receiver once; invoking an alias reads its captured action. */
+function compileAssociatedActionSelection(
+  expression: AST.MemberAccessExpression | AST.PostfixMemberAccess,
+): Compiled | undefined {
+  const selected = ASTUtils.resolveActionTarget(expression)
+  if (selected.kind === 'capability') {
+    const receiver = compileMethodReceiver(selected.associated.receiver)
+    const key = gen.jsLiteral(compileCallableWitnessKey(selected.requirement))
+    const rebindSelf = selected.associated.domain.genericParameter
+      && selected.result.genericParameter === selected.associated.domain.genericParameter
+    if (rebindSelf) {
+      return gen`(() => {
+        const _TaoGenericReceiver = ${receiver}.evaluate()
+        const _TaoSelectedAction = TR.Call(TR.Capability.method(_TaoGenericReceiver, ${key}))
+        return TR.Action(async (..._TaoActionArguments: TR.Evaluable[]) =>
+          TR.Capability.rebind(_TaoGenericReceiver,
+            await TR.DoResult<${
+        compileRuntimeType(selected.result)
+      }["jsValue"]>(_TaoSelectedAction, ..._TaoActionArguments)))
+      })()`
+    }
+    return gen`TR.Call(TR.Capability.method(${receiver}.evaluate(), ${key}))`
+  }
+  if (selected.kind !== 'named' || !selected.associated) {
+    return undefined
+  }
+  Assert(AST.isActionDeclaration(selected.action), 'an associated action selection names a source action')
+  const receiver = selected.associated
+  const declared = AST.associatedNominalActionOwner(selected.action)
+  Assert(
+    declared === receiver.owner && AST.associatedActionDispatch(selected.action) === receiver.dispatch,
+    'the validated associated action retains its actual receiver owner and cardinality',
+  )
+  const hasOwner = AST.findOwningView(expression) || AST.findOwningAssociatedView(expression)
+  const needsAuth = needsAuthContext(selected.action)
+  const options = hasOwner ? gen`, { owner: _TaoActionOwner }` : needsAuth ? gen`, {}` : gen.noop()
+  const captured = receiver.dispatch === 'static'
+    ? gen`undefined`
+    : gen`TR.CaptureActionReceiver(${compileMethodReceiver(receiver.receiver)}, ${gen.jsLiteral(receiver.cardinality)})`
+  return gen`${compileAssociatedActionWitness(selected.action)}(${captured}${options}${
+    needsAuth ? gen`, _TaoAuthScope` : gen.noop()
+  })`
+}
+
+/** Selected operators call the real ordered contract before any built-in runtime leaf. */
+function compileAssociatedOperation(expression: AST.BinaryExpression | AST.UnaryExpression): Compiled | undefined {
+  const resolved = Type.associatedOperation(expression)
+  if (resolved.problem) {
+    const builtIn = resolved.problem === 'unsupported-operator'
+      || (resolved.problem === 'missing-operator' && Type.ofExpression(expression).kind !== 'unresolved')
+    Assert(builtIn, 'a validated operation has one authored contract or a resolved built-in domain')
+    return undefined
+  }
+  Assert.defined(resolved.descriptor, 'a selected operation retains its defining callable')
+  const descriptor = resolved.descriptor
+  const receiverType = resolved.operandTypes[0]!
+  const capability = resolved.dispatch === 'instance'
+    && (receiverType.kind === 'capability' || !!receiverType.genericParameter)
+  const rebindSelf = capability && !!receiverType.genericParameter
+    && descriptor.result.genericParameter === receiverType.genericParameter
+  const receiver = resolved.receiver ? Compile.Expression(resolved.receiver) : undefined
+  const callable = capability
+    ? gen`TR.Capability.method(${rebindSelf ? gen`_TaoGenericReceiver` : gen`${receiver}.evaluate()`}, ${
+      gen.jsLiteral(compileCallableWitnessKey(descriptor))
+    })`
+    : compileAssociatedWitness(descriptor)
+  const call = gen`TR.Call(${callable}${
+    resolved.dispatch === 'instance' && !capability ? gen`, ${receiver}` : gen.noop()
+  }${gen.join(resolved.pairs, pair => gen`, ${compileArgumentForType(pair.operand, pair.type)}`, { separator: '' })})`
+  return rebindSelf
+    ? gen`(() => {
+      const _TaoGenericReceiver = ${receiver}.evaluate()
+      return TR.Capability.rebind(_TaoGenericReceiver, ${call})
+    })()`
+    : call
+}
+
 /**
  * A `color` value is the design color's name, never its hex: the mounted design resolves it at render,
  * so a derived color follows `Scheme` and each app that mounts the view reads its own design.
  */
+function compileGenericArgument(
+  argument: AST.Argument,
+  transport: ASTUtils.TaoType,
+  instantiated?: ASTUtils.TaoType,
+): Compiled {
+  const role = Type.genericRoleConstructor(argument)
+  if (!role && !transport.genericParameter) {
+    return compileArgumentForType(argument.value, transport)
+  }
+  const payload = role?.value ?? argument.value
+  const actual = Type.ofExpression(payload)
+  const target = instantiated ?? actual
+  // A contextual backing is constructed in inferred T; already typed wrappers keep their owner.
+  if (actual.kind === 'primitive' && !actual.nominal && target.kind === 'primitive' && target.nominal) {
+    const owner = Type.quantityOwner(target)
+    const value = owner
+      ? gen`${quantityFactoryBinding(owner)}.fromJSValue(${Compile.Expression(payload)}.jsValue)`
+      : checkedNumericValue(Compile.Expression(payload), target)
+    return compileValueForType(value, target, transport)
+  }
+  const source = ASTUtils.containsCapability(transport) ? compileReactiveArgument(payload) : Compile.Expression(payload)
+  return compileValueForType(source, actual, transport)
+}
+
 function compileDesignColorValue(path: string): Compiled {
   return gen`TR.Value(${gen.jsLiteral(path)})`
 }
@@ -412,12 +700,74 @@ function itemPropertyBindingPairs(
   return result.pairs
 }
 
+/** Contextual entity references select their actual bound row or collection, not the catalog name. */
+function contextualReceiverReference(
+  reference: AST.ValueReference | AST.MemberAccessExpression,
+  owner: AST.TypeDeclaration | AST.EntityDataDeclaration,
+): Compiled {
+  if (!AST.isEntityDataDeclaration(owner)) {
+    return gen.scopeName(owner)
+  }
+  return gen.scopeName({
+    name: AST.associatedReceiverBindingName(reference)!,
+  })
+}
+
 function compileConfiguredItem(
   value: AST.ConfigurationConstructor,
   itemType: ASTUtils.ItemShape | undefined,
 ): Compiled {
   Assert.defined(value.block, 'validated item constructor has a block')
-  return compileConfiguredItemBlock(value.block, itemType)
+  if (!itemType) {
+    return compileConfiguredItemBlock(value.block, itemType)
+  }
+  const construction = ASTUtils.resolveConfiguredItemConstruction(value)
+  // The canonical plan covers ordinary records; other validated constructors keep their existing path.
+  if (construction.kind !== 'complete') {
+    return compileConfiguredItemBlock(value.block, itemType)
+  }
+  return compileConfiguredItemConstruction(construction)
+}
+
+/** Allocation and witness transport consume the same real configured-field correspondence. */
+function compileConfiguredItemConstruction(plan: ASTUtils.ConfiguredItemConstruction): Compiled {
+  Assert(plan.kind === 'complete', 'validated configured item construction has complete correspondence')
+  const pairs = plan.operands.map(operand => {
+    const expected = operand.field
+    const destination = Type.itemFieldType(expected)
+    if (!AST.isConfigurationEntry(operand.node)) {
+      return { expected, compiled: compileArgumentForType(operand.node, destination) }
+    }
+    const pair = plan.pairs.find(pair => pair.entry === operand.node && pair.field === expected)
+    Assert.defined(pair, 'supplied configured operand retains its field correspondence')
+    const entry = pair.entry
+    const expression = entry.expression ?? entry.memberReference
+    if (expression) {
+      return { expected, compiled: compileArgumentForType(expression, pair.expected) }
+    }
+    let source: Compiled
+    if (entry.reference?.ref && AST.isValueDeclaration(entry.reference.ref)) {
+      const reference = Compile.ValueDeclarationReference(entry.reference.ref)
+      source = ASTUtils.containsCapability(pair.expected) ? gen`TR.Alias(() => ${reference})` : reference
+    } else if (entry.block) {
+      source = compileConfiguredItemConstruction(
+        ASTUtils.resolveConfiguredItemConstruction(entry, undefined, pair.actual),
+      )
+    } else {
+      Assert.defined(entry.value, 'validated configured operand has an actual payload')
+      Assert.is(entry.value, AST.isExpression, 'validated configured operand retains an expression')
+      source = Compile.Expression(entry.value)
+    }
+    return { expected, compiled: compileValueForType(source, pair.actual, pair.expected) }
+  })
+  return gen`TR.Value({
+    ${
+    gen.list(
+      pairs,
+      pair => gen`[${gen.nameLiteral(pair.expected)}]: ${itemFieldStorage(pair.compiled, pair.expected)},`,
+    )
+  }
+  })`
 }
 
 function compileConfiguredItemBlock(
@@ -434,28 +784,37 @@ function compileConfiguredItemBlock(
     .filter(Type.itemFieldIsFilled)
     .map(expected => {
       Assert.defined(expected.value, 'filled item slot has a value')
-      return { expected, compiled: Compile.Expression(expected.value) }
+      return { expected, compiled: compileArgumentForType(expected.value, Type.itemFieldType(expected)) }
     })
   for (const entry of block.entries) {
     if (entry.label && entry.expression) {
       const expected = fields.find(property => property.name === entry.label)
       Assert.defined(expected, 'validated configured item label resolves one field')
       remaining.delete(expected)
-      pairs.push({ expected, compiled: Compile.Expression(entry.expression) })
+      pairs.push({ expected, compiled: compileArgumentForType(entry.expression, Type.itemFieldType(expected)) })
       continue
     }
     const candidate = compileConfiguredItemEntry(entry, itemType)
     Assert.defined(candidate, 'validated configured item entry has a constructable value')
     const expected = bindSingleSlot(remaining, candidate.type, 'validated configured item entry binds one field')
     remaining.delete(expected)
-    pairs.push({ expected, compiled: candidate.compiled })
+    pairs.push({
+      expected,
+      compiled: compileValueForType(
+        ASTUtils.containsCapability(Type.itemFieldType(expected))
+          ? gen`TR.Alias(() => ${candidate.compiled})`
+          : candidate.compiled,
+        candidate.type,
+        Type.itemFieldType(expected),
+      ),
+    })
   }
   for (const expected of [...remaining]) {
     if (!AST.isTypeProperty(expected) || !Type.propertyHasDefault(expected)) {
       continue
     }
     Assert.defined(expected.value, 'defaulted item slot has a value')
-    pairs.push({ expected, compiled: Compile.Expression(expected.value) })
+    pairs.push({ expected, compiled: compileArgumentForType(expected.value, Type.itemFieldType(expected)) })
     remaining.delete(expected)
   }
   Assert(
@@ -464,8 +823,19 @@ function compileConfiguredItemBlock(
   )
   pairs.sort((left, right) => fields.indexOf(left.expected) - fields.indexOf(right.expected))
   return gen`TR.Value({
-    ${gen.list(pairs, pair => gen`[${gen.nameLiteral(pair.expected)}]: ${pair.compiled}.jsValue,`)}
+    ${
+    gen.list(
+      pairs,
+      pair => gen`[${gen.nameLiteral(pair.expected)}]: ${itemFieldStorage(pair.compiled, pair.expected)},`,
+    )
+  }
   })`
+}
+
+function itemFieldStorage(value: Compiled, field: ASTUtils.ItemShapeField): Compiled {
+  return ASTUtils.containsCapability(Type.itemFieldType(field))
+    ? gen`TR.Capability.storedValue(${value})`
+    : gen`${value}.jsValue`
 }
 
 function compileConfiguredItemEntry(
@@ -515,17 +885,19 @@ function compileConfiguredItemEntry(
 function configureCall(declaration: AST.ConfigurableDeclaration, config: Compiled): Compiled | undefined {
   const primitive = AST.configurationPrimitiveOf(declaration)
   if (primitive === 'nav') {
-    const runtimeDeclaration = gen.scopeName({ name: configurationRuntimeBindingName(declaration) })
+    const runtimeDeclaration = gen.scopeName(declaration, configurationRuntimeBindingName(declaration))
     return gen`TR.Navigation.Configure(${runtimeDeclaration}, ${config})`
   }
   if (primitive === 'auth') {
-    return gen`TR.Auth.Configure(${gen.scopeName({ name: configurationRuntimeBindingName(declaration) })}, ${config})`
+    return gen`TR.Auth.Configure(${
+      gen.scopeName(declaration, configurationRuntimeBindingName(declaration))
+    }, ${config})`
   }
   return primitive === 'datasource' ? dataConfigureCall(declaration, config) : undefined
 }
 
 function dataConfigureCall(declaration: AST.ConfigurableDeclaration, config: Compiled): Compiled {
-  const runtimeDeclaration = gen.scopeName({ name: configurationRuntimeBindingName(declaration) })
+  const runtimeDeclaration = gen.scopeName(declaration, configurationRuntimeBindingName(declaration))
   return gen`TR.Data.Configure(${runtimeDeclaration}, ${config})`
 }
 
@@ -876,6 +1248,24 @@ export function configuredDeclarationOfValue(
   return undefined
 }
 
+/** Method receivers retain the same live expression or authored member-path storage. */
+function compileMethodReceiver(receiver: ASTUtils.AssociatedMethodReceiver): Compiled {
+  return Switch.kind(receiver, {
+    expression: value => compileReactiveArgument(value.expression),
+    'member-path': value => {
+      const site = value.site
+      const declaration = resolveRef(site.target)
+      const contextualOwner = AST.associatedReceiverOwner(site)
+      const root = contextualOwner
+        ? contextualReceiverReference(site, contextualOwner)
+        : AST.isTypeDeclaration(declaration) || AST.isEntityDataDeclaration(declaration)
+        ? gen.scopeName(declaration)
+        : gen`TR.Alias(() => ${Compile.ValueDeclarationReference(declaration)})`
+      return compileMemberPath(root, Type.ofReferenceRoot(site), value.members)
+    },
+  })
+}
+
 /**
  * A member path walks one segment at a time, because a segment's lowering depends on the type it
  * reads from: a unit of a family converts, a family's reading renders, and everything else is an
@@ -916,6 +1306,19 @@ function compileMemberPath(root: Compiled, rootType: ASTUtils.TaoType, members: 
       flushPlainMembers()
       compiled = compileCompletenessMember(compiled, member, completenessFields)
       current = completenessType
+      continue
+    }
+    const negativeField = current.kind === 'entity'
+      ? Type.dataFieldForMember(current.entity, member)
+      : current.kind === 'item' && current.item
+      ? Type.itemFields(current.item).find((field): field is AST.EntityDataField =>
+        AST.isEntityDataField(field) && field.negativeName === member
+      )
+      : undefined
+    if (negativeField?.negativeName === member) {
+      flushPlainMembers()
+      compiled = gen`TR.Unary('not', TR.Member(${compiled}, [${gen.jsLiteral(negativeField.name)}]))`
+      current = Type.dataFieldValueType(negativeField)
       continue
     }
     plainMembers.push(member)
@@ -975,6 +1378,55 @@ function unitFamilyOf(type: ASTUtils.TaoType): ASTUtils.UnitFamily | undefined {
 
 function primitiveNamed(type: ASTUtils.TaoType, primitive: string): boolean {
   return type.kind === 'primitive' && type.primitive === primitive
+}
+
+/** Unions containing quantities preserve their wrappers and unwrap ordinary data branches. */
+function typeContainsQuantity(type: ASTUtils.TaoType): boolean {
+  return !!Type.quantityOwner(type) || abstractNumericDomain(type)
+    || type.kind === 'union' && type.members.some(typeContainsQuantity)
+}
+
+function abstractNumericDomain(type: ASTUtils.TaoType): boolean {
+  return primitiveNamed(type, 'numeric') && Type.isAbstractDomain(type)
+}
+
+/** nativeResultMembers flattens result unions without inventing an owner for ordinary branches. */
+function nativeResultMembers(type: ASTUtils.TaoType): readonly ASTUtils.TaoType[] {
+  return type.kind === 'union' ? type.members.flatMap(nativeResultMembers) : [type]
+}
+
+/** Disjoint primitive native data keeps raw passage; numeric backing is finite at ingress. */
+function nativePrimitiveResultBranch(type: ASTUtils.TaoType): Compiled | undefined {
+  if (type.kind !== 'primitive') {
+    return undefined
+  }
+  const rawNumber = () => gen`if (typeof result === 'number') return TR.Value(result);`
+  const rawText = () => gen`if (typeof result === 'string') return TR.Value(result);`
+  const unsupported = () => undefined
+  return Switch(type.primitive, {
+    numeric: () =>
+      gen`if (typeof result === 'number') return TR.Value(TR.checkedNumericBacking(result, ${
+        gen.jsLiteral(Type.displayName(type))
+      }));`,
+    number: rawNumber,
+    time: rawNumber,
+    duration: rawNumber,
+    text: rawText,
+    color: rawText,
+    shortcut: rawText,
+    boolean: () => gen`if (typeof result === 'boolean') return TR.Value(result);`,
+    none: () => gen`if (result === null) return TR.Value(result);`,
+    action: unsupported,
+    command: unsupported,
+    design: unsupported,
+    view: unsupported,
+    rendered: unsupported,
+    scene: unsupported,
+    nav: unsupported,
+    datasource: unsupported,
+    data: unsupported,
+    app: unsupported,
+  })
 }
 
 function ratioOf(family: ASTUtils.UnitFamily, unit: string): number {

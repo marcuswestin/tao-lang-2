@@ -1,4 +1,5 @@
 import { AST } from '@parser'
+import { Assert } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { testParseCode, testParseSyntax } from './test-parse'
 
@@ -36,7 +37,7 @@ Describe('parser: render prefixes', () => {
       view Main {
         state Caption is text = "Library"
         render Col {
-          accessible label Caption Leaf
+          accessible label (Caption) Leaf
           a11y label (Caption) "Quoted child"
           accessible label "Literal label" "Literal child"
         }
@@ -46,6 +47,7 @@ Describe('parser: render prefixes', () => {
       view Leaf { render inject \`\`\`ts return null \`\`\` }
     `)
     const root = AST.streamAllContents(parsed.entry.ast).find(AST.isRenderStatement)!
+    Expect(parsed.entry.document.parseResult.parserErrors).toEqual([])
     Expect(root.block!.statements.map(statement => statement.$type)).toEqual([
       'RenderAccessibilityStatement',
       'ViewRender',
@@ -57,8 +59,20 @@ Describe('parser: render prefixes', () => {
     const prefixes = root.block!.statements.filter(AST.isRenderAccessibilityStatement)
     Expect(prefixes.map(prefix => prefix.value.$type)).toEqual(['ValueReference', 'ValueReference', 'StringLiteral'])
     Expect(prefixes.map(prefix => prefix.spelling)).toEqual(['accessible', 'a11y', 'accessible'])
+    const caption = AST.streamAllContents(parsed.entry.ast).find(AST.isStateDeclaration)
+    Expect.Is(caption, AST.isStateDeclaration)
+    for (const prefix of prefixes.slice(0, 2)) {
+      Expect.Is(prefix.value, AST.isValueReference)
+      Expect(prefix.value.target.ref).toBe(caption)
+    }
     const children = root.block!.statements.filter(AST.isViewRender)
-    Expect(children[0]!.view.$refText).toBe('Leaf')
+    const firstChild = children[0]
+    Expect.Is(firstChild, AST.isViewRender)
+    Assert.defined(firstChild.view, 'the bare child after its prefix has a named view reference')
+    Expect(firstChild.view.$refText).toBe('Leaf')
+    Expect(AST.renderPrefixTarget(prefixes[0]!)).toBe(firstChild)
+    Expect(AST.renderPrefixTarget(prefixes[1]!)).toBe(children[1])
+    Expect(AST.renderPrefixTarget(prefixes[2]!)).toBe(children[2])
     Expect(children.slice(1).map(AST.isQuotedRender)).toEqual([true, true])
     Expect(children.slice(1).map(child => child.argumentList!.arguments[0]!.value.$cstNode!.text)).toEqual([
       '"Quoted child"',

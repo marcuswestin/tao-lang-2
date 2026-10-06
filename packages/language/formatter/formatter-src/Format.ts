@@ -1,6 +1,7 @@
 import { ActionsFormatter } from './formatters/ActionsFormatter'
 import { AliasesFormatter } from './formatters/AliasesFormatter'
 import { AppFormatter } from './formatters/AppFormatter'
+import { AssociatedMethodsFormatter } from './formatters/AssociatedMethodsFormatter'
 import { ConfigurationFormatter } from './formatters/ConfigurationFormatter'
 import { DataFormatter } from './formatters/DataFormatter'
 import { DesignFormatter } from './formatters/DesignFormatter'
@@ -8,6 +9,7 @@ import { ExpressionsFormatter } from './formatters/ExpressionsFormatter'
 import { FilesFormatter } from './formatters/FilesFormatter'
 import { InjectionsFormatter } from './formatters/InjectionsFormatter'
 import { NavigationFormatter } from './formatters/NavigationFormatter'
+import { NumericUnitsFormatter } from './formatters/NumericUnitsFormatter'
 import { PackageFormatter } from './formatters/PackageFormatter'
 import { RestorationFormatter } from './formatters/RestorationFormatter'
 import { ScenariosFormatter } from './formatters/ScenariosFormatter'
@@ -36,8 +38,10 @@ export const Format = {
   ...AliasesFormatter,
   ...ViewsFormatter,
   ...TypesFormatter,
+  ...AssociatedMethodsFormatter,
   ...StatementsFormatter,
   ...ExpressionsFormatter,
+  ...NumericUnitsFormatter,
   ...InjectionsFormatter,
   ...NavigationFormatter,
 } as const satisfies FormatHandlers

@@ -20,7 +20,8 @@ export const StateFormatter = {
   StateDeclaration(f) {
     f.oneSpaceAfter('state')
     f.oneSpaceAround('is')
-    f.oneSpaceAround('=')
+    f.oneSpaceBefore('=')
+    f.oneSpaceBeforeProperty('value')
     f.oneSpaceBefore('(')
   },
 } satisfies Partial<FormatHandlers>

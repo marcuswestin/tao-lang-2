@@ -12,7 +12,7 @@ const source = (version: string) => `
     action Set530() { set Width = 530 }
     Navigator StackNav { Initial Home }
   }
-  app Variant = Base with { id "com.tao.variant" version "${version}" }
+  app Variant = Base with { id "com.tao.variant", version "${version}" }
   scene Home() { Title "Home" render Empty() }
   view Empty() { render inject \`\`\`ts return null \`\`\` }
 `

@@ -9,7 +9,7 @@ import { managedChromePageMatches } from './ManagedLoopAcceptanceChrome'
 const reviewedFirebaseSources = [
   ['App.tao', '9766c64ca4fb02585633dc9c9457748e6f9b02416935e3a49d0b9e7e3ac6ff52'],
   ['Auth.tao', 'a54f7eefe96df2633cf420be934f970b9dc179c071c10ee0d9a9937f33712b59'],
-  ['Items/Items.tao', '6a312988e845c1b03e38a5bae2923ecf53477443a2f5523b0581407d38267fe9'],
+  ['Items/Items.tao', 'e5b7c23ff20554abb431288760be07efa5586868ad8a601ddc43479634a65bfa'],
   ['Data.tao', '51640ffc436f98f4186f40e93719e548a6357ac9f888edd23c2c7bb4e904a46c'],
 ] as const
 const reviewedFirebaseConnection = '19023f690abce9270fbce5b3ebaf78be7106cc5ffbcdf31d9213317a0762e591'

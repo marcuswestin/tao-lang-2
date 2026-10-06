@@ -23,14 +23,14 @@ Describe('validator: wildcard imports', () => {
         'Consumer/Main.tao': `use all from @widgets
         ${
           owner === 'app'
-            ? `view Root { render Widget }
+            ? `view Root() { render Widget }
              app Base { id "base" version "1.0.0" name "Base" ${requirement} view Root }
-             app Reader = Base with { id "reader" name "Reader" }`
+             app Reader = Base with { id "reader", name "Reader" }`
             : `package { name "Consumer" version 1.0.0 ${requirement} includes @ui }`
         }
         `,
         ...(owner === 'publication'
-          ? { 'Consumer/@ui/Root.tao': 'use all from @widgets\npublic view Root { render Widget }' }
+          ? { 'Consumer/@ui/Root.tao': 'use all from @widgets\npublic view Root() { render Widget }' }
           : {}),
       }),
     )

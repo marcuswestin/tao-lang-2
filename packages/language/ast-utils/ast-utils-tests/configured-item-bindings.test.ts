@@ -1,0 +1,322 @@
+import { Workspace } from '@compiler/workspace'
+import { AST, Parser } from '@parser'
+import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
+import { createAssociatedEffects } from '../ast-utils-src/associated-effect-context'
+import { ownAssociatedMethods } from '../ast-utils-src/associated-methods'
+import { ASTUtils } from '../ast-utils-src/ast-utils'
+import { Type } from '../ast-utils-src/Type'
+
+Describe('Actual configured item correspondence', () => {
+  Test('retains real reference entries, fields and payload domains in declaration order', async () => {
+    const file = await parse(`
+      type RowKey is text
+      type Caption is text
+      type Row is { Key RowKey, Caption Caption }
+      func Build(Key RowKey, Caption Caption) -> Row { return Row { Caption, Key } }
+    `)
+    const site = constructor(file, 'Build')
+    const plan = ASTUtils.resolveConfiguredItemConstruction(site)
+    Expect(plan.kind).toBe('complete')
+    Expect(plan.site).toBe(site)
+    Expect(plan.pairs[0]?.entry).toBe(site.block?.entries[1])
+    Expect(plan.pairs[1]?.entry).toBe(site.block?.entries[0])
+    for (const [index, pair] of plan.pairs.entries()) {
+      Expect(pair.field).toBe(plan.fields[index])
+      Expect(plan.operands[index]?.node).toBe(pair.entry)
+      Expect(pair.actual.kind).toBe('primitive')
+      Expect(pair.expected.kind).toBe('primitive')
+    }
+  })
+
+  Test('suppresses supplied defaults and retains actual omitted and filled expressions', async () => {
+    const file = await parse(`
+      let Foreign is text = Read from ./Native.ts
+      type Row is { First text is Foreign, Second text is "default", Fixed is "filled" }
+      func Build() -> Row { return Row { First: "safe" } }
+    `)
+    const site = constructor(file, 'Build')
+    const plan = ASTUtils.resolveConfiguredItemConstruction(site)
+    Expect(plan.kind).toBe('complete')
+    Expect(plan.operands.map(operand => operand.origin)).toEqual(['supplied', 'default', 'filled'])
+    Expect(plan.operands[0]?.node).toBe(site.block?.entries[0])
+    for (const index of [1, 2]) {
+      const field = plan.fields[index]
+      Expect.Is(field, AST.isTypeProperty)
+      Expect(plan.operands[index]?.node).toBe(field.value)
+    }
+    const first = plan.fields[0]
+    Expect.Is(first, AST.isTypeProperty)
+    Expect(plan.operands.some(operand => operand.node === first.value)).toBe(false)
+  })
+
+  Test('preserves concrete nested payload separately from expected capability', async () => {
+    const file = await parse(`
+      can Display { ToText() fails never -> text }
+      type HeaderLabel is text
+      type GroupHeader is { HeaderLabel HeaderLabel, func ToText() fails never -> text { return GroupHeader.HeaderLabel } }
+      type GroupedRow is { Content Display }
+      func Labeled(HeaderLabel HeaderLabel) -> GroupedRow { return GroupedRow { Content: GroupHeader { HeaderLabel } } }
+      func Named(HeaderLabel HeaderLabel) -> GroupedRow { return GroupedRow { Content GroupHeader { HeaderLabel } } }
+      func Bare(HeaderLabel HeaderLabel) -> GroupedRow { return GroupedRow { GroupHeader { HeaderLabel } } }
+    `)
+    const actual = file.statements.find(node => AST.isTypeDeclaration(node) && node.name === 'GroupHeader')
+    const expected = file.statements.find(node => AST.isTypeDeclaration(node) && node.name === 'Display')
+    for (const name of ['Labeled', 'Named', 'Bare']) {
+      const site = constructor(file, name)
+      const plan = ASTUtils.resolveConfiguredItemConstruction(site)
+      Expect(plan.kind).toBe('complete')
+      const pair = plan.pairs[0]
+      Expect(pair?.entry).toBe(site.block?.entries[0])
+      Expect(pair?.actual.kind === 'item' && pair.actual.nominal).toBe(actual)
+      Expect(pair?.expected.kind === 'capability' && pair.expected.declaration).toBe(expected)
+    }
+    const entry = constructor(file, 'Bare').block?.entries[0]
+    Expect.Is(entry, AST.isConfigurationEntry)
+    Expect(ASTUtils.resolveConfiguredItemConstruction(entry).operands[0]?.node).toBe(entry.block?.entries[0])
+  })
+
+  Test('tracks shorthand field types through nested header and row constructors', async () => {
+    const file = await parse(`
+      can Display { ToText() fails never -> text }
+      type HeaderLabel is text
+      type RowKey is text
+      type GroupHeader is {
+        HeaderLabel,
+        func ToText() fails never -> text { return GroupHeader.HeaderLabel }
+      }
+      type Row is { RowKey RowKey, Content Display }
+      type RowFactory is {
+        func Header(RowKey RowKey, Label HeaderLabel) fails never {
+          return Row { RowKey, Content: GroupHeader { HeaderLabel: Label } }
+        }
+      }
+      func Build(RowKey RowKey, Label HeaderLabel) -> Row {
+        return Row { RowKey, Content: GroupHeader { HeaderLabel: Label } }
+      }
+    `)
+    const build = file.statements.find(node => AST.isFunctionDeclaration(node) && node.name === 'Build')
+    Expect.Is(build, AST.isFunctionDeclaration)
+    const headerFactory = [...AST.streamAllContents(file)].find(
+      node => AST.isAssociatedFunctionDeclaration(node) && node.name === 'Header',
+    )
+    Expect.Is(headerFactory, AST.isAssociatedFunctionDeclaration)
+    const site = constructor(file, 'Build')
+    const headerConstructor = [site, ...AST.streamAllContents(site)].find(node =>
+      AST.isConfigurationConstructor(node) && node.type.ref?.name === 'GroupHeader'
+    )
+    Expect.Is(headerConstructor, AST.isConfigurationConstructor)
+    const nestedEntry = headerConstructor.block?.entries[0]
+    Expect.Is(nestedEntry, AST.isConfigurationEntry)
+    Expect(nestedEntry.label).toBe('HeaderLabel')
+    Expect.Is(nestedEntry.expression, AST.isValueReference)
+    const labelParameter = AST.parametersOf(build)[1]
+    Expect.Is(labelParameter, AST.isParameterDeclaration)
+    Expect(labelParameter.inlineType?.name).toBe('Label')
+    if (AST.isValueReference(nestedEntry.expression)) {
+      Expect(nestedEntry.expression.target.ref).toBe(labelParameter)
+    }
+    const outer = ASTUtils.resolveConfiguredItemConstruction(site)
+    const header = ASTUtils.resolveConfiguredItemConstruction(headerConstructor)
+    const headerType = file.statements.find(node => AST.isTypeDeclaration(node) && node.name === 'GroupHeader')
+    const headerLabelType = file.statements.find(node => AST.isTypeDeclaration(node) && node.name === 'HeaderLabel')
+    const rowKeyType = file.statements.find(node => AST.isTypeDeclaration(node) && node.name === 'RowKey')
+    Expect.Is(headerType, AST.isTypeDeclaration)
+    Expect.Is(headerLabelType, AST.isTypeDeclaration)
+    Expect.Is(rowKeyType, AST.isTypeDeclaration)
+    Expect.Is(build, AST.isFunctionDeclaration)
+    const headerShape = Type.ofDefinition(headerType)
+    Expect(headerShape.kind).toBe('item')
+    Expect(headerShape.kind === 'item' ? headerShape.item : undefined).toBeDefined()
+    if (headerShape.kind !== 'item' || !headerShape.item) {
+      return
+    }
+    const headerField = Type.itemFields(headerShape.item).find(entry =>
+      AST.isTypeProperty(entry) && entry.name === 'HeaderLabel'
+    )
+    Expect.Is(headerField, AST.isTypeProperty)
+    Expect(headerField.type).toBeUndefined()
+    Expect(headerField.value).toBeUndefined()
+    Expect(outer.kind).toBe('complete')
+    Expect(header.diagnostics.map(diagnostic => ({
+      kind: diagnostic.kind,
+      candidate: 'candidate' in diagnostic ? diagnostic.candidate.name ?? diagnostic.candidate.label : undefined,
+      target: 'target' in diagnostic ? diagnostic.target.name : undefined,
+    }))).toEqual([])
+    Expect(header.kind).toBe('complete')
+    Expect(header.pairs[0]?.entry).toBe(nestedEntry)
+    Expect(header.pairs[0]?.field).toBe(headerField)
+    Expect(header.pairs[0]?.actual.kind).toBe('primitive')
+    Expect(header.pairs[0]?.expected.kind).toBe('primitive')
+    if (header.pairs[0]?.actual.kind === 'primitive' && header.pairs[0]?.expected.kind === 'primitive') {
+      Expect(header.pairs[0].actual.primitive).toBe('text')
+      Expect(header.pairs[0].actual.nominal).toBe(headerLabelType)
+      Expect(header.pairs[0].expected.nominal).toBe(headerLabelType)
+    }
+    Expect(outer.pairs.map(pair => pair.field.name)).toEqual(['RowKey', 'Content'])
+    Expect(outer.pairs[0]?.entry).toBe(site.block?.entries[0])
+    Expect(outer.pairs[1]?.entry).toBe(site.block?.entries[1])
+    const rowKeyPair = outer.pairs[0]
+    Expect(rowKeyPair?.actual.kind).toBe('primitive')
+    Expect(rowKeyPair?.expected.kind).toBe('primitive')
+    if (rowKeyPair?.actual.kind === 'primitive' && rowKeyPair.expected.kind === 'primitive') {
+      Expect(rowKeyPair.actual.primitive).toBe('text')
+      Expect(rowKeyPair.actual.nominal).toBe(rowKeyType)
+      Expect(rowKeyPair.expected.nominal).toBe(rowKeyType)
+    }
+    const effects = createAssociatedEffects([file])
+    Expect(effects.analyses.get(build)?.effects).toEqual({
+      purity: { violations: [], open: false },
+      failures: { cases: [], open: false },
+    })
+    Expect(effects.analyses.get(headerFactory)?.effects).toEqual({
+      purity: { violations: [], open: false },
+      failures: { cases: [], open: false },
+    })
+  })
+
+  Test('returns invalid and unresolved evidence for genuine malformed sources', async () => {
+    const file = await parse(
+      `
+      type Pair is { Left text, Right text }
+      abstract type AbstractRow is { Caption text }
+      type Provider is nav with { Caption text }
+      func Missing() -> Pair { return Pair {} }
+      func Ambiguous(Value text) -> Pair { return Pair { Value } }
+      func Duplicate() -> Pair { return Pair { Left: "a", Left: "b", Right: "c" } }
+      func Invalid() -> Pair { return Pair { Wrong: "a", Right: "b" } }
+      func Abstract() -> AbstractRow { return AbstractRow { Caption: "x" } }
+      func Configurable() -> Provider { return Provider { Caption: "x" } }
+      func Unlinked() -> Pair { return Pair { Unknown } }
+    `,
+      ["No data entity or value named 'Unknown' is in scope."],
+    )
+    for (const name of ['Missing', 'Ambiguous', 'Duplicate', 'Invalid']) {
+      const plan = ASTUtils.resolveConfiguredItemConstruction(constructor(file, name))
+      Expect(plan.kind).toBe('invalid')
+      Expect(plan.diagnostics.length > 0).toBe(true)
+    }
+    Expect(ASTUtils.resolveConfiguredItemConstruction(constructor(file, 'Ambiguous')).pairs.length).toBe(0)
+    for (const name of ['Abstract', 'Configurable', 'Unlinked']) {
+      Expect(ASTUtils.resolveConfiguredItemConstruction(constructor(file, name)).kind).toBe('unresolved')
+    }
+  })
+
+  Test('binds the exact nominal field before a compatible optional capability field', async () => {
+    const file = await parse(`
+      can Display { ToText() fails never -> text }
+      type GroupHeader is { func ToText() fails never -> text { return "header" } }
+      type Row is { Concrete GroupHeader, Content Display? }
+      func Build() -> Row { return Row { GroupHeader {} } }
+    `)
+    const site = constructor(file, 'Build')
+    const plan = ASTUtils.resolveConfiguredItemConstruction(site)
+    Expect(plan.kind).toBe('complete')
+    Expect(plan.pairs.length).toBe(1)
+    Expect(plan.pairs[0]?.field.name).toBe('Concrete')
+    Expect(plan.pairs[0]?.entry).toBe(site.block?.entries[0])
+  })
+
+  Test('retains imported singular entity identities without admitting incompatible capabilities', async () => {
+    await withTaoFiles('configured-entity-binding-', {
+      'Library.tao': `
+        public data Books / Book {
+          Title text,
+          func Book.Label() fails never -> number { return 1 }
+        }
+      `,
+      'Example.tao': `
+        use Book from ./Library
+        can Display { Label() fails never -> text }
+        type Envelope is { Value Book }
+        type Row is { Content Display }
+        func Exact(Value Book) -> Envelope { return Envelope { Value } }
+        func Mismatch(Value Book) -> Row { return Row { Content: Value } }
+      `,
+    }, async paths => {
+      const parsed = await Workspace.parse(paths['Example.tao'])
+      Expect(parsed.entry.document.parseResult.lexerErrors).toEqual([])
+      Expect(parsed.entry.document.parseResult.parserErrors).toEqual([])
+      const file = parsed.entry.ast
+      const exact = ASTUtils.resolveConfiguredItemConstruction(constructor(file, 'Exact'))
+      Expect(exact.kind).toBe('complete')
+      const pair = exact.pairs[0]
+      Expect(pair?.actual.kind).toBe('entity')
+      if (pair?.actual.kind !== 'entity') {
+        return
+      }
+      const entity = pair.actual.entity
+      Expect(pair.expected.kind === 'entity' && pair.expected.entity).toBe(entity)
+      Expect(entity.singularName).toBe('Book')
+      const visible = AST.visibleFileDeclarations(constructor(file, 'Exact'), AST.isEntityDataDeclaration)
+      Expect(visible.includes(entity)).toBe(true)
+      const method = ownAssociatedMethods(entity)[0]
+      Expect.Is(method, AST.isAssociatedFunctionDeclaration)
+      const descriptor = Type.associatedCallable(method, entity)
+      Expect(descriptor.kind).toBe('ready')
+      if (descriptor.kind === 'ready') {
+        Expect(descriptor.descriptor.owner).toBe(entity)
+        Expect(descriptor.descriptor.declaration).toBe(method)
+      }
+      const mismatch = ASTUtils.resolveConfiguredItemConstruction(constructor(file, 'Mismatch'))
+      Expect(mismatch.kind).toBe('invalid')
+      Expect(mismatch.diagnostics.some(diagnostic => diagnostic.kind === 'named-type')).toBe(true)
+    }, { location: 'worktree' })
+  })
+
+  Test('retains an imported entity implementation when admitting a matching capability field', async () => {
+    await withTaoFiles('configured-entity-capability-', {
+      'Library.tao': `
+        public data Books / Book {
+          Title text,
+          func Book.Label() fails never -> text { return Book.Id }
+        }
+      `,
+      'Example.tao': `
+        use Book from ./Library
+        can Display { Label() fails never -> text }
+        type Row is { Content Display }
+        func Build(Value Book) -> Row { return Row { Content: Value } }
+      `,
+    }, async paths => {
+      const parsed = await Workspace.parse(paths['Example.tao'])
+      Expect(parsed.entry.document.parseResult.lexerErrors).toEqual([])
+      Expect(parsed.entry.document.parseResult.parserErrors).toEqual([])
+      const site = constructor(parsed.entry.ast, 'Build')
+      const plan = ASTUtils.resolveConfiguredItemConstruction(site)
+      Expect(plan.kind).toBe('complete')
+      Expect(plan.pairs.length).toBe(1)
+      const pair = plan.pairs[0]!
+      Expect(pair.entry).toBe(site.block?.entries[0])
+      Expect(pair.actual.kind).toBe('entity')
+      Expect(pair.expected.kind).toBe('capability')
+      if (pair.actual.kind !== 'entity') {
+        return
+      }
+      const entity = pair.actual.entity
+      const method = ownAssociatedMethods(entity)[0]
+      Expect.Is(method, AST.isAssociatedFunctionDeclaration)
+      const descriptor = Type.associatedCallable(method, entity)
+      Expect(descriptor.kind).toBe('ready')
+      if (descriptor.kind === 'ready') {
+        Expect(descriptor.descriptor.owner).toBe(entity)
+        Expect(descriptor.descriptor.declaration).toBe(method)
+      }
+    }, { location: 'worktree' })
+  })
+})
+
+async function parse(source: string, diagnostics: readonly string[] = []): Promise<AST.TaoFile> {
+  const parsed = await Parser.parseCode(source, { validation: false })
+  Expect(parsed.entry.document.parseResult.lexerErrors).toEqual([])
+  Expect(parsed.entry.document.parseResult.parserErrors).toEqual([])
+  Expect(parsed.diagnostics.map(diagnostic => diagnostic.message)).toEqual(diagnostics)
+  return parsed.entry.ast
+}
+
+function constructor(file: AST.TaoFile, name: string): AST.ConfigurationConstructor {
+  const owner = file.statements.find(node => AST.isFunctionDeclaration(node) && node.name === name)
+  Expect.Is(owner, AST.isFunctionDeclaration)
+  const site = AST.streamAllContents(owner).find(AST.isConfigurationConstructor)
+  Expect.Is(site, AST.isConfigurationConstructor)
+  return site
+}

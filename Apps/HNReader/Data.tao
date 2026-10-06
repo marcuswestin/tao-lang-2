@@ -7,7 +7,7 @@ use Local from @tao/data/providers/local
 // through iCloud, and reading history belongs to this device. Each datasource states the collections
 // it stores, and cross-store rows name stories with a `reference`.
 type HNSource is Http with {
-   Adapter item is HNAdapter from ./HNAdapter.ts
+   Adapter item is HNAdapter from ./HNAdapter.ts,
    CacheFor duration is 5.min
 }
 

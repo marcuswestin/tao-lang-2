@@ -1,0 +1,20 @@
+use Keyed from ./Keyed
+
+// The ordinal belongs to this displayed sequence and starts at one.
+public
+type Occurrence is {
+   Ordinal number
+}
+
+public
+type ListFailure is one of DuplicateKey
+
+// Identity and virtualization are library policy; the item renderer stays caller-owned.
+public
+view LazyList where type T is Keyed (Items list of T) {
+   @item(Item T, Occurrence): empty
+   render KeyedList(Items, DuplicateKey) {
+      @item: @item
+}  }
+
+view KeyedList where type T is Keyed (Items list of T, DuplicateKey ListFailure) accepts slots @item(Item T, Occurrence) from ./LazyList.tsx

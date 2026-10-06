@@ -72,7 +72,7 @@ function outlineNodesOf(statements: readonly AST.Statement[]): OutlineNode[] {
     if (!owner) {
       continue
     }
-    if (AST.isForStatement(node)) {
+    if (AST.isForStatement(node) && AST.isBlock(node.block)) {
       nodes.push({ kind: 'collection', loop: node, owner })
     } else if (AST.isRender(node)) {
       const descriptor = ASTUtils.outlineControlDescriptor(node)

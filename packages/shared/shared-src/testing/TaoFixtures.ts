@@ -49,8 +49,8 @@ export function promptTagsApp(): string {
 
     let StarterTags = PromptTags ["daily", "warmup"]
     let StarterPrompt = WritingPrompt {
-      PromptTitle: "Morning pages"
-      PromptMinutes: 10
+      PromptTitle: "Morning pages",
+      PromptMinutes: 10,
       StarterTags
     }
 
@@ -89,21 +89,21 @@ export function primitiveAppValueSpellings(navImplementation = 'nav TestNavImpl 
       Navigator HeadNavigation
     }
     app HeadWithApp = app with {
-      id "tao-test-head-with"
-      version "1.0.0"
-      name "Head with"
+      id "tao-test-head-with",
+      version "1.0.0",
+      name "Head with",
       Navigator HeadWithNavigation
     }
     project let LetApp = app {
-      id "tao-test-let"
-      version "1.0.0"
-      name "Let"
+      id "tao-test-let",
+      version "1.0.0",
+      name "Let",
       Navigator LetNavigation
     }
     project let LetWithApp = app with {
-      id "tao-test-let-with"
-      version "1.0.0"
-      name "Let with"
+      id "tao-test-let-with",
+      version "1.0.0",
+      name "Let with",
       Navigator LetWithNavigation
     }
 

@@ -183,7 +183,7 @@ Describe('effective app identity', () => {
       'Main.tao': `
         ${view}
         app Base { id "example" version "1.0.0-beta.1" name "Base" view Root }
-        app Derived = Base with { id "derived" name "Derived" }
+        app Derived = Base with { id "derived", name "Derived" }
       `,
     }),
   )
@@ -238,7 +238,7 @@ Describe('app requirement ownership', () => {
         use Widget from @parts
         ${reachableView}
         app Base { id "base" version "1.0.0" name "Base" ${appRequirement} view Root }
-        app Reader = Base with { id "reader" name "Reader" }
+        app Reader = Base with { id "reader", name "Reader" }
       `,
     }),
   )

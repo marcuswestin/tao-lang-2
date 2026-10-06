@@ -69,7 +69,7 @@ Describe('parser: injections', () => {
   })
 })
 
-function valueDeclarationName(declaration: AST.ValueDeclaration | undefined): string | undefined {
+function valueDeclarationName(declaration: AST.ValueReferenceTarget | undefined): string | undefined {
   if (!declaration) {
     return undefined
   }

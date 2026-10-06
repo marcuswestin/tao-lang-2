@@ -9,8 +9,8 @@ Describe('app persisted binding compilation', () => {
   Test('initializes a forward-declared same-module base before its derived app', async () => {
     const compiled = await TestCompiler.compileCode(
       `
-      app Variant = Base with { id "com.tao.variant" version "1.0.0" }
-      app Final = Variant with { id "com.tao.final" version "1.0.0" }
+      app Variant = Base with { id "com.tao.variant", version "1.0.0" }
+      app Final = Variant with { id "com.tao.final", version "1.0.0" }
       let Marker is number = 10
       app Base { id "com.tao.base" version "1.0.0" name "Base" view Empty }
       view Empty() { render inject ${tsFence} return null ${fence} }
@@ -122,7 +122,7 @@ Describe('app persisted binding compilation', () => {
         action ChangeWidth(Value number) { set Width = Value }
         Navigator StackNav { Initial Home(Width: Width, ChangeWidth: ChangeWidth) }
       }
-      app Variant = Base with { id "com.tao.variant" version "2.0.0" }
+      app Variant = Base with { id "com.tao.variant", version "2.0.0" }
       scene Home(Width number, ChangeWidth action(number)) { Title "Home" render Empty() }
       view Empty() { render inject ${tsFence} return null ${fence} }
     `,
@@ -152,7 +152,7 @@ Describe('app persisted binding compilation', () => {
         action ChangeWidth() { set Width = 321 }
         Navigator StackNav { Initial Home(Width: Width, ChangeWidth: ChangeWidth) }
       }
-      app Variant = Base with { id "com.tao.variant" version "2.0.0"
+      app Variant = Base with { id "com.tao.variant", version "2.0.0"
         Navigator StackNav { Initial Preview(Width: Width, ChangeWidth: ChangeWidth) }
       }
       scene Home(Width number, ChangeWidth action()) { Title "Home" render Empty() }
@@ -224,7 +224,7 @@ Describe('app persisted binding compilation', () => {
         use Base from ./Base.tao
         use StackNav from @tao/nav
         app Variant = Base with {
-          id "com.tao.variant" version "2.0.0"
+          id "com.tao.variant", version "2.0.0"
           Navigator StackNav { Initial Preview }
         }
         view Preview() { render inject ${tsFence} return null ${fence} }
@@ -263,10 +263,10 @@ Describe('app persisted binding compilation', () => {
         let Width is number = 10
         action ChangeWidth() { }
         app Variant = Base with {
-          id "com.tao.variant" version "2.0.0"
+          id "com.tao.variant", version "2.0.0"
           Navigator StackNav { Initial Preview(Width: Width, ChangeWidth: ChangeWidth) }
         }
-        app Inherited = Base with { id "com.tao.inherited" version "2.0.0" }
+        app Inherited = Base with { id "com.tao.inherited", version "2.0.0" }
         scene Preview(Width number, ChangeWidth action()) { Title "Preview" render Empty() }
         view Empty() { render inject ${tsFence} return null ${fence} }
       `,

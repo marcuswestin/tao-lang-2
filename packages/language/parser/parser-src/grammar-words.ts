@@ -39,6 +39,7 @@ const DECLARATION_WORDS: Readonly<Record<string, string>> = {
   TypeDeclaration: 'type',
   UsePackageStatement: 'package',
   ValueDeclaration: 'value',
+  ValueReferenceTarget: 'value',
   ViewDeclaration: 'view',
 }
 
@@ -54,6 +55,7 @@ const TOKEN_WORDS: Readonly<Record<string, string>> = {
   INTERPOLATED_STRING_START: 'a quoted string',
   INTERPOLATION_START: 'an interpolation',
   NUMBER: 'a number',
+  NUMERIC_UNIT_ID: 'a lowercase unit name',
   STRING: 'a quoted string',
   STRING_END: 'the end of a quoted string',
   STRING_TEXT: 'text inside a quoted string',

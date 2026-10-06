@@ -9,7 +9,7 @@ import "./visibility"
 import "./terminals"
 
 entry ViewsGrammarEntrypoint:
-    ViewDeclaration;
+    ViewDeclaration | AssociatedViewDeclaration;
 
 TagStatement:
     tag=TagOrHexColor;
@@ -40,9 +40,15 @@ ViewCommandExclusion:
 // the body sets stays private.
 ViewDeclaration:
     visibility=DeclarationVisibility? (scene?='scene' | 'view') name=ID
+    ('where' genericParameters+=GenericTypeParameter (',' genericParameters+=GenericTypeParameter)*)?
     (parameterList=ParameterList? ('responds' response=[TypeDeclaration:ID])? layoutClause=LayoutClause?
         (block=ViewBlock | foreign=ForeignViewImplementation)
         | '=' aliasTarget=PackageMemberReference);
+
+// An associated view inherits its owner's visibility and mounts with that owner's bound receiver.
+AssociatedViewDeclaration:
+    'view' (receiverName=ID '.')? name=ID parameterList=ParameterList?
+    layoutClause=LayoutClause? block=ViewBlock;
 
 ForeignViewImplementation:
     // Parse `content` as an ID and validate its spelling so the canonical layout word remains an ID
@@ -51,7 +57,7 @@ ForeignViewImplementation:
     'from' path=USE_IMPORT_PATH;
 
 ForeignViewSlotDeclaration:
-    name=USE_IMPORT_PATH;
+    name=USE_IMPORT_PATH parameterList=ParameterList?;
 
 // The source is context-sensitive here: bare supplied slots belong only to declaration bodies,
 // while nested render blocks retain the ordinary statement grammar. Returning Block preserves the
@@ -59,35 +65,61 @@ ForeignViewSlotDeclaration:
 ViewBlock returns Block:
     '{' statements+=ViewStatement* '}';
 
-// Views own optional, single-fill visual holes. A use without a render value places the slot in
-// the declaring view's implementation; a use with a render value fills that slot at one call site.
+// Views own renderer contracts. Bare and argument-bearing uses place a slot in the declaring
+// view's implementation; colon uses fill the receiving view's slot at one call site.
 RenderSlotDeclaration:
-    name=USE_IMPORT_PATH '=' 'empty';
+    name=USE_IMPORT_PATH parameterList=ParameterList ':'
+      (renderer=[ViewDeclaration:ID] | empty?='empty')
+    | name=USE_IMPORT_PATH ':'
+      (render=QualifiedSlotInlineRender | renderer=[ViewDeclaration:ID] | empty?='empty' | render=SlotInlineRender | block=Block)?
+    | name=USE_IMPORT_PATH '=' empty?='empty';
 
 type RenderSlotContract = RenderSlotDeclaration | ForeignViewSlotDeclaration;
 
 RenderSlotUse:
-    slot=[RenderSlotContract:USE_IMPORT_PATH] render=ViewRender?;
+    slot=[RenderSlotContract:USE_IMPORT_PATH]
+    ((inputBindings+=RenderSlotInputBinding (',' inputBindings+=RenderSlotInputBinding)*
+      | '(' inputBindings+=RenderSlotInputBinding (',' inputBindings+=RenderSlotInputBinding)* ')')
+      fill?='->' render=ViewRender
+    | fill?=':' (forwardedSlot=[RenderSlotContract:USE_IMPORT_PATH] | render=QualifiedSlotInlineRender | renderer=[ViewDeclaration:ID] | empty?='empty' | render=SlotInlineRender | block=Block)?
+    | ('(' argumentList=ArgumentList? ')')?);
+
+// Inline renderer names receive their types from the receiving slot's ordinary input contract.
+RenderSlotInputBinding:
+    name=ID;
+
+// A bare identifier is a named renderer target. Calls, quotations and decorated named renders are
+// real zero-input inline bodies and retain the standard ViewRender AST shape.
+SlotInlineRender returns ViewRender:
+    (quotation=PhraseText
+    | expression=(MemberMethodCallExpression | MemberAccessExpression)
+    | view=[RenderTarget:ID] ('(' argumentList=ArgumentList? ')')?)
+    layoutClause=LayoutClause? block=Block?;
+
+// Qualified targets must be distinguished before a bare supplied renderer reference consumes its ID.
+QualifiedSlotInlineRender returns ViewRender:
+    expression=(MemberMethodCallExpression | MemberAccessExpression)
+    layoutClause=LayoutClause? block=Block?;
 
 // A content-accepting view places its opaque unnamed caller content explicitly in its render tree.
 CallerContentStatement:
     {infer CallerContentStatement} '@@content';
 
-// A render site names a view declaration, a nav declaration, or a parameter of the owning view whose
-// type is `view`, `scene`, or `nav`. `nav is scene is view`, so everything that renders a view renders a
-// nav: a shell is ordinary layout holding its navigator, and a nav-typed parameter is how one shell
-// serves every configured navigator. A nav or a parameter renders as the value it was bound to, so it
-// takes no arguments, content, or events of its own; the validator diagnoses those at the render site.
-type RenderTarget = ViewDeclaration | NavDeclaration | ParameterDeclaration;
+// A render site names a view, nav, or a value declaration in the owning lexical scope. Text-valued
+// aliases, states, and parameters render as text; view-, scene-, and nav-typed parameters retain
+// their value-rendering behavior. A value render takes no arguments, content, or events of its own.
+type RenderTarget = ViewDeclaration | NavDeclaration | AliasDeclaration | StateDeclaration | ParameterDeclaration | RenderSlotInputBinding | ForStatement;
 
 RenderStatement:
     'render' (injection=Injection layoutClause=LayoutClause?
-        | (view=[RenderTarget:ID] ('(' argumentList=ArgumentList? ')')?
+        | (expression=(MemberMethodCallExpression | MemberAccessExpression)
+           | view=[RenderTarget:ID] ('(' argumentList=ArgumentList? ')')?
            | quotation=PhraseText) layoutClause=LayoutClause? block=Block?);
 
 // Quotation lowering supplies the ordinary view reference before consumers see this node.
 interface ViewRender {
-    view: @RenderTarget
+    view?: @RenderTarget
+    expression?: Expression
     argumentList?: ArgumentList
     quotation?: Expression
     layoutClause?: LayoutClause
@@ -95,13 +127,14 @@ interface ViewRender {
 }
 
 ViewRender returns ViewRender:
-    (view=[RenderTarget:ID] ('(' argumentList=ArgumentList? ')')?
+    (expression=(MemberMethodCallExpression | MemberAccessExpression)
+     | view=[RenderTarget:ID] ('(' argumentList=ArgumentList? ')')?
      | quotation=PhraseText) layoutClause=LayoutClause? block=Block?;
 
 EventHandler:
     'on' event=EventName
-    (controls=NativeEventControls '->' (action=ValueReference | payload=CasePayload? block=ActionBlock)
-     | action=ValueReference | '->' payload=CasePayload? block=ActionBlock);
+    (controls=NativeEventControls '->' (action=ValueReference | payload=CasePayload? block=(ActionBlock | AtomicActionBlock))
+     | action=ValueReference | '->' payload=CasePayload? block=(ActionBlock | AtomicActionBlock));
 
 // Control names remain identifiers so misspellings receive positioned semantic diagnostics.
 NativeEventControls:
@@ -115,18 +148,18 @@ EventName returns string:
 
 type Render = RenderStatement | ViewRender;
 
-// `otherwise` makes every subject render conditional total and terminates the branch list unambiguously.
+// A render conditional may omit its fallback; a subject with no matching branches then renders nothing.
 WhenRenderStatement:
     'when' (subject=SubjectExpression
-      ('{' branches+=WhenRenderBranch* otherwise=WhenRenderOtherwise '}'
-       | branches+=BarWhenRenderBranch* otherwise=BarWhenRenderOtherwise)
-      | branches+=PredicateWhenRenderBranch* otherwise=BarWhenRenderOtherwise);
+      ('{' branches+=WhenRenderBranch* otherwise=WhenRenderOtherwise? '}'
+       | branches+=BarWhenRenderBranch* otherwise=BarWhenRenderOtherwise?)
+      | branches+=PredicateWhenRenderBranch* otherwise=BarWhenRenderOtherwise?);
 
 WhenRenderBranch:
-    case=SubjectCaseName '->' payload=CasePayload? block=(Block | AtomicRenderBlock);
+    case=SubjectCaseName payload=CasePayload? '->' block=(Block | AtomicRenderBlock);
 
 BarWhenRenderBranch infers WhenRenderBranch:
-    barSyntax?='|' case=SubjectCaseName '->' payload=CasePayload? block=(Block | AtomicRenderBlock);
+    barSyntax?='|' case=SubjectCaseName payload=CasePayload? '->' block=(Block | AtomicRenderBlock);
 
 PredicateWhenRenderBranch infers WhenRenderBranch:
     barSyntax?='|' condition=OrExpression '->' block=(Block | AtomicRenderBlock);
@@ -176,7 +209,9 @@ GuardDefaultStatement:
     'guard' 'default' '{' branches+=GuardDefaultBranch+ '}';
 
 AppGuardBranch:
-    case=SubjectCaseName '->' (payload=CasePayload? block=Block | render=ViewRender);
+    case=SubjectCaseName (
+      payload=CasePayload '->' (block=Block | render=ViewRender)
+      | '->' (payload=CasePayload? block=Block | render=ViewRender));
 
 GuardDefaultBranch:
     case=SubjectCaseName '->' (payload=CasePayload? block=Block | render=ViewRender);
