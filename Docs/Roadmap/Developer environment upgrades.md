@@ -101,6 +101,7 @@ change that addressed it.
 - [DEVENV-FILE-WATCHING-DEPENDS-ON-A-WATCHMAN-NO-AGENT-CAN-START — File watching depends on a Watchman server no agent can start](<Developer environment upgrades/DEVENV-FILE-WATCHING-DEPENDS-ON-A-WATCHMAN-NO-AGENT-CAN-START.md>) — Candidate
 - [DEVENV-GIT-WORKTREE-TIMEOUTS-RECUR-AFTER-COMPLETION-REPAIR — Git worktree timeouts recur after completion repair](<Developer environment upgrades/DEVENV-GIT-WORKTREE-TIMEOUTS-RECUR-AFTER-COMPLETION-REPAIR.md>) — Candidate
 - [DEVENV-HOOK-REVIEW-IGNORES-DESCRIPTIVE-NAMES — Hook review ignores descriptive names](<Developer environment upgrades/DEVENV-HOOK-REVIEW-IGNORES-DESCRIPTIVE-NAMES.md>) — Blocked
+- [DEVENV-HOST-CONTROLS-COLD-BUILD-TIMEOUTS — Host controls cold builds time out](<Developer environment upgrades/DEVENV-HOST-CONTROLS-COLD-BUILD-TIMEOUTS.md>) — Candidate
 - [DEVENV-HOST-EFFECT-LINT-BASELINE-FINDINGS — Host effect lint has baseline findings](<Developer environment upgrades/DEVENV-HOST-EFFECT-LINT-BASELINE-FINDINGS.md>) — Candidate
 - [DEVENV-IOS-BUILDS-LACK-COCOAPODS-METADATA-ACCESS — iOS builds lack CocoaPods metadata access](<Developer environment upgrades/DEVENV-IOS-BUILDS-LACK-COCOAPODS-METADATA-ACCESS.md>) — In progress
 - [DEVENV-LANDING-TESTS-A-CODEX-CONFIG-IT-NEVER-REGENERATED — A landing tests a Codex config it never regenerated](<Developer environment upgrades/DEVENV-LANDING-TESTS-A-CODEX-CONFIG-IT-NEVER-REGENERATED.md>) — Candidate

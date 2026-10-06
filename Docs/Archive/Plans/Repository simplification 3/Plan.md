@@ -67,3 +67,10 @@ scope checks. All five mutated source files were restored byte-for-byte before r
 The opt-in host effect lint has 19 existing findings, reproduced from the base commit. Its open
 ledger entry records the boundary repair separately. The native timestamp entry is resolved and
 archived; real native/device acceptance and the persistent controller remain open.
+
+Current main through `4f3b2ca44` was integrated. The generated ledger-index conflict was resolved
+by regeneration. Scenario QA discovery, Studio preview activation/CI behavior and hosted Linux
+gate/shard changes do not replace or contradict the driver fixes; the same reviewer checked those
+seams. Post-integration CDP checks and typecheck passed. Cold-build timeouts remain a separate
+open verification issue with retained receipts; the initial full control pass and later passing
+driver assertions must not be described as a green later control lane.
