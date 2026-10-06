@@ -466,8 +466,10 @@ and Companion URL installation remain deferred.
 
 Installation reports its active phases, elapsed timings, and npm invocation count. It delegates
 checking and repairing each selected npm installation to npm, including on repeated installs. Each
-dependency origin's aliases share one npm tree installed by one invocation, so a peer they share is
-installed once; a scoped install keeps the aliases an earlier install linked into that tree.
+dependency origin's aliases share one npm tree installed by one invocation; a scoped install keeps
+the aliases an earlier install linked into that tree. Peer dependencies are not installed into it:
+they resolve from the host the app runs in, so a package such as `expo` or `react-native` is never
+bundled twice.
 Repeated installs preserve unchanged managed manifests and alias links. npm uses its ordinary
 cache and lock behavior; Tao does not maintain a separate installation-validity cache.
 

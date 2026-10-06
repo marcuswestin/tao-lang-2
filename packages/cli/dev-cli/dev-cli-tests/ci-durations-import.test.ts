@@ -106,6 +106,8 @@ function fakeDependencies(root: string, options: { token?: string; ghToken?: str
             { expired: false, id: 1001, name: 'verify-partition-1' },
             { expired: false, id: 9999, name: 'something-else' },
             { expired: false, id: 1002, name: 'verify-partition-2' },
+            // A first attempt's partition 2, superseded by the re-run's 1002; never downloaded.
+            { expired: false, id: 998, name: 'verify-partition-2' },
           ],
         })
       }
