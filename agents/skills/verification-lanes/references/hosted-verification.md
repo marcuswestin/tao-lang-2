@@ -81,15 +81,16 @@ diagnostic, never merge evidence; reassess machine contention before starting on
 ### What a partition spends before its first test
 
 Every partition repeats a fixed cost: checkout and cache restores, the bootstrap, and the prepare
-phase. Measured before this work, on a 10-partition run: about 24 s restoring `node_modules`,
-about 36 s bootstrapping, and 35–51 s of prepare-phase critical path. The bootstrap runs
+phase. Measured on a 10-partition run before setup was trimmed: about 71 s before the prepare
+phase, including about 36 s bootstrapping, and 35–51 s of prepare-phase critical path. The bootstrap runs
 `--verify-setup`, which prepares only what gates read, and skips native bindings when their
 freshness check proves them current. The `node_modules` cache leaves out Jazz's other-platform
 binaries. The prepare phase stays in each partition: running it once in `plan` adds more serial
-time than it saves, and each partition must still fail on unformatted or stale generated files. Its
-longest node, the editor build, skips when its recorded inputs and outputs both match, and Verify
-caches that build; a stale or foreign restore costs only a rebuild. Read a run's per-step times
-before trusting these figures.
+time than it saves, and each partition must still fail on unformatted or stale generated files. The
+editor build skips when its recorded inputs and outputs both match, which helps repeat local builds.
+Verify does not cache it: the WordFlower compile beside it is as long, so a restore saved no critical
+path. Measured after, on an 11-partition run: about 46 s before the prepare phase. Read a run's
+per-step times before trusting these figures.
 
 Hosted `Verify` is the final portable proof even when a local lane would finish sooner; contention
 decides only when to run a diagnostic lane, never which machine proves the merge. A failed check
