@@ -13,7 +13,7 @@ other `Verify` run is in flight and 11 when one is; the `VERIFY_PARTITIONS` and
 overrides both for one run, and `open-pr` waits before pushing while two runs are already in flight.
 It currently has PR, main-push and dispatch triggers, but no `merge_group` trigger. Complete
 the queue prerequisites before requiring native merge queue. The live landing contract is in
-[`hosted-verification.md`](../../agents/skills/verification-lanes/references/hosted-verification.md).
+[`landing/SKILL.md`](../../agents/skills/landing/SKILL.md).
 
 Measured on 2026-10-06 over fourteen landings through that route: push to merged took 6 min 30 s
 to 9 min 57 s for a lone landing, 11–16 min for two or three overlapping (admission sizes each at

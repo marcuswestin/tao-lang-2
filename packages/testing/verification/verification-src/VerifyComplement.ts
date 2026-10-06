@@ -77,6 +77,8 @@ export function runsOnPullRequests(workflowText: string): boolean {
 /**
  * isHostGate names the gates only an unsandboxed macOS host can run. A gate hosted `Verify`'s Linux
  * partitions run (`runsOnHostedLinux`) is not one: `Verify` proves it, so the complement leaves it out.
+ * That holds only while verify.yml's partition step passes `--hosted-linux`; without it the
+ * partitions skip the gate, and verify-complement.test.ts reads the workflow to keep the two tied.
  */
 export function isHostGate(name: string): boolean {
   const gate = GateCatalog.metadata(name)
