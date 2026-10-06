@@ -78,6 +78,19 @@ diagnostic, never merge evidence; reassess machine contention before starting on
   infer free capacity from missing data or invent a repository command. State the local evidence,
   CI evidence, coverage, and chosen route briefly.
 
+### What a partition spends before its first test
+
+Every partition repeats a fixed cost: checkout and cache restores, the bootstrap, and the prepare
+phase. Measured before this work, on a 10-partition run: about 24 s restoring `node_modules`,
+about 36 s bootstrapping, and 35–51 s of prepare-phase critical path. The bootstrap runs
+`--verify-setup`, which prepares only what gates read, and skips native bindings when their
+freshness check proves them current. The `node_modules` cache leaves out Jazz's other-platform
+binaries. The prepare phase stays in each partition: running it once in `plan` adds more serial
+time than it saves, and each partition must still fail on unformatted or stale generated files. Its
+longest node, the editor build, skips when its recorded inputs and outputs both match, and Verify
+caches that build; a stale or foreign restore costs only a rebuild. Read a run's per-step times
+before trusting these figures.
+
 Hosted `Verify` is the final portable proof even when a local lane would finish sooner; contention
 decides only when to run a diagnostic lane, never which machine proves the merge. A failed check
 still needs diagnosis; switching machines is not permission to ignore a failure.
