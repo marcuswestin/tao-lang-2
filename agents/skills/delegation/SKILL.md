@@ -35,15 +35,11 @@ Send one when the exchange buys something a subagent of your own would not, and 
 
 ## Model and effort routing
 
-Choose the model and effort for every spawn explicitly; ignore personal, harness, and project
-defaults and parent inheritance. Pass the chosen model and effort as spawn arguments when the
-tool accepts them. If a history-fork mode forbids overrides, use a self-contained brief in a mode
-that allows them; if a role fixes its model or effort, choose a role whose pins match the work.
-Report unavailable choices rather than silently falling back to defaults.
+**Every agent you create runs a lower model tier than you do.** This holds for every way of creating one: a subagent, a spawned session (a `spawn_task` chip, a started or forked session), a workflow's agents, a teammate. A frontier parent creates standard or fast agents; a standard parent creates standard or fast; the frontier tier is for the Developer's own primary session and is never chosen for an agent you create unless the Developer asked for it in the current request. A parent that lets a child inherit its model has made no choice, and inheritance is how a whole fleet ends up on the most expensive model. Choose the model and effort for every spawn explicitly; ignore personal, harness, and project defaults and parent inheritance. Pass them as spawn arguments when the tool accepts them. When it does not (a spawned session inherits the app's default model), set them right after the session starts with the session-management model and effort tools, or make the brief's first instruction have the new session set its own; either way, confirm the resolved model before handing it work. If a history-fork mode forbids overrides, use a self-contained brief in a mode that allows them; if a role fixes its model or effort, choose a role whose pins match the work. Report unavailable choices rather than silently falling back to defaults.
 
-Use medium for most work; high only for deep analysis/research, except already planned code writing uses newest GPT-6 Luna at high. Newest GPT-6 Sol determines implementation approaches and writes code only for intricate processes whose implementation is unsettled; hand settled work to Luna. Routine mechanical work may use Luna at low.
+**Effort is a deliberate choice, not a dial left at maximum.** Use medium for most work; high only for deep analysis/research, except already planned code writing uses newest GPT-6 Luna at high. Effort above high (`xhigh`) is rare: it needs a strong, specific reason that medium and high cannot meet, written in the brief, and it is never used for reviews, sweeps, verification, or a whole-slice session. Newest GPT-6 Sol determines implementation approaches and writes code only for intricate processes whose implementation is unsettled; hand settled work to Luna. Routine mechanical work may use Luna at low.
 
-All subagent reviews, including architecture, use medium or low. Sol extra-high (`xhigh`) is exceptionally rare, never for reviews; record why high is insufficient in the brief. These rules govern primary agents and subagents where selectable; avoid incompatible fixed roles. Light means `low`. GPT family choices override tier labels. Other harnesses retain the table's newest available family and the review ceiling; concrete IDs are defaults, not version ceilings. Preserve supported rolling aliases; never invent one.
+All subagent reviews, including architecture, use medium or low. These rules govern primary agents and subagents where selectable; avoid incompatible fixed roles. Light means `low`. GPT family choices override tier labels. Other harnesses retain the table's newest available family and the review ceiling; concrete IDs are defaults, not version ceilings. Preserve supported rolling aliases; never invent one.
 
 | Work                                                    | Tier                             | Effort        |
 | ------------------------------------------------------- | -------------------------------- | ------------- |
@@ -54,7 +50,7 @@ All subagent reviews, including architecture, use medium or low. Sol extra-high 
 | All subagent reviews                                    | deep                             | medium or low |
 | Deep analysis or research                               | deep                             | high          |
 | Unsettled intricate implementation                      | standard                         | medium        |
-| Language semantics and expensive decisions              | frontier                         | medium        |
+| Language semantics and expensive decisions              | deep; frontier only on request   | medium        |
 
 | Tier     | Claude Code `model` | Codex CLI `model` | Cursor `model`     |
 | -------- | ------------------- | ----------------- | ------------------ |
@@ -63,13 +59,15 @@ All subagent reviews, including architecture, use medium or low. Sol extra-high 
 | deep     | `opus`              | `gpt-6.1-sol`     | `claude-opus-5-5`  |
 | frontier | `fable`             | `gpt-6.1-sol`     | `claude-fable-5-1` |
 
+The frontier row exists so the table can name what the Developer runs; an agent creating another agent reads it as off limits (the lower-tier rule above), and the Developer's explicit request in the current task is the only thing that puts a created agent on it.
+
 `repo-lint` checks profile pins against this table; Codex `[agents]` defaults come from the standard row. See [model routing](references/model-routing.md) for precedence, availability, effort syntax, and completed-task measurement.
 
 Use `oracle` for one hard question — a root cause that survived two attempts, a costly design fork, a diagnosis you keep circling — read-only, no mandate to fix. Choose effort under the same policy; this role does not authorize extra-high or bypass the review ceiling. Tier and effort are separate choices.
 
 ## Choosing the tier
 
-Apply the GPT policy first, then the table; say the chosen tier in one line without asking. Ask only when the work fits no row and confidence between tiers is low, when spending a frontier model in another harness, when expecting a run over ten minutes, or when this work has already been rerun at another tier. Mark your recommendation and record the answer so it does not recur.
+Apply the lower-than-yourself rule first, then the GPT policy, then the table; say the chosen tier and effort in one line without asking. Ask only when the work fits no row and confidence between tiers is low, when spending a frontier model in another harness, when expecting a run over ten minutes, or when this work has already been rerun at another tier. Mark your recommendation and record the answer so it does not recur.
 
 ## The brief
 
