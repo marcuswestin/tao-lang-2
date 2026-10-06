@@ -175,9 +175,8 @@ async function barrier(mode: 'short' | 'escape' = 'short') {
       const members = ProcessTree.groupMembers(capture.group)
       if (
         worker !== undefined || Platform.processIsAlive(capture.worker.pid)
-        || capture.trackedDescendants.some(process =>
-          descendants.has(process.pid) || Platform.processIsAlive(process.pid)
-        )
+        // A tracked descendant escaped the supervisor, so nothing in the group reaps it.
+        || capture.trackedDescendants.some(process => descendants.has(process.pid) || escapedStillRuns(process.pid))
         || members.length !== 1 || members[0]!.pid !== capture.supervisor.pid
         || !ProcessTree.sameProcess(members[0], capture.supervisor)
         || child.exitCode !== null || child.signalCode !== null

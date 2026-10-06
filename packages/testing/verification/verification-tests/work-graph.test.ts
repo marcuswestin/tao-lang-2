@@ -790,6 +790,24 @@ Describe('work graph scheduling', () => {
     Expect(state.cpuMs).toBeUndefined()
   })
 
+  Test('names a signal the run never sent, in the reason and in the log a reader opens', async () => {
+    // The kernel's out-of-memory killer leaves a child no chance to print, so its log ends mid-test.
+    // A child that kills itself stands in for it: same signal, no output, nothing the graph sent.
+    const state = WorkGraph.createState({
+      name: 'killed-from-outside',
+      run: { args: ['-c', 'echo started; kill -KILL $$'], command: '/bin/sh' },
+    })
+
+    await WorkGraph.run([state], { timeoutPolicy: 'bounded', watchInterrupt: () => () => {} })
+
+    Expect(state.status).toBe('failed')
+    Expect(state.exitCode).toBeNull()
+    Expect(state.signal).toBe('SIGKILL')
+    Expect(state.failure?.message).toContain('killed by SIGKILL, which this run did not send')
+    Expect(state.fullOutput).toContain('started')
+    Expect(state.fullOutput).toContain('out-of-memory killer')
+  })
+
   // PID-reuse safety moved with the code: `ProcessTree.signalTracked` now owns it, and
   // `packages/shared/shared-tests/process-supervision.test.ts` proves a stale identity is skipped
   // while a still-matching one is signalled.
