@@ -47,8 +47,9 @@ contention before choosing an optional broad local lane.
   check-detail links. Compare queued/waiting jobs and their age with jobs actually starting and
   finishing; workflow creation, job start times, and recent runs reveal scheduling delay. Little
   or no contention means jobs start promptly and there is no growing runner backlog. Count runner
-  demand across relevant runs, including the twelve partitions per verification run, rather than
-  assuming one pull request consumes one runner. Pending `Verify` alone can mean running tests;
+  demand across relevant runs, including every partition of each verification run (the count is
+  the `PARTITIONS` default in `.github/workflows/verify.yml`, or the repository variable
+  `VERIFY_PARTITIONS` when set), rather than assuming one pull request consumes one runner. Pending `Verify` alone can mean running tests;
   waiting for approval or a prerequisite is not runner contention.
 - `./agent pr-checks --pr <number>` gives the current PR's check state, not the repository-wide
   runner queue. If queue observations are unavailable, report CI contention as unknown; do not
@@ -63,10 +64,14 @@ failure.
 
 ## Coverage and readiness
 
-`.github/workflows/verify.yml` runs `verify-full-sandbox` across twelve Linux runners
-(`--partition k/12`) on pull request pushes and pushes to `main`; `Verify` is the aggregate verdict
-and the only required check on `main`. It proves the portable gates only; the local complement in
-the route above proves the rest. Read the current workflow and lane membership when deciding what
+`.github/workflows/verify.yml` runs `verify-full-sandbox` across N Linux runners
+(`--partition k/N`) on pull request pushes, pushes to `main`, and `workflow_dispatch`; `Verify` is
+the aggregate verdict and the only required check on `main`. N is one workflow default
+(`PARTITIONS`, with its sizing reasoning beside it), overridden by the repository variable
+`VERIFY_PARTITIONS` and, for one run, by the dispatch input; the `plan` job resolves it and every
+partition and the aggregate read that resolved count. A cancelled or failed partition records no
+green tree. It proves the portable gates only; the local complement in the route above proves the
+rest. Read the current workflow and lane membership when deciding what
 the complement is; a gate the workflow admits leaves the local list.
 
 For feature work, refresh affected documents, review and commit the exact task paths, and prepare
