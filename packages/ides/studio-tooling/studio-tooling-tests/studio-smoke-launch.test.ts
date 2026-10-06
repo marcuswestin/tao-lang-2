@@ -97,13 +97,17 @@ Describe('Studio smoke launch', () => {
     let launch: Awaited<ReturnType<typeof startStudioSmokeLaunch>> | undefined
     try {
       let started: readonly string[] = []
+      const observed: string[] = []
       launch = await startStudioSmokeLaunch({
         appName: 'HNReader',
+        onOutput: chunk => observed.push(chunk.toString('utf8')),
         port: 42_000,
         projectRoot: '/w/Apps/HNReader',
         repositoryRoot: root,
         start: (_command, args, onOutput) => {
           started = args
+          onOutput(Buffer.from('[studio]: waiting for Metro\n'))
+          Expect(observed).toEqual(['[studio]: waiting for Metro\n'])
           onOutput(Buffer.from(`${readinessLine}\n`))
           return fakeCommand()
         },
@@ -121,6 +125,7 @@ Describe('Studio smoke launch', () => {
       ])
       Expect(launch.readiness.launchId).toBe('browser-42')
       Expect(launch.output()).toContain('"sessionUrl"')
+      Expect(observed).toEqual(['[studio]: waiting for Metro\n', `${readinessLine}\n`])
     } finally {
       await launch?.stop()
       await FS.remove(root)

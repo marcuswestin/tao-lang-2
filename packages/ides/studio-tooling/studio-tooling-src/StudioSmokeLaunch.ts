@@ -14,6 +14,8 @@ const READY_POLL_MS = 200
 
 export type StudioSmokeLaunchOptions = {
   appName?: string
+  /** Optional diagnostic observer, including output before readiness is available. */
+  onOutput?: (chunk: Buffer) => void
   port?: number
   previewPublication?: 'on' | 'off'
   projectRoot: string
@@ -57,6 +59,7 @@ export async function startStudioSmokeLaunch(
     args,
     chunk => {
       output += chunk.toString('utf8')
+      options.onOutput?.(chunk)
     },
   )
 

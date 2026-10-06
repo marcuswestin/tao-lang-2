@@ -282,10 +282,50 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
   let browser: StudioCdp | undefined
   let studio: Awaited<ReturnType<typeof startStudioSmokeLaunch>> | undefined
   const samples: EditSample[] = []
+  const traceDiagnostics = Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_TRACE'] === 'true'
+  let diagnosticPhase = 'setup'
+  let diagnosticOutput = ''
+  let diagnosticTimer: ReturnType<typeof setInterval> | undefined
+  let diagnosticWrite: Promise<void> | undefined
   try {
+    if (traceDiagnostics) {
+      // A test-process timeout bypasses catch/finally. Keep trace-only progress independently
+      // so an interrupted diagnostic retains completed samples and subprocess evidence.
+      const diagnosticRoot = FS.resolvePath('.artifacts/tests/studio-smoke/preview-latency', Repo.getRoot())
+      await FS.mkdir(diagnosticRoot)
+      const diagnosticPath = FS.resolvePath(`live-${Date.now()}`, diagnosticRoot)
+      HCI.writeLine(`Studio latency live diagnostic: ${diagnosticPath}`)
+      diagnosticTimer = setInterval(() => {
+        if (diagnosticWrite !== undefined) {
+          return
+        }
+        diagnosticWrite = Promise.all([
+          FS.writeText(`${diagnosticPath}.log`, diagnosticOutput),
+          FS.writeJson(`${diagnosticPath}.json`, {
+            label: `${project.name} publication-${mode}`,
+            phase: diagnosticPhase,
+            capturedAt: Date.now(),
+            samples: [...samples],
+          }),
+        ]).then(() => {}).catch(error =>
+          HCI.logProcessError('studio-latency', Errors.formatForLog(error))
+        ).finally(() => {
+          diagnosticWrite = undefined
+        })
+      }, 1_000)
+    }
     const sourcePath = await project.setup(projectRoot)
-    studio = await startStudioSmokeLaunch({ appName: project.appName, previewPublication: mode, projectRoot })
+    diagnosticPhase = 'launch'
+    studio = await startStudioSmokeLaunch({
+      appName: project.appName,
+      previewPublication: mode,
+      projectRoot,
+      ...(traceDiagnostics
+        ? { onOutput: (chunk: Buffer) => { diagnosticOutput += chunk.toString('utf8') } }
+        : {}),
+    })
     const activeStudio = studio
+    diagnosticPhase = 'activate-preview'
     Assert.defined(studio.readiness.previewUrl, 'the browser Studio launch advertises its Metro preview URL')
     browser = await StudioCdp.launchChrome({ artifactRoot: studio.readiness.artifactRoot })
     await browser.addInitScript(probeScript)
@@ -455,6 +495,7 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
     let lastPaintedRevision = 0
     let finalEdit = EDITS_PER_MODE
     for (let edit = 1; edit <= EDITS_PER_MODE; edit += 1) {
+      diagnosticPhase = `edit-${edit}-prepare`
       // Each marker is longer than the last, as most real edits change a file's length and so move
       // every source range after them.
       const marker = `Edit${edit}${'x'.repeat(edit)}`
@@ -464,6 +505,7 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
       })
       let diskSaveAt: number | undefined
       if (edit === 4 && Platform.runtimeProcess.env['TAO_STUDIO_LATENCY_REQUIRE_FULL_OVERLAP'] === 'true') {
+        diagnosticPhase = `edit-${edit}-await-authoritative-start`
         Assert.input(project.name === 'HNReader editor padding', 'Full-work overlap uses the HNReader design fixture.')
         Assert.input(
           Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_TRACE'] === 'true',
@@ -484,6 +526,7 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
         }, { intervalMs: 20, timeoutMs: VerificationTimeouts.resolve(30_000) ?? Infinity })
         Assert.defined(started, 'a real authoritative attempt begins before the overlapping editor save')
       }
+      diagnosticPhase = `edit-${edit}-save`
       if (project.edit === 'editor') {
         await browser.click('.cm-content')
         await browser.pressShortcut('a')
@@ -507,6 +550,7 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
           document.querySelector(${frame})?.scrollIntoView({ block: 'nearest' })
         })()`)
       }
+      diagnosticPhase = `edit-${edit}-await-paint`
       const painted = await Time.pollUntil(
         async () =>
           await browser!.evaluateInFrame<boolean>(
@@ -589,6 +633,7 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
         saveAt,
         sourceWrittenAt: await FS.modifiedTimeMs(sourcePath),
       })
+      diagnosticPhase = `edit-${edit}-await-completion`
       if (Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_FIRST'] !== 'false') {
         await browser.waitFor(
           `(async () => {
@@ -608,6 +653,7 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
       }
       await Time.sleep(saveGapMs)
     }
+    diagnosticPhase = 'supplemental-and-final-parity'
     if (rapidSaveProbe) {
       Assert.input(
         project.edit === 'editor' && project.expectedStyle !== undefined,
@@ -858,6 +904,7 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
     Expect(evidence.activatedCells).toBeGreaterThan(project.name === 'HNReader' ? 1 : 0)
     Expect(JSON.stringify(evidence)).not.toContain('RevisionNotFoundError')
   } catch (error) {
+    diagnosticPhase = 'failed'
     if (studio !== undefined) {
       const failureRoot = FS.resolvePath('.artifacts/tests/studio-smoke/preview-latency', Repo.getRoot())
       await FS.mkdir(failureRoot)
@@ -876,6 +923,10 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
     }
     throw error
   } finally {
+    if (diagnosticTimer !== undefined) {
+      clearInterval(diagnosticTimer)
+    }
+    await diagnosticWrite
     await browser?.close()
     await studio?.stop()
     await FS.remove(projectRoot)

@@ -1111,18 +1111,45 @@ Deliberate mutations fail their intended stale-source, first-deadline, timer cle
 close-drain, fresh-realm, failed-registration and whole-app paint-identity witnesses. Typecheck and
 lint pass. These checks establish iteration evidence, not merge or performance qualification.
 
-Current real-Metro editor trials remain diagnostic. One contended default padding trial painted
-all eight edits and reached final source/manifest parity, but failed its all-direct assertion with
-five deliveries: quiet releases and multi-second event-loop lag caused full attempts to consume
-later saves. The failed artifact is retained; no qualified gain follows from it. A later width,
-invalid-to-valid and rapid-save trial exposed a harness-world mismatch in its rapid paint poll;
-that poll is corrected and needs a fresh run. Successful screenshots, authenticated computed
-padding/paint, failure samples, rapid/revert/burst, retained-state, whole-app, multiple-preview,
-fresh-activation and actual-full-overlap proof remain part of completion acceptance.
+Real-Metro editor acceptance passes in four diagnostic trials. Each retains eight actual computed
+padding/paint samples, final authoritative source/manifest parity and screenshots. The combined
+width-change, invalid-to-valid, rapid-save, two-file burst and retained-state trial passes with two
+active previews; rapid saves reach the twelfth edit. The single-cell revert/fresh-activation trial
+witnesses an actual overlay publication barrier before the second cell registers. The whole-app
+trial retains equal data, navigation and persisted-state captures. The full-processing trial
+observes saves 2, 4 and 5 between traced authoritative attempt start/end events. Existing realms
+do not reload; the newly activated cell's first load is expected. Successful screenshots were
+reviewed, with the edited layout and no Problems.
+
+The reports under `.artifacts/tests/studio-smoke/preview-latency/` are respectively
+`hnreader-editor-padding-publication-off-1791311422255.json`,
+`hnreader-editor-padding-publication-off-1791311749509.json`,
+`hnreader-editor-padding-publication-off-1791311915175.json` and
+`hnreader-editor-padding-publication-off-1791312664745.json`. They ran at load 23.9–222.6 on 18 CPUs,
+with tracing and diagnostic save gaps, so they establish correctness rather than qualified gains.
+
+Failures remain preserved: one default padding trial painted all eight edits and reached final
+parity but failed its all-direct assertion with five deliveries, as quiet releases and event-loop
+lag let full attempts consume later saves. A rapid-save poll used the wrong JavaScript world and
+was corrected before the passing repeat. The first full-overlap trial timed out before yielding
+useful evidence, and a startup retry was stopped for diagnosis. Trace-only live journals now begin
+before Studio readiness, preserving output, progress and completed samples if the test process
+times out. The launch-observer regression passes; the captured full-overlap retry passes unchanged
+production code with one active cell. No watchdog, latency ceiling or Metro recovery policy changed.
+
+The lead performed the integrated source review with one read-only aid, checked its cited claims,
+and fixed shutdown drain, final epoch rechecking and a vacuous forged-padding test. The final
+qualification review also found that repeated delivery receipts could masquerade as seven warm
+saves. Duplicate/reversed-revision fixtures fail the old evaluator and pass with a distinct,
+increasing warm-revision guard. All twelve qualification and six launch-helper cases pass.
 
 All six canonical performance cases and their ceilings are preserved. A separate production-default
 padding qualification requires seven real warm delivery/paint receipts plus eventual authoritative
 source parity, rather than fabricated generated modification times. Quiet admission, paired
-main/feature trials, current-main integration, the changed-scope gate and final integrated review
-remain outstanding. The control is pinned to a named feature branch to prevent the repository's
-main-mirror sync from moving an unmeasured detached baseline. No push, CI or landing is authorized.
+main/feature trials and the changed-scope gate remain outstanding. Main `2876d9437` was fetched and
+integrated through the supported workflow as `1f1962f39`; frozen setup and current permission/route
+inspection completed. The control is pinned at that main SHA on `feat/studio-preview-speed-control`
+to prevent main-mirror sync from moving its unmeasured baseline. Standalone performance admission
+was inconclusive: other verification lanes were active and load was 65.45 on 18 CPUs. Retain that
+report and repeat stable source when the host is quiet; paired control measurements remain unrun.
+No push, CI or landing is authorized.

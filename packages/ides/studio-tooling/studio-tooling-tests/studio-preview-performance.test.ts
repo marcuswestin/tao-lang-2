@@ -468,6 +468,22 @@ Describe('Studio preview timing ceilings', () => {
       },
       {
         ...original,
+        rows: (original['rows'] as Array<Record<string, unknown>>).map((row, index) =>
+          index === 3
+            ? { ...row, deliveryRevision: 2 }
+            : row
+        ),
+      },
+      {
+        ...original,
+        rows: (original['rows'] as Array<Record<string, unknown>>).map((row, index) =>
+          index === 3
+            ? { ...row, deliveryRevision: 1 }
+            : row
+        ),
+      },
+      {
+        ...original,
         evidence: {
           ...(original['evidence'] as Record<string, unknown>),
           authoritativeCompletion: { status: 'compiled', compileRevision: 8 },

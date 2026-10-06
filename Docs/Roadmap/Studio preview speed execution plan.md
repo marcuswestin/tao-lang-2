@@ -1,6 +1,7 @@
 # Studio preview speed execution plan
 
-Prepared 2026-10-06. Status: execution approved and in progress; landing is not authorized.
+Prepared 2026-10-06. Status: implementation and source review completed; final iteration and
+performance qualification are in progress. Landing is not authorized.
 The [continuation roadmap](<Studio preview speed continuation.md>) remains
 the project owner. The [tracked POC handover](<Studio preview speed POC handover.md>) records the
 experimental mechanisms and historical evidence. This plan supersedes the supplementary archive's
@@ -18,9 +19,9 @@ main-only preparation plan as the proposed execution sequence, without supersedi
    plus the checkpoint's profiling and independent final native freshness audit.
 3. The complete checkpoint delta against `b1cc156c775b92d8095bd3ce6eee2214dabbf02b`
    was reviewed: 44 files, 3,776 insertions and 119 deletions, including all six experiments and
-   their tests. All remain experimental in this branch. Frozen setup, typecheck and lint pass;
-   focused integration evidence is recorded in the task checkpoint. No new latency measurement,
-   broad verification, push, hosted run or landing has occurred.
+   their tests. At takeover all six remained experimental. Frozen setup, typecheck and lint passed;
+   initial focused integration evidence is recorded in the task checkpoint. The acceptance record
+   below describes subsequent production work; no push, hosted run or landing has occurred.
 4. Main's native inspection memo, manifest capture/probes, two optimistic passes, locked fallback,
    and stale-publication recovery are retained. Explicit native roots remain cold under main's
    existing contract. The POC's mutable `experimentalInspection` option is not a production API.
@@ -28,6 +29,32 @@ main-only preparation plan as the proposed execution sequence, without supersedi
    remain untouched. The separate `feat/studio-preview-production` branch contains no POC source.
    Project store/local/cache layout, activation persistence, stable links, identical-publication
    suppression and the landed timer patches remain the baseline.
+
+## Implementation and acceptance record
+
+1. Production core `3aa6fbfb0` and qualification/harness `28de0892b` integrate preview-first
+   admission, bounded authoritative work, narrow padding delivery and fresh-realm barriers.
+   Supported main integration `1f1962f39` includes `2876d94371274ad01318b29f8c21860e8b4bba32`;
+   frozen setup reproduces all 1,252 maintained generated native files. The control worktree is
+   pinned to that main SHA on `feat/studio-preview-speed-control`; it has no measurement yet.
+2. The lead completed the integrated source review, using one permitted read-only aid and checking
+   its claims. Repairs include queued/initial compile drain on close, final epoch rechecking,
+   stronger real-session/identity/barrier mutation witnesses, a nonvacuous forged-padding fixture,
+   and rejection of duplicate/reversed warm delivery receipts. Trace-only journals preserve
+   startup output and partial samples across test-process timeouts; ordinary qualification has
+   no journal timer or writes. Focused checks and intended mutation failures are recorded in the
+   task checkpoint. The local changed-scope gate still needs its final run.
+3. Four real editor trials pass: two-preview width/recovery/rapid/burst/retained-state; single-cell
+   revert and fresh activation during an overlay; whole-app retained-state; actual full-work
+   overlap. Each records eight computed padding/paint samples and final source parity. Repeated
+   rapid saves reach edit 12; fresh activation witnesses the publication barrier; saves 2, 4 and 5
+   overlap traced authoritative attempts. Existing iframes retain their realms. The continuation
+   roadmap records exact report identifiers and preserved failures; screenshots were reviewed.
+4. These are diagnostic runs under load 23.9–222.6 on 18 CPUs, with tracing and diagnostic gaps.
+   They do not establish a speed gain or budget verdict. Standalone quiet admission returned
+   inconclusive because other lanes were active and load was 65.45. Sequential matched
+   main/feature trials in both modes, alternating-order repeats and unchanged-source standalone
+   qualification remain pending. No ceiling or execution budget was raised.
 
 ## Approved enablement
 

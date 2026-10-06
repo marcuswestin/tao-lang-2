@@ -180,6 +180,10 @@ async function evaluateDirectArtifacts(
       `Studio preview report ${path} must contain positive delivery revisions for all warm rows.`,
     )
   )
+  Assert.input(
+    deliveryRevisions.every((revision, index) => index === 0 || revision > deliveryRevisions[index - 1]!),
+    `Studio preview report ${path} must contain distinct, increasing warm delivery revisions.`,
+  )
   const maxDeliveryRevision = Math.max(...deliveryRevisions)
   Assert.input(
     completionRevision > maxDeliveryRevision,
