@@ -835,6 +835,13 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
                   },
                   semanticIdentity: `navigation:${this.name}:selection:${item.key}`,
                   title: String(item.definition.label.evaluate().jsValue),
+                  defaultStyle: {
+                    minHeight: 44,
+                    paddingHorizontal: 12,
+                    justifyContent: 'center',
+                    borderBottomWidth: 2,
+                    borderBottomColor: item.key === this.activeKey ? '#2563eb' : 'transparent',
+                  },
                 },
                 {
                   nativeProps: {
@@ -1055,4 +1062,4 @@ const selectionContentStyle = { flex: 1 } as const
 const toggleItemStyle = { flex: 1 } as const
 const hiddenToggleItemStyle = { display: 'none' } as const
 const selectionDrawerControlsStyle = { flexDirection: 'column' } as const
-const selectionTabControlsStyle = { flexDirection: 'row' } as const
+const selectionTabControlsStyle = { flexDirection: 'row', gap: 8 } as const

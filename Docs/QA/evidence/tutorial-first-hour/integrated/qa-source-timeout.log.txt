@@ -1,0 +1,16 @@
+test-file: running — log /Users/ro/.codex/worktrees/5894/tao-lang-2/.artifacts/logs/agent/test-file/2026-10-06T18-43-53-745Z-69892.log
+
+REPORT:
+test-file: failed (exit 143) in 120.1s
+parser generate: up to date
+compile app: up to date
+
+Test selection:
+- selected cli/tao-cli: exact requested file
+dev-test: running 1 node — logs: .artifacts/logs/dev-test/2026-10-06T18-43-54-651Z-69927-2fea423b
+cli/tao-cli: started at 14:43:54
+error: Recipe `test-file` was terminated on line 368 by signal 15
+cancelled by SIGTERM
+/Users/ro/.codex/worktrees/5894/tao-lang-2/.artifacts/logs/agent/test-file/2026-10-06T18-43-53-745Z-69892.log
+
+timed out with no output for 120s

@@ -1,0 +1,34 @@
+{
+  "id": "QA-TUTORIAL-DARK-PALETTE",
+  "status": "accepted-limitation",
+  "phase": 1,
+  "surfaceId": "visual:reading-list",
+  "dimension": "visual",
+  "channel": "phone-dark",
+  "severity": "minor",
+  "title": "dark scenario retains the light presentation",
+  "observed": "Requested dark scenario retains the light presentation; both inspected phone images have identical digests.",
+  "impact": "Dark appearance remains a design decision; the written tutorial does not promise dark mode.",
+  "location": "Docs/QA/evidence/pilot/reading-list-dark.png",
+  "affectedPhases": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "expected": "explicitly support an intentional light-only showcase or provide an accepted\n  dark presentation. The tutorial does not currently promise a dark theme, so this is not a\n  demonstrated violation of its written behavior.",
+  "recheck": "Repeat the exact captured scenario and inspect the result.",
+  "evidence": [
+    "Docs/QA/evidence/tutorial-first-hour/README.md",
+    "Docs/QA/evidence/tutorial-first-hour/capture-complete/source-snapshot.json",
+    "Docs/Tutorials/Your First Tao App.md"
+  ],
+  "evidenceHashes": [],
+  "createdAt": "2026-09-26T22:52:29.463Z",
+  "updatedAt": "2026-10-06T17:34:34.932Z",
+  "confidence": "design-judgment",
+  "requiredReviewer": "agent",
+  "relatedStories": [],
+  "notes": "The sample already defines explicit paper/ink colors. The tutorial now states that it deliberately keeps this light palette in either system scheme, satisfying the finding's intentional-light-showcase option. Exact dark-scheme capture remains readable and was inspected. A reactive dark theme is outside this first-hour example."
+}

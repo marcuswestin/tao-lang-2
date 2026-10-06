@@ -241,6 +241,8 @@ export class QaInventory {
       channels: string[]
       captureCells?: Record<string, string>
       captureApp?: string
+      captureProject?: string
+      captureSources?: Record<string, string>
     }[] = [
       {
         id: 'source:hnreader-browser',
@@ -251,10 +253,30 @@ export class QaInventory {
       },
       {
         id: 'source:tutorial-replay',
-        title: 'Tutorial source snippets and final behavior journey',
+        title: 'Tutorial source snippets, CLI failure recovery, and browser journey',
         source: 'Docs/Tutorials/Your First Tao App.md',
         dimension: 'functional',
-        channels: ['source-test'],
+        channels: ['source-test', 'browser-preview'],
+      },
+      // This app is authored in Markdown, outside the Apps scenario discovery roots.
+      {
+        id: 'visual:reading-list',
+        title: 'Tutorial ReadingList captured views',
+        source: 'Docs/Tutorials/Your First Tao App.md',
+        dimension: 'visual',
+        channels: ['phone-light', 'phone-dark', 'desktop'],
+        captureCells: {
+          'phone-light': 'QA views/phone',
+          'phone-dark': 'QA views/dark',
+          desktop: 'QA views/desktop',
+        },
+        captureApp: 'ReadingList',
+        captureProject: '.artifacts/qa/tutorial-review',
+        captureSources: {
+          'phone-light': 'ReadingList.tao',
+          'phone-dark': 'ReadingList.tao',
+          desktop: 'ReadingList.tao',
+        },
       },
     ]
     for (const check of checks) {

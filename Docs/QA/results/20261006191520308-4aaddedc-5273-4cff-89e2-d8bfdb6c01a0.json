@@ -1,0 +1,55 @@
+{
+  "id": "20261006191520308-4aaddedc-5273-4cff-89e2-d8bfdb6c01a0",
+  "runId": "20261006190454914-8e492d50-b4b4-47c3-98c3-b5aeb2c790d4",
+  "createdAt": "2026-10-06T19:15:20.307Z",
+  "recordedAt": "2026-10-06T19:15:20.307Z",
+  "commit": "1b8a44f0d840a8ab2ccbe2aad454939f8baa511f",
+  "phase": 1,
+  "executionProfile": "development",
+  "provenance": {
+    "snapshotBasis": "observation-time",
+    "originalDependencies": "recorded",
+    "observedMetadataEvidence": [
+      "Docs/QA/evidence/tutorial-first-hour/README.md",
+      "Docs/QA/evidence/tutorial-first-hour/land-candidate/source.json",
+      "Docs/QA/evidence/tutorial-first-hour/land-candidate/browser/build.json",
+      "Docs/QA/evidence/tutorial-first-hour/land-candidate/browser/web-export.json"
+    ]
+  },
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "runtime": "bun:1.4.2"
+  },
+  "inputs": {
+    "source": "Docs/Tutorials/Your First Tao App.md",
+    "dependencySnapshot": "Docs/QA/inputs/e5e4a61c696f6e87e58902bdd79f2241ebe7012f38af7e664d5d25e377fb717a.json"
+  },
+  "surfaceId": "doc:Docs/Tutorials/Your First Tao App.md",
+  "dimension": "text",
+  "outcome": "pass",
+  "reviewer": "agent",
+  "channel": "source",
+  "evidence": [
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/README.md",
+      "sha256": "00847d0eb85f49a6c53f6729ef7ca247087c6e9066b8985b098a24609a5b07fe"
+    },
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/land-candidate/source.json",
+      "sha256": "b40a6970d494b0acb20b966fe9cfba732a5005ea6953638e5e78961ca4535414"
+    },
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/land-candidate/browser/build.json",
+      "sha256": "7384e53c4ed35c7d3443386568f84c2302770163c3a2aff7c9f31c53c39e403a"
+    },
+    {
+      "path": "Docs/QA/evidence/tutorial-first-hour/land-candidate/browser/web-export.json",
+      "sha256": "91510a2117a1d05b9b553e9ec6d3e4a1ea6d54b65cb71635ec44888b47c4b4ec"
+    }
+  ],
+  "notes": "Reread documented setup/marker, run/check/test commands, cumulative snippets, query CurrentlyReading = Books with prose, platform navigation wording, compact layout, intentional paper palette and test/persistence/Retry/reset instructions. Fresh replay/build evidence matches the current Markdown. Human uncoached reader and installed public CLI acceptance remain separate.",
+  "sourceHash": "2e8549e78cb526c248696410b2379c48d18c372d8267f17937a6c21dac7b08ef",
+  "rendererHash": "not-applicable",
+  "profileHash": "c380b1a25ce5c66cd408f787f87e5ececcd9db2dc71e439c7fab43708d3c8d93"
+}

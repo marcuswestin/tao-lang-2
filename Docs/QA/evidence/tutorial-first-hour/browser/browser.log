@@ -1,0 +1,10 @@
+
+Running 3 tests using 1 worker
+
+  ✓  1 [browser] › packages/testing/e2e-testing/browser/reading-list.host.spec.ts:16:3 › First-hour tutorial in the browser › edits a book, preserves it across reload, finishes it, switches destinations, and removes it (1.0s)
+  ✓  2 [browser] › packages/testing/e2e-testing/browser/reading-list.host.spec.ts:50:3 › First-hour tutorial in the browser › reports unavailable local storage and recovers the saved book through Retry (656ms)
+  ✓  3 [browser] › packages/testing/e2e-testing/browser/reading-list.host.spec.ts:76:3 › First-hour tutorial in the browser › keeps short phone sections together and adapts to desktop and dark scheme (1.1s)
+
+  3 passed (3.7s)
+(node:91258) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
