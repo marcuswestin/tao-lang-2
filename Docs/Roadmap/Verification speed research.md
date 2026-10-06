@@ -384,3 +384,19 @@ Three runs of main's twelve-partition workflow, timed from each job's `started_a
   above is the baseline to compare against.
 - Imbalance confirms §13: the slowest uncached partition (611 s) is 2.2× the median (≈340 s),
   and the aggregate waits for it; slice A's weighting is worth more than any partition count.
+
+## 17. Companion hosts workflow (own measurement, 2026-10-06)
+
+- Baseline, run 37403352651 (https://github.com/tao-dev-org/tao-lang/actions/runs/37403352651),
+  no caches at all: android 1,603 s (`Set up Tao` 663 s, build 893 s); ios-simulator 1,789 s
+  (`Set up Tao` 688 s, build 995 s). Both jobs hold a slot for the whole run, the macOS one a
+  macOS slot, on every pull request whose first push touches the kit.
+- What slice D1 caches: the Nix store (`nix-community/cache-nix-action`, keyed on `devenv.lock`
+  and the profile expressions), Verify's installed `node_modules` under the same key, Gradle's
+  home (`gradle/actions/setup-gradle`), and CocoaPods' spec repository and pod downloads.
+- What it cannot cache: Expo SDK 57 (`expo ~57.0.26`, PR expo/expo#47209) makes `expo prebuild`
+  clean by default, so `ios/`, `android/`, `Pods/` and Xcode's derived data (`ios/build`) are
+  regenerated on every build and a restored copy would be deleted before use. Reusing them needs
+  `--no-clean` in `CompanionHostBuild.ts`, which changes what the `companion-host-build` host
+  operation does locally as well, so it is the Developer's call; the measured gap after caching
+  the rest says whether it is worth asking for.
