@@ -238,6 +238,37 @@ Describe('output discipline', () => {
     })
   })
 
+  Test('admits a bounded shell read where the harness offers no file tool, and still refuses dumps there', async () => {
+    const codex = (command: string) =>
+      outputDisciplineDecision(JSON.stringify({
+        hook_event_name: 'PreToolUse',
+        tool_input: { command },
+        tool_name: 'Bash',
+        transcript_path: '/Users/someone/.codex/sessions/2026/10/06/rollout.jsonl',
+        turn_id: 'turn-1',
+      }))
+    const claude = (command: string) =>
+      outputDisciplineDecision(JSON.stringify({
+        hook_event_name: 'PreToolUse',
+        tool_input: { command },
+        tool_name: 'Bash',
+        transcript_path: '/Users/someone/.claude/projects/x/session.jsonl',
+      }))
+
+    Expect(await codex('sed -n "1,40p" AGENTS.md')).toEqual('')
+    Expect(await codex('cat AGENTS.md')).toEqual('')
+    Expect(JSON.parse(await codex('sed -i "" s/a/b/ AGENTS.md')).hookSpecificOutput.permissionDecisionReason)
+      .toContain('Edit tool')
+    Expect(JSON.parse(await codex('git show HEAD')).hookSpecificOutput.permissionDecision).toEqual('deny')
+    Expect(JSON.parse(await claude('sed -n "1,40p" AGENTS.md')).hookSpecificOutput.permissionDecisionReason)
+      .toContain('Read tool')
+  })
+
+  Test('admits a whitespace check, which prints problems rather than the patch', () => {
+    Expect(isAllowed('git diff --check')).toEqual(true)
+    Expect(isAllowed('git diff')).toEqual(false)
+  })
+
   Test('lets an override through and writes down why, so a misfiring rule can be found later', async () => {
     const root = await mkTestDir('tao-hook-override-')
     try {
