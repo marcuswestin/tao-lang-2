@@ -1,7 +1,7 @@
 import { Packages, Type } from '@ast-utils'
 import { Workspace } from '@compiler/workspace'
 import { AST, Parser, URI } from '@parser'
-import { Diagnostics, Errors, FS, Platform, ReleaseCapabilities } from '@shared'
+import { Diagnostics, Errors, FS, ReleaseCapabilities } from '@shared'
 import { Describe, Expect, Test, testOverrideSlot, withTaoFiles } from '@shared/test'
 import { Validate } from '../validator-src/Validate'
 import Validator from '../validator-src/validator'
@@ -34,225 +34,9 @@ const dependenciesSlot = testOverrideSlot<typeof Parser.validationDependencies>(
   write: validationDependencies => Object.assign(Parser, { validationDependencies }),
 })
 
-const replayFlagSlot = testOverrideSlot<string | undefined>({
-  read: () => Platform.runtimeProcess.env['TAO_STUDIO_CHANGED_VALIDATION'],
-  write: value => {
-    if (value === undefined) {
-      delete Platform.runtimeProcess.env['TAO_STUDIO_CHANGED_VALIDATION']
-    } else {
-      Platform.runtimeProcess.env['TAO_STUDIO_CHANGED_VALIDATION'] = value
-    }
-  },
-})
-const withPreviewValidationFiles: typeof withTaoFiles = async (...args) => {
-  const restore = replayFlagSlot.install('true')
-  try {
-    return await withTaoFiles(...args)
-  } finally {
-    restore()
-  }
-}
-
 Describe('validator: workspace-owned document report reuse', () => {
-  Test(
-    'preview experiment rechecks project inputs after an edit and replays only complete unchanged inputs',
-    async () => {
-      await withPreviewValidationFiles('tao-preview-selected-validation-', {
-        '.tao/.gitkeep': '',
-        'Main.tao': 'let Value is number = 1',
-        'Other.tao': 'let Wrong is number = "bad"',
-      }, async (paths, root) => {
-        const workspace = await Workspace.open(root)
-        const entries = [paths['Main.tao']!, paths['Other.tao']!]
-        const baseline = await workspace.validateFiles(entries)
-        Expect(Diagnostics.messages(baseline.diagnostics)).toContain(
-          AliasesValidator.messages.ascriptionType('Wrong', 'number', 'text'),
-        )
-        await FS.writeText(paths['Main.tao']!, 'let Value is number = "changed"')
-        const checked: string[] = []
-        const foreign = Validate.ForeignImplementationFiles
-        const restore = foreignSlot.install(async (file, context) => {
-          checked.push(AST.getDocument(file).uri.path)
-          await foreign(file, context)
-        })
-        try {
-          const fast = await workspace.validateFiles(entries, [paths['Main.tao']!])
-          Expect(checked).toContain(paths['Main.tao']!)
-          Expect(checked).toContain(paths['Other.tao']!)
-          Expect(Diagnostics.messages(fast.diagnostics)).toContain(
-            AliasesValidator.messages.ascriptionType('Value', 'number', 'text'),
-          )
-          Expect(Diagnostics.messages(fast.diagnostics)).toContain(
-            AliasesValidator.messages.ascriptionType('Wrong', 'number', 'text'),
-          )
-          const cold = await (await Workspace.open(root)).validateFiles(entries)
-          Expect(fast.diagnostics).toEqual(cold.diagnostics)
-          // A completed full pass seeds replay; an unchanged hint still validates its named file.
-          await workspace.validateFiles(entries)
-          checked.length = 0
-          const unchanged = await workspace.validateFiles(entries, [paths['Main.tao']!])
-          Expect(checked).toContain(paths['Main.tao']!)
-          Expect(checked).not.toContain(paths['Other.tao']!)
-          Expect(unchanged.diagnostics).toEqual(cold.diagnostics)
-          checked.length = 0
-          await workspace.validateFiles(entries)
-          Expect(checked).toContain(paths['Other.tao']!)
-        } finally {
-          restore()
-        }
-      })
-    },
-  )
-
-  Test('unknown changed paths cannot skip foreign checks using a previous preview snapshot', async () => {
-    await withPreviewValidationFiles('tao-preview-unknown-validation-', {
-      '.tao/.gitkeep': '',
-      'Main.tao': 'let Value = 1',
-      'Other.tao': 'let Other = 2',
-    }, async (paths, root) => {
-      const workspace = await Workspace.open(root)
-      const entries = [paths['Main.tao']!, paths['Other.tao']!]
-      await workspace.validateFiles(entries)
-      const checked: string[] = []
-      const foreign = Validate.ForeignImplementationFiles
-      const restore = foreignSlot.install(async (file, context) => {
-        checked.push(AST.getDocument(file).uri.path)
-        await foreign(file, context)
-      })
-      try {
-        await workspace.validateFiles(entries, [FS.resolvePath('Unknown.tao', root)])
-        Expect(checked).toContain(paths['Main.tao']!)
-        Expect(checked).toContain(paths['Other.tao']!)
-      } finally {
-        restore()
-      }
-    })
-  })
-
-  Test('preview invalidates transitive imported declarations and reverted graph selections', async () => {
-    await withPreviewValidationFiles('tao-preview-dependency-validation-', {
-      '.tao/.gitkeep': '',
-      'Main.tao': 'use Echo from ./library/Echo\nlet Result is number = Echo()',
-      'library/Echo.tao': 'use Base from ./nested/Base\npublic function Echo() { return Base() }',
-      'library/nested/Base.tao': 'public function Base() { return 7 }',
-    }, async (paths, root) => {
-      const workspace = await Workspace.open(root)
-      const entry = paths['Main.tao']!
-      const echo = paths['library/Echo.tao']!
-      const base = paths['library/nested/Base.tao']!
-      const baseline = await workspace.validateFiles([entry])
-      Expect(baseline.diagnostics).toEqual([])
-      const checked: string[] = []
-      const foreign = Validate.ForeignImplementationFiles
-      const restore = foreignSlot.install(async (file, context) => {
-        checked.push(AST.getDocument(file).uri.path)
-        await foreign(file, context)
-      })
-      try {
-        for (
-          const [path, source, wrong] of [
-            [base, 'public function Base() { return "changed" }', true],
-            [echo, 'public function Echo() { return 8 }', false],
-            [echo, 'use Base from ./nested/Base\npublic function Echo() { return Base() }', true],
-            [base, 'public function Base() { return 7 }', false],
-          ] as const
-        ) {
-          await FS.writeText(path, source)
-          checked.length = 0
-          const fast = await workspace.validateFiles([entry], [path])
-          Expect(fast.entry.ast).toBe(baseline.entry.ast)
-          Expect(checked).toContain(entry)
-          Expect(
-            Diagnostics.messages(fast.diagnostics).includes(
-              AliasesValidator.messages.ascriptionType('Result', 'number', 'text'),
-            ),
-          ).toBe(wrong)
-          const cold = await (await Workspace.open(root)).validateFiles([entry])
-          Expect(fast.diagnostics).toEqual(cold.diagnostics)
-        }
-      } finally {
-        restore()
-      }
-    })
-  })
-
-  Test('preview drops unresolved snapshots and validates recovered import membership', async () => {
-    await withPreviewValidationFiles('tao-preview-recovery-validation-', {
-      '.tao/.gitkeep': '',
-      'Main.tao': 'use Value from ./library/Value\nlet Result is number = Value',
-      'library/Value.tao': 'public let Value = 1',
-    }, async (paths, root) => {
-      const workspace = await Workspace.open(root)
-      const entry = paths['Main.tao']!
-      const library = paths['library/Value.tao']!
-      const baseline = await workspace.validateFiles([entry])
-      Expect(baseline.diagnostics).toEqual([])
-      const checked: string[] = []
-      const foreign = Validate.ForeignImplementationFiles
-      const restore = foreignSlot.install(async (file, context) => {
-        checked.push(AST.getDocument(file).uri.path)
-        await foreign(file, context)
-      })
-      try {
-        for (const source of ['public let Other = 2', 'public let Value = "recovered"', 'public let Value = 1']) {
-          await FS.writeText(library, source)
-          checked.length = 0
-          const fast = await workspace.validateFiles([entry], [library])
-          Expect(fast.entry.ast).toBe(baseline.entry.ast)
-          Expect(checked).toContain(entry)
-          if (source.includes('Other')) {
-            Expect(Diagnostics.hasSource(fast.diagnostics, 'linker')).toBe(true)
-          } else if (source.includes('recovered')) {
-            Expect(Diagnostics.messages(fast.diagnostics)).toContain(
-              AliasesValidator.messages.ascriptionType('Result', 'number', 'text'),
-            )
-          } else {
-            Expect(fast.diagnostics).toEqual([])
-          }
-          Expect(fast.diagnostics).toEqual((await (await Workspace.open(root)).validateFiles([entry])).diagnostics)
-        }
-      } finally {
-        restore()
-      }
-    })
-  })
-
-  Test('preview falls back to a full pass when dependency observations are unavailable', async () => {
-    await withPreviewValidationFiles('tao-preview-incomplete-graph-', {
-      '.tao/.gitkeep': '',
-      'Main.tao': 'let Main = 1',
-      'Other.tao': 'let Wrong is number = "bad"',
-    }, async (paths, root) => {
-      const workspace = await Workspace.open(root)
-      const entries = [paths['Main.tao']!, paths['Other.tao']!]
-      const baseline = await workspace.validateFiles(entries)
-      Expect(Diagnostics.messages(baseline.diagnostics)).toContain(
-        AliasesValidator.messages.ascriptionType('Wrong', 'number', 'text'),
-      )
-      const checked: string[] = []
-      const foreign = Validate.ForeignImplementationFiles
-      const restores = [
-        foreignSlot.install(async (file, context) => {
-          checked.push(AST.getDocument(file).uri.path)
-          await foreign(file, context)
-        }),
-        dependenciesSlot.install(() => undefined),
-      ]
-      try {
-        const fast = await workspace.validateFiles(entries, [entries[0]!])
-        Expect(checked).toContain(entries[0]!)
-        Expect(checked).toContain(entries[1]!)
-        Expect(fast.diagnostics).toEqual(baseline.diagnostics)
-        const cold = await (await Workspace.open(root)).validateFiles(entries)
-        Expect(fast.diagnostics).toEqual(cold.diagnostics)
-      } finally {
-        restores.reverse().forEach(restore => restore())
-      }
-    })
-  })
-
   Test('replays ordered reports across six entry contexts while global and foreign checks run fresh', async () => {
-    await withPreviewValidationFiles('tao-document-reports-entries-', {
+    await withTaoFiles('tao-document-reports-entries-', {
       '.tao/.gitkeep': '',
       'One.tao': `let Wrong is number = "bad"
         let Calculation = true + 2
@@ -346,7 +130,7 @@ Describe('validator: workspace-owned document report reuse', () => {
   })
 
   Test('invalidates imported and transitive body/type changes without replacing the consumer AST', async () => {
-    await withPreviewValidationFiles('tao-document-reports-imports-', {
+    await withTaoFiles('tao-document-reports-imports-', {
       '.tao/.gitkeep': '',
       'Main.tao': 'use Echo from ./library/Echo\nlet Result is number = Echo()',
       'library/Echo.tao': 'use Base from ./nested/Base\npublic func Echo() { return Base() }',
@@ -384,7 +168,7 @@ Describe('validator: workspace-owned document report reuse', () => {
   })
 
   Test('keeps source overlays, syntax/link errors and recovered dependency membership current', async () => {
-    await withPreviewValidationFiles('tao-document-reports-overlay-', {
+    await withTaoFiles('tao-document-reports-overlay-', {
       '.tao/.gitkeep': '',
       'Main.tao': 'use Value from ./library/Value\nlet Result is number = Value',
       'library/Value.tao': 'public let Value = 1',
@@ -418,7 +202,7 @@ Describe('validator: workspace-owned document report reuse', () => {
   })
 
   Test('rechecks foreign files after create, content change and deletion despite unchanged Tao ASTs', async () => {
-    await withPreviewValidationFiles('tao-document-reports-foreign-', {
+    await withTaoFiles('tao-document-reports-foreign-', {
       '.tao/.gitkeep': '',
       'Main.tao': 'view Foreign() from ./Foreign.tsx\nlet Local = 2 + 3',
     }, async (paths, root) => {
@@ -470,7 +254,7 @@ Describe('validator: workspace-owned document report reuse', () => {
   })
 
   Test('keeps contexts private and discards staged reports after incomplete validation', async () => {
-    await withPreviewValidationFiles('tao-document-reports-contexts-', {
+    await withTaoFiles('tao-document-reports-contexts-', {
       '.tao/.gitkeep': '',
       'Main.tao': 'let Value = 2 + 3',
     }, async (paths, root) => {
@@ -478,7 +262,7 @@ Describe('validator: workspace-owned document report reuse', () => {
       const parser = Parser.createContext({ packages: Packages.createResolver(packages) })
       const parsed = await Parser.parse(parser, URI.file(paths['Main.tao']!), { validation: false })
       const context = Validator.createContext(packages, parsed.files.map(file => file.ast), parsed.entry.path)
-      const reuse = Validator.createDocumentReuse({ experimentalWholeDocumentReuse: true })
+      const reuse = Validator.createDocumentReuse()
       const original = Validate.Types
       let calls = 0
       const restore = typesSlot.install((...args) => {

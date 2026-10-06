@@ -197,10 +197,7 @@ async function compileValidated(
     ? ASTUtils.withAssociatedEffects(validationResult.associatedEffects, emit)
     : emit()
   const backendAt = trace ? performance.now() : 0
-  const afterNativeBindings = await inspectMaintainedNativeBindings({
-    ...context.nativeBindings,
-    experimentalInspection: undefined,
-  })
+  const afterNativeBindings = await inspectMaintainedNativeBindings(context.nativeBindings)
   const nativeAfterAt = trace ? performance.now() : 0
   Assert.input(
     afterNativeBindings.status === 'fresh' && afterNativeBindings.identity === nativeBindings.identity,

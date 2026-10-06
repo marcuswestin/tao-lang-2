@@ -169,6 +169,22 @@ const cohortSources = new WeakMap<object, TaoDesignCohortSource>()
 const liveCohorts = new Set<WeakRef<object>>()
 
 function validStudioDesignPaddingUpdate(update: TaoStudioDesignPaddingUpdate): boolean {
+  if (
+    typeof update !== 'object' || update === null
+    || typeof update.designName !== 'string'
+    || typeof update.bundleName !== 'string'
+    || typeof update.sourcePath !== 'string'
+    || (update.ownerKind !== 'legacy' && update.ownerKind !== 'styles' && update.ownerKind !== 'text')
+    || typeof update.entryIndex !== 'number'
+    || typeof update.expectedPadding !== 'number'
+    || typeof update.padding !== 'number'
+    || typeof update.oldLiteralRange !== 'object' || update.oldLiteralRange === null
+    || typeof update.newLiteralRange !== 'object' || update.newLiteralRange === null
+    || typeof update.oldSpecRange !== 'object' || update.oldSpecRange === null
+    || typeof update.newSpecRange !== 'object' || update.newSpecRange === null
+  ) {
+    return false
+  }
   const { newLiteralRange, newSpecRange, oldLiteralRange, oldSpecRange } = update
   const rangeValid = (range: TaoStudioDesignSourceRange): boolean =>
     Number.isSafeInteger(range.from) && range.from >= 0
@@ -189,6 +205,9 @@ function validStudioDesignPaddingUpdate(update: TaoStudioDesignPaddingUpdate): b
     return false
   }
   const delta = newLiteralRange.to - oldLiteralRange.to
+  if (!Number.isSafeInteger(delta)) {
+    return false
+  }
   return oldLiteralRange.from >= oldSpecRange.from
     && oldLiteralRange.to <= oldSpecRange.to
     && newLiteralRange.from >= newSpecRange.from
@@ -211,6 +230,38 @@ function studioDesignOwnerSourceMatches(
     && source.kind === sourceKind
     && source.start === update.oldSpecRange.from
     && source.end === update.oldSpecRange.to
+}
+
+function studioDesignOwnerMembershipIsUnique(
+  design: TaoDesign,
+  update: TaoStudioDesignPaddingUpdate,
+): boolean {
+  const bundleNames = new Set<string>()
+  for (const [name, source] of Object.entries(design.sources ?? {})) {
+    if (studioDesignOwnerIdentityMatches(source, update)) {
+      bundleNames.add(name)
+    }
+  }
+  for (const [name, spec] of Object.entries(design.bundles)) {
+    if (studioDesignOwnerIdentityMatches(spec.source, update)) {
+      bundleNames.add(name)
+    }
+  }
+  return bundleNames.size === 1 && bundleNames.has(update.bundleName)
+}
+
+function studioDesignOwnerIdentityMatches(
+  source: TaoDesignSource | undefined,
+  update: TaoStudioDesignPaddingUpdate,
+): boolean {
+  const sourceKind = update.ownerKind === 'legacy'
+    ? 'legacy-style'
+    : update.ownerKind === 'styles'
+    ? 'style'
+    : 'text-style'
+  return source?.path === update.sourcePath
+    && source.member === update.bundleName
+    && source.kind === sourceKind
 }
 
 function shiftStudioDesignSource(
@@ -544,7 +595,7 @@ export const DesignControls = {
   },
 
   /** Apply one compiler-authenticated padding overlay within the named design source. */
-  experimentalPatchPadding(update: TaoStudioDesignPaddingUpdate): boolean {
+  patchStudioPadding(update: TaoStudioDesignPaddingUpdate): boolean {
     if (!validStudioDesignPaddingUpdate(update)) {
       return false
     }
@@ -564,6 +615,7 @@ export const DesignControls = {
       bundle === undefined
       || metadata === undefined
       || provenance.length === 0
+      || !studioDesignOwnerMembershipIsUnique(latest, update)
       || provenance.some(source => !studioDesignOwnerSourceMatches(source, update))
     ) {
       return false

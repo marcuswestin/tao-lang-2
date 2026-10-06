@@ -59,7 +59,7 @@ import { mountStudioSelectionHud } from './app/StudioSelectionHud'
 import { configureStudioSessionPickers } from './app/StudioSessionPickers'
 import { StudioSourceMutations } from './app/StudioSourceMutations'
 import { StudioPreviewActivationGate } from './matrix/StudioPreviewActivationGate'
-import { postExperimentalDesignPadding } from './matrix/StudioPreviewBridge'
+import { postDesignPadding } from './matrix/StudioPreviewBridge'
 import {
   StudioApiClient,
   StudioApiError,
@@ -652,9 +652,9 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     await session.restore(handshake.entryPath, () => StudioMountSignal.throwIfAborted(signal))
     StudioMountSignal.throwIfAborted(signal)
     const disconnectEvents = connectStudioEvents(view.status, openCompileDiagnostic, {
-      onExperimentalDesignPadding(update) {
+      onDesignPadding(update) {
         for (const preview of previews) {
-          postExperimentalDesignPadding(preview, handshake, update)
+          postDesignPadding(preview, handshake, update)
         }
       },
       onCompile(state) {

@@ -306,8 +306,8 @@ export type StudioSessionAppState = Readonly<{
 }>
 
 export type StudioSessionHandshake = {
-  /** Advertised only while the temporary observed-paint scheduler is enabled. */
-  experimentalPreviewPaint?: true
+  /** Advertised while authenticated paint controls pending authoritative work. */
+  previewPaint?: true
   apps: readonly StudioAppVariant[]
   capabilities: {
     drafts: 'disk-synced-parsable'
@@ -343,19 +343,19 @@ export type StudioSessionHandshake = {
   type: 'handshake'
 }
 
-/** Events one project session publishes; the server relays each to that session's event sockets. */
-/** Temporary constant-padding delivery experiment; authoritative compilation follows. */
-export type StudioExperimentalDesignPadding = Readonly<
+/** Compiler-owned constant-padding delivery; authoritative compilation follows. */
+export type StudioDesignPaddingUpdate = Readonly<
   TaoStudioDesignPaddingUpdate & {
     revision: number
   }
 >
 
+/** Events one project session publishes; the server relays each to that session's event sockets. */
 export type StudioSessionEvent =
-  | (StudioExperimentalDesignPadding & {
+  | (StudioDesignPaddingUpdate & {
     channel: typeof studioProtocolChannel
     protocolVersion: typeof studioProtocolVersion
-    type: 'experimental-design-padding'
+    type: 'design-padding'
   })
   | {
     channel: typeof studioProtocolChannel

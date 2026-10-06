@@ -1,6 +1,6 @@
 import { EmittedModuleCache } from '@compiler/compiler'
 import { computeStudioDesignPaddingDelta } from '@compiler/studio-design-delta'
-import { Workspace } from '@compiler/workspace'
+import { discoverProjectTaoFiles, Workspace } from '@compiler/workspace'
 import Runtime from '@expo-host'
 import { ProjectTooling, type ProjectToolingResult, type ProjectToolingWatch } from '@project-tooling'
 import { Assert, Errors, FS, HCI, Platform, Switch } from '@shared'
@@ -18,14 +18,14 @@ import { reactiveBrowserSchemeCapability, type StudioJsonObject, type StudioJson
 
 export type OpenStudioPreviewSessionOptions = Omit<StudioProjectSessionOptions, 'compile'> & {
   previewPublication?: 'on' | 'off'
-  experimentalPreviewFirst?: boolean
+  previewFirst?: boolean
   previewRuntimeRoot: string
   validationMode?: 'development' | 'release'
 }
 
 export type StudioPreviewSession = {
   close: () => Promise<void>
-  /** Explicit release for the diagnostic held-full-pass control. */
+  /** Flush pending authoritative work, including during session shutdown. */
   releaseFullPass: () => Promise<void>
   session: StudioProjectSession
 }
@@ -45,17 +45,13 @@ export async function openStudioPreviewSession(
   let toolingInputEpoch = 0
   let consumedToolingInputEpoch = 0
   const pendingSourceInputs = new Set<string>()
-  const previewFirstEnabled = options.experimentalPreviewFirst
-    ?? Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_FIRST'] === 'true'
+  const previewFirstEnabled = options.previewFirst
+    ?? Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_FIRST'] !== 'false'
   const traceEnabled = Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_TRACE'] === 'true'
-  const fullPassMode = Platform.runtimeProcess.env['TAO_STUDIO_EXPERIMENT_FULL_PASS'] ?? 'immediate'
-  Assert.input(
-    fullPassMode === 'immediate' || fullPassMode === 'paused' || fullPassMode === 'after-paint',
-    'Full-pass experiment must be immediate, paused or after-paint.',
-  )
-  const designDeliveryEnabled = previewFirstEnabled && fullPassMode === 'after-paint'
-    && options.previewPublication === 'off' && Platform.runtimeProcess.env['TAO_STUDIO_DESIGN_DELIVERY'] === 'true'
+  const designDeliveryEnabled = previewFirstEnabled && options.previewPublication === 'off'
+    && Platform.runtimeProcess.env['TAO_STUDIO_DESIGN_DELIVERY'] !== 'false'
   let fullPassPending = false
+  let fullPassCompletion: Promise<void> | undefined
   let closing = false
   let lastFastRevision: number | undefined
   let lastPublishedRevision: number | undefined
@@ -77,14 +73,21 @@ export async function openStudioPreviewSession(
       }
     }, 100)
     : undefined
-  const releaseFullPass = async () => {
+  const releaseFullPass = (): Promise<void> => {
     if (!fullPassPending || session === undefined) {
-      return
+      return fullPassCompletion ?? Promise.resolve()
     }
     backgroundScheduler.complete()
     fullPassPending = false
     trace('full-pass-released')
-    await session.compileInitial()
+    const completion = session.compileInitial().then(() => {})
+    const tracked = completion.finally(() => {
+      if (fullPassCompletion === tracked) {
+        fullPassCompletion = undefined
+      }
+    })
+    fullPassCompletion = tracked
+    return tracked
   }
   const backgroundScheduler = createStudioBackgroundValidationScheduler({
     setTimer: (callback, delayMs) => setTimeout(callback, delayMs),
@@ -95,40 +98,16 @@ export async function openStudioPreviewSession(
   })
   trace('settings', {
     previewFirstEnabled,
-    fullPassMode,
-    changedValidation: Platform.runtimeProcess.env['TAO_STUDIO_CHANGED_VALIDATION'] === 'true',
-    sourceReadReuse: Platform.runtimeProcess.env['TAO_STUDIO_REUSE_SOURCE_READS'] === 'true',
-    nativeInspectionReuse: Platform.runtimeProcess.env['TAO_STUDIO_FAST_BINDING_INSPECTION'] === 'true',
+    designDeliveryEnabled,
     requestedFastHmr: Platform.runtimeProcess.env['TAO_STUDIO_FAST_HMR'],
     requestedFastFileMap: Platform.runtimeProcess.env['TAO_STUDIO_FAST_FILE_MAP'],
     publication: options.previewPublication ?? 'on',
     nodeEnv: Platform.runtimeProcess.env['NODE_ENV'],
   })
-  if (previewFirstEnabled) {
-    HCI.logProcessInfo(
-      'studio',
-      `Preview speed experiment: preview-first; full pass ${fullPassMode}; `
-        + `design delivery ${designDeliveryEnabled ? 'enabled' : 'disabled'}; `
-        + `whole-document replay ${
-          Platform.runtimeProcess.env['TAO_STUDIO_CHANGED_VALIDATION'] === 'true' ? 'enabled' : 'disabled'
-        }; `
-        + `source-read reuse ${
-          Platform.runtimeProcess.env['TAO_STUDIO_REUSE_SOURCE_READS'] === 'true' ? 'enabled' : 'disabled'
-        }; `
-        + `native inspection reuse ${
-          Platform.runtimeProcess.env['TAO_STUDIO_FAST_BINDING_INSPECTION'] === 'true' ? 'enabled' : 'disabled'
-        }; `
-        + `publication ${options.previewPublication ?? 'on'}. Browser development mode is independent of NODE_ENV.`,
-    )
-  }
   const profileEnabled = Platform.runtimeProcess.env['TAO_STUDIO_PREVIEW_PROFILE'] === 'true' || traceEnabled
   const profileNow = () => profileEnabled ? performance.now() : 0
   function compileToolingChange(result: ProjectToolingResult): void {
     if (closing || result.revision <= consumedToolingRevision) {
-      return
-    }
-    if (fullPassMode !== 'immediate') {
-      fullPassPending = true
       return
     }
     void session?.compileInitial().catch(error =>
@@ -137,8 +116,8 @@ export async function openStudioPreviewSession(
   }
   session = await StudioProjectSession.open({
     ...options,
-    experimentalEnsurePublishedPreview: async () => {
-      if (!designOverlayPending) {
+    ensurePublishedPreview: async () => {
+      if (!designOverlayPending && !(fullPassPending && session?.hasNativePreviewConsumers())) {
         return
       }
       // A fresh realm cannot inherit an overlay held only by existing preview runtimes.
@@ -150,231 +129,279 @@ export async function openStudioPreviewSession(
       Assert.input(completion.status === 'compiled', completion.message)
     },
     async compile(request) {
-      Assert.defined(session, 'the Tao Studio project session to exist before its first compile')
-      Assert.defined(toolingWatch, 'the project tooling watch exists before preview compilation')
-      const startedAt = profileNow()
-      const feedSources = session.feedSourceOverrides()
-      const sourceOverrides = feedSources === undefined ? undefined : Object.freeze({ ...feedSources })
-      const files = await session.files()
-      const sourceVersions = Object.fromEntries(files.map(file => [file.path, file.sourceVersion]))
-      for (const [path, source] of Object.entries(sourceOverrides ?? {})) {
-        sourceVersions[FS.relativePath(request.project, path)] = SourceActions.studioSourceVersion(source)
-      }
-      // A tooling watcher can precede Studio's source watcher. Read its pending inputs so
-      // an unconsumed second edit cannot be mistaken for an isolated editor save.
-      const pendingInputs = [...pendingSourceInputs]
-      pendingSourceInputs.clear()
-      for (const path of pendingInputs) {
-        const absolute = FS.resolvePath(path, request.project)
-        if (await FS.isFile(absolute)) {
-          sourceVersions[path] = SourceActions.studioSourceVersion(await FS.readText(absolute))
-        } else {
-          delete sourceVersions[path]
+      try {
+        Assert.defined(session, 'the Tao Studio project session to exist before its first compile')
+        Assert.defined(toolingWatch, 'the project tooling watch exists before preview compilation')
+        const startedAt = profileNow()
+        const feedSources = session.feedSourceOverrides()
+        const sourceOverrides = feedSources === undefined ? undefined : Object.freeze({ ...feedSources })
+        const files = await session.files()
+        const sourceVersions = Object.fromEntries(files.map(file => [file.path, file.sourceVersion]))
+        for (const [path, source] of Object.entries(sourceOverrides ?? {})) {
+          sourceVersions[FS.relativePath(request.project, path)] = SourceActions.studioSourceVersion(source)
         }
-      }
-      const changedSourcePaths = Object.keys(sourceVersions).filter(path =>
-        sourceChanges.get(path)?.version !== sourceVersions[path]
-      )
-      const requestedPath = request.changes.length === 1
-        ? FS.relativePath(request.project, FS.resolvePath(request.changes[0]!.path, request.project))
-        : undefined
-      const fastGate = studioPreviewFastGate({
-        enabled: previewFirstEnabled,
-        request,
-        requestedPath,
-        sourceVersions,
-        consumedSources: sourceChanges,
-        freshTooling: toolingWatch.lastResult.status === 'fresh',
-        currentToolingInputs: toolingInputEpoch === consumedToolingInputEpoch,
-      })
-      const previewFirst = Object.values(fastGate).every(Boolean)
-      trace('attempt-start', {
-        revision: request.compileRevision,
-        causes: request.causes,
-        changes: request.changes,
-        queueMs: request.queuedAt === undefined ? undefined : Date.now() - request.queuedAt,
-        previewFirst,
-        fastGate,
-      })
-      if (previewFirst) {
-        fullPassPending = true
-        if (fullPassMode === 'after-paint') {
-          backgroundScheduler.request(request.compileRevision)
-        }
-        if (fullPassMode === 'immediate') {
-          fullPassPending = false
-          void session.compileInitial().catch(error =>
-            HCI.logProcessError('studio-preview-first', Errors.formatForLog(error))
-          )
-        }
-      }
-      let tooling = toolingWatch.lastResult
-      if (!previewFirst) {
-        // An authoritative attempt consumes pending background work for this input.
-        // Keeping its old deadline would enqueue a redundant second full pass.
-        backgroundScheduler.complete()
-        fullPassPending = false
-        toolingAcquisitions += 1
-        try {
-          const inputEpoch = toolingInputEpoch
-          tooling = await toolingWatch.requestRefresh()
-          consumedToolingRevision = tooling.revision
-          consumedToolingInputEpoch = inputEpoch
-        } finally {
-          toolingAcquisitions -= 1
-          if (toolingAcquisitions === 0 && deferredToolingResult !== undefined) {
-            const deferred = deferredToolingResult
-            deferredToolingResult = undefined
-            compileToolingChange(deferred)
+        // A tooling watcher can precede Studio's source watcher. Read its pending inputs so
+        // an unconsumed second edit cannot be mistaken for an isolated editor save.
+        const pendingInputs = [...pendingSourceInputs]
+        pendingSourceInputs.clear()
+        for (const path of pendingInputs) {
+          const absolute = FS.resolvePath(path, request.project)
+          if (await FS.isFile(absolute)) {
+            sourceVersions[path] = SourceActions.studioSourceVersion(await FS.readText(absolute))
+          } else {
+            delete sourceVersions[path]
           }
         }
-      }
-      if (tooling.status !== 'fresh') {
-        Errors.throwUserInput(
-          tooling.diagnostics.map(diagnostic => diagnostic.message).join('\n')
-            || 'Project tooling is stale; keeping the last working preview.',
+        const changedSourcePaths = Object.keys(sourceVersions).filter(path =>
+          sourceChanges.get(path)?.version !== sourceVersions[path]
         )
-      }
-      const toolingDoneAt = profileNow()
-      const sourceEpochs: Record<string, number> = {}
-      for (const [path, version] of Object.entries(sourceVersions)) {
-        const previous = sourceChanges.get(path)
-        const epoch = previous?.version === version ? previous.epoch : request.compileRevision
-        sourceChanges.set(path, { version, epoch })
-        sourceEpochs[path] = epoch
-      }
-      for (const path of sourceChanges.keys()) {
-        if (!(path in sourceVersions)) {
-          sourceChanges.delete(path)
-        }
-      }
-      const designPath = FS.resolvePath('Design.tao', request.project)
-      const designSource = designDeliveryEnabled && await FS.isFile(designPath)
-        ? await FS.readText(designPath)
-        : undefined
-      const directDesign = previewFirst && fullPassMode === 'after-paint' && options.previewPublication === 'off'
-          && Platform.runtimeProcess.env['TAO_STUDIO_DESIGN_DELIVERY'] === 'true'
-          && changedSourcePaths.length === 1 && changedSourcePaths[0] === 'Design.tao'
-          && previousDesignSource !== undefined && designSource !== undefined && lastPublishedRevision !== undefined
-          && toolingInputEpoch === consumedToolingInputEpoch
-          && ![...pendingSourceInputs].some(path => path !== 'Design.tao')
-          && SourceActions.studioSourceVersion(designSource) === sourceVersions['Design.tao']
-        ? computeStudioDesignPaddingDelta(previousDesignSource, designSource)
-        : undefined
-      previousDesignSource = designSource
-      if (directDesign !== undefined) {
-        designOverlayPending = true
-        lastFastRevision = request.compileRevision
-        session.experimentalDesignPadding({
-          ...directDesign,
-          revision: request.compileRevision,
-          sourcePath: designPath,
-        })
-        trace('design-delivered', { revision: request.compileRevision, sourceVersions, ...directDesign })
-        return {
-          message: `Delivered experimental padding revision ${request.compileRevision}.`,
-          publishedRevision: lastPublishedRevision,
-        }
-      }
-      const sourcesDoneAt = profileNow()
-      previewWorkspace ??= await Workspace.open(request.project)
-      const workspaceDoneAt = profileNow()
-      const generated = await Runtime.generateApp(session.entryPath, {
-        appName: request.appName,
-        preview: {
-          experimentalChangedSourcePaths: previewFirst
-            ? changedSourcePaths.map(path => FS.resolvePath(path, request.project))
-            : undefined,
-          publicationChecks: options.previewPublication !== 'off',
-          project: request.project,
-          revision: request.compileRevision,
-          sourceOverrides,
+        const requestedPath = request.changes.length === 1
+          ? FS.relativePath(request.project, FS.resolvePath(request.changes[0]!.path, request.project))
+          : undefined
+        let attemptInputEpoch = toolingInputEpoch
+        const auditedToolingInputs = previewFirstEnabled && sourceOverrides === undefined
+          && (await toolingWatch.auditPreview?.(sourceVersions, SourceActions.studioSourceVersion) ?? false)
+          && attemptInputEpoch === toolingInputEpoch
+        const fastGate = studioPreviewFastGate({
+          enabled: previewFirstEnabled && session.hasPreviewConsumers() && !session.hasNativePreviewConsumers(),
+          request: {
+            ...request,
+            changes: request.changes.map(change => ({
+              ...change,
+              path: FS.relativePath(request.project, FS.resolvePath(change.path, request.project)),
+            })),
+          },
+          requestedPath,
           sourceVersions,
-          sourceEpochs,
-        },
-        runtimePackageRoot: options.previewRuntimeRoot,
-        validationMode: options.validationMode,
-        previewWorkspace,
-        emittedModuleCache,
-      }).catch(error => {
-        // No child can acknowledge a failed fast result. Do not leave diagnostics
-        // recovery waiting for the paint deadline that can never be satisfied.
-        if (previewFirst && fullPassMode === 'after-paint') {
+          consumedSources: sourceChanges,
+          freshTooling: toolingWatch.lastResult.status === 'fresh',
+          currentToolingInputs: toolingInputEpoch === consumedToolingInputEpoch,
+          auditedToolingInputs,
+        })
+        const previewFirst = Object.values(fastGate).every(Boolean)
+        trace('attempt-start', {
+          revision: request.compileRevision,
+          causes: request.causes,
+          changes: request.changes,
+          queueMs: request.queuedAt === undefined ? undefined : Date.now() - request.queuedAt,
+          previewFirst,
+          fastGate,
+        })
+        if (previewFirst) {
+          fullPassPending = true
+          backgroundScheduler.request(request.compileRevision)
+        }
+        let tooling = toolingWatch.lastResult
+        if (!previewFirst) {
+          // An authoritative attempt consumes pending background work for this input.
+          // Keeping its old deadline would enqueue a redundant second full pass.
+          backgroundScheduler.complete()
+          fullPassPending = false
+          toolingAcquisitions += 1
+          try {
+            const inputEpoch = toolingInputEpoch
+            tooling = await toolingWatch.requestRefresh()
+            consumedToolingRevision = tooling.revision
+            consumedToolingInputEpoch = inputEpoch
+          } finally {
+            toolingAcquisitions -= 1
+            if (toolingAcquisitions === 0 && deferredToolingResult !== undefined) {
+              const deferred = deferredToolingResult
+              deferredToolingResult = undefined
+              compileToolingChange(deferred)
+            }
+          }
+        }
+        if (tooling.status !== 'fresh') {
+          Errors.throwUserInput(
+            tooling.diagnostics.map(diagnostic => diagnostic.message).join('\n')
+              || 'Project tooling is stale; keeping the last working preview.',
+          )
+        }
+        if (!previewFirst) {
+          // Initial watcher attachment and an authoritative refresh can discover inputs
+          // before Studio's listing receives their watch events. Consume current bytes.
+          const currentPaths = await discoverProjectTaoFiles(request.project)
+          for (const path of Object.keys(sourceVersions)) {
+            delete sourceVersions[path]
+          }
+          for (const path of currentPaths) {
+            const source = sourceOverrides?.[path] ?? await FS.readText(path)
+            sourceVersions[FS.relativePath(request.project, path)] = SourceActions.studioSourceVersion(source)
+          }
+          attemptInputEpoch = toolingInputEpoch
+        }
+        const toolingDoneAt = profileNow()
+        const sourceEpochs: Record<string, number> = {}
+        const candidateSources = new Map<string, { version: string; epoch: number }>()
+        for (const [path, version] of Object.entries(sourceVersions)) {
+          const previous = sourceChanges.get(path)
+          const epoch = previous?.version === version ? previous.epoch : request.compileRevision
+          candidateSources.set(path, { version, epoch })
+          sourceEpochs[path] = epoch
+        }
+        const commitSources = () => {
+          sourceChanges.clear()
+          for (const [path, source] of candidateSources) {
+            sourceChanges.set(path, source)
+          }
+          previousDesignSource = designSource
+        }
+        const designPath = FS.resolvePath('Design.tao', request.project)
+        const designSource = designDeliveryEnabled && await FS.isFile(designPath)
+          ? await FS.readText(designPath)
+          : undefined
+        const directDesign = previewFirst && designDeliveryEnabled && !session.hasNativePreviewConsumers()
+            && changedSourcePaths.length === 1 && changedSourcePaths[0] === 'Design.tao'
+            && previousDesignSource !== undefined && designSource !== undefined && lastPublishedRevision !== undefined
+            && toolingInputEpoch === consumedToolingInputEpoch
+            && ![...pendingSourceInputs].some(path => path !== 'Design.tao')
+            && SourceActions.studioSourceVersion(designSource) === sourceVersions['Design.tao']
+          ? computeStudioDesignPaddingDelta(previousDesignSource, designSource)
+          : undefined
+        if (directDesign !== undefined) {
+          Assert.input(
+            await toolingWatch.auditPreview?.(sourceVersions, SourceActions.studioSourceVersion)
+              && attemptInputEpoch === toolingInputEpoch,
+            'Project inputs changed before padding delivery.',
+          )
+          designOverlayPending = true
+          lastFastRevision = request.compileRevision
+          session.deliverDesignPadding({
+            ...directDesign,
+            revision: request.compileRevision,
+            sourcePath: designPath,
+          })
+          trace('design-delivered', { revision: request.compileRevision, sourceVersions, ...directDesign })
+          commitSources()
+          return {
+            message: `Delivered padding revision ${request.compileRevision}.`,
+            publishedRevision: lastPublishedRevision,
+          }
+        }
+        const sourcesDoneAt = profileNow()
+        previewWorkspace ??= await Workspace.open(request.project)
+        const workspaceDoneAt = profileNow()
+        const generated = await Runtime.generateApp(session.entryPath, {
+          appName: request.appName,
+          preview: {
+            acceptSourceSnapshot: async () => {
+              if (attemptInputEpoch !== toolingInputEpoch) {
+                return false
+              }
+              if (!previewFirst) {
+                const currentPaths = await discoverProjectTaoFiles(request.project)
+                if (
+                  currentPaths.length !== Object.keys(sourceVersions).length
+                  || currentPaths.some(path => !Object.hasOwn(sourceVersions, FS.relativePath(request.project, path)))
+                ) {
+                  return false
+                }
+              }
+              for (const [path, version] of Object.entries(sourceVersions)) {
+                const source = sourceOverrides?.[FS.resolvePath(path, request.project)]
+                  ?? await FS.readText(FS.resolvePath(path, request.project))
+                if (SourceActions.studioSourceVersion(source) !== version) {
+                  return false
+                }
+              }
+              const sourceInputsCurrent = !previewFirst
+                || (await toolingWatch!.auditPreview?.(sourceVersions, SourceActions.studioSourceVersion) ?? false)
+              return sourceInputsCurrent && attemptInputEpoch === toolingInputEpoch
+            },
+            publicationChecks: options.previewPublication !== 'off',
+            project: request.project,
+            revision: request.compileRevision,
+            sourceOverrides,
+            sourceVersions,
+            sourceEpochs,
+          },
+          runtimePackageRoot: options.previewRuntimeRoot,
+          validationMode: options.validationMode,
+          previewWorkspace,
+          emittedModuleCache,
+        })
+        designOverlayPending = false
+        commitSources()
+        lastPublishedRevision = generated.preview?.revision
+        if (previewFirst) {
+          lastFastRevision = generated.preview?.revision
+        }
+        trace('published', {
+          sourceVersions: generated.preview?.sourceVersions,
+          changes: request.changes,
+          revision: request.compileRevision,
+          publishedRevision: generated.preview?.revision,
+          skipped: generated.previewPublicationSkipped,
+          previewFirst,
+        })
+        if (profileEnabled) {
+          const generatedAt = profileNow()
+          HCI.logProcessInfo(
+            'studio',
+            JSON.stringify({
+              type: 'studio-preview-pipeline-profile',
+              revision: request.compileRevision,
+              toolingRevision: tooling.revision,
+              previewFirst,
+              toolingMs: toolingDoneAt - startedAt,
+              sourceSnapshotMs: sourcesDoneAt - toolingDoneAt,
+              workspaceOpenMs: workspaceDoneAt - sourcesDoneAt,
+              generateAppMs: generatedAt - workspaceDoneAt,
+              totalMs: generatedAt - startedAt,
+            }),
+          )
+        }
+        if (generated.emittedModuleCache !== undefined) {
+          const { hits, misses, files: emitted } = generated.emittedModuleCache
+          HCI.logProcessInfo(
+            'studio',
+            JSON.stringify({
+              type: 'studio-emitted-module-cache',
+              revision: request.compileRevision,
+              previewFirst,
+              hits,
+              misses,
+              emitMs: emitted.reduce((sum, file) => sum + file.emitMs, 0),
+              totalMs: emitted.reduce((sum, file) => sum + file.totalMs, 0),
+            }),
+          )
+        }
+        if (
+          generated.previewPublicationSkipped !== true
+          && generated.studioManifest !== undefined && generated.preview !== undefined
+        ) {
+          session.setMatrixManifest(matrixManifest(session, generated, request.compileRevision))
+        }
+        return {
+          message: `Compiled ${request.appName} preview revision ${request.compileRevision}.`,
+          ...(generated.previewPublicationSkipped === true && generated.preview !== undefined
+            ? { publishedRevision: generated.preview.revision }
+            : {}),
+        }
+      } catch (error) {
+        trace('attempt-failed', { revision: request.compileRevision, error: Errors.messageOf(error) })
+        // Admission, delivery and publication can all fail before a child can paint.
+        // Release recovery immediately instead of waiting for an impossible acknowledgement.
+        if (fullPassPending) {
           void releaseFullPass().catch(fullError =>
             HCI.logProcessError('studio-background', Errors.formatForLog(fullError))
           )
         }
         throw error
-      })
-      designOverlayPending = false
-      lastPublishedRevision = generated.preview?.revision
-      if (previewFirst) {
-        lastFastRevision = generated.preview?.revision
-      }
-      trace('published', {
-        sourceVersions: generated.preview?.sourceVersions,
-        changes: request.changes,
-        revision: request.compileRevision,
-        publishedRevision: generated.preview?.revision,
-        skipped: generated.previewPublicationSkipped,
-        previewFirst,
-      })
-      if (profileEnabled) {
-        const generatedAt = profileNow()
-        HCI.logProcessInfo(
-          'studio',
-          JSON.stringify({
-            type: 'studio-preview-pipeline-profile',
-            revision: request.compileRevision,
-            toolingRevision: tooling.revision,
-            previewFirst,
-            toolingMs: toolingDoneAt - startedAt,
-            sourceSnapshotMs: sourcesDoneAt - toolingDoneAt,
-            workspaceOpenMs: workspaceDoneAt - sourcesDoneAt,
-            generateAppMs: generatedAt - workspaceDoneAt,
-            totalMs: generatedAt - startedAt,
-          }),
-        )
-      }
-      if (generated.emittedModuleCache !== undefined) {
-        const { hits, misses, files: emitted } = generated.emittedModuleCache
-        HCI.logProcessInfo(
-          'studio',
-          JSON.stringify({
-            type: 'studio-emitted-module-cache',
-            revision: request.compileRevision,
-            previewFirst,
-            hits,
-            misses,
-            emitMs: emitted.reduce((sum, file) => sum + file.emitMs, 0),
-            totalMs: emitted.reduce((sum, file) => sum + file.totalMs, 0),
-          }),
-        )
-      }
-      if (
-        generated.previewPublicationSkipped !== true
-        && generated.studioManifest !== undefined && generated.preview !== undefined
-      ) {
-        session.setMatrixManifest(matrixManifest(session, generated, request.compileRevision))
-      }
-      return {
-        message: `Compiled ${request.appName} preview revision ${request.compileRevision}.`,
-        ...(generated.previewPublicationSkipped === true && generated.preview !== undefined
-          ? { publishedRevision: generated.preview.revision }
-          : {}),
       }
     },
   })
   let watchReady = false
   toolingWatch = await ProjectTooling.watch(session.projectRoot, {
-    automaticRefresh: fullPassMode === 'immediate',
+    automaticRefresh: !previewFirstEnabled,
     hostModulesRoot: FS.resolvePath('node_modules', options.previewRuntimeRoot),
     onInputChange: change => {
-      if (!watchReady || closing || fullPassMode === 'immediate') {
+      if (!watchReady || closing || !previewFirstEnabled) {
         return
       }
       const relative = change.path === undefined ? undefined : FS.relativePath(session!.projectRoot, change.path)
-      if (change.event === 'change' && relative !== undefined && sourceChanges.has(relative)) {
+      if (change.kind === 'source' && relative !== undefined && sourceChanges.has(relative)) {
         pendingSourceInputs.add(relative)
         return
       }
@@ -396,7 +423,7 @@ export async function openStudioPreviewSession(
       compileToolingChange(result)
     },
   })
-  session.experimentalPreviewPaint = fullPassMode !== 'after-paint' ? undefined : (revision, painted = true) => {
+  session.previewPaint = !previewFirstEnabled ? undefined : (revision, painted = true) => {
     if (closing || !fullPassPending || revision !== lastFastRevision) {
       return false
     }
@@ -410,6 +437,11 @@ export async function openStudioPreviewSession(
     backgroundScheduler.painted(revision)
     return true
   }
+  session.previewConsumersChanged = () => {
+    if (!closing && fullPassPending && !session!.hasPreviewConsumers()) {
+      void releaseFullPass().catch(error => HCI.logProcessError('studio-background', Errors.formatForLog(error)))
+    }
+  }
   watchReady = true
   return {
     releaseFullPass,
@@ -420,11 +452,17 @@ export async function openStudioPreviewSession(
         clearInterval(heartbeat)
       }
       try {
+        await session!.waitForCompileIdle()
         await releaseFullPass()
       } finally {
         backgroundScheduler.close()
-        await toolingWatch?.dispose()
-        await Runtime.resetStudioPreviewSession({ runtimePackageRoot: options.previewRuntimeRoot })
+        session!.previewConsumersChanged = undefined
+        session!.previewPaint = undefined
+        try {
+          await toolingWatch?.dispose()
+        } finally {
+          await Runtime.resetStudioPreviewSession({ runtimePackageRoot: options.previewRuntimeRoot })
+        }
       }
     },
     session,

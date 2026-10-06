@@ -47,6 +47,33 @@ Describe('compiler: Studio design padding delta', () => {
     })
   })
 
+  Test('tracks rapid width changes and reverts from each immutable source baseline', () => {
+    const source = (padding: number) => `design Theme { styles { storyCard [pad ${padding}, radius 4] } }`
+    const widths = [12, 100, 12, 16]
+    for (let index = 0; index < widths.length - 1; index++) {
+      const before = source(widths[index]!)
+      const after = source(widths[index + 1]!)
+      const delta = computeStudioDesignPaddingDelta(before, after)
+      const from = before.indexOf(String(widths[index]!))
+      const to = after.indexOf(String(widths[index + 1]!))
+      Expect(delta).toMatchObject({
+        expectedPadding: widths[index],
+        padding: widths[index + 1],
+        oldLiteralRange: { from, to: from + String(widths[index]!).length },
+        newLiteralRange: { from: to, to: to + String(widths[index + 1]!).length },
+      })
+    }
+  })
+
+  Test('rejects an invalid edit and recovers on the next valid source snapshot', () => {
+    const before = `design Theme { card [pad 8] }`
+    Expect(computeStudioDesignPaddingDelta(before, `design Theme { card [pad -1] }`)).toBeUndefined()
+    Expect(computeStudioDesignPaddingDelta(before, `design Theme { card [pad 12] }`)).toMatchObject({
+      expectedPadding: 8,
+      padding: 12,
+    })
+  })
+
   Test('rejects modifier, condition, value-reference, and non-finite padding candidates', () => {
     for (
       const [before, after] of [

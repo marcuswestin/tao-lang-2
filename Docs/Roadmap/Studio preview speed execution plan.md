@@ -1,7 +1,7 @@
 # Studio preview speed execution plan
 
-Prepared 2026-10-06. Status: awaiting Developer approval; production implementation and landing
-are not authorized. The [continuation roadmap](<Studio preview speed continuation.md>) remains
+Prepared 2026-10-06. Status: execution approved and in progress; landing is not authorized.
+The [continuation roadmap](<Studio preview speed continuation.md>) remains
 the project owner. The [tracked POC handover](<Studio preview speed POC handover.md>) records the
 experimental mechanisms and historical evidence. This plan supersedes the supplementary archive's
 main-only preparation plan as the proposed execution sequence, without superseding its raw evidence.
@@ -29,7 +29,7 @@ main-only preparation plan as the proposed execution sequence, without supersedi
    Project store/local/cache layout, activation persistence, stable links, identical-publication
    suppression and the landed timer patches remain the baseline.
 
-## Proposed enablement
+## Approved enablement
 
 1. Enable preview-first and bounded authoritative scheduling by default only after their admission
    and lifecycle proofs pass. Preserve publication checks on by default. Unknown or unsupported
@@ -98,7 +98,8 @@ main-only preparation plan as the proposed execution sequence, without supersedi
    and run focused checks with writers paused. Commit coherent reviewed task-owned slices, update
    the continuation roadmap before each changed-scope gate, and run the local iteration lane.
    Run sequential paired measurements and the standalone performance proof after source is stable.
-   Perform the full integrated review personally at completion; there are no subagent reviews.
+   Perform the full integrated review personally at completion. The Developer's later instruction
+   permits one read-only subagent to aid that review if needed; the lead owns fixes and judgment.
    Prepare the reviewed merge message and report readiness, remaining risks and measured costs.
    Stop before push/CI/landing unless separately authorized. At project completion remind the
    Developer to review Tao test and scenario syntax and structure.

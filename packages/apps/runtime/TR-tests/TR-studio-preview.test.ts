@@ -2137,7 +2137,7 @@ Test('reports rejected design padding without paint and ignores out-of-order des
         newSpecRange: { from: 1, to: 20 },
         protocolVersion: 1,
         revision,
-        type: 'experimental-design-padding',
+        type: 'design-padding',
       },
       origin,
       source,

@@ -6,7 +6,7 @@ import type { StudioDeviceStatus } from '../studio-src/device/StudioDeviceStatus
 import { StudioFixtureGeneration } from '../studio-src/StudioFixtureGeneration'
 import type { StudioPreviewManifestV2 } from '../studio-src/StudioPreviewManifest'
 import {
-  type StudioProjectSession,
+  StudioProjectSession,
   StudioSourceActionConflictError,
 } from '../studio-src/StudioProjectSession'
 import {
@@ -114,6 +114,31 @@ Describe('Studio server request boundary', () => {
     })
   })
 
+  Test('routes whole-app preview release without changing its registration identity', async () => {
+    const released: string[] = []
+    const session = {
+      unregisterPreview(id: string) {
+        released.push(id)
+      },
+      subscribe: () => () => {},
+    } as unknown as StudioProjectSession
+    const url = new URL('http://127.0.0.1:5678/api/preview/release')
+    const response = await StudioServerTesting.handleRequest(
+      session,
+      {} as StudioFixtureGeneration,
+      new Request(url, {
+        body: JSON.stringify({ previewInstanceId: 'released-whole-app' }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      }),
+      url,
+      {},
+    )
+    Expect(response.status).toBe(200)
+    Expect(await response.json()).toEqual({ released: true })
+    Expect(released).toEqual(['released-whole-app'])
+  })
+
   Test('routes Move to package through the typed Studio file endpoint', async () => {
     const calls: unknown[] = []
     const session = {
@@ -160,7 +185,7 @@ Describe('Studio server request boundary', () => {
       const calls: string[] = []
       const registrations: string[] = []
       const session = {
-        async experimentalEnsurePublishedPreview() {
+        async ensurePublishedPreview() {
           calls.push('publishing')
           await Promise.resolve()
           calls.push('published')
@@ -200,7 +225,7 @@ Describe('Studio server request boundary', () => {
     for (const pathname of ['/api/preview/cell/instance', '/api/preview/instance']) {
       let registered = false
       const session = {
-        async experimentalEnsurePublishedPreview() {
+        async ensurePublishedPreview() {
           Errors.throwUnexpected('publication failed')
         },
         registerCellPreview() {
@@ -906,14 +931,32 @@ Describe('Studio child paint scheduling result', () => {
   Test('forwards actual paint and rejection separately without treating rejection as paint', async () => {
     const received: Array<[number, boolean | undefined]> = []
     const session = {
+      appName: 'Garden',
+      projectRoot: '/workspace',
+      compileSnapshot: () => ({ compileRevision: 1, previewInstanceId: 'paint-preview' }),
+      acknowledgePreviewPaint(input: unknown) {
+        return StudioProjectSession.prototype.acknowledgePreviewPaint.call(this, input)
+      },
       subscribe: () => () => {},
-      experimentalPreviewPaint: (revision: number, painted?: boolean) => {
+      previewPaint: (revision: number, painted?: boolean) => {
         received.push([revision, painted])
         return true
       },
     } as unknown as StudioProjectSession
-    const url = new URL('http://127.0.0.1:5678/api/preview/experimental-paint')
-    for (const body of [{ revision: 7, painted: true }, { revision: 8, painted: false }, { revision: 9 }]) {
+    const url = new URL('http://127.0.0.1:5678/api/preview/paint')
+    for (const result of [{ paintRevision: 7, painted: true }, { paintRevision: 8, painted: false }]) {
+      const body = {
+        ...result,
+        channel: 'tao-studio',
+        protocolVersion: 1,
+        type: 'preview-painted',
+        identity: {
+          appName: 'Garden',
+          project: '/workspace',
+          compileRevision: 1,
+          previewInstanceId: 'paint-preview',
+        },
+      }
       const response = await StudioServerTesting.handleRequest(
         session,
         {} as StudioFixtureGeneration,
@@ -923,19 +966,22 @@ Describe('Studio child paint scheduling result', () => {
       )
       Expect(await response.json()).toEqual({ accepted: true })
     }
-    Expect(received).toEqual([[7, true], [8, false], [9, true]])
+    Expect(received).toEqual([[7, true], [8, false]])
   })
 
   Test('rejects malformed child paint results before invoking the scheduler', async () => {
     let calls = 0
     const session = {
+      acknowledgePreviewPaint(input: unknown) {
+        return StudioProjectSession.prototype.acknowledgePreviewPaint.call(this, input)
+      },
       subscribe: () => () => {},
-      experimentalPreviewPaint: () => {
+      previewPaint: () => {
         calls += 1
         return true
       },
     } as unknown as StudioProjectSession
-    const url = new URL('http://127.0.0.1:5678/api/preview/experimental-paint')
+    const url = new URL('http://127.0.0.1:5678/api/preview/paint')
     await Expect(
       StudioServerTesting.handleRequest(
         session,
@@ -945,7 +991,7 @@ Describe('Studio child paint scheduling result', () => {
         {},
       ),
     )
-      .rejects.toThrow('boolean painted result')
+      .rejects.toThrow('Expected a valid Tao Studio preview-painted message.')
     Expect(calls).toBe(0)
   })
 })

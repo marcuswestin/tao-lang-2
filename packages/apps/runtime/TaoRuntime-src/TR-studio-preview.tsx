@@ -888,7 +888,7 @@ export function mountStudioPreviewBridge(
   let recording: StudioJourneyRecording | undefined
   let measurementQueued = false
   let stopped = false
-  let lastExperimentalDesignRevision = -1
+  let lastDesignRevision = -1
   const pendingPaintFrames = new Set<number>()
   const schedulePaintAcknowledgement = (paintRevision: number): void => {
     let firstFrame = 0
@@ -1452,7 +1452,7 @@ export function mountStudioPreviewBridge(
     // the table is read for an own key rather than dispatched exhaustively.
     const message = studioMessage(event, config, host.parent)
     const type = message?.['type']
-    if (message !== undefined && type === 'experimental-design-padding') {
+    if (message !== undefined && type === 'design-padding') {
       const identity = message['identity']
       const revision = nonNegativeInteger(message['revision'])
       if (
@@ -1460,11 +1460,11 @@ export function mountStudioPreviewBridge(
         && isObject(identity)
         && identityMatchesPreviewConfig(identity, config)
         && revision !== undefined
-        && revision > lastExperimentalDesignRevision
+        && revision > lastDesignRevision
       ) {
-        lastExperimentalDesignRevision = revision
+        lastDesignRevision = revision
         const update = parseStudioDesignPaddingUpdate(message)
-        const accepted = update !== undefined && DesignControls.experimentalPatchPadding(update)
+        const accepted = update !== undefined && DesignControls.patchStudioPadding(update)
         if (accepted) {
           schedulePaintAcknowledgement(revision)
         } else {

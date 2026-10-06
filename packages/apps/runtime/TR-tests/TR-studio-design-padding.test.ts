@@ -1,10 +1,10 @@
 import { Expect, Test } from '@shared/test'
 import { DesignControls, type TaoStudioDesignPaddingUpdate } from '../TaoRuntime-src/TR-design'
 
-Test('an experimental padding overlay keeps its publication and yields to an authoritative declaration', async () => {
-  const designPath = '/project/ExperimentalPadding.tao'
-  const consumerPath = '/project/ExperimentalPaddingView.tao'
-  const identity = 'test.design.experimental-padding'
+Test('a Studio padding overlay keeps its publication and yields to an authoritative declaration', async () => {
+  const designPath = '/project/StudioPadding.tao'
+  const consumerPath = '/project/StudioPaddingView.tao'
+  const identity = 'test.design.studio-padding'
   const metadata = { epoch: 7, path: designPath, sourceEpochs: { [consumerPath]: 7 } }
   const source = { end: 20, epoch: 7, kind: 'style' as const, member: 'storyCard', path: designPath, start: 1 }
   const original = DesignControls.Declaration(
@@ -12,7 +12,7 @@ Test('an experimental padding overlay keeps its publication and yields to an aut
       bundles: {
         storyCard: DesignControls.Spec([['pad', 8], ['bg', 'paper']], source),
       },
-      name: 'ExperimentalPadding',
+      name: 'StudioPadding',
       tokens: { paper: '#ffffff' },
     },
     identity,
@@ -24,8 +24,8 @@ Test('an experimental padding overlay keeps its publication and yields to an aut
   })
 
   try {
-    Expect(DesignControls.experimentalPatchPadding(paddingUpdate({
-      designName: 'ExperimentalPadding',
+    Expect(DesignControls.patchStudioPadding(paddingUpdate({
+      designName: 'StudioPadding',
       oldSpecRange: { from: 1, to: 20 },
       newSpecRange: { from: 1, to: 21 },
       oldLiteralRange: { from: 10, to: 11 },
@@ -63,7 +63,7 @@ Test('an experimental padding overlay keeps its publication and yields to an aut
     const authoritative = DesignControls.Declaration(
       {
         bundles: { storyCard: DesignControls.Spec([['pad', 18], ['bg', 'paper']], source) },
-        name: 'ExperimentalPadding',
+        name: 'StudioPadding',
         tokens: { paper: '#ffffff' },
       },
       identity,
@@ -81,7 +81,7 @@ Test('an experimental padding overlay keeps its publication and yields to an aut
   }
 })
 
-Test('experimental padding rejects stale, ambiguous, and missing pad matches without publishing', () => {
+Test('Studio padding rejects stale, ambiguous, and missing pad matches without publishing', () => {
   const cases = [
     { name: 'StalePadding', entries: [['pad', 8]] as const, expectedPadding: 6 },
     { name: 'MissingPadding', entries: [['bg', '#fff']] as const, expectedPadding: 8 },
@@ -96,7 +96,7 @@ Test('experimental padding rejects stale, ambiguous, and missing pad matches wit
         name: item.name,
         tokens: {},
       },
-      `test.design.experimental-padding.reject-${index}`,
+      `test.design.studio-padding.reject-${index}`,
       { epoch: 1, path: sourcePath, sourceEpochs: {} },
     )
     const request = paddingUpdate({
@@ -109,13 +109,13 @@ Test('experimental padding rejects stale, ambiguous, and missing pad matches wit
       oldLiteralRange: { from: 10, to: 11 },
       newLiteralRange: { from: 10, to: 11 },
     })
-    Expect(DesignControls.experimentalPatchPadding(request)).toBe(false)
+    Expect(DesignControls.patchStudioPadding(request)).toBe(false)
     Expect(DesignControls.current(original)).toBe(original)
     Expect(DesignControls.revision(original)).toBe(1)
   }
 })
 
-Test('experimental padding shifts source provenance immutably and accepts a later edit', () => {
+Test('Studio padding shifts source provenance immutably and accepts a later edit', () => {
   const sourcePath = '/project/PaddingWidths.tao'
   const source = (member: string, start: number, end: number) => ({
     end,
@@ -139,11 +139,11 @@ Test('experimental padding shifts source provenance immutably and accepts a late
       },
       tokens: {},
     },
-    'test.design.experimental-padding.widths',
+    'test.design.studio-padding.widths',
     { epoch: 1, path: sourcePath, sourceEpochs: {} },
   )
 
-  const first = DesignControls.experimentalPatchPadding(paddingUpdate({
+  const first = DesignControls.patchStudioPadding(paddingUpdate({
     designName: 'PaddingWidths',
     sourcePath,
     expectedPadding: 8,
@@ -162,7 +162,7 @@ Test('experimental padding shifts source provenance immutably and accepts a late
   Expect(overlay.sources?.['beforeCard']).toEqual(source('beforeCard', 0, 10))
   Expect(overlay.sources?.['laterCard']).toEqual(source('laterCard', 32, 42))
 
-  Expect(DesignControls.experimentalPatchPadding(paddingUpdate({
+  Expect(DesignControls.patchStudioPadding(paddingUpdate({
     designName: 'PaddingWidths',
     sourcePath,
     expectedPadding: 120,
@@ -178,7 +178,7 @@ Test('experimental padding shifts source provenance immutably and accepts a late
   Expect(overlay.bundles['storyCard']!.entries).toEqual([['pad', 120]])
 })
 
-Test('experimental padding refuses mismatched source identity and malformed source ranges', () => {
+Test('Studio padding refuses mismatched source identity and malformed source ranges', () => {
   const sourcePath = '/project/PaddingIdentity.tao'
   const source = { end: 20, kind: 'style' as const, member: 'storyCard', path: sourcePath, start: 1 }
   const original = DesignControls.Declaration(
@@ -188,7 +188,7 @@ Test('experimental padding refuses mismatched source identity and malformed sour
       sources: { storyCard: source },
       tokens: {},
     },
-    'test.design.experimental-padding.identity',
+    'test.design.studio-padding.identity',
     { epoch: 1, path: sourcePath, sourceEpochs: {} },
   )
   const valid = paddingUpdate({
@@ -209,7 +209,7 @@ Test('experimental padding refuses mismatched source identity and malformed sour
       { ...valid, padding: -1 },
     ]
   ) {
-    Expect(DesignControls.experimentalPatchPadding(invalid)).toBe(false)
+    Expect(DesignControls.patchStudioPadding(invalid)).toBe(false)
     Expect(DesignControls.current(original)).toBe(original)
   }
   const wrongMember = DesignControls.Declaration(
@@ -220,10 +220,10 @@ Test('experimental padding refuses mismatched source identity and malformed sour
       name: 'PaddingWrongMember',
       tokens: {},
     },
-    'test.design.experimental-padding.wrong-member',
+    'test.design.studio-padding.wrong-member',
     { epoch: 1, path: sourcePath, sourceEpochs: {} },
   )
-  Expect(DesignControls.experimentalPatchPadding({ ...valid, designName: 'PaddingWrongMember' })).toBe(false)
+  Expect(DesignControls.patchStudioPadding({ ...valid, designName: 'PaddingWrongMember' })).toBe(false)
   Expect(DesignControls.current(wrongMember)).toBe(wrongMember)
 
   const duplicateDefinition = {
@@ -233,17 +233,147 @@ Test('experimental padding refuses mismatched source identity and malformed sour
   }
   const duplicateA = DesignControls.Declaration(
     duplicateDefinition,
-    'test.design.experimental-padding.duplicate-a',
+    'test.design.studio-padding.duplicate-a',
     { epoch: 1, path: sourcePath, sourceEpochs: {} },
   )
   const duplicateB = DesignControls.Declaration(
     duplicateDefinition,
-    'test.design.experimental-padding.duplicate-b',
+    'test.design.studio-padding.duplicate-b',
     { epoch: 1, path: sourcePath, sourceEpochs: {} },
   )
-  Expect(DesignControls.experimentalPatchPadding({ ...valid, designName: 'PaddingDuplicateIdentity' })).toBe(false)
+  Expect(DesignControls.patchStudioPadding({ ...valid, designName: 'PaddingDuplicateIdentity' })).toBe(false)
   Expect(DesignControls.current(duplicateA)).toBe(duplicateA)
   Expect(DesignControls.current(duplicateB)).toBe(duplicateB)
+})
+
+Test('Studio padding rejects forged spans and ambiguous owner membership before notification', async () => {
+  const sourcePath = '/project/PaddingGuards.tao'
+  const owner = { end: 20, kind: 'style' as const, member: 'storyCard', path: sourcePath, start: 1 }
+  const original = DesignControls.Declaration(
+    {
+      bundles: { storyCard: DesignControls.Spec([['pad', 12]], owner) },
+      name: 'PaddingGuards',
+      sources: { storyCard: owner },
+      tokens: {},
+    },
+    'test.design.studio-padding.guards',
+    { epoch: 1, path: sourcePath, sourceEpochs: {} },
+  )
+  const notifications: number[] = []
+  const unsubscribe = DesignControls.subscribe(original, () => notifications.push(DesignControls.revision(original)))
+  try {
+    const valid = paddingUpdate({
+      designName: 'PaddingGuards',
+      sourcePath,
+      expectedPadding: 12,
+      oldLiteralRange: { from: 10, to: 12 },
+      newLiteralRange: { from: 10, to: 13 },
+      oldSpecRange: { from: 1, to: 20 },
+      newSpecRange: { from: 1, to: 21 },
+      padding: 100,
+    })
+    Expect(DesignControls.patchStudioPadding({
+      ...valid,
+      oldLiteralRange: { from: 0, to: 2 },
+      newLiteralRange: { from: 0, to: 3 },
+    })).toBe(false)
+    Expect(DesignControls.patchStudioPadding({
+      ...valid,
+      newSpecRange: { from: 1, to: 22 },
+    })).toBe(false)
+
+    Expect(DesignControls.revision(original)).toBe(1)
+    await Promise.resolve()
+    Expect(notifications).toEqual([])
+
+    const ambiguousName = 'PaddingAmbiguousMembership'
+    const ambiguous = DesignControls.Declaration(
+      {
+        bundles: { storyCard: DesignControls.Spec([['pad', 12]], owner) },
+        name: ambiguousName,
+        sources: { storyCard: owner, alias: owner },
+        tokens: {},
+      },
+      'test.design.studio-padding.ambiguous-membership',
+      { epoch: 1, path: sourcePath, sourceEpochs: {} },
+    )
+    Expect(DesignControls.patchStudioPadding({ ...valid, designName: ambiguousName })).toBe(false)
+    Expect(DesignControls.current(ambiguous)).toBe(ambiguous)
+    Expect(DesignControls.patchStudioPadding(valid)).toBe(true)
+    Expect(DesignControls.revision(original)).toBe(2)
+    await Promise.resolve()
+    Expect(notifications).toEqual([2])
+  } finally {
+    unsubscribe()
+  }
+})
+
+Test('Studio padding applies the resolved value, preserves cold parity, and reverts shifted provenance', () => {
+  const sourcePath = '/project/PaddingSequence.tao'
+  const source = (member: string, start: number, end: number) => ({
+    end,
+    kind: 'style' as const,
+    member,
+    path: sourcePath,
+    start,
+  })
+  const owner = source('storyCard', 1, 20)
+  const later = source('laterCard', 30, 40)
+  const original = DesignControls.Declaration(
+    {
+      bundles: {
+        laterCard: DesignControls.Spec([['gap', 4]], later),
+        storyCard: DesignControls.Spec([['pad', 12], ['bg', '#fff']], owner),
+      },
+      name: 'PaddingSequence',
+      sources: { laterCard: later, storyCard: owner },
+      tokens: {},
+    },
+    'test.design.studio-padding.sequence',
+    { epoch: 1, path: sourcePath, sourceEpochs: {} },
+  )
+
+  Expect(DesignControls.patchStudioPadding(paddingUpdate({
+    designName: 'PaddingSequence',
+    sourcePath,
+    expectedPadding: 12,
+    padding: 100,
+    oldSpecRange: { from: 1, to: 20 },
+    newSpecRange: { from: 1, to: 21 },
+    oldLiteralRange: { from: 10, to: 12 },
+    newLiteralRange: { from: 10, to: 13 },
+  }))).toBe(true)
+  const overlay = DesignControls.current(original)!
+  const resolved = DesignControls.resolve(overlay, DesignControls.Spec([['storyCard']]))
+  const cold = DesignControls.Declaration({
+    bundles: {
+      laterCard: DesignControls.Spec([['gap', 4]], source('laterCard', 31, 41)),
+      storyCard: DesignControls.Spec([['pad', 100], ['bg', '#fff']], source('storyCard', 1, 21)),
+    },
+    name: 'PaddingSequence',
+    sources: { laterCard: source('laterCard', 31, 41), storyCard: source('storyCard', 1, 21) },
+    tokens: {},
+  })
+  Expect(resolved).toMatchObject(DesignControls.resolve(cold, DesignControls.Spec([['storyCard']])))
+  Expect(resolved.layout?.entries).toEqual([['pad', 100]])
+  Expect(original.bundles['storyCard']!.entries).toEqual([['pad', 12], ['bg', '#fff']])
+  Expect(original.sources?.['laterCard']).toEqual(later)
+  Expect(overlay.sources?.['laterCard']).toEqual(source('laterCard', 31, 41))
+
+  Expect(DesignControls.patchStudioPadding(paddingUpdate({
+    designName: 'PaddingSequence',
+    sourcePath,
+    expectedPadding: 100,
+    padding: 12,
+    oldSpecRange: { from: 1, to: 21 },
+    newSpecRange: { from: 1, to: 20 },
+    oldLiteralRange: { from: 10, to: 13 },
+    newLiteralRange: { from: 10, to: 12 },
+  }))).toBe(true)
+  const reverted = DesignControls.current(original)!
+  Expect(DesignControls.resolve(reverted, DesignControls.Spec([['storyCard']])).layout?.entries).toEqual([['pad', 12]])
+  Expect(reverted.sources?.['laterCard']).toEqual(later)
+  Expect(overlay.sources?.['laterCard']).toEqual(source('laterCard', 31, 41))
 })
 
 function paddingUpdate(
@@ -251,7 +381,7 @@ function paddingUpdate(
 ): TaoStudioDesignPaddingUpdate {
   return {
     bundleName: 'storyCard',
-    designName: 'ExperimentalPadding',
+    designName: 'StudioPadding',
     entryIndex: 0,
     expectedPadding: 8,
     newLiteralRange: { from: 10, to: 11 },
@@ -260,7 +390,7 @@ function paddingUpdate(
     oldSpecRange: { from: 1, to: 20 },
     ownerKind: 'styles',
     padding: 14,
-    sourcePath: '/project/ExperimentalPadding.tao',
+    sourcePath: '/project/StudioPadding.tao',
     ...overrides,
   }
 }

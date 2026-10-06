@@ -3,11 +3,11 @@ import { Describe, Expect, Test, testOverrideSlot, until } from '@shared/test'
 import { studioPreviewMessageListener } from '../studio-src/client/app/StudioPreviewWiring'
 import { StudioSketchFeedTarget } from '../studio-src/client/matrix/StudioMatrixSketches'
 import { handlePreviewMessage } from '../studio-src/client/matrix/StudioPreviewBridge'
-import { postExperimentalDesignPadding } from '../studio-src/client/matrix/StudioPreviewBridge'
+import { postDesignPadding } from '../studio-src/client/matrix/StudioPreviewBridge'
 import type { StudioPreviewConnection } from '../studio-src/client/matrix/StudioPreviewConnection'
 import { StudioApiClient, type StudioHandshake } from '../studio-src/client/StudioApiClient'
 import {
-  type StudioExperimentalDesignPadding,
+  type StudioDesignPaddingUpdate,
   type StudioPreviewFeedDropMessage,
   studioProtocolChannel,
   studioProtocolVersion,
@@ -15,12 +15,12 @@ import {
 import type { StudioSketchCatalogSnapshot } from '../studio-src/StudioSketchCatalog'
 
 const mutableStudioApiClient = StudioApiClient as unknown as {
-  experimentalPreviewPaint: (revision: number, painted?: boolean) => Promise<unknown>
+  previewPaint: typeof StudioApiClient.previewPaint
 }
-const experimentalPreviewPaintSlot = testOverrideSlot({
-  read: () => mutableStudioApiClient.experimentalPreviewPaint,
-  write: (value: typeof mutableStudioApiClient.experimentalPreviewPaint) => {
-    mutableStudioApiClient.experimentalPreviewPaint = value
+const previewPaintSlot = testOverrideSlot({
+  read: () => mutableStudioApiClient.previewPaint,
+  write: (value: typeof mutableStudioApiClient.previewPaint) => {
+    mutableStudioApiClient.previewPaint = value
   },
 })
 const previewLayoutMeasurementsSlot = testOverrideSlot({
@@ -105,14 +105,14 @@ Describe('Studio iframe Feed drops', () => {
     const sent: unknown[] = []
     ;(preview.iframe.contentWindow as unknown as { postMessage(message: unknown, targetOrigin: string): void })
       .postMessage = (message, targetOrigin) => sent.push({ message, targetOrigin })
-    const restore = experimentalPreviewPaintSlot.install(async (revision, painted = true) => {
-      reports.push({ painted, revision })
+    const restore = previewPaintSlot.install(async message => {
+      reports.push({ painted: message.painted, revision: message.paintRevision })
       return { accepted: true }
     })
-    const experimentalHandshake = { ...handshake, experimentalPreviewPaint: true as const }
+    const experimentalHandshake = { ...handshake, previewPaint: true as const }
     const window = preview.iframe.contentWindow
     const identity = { ...preview.cellIdentity!, previewInstanceId: preview.previewInstanceId }
-    const padding = (revision: number): StudioExperimentalDesignPadding => ({
+    const padding = (revision: number): StudioDesignPaddingUpdate => ({
       bundleName: 'surface',
       designName: 'Theme',
       sourcePath: '/project/Design.tao',
@@ -148,9 +148,9 @@ Describe('Studio iframe Feed drops', () => {
         { async applySourceAction() {}, inspect() {} },
       )
     try {
-      postExperimentalDesignPadding(preview, experimentalHandshake, padding(8))
+      postDesignPadding(preview, experimentalHandshake, padding(8))
       Expect(sent).toMatchObject([{
-        message: { revision: 8, type: 'experimental-design-padding' },
+        message: { revision: 8, type: 'design-padding' },
         targetOrigin: preview.origin,
       }])
       await handle({ ...painted(8), origin: 'https://wrong.test' } as MessageEvent)
@@ -160,7 +160,7 @@ Describe('Studio iframe Feed drops', () => {
       Expect(reports).toEqual([])
       await handle(painted(8))
       await handle(painted(8))
-      postExperimentalDesignPadding(preview, experimentalHandshake, padding(9))
+      postDesignPadding(preview, experimentalHandshake, padding(9))
       await handle(painted(9, identity, false))
       Expect(reports).toEqual([{ painted: true, revision: 8 }, { painted: false, revision: 9 }])
     } finally {
@@ -174,7 +174,7 @@ Describe('Studio iframe Feed drops', () => {
     preview.activated = true
     preview.expectedRevision = 6
     preview.previewInstanceId = 'whole-app-preview'
-    const experimentalHandshake = { ...handshake, experimentalPreviewPaint: true as const }
+    const experimentalHandshake = { ...handshake, previewPaint: true as const }
     const sent: unknown[] = []
     const reports: Array<{ painted?: boolean; revision: number }> = []
     const window = preview.iframe.contentWindow
@@ -182,8 +182,8 @@ Describe('Studio iframe Feed drops', () => {
       message,
       targetOrigin,
     ) => sent.push({ message, targetOrigin })
-    const restore = experimentalPreviewPaintSlot.install(async (revision, painted = true) => {
-      reports.push({ painted, revision })
+    const restore = previewPaintSlot.install(async message => {
+      reports.push({ painted: message.painted, revision: message.paintRevision })
       return { accepted: true }
     })
     const identity = {
@@ -211,7 +211,7 @@ Describe('Studio iframe Feed drops', () => {
         inspect() {},
       })
     try {
-      postExperimentalDesignPadding(preview, experimentalHandshake, {
+      postDesignPadding(preview, experimentalHandshake, {
         bundleName: 'surface',
         designName: 'Theme',
         entryIndex: 0,
@@ -226,7 +226,7 @@ Describe('Studio iframe Feed drops', () => {
         sourcePath: '/project/Design.tao',
       })
       Expect(sent).toMatchObject([{
-        message: { identity, revision: 8, type: 'experimental-design-padding' },
+        message: { identity, revision: 8, type: 'design-padding' },
         targetOrigin: preview.origin,
       }])
       await receive(painted({ ...identity, appName: 'Other' }))

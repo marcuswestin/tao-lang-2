@@ -865,16 +865,7 @@ const sessionHandlers: Readonly<Record<StudioSessionRouteKey, StudioSessionHandl
     return jsonReply(analysis)
   },
   previewApplied: bodyTo((session, body) => ({ accepted: session.acknowledgePreview(body) })),
-  experimentalPreviewPaint: bodyTo((session, body) => {
-    Assert.input(
-      typeof body === 'object' && body !== null && 'revision' in body
-        && typeof body.revision === 'number' && Number.isSafeInteger(body.revision),
-      'Experimental paint requires a publication revision.',
-    )
-    const painted = 'painted' in body ? body.painted : true
-    Assert.input(typeof painted === 'boolean', 'Experimental paint requires a boolean painted result.')
-    return { accepted: session.experimentalPreviewPaint?.(body.revision, painted) ?? false }
-  }),
+  previewPaint: bodyTo((session, body) => ({ accepted: session.acknowledgePreviewPaint(body) })),
   previewCell: ({ session, url }) =>
     jsonReply(session.previewCell(requiredQuery(url, 'cellId', 'Missing Studio cell id.'))),
   previewCellBootstrap: ({ session, url }) =>
@@ -882,7 +873,7 @@ const sessionHandlers: Readonly<Record<StudioSessionRouteKey, StudioSessionHandl
       session.previewCellBootstrap(requiredQuery(url, 'previewInstanceId', 'Missing Studio preview instance id.')),
     ),
   previewCellInstance: bodyTo(async (session, body) => {
-    await session.experimentalEnsurePublishedPreview?.()
+    await session.ensurePublishedPreview?.()
     return session.registerCellPreview(body)
   }),
   previewCellRelease: bodyTo((session, body) => {
@@ -893,8 +884,13 @@ const sessionHandlers: Readonly<Record<StudioSessionRouteKey, StudioSessionHandl
   previewCellReconfigure: bodyTo((session, body) => session.reconfigureCell(body)),
   previewDiagnosis: async ({ options }) => jsonReply(await previewDiagnosis(options.previewUrl)),
   previewInstance: bodyTo(async (session, body) => {
-    await session.experimentalEnsurePublishedPreview?.()
+    await session.ensurePublishedPreview?.()
     return session.registerPreview(body)
+  }),
+  previewRelease: bodyTo((session, body) => {
+    Assert.input(Json.isRecord(body) && typeof body['previewInstanceId'] === 'string', 'Expected preview instance id.')
+    session.unregisterPreview(body['previewInstanceId'])
+    return { released: true }
   }),
   previewLayoutMeasurements: bodyTo((session, body) => session.recordPreviewLayoutMeasurements(body)),
   previewManifest: ({ session }) => {

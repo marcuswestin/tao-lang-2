@@ -50,6 +50,12 @@ const previewInstanceSlot = testOverrideSlot({
     Reflect.set(StudioApiClient, 'previewInstance', value)
   },
 })
+const releaseWholeAppSlot = testOverrideSlot({
+  read: () => StudioApiClient.releasePreviewInstance,
+  write: value => {
+    Reflect.set(StudioApiClient, 'releasePreviewInstance', value)
+  },
+})
 const documentSlot = testOverrideSlot<PropertyDescriptor | undefined>({
   equals: (left, right) => left?.value === right?.value,
   read: () => Object.getOwnPropertyDescriptor(globalThis, 'document'),
@@ -896,6 +902,10 @@ Test(
         .install(() => {}),
     ]
     const restorePreview = previewInstanceSlot.install(async () => ({}))
+    const releasedWhole: string[] = []
+    const restoreWholeRelease = releaseWholeAppSlot.install(async id => {
+      releasedWhole.push(id)
+    })
     const registrations: string[] = []
     const restoreRegistration = cellInstanceSlot.install(async body => {
       registrations.push((body as { cellId: string }).cellId)
@@ -936,7 +946,20 @@ Test(
       await refreshCellPreviews(parent, previews, previewUrl, manifest(cell('a')), savedHandshake)
       Expect(previews[0]?.activated).toBe(false)
       Expect(registrations).toEqual(['a'])
+      // When scenario previews disappear, activating and disabling the whole-app realm
+      // must release its server registration through the same connection teardown hook.
+      await refreshCellPreviews(parent, previews, previewUrl, manifest(), savedHandshake)
+      const whole = previews[0]!
+      await whole.toggleActivation!()
+      Expect(whole.activated).toBe(true)
+      const instanceId = whole.previewInstanceId
+      await whole.toggleActivation!()
+      Expect(whole.activated).toBe(false)
+      Expect(releasedWhole).toEqual([instanceId])
+      disconnectPreviews(previews)
+      Expect(releasedWhole).toEqual([instanceId])
     } finally {
+      restoreWholeRelease()
       restoreSession()
       restoreRelease()
       restoreRegistration()

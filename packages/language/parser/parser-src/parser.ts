@@ -86,8 +86,6 @@ export type ParseOptions = {
   validation?: boolean
   /** A host refreshed package ownership or physical boundaries without necessarily changing source. */
   relink?: boolean
-  /** Temporary preview experiment: the caller supplies every changed source path. */
-  experimentalChangedPaths?: readonly string[]
 }
 
 type LexReport = ReturnType<ParserServices['language']['parser']['Lexer']['tokenize']>
@@ -192,17 +190,6 @@ export const Parser = {
    */
   async parseEntries(context: ParserContext, uris: readonly URI[], options: ParseOptions = {}): Promise<ParseResult[]> {
     const loaded: LoadedDocuments = new Map()
-    const changed = options.experimentalChangedPaths === undefined
-      ? undefined
-      : new Set(options.experimentalChangedPaths.map(path => URI.file(FS.resolvePath(path)).path))
-    if (
-      !options.relink && changed !== undefined && changed.size > 0
-      && [...changed].every(path =>
-        context.services.shared.workspace.LangiumDocuments.getDocument(URI.file(path)) !== undefined
-      )
-    ) {
-      experimentalChangedSources.set(loaded, changed)
-    }
     const graphs: { entryDocument: AST.Document; documents: AST.Document[] }[] = []
     for (const uri of uris) {
       const entryDocument = await documentFromFilePath(context, uri.path, loaded)
@@ -1373,7 +1360,6 @@ function isParsedFile(file: ParsedFile | undefined): file is ParsedFile {
  */
 type LoadedDocuments = Map<string, AST.Document>
 const loadedSources = new WeakMap<LoadedDocuments, Map<string, Promise<string>>>()
-const experimentalChangedSources = new WeakMap<LoadedDocuments, ReadonlySet<string>>()
 
 async function loadReachableDocuments(
   context: ParserContext,
@@ -1544,14 +1530,6 @@ async function documentFromFilePath(
 function sourceFromFilePath(context: ParserContext, filePath: string, loaded?: LoadedDocuments): Promise<string> {
   if (loaded?.has(filePath)) {
     return Promise.resolve(loaded.get(filePath)!.textDocument.getText())
-  }
-  const changed = loaded && experimentalChangedSources.get(loaded)
-  if (changed !== undefined && !changed.has(filePath)) {
-    const retained = context.services.shared.workspace.LangiumDocuments.getDocument(URI.file(filePath))
-    const override = context.services.sourceOverrides?.[filePath]
-    if (retained !== undefined && (override === undefined || override === retained.textDocument.getText())) {
-      return Promise.resolve(retained.textDocument.getText())
-    }
   }
   let sources = loaded && loadedSources.get(loaded)
   if (loaded && !sources) {

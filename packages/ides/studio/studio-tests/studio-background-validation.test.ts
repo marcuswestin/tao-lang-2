@@ -48,6 +48,86 @@ Describe('Studio background validation scheduling', () => {
     Expect(released).toEqual([2])
   })
 
+  Test('repeated current and stale paints do not extend the quiet delay', () => {
+    const clock = new FakeClock()
+    const released: number[] = []
+    const scheduler = createStudioBackgroundValidationScheduler({
+      cancelTimer: clock.cancel,
+      idleDelayMs: 1_000,
+      onRelease: revision => released.push(revision),
+      setTimer: clock.set,
+    })
+
+    scheduler.request(1)
+    scheduler.painted(1)
+    clock.advanceBy(800)
+    scheduler.painted(1)
+    scheduler.painted(0)
+    clock.advanceBy(200)
+
+    Expect(released).toEqual([1])
+    Expect(clock.pendingCount).toBe(0)
+  })
+
+  Test('rejected stale paints leave the current request pending', () => {
+    const clock = new FakeClock()
+    const released: number[] = []
+    const scheduler = createStudioBackgroundValidationScheduler({
+      cancelTimer: clock.cancel,
+      onRelease: revision => released.push(revision),
+      setTimer: clock.set,
+    })
+
+    scheduler.request(1)
+    scheduler.request(2)
+    scheduler.painted(1, false)
+    Expect(released).toEqual([])
+    scheduler.painted(2, false)
+    Expect(released).toEqual([2])
+    Expect(clock.pendingCount).toBe(0)
+  })
+
+  Test('maximum deadline releases the latest request even when no paint arrives', () => {
+    const clock = new FakeClock()
+    const released: number[] = []
+    const scheduler = createStudioBackgroundValidationScheduler({
+      cancelTimer: clock.cancel,
+      maxDelayMs: 10_000,
+      onRelease: revision => released.push(revision),
+      setTimer: clock.set,
+    })
+
+    scheduler.request(1)
+    clock.advanceBy(4_000)
+    scheduler.request(2)
+    clock.advanceBy(5_999)
+    Expect(released).toEqual([])
+    clock.advanceBy(1)
+
+    Expect(released).toEqual([2])
+    Expect(clock.pendingCount).toBe(0)
+  })
+
+  Test('invalid revisions cannot create or consume pending work', () => {
+    const clock = new FakeClock()
+    const released: number[] = []
+    const scheduler = createStudioBackgroundValidationScheduler({
+      cancelTimer: clock.cancel,
+      onRelease: revision => released.push(revision),
+      setTimer: clock.set,
+    })
+
+    for (const revision of [Number.NaN, Number.POSITIVE_INFINITY, -1, 0, 1.5]) {
+      scheduler.request(revision)
+      scheduler.painted(revision)
+    }
+    scheduler.release()
+    clock.advanceBy(10_000)
+
+    Expect(released).toEqual([])
+    Expect(clock.pendingCount).toBe(0)
+  })
+
   Test('releases immediately when the latest paint is rejected', () => {
     const clock = new FakeClock()
     const released: number[] = []
@@ -117,6 +197,8 @@ Describe('Studio background validation scheduling', () => {
     scheduler.request(1)
     scheduler.painted(1)
     scheduler.close()
+    scheduler.close()
+    Expect(clock.pendingCount).toBe(0)
     scheduler.request(2)
     scheduler.painted(2)
     clock.advanceBy(10_000)

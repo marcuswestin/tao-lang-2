@@ -14,6 +14,8 @@ export function createStudioBackgroundValidationScheduler({
   setTimer,
 }: StudioBackgroundValidationSchedulerOptions) {
   let pendingRevision: number | undefined
+  let pendingAttempt: object | undefined
+  let paintedRevision: number | undefined
   let idleTimer: unknown
   let maximumTimer: unknown
   let hasIdleTimer = false
@@ -41,13 +43,15 @@ export function createStudioBackgroundValidationScheduler({
   }
 
   function clearPending() {
+    pendingAttempt = undefined
+    paintedRevision = undefined
     cancelIdleTimer()
     cancelMaximumTimer()
     pendingRevision = undefined
   }
 
-  function release() {
-    if (closed || pendingRevision === undefined) {
+  function releaseAttempt(attempt: object) {
+    if (closed || pendingAttempt !== attempt || pendingRevision === undefined) {
       return
     }
     const revision = pendingRevision
@@ -55,38 +59,56 @@ export function createStudioBackgroundValidationScheduler({
     onRelease(revision)
   }
 
+  function release() {
+    if (closed || pendingAttempt === undefined) {
+      return
+    }
+    releaseAttempt(pendingAttempt)
+  }
+
   function request(revision: number) {
-    if (closed) {
+    if (closed || !Number.isSafeInteger(revision) || revision < 1) {
       return
     }
-    pendingRevision = revision
+    if (pendingAttempt !== undefined && pendingRevision === revision) {
+      return
+    }
     cancelIdleTimer()
-    if (hasMaximumTimer) {
+    paintedRevision = undefined
+    pendingRevision = revision
+    if (pendingAttempt !== undefined) {
       return
     }
+    const attempt = {}
+    pendingAttempt = attempt
     hasMaximumTimer = true
     maximumTimer = setTimer(() => {
       maximumTimer = undefined
       hasMaximumTimer = false
-      release()
+      releaseAttempt(attempt)
     }, maxDelayMs)
   }
 
   function painted(revision: number, accepted = true) {
-    if (closed || pendingRevision !== revision) {
+    const attempt = pendingAttempt
+    if (closed || attempt === undefined || pendingRevision !== revision) {
       return
     }
     if (!accepted) {
-      release()
+      releaseAttempt(attempt)
+      return
+    }
+    if (paintedRevision === revision) {
       return
     }
     cancelIdleTimer()
+    paintedRevision = revision
     hasIdleTimer = true
     idleTimer = setTimer(() => {
       idleTimer = undefined
       hasIdleTimer = false
-      if (pendingRevision === revision) {
-        release()
+      if (pendingAttempt === attempt && pendingRevision === revision) {
+        releaseAttempt(attempt)
       }
     }, idleDelayMs)
   }

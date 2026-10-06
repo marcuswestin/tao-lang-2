@@ -174,14 +174,15 @@ type StudioActivationState = {
 const activationStates = new WeakMap<HTMLElement, StudioActivationState>()
 const maxActivationContextAttempts = 3
 
-function releaseCellInstance(previewInstanceId: string): () => void {
+function releasePreviewInstance(previewInstanceId: string, wholeApp = false): () => void {
   let released = false
   return () => {
     if (released) {
       return
     }
     released = true
-    void StudioApiClient.releaseCellInstance(previewInstanceId).catch(() => {})
+    const release = wholeApp ? StudioApiClient.releasePreviewInstance : StudioApiClient.releaseCellInstance
+    void release(previewInstanceId).catch(() => {})
   }
 }
 
@@ -282,6 +283,7 @@ export function wireActivation(
               previewInstanceId = crypto.randomUUID()
               if (cell === undefined) {
                 await StudioApiClient.previewInstance({ previewInstanceId })
+                releaseRegistered = releasePreviewInstance(previewInstanceId, true)
               } else {
                 Assert(manifest, 'a preview manifest for an activated scenario')
                 cellIdentity = {
@@ -308,7 +310,7 @@ export function wireActivation(
                   }
                   throw error
                 }
-                releaseRegistered = releaseCellInstance(previewInstanceId)
+                releaseRegistered = releasePreviewInstance(previewInstanceId)
               }
             }
             if (!current()) {
@@ -451,11 +453,12 @@ async function runRestoredPreviews(
         try {
           if (cell === undefined) {
             await StudioApiClient.previewInstance({ previewInstanceId }, signal)
+            releaseRegistered = releasePreviewInstance(previewInstanceId, true)
           } else {
             const identity = connection.cellIdentity
             Assert(identity, 'the current cell identity for a restored preview')
             await StudioApiClient.cellInstance({ ...identity, previewInstanceId }, signal)
-            releaseRegistered = releaseCellInstance(previewInstanceId)
+            releaseRegistered = releasePreviewInstance(previewInstanceId)
           }
           if (signal?.aborted) {
             throw Errors.abortError('Tao Studio preview activation was cancelled.')
@@ -549,6 +552,7 @@ async function connectWholeAppPreview(
     navigationPending: true,
     origin,
     previewInstanceId,
+    ...(activated && !startupPending ? { releaseCellInstance: releasePreviewInstance(previewInstanceId, true) } : {}),
     startupPending,
   }
   watchCellPreviewLoad(connection, handshake)
@@ -646,7 +650,7 @@ async function connectCellPreview(
     origin,
     previewInstanceId,
     startupPending,
-    ...(activated && !startupPending ? { releaseCellInstance: releaseCellInstance(previewInstanceId) } : {}),
+    ...(activated && !startupPending ? { releaseCellInstance: releasePreviewInstance(previewInstanceId) } : {}),
   }
   watchCellPreviewLoad(connection, handshake)
   return connection

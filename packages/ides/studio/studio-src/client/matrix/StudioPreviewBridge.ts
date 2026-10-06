@@ -92,14 +92,14 @@ function ignoreSupersededPreviewReport(error: unknown): void {
   throw error
 }
 
-type PendingExperimentalPaint = { instanceId: string; latestRevision: number; revisions: Set<number> }
-const pendingExperimentalPaints = new WeakMap<StudioPreviewConnection, PendingExperimentalPaint>()
+type PendingPreviewPaint = { instanceId: string; latestRevision: number; revisions: Set<number> }
+const pendingPreviewPaints = new WeakMap<StudioPreviewConnection, PendingPreviewPaint>()
 
-/** Diagnostic style-store update; active retained realms keep their app and navigation state. */
-export function postExperimentalDesignPadding(
+/** Direct style-store update; active retained realms keep their app and navigation state. */
+export function postDesignPadding(
   preview: StudioPreviewConnection,
   handshake: StudioHandshake,
-  update: import('../../StudioProtocol').StudioExperimentalDesignPadding,
+  update: import('../../StudioProtocol').StudioDesignPaddingUpdate,
 ): void {
   if (!preview.activated || preview.iframe.contentWindow === null) {
     return
@@ -112,9 +112,9 @@ export function postExperimentalDesignPadding(
       ...(preview.cellIdentity ?? { ...handshake.identity, compileRevision: preview.expectedRevision }),
       previewInstanceId: preview.previewInstanceId,
     },
-    type: 'experimental-design-padding',
+    type: 'design-padding',
   }, preview.origin)
-  rememberExperimentalPaint(preview, handshake, update.revision)
+  rememberPreviewPaint(preview, handshake, update.revision)
 }
 
 export function postInteractionMode(preview: StudioPreviewConnection, handshake: StudioHandshake): void {
@@ -535,7 +535,7 @@ async function receivePreviewApplied(
   }
   // A frame can acknowledge its previous revision while Studio publishes the next manifest.
   // The server correctly rejects that stale report; it does not indicate a broken preview.
-  rememberExperimentalPaint(preview, handshake, message.appliedRevision)
+  rememberPreviewPaint(preview, handshake, message.appliedRevision)
   try {
     await StudioApiClient.previewApplied(message)
   } catch (error) {
@@ -568,22 +568,22 @@ function receivePreviewMounted(
     current ?? { compileRevision: message.identity.compileRevision! },
     message.identity.previewInstanceId,
   )
-  rememberExperimentalPaint(preview, handshake, message.identity.compileRevision!)
+  rememberPreviewPaint(preview, handshake, message.identity.compileRevision!)
   StudioPreviewActivationGate.changed(preview)
   if (canvasGesturesOwned !== undefined) {
     postCanvasGestureOwnership(preview, handshake, canvasGesturesOwned)
   }
 }
 
-function rememberExperimentalPaint(
+function rememberPreviewPaint(
   preview: StudioPreviewConnection,
   handshake: StudioHandshake,
   revision: number,
 ): void {
-  if (handshake.experimentalPreviewPaint !== true) {
+  if (handshake.previewPaint !== true) {
     return
   }
-  const current = pendingExperimentalPaints.get(preview)
+  const current = pendingPreviewPaints.get(preview)
   const pending = current?.instanceId === preview.previewInstanceId
     ? current
     : { instanceId: preview.previewInstanceId, latestRevision: -1, revisions: new Set<number>() }
@@ -595,7 +595,7 @@ function rememberExperimentalPaint(
   // acknowledgement that can still advance background validation.
   pending.revisions.clear()
   pending.revisions.add(revision)
-  pendingExperimentalPaints.set(preview, pending)
+  pendingPreviewPaints.set(preview, pending)
 }
 
 function receivePreviewPainted(
@@ -604,12 +604,12 @@ function receivePreviewPainted(
   handshake: StudioHandshake,
 ): void {
   if (
-    handshake.experimentalPreviewPaint !== true
+    handshake.previewPaint !== true
     || !matchesCurrentPaintIdentity(preview, handshake, message.identity)
   ) {
     return
   }
-  const pending = pendingExperimentalPaints.get(preview)
+  const pending = pendingPreviewPaints.get(preview)
   if (
     pending?.instanceId !== preview.previewInstanceId
     || pending.latestRevision !== message.paintRevision
@@ -617,7 +617,7 @@ function receivePreviewPainted(
   ) {
     return
   }
-  void StudioApiClient.experimentalPreviewPaint(message.paintRevision, message.painted)
+  void StudioApiClient.previewPaint(message)
     .catch(ignoreSupersededPreviewReport)
 }
 

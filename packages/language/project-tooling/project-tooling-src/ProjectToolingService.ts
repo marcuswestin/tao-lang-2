@@ -170,6 +170,14 @@ export const ProjectTooling: ProjectToolingService = {
           return watch.lastResult
         },
         requestRefresh: requestOptions => watch.requestRefresh(requestOptions),
+        async auditPreview(sourceVersions, versionOfSource) {
+          if (disposal !== undefined || watch.lastResult.status !== 'fresh' || receipt === undefined) {
+            return false
+          }
+          const native = await inspectMaintainedNativeBindings(options.nativeBindings)
+          return native.status === 'fresh'
+            && await receipt.auditPreview(options, sourceVersions, native.identity, versionOfSource)
+        },
         dispose() {
           disposal ??= watch.dispose().finally(release)
           return disposal

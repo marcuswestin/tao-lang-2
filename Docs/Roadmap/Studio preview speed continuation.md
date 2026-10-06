@@ -1083,3 +1083,46 @@ The cancellation command now accepts `--all-workflows --sha <commit>` to stop ot
 The local iteration run stopped on a stale incoming hook-policy assertion after 10m49s, under peak load 54.8 on 18 CPUs. The corrected hook file passes 15 checks. The external-watch topology file passes all five checks unchanged in a separate 47.5s run, versus 149.2s with a helper-observation timeout during the contended run. No watchdog or assertion was weakened. Main's matching instruction/hook corrections were integrated; hosted Verify and the host-only complement remain the final merge proof.
 
 Hosted queue continuation, 2026-10-06: retry 37423918637 on head 5050a8a7 was cancelled before contributor agreement or partition planning executed; the aggregate failed because those prerequisite jobs were cancelled, with no portable tests run. The owned complement was stopped and exact-head cancellation confirmed no remaining workflows. With the Developer reserving the CI queue for this slice, a fresh hosted attempt will provide the missing complete portable and host proof.
+
+## Production preview speed integration, 2026-10-06 — in progress
+
+The approved [execution plan](<Studio preview speed execution plan.md>) integrates checkpoint
+`4efc6ff2a` on a separate feature branch. Browser Studio uses conservative preview-first admission,
+complete source/tooling receipt audits, successful source baselines and independent publication
+checks. Full work follows authenticated paint with a one-second quiet window and a ten-second
+first-pending maximum; running synchronous work remains non-preemptible. Invalidations, failed
+attempts, rejected delivery and loss of all registered previews release authoritative recovery.
+Close drains admitted and queued compilation before flushing pending work and disposing resources.
+
+Compiler-owned direct scalar padding is limited to publication-off browser previews without native
+consumers. Source/member/index/prior-value/provenance checks and immutable span shifts guard the
+update. Fresh browser or native registrations publish pending overlays first. Main's native memo,
+locking and separately invoked final freshness audit remain intact. Its unchanged-installation
+memo hit, visible-change rehash, explicit-root cold path and publisher-barrier regressions pass;
+no additional useful duplication has been demonstrated, so another inspection cache is excluded.
+Unchanged source-read reuse and extra whole-document replay remain preserved at the POC checkpoint
+and are restored out of production plumbing.
+
+Focused source evidence passes: real preview-session lifecycle and publication (nine cases),
+project/session identity (52), server boundaries (29), gateway lifecycle (31), compiler padding
+(seven), runtime padding (six), scheduler (ten), eligibility (seven), input classification (two),
+receipt audit (one), bridge/protocol/coordinator, runtime publication guards and main native memo.
+Deliberate mutations fail their intended stale-source, first-deadline, timer cleanup, final-consumer,
+close-drain, fresh-realm, failed-registration and whole-app paint-identity witnesses. Typecheck and
+lint pass. These checks establish iteration evidence, not merge or performance qualification.
+
+Current real-Metro editor trials remain diagnostic. One contended default padding trial painted
+all eight edits and reached final source/manifest parity, but failed its all-direct assertion with
+five deliveries: quiet releases and multi-second event-loop lag caused full attempts to consume
+later saves. The failed artifact is retained; no qualified gain follows from it. A later width,
+invalid-to-valid and rapid-save trial exposed a harness-world mismatch in its rapid paint poll;
+that poll is corrected and needs a fresh run. Successful screenshots, authenticated computed
+padding/paint, failure samples, rapid/revert/burst, retained-state, whole-app, multiple-preview,
+fresh-activation and actual-full-overlap proof remain part of completion acceptance.
+
+All six canonical performance cases and their ceilings are preserved. A separate production-default
+padding qualification requires seven real warm delivery/paint receipts plus eventual authoritative
+source parity, rather than fabricated generated modification times. Quiet admission, paired
+main/feature trials, current-main integration, the changed-scope gate and final integrated review
+remain outstanding. The control is pinned to a named feature branch to prevent the repository's
+main-mirror sync from moving an unmeasured detached baseline. No push, CI or landing is authorized.

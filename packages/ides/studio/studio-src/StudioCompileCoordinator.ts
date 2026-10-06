@@ -98,6 +98,7 @@ export class StudioCompileCoordinator {
   readonly #onState: StudioCompileCoordinatorOptions['onState']
   readonly #project: StudioProjectIdentity
   readonly #studioWrites = new Map<string, TrackedStudioWrite[]>()
+  readonly #idleWaiters = new Set<() => void>()
   #appliedRevision = 0
   #compileRevision = 0
   #diagnostics: readonly StudioCompileDiagnostic[] = []
@@ -132,6 +133,14 @@ export class StudioCompileCoordinator {
 
   requestInitialCompile(): Promise<StudioCompileCompletion> {
     return this.#requestCompile('initial', [])
+  }
+
+  /** Wait for admitted and queued attempts without requesting another compilation. */
+  waitForIdle(): Promise<void> {
+    if (!this.#working && this.#pending === undefined) {
+      return Promise.resolve()
+    }
+    return new Promise(resolve => this.#idleWaiters.add(resolve))
   }
 
   /** noteStudioWrite schedules its compile and records the exact source version the watcher should acknowledge. */
@@ -194,6 +203,16 @@ export class StudioCompileCoordinator {
       return
     }
     this.#previewInstanceId = previewInstanceId
+    this.#appliedRevision = 0
+    this.#emitState()
+  }
+
+  /** Only the current realm can release its applied-revision stream. */
+  releasePreviewInstance(previewInstanceId: string): void {
+    if (previewInstanceId !== this.#previewInstanceId) {
+      return
+    }
+    this.#previewInstanceId = undefined
     this.#appliedRevision = 0
     this.#emitState()
   }
@@ -285,6 +304,11 @@ export class StudioCompileCoordinator {
       this.#working = false
       if (this.#pending !== undefined) {
         this.#scheduleDrain()
+      } else {
+        for (const resolve of this.#idleWaiters) {
+          resolve()
+        }
+        this.#idleWaiters.clear()
       }
     }
   }

@@ -1,5 +1,12 @@
 import type { Diagnostic, DiagnosticRange } from '@shared'
 
+/** One accepted watch event, reported before debounce or automatic-refresh suppression. */
+export type ProjectToolingInputChange = {
+  path?: string
+  event: string
+  kind: 'source' | 'topology' | 'config' | 'dependency' | 'sidecar' | 'native' | 'unknown'
+}
+
 /** Options shared by a one-shot refresh and a disk-backed watch. */
 export type ProjectToolingOptions = {
   /** Diagnostic control: retain watches and initial refresh but require explicit refresh requests. */
@@ -15,7 +22,7 @@ export type ProjectToolingOptions = {
   /** Called after each completed watch refresh, including a stale refresh. */
   onResult?: (result: ProjectToolingResult) => void
   /** Called for each accepted filesystem or native-inventory change before refresh suppression or debounce. */
-  onInputChange?: (change: { path?: string; event: string }) => void
+  onInputChange?: (change: ProjectToolingInputChange) => void
   /** Receives watcher or refresh failures that cannot be returned from a file event. */
   onError?: (error: unknown) => void
 }
@@ -56,6 +63,16 @@ export type ProjectToolingResult = {
 export type ProjectToolingWatch = {
   readonly lastResult: ProjectToolingResult
   requestRefresh(options?: { force?: boolean }): Promise<ProjectToolingResult>
+  /**
+   * Prove that exact current project source versions are the only changes since the
+   * last fully audited fresh refresh. Discovery/ownership, dependency/config/sidecar
+   * bytes, native identity and generated outputs remain authoritative. Incomplete
+   * observations return false; watch notifications alone never authorize reuse.
+   */
+  auditPreview?(
+    sourceVersions: Readonly<Record<string, string>>,
+    versionOfSource: (text: string) => string,
+  ): Promise<boolean>
   dispose(): Promise<void>
 }
 

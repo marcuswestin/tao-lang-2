@@ -136,8 +136,8 @@ export type { StudioDesignValue, StudioFileDraftState }
 export type StudioProjectSessionOptions = {
   appName?: string
   compile: StudioCompileCoordinatorOptions['compile']
-  /** Runs before a new cell preview is registered when an experimental design overlay is pending. */
-  experimentalEnsurePublishedPreview?: () => Promise<void>
+  /** Publishes pending authoritative bytes before registering a fresh preview realm. */
+  ensurePublishedPreview?: () => Promise<void>
   entryPath?: string
   projectRoot: string
   /** Substitutes the disk behind the file listing; tests use it to count scans and reads. */
@@ -221,6 +221,7 @@ export class StudioProjectSession {
   readonly #workspace: Workspace
   #mutationLane: Promise<void> = Promise.resolve()
   #matrix: StudioMatrixSession | undefined
+  readonly #nativePreviewConsumers = new Set<object>()
   #canvasViewportStore: StudioCanvasViewportStore | undefined
   #canvasViewport: StudioCanvasViewport | undefined
   readonly #canvasViewportSequences = new Map<string, number>()
@@ -235,7 +236,7 @@ export class StudioProjectSession {
     files: StudioProjectFiles,
     compile: StudioCompileCoordinatorOptions['compile'],
     sketchCatalogIO?: StudioSketchCatalogIO,
-    readonly experimentalEnsurePublishedPreview?: () => Promise<void>,
+    readonly ensurePublishedPreview?: () => Promise<void>,
   ) {
     this.#workspace = workspace
     this.#files = files
@@ -296,7 +297,7 @@ export class StudioProjectSession {
       files,
       options.compile,
       options.sketchCatalogIO,
-      options.experimentalEnsurePublishedPreview,
+      options.ensurePublishedPreview,
     )
     return session
   }
@@ -530,12 +531,57 @@ export class StudioProjectSession {
     })
   }
 
-  /** Temporary diagnostic hook; absent outside the observed-paint scheduling experiment. */
-  experimentalPreviewPaint?: (revision: number, painted?: boolean) => boolean
+  /** Called only after the registered preview identity has been authenticated. */
+  previewPaint?: (revision: number, painted?: boolean) => boolean
 
-  /** Diagnostic delivery only; never substitutes for eventual authoritative compilation. */
-  experimentalDesignPadding(update: import('./StudioProtocol').StudioExperimentalDesignPadding): void {
-    this.#emit({ ...update, type: 'experimental-design-padding' })
+  /** Observes explicit loss of registered consumers, excluding manifest adoption. */
+  previewConsumersChanged?: () => void
+
+  hasNativePreviewConsumers(): boolean {
+    return this.#nativePreviewConsumers.size > 0
+  }
+
+  hasPreviewConsumers(): boolean {
+    return this.#matrix?.hasInstances() === true || this.compileSnapshot().previewInstanceId !== undefined
+  }
+
+  /** A connected native consumer requires generated authoritative bytes for every edit. */
+  retainNativePreviewConsumer(): () => void {
+    const token = {}
+    this.#nativePreviewConsumers.add(token)
+    return () => {
+      this.#nativePreviewConsumers.delete(token)
+    }
+  }
+
+  acknowledgePreviewPaint(input: unknown): boolean {
+    const message = StudioProtocol.parseMessage(input)
+    if (message?.type !== 'preview-painted') {
+      Errors.throwUserInput('Expected a valid Tao Studio preview-painted message.')
+    }
+    const identity = message.identity
+    const snapshot = this.compileSnapshot()
+    if (
+      identity.project !== this.projectRoot || identity.appName !== this.appName
+      || identity.compileRevision !== (snapshot.publishedRevision ?? snapshot.compileRevision)
+    ) {
+      return false
+    }
+    if (identity.cellId !== undefined) {
+      const cell = cellInstanceIdentity(identity)
+      if (cell === undefined) {
+        return false
+      }
+      this.#requireMatrix().assertCurrentInstance(cell)
+    } else if (identity.previewInstanceId !== snapshot.previewInstanceId) {
+      return false
+    }
+    return this.previewPaint?.(message.paintRevision, message.painted) ?? false
+  }
+
+  /** Delivers an admitted browser padding update; authoritative compilation still follows. */
+  deliverDesignPadding(update: import('./StudioProtocol').StudioDesignPaddingUpdate): void {
+    this.#emit({ ...update, type: 'design-padding' })
   }
 
   compileSnapshot(): StudioCompileSnapshot {
@@ -554,6 +600,10 @@ export class StudioProjectSession {
     return this.#coordinator.requestInitialCompile()
   }
 
+  waitForCompileIdle(): Promise<void> {
+    return this.#coordinator.waitForIdle()
+  }
+
   setPreviewInstance(previewInstanceId: string): void {
     Assert.input(previewInstanceId.trim().length > 0, 'Studio preview instance id cannot be empty.')
     this.#coordinator.setPreviewInstance(previewInstanceId)
@@ -565,6 +615,15 @@ export class StudioProjectSession {
     }
     this.setPreviewInstance(input['previewInstanceId'])
     return this.compileSnapshot()
+  }
+
+  /** Releasing an obsolete whole-app realm must leave its replacement registered. */
+  unregisterPreview(previewInstanceId: string): void {
+    const hadConsumers = this.hasPreviewConsumers()
+    this.#coordinator.releasePreviewInstance(previewInstanceId)
+    if (hadConsumers && !this.hasPreviewConsumers()) {
+      this.previewConsumersChanged?.()
+    }
   }
 
   /** setMatrixManifest installs the compiler-derived scenario/cell contract for this compile revision. */
@@ -600,13 +659,21 @@ export class StudioProjectSession {
 
   /** unregisterCellPreview releases one live instance; a stale or unknown id is a no-op. */
   unregisterCellPreview(previewInstanceId: string): void {
+    const hadConsumers = this.hasPreviewConsumers()
     this.#matrix?.unregisterInstance(previewInstanceId)
+    if (hadConsumers && !this.hasPreviewConsumers()) {
+      this.previewConsumersChanged?.()
+    }
   }
 
   reconfigureCell(input: unknown): StudioCellRuntime {
+    const hadConsumers = this.hasPreviewConsumers()
     const request = StudioSessionRequests.cellReconfigureRequest(input)
     const runtime = this.#requireMatrix().reconfigure(request)
     this.#emit({ cellId: request.cellId, type: 'cell-reconfigured' })
+    if (hadConsumers && !this.hasPreviewConsumers()) {
+      this.previewConsumersChanged?.()
+    }
     return runtime
   }
 
@@ -722,7 +789,7 @@ export class StudioProjectSession {
       },
       channel: studioProtocolChannel,
       compile: this.compileSnapshot(),
-      ...(this.experimentalPreviewPaint === undefined ? {} : { experimentalPreviewPaint: true as const }),
+      ...(this.previewPaint === undefined ? {} : { previewPaint: true as const }),
       endpoints: studioSessionEndpoints,
       entryPath: FS.relativePath(this.projectRoot, this.entryPath),
       files: await this.files(),

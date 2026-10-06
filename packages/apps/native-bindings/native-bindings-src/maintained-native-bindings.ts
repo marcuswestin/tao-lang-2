@@ -6,12 +6,7 @@ import { ExpoApiSource } from './native-binding-sources'
 import { resolveTypeScriptApiEngineInput, resolveTypeScriptApiInput } from './typescript-api-source'
 import { publishNativeBindingFileSets } from './write-bindings'
 
-export type MaintainedBindingOptions = {
-  stdlibRoot?: string
-  sourceRoots?: readonly string[]
-  /** Temporary per-fast-attempt reuse; the compiler still performs its final independent freshness check. */
-  experimentalInspection?: Inspection
-}
+export type MaintainedBindingOptions = { stdlibRoot?: string; sourceRoots?: readonly string[] }
 type Inspection = {
   status: 'fresh' | 'stale'
   diagnostics: readonly Diagnostic[]
@@ -293,9 +288,6 @@ export async function inspectMaintainedNativeBindings(
     beforeFinalProbe?: () => Promise<void>
   } = {},
 ): Promise<Inspection> {
-  if (options.experimentalInspection !== undefined) {
-    return options.experimentalInspection
-  }
   const location = locations(options)
   const first = roots(location.root, maintainedNativeSources[0]!)[0]
   const parent = FS.dirname(first)
