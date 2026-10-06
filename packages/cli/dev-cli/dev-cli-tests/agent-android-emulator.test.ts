@@ -1085,6 +1085,7 @@ Platform.runtimeConsole.info(JSON.stringify({disposed, shutdownRetention, ownedN
   let deadline: ReturnType<typeof setTimeout> | undefined
   let child: TrackedProcess | undefined
   try {
+    // budget-ok: The 30-second safety deadline bounds this retained-server fixture; success waits for pipe closure.
     const closed = await Promise.race([
       worker.waitForClose(),
       new Promise<undefined>(resolve => deadline = setTimeout(() => resolve(undefined), 30_000)),
