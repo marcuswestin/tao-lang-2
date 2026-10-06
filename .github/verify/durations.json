@@ -3250,14 +3250,6 @@
       "samples": 1,
       "source": "wall"
     },
-    "language/project-tooling:native-receipt-signatures": {
-      "emaMs": 140175,
-      "lastMs": 140175,
-      "lastRunAt": "2026-10-06T12:46:16Z",
-      "lastWallMs": 140175,
-      "samples": 1,
-      "source": "wall"
-    },
     "language/project-tooling:native-service": {
       "emaMs": 59860,
       "lastMs": 59860,

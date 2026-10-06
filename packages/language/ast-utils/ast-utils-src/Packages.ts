@@ -624,11 +624,7 @@ export namespace Packages {
         const owningRoot = projectRoots
           .filter(root => FS.pathIsWithin(path, root))
           .toSorted((left, right) => right.length - left.length)[0]
-        const excluded = owningRoot
-          && FS.relativePath(owningRoot, path).split('/').some(segment =>
-            segment.startsWith('_gen_tao-') || segment.startsWith('.tao-')
-            || TaoFiles.discoveryExcludeDirectoryNames.some(excluded => excluded === segment)
-          )
+        const excluded = owningRoot && isExcludedPackagePath(FS.relativePath(owningRoot, path))
         if (owningRoot && path !== owningRoot && !excluded && containsTaoSource(listing, scannedPath)) {
           record(path)
         }
@@ -639,6 +635,10 @@ export namespace Packages {
         .filter(root => FS.pathIsWithin(sourcePath, root))
         .toSorted((left, right) => right.length - left.length)[0] ?? resolvedRoot
       const relative = FS.relativePath(projectRoot, sourcePath)
+      // A module is a directory, so a root-level file such as `@x.tao` is never one.
+      if (!relative.includes('/') || isExcludedPackagePath(relative)) {
+        continue
+      }
       const moduleName = relative.split('/')[0]
       if (moduleName?.startsWith('@') && moduleName.length > 1) {
         record(FS.resolvePath(moduleName, projectRoot))
@@ -648,6 +648,14 @@ export namespace Packages {
       paths.sort()
     }
     return { projectRoot: resolvedRoot, projectRoots, packages }
+  }
+
+  /** isExcludedPackagePath returns whether a project-relative path passes through generated or tooling directories. */
+  function isExcludedPackagePath(relativePath: string): boolean {
+    return relativePath.split('/').some(segment =>
+      segment.startsWith('_gen_tao-') || segment.startsWith('.tao-')
+      || TaoFiles.discoveryExcludeDirectoryNames.some(excluded => excluded === segment)
+    )
   }
 
   function containsTaoSource(listing: Repo.Listing, directory: string): boolean {

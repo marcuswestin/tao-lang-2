@@ -21,7 +21,7 @@ From the checkout root, save the first block below as `ReadingList.tao`, then ru
 
 ```sh
 ./agent tao check ReadingList.tao
-./agent tao dev ReadingList.tao --app ReadingList --web
+./agent tao run ReadingList.tao --app ReadingList --web
 ```
 
 The second command opens the browser app and watches the file. Keep it running as you replace and
