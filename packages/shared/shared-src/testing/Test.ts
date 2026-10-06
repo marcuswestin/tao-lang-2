@@ -257,13 +257,19 @@ export function setTestRuntime(nextRuntime: TestRuntime): void {
   copyFunctionProperties(AfterEach, nextRuntime.afterEach, true)
   copyFunctionProperties(Describe, nextRuntime.describe)
   copyFunctionProperties(Expect, nextRuntime.expect)
-  copyFunctionProperties(Test, nextRuntime.test, true)
-  // Bun exposes registration variants lazily, so Reflect.ownKeys does not enumerate them.
-  for (const variant of ['skip', 'only', 'each', 'concurrent', 'failing', 'todo']) {
-    const registration = nextRuntime.test[variant]
-    if (typeof registration === 'function') {
-      Test[variant] = wrapRunnerTimeouts(registration, nextRuntime.test)
-    }
+  // Keep runner variants lazy: Bun's `.only` accessor rejects focused tests in CI when read.
+  // Configurable getters also let a later setTestRuntime replace this runner without stale wrappers.
+  copyFunctionProperties(Test, nextRuntime.test, true, TEST_REGISTRATION_VARIANTS)
+  for (const variant of TEST_REGISTRATION_VARIANTS) {
+    Object.defineProperty(Test, variant, {
+      configurable: true,
+      enumerable: true,
+      get() {
+        const runtimeTest = getTestRuntime().test
+        const registration = runtimeTest[variant]
+        return typeof registration === 'function' ? wrapRunnerTimeouts(registration, runtimeTest) : registration
+      },
+    })
   }
   Describe['skip'] = nextRuntime.describe['skip']
   // `copyFunctionProperties` carries the runner's own statics (`expect.any`, `expect.objectContaining`,
@@ -306,6 +312,8 @@ type TestRunnerExpect = (<T = unknown>(value?: T, ...args: any[]) => any) & Reco
 type TestRunnerFunction = ((...args: any[]) => any) & Record<string, any>
 
 let testRuntime: TestRuntime | undefined
+
+const TEST_REGISTRATION_VARIANTS = ['skip', 'only', 'each', 'concurrent', 'failing', 'todo'] as const
 
 const clockSlot = testOverrideSlot<() => number>({
   read: () => Date.now,
@@ -517,9 +525,10 @@ function copyFunctionProperties(
   target: TestRunnerFunction | TestRunnerExpect,
   source: TestRunnerFunction | TestRunnerExpect,
   runnerTimeouts = false,
+  skippedKeys: readonly PropertyKey[] = [],
 ): void {
   for (const key of Reflect.ownKeys(source)) {
-    if (key === 'length' || key === 'name' || key === 'prototype') {
+    if (key === 'length' || key === 'name' || key === 'prototype' || skippedKeys.includes(key)) {
       continue
     }
 

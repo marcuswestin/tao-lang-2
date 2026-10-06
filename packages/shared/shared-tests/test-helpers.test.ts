@@ -261,18 +261,23 @@ Describe('Shared test runner helpers', () => {
           `Test.skip('skipped diagnostic case', async () => { Expect('SKIP_RAN').toBe('SKIPPED') }, 1)`,
         ].join('\n'),
       )
-      async function probe(diagnostic: boolean, bounded = false, only = false) {
+      async function probe(diagnostic: boolean, bounded = false, only = false, ci = true) {
         return await CLI.run(Platform.runtimeProcess.execPath, {
           args: ['test', file, '--timeout=0', ...(only ? ['--only'] : [])],
-          env: { PROBE_BOUNDED: String(bounded), PROBE_ONLY: String(only), TAO_VERIFY_NO_TIMEOUTS: String(diagnostic) },
+          env: {
+            CI: String(ci),
+            PROBE_BOUNDED: String(bounded),
+            PROBE_ONLY: String(only),
+            TAO_VERIFY_NO_TIMEOUTS: String(diagnostic),
+          },
           processPolicy: 'test',
           timeoutMs: 30_000,
         })
       }
-      const ordinary = await probe(false)
+      const ordinary = await probe(false, false, false, true)
       Expect(ordinary.exitCode).not.toBe(0)
       Expect(ordinary.stderr).toContain('timed out')
-      const diagnostic = await probe(true)
+      const diagnostic = await probe(true, false, false, true)
       Expect(diagnostic.exitCode).toBe(0)
       Expect(diagnostic.stdout).toContain('TEST_FINISHED')
       Expect(diagnostic.stdout).toContain('AFTER_EACH_FINISHED')
@@ -280,9 +285,12 @@ Describe('Shared test runner helpers', () => {
       Expect(diagnostic.stdout).toContain('EACH_FINISHED')
       Expect(diagnostic.stdout).toContain('CONCURRENT_FINISHED')
       Expect(diagnostic.stderr).not.toContain('SKIP_RAN')
-      const exclusive = await probe(true, false, true)
+      const exclusive = await probe(true, false, true, false)
       Expect(exclusive.exitCode).toBe(0)
       Expect(exclusive.stdout).toContain('TEST_FINISHED')
+      const ciExclusive = await probe(true, false, true, true)
+      Expect(ciExclusive.exitCode).not.toBe(0)
+      Expect(ciExclusive.stderr).toMatch(/only.*CI|CI.*only/i)
       const bounded = await probe(true, true)
       Expect(bounded.exitCode).not.toBe(0)
       Expect(bounded.stderr).toContain('timed out')
