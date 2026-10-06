@@ -694,27 +694,66 @@ async function runProcess(state: WorkState, context: WorkRunContext): Promise<Wo
     return { error: Errors.asError(error), exitCode: null }
   }
   let forceKill: ReturnType<typeof setTimeout> | undefined
+  let forceKillDone: Promise<void> | undefined
+  let resolveForceKill: (() => void) | undefined
   let ownershipPoll: ReturnType<typeof setInterval> | undefined
   let trackedDescendants: TrackedProcess[] = []
   const trackedByIdentity = new Map<string, TrackedProcess>()
+  let inspectionError: Error | undefined
+  const inspectOwnership = (inspect: () => void): boolean => {
+    try {
+      inspect()
+      return true
+    } catch (error) {
+      inspectionError ??= Errors.asError(error)
+      return false
+    }
+  }
   const rememberDescendants = () => {
     if (child.exitCode !== null) {
       return
     }
-    for (const process of ProcessTree.descendants(child.pid)) {
-      trackedByIdentity.set(`${process.pid}:${process.startedAt}`, process)
-    }
+    inspectOwnership(() => {
+      for (const process of ProcessTree.descendants(child.pid)) {
+        trackedByIdentity.set(`${process.pid}:${process.startedAt}`, process)
+      }
+    })
   }
   const rememberOwnedDescendants = () => {
-    const owners = [...trackedByIdentity.values()]
-    const current = ProcessTree.identities(owners.map(process => process.pid))
-    for (const owner of owners) {
-      if (ProcessTree.sameProcess(current.get(owner.pid), owner)) {
-        for (const process of ProcessTree.descendants(owner.pid)) {
-          trackedByIdentity.set(`${process.pid}:${process.startedAt}`, process)
+    inspectOwnership(() => {
+      const owners = [...trackedByIdentity.values()]
+      const current = ProcessTree.identities(owners.map(process => process.pid))
+      for (const owner of owners) {
+        if (ProcessTree.sameProcess(current.get(owner.pid), owner)) {
+          for (const process of ProcessTree.descendants(owner.pid)) {
+            trackedByIdentity.set(`${process.pid}:${process.startedAt}`, process)
+          }
         }
       }
+    })
+  }
+  const signalTracked = (processes: readonly TrackedProcess[], signal: Platform.ProcessSignal) => {
+    inspectOwnership(() => ProcessTree.signalTracked(processes, signal))
+  }
+  const signalGroup = (signal: Platform.ProcessSignal) => {
+    inspectOwnership(() => ProcessTree.signalGroup(child.pid, signal))
+  }
+  const scheduleForceKill = (graceMs: number, includeGroup: boolean) => {
+    if (forceKill !== undefined) {
+      return
     }
+    forceKillDone = new Promise(resolve => resolveForceKill = resolve)
+    forceKill = setTimeout(() => {
+      rememberOwnedDescendants()
+      trackedDescendants = [...trackedByIdentity.values()]
+      signalTracked(trackedDescendants, 'SIGKILL')
+      if (includeGroup) {
+        signalGroup('SIGKILL')
+      }
+      forceKill = undefined
+      resolveForceKill?.()
+      resolveForceKill = undefined
+    }, graceMs)
   }
   let cancelled = false
   try {
@@ -725,19 +764,16 @@ async function runProcess(state: WorkState, context: WorkRunContext): Promise<Wo
       }
       cancelled = true
       rememberDescendants()
-      for (const process of ProcessTree.groupMembers(child.pid)) {
-        trackedByIdentity.set(`${process.pid}:${process.startedAt}`, process)
-      }
+      const groupInspected = inspectOwnership(() => {
+        for (const process of ProcessTree.groupMembers(child.pid)) {
+          trackedByIdentity.set(`${process.pid}:${process.startedAt}`, process)
+        }
+      })
       rememberOwnedDescendants()
       trackedDescendants = [...trackedByIdentity.values()]
-      ProcessTree.signalTracked(trackedDescendants, 'SIGTERM')
-      forceKill = setTimeout(() => {
-        rememberOwnedDescendants()
-        trackedDescendants = [...trackedByIdentity.values()]
-        ProcessTree.signalTracked(trackedDescendants, 'SIGKILL')
-        ProcessTree.signalGroup(child.pid, 'SIGKILL')
-        forceKill = undefined
-      }, graceMs ?? ProcessTree.FORCE_KILL_GRACE_MS)
+      signalTracked(trackedDescendants, 'SIGTERM')
+      signalGroup('SIGTERM')
+      scheduleForceKill(graceMs ?? ProcessTree.FORCE_KILL_GRACE_MS, !groupInspected || trackedDescendants.length > 0)
     })
     const outcome = await waitForProcess(
       child,
@@ -750,52 +786,78 @@ async function runProcess(state: WorkState, context: WorkRunContext): Promise<Wo
           clearInterval(ownershipPoll)
           ownershipPoll = undefined
         }
-        const groupMembers = ProcessTree.groupMembers(child.pid)
-        for (const process of groupMembers) {
-          trackedByIdentity.set(`${process.pid}:${process.startedAt}`, process)
-        }
+        let groupMembers: TrackedProcess[] = []
+        const groupInspected = inspectOwnership(() => {
+          groupMembers = ProcessTree.groupMembers(child.pid)
+          for (const process of groupMembers) {
+            trackedByIdentity.set(`${process.pid}:${process.startedAt}`, process)
+          }
+        })
         rememberOwnedDescendants()
         const owned = [...trackedByIdentity.values()]
         trackedDescendants = owned
-        const current = ProcessTree.identities(owned.map(process => process.pid))
-        const survivors = owned.filter(process => ProcessTree.sameProcess(current.get(process.pid), process))
-        if (survivors.length > 0 && !cancelled) {
-          ProcessTree.signalTracked(survivors, 'SIGTERM')
-          forceKill = setTimeout(() => {
-            rememberOwnedDescendants()
-            ProcessTree.signalTracked([...trackedByIdentity.values()], 'SIGKILL')
-            ProcessTree.signalGroup(child.pid, 'SIGKILL')
-            forceKill = undefined
-          }, ProcessTree.FORCE_KILL_GRACE_MS)
+        let current = new Map<number, TrackedProcess>()
+        const identitiesInspected = inspectOwnership(() => {
+          current = ProcessTree.identities(owned.map(process => process.pid))
+        })
+        const survivors = owned.filter(process =>
+          !identitiesInspected || ProcessTree.sameProcess(current.get(process.pid), process)
+        )
+        const liveGroupMembers = groupMembers.some(process =>
+          ProcessTree.sameProcess(current.get(process.pid), process)
+        )
+        const groupNeedsCleanup = liveGroupMembers || !groupInspected
+          || (!identitiesInspected && groupMembers.length > 0)
+        if (survivors.length > 0) {
+          signalTracked(survivors, 'SIGTERM')
         }
-        if (cancelled && survivors.length > 0) {
-          // Cancellation may have raced with a descendant escaping its original process group.
-          ProcessTree.signalTracked(survivors, 'SIGTERM')
-          if (forceKill === undefined) {
-            forceKill = setTimeout(() => {
-              rememberOwnedDescendants()
-              ProcessTree.signalTracked([...trackedByIdentity.values()], 'SIGKILL')
-              ProcessTree.signalGroup(child.pid, 'SIGKILL')
-              forceKill = undefined
-            }, ProcessTree.FORCE_KILL_GRACE_MS)
+        if (groupNeedsCleanup) {
+          signalGroup('SIGTERM')
+        }
+        if (survivors.length > 0 || groupNeedsCleanup) {
+          scheduleForceKill(ProcessTree.FORCE_KILL_GRACE_MS, groupNeedsCleanup)
+        }
+        if (liveGroupMembers) {
+          try {
+            await ProcessTree.waitForGroupExit(child.pid)
+          } catch (error) {
+            inspectionError ??= Errors.asError(error)
           }
         }
-        await Promise.all([
-          groupMembers.length > 0 ? ProcessTree.waitForGroupExit(child.pid) : Promise.resolve(),
-          ProcessTree.waitForTrackedExit(owned),
-        ])
+        try {
+          await ProcessTree.waitForTrackedExit(owned)
+        } catch (error) {
+          inspectionError ??= Errors.asError(error)
+          rememberOwnedDescendants()
+          trackedDescendants = [...trackedByIdentity.values()]
+          signalTracked(trackedDescendants, 'SIGKILL')
+          try {
+            await ProcessTree.waitForTrackedExit(trackedDescendants)
+          } catch (retryError) {
+            inspectionError ??= Errors.asError(retryError)
+          }
+        }
+        if (!groupInspected && forceKillDone !== undefined) {
+          await forceKillDone
+        }
         if (forceKill !== undefined) {
           clearTimeout(forceKill)
           forceKill = undefined
         }
         const diagnostic = survivors.length > 0
-          ? `\nOwned child processes outlived the command (${
-            survivors.map(process => process.pid).join(', ')
-          }); terminated ${survivors.length}.\n`
+          ? `\nOwned child processes outlived the command (${survivors.map(process => process.pid).join(', ')}); ${
+            inspectionError === undefined ? 'terminated' : 'cleanup attempted for'
+          } ${survivors.length}.\n`
           : undefined
+        const inspectionDiagnostic = inspectionError === undefined
+          ? undefined
+          : `\nProcess cleanup inspection was incomplete: ${Errors.messageOf(inspectionError)}.\n`
+        const output = [diagnostic, inspectionDiagnostic].filter((part): part is string => part !== undefined).join('')
         return {
-          exitCode: child.exitCode === 0 && diagnostic !== undefined ? 1 : child.exitCode,
-          ...(diagnostic === undefined ? {} : { output: diagnostic }),
+          exitCode: child.exitCode === 0 && (diagnostic !== undefined || inspectionError !== undefined)
+            ? 1
+            : child.exitCode,
+          ...(output.length === 0 ? {} : { output }),
         }
       },
     )

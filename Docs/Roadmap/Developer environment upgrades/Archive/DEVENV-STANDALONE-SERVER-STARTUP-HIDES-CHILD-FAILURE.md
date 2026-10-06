@@ -10,4 +10,5 @@
 - **Dependencies:** None. Implemented on `feat/test-process-termination`, 2026-10-06.
 - **Acceptance:** On `feat/test-process-termination` on 2026-10-06, six deterministic startup fixtures passed: early exit 0, failure 19 despite a ready marker, missing executable, signal despite a ready marker, healthy readiness, and a live no-port deadline with captured output. Each fixture cleans its child in finally. The real `build-clean-cli.test.ts` passed all three tests, including static-server containment. Installed-CLI acceptance in a fresh host remains separate from this local source proof; the historical sandbox failure cause remains unconfirmed.
 - **Source:** Install timing and unchanged-file preservation verification on `feat/install-timing-cache`.
+- **Additional acceptance:** A pending asynchronous HTTP readiness probe cannot block child-exit checks or the startup deadline. Real exit-23 and fake-time deadline fixtures retain startup output; the static-server build and containment fixture still passes.
 - **Archived:** 2026-10-06

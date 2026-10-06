@@ -1,5 +1,5 @@
 import { AfterEach, Describe, Expect, Test, testOverrideSlot, until, withCapturedOutput } from '@shared/test'
-import { CLI, Platform, ProcessTree, Time, type TrackedProcess } from '../shared-src/shared'
+import { CLI, Errors, Platform, ProcessTree, Time, type TrackedProcess } from '../shared-src/shared'
 
 /**
  * These tests start real process trees, so each one registers what it started for cleanup: a leaked
@@ -21,6 +21,18 @@ const clearTimeoutSlot = testOverrideSlot<ClearTimeoutCall>({
   read: () => globalThis.clearTimeout,
   write: value => {
     globalThis.clearTimeout = value as typeof globalThis.clearTimeout
+  },
+})
+const groupMembersSlot = testOverrideSlot<typeof ProcessTree.groupMembers>({
+  read: () => ProcessTree.groupMembers,
+  write: value => {
+    ProcessTree.groupMembers = value
+  },
+})
+const signalGroupSlot = testOverrideSlot<typeof ProcessTree.signalGroup>({
+  read: () => ProcessTree.signalGroup,
+  write: value => {
+    ProcessTree.signalGroup = value
   },
 })
 
@@ -144,6 +156,44 @@ async function waitForGone(tracked: TrackedProcess, description: string): Promis
 }
 
 Describe('CLI process policy', () => {
+  for (const verdict of [0, 7]) {
+    Test(`reports failed cleanup inspection while retaining child verdict ${verdict}`, async () => {
+      let output = ''
+      const command = CLI.start('/bin/sh', {
+        args: ['-c', `sleep 300 & echo $!; read reply; exit ${verdict}`],
+        detached: true,
+        processPolicy: 'test',
+        onOutput: (_stream, chunk) => {
+          output += chunk.toString()
+        },
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeoutMs: 30_000,
+        timeoutPolicy: 'bounded',
+      })
+      let restore = () => {}
+      let restoreSignal = () => {}
+      try {
+        const pid = await until(() => Number(/^(\d+)/.exec(output)?.[1]) || undefined, { timeoutPolicy: 'bounded' })
+        abandoned.push(pid)
+        const identity = ProcessTree.identities([pid]).get(pid)!
+        restore = groupMembersSlot.install(() => Errors.throwHostEnvironment('fixture group inspection denied'))
+        restoreSignal = signalGroupSlot.install(() => Errors.throwHostEnvironment('fixture group inspection denied'))
+        command.writeStdin('exit\n')
+        const result = await command.waitForClose()
+        Expect(result.exitCode).toBe(verdict || 1)
+        Expect(output).toContain('Test process cleanup could not be verified')
+        Expect(output).toContain('fixture group inspection denied')
+        Expect(isAlive(identity)).toBe(false)
+      } finally {
+        restore()
+        restoreSignal()
+        command.kill('SIGKILL')
+        await command.waitForClose()
+        command.dispose()
+      }
+    })
+  }
+
   Test('stops an isolated child forked from the direct child termination handler', async () => {
     let output = ''
     const command = CLI.start('/bin/sh', {

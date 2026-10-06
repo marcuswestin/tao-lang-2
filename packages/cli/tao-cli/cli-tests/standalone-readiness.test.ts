@@ -30,6 +30,45 @@ Describe('standalone acceptance readiness', () => {
     })
   })
 
+  Test('reports child failure while an asynchronous readiness probe stays pending', async () => {
+    await withChild(
+      '/bin/sh',
+      ['-c', 'read reply; printf "original startup error\\n"; exit 23'],
+      async (child, output) => {
+        await Expect(waitForStandaloneReadiness(
+          child,
+          () => {
+            child.endStdin()
+            return new Promise<boolean>(() => {})
+          },
+          output,
+          'pending HTTP probe',
+          CHILD_TIMEOUT_MS,
+        ))
+          .rejects.toThrow('pending HTTP probe failed to start (exit 23):\noriginal startup error')
+        Expect(child.exitCode).toBe(23)
+      },
+      'pipe',
+    )
+  })
+
+  Test('keeps the deadline active while an asynchronous readiness probe stays pending', async () => {
+    await withChild('/bin/sh', ['-c', 'printf "waiting for response\\n"; exec sleep 30'], async (child, output) => {
+      await Time.pollUntil(() => output().length > 0, { intervalMs: 25, timeoutMs: CHILD_TIMEOUT_MS })
+      let elapsed = 0
+      // budget-ok: fake time proves the deadline without waiting for a network request.
+      await Expect(
+        waitForStandaloneReadiness(child, () => new Promise<boolean>(() => {}), output, 'HTTP response', 1_000, {
+          intervalMs: 100,
+          now: () => elapsed,
+          sleep: async duration => {
+            elapsed += duration
+          },
+        }),
+      ).rejects.toThrow('HTTP response did not become ready within 1000 ms:\nwaiting for response')
+    })
+  })
+
   Test('reports a signal even when the child printed the ready marker first', async () => {
     await withChild('/bin/sh', ['-c', 'printf "ready marker\\n"; exec sleep 30'], async (child, output) => {
       await Time.pollUntil(() => output().includes('ready marker') || child.error, {
@@ -82,6 +121,7 @@ async function withChild(
   command: string,
   args: string[],
   run: (child: CLI.StartedCommand, output: () => string) => Promise<void>,
+  stdin: 'pipe' | 'ignore' = 'ignore',
 ): Promise<void> {
   let captured = ''
   const child = CLI.start(command, {
@@ -92,7 +132,7 @@ async function withChild(
     onOutput: (_stream, chunk) => {
       captured += String(chunk)
     },
-    stdio: 'pipe',
+    stdio: [stdin, 'pipe', 'pipe'],
   })
   try {
     await run(child, () => captured)

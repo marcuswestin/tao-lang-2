@@ -1,5 +1,5 @@
 import { Errors, FS, Platform, ProcessTree, type TrackedProcess } from '@shared'
-import { Deferred, Describe, Expect, mkTestDir, settle, Test, until } from '@shared/test'
+import { Deferred, Describe, Expect, mkTestDir, settle, Test, testOverrideSlot, until } from '@shared/test'
 import {
   type WorkCommand,
   WorkGraph,
@@ -8,6 +8,19 @@ import {
   type WorkRunResult,
   type WorkState,
 } from '../verification-src/WorkGraph'
+
+const mutableProcessTree = ProcessTree as unknown as {
+  groupMembers: typeof ProcessTree.groupMembers
+  signalGroup: typeof ProcessTree.signalGroup
+}
+const groupMembersOverride = testOverrideSlot({
+  read: () => ProcessTree.groupMembers,
+  write: value => mutableProcessTree.groupMembers = value,
+})
+const signalGroupOverride = testOverrideSlot({
+  read: () => ProcessTree.signalGroup,
+  write: value => mutableProcessTree.signalGroup = value,
+})
 
 async function publishedProcess(path: string): Promise<TrackedProcess | undefined> {
   if (!await FS.isFile(path)) {
@@ -888,6 +901,94 @@ Describe('work graph scheduling', () => {
     Expect(state.fullOutput).toContain('suite verdict: deliberate failure\n')
     Expect(state.fullOutput).not.toContain('Owned child processes outlived the command')
     Expect(WorkGraph.exitCodeFor(result)).toBe(1)
+  })
+
+  Test('group-inspection failures preserve failed verdicts and clean tracked children', async () => {
+    let denyGroupOperations = false
+    let groupMembersDenied = 0
+    let signalGroupDenied = 0
+    const originalGroupMembers = ProcessTree.groupMembers
+    const originalSignalGroup = ProcessTree.signalGroup
+    const restoreGroupMembers = groupMembersOverride.install(group => {
+      if (denyGroupOperations) {
+        groupMembersDenied += 1
+        Errors.throwHostEnvironment('fixture denied groupMembers')
+      }
+      return originalGroupMembers(group)
+    })
+    const restoreSignalGroup = signalGroupOverride.install((group, signal) => {
+      if (denyGroupOperations) {
+        signalGroupDenied += 1
+        Errors.throwHostEnvironment('fixture denied signalGroup')
+      }
+      return originalSignalGroup(group, signal)
+    })
+    try {
+      for (const childExitCode of [0, 7]) {
+        const root = await mkTestDir(`work-graph-inspection-fault-${childExitCode}-`)
+        const childPath = FS.resolvePath('child.pid', root)
+        const releasePath = FS.resolvePath('release', root)
+        const script = `
+          import { existsSync, writeFileSync } from 'node:fs'
+          import { spawn } from 'node:child_process'
+          const child = spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000)'], {
+            detached: true,
+            stdio: 'ignore',
+          })
+          writeFileSync(${JSON.stringify(childPath)}, String(child.pid))
+          child.unref()
+          process.stdout.write('inspection ready\\n')
+          const poll = setInterval(() => {
+            if (existsSync(${JSON.stringify(releasePath)})) {
+              clearInterval(poll)
+              process.exit(${childExitCode})
+            }
+          }, 10)
+        `
+        const state = WorkGraph.createState({
+          name: `inspection-fault-${childExitCode}`,
+          run: { args: ['-e', script], command: Platform.runtimeProcess.execPath },
+        })
+        const finished = WorkGraph.run([state], { timeoutPolicy: 'bounded', watchInterrupt: () => () => {} })
+        let child: TrackedProcess | undefined
+        try {
+          child = await until(() => publishedProcess(childPath), {
+            description: 'inspection-fault child to publish its exact identity',
+          })
+          await until(() => state.fullOutput.includes('inspection ready\n'), {
+            description: 'inspection-fault parent to reach its release handshake',
+          })
+          denyGroupOperations = true
+          await FS.writeText(releasePath, '')
+          const result = await finished
+
+          Expect(groupMembersDenied).toBeGreaterThan(0)
+          Expect(signalGroupDenied).toBeGreaterThan(0)
+          Expect(state.exitCode).toBe(childExitCode === 0 ? 1 : 7)
+          Expect(state.failure?.kind).toBe('nonzero-exit')
+          Expect(state.fullOutput).toContain('Process cleanup inspection was incomplete:')
+          Expect(state.fullOutput).toContain('fixture denied groupMembers')
+          Expect(state.fullOutput).toContain(`(${child.pid})`)
+          Expect(ProcessTree.sameProcess(ProcessTree.identities([child.pid]).get(child.pid), child)).toBe(false)
+          Expect(WorkGraph.exitCodeFor(result)).toBe(1)
+        } finally {
+          denyGroupOperations = false
+          await FS.writeText(releasePath, '')
+          if (
+            child !== undefined && ProcessTree.sameProcess(ProcessTree.identities([child.pid]).get(child.pid), child)
+          ) {
+            ProcessTree.signalTracked([child], 'SIGKILL')
+            await ProcessTree.waitForTrackedExit([child])
+          }
+          await finished
+          await FS.remove(root)
+        }
+      }
+    } finally {
+      denyGroupOperations = false
+      restoreSignalGroup()
+      restoreGroupMembers()
+    }
   })
 
   Test('fail-fast stops an owned process tree and leaves an unrelated process alone', async () => {

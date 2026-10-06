@@ -57,6 +57,20 @@
   FFI calls have no documented saved-errno guarantee. Preserve zombie identities, uncertain-identity
   errors and bundled Node-helper behavior. No fallback, permission change or inspection weakening
   was introduced in the native bridge work.
+- **Related observation (2026-10-06):** `feat/test-process-termination` stopped `verify-changed` at five
+  `project-dev-session.test.ts` assertions expecting a version-2 identity record and receiving version 1.
+  The unchanged focused file reproduced all five failures. `ProjectDevSession.acquire` still uses
+  `ProcessTree.processTable`, whose Darwin implementation launches `ps`; a direct bounded probe was
+  denied with `operation not permitted: ps`. The named host capability probe reported process-table
+  access available. Retain this as a sandbox verification limitation, not proof of successful full
+  verification or a reason to weaken identity inspection. Logs:
+  `.artifacts/logs/verify-changed/2026-10-06T17-35-43-839Z-65220-22a913f9/shared_4.log`,
+  `.artifacts/logs/agent/test-file/2026-10-06T17-36-14-969Z-71871.log`, and
+  `.artifacts/logs/agent/capabilities/2026-10-06T17-41-04-678Z-32576.log`.
+  The same session could inspect the start identity of its failed wrapper, but an exact-PID
+  `Platform.signalProcess(pid, 'SIGTERM')` returned `kill() failed: EPERM: Operation not permitted`.
+  Its test children were independently absent; stopping that wrapper required the Developer's
+  terminal. Do not interpret failed signalling as completed cleanup.
 - **Acceptance:** Either a sandboxed lane's `processTable()` returns the real table, or the code and its
   tests state that the non-Darwin branch is out of scope on this host and nothing in a lane relies on it.
 - **Source:** 2026-09-17 process-teardown implementation.

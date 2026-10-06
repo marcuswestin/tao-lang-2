@@ -1,4 +1,4 @@
-import { asError, CommandExecutionError, throwUnexpected } from './core/Errors'
+import { asError, CommandExecutionError, messageOf, throwUnexpected } from './core/Errors'
 import type { FileHandle } from './FS'
 import * as HCI from './HCI'
 import * as Platform from './Platform'
@@ -243,31 +243,48 @@ function startCommand(
   let closed = false
   let boundFailure: string | undefined
   let escalation: ReturnType<typeof setTimeout> | undefined
+  let escalationDone: Promise<void> | undefined
   let idleTimer: ReturnType<typeof setTimeout> | undefined
   let wallClockTimer: ReturnType<typeof setTimeout> | undefined
   let completionTimer: ReturnType<typeof setTimeout> | undefined
   let completedVerdict: number | undefined
   let teardownFailed = false
+  let groupNeedsCleanup = false
+  let lastGroupMembers: TrackedProcess[] = []
   let trackedDescendants: TrackedProcess[] | undefined
+  let inspectionError: Error | undefined
+  const inspectOwnership = (inspect: () => void): boolean => {
+    try {
+      inspect()
+      return true
+    } catch (error) {
+      inspectionError = asError(error)
+      return false
+    }
+  }
   const rememberDescendants = () => {
     if (policy !== 'test' || child.pid === undefined) {
-      return
+      return true
     }
-    const current = child.exitCode === null && child.signalCode === null ? ProcessTree.descendants(child.pid) : []
-    const remembered = new Map((trackedDescendants ?? []).map(entry => [`${entry.pid}:${entry.startedAt}`, entry]))
-    const identities = ProcessTree.identities((trackedDescendants ?? []).map(entry => entry.pid))
-    for (const owner of trackedDescendants ?? []) {
-      if (ProcessTree.sameProcess(identities.get(owner.pid), owner)) {
-        current.push(...ProcessTree.descendants(owner.pid))
+    return inspectOwnership(() => {
+      const current = child.exitCode === null && child.signalCode === null ? ProcessTree.descendants(child.pid) : []
+      const remembered = new Map((trackedDescendants ?? []).map(entry => [`${entry.pid}:${entry.startedAt}`, entry]))
+      const identities = ProcessTree.identities((trackedDescendants ?? []).map(entry => entry.pid))
+      for (const owner of trackedDescendants ?? []) {
+        if (ProcessTree.sameProcess(identities.get(owner.pid), owner)) {
+          current.push(...ProcessTree.descendants(owner.pid))
+        }
       }
-    }
-    if (spec.detached) {
-      current.push(...ProcessTree.groupMembers(child.pid))
-    }
-    for (const entry of current) {
-      remembered.set(`${entry.pid}:${entry.startedAt}`, entry)
-    }
-    trackedDescendants = [...remembered.values()]
+      // Live children can change groups while starting. Inspect groups only after their owner exits.
+      if (spec.detached && (child.exitCode !== null || child.signalCode !== null)) {
+        lastGroupMembers = ProcessTree.groupMembers(child.pid)
+        current.push(...lastGroupMembers)
+      }
+      for (const entry of current) {
+        remembered.set(`${entry.pid}:${entry.startedAt}`, entry)
+      }
+      trackedDescendants = [...remembered.values()]
+    })
   }
   // Keep ownership before exit reparents children. Output also snapshots immediately at readiness.
   const ownershipTimer = policy === 'test' ? setInterval(rememberDescendants, 100) : undefined
@@ -316,25 +333,33 @@ function startCommand(
       return child.kill(signal)
     }
     // Retain earlier identities: after signalling, a new walk alone would miss reparented children.
-    const current = child.exitCode === null && child.signalCode === null ? ProcessTree.descendants(pid) : []
-    // A retained child can start another child after our last poll and before its parent exits.
-    // Rewalk live owned identities before signalling, even when the direct child is already gone.
-    const identities = ProcessTree.identities((trackedDescendants ?? []).map(entry => entry.pid))
-    const laterDescendants = (trackedDescendants ?? [])
-      .filter(entry => ProcessTree.sameProcess(identities.get(entry.pid), entry))
-      .flatMap(entry => ProcessTree.descendants(entry.pid))
-    trackedDescendants = [...laterDescendants, ...current, ...(trackedDescendants ?? [])]
-    const descendants = trackedDescendants
-    ProcessTree.signalTracked(descendants, signal)
-    const groupSignalled = ProcessTree.signalGroup(pid, signal)
+    inspectOwnership(() => {
+      const current = child.exitCode === null && child.signalCode === null ? ProcessTree.descendants(pid) : []
+      // A retained child can start another child after our last poll and before its parent exits.
+      // Rewalk live owned identities before signalling, even when the direct child is already gone.
+      const identities = ProcessTree.identities((trackedDescendants ?? []).map(entry => entry.pid))
+      const laterDescendants = (trackedDescendants ?? [])
+        .filter(entry => ProcessTree.sameProcess(identities.get(entry.pid), entry))
+        .flatMap(entry => ProcessTree.descendants(entry.pid))
+      trackedDescendants = [...laterDescendants, ...current, ...(trackedDescendants ?? [])]
+    })
+    const descendants = trackedDescendants ?? []
+    inspectOwnership(() => ProcessTree.signalTracked(descendants, signal))
+    let groupSignalled = false
+    inspectOwnership(() => {
+      groupSignalled = ProcessTree.signalGroup(pid, signal)
+    })
     const directSignalled = child.kill(signal)
     if (signal !== 'SIGKILL' && escalation === undefined) {
-      escalation = setTimeout(() => {
-        rememberDescendants()
-        ProcessTree.signalTracked(trackedDescendants ?? descendants, 'SIGKILL')
-        ProcessTree.signalGroup(pid, 'SIGKILL')
-        child.kill('SIGKILL')
-      }, ProcessTree.FORCE_KILL_GRACE_MS)
+      escalationDone = new Promise(resolve => {
+        escalation = setTimeout(() => {
+          rememberDescendants()
+          inspectOwnership(() => ProcessTree.signalTracked(trackedDescendants ?? descendants, 'SIGKILL'))
+          inspectOwnership(() => ProcessTree.signalGroup(pid, 'SIGKILL'))
+          child.kill('SIGKILL')
+          resolve()
+        }, ProcessTree.FORCE_KILL_GRACE_MS)
+      })
     }
     return directSignalled || groupSignalled
   }
@@ -428,8 +453,8 @@ function startCommand(
     signal: Platform.ProcessSignal | null,
   ): CommandCloseResult => ({
     // Cleanup never replaces a reported failure with a signal or a successful parent exit.
-    exitCode: boundFailure !== undefined && completedVerdict !== undefined
-      ? exitCode || completedVerdict || 1
+    exitCode: (boundFailure !== undefined || teardownFailed) && completedVerdict !== undefined
+      ? completedVerdict || exitCode || 1
       : teardownFailed && exitCode === 0
       ? 1
       : exitCode,
@@ -438,23 +463,36 @@ function startCommand(
 
   let releaseCompletion = () => {}
   child.once('exit', (exitCode: number | null) => {
-    rememberDescendants()
+    const observed = rememberDescendants()
     if (policy === 'test' && (trackedDescendants?.length ?? 0) > 0) {
-      const current = ProcessTree.identities(trackedDescendants!.map(entry => entry.pid))
-      const survivors = trackedDescendants!.filter(entry => ProcessTree.sameProcess(current.get(entry.pid), entry))
-      if (survivors.length > 0) {
-        teardownFailed = true
-        const line = Buffer.from(
-          `Child exited ${exitCode ?? 'by signal'} with owned processes still running `
-            + `(${survivors.map(entry => entry.pid).join(', ')}); stopping them before returning.\n`,
-        )
-        if (outputHasWrapperSink) {
-          deliverOutput('stderr', line)
-        } else {
-          HCI.writeError(line)
+      const inspected = inspectOwnership(() => {
+        const current = ProcessTree.identities(trackedDescendants!.map(entry => entry.pid))
+        const survivors = trackedDescendants!.filter(entry => ProcessTree.sameProcess(current.get(entry.pid), entry))
+        groupNeedsCleanup = lastGroupMembers.some(entry => ProcessTree.sameProcess(current.get(entry.pid), entry))
+        if (survivors.length > 0) {
+          teardownFailed = true
+          const line = Buffer.from(
+            `Child exited ${exitCode ?? 'by signal'} with owned processes still running `
+              + `(${survivors.map(entry => entry.pid).join(', ')}); stopping them before returning.\n`,
+          )
+          if (outputHasWrapperSink) {
+            deliverOutput('stderr', line)
+          } else {
+            HCI.writeError(line)
+          }
+          stopProcessTree('SIGTERM')
         }
+      })
+      if (!inspected) {
+        teardownFailed = true
+        groupNeedsCleanup = spec.detached === true
         stopProcessTree('SIGTERM')
       }
+    }
+    if (!observed) {
+      teardownFailed = true
+      groupNeedsCleanup = spec.detached === true
+      stopProcessTree('SIGTERM')
     }
   })
   const closePromise = new Promise<CommandCloseResult>((resolve, reject) => {
@@ -464,11 +502,13 @@ function startCommand(
       // A descendant can close its pipes and ignore SIGTERM. Keep escalation alive until its
       // exact identity is gone, even though the direct child's close already arrived.
       const waitForOwnedExit = async () => {
-        if (policy === 'test' && spec.detached && child.pid !== undefined) {
+        if (groupNeedsCleanup && child.pid !== undefined) {
           await ProcessTree.waitForGroupExit(child.pid)
         }
         for (;;) {
-          rememberDescendants()
+          if (!rememberDescendants()) {
+            throw inspectionError
+          }
           const owned = trackedDescendants ?? []
           await ProcessTree.waitForTrackedExit(owned)
           if (owned === trackedDescendants) {
@@ -480,7 +520,33 @@ function startCommand(
           }
         }
       }
-      void waitForOwnedExit().then(() => {
+      void waitForOwnedExit().catch(async error => {
+        // Inspection uncertainty is a teardown failure, never evidence that the tree is empty.
+        inspectionError = asError(error)
+        teardownFailed = true
+        if (spec.detached && child.pid !== undefined) {
+          inspectOwnership(() => ProcessTree.signalGroup(child.pid, 'SIGKILL'))
+        }
+        inspectOwnership(() => ProcessTree.signalTracked(trackedDescendants ?? [], 'SIGKILL'))
+        if (escalationDone !== undefined) {
+          await escalationDone
+        }
+        try {
+          await ProcessTree.waitForTrackedExit(trackedDescendants ?? [])
+        } catch (retryError) {
+          inspectionError = asError(retryError)
+        }
+        const diagnostic = Buffer.from(
+          `Test process cleanup could not be verified after child exit ${exitCode ?? signal}: ${
+            messageOf(inspectionError)
+          }\n`,
+        )
+        if (outputHasWrapperSink) {
+          deliverOutput('stderr', diagnostic)
+        } else {
+          HCI.writeError(diagnostic)
+        }
+      }).then(() => {
         if (escalation !== undefined) {
           clearTimeout(escalation)
           escalation = undefined

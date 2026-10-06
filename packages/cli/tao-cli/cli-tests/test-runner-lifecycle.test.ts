@@ -65,19 +65,21 @@ Describe('Jest completion lifecycle', () => {
     Expect(completion.diagnostic()).toContain('MessagePort')
   })
 
-  Test('keeps the original reported failure when a runner ignores termination and exits successfully', async () => {
-    const result = await CLI.run('/bin/sh', {
-      args: [
-        '-c',
-        "trap 'exit 0' TERM; printf 'Tao test runner completed (exit 7); resource kinds: Timeout\\n'; while :; do sleep 1; done",
-      ],
-      completion: testRunnerCompletion(100),
-      processPolicy: 'test',
-      timeoutMs: 30_000,
-      timeoutPolicy: 'bounded',
+  for (const cleanupExit of [0, 9]) {
+    Test(`keeps the reported failure when cleanup exits ${cleanupExit}`, async () => {
+      const result = await CLI.run('/bin/sh', {
+        args: [
+          '-c',
+          `trap 'exit ${cleanupExit}' TERM; printf 'Tao test runner completed (exit 7); resource kinds: Timeout\\n'; while :; do sleep 1; done`,
+        ],
+        completion: testRunnerCompletion(100),
+        processPolicy: 'test',
+        timeoutMs: 30_000,
+        timeoutPolicy: 'bounded',
+      })
+      Expect(result.exitCode).toBe(7)
+      Expect(result.stderr).toContain('Last observed resource kinds: Timeout')
+      Expect(result.signal).not.toBe(null)
     })
-    Expect(result.exitCode).toBe(7)
-    Expect(result.stderr).toContain('Last observed resource kinds: Timeout')
-    Expect(result.signal).not.toBe(null)
-  })
+  }
 })

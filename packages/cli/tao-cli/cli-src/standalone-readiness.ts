@@ -13,14 +13,36 @@ export async function waitForStandaloneReadiness(
     sleep?: (ms: number) => Promise<void>
   } = {},
 ): Promise<void> {
-  const result = await Time.pollUntil(async () => {
+  let probePending = false
+  let probeResult: { ready: boolean } | { error: unknown } | undefined
+  const result = await Time.pollUntil(() => {
     const failure = childFailure(child)
     if (failure !== undefined) {
       return { failure }
     }
-    const ready = await readiness()
-    const afterReadiness = childFailure(child)
-    return afterReadiness !== undefined ? { failure: afterReadiness } : ready ? { ready: true as const } : undefined
+    if (probeResult !== undefined) {
+      const completed = probeResult
+      probeResult = undefined
+      if ('error' in completed) {
+        throw completed.error
+      }
+      if (completed.ready) {
+        return { ready: true as const }
+      }
+    }
+    if (!probePending) {
+      probePending = true
+      // An HTTP probe can stay pending while its child exits. Keep polling process state and the
+      // deadline independently; both continuations handle late settlement without retaining a timer.
+      void Promise.resolve().then(readiness).then(ready => {
+        probePending = false
+        probeResult = { ready }
+      }, error => {
+        probePending = false
+        probeResult = { error }
+      })
+    }
+    return undefined
   }, { intervalMs: timing.intervalMs ?? 250, timeoutMs, ...timing })
 
   if (result !== undefined && 'failure' in result) {

@@ -27,6 +27,44 @@ async function writeProbeScript(scratch: string, body: readonly string[]): Promi
 }
 
 Describe('agent runner', () => {
+  Test('lets a development launcher return with its managed background child alive', async () => {
+    const scratch = await mkTestDir('tao-launcher-owned-server-')
+    const pidPath = FS.resolvePath('child.pid', scratch)
+    let child: TrackedProcess | undefined
+    try {
+      const script = await writeProbeScript(scratch, [
+        `const child = Bun['spawn'](['bun', '-e', 'setInterval(() => {}, 1000)'], { detached: true, stdout: 'ignore', stderr: 'ignore' })`,
+        `await Bun.write(${JSON.stringify(pidPath)}, String(child.pid))`,
+        `child.unref()`,
+        `${LOG}('managed server started')`,
+      ])
+      const result = await withCapturedOutput(() =>
+        runAgentCommand({
+          env: {},
+          args: [],
+          command: 'app-dev',
+          cwd: scratch,
+          spawnArgs: [script],
+          spawnCommand: 'bun',
+        })
+      )
+      const pid = Number(await FS.readText(pidPath))
+      child = ProcessTree.identities([pid]).get(pid)
+      Expect(result.result).toBe(0)
+      Expect(child).toBeDefined()
+      Expect(result.stdout).toContain('managed server started')
+    } finally {
+      if (child === undefined && await FS.isFile(pidPath)) {
+        child = ProcessTree.identities([Number(await FS.readText(pidPath))]).values().next().value
+      }
+      if (child !== undefined) {
+        ProcessTree.signalTracked([child], 'SIGTERM')
+        await ProcessTree.waitForTrackedExit([child])
+      }
+      await FS.remove(scratch)
+    }
+  })
+
   Test("passes a child's exit status straight through", async () => {
     const scratch = await mkTestDir('tao-agent-runner-exit-')
     try {
@@ -243,7 +281,7 @@ Describe('agent runner', () => {
         runAgentCommand({
           env: {},
           args: [],
-          command: 'probe',
+          command: 'test-file',
           cwd: scratch,
           spawnArgs: [script],
           spawnCommand: 'bun',
@@ -251,7 +289,7 @@ Describe('agent runner', () => {
       ).finally(() => {
         finished = true
       })
-      const latestPath = FS.resolvePath('.artifacts/logs/agent/probe/latest.log', scratch)
+      const latestPath = FS.resolvePath('.artifacts/logs/agent/test-file/latest.log', scratch)
       await until(async () => await FS.isFile(latestPath) && (await FS.readText(latestPath)).includes('child-ready'))
       const childPid = Number(await FS.readText(pidPath))
       child = ProcessTree.identities([childPid]).get(childPid)
