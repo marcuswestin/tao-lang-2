@@ -809,6 +809,25 @@ Test('a disposed controller can restart with the same session while its old proc
   }
 })
 
+Test('status without a session reports an unreadable session instead of failing the listing', async () => {
+  const good = { ...disposedFailure(), state: 'stopped' as const }
+  const broken = Platform.randomUUID()
+  await writeDevLoopReceipt(good)
+  await FS.mkdir(devLoopDirectory(broken))
+  try {
+    const listing = await withCapturedOutput(() => runDevLoopCommand(['status', '--json']))
+    Expect(listing.result).toBe(0)
+    const { sessions } = JSON.parse(listing.stdout) as { sessions: { session: string; state: string }[] }
+    Expect(sessions.find(entry => entry.session === good.session)?.state).toBe('stopped')
+    const unreadable = sessions.find(entry => entry.session === broken) as { message?: string; state: string }
+    Expect(unreadable.state).toBe('unreadable')
+    Expect(unreadable.message).toBeTruthy()
+  } finally {
+    await FS.remove(devLoopDirectory(good.session))
+    await FS.remove(devLoopDirectory(broken))
+  }
+})
+
 Test(
   'launcher preserves the durable failure receipt when credentials disappear during its acknowledgement probe',
   async () => {

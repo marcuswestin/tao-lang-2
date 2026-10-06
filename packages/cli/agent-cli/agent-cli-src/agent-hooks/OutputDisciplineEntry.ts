@@ -15,7 +15,7 @@ import { hookOverrideReason, refusalIgnoringOverride } from './OutputDiscipline'
  * and only its record is lost, which is the right way round for a rule that exists to be measured.
  */
 
-type Payload = { cwd?: string; tool_input?: { command?: string } }
+type Payload = { cwd?: string; tool_input?: { command?: string }; transcript_path?: string | null; turn_id?: string }
 
 /** readPayload returns the harness payload, or undefined when it is not one this hook understands. */
 function readPayload(payload: string): Payload | undefined {
@@ -26,6 +26,16 @@ function readPayload(payload: string): Payload | undefined {
   }
 }
 
+/**
+ * hasReadTool says whether the calling harness offers a file-read tool. Claude Code does, and its
+ * payload carries no `turn_id`; Codex offers only its shell tool, sends `turn_id` with every
+ * PreToolUse call, and keeps transcripts under `.codex/`. Anything else is treated as Claude Code,
+ * the stricter reading.
+ */
+function hasReadTool(payload: Payload | undefined): boolean {
+  return payload?.turn_id === undefined && !(payload?.transcript_path ?? '').includes('/.codex/')
+}
+
 /** outputDisciplineDecision returns the harness JSON for a payload, or '' when the command may run. */
 export async function outputDisciplineDecision(payload: string): Promise<string> {
   const parsed = readPayload(payload)
@@ -33,7 +43,7 @@ export async function outputDisciplineDecision(payload: string): Promise<string>
   if (command === undefined || command === '') {
     return ''
   }
-  const refusal = refusalIgnoringOverride(command)
+  const refusal = refusalIgnoringOverride(command, { readTool: hasReadTool(parsed) })
   if (refusal === undefined) {
     return ''
   }
