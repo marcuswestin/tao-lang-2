@@ -1,19 +1,19 @@
 {
   "nodes": {
     "_compile-word-flower-app": {
-      "emaMs": 29603,
-      "lastMs": 29603,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 23375,
+      "lastMs": 23375,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 29603,
+      "lastWallMs": 23375,
       "source": "wall"
     },
     "_doctor-json": {
-      "emaMs": 3701,
-      "lastMs": 3701,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 3204,
+      "lastMs": 3204,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 3701,
+      "lastWallMs": 3204,
       "source": "wall"
     },
     "_dprint-check": {
@@ -23,75 +23,75 @@
       "samples": 1
     },
     "_fix-dprint": {
-      "emaMs": 5893,
-      "lastMs": 5893,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 5941,
+      "lastMs": 5941,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 5893,
+      "lastWallMs": 5941,
       "source": "wall"
     },
     "_fix-just-fmt": {
       "emaMs": 16,
       "lastMs": 16,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "lastWallMs": 16,
       "source": "wall"
     },
     "_fix-ledger-index": {
-      "emaMs": 365,
-      "lastMs": 365,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 348,
+      "lastMs": 348,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 365,
+      "lastWallMs": 348,
       "source": "wall"
     },
     "_fix-tao": {
-      "emaMs": 12333,
-      "lastMs": 12333,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 11631,
+      "lastMs": 11631,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 12333,
+      "lastWallMs": 11631,
       "source": "wall"
     },
     "_hosted-crud-test": {
-      "emaMs": 94,
-      "lastMs": 94,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "lastWallMs": 94,
+      "emaMs": 167,
+      "lastMs": 167,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 167,
       "samples": 1,
       "source": "wall"
     },
     "_ide-extension-build": {
-      "emaMs": 36167,
-      "lastMs": 36167,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 32705,
+      "lastMs": 32705,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 36167,
+      "lastWallMs": 32705,
       "source": "wall"
     },
     "_parser-gen": {
-      "emaMs": 107,
-      "lastMs": 107,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 70,
+      "lastMs": 70,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 107,
+      "lastWallMs": 70,
       "source": "wall"
     },
     "_repo-lint": {
-      "emaMs": 2877,
-      "lastMs": 2877,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 2670,
+      "lastMs": 2670,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 2877,
+      "lastWallMs": 2670,
       "source": "wall"
     },
     "_runtime-pack-check": {
-      "emaMs": 179,
-      "lastMs": 179,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 97,
+      "lastMs": 97,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 179,
+      "lastWallMs": 97,
       "source": "wall"
     },
     "_tao-check": {
@@ -101,1607 +101,2404 @@
       "samples": 1
     },
     "_typecheck": {
-      "emaMs": 35134,
-      "lastMs": 35134,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 31233,
+      "lastMs": 31233,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 35134,
+      "lastWallMs": 31233,
       "source": "wall"
     },
     "ai/generation": {
-      "emaMs": 766,
-      "lastMs": 766,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 717,
+      "lastMs": 717,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 766,
+      "lastWallMs": 717,
       "source": "wall"
     },
     "ai/tao-skills": {
-      "emaMs": 135280,
-      "lastMs": 135280,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 86581,
+      "lastMs": 86581,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 135280,
+      "lastWallMs": 86581,
       "source": "wall"
     },
     "ai/tao-skills#1": {
-      "emaMs": 133654,
-      "lastMs": 133654,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 85627,
+      "lastMs": 85627,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 133654
+      "lastWallMs": 85627
     },
     "ai/tao-skills#2": {
-      "emaMs": 1626,
-      "lastMs": 1626,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 954,
+      "lastMs": 954,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 1626
+      "lastWallMs": 954
     },
     "apps/expo-host": {
-      "emaMs": 174455,
-      "lastMs": 174455,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 72170,
+      "lastMs": 72170,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 174455,
+      "lastWallMs": 72170,
       "source": "wall"
     },
     "apps/expo-host#1": {
-      "emaMs": 131830,
-      "lastMs": 131830,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 40081,
+      "lastMs": 40081,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 131830
+      "lastWallMs": 40081
     },
     "apps/expo-host#10": {
-      "emaMs": 2106,
-      "lastMs": 2106,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 1567,
+      "lastMs": 1567,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 2106
+      "lastWallMs": 1567
     },
     "apps/expo-host#11": {
-      "emaMs": 1757,
-      "lastMs": 1757,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 792,
+      "lastMs": 792,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 1757
+      "lastWallMs": 792
     },
     "apps/expo-host#12": {
-      "emaMs": 6769,
-      "lastMs": 6769,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 2169,
+      "lastMs": 2169,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 6769
+      "lastWallMs": 2169
     },
     "apps/expo-host#13": {
-      "emaMs": 7937,
-      "lastMs": 7937,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 1997,
+      "lastMs": 1997,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 7937
+      "lastWallMs": 1997
     },
     "apps/expo-host#14": {
-      "emaMs": 1933,
-      "lastMs": 1933,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 434,
+      "lastMs": 434,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 1933
+      "lastWallMs": 434
+    },
+    "apps/expo-host#15": {
+      "emaMs": 991,
+      "lastMs": 991,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 991,
+      "samples": 1,
+      "source": "wall"
+    },
+    "apps/expo-host#16": {
+      "emaMs": 696,
+      "lastMs": 696,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 696,
+      "samples": 1,
+      "source": "wall"
+    },
+    "apps/expo-host#17": {
+      "emaMs": 367,
+      "lastMs": 367,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 367,
+      "samples": 1,
+      "source": "wall"
+    },
+    "apps/expo-host#18": {
+      "emaMs": 510,
+      "lastMs": 510,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 510,
+      "samples": 1,
+      "source": "wall"
+    },
+    "apps/expo-host#19": {
+      "emaMs": 924,
+      "lastMs": 924,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 924,
+      "samples": 1,
+      "source": "wall"
     },
     "apps/expo-host#2": {
-      "emaMs": 5703,
-      "lastMs": 5703,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 5775,
+      "lastMs": 5775,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 5703
+      "lastWallMs": 5775
+    },
+    "apps/expo-host#20": {
+      "emaMs": 164,
+      "lastMs": 164,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 164,
+      "samples": 1,
+      "source": "wall"
+    },
+    "apps/expo-host#21": {
+      "emaMs": 34,
+      "lastMs": 34,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 34,
+      "samples": 1,
+      "source": "wall"
+    },
+    "apps/expo-host#22": {
+      "emaMs": 137,
+      "lastMs": 137,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 137,
+      "samples": 1,
+      "source": "wall"
+    },
+    "apps/expo-host#23": {
+      "emaMs": 54,
+      "lastMs": 54,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 54,
+      "samples": 1,
+      "source": "wall"
+    },
+    "apps/expo-host#24": {
+      "emaMs": 182,
+      "lastMs": 182,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 182,
+      "samples": 1,
+      "source": "wall"
+    },
+    "apps/expo-host#25": {
+      "emaMs": 390,
+      "lastMs": 390,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 390,
+      "samples": 1,
+      "source": "wall"
+    },
+    "apps/expo-host#26": {
+      "emaMs": 141,
+      "lastMs": 141,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 141,
+      "samples": 1,
+      "source": "wall"
+    },
+    "apps/expo-host#27": {
+      "emaMs": 125,
+      "lastMs": 125,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 125,
+      "samples": 1,
+      "source": "wall"
+    },
+    "apps/expo-host#28": {
+      "emaMs": 32,
+      "lastMs": 32,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 32,
+      "samples": 1,
+      "source": "wall"
+    },
+    "apps/expo-host#29": {
+      "emaMs": 1770,
+      "lastMs": 1770,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 1770,
+      "samples": 1,
+      "source": "wall"
     },
     "apps/expo-host#3": {
-      "emaMs": 1967,
-      "lastMs": 1967,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 1749,
+      "lastMs": 1749,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 1967
+      "lastWallMs": 1749
+    },
+    "apps/expo-host#30": {
+      "emaMs": 37,
+      "lastMs": 37,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 37,
+      "samples": 1,
+      "source": "wall"
     },
     "apps/expo-host#4": {
-      "emaMs": 106,
-      "lastMs": 106,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 209,
+      "lastMs": 209,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 106
+      "lastWallMs": 209
     },
     "apps/expo-host#5": {
-      "emaMs": 7851,
-      "lastMs": 7851,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 6941,
+      "lastMs": 6941,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 7851
+      "lastWallMs": 6941
     },
     "apps/expo-host#6": {
-      "emaMs": 1603,
-      "lastMs": 1603,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 769,
+      "lastMs": 769,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 1603
+      "lastWallMs": 769
     },
     "apps/expo-host#7": {
-      "emaMs": 2334,
-      "lastMs": 2334,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 2257,
+      "lastMs": 2257,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 2334
+      "lastWallMs": 2257
     },
     "apps/expo-host#8": {
-      "emaMs": 971,
-      "lastMs": 971,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 526,
+      "lastMs": 526,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 971
+      "lastWallMs": 526
     },
     "apps/expo-host#9": {
-      "emaMs": 1588,
-      "lastMs": 1588,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 350,
+      "lastMs": 350,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 1588
+      "lastWallMs": 350
     },
     "apps/native-bindings": {
-      "emaMs": 202451,
-      "lastMs": 202451,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 175397,
+      "lastMs": 175397,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 202451,
+      "lastWallMs": 175397,
       "source": "wall"
     },
     "apps/native-bindings#1": {
-      "emaMs": 14516,
-      "lastMs": 14516,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 13339,
+      "lastMs": 13339,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 14516
+      "lastWallMs": 13339
     },
-    "apps/native-bindings#2": {
-      "emaMs": 20578,
-      "lastMs": 20578,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 20578
-    },
-    "apps/native-bindings#3": {
-      "emaMs": 31176,
-      "lastMs": 31176,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 31176
-    },
-    "apps/native-bindings#4": {
-      "emaMs": 7856,
-      "lastMs": 7856,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 7856
-    },
-    "apps/native-bindings#5": {
-      "emaMs": 4364,
-      "lastMs": 4364,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
+    "apps/native-bindings#10": {
+      "emaMs": 23602,
+      "lastMs": 23602,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 23602,
       "samples": 1,
       "source": "wall"
     },
-    "apps/native-bindings#6": {
-      "emaMs": 19978,
-      "lastMs": 19978,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+    "apps/native-bindings#11": {
+      "emaMs": 149,
+      "lastMs": 149,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 149,
+      "samples": 1,
+      "source": "wall"
+    },
+    "apps/native-bindings#12": {
+      "emaMs": 7397,
+      "lastMs": 7397,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 7397,
+      "samples": 1,
+      "source": "wall"
+    },
+    "apps/native-bindings#13": {
+      "emaMs": 20447,
+      "lastMs": 20447,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 20447,
+      "samples": 1,
+      "source": "wall"
+    },
+    "apps/native-bindings#14": {
+      "emaMs": 1799,
+      "lastMs": 1799,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 1799,
+      "samples": 1,
+      "source": "wall"
+    },
+    "apps/native-bindings#15": {
+      "emaMs": 2574,
+      "lastMs": 2574,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 2574,
+      "samples": 1,
+      "source": "wall"
+    },
+    "apps/native-bindings#16": {
+      "emaMs": 6988,
+      "lastMs": 6988,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 6988,
+      "samples": 1,
+      "source": "wall"
+    },
+    "apps/native-bindings#17": {
+      "emaMs": 4485,
+      "lastMs": 4485,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 4485,
+      "samples": 1,
+      "source": "wall"
+    },
+    "apps/native-bindings#2": {
+      "emaMs": 14280,
+      "lastMs": 14280,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 19978
+      "lastWallMs": 14280
+    },
+    "apps/native-bindings#3": {
+      "emaMs": 3735,
+      "lastMs": 3735,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 3735
+    },
+    "apps/native-bindings#4": {
+      "emaMs": 6865,
+      "lastMs": 6865,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 6865
+    },
+    "apps/native-bindings#5": {
+      "emaMs": 15236,
+      "lastMs": 15236,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 15236
+    },
+    "apps/native-bindings#6": {
+      "emaMs": 578,
+      "lastMs": 578,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 578
     },
     "apps/native-bindings#7": {
-      "emaMs": 85664,
-      "lastMs": 85664,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 6891,
+      "lastMs": 6891,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 85664
+      "lastWallMs": 6891
     },
     "apps/native-bindings#8": {
-      "emaMs": 22683,
-      "lastMs": 22683,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 32066,
+      "lastMs": 32066,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 22683
+      "lastWallMs": 32066
+    },
+    "apps/native-bindings#9": {
+      "emaMs": 14966,
+      "lastMs": 14966,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 14966,
+      "samples": 1,
+      "source": "wall"
     },
     "apps/providers/convex": {
-      "emaMs": 212,
-      "lastMs": 212,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 102,
+      "lastMs": 102,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 212,
+      "lastWallMs": 102,
       "source": "wall"
     },
     "apps/providers/firebase": {
-      "emaMs": 960,
-      "lastMs": 960,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 817,
+      "lastMs": 817,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 960,
+      "lastWallMs": 817,
       "source": "wall"
     },
     "apps/providers/icloud": {
-      "emaMs": 325,
-      "lastMs": 325,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 299,
+      "lastMs": 299,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 325,
+      "lastWallMs": 299,
       "source": "wall"
     },
     "apps/providers/instantdb": {
-      "emaMs": 547,
-      "lastMs": 547,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 478,
+      "lastMs": 478,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 547,
+      "lastWallMs": 478,
       "source": "wall"
     },
     "apps/providers/jazz": {
-      "emaMs": 253,
-      "lastMs": 253,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 265,
+      "lastMs": 265,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 253,
+      "lastWallMs": 265,
       "source": "wall"
     },
     "apps/providers/pylon": {
-      "emaMs": 203,
-      "lastMs": 203,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 155,
+      "lastMs": 155,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 203,
+      "lastWallMs": 155,
       "source": "wall"
     },
     "apps/runtime": {
-      "emaMs": 5225,
-      "lastMs": 5225,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 4195,
+      "lastMs": 4195,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 5225,
+      "lastWallMs": 4195,
       "source": "wall"
     },
     "apps/stdlib": {
-      "emaMs": 768,
-      "lastMs": 768,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 586,
+      "lastMs": 586,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 768,
+      "lastWallMs": 586,
       "source": "wall"
     },
     "cli/agent-cli": {
-      "emaMs": 16820,
-      "lastMs": 16820,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 15228,
+      "lastMs": 15228,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 16820,
+      "lastWallMs": 15228,
       "source": "wall"
     },
     "cli/cli-kit": {
-      "emaMs": 91,
-      "lastMs": 91,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 141,
+      "lastMs": 141,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 91,
+      "lastWallMs": 141,
       "source": "wall"
     },
     "cli/dev-cli": {
-      "emaMs": 128640,
-      "lastMs": 128640,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 126706,
+      "lastMs": 126706,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 128640,
+      "lastWallMs": 126706,
       "source": "wall"
     },
     "cli/tao-cli": {
-      "emaMs": 2254086,
-      "lastMs": 2254086,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 1303161,
+      "lastMs": 1303161,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 2254086,
+      "lastWallMs": 1303161,
       "source": "wall"
     },
     "cli/tao-cli#1": {
-      "emaMs": 170407,
-      "lastMs": 170407,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 47238,
+      "lastMs": 47238,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 170407
+      "lastWallMs": 47238
     },
     "cli/tao-cli#10": {
-      "emaMs": 57805,
-      "lastMs": 57805,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 17241,
+      "lastMs": 17241,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 57805
+      "lastWallMs": 17241
     },
     "cli/tao-cli#11": {
-      "emaMs": 7240,
-      "lastMs": 7240,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 7136,
+      "lastMs": 7136,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 7240
+      "lastWallMs": 7136
     },
     "cli/tao-cli#12": {
-      "emaMs": 26906,
-      "lastMs": 26906,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 43545,
+      "lastMs": 43545,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 26906
+      "lastWallMs": 43545
     },
     "cli/tao-cli#13": {
-      "emaMs": 39542,
-      "lastMs": 39542,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 21752,
+      "lastMs": 21752,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 39542
+      "lastWallMs": 21752
     },
     "cli/tao-cli#14": {
-      "emaMs": 30631,
-      "lastMs": 30631,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 28132,
+      "lastMs": 28132,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 30631
+      "lastWallMs": 28132
     },
     "cli/tao-cli#15": {
-      "emaMs": 44201,
-      "lastMs": 44201,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 27570,
+      "lastMs": 27570,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 44201
+      "lastWallMs": 27570
     },
     "cli/tao-cli#16": {
-      "emaMs": 18983,
-      "lastMs": 18983,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "emaMs": 41396,
+      "lastMs": 41396,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "source": "wall"
+      "source": "wall",
+      "lastWallMs": 41396
     },
     "cli/tao-cli#17": {
-      "emaMs": 16825,
-      "lastMs": 16825,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 18534,
+      "lastMs": 18534,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 16825
+      "lastWallMs": 18534
     },
     "cli/tao-cli#18": {
-      "emaMs": 53030,
-      "lastMs": 53030,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 22604,
+      "lastMs": 22604,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 53030
+      "lastWallMs": 22604
     },
     "cli/tao-cli#19": {
-      "emaMs": 56601,
-      "lastMs": 56601,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 14570,
+      "lastMs": 14570,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 56601
+      "lastWallMs": 14570
     },
     "cli/tao-cli#2": {
-      "emaMs": 179755,
-      "lastMs": 179755,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 84546,
+      "lastMs": 84546,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 179755
+      "lastWallMs": 84546
     },
     "cli/tao-cli#20": {
-      "emaMs": 44514,
-      "lastMs": 44514,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 18836,
+      "lastMs": 18836,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 44514
+      "lastWallMs": 18836
     },
     "cli/tao-cli#21": {
-      "emaMs": 40094,
-      "lastMs": 40094,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 29825,
+      "lastMs": 29825,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 40094
+      "lastWallMs": 29825
     },
     "cli/tao-cli#22": {
-      "emaMs": 27870,
-      "lastMs": 27870,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 27821,
+      "lastMs": 27821,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 27870
+      "lastWallMs": 27821
     },
     "cli/tao-cli#23": {
-      "emaMs": 24504,
-      "lastMs": 24504,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 19365,
+      "lastMs": 19365,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 24504
+      "lastWallMs": 19365
     },
     "cli/tao-cli#24": {
-      "emaMs": 29817,
-      "lastMs": 29817,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 8942,
+      "lastMs": 8942,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 29817
+      "lastWallMs": 8942
     },
     "cli/tao-cli#25": {
-      "emaMs": 113862,
-      "lastMs": 113862,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 40266,
+      "lastMs": 40266,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 113862
+      "lastWallMs": 40266
     },
     "cli/tao-cli#26": {
-      "emaMs": 126137,
-      "lastMs": 126137,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 59028,
+      "lastMs": 59028,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 126137
+      "lastWallMs": 59028
     },
     "cli/tao-cli#27": {
-      "emaMs": 11898,
-      "lastMs": 11898,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "emaMs": 34565,
+      "lastMs": 34565,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "source": "wall"
+      "source": "wall",
+      "lastWallMs": 34565
     },
     "cli/tao-cli#28": {
-      "emaMs": 1644,
-      "lastMs": 1644,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 1349,
+      "lastMs": 1349,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 1644
+      "lastWallMs": 1349
     },
     "cli/tao-cli#29": {
-      "emaMs": 172580,
-      "lastMs": 172580,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 107727,
+      "lastMs": 107727,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 172580
+      "lastWallMs": 107727
     },
     "cli/tao-cli#3": {
-      "emaMs": 193721,
-      "lastMs": 193721,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 81967,
+      "lastMs": 81967,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 193721
+      "lastWallMs": 81967
     },
     "cli/tao-cli#30": {
-      "emaMs": 47520,
-      "lastMs": 47520,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 11978,
+      "lastMs": 11978,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 47520
+      "lastWallMs": 11978
     },
     "cli/tao-cli#31": {
-      "emaMs": 12308,
-      "lastMs": 12308,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 5799,
+      "lastMs": 5799,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 12308
+      "lastWallMs": 5799
     },
     "cli/tao-cli#32": {
-      "emaMs": 146,
-      "lastMs": 146,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 67,
+      "lastMs": 67,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 146
+      "lastWallMs": 67
     },
     "cli/tao-cli#33": {
-      "emaMs": 14361,
-      "lastMs": 14361,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 9529,
+      "lastMs": 9529,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 14361
+      "lastWallMs": 9529
     },
     "cli/tao-cli#34": {
-      "emaMs": 549,
-      "lastMs": 549,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 551,
+      "lastMs": 551,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 549
+      "lastWallMs": 551
     },
     "cli/tao-cli#35": {
-      "emaMs": 23824,
-      "lastMs": 23824,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 28746,
+      "lastMs": 28746,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 23824
+      "lastWallMs": 28746
     },
     "cli/tao-cli#36": {
-      "emaMs": 34114,
-      "lastMs": 34114,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 16079,
+      "lastMs": 16079,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 34114
+      "lastWallMs": 16079
     },
     "cli/tao-cli#37": {
-      "emaMs": 25779,
-      "lastMs": 25779,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 11181,
+      "lastMs": 11181,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 25779
+      "lastWallMs": 11181
     },
     "cli/tao-cli#38": {
-      "emaMs": 9647,
-      "lastMs": 9647,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "emaMs": 12809,
+      "lastMs": 12809,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "source": "wall"
+      "source": "wall",
+      "lastWallMs": 12809
     },
     "cli/tao-cli#39": {
-      "emaMs": 18019,
-      "lastMs": 18019,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 10581,
+      "lastMs": 10581,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 18019
+      "lastWallMs": 10581
     },
     "cli/tao-cli#4": {
-      "emaMs": 116410,
-      "lastMs": 116410,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 77145,
+      "lastMs": 77145,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 116410
+      "lastWallMs": 77145
     },
     "cli/tao-cli#40": {
-      "emaMs": 21659,
-      "lastMs": 21659,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 7563,
+      "lastMs": 7563,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 21659
+      "lastWallMs": 7563
     },
     "cli/tao-cli#41": {
-      "emaMs": 40294,
-      "lastMs": 40294,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 12874,
+      "lastMs": 12874,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 40294
+      "lastWallMs": 12874
     },
     "cli/tao-cli#42": {
-      "emaMs": 18805,
-      "lastMs": 18805,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 9396,
+      "lastMs": 9396,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 18805
+      "lastWallMs": 9396
     },
     "cli/tao-cli#43": {
-      "emaMs": 8701,
-      "lastMs": 8701,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 6787,
+      "lastMs": 6787,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 8701
+      "lastWallMs": 6787
     },
     "cli/tao-cli#44": {
-      "emaMs": 1122,
-      "lastMs": 1122,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 2626,
+      "lastMs": 2626,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 1122
+      "lastWallMs": 2626
     },
     "cli/tao-cli#45": {
-      "emaMs": 4887,
-      "lastMs": 4887,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 4312,
+      "lastMs": 4312,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 4887
+      "lastWallMs": 4312
     },
     "cli/tao-cli#46": {
-      "emaMs": 8420,
-      "lastMs": 8420,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 10289,
+      "lastMs": 10289,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 8420
+      "lastWallMs": 10289
     },
     "cli/tao-cli#47": {
-      "emaMs": 6598,
-      "lastMs": 6598,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 6311,
+      "lastMs": 6311,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 6598
+      "lastWallMs": 6311
     },
     "cli/tao-cli#48": {
-      "emaMs": 4654,
-      "lastMs": 4654,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 6450,
+      "lastMs": 6450,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 4654
+      "lastWallMs": 6450
     },
     "cli/tao-cli#49": {
-      "emaMs": 5484,
-      "lastMs": 5484,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "emaMs": 3820,
+      "lastMs": 3820,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "source": "wall"
+      "source": "wall",
+      "lastWallMs": 3820
     },
     "cli/tao-cli#5": {
-      "emaMs": 46858,
-      "lastMs": 46858,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 22449,
+      "lastMs": 22449,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 46858
+      "lastWallMs": 22449
     },
     "cli/tao-cli#50": {
-      "emaMs": 9554,
-      "lastMs": 9554,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 3797,
+      "lastMs": 3797,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 9554
+      "lastWallMs": 3797
     },
     "cli/tao-cli#51": {
-      "emaMs": 7115,
-      "lastMs": 7115,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 5056,
+      "lastMs": 5056,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 7115
+      "lastWallMs": 5056
     },
     "cli/tao-cli#52": {
-      "emaMs": 8868,
-      "lastMs": 8868,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 7479,
+      "lastMs": 7479,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 8868
+      "lastWallMs": 7479
     },
     "cli/tao-cli#53": {
-      "emaMs": 5509,
-      "lastMs": 5509,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 2300,
+      "lastMs": 2300,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 5509
+      "lastWallMs": 2300
     },
     "cli/tao-cli#54": {
-      "emaMs": 878,
-      "lastMs": 878,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 912,
+      "lastMs": 912,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 878
+      "lastWallMs": 912
     },
     "cli/tao-cli#55": {
-      "emaMs": 2816,
-      "lastMs": 2816,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 5310,
+      "lastMs": 5310,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 2816
+      "lastWallMs": 5310
     },
     "cli/tao-cli#56": {
-      "emaMs": 16804,
-      "lastMs": 16804,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 8002,
+      "lastMs": 8002,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 16804
+      "lastWallMs": 8002
     },
     "cli/tao-cli#57": {
-      "emaMs": 2566,
-      "lastMs": 2566,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 1931,
+      "lastMs": 1931,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 2566
+      "lastWallMs": 1931
     },
     "cli/tao-cli#58": {
-      "emaMs": 4485,
-      "lastMs": 4485,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 5083,
+      "lastMs": 5083,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 4485
+      "lastWallMs": 5083
     },
     "cli/tao-cli#59": {
-      "emaMs": 969,
-      "lastMs": 969,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 1278,
+      "lastMs": 1278,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 969
+      "lastWallMs": 1278
     },
     "cli/tao-cli#6": {
-      "emaMs": 35201,
-      "lastMs": 35201,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "emaMs": 31264,
+      "lastMs": 31264,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "source": "wall"
+      "source": "wall",
+      "lastWallMs": 31264
     },
     "cli/tao-cli#60": {
-      "emaMs": 1436,
-      "lastMs": 1436,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 1925,
+      "lastMs": 1925,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 1436
+      "lastWallMs": 1925
     },
     "cli/tao-cli#61": {
-      "emaMs": 54482,
-      "lastMs": 54482,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 17868,
+      "lastMs": 17868,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 54482
+      "lastWallMs": 17868
     },
     "cli/tao-cli#62": {
-      "emaMs": 1359,
-      "lastMs": 1359,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 1514,
+      "lastMs": 1514,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 1359
+      "lastWallMs": 1514
     },
     "cli/tao-cli#63": {
-      "emaMs": 1723,
-      "lastMs": 1723,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 712,
+      "lastMs": 712,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 1723
+      "lastWallMs": 712
     },
     "cli/tao-cli#64": {
-      "emaMs": 408,
-      "lastMs": 408,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 418,
+      "lastMs": 418,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 408
+      "lastWallMs": 418
     },
     "cli/tao-cli#65": {
-      "emaMs": 295,
-      "lastMs": 295,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 195,
+      "lastMs": 195,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 295
+      "lastWallMs": 195
     },
     "cli/tao-cli#66": {
-      "emaMs": 657,
-      "lastMs": 657,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 1163,
+      "lastMs": 1163,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 657
+      "lastWallMs": 1163
     },
     "cli/tao-cli#67": {
-      "emaMs": 587,
-      "lastMs": 587,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 1428,
+      "lastMs": 1428,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 587
+      "lastWallMs": 1428
     },
     "cli/tao-cli#68": {
-      "emaMs": 396,
-      "lastMs": 396,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 402,
+      "lastMs": 402,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 396
+      "lastWallMs": 402
     },
     "cli/tao-cli#69": {
-      "emaMs": 138,
-      "lastMs": 138,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 72,
+      "lastMs": 72,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 138
+      "lastWallMs": 72
     },
     "cli/tao-cli#7": {
-      "emaMs": 92642,
-      "lastMs": 92642,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 51598,
+      "lastMs": 51598,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 92642
+      "lastWallMs": 51598
     },
     "cli/tao-cli#70": {
-      "emaMs": 800,
-      "lastMs": 800,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "emaMs": 148,
+      "lastMs": 148,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "source": "wall"
+      "source": "wall",
+      "lastWallMs": 148
     },
     "cli/tao-cli#71": {
-      "emaMs": 846,
-      "lastMs": 846,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 570,
+      "lastMs": 570,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 846
+      "lastWallMs": 570
     },
     "cli/tao-cli#72": {
-      "emaMs": 136,
-      "lastMs": 136,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 136
-    },
-    "cli/tao-cli#73": {
-      "emaMs": 126,
-      "lastMs": 126,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 126
-    },
-    "cli/tao-cli#74": {
-      "emaMs": 242,
-      "lastMs": 242,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 242
-    },
-    "cli/tao-cli#75": {
-      "emaMs": 468,
-      "lastMs": 468,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 468
-    },
-    "cli/tao-cli#76": {
-      "emaMs": 103,
-      "lastMs": 103,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 103
-    },
-    "cli/tao-cli#77": {
-      "emaMs": 513,
-      "lastMs": 513,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 513
-    },
-    "cli/tao-cli#78": {
       "emaMs": 105,
       "lastMs": 105,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
       "lastWallMs": 105
     },
-    "cli/tao-cli#79": {
-      "emaMs": 125,
-      "lastMs": 125,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+    "cli/tao-cli#73": {
+      "emaMs": 66,
+      "lastMs": 66,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 125
+      "lastWallMs": 66
+    },
+    "cli/tao-cli#74": {
+      "emaMs": 329,
+      "lastMs": 329,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 329
+    },
+    "cli/tao-cli#75": {
+      "emaMs": 353,
+      "lastMs": 353,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 353
+    },
+    "cli/tao-cli#76": {
+      "emaMs": 83,
+      "lastMs": 83,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 83
+    },
+    "cli/tao-cli#77": {
+      "emaMs": 429,
+      "lastMs": 429,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 429
+    },
+    "cli/tao-cli#78": {
+      "emaMs": 68,
+      "lastMs": 68,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 68
+    },
+    "cli/tao-cli#79": {
+      "emaMs": 96,
+      "lastMs": 96,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 96
     },
     "cli/tao-cli#8": {
-      "emaMs": 69724,
-      "lastMs": 69724,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 38640,
+      "lastMs": 38640,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 69724
+      "lastWallMs": 38640
     },
     "cli/tao-cli#80": {
-      "emaMs": 699,
-      "lastMs": 699,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 1345,
+      "lastMs": 1345,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 699
+      "lastWallMs": 1345
     },
     "cli/tao-cli#81": {
-      "emaMs": 612,
-      "lastMs": 612,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "emaMs": 45,
+      "lastMs": 45,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "source": "wall"
+      "source": "wall",
+      "lastWallMs": 45
     },
     "cli/tao-cli#82": {
-      "emaMs": 76,
-      "lastMs": 76,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 42,
+      "lastMs": 42,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 76
+      "lastWallMs": 42
     },
     "cli/tao-cli#83": {
-      "emaMs": 125,
-      "lastMs": 125,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 98,
+      "lastMs": 98,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 125
+      "lastWallMs": 98
     },
     "cli/tao-cli#84": {
-      "emaMs": 99,
-      "lastMs": 99,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 94,
+      "lastMs": 94,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 99
+      "lastWallMs": 94
     },
     "cli/tao-cli#85": {
-      "emaMs": 97,
-      "lastMs": 97,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 60,
+      "lastMs": 60,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 97
+      "lastWallMs": 60
     },
     "cli/tao-cli#86": {
-      "emaMs": 69,
-      "lastMs": 69,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 69
-    },
-    "cli/tao-cli#87": {
-      "emaMs": 90,
-      "lastMs": 90,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 90
-    },
-    "cli/tao-cli#88": {
-      "emaMs": 43,
-      "lastMs": 43,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 43
-    },
-    "cli/tao-cli#89": {
-      "emaMs": 49,
-      "lastMs": 49,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 49
-    },
-    "cli/tao-cli#9": {
-      "emaMs": 53750,
-      "lastMs": 53750,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 53750
-    },
-    "cli/tao-cli#90": {
-      "emaMs": 80,
-      "lastMs": 80,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 80
-    },
-    "cli/tao-cli#91": {
-      "emaMs": 73,
-      "lastMs": 73,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 73
-    },
-    "cli/tao-cli#92": {
-      "emaMs": 602,
-      "lastMs": 602,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1,
-      "source": "wall"
-    },
-    "cli/tao-cli#93": {
-      "emaMs": 47,
-      "lastMs": 47,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 47
-    },
-    "compiler": {
-      "emaMs": 685369,
-      "lastMs": 685369,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "lastWallMs": 685369,
-      "source": "wall"
-    },
-    "compiler#1": {
-      "emaMs": 16323,
-      "lastMs": 16323,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 16323
-    },
-    "compiler#10": {
-      "emaMs": 8920,
-      "lastMs": 8920,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 8920
-    },
-    "compiler#11": {
-      "emaMs": 4360,
-      "lastMs": 4360,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 4360
-    },
-    "compiler#12": {
-      "emaMs": 9450,
-      "lastMs": 9450,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 9450
-    },
-    "compiler#13": {
-      "emaMs": 10119,
-      "lastMs": 10119,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 10119
-    },
-    "compiler#14": {
-      "emaMs": 8322,
-      "lastMs": 8322,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 8322
-    },
-    "compiler#15": {
-      "emaMs": 9509,
-      "lastMs": 9509,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 9509
-    },
-    "compiler#16": {
-      "emaMs": 7633,
-      "lastMs": 7633,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 7633
-    },
-    "compiler#17": {
-      "emaMs": 30912,
-      "lastMs": 30912,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 30912
-    },
-    "compiler#2": {
-      "emaMs": 10198,
-      "lastMs": 10198,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 10198
-    },
-    "compiler#3": {
-      "emaMs": 3247,
-      "lastMs": 3247,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1,
-      "source": "wall"
-    },
-    "compiler#4": {
-      "emaMs": 7558,
-      "lastMs": 7558,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 7558
-    },
-    "compiler#5": {
-      "emaMs": 19383,
-      "lastMs": 19383,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 19383
-    },
-    "compiler#6": {
-      "emaMs": 31629,
-      "lastMs": 31629,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 31629
-    },
-    "compiler#7": {
-      "emaMs": 45260,
-      "lastMs": 45260,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 45260
-    },
-    "compiler#8": {
-      "emaMs": 25031,
-      "lastMs": 25031,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 25031
-    },
-    "compiler#9": {
-      "emaMs": 14501,
-      "lastMs": 14501,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 14501
-    },
-    "compiler:app-output": {
-      "emaMs": 126789,
-      "lastMs": 126789,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 126789
-    },
-    "compiler:emission-cache": {
-      "emaMs": 86280,
-      "lastMs": 86280,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 86280
-    },
-    "compiler:preview": {
-      "emaMs": 45616,
-      "lastMs": 45616,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 45616
-    },
-    "compiler:workspace": {
-      "emaMs": 167576,
-      "lastMs": 167576,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 167576
-    },
-    "dead-exports": {
-      "emaMs": 12901,
-      "lastMs": 12901,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "lastWallMs": 12901,
-      "source": "wall"
-    },
-    "ides/ide-extension": {
-      "emaMs": 49360,
-      "lastMs": 49360,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "lastWallMs": 49360,
-      "source": "wall"
-    },
-    "ides/ide-extension#1": {
-      "emaMs": 4877,
-      "lastMs": 4877,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 4877
-    },
-    "ides/ide-extension#2": {
-      "emaMs": 1121,
-      "lastMs": 1121,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 1121
-    },
-    "ides/ide-extension#3": {
-      "emaMs": 49,
-      "lastMs": 49,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 49
-    },
-    "ides/ide-extension#4": {
-      "emaMs": 43055,
-      "lastMs": 43055,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 43055
-    },
-    "ides/ide-extension#5": {
-      "emaMs": 258,
-      "lastMs": 258,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 258
-    },
-    "ides/studio": {
-      "emaMs": 633972,
-      "lastMs": 633972,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "lastWallMs": 633972,
-      "source": "wall"
-    },
-    "ides/studio#1": {
-      "emaMs": 49999,
-      "lastMs": 49999,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 49999
-    },
-    "ides/studio#10": {
-      "emaMs": 10147,
-      "lastMs": 10147,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 10147
-    },
-    "ides/studio#11": {
-      "emaMs": 21551,
-      "lastMs": 21551,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 21551
-    },
-    "ides/studio#12": {
-      "emaMs": 2376,
-      "lastMs": 2376,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 2376
-    },
-    "ides/studio#13": {
-      "emaMs": 5143,
-      "lastMs": 5143,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 5143
-    },
-    "ides/studio#14": {
-      "emaMs": 1707,
-      "lastMs": 1707,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 1707
-    },
-    "ides/studio#15": {
-      "emaMs": 9705,
-      "lastMs": 9705,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 9705
-    },
-    "ides/studio#16": {
-      "emaMs": 7487,
-      "lastMs": 7487,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 7487
-    },
-    "ides/studio#17": {
-      "emaMs": 1909,
-      "lastMs": 1909,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1,
-      "source": "wall"
-    },
-    "ides/studio#18": {
-      "emaMs": 2800,
-      "lastMs": 2800,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 2800
-    },
-    "ides/studio#19": {
       "emaMs": 102,
       "lastMs": 102,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
       "lastWallMs": 102
     },
-    "ides/studio#2": {
-      "emaMs": 38431,
-      "lastMs": 38431,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+    "cli/tao-cli#87": {
+      "emaMs": 102,
+      "lastMs": 102,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 38431
+      "lastWallMs": 102
     },
-    "ides/studio#20": {
-      "emaMs": 1358,
-      "lastMs": 1358,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+    "cli/tao-cli#88": {
+      "emaMs": 50,
+      "lastMs": 50,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 1358
+      "lastWallMs": 50
     },
-    "ides/studio#21": {
-      "emaMs": 3348,
-      "lastMs": 3348,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+    "cli/tao-cli#89": {
+      "emaMs": 45,
+      "lastMs": 45,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 3348
+      "lastWallMs": 45
     },
-    "ides/studio#22": {
-      "emaMs": 112,
-      "lastMs": 112,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+    "cli/tao-cli#9": {
+      "emaMs": 29103,
+      "lastMs": 29103,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 112
+      "lastWallMs": 29103
     },
-    "ides/studio#23": {
-      "emaMs": 2258,
-      "lastMs": 2258,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+    "cli/tao-cli#90": {
+      "emaMs": 75,
+      "lastMs": 75,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 2258
+      "lastWallMs": 75
     },
-    "ides/studio#24": {
-      "emaMs": 2421,
-      "lastMs": 2421,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+    "cli/tao-cli#91": {
+      "emaMs": 35,
+      "lastMs": 35,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 2421
+      "lastWallMs": 35
     },
-    "ides/studio#25": {
-      "emaMs": 4042,
-      "lastMs": 4042,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+    "cli/tao-cli#92": {
+      "emaMs": 34,
+      "lastMs": 34,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 4042
+      "lastWallMs": 34
     },
-    "ides/studio#26": {
-      "emaMs": 1588,
-      "lastMs": 1588,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+    "cli/tao-cli#93": {
+      "emaMs": 40,
+      "lastMs": 40,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 1588
+      "lastWallMs": 40
     },
-    "ides/studio#27": {
-      "emaMs": 2288,
-      "lastMs": 2288,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+    "compiler": {
+      "emaMs": 338669,
+      "lastMs": 338669,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "lastWallMs": 338669,
+      "source": "wall"
+    },
+    "compiler#1": {
+      "emaMs": 4183,
+      "lastMs": 4183,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 2288
+      "lastWallMs": 4183
     },
-    "ides/studio#28": {
-      "emaMs": 939,
-      "lastMs": 939,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
+    "compiler#10": {
+      "emaMs": 2586,
+      "lastMs": 2586,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 2586
+    },
+    "compiler#11": {
+      "emaMs": 1627,
+      "lastMs": 1627,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 1627
+    },
+    "compiler#12": {
+      "emaMs": 2556,
+      "lastMs": 2556,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 2556
+    },
+    "compiler#13": {
+      "emaMs": 3632,
+      "lastMs": 3632,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 3632
+    },
+    "compiler#14": {
+      "emaMs": 3134,
+      "lastMs": 3134,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 3134
+    },
+    "compiler#15": {
+      "emaMs": 3964,
+      "lastMs": 3964,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 3964
+    },
+    "compiler#16": {
+      "emaMs": 2116,
+      "lastMs": 2116,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 2116
+    },
+    "compiler#17": {
+      "emaMs": 18559,
+      "lastMs": 18559,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 18559
+    },
+    "compiler#18": {
+      "emaMs": 2298,
+      "lastMs": 2298,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 2298,
       "samples": 1,
       "source": "wall"
     },
-    "ides/studio#29": {
-      "emaMs": 1206,
-      "lastMs": 1206,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+    "compiler#19": {
+      "emaMs": 2191,
+      "lastMs": 2191,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 2191,
+      "samples": 1,
+      "source": "wall"
+    },
+    "compiler#2": {
+      "emaMs": 2361,
+      "lastMs": 2361,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 1206
+      "lastWallMs": 2361
+    },
+    "compiler#20": {
+      "emaMs": 5615,
+      "lastMs": 5615,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 5615,
+      "samples": 1,
+      "source": "wall"
+    },
+    "compiler#21": {
+      "emaMs": 1790,
+      "lastMs": 1790,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 1790,
+      "samples": 1,
+      "source": "wall"
+    },
+    "compiler#22": {
+      "emaMs": 3847,
+      "lastMs": 3847,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 3847,
+      "samples": 1,
+      "source": "wall"
+    },
+    "compiler#23": {
+      "emaMs": 5934,
+      "lastMs": 5934,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 5934,
+      "samples": 1,
+      "source": "wall"
+    },
+    "compiler#24": {
+      "emaMs": 15192,
+      "lastMs": 15192,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 15192,
+      "samples": 1,
+      "source": "wall"
+    },
+    "compiler#25": {
+      "emaMs": 6235,
+      "lastMs": 6235,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 6235,
+      "samples": 1,
+      "source": "wall"
+    },
+    "compiler#26": {
+      "emaMs": 3096,
+      "lastMs": 3096,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 3096,
+      "samples": 1,
+      "source": "wall"
+    },
+    "compiler#27": {
+      "emaMs": 2174,
+      "lastMs": 2174,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 2174,
+      "samples": 1,
+      "source": "wall"
+    },
+    "compiler#28": {
+      "emaMs": 1838,
+      "lastMs": 1838,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 1838,
+      "samples": 1,
+      "source": "wall"
+    },
+    "compiler#29": {
+      "emaMs": 3570,
+      "lastMs": 3570,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 3570,
+      "samples": 1,
+      "source": "wall"
+    },
+    "compiler#3": {
+      "emaMs": 3316,
+      "lastMs": 3316,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 3316
+    },
+    "compiler#30": {
+      "emaMs": 2458,
+      "lastMs": 2458,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 2458,
+      "samples": 1,
+      "source": "wall"
+    },
+    "compiler#31": {
+      "emaMs": 5593,
+      "lastMs": 5593,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 5593,
+      "samples": 1,
+      "source": "wall"
+    },
+    "compiler#32": {
+      "emaMs": 4504,
+      "lastMs": 4504,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 4504,
+      "samples": 1,
+      "source": "wall"
+    },
+    "compiler#33": {
+      "emaMs": 3989,
+      "lastMs": 3989,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 3989,
+      "samples": 1,
+      "source": "wall"
+    },
+    "compiler#34": {
+      "emaMs": 2657,
+      "lastMs": 2657,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 2657,
+      "samples": 1,
+      "source": "wall"
+    },
+    "compiler#35": {
+      "emaMs": 914,
+      "lastMs": 914,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 914,
+      "samples": 1,
+      "source": "wall"
+    },
+    "compiler#36": {
+      "emaMs": 2123,
+      "lastMs": 2123,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 2123,
+      "samples": 1,
+      "source": "wall"
+    },
+    "compiler#37": {
+      "emaMs": 2458,
+      "lastMs": 2458,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 2458,
+      "samples": 1,
+      "source": "wall"
+    },
+    "compiler#38": {
+      "emaMs": 2421,
+      "lastMs": 2421,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 2421,
+      "samples": 1,
+      "source": "wall"
+    },
+    "compiler#39": {
+      "emaMs": 2999,
+      "lastMs": 2999,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 2999,
+      "samples": 1,
+      "source": "wall"
+    },
+    "compiler#4": {
+      "emaMs": 3340,
+      "lastMs": 3340,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 3340
+    },
+    "compiler#40": {
+      "emaMs": 3978,
+      "lastMs": 3978,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 3978,
+      "samples": 1,
+      "source": "wall"
+    },
+    "compiler#41": {
+      "emaMs": 4892,
+      "lastMs": 4892,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 4892,
+      "samples": 1,
+      "source": "wall"
+    },
+    "compiler#5": {
+      "emaMs": 6551,
+      "lastMs": 6551,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 6551
+    },
+    "compiler#6": {
+      "emaMs": 1749,
+      "lastMs": 1749,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 1749
+    },
+    "compiler#7": {
+      "emaMs": 5835,
+      "lastMs": 5835,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 5835
+    },
+    "compiler#8": {
+      "emaMs": 6381,
+      "lastMs": 6381,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 6381
+    },
+    "compiler#9": {
+      "emaMs": 3080,
+      "lastMs": 3080,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 3080
+    },
+    "compiler:app-output": {
+      "emaMs": 43227,
+      "lastMs": 43227,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 43227
+    },
+    "compiler:emission-cache": {
+      "emaMs": 27418,
+      "lastMs": 27418,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 27418
+    },
+    "compiler:preview": {
+      "emaMs": 31838,
+      "lastMs": 31838,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 31838
+    },
+    "compiler:workspace": {
+      "emaMs": 68450,
+      "lastMs": 68450,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 68450
+    },
+    "dead-exports": {
+      "emaMs": 12211,
+      "lastMs": 12211,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "lastWallMs": 12211,
+      "source": "wall"
+    },
+    "ides/ide-extension": {
+      "emaMs": 29917,
+      "lastMs": 29917,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "lastWallMs": 29917,
+      "source": "wall"
+    },
+    "ides/ide-extension#1": {
+      "emaMs": 5542,
+      "lastMs": 5542,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 5542
+    },
+    "ides/ide-extension#2": {
+      "emaMs": 2015,
+      "lastMs": 2015,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 2015
+    },
+    "ides/ide-extension#3": {
+      "emaMs": 122,
+      "lastMs": 122,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 122
+    },
+    "ides/ide-extension#4": {
+      "emaMs": 22129,
+      "lastMs": 22129,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 22129
+    },
+    "ides/ide-extension#5": {
+      "emaMs": 109,
+      "lastMs": 109,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 109
+    },
+    "ides/studio": {
+      "emaMs": 398435,
+      "lastMs": 398435,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "lastWallMs": 398435,
+      "source": "wall"
+    },
+    "ides/studio#1": {
+      "emaMs": 28087,
+      "lastMs": 28087,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 28087
+    },
+    "ides/studio#10": {
+      "emaMs": 5725,
+      "lastMs": 5725,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 5725
+    },
+    "ides/studio#11": {
+      "emaMs": 10133,
+      "lastMs": 10133,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 10133
+    },
+    "ides/studio#12": {
+      "emaMs": 4521,
+      "lastMs": 4521,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 4521
+    },
+    "ides/studio#13": {
+      "emaMs": 3718,
+      "lastMs": 3718,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 3718
+    },
+    "ides/studio#14": {
+      "emaMs": 732,
+      "lastMs": 732,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 732
+    },
+    "ides/studio#15": {
+      "emaMs": 6558,
+      "lastMs": 6558,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 6558
+    },
+    "ides/studio#16": {
+      "emaMs": 5583,
+      "lastMs": 5583,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 5583
+    },
+    "ides/studio#17": {
+      "emaMs": 2591,
+      "lastMs": 2591,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 2591
+    },
+    "ides/studio#18": {
+      "emaMs": 3415,
+      "lastMs": 3415,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 3415
+    },
+    "ides/studio#19": {
+      "emaMs": 117,
+      "lastMs": 117,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 117
+    },
+    "ides/studio#2": {
+      "emaMs": 16392,
+      "lastMs": 16392,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 16392
+    },
+    "ides/studio#20": {
+      "emaMs": 1439,
+      "lastMs": 1439,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 1439
+    },
+    "ides/studio#21": {
+      "emaMs": 3250,
+      "lastMs": 3250,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 3250
+    },
+    "ides/studio#22": {
+      "emaMs": 74,
+      "lastMs": 74,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 74
+    },
+    "ides/studio#23": {
+      "emaMs": 4472,
+      "lastMs": 4472,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 4472
+    },
+    "ides/studio#24": {
+      "emaMs": 1464,
+      "lastMs": 1464,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 1464
+    },
+    "ides/studio#25": {
+      "emaMs": 4420,
+      "lastMs": 4420,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 4420
+    },
+    "ides/studio#26": {
+      "emaMs": 1090,
+      "lastMs": 1090,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 1090
+    },
+    "ides/studio#27": {
+      "emaMs": 1056,
+      "lastMs": 1056,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 1056
+    },
+    "ides/studio#28": {
+      "emaMs": 1386,
+      "lastMs": 1386,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 1386
+    },
+    "ides/studio#29": {
+      "emaMs": 507,
+      "lastMs": 507,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 507
     },
     "ides/studio#3": {
-      "emaMs": 32628,
-      "lastMs": 32628,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 14452,
+      "lastMs": 14452,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 32628
+      "lastWallMs": 14452
     },
     "ides/studio#30": {
-      "emaMs": 2587,
-      "lastMs": 2587,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 1744,
+      "lastMs": 1744,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 2587
+      "lastWallMs": 1744
     },
     "ides/studio#31": {
-      "emaMs": 2115,
-      "lastMs": 2115,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 1176,
+      "lastMs": 1176,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 2115
+      "lastWallMs": 1176
     },
     "ides/studio#32": {
-      "emaMs": 1423,
-      "lastMs": 1423,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 394,
+      "lastMs": 394,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 1423
+      "lastWallMs": 394
+    },
+    "ides/studio#33": {
+      "emaMs": 331,
+      "lastMs": 331,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 331,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#34": {
+      "emaMs": 290,
+      "lastMs": 290,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 290,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#35": {
+      "emaMs": 338,
+      "lastMs": 338,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 338,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#36": {
+      "emaMs": 530,
+      "lastMs": 530,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 530,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#37": {
+      "emaMs": 391,
+      "lastMs": 391,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 391,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#38": {
+      "emaMs": 69,
+      "lastMs": 69,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 69,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#39": {
+      "emaMs": 163,
+      "lastMs": 163,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 163,
+      "samples": 1,
+      "source": "wall"
     },
     "ides/studio#4": {
-      "emaMs": 15181,
-      "lastMs": 15181,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 11391,
+      "lastMs": 11391,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 15181
+      "lastWallMs": 11391
+    },
+    "ides/studio#40": {
+      "emaMs": 163,
+      "lastMs": 163,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 163,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#41": {
+      "emaMs": 188,
+      "lastMs": 188,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 188,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#42": {
+      "emaMs": 105,
+      "lastMs": 105,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 105,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#43": {
+      "emaMs": 347,
+      "lastMs": 347,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 347,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#44": {
+      "emaMs": 107,
+      "lastMs": 107,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 107,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#45": {
+      "emaMs": 72,
+      "lastMs": 72,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 72,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#46": {
+      "emaMs": 39,
+      "lastMs": 39,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 39,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#47": {
+      "emaMs": 55,
+      "lastMs": 55,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 55,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#48": {
+      "emaMs": 141,
+      "lastMs": 141,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 141,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#49": {
+      "emaMs": 54,
+      "lastMs": 54,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 54,
+      "samples": 1,
+      "source": "wall"
     },
     "ides/studio#5": {
-      "emaMs": 4731,
-      "lastMs": 4731,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 5099,
+      "lastMs": 5099,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 4731
+      "lastWallMs": 5099
+    },
+    "ides/studio#50": {
+      "emaMs": 465,
+      "lastMs": 465,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 465,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#51": {
+      "emaMs": 96,
+      "lastMs": 96,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 96,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#52": {
+      "emaMs": 78,
+      "lastMs": 78,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 78,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#53": {
+      "emaMs": 392,
+      "lastMs": 392,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 392,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#54": {
+      "emaMs": 82,
+      "lastMs": 82,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 82,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#55": {
+      "emaMs": 160,
+      "lastMs": 160,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 160,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#56": {
+      "emaMs": 138,
+      "lastMs": 138,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 138,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#57": {
+      "emaMs": 107,
+      "lastMs": 107,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 107,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#58": {
+      "emaMs": 55,
+      "lastMs": 55,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 55,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#59": {
+      "emaMs": 60,
+      "lastMs": 60,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 60,
+      "samples": 1,
+      "source": "wall"
     },
     "ides/studio#6": {
-      "emaMs": 4980,
-      "lastMs": 4980,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 6158,
+      "lastMs": 6158,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 4980
+      "lastWallMs": 6158
+    },
+    "ides/studio#60": {
+      "emaMs": 48,
+      "lastMs": 48,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 48,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#61": {
+      "emaMs": 63,
+      "lastMs": 63,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 63,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#62": {
+      "emaMs": 45,
+      "lastMs": 45,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 45,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#63": {
+      "emaMs": 69,
+      "lastMs": 69,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 69,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#64": {
+      "emaMs": 860,
+      "lastMs": 860,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 860,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#65": {
+      "emaMs": 44,
+      "lastMs": 44,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 44,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#66": {
+      "emaMs": 129,
+      "lastMs": 129,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 129,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#67": {
+      "emaMs": 99,
+      "lastMs": 99,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 99,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#68": {
+      "emaMs": 128,
+      "lastMs": 128,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 128,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#69": {
+      "emaMs": 42,
+      "lastMs": 42,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 42,
+      "samples": 1,
+      "source": "wall"
     },
     "ides/studio#7": {
-      "emaMs": 8946,
-      "lastMs": 8946,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 7578,
+      "lastMs": 7578,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 8946
+      "lastWallMs": 7578
+    },
+    "ides/studio#70": {
+      "emaMs": 94,
+      "lastMs": 94,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 94,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#71": {
+      "emaMs": 118,
+      "lastMs": 118,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 118,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#72": {
+      "emaMs": 50,
+      "lastMs": 50,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 50,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#73": {
+      "emaMs": 43,
+      "lastMs": 43,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 43,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#74": {
+      "emaMs": 37,
+      "lastMs": 37,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 37,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#75": {
+      "emaMs": 73,
+      "lastMs": 73,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 73,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#76": {
+      "emaMs": 303,
+      "lastMs": 303,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 303,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#77": {
+      "emaMs": 140,
+      "lastMs": 140,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 140,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#78": {
+      "emaMs": 58,
+      "lastMs": 58,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 58,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#79": {
+      "emaMs": 48,
+      "lastMs": 48,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 48,
+      "samples": 1,
+      "source": "wall"
     },
     "ides/studio#8": {
-      "emaMs": 10846,
-      "lastMs": 10846,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 4286,
+      "lastMs": 4286,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 10846
+      "lastWallMs": 4286
+    },
+    "ides/studio#80": {
+      "emaMs": 55,
+      "lastMs": 55,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 55,
+      "samples": 1,
+      "source": "wall"
+    },
+    "ides/studio#81": {
+      "emaMs": 103,
+      "lastMs": 103,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 103,
+      "samples": 1,
+      "source": "wall"
     },
     "ides/studio#9": {
-      "emaMs": 8429,
-      "lastMs": 8429,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 6986,
+      "lastMs": 6986,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 8429
+      "lastWallMs": 6986
     },
     "ides/studio-tooling": {
-      "emaMs": 21576,
-      "lastMs": 21576,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 22646,
+      "lastMs": 22646,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 21576,
+      "lastWallMs": 22646,
       "source": "wall"
     },
     "ides/studio:edit-to-preview": {
-      "emaMs": 19099,
-      "lastMs": 19099,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "emaMs": 68549,
+      "lastMs": 68549,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "source": "wall"
+      "source": "wall",
+      "lastWallMs": 68549
     },
     "ides/studio:session-receipts": {
-      "emaMs": 103644,
-      "lastMs": 103644,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 90329,
+      "lastMs": 90329,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 103644
+      "lastWallMs": 90329
     },
     "ides/studio:session-scenarios": {
-      "emaMs": 132799,
-      "lastMs": 132799,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 27623,
+      "lastMs": 27623,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 132799
+      "lastWallMs": 27623
     },
     "ides/studio:session-sources": {
-      "emaMs": 86747,
-      "lastMs": 86747,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 17216,
+      "lastMs": 17216,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 86747
+      "lastWallMs": 17216
     },
     "ides/studio:session-watch": {
-      "emaMs": 50847,
-      "lastMs": 50847,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 21059,
+      "lastMs": 21059,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 50847
+      "lastWallMs": 21059
     },
     "keyboard-navigation-smoke": {
       "emaMs": 78318,
@@ -1710,559 +2507,843 @@
       "samples": 1
     },
     "language/ast-utils": {
-      "emaMs": 3766,
-      "lastMs": 3766,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 4865,
+      "lastMs": 4865,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 3766,
+      "lastWallMs": 4865,
       "source": "wall"
     },
     "language/formatter": {
-      "emaMs": 5661,
-      "lastMs": 5661,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 8359,
+      "lastMs": 8359,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 5661,
+      "lastWallMs": 8359,
       "source": "wall"
     },
     "language/formatter#1": {
-      "emaMs": 4873,
-      "lastMs": 4873,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 7446,
+      "lastMs": 7446,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 4873
+      "lastWallMs": 7446
     },
     "language/formatter:core": {
-      "emaMs": 788,
-      "lastMs": 788,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 913,
+      "lastMs": 913,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 788,
+      "lastWallMs": 913,
       "source": "wall"
     },
     "language/parser": {
-      "emaMs": 40246,
-      "lastMs": 40246,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 43753,
+      "lastMs": 43753,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 40246,
+      "lastWallMs": 43753,
       "source": "wall"
     },
     "language/parser#1": {
-      "emaMs": 6593,
-      "lastMs": 6593,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 4503,
+      "lastMs": 4503,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 6593
+      "lastWallMs": 4503
+    },
+    "language/parser#10": {
+      "emaMs": 2926,
+      "lastMs": 2926,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 2926,
+      "samples": 1,
+      "source": "wall"
     },
     "language/parser#2": {
-      "emaMs": 6644,
-      "lastMs": 6644,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 3070,
+      "lastMs": 3070,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 6644
+      "lastWallMs": 3070
     },
     "language/parser#3": {
-      "emaMs": 3824,
-      "lastMs": 3824,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 2715,
+      "lastMs": 2715,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 3824
+      "lastWallMs": 2715
     },
     "language/parser#4": {
-      "emaMs": 7201,
-      "lastMs": 7201,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 3570,
+      "lastMs": 3570,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 7201
+      "lastWallMs": 3570
     },
     "language/parser#5": {
-      "emaMs": 6497,
-      "lastMs": 6497,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 4583,
+      "lastMs": 4583,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 6497
+      "lastWallMs": 4583
     },
     "language/parser#6": {
-      "emaMs": 8085,
-      "lastMs": 8085,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 3698,
+      "lastMs": 3698,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 8085
+      "lastWallMs": 3698
+    },
+    "language/parser#7": {
+      "emaMs": 10641,
+      "lastMs": 10641,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 10641,
+      "samples": 1,
+      "source": "wall"
+    },
+    "language/parser#8": {
+      "emaMs": 2969,
+      "lastMs": 2969,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 2969,
+      "samples": 1,
+      "source": "wall"
+    },
+    "language/parser#9": {
+      "emaMs": 4252,
+      "lastMs": 4252,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 4252,
+      "samples": 1,
+      "source": "wall"
     },
     "language/parser:core": {
-      "emaMs": 1402,
-      "lastMs": 1402,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 826,
+      "lastMs": 826,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 1402,
+      "lastWallMs": 826,
       "source": "wall"
     },
     "language/project-tooling": {
-      "emaMs": 1514550,
-      "lastMs": 1514550,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 1172943,
+      "lastMs": 1172943,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 1514550,
+      "lastWallMs": 1172943,
       "source": "wall"
     },
     "language/project-tooling#1": {
-      "emaMs": 6771,
-      "lastMs": 6771,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "emaMs": 38297,
+      "lastMs": 38297,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "source": "wall"
+      "source": "wall",
+      "lastWallMs": 38297
     },
     "language/project-tooling#2": {
-      "emaMs": 26086,
-      "lastMs": 26086,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 28030,
+      "lastMs": 28030,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 26086
+      "lastWallMs": 28030
     },
     "language/project-tooling#3": {
-      "emaMs": 55262,
-      "lastMs": 55262,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 53262,
+      "lastMs": 53262,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 55262
+      "lastWallMs": 53262
     },
     "language/project-tooling#4": {
-      "emaMs": 1031,
-      "lastMs": 1031,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 547,
+      "lastMs": 547,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 1031
+      "lastWallMs": 547
     },
     "language/project-tooling#5": {
-      "emaMs": 735,
-      "lastMs": 735,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 676,
+      "lastMs": 676,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 735
+      "lastWallMs": 676
     },
     "language/project-tooling#6": {
-      "emaMs": 110,
-      "lastMs": 110,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 67,
+      "lastMs": 67,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 110
+      "lastWallMs": 67
     },
     "language/project-tooling#7": {
-      "emaMs": 135,
-      "lastMs": 135,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 75,
+      "lastMs": 75,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 135
+      "lastWallMs": 75
     },
     "language/project-tooling#8": {
-      "emaMs": 42,
-      "lastMs": 42,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 63,
+      "lastMs": 63,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 42
+      "lastWallMs": 63
     },
     "language/project-tooling:native": {
-      "emaMs": 184792,
-      "lastMs": 184792,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 325817,
+      "lastMs": 325817,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 184792
+      "lastWallMs": 325817
     },
     "language/project-tooling:receipt-host": {
-      "emaMs": 122388,
-      "lastMs": 122388,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 58708,
+      "lastMs": 58708,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 122388
+      "lastWallMs": 58708
     },
     "language/project-tooling:receipt-inputs": {
-      "emaMs": 249263,
-      "lastMs": 249263,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 102762,
+      "lastMs": 102762,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 249263
+      "lastWallMs": 102762
     },
     "language/project-tooling:receipt-races": {
-      "emaMs": 109650,
-      "lastMs": 109650,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 74661,
+      "lastMs": 74661,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 109650
+      "lastWallMs": 74661
     },
     "language/project-tooling:receipt-resolution": {
-      "emaMs": 8398,
-      "lastMs": 8398,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "emaMs": 70754,
+      "lastMs": 70754,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "source": "wall"
+      "source": "wall",
+      "lastWallMs": 70754
     },
     "language/project-tooling:receipts": {
-      "emaMs": 126667,
-      "lastMs": 126667,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 106697,
+      "lastMs": 106697,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 126667
+      "lastWallMs": 106697
     },
     "language/project-tooling:service": {
-      "emaMs": 267863,
-      "lastMs": 267863,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 57556,
+      "lastMs": 57556,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 267863
+      "lastWallMs": 57556
     },
     "language/project-tooling:watch-files": {
-      "emaMs": 146744,
-      "lastMs": 146744,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 94619,
+      "lastMs": 94619,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 146744
+      "lastWallMs": 94619
     },
     "language/project-tooling:watch-refresh": {
-      "emaMs": 61991,
-      "lastMs": 61991,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 30528,
+      "lastMs": 30528,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 61991
+      "lastWallMs": 30528
     },
     "language/project-tooling:watch-topology": {
-      "emaMs": 161791,
-      "lastMs": 161791,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 129824,
+      "lastMs": 129824,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 161791
+      "lastWallMs": 129824
     },
     "language/source-actions": {
-      "emaMs": 41938,
-      "lastMs": 41938,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 45881,
+      "lastMs": 45881,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 41938,
+      "lastWallMs": 45881,
       "source": "wall"
     },
     "language/source-actions#1": {
-      "emaMs": 23861,
-      "lastMs": 23861,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 15272,
+      "lastMs": 15272,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 23861
+      "lastWallMs": 15272
+    },
+    "language/source-actions#10": {
+      "emaMs": 1501,
+      "lastMs": 1501,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 1501,
+      "samples": 1,
+      "source": "wall"
     },
     "language/source-actions#2": {
-      "emaMs": 3894,
-      "lastMs": 3894,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 5680,
+      "lastMs": 5680,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 3894
+      "lastWallMs": 5680
     },
     "language/source-actions#3": {
-      "emaMs": 2569,
-      "lastMs": 2569,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 1991,
+      "lastMs": 1991,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 2569
+      "lastWallMs": 1991
     },
     "language/source-actions#4": {
-      "emaMs": 2765,
-      "lastMs": 2765,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 1254,
+      "lastMs": 1254,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 2765
+      "lastWallMs": 1254
     },
     "language/source-actions#5": {
-      "emaMs": 6170,
-      "lastMs": 6170,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 3250,
+      "lastMs": 3250,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 6170
+      "lastWallMs": 3250
     },
     "language/source-actions#6": {
-      "emaMs": 2679,
-      "lastMs": 2679,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 1537,
+      "lastMs": 1537,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 2679
+      "lastWallMs": 1537
     },
     "language/source-actions#7": {
-      "emaMs": 3438,
-      "lastMs": 3438,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "emaMs": 11789,
+      "lastMs": 11789,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 11789
+    },
+    "language/source-actions#8": {
+      "emaMs": 2204,
+      "lastMs": 2204,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 2204,
+      "samples": 1,
+      "source": "wall"
+    },
+    "language/source-actions#9": {
+      "emaMs": 1403,
+      "lastMs": 1403,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 1403,
       "samples": 1,
       "source": "wall"
     },
     "language/validator": {
-      "emaMs": 161059,
-      "lastMs": 161059,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 131979,
+      "lastMs": 131979,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 161059,
+      "lastWallMs": 131979,
       "source": "wall"
     },
     "language/validator#1": {
-      "emaMs": 4647,
-      "lastMs": 4647,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 2804,
+      "lastMs": 2804,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 4647
+      "lastWallMs": 2804
     },
     "language/validator#10": {
-      "emaMs": 6404,
-      "lastMs": 6404,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 2550,
+      "lastMs": 2550,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 6404
+      "lastWallMs": 2550
     },
     "language/validator#11": {
-      "emaMs": 24060,
-      "lastMs": 24060,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 6272,
+      "lastMs": 6272,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 24060
+      "lastWallMs": 6272
     },
     "language/validator#12": {
-      "emaMs": 24512,
-      "lastMs": 24512,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 2977,
+      "lastMs": 2977,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 24512
+      "lastWallMs": 2977
     },
-    "language/validator#2": {
-      "emaMs": 7495,
-      "lastMs": 7495,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 7495
-    },
-    "language/validator#3": {
-      "emaMs": 9623,
-      "lastMs": 9623,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 9623
-    },
-    "language/validator#4": {
-      "emaMs": 4113,
-      "lastMs": 4113,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 4113
-    },
-    "language/validator#5": {
-      "emaMs": 9029,
-      "lastMs": 9029,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 9029
-    },
-    "language/validator#6": {
-      "emaMs": 26654,
-      "lastMs": 26654,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 26654
-    },
-    "language/validator#7": {
-      "emaMs": 26641,
-      "lastMs": 26641,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 26641
-    },
-    "language/validator#8": {
-      "emaMs": 16137,
-      "lastMs": 16137,
-      "lastRunAt": "2026-10-06T03:42:30Z",
-      "samples": 1,
-      "source": "wall",
-      "lastWallMs": 16137
-    },
-    "language/validator#9": {
-      "emaMs": 3646,
-      "lastMs": 3646,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
+    "language/validator#13": {
+      "emaMs": 1902,
+      "lastMs": 1902,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 1902,
       "samples": 1,
       "source": "wall"
     },
-    "language/validator:core": {
-      "emaMs": 1744,
-      "lastMs": 1744,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+    "language/validator#14": {
+      "emaMs": 9893,
+      "lastMs": 9893,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 9893,
       "samples": 1,
-      "lastWallMs": 1744,
+      "source": "wall"
+    },
+    "language/validator#15": {
+      "emaMs": 9051,
+      "lastMs": 9051,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 9051,
+      "samples": 1,
+      "source": "wall"
+    },
+    "language/validator#16": {
+      "emaMs": 5318,
+      "lastMs": 5318,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 5318,
+      "samples": 1,
+      "source": "wall"
+    },
+    "language/validator#17": {
+      "emaMs": 3050,
+      "lastMs": 3050,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 3050,
+      "samples": 1,
+      "source": "wall"
+    },
+    "language/validator#18": {
+      "emaMs": 1093,
+      "lastMs": 1093,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 1093,
+      "samples": 1,
+      "source": "wall"
+    },
+    "language/validator#19": {
+      "emaMs": 6717,
+      "lastMs": 6717,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 6717,
+      "samples": 1,
+      "source": "wall"
+    },
+    "language/validator#2": {
+      "emaMs": 1244,
+      "lastMs": 1244,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 1244
+    },
+    "language/validator#20": {
+      "emaMs": 1443,
+      "lastMs": 1443,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 1443,
+      "samples": 1,
+      "source": "wall"
+    },
+    "language/validator#21": {
+      "emaMs": 5356,
+      "lastMs": 5356,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 5356,
+      "samples": 1,
+      "source": "wall"
+    },
+    "language/validator#22": {
+      "emaMs": 1625,
+      "lastMs": 1625,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 1625,
+      "samples": 1,
+      "source": "wall"
+    },
+    "language/validator#23": {
+      "emaMs": 1245,
+      "lastMs": 1245,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 1245,
+      "samples": 1,
+      "source": "wall"
+    },
+    "language/validator#24": {
+      "emaMs": 3581,
+      "lastMs": 3581,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 3581,
+      "samples": 1,
+      "source": "wall"
+    },
+    "language/validator#25": {
+      "emaMs": 838,
+      "lastMs": 838,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 838,
+      "samples": 1,
+      "source": "wall"
+    },
+    "language/validator#26": {
+      "emaMs": 1214,
+      "lastMs": 1214,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 1214,
+      "samples": 1,
+      "source": "wall"
+    },
+    "language/validator#27": {
+      "emaMs": 2654,
+      "lastMs": 2654,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 2654,
+      "samples": 1,
+      "source": "wall"
+    },
+    "language/validator#28": {
+      "emaMs": 1225,
+      "lastMs": 1225,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 1225,
+      "samples": 1,
+      "source": "wall"
+    },
+    "language/validator#29": {
+      "emaMs": 3046,
+      "lastMs": 3046,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 3046,
+      "samples": 1,
+      "source": "wall"
+    },
+    "language/validator#3": {
+      "emaMs": 2979,
+      "lastMs": 2979,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 2979
+    },
+    "language/validator#30": {
+      "emaMs": 1401,
+      "lastMs": 1401,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 1401,
+      "samples": 1,
+      "source": "wall"
+    },
+    "language/validator#31": {
+      "emaMs": 4882,
+      "lastMs": 4882,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 4882,
+      "samples": 1,
+      "source": "wall"
+    },
+    "language/validator#32": {
+      "emaMs": 2090,
+      "lastMs": 2090,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 2090,
+      "samples": 1,
+      "source": "wall"
+    },
+    "language/validator#33": {
+      "emaMs": 7639,
+      "lastMs": 7639,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 7639,
+      "samples": 1,
+      "source": "wall"
+    },
+    "language/validator#34": {
+      "emaMs": 1169,
+      "lastMs": 1169,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 1169,
+      "samples": 1,
+      "source": "wall"
+    },
+    "language/validator#35": {
+      "emaMs": 2746,
+      "lastMs": 2746,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 2746,
+      "samples": 1,
+      "source": "wall"
+    },
+    "language/validator#36": {
+      "emaMs": 5099,
+      "lastMs": 5099,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 5099,
+      "samples": 1,
+      "source": "wall"
+    },
+    "language/validator#37": {
+      "emaMs": 4011,
+      "lastMs": 4011,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 4011,
+      "samples": 1,
+      "source": "wall"
+    },
+    "language/validator#38": {
+      "emaMs": 4847,
+      "lastMs": 4847,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 4847,
+      "samples": 1,
+      "source": "wall"
+    },
+    "language/validator#39": {
+      "emaMs": 1619,
+      "lastMs": 1619,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 1619,
+      "samples": 1,
+      "source": "wall"
+    },
+    "language/validator#4": {
+      "emaMs": 1352,
+      "lastMs": 1352,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 1352
+    },
+    "language/validator#40": {
+      "emaMs": 2106,
+      "lastMs": 2106,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "lastWallMs": 2106,
+      "samples": 1,
+      "source": "wall"
+    },
+    "language/validator#5": {
+      "emaMs": 3702,
+      "lastMs": 3702,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 3702
+    },
+    "language/validator#6": {
+      "emaMs": 5146,
+      "lastMs": 5146,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 5146
+    },
+    "language/validator#7": {
+      "emaMs": 3122,
+      "lastMs": 3122,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 3122
+    },
+    "language/validator#8": {
+      "emaMs": 641,
+      "lastMs": 641,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 641
+    },
+    "language/validator#9": {
+      "emaMs": 1285,
+      "lastMs": 1285,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "source": "wall",
+      "lastWallMs": 1285
+    },
+    "language/validator:core": {
+      "emaMs": 1045,
+      "lastMs": 1045,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "lastWallMs": 1045,
       "source": "wall"
     },
     "performance-checks": {
-      "emaMs": 783,
-      "lastMs": 783,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 512,
+      "lastMs": 512,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 783,
+      "lastWallMs": 512,
       "source": "wall"
     },
     "runtime-jest": {
-      "emaMs": 150825,
-      "lastMs": 150825,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 110529,
+      "lastMs": 110529,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 150825,
+      "lastWallMs": 110529,
       "source": "wall"
     },
     "services/account-server": {
-      "emaMs": 63593,
-      "lastMs": 63593,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 58910,
+      "lastMs": 58910,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 63593,
+      "lastWallMs": 58910,
       "source": "wall"
     },
     "services/account-server#1": {
-      "emaMs": 37590,
-      "lastMs": 37590,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 33179,
+      "lastMs": 33179,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 37590
+      "lastWallMs": 33179
     },
     "services/account-server#2": {
-      "emaMs": 9939,
-      "lastMs": 9939,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 7215,
+      "lastMs": 7215,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 9939
+      "lastWallMs": 7215
     },
     "services/account-server#3": {
-      "emaMs": 6923,
-      "lastMs": 6923,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 9789,
+      "lastMs": 9789,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 6923
+      "lastWallMs": 9789
     },
     "services/account-server#4": {
-      "emaMs": 4089,
-      "lastMs": 4089,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 4458,
+      "lastMs": 4458,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 4089
+      "lastWallMs": 4458
     },
     "services/account-server#5": {
-      "emaMs": 1899,
-      "lastMs": 1899,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 1097,
+      "lastMs": 1097,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 1899
+      "lastWallMs": 1097
     },
     "services/account-server#6": {
-      "emaMs": 1546,
-      "lastMs": 1546,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 1285,
+      "lastMs": 1285,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 1546
+      "lastWallMs": 1285
     },
     "services/account-server#7": {
-      "emaMs": 712,
-      "lastMs": 712,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 628,
+      "lastMs": 628,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 712
+      "lastWallMs": 628
     },
     "services/account-server#8": {
-      "emaMs": 86,
-      "lastMs": 86,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 77,
+      "lastMs": 77,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 86
+      "lastWallMs": 77
     },
     "services/account-server#9": {
-      "emaMs": 809,
-      "lastMs": 809,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 1182,
+      "lastMs": 1182,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 809
+      "lastWallMs": 1182
     },
     "services/update-server": {
-      "emaMs": 89,
-      "lastMs": 89,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 36,
+      "lastMs": 36,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 89,
+      "lastWallMs": 36,
       "source": "wall"
     },
     "shared": {
-      "emaMs": 9962,
-      "lastMs": 9962,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 10035,
+      "lastMs": 10035,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 9962,
+      "lastWallMs": 10035,
       "source": "wall"
     },
     "shared#1": {
-      "emaMs": 5274,
-      "lastMs": 5274,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 5405,
+      "lastMs": 5405,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 5274
+      "lastWallMs": 5405
     },
     "shared#2": {
-      "emaMs": 4688,
-      "lastMs": 4688,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 4630,
+      "lastMs": 4630,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 4688
+      "lastWallMs": 4630
     },
     "ship-bundle-proof": {
-      "emaMs": 54615,
-      "lastMs": 54615,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 36796,
+      "lastMs": 36796,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 54615,
+      "lastWallMs": 36796,
       "source": "wall"
     },
     "studio-agent-browser": {
@@ -2308,261 +3389,268 @@
       "samples": 1
     },
     "tao-apps": {
-      "emaMs": 472765,
-      "lastMs": 472765,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 511218,
+      "lastMs": 511218,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 472765,
+      "lastWallMs": 511218,
       "source": "wall"
     },
     "tao-apps#1": {
-      "emaMs": 92787,
-      "lastMs": 92787,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "emaMs": 32615,
+      "lastMs": 32615,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "source": "wall"
+      "source": "wall",
+      "lastWallMs": 32615
     },
     "tao-apps#10": {
-      "emaMs": 16574,
-      "lastMs": 16574,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 42646,
+      "lastMs": 42646,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 16574
+      "lastWallMs": 42646
     },
     "tao-apps#11": {
-      "emaMs": 23760,
-      "lastMs": 23760,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 19032,
+      "lastMs": 19032,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 23760
+      "lastWallMs": 19032
     },
     "tao-apps#12": {
-      "emaMs": 23443,
-      "lastMs": 23443,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 18550,
+      "lastMs": 18550,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 23443
+      "lastWallMs": 18550
     },
     "tao-apps#13": {
-      "emaMs": 22370,
-      "lastMs": 22370,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 18279,
+      "lastMs": 18279,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 22370
+      "lastWallMs": 18279
     },
     "tao-apps#14": {
-      "emaMs": 21268,
-      "lastMs": 21268,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 22715,
+      "lastMs": 22715,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 21268
+      "lastWallMs": 22715
     },
     "tao-apps#15": {
-      "emaMs": 21256,
-      "lastMs": 21256,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 18867,
+      "lastMs": 18867,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 21256
+      "lastWallMs": 18867
     },
     "tao-apps#16": {
-      "emaMs": 16746,
-      "lastMs": 16746,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 14929,
+      "lastMs": 14929,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 16746
+      "lastWallMs": 14929
     },
     "tao-apps#17": {
-      "emaMs": 14158,
-      "lastMs": 14158,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 17674,
+      "lastMs": 17674,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 14158
+      "lastWallMs": 17674
     },
     "tao-apps#18": {
-      "emaMs": 19746,
-      "lastMs": 19746,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 19043,
+      "lastMs": 19043,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 19746
+      "lastWallMs": 19043
     },
     "tao-apps#19": {
-      "emaMs": 21806,
-      "lastMs": 21806,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 14195,
+      "lastMs": 14195,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 21806
+      "lastWallMs": 14195
     },
     "tao-apps#2": {
-      "emaMs": 31883,
-      "lastMs": 31883,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 24439,
+      "lastMs": 24439,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 31883
+      "lastWallMs": 24439
     },
     "tao-apps#20": {
-      "emaMs": 2246,
-      "lastMs": 2246,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "emaMs": 22198,
+      "lastMs": 22198,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "source": "wall"
+      "source": "wall",
+      "lastWallMs": 22198
     },
     "tao-apps#21": {
-      "emaMs": 15163,
-      "lastMs": 15163,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 15233,
+      "lastMs": 15233,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 15163
+      "lastWallMs": 15233
     },
     "tao-apps#22": {
-      "emaMs": 22385,
-      "lastMs": 22385,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 14863,
+      "lastMs": 14863,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 22385
+      "lastWallMs": 14863
     },
     "tao-apps#23": {
-      "emaMs": 21901,
-      "lastMs": 21901,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 21743,
+      "lastMs": 21743,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 21901
+      "lastWallMs": 21743
     },
     "tao-apps#24": {
-      "emaMs": 21761,
-      "lastMs": 21761,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 22741,
+      "lastMs": 22741,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 21761
+      "lastWallMs": 22741
     },
     "tao-apps#3": {
-      "emaMs": 28672,
-      "lastMs": 28672,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 20653,
+      "lastMs": 20653,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 28672
+      "lastWallMs": 20653
     },
     "tao-apps#4": {
-      "emaMs": 25990,
-      "lastMs": 25990,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 26679,
+      "lastMs": 26679,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 25990
+      "lastWallMs": 26679
     },
     "tao-apps#5": {
-      "emaMs": 20160,
-      "lastMs": 20160,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 30283,
+      "lastMs": 30283,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 20160
+      "lastWallMs": 30283
     },
     "tao-apps#6": {
-      "emaMs": 15248,
-      "lastMs": 15248,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 15917,
+      "lastMs": 15917,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 15248
+      "lastWallMs": 15917
     },
     "tao-apps#7": {
-      "emaMs": 20742,
-      "lastMs": 20742,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 19867,
+      "lastMs": 19867,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 20742
+      "lastWallMs": 19867
     },
     "tao-apps#8": {
-      "emaMs": 25468,
-      "lastMs": 25468,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 19133,
+      "lastMs": 19133,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 25468
+      "lastWallMs": 19133
     },
     "tao-apps#9": {
-      "emaMs": 22265,
-      "lastMs": 22265,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 18924,
+      "lastMs": 18924,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 22265
+      "lastWallMs": 18924
     },
     "tao-apps:finalize": {
-      "emaMs": 412,
-      "lastMs": 372,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 2662,
+      "lastMs": 2662,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "lastWallMs": 2662,
+      "source": "wall"
     },
     "tao-apps:prepare": {
-      "emaMs": 53926,
-      "lastMs": 53042,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
-      "samples": 1
+      "emaMs": 5276,
+      "lastMs": 5276,
+      "lastRunAt": "2026-10-06T05:23:35Z",
+      "samples": 1,
+      "lastWallMs": 5276,
+      "source": "wall"
     },
     "testing/appium-driver": {
-      "emaMs": 326,
-      "lastMs": 326,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 346,
+      "lastMs": 346,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 326,
+      "lastWallMs": 346,
       "source": "wall"
     },
     "testing/e2e-testing": {
-      "emaMs": 14721,
-      "lastMs": 14721,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 42888,
+      "lastMs": 42888,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 14721,
+      "lastWallMs": 42888,
       "source": "wall"
     },
     "testing/e2e-testing#1": {
-      "emaMs": 31845,
-      "lastMs": 31845,
-      "lastRunAt": "2026-10-05T00:00:00.000Z",
+      "emaMs": 30091,
+      "lastMs": 30091,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "source": "wall"
+      "source": "wall",
+      "lastWallMs": 30091
     },
     "testing/e2e-testing#2": {
-      "emaMs": 10116,
-      "lastMs": 10116,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 10114,
+      "lastMs": 10114,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 10116
+      "lastWallMs": 10114
     },
     "testing/e2e-testing#3": {
-      "emaMs": 910,
-      "lastMs": 910,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 816,
+      "lastMs": 816,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 910
+      "lastWallMs": 816
     },
     "testing/e2e-testing#4": {
-      "emaMs": 3109,
-      "lastMs": 3109,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 1867,
+      "lastMs": 1867,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
       "source": "wall",
-      "lastWallMs": 3109
+      "lastWallMs": 1867
     },
     "testing/e2e-testing#5": {
       "emaMs": 211,
@@ -2605,19 +3693,19 @@
       "lastWallMs": 37
     },
     "testing/host-control": {
-      "emaMs": 703,
-      "lastMs": 703,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 491,
+      "lastMs": 491,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 703,
+      "lastWallMs": 491,
       "source": "wall"
     },
     "testing/verification": {
-      "emaMs": 28186,
-      "lastMs": 28186,
-      "lastRunAt": "2026-10-06T03:42:30Z",
+      "emaMs": 19445,
+      "lastMs": 19445,
+      "lastRunAt": "2026-10-06T05:23:35Z",
       "samples": 1,
-      "lastWallMs": 28186,
+      "lastWallMs": 19445,
       "source": "wall"
     }
   },
