@@ -890,7 +890,10 @@ await runWithCommands(commands => {
       '--auto-merge',
       'Enable GitHub auto-merge after checks start for authorized ready landing; omitted keeps it off and refuses an already enabled pull request.',
     )
-    .option('--poll-interval-ms <ms>', 'How often to poll the checks while they run (default 60000).')
+    .option(
+      '--poll-interval-ms <ms>',
+      'Poll the checks at a fixed interval; by default 30 s while queued, 15 s while partitions run, 10 s once any finished.',
+    )
     .option(
       '--no-complement',
       'With --auto-merge, do not start the local complement lane; run verify-complement separately.',
@@ -940,7 +943,10 @@ await runWithCommands(commands => {
     )
     .option('--pr <number>', "The pull request; by default, the open one for this worktree's branch.")
     .option('--wait', 'Follow the checks until every one has concluded.')
-    .option('--interval-ms <ms>', 'How often --wait polls GitHub (default 60000).')
+    .option(
+      '--interval-ms <ms>',
+      'Poll at a fixed interval with --wait; by default 30 s while queued, 15 s while partitions run, 10 s once any finished.',
+    )
     .action(async (options: { intervalMs?: string; pr?: string; wait?: boolean } = {}) => {
       await runExitCommand(async () =>
         (await PrChecksCommand.run({

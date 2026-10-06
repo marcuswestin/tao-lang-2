@@ -8,17 +8,37 @@ import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
  * credentials to read its checks. A `GH_TOKEN` or `GITHUB_TOKEN` in the environment is sent when
  * present, which also lifts the anonymous limit of 60 requests an hour.
  *
- * Polling reads check runs, the matching Verify workflow, and commit statuses. Check and workflow
- * reads use conditional requests; authenticated 304 responses do not spend the primary limit.
+ * Polling reads check runs, the matching Verify workflow, and commit statuses, all as conditional
+ * requests: a 304 does not spend the rate limit, so a poll that sees nothing new costs nothing.
  * Hosted callers reuse the CLI login, and standalone callers may configure a token. A failed check's
  * reason comes from its annotations, which the `Verify` job writes from each partition's summary,
  * so an agent learns which gate failed and why without downloading any log.
+ *
+ * The poll interval follows the run unless `--interval-ms` fixes it. A verdict is read only at a
+ * poll, so the interval is the one wait on the landing route that is a timer rather than an event:
+ * at a fixed 60 s, a `Verify` that concluded a second after a poll went unread for 59 s. The run
+ * spends most of its minutes with every partition running and nothing to learn, then concludes
+ * within seconds once the last partition ends (measured on 2026-10-06: the aggregate job took 6 s
+ * from the last partition's end to its verdict, and GitHub merged 45 s after that). So the poll is
+ * slow while the run is queued, moderate while partitions run, and fast once any has finished,
+ * which is when the end can come at any poll.
  */
 
 const API = 'https://api.github.com'
-const DEFAULT_INTERVAL_MS = 60_000
+/** While the workflow is queued or has no checks yet: nothing concludes for minutes. */
+const QUEUED_INTERVAL_MS = 30_000
+/** While partitions run and none has finished: a verdict is still minutes away. */
+const RUNNING_INTERVAL_MS = 15_000
+/** Once any partition has finished, or the aggregate is running: the verdict can land at any poll. */
+const ENDING_INTERVAL_MS = 10_000
 /** How long a pull request may carry no checks at all before that is reported as the failure. */
 const CHECKS_APPEAR_WITHIN_MS = 180_000
+/**
+ * Checks that start only after the merge: the archive workflow runs on the pull request closing and
+ * posts its own check on the head. It is not part of the verdict, and waiting for it would hold a
+ * caller for the seconds it takes to start and finish after `Verify` already concluded.
+ */
+const POST_MERGE_CHECKS = new Set(['Archive'])
 /** Annotations that restate a failure without saying anything about its cause. */
 const UNINFORMATIVE_ANNOTATION =
   /^Process completed with exit code \d+\.?$|Node\.js \d+ is deprecated|^Cache save failed/u
@@ -48,6 +68,7 @@ export type PrChecksOptions = {
   expectedHead?: string
   /** Reuse the GitHub CLI login when no environment token is set; internal to authenticated callers. */
   ghAuth?: boolean
+  /** A fixed poll interval; by default the interval follows the run's phase (see the header). */
   intervalMs?: number
   /** The pull request; by default, the open one whose head is this worktree's branch. */
   pr?: number
@@ -61,9 +82,13 @@ type PrChecksResult = { exitCode: 0 | 1 | 2; lines: string[] }
 
 /** Check is one check run or commit status, reduced to what the report needs. */
 type Check = {
+  /** When the check concluded, as GitHub recorded it; a status carries none. */
+  completedAt?: string
   /** The check run's id, for its annotations; statuses have none. */
   id?: number
   name: string
+  /** A check run that has started; a queued one and a status are not. */
+  started?: boolean
   state: 'failure' | 'pending' | 'success'
   url: string
 }
@@ -95,7 +120,14 @@ function landingState(pr: PullRequest): string | undefined {
     : `Auto-merge is on for #${pr.number}: GitHub squash-merges the moment Verify is green on this head.`
 }
 
-type CheckRun = { conclusion: string | null; html_url: string; id: number; name: string; status: string }
+type CheckRun = {
+  completed_at?: string | null
+  conclusion: string | null
+  html_url: string
+  id: number
+  name: string
+  status: string
+}
 type CommitStatus = { context: string; state: string; target_url: string | null }
 type VerifyWorkflowRun = {
   conclusion: string | null
@@ -143,16 +175,18 @@ export const PrChecksCommand = {
     for (;;) {
       const runs = await github.checkRuns(slug, sha)
       const workflows = await github.verifyWorkflowRuns(slug, sha)
-      const statuses = await github.json<{ statuses: CommitStatus[] }>(`/repos/${slug}/commits/${sha}/status`)
-      const checks = [...runs.map(fromCheckRun), ...statuses.statuses.map(fromStatus)]
+      const statuses = await github.statuses(slug, sha)
+      const checks = [...runs.map(fromCheckRun), ...statuses.map(fromStatus)]
       const verify = runs.find(run => run.name === 'Verify')
       const activeWorkflow = workflows.find(run => run.status !== 'completed')
       const completedWorkflow = workflows.find(run => run.status === 'completed')
       for (const check of checks.filter(check => check.state !== 'pending' && !announced.has(check.name))) {
         announced.add(check.name)
-        report(`${check.state === 'success' ? 'PASS' : 'FAIL'}  ${check.name}`)
+        // The verdict's own timestamp is what a timeline of the landing is measured from.
+        const at = check.name === 'Verify' && check.completedAt !== undefined ? ` (concluded ${check.completedAt})` : ''
+        report(`${check.state === 'success' ? 'PASS' : 'FAIL'}  ${check.name}${at}`)
       }
-      const pending = checks.filter(check => check.state === 'pending')
+      const pending = checks.filter(check => check.state === 'pending' && !POST_MERGE_CHECKS.has(check.name))
 
       if (!options.wait && checks.some(check => check.state === 'failure')) {
         return { exitCode: await conclude(github, slug, checks, report), lines } satisfies PrChecksResult
@@ -210,10 +244,27 @@ export const PrChecksCommand = {
       if (!options.wait) {
         return { exitCode: 2, lines } satisfies PrChecksResult
       }
-      await dependencies.sleep(options.intervalMs ?? DEFAULT_INTERVAL_MS)
+      await dependencies.sleep(options.intervalMs ?? pollInterval(checks))
     }
   },
 } as const
+
+/**
+ * pollInterval reads the run's phase off its partition checks: queued until one has started, running
+ * until one has finished, ending from then on. The aggregate (`Verify`) running also means ending,
+ * and a run with no partitions at all, such as a stubbed one, polls at the ending rate so a short
+ * run is not read late.
+ */
+function pollInterval(checks: readonly Check[]): number {
+  const partitions = checks.filter(check => check.name.startsWith('Partition '))
+  if (partitions.length === 0) {
+    return ENDING_INTERVAL_MS
+  }
+  if (partitions.some(check => check.state !== 'pending') || checks.some(c => c.name === 'Verify' && c.started)) {
+    return ENDING_INTERVAL_MS
+  }
+  return partitions.some(check => check.started) ? RUNNING_INTERVAL_MS : QUEUED_INTERVAL_MS
+}
 
 /** conclude reports any check still running, then each failure with the reasons its annotations give. */
 async function conclude(
@@ -238,7 +289,7 @@ async function conclude(
       }
     }
   }
-  const pending = checks.filter(check => check.state === 'pending')
+  const pending = checks.filter(check => check.state === 'pending' && !POST_MERGE_CHECKS.has(check.name))
   if (failed.length > 0) {
     return 1
   }
@@ -258,7 +309,14 @@ function fromCheckRun(run: CheckRun): Check {
     : run.conclusion === 'success' || run.conclusion === 'skipped' || run.conclusion === 'neutral'
     ? 'success'
     : 'failure'
-  return { id: run.id, name: run.name, state, url: run.html_url }
+  return {
+    ...(typeof run.completed_at === 'string' ? { completedAt: run.completed_at } : {}),
+    id: run.id,
+    name: run.name,
+    started: run.status !== 'queued',
+    state,
+    url: run.html_url,
+  }
 }
 
 function fromStatus(status: CommitStatus): Check {
@@ -340,6 +398,10 @@ export function gitHub(dependencies: PrChecksDependencies, authToken?: string) {
         true,
       ) as { workflow_runs: VerifyWorkflowRun[] }
       return body.workflow_runs.filter(run => run.head_sha === sha)
+    },
+    async statuses(slug: string, sha: string): Promise<CommitStatus[]> {
+      const body = await request(`/repos/${slug}/commits/${sha}/status`, true) as { statuses: CommitStatus[] }
+      return body.statuses
     },
     async json<ValueT>(path: string): Promise<ValueT> {
       return await request(path, false) as ValueT
