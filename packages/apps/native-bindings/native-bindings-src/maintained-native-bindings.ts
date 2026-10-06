@@ -284,6 +284,8 @@ export async function inspectMaintainedNativeBindings(
     afterManifestCapture?: () => Promise<void>
     /** Observe completed hashing before the final snapshot guards, without changing its verdict. */
     afterInspection?: () => Promise<void>
+    /** Observe each accepted unlocked attempt just before its final publication-lock probe. */
+    beforeFinalProbe?: () => Promise<void>
   } = {},
 ): Promise<Inspection> {
   const location = locations(options)
@@ -365,12 +367,15 @@ export async function inspectMaintainedNativeBindings(
     } catch {
       continue
     }
-    if (sameSnapshot(before, after) && await pass.accept?.() !== false && !await FS.exists(lock)) {
-      if (pass.result.status === 'fresh') {
-        pass.remember?.()
-        return pass.result
+    if (sameSnapshot(before, after) && await pass.accept?.() !== false) {
+      await observers.beforeFinalProbe?.()
+      if (!await FS.exists(lock)) {
+        if (pass.result.status === 'fresh') {
+          pass.remember?.()
+          return pass.result
+        }
+        return await inspectLocked()
       }
-      return await inspectLocked()
     }
   }
   // Errors raised here, such as an unreadable manifest, surface as themselves.
