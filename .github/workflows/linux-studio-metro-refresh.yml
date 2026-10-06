@@ -129,7 +129,8 @@ jobs:
         run: |
           start=$(date +%s)
           status=0
-          ./agent unsandboxed verify-full-ci --ci-host-gates "$GATE" || status=$?
+          # verify-full-ci refuses a gate flagged runsOnHostedLinux, so the gate's own command runs here.
+          ./agent unsandboxed studio-smoke --run-id "$GATE" packages/ides/studio-tooling/studio-smoke/studio-metro-refresh.test.ts || status=$?
           echo "GATE_STEP_SECONDS=$(( $(date +%s) - start ))"
           exit $status
 
